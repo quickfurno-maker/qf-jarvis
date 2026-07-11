@@ -12,6 +12,8 @@ QF Jarvis is the intelligence, recommendation, coordination, and founder decisio
 
 The authoritative statement of this boundary is [docs/architecture/system-boundary.md](docs/architecture/system-boundary.md). Where any other document differs from it, that document is a defect.
 
+**The boundary is unchanged by Phase 1.** It may be changed only by a superseding ADR, never by an implementation decision, and never by convenience.
+
 ## Permanent Rule
 
 Jarvis recommends.
@@ -34,17 +36,57 @@ Results return to QuickFurno Core.
 
 Agents recommend only. They do not authorize and they do not execute.
 
+**None of them is implemented.** They are a design, described in [agent-model.md](docs/architecture/agent-model.md), and they arrive in Phases 5 through 8.
+
 ## Current Status
 
 **Phase 0 — Project Charter and Architecture: complete and approved.**
 
 The business owner has approved the charter and the permanent architecture boundary. All Phase 0 exit criteria are met: the documentation set is complete and internally consistent, no document contradicts the [system boundary](docs/architecture/system-boundary.md), and **eight ADRs are Accepted** (ADR-0001 through ADR-0008).
 
-**Phase 1 — Engineering Foundation is the next phase. It has not started.**
+**Phase 1 — Engineering Foundation: in progress, pending review.**
 
-This repository is **implementation-free by design, and remains so until Phase 1**. No application framework, database, AI SDK, agent runtime, workflow integration, provider integration, frontend, CI, or deployment architecture has been implemented. There is no package manager, no dependency manifest, and no application code.
+The repository now contains an **engineering toolchain and nothing else**: a pnpm workspace, strict TypeScript, ESLint, Prettier, Vitest, a CI quality gate, and three new ADRs recording those choices. Three further ADRs are Accepted (ADR-0009 through ADR-0011), bringing the total to eleven.
+
+**There is no business implementation, and nothing runs.**
+
+`apps/api` and `apps/worker` exist as **compileable boundaries**: each is a documentation comment and `export {};`. They start no server, run no loop, and print nothing. There is no `pnpm dev` and no `pnpm start`, because there is nothing to start — and adding a placeholder to make the repository feel more alive is explicitly out of scope ([ADR-0010](docs/decisions/ADR-0010-workspace-and-module-structure.md)).
+
+Specifically, **none of the following exists in this repository**: agents, coordinator logic, AI or LLM SDKs, model prompts, canonical event contracts, recommendation or approval or execution contracts, event processing, a database, a queue, a web framework, a frontend, n8n workflows, WhatsApp or calling or telephony integration, provider credentials, environment configuration, Docker, or deployment configuration.
+
+**Phase 2 — Contracts and Canonical Events has not started.**
+
+## Getting Started
+
+**Prerequisites:** Node.js **24.18.0** and pnpm **11.11.0**. Both are pinned, and the versions are enforced — an install on a different Node major fails rather than warns.
+
+```bash
+# Use the pinned pnpm (Corepack ships with Node; do not install pnpm globally)
+corepack enable pnpm
+corepack prepare pnpm@11.11.0 --activate
+
+# Install
+pnpm install
+
+# Run the complete quality gate — this is exactly what CI runs
+pnpm check
+```
+
+`pnpm check` runs `format:check` → `lint` → `typecheck` → `test` → `build`, and fails on the first problem.
+
+The test suite is **empty, by design**. Phase 1 has no business logic, and a test that asserts nothing is worse than no test — it makes a green build mean "the fake tests still pass" rather than "the system works". From Phase 2, the critical deterministic rules — idempotency, expiry, authorization, bounds, signature and replay, and anything touching money — are developed **test-first**, without exception.
+
+Full instructions, including per-platform commands and troubleshooting: [development-setup.md](docs/engineering/development-setup.md).
 
 ## Documentation
+
+### Engineering
+
+- [Development setup](docs/engineering/development-setup.md) — prerequisites, install, and every command
+- [Repository structure](docs/engineering/repository-structure.md) — apps, packages, dependency direction, and how ADR-0004 is applied
+- [Supported toolchain](docs/engineering/supported-toolchain.md) — exact versions, verified peer compatibility, supply chain, update policy
+- [Quality gates](docs/engineering/quality-gates.md) — what each gate catches, the zero-warning policy, and review blockers
+- [Continuous integration](docs/engineering/continuous-integration.md) — triggers, least privilege, caching, frozen lockfile, and how failures block merge
 
 ### Charter
 
@@ -79,6 +121,9 @@ This repository is **implementation-free by design, and remains so until Phase 1
 - [ADR-0006 — Agent responsibility boundaries](docs/decisions/ADR-0006-agent-responsibility-boundaries.md)
 - [ADR-0007 — Founder approval interface and authority](docs/decisions/ADR-0007-founder-approval-interface-and-authority.md)
 - [ADR-0008 — Controlled communication capability (calling and WhatsApp)](docs/decisions/ADR-0008-controlled-communication-capability.md)
+- [ADR-0009 — Runtime, language, and package manager](docs/decisions/ADR-0009-runtime-language-and-package-manager.md) — Node 24 LTS, TypeScript, pnpm 11, native ESM
+- [ADR-0010 — Workspace and module structure](docs/decisions/ADR-0010-workspace-and-module-structure.md) — pnpm workspace, `apps/api`, `apps/worker`, future `packages/*`
+- [ADR-0011 — Quality toolchain and continuous integration](docs/decisions/ADR-0011-quality-toolchain-and-continuous-integration.md) — strict TypeScript, ESLint, Prettier, Vitest, GitHub Actions
 
 ### Governance
 
@@ -98,3 +143,11 @@ Pune is the first operational city; Mumbai and additional cities follow later. A
 ## Contributing
 
 One phase per branch, named `phase-N-short-description`. Architecture changes require an ADR. See [change management](docs/governance/change-management.md).
+
+Run `pnpm check` before you push — it is the same gate CI runs. CI blocks merge on failure once branch protection is configured on `main` ([continuous-integration.md](docs/engineering/continuous-integration.md)).
+
+The question every pull request is judged against:
+
+> **Could this change let a recommendation cause an effect without an authorization decision recorded in QuickFurno Core?**
+
+If yes, it does not merge, regardless of what it fixes.

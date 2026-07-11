@@ -1,0 +1,30 @@
+packages:
+  - apps/*
+  - packages/*
+
+# Supply chain: no dependency is permitted to run a lifecycle build script.
+#
+# pnpm blocks dependency build scripts by default and reports the packages it
+# ignored. An empty list here is a deliberate, explicit statement that none has
+# been reviewed and approved — and, as of Phase 1, none needs to be: the
+# dependency tree contains no package with an install or build script.
+#
+# Adding an entry is a supply-chain decision, not a convenience: it grants that
+# package arbitrary code execution at install time. It requires review and a
+# note in docs/engineering/supported-toolchain.md.
+onlyBuiltDependencies: []
+
+# Supply chain: a package version must have been public for at least 24 hours
+# before this repository will resolve it.
+#
+# The realistic npm attack is a compromised maintainer account publishing a
+# malicious patch release, which is typically detected and unpublished within
+# hours. A cooldown converts "we installed it within minutes of publication"
+# into "someone else found it first". It costs us nothing — we pin exact
+# versions and upgrade deliberately, so we are never racing to a release.
+#
+# `minimumReleaseAgeStrict` is what makes this real: without it, pnpm resolves a
+# too-fresh version anyway and records an automatic exemption for it. A control
+# that silently grants itself exceptions is not a control.
+minimumReleaseAge: 1440
+minimumReleaseAgeStrict: true

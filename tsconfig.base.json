@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+
+  // Shared compiler options for every project in the workspace.
+  // This file declares no inputs; each project sets its own rootDir/outDir/include.
+  // See docs/engineering/supported-toolchain.md.
+  "compilerOptions": {
+    // --- Target and libraries -------------------------------------------------
+    // Node.js 24 (V8 13.x) supports ES2024 in full. See .nvmrc / engines.node.
+    "target": "es2024",
+    "lib": ["ES2024"],
+    "types": ["node"],
+
+    // --- Module system --------------------------------------------------------
+    // Native ECMAScript modules under Node's own resolution rules (ADR-0009).
+    // NodeNext makes TypeScript resolve imports exactly as Node will at runtime,
+    // so a relative import missing its .js extension is a compile error rather
+    // than a production ERR_MODULE_NOT_FOUND.
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "moduleDetection": "force",
+
+    // Imports and exports mean exactly what they say; type-only syntax must be
+    // written explicitly. Required for correct ESM emit and safe transpilation.
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+
+    // --- Project references ---------------------------------------------------
+    // Every project is composite so the root can build and type-check the whole
+    // graph incrementally, and each app can be checked on its own.
+    "composite": true,
+    "incremental": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+
+    // --- Strictness -----------------------------------------------------------
+    // Phase 1 sets these once, at the start, while the cost of turning them on is
+    // zero. Turning them on later, against a codebase that grew up without them,
+    // is a refactor nobody schedules.
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "useUnknownInCatchVariables": true,
+    "noImplicitOverride": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "forceConsistentCasingInFileNames": true,
+
+    // Type declarations shipped by dependencies are not our code to fix. Our own
+    // source is checked in full; this only skips .d.ts files under node_modules.
+    "skipLibCheck": true
+  }
+}
