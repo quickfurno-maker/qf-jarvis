@@ -36,7 +36,7 @@ Results return to QuickFurno Core.
 
 Agents recommend only. They do not authorize and they do not execute.
 
-**None of them is implemented.** They are a design, described in [agent-model.md](docs/architecture/agent-model.md), and they arrive in Phases 5 through 8.
+**None of them is implemented.** They are a design, described in [agent-model.md](docs/architecture/agent-model.md). Jarvis coordination is introduced in Phase 4. Kabir, Riya, Anisha, and Jitin are introduced in Phases 5 through 8.
 
 ## Current Status
 

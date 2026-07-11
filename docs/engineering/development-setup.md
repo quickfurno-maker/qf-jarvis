@@ -11,11 +11,11 @@ Commands are given for **Windows PowerShell** and **POSIX** (Linux, macOS, Git B
 
 ## Prerequisites
 
-| Requirement | Version     | Why exactly this                                                                                                                                                                                                              |
-| ----------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Node.js** | **24.18.0** | Pinned in `.nvmrc`, `.node-version`, `engines.node`, and CI. `engine-strict=true` means an install on any other major **fails** rather than warns ([ADR-0009](../decisions/ADR-0009-runtime-language-and-package-manager.md)) |
-| **pnpm**    | **11.11.0** | Pinned in `packageManager`. Install it via Corepack, below — do not install it globally                                                                                                                                       |
-| **Git**     | any recent  | —                                                                                                                                                                                                                             |
+| Requirement | Version     | Why exactly this                                                                                                                                                                                                                                       |
+| ----------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Node.js** | **24.18.0** | Pinned in `.nvmrc`, `.node-version`, `engines.node`, and CI. `engineStrict: true` in `pnpm-workspace.yaml` means an install on any other major **fails** rather than warns ([ADR-0009](../decisions/ADR-0009-runtime-language-and-package-manager.md)) |
+| **pnpm**    | **11.11.0** | Pinned in `packageManager`. Install it via Corepack, below — do not install it globally                                                                                                                                                                |
+| **Git**     | any recent  | —                                                                                                                                                                                                                                                      |
 
 You do **not** need to install TypeScript, ESLint, Prettier, or Vitest. They are development dependencies of this repository and are installed by `pnpm install`.
 
@@ -89,9 +89,21 @@ pnpm install --frozen-lockfile
 
 This is what CI runs. Use it when you want to be certain you are running what was reviewed.
 
+### Where the package-manager policy lives
+
+**`pnpm-workspace.yaml`**, not `.npmrc`.
+
+pnpm 11 reads project policy — exact saves, strict peers, engine enforcement, the target Node version, the release cooldown, the build-script allowlist — from `pnpm-workspace.yaml`, using camelCase keys. It reads only **authentication and registry** settings from `.npmrc`, and this repository declares neither.
+
+Put project policy in `.npmrc` and pnpm **silently ignores it**: no warning, and `pnpm config get` reports the key as `undefined`. If you are changing a package-manager setting, change it in `pnpm-workspace.yaml` and then **prove it took effect**:
+
+```
+pnpm config get strictPeerDependencies
+```
+
 ### What a healthy install looks like
 
-- No peer-dependency warnings. The dependency set is verified compatible ([supported-toolchain.md](./supported-toolchain.md)); a peer warning means something changed and it needs investigating, not ignoring.
+- No peer-dependency warnings. The dependency set is verified compatible ([supported-toolchain.md](./supported-toolchain.md)); a peer warning means something changed and it needs investigating, not ignoring. `strictPeerDependencies: true` means an unmet peer **fails** the install rather than warning.
 - **No "ignored build scripts" message.** No package in this dependency tree runs an install or build script, and `onlyBuiltDependencies` is deliberately empty. If pnpm ever reports an ignored build script, **do not run `pnpm approve-builds` to make it go away** — approving a build script grants that package arbitrary code execution at install time. Investigate it, then record the decision ([security-principles.md](../governance/security-principles.md)).
 
 ---
@@ -180,7 +192,7 @@ When configuration eventually arrives, it arrives under [security-principles.md]
 ## Troubleshooting
 
 **`pnpm install` fails with an engine error.**
-You are on the wrong Node version. This is `engine-strict` working. Run `node --version`; if it is not `v24.18.0`, fix that first.
+You are on the wrong Node version. This is `engineStrict` working. Run `node --version`; if it is not `v24.18.0`, fix that first.
 
 **`pnpm` is not the pinned version.**
 You likely have a global pnpm shadowing Corepack. Run `corepack prepare pnpm@11.11.0 --activate`, and consider removing the global install.

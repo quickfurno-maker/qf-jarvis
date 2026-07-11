@@ -16,7 +16,7 @@ The decisions behind them: [ADR-0009](../decisions/ADR-0009-runtime-language-and
 | **Node.js** | **24.18.0** — LTS ("Krypton") | `.nvmrc`, `.node-version`, `engines.node` (`>=24.18.0 <25.0.0`), `.github/workflows/ci.yml` |
 | **pnpm**    | **11.11.0**                   | `packageManager: pnpm@11.11.0`                                                              |
 
-**Node is pinned in four places, and they are one decision.** `engine-strict=true` means an install on any other major **fails**, rather than warning and continuing. CI runs the same pinned version, so a drift between the four cannot pass quietly.
+**Node is pinned in four places, and they are one decision.** `engineStrict: true` (in `pnpm-workspace.yaml`) means an install on any other major **fails**, rather than warning and continuing. `nodeVersion: 24.18.0` additionally makes pnpm evaluate every dependency's engine range against the **target** runtime rather than against whichever Node 24 patch happens to be running the command. CI runs the same pinned version, so a drift between the four cannot pass quietly.
 
 **pnpm is pinned by `packageManager` and activated through Corepack.** CI reads that same field, so the pnpm in CI and the pnpm on a developer's machine cannot diverge. Do not install pnpm globally — a global install is a version nobody pinned.
 
@@ -87,7 +87,7 @@ Peer ranges were read from the registry **before** versions were selected — no
 | `vitest@4.1.10`                 | `vite` (required peer)                              | supplied by Vitest itself | ✅        |
 | `typescript-eslint@8.63.0`      | `engines.node: ^18.18.0 \|\| ^20.9.0 \|\| >=21.1.0` | node 24.18.0              | ✅        |
 
-The install runs with **`strict-peer-dependencies=true`** and produces **no peer warnings**. Vitest's optional peers (`jsdom`, `happy-dom`, `@vitest/ui`, coverage providers) are declared optional and are deliberately not installed.
+The install runs with **`strictPeerDependencies: true`** — verified active via `pnpm config get`, not merely written down — and produces **no peer warnings**. Vitest's optional peers (`jsdom`, `happy-dom`, `@vitest/ui`, coverage providers) are declared optional and are deliberately not installed.
 
 **Two versions are held back on purpose** — TypeScript (6, not 7) and ESLint (10.6.0, not 10.7.0). Both are explained above, both are recorded in [ADR-0011](../decisions/ADR-0011-quality-toolchain-and-continuous-integration.md), and the TypeScript one has a named exit condition.
 
@@ -97,16 +97,27 @@ The install runs with **`strict-peer-dependencies=true`** and produces **no peer
 
 ## Supply chain
 
-| Control                     | Setting                                                      | Effect                                                                                                      |
-| --------------------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
-| **Exact versions**          | `save-exact=true`                                            | `"6.0.3"`, never `"^6.0.3"`. A caret range is a standing instruction to run code nobody reviewed            |
-| **Committed lockfile**      | `pnpm-lock.yaml`                                             | The single authoritative resolution                                                                         |
-| **Frozen install in CI**    | `pnpm install --frozen-lockfile`                             | If the manifest and lockfile disagree, CI **fails** rather than resolving something new                     |
-| **Strict peers**            | `strict-peer-dependencies=true`                              | An unmet or conflicting peer fails the install                                                              |
-| **No auto-installed peers** | `auto-install-peers=false`                                   | Nothing enters the tree that we did not ask for                                                             |
-| **Engine enforcement**      | `engine-strict=true`                                         | The wrong Node version fails at install, with a clear message                                               |
-| **No install scripts**      | `onlyBuiltDependencies: []`                                  | **No package may run a lifecycle build script.** None currently needs to                                    |
-| **Release cooldown**        | `minimumReleaseAge: 1440`<br>`minimumReleaseAgeStrict: true` | A version must be public for **24 hours** before we resolve it — and pnpm may not grant itself an exemption |
+**Where the policy lives, and why it matters.** pnpm 11 reads project policy from **`pnpm-workspace.yaml`**, using camelCase keys. It reads only **authentication and registry** settings from `.npmrc`.
+
+This is not a stylistic detail. Project policy written to `.npmrc` is **silently ignored** — pnpm does not warn, and `pnpm config get` reports the key as `undefined`. A control configured in the wrong file is not a weaker control; it is an **absent** control that reads as present, which is worse than having none, because it is documented, believed, and relied upon.
+
+Every setting below is therefore verified with `pnpm config get` — the effective value pnpm resolves, not the text of a file. The settings that shape resolution are additionally recorded in `pnpm-lock.yaml`.
+
+| Control                        | Setting (`pnpm-workspace.yaml`)             | Effect                                                                                                                                                  |
+| ------------------------------ | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Exact versions**             | `savePrefix: ''`                            | `"6.0.3"`, never `"^6.0.3"`, when a version is not explicitly supplied. A caret range is a standing instruction to run code nobody reviewed             |
+| **Committed lockfile**         | `pnpm-lock.yaml`                            | The single authoritative resolution — and it stays diffable, so a reviewer can see it change                                                            |
+| **Frozen install in CI**       | `pnpm install --frozen-lockfile`            | If the manifest and lockfile disagree, CI **fails** rather than resolving something new                                                                 |
+| **Strict peers**               | `strictPeerDependencies: true`              | An unmet or conflicting peer **fails the install**                                                                                                      |
+| **No auto-installed peers**    | `autoInstallPeers: false`                   | Nothing enters the tree that we did not ask for. Recorded in the lockfile as `settings.autoInstallPeers: false`                                         |
+| **Engine enforcement**         | `engineStrict: true`                        | The wrong Node version fails at install, with a clear message                                                                                           |
+| **Target runtime**             | `nodeVersion: 24.18.0`                      | Dependency engine compatibility is evaluated against the **project's target runtime**, not against whichever Node 24 patch ran the command              |
+| **No install scripts**         | `onlyBuiltDependencies: []`                 | **No package may run a lifecycle build script.** None currently needs to                                                                                |
+| **Release cooldown**           | `minimumReleaseAge: 1440`                   | A version must be public for **24 hours** before we resolve it                                                                                          |
+| **No self-granted exemption**  | `minimumReleaseAgeStrict: true`             | pnpm may **not** resolve a too-fresh version and record an automatic exemption. A control that grants itself exceptions is not a control                |
+| **No missing-metadata bypass** | `minimumReleaseAgeIgnoreMissingTime: false` | A package with **missing publication-time metadata fails resolution** rather than bypassing the cooldown. Absent evidence of age is not evidence of age |
+
+There are **no cooldown exemptions** in this repository. `minimumReleaseAgeExclude` does not appear in `pnpm-workspace.yaml`, and no version is permitted to bypass the window.
 
 ### Install-script findings
 
@@ -156,3 +167,7 @@ A compromised development dependency would therefore reach a developer's machine
 ## Verified
 
 The matrix above was verified on **2026-07-11** against the pinned toolchain: `pnpm install --frozen-lockfile` with strict peers produced no warnings, and `pnpm check` (format → lint → typecheck → test → build) passed.
+
+**Every supply-chain setting was confirmed with `pnpm config get`**, against the value pnpm actually resolves — not against the text of a configuration file. This matters because the original Phase 1 configuration placed five of these settings in `.npmrc`, where **pnpm 11 silently ignored all of them**: they resolved to `undefined`, and the lockfile recorded `settings.autoInstallPeers: true` — the opposite of the documented policy. The install happened to be clean anyway, because the chosen versions are genuinely compatible; **the controls were not what made it clean.** The lockfile now records `settings.autoInstallPeers: false`, and each key above resolves to its intended value.
+
+The lesson is recorded here rather than quietly fixed: **a supply-chain control is only real if the tool confirms it is in force.** Documentation asserting an inactive control is worse than no documentation, because it is believed.

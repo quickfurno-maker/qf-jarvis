@@ -21,9 +21,9 @@ import { defineConfig } from 'vitest/config';
  */
 export default defineConfig({
   test: {
-    // Jarvis is a Node service. There is no browser, and there will not be one
-    // in this repository — the future founder control plane is a separate
-    // concern in a later phase.
+    // Phase 1 contains only Node application boundaries and therefore uses the
+    // Node test environment. The testing architecture for the future Founder
+    // Control Plane will be decided in its own phase and is not decided here.
     environment: 'node',
 
     // Tests live beside the source they cover, inside a workspace package.

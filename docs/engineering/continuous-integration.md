@@ -58,7 +58,7 @@ A 15-minute timeout bounds a hung job.
 
 ### Versions cannot drift from local
 
-- **Node** is `24.18.0` in the workflow, identical to `.nvmrc`, `.node-version`, and `engines.node`. `engine-strict=true` means a mismatch fails the install rather than warning.
+- **Node** is `24.18.0` in the workflow, identical to `.nvmrc`, `.node-version`, and `engines.node`. `engineStrict: true` in `pnpm-workspace.yaml` means a mismatch fails the install rather than warning.
 - **pnpm** is **not** given a version input. `pnpm/action-setup` reads it from the `packageManager` field in `package.json` — the same field Corepack reads locally. There is one source of truth, so CI's pnpm and a developer's pnpm cannot diverge.
 
 ### Caching

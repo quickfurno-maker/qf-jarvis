@@ -22,9 +22,11 @@
 .nvmrc      text eol=lf
 .node-version text eol=lf
 
-# Generated and owned by pnpm. Excluding it from diffs keeps review focused on
-# the manifest change that caused it, which is the part a human can actually judge.
-pnpm-lock.yaml text eol=lf -diff linguist-generated=true
+# The lockfile is a supply-chain artifact, and it must stay reviewable in Git and
+# on GitHub. It is the only place that records exactly what will be installed, so
+# a reviewer needs to see a dependency appear, a version move, or an integrity
+# hash change. Suppressing its diff would hide precisely the change worth reading.
+pnpm-lock.yaml text eol=lf
 
 # Binary files must never be line-ending converted.
 *.png  binary
