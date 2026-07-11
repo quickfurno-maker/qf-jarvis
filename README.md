@@ -44,9 +44,17 @@ Agents recommend only. They do not authorize and they do not execute.
 
 The business owner has approved the charter and the permanent architecture boundary. All Phase 0 exit criteria are met: the documentation set is complete and internally consistent, no document contradicts the [system boundary](docs/architecture/system-boundary.md), and **eight ADRs are Accepted** (ADR-0001 through ADR-0008).
 
-**Phase 1 — Engineering Foundation: in progress, pending review.**
+**Phase 1 — Engineering Foundation: complete and approved.**
 
 The repository now contains an **engineering toolchain and nothing else**: a pnpm workspace, strict TypeScript, ESLint, Prettier, Vitest, a CI quality gate, and three new ADRs recording those choices. Three further ADRs are Accepted (ADR-0009 through ADR-0011), bringing the total to eleven.
+
+**All Phase 1 exit criteria are met:**
+
+- The repository can be **installed from a clean clone** — `pnpm install --frozen-lockfile` resolves from the committed lockfile.
+- **Formatting, linting, type checking, tests, and build all pass** — `pnpm check` runs the complete gate and is green.
+- **CI runs on every pull request** ([ci.yml](.github/workflows/ci.yml)).
+- **`main` is protected**: the **Quality gate** status check is required, branches must be up to date before merging, a pull request is required, and **administrators cannot bypass the protection**. A red Quality gate cannot be merged — by anyone.
+- **ADR-0009 through ADR-0011 are Accepted**, so every foundational technology choice is recorded.
 
 **There is no business implementation, and nothing runs.**
 
@@ -54,7 +62,7 @@ The repository now contains an **engineering toolchain and nothing else**: a pnp
 
 Specifically, **none of the following exists in this repository**: agents, coordinator logic, AI or LLM SDKs, model prompts, canonical event contracts, recommendation or approval or execution contracts, event processing, a database, a queue, a web framework, a frontend, n8n workflows, WhatsApp or calling or telephony integration, provider credentials, environment configuration, Docker, or deployment configuration.
 
-**Phase 2 — Contracts and Canonical Events has not started.**
+**Phase 2 — Contracts and Canonical Events is the next phase. It has not started.**
 
 ## Getting Started
 
@@ -144,7 +152,7 @@ Pune is the first operational city; Mumbai and additional cities follow later. A
 
 One phase per branch, named `phase-N-short-description`. Architecture changes require an ADR. See [change management](docs/governance/change-management.md).
 
-Run `pnpm check` before you push — it is the same gate CI runs. CI blocks merge on failure once branch protection is configured on `main` ([continuous-integration.md](docs/engineering/continuous-integration.md)).
+Run `pnpm check` before you push — it is the same gate CI runs. **CI blocks merge on failure**: `main` requires the **Quality gate** status check to pass, and administrators cannot bypass it ([continuous-integration.md](docs/engineering/continuous-integration.md)).
 
 The question every pull request is judged against:
 

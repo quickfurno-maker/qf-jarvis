@@ -1,7 +1,7 @@
 name: CI
 
 # Phase 1 introduces CI, and from this point it runs on every pull request and
-# blocks merge on failure once branch protection is configured on `main`.
+# blocks merge on failure because branch protection requires the `Quality gate` on `main`.
 # See docs/engineering/continuous-integration.md.
 on:
   pull_request:

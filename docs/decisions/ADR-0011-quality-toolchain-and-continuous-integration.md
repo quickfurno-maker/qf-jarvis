@@ -219,5 +219,5 @@ Rejected as premature and, right now, actively harmful. A coverage threshold on 
 - **Normalize the Phase 0 documents** in a formatting-only pull request, and remove the `.prettierignore` exemption in the same change.
 - **Phase 2** writes the first real tests: contract tests against fixtures, developed test-first.
 - **Phase 3** proves idempotency by deliberately redelivering events. That test is the phase's deliverable.
-- **Configure branch protection on `main`** so that this workflow is a required status check. Until that is done, CI reports but does not block — the workflow exists, the enforcement is a repository setting, and the two are not the same thing.
+- **Branch protection on `main` is enabled** — done. The **Quality gate** is a required status check, branches must be up to date before merging, a pull request is required, and **administrator bypass is disabled**. The workflow is therefore enforced, not merely present; a red gate blocks the merge for everyone, including the business owner ([continuous-integration.md](../engineering/continuous-integration.md)).
 - **Each phase gate** reviews the toolchain, the zero-warning policy, and whether any placeholder test has crept in.

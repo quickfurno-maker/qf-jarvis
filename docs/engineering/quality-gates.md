@@ -117,12 +117,12 @@ Without this, a formatter that rewrites a file, a build that emits into a tracke
 
 **They are the same.** `pnpm check` locally and `pnpm check` in CI run the identical sequence, on the identical pinned Node (24.18.0) and pnpm (11.11.0).
 
-|                  | Local          | CI                                        |
-| ---------------- | -------------- | ----------------------------------------- |
-| Install          | `pnpm install` | `pnpm install --frozen-lockfile`          |
-| Gate             | `pnpm check`   | `pnpm check`                              |
-| Clean-tree check | —              | ✅                                        |
-| Blocks merge     | —              | ✅ (once branch protection is configured) |
+|                  | Local          | CI                                                              |
+| ---------------- | -------------- | --------------------------------------------------------------- |
+| Install          | `pnpm install` | `pnpm install --frozen-lockfile`                                |
+| Gate             | `pnpm check`   | `pnpm check`                                                    |
+| Clean-tree check | —              | ✅                                                              |
+| Blocks merge     | —              | ✅ **required status check on `main`, no administrator bypass** |
 
 CI is stricter in exactly two ways, and both are deliberate: the lockfile is **frozen**, and the tree must end **clean**.
 

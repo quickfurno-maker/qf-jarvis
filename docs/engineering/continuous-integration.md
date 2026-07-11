@@ -134,22 +134,24 @@ uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
 
 ## How failures block merge
 
-The workflow **reports** on every pull request today. It **blocks** merge once branch protection is configured on `main` — and those are two different things, so it is worth stating plainly which one is currently true.
+**Branch protection is enabled on `main`. A red Quality gate cannot be merged — by anyone.**
 
-**Required repository setting** (a one-time administrative action, outside this repository's files):
+The workflow does not merely report. It is a **required status check**, so a failing run blocks the merge button rather than decorating it with a red cross that somebody merges past.
+
+**Active repository configuration** — recorded here as an auditable statement of what is enforced on `main` today. It is a repository setting, not a file in this repository, which is exactly why it is written down: a control that lives only in a settings page is a control nobody can review.
 
 > Settings → Branches → branch protection rule for `main`:
 >
-> - ✅ **Require status checks to pass before merging** → require **`Quality gate`**
-> - ✅ **Require branches to be up to date before merging**
+> - ✅ **Require status checks to pass before merging** → **`Quality gate`** is required
+> - ✅ **Require branches to be up to date before merging** — strict status checks, so a stale branch is re-verified against current `main` before it lands
 > - ✅ **Require a pull request before merging**
-> - ✅ **Do not allow bypassing the above settings** — including for administrators
+> - ✅ **Do not allow bypassing the above settings** — **including for administrators**
 
-That last one matters. Phase 0 is explicit: _"Every change reaches `main` through a pull request. No exceptions, including for the business owner."_ A protection rule an administrator can click past is a suggestion, not a gate.
+That last one matters most, and it is the one that is usually left off. Phase 0 is explicit: _"Every change reaches `main` through a pull request. No exceptions, including for the business owner."_ A protection rule an administrator can click past is a suggestion, not a gate — so administrator bypass is **disabled**, and the rule binds the founder exactly as it binds everyone else.
 
-**Until branch protection is enabled, CI reports and review is the gate.** The workflow existing is not the same as the workflow being enforced, and pretending otherwise would be exactly the kind of quiet gap this project's governance exists to prevent.
+The up-to-date requirement closes the other quiet gap: two pull requests can each be green in isolation and broken once combined. Requiring the branch to be current means the Quality gate that passed is the Quality gate that reflects what `main` will actually contain.
 
-**A red build is fixed, not merged.** It is not merged with a follow-up ticket ([change-management.md](../governance/change-management.md) §3).
+**A red build is fixed, not merged.** It is not merged with a follow-up ticket ([change-management.md](../governance/change-management.md) §3) — and now it cannot be.
 
 ---
 
