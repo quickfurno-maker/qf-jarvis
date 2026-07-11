@@ -1,6 +1,6 @@
 # Communication Model — QF Jarvis
 
-**Status:** Phase 0 — in progress (pending review)
+**Status:** Phase 0 — Approved
 **Date:** 2026-07-11
 
 > **This document is authoritative** for how QF Jarvis supports calling and WhatsApp communication. Other documents cross-reference it rather than restating it. Ownership follows [system-boundary.md](./system-boundary.md); the decision is recorded in [ADR-0008](../decisions/ADR-0008-controlled-communication-capability.md).
@@ -67,8 +67,8 @@ sequenceDiagram
     participant Agent as Jarvis, Riya, or Anisha
     participant Core as QuickFurno Core
     participant N8N as n8n
-    participant Runtime as QF Communications Runtime
-    participant Provider as WhatsApp provider<br/>or QF Voice Runtime
+    participant Runtime as QF Communications Runtime<br/>WhatsApp adapter · QF Voice Runtime
+    participant Provider as WhatsApp provider<br/>or telephony/SIP provider
     participant Person as Client or vendor
 
     Origin->>Agent: instruction or event
@@ -83,6 +83,7 @@ sequenceDiagram
         Core->>N8N: authorized execution intent —<br/>bounded, expiring, idempotency-keyed
         N8N->>Runtime: execute workflow
         Runtime->>Runtime: re-validate consent and eligibility<br/>at execution time
+        Runtime->>Runtime: route via the WhatsApp adapter<br/>or the QF Voice Runtime
         Runtime->>Provider: transport
         Provider->>Person: the provider delivers
         Provider->>Runtime: provider result
@@ -94,7 +95,26 @@ sequenceDiagram
     end
 ```
 
-**Read the diagram for what is absent:** there is no edge from any agent to the runtime, to n8n, or to a provider. Jarvis requests and coordinates. Core authorizes. n8n and the runtime execute. The provider delivers. Core records.
+**Read the diagram for what is absent:** there is no edge from any agent to the runtime, to n8n, or to a provider. Jarvis requests and coordinates. Core authorizes. n8n and the runtime execute. **The provider delivers.** Core records.
+
+### Runtime and provider are not the same thing
+
+The distinction matters, and it is easy to blur:
+
+| Component | Side of the boundary | Role |
+| --- | --- | --- |
+| **QF Communications Runtime** | Execution-side, ours | Shared runtime. Validates, routes, retries, reports |
+| **WhatsApp adapter** | **Internal component of the runtime** | Routes a message toward the external WhatsApp provider |
+| **QF Voice Runtime** | **Internal component of the runtime** | Routes a call toward an external telephony/SIP provider |
+| **WhatsApp provider** | **External** | **Delivers** the message |
+| **Telephony or SIP provider** | **External** | **Delivers** the call |
+| **Client or vendor** | External | The recipient |
+
+The transport chain is therefore:
+
+> **n8n → QF Communications Runtime → WhatsApp adapter or QF Voice Runtime → external WhatsApp or telephony/SIP provider → recipient**
+
+**The QF Voice Runtime is ours, and it is not a provider.** It does not deliver a call; it hands the call to an external telephony or SIP provider that does. It never becomes the authoritative provider, and it never becomes a source of truth — **QuickFurno Core records the authoritative result**, from what the external provider reported back through the runtime and n8n.
 
 ---
 

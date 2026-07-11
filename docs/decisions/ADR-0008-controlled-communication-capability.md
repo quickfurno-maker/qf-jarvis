@@ -36,7 +36,9 @@ Jarvis **must not** directly invoke WhatsApp APIs; directly connect to telephony
 
 The flow is the existing flow, with communication as its subject:
 
-> Founder, administrator, or canonical event → Jarvis, Riya, or Anisha prepares a structured communication request → **QuickFurno Core validates recipient identity, consent, opt-out state, communication eligibility, policy, risk, and authorization** → Core creates an authorized execution intent → n8n and the QF Communications Runtime execute → the WhatsApp provider or the shared **QF Voice Runtime** delivers → the result returns through n8n → **QuickFurno Core records the authoritative result** → Jarvis and the relevant specialist reflect the outcome.
+> Founder, administrator, or canonical event → Jarvis, Riya, or Anisha prepares a structured communication request → **QuickFurno Core validates recipient identity, consent, opt-out state, communication eligibility, policy, risk, and authorization** → Core creates an authorized execution intent → n8n and the **QF Communications Runtime** execute, routing through the **WhatsApp adapter** or the **QF Voice Runtime** → the **external WhatsApp provider or telephony/SIP provider delivers** → the result returns through the runtime and n8n → **QuickFurno Core records the authoritative result** → Jarvis and the relevant specialist reflect the outcome.
+
+**The QF Voice Runtime is ours, and it is not a provider.** It is an internal component of the QF Communications Runtime; it hands a call to an external telephony or SIP provider, which delivers it. It never becomes the authoritative provider or a source of truth ([communication-model.md](../architecture/communication-model.md)).
 
 ### Founder authority is bounded by mandatory controls
 

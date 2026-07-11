@@ -1,6 +1,6 @@
 # Glossary — QF Jarvis
 
-**Status:** Phase 0 — in progress (pending review)
+**Status:** Phase 0 — Approved
 **Date:** 2026-07-11
 
 These terms have one meaning across this repository. Where another document uses one of them, it means exactly what is written here. Where a term implies ownership, the authoritative statement is [system-boundary.md](../architecture/system-boundary.md).
@@ -63,7 +63,9 @@ It may serve Jarvis, Riya, and Anisha — but each agent retains separate permis
 
 ### QF Voice Runtime
 
-The voice-call component of the QF Communications Runtime. Shared, execution-side, credential-holding. **Jarvis does not connect to it directly** — voice reaches it only through an authorized execution intent dispatched by QuickFurno Core and executed by n8n.
+The **internal voice component of the QF Communications Runtime** — ours, execution-side, credential-holding. It routes a call toward an **external telephony or SIP provider**, which delivers it.
+
+**It is not a provider, and it is not a source of truth.** The external telephony/SIP provider delivers; **QuickFurno Core records the authoritative result**. **Jarvis does not connect to it directly** — voice reaches it only through an authorized execution intent dispatched by Core and executed by n8n.
 
 Voice **begins at Automation Level 2 or 3**: production outbound voice initially requires explicit human approval on every call. Any future limited-policy automation for voice requires a **separate accepted ADR** ([automation-levels.md](../governance/automation-levels.md)).
 

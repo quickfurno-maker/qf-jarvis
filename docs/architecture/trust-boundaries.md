@@ -1,6 +1,6 @@
 # Trust Boundaries — QF Jarvis
 
-**Status:** Phase 0 — in progress (pending review)
+**Status:** Phase 0 — Approved
 **Date:** 2026-07-11
 
 **No implementation yet.** This document names the boundaries, what crosses them, and what must be true at each crossing. Mechanisms — algorithms, key stores, transport, libraries — are chosen in Phase 1 and Phase 13, not here.

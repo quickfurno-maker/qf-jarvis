@@ -1,6 +1,6 @@
 # Responsibility Matrix — QF Jarvis
 
-**Status:** Phase 0 — in progress (pending review)
+**Status:** Phase 0 — Approved
 **Date:** 2026-07-11
 
 Ownership statements here follow [system-boundary.md](./system-boundary.md), which is authoritative.
@@ -37,7 +37,7 @@ Ownership statements here follow [system-boundary.md](./system-boundary.md), whi
 | **Client message delivery** | **A** — authorizes and records result | — | I | **R** — executes the authorized intent | **R** — delivers |
 | **Communication request** (call or WhatsApp) | **A** — validates and decides | **R** — Jarvis, Riya, or Anisha prepares the structured request per domain routing | **R** — the human whose instruction it is, where founder- or admin-directed | — | — |
 | **Consent, opt-out, do-not-contact, quiet hours, attempt limits** | **A / R** — owns and **enforces**; refuses a request that violates them, **including the founder's own** | I — may hold a derived view as a courtesy check; **never as permission** | I | **R** — re-validates at execution time | — |
-| **Outbound call or WhatsApp execution** | **A** — authorizes and records the authoritative outcome | — | I | **R** — executes via the QF Communications Runtime | **R** — WhatsApp provider or QF Voice Runtime delivers |
+| **Outbound call or WhatsApp execution** | **A** — authorizes and records the authoritative outcome | — | I | **R** — executes via the QF Communications Runtime, routing through the WhatsApp adapter or the QF Voice Runtime | **R** — the **external WhatsApp provider or telephony/SIP provider** delivers |
 | **Delivery and call outcome** | **A / R** — records it as truth | I — **displays** it; may never write `delivered` or `completed` | I | **R** — reports the structured result | C — reports provider-side status |
 | **Communication routing between agents** | I | **A / R** — routes per the root-cause rule, and **records the reason** when it keeps a communication a specialist would normally own | I | — | — |
 | **Human handoff of a conversation** | **A / R** — owns handoff state | **R** — coordinates and requests it | **R** — the human who takes it over | R — surfaces the handoff | — |

@@ -1,6 +1,6 @@
 # Domain Map — QF Jarvis
 
-**Status:** Phase 0 — in progress (pending review)
+**Status:** Phase 0 — Approved
 **Date:** 2026-07-11
 
 This document names the logical domains that will exist across the QuickFurno ecosystem, and states where each one lives. **Nothing here is implemented.** Naming a domain is not designing a schema, and this document deliberately stops short of both.

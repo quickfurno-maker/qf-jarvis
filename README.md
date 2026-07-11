@@ -36,11 +36,13 @@ Agents recommend only. They do not authorize and they do not execute.
 
 ## Current Status
 
-**Phase 0 — Project Charter and Architecture: documentation in progress, pending review by the business owner.**
+**Phase 0 — Project Charter and Architecture: complete and approved.**
 
-Phase 0 is not complete. Its documents exist and are internally consistent, but the phase closes only when the business owner has reviewed and approved the charter and the boundary.
+The business owner has approved the charter and the permanent architecture boundary. All Phase 0 exit criteria are met: the documentation set is complete and internally consistent, no document contradicts the [system boundary](docs/architecture/system-boundary.md), and **eight ADRs are Accepted** (ADR-0001 through ADR-0008).
 
-This repository is **implementation-free by design**. No application framework, database, AI SDK, agent runtime, workflow integration, provider integration, frontend, CI, or deployment architecture has been implemented — and none will be until Phase 1. There is no package manager, no dependency manifest, and no application code.
+**Phase 1 — Engineering Foundation is the next phase. It has not started.**
+
+This repository is **implementation-free by design, and remains so until Phase 1**. No application framework, database, AI SDK, agent runtime, workflow integration, provider integration, frontend, CI, or deployment architecture has been implemented. There is no package manager, no dependency manifest, and no application code.
 
 ## Documentation
 

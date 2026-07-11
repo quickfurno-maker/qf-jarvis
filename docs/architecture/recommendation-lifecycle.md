@@ -1,6 +1,6 @@
 # Recommendation Lifecycle — QF Jarvis
 
-**Status:** Phase 0 — in progress (pending review)
+**Status:** Phase 0 — Approved
 **Date:** 2026-07-11
 
 Ownership follows [system-boundary.md](./system-boundary.md), which is authoritative.

@@ -1,6 +1,6 @@
 # Project Charter — QF Jarvis
 
-**Status:** Phase 0 — in progress (pending review)
+**Status:** Phase 0 — Approved
 **Date:** 2026-07-11
 **Business owner:** Keshav Sharma, Founder, QuickFurno
 

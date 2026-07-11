@@ -1,6 +1,6 @@
 # System Context — QF Jarvis
 
-**Status:** Phase 0 — in progress (pending review)
+**Status:** Phase 0 — Approved
 **Date:** 2026-07-11
 
 This document describes the systems and actors around QF Jarvis, and how information moves between them. Ownership statements here are summaries; the authoritative source is [system-boundary.md](./system-boundary.md).

@@ -1,6 +1,6 @@
 # Privacy Principles — QF Jarvis
 
-**Status:** Phase 0 — in progress (pending review)
+**Status:** Phase 0 — Approved
 **Date:** 2026-07-11
 
 QF Jarvis reasons about real people: clients who submitted a requirement for their home, and vendors running small businesses. Neither of them chose to be reasoned about by an AI system. That fact sets the standard.

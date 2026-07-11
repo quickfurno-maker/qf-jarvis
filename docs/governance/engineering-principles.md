@@ -1,6 +1,6 @@
 # Engineering Principles — QF Jarvis
 
-**Status:** Phase 0 — in progress (pending review)
+**Status:** Phase 0 — Approved
 **Date:** 2026-07-11
 
 These are the rules a pull request is judged against. Each states what to do, and — more usefully — what it forbids.

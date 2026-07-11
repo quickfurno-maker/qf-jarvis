@@ -1,6 +1,6 @@
 # Execution Governance — QF Jarvis
 
-**Status:** Phase 0 — in progress (pending review)
+**Status:** Phase 0 — Approved
 **Date:** 2026-07-11
 
 Ownership follows [system-boundary.md](./system-boundary.md), which is authoritative. The decision behind this model is [ADR-0002](../decisions/ADR-0002-recommend-authorize-execute-model.md) and [ADR-0005](../decisions/ADR-0005-human-and-policy-approval.md).

@@ -1,6 +1,6 @@
 # Phased Roadmap — QF Jarvis
 
-**Status:** Phase 0 — in progress (pending review)
+**Status:** Phase 0 — Approved
 **Date:** 2026-07-11
 
 ---
@@ -29,13 +29,15 @@ flowchart LR
 
 **Objective.** Establish the permanent boundary, the agent model, the governance rules, and the phase plan — before any code exists to argue with them.
 
-**Key outputs.** Charter, product vision, goals and non-goals, stakeholders, success metrics, glossary. Architecture: system context, system boundary, responsibility matrix, domain map, agent model, recommendation lifecycle, execution governance, data ownership, trust boundaries, this roadmap. Six accepted ADRs. Governance: engineering, security, privacy, and auditability principles; automation levels; change management.
+**Key outputs.** Charter, product vision, goals and non-goals, stakeholders, success metrics, glossary. Architecture: system context, system boundary, responsibility matrix, domain map, agent model, **communication model**, recommendation lifecycle, execution governance, data ownership, trust boundaries, this roadmap. **Eight Accepted ADRs** — [ADR-0001](../decisions/ADR-0001-source-of-truth-boundary.md), [ADR-0002](../decisions/ADR-0002-recommend-authorize-execute-model.md), [ADR-0003](../decisions/ADR-0003-event-driven-integration.md), [ADR-0004](../decisions/ADR-0004-modular-monolith-first.md), [ADR-0005](../decisions/ADR-0005-human-and-policy-approval.md), [ADR-0006](../decisions/ADR-0006-agent-responsibility-boundaries.md), [ADR-0007](../decisions/ADR-0007-founder-approval-interface-and-authority.md), [ADR-0008](../decisions/ADR-0008-controlled-communication-capability.md). Governance: engineering, security, privacy, and auditability principles; automation levels; change management.
 
 **Explicit exclusions.** No application code. No package manager, no `package.json`, no dependencies. No framework, database, AI SDK, agent runtime, workflow integration, provider integration, frontend, CI, or deployment file. No placeholder implementations.
 
 **Entry criteria.** A repository at zero baseline.
 
-**Exit criteria.** Every document above exists and is internally consistent. No document contradicts [system-boundary.md](./system-boundary.md). All ADRs are Accepted. The business owner has reviewed and approved the charter and the boundary.
+**Exit criteria — met.** Every document above exists and is internally consistent. No document contradicts [system-boundary.md](./system-boundary.md). All eight ADRs are Accepted. **The business owner has reviewed and approved the charter and the permanent architecture boundary.**
+
+**Status: Approved. Phase 1 is next, and has not started.**
 
 **Dependencies.** None.
 
@@ -65,7 +67,7 @@ flowchart LR
 
 **Objective.** Define the shared contracts before anything depends on them: canonical events, recommendations, approval decisions, execution intents, execution results.
 
-**Key outputs.** Versioned canonical event schemas ([ADR-0003](../decisions/ADR-0003-event-driven-integration.md)). The recommendation contract — subject, evidence, rationale, confidence, risk, priority, expiry, required approval, correlation, causation. Approval request, approval decision, execution intent, and execution result contracts. The **communication request**, **communication result**, and **communication state** contracts, including the full sixteen-state model ([communication-model.md](./communication-model.md)). A **contract registry** holding every version. **Fixtures** — representative sample payloads for every contract and version. Versioning and **compatibility rules**. Contract tests running against the fixtures.
+**Key outputs.** Versioned canonical event schemas ([ADR-0003](../decisions/ADR-0003-event-driven-integration.md)). The recommendation contract — subject, evidence, rationale, confidence, risk, priority, expiry, required approval, correlation, causation. Approval request, approval decision, execution intent, and execution result contracts. The **communication request**, **communication result**, and **communication state** contracts, including the authoritative eighteen-state communication lifecycle ([communication-model.md](./communication-model.md)). A **contract registry** holding every version. **Fixtures** — representative sample payloads for every contract and version. Versioning and **compatibility rules**. Contract tests running against the fixtures.
 
 **Explicit exclusions.** No event transport yet. No agents. No implementation of any contract's behavior — only its shape, its fixtures, and its tests. **No dependency on QuickFurno Core's current capabilities.**
 
@@ -229,7 +231,9 @@ Voice is a **capability gate inside this phase**, not a separate phase. The road
 
 **Gate 10f — Controlled voice pilot, evaluation, and staged rollout**, mirroring 10b–10d. **Production outbound voice requires explicit human approval on every call** ([automation-levels.md](../governance/automation-levels.md)).
 
-**Explicit exclusions.** **No Jarvis-to-n8n path, ever.** Intents come from QuickFurno Core. **No Jarvis-to-provider path and no provider credential in Jarvis, ever** — Jarvis directly invokes no WhatsApp API and connects to no telephony or SIP provider. No policy automation — every execution in this phase traces to a human approval. No money-related execution until its stronger-approval path is proven end to end. **No voice before gate 10e**, and **no voice policy automation at all**, which would require a separate accepted ADR.
+**Explicit exclusions.** **No Jarvis-to-n8n path, ever.** Intents come from QuickFurno Core. **No Jarvis-to-provider path and no provider credential in Jarvis, ever** — Jarvis directly invokes no WhatsApp API and connects to no telephony or SIP provider. No policy automation — every execution in this phase traces to a human approval. No money-related execution until its stronger-approval path is proven end to end. **No voice before gate 10e.**
+
+**No voice policy automation is permitted in Phase 10. Any future limited-policy voice automation requires a separate Accepted ADR, Phase 14 evaluation evidence, explicit Phase 15 promotion gates, business-owner approval, and immediate revocation capability.** In the meantime: **production outbound voice requires explicit human approval on every call**, **unrestricted autonomous calling remains prohibited**, and the example call types recorded in [automation-levels.md](../governance/automation-levels.md) — requested callbacks, appointment reminders, opted-in status calls, vendor-requested onboarding assistance — are **possibilities for a future ADR to argue, not scope authorized by Phase 0**.
 
 **Entry criteria.** Phase 9 complete. Approval decisions are recorded and attributable.
 

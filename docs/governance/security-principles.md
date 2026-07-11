@@ -1,6 +1,6 @@
 # Security Principles — QF Jarvis
 
-**Status:** Phase 0 — in progress (pending review)
+**Status:** Phase 0 — Approved
 **Date:** 2026-07-11
 
 Mechanisms are chosen in Phase 1 and hardened in Phase 13. These are the principles those mechanisms must satisfy. The boundaries they apply at are mapped in [trust-boundaries.md](../architecture/trust-boundaries.md).
