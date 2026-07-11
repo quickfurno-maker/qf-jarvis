@@ -1,0 +1,22 @@
+{
+  "name": "@qf/jarvis-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -b",
+    "typecheck": "tsc -b",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "@qf/contracts": "workspace:*",
+    "@qf/observability": "workspace:*",
+    "fastify": "^5.2.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@qf/testing": "workspace:*"
+  }
+}

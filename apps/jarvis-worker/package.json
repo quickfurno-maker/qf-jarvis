@@ -1,0 +1,21 @@
+{
+  "name": "@qf/jarvis-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -b",
+    "typecheck": "tsc -b",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@qf/contracts": "workspace:*",
+    "@qf/observability": "workspace:*",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@qf/testing": "workspace:*"
+  }
+}

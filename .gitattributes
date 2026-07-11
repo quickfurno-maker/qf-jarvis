@@ -1,0 +1,7 @@
+# Normalize line endings to LF in the repository and working tree on every
+# platform. Prettier is configured with endOfLine: "lf", so this keeps
+# `pnpm format:check` passing on Windows checkouts too.
+* text=auto eol=lf
+
+# Binary/lock artifacts that must not be line-ending normalized.
+pnpm-lock.yaml -text

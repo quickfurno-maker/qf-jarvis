@@ -1,0 +1,11 @@
+{
+  "//": "Solution-style root config. It builds nothing itself; it wires the project-reference graph so `tsc -b` compiles every workspace package in dependency order.",
+  "files": [],
+  "references": [
+    { "path": "packages/contracts" },
+    { "path": "packages/observability" },
+    { "path": "packages/testing" },
+    { "path": "apps/jarvis-api" },
+    { "path": "apps/jarvis-worker" }
+  ]
+}

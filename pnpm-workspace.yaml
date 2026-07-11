@@ -1,0 +1,9 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+
+# Explicitly vet which dependencies may run install/build scripts. esbuild
+# (pulled in by tsx for the dev scripts) installs a prebuilt platform binary in
+# its postinstall. It is not used by the build, test, or typecheck gates.
+allowBuilds:
+  esbuild: true
