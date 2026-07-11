@@ -1,0 +1,17 @@
+{
+  "name": "@qf-jarvis/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "QF Jarvis worker application boundary. Phase 1 establishes a compileable boundary and no runtime behavior.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.json",
+    "typecheck": "tsc --build tsconfig.json"
+  }
+}

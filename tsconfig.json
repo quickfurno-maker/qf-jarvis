@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+
+  // Solution-style root configuration.
+  //
+  // It owns no source files of its own. It exists so that `tsc --build` from the
+  // repository root type-checks and builds every project in dependency order,
+  // while each project below remains independently checkable.
+  "files": [],
+  "references": [{ "path": "./apps/api" }, { "path": "./apps/worker" }]
+}

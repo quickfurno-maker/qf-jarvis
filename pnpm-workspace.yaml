@@ -1,0 +1,73 @@
+packages:
+  - apps/*
+  - packages/*
+
+# ---------------------------------------------------------------------------
+# Project package-manager policy.
+#
+# pnpm 11 reads project policy from THIS file, using camelCase keys. It reads
+# only authentication and registry settings from `.npmrc`. Policy written to
+# `.npmrc` is silently ignored — it does not warn, and `pnpm config get` reports
+# it as `undefined`. Every setting below is verified with `pnpm config get`, and
+# the ones that shape resolution are recorded in `pnpm-lock.yaml`.
+# ---------------------------------------------------------------------------
+
+# Save exact versions. When a version is not explicitly supplied, `pnpm add`
+# writes "1.2.3", never "^1.2.3". A caret range is a standing instruction to run
+# code nobody reviewed.
+savePrefix: ''
+
+# An unmet or conflicting peer dependency FAILS the install rather than printing
+# a warning that scrolls past. Peer ranges are verified before a dependency is
+# chosen; they are never forced through with --force or --legacy-peer-deps.
+strictPeerDependencies: true
+
+# Missing peers are not silently installed on our behalf. Every package in the
+# tree is either declared by us or brought in deliberately by a dependency, so
+# the dependency graph says what it means.
+autoInstallPeers: false
+
+# The engines.node constraint in package.json is enforced, not advisory: the
+# wrong Node version fails at install with a clear message, rather than at
+# runtime with a strange one.
+engineStrict: true
+
+# Evaluate dependency engine compatibility against the project's TARGET runtime,
+# not against whichever Node 24 patch happens to be running the command. Without
+# this, a developer on a newer patch could install a dependency whose engines
+# range excludes the version CI and production actually run.
+nodeVersion: 24.18.0
+
+# The lockfile is authoritative. CI additionally installs with --frozen-lockfile.
+preferFrozenLockfile: true
+
+# Supply chain: a package version must have been public for at least 24 hours
+# (1440 minutes) before this repository will resolve it.
+#
+# The realistic npm attack is a compromised maintainer account publishing a
+# malicious patch release, which is typically detected and unpublished within
+# hours. A cooldown converts "we installed it minutes after publication" into
+# "someone else found it first". It costs us nothing: we pin exact versions and
+# upgrade deliberately, so we are never racing to a release.
+minimumReleaseAge: 1440
+
+# Without this, pnpm resolves a too-fresh version anyway and records an automatic
+# exemption for it. A control that silently grants itself exceptions is not a
+# control. There are no exemptions in this repository.
+minimumReleaseAgeStrict: true
+
+# A package whose publication time is missing from the registry metadata FAILS
+# resolution rather than bypassing the cooldown. Absent evidence of age is not
+# evidence of age — and "the metadata was missing" is exactly the shape a
+# cooldown bypass would take.
+minimumReleaseAgeIgnoreMissingTime: false
+
+# Supply chain: no dependency may run a lifecycle build script.
+#
+# An empty list is a deliberate, explicit statement that none has been reviewed
+# and approved — and, as of Phase 1, none needs to be: no package in the tree has
+# an install or build script. Adding an entry grants that package arbitrary code
+# execution at install time, on every developer machine and in CI. It is a
+# supply-chain decision requiring review and a note in
+# docs/engineering/supported-toolchain.md — never a way to silence a message.
+onlyBuiltDependencies: []

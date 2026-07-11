@@ -1,0 +1,35 @@
+# Dependencies and generated output are not ours to format.
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# The lockfile is generated and owned by pnpm. Formatting it would create a
+# spurious diff on every install and could break `--frozen-lockfile`.
+pnpm-lock.yaml
+
+# ---------------------------------------------------------------------------
+# The approved Phase 0 documentation set.
+#
+# These documents were reviewed and approved as they stand. Prettier would
+# rewrite all 31 of them — ~500 lines — purely to change `*emphasis*` into
+# `_emphasis_` and to re-pad every Markdown table. Neither behavior is
+# configurable, and neither changes a single word of content.
+#
+# Phase 1 does not spend the Phase 0 review on that. A pull request that adds a
+# toolchain and also churns the entire approved architecture set is a pull
+# request in which the boundary documents cannot be reviewed, because the real
+# changes are buried in whitespace. Formatting is not worth obscuring the one
+# thing this repository exists to protect.
+#
+# Exit path: normalize these files in a dedicated, formatting-only pull request
+# that changes nothing else, and delete this block in the same change. Until
+# then they are exempt from `pnpm format:check` — not from review.
+#
+# Everything written from Phase 1 onward is Prettier's: README.md,
+# docs/engineering/**, ADR-0009 and later, and all code and configuration.
+# ---------------------------------------------------------------------------
+docs/architecture/
+docs/charter/
+docs/governance/
+docs/decisions/ADR-000[1-8]-*.md

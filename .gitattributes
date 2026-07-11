@@ -1,0 +1,39 @@
+# The repository stores LF, always, on every platform.
+#
+# Without this, a Windows checkout commits CRLF, CI on Linux sees a diff that a
+# Windows developer cannot reproduce, and `git diff --check` in the quality gate
+# fails for reasons unrelated to the change under review.
+* text=auto eol=lf
+
+# Explicit for the file types this repository actually contains.
+*.ts        text eol=lf
+*.mts       text eol=lf
+*.cts       text eol=lf
+*.js        text eol=lf
+*.mjs       text eol=lf
+*.cjs       text eol=lf
+*.json      text eol=lf
+*.jsonc     text eol=lf
+*.md        text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.editorconfig text eol=lf
+.npmrc      text eol=lf
+.nvmrc      text eol=lf
+.node-version text eol=lf
+
+# The lockfile is a supply-chain artifact, and it must stay reviewable in Git and
+# on GitHub. It is the only place that records exactly what will be installed, so
+# a reviewer needs to see a dependency appear, a version move, or an integrity
+# hash change. Suppressing its diff would hide precisely the change worth reading.
+pnpm-lock.yaml text eol=lf
+
+# Binary files must never be line-ending converted.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.pdf  binary
+*.woff  binary
+*.woff2 binary
