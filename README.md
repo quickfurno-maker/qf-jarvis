@@ -56,13 +56,47 @@ The repository now contains an **engineering toolchain and nothing else**: a pnp
 - **`main` is protected**: the **Quality gate** status check is required, branches must be up to date before merging, a pull request is required, and **administrators cannot bypass the protection**. A red Quality gate cannot be merged — by anyone.
 - **ADR-0009 through ADR-0011 are Accepted**, so every foundational technology choice is recorded.
 
-**There is no business implementation, and nothing runs.**
+**Phase 2 — Contracts and Canonical Events: complete and approved.**
 
-`apps/api` and `apps/worker` exist as **compileable boundaries**: each is a documentation comment and `export {};`. They start no server, run no loop, and print nothing. There is no `pnpm dev` and no `pnpm start`, because there is nothing to start — and adding a placeholder to make the repository feel more alive is explicitly out of scope ([ADR-0010](docs/decisions/ADR-0010-workspace-and-module-structure.md)).
+The business owner approved Phase 2 on **2026-07-12**.
 
-Specifically, **none of the following exists in this repository**: agents, coordinator logic, AI or LLM SDKs, model prompts, canonical event contracts, recommendation or approval or execution contracts, event processing, a database, a queue, a web framework, a frontend, n8n workflows, WhatsApp or calling or telephony integration, provider credentials, environment configuration, Docker, or deployment configuration.
+The repository now contains [`@qf-jarvis/contracts`](packages/contracts/) — versioned, runtime-validatable **data contracts** for canonical events, recommendations, approval requests and decisions, execution intents and results, governed communication lifecycle records, vendor assignment and reassignment, cross-category linked leads, and agent memory and learning.
 
-**Phase 2 — Contracts and Canonical Events is the next phase. It has not started.**
+**Eighteen ADRs are Accepted.** ADR-0012 through [ADR-0018](docs/decisions/ADR-0018-governed-request-communication-and-control-contracts.md) were accepted by the business owner alongside Phase 2, joining ADR-0001 through ADR-0011.
+
+**Every contract in the package is governed by exactly one ADR:** the authorized-effect chain by [ADR-0014](docs/decisions/ADR-0014-governed-lifecycle-contracts.md), requests and communication authority by [ADR-0018](docs/decisions/ADR-0018-governed-request-communication-and-control-contracts.md), the client journey and reassignment by [ADR-0015](docs/decisions/ADR-0015-complete-client-journey-and-reassignment-policy.md), and memory and learning by [ADR-0016](docs/decisions/ADR-0016-agent-memory-and-learning-boundaries.md).
+
+The revised requirements are recorded in [quickfurno-compatibility-directive.md](docs/architecture/quickfurno-compatibility-directive.md), which is authoritative and approved.
+
+**All Phase 2 exit criteria are met:**
+
+- **973 tests pass** across 11 files, **none skipped**. 98 valid fixtures, 171 invalid fixtures.
+- **41 canonical events registered**, every one with a valid fixture — a contract cannot be registered and left unexercised.
+- **31 contracts**, each versioned, strict, and covered by `parse`/`safeParse` and fixtures.
+- **`pnpm check` is green** — format, lint, typecheck, test, build.
+- Personal data is minimized and justified; deletion propagation is representable and checkable.
+
+**Phase 2 creates contracts, not transport.** The contracts describe shapes; they move nothing and they **cannot cause an effect**. Parts of the permanent boundary are now _structural_ rather than merely documented:
+
+- A recommendation's `producingSystem` can only be `qf-jarvis`, and a recommendation is inert — no `approved` field, no recipient address, no credential.
+- An **approval request** is a separate contract from an approval **decision**. It has no outcome field, and one cannot be added. **An unanswered request expires; it never ripens into an approval** — silence is never consent.
+- An approval decision's `issuer` can only be `quickfurno-core`, and its deciding actor can only be a **human or a versioned policy**. There is no agent variant, so **agent self-approval is unrepresentable**.
+- An execution intent's `issuer` can only be `quickfurno-core` and its `executor` only `n8n`. **Jarvis cannot construct a valid execution intent**, and there is no provider to address one to.
+- An ambiguous execution result **cannot be recorded as a success**, and **`provider-accepted` cannot be recorded as `delivered`**.
+- A communication recipient can only be an opaque Core reference; a phone number or email address will not parse. There is **no consent field** — the QuickFurno Communication Core decides, and a stale copy of a permission cannot exist because there is nowhere to put one.
+- An assignment batch can only be issued by `quickfurno-core`. **Riya cannot construct one.** Three vendors per batch, one replacement batch, **six unique vendors per lead-category, for all time** — and a seventh does not parse ([ADR-0015](docs/decisions/ADR-0015-complete-client-journey-and-reassignment-policy.md)).
+- Agent memory carries `authoritative: false` and `rebuildable: true` as **literals**. Memory that claimed to be authoritative would not parse, and **QuickFurno truth overrides memory, always** ([ADR-0016](docs/decisions/ADR-0016-agent-memory-and-learning-boundaries.md)).
+- **No data becomes training data automatically.** Eligibility exists only as an explicit decision by a named human or versioned policy, against complete provenance. **Sensitive personal data is never eligible.**
+
+**There is still no business implementation, and nothing runs.**
+
+`apps/api` and `apps/worker` remain **compileable boundaries** — a documentation comment and `export {};`. They start no server, run no loop, and print nothing. No application imports the contracts yet; the first consumer is Phase 3's ingestion.
+
+Specifically, **none of the following exists in this repository**: agents, coordinator logic, AI or LLM SDKs, **a model gateway**, model prompts, event transport or ingestion, event persistence, message brokers or queues, webhooks, HTTP endpoints, a database, a web framework, a frontend, n8n workflows, WhatsApp or calling or telephony integration, provider integrations, provider credentials, environment configuration, Docker, or deployment configuration.
+
+The client, vendor, assignment, and governance events are **target contracts**. **No claim is made that QuickFurno Core emits any of them today** — establishing the live emitters is Phase 11's work, and where Core's shapes differ, an adapter absorbs the difference and the contract does not bend ([event-catalog.md](docs/contracts/event-catalog.md)).
+
+**Phase 3 — Durable Event Backbone has not started, and must not begin until Phase 2 is merged into `main`.**
 
 ## Getting Started
 
@@ -87,6 +121,19 @@ The test suite is **empty, by design**. Phase 1 has no business logic, and a tes
 Full instructions, including per-platform commands and troubleshooting: [development-setup.md](docs/engineering/development-setup.md).
 
 ## Documentation
+
+### Contracts
+
+- [Contracts overview](docs/contracts/README.md) — what Phase 2 is, and what it defers
+- [Contract principles](docs/contracts/contract-principles.md) — the rules every contract obeys
+- [Canonical event envelope](docs/contracts/canonical-event-envelope.md)
+- [Event catalog](docs/contracts/event-catalog.md) — the six registered events, and the ones deliberately absent
+- [Recommendation contract](docs/contracts/recommendation-contract.md)
+- [Approval and execution contracts](docs/contracts/approval-and-execution-contracts.md)
+- [Communication contract](docs/contracts/communication-contract.md) — the eighteen authoritative states
+- [Versioning and compatibility](docs/contracts/versioning-and-compatibility.md)
+- [Privacy and data minimization](docs/contracts/privacy-and-data-minimization.md)
+- [Testing and fixtures](docs/contracts/testing-and-fixtures.md)
 
 ### Engineering
 
@@ -132,6 +179,9 @@ Full instructions, including per-platform commands and troubleshooting: [develop
 - [ADR-0009 — Runtime, language, and package manager](docs/decisions/ADR-0009-runtime-language-and-package-manager.md) — Node 24 LTS, TypeScript, pnpm 11, native ESM
 - [ADR-0010 — Workspace and module structure](docs/decisions/ADR-0010-workspace-and-module-structure.md) — pnpm workspace, `apps/api`, `apps/worker`, future `packages/*`
 - [ADR-0011 — Quality toolchain and continuous integration](docs/decisions/ADR-0011-quality-toolchain-and-continuous-integration.md) — strict TypeScript, ESLint, Prettier, Vitest, GitHub Actions
+- [ADR-0012 — Runtime contract validation](docs/decisions/ADR-0012-runtime-contract-validation.md) — Zod, strict schemas, why types alone are insufficient at a trust boundary
+- [ADR-0013 — Canonical event envelope and versioning](docs/decisions/ADR-0013-canonical-event-envelope-and-versioning.md) — the envelope, the static registry, failing closed on unknown versions
+- [ADR-0014 — Governed lifecycle contracts](docs/decisions/ADR-0014-governed-lifecycle-contracts.md) — recommendation, approval, execution, communication, and why they cannot execute anything
 
 ### Governance
 
@@ -146,7 +196,17 @@ Full instructions, including per-platform commands and troubleshooting: [develop
 
 QuickFurno is a local home-service vendor discovery and lead-generation marketplace, connecting clients with verified local professionals in interior design, carpentry, modular factories, premium interiors, sofa work, painting, and civil work.
 
-Pune is the first operational city; Mumbai and additional cities follow later. A qualified lead may be shared with a maximum of three suitable vendors — a QuickFurno Core business rule, enforced by QuickFurno Core, not by QF Jarvis.
+Pune is the first operational city; Mumbai and additional cities follow later.
+
+**Vendor assignment is a QuickFurno Core business rule, enforced by QuickFurno Core, and never by QF Jarvis.** The current policy:
+
+- **Initial assignment batch: at most 3 eligible vendors.**
+- **One replacement batch**, on genuine dissatisfaction **and explicit client confirmation**: at most **3 additional unique vendors**, none of whom appeared in the first batch.
+- **Lifetime maximum: 6 unique vendors per lead-category**, for all time. There is no third batch.
+- **QuickFurno Core alone creates and authorizes assignment batches.** Riya may _request_ a reassignment; she never assigns a vendor, and `ClientReassignmentRequestV1` has no field in which she could name one.
+- **A cross-category requirement creates a separate linked lead** — its own identity, consent, verification, scoring, matching, and its own fresh batch of three.
+
+This supersedes the earlier flat "maximum of three vendors per qualified lead" rule ([ADR-0015](docs/decisions/ADR-0015-complete-client-journey-and-reassignment-policy.md), **Accepted 2026-07-12**).
 
 ## Contributing
 

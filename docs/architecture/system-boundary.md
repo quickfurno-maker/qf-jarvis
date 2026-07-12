@@ -31,10 +31,10 @@ The decision behind this boundary is recorded in [ADR-0001](../decisions/ADR-000
 
 - Business truth, in full and without exception.
 - Operational state and all authoritative lifecycle state.
-- **Leads** — creation, verification status, qualification, lifecycle.
+- **Leads** — creation, verification status, qualification, lifecycle. Including the creation of **linked leads**: a client's cross-category need becomes a **new lead** with independent identity, consent, verification, scoring, and matching — never a widened existing one ([quickfurno-compatibility-directive.md](./quickfurno-compatibility-directive.md) §5).
 - **Clients** — identity, requirements, relationship state.
 - **Vendors** — identity, qualification, onboarding state, activation state, service areas, performance.
-- **Assignments** — which vendors receive which lead, including enforcement of the business rule that **a qualified lead may be shared with a maximum of three suitable vendors**.
+- **Assignments** — which vendors receive which lead, and the enforcement of the vendor cap. **Core alone creates, authorizes, and performs an assignment or a reassignment.** The flat "maximum of three suitable vendors" rule is superseded by the two-batch, per-lead-category policy below.
 - **Packages** — eligibility, purchase, state, expiry.
 - **Wallets** — balances, debits, credits. All of it.
 - **Payments** — every money movement.
@@ -64,6 +64,51 @@ The decision behind this boundary is recorded in [ADR-0001](../decisions/ADR-000
 - Execute a provider action directly, bypassing n8n as the approved execution fabric.
 - Delegate authorization to an agent.
 - Accept an execution intent that did not originate from an approval decision it recorded.
+
+### Vendor assignment and reassignment
+
+**This supersedes the flat "maximum of three suitable vendors" rule.** The cap is now two-batch, and it is scoped **per lead-category** ([quickfurno-compatibility-directive.md](./quickfurno-compatibility-directive.md) §4, [ADR-0015](../decisions/ADR-0015-complete-client-journey-and-reassignment-policy.md)).
+
+| Rule | Value |
+| --- | --- |
+| Initial assignment batch | **At most 3** eligible vendors. Batch number **1** |
+| Replacement batch | **At most 3** *additional* vendors. Batch number **2** |
+| Replacement batches permitted | **Exactly one.** There is no batch three |
+| Lifetime maximum | **6 unique vendors per lead-category**, for all time |
+| Vendor overlap between batches | **Forbidden** |
+| Trigger for a replacement | Genuine dissatisfaction **and explicit client confirmation** |
+| Who creates and authorizes a batch | **QuickFurno Core, and only Core** |
+
+**Dissatisfaction is never inferred.** A replacement requires an explicit client confirmation — an artifact that points at the canonical event in which the client **actually asked**. An agent noticing that a client has gone quiet, or a model scoring a conversation as unhappy, is **evidence**. It is not confirmation, and it may not become one by an agent being confident about it.
+
+The failure this prevents is concrete, and it is not recoverable: three new vendors are contacted about a real person's home renovation because a model decided their tone had cooled. The vendors have been charged in lead value, and the client has been shopped around without ever asking to be.
+
+**The cap is per lead-category** because a client who wanted a wardrobe and now also wants a kitchen has not spent their wardrobe vendors exploring kitchens. Counting the two together starves a legitimate second requirement; counting them as one lead lets a client walk past an unbounded number of vendors by renaming what they wanted. The **lead-category pair** is the unit that makes both of those wrong.
+
+### The QuickFurno Communication Core
+
+**"QuickFurno Communication Core" is the communication authority *inside* QuickFurno Core.** It is not a separate system, and — this is the confusion worth killing on sight — **it is not the QF Communications Runtime**, which lives on the execution side of the boundary, in n8n's trust zone, and *delivers* ([communication-model.md](./communication-model.md)).
+
+The Communication Core **decides**. The Communications Runtime **delivers what Core decided**. Keeping the names apart is not pedantry: the moment "the communication system said it was fine" can mean either one, consent has been checked by whichever component happened to be nearest — which is exactly how a system ends up messaging someone who asked it not to.
+
+It owns, exclusively:
+
+| It owns | Which means Jarvis may not |
+| --- | --- |
+| Consent evidence | Hold a consent flag of its own |
+| Preferences | Decide a channel is acceptable |
+| Suppressions | Maintain a suppression list |
+| STOP/START authority | Interpret a STOP itself |
+| Communication decision authority | Authorize any communication |
+| Reason-code versions | Invent a refusal reason |
+| Current eligibility | Cache eligibility |
+| Delivery and call truth | Claim a message was delivered |
+| Authoritative communication history | Be the record of what was said |
+
+Two rules follow from that ownership, and neither may ever be softened:
+
+- **Unknown or stale consent is not permission.** A missing answer is a no. A system that reads "we hold no record of an opt-out" as an opt-in will, given time, contact everybody it once failed to ask.
+- **Transactional no-objection is not marketing permission.** A client who accepted a delivery update has not agreed to be marketed to. The second may never be inferred from the first.
 
 ---
 
@@ -109,7 +154,12 @@ The decision behind this boundary is recorded in [ADR-0001](../decisions/ADR-000
 - **Claim delivery, call completion, or success before authoritative execution results return.** `execution submitted` is not `provider accepted`, and neither is `delivered`. A **Call** or **Send WhatsApp** button initiates the governed flow; **the action is not delivered or completed merely because the button was clicked.**
 - **Override Riya's or Anisha's domain ownership without recording the routing reason.**
 - **Move money, adjust a wallet, alter a package, or change a payment** — by any path, direct or indirect.
-- **Assign a lead to a vendor.** It may reason about matching readiness and vendor suitability, and may explain or flag an outcome. Assignment is Core's, and the maximum-of-three-vendors rule is Core's to enforce.
+- **Assign or reassign a vendor.** It may reason about matching readiness and vendor suitability, may *notice* dissatisfaction, may *carry* a client's explicit confirmation, and may *ask* Core to reassign. **Choosing the vendors is Core's**, and the batch policy above — three, then at most three more, six per lead-category, ever — is Core's to enforce. Structurally: an assignment batch has no shape in which an agent could name a vendor.
+- **Create a lead, including a linked lead.** A cross-category need becomes a **new lead** with independent identity, consent, verification, scoring, and matching — and **Core creates it**; Jarvis identifies the need and asks. The tempting shortcut, widening the existing lead to add a category, is forbidden because it fails three ways at once: the vendor cap becomes meaningless, consent and verification are silently inherited, and the audit trail forks. A kitchen requirement reaching vendors on a wardrobe's consent is precisely what the separation exists to prevent.
+- **Create parallel consent, preference, suppression, STOP/START, or delivery state.** Not a consent flag, not a suppression list, not a cached eligibility answer, not a "we think this one was delivered" field. All of it belongs to the **QuickFurno Communication Core** (above). This is enforced rather than requested: a communication request contract has no consent field, and the schema is strict, so one cannot be added.
+- **Hold authoritative memory.** Agent memory is derived, isolated, minimal, rebuildable, and **non-authoritative by construction** — the non-authoritative and rebuildable properties are literals, and their opposites do not parse. A persistent, agent-owned store of business facts is, however it is described, a second copy of Core's data that drifts and that an agent will eventually reason from in preference to the truth. **QuickFurno truth overrides memory, always** ([ADR-0016](../decisions/ADR-0016-agent-memory-and-learning-boundaries.md)).
+- **Rewrite its own prompts, policies, or production configuration.** An agent that could raise or lower its own approval threshold would be an agent that could authorize itself, one indirection removed.
+- **Make data training-eligible.** Nothing becomes training data automatically. Eligibility exists only as an explicit decision by a named human or a named, versioned policy, against complete provenance, with a stated purpose limitation — and **sensitive personal data is never eligible, under any approval**.
 - **Enforce or bypass policy.** Policy is Core's.
 - **Store private model chain-of-thought.**
 - **Create authority by creating an artifact.** Producing a recommendation, however urgent, confident, or well-evidenced, changes nothing until Core authorizes it.

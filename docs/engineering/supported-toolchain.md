@@ -56,7 +56,30 @@ Every version is exact. There is not a caret in the manifest.
 | `vitest`                 | **4.1.10** | Test framework — brings its own Vite                                                                                       |
 | `@types/node`            | **24.9.2** | Node type definitions                                                                                                      |
 
-**9 development dependencies. 0 runtime dependencies.** Every one is tooling. There is no framework, database driver, AI SDK, HTTP client, or utility library in this repository.
+**9 development dependencies, all at the root.** Every one is tooling. There is no framework, database driver, AI SDK, HTTP client, or utility library in this repository.
+
+## Runtime dependencies
+
+| Package | Version   | Belongs to                      | Why                                                                                                       |
+| ------- | --------- | ------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `zod`   | **4.4.3** | `@qf-jarvis/contracts` **only** | Runtime validation at trust boundaries ([ADR-0012](../decisions/ADR-0012-runtime-contract-validation.md)) |
+
+**The root package still has zero runtime dependencies**, and every application still has zero. A dependency belongs to the package that needs it, not to the workspace that happens to contain it.
+
+Zod is the **only** runtime dependency in the repository, and it earns that place by being the thing that turns the architecture boundary from prose into a parser: TypeScript types are erased at runtime, so at a boundary where the value is `unknown`, `as CanonicalEvent` checks nothing at all.
+
+> ### Why Zod's supply-chain profile made this an easy call
+>
+> | Check                   | Result                                                                            |
+> | ----------------------- | --------------------------------------------------------------------------------- |
+> | Transitive dependencies | **Zero.** The install added exactly **+1 package**                                |
+> | Install / build scripts | **None.** `onlyBuiltDependencies` stays empty                                     |
+> | Peer dependencies       | None. Clean under `strictPeerDependencies: true`                                  |
+> | Release age             | Published 2026-05-04 — far outside the 24-hour cooldown, **no exemption written** |
+> | TypeScript 6.0.3        | Type-checks under full strict mode                                                |
+> | Module system           | Native ESM, `sideEffects: false`                                                  |
+>
+> A zero-dependency, script-free, ESM-native package is close to the best profile a runtime dependency can have — which is a large part of why it is the only one.
 
 > ### Why ESLint 10.6.0 and not 10.7.0?
 >

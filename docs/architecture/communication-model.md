@@ -54,6 +54,7 @@ A communication request is a **structured object**, like every other artifact Ja
 - **Independently authorize communication.**
 - **Bypass consent, opt-out, do-not-contact, quiet-hour, identity, risk, or attempt-limit controls.**
 - **Claim delivery, call completion, or success before authoritative execution results return.**
+- **Create parallel consent, preference, suppression, STOP/START, or delivery state.** Not a consent flag, not a suppression list, not a cached eligibility answer. All of it belongs to the **QuickFurno Communication Core** (below).
 
 The first three are structural — there is no integration and no credential to misuse. The rest are rules, and they are review blockers ([change-management.md](../governance/change-management.md)).
 
@@ -197,6 +198,44 @@ Jarvis, Riya, and Anisha may all use this runtime. Each nonetheless retains **se
 
 ---
 
+## The QuickFurno Communication Core
+
+**"QuickFurno Communication Core" is the communication authority *inside* QuickFurno Core.** It is not a separate system, and it is **not** the QF Communications Runtime described above.
+
+The two are constantly confused, and the confusion is dangerous rather than merely untidy:
+
+| | QuickFurno Communication Core | QF Communications Runtime |
+| --- | --- | --- |
+| **Where it lives** | **Inside QuickFurno Core** | **Execution side**, in n8n's trust zone |
+| **What it does** | **Decides** | **Delivers what Core decided** |
+| **Reached by** | An agent asking for authorization | n8n, under an authorized execution intent |
+| **Its consent check is** | **The authority** | A **second line of defence** at execution time |
+
+The moment "the communication system said it was fine" can mean either one, consent has been validated by whichever component happened to be nearest — which is exactly how a system ends up calling someone who asked it never to be called.
+
+The Communication Core owns, exclusively:
+
+| It owns | Which means Jarvis may not |
+| --- | --- |
+| Consent evidence | Hold a consent flag of its own |
+| Preferences | Decide a channel is acceptable |
+| Suppressions | Maintain a suppression list |
+| STOP/START authority | Interpret a STOP itself |
+| Communication decision authority | Authorize any communication |
+| Reason-code versions | Invent a refusal reason |
+| Current eligibility | Cache eligibility |
+| Delivery and call truth | Claim a message was delivered |
+| Authoritative communication history | Be the record of what was said |
+
+**Jarvis must not create parallel consent, preference, suppression, STOP/START, or delivery state.** Not as a flag, not as a list, not as a cache, and not as a "courtesy" copy that a later feature will inevitably start trusting. This is enforced in the contracts rather than asked for in prose: `CommunicationRequestV1` has no consent field, and the schema is strict, so one cannot be added.
+
+Two rules follow, and neither may ever be softened:
+
+- **Unknown or stale consent is not permission.** A missing answer is a no. A system that reads "we hold no record of an opt-out" as an opt-in will, given time, contact everybody it once failed to ask.
+- **Transactional no-objection is not marketing permission.** A client who accepted a delivery update has not agreed to be marketed to. The second may never be inferred from the first, and a purpose code is how the difference is made checkable rather than assumed.
+
+---
+
 ## QuickFurno Core remains authoritative
 
 Core owns all of the following. Jarvis may hold **derived, non-authoritative** views for reasoning and display, and must never treat them as truth or act on them as permission:
@@ -214,6 +253,75 @@ Core owns all of the following. Jarvis may hold **derived, non-authoritative** v
 - communication history
 - authoritative delivery and call outcomes
 - human-handoff state
+
+---
+
+## The communication contracts
+
+Three contracts carry a communication from *asking* to *truth*. They are separate on purpose: each is a different actor making a different claim, and the separations are what make the rules above enforceable rather than merely stated ([communication-contract.md](../contracts/communication-contract.md), [ADR-0014](../decisions/ADR-0014-governed-lifecycle-contracts.md)).
+
+| Contract | Produced by | What it claims |
+| --- | --- | --- |
+| **`CommunicationRequestV1`** | **QF Jarvis** or a specialist agent | *"I would like this to happen."* Nothing more |
+| **`CommunicationAuthorizationV1`** | **The QuickFurno Communication Core** | *"Authorized"* — or *"rejected, for this reason."* The only artifact that can permit anything |
+| **`CommunicationResultV1`** | **QuickFurno Core** | *"This is what actually happened."* Recorded, not reported |
+
+### `CommunicationRequestV1` — Jarvis asks
+
+A request is powerless by **shape**, not by convention:
+
+- **No consent field.** No `hasConsent`, no `optedIn`, no `withinQuietHours`, no `suppressed` — and none can be added, because the schema is strict. Copying Core's consent state into a Jarvis artifact turns a *courtesy check* into an *apparent permission*, and a stale copy of a permission is the most dangerous field in any system that reaches real people.
+- **No delivery claim.** No status, no `sentAt`, no `delivered`. A request is not a delivery, and it may not be made to look like one.
+- **No destination.** The recipient is an **opaque Core entity reference** — never a phone number, never an email address; the identifier character set excludes `@` and `+`, so neither will parse. **The object cannot reach a person.** This is what degrades a prompt-injection attack from *"make the system call me"* to *"make the system suggest something odd to a human who can see the evidence."*
+- **Content is a reference, never a body.** It names an approved **template** (messaging) or an approved **script** (voice), *with its version*. There is no message-body field, because a free-text body is where a careless or compromised agent writes something nobody approved, and where personal data arrives by accident. Template variables live in a governed container that refuses credentials, contact details, raw provider content, and model internals by key *and* by value shape — so the "just put it in the variables" escape hatch is closed too.
+- **Expiry is mandatory**, and an unanswered request dies rather than ripening.
+- **`requiredApproval` is never `none`** — a communication always reaches a person. On the **voice** channel it must be `stronger-approval` or `founder`: explicit human approval on **every** call ([ADR-0017](../decisions/ADR-0017-live-communication-sequencing.md)).
+
+### `CommunicationAuthorizationV1` — the Communication Core decides
+
+This is what makes "Core is the consent authority" operational rather than rhetorical. **Only this can authorize.**
+
+A rejection is not a shrug. It carries a **machine-readable reason code**, so a refusal can be counted, alerted on, and never silently retried:
+
+| Reason | Meaning |
+| --- | --- |
+| **`recipient-opted-out`** | They said no |
+| **`consent-withdrawn`** | They had said yes, and have since said no |
+| **`do-not-contact`** | Contact is barred |
+| **`suppressed`** | The recipient is on a suppression list Core owns |
+| **`stop-received`** | A STOP arrived, and **Core** interpreted it — not Jarvis |
+
+Others exist — `purpose-not-approved`, `attempt-limit-reached`, `quiet-hours`, `identity-unverified`, `channel-not-eligible` — and Core owns its own reason taxonomy. **These five are the refusals that must never be retried, softened, or routed around.**
+
+Note what is deliberately *absent*: there is **no `opted-out` communication state**. An opt-out is a **`rejected`** outcome carrying its reason. A nineteenth state would fork the lifecycle and let a consumer handle `rejected` while quietly ignoring the one refusal that must never be ignored.
+
+An authorization also carries **no `validUntil` and no consent snapshot**. It says what Core decided *when it decided*; it is not a permission slip that travels forward in time. A consent snapshot with a future expiry is precisely the stale permission that lets a withdrawn consent be ignored.
+
+### `CommunicationResultV1` — Core records
+
+**Reporting is not authority.** n8n and the QF Communications Runtime *observe* a provider and *report*. **Core records**, and the recording is what makes it true.
+
+Two collapses the contract refuses:
+
+- **`provider accepted` is not `delivered`.** The provider taking a message off our hands tells us the provider has it. It does not tell us anybody received it — so a result in `provider accepted` **cannot** carry a `succeeded` outcome, and neither can `execution submitted`. This is the exact defect that shows a founder one confident tick and lets them believe a conversation happened.
+- **`indeterminate` is not success**, and it is not failure either. When a call drops mid-dial or a webhook never arrives, the honest answer to *"did that connect?"* is **we do not know**. Recorded as failure, the system retries and somebody's phone rings twice. Recorded as success, a founder acts on a conversation that never happened. So ambiguity is a first-class outcome, and it is classified **requires-reconciliation**: go and find out; do not dial and see.
+
+A result carries no message body, no transcript, no recording, and no raw provider payload — only an **opaque provider handle** a human can look up. Evidence, never content.
+
+---
+
+## Both gates, or nothing
+
+**A communication needs two independent yeses, and it needs both.**
+
+1. **A human approval** — a named person, or a named and versioned policy, agreed the action should happen. Recorded as an `ApprovalDecisionV1` ([execution-governance.md](./execution-governance.md) §2a, §2b).
+2. **The Communication Core's eligibility check** — consent evidence, preferences, suppressions, STOP/START state, do-not-contact status, approved purpose, attempt limits, quiet hours. Recorded as a `CommunicationAuthorizationV1`.
+
+These answer **different questions**, which is exactly why they are different contracts. Merge them and there is a single "approved" to check — at which point the following sentence becomes unenforceable:
+
+> **A founder's approval does not override an opt-out.**
+
+The founder may approve a message to a client who has opted out. **The message must still not be sent.** That is enforced in the shape, both ways: an **authorized** result must name the `approvalDecisionId` it rests on — an authorization resting on no approval is Core authorizing a message nobody agreed to send — and a **rejected** one must **not** name an approval decision, because Core refused it *whether or not a human had approved it*.
 
 ---
 

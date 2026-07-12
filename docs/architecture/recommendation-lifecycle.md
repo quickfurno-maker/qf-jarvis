@@ -76,6 +76,33 @@ stateDiagram-v2
 
 ---
 
+## The submission path has its own contract
+
+The step out of **recommended** and into **awaiting approval** — the act of *asking* — now has an artifact of its own: **`ApprovalRequestV1`**. It is distinct from the recommendation it asks about, and distinct from the decision Core makes about it ([execution-governance.md](./execution-governance.md) §2b, [ADR-0014](../decisions/ADR-0014-governed-lifecycle-contracts.md)).
+
+| Artifact | Produced by | What it is |
+| --- | --- | --- |
+| **Recommendation** | A Jarvis specialist | *"Here is what I think should happen, and why."* Inert by construction |
+| **`ApprovalRequestV1`** | **QF Jarvis** | *"I am asking a human to decide this exact action."* **Carries no authority** |
+| **`ApprovalDecisionV1`** | **QuickFurno Core** | *"A named human, or a named and versioned policy, decided."* The only artifact that grants anything |
+
+The separation exists because the alternative fails in a specific way. Without a request contract, the fact that we asked has to be recorded *somewhere* — and it lands as a `submitted` flag on the recommendation or a `pending` outcome on the decision. Either one puts a piece of the authorization state inside Jarvis, and that is the one place it may never be.
+
+Two rules restated, because this is exactly where they are easiest to erode:
+
+- **Jarvis never sets `approved` itself.** A human clicking approve in the Control Plane produces an **approval request**. That is the ask, not the answer.
+- **The `approved` state requires an `approvalDecisionId` recorded by Core.** Not a local flag, not an optimistic render, not an inference from the fact that a request was sent. Absent Core's decision identifier, the recommendation is still `awaiting approval` — and it may yet be **rejected**, including a request the founder submitted.
+
+The request also carries an exact **fingerprint of the proposed action**, as it was worded when the approver saw it — so an approval binds to *that* action, and an approval that no longer matches it is detectably an approval of something else.
+
+### Expiry kills a recommendation; it never ripens into approval
+
+`expiresAt` is mandatory on an approval request, and **expiry is terminal**. An unanswered request **dies**. It is not sent late, it does not silently re-raise, and it does not become an approval through the passage of time. There is **no timeout-to-yes anywhere in this system** — and, in the contract, no field in which one could be expressed.
+
+If the situation still warrants action after a recommendation has expired, the answer is a **new recommendation** and a **new request**, freshly evidenced and freshly validated against a world that has moved. That is a new decision, and it is supposed to look like one.
+
+---
+
 ## Not every recommendation requires execution
 
 This is worth stating plainly, because a lifecycle diagram invites the assumption that every path ends at a provider. Most do not.

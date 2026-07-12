@@ -57,7 +57,7 @@ Configure policy, manage delegated approval limits, and act as the operational c
 Handles lead verification and the day-to-day mechanics of getting a qualified lead ready for QuickFurno Core to assign.
 
 - **Get from Jarvis (Kabir):** "verify this lead manually," "this lead shows fraud signals," "this lead is incomplete in a way that will hurt matching."
-- **Do not:** perform assignment. QuickFurno Core assigns, subject to its own rules — including the maximum of three vendors per qualified lead.
+- **Do not:** perform assignment. QuickFurno Core assigns, subject to its own rules — including the vendor cap: an initial batch of at most 3, one replacement batch of at most 3 additional unique vendors, and a lifetime maximum of 6 unique vendors per lead-category ([ADR-0015](../decisions/ADR-0015-complete-client-journey-and-reassignment-policy.md)).
 
 ### Sales / vendor-acquisition team
 
@@ -98,7 +98,7 @@ People looking for interior design, carpentry, modular factories, premium interi
 Verified local professionals who receive qualified leads.
 
 - **Relationship to Jarvis:** subjects, not users. A vendor may be the subject of an Anisha recommendation (activation, recharge, win-back) and may receive an authorized, executed communication as a result — but the vendor never sees Jarvis, and Jarvis never contacts them directly.
-- **Business rule they rely on:** a qualified lead is shared with at most three suitable vendors. QuickFurno Core enforces this.
+- **Business rule they rely on:** a qualified lead is offered to at most **3** vendors in its initial batch, and — only on genuine dissatisfaction with an explicit client confirmation — to at most **3 further unique vendors** in a single replacement batch. **6 unique vendors per lead-category, for all time.** QuickFurno Core enforces this ([ADR-0015](../decisions/ADR-0015-complete-client-journey-and-reassignment-policy.md)). A vendor is never re-offered a lead they were already offered.
 
 ### Compliance and security responsibility
 

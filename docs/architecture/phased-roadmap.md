@@ -1,7 +1,11 @@
 # Phased Roadmap — QF Jarvis
 
-**Status:** Phase 0 — Approved
-**Date:** 2026-07-11
+**Status:** Phase 0 approved · Phase 1 approved · **Phase 2 complete and approved (2026-07-12)** · Phase 3 not started
+**Date:** 2026-07-12
+
+> **Phase 3 must not begin until Phase 2 is merged into `main`.** A phase built on an unmerged branch is a phase built on something that can still change.
+
+> **Revised.** Phase 10 is now **test-only**, Phase 11 carries the live Core integration, and **Phase 11A** is a separate, gated controlled-communication pilot. The vendor assignment rule is now the two-batch, six-per-lead-category policy. See [quickfurno-compatibility-directive.md](./quickfurno-compatibility-directive.md), [ADR-0015](../decisions/ADR-0015-complete-client-journey-and-reassignment-policy.md), [ADR-0016](../decisions/ADR-0016-agent-memory-and-learning-boundaries.md), [ADR-0017](../decisions/ADR-0017-live-communication-sequencing.md).
 
 ---
 
@@ -17,11 +21,16 @@ Every phase below states an **objective**, **key outputs**, **explicit exclusion
 flowchart LR
     P0["0<br/>Charter"] --> P1["1<br/>Foundation"] --> P2["2<br/>Contracts"] --> P3["3<br/>Event backbone"] --> P4["4<br/>Jarvis coordination"]
     P4 --> P5["5<br/>Kabir"] --> P6["6<br/>Riya"] --> P7["7<br/>Anisha"] --> P8["8<br/>Jitin"]
-    P8 --> P9["9<br/>Approval and policy"] --> P10["10<br/>n8n bridge"] --> P11["11<br/>Core integration"] --> P12["12<br/>Founder control plane"]
+    P8 --> P9["9<br/>Approval and policy"] --> P10["10<br/>n8n bridge<br/><b>TEST ONLY</b>"] --> P11["11<br/>Core integration<br/><b>LIVE</b>"]
+    P11 --> P11A["11A<br/>Controlled<br/>communication pilot"] --> P12["12<br/>Founder control plane"]
     P12 --> P13["13<br/>Security and observability"] --> P14["14<br/>Evaluation loop"] --> P15["15<br/>Controlled automation"]
 
     style P0 fill:#e8f0fe,stroke:#1a73e8
+    style P10 fill:#fef7e0,stroke:#f9ab00
+    style P11A fill:#fce8e6,stroke:#d93025
 ```
+
+**The first real message is sent in Phase 11A, and nowhere earlier.** Phase 10 builds and proves the bridge against fixtures and a test dispatcher; it reaches nobody ([ADR-0017](../decisions/ADR-0017-live-communication-sequencing.md)).
 
 ---
 
@@ -37,7 +46,7 @@ flowchart LR
 
 **Exit criteria — met.** Every document above exists and is internally consistent. No document contradicts [system-boundary.md](./system-boundary.md). All eight ADRs are Accepted. **The business owner has reviewed and approved the charter and the permanent architecture boundary.**
 
-**Status: Approved. Phase 1 is next, and has not started.**
+**Status: complete and approved.**
 
 **Dependencies.** None.
 
@@ -55,7 +64,9 @@ flowchart LR
 
 **Entry criteria.** Phase 0 exit criteria met and approved.
 
-**Exit criteria.** A developer can clone, install, run checks, and run an empty test suite. CI runs on every pull request and blocks merge on failure. Every foundational technology choice has an ADR.
+**Exit criteria — met.** A developer can clone, install, run checks, and run the test suite. CI runs on every pull request and blocks merge on failure. Every foundational technology choice has an ADR.
+
+**Status: complete and approved.**
 
 **Dependencies.** Phase 0.
 
@@ -67,13 +78,23 @@ flowchart LR
 
 **Objective.** Define the shared contracts before anything depends on them: canonical events, recommendations, approval decisions, execution intents, execution results.
 
-**Key outputs.** Versioned canonical event schemas ([ADR-0003](../decisions/ADR-0003-event-driven-integration.md)). The recommendation contract — subject, evidence, rationale, confidence, risk, priority, expiry, required approval, correlation, causation. Approval request, approval decision, execution intent, and execution result contracts. The **communication request**, **communication result**, and **communication state** contracts, including the authoritative eighteen-state communication lifecycle ([communication-model.md](./communication-model.md)). A **contract registry** holding every version. **Fixtures** — representative sample payloads for every contract and version. Versioning and **compatibility rules**. Contract tests running against the fixtures.
+**Key outputs.** Versioned canonical event schemas ([ADR-0003](../decisions/ADR-0003-event-driven-integration.md)). The recommendation contract — subject, evidence, rationale, confidence, risk, priority, expiry, required approval, correlation, causation. **Approval request**, approval decision, execution intent, and execution result contracts — five separate contracts, and the request carries no authority. The **communication request**, **communication authorization**, **communication result**, and **communication state** contracts, including the authoritative eighteen-state communication lifecycle ([communication-model.md](./communication-model.md)).
 
-**Explicit exclusions.** No event transport yet. No agents. No implementation of any contract's behavior — only its shape, its fixtures, and its tests. **No dependency on QuickFurno Core's current capabilities.**
+**The revised contracts** ([quickfurno-compatibility-directive.md](./quickfurno-compatibility-directive.md)): the **assignment batch**, **client reassignment request and decision**, **additional-service request**, and **linked lead** contracts, encoding the two-batch, six-per-lead-category vendor policy ([ADR-0015](../decisions/ADR-0015-complete-client-journey-and-reassignment-policy.md)). The **agent memory** and **learning** contracts — agent-run, model reference, prompt-configuration reference, human correction, recommendation evaluation, outcome feedback, dataset provenance, training eligibility, memory invalidation ([ADR-0016](../decisions/ADR-0016-agent-memory-and-learning-boundaries.md)). **Erasure** and **policy-version** contracts.
+
+The **target event catalogue** — client, assignment, vendor, privacy, policy, and communication-authority events. A **contract registry** holding every version. **Fixtures** — representative sample payloads for every contract and version. Versioning and **compatibility rules**. Contract tests running against the fixtures.
+
+**Explicit exclusions.** No event transport yet. No agents. No implementation of any contract's behavior — only its shape, its fixtures, and its tests. **No dependency on QuickFurno Core's current capabilities.** **No model gateway and no model integration** — Claude and ChatGPT are named as the initial reasoning providers behind a future gateway, and neither is wired to anything here.
 
 **Entry criteria.** Phase 1 complete.
 
-**Exit criteria.** Every contract is versioned, documented, registered, and covered by contract tests running against fixtures. Compatibility rules are defined. Personal data in each contract is minimized and justified. Deletion propagation is designed ([data-ownership.md](./data-ownership.md)).
+**Exit criteria — met.** Every contract is versioned, documented, registered, and covered by contract tests running against fixtures. Compatibility rules are defined. Personal data in each contract is minimized and justified. Deletion propagation is designed and **representable** — every erasable derived record carries an erasure state ([data-ownership.md](./data-ownership.md)). The vendor assignment, reassignment, and cross-category policies are enforced by the schema, not by prose — **and where a rule is stateful and only Core can enforce it, that is documented rather than implied** ([assignment-and-reassignment.md](../contracts/assignment-and-reassignment.md)).
+
+**973 tests, 11 files, none skipped.** 31 contracts, 41 registered canonical events — every one with a valid fixture. 98 valid and 171 invalid fixtures. **ADR-0012 through ADR-0018 are Accepted.**
+
+**Status: complete and approved (2026-07-12).**
+
+**Target contracts are not claims about Core.** The client and vendor events describe the shape Core's events *will* take. **No claim is made that Core emits any of them today.** The payloads deliberately carry almost nothing — an opaque reference, a reason code, a small governed bag of derived signals — so that a Phase 11 adapter has an easy job rather than an impossible one. **The adapter absorbs the difference; the contract does not bend.**
 
 **Dependencies.** Phase 1. **This phase completes independently.** The contracts define the *target* integration shape; they do not require QuickFurno Core to emit or accept anything yet. Whether Core can currently emit these events, or currently expose an authorization-decision interface, is **unverified and deliberately out of scope here** — establishing those capabilities is **Phase 11's** work.
 
@@ -89,7 +110,7 @@ flowchart LR
 
 **Explicit exclusions.** No agents. No recommendations. No AI. No execution. No approval flow. **No live QuickFurno Core connection.**
 
-**Entry criteria.** Phase 2 complete.
+**Entry criteria.** Phase 2 complete, approved, **and merged into `main`.** Phase 3 does not begin on an unmerged branch.
 
 **Exit criteria.** Events are ingested idempotently — proven by deliberately redelivering them. Dead letters are visible and replayable. Read models can be destroyed and rebuilt from the event history with identical results. Duplicate-event and dead-letter metrics are instrumented.
 
@@ -123,7 +144,7 @@ flowchart LR
 
 **Key outputs.** Kabir, versioned. Deterministic rules first: completeness, format validity, threshold checks. Model reasoning only for genuine judgment: budget plausibility, urgency plausibility, fraud pattern synthesis. Structured recommendations with mandatory evidence. Automation **Level 1 — shadow recommendations**, not shown to operational users, recorded and evaluated.
 
-**Explicit exclusions.** No lead assignment — ever, in any phase. No approval flow yet. No execution. No other agents. Kabir does not decide how many vendors receive a lead; the max-three rule is QuickFurno Core's.
+**Explicit exclusions.** No lead assignment — ever, in any phase. No approval flow yet. No execution. No other agents. Kabir does not decide how many vendors receive a lead: the batch policy — **at most three per batch, one replacement batch, six unique vendors per lead-category** — is QuickFurno Core's to enforce ([ADR-0015](../decisions/ADR-0015-complete-client-journey-and-reassignment-policy.md)).
 
 **Entry criteria.** Phase 4 complete.
 
@@ -135,21 +156,21 @@ flowchart LR
 
 ---
 
-## Phase 6 — Riya: Client Intelligence
+## Phase 6 — Riya: Client Intelligence (the complete client journey)
 
-**Objective.** Client follow-up, nurture, abandoned-requirement recovery, reactivation, and communication timing and channel — in shadow mode.
+**Objective.** The **complete client journey** — requirement completion, follow-up, satisfaction and dissatisfaction detection, complaints, explicit client-confirmation capture, reassignment *requests*, cross-category *requests*, review, human escalation, and lifecycle closure — in shadow mode.
 
-**Key outputs.** Riya, versioned. Follow-up timing and channel recommendations. Abandoned-requirement detection. Reactivation candidates. Relationship intelligence. Structured recommendations with proposed actions that are bounded and specific.
+**Key outputs.** Riya, versioned. Follow-up timing and channel recommendations. Abandoned-requirement detection. Reactivation candidates. Relationship intelligence. **Dissatisfaction detection with evidence.** **Reassignment requests carrying an explicit client confirmation.** **Cross-category additional-service requests.** Human escalation. Structured recommendations with proposed actions that are bounded and specific.
 
-**Explicit exclusions.** No message is sent. No approval flow yet. No provider contact — Riya proposes content, timing, and channel, and nothing else.
+**Explicit exclusions.** No message is sent. No approval flow yet. No provider contact. **Riya never assigns a vendor**, never changes consent, and never sends anything directly. She may notice dissatisfaction, may carry the client's confirmation, and may ask Core to reassign — and `ClientReassignmentRequestV1` **has no field in which she could name a vendor** ([ADR-0015](../decisions/ADR-0015-complete-client-journey-and-reassignment-policy.md)).
 
 **Entry criteria.** Phase 5 complete and evaluated.
 
-**Exit criteria.** Riya produces evidence-backed recommendations in shadow. Proposed actions are bounded enough to become execution intents later without reinterpretation.
+**Exit criteria.** Riya produces evidence-backed recommendations in shadow. Proposed actions are bounded enough to become execution intents later without reinterpretation. **A reassignment request without an explicit client confirmation is demonstrably impossible to construct** — dissatisfaction is evidence, never permission.
 
-**Dependencies.** Phase 5 (proves the specialist pattern). Client and lead events.
+**Dependencies.** Phase 5 (proves the specialist pattern). Client, lead, and assignment events.
 
-**Principal risks.** Recommending outreach that would annoy real clients; recommending it at volume. Mitigated by shadow mode and by evaluating proposed-message quality before any of it is ever surfaced, let alone sent.
+**Principal risks.** Recommending outreach that would annoy real clients; recommending it at volume. **And the new one: inferring dissatisfaction and precipitating a reassignment nobody asked for** — three vendors contacted about a real person's home because a model read their tone as cooling. Mitigated by shadow mode, and structurally by the mandatory `ClientConfirmationV1`, which points at the canonical event in which the client actually asked.
 
 ---
 
@@ -207,70 +228,97 @@ flowchart LR
 
 ---
 
-## Phase 10 — n8n Execution Bridge
+## Phase 10 — n8n Execution Bridge — **TEST ONLY**
 
-**Objective.** Turn authorized execution intents into real actions — safely, idempotently, and reversibly.
+**Objective.** Build and prove the n8n execution bridge **against fixtures and a test dispatcher**. Reach nobody.
 
-**Key outputs.** Execution intent contract in production use: bounded, expiring, signed, idempotency-keyed. n8n-side validation of authenticity, integrity, freshness, and bounds. Provider integration inside n8n's trust zone. Bounded retries preserving idempotency. Dead-letter handling. Execution results returning to QuickFurno Core. Rate and volume bounds. Automation **Level 3 — approval-controlled execution**.
+> **This phase sends nothing to anyone.** No production recipient. No live provider. No production message. No production call. Not "discouraged", not "only with approval" — **forbidden** ([ADR-0017](../decisions/ADR-0017-live-communication-sequencing.md)).
 
-**The QF Communications Runtime** ([communication-model.md](./communication-model.md)): consent and policy validation interface, template and script registry, scheduling, retry and idempotency controls, delivery and call status handling, human handoff, structured result reporting. Provider credentials live **here and nowhere else**.
+**Why the earlier plan was wrong.** The Phase 0 roadmap put a live messaging pilot inside this phase, *conditional on QuickFurno Core's dispatch capability being ready*. That made the most consequential property of the whole project — **whether a real client's phone rings** — depend on another team's schedule. And the pilot would have validated consent enforcement against a **simulated** Core, which is the very authority that owns consent. A green pilot would have proved that our mock agrees with our contracts. That is a statement about us, not about the world.
 
-### Phase 10 capability gates — messaging before voice
+**The first real message must not be sent against a fake consent authority.**
 
-Voice is a **capability gate inside this phase**, not a separate phase. The roadmap is not renumbered; the gates are sequenced.
+**Key outputs.** A **test dispatcher** and fixtures. A **simulated Core interface**. Execution-intent validation: authenticity, integrity, freshness, bounds. n8n-side contract validation. **Duplicate-effect testing** — one execution intent produces at most one provider call initiation, proven by deliberately redelivering. Messaging lifecycle simulation across all eighteen states. Bounded retries preserving idempotency. Dead-letter handling. **Voice-gate design and tests.**
 
-**Gate 10a — Messaging adapter and provider integration.** The WhatsApp adapter, on the shared communication contracts from Phase 2, behind bounded, expiring, idempotency-keyed execution intents dispatched by Core. Authorization and consent validation enforced by Core and **re-validated by the runtime at execution time**.
+**The QF Communications Runtime** ([communication-model.md](./communication-model.md)), built and tested but not connected: consent and policy validation interface, template and script registry, scheduling, retry and idempotency controls, delivery and call status handling, human handoff, structured result reporting. Provider credentials live **here and nowhere else** — and in this phase, nowhere at all.
 
-**Gate 10b — Controlled messaging pilot.** A narrow, low-volume pilot: one recipient class, one purpose, volume-bounded, every message behind a named human approval.
-
-**Gate 10c — Messaging evaluation.** Did consent enforcement hold? Did a retry ever double-send? Did every result reach Core and close the lifecycle? Was any message claimed as delivered that was not?
-
-**Gate 10d — Staged messaging rollout.** Widened by purpose and by volume, one step at a time, each step reversible.
-
-**Gate 10e — QF Voice Runtime.** Only once messaging has proven consent enforcement, at-most-once execution, and authoritative result recording end to end. Voice brings transcript and summary processing, speech handling, recording consent, quiet hours, and misdial risk with it — **none of which arrive before it**.
-
-**Gate 10f — Controlled voice pilot, evaluation, and staged rollout**, mirroring 10b–10d. **Production outbound voice requires explicit human approval on every call** ([automation-levels.md](../governance/automation-levels.md)).
-
-**Explicit exclusions.** **No Jarvis-to-n8n path, ever.** Intents come from QuickFurno Core. **No Jarvis-to-provider path and no provider credential in Jarvis, ever** — Jarvis directly invokes no WhatsApp API and connects to no telephony or SIP provider. No policy automation — every execution in this phase traces to a human approval. No money-related execution until its stronger-approval path is proven end to end. **No voice before gate 10e.**
-
-**No voice policy automation is permitted in Phase 10. Any future limited-policy voice automation requires a separate Accepted ADR, Phase 14 evaluation evidence, explicit Phase 15 promotion gates, business-owner approval, and immediate revocation capability.** In the meantime: **production outbound voice requires explicit human approval on every call**, **unrestricted autonomous calling remains prohibited**, and the example call types recorded in [automation-levels.md](../governance/automation-levels.md) — requested callbacks, appointment reminders, opted-in status calls, vendor-requested onboarding assistance — are **possibilities for a future ADR to argue, not scope authorized by Phase 0**.
+**Explicit exclusions.** **No production recipient. No live provider. No production message. No production call.** **No Jarvis-to-n8n path, ever** — intents come from QuickFurno Core. **No Jarvis-to-provider path and no provider credential in Jarvis, ever.** No policy automation. No voice execution of any kind.
 
 **Entry criteria.** Phase 9 complete. Approval decisions are recorded and attributable.
 
-**Exit criteria.** An approved, low-risk, reversible action executes end to end and its result returns to Core. **Retry demonstrably does not double-send and does not double-dial** — one execution intent produces at most one provider call initiation. **An ambiguous provider outcome is demonstrably reconciled before any further attempt.** **A legitimate later attempt after a no-answer is demonstrably a new intent** — with its own identity, consent check, attempt-limit check, expiry, and audit trail — and is not confused with a retry. An expired intent is demonstrably refused. A forged intent is demonstrably refused. **A communication request for an opted-out recipient is demonstrably refused — including one the founder made.** **A scheduled communication whose recipient withdraws consent before the scheduled moment is demonstrably not sent.** Dead letters are visible and replayable. The full audit chain — event → recommendation → approval → intent → result — is verifiable for every execution.
+**Exit criteria.** Against the test dispatcher and a conforming simulated Core: an approved, low-risk, reversible action executes end to end and its result returns. **Retry demonstrably does not double-send and does not double-dial.** **An ambiguous provider outcome is demonstrably reconciled before any further attempt.** **A legitimate later attempt after a no-answer is demonstrably a new intent** — its own identity, consent check, attempt-limit check, expiry, and audit trail — not a retry. An expired intent is demonstrably refused. A forged intent is demonstrably refused. **A communication request for an opted-out recipient is demonstrably refused — including one the founder made.** **A scheduled communication whose recipient withdraws consent before the scheduled moment is demonstrably not sent.** Dead letters are visible and replayable. The full audit chain — event → recommendation → approval → intent → result — is verifiable.
 
-**Dependencies.** Phase 9. n8n availability. Provider credentials provisioned **in n8n only**. Note the sequencing: intents are dispatched to n8n **by QuickFurno Core**, so the first live end-to-end execution requires Core's dispatch capability. Phase 10 builds and proves the n8n side against the Phase 2 execution-intent contract; **Phase 11 completes and hardens the Core-side emitters, interfaces, and adapters** that make it live. If Core's dispatch capability is not ready when Phase 10 is, Phase 10 exits against a conforming test dispatcher and its live cut-over belongs to Phase 11 — the phases do not merge.
+**Dependencies.** Phase 9. n8n availability. **No dependency on QuickFurno Core's readiness** — that is the point. This phase completes on its own schedule.
 
-**Principal risks.** The first real effect on a real client or vendor. Mitigated by starting with the lowest-risk, most reversible action class, with volume bounds, and with a human behind every single execution.
+**Principal risks.** The temptation to "just try one" because the bridge is working. There is no production credential in this phase, which is what makes the temptation unactionable rather than merely resisted.
 
 ---
 
-## Phase 11 — QuickFurno Core Integration
+## Phase 11 — QuickFurno Core Integration — **LIVE**
 
-**Objective.** **This is the phase where QuickFurno Core's integration capabilities are established.** Everything before it was built against contracts and fixtures; this phase makes it live, and does the work Core requires in order to participate.
+**Objective.** **This is the phase where QuickFurno Core's integration capabilities are established, and where the system becomes live.** Everything before it was built against contracts and fixtures.
 
 **Key outputs.**
 
-- **Canonical event emitters in QuickFurno Core** — emitting the Phase 2 events for all four agent domains, versioned and signed.
-- **The authorization interface in QuickFurno Core** — accepting an approval request, validating identity, authority, current state, risk policy, expiry, and recommendation eligibility; deciding; recording the authoritative decision; and emitting the resulting canonical decision event ([ADR-0007](../decisions/ADR-0007-founder-approval-interface-and-authority.md)).
+- **Canonical event emitters in QuickFurno Core** — emitting the Phase 2 events for all four agent domains, including the **client, assignment, and vendor target events**, versioned and signed.
+- **The authorization interface in QuickFurno Core** — accepting an `ApprovalRequestV1`, validating identity, authority, current state, risk policy, expiry, and recommendation eligibility; deciding; recording the authoritative decision; and emitting the resulting canonical decision event ([ADR-0007](../decisions/ADR-0007-founder-approval-interface-and-authority.md)).
 - **Execution-intent dispatch from Core to n8n**, completing the Phase 10 bridge.
-- **Core's communication authority** — contact identity, phone number, WhatsApp eligibility, voice-call consent, opt-in and opt-out status, do-not-contact status, approved message or call purpose, attempt limits, quiet hours, communication history, human-handoff state, and **authoritative delivery and call outcomes** ([communication-model.md](./communication-model.md)).
+- **The QuickFurno Communication Core** — the real consent authority. Contact identity, phone number, WhatsApp eligibility, voice-call consent, opt-in and opt-out status, do-not-contact, suppressions, STOP/START, approved purpose, attempt limits, quiet hours, communication history, human-handoff state, and **authoritative delivery and call outcomes** ([communication-model.md](./communication-model.md)).
+- **Consent re-validation at execution time** — the runtime asks Core, and Core's answer *then* is the one that counts.
+- **Assignment, reassignment, and linked-lead capability in Core** — batch creation, the two-batch cap, the six-per-lead-category lifetime cap, client-confirmation capture, and separate linked-lead creation ([ADR-0015](../decisions/ADR-0015-complete-client-journey-and-reassignment-policy.md)).
 - **Compatibility adapters** — wherever Core's existing shapes differ from the Phase 2 contracts, an adapter reconciles them. **The adapter absorbs the difference; the contract does not bend.**
 - **Callbacks and result flow** — execution results returning to Core and reaching Jarvis as canonical events, closing recommendation lifecycles.
 - **Migration requirements for Core**, stated explicitly and planned per [change-management.md](../governance/change-management.md).
 - **Reconciliation** between Jarvis derived views and Core truth, with Core winning, always.
-- **Deletion and anonymization propagation** into Jarvis derived views and recommendation evidence.
+- **Deletion and anonymisation propagation** into Jarvis derived views, recommendation evidence, **agent memory, and dataset examples** ([ADR-0016](../decisions/ADR-0016-agent-memory-and-learning-boundaries.md)).
 - Backfill and replay against real history.
 
-**Explicit exclusions.** No Jarvis write path into business state — not in this phase, not in any phase. No second source of truth, however convenient. **No weakening of a Phase 2 contract to accommodate what Core happens to emit today** — that is what adapters are for.
+**Explicit exclusions.** No Jarvis write path into business state — not in this phase, not in any phase. No second source of truth, however convenient. **No weakening of a Phase 2 contract to accommodate what Core happens to emit today** — that is what adapters are for. **No production communication** — that is Phase 11A, and it is gated.
 
-**Entry criteria.** Phase 10 complete. **A scoping assessment of what QuickFurno Core can emit and accept today** — the first point in the roadmap where that answer is actually required.
+**Entry criteria.** Phase 10 complete. **A scoping assessment of what QuickFurno Core can emit and accept today.**
 
-**Exit criteria.** Core emits the events all four agents need. Core's authorization interface accepts approval requests, decides, records authoritatively, and emits decision events. Jarvis reflects those decisions and demonstrably holds **no local approved state** of its own. Every recommendation lifecycle closes with a recorded outcome. Derived views reconcile against Core, and a deliberate divergence is detected and corrected in Core's favor. A deletion in Core demonstrably propagates into Jarvis.
+**Exit criteria.** Core emits the events all four agents need. Core's authorization interface accepts approval requests, decides, records authoritatively, and emits decision events. Jarvis reflects those decisions and demonstrably holds **no local approved state** of its own. Every recommendation lifecycle closes with a recorded outcome. Derived views reconcile against Core, and a deliberate divergence is detected and corrected in Core's favour. **A deletion in Core demonstrably propagates into Jarvis derived views, recommendation evidence, and agent memory** — and a record that claims completion while data remains anywhere is demonstrably refused. **The QuickFurno Communication Core answers eligibility questions authoritatively**, and an opted-out recipient is demonstrably refused.
 
 **Dependencies.** Phase 10. **Deep cooperation from QuickFurno Core — this is the phase that needs it, and the first one that does.** Whether Core has these capabilities today is unverified; **establishing them is this phase's work, and their absence changes this phase's size, not the boundary** ([ADR-0001](../decisions/ADR-0001-source-of-truth-boundary.md)).
 
-**Principal risks.** This phase carries the integration risk that earlier phases deliberately deferred, so it may be large. That is the intended trade: the alternative was blocking Phases 2 through 10 on another team's roadmap. Secondary risk: reconciliation quietly turning into synchronization, and a derived view becoming load-bearing — mitigated by rebuilding read models from scratch periodically and proving nothing breaks.
+**Principal risks.** This phase carries the integration risk that earlier phases deliberately deferred, so it may be large. That is the intended trade: the alternative was blocking Phases 2 through 10 on another team's roadmap. Secondary risk: reconciliation quietly turning into synchronisation, and a derived view becoming load-bearing — mitigated by rebuilding read models from scratch periodically and proving nothing breaks.
+
+---
+
+## Phase 11A — Controlled Communication Pilot
+
+**Objective.** **Reach a real person, for the first time, on purpose.**
+
+This is a separate phase and not a gate inside Phase 11, for a specific reason: a controlled pilot buried inside a large integration phase is a pilot that gets **compressed when the phase runs late**. It needs its own gates, its own evidence, and its own ability to **stop** without stalling everything else ([ADR-0017](../decisions/ADR-0017-live-communication-sequencing.md)).
+
+### The sequence — and it is never run out of order
+
+1. **Internal test destinations.** Our own numbers. Nobody else's. The first end-to-end send will surface something nobody predicted; it should surface it against our own phone.
+2. **One low-risk transactional purpose.** *One.* Not a category of purposes.
+3. **Human-approved client pilot.** Volume-bounded. Every single message behind a named human approval.
+4. **Delivery and result reconciliation.** Did consent enforcement hold? Did a retry ever double-send? Did every result reach Core and close the lifecycle? **Was anything claimed as delivered that was not?**
+5. **Controlled expansion**, widened by purpose and by volume, one reversible step at a time.
+6. **Voice only after messaging safety evidence.**
+
+### Voice goes last, and brings its own risks with it
+
+Voice is not just another channel. It is synchronous, intrusive, impossible to retract, and it brings transcript and summary processing, speech handling, recording consent, quiet hours, and misdial risk — **none of which arrive before it, and none of which messaging ever tested.**
+
+**Production outbound voice requires explicit human approval on every call.** This is enforced in the contract, not merely in the process: a voice `CommunicationRequestV1` must carry `requiredApproval` of `stronger-approval` or `founder`, and must reference an approved **script** rather than a message template.
+
+**No voice policy automation is permitted.** Any future limited-policy voice automation requires a separate Accepted ADR, Phase 14 evaluation evidence, explicit Phase 15 promotion gates, business-owner approval, and immediate revocation capability. **Unrestricted autonomous calling remains prohibited**, and the example call types recorded in [automation-levels.md](../governance/automation-levels.md) — requested callbacks, appointment reminders, opted-in status calls, vendor-requested onboarding assistance — are **possibilities for a future ADR to argue, not authorized scope**.
+
+**Explicit exclusions.** No policy automation — every communication in this phase traces to a human approval. No money-related execution until its stronger-approval path is proven end to end. **No voice before messaging safety evidence exists.** **No Jarvis-to-n8n path and no Jarvis-to-provider path, ever.**
+
+**Entry criteria.** **Phase 11 has succeeded** — not started, not mostly working. Core emits, Core authorizes, Core records, and consent is enforced by the authority that owns it.
+
+> **No production communication is permitted before Phase 11 succeeds.**
+
+**Exit criteria.** A real, approved, low-risk, reversible message reaches a real recipient and its authoritative result returns to Core. **A retry demonstrably does not double-send and does not double-dial.** **An opted-out recipient is demonstrably refused — including one the founder approved.** **A scheduled communication whose recipient withdraws consent before the scheduled moment is demonstrably not sent.** Nothing was rendered as `delivered` that was not. Dead letters are visible and replayable. The full audit chain is verifiable for every message sent.
+
+**Dependencies.** Phase 11. Provider credentials provisioned **in n8n only** — and verifiably nowhere inside the Jarvis trust zone.
+
+**Principal risks.** **The first real effect on a real client or vendor.** Mitigated by internal destinations first, by one purpose, by volume bounds, by a named human behind every single message, and by an off switch that costs nothing to pull.
 
 ---
 
@@ -282,11 +330,11 @@ Voice is a **capability gate inside this phase**, not a separate phase. The road
 
 **Explicit exclusions.** No new agent capability. No chat interface that "just does things." No approval shortcut that bypasses risk classification. **No optimistic approval or delivery state** — the control plane never renders an action as approved before Core's authoritative decision arrives, and **never claims delivery, call completion, or success before authoritative execution results return**. `execution submitted` is not `provider accepted`, and neither is `delivered`; the UI must not collapse them. The control plane **initiates governed communication requests**; it does not authorize them, does not transport them, and does not deliver them.
 
-**Entry criteria.** Phase 11 complete — in particular, Core's authorization interface exists and emits decision events.
+**Entry criteria.** Phase 11 complete — in particular, Core's authorization interface exists and emits decision events. **Phase 11A's messaging pilot is under way**, so that the communication actions the control plane exposes are backed by a path that has actually been proven against a real recipient.
 
 **Exit criteria.** The founder can run a day from this view. Every item shows its evidence. Approving from the view submits a request to Core and renders **only** the decision Core returned — demonstrated by showing that a request Core rejects renders as rejected, and that a request in flight renders as pending, never as approved. **Clicking Call or Send WhatsApp demonstrably initiates a governed request, not a send**: a refused request renders as `rejected` with Core's reason and nothing is sent, an in-flight request renders as `authorization requested` or `execution submitted`, and `delivered` appears **only** on an authoritative execution result. **The rejected, cancelled, expired, and in-flight renderings are demonstrated — not only the happy path.** The view stays short — consolidation and expiry demonstrably work under real volume.
 
-**Dependencies.** Phase 11.
+**Dependencies.** Phase 11, and Phase 11A for anything the view can actually send.
 
 **Principal risks.** **This is the adoption phase, and adoption is the project's largest risk.** A view the founder stops reading is a failed project regardless of engineering quality. Mitigated by ruthless consolidation, honest prioritization, and tracking the stale-recommendation rate.
 

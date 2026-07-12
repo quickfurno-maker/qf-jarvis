@@ -23,10 +23,34 @@ qf-jarvis/
 │       ├── tsconfig.json
 │       └── README.md
 │
-├── packages/                    Shared modules — EMPTY, reserved for Phase 2
+├── packages/                    Shared modules
+│   ├── contracts/               @qf-jarvis/contracts — versioned data contracts (Phase 2)
+│   │   ├── src/
+│   │   │   ├── common/          identifiers, timestamps, entity refs, actors,
+│   │   │   │                    policy refs, classification, bounded + governed JSON
+│   │   │   ├── events/          envelope, catalog (41 events), static registry,
+│   │   │   │                    target client / vendor / governance events
+│   │   │   ├── recommendations/ RecommendationV1, lifecycle record
+│   │   │   ├── approvals/       ApprovalRequestV1 (asks), ApprovalDecisionV1 (decides)
+│   │   │   ├── execution/       ExecutionIntentV1, ExecutionResultV1
+│   │   │   ├── communications/  channels, the eighteen states, request,
+│   │   │   │                    authorization, result, state record, human handoff
+│   │   │   ├── assignments/     vendor batch policy, client confirmation,
+│   │   │   │                    reassignment, additional services, linked leads
+│   │   │   ├── learning/        agent runs, model + prompt provenance, corrections,
+│   │   │   │                    evaluations, outcome feedback, training eligibility
+│   │   │   ├── memory/          AgentMemoryRecordV1, MemoryInvalidationRequestV1
+│   │   │   ├── privacy/         erasure request and record
+│   │   │   ├── governance/      policy version changes
+│   │   │   ├── fixtures/        valid and invalid payloads
+│   │   │   ├── tests/           contract tests, grouped by domain
+│   │   │   └── index.ts         the public surface
+│   │   ├── package.json
+│   │   ├── tsconfig.json
+│   │   └── README.md
 │   └── README.md
 │
-├── docs/                        Charter, architecture, decisions, governance, engineering
+├── docs/                        Charter, architecture, contracts, decisions, governance, engineering
 ├── scripts/clean.mjs            Cross-platform artifact removal
 ├── .github/workflows/ci.yml     The quality gate
 │
@@ -43,13 +67,13 @@ qf-jarvis/
 
 ## `apps/` versus `packages/`
 
-|                    | `apps/*`                     | `packages/*`                            |
-| ------------------ | ---------------------------- | --------------------------------------- |
-| **Is**             | A deployable boundary        | A shared module                         |
-| **Depends on**     | `packages/*`                 | Nothing in this repository              |
-| **Depended on by** | Nothing                      | `apps/*`                                |
-| **Justified by**   | A distinct workload          | **Two or more real consumers**          |
-| **Today**          | `api`, `worker` — both empty | Empty. First package arrives in Phase 2 |
+|                    | `apps/*`                     | `packages/*`                               |
+| ------------------ | ---------------------------- | ------------------------------------------ |
+| **Is**             | A deployable boundary        | A shared module                            |
+| **Depends on**     | `packages/*`                 | Nothing in this repository                 |
+| **Depended on by** | Nothing                      | `apps/*`                                   |
+| **Justified by**   | A distinct workload          | **Two or more real consumers**             |
+| **Today**          | `api`, `worker` — both empty | `contracts` — the versioned data contracts |
 
 ### Dependency direction — one way, and enforced
 
@@ -92,11 +116,19 @@ A web framework is not chosen until a phase actually needs one. Choosing it now 
 
 Phase 3's event backbone is _"the load-bearing infrastructure of the entire system."_ Drawing this boundary on an empty repository costs nothing; discovering it in Phase 3, after ingestion has grown inside a request handler, costs a refactor that competes with delivering Phase 3 — and loses.
 
-## Future shared packages
+## Shared packages
 
-`packages/` is registered as `packages/*` in the workspace and holds only a README, so the first package needs a package and not a workspace change.
+### `@qf-jarvis/contracts` — the first, and so far the only
 
-**The first one is Phase 2's contracts** — canonical events, recommendations, approval decisions, execution intents, execution results ([ADR-0003](../decisions/ADR-0003-event-driven-integration.md)). **Do not create it now.** An empty contracts package invites the first person who needs a type to put it there, and the contracts would then be _discovered by implementation_ rather than agreed by design — which [engineering-principles.md](../governance/engineering-principles.md) §1 forbids by name.
+Phase 2 created it: the versioned, runtime-validatable data contracts — canonical events, recommendations, approval decisions, execution intents, execution results, and governed communication lifecycle records ([ADR-0003](../decisions/ADR-0003-event-driven-integration.md), [ADR-0012](../decisions/ADR-0012-runtime-contract-validation.md), [ADR-0013](../decisions/ADR-0013-canonical-event-envelope-and-versioning.md), [ADR-0014](../decisions/ADR-0014-governed-lifecycle-contracts.md)).
+
+It clears the bar without argument: every later phase depends on it, and a contract two systems must agree on is exactly what a versioning obligation and a review surface are for.
+
+It contains **no business logic and no transport**. It is data and validation — importing it cannot cause an effect. **No application imports it yet**, and that is correct: Phase 2 defines contracts, it does not wire them into anything. The first consumer is Phase 3's ingestion.
+
+Documentation: [docs/contracts/](../contracts/).
+
+### The bar for the next one
 
 **A new package is justified when two or more consumers genuinely need the same thing, and that thing has a boundary someone can name.** It is not justified by "this feels shared" (one consumer is not sharing), by "we will need it eventually" (then create it eventually), or by "it keeps `apps/` tidy" (tidiness is not a boundary).
 

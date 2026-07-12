@@ -52,6 +52,39 @@ Three consequences, stated as rules:
 - **Jarvis must never locally mark an action as approved before receiving Core's authoritative response.** No optimistic UI state, no local "approved" flag, no rendering the outcome the user probably wants while the request is in flight. In flight renders as **pending**. Core's rejection renders as **rejected**.
 - **Core may reject a request the founder made.** Stale state, expired recommendation, insufficient authority for that risk class, a policy that has since changed — Core validates against its own truth, and its answer is the one that counts. A control plane that cannot display "the founder clicked approve and Core said no" has been built wrong.
 
+## 2b. Asking is its own contract — `ApprovalRequestV1`
+
+The act of **asking** for approval has its own artifact, and it is a **different contract** from `ApprovalDecisionV1`. **Jarvis produces the request. Core produces the decision.** They are not two states of one object.
+
+The distinction is not bookkeeping. With only two shapes in the approval path — a *recommendation* (Jarvis's) and a *decision* (Core's) — the act of asking has nowhere to live, and a system in that position invariably grows a shortcut: a recommendation with a `submitted` flag, or a decision with a `pending` outcome. Both put a fragment of the **authorization state inside Jarvis**, which is the one place it may never be. Once a fragment is there, the rest follows.
+
+So asking is its own contract, and it is deliberately powerless:
+
+| Property | The rule | Why |
+| --- | --- | --- |
+| **No authority** | The producing system is the literal `qf-jarvis` | **Jarvis may state what it wants and why. It may never state what it got** |
+| **No outcome** | There is **no `outcome`, no `approved`, no `decision`, and no `decidedBy` field** — and the shape is strict, so none can be added | A granted request is not a request with a flag set. It is an `ApprovalDecisionV1`, issued by Core: a different contract, with a different issuer |
+| **Mandatory expiry** | `expiresAt` is required, and must fall strictly after creation | An unanswered request **dies**. It does not ripen |
+| **No timeout-to-approve** | There is no field in which one could be expressed | **Silence is never consent** (§2). A queue that auto-approves whatever nobody got to is a queue that approves precisely the things nobody understood |
+| **Action fingerprint** | The request carries an exact digest of the proposed action **as it was worded when it was shown to the approver** | An approval binds to **that** action — not to whatever the action identifier happens to point at afterwards |
+| **Requested authority is a floor** | Core may require a **stronger** authority than the one asked for. It may never accept a weaker one | The request states what Jarvis *believes* is needed. Core enforces its own policy above it (§9) |
+
+**The fingerprint is the anti-substitution control**, and it is worth being explicit about what it prevents. Without it, an approval is a reference to an identifier — and an identifier can be made to point somewhere else between the moment a human read the proposal and the moment Core acted on it. With it, an approval that no longer matches the action it approved is **detectably** an approval of something else. That is the difference between an audit trail and a story.
+
+### Risk escalates in the request, not only in the decision
+
+The schema refuses an under-asking request:
+
+- A **money-related** request must request **`stronger-approval`** or **`founder`**.
+- An **outbound-voice-call** request must request **`stronger-approval`** or **`founder`** — explicit human approval on every call ([ADR-0017](../decisions/ADR-0017-live-communication-sequencing.md), [automation-levels.md](../governance/automation-levels.md)).
+- A request may never ask for **`none`**. An action that genuinely needs no approval is informational, it executes nothing, and it does not travel this path at all — so an **informational** recommendation produces no approval request whatsoever.
+
+Catching an under-ask at the *decision* would be too late: by then the request has already been routed, and a money-related approval has quietly reached a delegated approver who should never have seen it. So it is refused at the point it is written.
+
+### An approval is not an eligibility check
+
+An `ApprovalDecisionV1` says a human or a policy approved the action. It does **not** say the recipient may be contacted — that is the QuickFurno Communication Core's `CommunicationAuthorizationV1`, and a communication requires **both**. **A founder's approval does not override an opt-out** ([communication-model.md](./communication-model.md)).
+
 ## 3. Only approved recommendations may become execution intents
 
 The conversion happens **inside QuickFurno Core**, from an approval decision that Core itself recorded. Jarvis does not create execution intents. It cannot manufacture authority by manufacturing an artifact.
