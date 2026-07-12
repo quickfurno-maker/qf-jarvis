@@ -29,7 +29,7 @@ Owned by QuickFurno Core. QF Jarvis may **read derived views** of these and may 
 | **leads** | Lead records, verification status, qualification, lifecycle |
 | **clients** | Client identity, requirements, relationship state |
 | **vendors** | Vendor identity, qualification, onboarding and activation state, service areas, categories, performance |
-| **assignments** | Which vendors received which lead. Enforces the business rule: a qualified lead is shared with **at most three suitable vendors**. This rule is QuickFurno Core's, not Jarvis's |
+| **assignments** | Which vendors received which lead, in batches. Enforces the vendor cap: an **initial batch of at most 3**, **one replacement batch of at most 3 additional unique vendors** (on explicit client confirmation), and a **lifetime maximum of 6 unique vendors per lead-category**. This rule is QuickFurno Core's, not Jarvis's ([ADR-0015](../decisions/ADR-0015-complete-client-journey-and-reassignment-policy.md)) |
 | **packages** | Package definitions, eligibility, purchase, state, expiry |
 | **wallets** | Balances, debits, credits |
 | **payments** | Money movement |
@@ -93,7 +93,7 @@ flowchart TB
         L["leads"]
         C["clients"]
         V["vendors"]
-        AS["assignments<br/>max 3 vendors per qualified lead"]
+        AS["assignments<br/>3 per batch · 1 replacement<br/>max 6 unique per lead-category"]
         PK["packages"]
         W["wallets"]
         PY["payments"]

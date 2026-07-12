@@ -26,7 +26,7 @@ Sensitivity levels: **Low** (operational, non-personal) · **Medium** (business-
 | **Leads** | QuickFurno Core | Core, Jarvis (derived view), Operations, assigned Vendors | **QuickFurno Core only** | Retain while commercially and legally required; personal fields minimized in any Jarvis copy | **High** — personal data |
 | **Clients** | QuickFurno Core | Core, Jarvis (identity references + minimum attributes), Support | **QuickFurno Core only** | Retain per client relationship and legal obligation; deletion requests propagate to Jarvis derived views | **High** — personal data |
 | **Vendors** | QuickFurno Core | Core, Jarvis (derived view), Sales, Operations | **QuickFurno Core only** | Retain per vendor relationship and legal obligation | **High** — personal and business data |
-| **Assignments** | QuickFurno Core | Core, Jarvis (derived view), Vendors, Operations | **QuickFurno Core only** — including enforcement of the max-three-vendors-per-qualified-lead rule | Retain for audit and dispute resolution | **Medium** |
+| **Assignments** | QuickFurno Core | Core, Jarvis (derived view), Vendors, Operations | **QuickFurno Core only** — including enforcement of the assignment policy: an initial batch of **at most 3** vendors, **exactly one** replacement batch of **at most 3 additional** unique vendors, **no overlap between batches**, and a lifetime maximum of **6 unique vendors per lead-category**. A replacement requires the client's **explicit confirmation**, pointing at the canonical event in which they actually asked ([ADR-0015](../decisions/ADR-0015-complete-client-journey-and-reassignment-policy.md)) | Retain for audit and dispute resolution — the batch history *is* the evidence that the cap was honoured | **Medium** |
 | **Wallets** | QuickFurno Core | Core, Vendors, Finance; Jarvis reads a derived, **non-authoritative** balance view only | **QuickFurno Core only** | Retain per financial record-keeping obligation | **Critical** — money |
 | **Packages** | QuickFurno Core | Core, Vendors, Sales; Jarvis derived view | **QuickFurno Core only** | Retain per commercial and financial obligation | **Critical** — money-adjacent |
 | **Payments** | QuickFurno Core | Core, Finance | **QuickFurno Core only** | Retain per financial and tax obligation — typically the longest retention in the system | **Critical** — money |
@@ -41,6 +41,8 @@ Sensitivity levels: **Low** (operational, non-personal) · **Medium** (business-
 | **Communication history, delivery and call outcomes, human-handoff state** | **QuickFurno Core** | Core, Jarvis (read — **displays**, never writes), auditors | n8n reports; **Core records as truth**. Jarvis may never write `delivered` or `completed` | Retain for audit and for attempt-limit enforcement | **High** |
 | **Call transcripts and summaries** | **QuickFurno Core** — produced by the QF Communications Runtime, recorded by Core | Core, the owning specialist agent, auditors | QF Communications Runtime produces; **Core records** | **Shortest defensible retention.** A transcript is the most sensitive artifact this system will ever hold — a recording of a real conversation with a real person. Retention requires explicit purpose, and the raw transcript should not outlive the summary that justified keeping it | **Critical** — personal data |
 | **Agent runs** | **QF Jarvis** | Jarvis, technical operators, auditors | **QF Jarvis** | Retain for evaluation and debugging. **Never contains model chain-of-thought.** Input context retained only in minimized, redacted form | **Medium** |
+| **Agent memory** | **QF Jarvis** — but **derived and non-authoritative**, never truth | The **owning agent only.** Memory is isolated per agent, and a subject outside its owner's domain does not parse | **QF Jarvis.** `authoritative: false` and `rebuildable: true` are **literals** — the alternatives do not parse. Every record names the canonical events it was derived from. **QuickFurno truth overrides memory, always**; on disagreement memory is rebuilt, not reconciled toward ([ADR-0016](../decisions/ADR-0016-agent-memory-and-learning-boundaries.md)) | Retain only while useful. **Rebuildable, so it may be destroyed at any time** — and when in doubt it is deleted, not migrated. Erasure state is **mandatory** on every record, so an un-propagated deletion is *detectable* rather than invisible | **High** — minimized derived context about real people |
+| **Dataset examples / training data** | **QF Jarvis** — the candidate examples and the eligibility decisions recorded against them | Only a named, approved purpose | **QF Jarvis** records candidates; **eligibility is never automatic and never inferred.** It exists only as an explicit decision by a **named human**, or a named and versioned policy a human approved, against complete provenance and with a stated purpose limitation. **Sensitive personal data is never eligible, under any approval** | Retain only for the stated purpose, and no longer. **Never contains chain-of-thought, raw model output, provider credentials, or a complete prompt containing personal data** | **High to Critical** — personal data, and effectively irreversible once a model has trained on it |
 | **Policies** | **QuickFurno Core** | Core, administrators, Jarvis (read, to know what approval a recommendation needs), auditors | **QuickFurno Core only** — administrators author; Jarvis may only *propose* a change as a recommendation | Retain all versions. Policy history is part of the audit trail | **Critical** — authorization |
 | **Audit records** | **QuickFurno Core** | Core, auditors, founder | Append-only. **No actor may modify or delete** | Retain per legal and governance obligation. Immutable | **Critical** |
 
@@ -54,9 +56,9 @@ Exactly three things:
 2. **Agent runs** — what ran, at what version, on what input, producing what output.
 3. **Approval requests and communication requests** it submitted — a record of what it *asked* Core to authorize. **A request is not a decision, and it is certainly not a delivery.** Both belong to Core, and Jarvis stores only what Core told it.
 
-Plus the derived read models and attention state built from canonical events, which are **rebuildable and non-authoritative**.
+Plus the derived read models, **agent memory**, and attention state built from canonical events — all of which are **rebuildable and non-authoritative** — and the **dataset examples** it records, which become training data only by an explicit human decision and never by default.
 
-That is all. Jarvis owns its own thinking and its own asking — and nothing the business runs on.
+That is all. Jarvis owns its own thinking and its own asking — and nothing the business runs on. **Agent memory is not an exception to that.** It is derived from canonical events, disposable by construction, and loses every argument it has with Core.
 
 ---
 
@@ -98,7 +100,7 @@ Setting retention durations requires, at minimum:
 2. **Privacy and legal review** — the actual obligations, established by someone qualified to establish them.
 3. **Operational requirements** — how far back agents genuinely need to reason, and how far back replay must work.
 4. **Audit requirements** — how long the authorization chain must remain reconstructible ([auditability-principles.md](../governance/auditability-principles.md)).
-5. **Deletion and anonymization design** — how a deletion propagates from Core into Jarvis derived views, identity references, and recommendation evidence, and what "anonymized" concretely means for each artifact.
+5. **Deletion and anonymization design** — how a deletion propagates from Core into Jarvis derived views, identity references, recommendation evidence, **agent memory, and dataset examples**, and what "anonymized" concretely means for each artifact.
 6. **Artifact-specific retention** — a per-artifact answer, not one global period. An immutable approval decision, a rebuildable read model, and a model's transient input context have nothing in common.
 7. **Configurable policy** — retention is configuration, versioned and changeable, not a constant compiled into code.
 8. **Shorter retention for transient model inputs**, where appropriate. The context assembled for a single agent run is the most disposable and most privacy-sensitive data in the system; it should be the shortest-lived, and it must never contain chain-of-thought in the first place.
@@ -107,12 +109,27 @@ Setting retention durations requires, at minimum:
 
 ## Deletion and the right to be forgotten
 
-When QuickFurno Core deletes or anonymizes a client or vendor record, the deletion must propagate to:
+When QuickFurno Core deletes or anonymizes a client or vendor record, the deletion must propagate to **every derived thing built from it**:
 
 - Jarvis derived read models,
 - Jarvis identity references,
-- Recommendation evidence, where it embeds personal data rather than referencing it.
+- Recommendation evidence, where it embeds personal data rather than referencing it,
+- **Agent memory** — every record any agent holds about the erased subject ([ADR-0016](../decisions/ADR-0016-agent-memory-and-learning-boundaries.md)),
+- **Dataset examples** — every candidate or approved training example drawn from that subject's data.
 
-This is a design requirement, established now and implemented in Phase 2 (contracts) and Phase 11 (Core integration). It is easy to honor if Jarvis references rather than copies — which is exactly why it references rather than copies.
+The last two are the ones a deletion quietly misses, and it is worth saying why. A read model is *obviously* a copy, and somebody will remember to clear it. A memory record and a dataset example do not feel like a copy — they feel like **our** data: derived, aggregated, ours. They feel that way right up to the moment somebody asks whether the person's data is actually gone, and the honest answer turns out to be that nobody looked.
 
-Audit records and approval decisions are immutable and are handled separately, under legal-retention rules rather than deletion rules.
+### Erasure state lives on the record, not in a side table
+
+Erasure state is **represented on every derived record**. It is mandatory on agent memory — not optional-with-a-default, mandatory — so that a memory record about an erased client which still reads as un-erased is a **detectable defect** rather than an invisible one. Propagation can then be *verified* rather than assumed, which is the entire difference between a deletion guarantee and a deletion intention.
+
+Erasure is two contracts, because **a request is not a completion**:
+
+- **`ErasureRequestV1`** — *this was asked for*: the subject, the erasure type, who asked, and a **non-empty** list of the scopes it must reach. An erasure that reaches nowhere is not an erasure.
+- **`ErasureRecordV1`** — *this was done*, and, crucially, **what was and was not reached**: the scopes completed, and the scopes still outstanding.
+
+**An erasure record that claims `completed` while scopes remain outstanding is refused. It does not parse.** That record is the most dangerous one this system could hold, because it **closes the obligation while the data is still sitting there** — and it is exactly the record a well-meaning caller writes when the shape offers nothing better. Erasure is a distributed operation across systems that fail independently; the interval between "asked" and "done everywhere" is real, sometimes long, and legally material. A shape without a `partial` state forces an honest operator to choose between claiming a completion they have not achieved and recording nothing at all. Both are worse than the truth. For the same reason, a `completed` record naming **no** scopes is also refused: an erasure that erased nothing, nowhere, is not a completed erasure.
+
+This is a design requirement, established now, represented in Phase 2 (contracts) and propagated in Phase 11 (Core integration). It is easy to honor if Jarvis references rather than copies — which is exactly why it references rather than copies.
+
+Audit records and approval decisions are immutable and are handled separately, under legal-retention rules rather than deletion rules. The audit trail is deliberately **not** an erasable scope: what is erased is the **personal data**; what remains is the **fact that a governed action occurred**. Erasing the record that a decision was made would destroy the accountability the decision exists to provide.

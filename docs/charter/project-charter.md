@@ -129,10 +129,33 @@ QuickFurno is a local home-service vendor discovery and lead-generation marketpl
 Operating principles that shape the architecture:
 
 - **Pune is the first operational city.** Mumbai and additional cities follow later. Nothing may be built in a way that hard-codes a single city.
-- **One qualified lead may be shared with a maximum of three suitable vendors.** This is a **QuickFurno Core business rule**, enforced by QuickFurno Core. Jarvis may reason about matching readiness and vendor suitability, and may explain or flag outcomes, but Jarvis does not perform assignment and does not own this rule.
+- **One qualified lead may be shared with a maximum of three suitable vendors.** ⚠️ **Superseded — see the note below.** This is a **QuickFurno Core business rule**, enforced by QuickFurno Core. Jarvis may reason about matching readiness and vendor suitability, and may explain or flag outcomes, but Jarvis does not perform assignment and does not own this rule.
 - **Location-aware matching matters.** Vendor category, city, service area, quality, availability, package eligibility, and performance may influence matching — all evaluated and decided by QuickFurno Core.
 - **QuickFurno Core remains authoritative** for matching, lead assignment, wallet, package, payment, and vendor state.
 - Jarvis may assess, recommend, prioritize, and explain. It does not make final assignment or money-related decisions independently.
+
+### ⚠️ Supersession note — the maximum-three-vendors rule
+
+**The flat "maximum of three suitable vendors per qualified lead" rule recorded above is superseded** by the revised two-batch policy in [ADR-0015](../decisions/ADR-0015-complete-client-journey-and-reassignment-policy.md), **Accepted by the business owner on 2026-07-12**.
+
+The original rule is **left in place deliberately, not deleted.** It is what Phase 0 approved, and the charter is a record of what was decided and when. Editing it into agreement with a later decision would destroy exactly the history the charter exists to hold — and would make it impossible to answer *"what did we originally agree, and when did that change?"* ([change-management.md](../governance/change-management.md): superseding does not mean editing).
+
+**The revised policy:**
+
+| Rule | Value |
+| --- | --- |
+| Initial assignment batch | at most **3** eligible vendors — batch **1** |
+| Replacement batch | at most **3** *additional* unique vendors — batch **2** |
+| Replacement batches permitted | **exactly one.** There is no batch three |
+| Lifetime maximum | **6 unique vendors per lead-category**, for all time |
+| Vendor overlap between batches | **forbidden** |
+| Trigger for a replacement | genuine dissatisfaction **and explicit client confirmation** |
+| Who creates and authorizes a batch | **QuickFurno Core, and only Core** |
+| Cross-category requirement | a **separate linked lead**, with its own fresh batch of three |
+
+What has **not** changed: assignment remains **QuickFurno Core's business rule, enforced by Core**. Jarvis does not perform assignment, does not own the rule, and — under the revised policy — Riya may *request* a reassignment but has no field in which she could name a vendor.
+
+> **Status: ADR-0015 is `Accepted`. The business owner approved this supersession on 2026-07-12, and the revised policy above is now the operative one.** The original rule is retained as the record of what Phase 0 approved — not as current policy.
 
 ## 11. Implementation principles
 

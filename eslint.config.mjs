@@ -82,6 +82,37 @@ export default tseslint.config(
     },
   },
 
+  // The contracts package claims to have no side effects: it opens no socket,
+  // reads no environment variable, touches no filesystem, and logs nothing.
+  //
+  // A claim that nothing enforces is a comment. These rules are the enforcement —
+  // a contract library that logs is a contract library that leaks, and the values
+  // it would be logging are exactly the ones it just refused to accept.
+  {
+    files: ['packages/contracts/src/**/*.ts'],
+    ignores: ['packages/contracts/src/tests/**'],
+    rules: {
+      'no-console': 'error',
+      'no-restricted-globals': [
+        'error',
+        { name: 'process', message: 'The contracts package reads no environment.' },
+        { name: 'fetch', message: 'The contracts package performs no network activity.' },
+      ],
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['node:*', 'fs', 'net', 'http', 'https', 'child_process'],
+              message:
+                'The contracts package is pure data and validation. It performs no I/O of any kind.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
   // Must remain last: turns off every rule that would fight Prettier.
   // Formatting is Prettier's job; ESLint's job is correctness.
   eslintConfigPrettier,

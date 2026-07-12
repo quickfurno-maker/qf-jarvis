@@ -61,9 +61,29 @@ This includes — especially includes — changes made under time pressure. An a
 
 **Weakening the system boundary requires a superseding ADR and the business owner's explicit decision.** It is not a code review comment, not a sprint deadline, and not a pragmatic exception. The four edges that do not exist — Jarvis → provider, Jarvis → n8n, Jarvis → business state, agent → approval — do not become negotiable because a delivery date is close ([system-boundary.md](../architecture/system-boundary.md)).
 
+### The ADR lifecycle
+
+```
+Proposed  →  Accepted   →  (optionally) Superseded
+          →  Rejected
+```
+
+| Status | Meaning |
+| --- | --- |
+| **Proposed** | Written, reviewable, and **not yet decided.** The decision it describes has *not* been made, and nothing may rely on it |
+| **Accepted** | The business owner has decided. It is binding |
+| **Rejected** | Considered and declined. **The document stays** — a rejected alternative is exactly the thing somebody re-proposes in a year, and the record of why it was declined is the answer |
+| **Superseded** | Replaced by a later ADR, which must name it. The original is never deleted and never edited into agreement with its replacement |
+
+**An ADR is `Proposed` until the business owner has actually reviewed it.** Marking an ADR `Accepted` in the same commit that writes it records a decision nobody made — and it is a particularly easy mistake to make, because the author is usually convinced. The status field is not a measure of how confident the author is; it is a record of whether a *decision* happened.
+
+A phase whose ADRs read `Accepted` while the phase itself is "pending review" is a phase making a claim about its own approval that is not true.
+
+**Superseding does not mean editing.** An ADR that is wrong is superseded by a new one that says so. It is not quietly corrected — the history of what we believed, and when, is part of the audit ([auditability-principles.md](./auditability-principles.md)).
+
 ## 6. Contract-breaking changes require versioning
 
-The five contracts — canonical event, recommendation, approval decision, execution intent, execution result — are versioned ([ADR-0003](../decisions/ADR-0003-event-driven-integration.md)).
+Every contract is versioned ([ADR-0003](../decisions/ADR-0003-event-driven-integration.md)) — the canonical event envelope, recommendation, recommendation lifecycle, **approval request**, approval decision, execution intent, execution result, **communication request, authorization, result, and state**, the **assignment, reassignment, and linked-lead** contracts, and the **agent memory and learning** contracts.
 
 - A breaking change is a **new version**, never an edit in place.
 - Both versions are supported through a stated migration window.

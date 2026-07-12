@@ -7,5 +7,9 @@
   // repository root type-checks and builds every project in dependency order,
   // while each project below remains independently checkable.
   "files": [],
-  "references": [{ "path": "./apps/api" }, { "path": "./apps/worker" }]
+  "references": [
+    { "path": "./apps/api" },
+    { "path": "./apps/worker" },
+    { "path": "./packages/contracts" }
+  ]
 }

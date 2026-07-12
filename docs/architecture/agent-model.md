@@ -30,10 +30,15 @@ Jarvis is an agent, but not a domain adviser. It sits above the specialists and 
 - **Founder prioritization** — rank by business impact and time sensitivity, not recency. Deduplicate, merge, and suppress: three agents noticing the same underlying problem produce one attention item, not three.
 - **Founder briefings and attention management** — the periodic synthesis of what changed and what it means. Keep the list short. Expire what is stale. Suppress what has already been acted on.
 - **Communication coordination** — Jarvis **requests and coordinates communication**: founder-directed calls and WhatsApp messages, urgent escalations, cross-domain contact, consolidated multi-agent updates, human-handoff coordination, scripts and drafts, prioritization, scheduling, status monitoring, and cancellation requests. It has **controlled communication coordination and user-facing capabilities, but no direct provider transport, delivery, or authorization authority**. Authoritative: [communication-model.md](./communication-model.md).
+- **Escalation** — raise a situation to a human when it exceeds a specialist's domain, its confidence, or its permission. Escalating is not deciding: Jarvis names the problem and the person who should look at it, and then stops.
+- **Evaluation** — record how recommendations fared: accepted, rejected, expired, and whether the outcome actually moved. This is the one accountability Jarvis genuinely carries, and it is accountability for its *own* output, not for the business.
+
+**Jarvis must not absorb specialist domains.** It owns the connecting, never the concluding.
 
 **Jarvis explicitly does not**
 
-- Absorb the specialists' domains. If Jarvis starts making lead-quality judgments itself, Kabir is redundant and the boundary between them is gone. See [ADR-0006](../decisions/ADR-0006-agent-responsibility-boundaries.md).
+- Make a domain judgment of its own. If Jarvis starts making lead-quality judgments itself, Kabir is redundant and the boundary between them is gone. See [ADR-0006](../decisions/ADR-0006-agent-responsibility-boundaries.md).
+- Remember a domain fact. Its memory holds recommendations, agent runs, evaluations, and founder-attention state — and **no client, vendor, or lead context at all**. An agent that accumulates domain context is an agent that has begun to conclude. See [Agent memory](#agent-memory).
 - Authorize anything. Coordination is not authority.
 
 ---
@@ -42,29 +47,43 @@ Jarvis is an agent, but not a domain adviser. It sits above the specialists and 
 
 Each specialist owns one domain, reasons only within it, and produces recommendations only about it. A specialist that finds something outside its domain does not act on it — it raises a signal that Jarvis routes.
 
-### Kabir — lead intelligence
+### Kabir — advisory lead intelligence
 
 Lead quality. Lead completeness. Spam and fraud signals. Budget plausibility. Urgency plausibility. Category consistency. Location consistency. Matching readiness. Operational intelligence.
 
-*May* assess whether a lead is ready to be matched and whether a vendor profile suits it. *May not* assign a lead, and may not decide how many vendors receive it — the maximum of three suitable vendors per qualified lead is a QuickFurno Core business rule, enforced by Core.
+**Kabir never replaces LeadLens, TrustShield, MatchForge, or LeadFlow.** Those are QuickFurno Core's systems and they remain **authoritative** — they are what actually scores, screens, matches, and routes a lead. Kabir advises *alongside* them; he does not substitute for them, and where Kabir and Core disagree, **Core is right**. The disagreement is worth surfacing to a human, but it is a signal, never a veto and never an override. An advisory system that quietly becomes the scorer is a second source of truth that nobody decided to create.
 
-### Riya — client intelligence
+*May* assess whether a lead is ready to be matched and whether a vendor profile suits it. *May not* assign a lead, and may not decide how many vendors receive it — the assignment and reassignment policy is a QuickFurno Core business rule, enforced by Core ([responsibility-matrix.md](./responsibility-matrix.md), [ADR-0015](../decisions/ADR-0015-complete-client-journey-and-reassignment-policy.md)).
 
-Client communication strategy. Client follow-up. Nurture recommendations. Abandoned-requirement recovery. Client reactivation. Relationship intelligence. Communication timing and channel recommendations.
+### Riya — the complete client journey
 
-*May* recommend what to say, when, and through which channel. *May not* send anything. The message reaches a client only after approval, and only through n8n and an approved provider.
+Riya owns client intelligence across the **whole** journey, not a slice of it: requirement completion, follow-up, satisfaction and dissatisfaction detection, complaints, **explicit client confirmation capture**, **reassignment requests**, **linked-category lead requests**, review, human escalation, and lifecycle closure. Communication strategy, nurture, abandoned-requirement recovery, reactivation, and relationship intelligence sit *inside* that journey rather than beside it.
 
-### Anisha — vendor intelligence
+**Riya never assigns, never changes consent, and never sends directly.**
 
-Vendor acquisition. Vendor qualification. Onboarding. Profile completion. Activation. Package readiness. Recharge recommendations. Retention. Upgrade. Inactivity recovery. Vendor win-back.
+Those are three different failures, and each is worth being concrete about:
 
-*May* recommend that a vendor is a recharge candidate or a churn risk, with evidence. *May not* touch a wallet, a package, or a payment. Money is Core's, and money-related actions require stronger approval ([execution-governance.md](./execution-governance.md)).
+- **Never assigns.** She may *notice* that a client is dissatisfied, may *carry* the client's explicit confirmation, and may *ask* Core to reassign. She may not choose the vendors — and the reassignment request has **no field in which she could name one**. The failure this prevents is not abstract: three vendors are charged, in real lead value, for a real person's home renovation because a model decided their tone had cooled. Nobody gets that back.
+- **Never changes consent.** Consent, preferences, suppressions, and STOP/START belong to the QuickFurno Communication Core, exclusively ([communication-model.md](./communication-model.md)). Unknown or stale consent is **not permission**, and a client who tolerated a delivery update has not agreed to be marketed to.
+- **Never sends directly.** A message reaches a client only after Core authorizes it and n8n executes it through an approved provider. Riya recommends what to say, when, and through which channel — and that is the end of her reach.
 
-### Jitin — marketing intelligence
+Dissatisfaction is **evidence**, never confirmation. A replacement requires a confirmation artifact that points at the canonical event in which the client **actually asked**; a model's confidence is not a substitute for that, and may never be promoted into one ([ADR-0015](../decisions/ADR-0015-complete-client-journey-and-reassignment-policy.md)). Riya will therefore sometimes be right and unable to act — she will spot a dissatisfied client who never asks — and that is the correct outcome, because the failure in the other direction is unrecoverable.
 
-Campaign performance intelligence. Marketing channel analysis. Cost-per-verified-lead analysis. City and category demand intelligence. SEO opportunity detection. Content recommendations. Creative fatigue detection. Budget-shift recommendations. Growth intelligence.
+### Anisha — the complete vendor journey
 
-*May* recommend a budget shift with evidence. *May not* change a budget. Ad spend is money; authorization is Core's and execution is n8n's.
+Anisha owns vendor intelligence across the whole vendor lifecycle: registration, profile completion, verification status, activation, inactivity, performance, package readiness, recharge opportunity, complaints, retention risk, and win-back — plus advisory relationship intelligence, end to end.
+
+**Anisha never controls verification, activation, eligibility, ranking, packages, wallets, credits, money, or assignments.** Every one of those is QuickFurno Core's. Anisha's role in each is to *notice and explain*, with evidence: that a vendor's profile is stalled short of verification, that an active vendor has gone quiet, that a package is nearly exhausted, that a good vendor is drifting toward churn.
+
+She recommends a recharge **conversation**; she never touches money. Money-adjacent signals reach her as **bands, never balances** — a wallet figure copied into a Jarvis contract would be stale the moment it was written, and its mere existence would invite somebody to reason about a real vendor's money from a copy nobody reconciles. "Below the assignment threshold" supports exactly the same conversation and cannot be mistaken for an account statement. Money-related actions also require stronger approval ([execution-governance.md](./execution-governance.md)).
+
+### Jitin — advisory growth intelligence
+
+Campaign performance intelligence. Marketing channel efficiency. Cost per verified lead by city and category. Demand intelligence. SEO opportunity detection. Content recommendations. Creative fatigue detection. Budget-shift recommendations.
+
+**Jitin has no advertising-provider credentials and no budget authority.** There is no Google Ads path and no Meta Ads path out of the Jarvis trust zone — not now, not in a later phase. He *may* recommend a budget shift with evidence; he *may not* change a budget. Ad spend is money: authorization is Core's and execution is n8n's.
+
+Jitin works in **aggregate**. His domain is cities, categories, and campaigns, and it contains **no client and no vendor**. Marketing intelligence does not *require* remembering individual people in order to work, so it is not permitted to — a capability that is unnecessary and dangerous is simply not granted.
 
 ---
 
@@ -78,11 +97,11 @@ The rule is deterministic: **identify the root cause, and the agent that owns th
 
 | Agent | Owns as root cause |
 | --- | --- |
-| **Kabir** | Intrinsic lead quality · completeness · spam and fraud risk · budget and urgency plausibility · location and category consistency · matching readiness |
-| **Anisha** | Vendor acquisition · onboarding · activation · responsiveness · package readiness · recharge · retention · vendor performance improvement · inactivity and win-back |
-| **Riya** | Client communication · client follow-up · nurture · abandoned requirements · client reactivation · relationship strategy |
-| **Jitin** | Campaign and source quality · marketing channel efficiency · cost per verified lead · SEO and content opportunities · creative fatigue · growth recommendations |
-| **Jarvis** | Routing · conflict detection · multi-domain synthesis · composite recommendations · founder prioritization · communication coordination for cross-domain and founder-directed contact |
+| **Kabir** | Intrinsic lead quality · completeness · spam and fraud risk · budget and urgency plausibility · location and category consistency · matching readiness — **advisory alongside LeadLens, TrustShield, MatchForge, and LeadFlow, never in place of them** |
+| **Anisha** | The complete vendor journey — registration · profile completion · verification status · activation · inactivity · performance · package readiness · recharge opportunity · complaints · retention risk · win-back. **Never controls verification, activation, eligibility, ranking, packages, wallets, credits, money, or assignments** |
+| **Riya** | The complete client journey — requirement completion · follow-up · satisfaction and dissatisfaction detection · complaints · explicit client confirmation capture · reassignment **requests** · linked-category lead **requests** · review · human escalation · lifecycle closure. **Never assigns, never changes consent, never sends directly** |
+| **Jitin** | Campaign and source quality · marketing channel efficiency · cost per verified lead by city and category · demand intelligence · SEO and content opportunities · creative fatigue · growth recommendations — **in aggregate; no individuals** |
+| **Jarvis** | Routing · conflict detection · multi-domain synthesis · composite recommendations · founder attention · evaluation · escalation · communication coordination for cross-domain and founder-directed contact. **Absorbs no specialist domain** |
 
 Note what Jarvis owns: **it owns the connecting, never the concluding.** Routing a signal, detecting that two agents disagree, synthesizing across domains, assembling a composite, ranking for the founder — none of these require a domain judgment, and Jarvis makes none.
 
@@ -134,6 +153,58 @@ Every agent run is given, and is limited to:
 | **Prior recommendations for the same subject** | To avoid re-recommending what is already pending or was recently rejected |
 
 An agent receives the **minimum data necessary for its domain**. Kabir does not need payment history. Jitin does not need a client's phone number. Data minimization is enforced at the agent boundary, not just at the log.
+
+---
+
+## Agent memory
+
+Memory is the only artifact in this system that **persists and is reused**. Everything else — a recommendation, an approval, a result — is a statement about a moment. Memory is a belief carried forward. And a persistent, agent-owned store of business facts is, whatever the design document calls it, **a second copy of QuickFurno Core's data**: one that drifts, that nobody reconciles, and that an agent will eventually reason from in preference to the truth.
+
+Memory nevertheless exists, because relationship intelligence is a real product goal and cannot be reconstructed from a single run's context window. So it is bounded by **shape**, not by policy — the constraints below are literals in the schema, not rules a reviewer has to remember ([ADR-0016](../decisions/ADR-0016-agent-memory-and-learning-boundaries.md)).
+
+### Who may remember what
+
+Memory ownership is a **closed map**. A memory record whose subject falls outside its owner's domain **does not parse**.
+
+| Agent | May remember | And nothing else |
+| --- | --- | --- |
+| **Riya** | client · lead · requirement | The client journey, and only it |
+| **Anisha** | vendor | Not a client. Not a campaign |
+| **Kabir** | lead | Not a client. Not a vendor |
+| **Jitin** | city · category · campaign | **No individuals at all** |
+| **Jarvis** | recommendation · agent-run · evaluation · founder-attention | **No domain facts at all** |
+
+Two of these look excessive until the failure is named.
+
+**Jitin cannot remember a client or a vendor.** Marketing intelligence works in aggregate — cost per verified lead, by city and category. It does not *need* to remember individual people to do its job, so it is not permitted to.
+
+**Jarvis cannot remember any domain fact.** Jarvis owns the connecting, never the concluding. An agent that quietly accumulates client and vendor context is an agent that has started to conclude, and the bounded-specialist model is finished the moment it does.
+
+The consequence worth stating plainly: **cross-domain contamination is a parse error, not a code-review finding.** Anisha reasoning about client satisfaction cannot even begin, because she cannot hold a memory about a client.
+
+### The six properties
+
+| Property | How it is enforced |
+| --- | --- |
+| **Isolated** | The owning agent scopes the record; a subject outside that agent's domain does not parse |
+| **Minimal** | Bounded text and governed signals only. There is no free-text blob, so there is nowhere to smuggle a transcript in |
+| **Derived** | Source event ids are **non-empty, always**. Memory that cannot name the canonical events it came from was not derived from them — it was **invented**, and an invented memory is a fact the system made up about a real client |
+| **Rebuildable** | `rebuildable: true` is a **literal**. `false` does not parse |
+| **Non-authoritative** | `authoritative: false` is a **literal**. `true` does not parse |
+| **Deletion-aware** | Erasure state is **mandatory**. A memory record about an erased client that still reads as un-erased is therefore a **detectable** defect rather than an invisible one ([data-ownership.md](./data-ownership.md)) |
+
+The two literals are the same guarantee stated from both ends. A memory record that could *not* be rebuilt would have to be **preserved** — and a store that must be preserved has become a database of record, whatever it is named.
+
+**QuickFurno truth overrides memory, always.** When they disagree, memory is **rebuilt, not reconciled toward**. Being willing to throw a derived store away is precisely what keeps it derived; an organisation that has become afraid to rebuild its cache no longer has a cache.
+
+### What is never stored, and what an agent may never do
+
+- **No chain-of-thought is ever stored.** Not in memory, not in a run record, not in a dataset — refused by key and by value shape in every governed container, and the refusal cannot be opted out of. What *is* kept is the stated rationale and the evidence beneath it (see [Prohibition on private chain-of-thought storage](#prohibition-on-private-chain-of-thought-storage)).
+- **No complete prompts containing personal data, no raw model output, no provider credentials.**
+- **Agents may not rewrite their own prompts, policies, or production configuration.** A prompt version is something a human changed and a reviewer saw. An agent that could edit its own prompt would have behaviour no human approved; an agent that could raise its own approval threshold would be an agent that can authorize itself, one indirection removed. These records *carry* a version; they grant no ability to set one.
+- **No data becomes training data automatically.** Eligibility exists only as an explicit decision by a named human — or a named, versioned policy a human approved — against complete provenance and with a stated purpose limitation. **Sensitive personal data is never eligible, under any approval.**
+
+Model and prompt **provenance is mandatory** for any run that invoked a model. Model provenance without prompt provenance is not provenance: the run cannot be reproduced, cannot be regression-tested, and cannot be explained on the day it goes wrong.
 
 ---
 
@@ -226,10 +297,10 @@ The distinction matters for three reasons: hidden deliberation frequently contai
 flowchart TB
     EV["Canonical event"] --> J["Jarvis — coordinator<br/>route, synthesize, prioritize, consolidate"]
 
-    J --> K["Kabir<br/>lead intelligence"]
-    J --> R["Riya<br/>client intelligence"]
-    J --> A["Anisha<br/>vendor intelligence"]
-    J --> JI["Jitin<br/>marketing intelligence"]
+    J --> K["Kabir<br/>advisory lead intelligence"]
+    J --> R["Riya<br/>complete client journey"]
+    J --> A["Anisha<br/>complete vendor journey"]
+    J --> JI["Jitin<br/>advisory growth intelligence"]
 
     K --> REC["Structured recommendation<br/>evidence, rationale, confidence,<br/>risk, priority, expiry, required approval"]
     R --> REC
