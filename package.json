@@ -10,14 +10,20 @@
     "node": ">=24.18.0 <25.0.0"
   },
   "scripts": {
-    "build": "tsc --build tsconfig.json",
+    "build": "tsc --build tsconfig.json && node scripts/copy-sql-assets.mjs",
     "clean": "node scripts/clean.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint . --max-warnings=0",
     "typecheck": "tsc --build tsconfig.json --pretty",
-    "test": "vitest run --passWithNoTests",
+    "test": "pnpm run test:unit && pnpm run test:integration",
+    "test:unit": "vitest run --passWithNoTests",
+    "test:integration": "vitest run --config vitest.integration.config.mjs",
     "test:watch": "vitest watch",
+    "db:up": "docker compose up -d --wait",
+    "db:down": "docker compose down",
+    "db:reset:destroy-all-local-data": "docker compose down --volumes && docker compose up -d --wait",
+    "db:migrate": "pnpm --filter @qf-jarvis/event-backbone db:migrate",
     "check": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build"
   },
   "devDependencies": {

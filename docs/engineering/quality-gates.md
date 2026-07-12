@@ -35,6 +35,19 @@ The order is deliberate: cheapest and most mechanical first. A formatting failur
 
 **Failures are never hidden.** No `|| true`, no `continue-on-error`, no swallowed exit code. A step that cannot fail is not a gate.
 
+### Step 4 is two suites, and both must run
+
+From Stage 3.1, `pnpm test` is `pnpm test:unit` followed by `pnpm test:integration`.
+
+| Suite              | Files                   | Execution    | `DATABASE_URL` |
+| ------------------ | ----------------------- | ------------ | -------------- |
+| `test:unit`        | `*.test.ts`             | **parallel** | not used       |
+| `test:integration` | `*.integration.test.ts` | **serial**   | **required**   |
+
+So **the full gate requires a running PostgreSQL** ([ADR-0019](../decisions/ADR-0019-durable-event-store-and-persistence.md) §6), and the integration tests **fail rather than skip** when there is not one. That is the point: a skipped database test is a green build that proves nothing, which is strictly worse than a red one.
+
+The serialisation is confined to the integration configuration. The database-free tests keep running in parallel — **the cost of a correct integration test is not charged to every test that is not one.**
+
 ---
 
 ## What each gate is actually for

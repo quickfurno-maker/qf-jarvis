@@ -104,13 +104,30 @@ The **target event catalogue** — client, assignment, vendor, privacy, policy, 
 
 ## Phase 3 — Durable Event Backbone
 
-**Status: Stage 3.0 (decisions and architecture) complete and approved, 2026-07-12. Phase 3 implementation has not started.**
+**Status: Stage 3.0 complete and approved. Stage 3.1 (persistence foundation) implemented, pending review. Phase 3 is NOT complete.**
 
-The design is [event-backbone.md](./event-backbone.md); the decisions are [ADR-0019](../decisions/ADR-0019-durable-event-store-and-persistence.md) through [ADR-0022](../decisions/ADR-0022-projections-ordering-and-rebuild-determinism.md), **all Accepted**.
+The design is [event-backbone.md](./event-backbone.md); the decisions are [ADR-0019](../decisions/ADR-0019-durable-event-store-and-persistence.md) through [ADR-0022](../decisions/ADR-0022-projections-ordering-and-rebuild-determinism.md), plus [ADR-0023](../decisions/ADR-0023-dedicated-supabase-managed-postgresql.md), **all Accepted**.
 
-**No implementation exists.** No database, no dependency beyond Zod, no migration, no Compose file, no CI database service, no worker runtime, no Phase 3 application code.
+**What exists after Stage 3.1:** the `@qf-jarvis/event-backbone` package — a validated database configuration, a connection pool, a transaction helper, a forward-only migration runner with checksum verification, and the **immutable canonical event log**. PostgreSQL 17 for local development and CI.
 
-> **Stage 3.1 must not begin until the Stage 3.0 pull request is merged into `main` and separately authorized by the business owner.** Approving the decisions is not authorising the implementation.
+**Where it will be deployed.** A **dedicated, Supabase-managed QF-Jarvis PostgreSQL 17 project** ([ADR-0023](../decisions/ADR-0023-dedicated-supabase-managed-postgresql.md)) — **its own** project and credentials, and **not QuickFurno Core's Supabase project, which remains forbidden**. Supabase is a Postgres host and nothing else: no Auth, no Storage, no Realtime, no Edge Functions, no `@supabase/supabase-js`. **Nothing has been applied to it, and Phase 3 stores synthetic fixtures only.**
+
+**What does NOT exist:** ingestion · signature verification · contract parsing at ingestion · deduplication *behaviour* · rejection handling · conflicting-duplicate handling · projections · checkpoints · retries · dead letters · replay · quarantine · read models · the test emitter · metrics · a worker loop · an HTTP endpoint. **`apps/api` and `apps/worker` remain compileable boundaries.**
+
+> The `UNIQUE (event_id)` constraint lays the **foundation** for eventId idempotency ([ADR-0020](../decisions/ADR-0020-event-ingestion-signature-verification-and-idempotency.md)). It is **not** the Stage 3.3 behaviour that distinguishes a benign duplicate from a conflicting one, and Stage 3.1 does not claim it is.
+
+| Stage | Status |
+| --- | --- |
+| **3.0** — decisions and architecture | ✅ **Complete and approved (2026-07-12)** |
+| **3.1** — persistence foundation | **Implemented, pending review** |
+| 3.2 — signature verification | Not started |
+| 3.3 — validated signed ingestion | Not started |
+| 3.4 — projections and bounded retries | Not started |
+| 3.5 — dead letters and replay | Not started |
+| 3.6 — rebuild determinism | Not started |
+| 3.7 — fixture-only test emitter | Not started |
+| 3.8 — metrics and adversarial validation | Not started |
+| 3.9 — documentation and exit audit | Not started |
 
 **Objective.** Reliable, idempotent, replayable event ingestion. This is the load-bearing infrastructure of the entire system.
 
@@ -127,6 +144,8 @@ The canonical envelope defined in Phase 2 carries **no aggregate sequence**. Pha
 **Note.** `apps/worker` **begins to run a loop** in this phase. That is a planned change, anticipated by name in [ADR-0010](../decisions/ADR-0010-workspace-and-module-structure.md) §2 — not scope creep.
 
 **Privacy.** Phase 3 uses **synthetic Phase 2 fixtures only**. No live personal data, no contact information, no production recipient, no production event stream. **The legal classification and retention policy of a production canonical event log is deliberately not decided in this phase** — it is an owner-approved gate on Phase 11 ([ADR-0019](../decisions/ADR-0019-durable-event-store-and-persistence.md) §7).
+
+**A deployment database now existing does not change that.** The QF-Jarvis Supabase project must contain **no live QuickFurno personal data during Phase 3**, and provisioning it unblocks nothing: **having somewhere to put the data is not permission to put it there** ([ADR-0023](../decisions/ADR-0023-dedicated-supabase-managed-postgresql.md) §7).
 
 **Entry criteria.** Phase 2 complete, approved, **and merged into `main`.** Phase 3 does not begin on an unmerged branch. **Met — merged 2026-07-12.**
 

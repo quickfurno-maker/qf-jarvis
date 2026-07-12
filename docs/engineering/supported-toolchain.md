@@ -5,7 +5,7 @@
 
 The exact versions this repository runs on, why each is pinned, and the rules for changing them.
 
-The decisions behind them: [ADR-0009](../decisions/ADR-0009-runtime-language-and-package-manager.md) (runtime, language, package manager) and [ADR-0011](../decisions/ADR-0011-quality-toolchain-and-continuous-integration.md) (quality toolchain and CI).
+The decisions behind them: [ADR-0009](../decisions/ADR-0009-runtime-language-and-package-manager.md) (runtime, language, package manager), [ADR-0011](../decisions/ADR-0011-quality-toolchain-and-continuous-integration.md) (quality toolchain and CI), and [ADR-0019](../decisions/ADR-0019-durable-event-store-and-persistence.md) (the database and its driver).
 
 ---
 
@@ -40,6 +40,37 @@ Strict mode in full, native ESM, `module: nodenext` ([tsconfig.base.json](../../
 >
 > **Exit condition: upgrade to TypeScript 7 when typescript-eslint's peer range admits it.** Reviewed at every phase gate. [ADR-0011](../decisions/ADR-0011-quality-toolchain-and-continuous-integration.md) owns this.
 
+## Database
+
+| Environment    | Version                                   | Pinned where                                                                        |
+| -------------- | ----------------------------------------- | ----------------------------------------------------------------------------------- |
+| **Local + CI** | **17.10** (`-alpine`)                     | `compose.yml` **and** `.github/workflows/ci.yml` — the same exact image tag in both |
+| **Deployed**   | PostgreSQL **17**, provider-managed patch | Not pinned here, and it must not be                                                 |
+
+**Major version 17 is the contract. The patch level is not.**
+
+Local and CI pin the exact image, and that buys **one specific thing**: a laptop and a CI runner agree with _each other_. `postgres:17` is a moving tag that resolves to whatever the latest 17.x happens to be on the day it is pulled, so without the pin the two could silently diverge.
+
+**It must not be over-read as a claim about the deployed database.** The managed QF-Jarvis project runs a provider-chosen build — 17.6.x at the time of writing, against 17.10 locally — and **that divergence is expected and permitted**. Local/CI patch equality does not imply Supabase patch equality, and asserting otherwise would be asserting something this repository cannot enforce.
+
+What _is_ required: **migrations and queries must remain compatible across supported PostgreSQL 17 minor releases**, and nothing here may depend on behaviour introduced in a specific 17.x patch. **A provider patch upgrade must not require a change to this repository** — and if one ever does, that is a finding worth an ADR rather than a quiet edit ([ADR-0023](../decisions/ADR-0023-dedicated-supabase-managed-postgresql.md) §7).
+
+PostgreSQL is required from Stage 3.1 — the full quality gate does not pass without one, and the integration tests **fail rather than skip** when `DATABASE_URL` is absent ([ADR-0019](../decisions/ADR-0019-durable-event-store-and-persistence.md) §6, [development-setup.md](./development-setup.md)).
+
+**Docker Compose runs the local database, and that is all it does.** `compose.yml` is **local-development infrastructure, not a deployment artifact**: no application container, no reverse proxy, no TLS, no backup, no resource limit, no secret management. Phase 0 excluded Docker as a deployment artifact and that exclusion stands; a local database for a developer is a different thing, and [ADR-0019](../decisions/ADR-0019-durable-event-store-and-persistence.md) §6 is where the distinction is recorded rather than assumed. Nothing in this repository deploys from it.
+
+### The deployment provider — and why it changes nothing in this file
+
+Deployed PostgreSQL is a **dedicated, Supabase-managed QF-Jarvis project** ([ADR-0023](../decisions/ADR-0023-dedicated-supabase-managed-postgresql.md)) — **not QuickFurno Core's Supabase project**, which remains forbidden.
+
+**Supabase is a Postgres host and nothing else.** The driver is still `pg`, the configuration is still `DATABASE_URL`, and **the dependency list below does not change by a single line**. That is the test of whether this is a provider decision or an architecture decision, and it passes: nothing above the driver knows who the host is.
+
+**`@supabase/supabase-js` must not be added.** It is a client for Auth, Storage, Realtime, and PostgREST — every one of which is a capability the architecture withholds from Jarvis, which authorizes nothing, executes nothing, and delivers nothing. The database is already reachable with a driver that is pinned, audited, and script-free; a second way to reach it would add a dependency in order to gain nothing.
+
+**No Supabase project ref, hostname, connection URL, database password, service-role key, `anon` key, or API key appears in this repository**, and none may. The deployment target is identified **outside** the repository, through controlled deployment configuration ([ADR-0023](../decisions/ADR-0023-dedicated-supabase-managed-postgresql.md) §9). Any Supabase-shaped hostname in the tree is a **synthetic placeholder in a unit test** and is deliberately not a valid ref.
+
+**The persistence package supports direct and session-mode connections only** — a Supavisor **transaction-mode** pooler is refused at config construction, because advisory locks and session-level settings do not survive it ([ADR-0023](../decisions/ADR-0023-dedicated-supabase-managed-postgresql.md) §6).
+
 ## Quality toolchain
 
 Every version is exact. There is not a caret in the manifest.
@@ -56,17 +87,41 @@ Every version is exact. There is not a caret in the manifest.
 | `vitest`                 | **4.1.10** | Test framework — brings its own Vite                                                                                       |
 | `@types/node`            | **24.9.2** | Node type definitions                                                                                                      |
 
-**9 development dependencies, all at the root.** Every one is tooling. There is no framework, database driver, AI SDK, HTTP client, or utility library in this repository.
+**9 development dependencies at the root.** Every one is tooling. There is no framework, AI SDK, HTTP client, or utility library in this repository.
+
+One further development dependency lives in the package that needs it rather than at the root:
+
+| Package     | Version    | Belongs to                           | Role                      |
+| ----------- | ---------- | ------------------------------------ | ------------------------- |
+| `@types/pg` | **8.20.0** | `@qf-jarvis/event-backbone` **only** | Type definitions for `pg` |
 
 ## Runtime dependencies
 
-| Package | Version   | Belongs to                      | Why                                                                                                       |
-| ------- | --------- | ------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `zod`   | **4.4.3** | `@qf-jarvis/contracts` **only** | Runtime validation at trust boundaries ([ADR-0012](../decisions/ADR-0012-runtime-contract-validation.md)) |
+| Package | Version    | Belongs to                           | Why                                                                                                               |
+| ------- | ---------- | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| `zod`   | **4.4.3**  | `@qf-jarvis/contracts` **only**      | Runtime validation at trust boundaries ([ADR-0012](../decisions/ADR-0012-runtime-contract-validation.md))         |
+| `pg`    | **8.22.0** | `@qf-jarvis/event-backbone` **only** | The PostgreSQL driver. Raw SQL, no ORM ([ADR-0019](../decisions/ADR-0019-durable-event-store-and-persistence.md)) |
 
 **The root package still has zero runtime dependencies**, and every application still has zero. A dependency belongs to the package that needs it, not to the workspace that happens to contain it.
 
-Zod is the **only** runtime dependency in the repository, and it earns that place by being the thing that turns the architecture boundary from prose into a parser: TypeScript types are erased at runtime, so at a boundary where the value is `unknown`, `as CanonicalEvent` checks nothing at all.
+Zod earns its place by turning an architecture boundary from prose into a parser: TypeScript types are erased at runtime, so at a boundary where the value is `unknown`, `as CanonicalEvent` checks nothing at all.
+
+**`pg` is the second runtime dependency this repository has ever had, and the only one Phase 3 introduces.** There is no ORM, no query builder, and no migration framework. The queries that matter here — `ON CONFLICT DO NOTHING`, advisory locks, ordered scans by identity column, a transactional checkpoint write — are precisely the ones an ORM abstracts away, and precisely the ones that must stay readable in a diff ([ADR-0019](../decisions/ADR-0019-durable-event-store-and-persistence.md) §3).
+
+> ### `pg`'s supply-chain profile
+>
+> | Check                   | Result                                                                                                                                                               |
+> | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+> | Implementation          | **Pure JavaScript.** No native addon, nothing to compile                                                                                                             |
+> | Install / build scripts | **None.** `onlyBuiltDependencies` stays **empty** — no approval was granted, and none was needed                                                                     |
+> | Peer dependencies       | One — `pg-native` — declared **optional** and deliberately not installed. Clean under `strictPeerDependencies: true`                                                 |
+> | Transitive dependencies | Not zero. The lockfile records `pg-connection-string`, `pg-pool`, `pg-protocol`, `pg-types`, `pgpass` and their helpers. **None of them runs a build script either** |
+> | Release age             | Satisfies `minimumReleaseAge: 1440`. **No exemption was written** — there are none in this repository                                                                |
+> | Engines                 | `>= 16.0.0` — satisfied by Node 24.18.0                                                                                                                              |
+>
+> **The build-script answer chose the driver; preference did not.** `onlyBuiltDependencies: []` is an accepted supply-chain control, and it eliminates the alternatives before any comparison begins: `better-sqlite3` is a native module that requires a build script, and Prisma fetches engine binaries in a `postinstall`. Neither can be installed here without weakening the control — and a control weakened to admit a convenience is not a control.
+>
+> `pg` is not zero-dependency the way Zod is, and this document will not pretend otherwise. What it is: pure JavaScript, script-free, and the driver essentially every Node PostgreSQL deployment already runs on.
 
 > ### Why Zod's supply-chain profile made this an easy call
 >
@@ -79,7 +134,7 @@ Zod is the **only** runtime dependency in the repository, and it earns that plac
 > | TypeScript 6.0.3        | Type-checks under full strict mode                                                |
 > | Module system           | Native ESM, `sideEffects: false`                                                  |
 >
-> A zero-dependency, script-free, ESM-native package is close to the best profile a runtime dependency can have — which is a large part of why it is the only one.
+> A zero-dependency, script-free, ESM-native package is close to the best profile a runtime dependency can have — and it remains the bar every later one is measured against.
 
 > ### Why ESLint 10.6.0 and not 10.7.0?
 >
@@ -109,6 +164,11 @@ Peer ranges were read from the registry **before** versions were selected — no
 | `vitest@4.1.10`                 | `engines.node: ^20.0.0 \|\| ^22.0.0 \|\| >=24.0.0`  | node 24.18.0              | ✅        |
 | `vitest@4.1.10`                 | `vite` (required peer)                              | supplied by Vitest itself | ✅        |
 | `typescript-eslint@8.63.0`      | `engines.node: ^18.18.0 \|\| ^20.9.0 \|\| >=21.1.0` | node 24.18.0              | ✅        |
+| `pg@8.22.0`                     | `engines.node: >= 16.0.0`                           | node 24.18.0              | ✅        |
+| `pg@8.22.0`                     | `pg-native: >=3.0.1` (**optional** peer)            | not installed, by choice  | ✅        |
+| `pg-pool@3.14.0`                | `pg: >=8.0`                                         | pg 8.22.0                 | ✅        |
+
+`pg-native` is `pg`'s optional native binding. It is **not installed**, and it must not be: it is a native addon, and installing it would require a lifecycle build script that `onlyBuiltDependencies: []` forbids. Being an _optional_ peer, its absence is clean under `strictPeerDependencies: true` — the policy and the dependency agree, rather than one of them being tolerated.
 
 The install runs with **`strictPeerDependencies: true`** — verified active via `pnpm config get`, not merely written down — and produces **no peer warnings**. Vitest's optional peers (`jsdom`, `happy-dom`, `@vitest/ui`, coverage providers) are declared optional and are deliberately not installed.
 
@@ -146,6 +206,8 @@ There are **no cooldown exemptions** in this repository. `minimumReleaseAgeExclu
 
 **Zero packages in this dependency tree require an install or build script.** `onlyBuiltDependencies` is empty and no approval has been granted to anything.
 
+**Adding a database driver did not change that**, and that is not luck. `pg` was chosen _because_ it is pure JavaScript and declares no lifecycle script; the drivers that would have required one were ruled out by the policy before they were compared on merit ([ADR-0019](../decisions/ADR-0019-durable-event-store-and-persistence.md) §4). The control decided the dependency, rather than the dependency being an argument for relaxing the control.
+
 If a future install reports an ignored build script, **do not run `pnpm approve-builds` to make the message disappear.** Approving a build script grants that package **arbitrary code execution at install time**, on every developer machine and in CI. It is a supply-chain decision:
 
 1. Establish what the script does and why the package needs it.
@@ -156,9 +218,9 @@ If a future install reports an ignored build script, **do not run `pnpm approve-
 
 ### Blast radius
 
-Every dependency here is **development tooling**. None ships to production, and QF Jarvis holds **no provider credential and no secret** ([system-boundary.md](../architecture/system-boundary.md)). CI runs with `permissions: contents: read` and uses no secret.
+Almost every dependency here is **development tooling**. The exceptions are the two runtime dependencies — `zod` and `pg` — and neither changes the containment, because QF Jarvis holds **no provider credential and no secret** ([system-boundary.md](../architecture/system-boundary.md)). CI runs with `permissions: contents: read`, and the only database credential in this repository is a CI-only, disposable one written in plain sight precisely because it guards nothing.
 
-A compromised development dependency would therefore reach a developer's machine and a CI runner — and stop there. It cannot reach a client, a vendor, a message, a call, or money. That containment is not a property of this toolchain; it is a property of the boundary, and it is one of the reasons the boundary is not negotiable.
+A compromised dependency would therefore reach a developer's machine, a CI runner, and — at worst — a local database of synthetic fixtures. It stops there. It cannot reach a client, a vendor, a message, a call, or money. That containment is not a property of this toolchain; it is a property of the boundary, and it is one of the reasons the boundary is not negotiable.
 
 ---
 
@@ -166,15 +228,18 @@ A compromised development dependency would therefore reach a developer's machine
 
 **A version is never bumped to make an error go away.** If an upgrade surfaces a type error or a lint failure, the tool is working, and the finding gets fixed.
 
-| What                           | When                                                                                | How                                                                                                |
-| ------------------------------ | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| **Node patch/minor** (24.x)    | Promptly for security releases                                                      | Update `.nvmrc`, `.node-version`, `engines.node`, **and CI together** — one decision in four files |
-| **Node major**                 | When the next even-numbered release **enters LTS**, not when it is released         | Its own pull request, toolchain re-verified against it. Never bundled with a feature               |
-| **TypeScript**                 | **To 7.x when typescript-eslint's peer range admits it** — the named exit condition | Its own pull request. A major typically surfaces new type errors; they are fixed, not suppressed   |
-| **pnpm**                       | Deliberately                                                                        | `packageManager` and CI updated together                                                           |
-| **ESLint / typescript-eslint** | Deliberately, and **as a pair** — they are peer-coupled                             | Re-verify the peer matrix above. A green `pnpm check` is necessary, not sufficient                 |
-| **Prettier**                   | Deliberately. A major may reformat files — expect a diff and review it as a change  | Its own pull request                                                                               |
-| **Vitest**                     | Deliberately                                                                        | Its own pull request                                                                               |
+| What                           | When                                                                                | How                                                                                                                        |
+| ------------------------------ | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| **Node patch/minor** (24.x)    | Promptly for security releases                                                      | Update `.nvmrc`, `.node-version`, `engines.node`, **and CI together** — one decision in four files                         |
+| **Node major**                 | When the next even-numbered release **enters LTS**, not when it is released         | Its own pull request, toolchain re-verified against it. Never bundled with a feature                                       |
+| **TypeScript**                 | **To 7.x when typescript-eslint's peer range admits it** — the named exit condition | Its own pull request. A major typically surfaces new type errors; they are fixed, not suppressed                           |
+| **pnpm**                       | Deliberately                                                                        | `packageManager` and CI updated together                                                                                   |
+| **ESLint / typescript-eslint** | Deliberately, and **as a pair** — they are peer-coupled                             | Re-verify the peer matrix above. A green `pnpm check` is necessary, not sufficient                                         |
+| **Prettier**                   | Deliberately. A major may reformat files — expect a diff and review it as a change  | Its own pull request                                                                                                       |
+| **Vitest**                     | Deliberately                                                                        | Its own pull request                                                                                                       |
+| **PostgreSQL** (17.x)          | Promptly for security releases                                                      | Update `compose.yml` **and** `.github/workflows/ci.yml` together — one decision in two files, or the laptop and CI diverge |
+| **PostgreSQL major**           | Deliberately, never to chase a release                                              | Its own pull request. The migrations and the immutable-log guarantees are re-verified against it                           |
+| **`pg`**                       | Deliberately, and **as a pair with `@types/pg`** — the types describe the driver    | Re-verify the supply-chain profile above: still pure JavaScript, still no build script                                     |
 
 ## Compatibility policy
 

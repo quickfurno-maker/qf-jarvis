@@ -1,0 +1,25 @@
+{
+  "name": "@qf-jarvis/event-backbone",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis durable event backbone. Stage 3.1 provides the PostgreSQL persistence foundation and nothing else: a pool, a transaction helper, a forward-only migration runner, and the immutable canonical event log.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.json",
+    "typecheck": "tsc --build tsconfig.json",
+    "db:migrate": "node ./dist/persistence/migrate-cli.js"
+  },
+  "dependencies": {
+    "pg": "8.22.0"
+  },
+  "devDependencies": {
+    "@types/pg": "8.20.0"
+  }
+}

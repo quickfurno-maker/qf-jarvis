@@ -88,28 +88,39 @@ The revised requirements are recorded in [quickfurno-compatibility-directive.md]
 - Agent memory carries `authoritative: false` and `rebuildable: true` as **literals**. Memory that claimed to be authoritative would not parse, and **QuickFurno truth overrides memory, always** ([ADR-0016](docs/decisions/ADR-0016-agent-memory-and-learning-boundaries.md)).
 - **No data becomes training data automatically.** Eligibility exists only as an explicit decision by a named human or versioned policy, against complete provenance. **Sensitive personal data is never eligible.**
 
-**There is still no business implementation, and nothing runs.**
+**There is still no business implementation.**
 
-`apps/api` and `apps/worker` remain **compileable boundaries** — a documentation comment and `export {};`. They start no server, run no loop, and print nothing. No application imports the contracts yet; the first consumer is Phase 3's ingestion.
+`apps/api` and `apps/worker` remain **compileable boundaries** — a documentation comment and `export {};`. They start no server, run no loop, and print nothing.
 
-Specifically, **none of the following exists in this repository**: agents, coordinator logic, AI or LLM SDKs, **a model gateway**, model prompts, event transport or ingestion, event persistence, message brokers or queues, webhooks, HTTP endpoints, a database, a web framework, a frontend, n8n workflows, WhatsApp or calling or telephony integration, provider integrations, provider credentials, environment configuration, Docker, or deployment configuration.
+Specifically, **none of the following exists in this repository**: agents, coordinator logic, AI or LLM SDKs, **a model gateway**, model prompts, **event ingestion**, **signature verification**, **projections**, **replay**, message brokers or queues, webhooks, HTTP endpoints, a web framework, a frontend, n8n workflows, WhatsApp or calling or telephony integration, provider integrations, provider credentials, or production deployment configuration.
 
 The client, vendor, assignment, and governance events are **target contracts**. **No claim is made that QuickFurno Core emits any of them today** — establishing the live emitters is Phase 11's work, and where Core's shapes differ, an adapter absorbs the difference and the contract does not bend ([event-catalog.md](docs/contracts/event-catalog.md)).
 
-**Phase 3 — Durable Event Backbone: Stage 3.0 (decisions and architecture) complete and approved. Implementation has not started.**
+**Phase 3 — Durable Event Backbone: Stage 3.0 complete and approved. Stage 3.1 (persistence foundation) implemented, pending review. Phase 3 is NOT complete.**
 
-Phase 2 was merged into `main` on 2026-07-12, so Phase 3's entry criterion is met. The business owner approved Stage 3.0 on **2026-07-12**.
+Phase 2 was merged into `main` on 2026-07-12, so Phase 3's entry criterion is met.
 
-**Stage 3.0 is documentation only. No implementation exists** — no database, no dependency beyond Zod, no migration, no Compose file, no CI database service, no worker runtime, and no Phase 3 application code. `apps/api` and `apps/worker` are still `export {};`.
+**Stage 3.1 adds [`@qf-jarvis/event-backbone`](packages/event-backbone/)** — a validated database configuration, a connection pool, a transaction helper, a forward-only migration runner with checksum verification, and the **immutable canonical event log**. It adds **one** runtime dependency, `pg`, and **PostgreSQL 17 is now required to run the full quality gate**: the integration tests **fail** without a database, and never skip.
 
-**Stage 3.1 must not begin until the Stage 3.0 pull request is merged into `main` and separately authorized.** Approving the decisions is not authorising the implementation.
+**Stage 3.1 is persistence and nothing else.** There is no ingestion, no signature verification, no contract parsing, no deduplication _behaviour_, no projections, no checkpoints, no retries, no dead letters, no replay, no read models, no test emitter, no metrics, and no worker loop. Those are Stages 3.2–3.8.
 
-The design is [event-backbone.md](docs/architecture/event-backbone.md). **Twenty-two ADRs are Accepted**, including four new ones:
+> The `UNIQUE (event_id)` constraint lays the **foundation** for eventId idempotency. It is **not** the Stage 3.3 behaviour that distinguishes a benign duplicate from a conflicting one, and nothing here claims it is.
 
-- [ADR-0019 — Durable event store and persistence](docs/decisions/ADR-0019-durable-event-store-and-persistence.md) — PostgreSQL 17, **Jarvis's own database, never QuickFurno's Supabase**; raw SQL, no ORM
+The database is **Jarvis's own** — never QuickFurno Core's database, **never QuickFurno Core's Supabase project**, never a QuickFurno business table. The Compose file is **development only** and is not production deployment configuration.
+
+**Production PostgreSQL is a dedicated, Supabase-managed QF-Jarvis project** ([ADR-0023](docs/decisions/ADR-0023-dedicated-supabase-managed-postgresql.md)) — its own project, its own credentials, its own blast radius, and **not Core's**. Supabase is used **only as a Postgres host**: no Auth, no Storage, no Realtime, no Edge Functions, no Data API, no `@supabase/supabase-js`. The driver stays `pg` and the configuration stays `DATABASE_URL`, so **nothing above the driver knows who the provider is**.
+
+**Everything Jarvis owns lives in the private `qf_jarvis` schema — nothing in `public`**, every reference fully qualified, and the schema revoked from `PUBLIC` and from the provider's own roles on **every** migration run. **No project ref, hostname, connection URL or key appears anywhere in this repository**; the deployment target is identified outside it.
+
+**Nothing has been applied to it.** Local development uses a loopback PostgreSQL; CI uses a GitHub Actions PostgreSQL service. **No migration has been run against Supabase, and Phase 3 stores synthetic fixtures only** — the production event-log retention decision remains a hard gate on Phase 11.
+
+The design is [event-backbone.md](docs/architecture/event-backbone.md). **Twenty-three ADRs are Accepted**, including five for Phase 3:
+
+- [ADR-0019 — Durable event store and persistence](docs/decisions/ADR-0019-durable-event-store-and-persistence.md) — PostgreSQL 17, **Jarvis's own database, never QuickFurno's Supabase project**; raw SQL, no ORM. Its deployment-provider assumption is superseded by ADR-0023; everything else stands
 - [ADR-0020 — Ingestion, signature verification, and idempotency](docs/decisions/ADR-0020-event-ingestion-signature-verification-and-idempotency.md) — **Ed25519 asymmetric: Jarvis holds public keys only and cannot forge Core's events**; `eventId` is identity; **a conflicting duplicate fails closed**
 - [ADR-0021 — Processing, retries, dead letters, and replay](docs/decisions/ADR-0021-processing-retries-dead-letters-and-replay.md) — no broker, because **PostgreSQL already provides durable ordering, locking, retries, checkpoints and atomic state transitions**; a poison event **halts** its projection rather than silently skipping it
 - [ADR-0022 — Projections, ordering, and rebuild determinism](docs/decisions/ADR-0022-projections-ordering-and-rebuild-determinism.md) — destroy-and-rebuild produces an **identical digest**; **erasure survives a rebuild**; and the **ordering limitation is stated rather than papered over**
+- [ADR-0023 — Dedicated Supabase-managed PostgreSQL](docs/decisions/ADR-0023-dedicated-supabase-managed-postgresql.md) — Supabase is **a Postgres host and nothing else**, in a **QF-Jarvis project that is not Core's**. Everything lives in a **private `qf_jarvis` schema**, revoked from the provider's own roles on every run. **Transaction-mode pooling would break advisory-lock serialisation silently**, so it is **refused at config construction** — recorded, and enforced, before it can bite
 
 Two things worth knowing up front, because both are limitations rather than features:
 

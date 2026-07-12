@@ -1,15 +1,104 @@
 # The Durable Event Backbone — QF Jarvis
 
-**Status:** Phase 3 — **Stage 3.0 complete and approved (2026-07-12).** Phase 3 implementation **has not started.**
+**Status:** Phase 3 — **Stage 3.0 complete and approved. Stage 3.1 (persistence foundation) implemented, pending review. Phase 3 is NOT complete.**
 **Date:** 2026-07-12
 
 The load-bearing infrastructure of the entire system. Everything above it inherits its correctness — and its failures.
 
-**Nothing in this document is implemented.** Stage 3.0 is documentation only. There is no database, no dependency beyond Zod, no migration, no Compose file, no CI database service, no worker runtime, and no Phase 3 application code.
+**What exists today (Stage 3.1):** the `@qf-jarvis/event-backbone` package — a validated database configuration, a connection pool, a transaction helper, a forward-only migration runner with checksum verification, and the **immutable canonical event log**. PostgreSQL 17 for local development and CI.
 
-> **Stage 3.1 must not begin until this Stage 3.0 pull request is merged into `main` and separately authorized by the business owner.**
+**Everything else in this document is still design.** There is **no ingestion**, **no signature verification**, **no contract parsing**, **no deduplication behaviour**, **no projection framework**, **no checkpoints**, **no retries**, **no dead letters**, **no replay**, **no quarantine**, **no read models**, **no test emitter**, **no metrics**, and **no worker loop**. `apps/api` and `apps/worker` remain compileable boundaries.
 
-Decisions — **all Accepted by the business owner on 2026-07-12**: [ADR-0019](../decisions/ADR-0019-durable-event-store-and-persistence.md) (persistence) · [ADR-0020](../decisions/ADR-0020-event-ingestion-signature-verification-and-idempotency.md) (ingestion, signatures, idempotency) · [ADR-0021](../decisions/ADR-0021-processing-retries-dead-letters-and-replay.md) (processing, retries, dead letters, replay) · [ADR-0022](../decisions/ADR-0022-projections-ordering-and-rebuild-determinism.md) (projections, ordering, rebuild).
+> The `UNIQUE (event_id)` constraint in migration `0001` lays the **foundation** for eventId idempotency. It is **not** the Stage 3.3 behaviour that distinguishes a benign duplicate from a conflicting one, and Stage 3.1 does not claim it is.
+
+Decisions — **all Accepted by the business owner on 2026-07-12**: [ADR-0019](../decisions/ADR-0019-durable-event-store-and-persistence.md) (persistence) · [ADR-0020](../decisions/ADR-0020-event-ingestion-signature-verification-and-idempotency.md) (ingestion, signatures, idempotency) · [ADR-0021](../decisions/ADR-0021-processing-retries-dead-letters-and-replay.md) (processing, retries, dead letters, replay) · [ADR-0022](../decisions/ADR-0022-projections-ordering-and-rebuild-determinism.md) (projections, ordering, rebuild) · [ADR-0023](../decisions/ADR-0023-dedicated-supabase-managed-postgresql.md) (the deployment provider).
+
+---
+
+## Where the database lives
+
+Three environments, **one engine, one schema, one set of migrations**.
+
+| Environment | Database | Role |
+| ----------- | -------- | ---- |
+| **Local** | Loopback **PostgreSQL 17** | Development, and the destructive test database |
+| **CI** | GitHub Actions **PostgreSQL 17** service | The integration-test database. Ephemeral, CI-only credentials |
+| **Deployment** | **Dedicated Supabase-managed PostgreSQL 17** — the **QF-Jarvis** project | Jarvis's own database ([ADR-0023](../decisions/ADR-0023-dedicated-supabase-managed-postgresql.md)) |
+
+**The QF-Jarvis Supabase project is not QuickFurno Core's Supabase project, and Core's remains forbidden** — no credential, no connection string, no role, no read, no write ([ADR-0001](../decisions/ADR-0001-source-of-truth-boundary.md), [ADR-0019](../decisions/ADR-0019-durable-event-store-and-persistence.md) §2).
+
+**Supabase is a Postgres host and nothing else.** No Auth, no Storage, no Realtime, no Edge Functions, no Data API, and **no `@supabase/supabase-js`** — every one of those is a capability the architecture deliberately withholds from Jarvis, which authorizes nothing, executes nothing, and delivers nothing. The driver stays `pg`; the configuration stays `DATABASE_URL`. **Nothing above the driver knows who the provider is**, which is what makes the decision reversible and the three environments comparable.
+
+**PostgreSQL major 17 is the contract; patch levels are not.** Local and CI pin the exact image (17.10, in `compose.yml` and in CI) so a laptop and a runner agree with *each other*. The managed project runs a provider-chosen 17.6.x build, and **that divergence is expected and permitted**. Nothing here may depend on behaviour introduced in a specific 17.x patch, and a provider patch upgrade must not require a change to this repository ([ADR-0023](../decisions/ADR-0023-dedicated-supabase-managed-postgresql.md) §7).
+
+### Everything lives in `qf_jarvis`. Nothing lives in `public`.
+
+The event log, the migration history, both mutation-rejection functions, both triggers, every index and constraint — all in **`qf_jarvis`**, every reference **fully qualified**.
+
+`public` is the shared, world-facing default: the schema a Data API reaches for first, and the schema every other tool assumes it may write to. **An immutable event log has no business living in a room with an unlocked door.** A private schema also makes the access question answerable in one place — revoke `USAGE` and every object inside is unreachable by name, whatever grants a provider hands its own roles after its next upgrade.
+
+`anon`, `authenticated` and `service_role` are revoked by a **conditional `DO` block** that checks `pg_roles` first — because those roles are *Supabase's* and do not exist on a laptop, and an unconditional `REVOKE` would be a hard error locally and in CI. The identical migration therefore runs in all three environments. It **re-runs on every migration**, so a provider that re-grants during a platform upgrade is re-revoked rather than silently tolerated.
+
+**Nothing depends on `search_path`** — an ambient `search_path` is a global variable set by whoever connected last, and correctness that rests on one fails the day a pooler hands back a different session.
+
+The migrations are plain SQL against stock PostgreSQL 17 — no Supabase extension, no `auth.*` schema, no RLS policy. **A migration that only ran on Supabase would mean the thing CI proved is not the thing production runs**, which is the exact failure ADR-0019 rejected when it refused a SQLite/PostgreSQL dual dialect.
+
+> ### Transaction-mode pooling would break session state — silently
+>
+> The persistence package depends on session state in more places than the migration runner: **`pg_advisory_lock()`** (the migration lock, and from Stage 3.4 each projection's lock), plus **`statement_timeout`** and **`application_name`** set on connect. Supabase's Supavisor pooler in **transaction mode** multiplexes many clients over few backends, so a lock could be taken on one session and released on another, and a session-level `SET` may not survive at all.
+>
+> **Supported: direct connections, and Supavisor session mode (port 5432). Not supported: Supavisor transaction mode (port 6543).**
+>
+> This is **enforced in `createDatabaseConfig`**, so it holds for every pool the package creates — not only `db:migrate`. It **throws rather than warns**, because under transaction pooling the migration runner would *appear* to work and would simply have stopped serialising two concurrent migrators. **A guarantee that fails quietly is worse than one that was never claimed.**
+>
+> A future component may introduce a separate transaction-mode connection **only after proving** it depends on no advisory lock, no prepared statement, and no session state. The migration runner and the projection runner will never qualify.
+>
+> **Stage 3.1 has not been validated against Supabase.** No migration has been applied there. Establishing and *proving* the connection mode and TLS configuration belongs to the stage that first connects — and it is **not claimed as done**.
+
+### Deployment obligations this repository cannot enforce
+
+- **`qf_jarvis` must never be added to Supabase's exposed-schema (Data API) configuration.** Not for debugging, not temporarily.
+- **No Supabase API key** — `anon`, `service_role`, or otherwise — **may be used to reach event-backbone data.**
+- **The runtime role is a dedicated PostgreSQL login role.** It must **not** be a superuser and must **not** own the schema or its tables — a table owner can `DISABLE TRIGGER`, which defeats immutability entirely.
+- **The migration role and the runtime role are separate responsibilities**, and neither is a superuser.
+- **Stage 3.1 creates no password-bearing login role and commits none.** Roles are a deployment artifact; a `CREATE ROLE ... LOGIN PASSWORD` in a migration is a credential in Git.
+
+**These live outside Git and are only as good as the person clicking.** The revokes make a mistake far less dangerous. They do not make it impossible, and this document will not pretend otherwise ([ADR-0023](../decisions/ADR-0023-dedicated-supabase-managed-postgresql.md) §4).
+
+**Phase 3 stores synthetic Phase 2 fixtures only.** The QF-Jarvis Supabase project must contain **no live QuickFurno personal data**. Provisioning a deployment database does not unblock production event-log retention: that remains an owner-approved **hard gate on Phase 11** ([ADR-0019](../decisions/ADR-0019-durable-event-store-and-persistence.md) §7). **Having somewhere to put the data is not permission to put it there.**
+
+---
+
+## The Stage 3.1 event table: one event, one representation
+
+The envelope lives in **columns** — `event_id`, `event_type`, `event_version`, `occurred_at`, `emitted_at`, `source`, `subject_type`, `subject_id`, `correlation_id`, `causation_event_id`. The payload lives in **`payload` JSONB**.
+
+**The complete canonical event is not _also_ stored as a JSONB blob.** Storing both would be two representations of one accepted fact, and two representations can disagree — a column saying one thing while the blob beside it says another, with **nothing to reconcile them against**, because the log *is* the record of last resort. A store whose entire purpose is to be trustworthy when everything else is in doubt must not itself be a source of doubt. So the contradiction is made **unrepresentable** rather than defended against: the persisted event is reconstructed from the envelope columns plus `payload`, and every field has exactly one place it is written.
+
+`payload` is JSONB because its shape varies by event type; giving it a fixed schema would mean hard-coding all 41 Phase 2 contracts into SQL and re-migrating on every contract change.
+
+### The two digests
+
+| Column                  | Over what                                                                                                | For                                                                            |
+| ----------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `semantic_event_digest` | The deterministic canonical JSON of the **entire parsed, validated canonical event** — envelope + payload | Semantic identity. What a duplicate will be compared on ([ADR-0020](../decisions/ADR-0020-event-ingestion-signature-verification-and-idempotency.md) §8) |
+| `body_digest`           | The **exact bytes received**                                                                             | Evidence. The value the signature commits to                                   |
+
+It is named `semantic_event_digest`, not `payload_digest`, because it digests the event and not the payload — and a name that says otherwise would be a lie by omission the first time somebody diffed two events whose payloads matched and whose envelopes did not.
+
+**Stage 3.1 stores these. It compares nothing.** Duplicate classification is Stage 3.3.
+
+### Constraints mirror the stable Phase 2 shapes
+
+`event_type` and `subject_type` are lowercase machine tokens (1–64). `subject_id` is an opaque Core reference over `[A-Za-z0-9._:-]` (1–128) — **deliberately not a UUID**, because Core owns its identifier scheme, and **deliberately not a closed list of subject types**, because Core owns its entity taxonomy and Phase 3 has not integrated with Core. `source` is the literal `quickfurno-core`; `signature_algorithm` is the literal `ed25519`.
+
+They are not a second copy of Zod. They are the cheap, stable checks that mean **a bug in some future ingestion path cannot write a row the contracts would have refused**.
+
+### `schema_migration` is append-only too
+
+The migration history is protected exactly as hard as the event log — a `BEFORE UPDATE OR DELETE` trigger and a `REVOKE`. **A control that can be edited by the thing it constrains is not a control:** an `UPDATE` of a recorded checksum defeats the reconciliation that checksumming exists for, and a `DELETE` re-opens an applied migration against a schema that already has it. The runner needs only `SELECT` and `INSERT`, and is written that way.
+
+> **The same limit applies to both tables, and is not glossed.** A PostgreSQL **superuser** is not constrained by grants, and a table **owner** can disable a trigger. Therefore **the production application role must not be a superuser and must not own these tables, and the deployment's migration role must not be a superuser.** That is a deployment obligation; Stage 3.1 cannot discharge it.
 
 ---
 
@@ -271,8 +360,8 @@ apps/
 
 | Stage | What | Gate |
 | --- | --- | --- |
-| **3.0** | **This document and ADR-0019–0022** | ✅ **Complete and approved, 2026-07-12** |
-| 3.1 | Persistence: `pg`, pool, migrator, event store, CI + dev database | **Blocked** — see below. Then: migrator idempotent; checksum guard; `UPDATE`/`DELETE` on `event` refused |
+| **3.0** | This document and ADR-0019–0022 | ✅ **Complete and approved, 2026-07-12** |
+| **3.1** | Persistence: `pg`, pool, transactions, migrator, event log, CI + dev database | ✅ **Implemented, pending review.** Migrator idempotent; checksum guard refuses an edited migration; `UPDATE`/`DELETE` on `event` refused by trigger |
 | 3.2 | Signature verification and key registry (pure) | All reason codes; injected clock; test keys refused in production |
 | 3.3 | Ingestion, dedup, conflict detection | **Idempotency proven by deliberate redelivery** |
 | 3.4 | Projection framework, runner, bounded retries | Poison contained; other projections unaffected |
@@ -282,4 +371,4 @@ apps/
 | 3.8 | Metrics, structured logs, adversarial suite | **Duplicate and dead-letter metrics instrumented** |
 | 3.9 | Documentation and exit audit | Phase 3 exit criteria demonstrably met |
 
-**Stage 3.1 must not begin until this Stage 3.0 pull request is merged into `main` and separately authorized by the business owner.** Approval of the *decisions* is not authorisation to *implement* them — a design merged into `main` is a design somebody can build on; a design sitting on a branch is one that can still change.
+**Stage 3.2 must not begin until Stage 3.1 is reviewed and approved.** Approval of the *decisions* is not authorisation to *implement* them, and approval of one stage is not authorisation for the next.

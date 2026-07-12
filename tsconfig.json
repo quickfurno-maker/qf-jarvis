@@ -10,6 +10,7 @@
   "references": [
     { "path": "./apps/api" },
     { "path": "./apps/worker" },
-    { "path": "./packages/contracts" }
+    { "path": "./packages/contracts" },
+    { "path": "./packages/event-backbone" }
   ]
 }
