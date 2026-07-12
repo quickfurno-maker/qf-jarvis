@@ -70,8 +70,11 @@ CREATE TABLE qf_jarvis.event (
   source                 TEXT        NOT NULL,
 
   -- The subject, as the Phase 2 EntityReference: an opaque {entityType, entityId}.
-  -- Core owns what a "lead" actually is. The entity-id character set excludes '@' and
-  -- '+' at the contract layer, so a phone number or an email address cannot arrive here.
+  -- Core owns what a "lead" actually is.
+  --
+  -- Core references exclude email addresses and plus-prefixed E.164 phone numbers. A bare
+  -- digit sequence may still be a legitimate opaque Core identifier. This character-set
+  -- restriction is a GUARDRAIL, NOT A PRIVACY GUARANTEE.
   subject_type           TEXT        NOT NULL,
   subject_id             TEXT        NOT NULL,
 
@@ -174,9 +177,14 @@ CREATE TABLE qf_jarvis.event (
   -- Deliberately NOT a UUID. Core chooses its own identifier scheme and we carry the
   -- string opaquely; a UUID column here would be a guess about Core's database.
   --
-  -- The character set excludes '@' and '+', so an email address and an E.164 phone
-  -- number are structurally unable to appear in this column. That is a guardrail, not
-  -- the privacy control — the control is that this is a REFERENCE, and Core resolves it.
+  -- Core references exclude email addresses and plus-prefixed E.164 phone numbers. A bare
+  -- digit sequence may still be a legitimate opaque Core identifier — and it must remain
+  -- permitted, because Core owns its identifier scheme and excluding numeric ids would be
+  -- a guess about a system Phase 3 has not integrated with.
+  --
+  -- THIS CHARACTER-SET RESTRICTION IS A GUARDRAIL, NOT A PRIVACY GUARANTEE. The control is
+  -- that this column holds a REFERENCE: Core resolves the actual contact from its own
+  -- records, against consent it owns, at execution time.
   CONSTRAINT event_subject_id_is_opaque_core_reference
     CHECK (
       length(subject_id) BETWEEN 1 AND 128
@@ -214,8 +222,10 @@ COMMENT ON TABLE qf_jarvis.event IS
   'The immutable canonical event log. Append-only: UPDATE and DELETE are refused by trigger. '
   'Ordered by `sequence` (ingestion order, NOT business order). The envelope is in columns and '
   'the payload is in `payload`; the complete event is NOT also stored as a blob, so the two '
-  'cannot contradict each other. Contains no personal data by construction — Phase 2 contracts '
-  'carry opaque Core references, never copies of people.';
+  'cannot contradict each other. Carries opaque Core references rather than copied contact '
+  'details. Those pseudonymous identifiers may still constitute personal data when linkable '
+  'to a person. Production classification, retention, erasure and access controls remain '
+  'gated by the Phase 11 privacy decision.';
 
 COMMENT ON COLUMN qf_jarvis.event.sequence IS
   'Ingestion order. A total order over ARRIVAL, not business time. Replay traverses this.';
