@@ -96,7 +96,25 @@ Specifically, **none of the following exists in this repository**: agents, coord
 
 The client, vendor, assignment, and governance events are **target contracts**. **No claim is made that QuickFurno Core emits any of them today** — establishing the live emitters is Phase 11's work, and where Core's shapes differ, an adapter absorbs the difference and the contract does not bend ([event-catalog.md](docs/contracts/event-catalog.md)).
 
-**Phase 3 — Durable Event Backbone has not started, and must not begin until Phase 2 is merged into `main`.**
+**Phase 3 — Durable Event Backbone: Stage 3.0 (decisions and architecture) complete and approved. Implementation has not started.**
+
+Phase 2 was merged into `main` on 2026-07-12, so Phase 3's entry criterion is met. The business owner approved Stage 3.0 on **2026-07-12**.
+
+**Stage 3.0 is documentation only. No implementation exists** — no database, no dependency beyond Zod, no migration, no Compose file, no CI database service, no worker runtime, and no Phase 3 application code. `apps/api` and `apps/worker` are still `export {};`.
+
+**Stage 3.1 must not begin until the Stage 3.0 pull request is merged into `main` and separately authorized.** Approving the decisions is not authorising the implementation.
+
+The design is [event-backbone.md](docs/architecture/event-backbone.md). **Twenty-two ADRs are Accepted**, including four new ones:
+
+- [ADR-0019 — Durable event store and persistence](docs/decisions/ADR-0019-durable-event-store-and-persistence.md) — PostgreSQL 17, **Jarvis's own database, never QuickFurno's Supabase**; raw SQL, no ORM
+- [ADR-0020 — Ingestion, signature verification, and idempotency](docs/decisions/ADR-0020-event-ingestion-signature-verification-and-idempotency.md) — **Ed25519 asymmetric: Jarvis holds public keys only and cannot forge Core's events**; `eventId` is identity; **a conflicting duplicate fails closed**
+- [ADR-0021 — Processing, retries, dead letters, and replay](docs/decisions/ADR-0021-processing-retries-dead-letters-and-replay.md) — no broker, because **PostgreSQL already provides durable ordering, locking, retries, checkpoints and atomic state transitions**; a poison event **halts** its projection rather than silently skipping it
+- [ADR-0022 — Projections, ordering, and rebuild determinism](docs/decisions/ADR-0022-projections-ordering-and-rebuild-determinism.md) — destroy-and-rebuild produces an **identical digest**; **erasure survives a rebuild**; and the **ordering limitation is stated rather than papered over**
+
+Two things worth knowing up front, because both are limitations rather than features:
+
+- **The canonical envelope carries no aggregate sequence**, so Phase 3 guarantees deterministic ingestion order and deterministic replay — and **does not claim** per-aggregate ordering or sequence-gap detection. There is no sequence to detect a gap in. That needs a future envelope version and Core's cooperation: **Phase 11**.
+- **Phase 3 uses synthetic fixtures only.** The legal classification and retention policy of a _production_ event log is **deliberately not decided here** — it is an owner-approved hard gate on Phase 11.
 
 ## Getting Started
 

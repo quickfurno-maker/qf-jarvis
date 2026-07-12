@@ -104,15 +104,33 @@ The **target event catalogue** — client, assignment, vendor, privacy, policy, 
 
 ## Phase 3 — Durable Event Backbone
 
+**Status: Stage 3.0 (decisions and architecture) complete and approved, 2026-07-12. Phase 3 implementation has not started.**
+
+The design is [event-backbone.md](./event-backbone.md); the decisions are [ADR-0019](../decisions/ADR-0019-durable-event-store-and-persistence.md) through [ADR-0022](../decisions/ADR-0022-projections-ordering-and-rebuild-determinism.md), **all Accepted**.
+
+**No implementation exists.** No database, no dependency beyond Zod, no migration, no Compose file, no CI database service, no worker runtime, no Phase 3 application code.
+
+> **Stage 3.1 must not begin until the Stage 3.0 pull request is merged into `main` and separately authorized by the business owner.** Approving the decisions is not authorising the implementation.
+
 **Objective.** Reliable, idempotent, replayable event ingestion. This is the load-bearing infrastructure of the entire system.
 
-**Key outputs.** Event ingestion with signature verification. Idempotent processing and deduplication. Ordering guarantees where they matter. Bounded retries. Dead-letter handling that is visible, alertable, and replayable. Replay capability. Derived read models, rebuildable from events. Correlation and causation propagation.
+**Key outputs.** Event ingestion with signature verification. Idempotent processing and deduplication. Ordering guarantees where they matter — **see the scoping note below**. Bounded retries. Dead-letter handling that is visible and replayable. Replay capability. Derived read models, rebuildable from events. Correlation and causation propagation. A **fixture-driven conforming test emitter**, which is the only event source in this phase.
 
-**Explicit exclusions.** No agents. No recommendations. No AI. No execution. No approval flow. **No live QuickFurno Core connection.**
+### Ordering — scoped, because the envelope cannot carry more
 
-**Entry criteria.** Phase 2 complete, approved, **and merged into `main`.** Phase 3 does not begin on an unmerged branch.
+The canonical envelope defined in Phase 2 carries **no aggregate sequence**. Phase 3 therefore guarantees **deterministic ingestion order, deterministic replay in that order, preserved correlation and causation, and late-event-safe reducers** — and **does not claim** global business ordering, per-aggregate ordering, or sequence-gap detection.
 
-**Exit criteria.** Events are ingested idempotently — proven by deliberately redelivering them. Dead letters are visible and replayable. Read models can be destroyed and rebuilt from the event history with identical results. Duplicate-event and dead-letter metrics are instrumented.
+**There is no sequence to detect a gap in.** Per-aggregate ordering requires a future versioned envelope carrying one, which requires Core to emit it — a **Phase 11** decision that **must not be invented in Phase 3** ([ADR-0022](../decisions/ADR-0022-projections-ordering-and-rebuild-determinism.md)).
+
+**Explicit exclusions.** No agents. No recommendations. No AI or model SDK. No execution. No approval flow. No communication sending. No n8n. No provider integration. **No live QuickFurno Core connection. No QuickFurno Supabase credential. No writes to QuickFurno business tables.** No founder control-plane UI. **No HTTP ingestion endpoint** — ingestion is a function, and `apps/api` remains a compileable boundary. **No agent-specific or domain-intelligence read model** — one domain-neutral reference projection, and no more.
+
+**Note.** `apps/worker` **begins to run a loop** in this phase. That is a planned change, anticipated by name in [ADR-0010](../decisions/ADR-0010-workspace-and-module-structure.md) §2 — not scope creep.
+
+**Privacy.** Phase 3 uses **synthetic Phase 2 fixtures only**. No live personal data, no contact information, no production recipient, no production event stream. **The legal classification and retention policy of a production canonical event log is deliberately not decided in this phase** — it is an owner-approved gate on Phase 11 ([ADR-0019](../decisions/ADR-0019-durable-event-store-and-persistence.md) §7).
+
+**Entry criteria.** Phase 2 complete, approved, **and merged into `main`.** Phase 3 does not begin on an unmerged branch. **Met — merged 2026-07-12.**
+
+**Exit criteria.** Events are ingested idempotently — proven by deliberately redelivering them. Dead letters are visible and replayable. Read models can be destroyed and rebuilt from the event history with identical results. Duplicate-event and dead-letter metrics are instrumented. **A conflicting duplicate — the same event id with different content — fails closed, stays visible, and never overwrites the accepted event.**
 
 **Dependencies.** Phase 2. **This phase completes independently.** The backbone is built and proven against the Phase 2 contracts and fixtures — a conforming event source, not a live Core. Connecting a real emitter is **Phase 11**. Building the backbone this way is a feature, not a compromise: replayable, fixture-driven ingestion is exactly what makes Phase 11's integration testable and Phase 3's correctness provable without waiting on another system.
 
@@ -276,6 +294,21 @@ The **target event catalogue** — client, assignment, vendor, privacy, policy, 
 **Explicit exclusions.** No Jarvis write path into business state — not in this phase, not in any phase. No second source of truth, however convenient. **No weakening of a Phase 2 contract to accommodate what Core happens to emit today** — that is what adapters are for. **No production communication** — that is Phase 11A, and it is gated.
 
 **Entry criteria.** Phase 10 complete. **A scoping assessment of what QuickFurno Core can emit and accept today.**
+
+**And a hard gate, added in Phase 3.** Before Phase 11 permits a **single live event**, a **separate owner-approved privacy and retention decision** must exist. Phase 3 deliberately did not decide it, because it is a legal question rather than an engineering one: the event log is immutable and append-only, and it carries **pseudonymous** Core identifiers — and a pseudonymous identifier linked to a person is still personal data.
+
+That decision must define:
+
+- whether the canonical event log is a **retained audit record**;
+- **legal retention periods**;
+- **erasure and anonymisation behaviour**;
+- **legal holds**;
+- **pseudonymous identifier handling**;
+- **unlinking or cryptographic-erasure options**;
+- **deletion propagation**;
+- **access-control requirements**.
+
+**No live event flows until that decision is approved.** Phase 3 built the mechanism that makes any of those answers implementable — erasure events are processable, derived models are rebuildable, and an erasure survives a rebuild — but **it hardcoded no retention period and claimed no override of any applicable erasure requirement** ([ADR-0019](../decisions/ADR-0019-durable-event-store-and-persistence.md) §7).
 
 **Exit criteria.** Core emits the events all four agents need. Core's authorization interface accepts approval requests, decides, records authoritatively, and emits decision events. Jarvis reflects those decisions and demonstrably holds **no local approved state** of its own. Every recommendation lifecycle closes with a recorded outcome. Derived views reconcile against Core, and a deliberate divergence is detected and corrected in Core's favour. **A deletion in Core demonstrably propagates into Jarvis derived views, recommendation evidence, and agent memory** — and a record that claims completion while data remains anywhere is demonstrably refused. **The QuickFurno Communication Core answers eligibility questions authoritatively**, and an opted-out recipient is demonstrably refused.
 
