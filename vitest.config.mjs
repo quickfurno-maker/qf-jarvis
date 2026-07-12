@@ -1,35 +1,47 @@
 import { defineConfig } from 'vitest/config';
 
 /**
- * Vitest configuration.
+ * The **unit** test configuration. Database-free, and parallel.
  *
- * Phase 1 ships no tests, and that is deliberate. There is no business logic to
- * test yet, and a test that asserts `expect(true).toBe(true)` — or that checks a
- * constant the test itself invented — proves nothing, costs review attention,
- * and turns a green suite into a signal that means nothing. `pnpm test` is wired
- * to pass on an empty suite (see the `test` script) precisely so that the first
- * real test can be written without anyone having first deleted a fake one.
+ * ### Two configurations, and why
  *
- * What arrives here from Phase 2 onward is not optional, however. The rules
- * listed in docs/governance/engineering-principles.md §2 — idempotency, expiry,
- * authorization, bounds, signature and replay, and anything touching money — are
- * developed test-first, without exception: write the test, watch it fail, then
- * make it pass. For those rules the test is not a check on the implementation;
- * it is the only evidence the rule exists at all.
+ * Stage 3.1 added PostgreSQL integration tests that share one database: they drop and
+ * recreate the `public` schema to start from nothing, so two of them running at the same
+ * time destroy each other's schema mid-run. They must run **serially**.
  *
- * See docs/engineering/quality-gates.md.
+ * The first fix was to make the *whole repository* serial. That worked, and it was the
+ * wrong trade: it took 973 database-free contract tests — which have no shared state, no
+ * I/O, and no reason to wait for anything — and made them queue behind a database. The
+ * cost of a correct integration test should not be paid by every test that is not one.
+ *
+ * So the suites are split by what they actually need:
+ *
+ * | Configuration                | Files                     | Execution | `DATABASE_URL` |
+ * | ---------------------------- | ------------------------- | --------- | -------------- |
+ * | this one                     | `*.test.ts`               | parallel  | not used       |
+ * | `vitest.integration.config`  | `*.integration.test.ts`   | serial    | **required**   |
+ *
+ * `pnpm test:unit` runs this one. `pnpm test:integration` runs the other. **`pnpm test`
+ * runs both**, and `pnpm check` runs `pnpm test` — so the complete gate still requires a
+ * real PostgreSQL, and no test is ever skipped for want of one.
+ *
+ * ### Nothing here may touch a database
+ *
+ * The exclusion below is what keeps that true. An integration test that lands in this
+ * suite by accident would run in parallel with another one and corrupt it — so the naming
+ * convention is load-bearing, not cosmetic: **a test that needs PostgreSQL is named
+ * `*.integration.test.ts`.**
+ *
+ * See docs/engineering/quality-gates.md and docs/engineering/development-setup.md.
  */
 export default defineConfig({
   test: {
-    // Phase 1 contains only Node application boundaries and therefore uses the
-    // Node test environment. The testing architecture for the future Founder
-    // Control Plane will be decided in its own phase and is not decided here.
     environment: 'node',
 
     // Tests live beside the source they cover, inside a workspace package.
     include: ['apps/*/src/**/*.{test,spec}.ts', 'packages/*/src/**/*.{test,spec}.ts'],
 
-    // Never treat generated output as a test source.
-    exclude: ['**/node_modules/**', '**/dist/**'],
+    // Never treat generated output as a test source — and never run a database test here.
+    exclude: ['**/node_modules/**', '**/dist/**', '**/*.integration.test.ts'],
   },
 });

@@ -1,0 +1,77 @@
+# QF Jarvis — LOCAL DEVELOPMENT DATABASE ONLY.
+#
+# THIS IS NOT PRODUCTION CONFIGURATION, AND IT MUST NEVER BECOME PRODUCTION
+# CONFIGURATION. There is no application container here, no reverse proxy, no TLS, no
+# backup, no resource limit, and no secret management. It exists so that a developer can
+# run `pnpm check` on a laptop, and for nothing else (ADR-0019 §6).
+#
+# It is also NOT QuickFurno's database. QF Jarvis owns its own PostgreSQL instance, its
+# own credentials, and its own blast radius. A QuickFurno Core Supabase credential must
+# never appear here, or anywhere in this repository (ADR-0001, ADR-0019 §2).
+#
+# Deployment is a SEPARATE, Supabase-managed QF-Jarvis project (ADR-0023) — and this file
+# has nothing to do with it. No Supabase credential, service-role key, API key or
+# connection URL belongs in this repository, for EITHER project (ADR-0023 §6).
+#
+# ---------------------------------------------------------------------------
+# Usage (PowerShell)
+# ---------------------------------------------------------------------------
+#
+#   $env:QF_JARVIS_POSTGRES_PASSWORD = "<a local-only password you choose>"
+#   docker compose up -d --wait
+#
+#   $env:DATABASE_URL = "postgresql://qf_jarvis_dev:<that password>@127.0.0.1:55432/qf_jarvis_test"
+#   pnpm.cmd db:migrate
+#   pnpm.cmd check
+#
+# The password is REQUIRED and has no default. Compose's `:?` syntax below makes startup
+# fail with a clear message when it is absent, rather than silently booting a database
+# with a password somebody committed to a repository once and never rotated.
+#
+# There is no `.env` file, and there must not be one.
+
+name: qf-jarvis-dev
+
+services:
+  postgres:
+    # Pinned to an exact PostgreSQL 17 patch release. `postgres:17` would drift.
+    image: postgres:17.10-alpine
+    container_name: qf-jarvis-postgres-dev
+
+    environment:
+      POSTGRES_DB: qf_jarvis_dev
+      POSTGRES_USER: qf_jarvis_dev
+      # No default. Startup fails if this is not set in the shell.
+      POSTGRES_PASSWORD: ${QF_JARVIS_POSTGRES_PASSWORD:?Set QF_JARVIS_POSTGRES_PASSWORD in your shell. It is a local-only password, and there is deliberately no default.}
+      # Deterministic collation, so an ORDER BY behaves the same on every machine.
+      POSTGRES_INITDB_ARGS: '--encoding=UTF8 --locale=C'
+
+    ports:
+      # Bound to loopback ONLY — never 0.0.0.0. This database is not reachable from the
+      # network, and a developer laptop on a café Wi-Fi should not be serving PostgreSQL.
+      #
+      # Port 55432, not 5432, so it does not collide with any PostgreSQL a developer
+      # already runs.
+      - '127.0.0.1:55432:5432'
+
+    volumes:
+      - qf-jarvis-postgres-dev-data:/var/lib/postgresql/data
+      # Creates the separate test database on first boot. Runs once, on an empty volume.
+      - ./scripts/dev-postgres-init.sql:/docker-entrypoint-initdb.d/10-create-test-database.sql:ro
+
+    healthcheck:
+      # `docker compose up --wait` blocks on this, so `pnpm db:migrate` cannot race a
+      # database that is still starting.
+      test: ['CMD-SHELL', 'pg_isready -U qf_jarvis_dev -d qf_jarvis_dev']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+    # Appropriate for a laptop: comes back after a reboot, but never fights a developer
+    # who deliberately stopped it.
+    restart: unless-stopped
+
+volumes:
+  qf-jarvis-postgres-dev-data:
+    name: qf-jarvis-postgres-dev-data

@@ -16,6 +16,20 @@ The contracts qualify without argument. Every later phase depends on them: inges
 
 See [docs/contracts/](../docs/contracts/) for the full documentation set.
 
+## `@qf-jarvis/event-backbone` — the second package
+
+[`event-backbone/`](./event-backbone/) holds the durable event backbone. It arrived in **Phase 3, Stage 3.1**, and at the moment it contains **persistence and nothing else**: a validated database configuration, a connection pool, a transaction helper, a forward-only migration runner with checksum verification, and the **immutable canonical event log**.
+
+**It clears the two-consumer bar, and not speculatively.** `apps/worker` will run the projection runner (Stage 3.4). At **Phase 11**, `apps/api` gains an HTTP webhook that must call **the same** `ingest()` — and _apps may never depend on apps_. Drawing the boundary now costs nothing; discovering it in Phase 11 would cost a refactor that competes with the integration and loses.
+
+**What it does not contain:** ingestion, signature verification, contract parsing, deduplication _behaviour_, projections, checkpoints, retries, dead letters, replay, quarantine, read models, a test emitter, metrics, or a worker loop. Those are Stages 3.2–3.8, each with an Accepted ADR.
+
+It depends on **nothing in this workspace** — its only dependency is `pg`. It does not import `@qf-jarvis/contracts`, because Stage 3.1 does no contract parsing.
+
+`packages/persistence` was **deliberately not created**: [ADR-0010](../docs/decisions/ADR-0010-workspace-and-module-structure.md) §6 requires two or more consumers, and it has one. **Extraction trigger, recorded now:** extract it when Phase 4's coordination layer needs to own its own migrations.
+
+See [docs/architecture/event-backbone.md](../docs/architecture/event-backbone.md) and [ADR-0019](../docs/decisions/ADR-0019-durable-event-store-and-persistence.md) through [ADR-0022](../docs/decisions/ADR-0022-projections-ordering-and-rebuild-determinism.md).
+
 ## When a new package is justified
 
 The bar has not moved.
@@ -38,4 +52,6 @@ Dependencies point **inward, one way**: `apps/*` may depend on `packages/*`. A p
 
 This is not merely convention. pnpm's isolated `node_modules` means a workspace project can import only what it **declares** — an undeclared cross-boundary import does not resolve.
 
-**No application imports `@qf-jarvis/contracts` yet**, and that is correct. Phase 2 defines contracts; it does not wire them into anything. The first consumer arrives in Phase 3.
+**No application imports either package yet**, and that is correct.
+
+Phase 2 defined contracts; it did not wire them into anything. Phase 3 Stage 3.1 builds persistence; it does not run anything either. `apps/worker` starts consuming `@qf-jarvis/event-backbone` in **Stage 3.4**, when there is finally a projection runner for it to run.

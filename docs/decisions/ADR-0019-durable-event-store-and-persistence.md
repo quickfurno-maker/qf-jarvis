@@ -1,8 +1,12 @@
 # ADR-0019 — Durable Event Store and Persistence
 
-**Status:** Accepted
+**Status:** Accepted — **§1's deployment-provider assumption superseded by [ADR-0023](./ADR-0023-dedicated-supabase-managed-postgresql.md)**
 **Date:** 2026-07-12
 **Deciders:** Keshav Sharma (Founder, QuickFurno — business owner)
+
+> **Superseded in part.** [ADR-0023](./ADR-0023-dedicated-supabase-managed-postgresql.md) replaces **one line of this ADR**: the §1 table row _"Production on a VPS."_ Production PostgreSQL for QF Jarvis is now a **dedicated, Supabase-managed project** — **not QuickFurno Core's**.
+>
+> **Everything else here stands, and §2 is reinforced rather than relaxed.** Jarvis's own database, Core's Supabase still forbidden, raw SQL, no ORM, the `pg` driver, forward-only checksummed migrations, Compose for development only, GitHub Actions PostgreSQL for CI only, and the retention gate still closed.
 
 ---
 
@@ -38,16 +42,16 @@ RETURNING sequence;
 
 That is the whole argument. Everything else follows:
 
-| Requirement                          | What Postgres gives                                                                    |
-| ------------------------------------ | -------------------------------------------------------------------------------------- |
-| Crash safety                         | WAL, `fsync`, full ACID                                                                |
-| **Atomic deduplication**             | `ON CONFLICT` on a unique constraint — no read-then-write race                         |
-| Concurrency                          | MVCC; **advisory locks** (one per projection); `FOR UPDATE SKIP LOCKED` if ever needed |
-| Atomic checkpoint + read-model write | One transaction, so a read model can never be ahead of or behind its own checkpoint    |
-| Deterministic replay                 | `BIGINT GENERATED ALWAYS AS IDENTITY` — a total order over ingestion                   |
-| Immutability                         | `BEFORE UPDATE OR DELETE` trigger **and** revoked grants — belt and braces             |
-| Migrations, indexing, operations     | Mature, boring, well understood                                                        |
-| Production on a VPS                  | A single instance, alongside the Jarvis service                                        |
+| Requirement                          | What Postgres gives                                                                                                                                                                         |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Crash safety                         | WAL, `fsync`, full ACID                                                                                                                                                                     |
+| **Atomic deduplication**             | `ON CONFLICT` on a unique constraint — no read-then-write race                                                                                                                              |
+| Concurrency                          | MVCC; **advisory locks** (one per projection); `FOR UPDATE SKIP LOCKED` if ever needed                                                                                                      |
+| Atomic checkpoint + read-model write | One transaction, so a read model can never be ahead of or behind its own checkpoint                                                                                                         |
+| Deterministic replay                 | `BIGINT GENERATED ALWAYS AS IDENTITY` — a total order over ingestion                                                                                                                        |
+| Immutability                         | `BEFORE UPDATE OR DELETE` trigger **and** revoked grants — belt and braces                                                                                                                  |
+| Migrations, indexing, operations     | Mature, boring, well understood                                                                                                                                                             |
+| ~~Production on a VPS~~              | ~~A single instance, alongside the Jarvis service~~ — **superseded by [ADR-0023](./ADR-0023-dedicated-supabase-managed-postgresql.md): a dedicated Supabase-managed PostgreSQL 17 project** |
 
 ### 2. Jarvis's own database. Never QuickFurno's.
 
@@ -56,6 +60,8 @@ That is the whole argument. Everything else follows:
 This is not a comment on Supabase, which is fine. It is [ADR-0001](./ADR-0001-source-of-truth-boundary.md). A shared database is an integration point, and an integration point one `UPDATE` away from being a write path — which is exactly the erosion the boundary exists to prevent. ADR-0003 already rejected "shared database tables as an integration point" as _"alternative 1 wearing a hat."_
 
 Jarvis gets its own instance, its own credentials, its own schema, its own backup, and its own blast radius.
+
+> **This clause is what [ADR-0023](./ADR-0023-dedicated-supabase-managed-postgresql.md) satisfies rather than overrides.** A **dedicated QF-Jarvis Supabase project** is its own instance, credentials, schema, backup and blast radius. **QuickFurno Core's Supabase project remains forbidden** — that rejection was never about the technology, and it has not softened.
 
 ### 3. Raw SQL. No ORM.
 
@@ -142,7 +148,7 @@ The tension is real and should be stated rather than glossed. [auditability-prin
 
 **Append-only files.** Rejected. There is no atomic deduplication, no transaction spanning event and checkpoint, no indexing, and crash safety would be hand-rolled. The entire design would become a re-implementation of what a unique constraint gives for free — and the re-implementation would be the part most likely to be wrong.
 
-**QuickFurno's Supabase.** Rejected on the boundary (§2). Convenient, and that is exactly the danger.
+**QuickFurno's Supabase.** Rejected on the boundary (§2). Convenient, and that is exactly the danger. **This rejection is permanent and is not affected by [ADR-0023](./ADR-0023-dedicated-supabase-managed-postgresql.md)** — which provisions Jarvis a **separate** Supabase project, and makes Core's project _more_ tempting rather than more permissible.
 
 **Prisma.** Rejected: it fetches engine binaries in a `postinstall` script, which the supply-chain policy blocks — and it would hide the semantics that matter.
 

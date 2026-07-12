@@ -48,11 +48,35 @@ qf-jarvis/
 │   │   ├── package.json
 │   │   ├── tsconfig.json
 │   │   └── README.md
+│   ├── event-backbone/          @qf-jarvis/event-backbone — durable persistence (Phase 3, Stage 3.1)
+│   │   ├── src/
+│   │   │   ├── persistence/
+│   │   │   │   ├── database-config.ts      validated, bounded config — supplied, never read from env
+│   │   │   │   ├── pool.ts                 created by an explicit call. No module-level pool
+│   │   │   │   ├── transaction.ts          withClient / withTransaction — release on every path
+│   │   │   │   ├── migration-runner.ts     forward-only, checksummed, advisory-locked
+│   │   │   │   ├── migration-types.ts
+│   │   │   │   ├── migration-errors.ts
+│   │   │   │   ├── migrations-directory.ts resolves the migrations beside the compiled code
+│   │   │   │   ├── migrate-cli.ts          the ONLY reader of DATABASE_URL — a CLI is a boundary
+│   │   │   │   └── migrations/             0001_event_log.sql — the immutable log, in schema `qf_jarvis`
+│   │   │   ├── tests/
+│   │   │   │   ├── database-config.test.ts              a UNIT test — parallel, no database
+│   │   │   │   ├── *.integration.test.ts                PostgreSQL tests — serial, DATABASE_URL required
+│   │   │   │   └── database-test-utils.ts               the destructive-operation guards
+│   │   │   └── index.ts         the public surface
+│   │   ├── package.json         its own dependency: `pg`. Nothing from this workspace
+│   │   ├── tsconfig.json
+│   │   └── README.md
 │   └── README.md
 │
 ├── docs/                        Charter, architecture, contracts, decisions, governance, engineering
-├── scripts/clean.mjs            Cross-platform artifact removal
-├── .github/workflows/ci.yml     The quality gate
+├── scripts/
+│   ├── clean.mjs                Cross-platform artifact removal
+│   ├── copy-sql-assets.mjs      Copies src/**/*.sql into dist/. `tsc` does not
+│   └── dev-postgres-init.sql    Creates qf_jarvis_test on first boot. DEVELOPMENT ONLY
+├── compose.yml                  Local PostgreSQL 17.10. DEVELOPMENT ONLY — never production config
+├── .github/workflows/ci.yml     The quality gate — and, from Stage 3.1, a PostgreSQL service
 │
 ├── package.json                 Root: scripts and dev tooling. No runtime dependencies
 ├── pnpm-workspace.yaml          Workspace members and supply-chain policy
@@ -60,20 +84,35 @@ qf-jarvis/
 ├── tsconfig.json                Solution config — references every project
 ├── eslint.config.mjs
 ├── prettier.config.mjs
-└── vitest.config.mjs
+├── vitest.config.mjs             UNIT tests — parallel, database-free
+└── vitest.integration.config.mjs PostgreSQL tests — serial, DATABASE_URL required
 ```
+
+### Two test configurations, because they need different things
+
+A test that needs PostgreSQL is named **`*.integration.test.ts`**, and the name is the boundary — `vitest.config.mjs` excludes that pattern, and `vitest.integration.config.mjs` includes nothing else.
+
+The integration tests drop and recreate the `public` schema so each starts from nothing, so two of them running at once destroy each other. They run **serially**. The database-free tests — nearly a thousand contract tests with no shared state and no I/O — run in **parallel**, as they always did. Making the whole repository serial to accommodate the database was the first fix, and it was the wrong one: **the cost of a correct integration test should not be paid by every test that is not one.**
+
+### The migrations live inside the package, and the build copies them
+
+`0001_event_log.sql` sits in `packages/event-backbone/src/persistence/migrations/`, beside the runner that loads it — not in a top-level `migrations/` directory, because a migration is part of the module whose schema it defines, and splitting the two means a package can be imported without the schema it assumes.
+
+**`tsc` compiles TypeScript; it does not copy assets.** Left alone, `dist/persistence/migrations/` would simply be empty — and the migration CLI, which runs from `dist/`, would find no migrations and cheerfully report "already up to date" against a database with no tables. That failure is **silent**, which is why the root `build` script runs `node scripts/copy-sql-assets.mjs` rather than a README noting that someone should remember to copy the files.
+
+Resolving the migrations back out of `src/` at runtime was the alternative, and it was rejected: a compiled artifact that reaches into its own source tree breaks the moment anything is deployed without `src/`. Making `dist/` self-contained is what `dist/` is for.
 
 ---
 
 ## `apps/` versus `packages/`
 
-|                    | `apps/*`                     | `packages/*`                               |
-| ------------------ | ---------------------------- | ------------------------------------------ |
-| **Is**             | A deployable boundary        | A shared module                            |
-| **Depends on**     | `packages/*`                 | Nothing in this repository                 |
-| **Depended on by** | Nothing                      | `apps/*`                                   |
-| **Justified by**   | A distinct workload          | **Two or more real consumers**             |
-| **Today**          | `api`, `worker` — both empty | `contracts` — the versioned data contracts |
+|                    | `apps/*`                     | `packages/*`                                                  |
+| ------------------ | ---------------------------- | ------------------------------------------------------------- |
+| **Is**             | A deployable boundary        | A shared module                                               |
+| **Depends on**     | `packages/*`                 | Nothing in this repository                                    |
+| **Depended on by** | Nothing                      | `apps/*`                                                      |
+| **Justified by**   | A distinct workload          | **Two or more real consumers**                                |
+| **Today**          | `api`, `worker` — both empty | `contracts` — data contracts · `event-backbone` — persistence |
 
 ### Dependency direction — one way, and enforced
 
@@ -86,6 +125,8 @@ apps/*  ──depends on──▶  packages/*
 - An application **may never** depend on another application. If `api` and `worker` need the same thing, that thing is a package — that is what the word means.
 
 This is not merely a convention that review has to police. pnpm's isolated `node_modules` means a workspace project can import only what it **declares** ([ADR-0009](../decisions/ADR-0009-runtime-language-and-package-manager.md)). An undeclared cross-boundary import does not resolve. The package manager enforces the rule; review does not have to remember it.
+
+**The direction still holds, unchanged, with two packages in the tree.** `@qf-jarvis/event-backbone` depends on **nothing in this workspace** — not on `contracts`, not on an application. Its only dependency is `pg`. And `apps/api` and `apps/worker` still import nothing: neither has grown a dependency on either package. A shared module that already reached across to another shared module in its first stage would have told you the boundary was drawn in the wrong place.
 
 ---
 
@@ -118,7 +159,7 @@ Phase 3's event backbone is _"the load-bearing infrastructure of the entire syst
 
 ## Shared packages
 
-### `@qf-jarvis/contracts` — the first, and so far the only
+### `@qf-jarvis/contracts` — the first
 
 Phase 2 created it: the versioned, runtime-validatable data contracts — canonical events, recommendations, approval decisions, execution intents, execution results, and governed communication lifecycle records ([ADR-0003](../decisions/ADR-0003-event-driven-integration.md), [ADR-0012](../decisions/ADR-0012-runtime-contract-validation.md), [ADR-0013](../decisions/ADR-0013-canonical-event-envelope-and-versioning.md), [ADR-0014](../decisions/ADR-0014-governed-lifecycle-contracts.md)).
 
@@ -127,6 +168,25 @@ It clears the bar without argument: every later phase depends on it, and a contr
 It contains **no business logic and no transport**. It is data and validation — importing it cannot cause an effect. **No application imports it yet**, and that is correct: Phase 2 defines contracts, it does not wire them into anything. The first consumer is Phase 3's ingestion.
 
 Documentation: [docs/contracts/](../contracts/).
+
+### `@qf-jarvis/event-backbone` — the second
+
+Phase 3, Stage 3.1 created it, and it currently holds **the PostgreSQL persistence foundation and nothing else**: a validated database configuration, a connection pool, a transaction helper, a forward-only migration runner with checksum verification, and the immutable canonical event log ([ADR-0019](../decisions/ADR-0019-durable-event-store-and-persistence.md)).
+
+**What is deliberately not in it: no ingestion, no signature verification, no deduplication behaviour, no projections, no checkpoints, no retries, no dead letters, no replay, no test emitter, and no worker loop.** Those are later stages of Phase 3, each with its own Accepted ADR. The `UNIQUE (event_id)` constraint lays the _foundation_ for eventId idempotency; it is not yet the behaviour that distinguishes a benign duplicate from a conflicting one, and the package does not claim it is.
+
+Two structural properties are worth naming, because they are what keep this package a _module_ rather than an ambient service:
+
+- **Importing it connects to nothing.** There is no module-level pool and no ambient configuration. `createDatabasePool` is a function a caller invokes with an explicit config.
+- **Library code reads no environment.** The only reader of `DATABASE_URL` is `migrate-cli.ts`, because a CLI is a process boundary. A library that reaches into `process.env` behaves according to something the caller cannot see and a test cannot control.
+
+**No application imports it yet**, and that is correct: Stage 3.1 provides persistence, and Stage 3.2 is where ingestion arrives to use it. `apps/api` and `apps/worker` remain `export {};`.
+
+The database it talks to is **Jarvis's own** — never QuickFurno Core's database, **never QuickFurno Core's Supabase project**, never a QuickFurno business table ([ADR-0001](../decisions/ADR-0001-source-of-truth-boundary.md), [ADR-0019](../decisions/ADR-0019-durable-event-store-and-persistence.md) §2). Deployment uses a **dedicated, Supabase-managed QF-Jarvis project** ([ADR-0023](../decisions/ADR-0023-dedicated-supabase-managed-postgresql.md)), as a Postgres host and nothing more — **the package's only dependency is still `pg`, and there is no `@supabase/supabase-js` in this repository.**
+
+**Every object it creates lives in the private `qf_jarvis` schema, never in `public`**, and every reference to one is fully qualified — nothing depends on an ambient `search_path`. The schema is revoked from `PUBLIC`, and from the provider's own roles wherever those roles exist, on **every** migration run.
+
+Documentation: [packages/event-backbone/README.md](../../packages/event-backbone/README.md) · [event-backbone.md](../architecture/event-backbone.md) · [development-setup.md](./development-setup.md).
 
 ### The bar for the next one
 

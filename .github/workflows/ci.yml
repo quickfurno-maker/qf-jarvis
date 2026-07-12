@@ -31,6 +31,43 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
+    # From Stage 3.1 the quality gate needs a real PostgreSQL, because the event
+    # backbone's integration tests run against one. They FAIL without a database; they
+    # never skip. A skipped database test is a green build that proves nothing, and
+    # proving the database behaviour is the entire point of the phase.
+    #
+    # This is a CI-ONLY database. The credentials below are CI-only and disposable, and
+    # they are deliberately written in plain sight rather than stored as secrets: a value
+    # that guards nothing should not be dressed up as though it guards something.
+    #
+    # CI NEVER CONNECTS TO SUPABASE. Deployment uses a dedicated, Supabase-managed
+    # QF-Jarvis project (ADR-0023); CI uses this ephemeral service container and nothing
+    # else. No QuickFurno credential, no Supabase credential of either project, and no
+    # production secret appears here or anywhere in this repository
+    # (ADR-0019 §2, ADR-0023 §6).
+    services:
+      postgres:
+        # Pinned to the same exact patch release as compose.yml, so CI and a developer
+        # laptop run the same database rather than two that are nearly the same.
+        image: postgres:17.10-alpine
+        env:
+          POSTGRES_DB: qf_jarvis_test
+          POSTGRES_USER: qf_jarvis_ci
+          POSTGRES_PASSWORD: qf_jarvis_ci_only
+        ports:
+          - 5432:5432
+        # The job does not start until PostgreSQL is genuinely accepting connections,
+        # so the migration step cannot race a database that is still booting.
+        options: >-
+          --health-cmd "pg_isready -U qf_jarvis_ci -d qf_jarvis_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      # The integration tests and the migration CLI both read this. Loopback, CI-only.
+      DATABASE_URL: postgresql://qf_jarvis_ci:qf_jarvis_ci_only@127.0.0.1:5432/qf_jarvis_test
+
     steps:
       # Actions are pinned to immutable commit SHAs, not to mutable tags. A tag
       # can be repointed at new code by whoever controls the action's repository;
@@ -38,6 +75,22 @@ jobs:
       # the comment beside it so that upgrades stay reviewable by a human.
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      # compose.yml is DEVELOPMENT tooling, and nothing in CI runs from it — the job's
+      # database is the `services.postgres` container above. But a developer's first
+      # command on a fresh clone is `pnpm db:up`, and a Compose file that only breaks on
+      # someone else's laptop is a file nobody reviews and everybody trips over.
+      #
+      # `config` PARSES AND RENDERS. It starts no container, pulls no image, and touches
+      # no volume. It proves the syntax is valid and — because the password uses Compose's
+      # required-variable syntax with no default — that the variable substitution resolves.
+      #
+      # The value below is a throwaway that exists only so the render succeeds. It is not
+      # a secret, it guards nothing, and no container is ever started with it. It is
+      # deliberately inline rather than stored as a repository secret: dressing a
+      # meaningless string up as a secret teaches the wrong lesson about what a secret is.
+      - name: Validate the development Compose file
+        run: QF_JARVIS_POSTGRES_PASSWORD=ci-compose-validation-only docker compose config --quiet
 
       # Must run before setup-node: setup-node's `cache: pnpm` needs pnpm on the
       # PATH to locate the store directory it is being asked to cache.
@@ -62,10 +115,23 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # The migration CLI runs from `dist/`, so the workspace must be built before it
+      # can be invoked. This step also proves the CLI itself works — `pnpm check` would
+      # exercise the migration *runner* through the tests, but not the executable that
+      # a deploy actually calls.
+      - name: Build
+        run: pnpm build
+
+      - name: Apply database migrations
+        run: pnpm db:migrate
+
       # The complete local quality sequence, in one command:
       # format:check -> lint -> typecheck -> test -> build.
       # It is the same command a developer runs before pushing, so a green local
       # run and a green CI run mean the same thing.
+      #
+      # The event-backbone integration tests run here, against the PostgreSQL service
+      # above. They fail rather than skip if DATABASE_URL is absent.
       - name: Run quality gate
         run: pnpm check
 
