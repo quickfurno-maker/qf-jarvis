@@ -1,8 +1,16 @@
 # ADR-0025 — QuickFurno Compatibility Boundary and Core Adapter Baseline
 
-**Status:** **Proposed** — not Accepted. Awaiting owner review.
+**Status:** **Accepted** — accepted by **Keshav Sharma** (Founder, QuickFurno — business owner) on **2026-07-13**.
 **Date:** 2026-07-13
+**Accepted:** 2026-07-13
 **Deciders:** Keshav Sharma (Founder, QuickFurno — business owner)
+**Stage 3.1.2 merged at:** `6030597e4f3be19e5c288ef951e661a7359e4307`
+
+> ### What acceptance authorizes, and what it does not
+>
+> **Acceptance authorizes the documented architecture and the owner policies recorded below** — the compatibility boundary, the vendor distribution policy, the WhatsApp policy, the classification of the safety findings, and the staged remediation plan.
+>
+> **Acceptance authorizes no action against any running system.** It does **not** authorize live integration, a Supabase connection, a provider setting change, a migration, n8n, WhatsApp, or any mutation of the QuickFurno repository. **Reading a system does not grant permission to act on it**, and an accepted description of a boundary is not permission to cross it.
 
 **Depends on:** [ADR-0001](./ADR-0001-source-of-truth-boundary.md) (source-of-truth boundary) · [ADR-0002](./ADR-0002-recommend-authorize-execute-model.md) (recommend → authorize → execute) · [ADR-0003](./ADR-0003-event-driven-integration.md) (event-driven integration) · [ADR-0013](./ADR-0013-canonical-event-envelope-and-versioning.md) (canonical envelope) · [ADR-0015](./ADR-0015-complete-client-journey-and-reassignment-policy.md) (assignment and reassignment policy) · [ADR-0020](./ADR-0020-event-ingestion-signature-verification-and-idempotency.md) (signature verification and idempotency) · the [QuickFurno Compatibility Directive](../architecture/quickfurno-compatibility-directive.md)
 

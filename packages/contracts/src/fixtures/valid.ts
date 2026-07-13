@@ -474,7 +474,7 @@ const envelope = {
 export const validRecommendationCreatedEvent: CanonicalEvent = {
   ...envelope,
   eventType: 'qf.recommendation.created',
-  eventVersion: 1,
+  eventVersion: 2,
   subject: CLIENT_SUBJECT,
   payload: { recommendation: validActionableRecommendation },
 };
@@ -482,7 +482,7 @@ export const validRecommendationCreatedEvent: CanonicalEvent = {
 export const validRecommendationLifecycleEvent: CanonicalEvent = {
   ...envelope,
   eventType: 'qf.recommendation.lifecycle-state-recorded',
-  eventVersion: 1,
+  eventVersion: 2,
   subject: CLIENT_SUBJECT,
   causationEventId: FIXTURE_IDS.causationEvent,
   payload: { record: validLifecycleRecordApproved },
@@ -491,7 +491,7 @@ export const validRecommendationLifecycleEvent: CanonicalEvent = {
 export const validApprovalDecisionEvent: CanonicalEvent = {
   ...envelope,
   eventType: 'qf.approval.decision-recorded',
-  eventVersion: 1,
+  eventVersion: 2,
   subject: CLIENT_SUBJECT,
   payload: { decision: validApprovalDecisionByHuman },
 };
@@ -499,7 +499,7 @@ export const validApprovalDecisionEvent: CanonicalEvent = {
 export const validExecutionIntentEvent: CanonicalEvent = {
   ...envelope,
   eventType: 'qf.execution.intent-issued',
-  eventVersion: 1,
+  eventVersion: 2,
   subject: CLIENT_SUBJECT,
   payload: { intent: validExecutionIntent },
 };
@@ -507,7 +507,7 @@ export const validExecutionIntentEvent: CanonicalEvent = {
 export const validExecutionResultEvent: CanonicalEvent = {
   ...envelope,
   eventType: 'qf.execution.result-recorded',
-  eventVersion: 1,
+  eventVersion: 2,
   subject: CLIENT_SUBJECT,
   payload: { result: validExecutionResultIndeterminate },
 };
@@ -515,7 +515,7 @@ export const validExecutionResultEvent: CanonicalEvent = {
 export const validCommunicationStateEvent: CanonicalEvent = {
   ...envelope,
   eventType: 'qf.communication.state-recorded',
-  eventVersion: 1,
+  eventVersion: 2,
   subject: VENDOR_SUBJECT,
   payload: { record: validCommunicationRejectedOptOut },
 };

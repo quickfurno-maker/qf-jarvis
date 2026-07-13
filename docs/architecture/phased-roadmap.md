@@ -121,10 +121,10 @@ The design is [event-backbone.md](./event-backbone.md); the decisions are [ADR-0
 | **3.0** — decisions and architecture | ✅ **Complete and approved (2026-07-12)** |
 | **3.1** — persistence foundation | ✅ **Complete and merged (2026-07-13)** |
 | **3.1.1** — managed database connection hardening | ✅ **Complete and merged (2026-07-13)** — [ADR-0024](../decisions/ADR-0024-verified-tls-and-managed-database-preflight.md) **Accepted** |
-| **3.1.2** — QuickFurno compatibility baseline | **In progress** — [ADR-0025](../decisions/ADR-0025-quickfurno-compatibility-boundary-and-core-adapter-baseline.md) **Proposed** |
+| **3.1.2** — QuickFurno compatibility baseline | ✅ **Complete and merged (2026-07-13)** — [ADR-0025](../decisions/ADR-0025-quickfurno-compatibility-boundary-and-core-adapter-baseline.md) **Accepted** |
 | **3.1.3** — QuickFurno Core compatibility and safety remediation | **Not started.** **Runs in the QuickFurno repository, not here** — see below |
-| **3.1.4** — canonical payload privacy hardening | **Not started.** **`qf-jarvis`. Hard gate before Stage 3.2** — see below |
-| 3.2 — signature verification | **Not started.** **Blocked by Stage 3.1.4** — see below |
+| **3.1.4** — canonical payload privacy hardening | **In progress — implementation complete, pending owner review.** [ADR-0026](../decisions/ADR-0026-canonical-payload-privacy-boundary.md) **Proposed**. `qf-jarvis` |
+| 3.2 — signature verification | **Not started. `blocked_by_stage_3_1_4`** — the gate is cleared by owner acceptance, not by the code existing |
 | 3.3 — validated signed ingestion | Not started |
 | 3.4 — projections and bounded retries | Not started |
 | 3.5 — dead letters and replay | Not started |
@@ -180,6 +180,12 @@ The design is [event-backbone.md](./event-backbone.md); the decisions are [ADR-0
 - **Retain Core-side contact resolution at authorized execution time** — Jarvis never learns the recipient, because it never holds them.
 
 **Until Stage 3.1.4 closes the gap: no adapter may forward Core free text.** The finding is `gps-value-shape-not-refused` — **a known contract gap, not an accepted risk.**
+
+> ### The gate is not cleared by writing the code
+>
+> Stage 3.1.4 is **implemented and tested**, and it is **not accepted**: ADR-0026 is **Proposed**, the PR is unmerged, and CI has not run. The finding is therefore recorded as **`fixed_pending_acceptance`**, not resolved, and **Stage 3.2 remains `blocked_by_stage_3_1_4`**.
+>
+> **An implementation is not an acceptance.** A stage that marks its own gate cleared the moment its tests go green has replaced the reviewer with the author.
 
 **This correction is NOT implemented in Stage 3.1.2**, which is forbidden from changing contract implementation. Stage 3.1.2 records the gap honestly and tests that it is still open.
 

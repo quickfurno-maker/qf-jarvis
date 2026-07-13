@@ -19,42 +19,53 @@
  */
 
 import type {
-  AssignmentBatchCompletedEventV1,
-  AssignmentBatchCreatedEventV1,
+  AssignmentBatchCompletedEventV2,
+  AssignmentBatchCreatedEventV2,
   CanonicalEvent,
-  ClientAdditionalServiceConfirmedEventV1,
-  ClientAdditionalServiceIdentifiedEventV1,
-  ClientAdditionalServiceRejectedEventV1,
-  ClientComplaintRecordedEventV1,
-  ClientDissatisfactionRecordedEventV1,
-  ClientFollowUpCompletedEventV1,
-  ClientFollowUpDueDetectedEventV1,
-  ClientLifecycleClosedEventV1,
-  ClientReassignmentAuthorizedEventV1,
-  ClientReassignmentRejectedEventV1,
-  ClientReassignmentRequestedEventV1,
-  ClientRequirementCompletedEventV1,
-  ClientReviewRequestedEventV1,
-  ClientSatisfactionRecordedEventV1,
-  CommunicationAuthorizationRecordedEventV1,
-  CommunicationHumanHandoffRecordedEventV1,
-  CommunicationHumanHandoffRequestedEventV1,
-  CommunicationResultRecordedEventV1,
-  LeadLinkedCreatedEventV1,
-  PolicyVersionChangedEventV1,
-  PrivacyErasureRecordedEventV1,
-  PrivacyErasureRequestedEventV1,
-  VendorActivatedEventV1,
-  VendorComplaintRecordedEventV1,
-  VendorInactivityDetectedEventV1,
-  VendorPackageReadinessChangedEventV1,
-  VendorPerformanceUpdatedEventV1,
-  VendorProfileCompletedEventV1,
-  VendorRechargeOpportunityDetectedEventV1,
-  VendorRegistrationStartedEventV1,
-  VendorRetentionRiskDetectedEventV1,
-  VendorVerificationRequestedEventV1,
-  VendorWinbackCandidateDetectedEventV1,
+  ClientAdditionalServiceConfirmedEventV2,
+  ClientAdditionalServiceIdentifiedEventV2,
+  ClientAdditionalServiceRejectedEventV2,
+  ClientComplaintRecordedEventV2,
+  ClientDissatisfactionRecordedEventV2,
+  ClientFollowUpCompletedEventV2,
+  ClientFollowUpDueDetectedEventV2,
+  ClientLifecycleClosedEventV2,
+  ClientReassignmentAuthorizedEventV2,
+  ClientReassignmentRejectedEventV2,
+  ClientReassignmentRequestedEventV2,
+  ClientRequirementCompletedEventV2,
+  ClientReviewRequestedEventV2,
+  ClientSatisfactionRecordedEventV2,
+  CommunicationAuthorizationRecordedEventV2,
+  CommunicationHumanHandoffRecordedEventV2,
+  CommunicationHumanHandoffRequestedEventV2,
+  CommunicationResultRecordedEventV2,
+  LeadLinkedCreatedEventV2,
+  PolicyVersionChangedEventV2,
+  PrivacyErasureRecordedEventV2,
+  PrivacyErasureRequestedEventV2,
+  VendorActivatedEventV2,
+  VendorComplaintRecordedEventV2,
+  VendorInactivityDetectedEventV2,
+  VendorPackageReadinessChangedEventV2,
+  VendorPerformanceUpdatedEventV2,
+  VendorProfileCompletedEventV2,
+  VendorRechargeOpportunityDetectedEventV2,
+  VendorRegistrationStartedEventV2,
+  VendorRetentionRiskDetectedEventV2,
+  VendorVerificationRequestedEventV2,
+  VendorWinbackCandidateDetectedEventV2,
+  CategoryCreatedEventV1,
+  CategoryDeactivatedEventV1,
+  CategoryUpdatedEventV1,
+  CityCreatedEventV1,
+  CityDeactivatedEventV1,
+  CityUpdatedEventV1,
+  SubcategoryCreatedEventV1,
+  SubcategoryDeactivatedEventV1,
+  SubcategoryMovedEventV1,
+  SubcategoryUpdatedEventV1,
+  TaxonomyVersionPublishedEventV1,
 } from '../events/event-catalog.js';
 import type { EvidenceItem } from '../recommendations/recommendation.js';
 import type { AdditionalServiceRequestV1 } from '../assignments/additional-service.js';
@@ -1053,7 +1064,7 @@ export const TARGET_VALID_FIXTURES: readonly ValidFixture[] = [
 
 /** The envelope every target event fixture shares. Core is always the source. */
 const ENVELOPE = {
-  eventVersion: 1,
+  eventVersion: 2,
   occurredAt: TARGET_TIMES.occurredAt,
   emittedAt: TARGET_TIMES.emittedAt,
   source: 'quickfurno-core',
@@ -1063,7 +1074,7 @@ const ENVELOPE = {
 /** Distinct, obviously synthetic event ids. One per target event. */
 const E = (n: number): string => `e0000${String(n).padStart(3, '0')}-0000-4000-8000-000000000001`;
 
-export const validClientRequirementCompletedEvent: ClientRequirementCompletedEventV1 = {
+export const validClientRequirementCompletedEvent: ClientRequirementCompletedEventV2 = {
   ...ENVELOPE,
   eventId: E(1),
   eventType: 'qf.client.requirement-completed',
@@ -1071,7 +1082,7 @@ export const validClientRequirementCompletedEvent: ClientRequirementCompletedEve
   payload: { reasonCode: 'requirement-complete', lead: LEAD, category: CATEGORY_WARDROBE },
 };
 
-export const validClientFollowUpDueDetectedEvent: ClientFollowUpDueDetectedEventV1 = {
+export const validClientFollowUpDueDetectedEvent: ClientFollowUpDueDetectedEventV2 = {
   ...ENVELOPE,
   eventId: E(2),
   eventType: 'qf.client.follow-up-due-detected',
@@ -1084,7 +1095,7 @@ export const validClientFollowUpDueDetectedEvent: ClientFollowUpDueDetectedEvent
   },
 };
 
-export const validClientFollowUpCompletedEvent: ClientFollowUpCompletedEventV1 = {
+export const validClientFollowUpCompletedEvent: ClientFollowUpCompletedEventV2 = {
   ...ENVELOPE,
   eventId: E(3),
   eventType: 'qf.client.follow-up-completed',
@@ -1097,7 +1108,7 @@ export const validClientFollowUpCompletedEvent: ClientFollowUpCompletedEventV1 =
   },
 };
 
-export const validClientSatisfactionRecordedEvent: ClientSatisfactionRecordedEventV1 = {
+export const validClientSatisfactionRecordedEvent: ClientSatisfactionRecordedEventV2 = {
   ...ENVELOPE,
   eventId: E(4),
   eventType: 'qf.client.satisfaction-recorded',
@@ -1105,7 +1116,7 @@ export const validClientSatisfactionRecordedEvent: ClientSatisfactionRecordedEve
   payload: { reasonCode: 'client-satisfied', lead: LEAD, category: CATEGORY_WARDROBE },
 };
 
-export const validClientDissatisfactionRecordedEvent: ClientDissatisfactionRecordedEventV1 = {
+export const validClientDissatisfactionRecordedEvent: ClientDissatisfactionRecordedEventV2 = {
   ...ENVELOPE,
   eventId: E(5),
   eventType: 'qf.client.dissatisfaction-recorded',
@@ -1118,7 +1129,7 @@ export const validClientDissatisfactionRecordedEvent: ClientDissatisfactionRecor
   },
 };
 
-export const validClientComplaintRecordedEvent: ClientComplaintRecordedEventV1 = {
+export const validClientComplaintRecordedEvent: ClientComplaintRecordedEventV2 = {
   ...ENVELOPE,
   eventId: E(6),
   eventType: 'qf.client.complaint-recorded',
@@ -1126,7 +1137,7 @@ export const validClientComplaintRecordedEvent: ClientComplaintRecordedEventV1 =
   payload: { reasonCode: 'service-complaint', severity: 'high' },
 };
 
-export const validClientReassignmentRequestedEvent: ClientReassignmentRequestedEventV1 = {
+export const validClientReassignmentRequestedEvent: ClientReassignmentRequestedEventV2 = {
   ...ENVELOPE,
   eventId: E(7),
   eventType: 'qf.client.reassignment-requested',
@@ -1134,7 +1145,7 @@ export const validClientReassignmentRequestedEvent: ClientReassignmentRequestedE
   payload: { request: validReassignmentRequest },
 };
 
-export const validClientReassignmentAuthorizedEvent: ClientReassignmentAuthorizedEventV1 = {
+export const validClientReassignmentAuthorizedEvent: ClientReassignmentAuthorizedEventV2 = {
   ...ENVELOPE,
   eventId: E(8),
   eventType: 'qf.client.reassignment-authorized',
@@ -1142,7 +1153,7 @@ export const validClientReassignmentAuthorizedEvent: ClientReassignmentAuthorize
   payload: { decision: validReassignmentDecisionAuthorized },
 };
 
-export const validClientReassignmentRejectedEvent: ClientReassignmentRejectedEventV1 = {
+export const validClientReassignmentRejectedEvent: ClientReassignmentRejectedEventV2 = {
   ...ENVELOPE,
   eventId: E(9),
   eventType: 'qf.client.reassignment-rejected',
@@ -1150,7 +1161,7 @@ export const validClientReassignmentRejectedEvent: ClientReassignmentRejectedEve
   payload: { decision: validReassignmentDecisionRejected },
 };
 
-export const validAssignmentBatchCreatedEvent: AssignmentBatchCreatedEventV1 = {
+export const validAssignmentBatchCreatedEvent: AssignmentBatchCreatedEventV2 = {
   ...ENVELOPE,
   eventId: E(10),
   eventType: 'qf.assignment.batch-created',
@@ -1158,7 +1169,7 @@ export const validAssignmentBatchCreatedEvent: AssignmentBatchCreatedEventV1 = {
   payload: { batch: validInitialBatch },
 };
 
-export const validAssignmentBatchCompletedEvent: AssignmentBatchCompletedEventV1 = {
+export const validAssignmentBatchCompletedEvent: AssignmentBatchCompletedEventV2 = {
   ...ENVELOPE,
   eventId: E(11),
   eventType: 'qf.assignment.batch-completed',
@@ -1172,7 +1183,7 @@ export const validAssignmentBatchCompletedEvent: AssignmentBatchCompletedEventV1
   },
 };
 
-export const validClientAdditionalServiceIdentifiedEvent: ClientAdditionalServiceIdentifiedEventV1 =
+export const validClientAdditionalServiceIdentifiedEvent: ClientAdditionalServiceIdentifiedEventV2 =
   {
     ...ENVELOPE,
     eventId: E(12),
@@ -1181,7 +1192,7 @@ export const validClientAdditionalServiceIdentifiedEvent: ClientAdditionalServic
     payload: { request: validAdditionalServiceRequest },
   };
 
-export const validClientAdditionalServiceConfirmedEvent: ClientAdditionalServiceConfirmedEventV1 = {
+export const validClientAdditionalServiceConfirmedEvent: ClientAdditionalServiceConfirmedEventV2 = {
   ...ENVELOPE,
   eventId: E(13),
   eventType: 'qf.client.additional-service-confirmed',
@@ -1194,7 +1205,7 @@ export const validClientAdditionalServiceConfirmedEvent: ClientAdditionalService
   },
 };
 
-export const validClientAdditionalServiceRejectedEvent: ClientAdditionalServiceRejectedEventV1 = {
+export const validClientAdditionalServiceRejectedEvent: ClientAdditionalServiceRejectedEventV2 = {
   ...ENVELOPE,
   eventId: E(14),
   eventType: 'qf.client.additional-service-rejected',
@@ -1206,7 +1217,7 @@ export const validClientAdditionalServiceRejectedEvent: ClientAdditionalServiceR
   },
 };
 
-export const validLeadLinkedCreatedEvent: LeadLinkedCreatedEventV1 = {
+export const validLeadLinkedCreatedEvent: LeadLinkedCreatedEventV2 = {
   ...ENVELOPE,
   eventId: E(15),
   eventType: 'qf.lead.linked-created',
@@ -1214,7 +1225,7 @@ export const validLeadLinkedCreatedEvent: LeadLinkedCreatedEventV1 = {
   payload: { link: validLinkedLeadCreated },
 };
 
-export const validClientReviewRequestedEvent: ClientReviewRequestedEventV1 = {
+export const validClientReviewRequestedEvent: ClientReviewRequestedEventV2 = {
   ...ENVELOPE,
   eventId: E(16),
   eventType: 'qf.client.review-requested',
@@ -1222,7 +1233,7 @@ export const validClientReviewRequestedEvent: ClientReviewRequestedEventV1 = {
   payload: { reasonCode: 'job-complete', lead: LEAD, category: CATEGORY_WARDROBE },
 };
 
-export const validClientLifecycleClosedEvent: ClientLifecycleClosedEventV1 = {
+export const validClientLifecycleClosedEvent: ClientLifecycleClosedEventV2 = {
   ...ENVELOPE,
   eventId: E(17),
   eventType: 'qf.client.lifecycle-closed',
@@ -1235,7 +1246,7 @@ export const validClientLifecycleClosedEvent: ClientLifecycleClosedEventV1 = {
   },
 };
 
-export const validVendorRegistrationStartedEvent: VendorRegistrationStartedEventV1 = {
+export const validVendorRegistrationStartedEvent: VendorRegistrationStartedEventV2 = {
   ...ENVELOPE,
   eventId: E(18),
   eventType: 'qf.vendor.registration-started',
@@ -1243,7 +1254,7 @@ export const validVendorRegistrationStartedEvent: VendorRegistrationStartedEvent
   payload: { reasonCode: 'registration-begun', registrationChannelCode: 'web' },
 };
 
-export const validVendorProfileCompletedEvent: VendorProfileCompletedEventV1 = {
+export const validVendorProfileCompletedEvent: VendorProfileCompletedEventV2 = {
   ...ENVELOPE,
   eventId: E(19),
   eventType: 'qf.vendor.profile-completed',
@@ -1251,7 +1262,7 @@ export const validVendorProfileCompletedEvent: VendorProfileCompletedEventV1 = {
   payload: { reasonCode: 'profile-complete', completeness: 1 },
 };
 
-export const validVendorVerificationRequestedEvent: VendorVerificationRequestedEventV1 = {
+export const validVendorVerificationRequestedEvent: VendorVerificationRequestedEventV2 = {
   ...ENVELOPE,
   eventId: E(20),
   eventType: 'qf.vendor.verification-requested',
@@ -1259,7 +1270,7 @@ export const validVendorVerificationRequestedEvent: VendorVerificationRequestedE
   payload: { reasonCode: 'verification-requested' },
 };
 
-export const validVendorActivatedEvent: VendorActivatedEventV1 = {
+export const validVendorActivatedEvent: VendorActivatedEventV2 = {
   ...ENVELOPE,
   eventId: E(21),
   eventType: 'qf.vendor.activated',
@@ -1267,7 +1278,7 @@ export const validVendorActivatedEvent: VendorActivatedEventV1 = {
   payload: { reasonCode: 'vendor-activated' },
 };
 
-export const validVendorInactivityDetectedEvent: VendorInactivityDetectedEventV1 = {
+export const validVendorInactivityDetectedEvent: VendorInactivityDetectedEventV2 = {
   ...ENVELOPE,
   eventId: E(22),
   eventType: 'qf.vendor.inactivity-detected',
@@ -1275,7 +1286,7 @@ export const validVendorInactivityDetectedEvent: VendorInactivityDetectedEventV1
   payload: { reasonCode: 'no-activity', inactiveSinceAt: TARGET_TIMES.createdAt },
 };
 
-export const validVendorPerformanceUpdatedEvent: VendorPerformanceUpdatedEventV1 = {
+export const validVendorPerformanceUpdatedEvent: VendorPerformanceUpdatedEventV2 = {
   ...ENVELOPE,
   eventId: E(23),
   eventType: 'qf.vendor.performance-updated',
@@ -1283,7 +1294,7 @@ export const validVendorPerformanceUpdatedEvent: VendorPerformanceUpdatedEventV1
   payload: { reasonCode: 'performance-recomputed', performanceBand: 'medium' },
 };
 
-export const validVendorPackageReadinessChangedEvent: VendorPackageReadinessChangedEventV1 = {
+export const validVendorPackageReadinessChangedEvent: VendorPackageReadinessChangedEventV2 = {
   ...ENVELOPE,
   eventId: E(24),
   eventType: 'qf.vendor.package-readiness-changed',
@@ -1291,7 +1302,7 @@ export const validVendorPackageReadinessChangedEvent: VendorPackageReadinessChan
   payload: { reasonCode: 'readiness-changed', readinessBand: 'low' },
 };
 
-export const validVendorRechargeOpportunityDetectedEvent: VendorRechargeOpportunityDetectedEventV1 =
+export const validVendorRechargeOpportunityDetectedEvent: VendorRechargeOpportunityDetectedEventV2 =
   {
     ...ENVELOPE,
     eventId: E(25),
@@ -1300,7 +1311,7 @@ export const validVendorRechargeOpportunityDetectedEvent: VendorRechargeOpportun
     payload: { reasonCode: 'package-nearly-exhausted', opportunityBand: 'high' },
   };
 
-export const validVendorComplaintRecordedEvent: VendorComplaintRecordedEventV1 = {
+export const validVendorComplaintRecordedEvent: VendorComplaintRecordedEventV2 = {
   ...ENVELOPE,
   eventId: E(26),
   eventType: 'qf.vendor.complaint-recorded',
@@ -1308,7 +1319,7 @@ export const validVendorComplaintRecordedEvent: VendorComplaintRecordedEventV1 =
   payload: { reasonCode: 'client-complaint', severity: 'medium' },
 };
 
-export const validVendorRetentionRiskDetectedEvent: VendorRetentionRiskDetectedEventV1 = {
+export const validVendorRetentionRiskDetectedEvent: VendorRetentionRiskDetectedEventV2 = {
   ...ENVELOPE,
   eventId: E(27),
   eventType: 'qf.vendor.retention-risk-detected',
@@ -1316,7 +1327,7 @@ export const validVendorRetentionRiskDetectedEvent: VendorRetentionRiskDetectedE
   payload: { reasonCode: 'engagement-falling', riskBand: 'high' },
 };
 
-export const validVendorWinbackCandidateDetectedEvent: VendorWinbackCandidateDetectedEventV1 = {
+export const validVendorWinbackCandidateDetectedEvent: VendorWinbackCandidateDetectedEventV2 = {
   ...ENVELOPE,
   eventId: E(28),
   eventType: 'qf.vendor.winback-candidate-detected',
@@ -1324,7 +1335,7 @@ export const validVendorWinbackCandidateDetectedEvent: VendorWinbackCandidateDet
   payload: { reasonCode: 'previously-strong-vendor', candidacyBand: 'medium' },
 };
 
-export const validPrivacyErasureRequestedEvent: PrivacyErasureRequestedEventV1 = {
+export const validPrivacyErasureRequestedEvent: PrivacyErasureRequestedEventV2 = {
   ...ENVELOPE,
   eventId: E(29),
   eventType: 'qf.privacy.erasure-requested',
@@ -1332,7 +1343,7 @@ export const validPrivacyErasureRequestedEvent: PrivacyErasureRequestedEventV1 =
   payload: { request: validErasureRequest },
 };
 
-export const validPrivacyErasureRecordedEvent: PrivacyErasureRecordedEventV1 = {
+export const validPrivacyErasureRecordedEvent: PrivacyErasureRecordedEventV2 = {
   ...ENVELOPE,
   eventId: E(30),
   eventType: 'qf.privacy.erasure-recorded',
@@ -1340,7 +1351,7 @@ export const validPrivacyErasureRecordedEvent: PrivacyErasureRecordedEventV1 = {
   payload: { record: validErasureRecordCompleted },
 };
 
-export const validPolicyVersionChangedEvent: PolicyVersionChangedEventV1 = {
+export const validPolicyVersionChangedEvent: PolicyVersionChangedEventV2 = {
   ...ENVELOPE,
   eventId: E(31),
   eventType: 'qf.policy.version-changed',
@@ -1348,7 +1359,7 @@ export const validPolicyVersionChangedEvent: PolicyVersionChangedEventV1 = {
   payload: { change: validPolicyVersionChange },
 };
 
-export const validCommunicationAuthorizationRecordedEvent: CommunicationAuthorizationRecordedEventV1 =
+export const validCommunicationAuthorizationRecordedEvent: CommunicationAuthorizationRecordedEventV2 =
   {
     ...ENVELOPE,
     eventId: E(32),
@@ -1357,7 +1368,7 @@ export const validCommunicationAuthorizationRecordedEvent: CommunicationAuthoriz
     payload: { authorization: validCommunicationAuthorizationOptedOut },
   };
 
-export const validCommunicationResultRecordedEvent: CommunicationResultRecordedEventV1 = {
+export const validCommunicationResultRecordedEvent: CommunicationResultRecordedEventV2 = {
   ...ENVELOPE,
   eventId: E(33),
   eventType: 'qf.communication.result-recorded',
@@ -1365,7 +1376,7 @@ export const validCommunicationResultRecordedEvent: CommunicationResultRecordedE
   payload: { result: validCommunicationResultDelivered },
 };
 
-export const validCommunicationHumanHandoffRequestedEvent: CommunicationHumanHandoffRequestedEventV1 =
+export const validCommunicationHumanHandoffRequestedEvent: CommunicationHumanHandoffRequestedEventV2 =
   {
     ...ENVELOPE,
     eventId: E(34),
@@ -1374,7 +1385,7 @@ export const validCommunicationHumanHandoffRequestedEvent: CommunicationHumanHan
     payload: { request: validHumanHandoffRequest },
   };
 
-export const validCommunicationHumanHandoffRecordedEvent: CommunicationHumanHandoffRecordedEventV1 =
+export const validCommunicationHumanHandoffRecordedEvent: CommunicationHumanHandoffRecordedEventV2 =
   {
     ...ENVELOPE,
     eventId: E(35),
@@ -1384,7 +1395,212 @@ export const validCommunicationHumanHandoffRecordedEvent: CommunicationHumanHand
   };
 
 /** Every target event, for the registry-coverage test. */
+
+// ---------------------------------------------------------------------------
+// Taxonomy event fixtures — Stage 3.1.4
+//
+// The taxonomy is the one place a canonical payload carries a human-readable string, and these
+// fixtures pin down that it is a **label** and not free text: "Interior Designers" is fine,
+// and a sentence is not. Permanent ids and a taxonomy version travel alongside, because logic
+// keys on those and never on the label.
+// ---------------------------------------------------------------------------
+
+const TAXONOMY_CITY = { entityType: 'city', entityId: 'CORE-CITY-PUNE' } as const;
+const TAXONOMY_CATEGORY = { entityType: 'category', entityId: 'CORE-CAT-INTERIORS' } as const;
+const TAXONOMY_SUBCATEGORY = {
+  entityType: 'subcategory',
+  entityId: 'CORE-SUB-CARPENTERS',
+} as const;
+const TAXONOMY_PARENT = { entityType: 'category', entityId: 'CORE-CAT-INTERIORS' } as const;
+const TAXONOMY_NEW_PARENT = { entityType: 'category', entityId: 'CORE-CAT-CIVIL-WORK' } as const;
+
+export const validCityCreatedEvent: CityCreatedEventV1 = {
+  ...ENVELOPE,
+  eventVersion: 1,
+  eventId: E(90),
+  eventType: 'qf.taxonomy.city-created',
+  subject: TAXONOMY_CITY,
+  payload: {
+    taxonomyVersion: 14,
+    nodeId: TAXONOMY_CITY,
+    displayName: 'Pune',
+    state: 'active',
+    effectiveAt: TARGET_TIMES.occurredAt,
+  },
+};
+
+export const validCityUpdatedEvent: CityUpdatedEventV1 = {
+  ...ENVELOPE,
+  eventVersion: 1,
+  eventId: E(91),
+  eventType: 'qf.taxonomy.city-updated',
+  subject: TAXONOMY_CITY,
+  payload: {
+    taxonomyVersion: 15,
+    nodeId: TAXONOMY_CITY,
+    displayName: 'Pune Metropolitan',
+    previousDisplayName: 'Pune',
+    state: 'active',
+    effectiveAt: TARGET_TIMES.occurredAt,
+  },
+};
+
+export const validCityDeactivatedEvent: CityDeactivatedEventV1 = {
+  ...ENVELOPE,
+  eventVersion: 1,
+  eventId: E(92),
+  eventType: 'qf.taxonomy.city-deactivated',
+  subject: TAXONOMY_CITY,
+  payload: {
+    taxonomyVersion: 16,
+    nodeId: TAXONOMY_CITY,
+    displayName: 'Pune Metropolitan',
+    state: 'deactivated',
+    effectiveAt: TARGET_TIMES.occurredAt,
+  },
+};
+
+export const validCategoryCreatedEvent: CategoryCreatedEventV1 = {
+  ...ENVELOPE,
+  eventVersion: 1,
+  eventId: E(93),
+  eventType: 'qf.taxonomy.category-created',
+  subject: TAXONOMY_CATEGORY,
+  payload: {
+    taxonomyVersion: 14,
+    nodeId: TAXONOMY_CATEGORY,
+    displayName: 'Interior Designers',
+    state: 'active',
+    effectiveAt: TARGET_TIMES.occurredAt,
+  },
+};
+
+export const validCategoryUpdatedEvent: CategoryUpdatedEventV1 = {
+  ...ENVELOPE,
+  eventVersion: 1,
+  eventId: E(94),
+  eventType: 'qf.taxonomy.category-updated',
+  subject: TAXONOMY_CATEGORY,
+  payload: {
+    taxonomyVersion: 15,
+    nodeId: TAXONOMY_CATEGORY,
+    // A rename. The id did not move, which is exactly why logic must key on the id.
+    displayName: 'Interior Design',
+    previousDisplayName: 'Interior Designers',
+    state: 'active',
+    effectiveAt: TARGET_TIMES.occurredAt,
+  },
+};
+
+export const validCategoryDeactivatedEvent: CategoryDeactivatedEventV1 = {
+  ...ENVELOPE,
+  eventVersion: 1,
+  eventId: E(95),
+  eventType: 'qf.taxonomy.category-deactivated',
+  subject: TAXONOMY_CATEGORY,
+  payload: {
+    taxonomyVersion: 16,
+    nodeId: TAXONOMY_CATEGORY,
+    displayName: 'Interior Design',
+    state: 'deactivated',
+    effectiveAt: TARGET_TIMES.occurredAt,
+  },
+};
+
+export const validSubcategoryCreatedEvent: SubcategoryCreatedEventV1 = {
+  ...ENVELOPE,
+  eventVersion: 1,
+  eventId: E(96),
+  eventType: 'qf.taxonomy.subcategory-created',
+  subject: TAXONOMY_SUBCATEGORY,
+  payload: {
+    taxonomyVersion: 14,
+    nodeId: TAXONOMY_SUBCATEGORY,
+    displayName: 'Carpenters',
+    state: 'active',
+    parentCategoryId: TAXONOMY_PARENT,
+    effectiveAt: TARGET_TIMES.occurredAt,
+  },
+};
+
+export const validSubcategoryMovedEvent: SubcategoryMovedEventV1 = {
+  ...ENVELOPE,
+  eventVersion: 1,
+  eventId: E(97),
+  eventType: 'qf.taxonomy.subcategory-moved',
+  subject: TAXONOMY_SUBCATEGORY,
+  payload: {
+    taxonomyVersion: 15,
+    nodeId: TAXONOMY_SUBCATEGORY,
+    displayName: 'Carpenters',
+    state: 'active',
+    // The id and the label are identical to the line above. Only the parent changed — which is
+    // why a move is its own event and not a rename.
+    parentCategoryId: TAXONOMY_NEW_PARENT,
+    previousParentCategoryId: TAXONOMY_PARENT,
+    effectiveAt: TARGET_TIMES.occurredAt,
+  },
+};
+
+export const validSubcategoryUpdatedEvent: SubcategoryUpdatedEventV1 = {
+  ...ENVELOPE,
+  eventVersion: 1,
+  eventId: E(98),
+  eventType: 'qf.taxonomy.subcategory-updated',
+  subject: TAXONOMY_SUBCATEGORY,
+  payload: {
+    taxonomyVersion: 16,
+    nodeId: TAXONOMY_SUBCATEGORY,
+    displayName: 'Carpentry & Joinery',
+    previousDisplayName: 'Carpenters',
+    state: 'active',
+    parentCategoryId: TAXONOMY_NEW_PARENT,
+    effectiveAt: TARGET_TIMES.occurredAt,
+  },
+};
+
+export const validSubcategoryDeactivatedEvent: SubcategoryDeactivatedEventV1 = {
+  ...ENVELOPE,
+  eventVersion: 1,
+  eventId: E(99),
+  eventType: 'qf.taxonomy.subcategory-deactivated',
+  subject: TAXONOMY_SUBCATEGORY,
+  payload: {
+    taxonomyVersion: 17,
+    nodeId: TAXONOMY_SUBCATEGORY,
+    displayName: 'Carpentry & Joinery',
+    state: 'deactivated',
+    parentCategoryId: TAXONOMY_NEW_PARENT,
+    effectiveAt: TARGET_TIMES.occurredAt,
+  },
+};
+
+export const validTaxonomyVersionPublishedEvent: TaxonomyVersionPublishedEventV1 = {
+  ...ENVELOPE,
+  eventVersion: 1,
+  eventId: E(100),
+  eventType: 'qf.taxonomy.version-published',
+  subject: { entityType: 'taxonomy', entityId: 'CORE-TAXONOMY' },
+  payload: {
+    reasonCode: 'taxonomy.version-published',
+    taxonomyVersion: 15,
+    previousTaxonomyVersion: 14,
+    effectiveAt: TARGET_TIMES.occurredAt,
+  },
+};
+
 export const TARGET_VALID_EVENT_FIXTURES: readonly CanonicalEvent[] = [
+  validCityCreatedEvent,
+  validCityUpdatedEvent,
+  validCityDeactivatedEvent,
+  validCategoryCreatedEvent,
+  validCategoryUpdatedEvent,
+  validCategoryDeactivatedEvent,
+  validSubcategoryCreatedEvent,
+  validSubcategoryMovedEvent,
+  validSubcategoryUpdatedEvent,
+  validSubcategoryDeactivatedEvent,
+  validTaxonomyVersionPublishedEvent,
   validClientRequirementCompletedEvent,
   validClientFollowUpDueDetectedEvent,
   validClientFollowUpCompletedEvent,
