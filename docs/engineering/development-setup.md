@@ -153,6 +153,7 @@ pnpm check
 | `pnpm db:up`                               | `docker compose up -d --wait` — start PostgreSQL and wait until it is genuinely accepting connections                                    |
 | `pnpm db:down`                             | Stop the container. **The volume survives**, so your data is still there when you bring it back up                                       |
 | `pnpm db:migrate`                          | Apply the forward-only migrations in `packages/event-backbone/src/persistence/migrations/` to whatever `DATABASE_URL` points at          |
+| `pnpm db:preflight`                        | **Read-only.** Check version, TLS, role privileges, connection mode and schema state. Changes nothing                                    |
 | `pnpm test:integration`                    | Run only the PostgreSQL tests. Requires `DATABASE_URL`                                                                                   |
 | **`pnpm db:reset:destroy-all-local-data`** | **DESTRUCTIVE.** `docker compose down --volumes`, then up again — it **deletes the local volume**. Everything in `qf_jarvis_dev` is gone |
 
@@ -232,6 +233,25 @@ Supabase is used **only as a Postgres host**: no Auth, no Storage, no Realtime, 
 Not in `public`. The event log, the migration history, the functions, the triggers, the indexes — all of it, and every reference to it is fully qualified. **Nothing depends on `search_path`**, so nothing breaks when a pooler hands back a different session ([ADR-0023](../decisions/ADR-0023-dedicated-supabase-managed-postgresql.md) §3).
 
 If you write a diagnostic query by hand, qualify it: `SELECT * FROM qf_jarvis.event`, not `SELECT * FROM event`.
+
+### TLS: verified off loopback, and there is no middle setting
+
+`createDatabaseConfig` takes an explicit TLS policy with exactly two options: **`disabled`** (permitted **only** for a loopback host) and **`verify-full`** (CA-pinned, `rejectUnauthorized: true`). **There is no `rejectUnauthorized` field, so the unsafe configuration is unrepresentable** ([ADR-0024](../decisions/ADR-0024-verified-tls-and-managed-database-preflight.md)).
+
+**Your local database is unaffected** — `127.0.0.1` is loopback, TLS stays off, and nothing about your workflow changes. A **non-loopback** connection with TLS disabled is now a hard error rather than a plaintext session nobody noticed.
+
+Two rules that will bite if they are not known up front:
+
+- **`sslmode=require` is not TLS verification.** It encrypts and verifies _nothing_ — it accepts any certificate from anybody, so it stops a passive eavesdropper and does nothing at all about an active one.
+- **A `DATABASE_URL` carrying `sslmode` / `sslcert` / `sslkey` / `sslrootcert` is refused.** `pg` lets those **override** the explicit `ssl` object, which would silently downgrade a CA-pinned connection. The URL carries routing and credentials only.
+
+For a managed connection, set `QF_JARVIS_DB_CA_CERT_PATH` to the provider's CA certificate. It is **public trust material, not a secret** — and it is deliberately **not committed**, so a provider rotating its CA does not require a change to this repository.
+
+### `pnpm db:preflight` — before any managed migration
+
+Connects with the **same validated configuration** `db:migrate` uses, and checks PostgreSQL major 17, TLS actually active on the connection, the role is not a superuser, the connection mode, and the schema/history state.
+
+**It writes nothing, and PostgreSQL is what enforces that** — every query runs inside a `READ ONLY` transaction that is then rolled back. See [managed-database-runbook.md](./managed-database-runbook.md) for the full first-migration checklist.
 
 ### Connection mode: direct or session-mode. Never transaction-mode.
 

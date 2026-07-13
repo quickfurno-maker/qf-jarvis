@@ -16,6 +16,16 @@
  * `statement_timeout` is applied **server-side**, so PostgreSQL itself cancels a query
  * that overruns. A client-side timeout would abandon the socket while the server kept
  * working — which is how a "timed out" query keeps holding a lock.
+ *
+ * ### TLS comes from the validated config, and only from there
+ *
+ * `createDatabaseConfig` has already refused a non-loopback connection without
+ * `verify-full`, and refused a URL carrying `sslmode`/`sslrootcert` (which `pg` would
+ * otherwise let override the `ssl` object below). By the time a config reaches this file,
+ * the only two possibilities are the two that are safe.
+ *
+ * **`rejectUnauthorized: false` does not appear in this file, and cannot.** There is no
+ * field on `TlsConfig` that could produce it.
  */
 
 import pg from 'pg';
@@ -26,6 +36,26 @@ const { Pool } = pg;
 
 export type DatabasePool = pg.Pool;
 export type DatabaseClient = pg.PoolClient;
+
+/**
+ * Translate the validated TLS policy into what `pg` expects.
+ *
+ * `ssl: false` for loopback. A CA-pinned, hostname-verified `ssl` object otherwise. There is
+ * deliberately no third branch, because `TlsConfig` has no third case — the compiler, not a
+ * reviewer, is what keeps an `rejectUnauthorized: false` from appearing here one day.
+ */
+function toPgSsl(config: DatabaseConfig): false | { ca: string; rejectUnauthorized: true } {
+  if (config.tls.mode === 'disabled') {
+    return false;
+  }
+
+  return {
+    ca: config.tls.caCertificatePem,
+    // Verify the chain against the pinned CA, and verify the hostname. This is what makes
+    // it verify-full rather than "encrypted with whoever answered the phone".
+    rejectUnauthorized: true,
+  };
+}
 
 /**
  * Create a pool. Connects lazily — no socket is opened until the first query.
@@ -43,6 +73,8 @@ export function createDatabasePool(config: DatabaseConfig): DatabasePool {
     statement_timeout: config.statementTimeoutMillis,
 
     application_name: config.applicationName,
+
+    ssl: toPgSsl(config),
 
     // A pooled connection that has been idle for a very long time may sit behind a
     // firewall that has silently dropped it. Recycling bounds that surprise.

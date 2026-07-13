@@ -31,15 +31,35 @@
  */
 
 export {
+  assertCaCertificateBundle,
+  assertConnectionUrlIsSupported,
   createDatabaseConfig,
   DATABASE_CONFIG_BOUNDS,
   DATABASE_CONFIG_DEFAULTS,
   DatabaseConfigError,
+  DatabaseTlsError,
   describeConnectionTarget,
+  describeTls,
+  isLoopbackConnectionTarget,
   UnsupportedConnectionModeError,
   type DatabaseConfig,
   type DatabaseConfigInput,
+  type TlsConfig,
 } from './persistence/database-config.js';
+
+export {
+  REQUIRED_POSTGRES_MAJOR_VERSION,
+  runPreflight,
+  runPreflightOnClient,
+  type PreflightCheck,
+  type PreflightReport,
+} from './persistence/preflight.js';
+
+export {
+  migrateWithPreflight,
+  PreflightFailedError,
+  type MigrateWithPreflightResult,
+} from './persistence/migrate.js';
 
 export {
   closeDatabasePool,
@@ -50,7 +70,11 @@ export {
 
 export { withClient, withTransaction } from './persistence/transaction.js';
 
-export { loadMigrationFiles, runMigrations } from './persistence/migration-runner.js';
+export {
+  loadMigrationFiles,
+  runMigrations,
+  runMigrationsOnClient,
+} from './persistence/migration-runner.js';
 
 export { defaultMigrationsDirectory } from './persistence/migrations-directory.js';
 

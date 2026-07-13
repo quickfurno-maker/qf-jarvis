@@ -14,7 +14,8 @@
   "scripts": {
     "build": "tsc --build tsconfig.json",
     "typecheck": "tsc --build tsconfig.json",
-    "db:migrate": "node ./dist/persistence/migrate-cli.js"
+    "db:migrate": "node ./dist/persistence/migrate-cli.js",
+    "db:preflight": "node ./dist/persistence/preflight-cli.js"
   },
   "dependencies": {
     "pg": "8.22.0"

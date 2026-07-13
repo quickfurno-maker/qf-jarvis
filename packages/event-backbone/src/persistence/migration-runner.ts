@@ -310,31 +310,47 @@ export async function runMigrations(
   // database problem and should not need a database to discover.
   const files = await loadMigrationFiles(migrationsDirectory);
 
-  return withClient(pool, async (client) => {
-    // Session-scoped. Held until explicitly unlocked, or until this session ends —
-    // which is what stops a crashed migrator from wedging the database permanently.
-    await client.query('SELECT pg_advisory_lock($1)', [MIGRATION_ADVISORY_LOCK_KEY]);
+  return withClient(pool, (client) => runMigrationsOnClient(client, files));
+}
 
-    try {
-      await client.query(BOOTSTRAP_SQL);
+/**
+ * The migration itself, on a client the caller already holds.
+ *
+ * Extracted so that `migrateWithPreflight` can run the **read-only preflight and the migration
+ * on the SAME session** (see migrate.ts). A preflight on one connection and a migration on
+ * another has checked a connection that is not the one about to write.
+ *
+ * **This is the first line that touches the database with intent to change it.** Everything
+ * that must happen before that — file validation, the preflight — has to happen before this
+ * function is called, and `migrateWithPreflight` is the thing that guarantees it does.
+ */
+export async function runMigrationsOnClient(
+  client: DatabaseClient,
+  files: readonly MigrationFile[],
+): Promise<MigrationResult> {
+  // Session-scoped. Held until explicitly unlocked, or until this session ends —
+  // which is what stops a crashed migrator from wedging the database permanently.
+  await client.query('SELECT pg_advisory_lock($1)', [MIGRATION_ADVISORY_LOCK_KEY]);
 
-      const alreadyApplied = await readAppliedMigrations(client);
-      reconcile(files, alreadyApplied);
+  try {
+    await client.query(BOOTSTRAP_SQL);
 
-      const appliedVersions = new Set(alreadyApplied.map((record) => record.version));
-      const pending = files.filter((file) => !appliedVersions.has(file.version));
+    const alreadyApplied = await readAppliedMigrations(client);
+    reconcile(files, alreadyApplied);
 
-      const applied: MigrationFile[] = [];
-      for (const file of pending) {
-        await applyMigration(client, file);
-        applied.push(file);
-      }
+    const appliedVersions = new Set(alreadyApplied.map((record) => record.version));
+    const pending = files.filter((file) => !appliedVersions.has(file.version));
 
-      return { applied, alreadyApplied };
-    } finally {
-      // Released on every path — success, validation failure, SQL failure. The `finally`
-      // is the whole reason a crashed migration does not block the next deploy.
-      await client.query('SELECT pg_advisory_unlock($1)', [MIGRATION_ADVISORY_LOCK_KEY]);
+    const applied: MigrationFile[] = [];
+    for (const file of pending) {
+      await applyMigration(client, file);
+      applied.push(file);
     }
-  });
+
+    return { applied, alreadyApplied };
+  } finally {
+    // Released on every path — success, validation failure, SQL failure. The `finally`
+    // is the whole reason a crashed migration does not block the next deploy.
+    await client.query('SELECT pg_advisory_unlock($1)', [MIGRATION_ADVISORY_LOCK_KEY]);
+  }
 }

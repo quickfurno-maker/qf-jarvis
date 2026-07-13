@@ -43,6 +43,72 @@ That second revoke is a **conditional `DO` block**, not a plain statement, and t
 
 **Nothing depends on `search_path`.** An ambient `search_path` is a global variable set by whoever connected last, and correctness that rests on one fails the day a pooler hands back a different session.
 
+## TLS: verified, or loopback. There is no third option.
+
+```ts
+type TlsConfig =
+  | { mode: 'disabled' } // loopback ONLY
+  | { mode: 'verify-full'; caCertificatePem: string }; // everything else
+```
+
+**There is no `rejectUnauthorized` field, so `rejectUnauthorized: false` is _unrepresentable_** — not discouraged, not linted against, but impossible to write ([ADR-0024](../../docs/decisions/ADR-0024-verified-tls-and-managed-database-preflight.md)).
+
+| Target                                                    | Policy                                                  |
+| --------------------------------------------------------- | ------------------------------------------------------- |
+| **`localhost`, `127.0.0.1`, `::1`** — exactly these three | `disabled` permitted — there is no network to intercept |
+| **Anything else**                                         | **`verify-full` required.** `disabled` is a hard error  |
+
+The default is `disabled`, and that is safe **only because the non-loopback case then fails**. Omitting TLS for a managed database does not quietly open a plaintext connection; it throws.
+
+> **`postgres` used to be on that list, and it should not have been.** It was admitted as "the Compose service name" — but it is a **DNS name, not a loopback address**. It resolves to whatever the resolver says it does, and a hostname the resolver controls is a hostname an attacker who controls the resolver controls. It crosses a network, so it gets TLS. Matching is **exact**: `0.0.0.0` is a bind address rather than a destination, `localhost.example.com` is not `localhost`, and neither is `notlocalhost`.
+
+> **`sslmode=require` is not this, and the difference is the whole point.** `require` encrypts and verifies **nothing**: it accepts any certificate from anybody. It stops a passive eavesdropper and does exactly nothing about an active one — an attacker who can answer for the host presents a self-signed certificate and `require` shakes their hand.
+
+> **A URL carrying `sslmode` / `sslcert` / `sslkey` / `sslrootcert` is refused.** `pg` lets those **replace** the explicit `ssl` object, so a CA-pinned `verify-full` connection can be **silently downgraded** by six characters in an environment variable. Nothing errors, nothing logs, and the connection is reported as healthy. The URL carries routing and credentials; TLS policy comes from the validated config.
+
+The CA is loaded at the **process boundary** from `QF_JARVIS_DB_CA_CERT_PATH`, mandatory for any non-loopback host. **The CA is public trust material, not a secret** — it is kept out of Git so that a provider CA rotation does not require a commit.
+
+### The CA bundle is PARSED as X.509, not pattern-matched
+
+With Node's built-in `X509Certificate` — **no dependency added**. Every `CERTIFICATE` block must parse (**one bad block rejects the whole bundle**), **at least one must be a real CA (`ca === true`)**, text outside the blocks is refused, and a `PRIVATE KEY` gets its own message.
+
+A regex catches an empty file and an HTML error page from a proxy. It does **not** catch the failures that hurt: random bytes in a PEM envelope, a truncated download, or — worst — **a perfectly valid _leaf_ certificate**. That one parses, is real, is somebody's genuine certificate, and is **useless as a trust anchor**. It would have sailed through a shape check and then failed at handshake time, in production, with an error about something else. `X509Certificate.ca` has an opinion about it; a regex does not.
+
+**Expiry, chain building and hostname verification remain the handshake's job.** Doing them twice in two places is how the two places end up disagreeing.
+
+## The preflight is a GATE on `db:migrate`, not a command you might remember
+
+**`db:migrate` runs the preflight itself** — on the same client, before the advisory lock, before any DDL — and **aborts the migration if it fails.**
+
+```
+1. loadMigrationFiles()          ← no connection yet
+2. withClient(pool)              ← ONE client
+3. runPreflightOnClient()        ← BEGIN TRANSACTION READ ONLY … ROLLBACK
+4. if (!passed) throw            ← nothing after this runs
+5. runMigrationsOnClient()       ← pg_advisory_lock, bootstrap, DDL
+```
+
+There is no ordering to get wrong at a call site, because there is no call site: `migrateWithPreflight` is the only exported path to a migration, and it runs both. One client, not two — a preflight on a _different_ connection has verified a connection that is not the one about to write.
+
+**The two failures read differently, and the difference matters at 2am:**
+
+| Message                                 | Means                                               |
+| --------------------------------------- | --------------------------------------------------- |
+| **`Managed database preflight failed`** | **Nothing was touched.** No lock, no schema, no DDL |
+| **`Migration failed`**                  | Something ran, and rolled back                      |
+
+**`pnpm db:preflight` remains** as a standalone, read-only inspection command. It reports _every_ failed check rather than throwing on the first — telling you what is wrong is its job; throwing is the gate's.
+
+**It cannot write, and that is enforced rather than promised:** every query runs inside `BEGIN TRANSACTION READ ONLY`, then rolls back. A stray `CREATE` or `INSERT` — now or in some future edit — is **refused by PostgreSQL** with SQLSTATE `25006`. A comment saying "read-only" is a promise from whoever wrote it; a read-only transaction is a promise from the database.
+
+> **The superuser check is required off loopback, and reported on it.** The `postgres` Docker image makes `POSTGRES_USER` a superuser, so requiring it locally would fail every developer's first `pnpm check`. The obligation is about the **managed** role, and that is where it is enforced.
+
+> **Server-side SSL enforcement is not something this code can check — ever.** A client can prove _its own_ connection used TLS. It cannot prove the server would refuse a plaintext one from somebody else. That lives in the provider's console ([managed-database-runbook.md](../../docs/engineering/managed-database-runbook.md)).
+
+## Nothing printed identifies the target
+
+**A managed hostname _is_ sensitive**: `db.<project-ref>.supabase.co` contains the project ref. So `describeConnectionTarget` prints `127.0.0.1:55432/qf_jarvis_test` for loopback and **`«managed host redacted»:5432/postgres`** for anything else — port and database survive, because an operator needs to know _which_ database, and neither identifies the project. Never the URL, the user, the password, the CA path, or the CA contents.
+
 ## Connection mode: direct or session-mode. Never transaction-mode.
 
 > **`createDatabaseConfig` refuses a Supavisor transaction-mode pooler** (port `6543`) — for **every** pool this package creates, not just `db:migrate`.
@@ -58,9 +124,16 @@ That second revoke is a **conditional `DO` block**, not a plain statement, and t
 ## Public surface
 
 ```ts
-// Configuration — validated, bounded, explicitly supplied.
+// Configuration — validated, bounded, explicitly supplied, fail-closed on TLS.
 createDatabaseConfig(input): DatabaseConfig
-describeConnectionTarget(url): string   // host:port/database — never the password
+describeConnectionTarget(url): string   // redacted — never the password, never a managed host
+describeTls(tls): string
+isLoopbackConnectionTarget(url): boolean
+assertCertificateShapedPem(pem): string
+assertConnectionUrlIsSupported(url): void
+
+// Preflight — READ ONLY, enforced by the transaction, not by a comment.
+runPreflight(pool, config): Promise<PreflightReport>
 
 // Pool — no hidden global, nothing created at import time.
 createDatabasePool(config): DatabasePool
