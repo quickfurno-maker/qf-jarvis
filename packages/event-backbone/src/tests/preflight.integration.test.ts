@@ -100,14 +100,47 @@ describe('the preflight reports the truth about a virgin database', () => {
     expect(version.detail).toContain('not pinned');
   });
 
-  it('reports that the connected role is not a superuser', async () => {
-    // If this ever fails locally, the local role has been given superuser — and every
-    // immutability guarantee in Stage 3.1 is void, because a superuser bypasses grants and
-    // can DISABLE TRIGGER. That is exactly what this check exists to catch.
-    const role = check(await runPreflight(pool, config), 'Migration role is not a superuser');
+  it('reports the superuser fact, and does not block a disposable loopback database', async () => {
+    // **This is the bounded loopback exception, and it is asserted rather than assumed.**
+    //
+    // The official `postgres` image creates `POSTGRES_USER` as a SUPERUSER. That is true of the
+    // `compose.yml` this repository ships AND of the CI service container. So on loopback this
+    // check REPORTS and does not BLOCK — a required check here would fail the documented
+    // "clone, compose up, pnpm check" path on every developer's first run, and fail CI, with
+    // nothing actually wrong.
+    //
+    // Off loopback it is REQUIRED, and that is the check that matters. **A green run here is
+    // evidence about a throwaway database and evidence of NOTHING about the managed role**
+    // (ADR-0024 §6).
+    const report = await runPreflight(pool, config);
+    const role = check(report, 'Migration role is not a superuser');
 
-    expect(role.passed).toBe(true);
-    expect(role.detail).toContain('not a superuser');
+    // Advisory on loopback — and the preflight passes even when the role IS a superuser.
+    expect(role.required).toBe(false);
+    expect(report.passed).toBe(true);
+
+    // Whatever it reports, it must report the TRUTH. Compared against the database's own
+    // answer rather than against an assumption about how this database was provisioned —
+    // an assumption is what made an earlier version of this test wrong.
+    const isSuperuser = await withClient(pool, async (client) => {
+      const result = await client.query<{ is_superuser: boolean }>(
+        `SELECT COALESCE(
+                  (SELECT rolsuper FROM pg_catalog.pg_roles WHERE rolname = current_user),
+                  false
+                ) AS is_superuser`,
+      );
+      return result.rows[0]?.is_superuser ?? false;
+    });
+
+    expect(role.passed).toBe(!isSuperuser);
+
+    if (isSuperuser) {
+      expect(role.detail).toContain('IS a superuser');
+      // It must say so in terms nobody can mistake for approval of a managed superuser.
+      expect(role.detail).toContain('NOT acceptable on the managed one');
+    } else {
+      expect(role.detail).toContain('the connected role is not a superuser');
+    }
   });
 
   it('treats loopback as not requiring TLS, and says so', async () => {
