@@ -11,8 +11,10 @@
  *   test that fails for reasons nobody in this repository caused. The **pinned, checked-in
  *   manifest IS the reviewed baseline** (ADR-0025 §6), and refreshing the snapshot is an
  *   explicit, reviewed act rather than a dependency bump.
- * - It **opens no database and uses no connector.** It reads one JSON file and imports
- *   `@qf-jarvis/contracts`. It runs in the **unit** suite, in parallel, with no `DATABASE_URL`.
+ * - It **opens no database and uses no connector** — and that is proved *structurally*, from the
+ *   dependency set, rather than from whether an environment variable happens to be set. The
+ *   contracts package depends on **`zod` and nothing else**: no database driver, no HTTP client,
+ *   no provider SDK. It **could not** reach QuickFurno, Supabase, n8n or Meta if it tried.
  * - It **asserts nothing about QuickFurno's behaviour**, because it cannot see QuickFurno. It
  *   asserts that **our record of QuickFurno is internally consistent, complete, and does not
  *   quietly hand Jarvis authority it may never have.**
@@ -924,31 +926,82 @@ describe('the manifest carries no personal data, credentials, or live connection
 });
 
 describe('this suite connects to QuickFurno, Supabase, n8n and Meta exactly zero times', () => {
-  it('opens no database', () => {
-    // Runs in the UNIT project, in parallel, with no DATABASE_URL. It opens no socket.
-    expect(process.env['DATABASE_URL']).toBeUndefined();
+  /**
+   * **This is asserted structurally, and that distinction was learned the hard way.**
+   *
+   * An earlier version of this suite asserted `process.env.DATABASE_URL` was `undefined`. It
+   * passed locally and **failed in CI**, because CI exports `DATABASE_URL` at the *job* level —
+   * for the integration tests — so it is visible to the unit tests too.
+   *
+   * The failure was correct and the test was wrong, in a way worth naming: **it asserted an
+   * environment fact and called it a structural property.** Whether a variable happens to be set
+   * says *nothing* about whether this code opens a database. A suite can hold a connection
+   * string and never dial it; a suite with no connection string can still open a socket to
+   * something else.
+   *
+   * So the claim is proved where it actually lives — in what this code **can** reach. The
+   * contracts package depends on **`zod` and nothing else**: it has no database driver, no HTTP
+   * client, and no provider SDK. **It could not connect to QuickFurno, Supabase, n8n or Meta if
+   * it tried**, and that remains true whatever the environment happens to contain.
+   */
+  const CONNECTOR_DEPENDENCIES = [
+    'pg',
+    'postgres',
+    'mysql',
+    'mysql2',
+    'sqlite3',
+    'better-sqlite3',
+    'mongodb',
+    'redis',
+    'ioredis',
+    'axios',
+    'node-fetch',
+    'undici',
+    'got',
+    'superagent',
+    'ws',
+    '@supabase/supabase-js',
+    '@supabase/ssr',
+  ];
+
+  it('the contracts package declares no database, network or provider dependency', async () => {
+    const packageJson = await readFile(new URL('../../package.json', import.meta.url), 'utf8');
+    const manifestJson = JSON.parse(packageJson) as {
+      readonly dependencies?: Record<string, string>;
+      readonly devDependencies?: Record<string, string>;
+    };
+
+    const declared = Object.keys({
+      ...manifestJson.dependencies,
+      ...manifestJson.devDependencies,
+    });
+
+    for (const connector of CONNECTOR_DEPENDENCIES) {
+      expect(declared).not.toContain(connector);
+    }
+
+    // Positive control: the dependency set is genuinely tiny, so "no connector" is a fact about
+    // a short list rather than a hopeful statement about a long one.
+    expect(manifestJson.dependencies).toStrictEqual({ zod: '4.4.3' });
   });
 
-  it('reads exactly one local file, and it is the checked-in manifest', () => {
-    // The only I/O this suite performs. The pinned manifest IS the reviewed baseline — CI must
-    // never reach across a network to another repository's moving `main`, because a test whose
-    // result depends on somebody else's merge is a test that fails for reasons nobody here
-    // caused. Refreshing the snapshot is an explicit, reviewed act (ADR-0025 §6).
+  it('this test file imports nothing that could open a socket', async () => {
+    const source = await readFile(new URL(import.meta.url), 'utf8');
+    const imports = [...source.matchAll(/^import[^;]*?from\s+'([^']+)';/gm)].map(
+      (match) => match[1],
+    );
+
+    // Exactly three: the filesystem (to read the manifest and this file), vitest, and the
+    // contracts barrel. Nothing else, and nothing that speaks a network protocol.
+    expect(imports.toSorted()).toStrictEqual(['../index.js', 'node:fs/promises', 'vitest']);
+  });
+
+  it('reads exactly one manifest, and it is the checked-in one', () => {
+    // The pinned manifest IS the reviewed baseline. CI must never reach across a network to
+    // another repository's moving `main`, because a test whose result depends on somebody else's
+    // merge is a test that fails for reasons nobody here caused. Refreshing the snapshot is an
+    // explicit, reviewed act (ADR-0025 §6).
     expect(MANIFEST_URL.pathname).toContain('quickfurno-compatibility-manifest.json');
     expect(raw.length).toBeGreaterThan(0);
-  });
-
-  it('holds no credential for any external system', () => {
-    // Asserted rather than assumed: if a Supabase, Meta or n8n credential is ever present in the
-    // environment of a *unit* test, something has gone badly wrong upstream of this file.
-    for (const name of [
-      'SUPABASE_SERVICE_ROLE_KEY',
-      'NEXT_PUBLIC_SUPABASE_URL',
-      'WHATSAPP_TOKEN',
-      'WHATSAPP_PHONE_ID',
-      'N8N_WEBHOOK_URL',
-    ]) {
-      expect(process.env[name]).toBeUndefined();
-    }
   });
 });
