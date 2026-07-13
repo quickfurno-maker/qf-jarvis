@@ -15,13 +15,16 @@ import {
   defaultMigrationsDirectory,
   MIGRATION_SCHEMA,
   REQUIRED_POSTGRES_MAJOR_VERSION,
-  runMigrations,
   runPreflight,
   withClient,
   type DatabasePool,
   type PreflightCheck,
   type PreflightReport,
 } from '../index.js';
+// The runner's UNGATED entry point. Deliberately NOT exported from the package root (see
+// ../index.ts): it is reachable here because these tests live inside the package and exercise
+// the runner in isolation. A CONSUMER cannot reach it, and must go through migrateWithPreflight.
+import { runMigrations } from '../persistence/migration-runner.js';
 import {
   closeTestPool,
   createTestPool,

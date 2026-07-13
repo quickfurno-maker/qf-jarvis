@@ -129,11 +129,12 @@ createDatabaseConfig(input): DatabaseConfig
 describeConnectionTarget(url): string   // redacted — never the password, never a managed host
 describeTls(tls): string
 isLoopbackConnectionTarget(url): boolean
-assertCertificateShapedPem(pem): string
+assertCaCertificateBundle(pem): string   // PARSED as X.509 — a leaf is not a trust anchor
 assertConnectionUrlIsSupported(url): void
 
 // Preflight — READ ONLY, enforced by the transaction, not by a comment.
 runPreflight(pool, config): Promise<PreflightReport>
+PreflightFailedError                     // thrown by the gate: NOTHING was touched
 
 // Pool — no hidden global, nothing created at import time.
 createDatabasePool(config): DatabasePool
@@ -143,11 +144,21 @@ closeDatabasePool(pool): Promise<void>
 withClient(pool, callback)
 withTransaction(pool, callback)         // BEGIN / COMMIT, ROLLBACK on failure
 
-// Migrations — forward-only, checksummed, advisory-locked.
-runMigrations(pool, directory): Promise<MigrationResult>
-loadMigrationFiles(directory)
+// Migrations — forward-only, checksummed, advisory-locked, and PREFLIGHTED.
+// This is the ONLY public way to migrate. See below.
+migrateWithPreflight(pool, config, directory): Promise<MigrateWithPreflightResult>
 defaultMigrationsDirectory(): string
 ```
+
+> ### `migrateWithPreflight` is the only PUBLIC migration API
+>
+> `runMigrations` and `runMigrationsOnClient` **exist**, in `persistence/migration-runner.ts`, and they are **not exported from the package root.** They are the two functions that take the advisory lock and execute DDL **with no preflight**: `migrate.ts` composes them into the gate, and the runner's own tests exercise them in isolation. They are **internal runner and testing functions**, and a consumer of this package cannot reach them.
+>
+> Publishing them beside `migrateWithPreflight` put a supported, type-safe way to migrate a managed database **around** the gate right next to the gate. The CLI called the safe one; nothing obliged the next caller to. **A gate with a signposted path around it is not a gate**, so the path is gone — and `tests/public-api.test.ts` fails if it returns.
+>
+> **`db:migrate` cannot bypass the preflight.** It calls `migrateWithPreflight`, which runs the preflight and the migration on one client, in that order, and throws before any lock or DDL if the preflight fails.
+>
+> **Reaching past the package root into `src/persistence/*` or `dist/persistence/*` is unsupported.** The `exports` map publishes `.` and nothing else, so a deep import does not resolve.
 
 **No retries at this layer.** Retry policy — what is retryable, how many attempts, what backoff — is a Stage 3.4 decision recorded in [ADR-0021](../../docs/decisions/ADR-0021-processing-retries-dead-letters-and-replay.md). An implicit retry buried in the transaction helper would put that policy where nobody thinks to look for it, applied to everything, uniformly, whether or not it is safe.
 

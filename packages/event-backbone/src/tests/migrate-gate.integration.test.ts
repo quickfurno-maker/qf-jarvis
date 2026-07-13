@@ -22,12 +22,15 @@ import {
   MIGRATION_SCHEMA,
   migrateWithPreflight,
   PreflightFailedError,
-  runMigrations,
   runPreflight,
   withClient,
   type DatabaseConfig,
   type DatabasePool,
 } from '../index.js';
+// The runner's UNGATED entry point. Deliberately NOT exported from the package root (see
+// ../index.ts): it is reachable here because these tests live inside the package and exercise
+// the runner in isolation. A CONSUMER cannot reach it, and must go through migrateWithPreflight.
+import { runMigrations } from '../persistence/migration-runner.js';
 import {
   closeTestPool,
   countAdvisoryLockHolders,

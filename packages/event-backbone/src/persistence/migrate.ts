@@ -73,9 +73,17 @@ export interface MigrateWithPreflightResult {
 /**
  * Preflight, then migrate — on one client, in that order, or not at all.
  *
- * **This is the only supported way to migrate.** `runMigrations` still exists for the tests
- * that exercise the runner's own behaviour in isolation, but nothing that reaches a real
- * database goes through it: `db:migrate` calls this.
+ * **This is the only PUBLIC way to migrate, and the package root enforces that.**
+ *
+ * `runMigrations` and `runMigrationsOnClient` still exist in `migration-runner.ts` — this file
+ * composes them, and the runner's own tests exercise them in isolation — but they are
+ * **internal runner and testing functions and are not exported from `../index.ts`.** They take
+ * the advisory lock and execute DDL with **no preflight**, so publishing them beside this
+ * function offered a consumer a supported, type-safe path *around* the gate. **`db:migrate`
+ * cannot bypass the preflight**: it calls this, and there is no other public door.
+ *
+ * Deep imports from `persistence/*` are unsupported — the package `exports` map publishes `.`
+ * and nothing else. `tests/public-api.test.ts` fails if a bypass is ever re-exported.
  */
 export async function migrateWithPreflight(
   pool: DatabasePool,
