@@ -1,0 +1,1737 @@
+{
+  "$comment": "QuickFurno compatibility baseline. Machine-readable, reviewed, and PINNED. Validated by packages/contracts/src/tests/quickfurno-compatibility.test.ts. Contains NO credentials, NO project refs, NO URLs, NO personal data, and NO copied production records. CI does NOT fetch QuickFurno, Supabase, n8n or Meta: this checked-in manifest IS the reviewed baseline, and refreshing the snapshot is an explicit, reviewed act (ADR-0025 s6). Compatibility documentation authorizes no production action.",
+  "manifestVersion": 2,
+  "schemaVersion": 2,
+  "generatedForStage": "3.1.2",
+  "adr": "ADR-0025",
+  "adrStatus": "Proposed",
+  "ownerDecisionsRecorded": "2026-07-13",
+
+  "quickfurno": {
+    "repository": "quickfurno-maker/quickfurno-marketplace",
+    "snapshotSha": "00706899b46ae16fa6170c70125708b63e0926a9",
+    "snapshotDate": "2026-07-03",
+    "filesInspected": 583,
+    "directoriesInspected": 170,
+    "stack": {
+      "framework": "next",
+      "frameworkVersion": "14.2.15",
+      "packageManager": "npm",
+      "nodeVersionPinned": false,
+      "nodeVersionInferred": "20",
+      "database": "supabase-postgresql",
+      "testSuite": "none",
+      "testFileCount": 0,
+      "aiProviderCalls": 0
+    }
+  },
+
+  "jarvis": {
+    "repository": "quickfurno-maker/qf-jarvis",
+    "snapshotSha": "9c76d995358e2194746f86c136041eb12f5291ce",
+    "runtime": "node-24",
+    "packageManager": "pnpm",
+    "database": "dedicated-supabase-managed-postgresql-17"
+  },
+
+  "databaseBoundary": {
+    "sharedDatabase": false,
+    "sharedCredentials": false,
+    "sharedRuntimePackages": false,
+    "jarvisReadsCoreTables": false,
+    "jarvisWritesCoreTables": false,
+    "coreReadsJarvisTables": false,
+    "coreWritesJarvisTables": false,
+    "quickfurnoCoreSupabaseProject": "permanently-forbidden-to-jarvis",
+    "jarvisDatabase": "dedicated-qf-jarvis-managed-postgresql",
+    "integrationSurface": "signed-canonical-events-in, recommendations-out",
+    "note": "Core's authoritative operations run as PostgreSQL functions invoked with the Supabase service role, which BYPASSES row-level security. A 'read-only' credential into Core's database would therefore be read-only by our restraint, not by the database's enforcement. The boundary between the two systems cannot be a database boundary."
+  },
+
+  "assignmentPolicy": {
+    "$comment": "TWO policies are recorded, deliberately and permanently. The observed one is EVIDENCE about the system as it exists at the pinned snapshot; the owner-approved one is the TARGET. The observed value of 9 must never be silently replaced by the target value: erasing the evidence would erase the reason the remediation exists.",
+
+    "observed_current_core_policy": {
+      "initial_max": 3,
+      "manual_total_max": 9,
+      "explicit_replacement_batch": false,
+      "single_combined_distinct_vendor_count": true,
+      "lifetime_cap": null,
+      "documented_limit_in_core_docs": 3,
+      "badLeadReportedAssignmentStillConsumesSlot": true,
+      "evidenceSource": [
+        "lib/config.ts:112",
+        "lib/config.ts:113",
+        "supabase/migrations/20260701000031_phase26a2c_recovery_fallback_reporting.sql:43",
+        "services/manualLeadAssignmentService.ts:149",
+        "docs/quickfurno-aos-flow.md:195"
+      ],
+      "note": "Core's automatic/primary maximum is 3. Its admin manual 'recovery' maximum is 9. There is no two-batch model: primary and recovery are derived slices of ONE distinct-vendor count. Core's own documentation says 3, which is stale."
+    },
+
+    "owner_approved_target_policy": {
+      "initial_batch_max": 3,
+      "replacement_batch_max": 3,
+      "lifetime_unique_max_per_lead_category": 6,
+      "overlap_allowed": false,
+      "replacement_batches_permitted": 1,
+      "initial_batch_number": 1,
+      "replacement_batch_number": 2,
+      "replacement_requires_genuine_client_dissatisfaction": true,
+      "replacement_requires_explicit_client_confirmation": true,
+      "different_category_creates_separate_linked_lead": true,
+      "linked_lead_has_its_own_cap": true,
+      "core_must_revalidate": [
+        "category",
+        "location",
+        "eligibility",
+        "consent",
+        "capacity",
+        "package",
+        "credits",
+        "anti-abuse"
+      ],
+      "jarvis_may_request_replacement": true,
+      "jarvis_may_assign_vendors": false,
+      "final_authority": "quickfurno-core",
+      "source": "Owner decision 2026-07-13; ADR-0015; quickfurno-compatibility-directive.md s4; packages/contracts/src/assignments/assignment-policy.ts"
+    },
+
+    "conflict": {
+      "id": "vendor-cap-conflict",
+      "status": "core_remediation_required",
+      "severity": "high",
+      "summary": "Observed Core permits 9 unique vendors per lead from a single combined count with no explicit replacement batch. The owner-approved target policy is 3 initial + 3 replacement = 6 unique vendors per lead-category, with no overlap. These are incompatible.",
+      "isCoreImplementationConflict": true,
+      "isOwnerApprovedPolicy": false,
+      "remediationOwner": "quickfurno-core",
+      "remediationStage": "3.1.3",
+      "blockingPhase": "phase-11"
+    },
+
+    "jarvisConstraint": {
+      "jarvisMayGenerateAssignmentAboveOwnerLimits": false,
+      "jarvisMayRecommendAssignmentAboveOwnerLimits": false,
+      "jarvisMayNormalizeObservedNineIntoTarget": false,
+      "note": "Jarvis must never generate, recommend or normalize an assignment above the owner-approved limits. It must also never rewrite the observed value of 9 into the target 6: the observed value is evidence, and normalizing it away would hide the conflict it exists to surface."
+    }
+  },
+
+  "whatsappPolicy": {
+    "LIVE_WHATSAPP_BEFORE_PHASE_11A": "PROHIBITED",
+
+    "observedEdgeFunction": {
+      "path": "supabase/functions/whatsapp-dispatch/index.ts",
+      "runtime": "deno",
+      "status": "live_capable_not_authorized",
+      "remediation_required_before": "phase_11a",
+      "liveCapable": true,
+      "authorized": false,
+      "readsPendingWhatsappLogs": true,
+      "callsMetaGraphApi": true,
+      "gatedOnlyByProviderCredentialsAndInvocation": true,
+      "canReadNextJsFeatureFlags": false,
+      "whatsappSendingEnabledFlagGovernsThisFunction": false,
+      "evidenceSource": [
+        "supabase/functions/whatsapp-dispatch/index.ts",
+        "lib/aos/config/featureFlags.ts:30",
+        "supabase/migrations/20260620000003_functions.sql:295"
+      ],
+      "note": "The Edge Function is Deno and is deployed independently of the Next.js runtime. It therefore cannot import or read WHATSAPP_SENDING_ENABLED, and that flag does not govern it. A feature flag in one runtime is not a control over another."
+    },
+
+    "prohibitedUntilPhase11a": [
+      "scheduling the function",
+      "manual invocation for production delivery",
+      "providing active Meta credentials to it",
+      "treating queued whatsapp_logs rows as authorization to send",
+      "any Jarvis recommendation directly triggering it"
+    ],
+
+    "queuedRecordsConstituteAuthorization": false,
+    "jarvisRecommendationMayTriggerDelivery": false,
+
+    "authorizedDeliveryChain": [
+      "quickfurno-core-authorization",
+      "execution-intent",
+      "n8n",
+      "approved-provider-adapter",
+      "provider-result",
+      "authoritative-core-result-event"
+    ],
+
+    "requiredCoreChecksBeforeLiveDelivery": [
+      "recipient-resolution",
+      "consent",
+      "opt-out-dnc",
+      "communication-eligibility",
+      "quiet-hours",
+      "message-purpose",
+      "approval-level",
+      "idempotency",
+      "at-most-once-execution",
+      "audit-trail"
+    ]
+  },
+
+  "securityFindings": [
+    {
+      "id": "uncontrolled-whatsapp-delivery",
+      "title": "Live WhatsApp delivery path not governed by any feature flag",
+      "severity": "critical",
+      "evidenceSource": [
+        "supabase/functions/whatsapp-dispatch/index.ts",
+        "lib/aos/config/featureFlags.ts:30"
+      ],
+      "affectedEntity": "whatsapp-message",
+      "currentExposure": "Supplying WHATSAPP_TOKEN and WHATSAPP_PHONE_ID and invoking the function sends real messages to real people. The Deno Edge Function cannot read the Next.js feature flags, so WHATSAPP_SENDING_ENABLED=false does not restrain it. Core's README asserts no WhatsApp sending, which is false.",
+      "requiredRemediation": "Disable or hard-guard the Edge Function. Do not schedule it, do not supply active Meta credentials, and route all future delivery through Core authorization -> execution intent -> n8n -> approved provider adapter.",
+      "remediationOwner": "quickfurno-core",
+      "remediationStage": "3.1.3",
+      "blockingPhase": "phase-11a",
+      "hardBlocker": true
+    },
+    {
+      "id": "vendor-cap-conflict",
+      "title": "Assignment cap conflict: observed 9 vs owner-approved 6",
+      "severity": "high",
+      "evidenceSource": [
+        "lib/config.ts:113",
+        "supabase/migrations/20260701000031_phase26a2c_recovery_fallback_reporting.sql:43"
+      ],
+      "affectedEntity": "lead-assignment",
+      "currentExposure": "A lead can reach 9 unique vendors through admin recovery mode, counted from one pool with no batch concept and no lifetime cap. A bad-lead-reported assignment still consumes a slot. This exceeds the owner-approved lifetime maximum of 6 unique vendors per lead-category.",
+      "requiredRemediation": "Replace the 9-vendor recovery model with the approved 3 + 3 two-batch model. Introduce explicit primary and replacement batch records. Enforce no-overlap and lifetime uniqueness per lead-category.",
+      "remediationOwner": "quickfurno-core",
+      "remediationStage": "3.1.3",
+      "blockingPhase": "phase-11",
+      "hardBlocker": true
+    },
+    {
+      "id": "missing-rls",
+      "title": "Seven tables have no row-level security and no revokes",
+      "severity": "critical",
+      "evidenceSource": [
+        "supabase/migrations/20260701000022_phase_25a_paid_only_auto_match_free_vendor_interest.sql",
+        "supabase/migrations/20260702000038_lead_quality_engine_phase1.sql",
+        "supabase/migrations/20260702000039_b_lead_clarification_flow.sql"
+      ],
+      "affectedEntity": "runtime-setting, quality-score, clarification-response, assignment-queue-item",
+      "currentExposure": "free_vendor_profile_interests, marketplace_runtime_settings, lead_assignment_queue, lead_auto_assignment_logs, lead_scores, lead_clarification_requests and lead_clarification_responses have RLS disabled with zero REVOKE statements. Under Supabase default grants these are readable and writable with the publishable anon key. They carry client PII and, in the case of marketplace_runtime_settings, operational kill-switches.",
+      "requiredRemediation": "Enable RLS and add explicit policies on all seven tables. Revoke default anon/authenticated grants on operational settings.",
+      "remediationOwner": "quickfurno-core",
+      "remediationStage": "3.1.3",
+      "blockingPhase": "phase-11",
+      "hardBlocker": true
+    },
+    {
+      "id": "anon-writable-runtime-settings",
+      "title": "Operational runtime settings are anonymously mutable",
+      "severity": "critical",
+      "evidenceSource": [
+        "supabase/migrations/20260701000022_phase_25a_paid_only_auto_match_free_vendor_interest.sql:11"
+      ],
+      "affectedEntity": "runtime-setting",
+      "currentExposure": "marketplace_runtime_settings has no RLS. It holds auto_assignment_mode, max_vendors_per_lead and show_free_vendors_publicly. Anonymous mutation of operational controls is a security blocker before any live Jarvis integration.",
+      "requiredRemediation": "Enable RLS, restrict writes to superadmin, and revoke anon/authenticated grants.",
+      "remediationOwner": "quickfurno-core",
+      "remediationStage": "3.1.3",
+      "blockingPhase": "phase-11",
+      "hardBlocker": true
+    },
+    {
+      "id": "whatsapp-logs-cleartext",
+      "title": "Phone and message stored in cleartext in whatsapp_logs",
+      "severity": "high",
+      "evidenceSource": [
+        "supabase/migrations/20260620000001_create_tables.sql:162",
+        "supabase/migrations/20260620000003_functions.sql:295"
+      ],
+      "affectedEntity": "whatsapp-message",
+      "currentExposure": "whatsapp_logs stores both the vendor's and the client's phone number and the full message body in the clear.",
+      "requiredRemediation": "Minimise retention, restrict access, and never propagate these fields across the Jarvis boundary. Canonical payloads refuse contact keys by construction.",
+      "remediationOwner": "quickfurno-core",
+      "remediationStage": "3.1.3",
+      "blockingPhase": "phase-11",
+      "hardBlocker": false
+    },
+    {
+      "id": "gps-in-freetext",
+      "title": "Precise GPS coordinates embedded in the free-text lead requirement",
+      "severity": "high",
+      "evidenceSource": [
+        "components/client/ClientEnquiryModal.tsx:714",
+        "supabase/migrations/20260620000001_create_tables.sql:60"
+      ],
+      "affectedEntity": "lead",
+      "currentExposure": "leads has no latitude/longitude columns. The enquiry form interpolates the captured coordinates into free text, which lands in leads.message. Clarification answers are appended to the same column. A client's precise home location is therefore stored inside a field nobody classifies as sensitive.",
+      "requiredRemediation": "Core: stop writing coordinates into free text; store them in typed, access-controlled columns or not at all. Jarvis: canonical payloads MUST NOT carry Core free text. The governed payload refuses body, notes, freetext and raw by key, and refuses contact values by shape.",
+      "remediationOwner": "quickfurno-core",
+      "remediationStage": "3.1.3",
+      "blockingPhase": "phase-11",
+      "hardBlocker": true,
+      "jarvisSideControl": "canonical-payload-key-and-value-refusal"
+    },
+    {
+      "id": "gps-value-shape-not-refused",
+      "title": "A coordinate-shaped value hidden in an arbitrary string is not refused by the canonical payload",
+      "severity": "high",
+      "status": "contract_gap",
+      "owner": "qf-jarvis",
+      "blocking_phase": "stage_3_2",
+      "resolution_phase": "stage_3_1_4",
+      "evidenceSource": [
+        "packages/contracts/src/common/governed-parameters.ts:141",
+        "packages/contracts/src/events/target-payloads.ts:60"
+      ],
+      "affectedEntity": "lead",
+      "currentExposure": "derivedObservationSchema refuses the free-text carrier keys (body, notes, freetext, raw), all contact keys, and any value containing an email or a phone number. It does NOT refuse a coordinate pair such as '18.5204, 73.8567' placed in an arbitrarily-named permitted key. The key-level and contact-value defences hold; a coordinate-shaped value in a benign key does not trip them. Core stores precise client coordinates inside leads.message, so the exposure is concrete rather than theoretical.",
+      "requiredRemediation": "Stage 3.1.4 (Canonical Payload Privacy Hardening) must replace generic arbitrary-string payload freedom with bounded, event-specific or explicitly allowlisted fields, and must reject latitude/longitude pairs hidden inside string values. Until it is closed, NO adapter may forward Core free text. Adding the value-pattern is a CONTRACT CHANGE and is deliberately NOT made in Stage 3.1.2.",
+      "remediationOwner": "qf-jarvis",
+      "remediationStage": "3.1.4",
+      "blockingPhase": "stage-3-2",
+      "hardBlocker": true,
+      "isKnownGapNotAcceptedRisk": true,
+      "mayBeDeferredToPhase11": false,
+      "note": "This is a KNOWN CONTRACT GAP, not expected-safe behaviour and not an accepted risk. It must not resolve in Phase 11: Phase 11 is the first LIVE Core integration and may not begin with an already-known canonical payload privacy weakness. It therefore blocks Stage 3.2 signed ingestion, and resolves in Stage 3.1.4."
+    },
+    {
+      "id": "unrestricted-status-transitions",
+      "title": "No entity enforces status transitions",
+      "severity": "high",
+      "evidenceSource": [
+        "services/vendorService.ts:281",
+        "services/adminService.ts:446",
+        "services/adminService.ts:471"
+      ],
+      "affectedEntity": "lead, vendor, lead-assignment, bad-lead-report, support-thread",
+      "currentExposure": "Every status change is a bare update with no from-state check. Won -> New, Rejected -> Approved and Suspended -> Approved are all permitted. A Jarvis projection must not assume Core enforced any ordering.",
+      "requiredRemediation": "Add guarded state transitions in Core. Must be corrected before Jarvis may recommend lifecycle-changing actions.",
+      "remediationOwner": "quickfurno-core",
+      "remediationStage": "3.1.3",
+      "blockingPhase": "phase-11",
+      "hardBlocker": true
+    },
+    {
+      "id": "audit-missing-actor",
+      "title": "Audit records do not identify the actor",
+      "severity": "high",
+      "evidenceSource": [
+        "services/adminService.ts:92",
+        "supabase/migrations/20260621000006_superadmin_foundation.sql:100"
+      ],
+      "affectedEntity": "audit-record",
+      "currentExposure": "recordAuditLog writes 4 of 9 columns. admin_user_id, ip_address and user_agent are always NULL. Credit grants, manual payments, manual assignment, bad-lead decisions and runtime-setting changes are not logged at all. Core cannot answer 'who approved this?'.",
+      "requiredRemediation": "Write actor identity on every audit record and extend coverage to money and assignment actions.",
+      "remediationOwner": "quickfurno-core",
+      "remediationStage": "3.1.3",
+      "blockingPhase": "phase-11",
+      "hardBlocker": true
+    },
+    {
+      "id": "approval-structures-do-not-authorize",
+      "title": "Approval structures authorize nothing",
+      "severity": "high",
+      "evidenceSource": [
+        "supabase/migrations/20260630000017_lead_assignment_approvals.sql:37",
+        "lib/aos/kernel/permissionGate.ts:10",
+        "lib/aos/approvals/approvalRules.ts"
+      ],
+      "affectedEntity": "lead-assignment",
+      "currentExposure": "lead_assignment_approvals is CHECK-locked to mode 'preview', never assigns, and has no reject path. checkAgentPermission and lib/aos/approvals have zero callers. Meanwhile every path that actually assigns requires no approval at all. These scaffolds must never be mistaken for an authorization layer.",
+      "requiredRemediation": "Introduce a real authorization step that gates the paths which actually mutate, and either wire or delete the inert permission gate.",
+      "remediationOwner": "quickfurno-core",
+      "remediationStage": "3.1.3",
+      "blockingPhase": "phase-11",
+      "hardBlocker": true
+    },
+    {
+      "id": "canonical-events-absent",
+      "title": "Core emits none of the 41 canonical events",
+      "severity": "high",
+      "evidenceSource": [
+        "lib/aos/events/n8nEventTypes.ts",
+        "lib/aos/events/safeAgentEventPipeline.ts:93"
+      ],
+      "affectedEntity": "all",
+      "currentExposure": "Core emits no canonical event. Its current bridge is fire-and-forget: failures are swallowed and reported as success, there is no queue or retry, and event ids are fabricated from Date.now() + Math.random(). An event permitted to vanish is not an event a downstream system may derive truth from.",
+      "requiredRemediation": "Build the durable, signed, transactional Core outbox. Business change and outbox record must commit in one transaction.",
+      "remediationOwner": "quickfurno-core",
+      "remediationStage": "3.1.3",
+      "blockingPhase": "phase-11",
+      "hardBlocker": true
+    }
+  ],
+
+  "eventCounts": {
+    "$comment": "The reconciliation the owner required. sourceTransitions is the number of Core business transitions catalogued. Each maps to at most one canonical event; several transitions legitimately share one canonical event (a lead being captured and a lead being qualified are two Core stages of the one canonical fact 'requirement completed'), which is why uniqueCanonicalEventsTargeted is smaller. The identity below is asserted by test.",
+    "sourceTransitions": 34,
+    "withCanonicalEvent": 24,
+    "contractGaps": 9,
+    "unsupported": 1,
+    "uniqueCanonicalEventsTargeted": 21,
+    "canonicalEventsInRegistry": 41,
+    "reconciliation": "sourceTransitions = withCanonicalEvent + contractGaps + unsupported",
+    "priorManifestOmission": "Manifest v1 listed 26 of the 34 catalogued transitions. The 8 omitted (lead-scored, package-expired, vendor-inactivity, vendor-performance, client-satisfaction, client-complaint, linked-lead-created, client-lifecycle-closed) are now present. The gap between the documented 33 and the manifested 26 was an omission, not a definitional difference."
+  },
+
+  "sourceEvents": {
+    "$comment": "Every named event in QuickFurno at the pinned snapshot. 21 n8n + 4 internal + 4 preview = 29. All are accounted for with a disposition.",
+    "n8n": [
+      {
+        "name": "lead.created",
+        "emittable": true,
+        "disposition": "replace",
+        "canonicalEvent": "qf.client.requirement-completed",
+        "sourceFiles": ["lib/aos/events/n8nEventTypes.ts:2", "services/leadService.ts:148"]
+      },
+      {
+        "name": "lead.scored",
+        "emittable": true,
+        "disposition": "unsupported",
+        "canonicalEvent": null,
+        "sourceFiles": ["lib/aos/events/n8nEventTypes.ts:3", "services/leadService.ts:174"]
+      },
+      {
+        "name": "lead.qualified",
+        "emittable": true,
+        "disposition": "replace",
+        "canonicalEvent": "qf.client.requirement-completed",
+        "sourceFiles": ["lib/aos/events/n8nEventTypes.ts:4", "services/leadService.ts:221"]
+      },
+      {
+        "name": "lead.clarification_required",
+        "emittable": true,
+        "disposition": "gap",
+        "canonicalEvent": null,
+        "sourceFiles": [
+          "lib/aos/events/n8nEventTypes.ts:5",
+          "lib/aos/events/emitLeadClarificationRequiredEvent.ts:20"
+        ]
+      },
+      {
+        "name": "lead.rejected_quality",
+        "emittable": true,
+        "disposition": "gap",
+        "canonicalEvent": null,
+        "sourceFiles": ["lib/aos/events/n8nEventTypes.ts:6", "services/leadService.ts:221"]
+      },
+      {
+        "name": "lead.assignment_preview",
+        "emittable": true,
+        "disposition": "deprecate",
+        "canonicalEvent": null,
+        "sourceFiles": ["lib/aos/events/n8nEventTypes.ts:7"]
+      },
+      {
+        "name": "lead.assignment_approved",
+        "emittable": true,
+        "disposition": "replace",
+        "canonicalEvent": "qf.assignment.batch-created",
+        "sourceFiles": [
+          "lib/aos/events/n8nEventTypes.ts:8",
+          "lib/aos/events/emitLeadAssignmentApprovedEvent.ts:97"
+        ]
+      },
+      {
+        "name": "lead.assignment_queued",
+        "emittable": true,
+        "disposition": "deprecate",
+        "canonicalEvent": null,
+        "sourceFiles": [
+          "lib/aos/events/n8nEventTypes.ts:9",
+          "lib/lead-assignment/autoAssignmentEngine.ts:285"
+        ]
+      },
+      {
+        "name": "lead.assignment_queue_rechecked",
+        "emittable": true,
+        "disposition": "deprecate",
+        "canonicalEvent": null,
+        "sourceFiles": [
+          "lib/aos/events/n8nEventTypes.ts:10",
+          "lib/lead-assignment/leadQueueService.ts:148"
+        ]
+      },
+      {
+        "name": "lead.assigned",
+        "emittable": false,
+        "disposition": "replace",
+        "canonicalEvent": "qf.assignment.batch-completed",
+        "sourceFiles": ["lib/aos/events/n8nEventTypes.ts:11"],
+        "note": "Orphan: defined and workflow-mapped, but coerces to aos.failure."
+      },
+      {
+        "name": "vendor.profile_interest_captured",
+        "emittable": true,
+        "disposition": "gap",
+        "canonicalEvent": null,
+        "sourceFiles": [
+          "lib/aos/events/n8nEventTypes.ts:12",
+          "lib/lead-assignment/freeVendorInterestService.ts:110"
+        ]
+      },
+      {
+        "name": "vendor.recharge_prompt_preview",
+        "emittable": true,
+        "disposition": "rename",
+        "canonicalEvent": "qf.vendor.recharge-opportunity-detected",
+        "sourceFiles": [
+          "lib/aos/events/n8nEventTypes.ts:13",
+          "lib/lead-assignment/freeVendorInterestService.ts:129"
+        ]
+      },
+      {
+        "name": "vendor.replied",
+        "emittable": false,
+        "disposition": "gap",
+        "canonicalEvent": null,
+        "sourceFiles": ["lib/aos/events/n8nEventTypes.ts:14"],
+        "note": "Orphan."
+      },
+      {
+        "name": "client.followup_due",
+        "emittable": false,
+        "disposition": "rename",
+        "canonicalEvent": "qf.client.follow-up-due-detected",
+        "sourceFiles": ["lib/aos/events/n8nEventTypes.ts:15"],
+        "note": "Orphan."
+      },
+      {
+        "name": "client.rating_due",
+        "emittable": false,
+        "disposition": "rename",
+        "canonicalEvent": "qf.client.review-requested",
+        "sourceFiles": ["lib/aos/events/n8nEventTypes.ts:16"],
+        "note": "Orphan."
+      },
+      {
+        "name": "nurture.due",
+        "emittable": false,
+        "disposition": "gap",
+        "canonicalEvent": null,
+        "sourceFiles": ["lib/aos/events/n8nEventTypes.ts:17"],
+        "note": "Orphan. Nurture is a stub in Core."
+      },
+      {
+        "name": "report.daily",
+        "emittable": false,
+        "disposition": "unsupported",
+        "canonicalEvent": null,
+        "sourceFiles": ["lib/aos/events/n8nEventTypes.ts:18"],
+        "note": "Orphan. Internal report, not a business fact."
+      },
+      {
+        "name": "vendor.low_credit",
+        "emittable": false,
+        "disposition": "rename",
+        "canonicalEvent": "qf.vendor.package-readiness-changed",
+        "sourceFiles": ["lib/aos/events/n8nEventTypes.ts:19"],
+        "note": "Orphan. Declared and workflow-mapped, never emitted. Must carry a band, never a balance."
+      },
+      {
+        "name": "complaint.created",
+        "emittable": false,
+        "disposition": "split",
+        "canonicalEvent": "qf.client.complaint-recorded",
+        "sourceFiles": ["lib/aos/events/n8nEventTypes.ts:20"],
+        "note": "Orphan. Core has one name; the canonical catalogue has two, by subject (client vs vendor). Core must say which."
+      },
+      {
+        "name": "aos.failure",
+        "emittable": true,
+        "disposition": "unsupported",
+        "canonicalEvent": null,
+        "sourceFiles": [
+          "lib/aos/events/n8nEventTypes.ts:21",
+          "lib/aos/events/safeAgentEventPipeline.ts:239"
+        ],
+        "note": "Operational telemetry. Jarvis must not ingest it."
+      },
+      {
+        "name": "whatsapp.status_updated",
+        "emittable": false,
+        "disposition": "replace",
+        "canonicalEvent": "qf.communication.state-recorded",
+        "sourceFiles": [
+          "lib/aos/events/n8nEventTypes.ts:22",
+          "app/api/aos/whatsapp-status/route.ts"
+        ],
+        "note": "Orphan. The endpoint accepts any status string and updates nothing."
+      }
+    ],
+    "internal": [
+      {
+        "name": "agent.task.queued",
+        "emittable": false,
+        "disposition": "deprecate",
+        "canonicalEvent": null,
+        "sourceFiles": ["lib/aos/events/eventTypes.ts:2"],
+        "note": "Dead code. Never emitted, never handled."
+      },
+      {
+        "name": "agent.task.completed",
+        "emittable": false,
+        "disposition": "deprecate",
+        "canonicalEvent": null,
+        "sourceFiles": ["lib/aos/events/eventTypes.ts:3"],
+        "note": "Dead code."
+      },
+      {
+        "name": "approval.requested",
+        "emittable": false,
+        "disposition": "deprecate",
+        "canonicalEvent": null,
+        "sourceFiles": ["lib/aos/events/eventTypes.ts:4"],
+        "note": "Dead code."
+      },
+      {
+        "name": "audit.logged",
+        "emittable": false,
+        "disposition": "deprecate",
+        "canonicalEvent": null,
+        "sourceFiles": ["lib/aos/events/eventTypes.ts:5"],
+        "note": "Dead code."
+      }
+    ],
+    "preview": [
+      {
+        "name": "lead.quality_preview",
+        "emittable": false,
+        "disposition": "deprecate",
+        "canonicalEvent": null,
+        "sourceFiles": ["lib/aos/events/n8nPreviewWorkflowMap.ts:15"],
+        "note": "Display-only. Routes nothing."
+      },
+      {
+        "name": "vendor.match_preview",
+        "emittable": false,
+        "disposition": "deprecate",
+        "canonicalEvent": null,
+        "sourceFiles": ["lib/aos/events/n8nPreviewWorkflowMap.ts:16"],
+        "note": "Display-only."
+      },
+      {
+        "name": "client.followup_preview",
+        "emittable": false,
+        "disposition": "deprecate",
+        "canonicalEvent": null,
+        "sourceFiles": ["lib/aos/events/n8nPreviewWorkflowMap.ts:17"],
+        "note": "Display-only."
+      },
+      {
+        "name": "ops.daily",
+        "emittable": false,
+        "disposition": "deprecate",
+        "canonicalEvent": null,
+        "sourceFiles": ["lib/aos/events/n8nPreviewWorkflowMap.ts:18"],
+        "note": "Display-only."
+      }
+    ]
+  },
+
+  "deprecatedNames": [
+    "agent.task.queued",
+    "agent.task.completed",
+    "approval.requested",
+    "audit.logged",
+    "lead.quality_preview",
+    "vendor.match_preview",
+    "client.followup_preview",
+    "ops.daily",
+    "lead.assignment_preview",
+    "lead.assignment_queued",
+    "lead.assignment_queue_rechecked"
+  ],
+
+  "eventMappings": [
+    {
+      "id": "lead-captured",
+      "sourceOperation": "Lead captured",
+      "sourceRef": "leads insert",
+      "canonicalEvent": "qf.client.requirement-completed",
+      "canonicalEventVersion": 1,
+      "subjectType": "lead",
+      "contractStatus": "exists",
+      "producer": "quickfurno-core",
+      "consumers": ["kabir", "riya"],
+      "sourceFiles": ["services/leadService.ts:111"]
+    },
+    {
+      "id": "lead-scored",
+      "sourceOperation": "Lead scored",
+      "sourceRef": "lead_scores",
+      "canonicalEvent": null,
+      "canonicalEventVersion": null,
+      "subjectType": "lead",
+      "contractStatus": "unsupported",
+      "producer": "quickfurno-core",
+      "consumers": [],
+      "sourceFiles": ["services/leadQualityService.ts:81"],
+      "note": "Core's LeadLens score stays Core's. Kabir advises alongside it and does not ingest it as a canonical event."
+    },
+    {
+      "id": "lead-qualified",
+      "sourceOperation": "Lead qualified",
+      "sourceRef": "leadQualityService",
+      "canonicalEvent": "qf.client.requirement-completed",
+      "canonicalEventVersion": 1,
+      "subjectType": "lead",
+      "contractStatus": "exists",
+      "producer": "quickfurno-core",
+      "consumers": ["kabir"],
+      "sourceFiles": ["services/leadQualityService.ts:225"]
+    },
+    {
+      "id": "clarification-requested",
+      "sourceOperation": "Clarification required",
+      "sourceRef": "lead_clarification_requests",
+      "canonicalEvent": null,
+      "canonicalEventVersion": null,
+      "subjectType": "lead",
+      "contractStatus": "contract-gap",
+      "gapId": "clarification-requested-gap",
+      "producer": "quickfurno-core",
+      "consumers": ["kabir"],
+      "sourceFiles": ["services/leadClarificationService.ts:196"]
+    },
+    {
+      "id": "clarification-answered",
+      "sourceOperation": "Clarification answered",
+      "sourceRef": "lead_clarification_responses",
+      "canonicalEvent": null,
+      "canonicalEventVersion": null,
+      "subjectType": "lead",
+      "contractStatus": "contract-gap",
+      "gapId": "clarification-answered-gap",
+      "producer": "quickfurno-core",
+      "consumers": ["kabir"],
+      "sourceFiles": ["app/actions.ts:561"]
+    },
+    {
+      "id": "lead-rejected-quality",
+      "sourceOperation": "Lead rejected on quality",
+      "sourceRef": "leads.status",
+      "canonicalEvent": null,
+      "canonicalEventVersion": null,
+      "subjectType": "lead",
+      "contractStatus": "contract-gap",
+      "gapId": "lead-rejected-gap",
+      "producer": "quickfurno-core",
+      "consumers": ["kabir"],
+      "sourceFiles": ["services/leadQualityService.ts:226"]
+    },
+    {
+      "id": "lead-duplicate",
+      "sourceOperation": "Lead marked duplicate",
+      "sourceRef": "check_duplicate_lead",
+      "canonicalEvent": null,
+      "canonicalEventVersion": null,
+      "subjectType": "lead",
+      "contractStatus": "contract-gap",
+      "gapId": "lead-duplicate-gap",
+      "producer": "quickfurno-core",
+      "consumers": ["kabir"],
+      "sourceFiles": ["supabase/migrations/20260620000003_functions.sql:134"]
+    },
+    {
+      "id": "vendors-assigned",
+      "sourceOperation": "Vendors assigned to a lead",
+      "sourceRef": "assign_lead_to_paid_vendors_phase26a",
+      "canonicalEvent": "qf.assignment.batch-created",
+      "canonicalEventVersion": 1,
+      "subjectType": "lead",
+      "contractStatus": "exists-with-conflict",
+      "conflictId": "vendor-cap-conflict",
+      "producer": "quickfurno-core",
+      "consumers": ["riya", "anisha"],
+      "sourceFiles": ["supabase/migrations/20260702000034_fix_auto_match_category_mapping.sql:267"]
+    },
+    {
+      "id": "assignment-completed",
+      "sourceOperation": "Assignment completed",
+      "sourceRef": "lead_assignments",
+      "canonicalEvent": "qf.assignment.batch-completed",
+      "canonicalEventVersion": 1,
+      "subjectType": "lead",
+      "contractStatus": "exists",
+      "producer": "quickfurno-core",
+      "consumers": ["riya"],
+      "sourceFiles": ["supabase/migrations/20260620000001_create_tables.sql:120"]
+    },
+    {
+      "id": "credit-deducted",
+      "sourceOperation": "Credit deducted",
+      "sourceRef": "deduct_vendor_credit",
+      "canonicalEvent": null,
+      "canonicalEventVersion": null,
+      "subjectType": "vendor",
+      "contractStatus": "contract-gap",
+      "gapId": "credit-deducted-gap",
+      "producer": "quickfurno-core",
+      "consumers": ["anisha"],
+      "sourceFiles": ["supabase/migrations/20260620000003_functions.sql:76"]
+    },
+    {
+      "id": "vendor-registered",
+      "sourceOperation": "Vendor registered",
+      "sourceRef": "registerVendor",
+      "canonicalEvent": "qf.vendor.registration-started",
+      "canonicalEventVersion": 1,
+      "subjectType": "vendor",
+      "contractStatus": "exists",
+      "producer": "quickfurno-core",
+      "consumers": ["anisha"],
+      "sourceFiles": ["services/vendorService.ts:67"]
+    },
+    {
+      "id": "vendor-profile-completed",
+      "sourceOperation": "Vendor profile completed",
+      "sourceRef": "vendors",
+      "canonicalEvent": "qf.vendor.profile-completed",
+      "canonicalEventVersion": 1,
+      "subjectType": "vendor",
+      "contractStatus": "exists",
+      "producer": "quickfurno-core",
+      "consumers": ["anisha"],
+      "sourceFiles": ["services/vendorProfileChangeService.ts:146"]
+    },
+    {
+      "id": "vendor-verification-requested",
+      "sourceOperation": "Verification requested",
+      "sourceRef": "vendors.verification_status",
+      "canonicalEvent": "qf.vendor.verification-requested",
+      "canonicalEventVersion": 1,
+      "subjectType": "vendor",
+      "contractStatus": "exists",
+      "producer": "quickfurno-core",
+      "consumers": ["anisha"],
+      "sourceFiles": ["services/vendorService.ts:99"],
+      "note": "Core's verification_status is a write-once dead field."
+    },
+    {
+      "id": "vendor-activated",
+      "sourceOperation": "Vendor approved",
+      "sourceRef": "setVendorStatus",
+      "canonicalEvent": "qf.vendor.activated",
+      "canonicalEventVersion": 1,
+      "subjectType": "vendor",
+      "contractStatus": "exists",
+      "producer": "quickfurno-core",
+      "consumers": ["anisha"],
+      "sourceFiles": ["services/adminService.ts:482"]
+    },
+    {
+      "id": "vendor-suspended",
+      "sourceOperation": "Vendor suspended",
+      "sourceRef": "setVendorStatus",
+      "canonicalEvent": null,
+      "canonicalEventVersion": null,
+      "subjectType": "vendor",
+      "contractStatus": "contract-gap",
+      "gapId": "vendor-suspended-gap",
+      "producer": "quickfurno-core",
+      "consumers": ["anisha"],
+      "sourceFiles": ["services/adminService.ts:484"]
+    },
+    {
+      "id": "vendor-rejected",
+      "sourceOperation": "Vendor rejected",
+      "sourceRef": "setVendorStatus",
+      "canonicalEvent": null,
+      "canonicalEventVersion": null,
+      "subjectType": "vendor",
+      "contractStatus": "contract-gap",
+      "gapId": "vendor-rejected-gap",
+      "producer": "quickfurno-core",
+      "consumers": ["anisha"],
+      "sourceFiles": ["services/adminService.ts:483"]
+    },
+    {
+      "id": "vendor-low-credit",
+      "sourceOperation": "Low credit detected",
+      "sourceRef": "vendors.remaining_credits",
+      "canonicalEvent": "qf.vendor.package-readiness-changed",
+      "canonicalEventVersion": 1,
+      "subjectType": "vendor",
+      "contractStatus": "exists",
+      "producer": "quickfurno-core",
+      "consumers": ["anisha"],
+      "sourceFiles": ["services/adminService.ts:320"],
+      "note": "Band, never a balance."
+    },
+    {
+      "id": "vendor-recharge-opportunity",
+      "sourceOperation": "Recharge opportunity",
+      "sourceRef": "free_vendor_profile_interests",
+      "canonicalEvent": "qf.vendor.recharge-opportunity-detected",
+      "canonicalEventVersion": 1,
+      "subjectType": "vendor",
+      "contractStatus": "exists",
+      "producer": "quickfurno-core",
+      "consumers": ["anisha"],
+      "sourceFiles": ["lib/lead-assignment/freeVendorInterestService.ts:129"],
+      "note": "Band, never a balance."
+    },
+    {
+      "id": "package-activated",
+      "sourceOperation": "Package activated",
+      "sourceRef": "assign_package_to_vendor",
+      "canonicalEvent": "qf.vendor.package-readiness-changed",
+      "canonicalEventVersion": 1,
+      "subjectType": "vendor",
+      "contractStatus": "exists",
+      "producer": "quickfurno-core",
+      "consumers": ["anisha"],
+      "sourceFiles": ["supabase/migrations/20260620000003_functions.sql:330"]
+    },
+    {
+      "id": "package-expired",
+      "sourceOperation": "Package expired",
+      "sourceRef": "expire_vendor_packages",
+      "canonicalEvent": "qf.vendor.package-readiness-changed",
+      "canonicalEventVersion": 1,
+      "subjectType": "vendor",
+      "contractStatus": "exists",
+      "producer": "quickfurno-core",
+      "consumers": ["anisha"],
+      "sourceFiles": ["supabase/migrations/20260620000003_functions.sql:365"],
+      "note": "The function exists; no scheduler ever calls it."
+    },
+    {
+      "id": "payment-recorded",
+      "sourceOperation": "Payment recorded",
+      "sourceRef": "payments",
+      "canonicalEvent": null,
+      "canonicalEventVersion": null,
+      "subjectType": "vendor",
+      "contractStatus": "contract-gap",
+      "gapId": "payment-recorded-gap",
+      "producer": "quickfurno-core",
+      "consumers": [],
+      "sourceFiles": ["services/packageService.ts:21"],
+      "note": "Observational only. Jarvis may never be authoritative for money."
+    },
+    {
+      "id": "free-vendor-interest",
+      "sourceOperation": "Free-vendor interest captured",
+      "sourceRef": "free_vendor_profile_interests",
+      "canonicalEvent": null,
+      "canonicalEventVersion": null,
+      "subjectType": "vendor",
+      "contractStatus": "contract-gap",
+      "gapId": "free-vendor-interest-gap",
+      "producer": "quickfurno-core",
+      "consumers": ["anisha"],
+      "sourceFiles": ["lib/lead-assignment/freeVendorInterestService.ts:110"]
+    },
+    {
+      "id": "bad-lead-reported",
+      "sourceOperation": "Bad-lead reported",
+      "sourceRef": "bad_lead_reports",
+      "canonicalEvent": "qf.vendor.complaint-recorded",
+      "canonicalEventVersion": 1,
+      "subjectType": "vendor",
+      "contractStatus": "exists",
+      "producer": "quickfurno-core",
+      "consumers": ["anisha", "kabir"],
+      "sourceFiles": ["services/vendorService.ts:377"]
+    },
+    {
+      "id": "vendor-inactivity",
+      "sourceOperation": "Vendor inactivity detected",
+      "sourceRef": "not-implemented",
+      "canonicalEvent": "qf.vendor.inactivity-detected",
+      "canonicalEventVersion": 1,
+      "subjectType": "vendor",
+      "contractStatus": "exists-core-lacks-capability",
+      "producer": "quickfurno-core",
+      "consumers": ["anisha"],
+      "sourceFiles": ["lib/aos/agents/vendor-pulse/agent.config.ts"],
+      "note": "Core has no inactivity detection."
+    },
+    {
+      "id": "vendor-performance",
+      "sourceOperation": "Vendor performance updated",
+      "sourceRef": "vendors.rating",
+      "canonicalEvent": "qf.vendor.performance-updated",
+      "canonicalEventVersion": 1,
+      "subjectType": "vendor",
+      "contractStatus": "exists-core-lacks-capability",
+      "producer": "quickfurno-core",
+      "consumers": ["anisha"],
+      "sourceFiles": ["supabase/migrations/20260620000001_create_tables.sql:39"],
+      "note": "vendors.rating and completed_projects are read by every ranking function and written by nothing. They are permanently zero."
+    },
+    {
+      "id": "client-followup-due",
+      "sourceOperation": "Client follow-up due",
+      "sourceRef": "not-implemented",
+      "canonicalEvent": "qf.client.follow-up-due-detected",
+      "canonicalEventVersion": 1,
+      "subjectType": "client",
+      "contractStatus": "exists-core-lacks-capability",
+      "producer": "quickfurno-core",
+      "consumers": ["riya"],
+      "sourceFiles": ["lib/aos/events/n8nEventTypes.ts:15"]
+    },
+    {
+      "id": "client-review-requested",
+      "sourceOperation": "Client rating due",
+      "sourceRef": "not-implemented",
+      "canonicalEvent": "qf.client.review-requested",
+      "canonicalEventVersion": 1,
+      "subjectType": "client",
+      "contractStatus": "exists-core-lacks-capability",
+      "producer": "quickfurno-core",
+      "consumers": ["riya"],
+      "sourceFiles": ["lib/aos/events/n8nEventTypes.ts:16"]
+    },
+    {
+      "id": "client-satisfaction",
+      "sourceOperation": "Satisfaction recorded",
+      "sourceRef": "not-implemented",
+      "canonicalEvent": "qf.client.satisfaction-recorded",
+      "canonicalEventVersion": 1,
+      "subjectType": "client",
+      "contractStatus": "exists-core-lacks-capability",
+      "producer": "quickfurno-core",
+      "consumers": ["riya"],
+      "sourceFiles": ["docs/architecture/recommendation-lifecycle.md"],
+      "note": "NOT IMPLEMENTED in Core. No CSAT, NPS or feedback exists."
+    },
+    {
+      "id": "client-complaint",
+      "sourceOperation": "Client complaint recorded",
+      "sourceRef": "not-implemented",
+      "canonicalEvent": "qf.client.complaint-recorded",
+      "canonicalEventVersion": 1,
+      "subjectType": "client",
+      "contractStatus": "exists-core-lacks-capability",
+      "producer": "quickfurno-core",
+      "consumers": ["riya"],
+      "sourceFiles": ["lib/aos/agents/client-care/agent.config.ts"],
+      "note": "NOT IMPLEMENTED in Core as a client feature."
+    },
+    {
+      "id": "client-reassignment-requested",
+      "sourceOperation": "Reassignment requested",
+      "sourceRef": "not-implemented",
+      "canonicalEvent": "qf.client.reassignment-requested",
+      "canonicalEventVersion": 1,
+      "subjectType": "client",
+      "contractStatus": "exists-core-lacks-capability",
+      "producer": "quickfurno-core",
+      "consumers": ["riya"],
+      "sourceFiles": ["lib/aos/rules/replacementRules.ts"],
+      "note": "Core has no replacement flow at all. Requires an explicit ClientConfirmationV1."
+    },
+    {
+      "id": "linked-lead-created",
+      "sourceOperation": "Linked lead created",
+      "sourceRef": "not-implemented",
+      "canonicalEvent": "qf.lead.linked-created",
+      "canonicalEventVersion": 1,
+      "subjectType": "lead",
+      "contractStatus": "exists-core-lacks-capability",
+      "producer": "quickfurno-core",
+      "consumers": ["riya"],
+      "sourceFiles": ["services/clientRequirementGroupService.ts"],
+      "note": "A multi-category enquiry does not create multiple leads in Core. There is exactly one lead-insert site."
+    },
+    {
+      "id": "client-lifecycle-closed",
+      "sourceOperation": "Client lifecycle closed",
+      "sourceRef": "not-implemented",
+      "canonicalEvent": "qf.client.lifecycle-closed",
+      "canonicalEventVersion": 1,
+      "subjectType": "client",
+      "contractStatus": "exists-core-lacks-capability",
+      "producer": "quickfurno-core",
+      "consumers": ["riya"],
+      "sourceFiles": ["docs/architecture/recommendation-lifecycle.md"],
+      "note": "NOT IMPLEMENTED in Core."
+    },
+    {
+      "id": "communication-state",
+      "sourceOperation": "WhatsApp state change",
+      "sourceRef": "whatsapp_logs",
+      "canonicalEvent": "qf.communication.state-recorded",
+      "canonicalEventVersion": 1,
+      "subjectType": "communication",
+      "contractStatus": "exists",
+      "producer": "quickfurno-core",
+      "consumers": ["riya"],
+      "sourceFiles": ["supabase/functions/whatsapp-dispatch/index.ts"],
+      "note": "Must be one of the 18 canonical communication states. Core's whatsapp-status endpoint accepts any string and updates nothing."
+    },
+    {
+      "id": "privacy-erasure",
+      "sourceOperation": "Erasure requested",
+      "sourceRef": "not-implemented",
+      "canonicalEvent": "qf.privacy.erasure-requested",
+      "canonicalEventVersion": 1,
+      "subjectType": "lead",
+      "contractStatus": "exists-core-lacks-capability",
+      "producer": "quickfurno-core",
+      "consumers": ["jarvis"],
+      "sourceFiles": ["docs/governance/privacy-principles.md"],
+      "note": "Core has no deletion or anonymisation path for any entity."
+    }
+  ],
+
+  "knownGaps": [
+    {
+      "id": "clarification-requested-gap",
+      "summary": "Lead clarification requested has no canonical event.",
+      "subjectType": "lead",
+      "resolutionPhase": "phase-11"
+    },
+    {
+      "id": "clarification-answered-gap",
+      "summary": "Lead clarification answered has no canonical event.",
+      "subjectType": "lead",
+      "resolutionPhase": "phase-11"
+    },
+    {
+      "id": "lead-rejected-gap",
+      "summary": "Lead rejected on quality has no canonical event.",
+      "subjectType": "lead",
+      "resolutionPhase": "phase-11"
+    },
+    {
+      "id": "lead-duplicate-gap",
+      "summary": "Lead marked duplicate has no canonical event.",
+      "subjectType": "lead",
+      "resolutionPhase": "phase-11"
+    },
+    {
+      "id": "credit-deducted-gap",
+      "summary": "Credit deduction has no canonical event. Must carry a band, never a balance.",
+      "subjectType": "vendor",
+      "resolutionPhase": "phase-11"
+    },
+    {
+      "id": "vendor-suspended-gap",
+      "summary": "Vendor suspension has no canonical event.",
+      "subjectType": "vendor",
+      "resolutionPhase": "phase-11"
+    },
+    {
+      "id": "vendor-rejected-gap",
+      "summary": "Vendor rejection has no canonical event.",
+      "subjectType": "vendor",
+      "resolutionPhase": "phase-11"
+    },
+    {
+      "id": "payment-recorded-gap",
+      "summary": "Payment recording has no canonical event. Observational only; Jarvis is never authoritative for money.",
+      "subjectType": "vendor",
+      "resolutionPhase": "phase-11"
+    },
+    {
+      "id": "free-vendor-interest-gap",
+      "summary": "Free-vendor interest capture has no canonical event.",
+      "subjectType": "vendor",
+      "resolutionPhase": "phase-11"
+    }
+  ],
+
+  "entities": [
+    {
+      "id": "lead",
+      "owner": "quickfurno-core",
+      "identifier": "leads.id",
+      "sensitivity": "personal-data",
+      "implemented": true,
+      "stateEnforcement": false,
+      "sourceFiles": [
+        "services/leadService.ts:111",
+        "supabase/migrations/20260620000001_create_tables.sql:60"
+      ]
+    },
+    {
+      "id": "client",
+      "owner": "quickfurno-core",
+      "identifier": "none-normalized-phone",
+      "sensitivity": "personal-data",
+      "implemented": false,
+      "stateEnforcement": false,
+      "sourceFiles": ["services/clientRequirementGroupService.ts"],
+      "note": "There is no clients table. A client is a normalized phone number."
+    },
+    {
+      "id": "requirement-group",
+      "owner": "quickfurno-core",
+      "identifier": "client_requirement_groups.id",
+      "sensitivity": "pseudonymous",
+      "implemented": true,
+      "stateEnforcement": false,
+      "sourceFiles": [
+        "supabase/migrations/20260701000032_phase26a2d_client_requirement_groups.sql",
+        "lib/config.ts:123"
+      ]
+    },
+    {
+      "id": "vendor",
+      "owner": "quickfurno-core",
+      "identifier": "vendors.id",
+      "sensitivity": "personal-data",
+      "implemented": true,
+      "stateEnforcement": false,
+      "sourceFiles": [
+        "services/vendorService.ts",
+        "supabase/migrations/20260620000001_create_tables.sql:23"
+      ]
+    },
+    {
+      "id": "vendor-package",
+      "owner": "quickfurno-core",
+      "identifier": "vendor_packages.id",
+      "sensitivity": "commercial",
+      "implemented": true,
+      "stateEnforcement": false,
+      "sourceFiles": [
+        "supabase/migrations/20260620000001_create_tables.sql:90",
+        "supabase/migrations/20260620000003_functions.sql:330"
+      ]
+    },
+    {
+      "id": "package-order",
+      "owner": "quickfurno-core",
+      "identifier": "vendor_package_orders.id",
+      "sensitivity": "commercial",
+      "implemented": false,
+      "stateEnforcement": false,
+      "sourceFiles": [
+        "supabase/migrations/20260701000023_vendor_package_orders.sql:18",
+        "services/vendorPackageOrderService.ts:110"
+      ],
+      "note": "Inert intent record. No payment provider is connected."
+    },
+    {
+      "id": "payment",
+      "owner": "quickfurno-core",
+      "identifier": "payments.id",
+      "sensitivity": "commercial",
+      "implemented": true,
+      "stateEnforcement": false,
+      "sourceFiles": ["services/packageService.ts:21"],
+      "note": "No payment gateway exists. Money is admin-recorded."
+    },
+    {
+      "id": "lead-assignment",
+      "owner": "quickfurno-core",
+      "identifier": "lead_assignments.id",
+      "sensitivity": "personal-data",
+      "implemented": true,
+      "stateEnforcement": false,
+      "sourceFiles": [
+        "supabase/migrations/20260620000001_create_tables.sql:120",
+        "supabase/migrations/20260702000034_fix_auto_match_category_mapping.sql"
+      ]
+    },
+    {
+      "id": "assignment-queue-item",
+      "owner": "quickfurno-core",
+      "identifier": "lead_assignment_queue.id",
+      "sensitivity": "operational",
+      "implemented": true,
+      "stateEnforcement": false,
+      "sourceFiles": [
+        "supabase/migrations/20260701000022_phase_25a_paid_only_auto_match_free_vendor_interest.sql:44"
+      ]
+    },
+    {
+      "id": "matching-run",
+      "owner": "quickfurno-core",
+      "identifier": "lead_matching_runs.id",
+      "sensitivity": "operational",
+      "implemented": true,
+      "stateEnforcement": false,
+      "sourceFiles": [
+        "supabase/migrations/20260701000027_phase26a_auto_lead_matching_foundation.sql:4",
+        "services/leadMatchingEngine.ts:296"
+      ]
+    },
+    {
+      "id": "quality-score",
+      "owner": "quickfurno-core",
+      "identifier": "lead_scores.id",
+      "sensitivity": "pseudonymous",
+      "implemented": true,
+      "stateEnforcement": false,
+      "sourceFiles": [
+        "services/leadQualityService.ts:81",
+        "supabase/migrations/20260702000038_lead_quality_engine_phase1.sql"
+      ],
+      "note": "Pure TypeScript. There is no SQL scoring function. Table has no RLS."
+    },
+    {
+      "id": "clarification-request",
+      "owner": "quickfurno-core",
+      "identifier": "lead_clarification_requests.id",
+      "sensitivity": "pseudonymous",
+      "implemented": true,
+      "stateEnforcement": false,
+      "sourceFiles": [
+        "services/leadClarificationService.ts",
+        "supabase/migrations/20260702000039_b_lead_clarification_flow.sql"
+      ]
+    },
+    {
+      "id": "clarification-response",
+      "owner": "quickfurno-core",
+      "identifier": "lead_clarification_responses.id",
+      "sensitivity": "personal-data",
+      "implemented": true,
+      "stateEnforcement": false,
+      "sourceFiles": [
+        "app/actions.ts:561",
+        "supabase/migrations/20260702000039_b_lead_clarification_flow.sql"
+      ],
+      "note": "Answers are typed in by a superadmin. No inbound WhatsApp. Table has no RLS."
+    },
+    {
+      "id": "bad-lead-report",
+      "owner": "quickfurno-core",
+      "identifier": "bad_lead_reports.id",
+      "sensitivity": "pseudonymous",
+      "implemented": true,
+      "stateEnforcement": false,
+      "sourceFiles": ["services/vendorService.ts:377", "services/adminService.ts:585"],
+      "note": "credit_restored is hardcoded false. No refund path exists."
+    },
+    {
+      "id": "complaint",
+      "owner": "quickfurno-core",
+      "identifier": "none",
+      "sensitivity": "personal-data",
+      "implemented": false,
+      "stateEnforcement": false,
+      "sourceFiles": ["lib/aos/agents/client-care/agent.config.ts"],
+      "note": "NOT IMPLEMENTED in Core."
+    },
+    {
+      "id": "notification",
+      "owner": "quickfurno-core",
+      "identifier": "vendor_notifications.id",
+      "sensitivity": "operational",
+      "implemented": true,
+      "stateEnforcement": false,
+      "sourceFiles": [
+        "services/vendorNotificationService.ts:78",
+        "supabase/migrations/20260701000025_vendor_notifications_support.sql:4"
+      ]
+    },
+    {
+      "id": "whatsapp-message",
+      "owner": "quickfurno-core",
+      "identifier": "whatsapp_logs.id",
+      "sensitivity": "personal-data",
+      "implemented": true,
+      "stateEnforcement": false,
+      "sourceFiles": [
+        "supabase/functions/whatsapp-dispatch/index.ts",
+        "supabase/migrations/20260620000003_functions.sql:295"
+      ],
+      "note": "Edge Function is live-capable and not authorized. Phone and message are stored in the clear."
+    },
+    {
+      "id": "support-thread",
+      "owner": "quickfurno-core",
+      "identifier": "vendor_support_threads.id",
+      "sensitivity": "operational",
+      "implemented": true,
+      "stateEnforcement": false,
+      "sourceFiles": [
+        "services/vendorSupportService.ts",
+        "supabase/migrations/20260701000025_vendor_notifications_support.sql:25"
+      ]
+    },
+    {
+      "id": "category",
+      "owner": "quickfurno-core",
+      "identifier": "service_categories.id",
+      "sensitivity": "operational",
+      "implemented": true,
+      "stateEnforcement": false,
+      "sourceFiles": [
+        "services/categoryAdminService.ts",
+        "supabase/migrations/20260630000021_category_governance.sql"
+      ],
+      "note": "No FK from vendors. Categories are denormalized text matched by three divergent rulesets."
+    },
+    {
+      "id": "city",
+      "owner": "quickfurno-core",
+      "identifier": "cities.id",
+      "sensitivity": "operational",
+      "implemented": true,
+      "stateEnforcement": false,
+      "sourceFiles": [
+        "lib/locations/cityService.ts",
+        "supabase/migrations/20260630000020_align_active_cities.sql"
+      ],
+      "note": "Only 2 cities are active."
+    },
+    {
+      "id": "runtime-setting",
+      "owner": "quickfurno-core",
+      "identifier": "marketplace_runtime_settings.setting_key",
+      "sensitivity": "operational",
+      "implemented": true,
+      "stateEnforcement": false,
+      "sourceFiles": [
+        "lib/lead-assignment/runtimeSettings.ts",
+        "lib/aos/runtime/aosRuntimeSettings.ts"
+      ],
+      "note": "Three separate settings tables. marketplace_runtime_settings has NO RLS and is anonymously mutable."
+    },
+    {
+      "id": "audit-record",
+      "owner": "quickfurno-core",
+      "identifier": "audit_logs.id",
+      "sensitivity": "operational",
+      "implemented": true,
+      "stateEnforcement": false,
+      "sourceFiles": [
+        "services/adminService.ts:92",
+        "supabase/migrations/20260621000006_superadmin_foundation.sql:100"
+      ],
+      "note": "admin_user_id is never written. The audit trail cannot name the actor."
+    }
+  ],
+
+  "authority": [
+    {
+      "action": "verify-or-reject-lead",
+      "authoritativeOwner": "quickfurno-core",
+      "jarvisMayRecommend": true,
+      "jarvisForbidden": false,
+      "approvalLevel": "authorized-team-human",
+      "executedBy": "quickfurno-core",
+      "sourceFiles": ["services/leadQualityService.ts"]
+    },
+    {
+      "action": "change-consent",
+      "authoritativeOwner": "quickfurno-core",
+      "jarvisMayRecommend": false,
+      "jarvisForbidden": true,
+      "approvalLevel": "none",
+      "executedBy": "quickfurno-core",
+      "sourceFiles": ["supabase/migrations/20260624000008_lead_capture_consent.sql"]
+    },
+    {
+      "action": "assign-vendors",
+      "authoritativeOwner": "quickfurno-core",
+      "jarvisMayRecommend": true,
+      "jarvisForbidden": false,
+      "approvalLevel": "authorized-team-human",
+      "executedBy": "quickfurno-core",
+      "sourceFiles": ["supabase/migrations/20260702000034_fix_auto_match_category_mapping.sql"],
+      "note": "Jarvis may advise matching readiness and may request a replacement. It may never name a vendor, never assign, and never exceed the owner-approved caps."
+    },
+    {
+      "action": "deduct-credit",
+      "authoritativeOwner": "quickfurno-core",
+      "jarvisMayRecommend": false,
+      "jarvisForbidden": true,
+      "approvalLevel": "none",
+      "executedBy": "quickfurno-core",
+      "sourceFiles": ["supabase/migrations/20260620000003_functions.sql:76"]
+    },
+    {
+      "action": "refund-credit",
+      "authoritativeOwner": "quickfurno-core",
+      "jarvisMayRecommend": false,
+      "jarvisForbidden": true,
+      "approvalLevel": "founder",
+      "executedBy": "quickfurno-core",
+      "sourceFiles": ["supabase/migrations/20260620000003_functions.sql:109"]
+    },
+    {
+      "action": "activate-vendor",
+      "authoritativeOwner": "quickfurno-core",
+      "jarvisMayRecommend": true,
+      "jarvisForbidden": false,
+      "approvalLevel": "authorized-team-human",
+      "executedBy": "quickfurno-core",
+      "sourceFiles": ["services/adminService.ts:482"]
+    },
+    {
+      "action": "suspend-vendor",
+      "authoritativeOwner": "quickfurno-core",
+      "jarvisMayRecommend": true,
+      "jarvisForbidden": false,
+      "approvalLevel": "authorized-team-human",
+      "executedBy": "quickfurno-core",
+      "sourceFiles": ["services/adminService.ts:484"]
+    },
+    {
+      "action": "change-vendor-package",
+      "authoritativeOwner": "quickfurno-core",
+      "jarvisMayRecommend": true,
+      "jarvisForbidden": false,
+      "approvalLevel": "authorized-team-human",
+      "executedBy": "quickfurno-core",
+      "sourceFiles": ["services/vendorAdminService.ts:194"]
+    },
+    {
+      "action": "record-payment",
+      "authoritativeOwner": "quickfurno-core",
+      "jarvisMayRecommend": false,
+      "jarvisForbidden": true,
+      "approvalLevel": "none",
+      "executedBy": "quickfurno-core",
+      "sourceFiles": ["services/packageService.ts:21"]
+    },
+    {
+      "action": "send-whatsapp",
+      "authoritativeOwner": "quickfurno-core",
+      "jarvisMayRecommend": true,
+      "jarvisForbidden": false,
+      "approvalLevel": "founder",
+      "executedBy": "n8n",
+      "sourceFiles": ["supabase/functions/whatsapp-dispatch/index.ts"],
+      "note": "Jarvis proposes a CommunicationRequestV1. It never sends, and no Jarvis recommendation may directly trigger the Edge Function. LIVE_WHATSAPP_BEFORE_PHASE_11A = PROHIBITED."
+    },
+    {
+      "action": "place-voice-call",
+      "authoritativeOwner": "quickfurno-core",
+      "jarvisMayRecommend": true,
+      "jarvisForbidden": false,
+      "approvalLevel": "founder",
+      "executedBy": "n8n",
+      "sourceFiles": ["docs/architecture/communication-model.md"],
+      "note": "Only after messaging safety evidence (Phase 11A)."
+    },
+    {
+      "action": "reassign-vendors",
+      "authoritativeOwner": "quickfurno-core",
+      "jarvisMayRecommend": true,
+      "jarvisForbidden": false,
+      "approvalLevel": "authorized-team-human",
+      "executedBy": "quickfurno-core",
+      "sourceFiles": ["lib/aos/rules/replacementRules.ts"],
+      "note": "Requires genuine client dissatisfaction AND an explicit ClientConfirmationV1. Dissatisfaction is never inferred. Jarvis and Riya may REQUEST a replacement; they may never assign."
+    },
+    {
+      "action": "resolve-complaint",
+      "authoritativeOwner": "quickfurno-core",
+      "jarvisMayRecommend": true,
+      "jarvisForbidden": false,
+      "approvalLevel": "authorized-team-human",
+      "executedBy": "quickfurno-core",
+      "sourceFiles": ["services/adminService.ts:585"]
+    },
+    {
+      "action": "campaign-spend",
+      "authoritativeOwner": "quickfurno-core",
+      "jarvisMayRecommend": true,
+      "jarvisForbidden": false,
+      "approvalLevel": "founder",
+      "executedBy": "quickfurno-core",
+      "sourceFiles": ["lib/analytics/analyticsAdapter.ts"],
+      "note": "Jitin has no advertising-provider credential and no budget authority."
+    },
+    {
+      "action": "change-categories-or-cities",
+      "authoritativeOwner": "quickfurno-core",
+      "jarvisMayRecommend": true,
+      "jarvisForbidden": false,
+      "approvalLevel": "authorized-team-human",
+      "executedBy": "quickfurno-core",
+      "sourceFiles": ["services/categoryAdminService.ts"]
+    },
+    {
+      "action": "modify-runtime-settings",
+      "authoritativeOwner": "quickfurno-core",
+      "jarvisMayRecommend": false,
+      "jarvisForbidden": true,
+      "approvalLevel": "none",
+      "executedBy": "quickfurno-core",
+      "sourceFiles": ["lib/aos/runtime/aosRuntimeSettings.ts"]
+    }
+  ],
+
+  "jarvisNeverAuthoritativeFor": [
+    "money",
+    "consent",
+    "assignment",
+    "activation",
+    "suspension",
+    "communication-eligibility"
+  ],
+
+  "prohibitedPayloadFields": {
+    "$comment": "Refused by the governed payload schema. Key-level refusal is verified by test against derivedObservationSchema; value-level refusal covers emails and phone numbers. A coordinate-shaped value in an arbitrarily-named key is NOT yet refused - see finding gps-value-shape-not-refused, which BLOCKS Stage 3.2 and resolves in Stage 3.1.4. Until it is closed, no adapter may forward Core free text.",
+    "refusedByKey": [
+      "body",
+      "notes",
+      "freetext",
+      "raw",
+      "phone",
+      "email",
+      "address",
+      "transcript",
+      "recording",
+      "prompt",
+      "chainofthought"
+    ],
+    "refusedByValueShape": ["email-address", "e164-phone", "long-digit-run"],
+    "notYetRefusedByValueShape": ["latitude-longitude-pair"],
+    "coreFreeTextFieldsNeverMapped": ["leads.message"],
+    "gpsBearingFreeTextPermitted": false,
+    "openGapId": "gps-value-shape-not-refused",
+    "closedByStage": "3.1.4"
+  },
+
+  "adapterConstraints": {
+    "$comment": "Binding on any future Core adapter. They hold now, and they hold especially while the canonical payload gap is open.",
+    "coreFreeTextForwardingPermitted": false,
+    "mayForwardLeadsMessage": false,
+    "mayForwardRawRequirementText": false,
+    "mustMapReasonCodesAndBoundedSignalsOnly": true,
+    "note": "No adapter may transmit Core free text while gps-value-shape-not-refused is open. The key-level refusals stop the obvious carriers; they do not stop a coordinate pair renamed into a benign field, so discipline is the control until Stage 3.1.4 makes it structural."
+  },
+
+  "phaseGates": {
+    "$comment": "What must be complete before each gated phase may begin. Asserted by test so that a stage cannot quietly start while a known blocker is outstanding.",
+    "stage_3_2_signed_ingestion": {
+      "blockedBy": ["stage-3.1.4"],
+      "rationale": "Signed ingestion must not begin against a canonical payload with a known privacy weakness. Signing a payload that can smuggle coordinates only makes the smuggling authenticated."
+    },
+    "phase_11_live_core_integration": {
+      "blockedBy": ["stage-3.1.3", "stage-3.1.4"],
+      "rationale": "Phase 11 is the first LIVE Core integration. It may not begin with either an unremediated Core safety defect or an already-known canonical payload privacy weakness."
+    },
+    "phase_11a_live_communication": {
+      "blockedBy": ["stage-3.1.3", "stage-3.1.4", "phase-11"],
+      "rationale": "LIVE_WHATSAPP_BEFORE_PHASE_11A = PROHIBITED. Live communication additionally requires Phase 11 to have succeeded."
+    }
+  },
+
+  "authorityConflicts": [
+    {
+      "id": "vendor-cap-conflict",
+      "severity": "high",
+      "status": "core_remediation_required",
+      "summary": "Core permits 9 vendors per lead from one pool with no batch concept; Core's docs say 3; the owner-approved policy is 3 + 3 = 6 lifetime per lead-category.",
+      "resolution": "core-remediation",
+      "remediationStage": "3.1.3",
+      "blockingPhase": "phase-11"
+    },
+    {
+      "id": "approval-flow-inert",
+      "severity": "high",
+      "status": "core_remediation_required",
+      "summary": "lead_assignment_approvals never assigns and has no reject path, while every real assignment path requires no approval at all.",
+      "resolution": "core-remediation",
+      "remediationStage": "3.1.3",
+      "blockingPhase": "phase-11"
+    },
+    {
+      "id": "permission-gate-inert",
+      "severity": "medium",
+      "status": "core_remediation_required",
+      "summary": "checkAgentPermission and lib/aos/approvals have zero callers. They gate and approve nothing, and must not be mistaken for an authorization layer.",
+      "resolution": "core-remediation",
+      "remediationStage": "3.1.3",
+      "blockingPhase": "phase-11"
+    },
+    {
+      "id": "audit-actor-missing",
+      "severity": "high",
+      "status": "core_remediation_required",
+      "summary": "audit_logs.admin_user_id is never written. Core cannot answer 'who approved this?'.",
+      "resolution": "core-remediation",
+      "remediationStage": "3.1.3",
+      "blockingPhase": "phase-11"
+    },
+    {
+      "id": "whatsapp-unflagged-live-send",
+      "severity": "critical",
+      "status": "core_remediation_required",
+      "summary": "The whatsapp-dispatch Edge Function calls the real Meta Graph API gated only by secret presence. It is Deno and cannot read the Next.js feature flags, so WHATSAPP_SENDING_ENABLED=false does not restrain it.",
+      "resolution": "core-remediation",
+      "remediationStage": "3.1.3",
+      "blockingPhase": "phase-11a"
+    }
+  ],
+
+  "documentationDrift": [
+    {
+      "id": "max-vendors-doc-stale",
+      "claim": "docs/quickfurno-aos-flow.md:195 says 'Maximum 3 vendors.'",
+      "reality": "lib/config.ts:113 ADMIN_MANUAL_TOTAL_VENDOR_LIMIT = 9",
+      "severity": "high"
+    },
+    {
+      "id": "whatsapp-not-sending",
+      "claim": "README.md:42 says 'No WhatsApp sending yet.'",
+      "reality": "supabase/functions/whatsapp-dispatch/index.ts calls the real Meta Graph API v20.0",
+      "severity": "high"
+    },
+    {
+      "id": "rls-everywhere",
+      "claim": "README.md:100 says 'RLS everywhere'.",
+      "reality": "7 tables have no RLS at all, including marketplace_runtime_settings, lead_scores and lead_clarification_responses",
+      "severity": "high"
+    },
+    {
+      "id": "bad-lead-refund",
+      "claim": "README.md:89 says admin approval refunds the credit.",
+      "reality": "credit_restored is hardcoded false. No refund path exists.",
+      "severity": "high"
+    },
+    {
+      "id": "n8n-no-webhook-calls",
+      "claim": "lib/aos/README.md:43 says 'No n8n webhook calls yet.'",
+      "reality": "n8nTool.ts:129 performs a real fetch when both locks are open",
+      "severity": "medium"
+    },
+    {
+      "id": "pipeline-masks-pii",
+      "claim": "emitLeadCreatedEvent.ts:52 says the pipeline masks PII.",
+      "reality": "The pipeline DROPS the lead object; masking applies elsewhere. Right outcome, wrong mechanism.",
+      "severity": "medium"
+    },
+    {
+      "id": "queue-event-for-n8n",
+      "claim": "queueEventForN8n implies a queue.",
+      "reality": "There is no queue. databasePersisted is always false. A failed event is lost.",
+      "severity": "medium"
+    },
+    {
+      "id": "credit-deduction-disabled-flag",
+      "claim": "CREDIT_DEDUCTION_ENABLED = false, surfaced to admins as 'Disabled - no charges'.",
+      "reality": "Assignment RPCs do deduct credits. The flag gates nothing.",
+      "severity": "high"
+    },
+    {
+      "id": "no-real-ai",
+      "claim": "README.md:41 says 'No real AI yet.'",
+      "reality": "TRUE. Zero AI-provider calls exist in lib/aos.",
+      "severity": "none"
+    }
+  ],
+
+  "coreCapabilitiesRequiredForPhase11": [
+    "durable-transactional-event-outbox",
+    "ed25519-event-signing-with-key-rotation",
+    "stable-event-ids-generated-in-the-business-transaction",
+    "correlation-and-causation-threading",
+    "recommendation-intake-with-policy-and-authority-validation",
+    "core-issued-execution-intents",
+    "authoritative-result-events",
+    "client-entity-identity",
+    "assignment-batch-semantics",
+    "reassignment-with-explicit-client-confirmation",
+    "erasure-and-anonymisation-path",
+    "stable-reason-code-vocabularies",
+    "guarded-state-transitions",
+    "actor-aware-audit-records",
+    "row-level-security-on-all-tables"
+  ]
+}

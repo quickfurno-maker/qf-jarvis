@@ -119,8 +119,12 @@ The design is [event-backbone.md](./event-backbone.md); the decisions are [ADR-0
 | Stage | Status |
 | --- | --- |
 | **3.0** — decisions and architecture | ✅ **Complete and approved (2026-07-12)** |
-| **3.1** — persistence foundation | **Implemented, pending review** |
-| 3.2 — signature verification | Not started |
+| **3.1** — persistence foundation | ✅ **Complete and merged (2026-07-13)** |
+| **3.1.1** — managed database connection hardening | ✅ **Complete and merged (2026-07-13)** — [ADR-0024](../decisions/ADR-0024-verified-tls-and-managed-database-preflight.md) **Accepted** |
+| **3.1.2** — QuickFurno compatibility baseline | **In progress** — [ADR-0025](../decisions/ADR-0025-quickfurno-compatibility-boundary-and-core-adapter-baseline.md) **Proposed** |
+| **3.1.3** — QuickFurno Core compatibility and safety remediation | **Not started.** **Runs in the QuickFurno repository, not here** — see below |
+| **3.1.4** — canonical payload privacy hardening | **Not started.** **`qf-jarvis`. Hard gate before Stage 3.2** — see below |
+| 3.2 — signature verification | **Not started.** **Blocked by Stage 3.1.4** — see below |
 | 3.3 — validated signed ingestion | Not started |
 | 3.4 — projections and bounded retries | Not started |
 | 3.5 — dead letters and replay | Not started |
@@ -128,6 +132,81 @@ The design is [event-backbone.md](./event-backbone.md); the decisions are [ADR-0
 | 3.7 — fixture-only test emitter | Not started |
 | 3.8 — metrics and adversarial validation | Not started |
 | 3.9 — documentation and exit audit | Not started |
+
+## Stage 3.1.3 — QuickFurno Core Compatibility and Safety Remediation
+
+**This work occurs in the QuickFurno repository, NOT in `qf-jarvis`.** Stage 3.1.2 read QuickFurno at a pinned commit and **wrote nothing to it**; Stage 3.1.3 is where the findings get fixed, by whoever owns that repository.
+
+| Work item | Why |
+| --- | --- |
+| **Replace the 9-vendor manual recovery model with the approved 3 + 3, lifetime-6 policy** | Core permits 9 unique vendors per lead from one combined count. The owner-approved maximum is **6 per lead-category** |
+| **Introduce explicit primary and replacement batch records** | Core has **no batch number and no replacement concept**. Without them, `qf.assignment.batch-created` has nothing to carry |
+| **Enforce no-overlap and lifetime uniqueness** | Otherwise the cap arithmetic is a lie |
+| **Add guarded state transitions** | **No entity enforces any transition today.** `Won → New` and `Suspended → Approved` are permitted |
+| **Secure missing RLS and operational settings** | **7 tables have no RLS.** `marketplace_runtime_settings` — which holds operational kill-switches — is **anonymously mutable** |
+| **Disable or guard the live WhatsApp Edge Function** | It calls the real Meta Graph API, gated **only** by secret presence, and **no Next.js feature flag can reach it** |
+| **Remove GPS from free-text storage** | Precise client coordinates are interpolated into `leads.message` |
+| **Add actor-aware audit records** | `audit_logs.admin_user_id` is **never written**. Core cannot answer *"who approved this?"* |
+| **Prepare the durable signed Core outbox** | The current bridge is fire-and-forget. **An event permitted to vanish is not an event to derive truth from** |
+
+**Stage 3.1.3 is:**
+
+- **allowed to run in parallel** with fixture-only Jarvis backbone work;
+- **not required** to begin Stage 3.2 fixture testing;
+- a **hard gate before Phase 11** live Core integration;
+- a **hard gate before Phase 11A** live WhatsApp.
+
+> **Fixture-driven Jarvis work does not wait on Core.** That is exactly why the backbone is built against conforming fixtures rather than a live emitter — Stage 3.2 can prove signature verification against a fixture stream while Core is still being repaired. **What it may not do is go live.**
+
+---
+
+## Stage 3.1.4 — Canonical Payload Privacy Hardening
+
+**This is `qf-jarvis` work, and it is a HARD GATE before Stage 3.2.**
+
+**Why it cannot wait for Phase 11.** The canonical payload today refuses the obvious free-text carriers (`body`, `notes`, `freetext`, `raw`), every contact key, and any value containing an email or a phone number. It does **not** refuse a **latitude/longitude pair hidden inside an arbitrary string value** — and Core stores precise client coordinates *inside* `leads.message`, so the exposure is concrete rather than theoretical.
+
+> **Phase 11 is the first LIVE Core integration, and it may not begin with an already-known canonical payload privacy weakness.** Deferring this would mean the first real personal data crosses the boundary through a hole we had written down and chosen to leave open. And it must close before **Stage 3.2**, not merely before Phase 11: **signing a payload that can smuggle coordinates only makes the smuggling authenticated.**
+
+**Purpose:**
+
+- **Review every canonical event payload.**
+- **Replace generic arbitrary-string payload freedom** with **bounded, event-specific or explicitly allowlisted** fields.
+- **Prevent** raw Core `requirement`, `message`, `notes`, `body`, free text, addresses, phone numbers, emails and **GPS coordinates** from entering Jarvis canonical events.
+- **Reject latitude/longitude pairs hidden inside string values.**
+- **Preserve safe bounded fields** — city code, area code, category, score, reason code, status, and **opaque Core references**.
+- **Add positive and negative fixtures.**
+- **Document false-positive handling.** A coordinate detector that fires on a version string or a price is a detector somebody switches off.
+- **Retain Core-side contact resolution at authorized execution time** — Jarvis never learns the recipient, because it never holds them.
+
+**Until Stage 3.1.4 closes the gap: no adapter may forward Core free text.** The finding is `gps-value-shape-not-refused` — **a known contract gap, not an accepted risk.**
+
+**This correction is NOT implemented in Stage 3.1.2**, which is forbidden from changing contract implementation. Stage 3.1.2 records the gap honestly and tests that it is still open.
+
+---
+
+### The order — each step separately owner-authorized
+
+```
+1. Stage 3.1.2 — QuickFurno compatibility baseline      ← in progress (ADR-0025 Proposed)
+2. Stage 3.1.3 — QuickFurno Core remediation            ← MAY BEGIN IN PARALLEL.
+                                                          QuickFurno repository track
+3. Provider hardening and managed migration             ← owner-authorized; runbook steps 2-7
+4. Stage 3.1.4 — canonical payload privacy hardening    ← qf-jarvis. HARD GATE before 3.2
+5. Stage 3.2 — signed fixture ingestion                 ← fixture-only. Blocked by 3.1.4
+```
+
+| Gate | Blocked by |
+| --- | --- |
+| **Stage 3.2** — signed fixture ingestion | **Stage 3.1.4** |
+| **Phase 11** — live Core integration | **Stage 3.1.3 AND Stage 3.1.4** |
+| **Phase 11A** — live communication | **Stage 3.1.3, Stage 3.1.4, and Phase 11** |
+
+**Stage 3.1.3 is a QuickFurno repository track. Stage 3.1.4 belongs to `qf-jarvis`.** They are independent and may run concurrently — but **neither Stage 3.2 nor Phase 11 begins while its own blocker is open.**
+
+**Steps 2–7 are recorded in [managed-database-runbook.md](../engineering/managed-database-runbook.md), and none of them has been executed.** No connection has ever been opened to the managed database, no Supabase setting has been changed, and **Supabase migrations remain zero.**
+
+> **Stage 3.2 begins only after Stage 3.1.2 is approved AND the managed database is ready.** Both, not either. A signature-verification stage built before the compatibility baseline is reviewed would be verifying signatures on an event shape nobody had checked against the system that will one day produce it.
 
 **Objective.** Reliable, idempotent, replayable event ingestion. This is the load-bearing infrastructure of the entire system.
 
