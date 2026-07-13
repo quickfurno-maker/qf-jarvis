@@ -31,15 +31,35 @@
  */
 
 export {
+  assertCaCertificateBundle,
+  assertConnectionUrlIsSupported,
   createDatabaseConfig,
   DATABASE_CONFIG_BOUNDS,
   DATABASE_CONFIG_DEFAULTS,
   DatabaseConfigError,
+  DatabaseTlsError,
   describeConnectionTarget,
+  describeTls,
+  isLoopbackConnectionTarget,
   UnsupportedConnectionModeError,
   type DatabaseConfig,
   type DatabaseConfigInput,
+  type TlsConfig,
 } from './persistence/database-config.js';
+
+export {
+  REQUIRED_POSTGRES_MAJOR_VERSION,
+  runPreflight,
+  runPreflightOnClient,
+  type PreflightCheck,
+  type PreflightReport,
+} from './persistence/preflight.js';
+
+export {
+  migrateWithPreflight,
+  PreflightFailedError,
+  type MigrateWithPreflightResult,
+} from './persistence/migrate.js';
 
 export {
   closeDatabasePool,
@@ -50,8 +70,28 @@ export {
 
 export { withClient, withTransaction } from './persistence/transaction.js';
 
-export { loadMigrationFiles, runMigrations } from './persistence/migration-runner.js';
-
+/**
+ * **`migrateWithPreflight` is the ONLY public migration API, and that is enforced here.**
+ *
+ * `runMigrations` and `runMigrationsOnClient` are **deliberately not exported from this
+ * barrel.** They still exist — inside `persistence/migration-runner.ts`, where `migrate.ts`
+ * composes them and the runner's own tests exercise them in isolation — but a **consumer of
+ * this package cannot reach them.**
+ *
+ * They are the two functions that take the advisory lock and execute DDL **without a
+ * preflight**. Exporting them from the root put a documented, supported, type-safe way to
+ * migrate a managed database **around** the gate right next to the gate — and a gate with a
+ * signposted path around it is not a gate. The CLI called the safe one; nothing made the next
+ * caller do the same, and the next caller is the one nobody reviews.
+ *
+ * `loadMigrationFiles` is not exported either. It mutates nothing, so it was never a bypass —
+ * but it has no external consumer, and a public surface is a promise. Do not make promises
+ * nobody asked for.
+ *
+ * **Reaching past this barrel into `persistence/*` is unsupported.** The package `exports` map
+ * publishes `.` and nothing else, so a deep import does not resolve; `tests/public-api.test.ts`
+ * fails if either bypass function ever reappears above.
+ */
 export { defaultMigrationsDirectory } from './persistence/migrations-directory.js';
 
 export {

@@ -55,10 +55,14 @@ import {
  * Loopback only. A test suite has no business connecting anywhere else.
  *
  * **This is what rejects every managed database**, including Supabase — not a hostname
- * denylist that has to keep up with providers, but an allowlist of four loopback names
+ * denylist that has to keep up with providers, but an allowlist of three loopback names
  * that a managed provider can never be one of.
+ *
+ * `postgres` was removed along with the TLS loopback exemption: it is a **DNS name**, not a
+ * loopback address, and it resolves to whatever the resolver says it does. It never belonged
+ * in either list.
  */
-const ALLOWED_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', 'postgres']);
+const ALLOWED_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
 
 /** Supabase's roles. They do not exist on a laptop, which is the whole problem the tests solve. */
 export const MANAGED_ROLES = ['anon', 'authenticated', 'service_role'] as const;
