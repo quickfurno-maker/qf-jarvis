@@ -4,7 +4,7 @@
   "schemaVersion": 2,
   "generatedForStage": "3.1.2",
   "adr": "ADR-0025",
-  "adrStatus": "Proposed",
+  "adrStatus": "Accepted",
   "ownerDecisionsRecorded": "2026-07-13",
   "quickfurno": {
     "repository": "quickfurno-maker/quickfurno-marketplace",
@@ -1779,5 +1779,8 @@
     "requiresTaxonomyVersion": true,
     "taxonomyAuthority": "quickfurno-core-admin-only",
     "honestResidual": "A benign sentence under 64 characters carrying no contact data and no coordinates is still accepted as a label. Deliberate: it is untidy and it leaks nothing. The thing defended is the client’s phone number and front door, not the taxonomy’s prose style."
-  }
+  },
+  "adrAcceptedOn": "2026-07-13",
+  "adrAcceptedBy": "Keshav Sharma (Founder, QuickFurno — business owner)",
+  "adrNote": "ADR-0025 governs this manifest: the QuickFurno compatibility boundary and Core adapter baseline, established by Stage 3.1.2 and merged at 6030597e4f3be19e5c288ef951e661a7359e4307. Its acceptance authorizes the documented architecture and owner policies, and authorizes no action against any running system. ADR-0026 (canonical payload privacy boundary, Stage 3.1.4) is a SEPARATE decision and remains Proposed — see stage_3_1_4.adrStatus."
 }
