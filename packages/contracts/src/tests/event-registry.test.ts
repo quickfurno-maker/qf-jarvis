@@ -21,9 +21,32 @@ describe('registry composition', () => {
     expect(registered).toStrictEqual([...CANONICAL_EVENT_TYPES].sort());
   });
 
-  it('registers every type at version 1, and no other version', () => {
+  it('registers each type at exactly one version, and version 1 is no longer among them', () => {
+    // Stage 3.1.4 moved the inherited events to version 2 and deregistered version 1, which had
+    // carried an arbitrary free-text `detail` and an open `signals` dictionary. The taxonomy
+    // events are new in that stage, so they begin — correctly — at version 1.
+    const byType = new Map<string, number[]>();
+
     for (const entry of CANONICAL_EVENT_ENTRIES) {
-      expect(entry.eventVersion).toBe(1);
+      byType.set(entry.eventType, [...(byType.get(entry.eventType) ?? []), entry.eventVersion]);
+    }
+
+    for (const [eventType, versions] of byType) {
+      expect(versions, `${eventType} is registered at more than one version`).toHaveLength(1);
+
+      const [version] = versions;
+      const expected = eventType.startsWith('qf.taxonomy.') ? 1 : 2;
+
+      expect(version, `${eventType} should be registered at v${String(expected)}`).toBe(expected);
+    }
+  });
+
+  it('does not register the superseded version 1 of any inherited event', () => {
+    // The whole point of the stage. If v1 were still registered, the door it opened would still
+    // be open, and closing a door while leaving it open is not a fix.
+    for (const eventType of CANONICAL_EVENT_TYPES) {
+      if (eventType.startsWith('qf.taxonomy.')) continue;
+      expect(isRegisteredCanonicalEvent(eventType, 1)).toBe(false);
     }
   });
 
@@ -55,7 +78,7 @@ describe('dispatch', () => {
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.eventType).toBe(event.eventType);
-      expect(result.data.eventVersion).toBe(1);
+      expect(result.data.eventVersion).toBe(event.eventVersion);
     }
   });
 
@@ -83,18 +106,19 @@ describe('failing closed', () => {
 
     expect(result.success).toBe(false);
     if (!result.success) {
-      expect(result.error.issues[0]?.code).toBe('unknown_contract');
+      expect(result.error.issues[0]?.code).toBe('unsupported_unknown_version');
     }
   });
 
-  it('rejects an unknown future version, and does NOT fall back to v1', () => {
-    const future = { ...cloneFixture(firstEventFixture()), eventVersion: 2 };
+  it('rejects an unknown future version, and does NOT fall back to an earlier one', () => {
+    // Version 3: 2 is now the registered version, so the 'unknown future' case moved up.
+    const future = { ...cloneFixture(firstEventFixture()), eventVersion: 3 };
 
     const result = safeParseCanonicalEvent(future);
 
     expect(result.success).toBe(false);
     if (!result.success) {
-      expect(result.error.issues[0]?.code).toBe('unknown_contract');
+      expect(result.error.issues[0]?.code).toBe('unsupported_unknown_version');
       // The message must make the no-fallback rule explicit: this is the failure
       // mode where a v2 payload gets parsed as a v1 and the changed fields are
       // silently dropped.
@@ -109,9 +133,11 @@ describe('failing closed', () => {
   });
 
   it('reports registration for known pairs only', () => {
-    expect(isRegisteredCanonicalEvent('qf.recommendation.created', 1)).toBe(true);
-    expect(isRegisteredCanonicalEvent('qf.recommendation.created', 2)).toBe(false);
-    expect(isRegisteredCanonicalEvent('qf.lead.created', 1)).toBe(false);
+    expect(isRegisteredCanonicalEvent('qf.recommendation.created', 2)).toBe(true);
+    // v1 is deregistered: the version that permitted free text is no longer ingestible.
+    expect(isRegisteredCanonicalEvent('qf.recommendation.created', 1)).toBe(false);
+    expect(isRegisteredCanonicalEvent('qf.recommendation.created', 3)).toBe(false);
+    expect(isRegisteredCanonicalEvent('qf.lead.created', 2)).toBe(false);
   });
 
   it('throws a structured error from the throwing parser', () => {

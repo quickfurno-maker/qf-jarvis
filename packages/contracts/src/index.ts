@@ -1033,3 +1033,65 @@ export function safeParsePromptConfigurationReference(
     input,
   );
 }
+
+// --- Stage 3.1.4: canonical payload privacy hardening (ADR-0026) ---
+export {
+  inspectProhibitedContent,
+  isFreeOfProhibitedContent,
+  isProhibitedKey,
+  keySegments,
+  normaliseKey,
+  PROHIBITED_KEY_GROUPS,
+  PROHIBITED_KEYS,
+  type ProhibitedContentIssue,
+} from './common/prohibited-content.js';
+
+export {
+  boundedCountSchema,
+  contractPayloadV2,
+  derivedSignalSchema,
+  derivedSignalListSchema,
+  MAX_SIGNALS,
+  MAX_TAXONOMY_LABEL_LENGTH,
+  observationPayloadV2,
+  observationPayloadV2Schema,
+  PAYLOAD_NUMERIC_BOUNDS,
+  scoreSchema,
+  taxonomyLabelSchema,
+  unitIntervalSchema,
+  withProhibitedContentGuard,
+  type DerivedSignal,
+  type ObservationPayloadV2,
+  type TaxonomyLabel,
+} from './events/payload-primitives.js';
+
+export {
+  CANONICAL_PAYLOAD_KEYS,
+  CANONICAL_PAYLOAD_SCHEMAS,
+  canonicalPayloadKey,
+  resolveCanonicalPayloadSchema,
+  type CanonicalPayloadKey,
+} from './events/payload-registry.js';
+
+export {
+  TAXONOMY_EVENT_TYPES,
+  TAXONOMY_NODE_STATES,
+  taxonomyNodeStateSchema,
+  taxonomyReferenceShape,
+  taxonomyVersionSchema,
+  type TaxonomyEventType,
+  type TaxonomyVersion,
+} from './events/taxonomy-events.js';
+
+export { REGISTERED_EVENT_DEFINITIONS } from './events/canonical-events-v2.js';
+
+export {
+  findRetiredVersion,
+  isRetiredCanonicalVersion,
+  RETIRED_EVENT_VERSIONS,
+  UNSUPPORTED_RETIRED_VERSION,
+  UNSUPPORTED_UNKNOWN_VERSION,
+  type RetiredEventVersion,
+} from './events/retired-versions.js';
+
+export { isGuardedPayloadSchema } from './events/payload-primitives.js';

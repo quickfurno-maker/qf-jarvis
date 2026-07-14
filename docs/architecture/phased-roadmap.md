@@ -121,10 +121,10 @@ The design is [event-backbone.md](./event-backbone.md); the decisions are [ADR-0
 | **3.0** — decisions and architecture | ✅ **Complete and approved (2026-07-12)** |
 | **3.1** — persistence foundation | ✅ **Complete and merged (2026-07-13)** |
 | **3.1.1** — managed database connection hardening | ✅ **Complete and merged (2026-07-13)** — [ADR-0024](../decisions/ADR-0024-verified-tls-and-managed-database-preflight.md) **Accepted** |
-| **3.1.2** — QuickFurno compatibility baseline | **In progress** — [ADR-0025](../decisions/ADR-0025-quickfurno-compatibility-boundary-and-core-adapter-baseline.md) **Proposed** |
+| **3.1.2** — QuickFurno compatibility baseline | ✅ **Complete and merged (2026-07-13)** — [ADR-0025](../decisions/ADR-0025-quickfurno-compatibility-boundary-and-core-adapter-baseline.md) **Accepted** |
 | **3.1.3** — QuickFurno Core compatibility and safety remediation | **Not started.** **Runs in the QuickFurno repository, not here** — see below |
-| **3.1.4** — canonical payload privacy hardening | **Not started.** **`qf-jarvis`. Hard gate before Stage 3.2** — see below |
-| 3.2 — signature verification | **Not started.** **Blocked by Stage 3.1.4** — see below |
+| **3.1.4** — canonical payload privacy hardening | ✅ **Complete and accepted (2026-07-13)** — [ADR-0026](../decisions/ADR-0026-canonical-payload-privacy-boundary.md) **Accepted**. `qf-jarvis` |
+| 3.2 — signature verification | **Not started.** Unblocked **effective on merge of PR #9**. Stage 3.1.4 is accepted; Stage 3.2 has **not begun** |
 | 3.3 — validated signed ingestion | Not started |
 | 3.4 — projections and bounded retries | Not started |
 | 3.5 — dead letters and replay | Not started |
@@ -180,6 +180,12 @@ The design is [event-backbone.md](./event-backbone.md); the decisions are [ADR-0
 - **Retain Core-side contact resolution at authorized execution time** — Jarvis never learns the recipient, because it never holds them.
 
 **Until Stage 3.1.4 closes the gap: no adapter may forward Core free text.** The finding is `gps-value-shape-not-refused` — **a known contract gap, not an accepted risk.**
+
+> ### Accepted, 2026-07-13
+>
+> The owner accepted **ADR-0026** on 2026-07-13, explicitly including the **zero-length migration window** and the **immediate retirement of v1** — on the stated grounds that producer, consumer and persisted-event counts are all **zero**. Stage 3.1.4 is **complete and accepted**; the finding is **resolved**, and its `historical_status` remains `contract_gap` with the evidence preserved permanently.
+>
+> **Stage 3.2 is unblocked effective on the merge of PR #9, and has not started.** The gate was cleared by the owner's decision, not by the tests going green — which is the order that matters.
 
 **This correction is NOT implemented in Stage 3.1.2**, which is forbidden from changing contract implementation. Stage 3.1.2 records the gap honestly and tests that it is still open.
 

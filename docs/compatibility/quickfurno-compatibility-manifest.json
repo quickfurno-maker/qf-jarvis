@@ -1,12 +1,11 @@
 {
   "$comment": "QuickFurno compatibility baseline. Machine-readable, reviewed, and PINNED. Validated by packages/contracts/src/tests/quickfurno-compatibility.test.ts. Contains NO credentials, NO project refs, NO URLs, NO personal data, and NO copied production records. CI does NOT fetch QuickFurno, Supabase, n8n or Meta: this checked-in manifest IS the reviewed baseline, and refreshing the snapshot is an explicit, reviewed act (ADR-0025 s6). Compatibility documentation authorizes no production action.",
-  "manifestVersion": 2,
+  "manifestVersion": 5,
   "schemaVersion": 2,
   "generatedForStage": "3.1.2",
   "adr": "ADR-0025",
-  "adrStatus": "Proposed",
+  "adrStatus": "Accepted",
   "ownerDecisionsRecorded": "2026-07-13",
-
   "quickfurno": {
     "repository": "quickfurno-maker/quickfurno-marketplace",
     "snapshotSha": "00706899b46ae16fa6170c70125708b63e0926a9",
@@ -25,7 +24,6 @@
       "aiProviderCalls": 0
     }
   },
-
   "jarvis": {
     "repository": "quickfurno-maker/qf-jarvis",
     "snapshotSha": "9c76d995358e2194746f86c136041eb12f5291ce",
@@ -33,7 +31,6 @@
     "packageManager": "pnpm",
     "database": "dedicated-supabase-managed-postgresql-17"
   },
-
   "databaseBoundary": {
     "sharedDatabase": false,
     "sharedCredentials": false,
@@ -47,10 +44,8 @@
     "integrationSurface": "signed-canonical-events-in, recommendations-out",
     "note": "Core's authoritative operations run as PostgreSQL functions invoked with the Supabase service role, which BYPASSES row-level security. A 'read-only' credential into Core's database would therefore be read-only by our restraint, not by the database's enforcement. The boundary between the two systems cannot be a database boundary."
   },
-
   "assignmentPolicy": {
     "$comment": "TWO policies are recorded, deliberately and permanently. The observed one is EVIDENCE about the system as it exists at the pinned snapshot; the owner-approved one is the TARGET. The observed value of 9 must never be silently replaced by the target value: erasing the evidence would erase the reason the remediation exists.",
-
     "observed_current_core_policy": {
       "initial_max": 3,
       "manual_total_max": 9,
@@ -68,7 +63,6 @@
       ],
       "note": "Core's automatic/primary maximum is 3. Its admin manual 'recovery' maximum is 9. There is no two-batch model: primary and recovery are derived slices of ONE distinct-vendor count. Core's own documentation says 3, which is stale."
     },
-
     "owner_approved_target_policy": {
       "initial_batch_max": 3,
       "replacement_batch_max": 3,
@@ -96,7 +90,6 @@
       "final_authority": "quickfurno-core",
       "source": "Owner decision 2026-07-13; ADR-0015; quickfurno-compatibility-directive.md s4; packages/contracts/src/assignments/assignment-policy.ts"
     },
-
     "conflict": {
       "id": "vendor-cap-conflict",
       "status": "core_remediation_required",
@@ -108,7 +101,6 @@
       "remediationStage": "3.1.3",
       "blockingPhase": "phase-11"
     },
-
     "jarvisConstraint": {
       "jarvisMayGenerateAssignmentAboveOwnerLimits": false,
       "jarvisMayRecommendAssignmentAboveOwnerLimits": false,
@@ -116,10 +108,8 @@
       "note": "Jarvis must never generate, recommend or normalize an assignment above the owner-approved limits. It must also never rewrite the observed value of 9 into the target 6: the observed value is evidence, and normalizing it away would hide the conflict it exists to surface."
     }
   },
-
   "whatsappPolicy": {
     "LIVE_WHATSAPP_BEFORE_PHASE_11A": "PROHIBITED",
-
     "observedEdgeFunction": {
       "path": "supabase/functions/whatsapp-dispatch/index.ts",
       "runtime": "deno",
@@ -139,7 +129,6 @@
       ],
       "note": "The Edge Function is Deno and is deployed independently of the Next.js runtime. It therefore cannot import or read WHATSAPP_SENDING_ENABLED, and that flag does not govern it. A feature flag in one runtime is not a control over another."
     },
-
     "prohibitedUntilPhase11a": [
       "scheduling the function",
       "manual invocation for production delivery",
@@ -147,10 +136,8 @@
       "treating queued whatsapp_logs rows as authorization to send",
       "any Jarvis recommendation directly triggering it"
     ],
-
     "queuedRecordsConstituteAuthorization": false,
     "jarvisRecommendationMayTriggerDelivery": false,
-
     "authorizedDeliveryChain": [
       "quickfurno-core-authorization",
       "execution-intent",
@@ -159,7 +146,6 @@
       "provider-result",
       "authoritative-core-result-event"
     ],
-
     "requiredCoreChecksBeforeLiveDelivery": [
       "recipient-resolution",
       "consent",
@@ -173,7 +159,6 @@
       "audit-trail"
     ]
   },
-
   "securityFindings": [
     {
       "id": "uncontrolled-whatsapp-delivery",
@@ -276,7 +261,7 @@
       "id": "gps-value-shape-not-refused",
       "title": "A coordinate-shaped value hidden in an arbitrary string is not refused by the canonical payload",
       "severity": "high",
-      "status": "contract_gap",
+      "status": "resolved",
       "owner": "qf-jarvis",
       "blocking_phase": "stage_3_2",
       "resolution_phase": "stage_3_1_4",
@@ -290,10 +275,19 @@
       "remediationOwner": "qf-jarvis",
       "remediationStage": "3.1.4",
       "blockingPhase": "stage-3-2",
-      "hardBlocker": true,
+      "hardBlocker": false,
       "isKnownGapNotAcceptedRisk": true,
       "mayBeDeferredToPhase11": false,
-      "note": "This is a KNOWN CONTRACT GAP, not expected-safe behaviour and not an accepted risk. It must not resolve in Phase 11: Phase 11 is the first LIVE Core integration and may not begin with an already-known canonical payload privacy weakness. It therefore blocks Stage 3.2 signed ingestion, and resolves in Stage 3.1.4."
+      "note": "This is a KNOWN CONTRACT GAP, not expected-safe behaviour and not an accepted risk. It must not resolve in Phase 11: Phase 11 is the first LIVE Core integration and may not begin with an already-known canonical payload privacy weakness. It therefore blocks Stage 3.2 signed ingestion, and resolves in Stage 3.1.4.",
+      "resolvedInStage": "3.1.4",
+      "historicalEvidence": "This gap was REAL and is preserved as evidence, not deleted. Before Stage 3.1.4, derivedObservationSchema accepted { requirement: \"GPS: 18.5204, 73.8567\" } — an arbitrary 500-character `detail` string and an open `signals` dictionary gave a coordinate somewhere to sit. QuickFurno Core stores precise client coordinates inside leads.message, so the exposure was concrete.",
+      "resolution": "Canonical payload version 2. PRIMARY control: every event resolves to exactly one strict, event-specific payload schema; `detail` free text is gone and `signals` is an explicitly-shaped bounded list, so there is no field a coordinate could sit in. DEFENCE IN DEPTH: a prohibited-content scan refuses coordinate pairs in strings, structured latitude/longitude, coordinate arrays, map links, contacts and credentials, with segment-aware key matching so renaming does not launder. Version 1 is deregistered and fails closed.",
+      "implementation_status": "accepted",
+      "historical_status": "contract_gap",
+      "resolution_stage": "stage_3_1_4",
+      "acceptanceNote": "The implementation was accepted by the owner on 2026-07-13 (ADR-0026). The finding is RESOLVED. Its historical_status remains contract_gap and historicalEvidence is preserved permanently: erasing the record would erase the reason the hardening exists, and the next person tempted to widen a payload would have nothing to read.",
+      "acceptedOn": "2026-07-13",
+      "acceptedBy": "Keshav Sharma"
     },
     {
       "id": "unrestricted-status-transitions",
@@ -362,19 +356,17 @@
       "hardBlocker": true
     }
   ],
-
   "eventCounts": {
-    "$comment": "The reconciliation the owner required. sourceTransitions is the number of Core business transitions catalogued. Each maps to at most one canonical event; several transitions legitimately share one canonical event (a lead being captured and a lead being qualified are two Core stages of the one canonical fact 'requirement completed'), which is why uniqueCanonicalEventsTargeted is smaller. The identity below is asserted by test.",
+    "$comment": "The reconciliation the owner required. sourceTransitions is the number of Core business transitions catalogued. Each maps to at most one canonical event; several transitions legitimately share one canonical event (a lead being captured and a lead being qualified are two Core stages of the one canonical fact 'requirement completed'), which is why uniqueCanonicalEventsTargeted is smaller. The identity below is asserted by test. Stage 3.1.4 moved the 41 inherited events to v2 and added 11 taxonomy events, so the registry now holds 52 type@version pairs.",
     "sourceTransitions": 34,
     "withCanonicalEvent": 24,
     "contractGaps": 9,
     "unsupported": 1,
     "uniqueCanonicalEventsTargeted": 21,
-    "canonicalEventsInRegistry": 41,
+    "canonicalEventsInRegistry": 52,
     "reconciliation": "sourceTransitions = withCanonicalEvent + contractGaps + unsupported",
     "priorManifestOmission": "Manifest v1 listed 26 of the 34 catalogued transitions. The 8 omitted (lead-scored, package-expired, vendor-inactivity, vendor-performance, client-satisfaction, client-complaint, linked-lead-created, client-lifecycle-closed) are now present. The gap between the documented 33 and the manifested 26 was an omission, not a definitional difference."
   },
-
   "sourceEvents": {
     "$comment": "Every named event in QuickFurno at the pinned snapshot. 21 n8n + 4 internal + 4 preview = 29. All are accounted for with a disposition.",
     "n8n": [
@@ -629,7 +621,6 @@
       }
     ]
   },
-
   "deprecatedNames": [
     "agent.task.queued",
     "agent.task.completed",
@@ -643,14 +634,13 @@
     "lead.assignment_queued",
     "lead.assignment_queue_rechecked"
   ],
-
   "eventMappings": [
     {
       "id": "lead-captured",
       "sourceOperation": "Lead captured",
       "sourceRef": "leads insert",
       "canonicalEvent": "qf.client.requirement-completed",
-      "canonicalEventVersion": 1,
+      "canonicalEventVersion": 2,
       "subjectType": "lead",
       "contractStatus": "exists",
       "producer": "quickfurno-core",
@@ -675,7 +665,7 @@
       "sourceOperation": "Lead qualified",
       "sourceRef": "leadQualityService",
       "canonicalEvent": "qf.client.requirement-completed",
-      "canonicalEventVersion": 1,
+      "canonicalEventVersion": 2,
       "subjectType": "lead",
       "contractStatus": "exists",
       "producer": "quickfurno-core",
@@ -739,7 +729,7 @@
       "sourceOperation": "Vendors assigned to a lead",
       "sourceRef": "assign_lead_to_paid_vendors_phase26a",
       "canonicalEvent": "qf.assignment.batch-created",
-      "canonicalEventVersion": 1,
+      "canonicalEventVersion": 2,
       "subjectType": "lead",
       "contractStatus": "exists-with-conflict",
       "conflictId": "vendor-cap-conflict",
@@ -752,7 +742,7 @@
       "sourceOperation": "Assignment completed",
       "sourceRef": "lead_assignments",
       "canonicalEvent": "qf.assignment.batch-completed",
-      "canonicalEventVersion": 1,
+      "canonicalEventVersion": 2,
       "subjectType": "lead",
       "contractStatus": "exists",
       "producer": "quickfurno-core",
@@ -777,7 +767,7 @@
       "sourceOperation": "Vendor registered",
       "sourceRef": "registerVendor",
       "canonicalEvent": "qf.vendor.registration-started",
-      "canonicalEventVersion": 1,
+      "canonicalEventVersion": 2,
       "subjectType": "vendor",
       "contractStatus": "exists",
       "producer": "quickfurno-core",
@@ -789,7 +779,7 @@
       "sourceOperation": "Vendor profile completed",
       "sourceRef": "vendors",
       "canonicalEvent": "qf.vendor.profile-completed",
-      "canonicalEventVersion": 1,
+      "canonicalEventVersion": 2,
       "subjectType": "vendor",
       "contractStatus": "exists",
       "producer": "quickfurno-core",
@@ -801,7 +791,7 @@
       "sourceOperation": "Verification requested",
       "sourceRef": "vendors.verification_status",
       "canonicalEvent": "qf.vendor.verification-requested",
-      "canonicalEventVersion": 1,
+      "canonicalEventVersion": 2,
       "subjectType": "vendor",
       "contractStatus": "exists",
       "producer": "quickfurno-core",
@@ -814,7 +804,7 @@
       "sourceOperation": "Vendor approved",
       "sourceRef": "setVendorStatus",
       "canonicalEvent": "qf.vendor.activated",
-      "canonicalEventVersion": 1,
+      "canonicalEventVersion": 2,
       "subjectType": "vendor",
       "contractStatus": "exists",
       "producer": "quickfurno-core",
@@ -852,7 +842,7 @@
       "sourceOperation": "Low credit detected",
       "sourceRef": "vendors.remaining_credits",
       "canonicalEvent": "qf.vendor.package-readiness-changed",
-      "canonicalEventVersion": 1,
+      "canonicalEventVersion": 2,
       "subjectType": "vendor",
       "contractStatus": "exists",
       "producer": "quickfurno-core",
@@ -865,7 +855,7 @@
       "sourceOperation": "Recharge opportunity",
       "sourceRef": "free_vendor_profile_interests",
       "canonicalEvent": "qf.vendor.recharge-opportunity-detected",
-      "canonicalEventVersion": 1,
+      "canonicalEventVersion": 2,
       "subjectType": "vendor",
       "contractStatus": "exists",
       "producer": "quickfurno-core",
@@ -878,7 +868,7 @@
       "sourceOperation": "Package activated",
       "sourceRef": "assign_package_to_vendor",
       "canonicalEvent": "qf.vendor.package-readiness-changed",
-      "canonicalEventVersion": 1,
+      "canonicalEventVersion": 2,
       "subjectType": "vendor",
       "contractStatus": "exists",
       "producer": "quickfurno-core",
@@ -890,7 +880,7 @@
       "sourceOperation": "Package expired",
       "sourceRef": "expire_vendor_packages",
       "canonicalEvent": "qf.vendor.package-readiness-changed",
-      "canonicalEventVersion": 1,
+      "canonicalEventVersion": 2,
       "subjectType": "vendor",
       "contractStatus": "exists",
       "producer": "quickfurno-core",
@@ -930,7 +920,7 @@
       "sourceOperation": "Bad-lead reported",
       "sourceRef": "bad_lead_reports",
       "canonicalEvent": "qf.vendor.complaint-recorded",
-      "canonicalEventVersion": 1,
+      "canonicalEventVersion": 2,
       "subjectType": "vendor",
       "contractStatus": "exists",
       "producer": "quickfurno-core",
@@ -942,7 +932,7 @@
       "sourceOperation": "Vendor inactivity detected",
       "sourceRef": "not-implemented",
       "canonicalEvent": "qf.vendor.inactivity-detected",
-      "canonicalEventVersion": 1,
+      "canonicalEventVersion": 2,
       "subjectType": "vendor",
       "contractStatus": "exists-core-lacks-capability",
       "producer": "quickfurno-core",
@@ -955,7 +945,7 @@
       "sourceOperation": "Vendor performance updated",
       "sourceRef": "vendors.rating",
       "canonicalEvent": "qf.vendor.performance-updated",
-      "canonicalEventVersion": 1,
+      "canonicalEventVersion": 2,
       "subjectType": "vendor",
       "contractStatus": "exists-core-lacks-capability",
       "producer": "quickfurno-core",
@@ -968,7 +958,7 @@
       "sourceOperation": "Client follow-up due",
       "sourceRef": "not-implemented",
       "canonicalEvent": "qf.client.follow-up-due-detected",
-      "canonicalEventVersion": 1,
+      "canonicalEventVersion": 2,
       "subjectType": "client",
       "contractStatus": "exists-core-lacks-capability",
       "producer": "quickfurno-core",
@@ -980,7 +970,7 @@
       "sourceOperation": "Client rating due",
       "sourceRef": "not-implemented",
       "canonicalEvent": "qf.client.review-requested",
-      "canonicalEventVersion": 1,
+      "canonicalEventVersion": 2,
       "subjectType": "client",
       "contractStatus": "exists-core-lacks-capability",
       "producer": "quickfurno-core",
@@ -992,7 +982,7 @@
       "sourceOperation": "Satisfaction recorded",
       "sourceRef": "not-implemented",
       "canonicalEvent": "qf.client.satisfaction-recorded",
-      "canonicalEventVersion": 1,
+      "canonicalEventVersion": 2,
       "subjectType": "client",
       "contractStatus": "exists-core-lacks-capability",
       "producer": "quickfurno-core",
@@ -1005,7 +995,7 @@
       "sourceOperation": "Client complaint recorded",
       "sourceRef": "not-implemented",
       "canonicalEvent": "qf.client.complaint-recorded",
-      "canonicalEventVersion": 1,
+      "canonicalEventVersion": 2,
       "subjectType": "client",
       "contractStatus": "exists-core-lacks-capability",
       "producer": "quickfurno-core",
@@ -1018,7 +1008,7 @@
       "sourceOperation": "Reassignment requested",
       "sourceRef": "not-implemented",
       "canonicalEvent": "qf.client.reassignment-requested",
-      "canonicalEventVersion": 1,
+      "canonicalEventVersion": 2,
       "subjectType": "client",
       "contractStatus": "exists-core-lacks-capability",
       "producer": "quickfurno-core",
@@ -1031,7 +1021,7 @@
       "sourceOperation": "Linked lead created",
       "sourceRef": "not-implemented",
       "canonicalEvent": "qf.lead.linked-created",
-      "canonicalEventVersion": 1,
+      "canonicalEventVersion": 2,
       "subjectType": "lead",
       "contractStatus": "exists-core-lacks-capability",
       "producer": "quickfurno-core",
@@ -1044,7 +1034,7 @@
       "sourceOperation": "Client lifecycle closed",
       "sourceRef": "not-implemented",
       "canonicalEvent": "qf.client.lifecycle-closed",
-      "canonicalEventVersion": 1,
+      "canonicalEventVersion": 2,
       "subjectType": "client",
       "contractStatus": "exists-core-lacks-capability",
       "producer": "quickfurno-core",
@@ -1057,7 +1047,7 @@
       "sourceOperation": "WhatsApp state change",
       "sourceRef": "whatsapp_logs",
       "canonicalEvent": "qf.communication.state-recorded",
-      "canonicalEventVersion": 1,
+      "canonicalEventVersion": 2,
       "subjectType": "communication",
       "contractStatus": "exists",
       "producer": "quickfurno-core",
@@ -1070,7 +1060,7 @@
       "sourceOperation": "Erasure requested",
       "sourceRef": "not-implemented",
       "canonicalEvent": "qf.privacy.erasure-requested",
-      "canonicalEventVersion": 1,
+      "canonicalEventVersion": 2,
       "subjectType": "lead",
       "contractStatus": "exists-core-lacks-capability",
       "producer": "quickfurno-core",
@@ -1079,7 +1069,6 @@
       "note": "Core has no deletion or anonymisation path for any entity."
     }
   ],
-
   "knownGaps": [
     {
       "id": "clarification-requested-gap",
@@ -1136,7 +1125,6 @@
       "resolutionPhase": "phase-11"
     }
   ],
-
   "entities": [
     {
       "id": "lead",
@@ -1402,7 +1390,6 @@
       "note": "admin_user_id is never written. The audit trail cannot name the actor."
     }
   ],
-
   "authority": [
     {
       "action": "verify-or-reject-lead",
@@ -1554,7 +1541,6 @@
       "sourceFiles": ["lib/aos/runtime/aosRuntimeSettings.ts"]
     }
   ],
-
   "jarvisNeverAuthoritativeFor": [
     "money",
     "consent",
@@ -1563,9 +1549,8 @@
     "suspension",
     "communication-eligibility"
   ],
-
   "prohibitedPayloadFields": {
-    "$comment": "Refused by the governed payload schema. Key-level refusal is verified by test against derivedObservationSchema; value-level refusal covers emails and phone numbers. A coordinate-shaped value in an arbitrarily-named key is NOT yet refused - see finding gps-value-shape-not-refused, which BLOCKS Stage 3.2 and resolves in Stage 3.1.4. Until it is closed, no adapter may forward Core free text.",
+    "$comment": "Refused by the canonical payload. PRIMARY control: strict event-specific schemas with no free text and no open dictionary — a payload has nowhere to put a coordinate. DEFENCE IN DEPTH: prohibited-content scanning of keys (segment-aware, so renaming does not launder) and values (coordinates, contacts, credentials). Closed in Stage 3.1.4; the finding gps-value-shape-not-refused is retained as historical evidence.",
     "refusedByKey": [
       "body",
       "notes",
@@ -1579,14 +1564,27 @@
       "prompt",
       "chainofthought"
     ],
-    "refusedByValueShape": ["email-address", "e164-phone", "long-digit-run"],
-    "notYetRefusedByValueShape": ["latitude-longitude-pair"],
+    "refusedByValueShape": [
+      "email-address",
+      "e164-phone",
+      "long-digit-run",
+      "latitude-longitude-pair",
+      "labelled-coordinate",
+      "coordinate-array",
+      "map-url",
+      "jwt",
+      "bearer-credential",
+      "connection-string",
+      "private-key"
+    ],
+    "notYetRefusedByValueShape": [],
     "coreFreeTextFieldsNeverMapped": ["leads.message"],
     "gpsBearingFreeTextPermitted": false,
-    "openGapId": "gps-value-shape-not-refused",
-    "closedByStage": "3.1.4"
+    "openGapId": null,
+    "closedByStage": "3.1.4",
+    "gapImplementationStatus": "accepted",
+    "closureAcceptedOn": "2026-07-13"
   },
-
   "adapterConstraints": {
     "$comment": "Binding on any future Core adapter. They hold now, and they hold especially while the canonical payload gap is open.",
     "coreFreeTextForwardingPermitted": false,
@@ -1595,23 +1593,27 @@
     "mustMapReasonCodesAndBoundedSignalsOnly": true,
     "note": "No adapter may transmit Core free text while gps-value-shape-not-refused is open. The key-level refusals stop the obvious carriers; they do not stop a coordinate pair renamed into a benign field, so discipline is the control until Stage 3.1.4 makes it structural."
   },
-
   "phaseGates": {
     "$comment": "What must be complete before each gated phase may begin. Asserted by test so that a stage cannot quietly start while a known blocker is outstanding.",
     "stage_3_2_signed_ingestion": {
-      "blockedBy": ["stage-3.1.4"],
-      "rationale": "Signed ingestion must not begin against a canonical payload with a known privacy weakness. Signing a payload that can smuggle coordinates only makes the smuggling authenticated."
+      "blockedBy": [],
+      "rationale": "Stage 3.1.4 closed the canonical payload privacy gap and the owner accepted it on 2026-07-13 (ADR-0026). Signed ingestion may proceed against a payload that cannot smuggle coordinates — signing one that could would only have made the smuggling authenticated. Unblocked EFFECTIVE ON MERGE of PR #9; Stage 3.2 has not started.",
+      "implementationStatus": "accepted",
+      "satisfiedBy": ["stage-3.1.4"],
+      "effectiveOn": "merge-of-pr-9",
+      "started": false
     },
     "phase_11_live_core_integration": {
-      "blockedBy": ["stage-3.1.3", "stage-3.1.4"],
-      "rationale": "Phase 11 is the first LIVE Core integration. It may not begin with either an unremediated Core safety defect or an already-known canonical payload privacy weakness."
+      "blockedBy": ["stage-3.1.3"],
+      "rationale": "Phase 11 is the first LIVE Core integration. Canonical payload privacy hardening (Stage 3.1.4) is accepted. Core-side safety remediation (Stage 3.1.3) is NOT, and it remains a hard blocker — plus every later prerequisite that Phase 11 already carries.",
+      "satisfiedBy": ["stage-3.1.4"]
     },
     "phase_11a_live_communication": {
-      "blockedBy": ["stage-3.1.3", "stage-3.1.4", "phase-11"],
-      "rationale": "LIVE_WHATSAPP_BEFORE_PHASE_11A = PROHIBITED. Live communication additionally requires Phase 11 to have succeeded."
+      "blockedBy": ["stage-3.1.3", "phase-11"],
+      "rationale": "LIVE_WHATSAPP_BEFORE_PHASE_11A = PROHIBITED. Live communication additionally requires Phase 11 to have succeeded.",
+      "satisfiedBy": ["stage-3.1.4"]
     }
   },
-
   "authorityConflicts": [
     {
       "id": "vendor-cap-conflict",
@@ -1659,7 +1661,6 @@
       "blockingPhase": "phase-11a"
     }
   ],
-
   "documentationDrift": [
     {
       "id": "max-vendors-doc-stale",
@@ -1716,7 +1717,6 @@
       "severity": "none"
     }
   ],
-
   "coreCapabilitiesRequiredForPhase11": [
     "durable-transactional-event-outbox",
     "ed25519-event-signing-with-key-rotation",
@@ -1733,5 +1733,68 @@
     "guarded-state-transitions",
     "actor-aware-audit-records",
     "row-level-security-on-all-tables"
-  ]
+  ],
+  "stage_3_1_4": {
+    "adr": "ADR-0026",
+    "adrStatus": "Accepted",
+    "canonicalEventsRegistered": 52,
+    "inheritedEventsAtVersion": 2,
+    "taxonomyEventsAtVersion": 1,
+    "version1Deregistered": true,
+    "arbitraryFreeTextRemoved": true,
+    "openDictionaryRemoved": true,
+    "adrAcceptedOn": "2026-07-13",
+    "adrAcceptedBy": "Keshav Sharma (Founder, QuickFurno — business owner)"
+  },
+  "stageStatus": {
+    "$comment": "Authoritative stage/gate status. ADR-0026 was accepted by the owner on 2026-07-13 and Stage 3.1.4 is complete. Stage 3.2 becomes unblocked ON MERGE of PR #9 — this branch describes the state that becomes authoritative when it lands. Stage 3.2 has NOT started, and no Stage 3.2 work may begin while the PR is unmerged.",
+    "stage_3_1_2": "complete_merged",
+    "stage_3_1_3": "not_started_quickfurno_repository_track",
+    "stage_3_1_4": "completed_accepted",
+    "stage_3_2": "unblocked_effective_on_merge_of_pr_9",
+    "adr_0025": "Accepted",
+    "adr_0026": "Accepted",
+    "stage_3_2_note": "Unblocked effective on merge. NOT started.",
+    "stage_3_2_started": "false"
+  },
+  "retiredCanonicalVersions": {
+    "$comment": "Machine-readable retirement record for the 41 inherited canonical event families. Version 1 permitted arbitrary free text and an open dictionary; it is withdrawn and is NOT ingestible. The owner accepted the zero-length migration window and the immediate retirement on 2026-07-13 (ADR-0026), on the stated grounds that producer, consumer and persisted-event counts are all zero. Git history remains the source for the exact retired schema; this catalogue is the current traceability. Mirrors packages/contracts/src/events/retired-versions.ts.",
+    "count": 41,
+    "retiredVersion": 1,
+    "replacementVersion": 2,
+    "migrationWindow": "zero",
+    "producerCount": 0,
+    "consumerCount": 0,
+    "persistedEventCount": 0,
+    "retiredBeforeLiveUse": true,
+    "decisionReference": "ADR-0026",
+    "decisionStatus": "accepted",
+    "parseFailureCode": "unsupported_retired_version",
+    "unknownVersionFailureCode": "unsupported_unknown_version",
+    "source": "packages/contracts/src/events/retired-versions.ts",
+    "acceptedOn": "2026-07-13",
+    "acceptedBy": "Keshav Sharma"
+  },
+  "taxonomyLabelRule": {
+    "$comment": "A word count is not a privacy boundary. It stops nothing that matters — a two-word label can be a place name followed by a ten-digit number — and it rejects legitimate Hindi and Hinglish service names. The boundary is CONTENT: no contacts, no coordinates, no URLs, no credentials.",
+    "maxUnicodeCharacters": 64,
+    "minMeaningfulCharacters": 1,
+    "wordLimit": null,
+    "wordLimitIsUiRecommendationOnly": true,
+    "repeatedWhitespaceProhibited": true,
+    "newlinesAndControlCharactersProhibited": true,
+    "urlsProhibited": true,
+    "emailAndPhoneShapesProhibited": true,
+    "coordinateAndMapLinkShapesProhibited": true,
+    "messagePunctuationProhibited": true,
+    "boundedHumanReadablePunctuationPermitted": true,
+    "multilingualPermitted": ["english", "hindi", "hinglish"],
+    "requiresPermanentTaxonomyId": true,
+    "requiresTaxonomyVersion": true,
+    "taxonomyAuthority": "quickfurno-core-admin-only",
+    "honestResidual": "A benign sentence under 64 characters carrying no contact data and no coordinates is still accepted as a label. Deliberate: it is untidy and it leaks nothing. The thing defended is the client’s phone number and front door, not the taxonomy’s prose style."
+  },
+  "adrAcceptedOn": "2026-07-13",
+  "adrAcceptedBy": "Keshav Sharma (Founder, QuickFurno — business owner)",
+  "adrNote": "ADR-0025 governs this manifest: the QuickFurno compatibility boundary and Core adapter baseline, established by Stage 3.1.2 and merged at 6030597e4f3be19e5c288ef951e661a7359e4307. Its acceptance authorizes the documented architecture and owner policies, and authorizes no action against any running system. ADR-0026 (canonical payload privacy boundary, Stage 3.1.4) is a SEPARATE decision and remains Proposed — see stage_3_1_4.adrStatus."
 }

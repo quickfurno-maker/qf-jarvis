@@ -35,6 +35,8 @@ import { describe, expect, it } from 'vitest';
 import {
   CANONICAL_EVENT_TYPES,
   derivedObservationSchema,
+  isFreeOfProhibitedContent,
+  observationPayloadV2Schema,
   INITIAL_BATCH_NUMBER,
   isRegisteredCanonicalEvent,
   MAX_VENDORS_PER_BATCH,
@@ -100,11 +102,19 @@ interface SecurityFinding {
   readonly resolution_phase?: string;
   readonly isKnownGapNotAcceptedRisk?: boolean;
   readonly mayBeDeferredToPhase11?: boolean;
+  /** Present once resolved. The finding is retained as evidence, never deleted. */
+  readonly resolvedInStage?: string;
+  readonly historicalEvidence?: string;
+  readonly implementation_status?: string;
+  readonly historical_status?: string;
+  readonly resolution_stage?: string;
 }
 
 interface PhaseGate {
   readonly blockedBy: readonly string[];
   readonly rationale: string;
+  /** Present once a gate has been satisfied: what satisfied it. */
+  readonly satisfiedBy?: readonly string[];
 }
 
 interface Manifest {
@@ -163,8 +173,9 @@ interface Manifest {
     readonly refusedByKey: readonly string[];
     readonly gpsBearingFreeTextPermitted: boolean;
     readonly coreFreeTextFieldsNeverMapped: readonly string[];
-    readonly openGapId: string;
+    readonly openGapId: string | null;
     readonly closedByStage: string;
+    readonly gapImplementationStatus: string;
   };
   readonly adapterConstraints: {
     readonly coreFreeTextForwardingPermitted: boolean;
@@ -189,6 +200,9 @@ interface Manifest {
   readonly authority: readonly AuthorityEntry[];
   readonly jarvisNeverAuthoritativeFor: readonly string[];
   readonly deprecatedNames: readonly string[];
+  readonly stageStatus: Record<string, string>;
+  readonly retiredCanonicalVersions: Record<string, unknown>;
+  readonly taxonomyLabelRule: Record<string, unknown>;
 }
 
 const MANIFEST_URL = new URL(
@@ -749,52 +763,60 @@ describe('no canonical payload may carry GPS-bearing free text', () => {
    * **Stage 3.1.4**. It may **not** be deferred to Phase 11 — *signing a payload that can
    * smuggle coordinates only makes the smuggling authenticated.*
    */
-  it('proves the gap is REAL and still open — this is not expected-safe behaviour', () => {
-    const stillAccepted = derivedObservationSchema.safeParse({
-      requirement: 'GPS: 18.5204, 73.8567',
+  it('the gap is CLOSED: a coordinate hidden in an arbitrary string is now refused', () => {
+    // This test used to assert the OPPOSITE — that a coordinate in an arbitrary string was
+    // accepted — and it was written that way deliberately, so that closing the gap would fail it
+    // loudly. Stage 3.1.4 closed it, and this is that notification arriving.
+    expect(isFreeOfProhibitedContent({ requirement: 'GPS: 18.5204, 73.8567' })).toBe(false);
+    expect(isFreeOfProhibitedContent({ signal: '18.5204, 73.8567' })).toBe(false);
+    expect(isFreeOfProhibitedContent({ latitude: 18.5204, longitude: 73.8567 })).toBe(false);
+    expect(isFreeOfProhibitedContent({ point: [18.5204, 73.8567] })).toBe(false);
+  });
+
+  it('and the PRIMARY control is the schema, not the detector — there is no field to put it in', () => {
+    // The detector is the second lock. The first is that a v2 payload has nowhere to carry free
+    // text at all: `detail` is gone. A payload with no field for a coordinate does not need to be
+    // searched for one.
+    const withDetail = observationPayloadV2Schema.safeParse({
+      reasonCode: 'requirement.complete',
+      detail: 'GPS: 18.5204, 73.8567',
     });
 
-    // Asserting the gap rather than pretending it is closed. When Stage 3.1.4 closes it, this
-    // test fails loudly and gets updated — which is exactly the notification we want, and is why
-    // it is written as an assertion instead of a comment.
-    expect(stillAccepted.success).toBe(true);
+    expect(withDetail.success).toBe(false);
   });
 
-  it('classifies the gap as a high-severity contract gap owned by Jarvis', () => {
+  it('the finding is RESOLVED and ACCEPTED — never deleted', () => {
     const finding = gpsFinding();
 
-    expect(finding.severity).toBe('high');
-    expect(finding.status).toBe('contract_gap');
-    expect(finding.owner).toBe('qf-jarvis');
-    expect(finding.remediationOwner).toBe('qf-jarvis');
-    // A known gap is not an accepted risk. The distinction is the whole point: an accepted risk
-    // is a decision to live with something; a gap is a debt with a due date.
+    // The owner accepted the hardening on 2026-07-13 (ADR-0026). The gap is closed, and the
+    // record says so — with provenance, so the claim is checkable.
+    expect(finding.status).toBe('resolved');
+    expect(finding.implementation_status).toBe('accepted');
+    expect(finding.resolution_stage).toBe('stage_3_1_4');
+
+    // And the history survives acceptance. Acceptance closes a gap; it does not erase the fact
+    // that there was one — and erasing it would erase the reason the hardening exists.
+    expect(finding.historical_status).toBe('contract_gap');
+    expect(finding.historicalEvidence).toBeTypeOf('string');
     expect(finding.isKnownGapNotAcceptedRisk).toBe(true);
-    expect(finding.hardBlocker).toBe(true);
-  });
+    expect(finding.owner).toBe('qf-jarvis');
 
-  it('BLOCKS Stage 3.2 — signed ingestion may not begin with the gap open', () => {
-    const finding = gpsFinding();
-
-    expect(finding.blocking_phase).toBe('stage_3_2');
-    expect(manifest.phaseGates.stage_3_2_signed_ingestion.blockedBy).toContain('stage-3.1.4');
-  });
-
-  it('resolves in Stage 3.1.4, and may NOT be deferred to Phase 11', () => {
-    const finding = gpsFinding();
-
-    expect(finding.resolution_phase).toBe('stage_3_1_4');
-    expect(finding.remediationStage).toBe('3.1.4');
-
-    // The correction the owner made. Phase 11 is the first LIVE Core integration; it may not
-    // begin with an already-known canonical payload privacy weakness, so this cannot be parked
-    // there.
+    // It never was deferrable to Phase 11, and the record still says so.
     expect(finding.mayBeDeferredToPhase11).toBe(false);
-    expect(finding.blocking_phase).not.toBe('phase-11');
-    expect(finding.remediationStage).not.toBe('phase-11');
   });
 
-  it('forbids any adapter from transmitting Core free text while the gap is open', () => {
+  it('Stage 3.2 is unblocked effective on merge — and has NOT started', () => {
+    expect(manifest.phaseGates.stage_3_2_signed_ingestion.blockedBy).toStrictEqual([]);
+    expect(manifest.phaseGates.stage_3_2_signed_ingestion.satisfiedBy).toContain('stage-3.1.4');
+    expect(manifest.stageStatus['stage_3_1_4']).toBe('completed_accepted');
+    expect(manifest.stageStatus['adr_0026']).toBe('Accepted');
+
+    // Unblocking a stage and beginning it are different acts. Conflating them is how a phase
+    // quietly starts before anybody agreed it should.
+    expect(manifest.stageStatus['stage_3_2_started']).toBe('false');
+  });
+
+  it('still forbids any adapter from transmitting Core free text', () => {
     const constraints = manifest.adapterConstraints;
 
     expect(constraints.coreFreeTextForwardingPermitted).toBe(false);
@@ -802,36 +824,44 @@ describe('no canonical payload may carry GPS-bearing free text', () => {
     expect(constraints.mayForwardRawRequirementText).toBe(false);
     expect(constraints.mustMapReasonCodesAndBoundedSignalsOnly).toBe(true);
 
-    // And the payload block names the open gap, so the two records cannot drift apart.
-    expect(manifest.prohibitedPayloadFields.openGapId).toBe('gps-value-shape-not-refused');
+    // The gap is closed and its closure is accepted, so there is no open gap id. The constraint
+    // itself stands — and it is now enforced STRUCTURALLY by the schema rather than resting on
+    // an adapter author's discipline.
+    expect(manifest.prohibitedPayloadFields.openGapId).toBeNull();
+    expect(manifest.prohibitedPayloadFields.gapImplementationStatus).toBe('accepted');
     expect(manifest.prohibitedPayloadFields.closedByStage).toBe('3.1.4');
   });
 });
 
 describe('phase gates: nothing starts while its own blocker is open', () => {
-  it('Phase 11 remains blocked until BOTH Stage 3.1.3 and Stage 3.1.4 are complete', () => {
+  it('Phase 11 remains blocked by Stage 3.1.3; payload hardening is satisfied', () => {
     const gate = manifest.phaseGates.phase_11_live_core_integration;
 
-    // Core remediation alone is not enough, and payload hardening alone is not enough. Phase 11
-    // is where real personal data first crosses the boundary, and it may not begin through a
-    // hole that was already written down.
+    // Stage 3.1.4 is accepted. The QuickFurno-side safety remediation (Stage 3.1.3) is NOT, and
+    // Phase 11 is where real personal data first crosses the boundary — so it stays shut.
     expect(gate.blockedBy).toContain('stage-3.1.3');
-    expect(gate.blockedBy).toContain('stage-3.1.4');
+    expect(gate.satisfiedBy).toContain('stage-3.1.4');
   });
 
   it('Phase 11A additionally requires Phase 11 to have succeeded', () => {
     const gate = manifest.phaseGates.phase_11a_live_communication;
 
     expect(gate.blockedBy).toContain('stage-3.1.3');
-    expect(gate.blockedBy).toContain('stage-3.1.4');
     expect(gate.blockedBy).toContain('phase-11');
+    expect(gate.satisfiedBy).toContain('stage-3.1.4');
   });
 
-  it('every phase gate names at least one blocker and a rationale', () => {
+  it('every phase gate states a rationale, and a satisfied gate says what satisfied it', () => {
     for (const gate of Object.values(manifest.phaseGates)) {
       if (typeof gate === 'string') continue; // the $comment
-      expect(gate.blockedBy.length).toBeGreaterThan(0);
       expect(gate.rationale.trim()).not.toBe('');
+
+      // A gate with no blockers left has been satisfied, and must name what satisfied it.
+      // "Unblocked, reason unrecorded" is how a gate quietly stops meaning anything. Right now
+      // every gate still has a blocker, because nothing has been accepted.
+      if (gate.blockedBy.length === 0) {
+        expect(gate.satisfiedBy?.length ?? 0).toBeGreaterThan(0);
+      }
     }
   });
 });

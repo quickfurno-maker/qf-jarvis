@@ -147,6 +147,21 @@ export const CANONICAL_EVENT_TYPES = [
   'qf.communication.result-recorded',
   'qf.communication.human-handoff-requested',
   'qf.communication.human-handoff-recorded',
+
+  // --- Taxonomy: cities, categories, subcategories, and the version that pins them ---
+  // Core owns the taxonomy and emits these. Jarvis is told; Jarvis never decides
+  // (taxonomy-events.ts, ADR-0026 §7).
+  'qf.taxonomy.city-created',
+  'qf.taxonomy.city-updated',
+  'qf.taxonomy.city-deactivated',
+  'qf.taxonomy.category-created',
+  'qf.taxonomy.category-updated',
+  'qf.taxonomy.category-deactivated',
+  'qf.taxonomy.subcategory-created',
+  'qf.taxonomy.subcategory-moved',
+  'qf.taxonomy.subcategory-updated',
+  'qf.taxonomy.subcategory-deactivated',
+  'qf.taxonomy.version-published',
 ] as const;
 
 export type CanonicalEventType = (typeof CANONICAL_EVENT_TYPES)[number];
@@ -225,7 +240,7 @@ export type CommunicationStateRecordedEventV1 = z.infer<
  * and a new event type that nobody handled becomes a **compile error** rather than
  * a silently ignored message.
  */
-export type CanonicalEvent =
+export type CanonicalEventV1 =
   // Architecture lifecycle
   | RecommendationCreatedEventV1
   | RecommendationLifecycleStateRecordedEventV1
@@ -279,3 +294,8 @@ export type CanonicalEvent =
 export * from './client-events.js';
 export * from './vendor-events.js';
 export * from './governance-events.js';
+
+// The privacy-hardened v2 events, and the CanonicalEvent union the registry actually uses.
+// v1 above is retained for the regression tests that prove what it used to accept (ADR-0026 §5).
+export * from './canonical-events-v2.js';
+export * from './taxonomy-events.js';

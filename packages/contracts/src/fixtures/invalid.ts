@@ -132,11 +132,28 @@ export const INVALID_FIXTURES: readonly InvalidFixture[] = [
     }),
   },
   {
-    name: 'event: unknown (future) event version does not fall back to v1',
+    // Version 3, not 2. Version 2 became the *registered* version in Stage 3.1.4, so a fixture
+    // asserting "an unknown version is rejected" had to move to a version that is genuinely
+    // unknown — otherwise it would have quietly started asserting that a valid event is invalid,
+    // which is the same test passing for the opposite reason.
+    name: 'event: unknown (future) event version does not fall back to an earlier one',
     contract: 'CanonicalEvent',
     because: 'An unknown version is rejected, never guessed at, and never downgraded.',
     value: variantOf(validRecommendationCreatedEvent, (draft) => {
-      draft['eventVersion'] = 2;
+      draft['eventVersion'] = 3;
+    }),
+  },
+  {
+    // The one that matters most in this stage. v1 is no longer registered — it carried the
+    // arbitrary `detail` string and the open `signals` dictionary — and a v1 event must now fail
+    // closed rather than be parsed by a schema that never checked it (ADR-0026 §5).
+    name: 'event: the superseded version 1 is no longer ingestible',
+    contract: 'CanonicalEvent',
+    because:
+      'Version 1 permitted arbitrary free text and an open dictionary. It is deregistered, and a ' +
+      'deregistered version is refused rather than silently accepted by some other contract.',
+    value: variantOf(validRecommendationCreatedEvent, (draft) => {
+      draft['eventVersion'] = 1;
     }),
   },
   {

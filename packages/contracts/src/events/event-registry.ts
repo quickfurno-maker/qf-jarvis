@@ -28,52 +28,13 @@
 
 import { z } from 'zod';
 
+import { CANONICAL_EVENT_TYPES, type CanonicalEventType } from './event-catalog.js';
+import { type CanonicalEvent, REGISTERED_EVENT_DEFINITIONS } from './canonical-events-v2.js';
 import {
-  approvalDecisionRecordedEventV1Schema,
-  assignmentBatchCompletedEventV1Schema,
-  assignmentBatchCreatedEventV1Schema,
-  CANONICAL_EVENT_TYPES,
-  type CanonicalEvent,
-  type CanonicalEventType,
-  clientAdditionalServiceConfirmedEventV1Schema,
-  clientAdditionalServiceIdentifiedEventV1Schema,
-  clientAdditionalServiceRejectedEventV1Schema,
-  clientComplaintRecordedEventV1Schema,
-  clientDissatisfactionRecordedEventV1Schema,
-  clientFollowUpCompletedEventV1Schema,
-  clientFollowUpDueDetectedEventV1Schema,
-  clientLifecycleClosedEventV1Schema,
-  clientReassignmentAuthorizedEventV1Schema,
-  clientReassignmentRejectedEventV1Schema,
-  clientReassignmentRequestedEventV1Schema,
-  clientRequirementCompletedEventV1Schema,
-  clientReviewRequestedEventV1Schema,
-  clientSatisfactionRecordedEventV1Schema,
-  communicationAuthorizationRecordedEventV1Schema,
-  communicationHumanHandoffRecordedEventV1Schema,
-  communicationHumanHandoffRequestedEventV1Schema,
-  communicationResultRecordedEventV1Schema,
-  communicationStateRecordedEventV1Schema,
-  executionIntentIssuedEventV1Schema,
-  executionResultRecordedEventV1Schema,
-  leadLinkedCreatedEventV1Schema,
-  policyVersionChangedEventV1Schema,
-  privacyErasureRecordedEventV1Schema,
-  privacyErasureRequestedEventV1Schema,
-  recommendationCreatedEventV1Schema,
-  recommendationLifecycleStateRecordedEventV1Schema,
-  vendorActivatedEventV1Schema,
-  vendorComplaintRecordedEventV1Schema,
-  vendorInactivityDetectedEventV1Schema,
-  vendorPackageReadinessChangedEventV1Schema,
-  vendorPerformanceUpdatedEventV1Schema,
-  vendorProfileCompletedEventV1Schema,
-  vendorRechargeOpportunityDetectedEventV1Schema,
-  vendorRegistrationStartedEventV1Schema,
-  vendorRetentionRiskDetectedEventV1Schema,
-  vendorVerificationRequestedEventV1Schema,
-  vendorWinbackCandidateDetectedEventV1Schema,
-} from './event-catalog.js';
+  findRetiredVersion,
+  UNSUPPORTED_RETIRED_VERSION,
+  UNSUPPORTED_UNKNOWN_VERSION,
+} from './retired-versions.js';
 import {
   contractFailure,
   type ContractResult,
@@ -120,265 +81,99 @@ function defineEntry<T extends CanonicalEvent>(
   };
 }
 
-const ENTRIES: readonly CanonicalEventRegistryEntry[] = [
-  defineEntry(
-    'qf.recommendation.created',
-    1,
+/**
+ * What each registered contract means, in one line.
+ *
+ * Keyed by event type, because the meaning of `qf.vendor.activated` does not change when its
+ * payload version does — the *shape* changed, not the *fact*.
+ */
+const DESCRIPTIONS: Readonly<Record<CanonicalEventType, string>> = {
+  'qf.recommendation.created':
     'QF Jarvis produced a recommendation and QuickFurno Core recorded it. The recommendation is inert.',
-    recommendationCreatedEventV1Schema,
-  ),
-  defineEntry(
-    'qf.recommendation.lifecycle-state-recorded',
-    1,
-    'A recommendation moved to a new lifecycle state.',
-    recommendationLifecycleStateRecordedEventV1Schema,
-  ),
-  defineEntry(
-    'qf.approval.decision-recorded',
-    1,
-    'QuickFurno Core recorded an authoritative approval decision.',
-    approvalDecisionRecordedEventV1Schema,
-  ),
-  defineEntry(
-    'qf.execution.intent-issued',
-    1,
-    'QuickFurno Core issued a bounded, expiring execution intent to n8n.',
-    executionIntentIssuedEventV1Schema,
-  ),
-  defineEntry(
-    'qf.execution.result-recorded',
-    1,
-    'QuickFurno Core recorded an execution result reported by n8n or the QF Communications Runtime.',
-    executionResultRecordedEventV1Schema,
-  ),
-  defineEntry(
-    'qf.communication.state-recorded',
-    1,
-    'A governed communication moved to a new lifecycle state.',
-    communicationStateRecordedEventV1Schema,
-  ),
+  'qf.recommendation.lifecycle-state-recorded':
+    'A recommendation moved through its governed lifecycle. Recorded by Core.',
+  'qf.approval.decision-recorded': 'A human or a named policy decided. Core recorded the decision.',
+  'qf.execution.intent-issued':
+    'QuickFurno Core authorized an action and issued an intent for n8n to execute. Only Core may issue one.',
+  'qf.execution.result-recorded': 'n8n reported an outcome, and Core recorded it as authoritative.',
+  'qf.communication.state-recorded': 'A communication reached one of the eighteen governed states.',
 
-  // --- Target: the client journey and vendor assignment -------------------
-  // Target contracts. QuickFurno Core does not emit these today; establishing the
-  // emitters is Phase 11's work, and an adapter absorbs any difference.
+  'qf.client.requirement-completed': 'A client requirement is complete enough to act on.',
+  'qf.client.follow-up-due-detected': 'A follow-up became due.',
+  'qf.client.follow-up-completed': 'A follow-up was completed.',
+  'qf.client.satisfaction-recorded': 'Client satisfaction was recorded.',
+  'qf.client.dissatisfaction-recorded':
+    'Client dissatisfaction was recorded. Evidence, never permission to reassign.',
+  'qf.client.complaint-recorded': 'A client complaint was recorded.',
+  'qf.client.reassignment-requested':
+    'A reassignment was requested, carrying the explicit client confirmation that permits one.',
+  'qf.client.reassignment-authorized': 'Core authorized a reassignment.',
+  'qf.client.reassignment-rejected': 'Core rejected a reassignment.',
+  'qf.assignment.batch-created':
+    'Core created an assignment batch. At most three vendors, and only Core may create one.',
+  'qf.assignment.batch-completed': 'An assignment batch completed.',
+  'qf.client.additional-service-identified': 'An additional service need was identified.',
+  'qf.client.additional-service-confirmed':
+    'The client explicitly confirmed an additional service.',
+  'qf.client.additional-service-rejected': 'An additional service was rejected.',
+  'qf.lead.linked-created':
+    'A different category became a separate linked lead, with its own consent, verification and cap.',
+  'qf.client.review-requested': 'A review was requested from the client.',
+  'qf.client.lifecycle-closed': 'The client lifecycle closed.',
 
-  defineEntry(
-    'qf.client.requirement-completed',
-    1,
-    'A client finished stating what they need.',
-    clientRequirementCompletedEventV1Schema,
-  ),
-  defineEntry(
-    'qf.client.follow-up-due-detected',
-    1,
-    'Something detected that a client follow-up had fallen due.',
-    clientFollowUpDueDetectedEventV1Schema,
-  ),
-  defineEntry(
-    'qf.client.follow-up-completed',
-    1,
-    'A client follow-up happened.',
-    clientFollowUpCompletedEventV1Schema,
-  ),
-  defineEntry(
-    'qf.client.satisfaction-recorded',
-    1,
-    'A client said they were satisfied.',
-    clientSatisfactionRecordedEventV1Schema,
-  ),
-  defineEntry(
-    'qf.client.dissatisfaction-recorded',
-    1,
-    'A client said they were dissatisfied. Evidence for a reassignment request — not a reassignment.',
-    clientDissatisfactionRecordedEventV1Schema,
-  ),
-  defineEntry(
-    'qf.client.complaint-recorded',
-    1,
-    'A formal client complaint was recorded.',
-    clientComplaintRecordedEventV1Schema,
-  ),
-  defineEntry(
-    'qf.client.reassignment-requested',
-    1,
-    'QF Jarvis asked QuickFurno Core to reassign, carrying the client’s explicit confirmation. It authorizes nothing.',
-    clientReassignmentRequestedEventV1Schema,
-  ),
-  defineEntry(
-    'qf.client.reassignment-authorized',
-    1,
-    'QuickFurno Core authorized a replacement batch. This event is the authorization becoming real.',
-    clientReassignmentAuthorizedEventV1Schema,
-  ),
-  defineEntry(
-    'qf.client.reassignment-rejected',
-    1,
-    'QuickFurno Core refused a reassignment.',
-    clientReassignmentRejectedEventV1Schema,
-  ),
-  defineEntry(
-    'qf.assignment.batch-created',
-    1,
-    'QuickFurno Core created an assignment batch of at most three vendors.',
-    assignmentBatchCreatedEventV1Schema,
-  ),
-  defineEntry(
-    'qf.assignment.batch-completed',
-    1,
-    'An assignment batch ran its course.',
-    assignmentBatchCompletedEventV1Schema,
-  ),
-  defineEntry(
-    'qf.client.additional-service-identified',
-    1,
-    'A specialist noticed the client may also want something in another category. A signal, not a conclusion.',
-    clientAdditionalServiceIdentifiedEventV1Schema,
-  ),
-  defineEntry(
-    'qf.client.additional-service-confirmed',
-    1,
-    'The client explicitly confirmed they want an additional service in another category.',
-    clientAdditionalServiceConfirmedEventV1Schema,
-  ),
-  defineEntry(
-    'qf.client.additional-service-rejected',
-    1,
-    'The client declined a proposed additional service.',
-    clientAdditionalServiceRejectedEventV1Schema,
-  ),
-  defineEntry(
-    'qf.lead.linked-created',
-    1,
-    'QuickFurno Core created a separate linked lead for a new category, with its own identity, consent, verification, scoring and matching.',
-    leadLinkedCreatedEventV1Schema,
-  ),
-  defineEntry(
-    'qf.client.review-requested',
-    1,
-    'A review was requested from the client.',
-    clientReviewRequestedEventV1Schema,
-  ),
-  defineEntry(
-    'qf.client.lifecycle-closed',
-    1,
-    'A client lead-category journey ended.',
-    clientLifecycleClosedEventV1Schema,
-  ),
+  'qf.vendor.registration-started': 'A vendor began registering.',
+  'qf.vendor.profile-completed': 'A vendor profile reached completeness.',
+  'qf.vendor.verification-requested': 'Vendor verification was requested.',
+  'qf.vendor.activated': 'Core activated a vendor. Only Core may.',
+  'qf.vendor.inactivity-detected': 'A vendor has gone inactive.',
+  'qf.vendor.performance-updated': 'Vendor performance changed. A band, never a score to act on.',
+  'qf.vendor.package-readiness-changed': 'Package readiness changed. A band, never a balance.',
+  'qf.vendor.recharge-opportunity-detected':
+    'A recharge conversation is warranted. A band, never a balance, and never a transaction.',
+  'qf.vendor.complaint-recorded': 'A complaint about or from a vendor was recorded.',
+  'qf.vendor.retention-risk-detected': 'A vendor is at risk of leaving.',
+  'qf.vendor.winback-candidate-detected': 'A departed vendor is a win-back candidate.',
 
-  // --- Target: the vendor journey -----------------------------------------
+  'qf.privacy.erasure-requested': 'An erasure was requested.',
+  'qf.privacy.erasure-recorded': 'An erasure was carried out and recorded.',
+  'qf.policy.version-changed': 'A governed policy version changed.',
+  'qf.communication.authorization-recorded':
+    'The QuickFurno Communication Core authorized, or refused, a communication.',
+  'qf.communication.result-recorded': 'A communication result was recorded by Core.',
+  'qf.communication.human-handoff-requested': 'A conversation must reach a human.',
+  'qf.communication.human-handoff-recorded': 'A human took over a conversation.',
 
-  defineEntry(
-    'qf.vendor.registration-started',
-    1,
-    'A vendor began registering.',
-    vendorRegistrationStartedEventV1Schema,
-  ),
-  defineEntry(
-    'qf.vendor.profile-completed',
-    1,
-    'A vendor completed their profile.',
-    vendorProfileCompletedEventV1Schema,
-  ),
-  defineEntry(
-    'qf.vendor.verification-requested',
-    1,
-    'QuickFurno Core recorded that a vendor verification was requested. Jarvis does not verify.',
-    vendorVerificationRequestedEventV1Schema,
-  ),
-  defineEntry(
-    'qf.vendor.activated',
-    1,
-    'QuickFurno Core activated a vendor. Jarvis does not activate.',
-    vendorActivatedEventV1Schema,
-  ),
-  defineEntry(
-    'qf.vendor.inactivity-detected',
-    1,
-    'A vendor has gone inactive.',
-    vendorInactivityDetectedEventV1Schema,
-  ),
-  defineEntry(
-    'qf.vendor.performance-updated',
-    1,
-    'A vendor’s performance band changed. A band, never a rank — ranking is Core’s.',
-    vendorPerformanceUpdatedEventV1Schema,
-  ),
-  defineEntry(
-    'qf.vendor.package-readiness-changed',
-    1,
-    'A vendor’s package readiness band changed. No amounts, no credits, no money.',
-    vendorPackageReadinessChangedEventV1Schema,
-  ),
-  defineEntry(
-    'qf.vendor.recharge-opportunity-detected',
-    1,
-    'A recharge conversation may be worth having. A band, never a balance.',
-    vendorRechargeOpportunityDetectedEventV1Schema,
-  ),
-  defineEntry(
-    'qf.vendor.complaint-recorded',
-    1,
-    'A vendor complaint was recorded.',
-    vendorComplaintRecordedEventV1Schema,
-  ),
-  defineEntry(
-    'qf.vendor.retention-risk-detected',
-    1,
-    'A vendor may be about to leave.',
-    vendorRetentionRiskDetectedEventV1Schema,
-  ),
-  defineEntry(
-    'qf.vendor.winback-candidate-detected',
-    1,
-    'A departed vendor may be worth approaching again.',
-    vendorWinbackCandidateDetectedEventV1Schema,
-  ),
+  'qf.taxonomy.city-created': 'Core created a city. Jarvis is told; Jarvis never decides.',
+  'qf.taxonomy.city-updated': 'Core updated a city. The id is permanent; the label is not.',
+  'qf.taxonomy.city-deactivated': 'Core deactivated a city.',
+  'qf.taxonomy.category-created': 'Core created a category.',
+  'qf.taxonomy.category-updated': 'Core updated a category. The id is permanent; the label is not.',
+  'qf.taxonomy.category-deactivated': 'Core deactivated a category.',
+  'qf.taxonomy.subcategory-created': 'Core created a subcategory under a parent category.',
+  'qf.taxonomy.subcategory-moved':
+    'Core moved a subcategory to a different parent. Its meaning changed while its id did not.',
+  'qf.taxonomy.subcategory-updated': 'Core updated a subcategory.',
+  'qf.taxonomy.subcategory-deactivated': 'Core deactivated a subcategory.',
+  'qf.taxonomy.version-published':
+    'Core published a taxonomy version. Without it, the ids in other events have no meaning.',
+};
 
-  // --- Target: governance, privacy, and communication authority -----------
-
-  defineEntry(
-    'qf.privacy.erasure-requested',
-    1,
-    'Somebody exercised a deletion or anonymisation right. The obligation starts here.',
-    privacyErasureRequestedEventV1Schema,
-  ),
-  defineEntry(
-    'qf.privacy.erasure-recorded',
-    1,
-    'QuickFurno Core recorded how far an erasure actually got, including which scopes remain outstanding.',
-    privacyErasureRecordedEventV1Schema,
-  ),
-  defineEntry(
-    'qf.policy.version-changed',
-    1,
-    'A governing policy changed. Every policyVersion recorded elsewhere resolves against this.',
-    policyVersionChangedEventV1Schema,
-  ),
-  defineEntry(
-    'qf.communication.authorization-recorded',
-    1,
-    'The QuickFurno Communication Core decided whether a communication may happen. A rejection carries why — including an opt-out.',
-    communicationAuthorizationRecordedEventV1Schema,
-  ),
-  defineEntry(
-    'qf.communication.result-recorded',
-    1,
-    'QuickFurno Core recorded what happened to a communication. Provider-accepted is not delivered; indeterminate is not success.',
-    communicationResultRecordedEventV1Schema,
-  ),
-  defineEntry(
-    'qf.communication.human-handoff-requested',
-    1,
-    'A machine asked for a person. It has not got one yet.',
-    communicationHumanHandoffRequestedEventV1Schema,
-  ),
-  defineEntry(
-    'qf.communication.human-handoff-recorded',
-    1,
-    'A person actually picked up a handed-off communication.',
-    communicationHumanHandoffRecordedEventV1Schema,
-  ),
-];
+/**
+ * The registered contracts, built from `REGISTERED_EVENT_DEFINITIONS`.
+ *
+ * Built from the definitions rather than restated beside them, so "what is defined" and "what is
+ * registered" cannot drift apart. A drift here shows up as an event that exists in source and
+ * cannot be parsed — or, far worse, one that parses and was never reviewed.
+ */
+const ENTRIES: readonly CanonicalEventRegistryEntry[] = REGISTERED_EVENT_DEFINITIONS.map(
+  ([eventType, eventVersion, schema]) =>
+    defineEntry(
+      eventType,
+      eventVersion,
+      DESCRIPTIONS[eventType],
+      schema as unknown as z.ZodType<CanonicalEvent>,
+    ),
+);
 
 /**
  * A registry that genuinely cannot be added to.
@@ -444,10 +239,38 @@ export function safeParseCanonicalEvent(input: unknown): ContractResult<Canonica
   const entry = CANONICAL_EVENT_REGISTRY.get(key);
 
   if (entry === undefined) {
+    /**
+     * **A retired version and an unknown version are different failures, and stay different.**
+     *
+     * A **retired** version is a contract we had, and withdrew, and can explain — the producer is
+     * behind us and must be upgraded. An **unknown** version is a contract we have never seen —
+     * the producer is *ahead* of us, and the consumer must be upgraded.
+     *
+     * Collapsing them into one "unknown contract" loses the distinction at exactly the moment it
+     * decides who gets paged. Neither one ever falls back to the other version, and neither is
+     * guessed at.
+     */
+    const retired = findRetiredVersion(head.data.eventType, head.data.eventVersion);
+
+    if (retired !== undefined) {
+      return contractFailure(CONTRACT_NAME, [
+        {
+          path: 'eventVersion',
+          code: UNSUPPORTED_RETIRED_VERSION,
+          message:
+            `Canonical event contract "${key}" is RETIRED and is no longer ingestible. ` +
+            `It was superseded by version ${String(retired.replacementVersion)}. ` +
+            `${retired.retirementReason} ` +
+            `Retirement is recorded in the retirement catalogue (${retired.decisionReference}); ` +
+            `a retired version is refused, never parsed by a later contract that never checked it.`,
+        },
+      ]);
+    }
+
     return contractFailure(CONTRACT_NAME, [
       {
         path: 'eventType',
-        code: 'unknown_contract',
+        code: UNSUPPORTED_UNKNOWN_VERSION,
         message:
           `No registered canonical event contract for "${key}". ` +
           `Unknown types and versions are rejected, never guessed at, and a future version never falls back to an earlier one. ` +
