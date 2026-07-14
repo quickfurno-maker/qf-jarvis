@@ -27,13 +27,30 @@ import { readFile } from 'node:fs/promises';
 
 import { describe, expect, it } from 'vitest';
 
+import { RETIRED_EVENT_VERSIONS } from '../index.js';
+
 interface Manifest {
   readonly adr: string;
   readonly adrStatus: string;
   readonly adrAcceptedOn?: string;
-  readonly stage_3_1_4: { readonly adr: string; readonly adrStatus: string };
+  readonly stage_3_1_4: {
+    readonly adr: string;
+    readonly adrStatus: string;
+    readonly adrAcceptedOn?: string;
+    readonly adrAcceptedBy?: string;
+  };
   readonly stageStatus: Record<string, string>;
-  readonly phaseGates: Record<string, { readonly blockedBy: readonly string[] }>;
+  readonly phaseGates: Record<
+    string,
+    {
+      readonly blockedBy: readonly string[];
+      readonly satisfiedBy?: readonly string[];
+      readonly started?: boolean;
+      readonly effectiveOn?: string;
+    }
+  >;
+  readonly securityFindings: readonly Record<string, unknown>[];
+  readonly retiredCanonicalVersions: Record<string, unknown>;
 }
 
 const MANIFEST_URL = new URL(
@@ -97,44 +114,109 @@ describe('the manifest agrees with the ADR it names', () => {
   });
 });
 
-describe('ADR-0026 remains Proposed, and the manifest says so', () => {
-  it('the ADR document declares Proposed', () => {
-    expect(declaredStatus(adr0026)).toBe('Proposed');
+describe('ADR-0026 is Accepted, and the manifest agrees', () => {
+  it('the ADR document declares Accepted', () => {
+    expect(declaredStatus(adr0026)).toBe('Accepted');
   });
 
   it('the manifest agrees, in both places it is recorded', () => {
     expect(manifest.stage_3_1_4.adr).toBe('ADR-0026');
     expect(manifest.stage_3_1_4.adrStatus).toBe(declaredStatus(adr0026));
     expect(manifest.stageStatus['adr_0026']).toBe(declaredStatus(adr0026));
-    expect(manifest.stageStatus['adr_0026']).toBe('Proposed');
+    expect(manifest.stageStatus['adr_0026']).toBe('Accepted');
   });
 
-  it('ADR-0025 and ADR-0026 are separate decisions and are not conflated', () => {
-    // Accepting the compatibility baseline did not accept the payload hardening. They are
-    // different decisions, taken at different times, and a manifest that blurred them would be
-    // claiming an approval that was never given.
+  it('records acceptance provenance — who, and when', () => {
+    expect(manifest.stage_3_1_4.adrAcceptedOn).toBe('2026-07-13');
+    expect(manifest.stage_3_1_4.adrAcceptedBy).toContain('Keshav Sharma');
+    expect(adr0026).toContain('Keshav Sharma');
+  });
+
+  it('the acceptance explicitly covers the zero-length migration window and immediate retirement', () => {
+    // The one thing ADR-0026 §5 named as the owner's to decide. If the acceptance were silent on
+    // it, the retirement would rest on an engineer's judgment rather than a decision.
+    expect(adr0026).toContain('zero-length migration window');
+    expect(adr0026).toContain('immediate retirement');
+  });
+
+  it('ADR-0025 and ADR-0026 remain separate decisions, both now Accepted', () => {
     expect(manifest.adr).not.toBe(manifest.stage_3_1_4.adr);
     expect(manifest.adrStatus).toBe('Accepted');
-    expect(manifest.stage_3_1_4.adrStatus).toBe('Proposed');
+    expect(manifest.stage_3_1_4.adrStatus).toBe('Accepted');
   });
 });
 
-describe('the Stage 3.1.4 gate is not cleared by this correction', () => {
-  it('Stage 3.1.4 remains implementation_complete_pending_owner_review', () => {
-    expect(manifest.stageStatus['stage_3_1_4']).toBe(
-      'in_progress / implementation_complete_pending_owner_review',
-    );
+describe('all 41 retirement records are accepted', () => {
+  it('the manifest records the retirement decision as accepted, with provenance', () => {
+    expect(manifest.retiredCanonicalVersions['count']).toBe(41);
+    expect(manifest.retiredCanonicalVersions['decisionStatus']).toBe('accepted');
+    expect(manifest.retiredCanonicalVersions['acceptedOn']).toBe('2026-07-13');
   });
 
-  it('Stage 3.2 remains blocked_by_stage_3_1_4', () => {
-    expect(manifest.stageStatus['stage_3_2']).toBe('blocked_by_stage_3_1_4');
-    expect(manifest.phaseGates['stage_3_2_signed_ingestion']?.blockedBy).toContain('stage-3.1.4');
+  it.each(RETIRED_EVENT_VERSIONS.map((r) => [r.eventType, r] as const))(
+    '%s is accepted, not merely proposed',
+    (_eventType, record) => {
+      expect(record.decisionStatus).toBe('accepted');
+      expect(record.acceptedOn).toBe('2026-07-13');
+    },
+  );
+});
+
+describe('the historical GPS evidence survives acceptance', () => {
+  const finding = manifest.securityFindings.find(
+    (candidate) => candidate['id'] === 'gps-value-shape-not-refused',
+  );
+
+  it('the finding is still present — resolved, never deleted', () => {
+    expect(finding).toBeDefined();
+    expect(finding?.['status']).toBe('resolved');
+    expect(finding?.['implementation_status']).toBe('accepted');
   });
 
-  it('correcting a stale status field does not accept a decision', () => {
-    // Aligning the manifest with an ADR the owner already accepted is bookkeeping. It is not an
-    // approval of anything else, and it must not become one by proximity.
-    expect(manifest.stageStatus['adr_0026']).toBe('Proposed');
-    expect(manifest.stageStatus['stage_3_2']).not.toBe('unblocked');
+  it('its historical status remains contract_gap, permanently', () => {
+    // Acceptance closes a gap. It does not erase the fact that there was one — and erasing it
+    // would erase the reason the hardening exists, leaving the next person to widen a payload
+    // with nothing to read.
+    expect(finding?.['historical_status']).toBe('contract_gap');
+    expect(finding?.['historicalEvidence']).toBeTypeOf('string');
+    expect(String(finding?.['historicalEvidence'])).toContain('GPS');
+  });
+});
+
+describe('Stage 3.1.4 is complete; Stage 3.2 is unblocked on merge and has NOT started', () => {
+  it('Stage 3.1.4 is completed and accepted', () => {
+    expect(manifest.stageStatus['stage_3_1_4']).toBe('completed_accepted');
+  });
+
+  it('Stage 3.2 is unblocked effective on the merge of PR #9', () => {
+    expect(manifest.stageStatus['stage_3_2']).toBe('unblocked_effective_on_merge_of_pr_9');
+    expect(manifest.phaseGates['stage_3_2_signed_ingestion']?.blockedBy).toStrictEqual([]);
+    expect(manifest.phaseGates['stage_3_2_signed_ingestion']?.satisfiedBy).toContain('stage-3.1.4');
+    expect(manifest.phaseGates['stage_3_2_signed_ingestion']?.effectiveOn).toBe('merge-of-pr-9');
+  });
+
+  it('does NOT claim Stage 3.2 has started', () => {
+    // Unblocking a stage and beginning it are different acts, and conflating them is how a phase
+    // quietly starts before anybody agreed it should.
+    expect(manifest.phaseGates['stage_3_2_signed_ingestion']?.started).toBe(false);
+    expect(manifest.stageStatus['stage_3_2_started']).toBe('false');
+    expect(manifest.stageStatus['stage_3_2']).not.toContain('in_progress');
+    expect(manifest.stageStatus['stage_3_2']).not.toContain('complete');
+  });
+
+  it('Phase 11 remains blocked by Stage 3.1.3', () => {
+    // Payload hardening is accepted. The QuickFurno-side safety remediation is not, and Phase 11
+    // is where real personal data first crosses the boundary.
+    const gate = manifest.phaseGates['phase_11_live_core_integration'];
+
+    expect(gate?.blockedBy).toContain('stage-3.1.3');
+    expect(gate?.satisfiedBy).toContain('stage-3.1.4');
+  });
+
+  it('Phase 11A remains blocked by Stage 3.1.3 and Phase 11', () => {
+    const gate = manifest.phaseGates['phase_11a_live_communication'];
+
+    expect(gate?.blockedBy).toContain('stage-3.1.3');
+    expect(gate?.blockedBy).toContain('phase-11');
   });
 });

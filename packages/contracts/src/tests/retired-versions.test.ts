@@ -75,9 +75,12 @@ describe('the retirement catalogue', () => {
       expect(record.retiredBeforeLiveUse).toBe(true);
 
       expect(record.decisionReference).toBe('ADR-0026');
-      // ADR-0026 is Proposed. The retirement is implemented and is NOT yet accepted, and the
-      // record says so rather than quietly implying a decision nobody made.
-      expect(record.decisionStatus).toBe('pending-owner-acceptance');
+      // ADR-0026 was accepted on 2026-07-13, and the acceptance explicitly covered the
+      // zero-length migration window and the immediate retirement of v1. The record now says
+      // `accepted` because that is true — and it carries who and when, so the claim is checkable.
+      expect(record.decisionStatus).toBe('accepted');
+      expect(record.acceptedOn).toBe('2026-07-13');
+      expect(record.acceptedBy).toBe('Keshav Sharma');
     },
   );
 

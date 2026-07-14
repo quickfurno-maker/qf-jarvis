@@ -1,8 +1,19 @@
 # ADR-0026 — Canonical Payload Privacy Boundary
 
-**Status:** **Proposed** — not Accepted. Awaiting owner review.
+**Status:** **Accepted** — accepted by **Keshav Sharma** (Founder, QuickFurno — business owner) on **2026-07-13**.
 **Date:** 2026-07-13
+**Accepted:** 2026-07-13
 **Deciders:** Keshav Sharma (Founder, QuickFurno — business owner)
+
+> ### What the owner accepted
+>
+> The **Canonical Payload Privacy Boundary**: strict, event-specific canonical payload schemas; the removal of arbitrary free text and open dictionaries; defence-in-depth prohibited-content scanning; **all 41 inherited events moving from v1 to v2**; the **immediate retirement of the vulnerable v1 contracts**; the **zero-length migration window** — explicitly, and on the stated grounds that `producerCount`, `consumerCount` and `persistedEventCount` are **all zero**; **11 new taxonomy events at v1**; the documented **taxonomy-label residual**; and the **permanent preservation of the historical GPS-gap evidence**.
+>
+> **§5 asked for exactly this decision and named it as the owner's to make.** It is now made: the migration window is zero because there was nobody to migrate, and v1 is retired immediately rather than kept ingestible for the benefit of no one.
+>
+> **Acceptance authorizes the contract design and the retirement. It authorizes no action against any running system** — no Supabase connection, no provider change, no migration, no n8n, no WhatsApp, no QuickFurno mutation, and no Stage 3.2 implementation before PR #9 is merged.
+>
+> **The acknowledged residuals stand, and are not softened by acceptance.** The prohibited-content scan is the _second_ lock and can be defeated by a determined producer; `rationale`/`summary`/`explanation` survive as guarded human-authored governance text; and a benign sentence under 64 characters is still a valid taxonomy label. Each is stated in the sections below, and acceptance does not quietly delete any of them.
 
 **Depends on:** [ADR-0013](./ADR-0013-canonical-event-envelope-and-versioning.md) (envelope and versioning) · [ADR-0016](./ADR-0016-agent-memory-and-learning-boundaries.md) (memory bounds) · [ADR-0025](./ADR-0025-quickfurno-compatibility-boundary-and-core-adapter-baseline.md) (**Accepted**, the compatibility baseline that found this)
 

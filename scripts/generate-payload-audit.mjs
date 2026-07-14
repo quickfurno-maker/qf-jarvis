@@ -146,7 +146,9 @@ const audit = {
     'Canonical payload privacy audit — Stage 3.1.4, ADR-0026. GENERATED from the real registry by scripts/generate-payload-audit.mjs; do not hand-edit. Every registered canonical event is accounted for, and none is left unreviewed.',
   stage: '3.1.4',
   adr: 'ADR-0026',
-  adrStatus: 'Proposed',
+  adrStatus: 'Accepted',
+  adrAcceptedOn: '2026-07-13',
+  adrAcceptedBy: 'Keshav Sharma',
   generatedFrom: 'packages/contracts/src/events/payload-registry.ts',
 
   summary: {
@@ -183,10 +185,13 @@ const audit = {
   gateStatus: {
     stage: '3.1.4',
     implementation: 'complete',
-    acceptance: 'pending-owner-review',
-    adr0026: 'Proposed',
-    stage_3_2: 'blocked_by_stage_3_1_4',
-    note: 'An implementation is not an acceptance. The gate is cleared by the owner, not by the tests going green.',
+    acceptance: 'accepted',
+    acceptedOn: '2026-07-13',
+    acceptedBy: 'Keshav Sharma',
+    adr0026: 'Accepted',
+    stage_3_2: 'unblocked_effective_on_merge_of_pr_9',
+    stage_3_2_started: false,
+    note: 'The owner accepted ADR-0026 on 2026-07-13, explicitly including the zero-length migration window and the immediate retirement of v1. Stage 3.2 is unblocked EFFECTIVE ON MERGE of PR #9 and has NOT started.',
   },
 
   events,

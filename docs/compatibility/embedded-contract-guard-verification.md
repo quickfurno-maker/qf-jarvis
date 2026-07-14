@@ -1,6 +1,6 @@
 # Embedded Governance Contracts — Why They Were Not Re-Versioned, and How They Are Guarded
 
-**Status:** Stage 3.1.4 verification record. **[ADR-0026](../decisions/ADR-0026-canonical-payload-privacy-boundary.md) — Proposed.**
+**Status:** Stage 3.1.4 verification record. **[ADR-0026](../decisions/ADR-0026-canonical-payload-privacy-boundary.md) — Accepted (2026-07-13).**
 **Date:** 2026-07-13
 
 ---

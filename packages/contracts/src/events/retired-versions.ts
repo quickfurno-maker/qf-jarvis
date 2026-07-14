@@ -17,6 +17,10 @@
  * The answer is zero, zero and zero. That is a measured fact (ADR-0025, Accepted), not a
  * convenient assumption, and it is written down here so it can be checked rather than believed.
  *
+ * **The owner accepted this on 2026-07-13** (ADR-0026), explicitly including the zero-length
+ * migration window and the immediate retirement of v1 — on the stated grounds that there was
+ * nobody to migrate. The records below say `accepted`, not `pending`, because that is now true.
+ *
  * ### Git history is the schema. This is the traceability.
  *
  * The exact shape of a retired v1 schema lives in git history, where it belongs — a contracts
@@ -50,7 +54,10 @@ export interface RetiredEventVersion {
   readonly persistedEventCount: 0;
   readonly retiredBeforeLiveUse: true;
   readonly decisionReference: 'ADR-0026';
-  readonly decisionStatus: 'pending-owner-acceptance';
+  /** Accepted by the owner on 2026-07-13. The retirement is a decision, not a proposal. */
+  readonly decisionStatus: 'accepted';
+  readonly acceptedOn: '2026-07-13';
+  readonly acceptedBy: 'Keshav Sharma';
 }
 
 /**
@@ -128,7 +135,9 @@ export const RETIRED_EVENT_VERSIONS: readonly RetiredEventVersion[] = RETIRED_EV
     persistedEventCount: 0,
     retiredBeforeLiveUse: true,
     decisionReference: 'ADR-0026',
-    decisionStatus: 'pending-owner-acceptance',
+    decisionStatus: 'accepted',
+    acceptedOn: '2026-07-13',
+    acceptedBy: 'Keshav Sharma',
   }),
 );
 

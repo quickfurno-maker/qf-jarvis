@@ -173,7 +173,7 @@ interface Manifest {
     readonly refusedByKey: readonly string[];
     readonly gpsBearingFreeTextPermitted: boolean;
     readonly coreFreeTextFieldsNeverMapped: readonly string[];
-    readonly openGapId: string;
+    readonly openGapId: string | null;
     readonly closedByStage: string;
     readonly gapImplementationStatus: string;
   };
@@ -785,17 +785,17 @@ describe('no canonical payload may carry GPS-bearing free text', () => {
     expect(withDetail.success).toBe(false);
   });
 
-  it('the finding is FIXED PENDING ACCEPTANCE — implemented, not yet accepted, never deleted', () => {
+  it('the finding is RESOLVED and ACCEPTED — never deleted', () => {
     const finding = gpsFinding();
 
-    // The distinction the owner insisted on, and it is the right one: **an implementation is not
-    // an acceptance.** The hardening is written and tested; ADR-0026 is Proposed and the PR is
-    // unmerged. Marking this "resolved" would clear a gate nobody has agreed to clear.
-    expect(finding.implementation_status).toBe('fixed_pending_acceptance');
+    // The owner accepted the hardening on 2026-07-13 (ADR-0026). The gap is closed, and the
+    // record says so — with provenance, so the claim is checkable.
+    expect(finding.status).toBe('resolved');
+    expect(finding.implementation_status).toBe('accepted');
     expect(finding.resolution_stage).toBe('stage_3_1_4');
 
-    // And the history survives. Erasing it would erase the reason the hardening exists, and the
-    // next person tempted to widen a payload would have nothing to read.
+    // And the history survives acceptance. Acceptance closes a gap; it does not erase the fact
+    // that there was one — and erasing it would erase the reason the hardening exists.
     expect(finding.historical_status).toBe('contract_gap');
     expect(finding.historicalEvidence).toBeTypeOf('string');
     expect(finding.isKnownGapNotAcceptedRisk).toBe(true);
@@ -805,12 +805,15 @@ describe('no canonical payload may carry GPS-bearing free text', () => {
     expect(finding.mayBeDeferredToPhase11).toBe(false);
   });
 
-  it('Stage 3.2 remains BLOCKED until Stage 3.1.4 is accepted and merged', () => {
-    // The gate is not cleared by writing the code. It is cleared by the owner accepting it.
-    expect(manifest.phaseGates.stage_3_2_signed_ingestion.blockedBy).toContain('stage-3.1.4');
-    expect(manifest.stageStatus['stage_3_2']).toBe('blocked_by_stage_3_1_4');
-    expect(manifest.stageStatus['adr_0026']).toBe('Proposed');
-    expect(manifest.stageStatus['stage_3_1_4']).toContain('pending_owner_review');
+  it('Stage 3.2 is unblocked effective on merge — and has NOT started', () => {
+    expect(manifest.phaseGates.stage_3_2_signed_ingestion.blockedBy).toStrictEqual([]);
+    expect(manifest.phaseGates.stage_3_2_signed_ingestion.satisfiedBy).toContain('stage-3.1.4');
+    expect(manifest.stageStatus['stage_3_1_4']).toBe('completed_accepted');
+    expect(manifest.stageStatus['adr_0026']).toBe('Accepted');
+
+    // Unblocking a stage and beginning it are different acts. Conflating them is how a phase
+    // quietly starts before anybody agreed it should.
+    expect(manifest.stageStatus['stage_3_2_started']).toBe('false');
   });
 
   it('still forbids any adapter from transmitting Core free text', () => {
@@ -821,35 +824,31 @@ describe('no canonical payload may carry GPS-bearing free text', () => {
     expect(constraints.mayForwardRawRequirementText).toBe(false);
     expect(constraints.mustMapReasonCodesAndBoundedSignalsOnly).toBe(true);
 
-    // The fix is implemented and NOT accepted, so the gap id stays visible. The schema now
-    // enforces the constraint structurally; the discipline is no longer the only thing holding —
-    // but the gate does not clear until the owner clears it.
-    expect(manifest.prohibitedPayloadFields.openGapId).toBe('gps-value-shape-not-refused');
-    expect(manifest.prohibitedPayloadFields.gapImplementationStatus).toBe(
-      'fixed_pending_acceptance',
-    );
+    // The gap is closed and its closure is accepted, so there is no open gap id. The constraint
+    // itself stands — and it is now enforced STRUCTURALLY by the schema rather than resting on
+    // an adapter author's discipline.
+    expect(manifest.prohibitedPayloadFields.openGapId).toBeNull();
+    expect(manifest.prohibitedPayloadFields.gapImplementationStatus).toBe('accepted');
     expect(manifest.prohibitedPayloadFields.closedByStage).toBe('3.1.4');
   });
 });
 
 describe('phase gates: nothing starts while its own blocker is open', () => {
-  it('Phase 11 remains blocked by BOTH Stage 3.1.3 and Stage 3.1.4', () => {
+  it('Phase 11 remains blocked by Stage 3.1.3; payload hardening is satisfied', () => {
     const gate = manifest.phaseGates.phase_11_live_core_integration;
 
-    // **Neither is accepted.** Stage 3.1.4's hardening is written and tested; ADR-0026 is Proposed
-    // and the PR is unmerged. Phase 11 is where real personal data first crosses the boundary, and
-    // it may not begin on the strength of code nobody has reviewed. **An implementation is not an
-    // acceptance**, and this test is what stops that sentence from being merely a slogan.
+    // Stage 3.1.4 is accepted. The QuickFurno-side safety remediation (Stage 3.1.3) is NOT, and
+    // Phase 11 is where real personal data first crosses the boundary — so it stays shut.
     expect(gate.blockedBy).toContain('stage-3.1.3');
-    expect(gate.blockedBy).toContain('stage-3.1.4');
+    expect(gate.satisfiedBy).toContain('stage-3.1.4');
   });
 
   it('Phase 11A additionally requires Phase 11 to have succeeded', () => {
     const gate = manifest.phaseGates.phase_11a_live_communication;
 
     expect(gate.blockedBy).toContain('stage-3.1.3');
-    expect(gate.blockedBy).toContain('stage-3.1.4');
     expect(gate.blockedBy).toContain('phase-11');
+    expect(gate.satisfiedBy).toContain('stage-3.1.4');
   });
 
   it('every phase gate states a rationale, and a satisfied gate says what satisfied it', () => {

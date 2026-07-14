@@ -2,7 +2,9 @@
   "$comment": "Canonical payload privacy audit — Stage 3.1.4, ADR-0026. GENERATED from the real registry by scripts/generate-payload-audit.mjs; do not hand-edit. Every registered canonical event is accounted for, and none is left unreviewed.",
   "stage": "3.1.4",
   "adr": "ADR-0026",
-  "adrStatus": "Proposed",
+  "adrStatus": "Accepted",
+  "adrAcceptedOn": "2026-07-13",
+  "adrAcceptedBy": "Keshav Sharma",
   "generatedFrom": "packages/contracts/src/events/payload-registry.ts",
   "summary": {
     "canonicalEventTypes": 52,
@@ -35,7 +37,9 @@
       "persistedEventCount": 0,
       "retiredBeforeLiveUse": true,
       "decisionReference": "ADR-0026",
-      "decisionStatus": "pending-owner-acceptance"
+      "decisionStatus": "accepted",
+      "acceptedOn": "2026-07-13",
+      "acceptedBy": "Keshav Sharma"
     },
     {
       "eventType": "qf.recommendation.lifecycle-state-recorded",
@@ -48,7 +52,9 @@
       "persistedEventCount": 0,
       "retiredBeforeLiveUse": true,
       "decisionReference": "ADR-0026",
-      "decisionStatus": "pending-owner-acceptance"
+      "decisionStatus": "accepted",
+      "acceptedOn": "2026-07-13",
+      "acceptedBy": "Keshav Sharma"
     },
     {
       "eventType": "qf.approval.decision-recorded",
@@ -61,7 +67,9 @@
       "persistedEventCount": 0,
       "retiredBeforeLiveUse": true,
       "decisionReference": "ADR-0026",
-      "decisionStatus": "pending-owner-acceptance"
+      "decisionStatus": "accepted",
+      "acceptedOn": "2026-07-13",
+      "acceptedBy": "Keshav Sharma"
     },
     {
       "eventType": "qf.execution.intent-issued",
@@ -74,7 +82,9 @@
       "persistedEventCount": 0,
       "retiredBeforeLiveUse": true,
       "decisionReference": "ADR-0026",
-      "decisionStatus": "pending-owner-acceptance"
+      "decisionStatus": "accepted",
+      "acceptedOn": "2026-07-13",
+      "acceptedBy": "Keshav Sharma"
     },
     {
       "eventType": "qf.execution.result-recorded",
@@ -87,7 +97,9 @@
       "persistedEventCount": 0,
       "retiredBeforeLiveUse": true,
       "decisionReference": "ADR-0026",
-      "decisionStatus": "pending-owner-acceptance"
+      "decisionStatus": "accepted",
+      "acceptedOn": "2026-07-13",
+      "acceptedBy": "Keshav Sharma"
     },
     {
       "eventType": "qf.communication.state-recorded",
@@ -100,7 +112,9 @@
       "persistedEventCount": 0,
       "retiredBeforeLiveUse": true,
       "decisionReference": "ADR-0026",
-      "decisionStatus": "pending-owner-acceptance"
+      "decisionStatus": "accepted",
+      "acceptedOn": "2026-07-13",
+      "acceptedBy": "Keshav Sharma"
     },
     {
       "eventType": "qf.client.requirement-completed",
@@ -113,7 +127,9 @@
       "persistedEventCount": 0,
       "retiredBeforeLiveUse": true,
       "decisionReference": "ADR-0026",
-      "decisionStatus": "pending-owner-acceptance"
+      "decisionStatus": "accepted",
+      "acceptedOn": "2026-07-13",
+      "acceptedBy": "Keshav Sharma"
     },
     {
       "eventType": "qf.client.follow-up-due-detected",
@@ -126,7 +142,9 @@
       "persistedEventCount": 0,
       "retiredBeforeLiveUse": true,
       "decisionReference": "ADR-0026",
-      "decisionStatus": "pending-owner-acceptance"
+      "decisionStatus": "accepted",
+      "acceptedOn": "2026-07-13",
+      "acceptedBy": "Keshav Sharma"
     },
     {
       "eventType": "qf.client.follow-up-completed",
@@ -139,7 +157,9 @@
       "persistedEventCount": 0,
       "retiredBeforeLiveUse": true,
       "decisionReference": "ADR-0026",
-      "decisionStatus": "pending-owner-acceptance"
+      "decisionStatus": "accepted",
+      "acceptedOn": "2026-07-13",
+      "acceptedBy": "Keshav Sharma"
     },
     {
       "eventType": "qf.client.satisfaction-recorded",
@@ -152,7 +172,9 @@
       "persistedEventCount": 0,
       "retiredBeforeLiveUse": true,
       "decisionReference": "ADR-0026",
-      "decisionStatus": "pending-owner-acceptance"
+      "decisionStatus": "accepted",
+      "acceptedOn": "2026-07-13",
+      "acceptedBy": "Keshav Sharma"
     },
     {
       "eventType": "qf.client.dissatisfaction-recorded",
@@ -165,7 +187,9 @@
       "persistedEventCount": 0,
       "retiredBeforeLiveUse": true,
       "decisionReference": "ADR-0026",
-      "decisionStatus": "pending-owner-acceptance"
+      "decisionStatus": "accepted",
+      "acceptedOn": "2026-07-13",
+      "acceptedBy": "Keshav Sharma"
     },
     {
       "eventType": "qf.client.complaint-recorded",
@@ -178,7 +202,9 @@
       "persistedEventCount": 0,
       "retiredBeforeLiveUse": true,
       "decisionReference": "ADR-0026",
-      "decisionStatus": "pending-owner-acceptance"
+      "decisionStatus": "accepted",
+      "acceptedOn": "2026-07-13",
+      "acceptedBy": "Keshav Sharma"
     },
     {
       "eventType": "qf.client.reassignment-requested",
@@ -191,7 +217,9 @@
       "persistedEventCount": 0,
       "retiredBeforeLiveUse": true,
       "decisionReference": "ADR-0026",
-      "decisionStatus": "pending-owner-acceptance"
+      "decisionStatus": "accepted",
+      "acceptedOn": "2026-07-13",
+      "acceptedBy": "Keshav Sharma"
     },
     {
       "eventType": "qf.client.reassignment-authorized",
@@ -204,7 +232,9 @@
       "persistedEventCount": 0,
       "retiredBeforeLiveUse": true,
       "decisionReference": "ADR-0026",
-      "decisionStatus": "pending-owner-acceptance"
+      "decisionStatus": "accepted",
+      "acceptedOn": "2026-07-13",
+      "acceptedBy": "Keshav Sharma"
     },
     {
       "eventType": "qf.client.reassignment-rejected",
@@ -217,7 +247,9 @@
       "persistedEventCount": 0,
       "retiredBeforeLiveUse": true,
       "decisionReference": "ADR-0026",
-      "decisionStatus": "pending-owner-acceptance"
+      "decisionStatus": "accepted",
+      "acceptedOn": "2026-07-13",
+      "acceptedBy": "Keshav Sharma"
     },
     {
       "eventType": "qf.assignment.batch-created",
@@ -230,7 +262,9 @@
       "persistedEventCount": 0,
       "retiredBeforeLiveUse": true,
       "decisionReference": "ADR-0026",
-      "decisionStatus": "pending-owner-acceptance"
+      "decisionStatus": "accepted",
+      "acceptedOn": "2026-07-13",
+      "acceptedBy": "Keshav Sharma"
     },
     {
       "eventType": "qf.assignment.batch-completed",
@@ -243,7 +277,9 @@
       "persistedEventCount": 0,
       "retiredBeforeLiveUse": true,
       "decisionReference": "ADR-0026",
-      "decisionStatus": "pending-owner-acceptance"
+      "decisionStatus": "accepted",
+      "acceptedOn": "2026-07-13",
+      "acceptedBy": "Keshav Sharma"
     },
     {
       "eventType": "qf.client.additional-service-identified",
@@ -256,7 +292,9 @@
       "persistedEventCount": 0,
       "retiredBeforeLiveUse": true,
       "decisionReference": "ADR-0026",
-      "decisionStatus": "pending-owner-acceptance"
+      "decisionStatus": "accepted",
+      "acceptedOn": "2026-07-13",
+      "acceptedBy": "Keshav Sharma"
     },
     {
       "eventType": "qf.client.additional-service-confirmed",
@@ -269,7 +307,9 @@
       "persistedEventCount": 0,
       "retiredBeforeLiveUse": true,
       "decisionReference": "ADR-0026",
-      "decisionStatus": "pending-owner-acceptance"
+      "decisionStatus": "accepted",
+      "acceptedOn": "2026-07-13",
+      "acceptedBy": "Keshav Sharma"
     },
     {
       "eventType": "qf.client.additional-service-rejected",
@@ -282,7 +322,9 @@
       "persistedEventCount": 0,
       "retiredBeforeLiveUse": true,
       "decisionReference": "ADR-0026",
-      "decisionStatus": "pending-owner-acceptance"
+      "decisionStatus": "accepted",
+      "acceptedOn": "2026-07-13",
+      "acceptedBy": "Keshav Sharma"
     },
     {
       "eventType": "qf.lead.linked-created",
@@ -295,7 +337,9 @@
       "persistedEventCount": 0,
       "retiredBeforeLiveUse": true,
       "decisionReference": "ADR-0026",
-      "decisionStatus": "pending-owner-acceptance"
+      "decisionStatus": "accepted",
+      "acceptedOn": "2026-07-13",
+      "acceptedBy": "Keshav Sharma"
     },
     {
       "eventType": "qf.client.review-requested",
@@ -308,7 +352,9 @@
       "persistedEventCount": 0,
       "retiredBeforeLiveUse": true,
       "decisionReference": "ADR-0026",
-      "decisionStatus": "pending-owner-acceptance"
+      "decisionStatus": "accepted",
+      "acceptedOn": "2026-07-13",
+      "acceptedBy": "Keshav Sharma"
     },
     {
       "eventType": "qf.client.lifecycle-closed",
@@ -321,7 +367,9 @@
       "persistedEventCount": 0,
       "retiredBeforeLiveUse": true,
       "decisionReference": "ADR-0026",
-      "decisionStatus": "pending-owner-acceptance"
+      "decisionStatus": "accepted",
+      "acceptedOn": "2026-07-13",
+      "acceptedBy": "Keshav Sharma"
     },
     {
       "eventType": "qf.vendor.registration-started",
@@ -334,7 +382,9 @@
       "persistedEventCount": 0,
       "retiredBeforeLiveUse": true,
       "decisionReference": "ADR-0026",
-      "decisionStatus": "pending-owner-acceptance"
+      "decisionStatus": "accepted",
+      "acceptedOn": "2026-07-13",
+      "acceptedBy": "Keshav Sharma"
     },
     {
       "eventType": "qf.vendor.profile-completed",
@@ -347,7 +397,9 @@
       "persistedEventCount": 0,
       "retiredBeforeLiveUse": true,
       "decisionReference": "ADR-0026",
-      "decisionStatus": "pending-owner-acceptance"
+      "decisionStatus": "accepted",
+      "acceptedOn": "2026-07-13",
+      "acceptedBy": "Keshav Sharma"
     },
     {
       "eventType": "qf.vendor.verification-requested",
@@ -360,7 +412,9 @@
       "persistedEventCount": 0,
       "retiredBeforeLiveUse": true,
       "decisionReference": "ADR-0026",
-      "decisionStatus": "pending-owner-acceptance"
+      "decisionStatus": "accepted",
+      "acceptedOn": "2026-07-13",
+      "acceptedBy": "Keshav Sharma"
     },
     {
       "eventType": "qf.vendor.activated",
@@ -373,7 +427,9 @@
       "persistedEventCount": 0,
       "retiredBeforeLiveUse": true,
       "decisionReference": "ADR-0026",
-      "decisionStatus": "pending-owner-acceptance"
+      "decisionStatus": "accepted",
+      "acceptedOn": "2026-07-13",
+      "acceptedBy": "Keshav Sharma"
     },
     {
       "eventType": "qf.vendor.inactivity-detected",
@@ -386,7 +442,9 @@
       "persistedEventCount": 0,
       "retiredBeforeLiveUse": true,
       "decisionReference": "ADR-0026",
-      "decisionStatus": "pending-owner-acceptance"
+      "decisionStatus": "accepted",
+      "acceptedOn": "2026-07-13",
+      "acceptedBy": "Keshav Sharma"
     },
     {
       "eventType": "qf.vendor.performance-updated",
@@ -399,7 +457,9 @@
       "persistedEventCount": 0,
       "retiredBeforeLiveUse": true,
       "decisionReference": "ADR-0026",
-      "decisionStatus": "pending-owner-acceptance"
+      "decisionStatus": "accepted",
+      "acceptedOn": "2026-07-13",
+      "acceptedBy": "Keshav Sharma"
     },
     {
       "eventType": "qf.vendor.package-readiness-changed",
@@ -412,7 +472,9 @@
       "persistedEventCount": 0,
       "retiredBeforeLiveUse": true,
       "decisionReference": "ADR-0026",
-      "decisionStatus": "pending-owner-acceptance"
+      "decisionStatus": "accepted",
+      "acceptedOn": "2026-07-13",
+      "acceptedBy": "Keshav Sharma"
     },
     {
       "eventType": "qf.vendor.recharge-opportunity-detected",
@@ -425,7 +487,9 @@
       "persistedEventCount": 0,
       "retiredBeforeLiveUse": true,
       "decisionReference": "ADR-0026",
-      "decisionStatus": "pending-owner-acceptance"
+      "decisionStatus": "accepted",
+      "acceptedOn": "2026-07-13",
+      "acceptedBy": "Keshav Sharma"
     },
     {
       "eventType": "qf.vendor.complaint-recorded",
@@ -438,7 +502,9 @@
       "persistedEventCount": 0,
       "retiredBeforeLiveUse": true,
       "decisionReference": "ADR-0026",
-      "decisionStatus": "pending-owner-acceptance"
+      "decisionStatus": "accepted",
+      "acceptedOn": "2026-07-13",
+      "acceptedBy": "Keshav Sharma"
     },
     {
       "eventType": "qf.vendor.retention-risk-detected",
@@ -451,7 +517,9 @@
       "persistedEventCount": 0,
       "retiredBeforeLiveUse": true,
       "decisionReference": "ADR-0026",
-      "decisionStatus": "pending-owner-acceptance"
+      "decisionStatus": "accepted",
+      "acceptedOn": "2026-07-13",
+      "acceptedBy": "Keshav Sharma"
     },
     {
       "eventType": "qf.vendor.winback-candidate-detected",
@@ -464,7 +532,9 @@
       "persistedEventCount": 0,
       "retiredBeforeLiveUse": true,
       "decisionReference": "ADR-0026",
-      "decisionStatus": "pending-owner-acceptance"
+      "decisionStatus": "accepted",
+      "acceptedOn": "2026-07-13",
+      "acceptedBy": "Keshav Sharma"
     },
     {
       "eventType": "qf.privacy.erasure-requested",
@@ -477,7 +547,9 @@
       "persistedEventCount": 0,
       "retiredBeforeLiveUse": true,
       "decisionReference": "ADR-0026",
-      "decisionStatus": "pending-owner-acceptance"
+      "decisionStatus": "accepted",
+      "acceptedOn": "2026-07-13",
+      "acceptedBy": "Keshav Sharma"
     },
     {
       "eventType": "qf.privacy.erasure-recorded",
@@ -490,7 +562,9 @@
       "persistedEventCount": 0,
       "retiredBeforeLiveUse": true,
       "decisionReference": "ADR-0026",
-      "decisionStatus": "pending-owner-acceptance"
+      "decisionStatus": "accepted",
+      "acceptedOn": "2026-07-13",
+      "acceptedBy": "Keshav Sharma"
     },
     {
       "eventType": "qf.policy.version-changed",
@@ -503,7 +577,9 @@
       "persistedEventCount": 0,
       "retiredBeforeLiveUse": true,
       "decisionReference": "ADR-0026",
-      "decisionStatus": "pending-owner-acceptance"
+      "decisionStatus": "accepted",
+      "acceptedOn": "2026-07-13",
+      "acceptedBy": "Keshav Sharma"
     },
     {
       "eventType": "qf.communication.authorization-recorded",
@@ -516,7 +592,9 @@
       "persistedEventCount": 0,
       "retiredBeforeLiveUse": true,
       "decisionReference": "ADR-0026",
-      "decisionStatus": "pending-owner-acceptance"
+      "decisionStatus": "accepted",
+      "acceptedOn": "2026-07-13",
+      "acceptedBy": "Keshav Sharma"
     },
     {
       "eventType": "qf.communication.result-recorded",
@@ -529,7 +607,9 @@
       "persistedEventCount": 0,
       "retiredBeforeLiveUse": true,
       "decisionReference": "ADR-0026",
-      "decisionStatus": "pending-owner-acceptance"
+      "decisionStatus": "accepted",
+      "acceptedOn": "2026-07-13",
+      "acceptedBy": "Keshav Sharma"
     },
     {
       "eventType": "qf.communication.human-handoff-requested",
@@ -542,7 +622,9 @@
       "persistedEventCount": 0,
       "retiredBeforeLiveUse": true,
       "decisionReference": "ADR-0026",
-      "decisionStatus": "pending-owner-acceptance"
+      "decisionStatus": "accepted",
+      "acceptedOn": "2026-07-13",
+      "acceptedBy": "Keshav Sharma"
     },
     {
       "eventType": "qf.communication.human-handoff-recorded",
@@ -555,16 +637,21 @@
       "persistedEventCount": 0,
       "retiredBeforeLiveUse": true,
       "decisionReference": "ADR-0026",
-      "decisionStatus": "pending-owner-acceptance"
+      "decisionStatus": "accepted",
+      "acceptedOn": "2026-07-13",
+      "acceptedBy": "Keshav Sharma"
     }
   ],
   "gateStatus": {
     "stage": "3.1.4",
     "implementation": "complete",
-    "acceptance": "pending-owner-review",
-    "adr0026": "Proposed",
-    "stage_3_2": "blocked_by_stage_3_1_4",
-    "note": "An implementation is not an acceptance. The gate is cleared by the owner, not by the tests going green."
+    "acceptance": "accepted",
+    "acceptedOn": "2026-07-13",
+    "acceptedBy": "Keshav Sharma",
+    "adr0026": "Accepted",
+    "stage_3_2": "unblocked_effective_on_merge_of_pr_9",
+    "stage_3_2_started": false,
+    "note": "The owner accepted ADR-0026 on 2026-07-13, explicitly including the zero-length migration window and the immediate retirement of v1. Stage 3.2 is unblocked EFFECTIVE ON MERGE of PR #9 and has NOT started."
   },
   "events": [
     {
