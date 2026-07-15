@@ -184,14 +184,17 @@ const audit = {
 
   gateStatus: {
     stage: '3.1.4',
+    snapshotEra: 'stage-3.1.4 (historical point-in-time snapshot)',
     implementation: 'complete',
     acceptance: 'accepted',
     acceptedOn: '2026-07-13',
     acceptedBy: 'Keshav Sharma',
     adr0026: 'Accepted',
-    stage_3_2: 'unblocked_effective_on_merge_of_pr_9',
-    stage_3_2_started: false,
-    note: 'The owner accepted ADR-0026 on 2026-07-13, explicitly including the zero-length migration window and the immediate retirement of v1. Stage 3.2 is unblocked EFFECTIVE ON MERGE of PR #9 and has NOT started.',
+    stage_3_2_asOfThisSnapshot: 'not started (Stage 3.1.4-era)',
+    stage_3_2_started_asOfThisSnapshot: false,
+    currentStatusSource:
+      'docs/compatibility/quickfurno-compatibility-manifest.json -> phaseGates / stageStatus',
+    note: 'HISTORICAL Stage 3.1.4-era snapshot. The owner accepted ADR-0026 on 2026-07-13, explicitly including the zero-length migration window and the immediate retirement of v1. As of this snapshot, Stage 3.2 had NOT started. This is a point-in-time record and is not the current status: for CURRENT stage status see the compatibility manifest phaseGates/stageStatus. Under ADR-0027, current Stage 3.2 is database-free SIGNATURE VERIFICATION (implemented, awaiting owner acceptance) and current Stage 3.3 is VALIDATED SIGNED INGESTION (not started).',
   },
 
   events,

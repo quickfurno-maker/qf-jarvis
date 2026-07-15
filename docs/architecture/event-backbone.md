@@ -1,13 +1,13 @@
 # The Durable Event Backbone — QF Jarvis
 
-**Status:** Phase 3 — **Stage 3.0 complete and approved. Stage 3.1 (persistence foundation) implemented, pending review. Phase 3 is NOT complete.**
+**Status:** Phase 3 — **Stages 3.0–3.1.4 complete and merged/accepted. Stage 3.2 (pure signature verification, in `@qf-jarvis/event-ingestion`) implemented and awaiting owner acceptance. Phase 3 is NOT complete.**
 **Date:** 2026-07-12
 
 The load-bearing infrastructure of the entire system. Everything above it inherits its correctness — and its failures.
 
-**What exists today (Stage 3.1):** the `@qf-jarvis/event-backbone` package — a validated database configuration, a connection pool, a transaction helper, a forward-only migration runner with checksum verification, and the **immutable canonical event log**. PostgreSQL 17 for local development and CI.
+**What exists today (Stage 3.1):** the `@qf-jarvis/event-backbone` package — a validated database configuration, a connection pool, a transaction helper, a forward-only migration runner with checksum verification, and the **immutable canonical event log**. PostgreSQL 17 for local development and CI. **Stage 3.2 additionally exists**, as **pure Ed25519 signature verification in the separate `@qf-jarvis/event-ingestion` package** — database-free — implemented and awaiting owner acceptance ([ADR-0027](../decisions/ADR-0027-stage-3-2-signature-verification-protocol.md)).
 
-**Everything else in this document is still design.** There is **no ingestion**, **no signature verification**, **no contract parsing**, **no deduplication behaviour**, **no projection framework**, **no checkpoints**, **no retries**, **no dead letters**, **no replay**, **no quarantine**, **no read models**, **no test emitter**, **no metrics**, and **no worker loop**. `apps/api` and `apps/worker` remain compileable boundaries.
+**Everything else in this document is still design.** There is **no ingestion**, **no contract parsing**, **no deduplication behaviour**, **no projection framework**, **no checkpoints**, **no retries**, **no dead letters**, **no replay**, **no quarantine**, **no read models**, **no test emitter**, **no metrics**, and **no worker loop**. **Signature verification now exists — but in `@qf-jarvis/event-ingestion` (Stage 3.2), not in this package**, and it performs no persistence; composing verification with contract validation and this persistence into ingestion is **Stage 3.3**. `apps/api` and `apps/worker` remain compileable boundaries, and no live integration exists.
 
 > The `UNIQUE (event_id)` constraint in migration `0001` lays the **foundation** for eventId idempotency. It is **not** the Stage 3.3 behaviour that distinguishes a benign duplicate from a conflicting one, and Stage 3.1 does not claim it is.
 
@@ -371,4 +371,4 @@ apps/
 | 3.8 | Metrics, structured logs, adversarial suite | **Duplicate and dead-letter metrics instrumented** |
 | 3.9 | Documentation and exit audit | Phase 3 exit criteria demonstrably met |
 
-**Stage 3.2 must not begin until Stage 3.1 is reviewed and approved.** Approval of the *decisions* is not authorisation to *implement* them, and approval of one stage is not authorisation for the next.
+**Stage 3.1 is reviewed and merged; Stage 3.2 (pure signature verification) is implemented and awaiting owner acceptance; Stage 3.3 has not begun.** Approval of the *decisions* is not authorisation to *implement* them, and approval of one stage is not authorisation for the next — Stage 3.3 requires both Stage 3.2 owner acceptance and managed-database readiness.

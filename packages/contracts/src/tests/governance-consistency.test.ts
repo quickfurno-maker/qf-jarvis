@@ -183,25 +183,27 @@ describe('the historical GPS evidence survives acceptance', () => {
   });
 });
 
-describe('Stage 3.1.4 is complete; Stage 3.2 is unblocked on merge and has NOT started', () => {
+describe('Stage 3.1.4 is complete; Stage 3.2 is implemented and awaiting acceptance; Stage 3.3 has NOT started', () => {
   it('Stage 3.1.4 is completed and accepted', () => {
     expect(manifest.stageStatus['stage_3_1_4']).toBe('completed_accepted');
   });
 
-  it('Stage 3.2 is unblocked effective on the merge of PR #9', () => {
-    expect(manifest.stageStatus['stage_3_2']).toBe('unblocked_effective_on_merge_of_pr_9');
-    expect(manifest.phaseGates['stage_3_2_signed_ingestion']?.blockedBy).toStrictEqual([]);
-    expect(manifest.phaseGates['stage_3_2_signed_ingestion']?.satisfiedBy).toContain('stage-3.1.4');
-    expect(manifest.phaseGates['stage_3_2_signed_ingestion']?.effectiveOn).toBe('merge-of-pr-9');
+  it('Stage 3.2 is pure signature verification, implemented and awaiting owner acceptance', () => {
+    expect(manifest.stageStatus['stage_3_2']).toBe('implemented_awaiting_owner_acceptance');
+    expect(manifest.stageStatus['adr_0027']).toBe('Accepted');
+    expect(manifest.phaseGates['stage_3_2_signature_verification']?.blockedBy).toStrictEqual([]);
+    expect(manifest.phaseGates['stage_3_2_signature_verification']?.satisfiedBy).toContain(
+      'stage-3.1.4',
+    );
   });
 
-  it('does NOT claim Stage 3.2 has started', () => {
-    // Unblocking a stage and beginning it are different acts, and conflating them is how a phase
-    // quietly starts before anybody agreed it should.
-    expect(manifest.phaseGates['stage_3_2_signed_ingestion']?.started).toBe(false);
-    expect(manifest.stageStatus['stage_3_2_started']).toBe('false');
-    expect(manifest.stageStatus['stage_3_2']).not.toContain('in_progress');
-    expect(manifest.stageStatus['stage_3_2']).not.toContain('complete');
+  it('records Stage 3.2 as started, and Stage 3.3 as not started and database-gated', () => {
+    expect(manifest.stageStatus['stage_3_2_started']).toBe('true');
+    expect(manifest.stageStatus['stage_3_3']).toBe('not_started');
+    expect(manifest.stageStatus['stage_3_3_started']).toBe('false');
+    expect(manifest.phaseGates['stage_3_3_validated_signed_ingestion']?.blockedBy).toContain(
+      'managed-database-readiness',
+    );
   });
 
   it('Phase 11 remains blocked by Stage 3.1.3', () => {

@@ -68,6 +68,16 @@ qf-jarvis/
 │   │   ├── package.json         its own dependency: `pg`. Nothing from this workspace
 │   │   ├── tsconfig.json
 │   │   └── README.md
+│   ├── event-ingestion/         @qf-jarvis/event-ingestion — signature verification (Phase 3, Stage 3.2)
+│   │   ├── src/
+│   │   │   ├── signature/        field formats, strict envelope parser, key registry,
+│   │   │   │                     computed digest, signing input, verify
+│   │   │   ├── tests/            unit tests + test-only key fixtures (excluded from dist)
+│   │   │   └── index.ts          the public surface
+│   │   ├── package.json          NO runtime dependency — node:crypto only
+│   │   ├── tsconfig.json         no-emit: type-checks everything incl. tests
+│   │   ├── tsconfig.build.json   the emitting build — excludes src/tests from dist
+│   │   └── README.md
 │   └── README.md
 │
 ├── docs/                        Charter, architecture, contracts, decisions, governance, engineering
@@ -106,13 +116,13 @@ Resolving the migrations back out of `src/` at runtime was the alternative, and 
 
 ## `apps/` versus `packages/`
 
-|                    | `apps/*`                     | `packages/*`                                                  |
-| ------------------ | ---------------------------- | ------------------------------------------------------------- |
-| **Is**             | A deployable boundary        | A shared module                                               |
-| **Depends on**     | `packages/*`                 | Nothing in this repository                                    |
-| **Depended on by** | Nothing                      | `apps/*`                                                      |
-| **Justified by**   | A distinct workload          | **Two or more real consumers**                                |
-| **Today**          | `api`, `worker` — both empty | `contracts` — data contracts · `event-backbone` — persistence |
+|                    | `apps/*`                     | `packages/*`                                                                                               |
+| ------------------ | ---------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| **Is**             | A deployable boundary        | A shared module                                                                                            |
+| **Depends on**     | `packages/*`                 | Nothing in this repository                                                                                 |
+| **Depended on by** | Nothing                      | `apps/*`                                                                                                   |
+| **Justified by**   | A distinct workload          | **Two or more real consumers**                                                                             |
+| **Today**          | `api`, `worker` — both empty | `contracts` — data contracts · `event-backbone` — persistence · `event-ingestion` — signature verification |
 
 ### Dependency direction — one way, and enforced
 
@@ -126,7 +136,7 @@ apps/*  ──depends on──▶  packages/*
 
 This is not merely a convention that review has to police. pnpm's isolated `node_modules` means a workspace project can import only what it **declares** ([ADR-0009](../decisions/ADR-0009-runtime-language-and-package-manager.md)). An undeclared cross-boundary import does not resolve. The package manager enforces the rule; review does not have to remember it.
 
-**The direction still holds, unchanged, with two packages in the tree.** `@qf-jarvis/event-backbone` depends on **nothing in this workspace** — not on `contracts`, not on an application. Its only dependency is `pg`. And `apps/api` and `apps/worker` still import nothing: neither has grown a dependency on either package. A shared module that already reached across to another shared module in its first stage would have told you the boundary was drawn in the wrong place.
+**The direction still holds, unchanged, with three packages in the tree.** `@qf-jarvis/event-backbone` depends on **nothing in this workspace** — not on `contracts`, not on an application. Its only dependency is `pg`. `@qf-jarvis/event-ingestion` (Stage 3.2) also depends on **nothing in this workspace** and has **no third-party runtime dependency at all** — `node:crypto` only. And `apps/api` and `apps/worker` still import nothing: none has grown a dependency on any package. A shared module that already reached across to another shared module in its first stage would have told you the boundary was drawn in the wrong place.
 
 ---
 
@@ -180,13 +190,25 @@ Two structural properties are worth naming, because they are what keep this pack
 - **Importing it connects to nothing.** There is no module-level pool and no ambient configuration. `createDatabasePool` is a function a caller invokes with an explicit config.
 - **Library code reads no environment.** The only reader of `DATABASE_URL` is `migrate-cli.ts`, because a CLI is a process boundary. A library that reaches into `process.env` behaves according to something the caller cannot see and a test cannot control.
 
-**No application imports it yet**, and that is correct: Stage 3.1 provides persistence, and Stage 3.2 is where ingestion arrives to use it. `apps/api` and `apps/worker` remain `export {};`.
+**No application imports it yet**, and that is correct: Stage 3.1 provides persistence. Stage 3.2 adds pure signature verification in a **separate** package (`event-ingestion`) that does **not** touch persistence; **Stage 3.3** is where ingestion composes the verifier, contract validation, and this persistence. `apps/api` and `apps/worker` remain `export {};`.
 
 The database it talks to is **Jarvis's own** — never QuickFurno Core's database, **never QuickFurno Core's Supabase project**, never a QuickFurno business table ([ADR-0001](../decisions/ADR-0001-source-of-truth-boundary.md), [ADR-0019](../decisions/ADR-0019-durable-event-store-and-persistence.md) §2). Deployment uses a **dedicated, Supabase-managed QF-Jarvis project** ([ADR-0023](../decisions/ADR-0023-dedicated-supabase-managed-postgresql.md)), as a Postgres host and nothing more — **the package's only dependency is still `pg`, and there is no `@supabase/supabase-js` in this repository.**
 
 **Every object it creates lives in the private `qf_jarvis` schema, never in `public`**, and every reference to one is fully qualified — nothing depends on an ambient `search_path`. The schema is revoked from `PUBLIC`, and from the provider's own roles wherever those roles exist, on **every** migration run.
 
 Documentation: [packages/event-backbone/README.md](../../packages/event-backbone/README.md) · [event-backbone.md](../architecture/event-backbone.md) · [development-setup.md](./development-setup.md).
+
+### `@qf-jarvis/event-ingestion` — the third
+
+Phase 3, Stage 3.2 created it, and it currently holds **pure Ed25519 signature verification and nothing else**: the `verifySignature` function, a validated public-key registry, the strict envelope parser, and the protocol constants ([ADR-0027](../decisions/ADR-0027-stage-3-2-signature-verification-protocol.md)). It is the **trust boundary in front of the event log** — the layer that authenticates what arrives from Core before anything believes it.
+
+**What is deliberately not in it: no ingest function, no persistence, no contract parsing, no idempotency, no deduplication, no dead letters, no replay, no HTTP endpoint, and no worker loop.** Those are **Stage 3.3 (validated signed ingestion) and later**, which _compose_ this verifier with `@qf-jarvis/contracts` (validation) and `@qf-jarvis/event-backbone` (persistence). Stage 3.2 refuses a forged, altered, stale, or wrongly-keyed body; it does not yet decide what a good one becomes.
+
+**It depends on nothing** — not `contracts`, not `event-backbone`, not `pg`; `node:crypto` only. It reads no environment, file, or network: time and keys are injected. Importing it causes no effect.
+
+**Reconciling the "two or more real consumers" bar.** This package is created ahead of its consumers, which is normally exactly what the bar forbids. It is justified not by "it feels shared" but by an **owner-approved architectural decision**: [ADR-0020](../decisions/ADR-0020-event-ingestion-signature-verification-and-idempotency.md) §10 already established that _"ingestion is a package,"_ and [ADR-0027](../decisions/ADR-0027-stage-3-2-signature-verification-protocol.md) accepts the staged boundary in which Stage 3.2 seeds the package with the verifier and its two real consumers arrive next — the Stage 3.3 ingest path in `worker`, and `apps/api` in Phase 11. A new package remains an architectural change reviewed as one; here that review happened, and it is recorded. **No application imports it yet**, and `apps/api` and `apps/worker` remain `export {};`.
+
+Documentation: [packages/event-ingestion/README.md](../../packages/event-ingestion/README.md).
 
 ### The bar for the next one
 

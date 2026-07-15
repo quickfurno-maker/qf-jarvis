@@ -86,21 +86,23 @@ The confirmed findings are engineering and security defects, **not unresolved bu
 
 ### 5. The canonical payload does not yet reject coordinate-shaped content — and that is a gap, not an accepted risk
 
+_**Historical — discovery-time finding, RESOLVED in Stage 3.1.4 (ADR-0026, accepted 2026-07-13). Preserved as recorded; see the supersession note at the end of this section for current status.**_
+
 **The current contracts do not fully reject coordinate-shaped content hidden inside arbitrary strings.**
 
 The governed payload refuses the free-text carrier keys (`body`, `notes`, `freetext`, `raw`), every contact key, and any value containing an email address or a phone number. It does **not** refuse a **latitude/longitude pair** placed inside an arbitrarily-named permitted key. Core stores precise client coordinates **inside `leads.message`**, so this is a concrete exposure, not a theoretical one.
 
 > **This is a known contract gap. It is not expected-safe behaviour, and it is not an accepted risk.**
 
-|                                     |                                                       |
-| ----------------------------------- | ----------------------------------------------------- |
-| **Finding**                         | `gps-value-shape-not-refused`                         |
-| **Owner**                           | **`qf-jarvis`**                                       |
-| **Severity**                        | **High**                                              |
-| **Status**                          | **`contract_gap`**                                    |
-| **Blocks**                          | **Stage 3.2** — signed fixture ingestion              |
-| **Resolves in**                     | **Stage 3.1.4** — Canonical Payload Privacy Hardening |
-| **May it be deferred to Phase 11?** | **No**                                                |
+|                                     |                                                                                                                                                                         |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Finding**                         | `gps-value-shape-not-refused`                                                                                                                                           |
+| **Owner**                           | **`qf-jarvis`**                                                                                                                                                         |
+| **Severity**                        | **High**                                                                                                                                                                |
+| **Status**                          | **`contract_gap`**                                                                                                                                                      |
+| **Blocks** _(discovery-time)_       | **Stage 3.2** — signed fixture ingestion _(discovery-time naming; ADR-0027 later split this into Stage 3.2 verification + Stage 3.3 ingestion — see supersession note)_ |
+| **Resolves in**                     | **Stage 3.1.4** — Canonical Payload Privacy Hardening                                                                                                                   |
+| **May it be deferred to Phase 11?** | **No**                                                                                                                                                                  |
 
 **Two consequences, both binding now:**
 
@@ -109,9 +111,18 @@ The governed payload refuses the free-text carrier keys (`body`, `notes`, `freet
 
 **Phase 11 remains blocked until Core remediation (Stage 3.1.3) AND payload privacy hardening (Stage 3.1.4) are complete.** Phase 11 is the first moment real personal data crosses the boundary. **It may not begin through a hole we had already written down.**
 
+> **Supersession note (current).** The discovery-time finding above is preserved exactly as
+> recorded. Since discovery: the finding was **resolved by accepted ADR-0026** (Stage 3.1.4,
+> now complete); and **[ADR-0027](./ADR-0027-stage-3-2-signature-verification-protocol.md)**
+> later separated the boundary so that **Stage 3.2 is _pure signature verification_** and
+> **validated signed ingestion is _Stage 3.3_** — so "Stage 3.2 — signed fixture ingestion"
+> above is discovery-time naming that has since been split. **Stage 3.2 implementation was
+> separately authorized by the owner and is now awaiting acceptance.** This does not change
+> the boundary this ADR draws: it still authorizes **no** live integration or production action.
+
 ### 6. Compatibility documentation authorizes no production action
 
-**Reading a system does not grant permission to act on it.** Nothing in this ADR or in `docs/compatibility/` authorizes a connection, a setting change, a migration, a message, or a Stage 3.2 start.
+**Reading a system does not grant permission to act on it.** Nothing in this ADR or in `docs/compatibility/` authorizes a connection, a setting change, a migration, a message, or any live integration or production action. (The separately-authorized Stage 3.2 pure verifier is **database-free and touches no running system**; this ADR grants it no authorization and authorizes no production action of any kind.)
 
 ---
 

@@ -278,7 +278,7 @@
       "hardBlocker": false,
       "isKnownGapNotAcceptedRisk": true,
       "mayBeDeferredToPhase11": false,
-      "note": "This is a KNOWN CONTRACT GAP, not expected-safe behaviour and not an accepted risk. It must not resolve in Phase 11: Phase 11 is the first LIVE Core integration and may not begin with an already-known canonical payload privacy weakness. It therefore blocks Stage 3.2 signed ingestion, and resolves in Stage 3.1.4.",
+      "note": "This is a KNOWN CONTRACT GAP, not expected-safe behaviour and not an accepted risk. It must not resolve in Phase 11: Phase 11 is the first LIVE Core integration and may not begin with an already-known canonical payload privacy weakness. It therefore blocks Stage 3.2 signed ingestion, and resolves in Stage 3.1.4. [SUPERSESSION — current: this sentence is the discovery-time record. At discovery it blocked the then-planned Stage 3.2 'signed fixture ingestion' stage; it was resolved and accepted in Stage 3.1.4 (ADR-0026). ADR-0027 has since split the boundary — current Stage 3.2 is database-free signature verification, and current Stage 3.3 is validated signed ingestion. For current status see phaseGates.stage_3_2_signature_verification / phaseGates.stage_3_3_validated_signed_ingestion and stageStatus.]",
       "resolvedInStage": "3.1.4",
       "historicalEvidence": "This gap was REAL and is preserved as evidence, not deleted. Before Stage 3.1.4, derivedObservationSchema accepted { requirement: \"GPS: 18.5204, 73.8567\" } — an arbitrary 500-character `detail` string and an open `signals` dictionary gave a coordinate somewhere to sit. QuickFurno Core stores precise client coordinates inside leads.message, so the exposure was concrete.",
       "resolution": "Canonical payload version 2. PRIMARY control: every event resolves to exactly one strict, event-specific payload schema; `detail` free text is gone and `signals` is an explicitly-shaped bounded list, so there is no field a coordinate could sit in. DEFENCE IN DEPTH: a prohibited-content scan refuses coordinate pairs in strings, structured latitude/longitude, coordinate arrays, map links, contacts and credentials, with segment-aware key matching so renaming does not launder. Version 1 is deregistered and fails closed.",
@@ -1595,13 +1595,22 @@
   },
   "phaseGates": {
     "$comment": "What must be complete before each gated phase may begin. Asserted by test so that a stage cannot quietly start while a known blocker is outstanding.",
-    "stage_3_2_signed_ingestion": {
+    "stage_3_2_signature_verification": {
       "blockedBy": [],
-      "rationale": "Stage 3.1.4 closed the canonical payload privacy gap and the owner accepted it on 2026-07-13 (ADR-0026). Signed ingestion may proceed against a payload that cannot smuggle coordinates — signing one that could would only have made the smuggling authenticated. Unblocked EFFECTIVE ON MERGE of PR #9; Stage 3.2 has not started.",
-      "implementationStatus": "accepted",
+      "rationale": "Stage 3.1.4 closed the canonical payload privacy gap and the owner accepted it on 2026-07-13 (ADR-0026). Stage 3.2 is PURE Ed25519 signature verification (ADR-0027, Accepted): fixture-only and database-free. It is implemented locally on branch stage-3-2-signature-verification and is awaiting owner acceptance.",
+      "implementationStatus": "implemented_awaiting_owner_acceptance",
       "satisfiedBy": ["stage-3.1.4"],
-      "effectiveOn": "merge-of-pr-9",
-      "started": false
+      "started": true,
+      "databaseRequired": false,
+      "adr": "ADR-0027",
+      "adrStatus": "Accepted"
+    },
+    "stage_3_3_validated_signed_ingestion": {
+      "blockedBy": ["stage-3.2-owner-acceptance", "managed-database-readiness"],
+      "rationale": "Stage 3.3 composes the Stage 3.2 verifier with contract validation and event-store persistence. It is the first stage that writes to the event store, so it is gated on Stage 3.2 owner acceptance AND managed-database readiness.",
+      "implementationStatus": "not_started",
+      "started": false,
+      "databaseRequired": true
     },
     "phase_11_live_core_integration": {
       "blockedBy": ["stage-3.1.3"],
@@ -1747,15 +1756,18 @@
     "adrAcceptedBy": "Keshav Sharma (Founder, QuickFurno — business owner)"
   },
   "stageStatus": {
-    "$comment": "Authoritative stage/gate status. ADR-0026 was accepted by the owner on 2026-07-13 and Stage 3.1.4 is complete. Stage 3.2 becomes unblocked ON MERGE of PR #9 — this branch describes the state that becomes authoritative when it lands. Stage 3.2 has NOT started, and no Stage 3.2 work may begin while the PR is unmerged.",
+    "$comment": "Authoritative stage/gate status. ADR-0026 was accepted by the owner on 2026-07-13 and Stage 3.1.4 is complete. Stage 3.2 (pure signature verification, ADR-0027 Accepted) is implemented locally and awaiting owner acceptance; it is database-free. Stage 3.3 (validated signed ingestion) has NOT started and is gated on Stage 3.2 acceptance AND managed-database readiness.",
     "stage_3_1_2": "complete_merged",
     "stage_3_1_3": "not_started_quickfurno_repository_track",
     "stage_3_1_4": "completed_accepted",
-    "stage_3_2": "unblocked_effective_on_merge_of_pr_9",
+    "stage_3_2": "implemented_awaiting_owner_acceptance",
+    "stage_3_2_started": "true",
+    "stage_3_2_note": "Pure signature verification; database-free. Implemented locally on branch stage-3-2-signature-verification, awaiting owner acceptance.",
+    "stage_3_3": "not_started",
+    "stage_3_3_started": "false",
     "adr_0025": "Accepted",
     "adr_0026": "Accepted",
-    "stage_3_2_note": "Unblocked effective on merge. NOT started.",
-    "stage_3_2_started": "false"
+    "adr_0027": "Accepted"
   },
   "retiredCanonicalVersions": {
     "$comment": "Machine-readable retirement record for the 41 inherited canonical event families. Version 1 permitted arbitrary free text and an open dictionary; it is withdrawn and is NOT ingestible. The owner accepted the zero-length migration window and the immediate retirement on 2026-07-13 (ADR-0026), on the stated grounds that producer, consumer and persisted-event counts are all zero. Git history remains the source for the exact retired schema; this catalogue is the current traceability. Mirrors packages/contracts/src/events/retired-versions.ts.",
@@ -1796,5 +1808,5 @@
   },
   "adrAcceptedOn": "2026-07-13",
   "adrAcceptedBy": "Keshav Sharma (Founder, QuickFurno — business owner)",
-  "adrNote": "ADR-0025 governs this manifest: the QuickFurno compatibility boundary and Core adapter baseline, established by Stage 3.1.2 and merged at 6030597e4f3be19e5c288ef951e661a7359e4307. Its acceptance authorizes the documented architecture and owner policies, and authorizes no action against any running system. ADR-0026 (canonical payload privacy boundary, Stage 3.1.4) is a SEPARATE decision and remains Proposed — see stage_3_1_4.adrStatus."
+  "adrNote": "ADR-0025 governs this manifest: the QuickFurno compatibility boundary and Core adapter baseline, established by Stage 3.1.2 and merged at 6030597e4f3be19e5c288ef951e661a7359e4307. Its acceptance authorizes the documented architecture and owner policies, and authorizes no action against any running system. ADR-0026 (canonical payload privacy boundary, Stage 3.1.4) is a SEPARATE decision and is Accepted (owner-accepted 2026-07-13) — see stage_3_1_4.adrStatus. ADR-0027 (Stage 3.2 signature-verification protocol) is Accepted."
 }
