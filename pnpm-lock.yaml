@@ -56,6 +56,8 @@ importers:
         specifier: 8.20.0
         version: 8.20.0
 
+  packages/event-ingestion: {}
+
 packages:
 
   '@emnapi/core@1.11.1':

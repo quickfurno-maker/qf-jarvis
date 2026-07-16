@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    // Emit the incremental build info to the conventional name so `scripts/clean.mjs`
+    // (which removes `tsconfig.tsbuildinfo`) clears it — otherwise a stale
+    // `tsconfig.build.tsbuildinfo` would make `tsc --build` skip re-emitting `dist/`.
+    "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
+  },
+
+  // The EMITTING build, referenced by the root solution. Tests — and the
+  // deterministic test-only key material under src/tests — are EXCLUDED, so nothing
+  // from src/tests reaches dist/. The shipped package (the `exports` map points only
+  // at ./dist) therefore contains no private key of any kind. Tests are type-checked,
+  // without emit, by tsconfig.json.
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/tests/**"]
+}

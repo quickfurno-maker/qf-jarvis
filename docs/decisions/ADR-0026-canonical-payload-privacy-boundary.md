@@ -144,11 +144,25 @@ The boundary is **content**: at most 64 Unicode characters; at least one meaning
 
 > **The honest residual:** a benign sentence under 64 characters, carrying no contact data and no coordinates, **will still be accepted as a label.** That is a deliberate trade, stated rather than hidden: it is untidy, and it leaks nothing. **The thing being defended is the client's phone number and front door — not the taxonomy's prose style.**
 
-### 11. This ADR is Proposed, and the gate is not cleared
+### 11. Implementation-review snapshot (historical — superseded by owner acceptance)
 
-The hardening is **implemented and tested**. It is **not accepted**. ADR-0026 is **Proposed**, the Stage 3.1.4 PR is unmerged, and CI has not run. So the finding stands at **`fixed_pending_acceptance`**, and **Stage 3.2 remains `blocked_by_stage_3_1_4`**.
+> **Historical status before owner acceptance — superseded.** The paragraph below was
+> true at implementation-review time and is preserved as the review-time record. It is
+> **no longer current**; see "Present status" immediately after it.
+>
+> _The hardening is **implemented and tested**. It is **not accepted**. ADR-0026 is
+> **Proposed**, the Stage 3.1.4 PR is unmerged, and CI has not run. So the finding stands
+> at `fixed_pending_acceptance`, and Stage 3.2 remains `blocked_by_stage_3_1_4`._
+>
+> **An implementation is not an acceptance.** A stage that clears its own gate the moment
+> its tests go green has replaced the reviewer with the author.
 
-**An implementation is not an acceptance.** A stage that clears its own gate the moment its tests go green has replaced the reviewer with the author.
+**Present status (current).** ADR-0026 was **accepted by the owner on 2026-07-13**; **PR #9
+(Stage 3.1.4) is merged**; **Stage 3.1.4 is complete**; the **Stage 3.2 blocker is closed**;
+and **Stage 3.2 — pure signature verification — is implemented and awaiting owner
+acceptance** ([ADR-0027](./ADR-0027-stage-3-2-signature-verification-protocol.md)). The
+finding is now `resolved` / `accepted`. The principle above still holds — implementation is
+not acceptance — and the acceptance here was the owner's separate act, recorded in the header.
 
 ## Consequences
 

@@ -1,0 +1,19 @@
+{
+  "name": "@qf-jarvis/event-ingestion",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis event-ingestion trust boundary. Stage 3.2 provides pure, synchronous Ed25519 signature verification and a public-key registry — no database, no contract parsing, no ingest function. node:crypto only; zero third-party runtime dependencies.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  }
+}

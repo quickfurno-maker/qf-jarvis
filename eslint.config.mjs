@@ -113,6 +113,68 @@ export default tseslint.config(
     },
   },
 
+  // The event-ingestion signature verifier claims to be pure and synchronous: it
+  // reads no clock, no environment, no filesystem, and no network. `now` is injected
+  // and the keys are injected. These rules are the enforcement of that claim — a
+  // verifier that reached for Date.now() or process.env would quietly break the tested
+  // property that an event's validity depends only on the injected inputs. node:crypto
+  // is the one permitted node builtin; the I/O modules are forbidden.
+  {
+    files: ['packages/event-ingestion/src/**/*.ts'],
+    ignores: ['packages/event-ingestion/src/tests/**'],
+    rules: {
+      'no-console': 'error',
+      'no-restricted-globals': [
+        'error',
+        {
+          name: 'process',
+          message: 'The signature verifier reads no environment. Configuration is passed in.',
+        },
+        {
+          name: 'fetch',
+          message: 'The signature verifier performs no network activity.',
+        },
+      ],
+      'no-restricted-properties': [
+        'error',
+        {
+          object: 'Date',
+          property: 'now',
+          message: 'The verifier reads no clock. The current time is injected as `now`.',
+        },
+      ],
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: [
+                'node:fs',
+                'node:fs/*',
+                'node:net',
+                'node:http',
+                'node:https',
+                'node:child_process',
+                'node:dns',
+                'node:tls',
+                'node:dgram',
+                'node:process',
+                'node:worker_threads',
+                'fs',
+                'net',
+                'http',
+                'https',
+                'child_process',
+              ],
+              message:
+                'Stage 3.2 signature verification is a pure, synchronous leaf. It performs no filesystem, network, or process I/O. Only node:crypto is permitted.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
   // Must remain last: turns off every rule that would fight Prettier.
   // Formatting is Prettier's job; ESLint's job is correctness.
   eslintConfigPrettier,

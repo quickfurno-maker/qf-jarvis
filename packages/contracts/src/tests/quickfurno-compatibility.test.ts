@@ -184,7 +184,8 @@ interface Manifest {
     readonly mustMapReasonCodesAndBoundedSignalsOnly: boolean;
   };
   readonly phaseGates: {
-    readonly stage_3_2_signed_ingestion: PhaseGate;
+    readonly stage_3_2_signature_verification: PhaseGate;
+    readonly stage_3_3_validated_signed_ingestion: PhaseGate;
     readonly phase_11_live_core_integration: PhaseGate;
     readonly phase_11a_live_communication: PhaseGate;
     readonly [key: string]: PhaseGate | string;
@@ -805,15 +806,24 @@ describe('no canonical payload may carry GPS-bearing free text', () => {
     expect(finding.mayBeDeferredToPhase11).toBe(false);
   });
 
-  it('Stage 3.2 is unblocked effective on merge — and has NOT started', () => {
-    expect(manifest.phaseGates.stage_3_2_signed_ingestion.blockedBy).toStrictEqual([]);
-    expect(manifest.phaseGates.stage_3_2_signed_ingestion.satisfiedBy).toContain('stage-3.1.4');
+  it('Stage 3.2 is pure signature verification, implemented and awaiting owner acceptance; Stage 3.3 has NOT started', () => {
+    const stage32 = manifest.phaseGates.stage_3_2_signature_verification;
+    expect(stage32.blockedBy).toStrictEqual([]);
+    expect(stage32.satisfiedBy).toContain('stage-3.1.4');
     expect(manifest.stageStatus['stage_3_1_4']).toBe('completed_accepted');
     expect(manifest.stageStatus['adr_0026']).toBe('Accepted');
+    expect(manifest.stageStatus['adr_0027']).toBe('Accepted');
 
-    // Unblocking a stage and beginning it are different acts. Conflating them is how a phase
-    // quietly starts before anybody agreed it should.
-    expect(manifest.stageStatus['stage_3_2_started']).toBe('false');
+    // Stage 3.2 is implemented locally and awaiting acceptance — and it is database-free.
+    expect(manifest.stageStatus['stage_3_2']).toBe('implemented_awaiting_owner_acceptance');
+    expect(manifest.stageStatus['stage_3_2_started']).toBe('true');
+
+    // Stage 3.3 (validated signed ingestion) is the one that has not started and needs a database.
+    const stage33 = manifest.phaseGates.stage_3_3_validated_signed_ingestion;
+    expect(stage33.blockedBy).toContain('stage-3.2-owner-acceptance');
+    expect(stage33.blockedBy).toContain('managed-database-readiness');
+    expect(manifest.stageStatus['stage_3_3']).toBe('not_started');
+    expect(manifest.stageStatus['stage_3_3_started']).toBe('false');
   });
 
   it('still forbids any adapter from transmitting Core free text', () => {

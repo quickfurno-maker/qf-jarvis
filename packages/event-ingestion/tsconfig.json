@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // Type-check EVERYTHING — production source and tests — under full strict mode,
+    // but emit nothing. This is the config the ESLint type-aware project service and
+    // `pnpm --filter … typecheck:tests` use, so tests are held to the same rules as
+    // the rest of the repository even though the emitting build (tsconfig.build.json)
+    // deliberately excludes them to keep test-only key material out of dist/.
+    // `composite` must be off because it requires emit.
+    "noEmit": true,
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "incremental": false
+  },
+  "include": ["src/**/*.ts"]
+}

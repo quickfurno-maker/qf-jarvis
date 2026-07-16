@@ -1,6 +1,6 @@
 # Phased Roadmap — QF Jarvis
 
-**Status:** Phase 0 approved · Phase 1 approved · **Phase 2 complete and approved (2026-07-12)** · Phase 3 not started
+**Status:** Phase 0 approved · Phase 1 approved · **Phase 2 complete and approved (2026-07-12)** · Phase 3 in progress — Stage 3.2 signature verification implemented, awaiting owner acceptance (no later phase authorized)
 **Date:** 2026-07-12
 
 > **Phase 3 must not begin until Phase 2 is merged into `main`.** A phase built on an unmerged branch is a phase built on something that can still change.
@@ -112,7 +112,7 @@ The design is [event-backbone.md](./event-backbone.md); the decisions are [ADR-0
 
 **Where it will be deployed.** A **dedicated, Supabase-managed QF-Jarvis PostgreSQL 17 project** ([ADR-0023](../decisions/ADR-0023-dedicated-supabase-managed-postgresql.md)) — **its own** project and credentials, and **not QuickFurno Core's Supabase project, which remains forbidden**. Supabase is a Postgres host and nothing else: no Auth, no Storage, no Realtime, no Edge Functions, no `@supabase/supabase-js`. **Nothing has been applied to it, and Phase 3 stores synthetic fixtures only.**
 
-**What does NOT exist:** ingestion · signature verification · contract parsing at ingestion · deduplication *behaviour* · rejection handling · conflicting-duplicate handling · projections · checkpoints · retries · dead letters · replay · quarantine · read models · the test emitter · metrics · a worker loop · an HTTP endpoint. **`apps/api` and `apps/worker` remain compileable boundaries.**
+**Pure signature verification DOES now exist** — in `@qf-jarvis/event-ingestion` (Stage 3.2, implemented locally on branch `stage-3-2-signature-verification` and **awaiting owner acceptance**; **database-free**). But it performs no ingestion and touches no database. **What does NOT exist:** the ingest function · contract parsing at ingestion · persistence composition · deduplication *behaviour* · rejection handling · conflicting-duplicate handling · projections · checkpoints · retries · dead letters · replay · quarantine · read models · the test emitter · metrics · a worker loop · an HTTP endpoint. Composing verification, contract validation and persistence into ingestion is **Stage 3.3, which has not started.** **`apps/api` and `apps/worker` remain compileable boundaries.**
 
 > The `UNIQUE (event_id)` constraint lays the **foundation** for eventId idempotency ([ADR-0020](../decisions/ADR-0020-event-ingestion-signature-verification-and-idempotency.md)). It is **not** the Stage 3.3 behaviour that distinguishes a benign duplicate from a conflicting one, and Stage 3.1 does not claim it is.
 
@@ -124,8 +124,8 @@ The design is [event-backbone.md](./event-backbone.md); the decisions are [ADR-0
 | **3.1.2** — QuickFurno compatibility baseline | ✅ **Complete and merged (2026-07-13)** — [ADR-0025](../decisions/ADR-0025-quickfurno-compatibility-boundary-and-core-adapter-baseline.md) **Accepted** |
 | **3.1.3** — QuickFurno Core compatibility and safety remediation | **Not started.** **Runs in the QuickFurno repository, not here** — see below |
 | **3.1.4** — canonical payload privacy hardening | ✅ **Complete and accepted (2026-07-13)** — [ADR-0026](../decisions/ADR-0026-canonical-payload-privacy-boundary.md) **Accepted**. `qf-jarvis` |
-| 3.2 — signature verification | **Not started.** Unblocked **effective on merge of PR #9**. Stage 3.1.4 is accepted; Stage 3.2 has **not begun** |
-| 3.3 — validated signed ingestion | Not started |
+| 3.2 — signature verification | **Implementation in progress — awaiting owner acceptance.** Pure Ed25519 signature verification is implemented in `@qf-jarvis/event-ingestion` on branch `stage-3-2-signature-verification` ([ADR-0027](../decisions/ADR-0027-stage-3-2-signature-verification-protocol.md)). Fixture-only, database-free; no `ingest`, no persistence, no idempotency. Not yet merged; not yet accepted |
+| 3.3 — validated signed ingestion | **Not started.** Composes the Stage 3.2 verifier with contract validation and persistence. **Gated on managed-database readiness** (it is the first stage that touches the event store); the pure Stage 3.2 verifier is **not** so gated |
 | 3.4 — projections and bounded retries | Not started |
 | 3.5 — dead letters and replay | Not started |
 | 3.6 — rebuild determinism | Not started |
@@ -152,7 +152,7 @@ The design is [event-backbone.md](./event-backbone.md); the decisions are [ADR-0
 **Stage 3.1.3 is:**
 
 - **allowed to run in parallel** with fixture-only Jarvis backbone work;
-- **not required** to begin Stage 3.2 fixture testing;
+- **not required** to begin Stage 3.2 (pure, database-free signature verification);
 - a **hard gate before Phase 11** live Core integration;
 - a **hard gate before Phase 11A** live WhatsApp.
 
@@ -185,7 +185,7 @@ The design is [event-backbone.md](./event-backbone.md); the decisions are [ADR-0
 >
 > The owner accepted **ADR-0026** on 2026-07-13, explicitly including the **zero-length migration window** and the **immediate retirement of v1** — on the stated grounds that producer, consumer and persisted-event counts are all **zero**. Stage 3.1.4 is **complete and accepted**; the finding is **resolved**, and its `historical_status` remains `contract_gap` with the evidence preserved permanently.
 >
-> **Stage 3.2 is unblocked effective on the merge of PR #9, and has not started.** The gate was cleared by the owner's decision, not by the tests going green — which is the order that matters.
+> **Stage 3.2's blocker (Stage 3.1.4) is closed.** The gate was cleared by the owner's decision, not by the tests going green — which is the order that matters. Stage 3.2 — **pure signature verification** — is now **implemented locally on branch `stage-3-2-signature-verification` and awaiting owner acceptance** ([ADR-0027](../decisions/ADR-0027-stage-3-2-signature-verification-protocol.md)); it is **database-free**.
 
 **This correction is NOT implemented in Stage 3.1.2**, which is forbidden from changing contract implementation. Stage 3.1.2 records the gap honestly and tests that it is still open.
 
@@ -194,25 +194,27 @@ The design is [event-backbone.md](./event-backbone.md); the decisions are [ADR-0
 ### The order — each step separately owner-authorized
 
 ```
-1. Stage 3.1.2 — QuickFurno compatibility baseline      ← in progress (ADR-0025 Proposed)
+1. Stage 3.1.2 — QuickFurno compatibility baseline      ← complete and accepted (ADR-0025 Accepted)
 2. Stage 3.1.3 — QuickFurno Core remediation            ← MAY BEGIN IN PARALLEL.
-                                                          QuickFurno repository track
+                                                          QuickFurno repository track; Phase 11 gate
 3. Provider hardening and managed migration             ← owner-authorized; runbook steps 2-7
-4. Stage 3.1.4 — canonical payload privacy hardening    ← qf-jarvis. HARD GATE before 3.2
-5. Stage 3.2 — signed fixture ingestion                 ← fixture-only. Blocked by 3.1.4
+4. Stage 3.1.4 — canonical payload privacy hardening    ← qf-jarvis. Complete and accepted. Was the hard gate before 3.2
+5. Stage 3.2 — pure signature verification              ← database-free. Blocker 3.1.4 closed; implemented, awaiting owner acceptance
+6. Stage 3.3 — validated signed ingestion               ← composes 3.2 + contracts + persistence. Not started. Gated by 3.2 acceptance AND managed-database readiness
 ```
 
 | Gate | Blocked by |
 | --- | --- |
-| **Stage 3.2** — signed fixture ingestion | **Stage 3.1.4** |
+| **Stage 3.2** — signature verification | **Stage 3.1.4 (closed).** Implemented, awaiting owner acceptance; **database-free** |
+| **Stage 3.3** — validated signed ingestion | **Stage 3.2 owner acceptance AND managed-database readiness** |
 | **Phase 11** — live Core integration | **Stage 3.1.3 AND Stage 3.1.4** |
 | **Phase 11A** — live communication | **Stage 3.1.3, Stage 3.1.4, and Phase 11** |
 
-**Stage 3.1.3 is a QuickFurno repository track. Stage 3.1.4 belongs to `qf-jarvis`.** They are independent and may run concurrently — but **neither Stage 3.2 nor Phase 11 begins while its own blocker is open.**
+**Stage 3.1.3 is a QuickFurno repository track and remains a Phase 11 gate. Stage 3.1.4 belongs to `qf-jarvis` and is closed.** **Stage 3.3 does not begin until Stage 3.2 is accepted and the managed database is ready; Phase 11 does not begin while Stage 3.1.3 is open.**
 
 **Steps 2–7 are recorded in [managed-database-runbook.md](../engineering/managed-database-runbook.md), and none of them has been executed.** No connection has ever been opened to the managed database, no Supabase setting has been changed, and **Supabase migrations remain zero.**
 
-> **Stage 3.2 begins only after Stage 3.1.2 is approved AND the managed database is ready.** Both, not either. A signature-verification stage built before the compatibility baseline is reviewed would be verifying signatures on an event shape nobody had checked against the system that will one day produce it.
+> **Stage 3.3 begins only after Stage 3.2 is accepted AND the managed database is ready.** Both, not either — Stage 3.3 is the first stage that writes to the event store. The pure **Stage 3.2** verifier is **database-free** and is **not** gated on managed-database readiness; it was gated only on Stage 3.1.4, which is closed.
 
 **Objective.** Reliable, idempotent, replayable event ingestion. This is the load-bearing infrastructure of the entire system.
 
