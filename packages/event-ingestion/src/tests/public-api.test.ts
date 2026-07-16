@@ -44,6 +44,14 @@ describe('public API surface', () => {
     expect(runtimeExports).not.toContain('decodeEd25519Signature');
   });
 
+  it('keeps the Stage 3.3 semantic-digest foundation INTERNAL (ADR-0029)', () => {
+    // The digest primitive is compiled internally but has no public consumer yet, so the
+    // package root must not expose it — nor the internal canonical-JSON serialiser.
+    expect(runtimeExports).not.toContain('computeSemanticEventDigest');
+    expect(runtimeExports).not.toContain('SemanticCanonicalisationError');
+    expect(runtimeExports).not.toContain('canonicaliseToJson');
+  });
+
   it('exposes no ingest / persistence surface (Stage 3.3+)', () => {
     expect(runtimeExports).not.toContain('ingest');
     expect(runtimeExports).not.toContain('createPool');

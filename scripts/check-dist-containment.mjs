@@ -46,6 +46,12 @@ const FORBIDDEN_NAMES = [
   'parseSignatureEnvelope',
   'TEST_KEY_SEED_HEX',
   'TEST_PUBLIC_KEY_SPKI_B64',
+  // Stage 3.3 slice 1 semantic-digest foundation is INTERNAL — the barrel must not export it
+  // (ADR-0029). These names legitimately appear inside internal dist modules, so they are
+  // checked against the exported barrel surface only, never against file contents.
+  'computeSemanticEventDigest',
+  'SemanticCanonicalisationError',
+  'canonicaliseToJson',
 ];
 
 // Distinctive substrings of the deterministic test key material — none may appear in dist.

@@ -96,7 +96,7 @@ Specifically, **none of the following exists in this repository**: agents, coord
 
 The client, vendor, assignment, and governance events are **target contracts**. **No claim is made that QuickFurno Core emits any of them today** — establishing the live emitters is Phase 11's work, and where Core's shapes differ, an adapter absorbs the difference and the contract does not bend ([event-catalog.md](docs/contracts/event-catalog.md)).
 
-**Phase 3 — Durable Event Backbone: Stages 3.0–3.1.4 complete and merged/accepted. Stage 3.2 (pure signature verification) is complete, owner-accepted and merged (PR #10, merged 2026-07-16). Phase 3 is NOT complete — Stage 3.3 onward has not started.**
+**Phase 3 — Durable Event Backbone: Stages 3.0–3.1.4 complete and merged/accepted. Stage 3.2 (pure signature verification) is complete, owner-accepted and merged (PR #10, merged 2026-07-16). Stage 3.3 has begun with a database-free semantic-digest foundation ([ADR-0029](docs/decisions/ADR-0029-stage-3-3-semantic-digest-foundation.md), Accepted); the full validated signed ingestion — `ingest`, persistence, idempotency, rejection and conflict tables — has NOT started and remains gated on managed-database readiness. Phase 3 is NOT complete.**
 
 Phase 2 was merged into `main` on 2026-07-12, so Phase 3's entry criterion is met.
 
@@ -106,7 +106,9 @@ Phase 2 was merged into `main` on 2026-07-12, so Phase 3's entry criterion is me
 
 > The `UNIQUE (event_id)` constraint lays the **foundation** for eventId idempotency. It is **not** the Stage 3.3 behaviour that distinguishes a benign duplicate from a conflicting one, and nothing here claims it is.
 
-**Stage 3.2 adds [`@qf-jarvis/event-ingestion`](packages/event-ingestion/)** — the trust boundary in front of the event log: **pure, synchronous Ed25519 signature verification** and a validated public-key registry, and nothing else. It is **fixture-only and database-free**, adds **no runtime dependency** (`node:crypto` only), and is **complete, owner-accepted and merged** via PR #10 on 2026-07-16 ([ADR-0027](docs/decisions/ADR-0027-stage-3-2-signature-verification-protocol.md), Accepted). There is still **no ingest function, no persistence, no idempotency, no HTTP endpoint, and no live integration** — those are Stage 3.3 (validated signed ingestion) onward, which has **not started** and is gated on managed-database readiness. `apps/api` and `apps/worker` remain `export {};`, and nothing imports the package yet.
+**Stage 3.2 adds [`@qf-jarvis/event-ingestion`](packages/event-ingestion/)** — the trust boundary in front of the event log: **pure, synchronous Ed25519 signature verification** and a validated public-key registry. It is **fixture-only and database-free**, adds **no runtime dependency** (`node:crypto` only), and is **complete, owner-accepted and merged** via PR #10 on 2026-07-16 ([ADR-0027](docs/decisions/ADR-0027-stage-3-2-signature-verification-protocol.md), Accepted).
+
+**Stage 3.3 slice 1** adds to that same package a pure, **database-free semantic-digest foundation** ([ADR-0029](docs/decisions/ADR-0029-stage-3-3-semantic-digest-foundation.md), Accepted) — deterministic canonical JSON + SHA-256 over an already-validated canonical event, for later semantic duplicate comparison. It is compiled **internally and is not a public package capability** — it is not exported from the package root, and only a later validated-ingestion composition will call it. It is **not** the signing canonicalisation (signatures still verify the exact raw bytes). There is still **no `ingest` function, no JSON-parse-and-validate composition, no persistence, no idempotency behaviour, no `ingestion_rejection` or `event_conflict` table, no migration or repository, no HTTP endpoint, and no live integration** — those are later Stage 3.3 slices, and every persistence-touching part **remains gated on managed-database readiness**. `apps/api` and `apps/worker` remain `export {};`, and nothing imports the package yet.
 
 The database is **Jarvis's own** — never QuickFurno Core's database, **never QuickFurno Core's Supabase project**, never a QuickFurno business table. The Compose file is **development only** and is not production deployment configuration.
 
@@ -116,7 +118,7 @@ The database is **Jarvis's own** — never QuickFurno Core's database, **never Q
 
 **Nothing has been applied to it.** Local development uses a loopback PostgreSQL; CI uses a GitHub Actions PostgreSQL service. **No migration has been run against Supabase, and Phase 3 stores synthetic fixtures only** — the production event-log retention decision remains a hard gate on Phase 11.
 
-The design is [event-backbone.md](docs/architecture/event-backbone.md). **Twenty-seven ADRs are Accepted**, including nine for Phase 3 (ADR-0019 through ADR-0027):
+The design is [event-backbone.md](docs/architecture/event-backbone.md). **Twenty-nine ADRs are Accepted** (ADR-0028 records the AI-runtime roadmap amendment); the Phase 3 event-backbone decisions are ADR-0019 through ADR-0027 and ADR-0029:
 
 - [ADR-0019 — Durable event store and persistence](docs/decisions/ADR-0019-durable-event-store-and-persistence.md) — PostgreSQL 17, **Jarvis's own database, never QuickFurno's Supabase project**; raw SQL, no ORM. Its deployment-provider assumption is superseded by ADR-0023; everything else stands
 - [ADR-0020 — Ingestion, signature verification, and idempotency](docs/decisions/ADR-0020-event-ingestion-signature-verification-and-idempotency.md) — **Ed25519 asymmetric: Jarvis holds public keys only and cannot forge Core's events**; `eventId` is identity; **a conflicting duplicate fails closed**
@@ -127,6 +129,7 @@ The design is [event-backbone.md](docs/architecture/event-backbone.md). **Twenty
 - [ADR-0025 — QuickFurno compatibility boundary and Core adapter baseline](docs/decisions/ADR-0025-quickfurno-compatibility-boundary-and-core-adapter-baseline.md) — Stage 3.1.2, **Accepted**
 - [ADR-0026 — Canonical payload privacy boundary](docs/decisions/ADR-0026-canonical-payload-privacy-boundary.md) — Stage 3.1.4, **Accepted**; latitude/longitude pairs hidden in string values are refused
 - [ADR-0027 — Stage 3.2 signature-verification protocol](docs/decisions/ADR-0027-stage-3-2-signature-verification-protocol.md) — **Accepted**; pure Ed25519 verification, the strict envelope parser, the keyId and signature formats, canonical SPKI DER, and the 3.2/3.3 boundary
+- [ADR-0029 — Stage 3.3 semantic-digest foundation](docs/decisions/ADR-0029-stage-3-3-semantic-digest-foundation.md) — **Accepted**; a database-free, owner-authorized slice pinning the deterministic canonical-JSON + SHA-256 semantic digest. **Not** the signing canonicalisation; adds no `ingest`, no persistence, no migration. All persistence-touching Stage 3.3 work remains gated on managed-database readiness
 
 Two things worth knowing up front, because both are limitations rather than features:
 

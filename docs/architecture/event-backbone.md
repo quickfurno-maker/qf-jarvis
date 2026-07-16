@@ -1,6 +1,6 @@
 # The Durable Event Backbone — QF Jarvis
 
-**Status:** Phase 3 — **Stages 3.0–3.1.4 complete and merged/accepted. Stage 3.2 (pure signature verification, in `@qf-jarvis/event-ingestion`) complete, owner-accepted and merged (PR #10, 2026-07-16). Stage 3.3 onward not started. Phase 3 is NOT complete.**
+**Status:** Phase 3 — **Stages 3.0–3.1.4 complete and merged/accepted. Stage 3.2 (pure signature verification, in `@qf-jarvis/event-ingestion`) complete, owner-accepted and merged (PR #10, 2026-07-16). Stage 3.3 slice 1 — a database-free semantic-digest foundation ([ADR-0029](../decisions/ADR-0029-stage-3-3-semantic-digest-foundation.md), Accepted) — is implemented as a pure unit; the full ingest composition and all persistence have NOT started and remain gated on managed-database readiness. Phase 3 is NOT complete.**
 **Date:** 2026-07-12
 
 The load-bearing infrastructure of the entire system. Everything above it inherits its correctness — and its failures.
@@ -87,6 +87,8 @@ The envelope lives in **columns** — `event_id`, `event_type`, `event_version`,
 It is named `semantic_event_digest`, not `payload_digest`, because it digests the event and not the payload — and a name that says otherwise would be a lie by omission the first time somebody diffed two events whose payloads matched and whose envelopes did not.
 
 **Stage 3.1 stores these. It compares nothing.** Duplicate classification is Stage 3.3.
+
+> **Stage 3.3 slice 1 now provides the pure semantic-digest computation** — deterministic canonical JSON + SHA-256 over the validated canonical event — **internally** in `@qf-jarvis/event-ingestion`, database-free ([ADR-0029](../decisions/ADR-0029-stage-3-3-semantic-digest-foundation.md), Accepted). It is **not exported** from the package root (there is no consumer yet); only a later validated-ingestion composition will call it. It is the value a later slice will _compare_; it is **not** wired to any persistence, performs no ingestion, and is **not** the signing canonicalisation. Computing the digest and _using_ it to classify a duplicate against the stored log are different steps — the latter is a persistence-touching Stage 3.3 slice, still gated on managed-database readiness.
 
 ### Constraints mirror the stable Phase 2 shapes
 
