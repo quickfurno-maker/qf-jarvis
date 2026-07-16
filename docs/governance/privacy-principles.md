@@ -55,6 +55,7 @@ Every copy of personal data is a place it can leak, a place it can go stale, and
 
 - **No raw personal data in logs.** Redact contact details, addresses, and message content. **No phone numbers, no message bodies, no call transcripts.** Log identifiers, not people.
 - Redaction applies to error messages, stack traces, and debug output — which is where personal data actually escapes, not in the log lines someone wrote on purpose.
+- **AI operational tracing is held to exactly these rules.** The tracing introduced in **Phase 4.2** records only identifiers, versions, counts, and outcomes, and **never** chain-of-thought, raw personal-data prompts, complete raw model output, secrets, provider credentials, phone numbers, message bodies, or call transcripts. A trace is a log ([ai-evaluation-observability-and-data-quality.md](../architecture/ai-evaluation-observability-and-data-quality.md), [ADR-0028](../decisions/ADR-0028-ai-runtime-foundations-and-roadmap-sequencing.md)).
 - A sensitive-data logging incident has a target of **zero** and is treated as an incident, not a metric movement ([success-metrics.md](../charter/success-metrics.md)).
 - **You can reconstruct the entire audit chain — event to recommendation to approval to intent to result — without ever having logged a phone number.** Correlation identifiers do the work.
 
@@ -71,6 +72,10 @@ Three reasons, and the first is a privacy reason:
 3. **It is a liability that grows with every run**, for no operational benefit.
 
 This is stated in [agent-model.md](../architecture/agent-model.md), [goals-and-non-goals.md](../charter/goals-and-non-goals.md), and here, because it is a rule that gets quietly broken by whoever adds verbose logging to debug an agent.
+
+## 9. Privacy classification before any remote model call
+
+A **remote model call is a data export.** So the model gateway (Phase 4.0) **classifies data before it may be considered for a remote model**, and unclassified or too-sensitive data does not leave the local boundary — which is why the runtime is **Gemma-first and local-first** ([model-runtime-and-governance.md](../architecture/model-runtime-and-governance.md), [ADR-0028](../decisions/ADR-0028-ai-runtime-foundations-and-roadmap-sequencing.md)). **No consumer AI subscription is a production model backend**, because it is ungoverned by any data agreement. And **no raw chat, model output, or business conversation becomes training data automatically** — eligibility is an explicit named-human or named-versioned-policy decision against complete provenance, and **sensitive personal data is never eligible** ([ADR-0016](../decisions/ADR-0016-agent-memory-and-learning-boundaries.md)). Retrieved **governed knowledge** carries a classification and retrieval permissions and is **evidence, never business authority** ([governed-knowledge-and-capabilities.md](../architecture/governed-knowledge-and-capabilities.md)). All of this is **approved architecture, not implemented.**
 
 ## 8. Consent is permission, not a data field
 

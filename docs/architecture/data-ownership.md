@@ -62,6 +62,18 @@ That is all. Jarvis owns its own thinking and its own asking — and nothing the
 
 ---
 
+## The AI-runtime foundations add data categories, not authority
+
+The [ADR-0028](../decisions/ADR-0028-ai-runtime-foundations-and-roadmap-sequencing.md) amendment introduces a few new **Jarvis-owned** data categories. Each is **approved architecture, not implemented**, and none of them owns business truth:
+
+- **Governed knowledge** (Phase 4.1) — reviewed, versioned, approved reference documents with full provenance (`owner`, `approvedBy`, `effectiveFrom`, `expiresAt`, classification, retrieval permissions, `supersededBy`). It is **separate from agent memory** and it is **evidence, never business authority**: a retrieved document may inform reasoning, but **QuickFurno Core remains authoritative for current operational and business state** ([governed-knowledge-and-capabilities.md](./governed-knowledge-and-capabilities.md)).
+- **Model and prompt provenance** (Phase 4.0) — the model version and prompt version recorded on every model-backed run. Provenance, not content: **no chain-of-thought, no raw model output, no complete prompt containing personal data** ([model-runtime-and-governance.md](./model-runtime-and-governance.md)).
+- **AI operational traces** and **input-readiness watermarks** (Phase 4.2) — identifiers, versions, counts, and outcomes only. A trace **never** holds chain-of-thought, a raw personal-data prompt, complete raw model output, a secret, a credential, a phone number, a message body, or a call transcript ([ai-evaluation-observability-and-data-quality.md](./ai-evaluation-observability-and-data-quality.md)).
+
+All three are derived, minimized, and non-authoritative, and all three fall under the same retention and erasure discipline as the rest of Jarvis's derived data.
+
+---
+
 ## Derived views are not truth
 
 QF Jarvis maintains derived read models so its agents can reason without hammering QuickFurno Core. These are:
