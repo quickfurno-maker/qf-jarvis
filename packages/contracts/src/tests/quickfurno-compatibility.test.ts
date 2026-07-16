@@ -115,6 +115,16 @@ interface PhaseGate {
   readonly rationale: string;
   /** Present once a gate has been satisfied: what satisfied it. */
   readonly satisfiedBy?: readonly string[];
+  readonly blockerClosed?: boolean;
+  readonly implementationStatus?: string;
+  readonly started?: boolean;
+  readonly completed?: boolean;
+  readonly accepted?: boolean;
+  readonly merged?: boolean;
+  readonly databaseRequired?: boolean;
+  readonly authorizationGranted?: boolean;
+  readonly prNumber?: number;
+  readonly mergeCommit?: string;
 }
 
 interface Manifest {
@@ -806,7 +816,7 @@ describe('no canonical payload may carry GPS-bearing free text', () => {
     expect(finding.mayBeDeferredToPhase11).toBe(false);
   });
 
-  it('Stage 3.2 is pure signature verification, implemented and awaiting owner acceptance; Stage 3.3 has NOT started', () => {
+  it('Stage 3.2 is pure signature verification, complete, owner-accepted and merged; Stage 3.3 has NOT started', () => {
     const stage32 = manifest.phaseGates.stage_3_2_signature_verification;
     expect(stage32.blockedBy).toStrictEqual([]);
     expect(stage32.satisfiedBy).toContain('stage-3.1.4');
@@ -814,14 +824,24 @@ describe('no canonical payload may carry GPS-bearing free text', () => {
     expect(manifest.stageStatus['adr_0026']).toBe('Accepted');
     expect(manifest.stageStatus['adr_0027']).toBe('Accepted');
 
-    // Stage 3.2 is implemented locally and awaiting acceptance — and it is database-free.
-    expect(manifest.stageStatus['stage_3_2']).toBe('implemented_awaiting_owner_acceptance');
+    // Stage 3.2 is complete, owner-accepted and merged (PR #10) — and it is database-free.
+    expect(manifest.stageStatus['stage_3_2']).toBe('complete_accepted_merged');
     expect(manifest.stageStatus['stage_3_2_started']).toBe('true');
+    expect(manifest.stageStatus['stage_3_2_completed']).toBe('true');
+    expect(stage32.completed).toBe(true);
+    expect(stage32.accepted).toBe(true);
+    expect(stage32.merged).toBe(true);
+    expect(stage32.databaseRequired).toBe(false);
+    expect(stage32.prNumber).toBe(10);
+    expect(stage32.mergeCommit).toBe('4d041edb10c7a511cbad58e4054ead16c01e2b7e');
 
     // Stage 3.3 (validated signed ingestion) is the one that has not started and needs a database.
+    // With Stage 3.2 accepted, its remaining blocker is managed-database readiness alone.
     const stage33 = manifest.phaseGates.stage_3_3_validated_signed_ingestion;
-    expect(stage33.blockedBy).toContain('stage-3.2-owner-acceptance');
     expect(stage33.blockedBy).toContain('managed-database-readiness');
+    expect(stage33.started).toBe(false);
+    expect(stage33.databaseRequired).toBe(true);
+    expect(stage33.authorizationGranted).toBe(false);
     expect(manifest.stageStatus['stage_3_3']).toBe('not_started');
     expect(manifest.stageStatus['stage_3_3_started']).toBe('false');
   });
@@ -866,9 +886,9 @@ describe('phase gates: nothing starts while its own blocker is open', () => {
       if (typeof gate === 'string') continue; // the $comment
       expect(gate.rationale.trim()).not.toBe('');
 
-      // A gate with no blockers left has been satisfied, and must name what satisfied it.
-      // "Unblocked, reason unrecorded" is how a gate quietly stops meaning anything. Right now
-      // every gate still has a blocker, because nothing has been accepted.
+      // A gate with no blockers left has been satisfied and must name what satisfied it.
+      // "Unblocked, reason unrecorded" is how a gate quietly stops meaning anything.
+      // Stage 3.2 is now satisfied; its satisfiedBy provenance must remain explicit.
       if (gate.blockedBy.length === 0) {
         expect(gate.satisfiedBy?.length ?? 0).toBeGreaterThan(0);
       }

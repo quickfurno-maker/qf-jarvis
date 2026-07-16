@@ -159,9 +159,9 @@ The boundary is **content**: at most 64 Unicode characters; at least one meaning
 
 **Present status (current).** ADR-0026 was **accepted by the owner on 2026-07-13**; **PR #9
 (Stage 3.1.4) is merged**; **Stage 3.1.4 is complete**; the **Stage 3.2 blocker is closed**;
-and **Stage 3.2 — pure signature verification — is implemented and awaiting owner
-acceptance** ([ADR-0027](./ADR-0027-stage-3-2-signature-verification-protocol.md)). The
-finding is now `resolved` / `accepted`. The principle above still holds — implementation is
+and **Stage 3.2 — pure signature verification — is complete, owner-accepted and merged**
+via PR #10 on 2026-07-16 ([ADR-0027](./ADR-0027-stage-3-2-signature-verification-protocol.md),
+Accepted). The finding is now `resolved` / `accepted`. The principle above still holds — implementation is
 not acceptance — and the acceptance here was the owner's separate act, recorded in the header.
 
 ## Consequences

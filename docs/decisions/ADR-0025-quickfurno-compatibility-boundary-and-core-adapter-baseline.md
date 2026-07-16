@@ -117,7 +117,7 @@ The governed payload refuses the free-text carrier keys (`body`, `notes`, `freet
 > later separated the boundary so that **Stage 3.2 is _pure signature verification_** and
 > **validated signed ingestion is _Stage 3.3_** — so "Stage 3.2 — signed fixture ingestion"
 > above is discovery-time naming that has since been split. **Stage 3.2 implementation was
-> separately authorized by the owner and is now awaiting acceptance.** This does not change
+> separately authorized by the owner and is now complete, owner-accepted and merged (PR #10, 2026-07-16).** This does not change
 > the boundary this ADR draws: it still authorizes **no** live integration or production action.
 
 ### 6. Compatibility documentation authorizes no production action

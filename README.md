@@ -96,7 +96,7 @@ Specifically, **none of the following exists in this repository**: agents, coord
 
 The client, vendor, assignment, and governance events are **target contracts**. **No claim is made that QuickFurno Core emits any of them today** — establishing the live emitters is Phase 11's work, and where Core's shapes differ, an adapter absorbs the difference and the contract does not bend ([event-catalog.md](docs/contracts/event-catalog.md)).
 
-**Phase 3 — Durable Event Backbone: Stages 3.0–3.1.4 complete and merged/accepted. Stage 3.2 (pure signature verification) is implemented and awaiting owner acceptance on branch `stage-3-2-signature-verification`. Phase 3 is NOT complete.**
+**Phase 3 — Durable Event Backbone: Stages 3.0–3.1.4 complete and merged/accepted. Stage 3.2 (pure signature verification) is complete, owner-accepted and merged (PR #10, merged 2026-07-16). Phase 3 is NOT complete — Stage 3.3 onward has not started.**
 
 Phase 2 was merged into `main` on 2026-07-12, so Phase 3's entry criterion is met.
 
@@ -106,7 +106,7 @@ Phase 2 was merged into `main` on 2026-07-12, so Phase 3's entry criterion is me
 
 > The `UNIQUE (event_id)` constraint lays the **foundation** for eventId idempotency. It is **not** the Stage 3.3 behaviour that distinguishes a benign duplicate from a conflicting one, and nothing here claims it is.
 
-**Stage 3.2 adds [`@qf-jarvis/event-ingestion`](packages/event-ingestion/)** — the trust boundary in front of the event log: **pure, synchronous Ed25519 signature verification** and a validated public-key registry, and nothing else. It is **fixture-only and database-free**, adds **no runtime dependency** (`node:crypto` only), and is implemented and **awaiting owner acceptance** ([ADR-0027](docs/decisions/ADR-0027-stage-3-2-signature-verification-protocol.md)). There is still **no ingest function, no persistence, no idempotency, no HTTP endpoint, and no live integration** — those are Stage 3.3 (validated signed ingestion) onward, which is gated on Stage 3.2 acceptance and managed-database readiness. `apps/api` and `apps/worker` remain `export {};`, and nothing imports the package yet.
+**Stage 3.2 adds [`@qf-jarvis/event-ingestion`](packages/event-ingestion/)** — the trust boundary in front of the event log: **pure, synchronous Ed25519 signature verification** and a validated public-key registry, and nothing else. It is **fixture-only and database-free**, adds **no runtime dependency** (`node:crypto` only), and is **complete, owner-accepted and merged** via PR #10 on 2026-07-16 ([ADR-0027](docs/decisions/ADR-0027-stage-3-2-signature-verification-protocol.md), Accepted). There is still **no ingest function, no persistence, no idempotency, no HTTP endpoint, and no live integration** — those are Stage 3.3 (validated signed ingestion) onward, which has **not started** and is gated on managed-database readiness. `apps/api` and `apps/worker` remain `export {};`, and nothing imports the package yet.
 
 The database is **Jarvis's own** — never QuickFurno Core's database, **never QuickFurno Core's Supabase project**, never a QuickFurno business table. The Compose file is **development only** and is not production deployment configuration.
 
