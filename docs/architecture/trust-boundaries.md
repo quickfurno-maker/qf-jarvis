@@ -76,6 +76,7 @@ flowchart LR
 
 - Agents are **least-privileged**: each receives only the data its domain requires ([data-ownership.md](./data-ownership.md)). Jitin does not get client phone numbers.
 - Agents have **no network egress to providers**, and no provider credentials exist inside the Jarvis trust zone to be stolen.
+- **Model invocation crosses this boundary through one internal gateway.** An agent never imports or calls a model provider directly; it asks the **model gateway** (Phase 4.0), which owns routing, local-versus-remote placement, **privacy classification before any remote call**, budgets and limits, structured-output validation, and provenance ([model-runtime-and-governance.md](./model-runtime-and-governance.md), [ADR-0028](../decisions/ADR-0028-ai-runtime-foundations-and-roadmap-sequencing.md)). A remote model call is a data export, and an export of unclassified personal data does not happen. **Capabilities an agent may invoke are declared, bounded, contract-typed doors** — never arbitrary SQL, shell, fetch, or provider access (Phase 4.1). This is **approved architecture, not implemented.**
 - Agent inputs and outputs are **validated against a contract**. A malformed agent output is a failure, not a value to be coerced.
 - **Prompt injection is treated as a live threat.** Lead text, client messages, and vendor profile content are attacker-influencable and enter agent context. A model instructed by hostile content still cannot authorize or execute anything — but it *can* produce a misleading recommendation aimed at a human approver. Therefore: untrusted content is clearly delimited in context, agent outputs are contract-validated, evidence must reference real event identifiers, and approvers see the evidence, not just the conclusion.
 - **No chain-of-thought is persisted** anywhere inside this zone.
@@ -161,6 +162,7 @@ This is the reason the approval **authority** sits on the far side of this bound
 - **Least privilege and delegated limits**: an operator's approval authority is bounded by policy; money-related actions escalate ([execution-governance.md](./execution-governance.md)).
 - **Sessions expire.** An idle approver session is a standing authorization waiting to be stolen.
 - Founder and admin actions are **audited** like everything else.
+- **These controls are established before approval is exposed to people.** Named individual accounts, MFA, role-based access control, delegated limits, step-up authentication for sensitive actions, session and device revocation, emergency read-only mode, an access-review process, and full actor attribution are the **Phase 8.5 Human Identity and Access Foundation**, inserted **before Phase 9** ([production-readiness-and-access-control.md](./production-readiness-and-access-control.md), [ADR-0028](../decisions/ADR-0028-ai-runtime-foundations-and-roadmap-sequencing.md)). Approved architecture, not implemented.
 
 ---
 
@@ -194,6 +196,7 @@ A system with signatures but no idempotency will double-charge a vendor on a net
 - **No raw personal data in logs.** Redact client and vendor contact details, addresses, and message content. **No phone numbers. No message bodies. No call transcripts.** Log identifiers, not people.
 - **No model chain-of-thought in logs.**
 - Log **enough to audit**: correlation and causation identifiers, decision points, and outcomes — so that the full chain can be reconstructed without ever having logged a phone number.
+- **AI operational tracing is held to exactly these rules.** The tracing introduced in **Phase 4.2** records only identifiers, versions, counts and outcomes, and **never** chain-of-thought, raw personal-data prompts, complete raw model output, secrets, provider credentials, phone numbers, message bodies, or call transcripts. A trace is a log, and the never-record list is these restrictions applied to the one surface most tempted to break them ([ai-evaluation-observability-and-data-quality.md](./ai-evaluation-observability-and-data-quality.md), [ADR-0028](../decisions/ADR-0028-ai-runtime-foundations-and-roadmap-sequencing.md)).
 - A sensitive-data logging incident is an **incident**, with a target of zero ([success-metrics.md](../charter/success-metrics.md)).
 
 ---

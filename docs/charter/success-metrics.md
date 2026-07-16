@@ -60,6 +60,35 @@ These measure whether the intelligence layer works. They are necessary but never
 
 ---
 
+## AI runtime, data-quality and readiness metrics
+
+These measure the AI-runtime, governance, evaluation, and production-readiness foundations added by [ADR-0028](../decisions/ADR-0028-ai-runtime-foundations-and-roadmap-sequencing.md). **Every one of them is a future-calibration item**, and — because the capabilities they measure are **approved architecture, not implemented** — **none can be measured yet.** No numerical targets are invented here; they are set only after the relevant phase exists and a real measurement period has run.
+
+| Metric | Definition | Baseline | Target |
+| --- | --- | --- | --- |
+| Cost per recommendation | Model spend attributable to producing one recommendation | To be established | Future calibration |
+| Tokens per agent run | Total model tokens consumed by a single agent run | To be established | Future calibration |
+| Model calls per run | Number of model-gateway invocations per agent run | To be established | Future calibration |
+| Model fallback rate | Share of model calls served by a fallback path | To be established | Future calibration |
+| Model timeout rate | Share of model calls that time out or trip the circuit breaker | To be established | Future calibration |
+| Queue depth | Number of agent runs waiting for model capacity | To be established | Future calibration |
+| Oldest queued-run age | Age of the oldest run waiting in the model-work queue | To be established | Future calibration |
+| Local-model utilization | Share of model calls served locally rather than remotely | To be established | Future calibration |
+| Retrieval-grounding rate | Share of recommendations whose claims are grounded in retrieved evidence | To be established | Future calibration |
+| Unsupported-claim rate | Share of recommendation claims not supported by cited evidence | To be established | Future calibration |
+| Structured-output failure rate | Share of model outputs that fail contract validation | To be established | Future calibration |
+| Stale-context refusal rate | Share of runs that refuse or warn on `STALE_CONTEXT` | To be established | Future calibration |
+| Incomplete-context refusal rate | Share of runs that refuse or warn on `INCOMPLETE_CONTEXT` | To be established | Future calibration |
+| Capability-denial count | Attempts to invoke a capability that the registry denied | To be established | Future calibration |
+| Restore-drill success | Whether the most recent backup restore drill succeeded | To be established | Future calibration |
+| RPO compliance | Whether the recovery-point objective was met in the last drill or incident | To be established | Future calibration |
+| RTO compliance | Whether the recovery-time objective was met in the last drill or incident | To be established | Future calibration |
+| Multilingual safety failure rate | Share of multilingual communication-safety cases that fail the Phase 11A gate | To be established | Future calibration |
+
+**These do not displace the safety metrics below.** The three non-negotiable targets — audit completeness = 100%, unauthorized action count = 0, and sensitive-data logging incidents = 0 — remain exactly as stated.
+
+---
+
 ## Safety metrics
 
 These measure whether the boundary held. Unlike the metrics above, several of these have a target *now*, and it is zero.

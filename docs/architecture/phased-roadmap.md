@@ -1,11 +1,13 @@
 # Phased Roadmap — QF Jarvis
 
-**Status:** Phase 0 approved · Phase 1 approved · **Phase 2 complete and approved (2026-07-12)** · Phase 3 in progress — Stage 3.2 signature verification complete, owner-accepted and merged (PR #10, 2026-07-16); Stage 3.3 onward not started (no later phase authorized)
+**Status:** Phase 0 approved · Phase 1 approved · **Phase 2 complete and approved (2026-07-12)** · Phase 3 in progress — Stage 3.2 signature verification complete, owner-accepted and merged (PR #10, 2026-07-16); Stage 3.3 onward not started (no later phase authorized) · **AI runtime foundation roadmap amendment approved (2026-07-16, [ADR-0028](../decisions/ADR-0028-ai-runtime-foundations-and-roadmap-sequencing.md)) — approved architecture, not implemented**
 **Date:** 2026-07-12
 
 > **Phase 3 must not begin until Phase 2 is merged into `main`.** A phase built on an unmerged branch is a phase built on something that can still change.
 
 > **Revised.** Phase 10 is now **test-only**, Phase 11 carries the live Core integration, and **Phase 11A** is a separate, gated controlled-communication pilot. The vendor assignment rule is now the two-batch, six-per-lead-category policy. See [quickfurno-compatibility-directive.md](./quickfurno-compatibility-directive.md), [ADR-0015](../decisions/ADR-0015-complete-client-journey-and-reassignment-policy.md), [ADR-0016](../decisions/ADR-0016-agent-memory-and-learning-boundaries.md), [ADR-0017](../decisions/ADR-0017-live-communication-sequencing.md).
+
+> **AI runtime foundation amendment (2026-07-16, [ADR-0028](../decisions/ADR-0028-ai-runtime-foundations-and-roadmap-sequencing.md), Accepted).** The former Phase 4 (Jarvis coordination) is now **Phase 4.3**, preceded by **Phase 4.0** (model gateway and AI runtime), **Phase 4.1** (governed knowledge and capabilities), and **Phase 4.2** (continuous evaluation, observability and data quality). **Phase 8.5** (human identity and access) is inserted before Phase 9; **Phase 10.5** (production readiness) between Phases 10 and 11; a **multilingual communication safety gate** is added to Phase 11A; and Phase 12 is expanded into a founder operating system. **Phases 5–15 are not renumbered** — sub-phase numbers keep every existing reference valid. **All of this is approved architecture, not implemented.** The load-bearing rule: **a control appears in the phase that first depends on it, never later** — Phase 13 verifies controls, it does not introduce them. See [model-runtime-and-governance.md](./model-runtime-and-governance.md), [governed-knowledge-and-capabilities.md](./governed-knowledge-and-capabilities.md), [ai-evaluation-observability-and-data-quality.md](./ai-evaluation-observability-and-data-quality.md), [production-readiness-and-access-control.md](./production-readiness-and-access-control.md).
 
 ---
 
@@ -19,13 +21,18 @@ Every phase below states an **objective**, **key outputs**, **explicit exclusion
 
 ```mermaid
 flowchart LR
-    P0["0<br/>Charter"] --> P1["1<br/>Foundation"] --> P2["2<br/>Contracts"] --> P3["3<br/>Event backbone"] --> P4["4<br/>Jarvis coordination"]
-    P4 --> P5["5<br/>Kabir"] --> P6["6<br/>Riya"] --> P7["7<br/>Anisha"] --> P8["8<br/>Jitin"]
-    P8 --> P9["9<br/>Approval and policy"] --> P10["10<br/>n8n bridge<br/><b>TEST ONLY</b>"] --> P11["11<br/>Core integration<br/><b>LIVE</b>"]
-    P11 --> P11A["11A<br/>Controlled<br/>communication pilot"] --> P12["12<br/>Founder control plane"]
+    P0["0<br/>Charter"] --> P1["1<br/>Foundation"] --> P2["2<br/>Contracts"] --> P3["3<br/>Event backbone"]
+    P3 --> P40["4.0<br/>Model gateway"] --> P41["4.1<br/>Knowledge &<br/>capabilities"] --> P42["4.2<br/>Evaluation &<br/>tracing"] --> P43["4.3<br/>Jarvis coordination"]
+    P43 --> P5["5<br/>Kabir"] --> P6["6<br/>Riya"] --> P7["7<br/>Anisha"] --> P8["8<br/>Jitin"]
+    P8 --> P85["8.5<br/>Identity &<br/>access"] --> P9["9<br/>Approval and policy"] --> P10["10<br/>n8n bridge<br/><b>TEST ONLY</b>"]
+    P10 --> P105["10.5<br/>Production<br/>readiness"] --> P11["11<br/>Core integration<br/><b>LIVE</b>"]
+    P11 --> P11A["11A<br/>Controlled comms pilot<br/>+ multilingual gate"] --> P12["12<br/>Founder control plane<br/>and operating system"]
     P12 --> P13["13<br/>Security and observability"] --> P14["14<br/>Evaluation loop"] --> P15["15<br/>Controlled automation"]
 
     style P0 fill:#e8f0fe,stroke:#1a73e8
+    style P40 fill:#e8f0fe,stroke:#1a73e8
+    style P85 fill:#e8f0fe,stroke:#1a73e8
+    style P105 fill:#e8f0fe,stroke:#1a73e8
     style P10 fill:#fef7e0,stroke:#f9ab00
     style P11A fill:#fce8e6,stroke:#d93025
 ```
@@ -244,19 +251,73 @@ The canonical envelope defined in Phase 2 carries **no aggregate sequence**. Pha
 
 ---
 
-## Phase 4 — Jarvis Coordination Layer
+## Phase 4.0 — Model Gateway and AI Runtime Foundation
 
-**Objective.** Build the coordinator before the specialists — routing, consolidation, prioritization, and attention management — so that the first agent has somewhere to land.
+**Objective.** Build the one gateway through which **all** model invocation passes — before any agent exists to call a model. **This is approved architecture, not implemented** ([ADR-0028](../decisions/ADR-0028-ai-runtime-foundations-and-roadmap-sequencing.md), [model-runtime-and-governance.md](./model-runtime-and-governance.md)).
 
-**Key outputs.** Event routing. The agent registry, with versioning and enablement. Agent-run recording. Recommendation consolidation and deduplication. Prioritization by impact and time sensitivity. Expiry handling. The founder attention model. **Communication prioritization and scheduling**, plus recording of **specialist context contribution and routing reasons** ([communication-model.md](./communication-model.md)). Automation **Level 0 — observation only**.
+**Key outputs.** One internal model gateway. **Agents never import or call model providers directly.** A **Gemma-first, model-independent** architecture. Runtime modes — `OFF`, `SHADOW`, `CANARY`, `ACTIVE`, `FALLBACK`. Model routing; local-versus-remote policy; timeout and circuit-breaker policy; retry budgets; structured-output validation; prompt versioning; model versioning; model and prompt provenance; privacy classification before remote processing; token budgets; cost budgets; concurrency limits; queue limits; resource-pressure controls; provider fallback; an emergency kill switch.
 
-**Explicit exclusions.** No specialist agents. No approval submission. No execution. No founder UI — the attention model exists as data, not as a screen. **No communication is sent, prepared, or connected to anything** — scheduling exists as coordination logic only.
+**Explicit exclusions.** **No specialist agent.** No coordinator. No knowledge system. **No consumer AI subscription as a production model backend.** **No raw chat, model output or business conversation becoming training data automatically.** No provider communication credential — a model backend is not a communication provider. The gateway authorizes nothing and executes nothing.
 
 **Entry criteria.** Phase 3 complete.
 
+**Exit criteria.** Every model call in the system goes through the gateway, and an agent that tried to hold a provider client could not resolve one. Budgets, concurrency and queue limits are enforced and observable. The kill switch stops all model invocation. Structured-output validation refuses a malformed model output rather than coercing it. Model and prompt provenance is recorded on every model-backed run.
+
+**Dependencies.** Phase 3. **This phase completes independently** — proven against fixtures and synthetic reasoning tasks, with no live Core and no real personal data.
+
+**Principal risks.** A gateway that agents can route around is not a gateway. Mitigated structurally: the provider client is a dependency of the gateway package and of nothing else, exactly as `packages/contracts` is kept pure and the test emitter is kept unresolvable.
+
+---
+
+## Phase 4.1 — Governed Knowledge and Capability Foundation
+
+**Objective.** Establish **governed knowledge retrieval** (separate from agent memory) and a **secure capability registry**, so that when agents arrive they draw on reviewed reference material through bounded, contract-typed doors. **Approved architecture, not implemented** ([ADR-0028](../decisions/ADR-0028-ai-runtime-foundations-and-roadmap-sequencing.md), [governed-knowledge-and-capabilities.md](./governed-knowledge-and-capabilities.md)).
+
+**Key outputs.** A knowledge lifecycle — `uploaded → scanned → reviewed → approved → active → retired` — with every record carrying document identifier, version, source, owner, `approvedBy`, `effectiveFrom`, `expiresAt` (where applicable), classification, retrieval permissions, and `supersededBy` (where applicable). A secure capability registry, each capability declaring identifier, owning component, allowed caller or agent, read/write classification, input contract, output contract, data classification, timeout, rate limit, audit requirements, environment availability, feature flag, and failure behaviour.
+
+**Explicit exclusions.** **Retrieved knowledge is evidence, never business authority** — QuickFurno Core remains authoritative for current operational and business state. **No commitment to a vector database merely because retrieval exists** — vector retrieval must be justified by Phase 4.2 evaluation evidence, and deterministic lookup with metadata filtering is the valid first implementation. **Open-ended capabilities are prohibited** — no arbitrary SQL, arbitrary shell, unrestricted filesystem access, arbitrary URL fetching, generic provider invocation, or unrestricted document retrieval. Jarvis retains **no write access to business state, no path to n8n, no provider credentials, and no direct communication transport.**
+
+**Entry criteria.** Phase 4.0 complete.
+
+**Exit criteria.** Knowledge is retrievable only through the lifecycle, with full provenance on every record, and a retired or expired document is refused rather than silently served. Every capability an agent could invoke is declared, bounded, and denyable by flag; an open-ended capability is impossible to express.
+
+**Dependencies.** Phase 4.0.
+
+**Principal risks.** A knowledge base treated as truth; a capability that quietly becomes open-ended. Mitigated by "evidence, never authority," classification-scoped retrieval, and the prohibition on open-ended capabilities.
+
+---
+
+## Phase 4.2 — Continuous Evaluation, Observability and Data Quality
+
+**Objective.** Stand up the **engineering evaluation harness**, **AI operational tracing**, and **input-readiness gating** — before the first specialist, so each specialist is built against a harness that can fail it. **Approved architecture, not implemented** ([ADR-0028](../decisions/ADR-0028-ai-runtime-foundations-and-roadmap-sequencing.md), [ai-evaluation-observability-and-data-quality.md](./ai-evaluation-observability-and-data-quality.md)).
+
+**Key outputs.** Evaluation categories — golden cases, hard negatives, adversarial prompt-injection, multilingual prompt injection, routing correctness, domain-boundary refusal, evidence grounding, structured-output compliance, stale-context behaviour, incomplete-context behaviour, model-fallback behaviour, cost regressions, latency regressions, and the multilingual/Indian-market set (Hindi, English, Hinglish, Romanized Hindi, Indian number formats, lakh and crore interpretation, locality and category terminology). AI tracing across the whole path — canonical event → projection → coordinator route → specialist run → deterministic rules → knowledge retrieval → model gateway → output validation → recommendation — recording only identifiers, versions, counts and outcomes. A formal **input-readiness result** — `READY`, `READY_WITH_WARNINGS`, `STALE_CONTEXT`, `INCOMPLETE_CONTEXT`, `CONFLICTED_CONTEXT`, `SOURCE_UNAVAILABLE` — and an **input watermark** on every recommendation.
+
+**Explicit exclusions.** **Tracing never records** chain-of-thought, raw personal-data prompts, complete raw model output, secrets, provider credentials, phone numbers, message bodies, or call transcripts. **Phase 4.2 is the engineering evaluation harness, not Phase 14** — real-world business effectiveness, outcome correlation and automation-promotion evidence remain Phase 14.
+
+**Entry criteria.** Phase 4.1 complete.
+
+**Exit criteria.** The harness can fail an agent version on grounding, refusal, structured-output, cost, latency, and the multilingual categories. Tracing reconstructs a reasoning path from identifiers alone, and a trace-store audit finds none of the never-record items. Every recommendation carries an input watermark, so a recommendation built on stale or incomplete context is detectably so.
+
+**Dependencies.** Phase 4.1.
+
+**Principal risks.** An evaluation harness written after the agents it grades; a trace store that leaks personal data. Mitigated by building the harness first and by the never-record list, which is [security-principles.md](../governance/security-principles.md) and [privacy-principles.md](../governance/privacy-principles.md) applied to tracing.
+
+---
+
+## Phase 4.3 — Jarvis Coordination Layer
+
+**Objective.** Build the coordinator before the specialists — routing, consolidation, prioritization, and attention management — so that the first agent has somewhere to land. **This is the former Phase 4, renumbered by [ADR-0028](../decisions/ADR-0028-ai-runtime-foundations-and-roadmap-sequencing.md); its content is unchanged.**
+
+**Key outputs.** Event routing. The agent registry, with versioning and enablement. Agent-run recording. Recommendation consolidation and deduplication. Conflict detection. Prioritization by impact and time sensitivity. Expiry handling. The founder attention model. Cross-domain synthesis. **Communication prioritization and scheduling**, plus recording of **specialist context contribution and routing reasons** ([communication-model.md](./communication-model.md)). Automation **Level 0 — observation only**.
+
+**Explicit exclusions.** No specialist agents. No approval submission. No execution. No founder UI — the attention model exists as data, not as a screen. **No communication is sent, prepared, or connected to anything** — scheduling exists as coordination logic only. **Do not move specialist domain logic into Jarvis** ([ADR-0006](../decisions/ADR-0006-agent-responsibility-boundaries.md)).
+
+**Entry criteria.** **Phases 4.0, 4.1 and 4.2 complete.** The coordinator is not built until the runtime it coordinates, the knowledge and capabilities it draws on, and the evaluation and tracing that watch it all exist.
+
 **Exit criteria.** Events route correctly to a placeholder-free registry with no agents registered. Consolidation, prioritization, and expiry are implemented and tested. The system observes and measures, and recommends nothing, because nothing recommends yet.
 
-**Dependencies.** Phase 3.
+**Dependencies.** Phases 4.0–4.2.
 
 **Principal risks.** The coordinator absorbing domain logic that belongs to specialists ([ADR-0006](../decisions/ADR-0006-agent-responsibility-boundaries.md)). Mitigated by building it with zero agents registered, which makes domain logic impossible to sneak in.
 
@@ -270,11 +331,11 @@ The canonical envelope defined in Phase 2 carries **no aggregate sequence**. Pha
 
 **Explicit exclusions.** No lead assignment — ever, in any phase. No approval flow yet. No execution. No other agents. Kabir does not decide how many vendors receive a lead: the batch policy — **at most three per batch, one replacement batch, six unique vendors per lead-category** — is QuickFurno Core's to enforce ([ADR-0015](../decisions/ADR-0015-complete-client-journey-and-reassignment-policy.md)).
 
-**Entry criteria.** Phase 4 complete.
+**Entry criteria.** Phase 4.3 complete.
 
 **Exit criteria.** Kabir produces evidence-backed recommendations on real events, in shadow. Deterministic rules demonstrably run before model reasoning. Shadow evaluation has run long enough to say whether Kabir is worth a human's attention.
 
-**Dependencies.** Phase 4. Lead events from Phase 2.
+**Dependencies.** Phase 4.3. Lead events from Phase 2.
 
 **Principal risks.** Using a model where a rule would do; false positives that would erode trust in the system if surfaced. Mitigated by shadow mode — the first agent's mistakes cost nothing but evaluation data.
 
@@ -334,6 +395,24 @@ The canonical envelope defined in Phase 2 carries **no aggregate sequence**. Pha
 
 ---
 
+## Phase 8.5 — Human Identity and Access Foundation
+
+**Objective.** Establish identity and access controls **before approval capability is exposed to people in Phase 9** — because approval authority is the most valuable credential in the system, and it may not be exposed to accounts that cannot be attributed, revoked, or stepped up. **Approved architecture, not implemented** ([ADR-0028](../decisions/ADR-0028-ai-runtime-foundations-and-roadmap-sequencing.md), [production-readiness-and-access-control.md](./production-readiness-and-access-control.md)).
+
+**Key outputs.** Named individual accounts. No shared approver accounts. MFA. Role-based access control. Delegated limits. Step-up authentication for sensitive actions. Session expiry. Session and device revocation. Emergency read-only mode. An access-review process. Full actor attribution. Separate reviewer and approver permissions where appropriate.
+
+**Explicit exclusions.** No approval capability itself — that is Phase 9; this phase builds the identity controls it will rest on. No new edge across the permanent boundary; identity governs *who among authorized humans may do what*, and grants no agent any authority.
+
+**Entry criteria.** Phase 8 complete.
+
+**Exit criteria.** Every human with approval authority has a named, MFA-protected account; there are no shared approver accounts; sessions expire and can be revoked; sensitive actions require step-up; and every action is attributable to an individual. Emergency read-only mode can freeze the system to observation.
+
+**Dependencies.** Phase 8.
+
+**Principal risks.** Building the most dangerous door (approval) before its lock (identity). This phase is the lock, and it comes first by design.
+
+---
+
 ## Phase 9 — Approval and Policy Layer
 
 **Objective.** **Define** the approval and policy capabilities: risk classification, approval levels, delegated limits, expiry, attribution, and the approval-request submission path — as a specified, tested capability on the Jarvis side.
@@ -342,11 +421,11 @@ The canonical envelope defined in Phase 2 carries **no aggregate sequence**. Pha
 
 **Explicit exclusions.** No execution — approval exists, but nothing is executed from it yet. No policy automation. No n8n. **No optimistic or local approval state** — Jarvis never marks anything approved on its own. This phase deliberately builds the approval mechanism *before* anything can act on an approval, so the path is proven while it is still harmless.
 
-**Entry criteria.** Phases 5–8 complete, with at least one agent evaluated as good enough to show a human.
+**Entry criteria.** Phases 5–8 complete, with at least one agent evaluated as good enough to show a human. **Phase 8.5 complete** — identity, MFA and RBAC exist before approval is exposed to people.
 
 **Exit criteria.** Recommendations reach humans, who approve, reject, or request changes against Core's authorization interface as specified in Phase 2's contracts. Every decision is attributable and audited. Money-related recommendations demonstrably require stronger approval. An expired recommendation demonstrably does *not* become approved. Jarvis demonstrably does **not** display an approved state without an authoritative Core decision. Recommendation acceptance rate and approval turnaround are instrumented.
 
-**Dependencies.** Phases 5–8, and the approval-request and approval-decision contracts from Phase 2. **This phase defines the capability against those contracts.** Whether Core's authorization interface exists yet is **unverified and out of scope here** — building or adapting it is **Phase 11's** work.
+**Dependencies.** Phases 5–8, Phase 8.5, and the approval-request and approval-decision contracts from Phase 2. **This phase defines the capability against those contracts.** Whether Core's authorization interface exists yet is **unverified and out of scope here** — building or adapting it is **Phase 11's** work.
 
 **Principal risks.** Approval fatigue; a UI that makes rejection harder than approval. Mitigated by consolidation, prioritization, and expiry — and by tracking the stale-recommendation rate as an adoption canary.
 
@@ -378,6 +457,24 @@ The canonical envelope defined in Phase 2 carries **no aggregate sequence**. Pha
 
 ---
 
+## Phase 10.5 — Production Readiness Foundation
+
+**Objective.** Make the platform **recoverable and its artifacts verifiable** before Phase 11 turns on live Core data — because live data may not run on infrastructure whose recovery has never been proven. **Approved architecture, not implemented** ([ADR-0028](../decisions/ADR-0028-ai-runtime-foundations-and-roadmap-sequencing.md), [production-readiness-and-access-control.md](./production-readiness-and-access-control.md)).
+
+**Key outputs.** Backup policy; encrypted backup mechanism; point-in-time recovery where supported; a **restore drill**; documented RPO and RTO; a disaster-recovery runbook. Named failure modes — Mac mini, VPS, managed database, provider outage — and a degraded read-only mode. Supply-chain and artifact verification — model artifact hashes, tokenizer hashes, model licences, quantization records, prompt hashes, dependency-lockfile verification, build provenance, container/deployment artifact digest where applicable, security-scan evidence, and secret-isolation verification.
+
+**Explicit exclusions.** **This phase does not authorize live QuickFurno data or production communication.** It makes the platform recoverable; it grants no licence to put real data or real messages on it. The Phase 11 privacy-and-retention gate ([ADR-0019](../decisions/ADR-0019-durable-event-store-and-persistence.md) §7) is untouched.
+
+**Entry criteria.** Phase 10 complete.
+
+**Exit criteria.** **A restore drill has succeeded** — a backup is not proven until it has been restored. RPO and RTO are documented and met by the drill. Every failure mode has a written response, and degraded read-only mode works. Model and software artifacts have verified hashes, known licences, and recorded provenance; secret isolation is verified.
+
+**Dependencies.** Phase 10.
+
+**Principal risks.** A backup nobody has restored, discovered to be unusable at the worst possible moment. Mitigated by making the restore drill the exit criterion — the drill, not the backup, is the proof.
+
+---
+
 ## Phase 11 — QuickFurno Core Integration — **LIVE**
 
 **Objective.** **This is the phase where QuickFurno Core's integration capabilities are established, and where the system becomes live.** Everything before it was built against contracts and fixtures.
@@ -399,7 +496,7 @@ The canonical envelope defined in Phase 2 carries **no aggregate sequence**. Pha
 
 **Explicit exclusions.** No Jarvis write path into business state — not in this phase, not in any phase. No second source of truth, however convenient. **No weakening of a Phase 2 contract to accommodate what Core happens to emit today** — that is what adapters are for. **No production communication** — that is Phase 11A, and it is gated.
 
-**Entry criteria.** Phase 10 complete. **A scoping assessment of what QuickFurno Core can emit and accept today.**
+**Entry criteria.** Phase 10 complete. **Phase 10.5 complete** — the platform is recoverable and its restore drill has succeeded. **A scoping assessment of what QuickFurno Core can emit and accept today.**
 
 **And a hard gate, added in Phase 3.** Before Phase 11 permits a **single live event**, a **separate owner-approved privacy and retention decision** must exist. Phase 3 deliberately did not decide it, because it is a legal question rather than an engineering one: the event log is immutable and append-only, and it carries **pseudonymous** Core identifiers — and a pseudonymous identifier linked to a person is still personal data.
 
@@ -418,7 +515,7 @@ That decision must define:
 
 **Exit criteria.** Core emits the events all four agents need. Core's authorization interface accepts approval requests, decides, records authoritatively, and emits decision events. Jarvis reflects those decisions and demonstrably holds **no local approved state** of its own. Every recommendation lifecycle closes with a recorded outcome. Derived views reconcile against Core, and a deliberate divergence is detected and corrected in Core's favour. **A deletion in Core demonstrably propagates into Jarvis derived views, recommendation evidence, and agent memory** — and a record that claims completion while data remains anywhere is demonstrably refused. **The QuickFurno Communication Core answers eligibility questions authoritatively**, and an opted-out recipient is demonstrably refused.
 
-**Dependencies.** Phase 10. **Deep cooperation from QuickFurno Core — this is the phase that needs it, and the first one that does.** Whether Core has these capabilities today is unverified; **establishing them is this phase's work, and their absence changes this phase's size, not the boundary** ([ADR-0001](../decisions/ADR-0001-source-of-truth-boundary.md)).
+**Dependencies.** Phase 10, Phase 10.5. **Deep cooperation from QuickFurno Core — this is the phase that needs it, and the first one that does.** Whether Core has these capabilities today is unverified; **establishing them is this phase's work, and their absence changes this phase's size, not the boundary** ([ADR-0001](../decisions/ADR-0001-source-of-truth-boundary.md)).
 
 **Principal risks.** This phase carries the integration risk that earlier phases deliberately deferred, so it may be large. That is the intended trade: the alternative was blocking Phases 2 through 10 on another team's roadmap. Secondary risk: reconciliation quietly turning into synchronisation, and a derived view becoming load-bearing — mitigated by rebuilding read models from scratch periodically and proving nothing breaks.
 
@@ -429,6 +526,14 @@ That decision must define:
 **Objective.** **Reach a real person, for the first time, on purpose.**
 
 This is a separate phase and not a gate inside Phase 11, for a specific reason: a controlled pilot buried inside a large integration phase is a pilot that gets **compressed when the phase runs late**. It needs its own gates, its own evidence, and its own ability to **stop** without stalling everything else ([ADR-0017](../decisions/ADR-0017-live-communication-sequencing.md)).
+
+### The multilingual communication safety gate — mandatory before any real message
+
+**Before a single real communication is sent, the multilingual safety gate must pass** ([ADR-0028](../decisions/ADR-0028-ai-runtime-foundations-and-roadmap-sequencing.md)). QuickFurno's clients and vendors communicate in Hindi, English, and the mixtures people actually use — and the first real message must be safe in the language it is actually written in, not only in English.
+
+**The gate tests:** Hindi · English · Hinglish · Romanized Hindi · STOP and START interpretation · opt-out language · mixed-language consent · quiet-hours wording · numbers, dates, budgets and measurements · Pune and Mumbai locality names · interior, carpentry and modular terminology · respectful and non-manipulative tone · multilingual prompt injection · template rendering · **no invented promises** · **no invented pricing** · **no invented availability**.
+
+**Voice remains after messaging safety evidence** ([ADR-0017](../decisions/ADR-0017-live-communication-sequencing.md)). The multilingual gate does not move voice earlier.
 
 ### The sequence — and it is never run out of order
 
@@ -447,51 +552,55 @@ Voice is not just another channel. It is synchronous, intrusive, impossible to r
 
 **No voice policy automation is permitted.** Any future limited-policy voice automation requires a separate Accepted ADR, Phase 14 evaluation evidence, explicit Phase 15 promotion gates, business-owner approval, and immediate revocation capability. **Unrestricted autonomous calling remains prohibited**, and the example call types recorded in [automation-levels.md](../governance/automation-levels.md) — requested callbacks, appointment reminders, opted-in status calls, vendor-requested onboarding assistance — are **possibilities for a future ADR to argue, not authorized scope**.
 
-**Explicit exclusions.** No policy automation — every communication in this phase traces to a human approval. No money-related execution until its stronger-approval path is proven end to end. **No voice before messaging safety evidence exists.** **No Jarvis-to-n8n path and no Jarvis-to-provider path, ever.**
+**Explicit exclusions.** No policy automation — every communication in this phase traces to a human approval. No money-related execution until its stronger-approval path is proven end to end. **No voice before messaging safety evidence exists.** **No real message before the multilingual safety gate passes.** **No Jarvis-to-n8n path and no Jarvis-to-provider path, ever.**
 
-**Entry criteria.** **Phase 11 has succeeded** — not started, not mostly working. Core emits, Core authorizes, Core records, and consent is enforced by the authority that owns it.
+**Entry criteria.** **Phase 11 has succeeded** — not started, not mostly working. Core emits, Core authorizes, Core records, and consent is enforced by the authority that owns it. **The multilingual communication safety gate passes.**
 
-> **No production communication is permitted before Phase 11 succeeds.**
+> **No production communication is permitted before Phase 11 succeeds and the multilingual safety gate passes.**
 
 **Exit criteria.** A real, approved, low-risk, reversible message reaches a real recipient and its authoritative result returns to Core. **A retry demonstrably does not double-send and does not double-dial.** **An opted-out recipient is demonstrably refused — including one the founder approved.** **A scheduled communication whose recipient withdraws consent before the scheduled moment is demonstrably not sent.** Nothing was rendered as `delivered` that was not. Dead letters are visible and replayable. The full audit chain is verifiable for every message sent.
 
 **Dependencies.** Phase 11. Provider credentials provisioned **in n8n only** — and verifiably nowhere inside the Jarvis trust zone.
 
-**Principal risks.** **The first real effect on a real client or vendor.** Mitigated by internal destinations first, by one purpose, by volume bounds, by a named human behind every single message, and by an off switch that costs nothing to pull.
+**Principal risks.** **The first real effect on a real client or vendor.** Mitigated by internal destinations first, by one purpose, by volume bounds, by a named human behind every single message, by the multilingual safety gate, and by an off switch that costs nothing to pull.
 
 ---
 
-## Phase 12 — Founder Control Plane
+## Phase 12 — Founder Control Plane and Operating System
 
-**Objective.** The product surface: one prioritized founder command view.
+**Objective.** The product surface: one prioritized founder command view, expanded into a **founder operating system**.
 
-**Key outputs.** The consolidated, ranked, expiring attention view. Evidence visible on every item — *why is this here?* answered in one click. **The founder-facing approval interface** — approve, reject, and request-changes actions that submit an **approval request** to QuickFurno Core and display Core's authoritative response ([ADR-0007](../decisions/ADR-0007-founder-approval-interface-and-authority.md)). **The communication actions — Call client, Call vendor, Send WhatsApp, Schedule communication, Request human callback** — which **create governed communication requests** and render the authoritative lifecycle state ([communication-model.md](./communication-model.md), [ADR-0008](../decisions/ADR-0008-controlled-communication-capability.md)). Founder briefings. Proactive alerts. Dismissal feeding evaluation. Cross-domain composite recommendations ([agent-model.md](./agent-model.md)).
+**Key outputs.** The consolidated, ranked, expiring **prioritized attention view**. An **evidence view** — *why is this here?* answered in one click. An **approval queue**. **The founder-facing approval interface** — approve, reject, and request-changes actions that submit an **approval request** to QuickFurno Core and display Core's authoritative response ([ADR-0007](../decisions/ADR-0007-founder-approval-interface-and-authority.md)). **The communication actions — Call client, Call vendor, Send WhatsApp, Schedule communication, Request human callback** — which **create governed communication requests** and render the authoritative lifecycle state ([communication-model.md](./communication-model.md), [ADR-0008](../decisions/ADR-0008-controlled-communication-capability.md)).
 
-**Explicit exclusions.** No new agent capability. No chat interface that "just does things." No approval shortcut that bypasses risk classification. **No optimistic approval or delivery state** — the control plane never renders an action as approved before Core's authoritative decision arrives, and **never claims delivery, call completion, or success before authoritative execution results return**. `execution submitted` is not `provider accepted`, and neither is `delivered`; the UI must not collapse them. The control plane **initiates governed communication requests**; it does not authorize them, does not transport them, and does not deliver them.
+The operating-system surfaces ([ADR-0028](../decisions/ADR-0028-ai-runtime-foundations-and-roadmap-sequencing.md)): a **daily founder briefing**; a **decision register**; a **waiting-for tracker**; a **delegated-action tracker**; **recurring review queues**; **stale-approval alerts**; an **unresolved-incident view**; **agent health**; **model-gateway health**; a **business-KPI summary**; **searchable audit history**; a **mobile urgent-review experience**; and **governed calendar and reminder integration**. Founder briefings, proactive alerts, dismissal feeding evaluation, and cross-domain composite recommendations ([agent-model.md](./agent-model.md)).
+
+**Explicit exclusions.** No new agent capability. No chat interface that "just does things." No approval shortcut that bypasses risk classification. **The dashboard must never: display optimistic approval; display optimistic delivery; collapse submitted, provider-accepted and delivered states; authorize locally; or store a second copy of QuickFurno business truth.** `execution submitted` is not `provider accepted`, and neither is `delivered`; the UI must not collapse them. The control plane **initiates governed communication requests**; it does not authorize them, does not transport them, and does not deliver them.
 
 **Entry criteria.** Phase 11 complete — in particular, Core's authorization interface exists and emits decision events. **Phase 11A's messaging pilot is under way**, so that the communication actions the control plane exposes are backed by a path that has actually been proven against a real recipient.
 
-**Exit criteria.** The founder can run a day from this view. Every item shows its evidence. Approving from the view submits a request to Core and renders **only** the decision Core returned — demonstrated by showing that a request Core rejects renders as rejected, and that a request in flight renders as pending, never as approved. **Clicking Call or Send WhatsApp demonstrably initiates a governed request, not a send**: a refused request renders as `rejected` with Core's reason and nothing is sent, an in-flight request renders as `authorization requested` or `execution submitted`, and `delivered` appears **only** on an authoritative execution result. **The rejected, cancelled, expired, and in-flight renderings are demonstrated — not only the happy path.** The view stays short — consolidation and expiry demonstrably work under real volume.
+**Exit criteria.** The founder can run a day from this view. Every item shows its evidence. Approving from the view submits a request to Core and renders **only** the decision Core returned — demonstrated by showing that a request Core rejects renders as rejected, and that a request in flight renders as pending, never as approved. **Clicking Call or Send WhatsApp demonstrably initiates a governed request, not a send**: a refused request renders as `rejected` with Core's reason and nothing is sent, an in-flight request renders as `authorization requested` or `execution submitted`, and `delivered` appears **only** on an authoritative execution result. **The rejected, cancelled, expired, and in-flight renderings are demonstrated — not only the happy path.** The view stays short — consolidation and expiry demonstrably work under real volume. The operating-system surfaces — briefing, decision register, waiting-for and delegated-action trackers, incident and health views, searchable audit history, and the mobile urgent-review experience — are usable and never render an optimistic or locally-authorized state.
 
 **Dependencies.** Phase 11, and Phase 11A for anything the view can actually send.
 
-**Principal risks.** **This is the adoption phase, and adoption is the project's largest risk.** A view the founder stops reading is a failed project regardless of engineering quality. Mitigated by ruthless consolidation, honest prioritization, and tracking the stale-recommendation rate.
+**Principal risks.** **This is the adoption phase, and adoption is the project's largest risk.** A view the founder stops reading is a failed project regardless of engineering quality. Mitigated by ruthless consolidation, honest prioritization, and tracking the stale-recommendation rate. Secondary risk: an operating system that grows into a second source of truth — mitigated by the never-store-business-truth rule and by every surface reading Core's authoritative state rather than a local copy.
 
 ---
 
 ## Phase 13 — Security and Observability Hardening
 
-**Objective.** Make the trust boundaries real, and make the system's behavior visible.
+**Objective.** Make the trust boundaries real, and make the system's behavior visible. **Phase 13 hardens and independently verifies controls introduced earlier; it is not the first appearance of any of them** ([ADR-0028](../decisions/ADR-0028-ai-runtime-foundations-and-roadmap-sequencing.md)).
 
-**Key outputs.** Signature verification at every boundary ([trust-boundaries.md](./trust-boundaries.md)). Replay protection. Key rotation without downtime. Secret isolation, verified — including proof that Jarvis holds no provider credentials. Log redaction, verified: no secrets, no raw personal data, no chain-of-thought. Prompt-injection defenses for attacker-influencable content. Rate and volume bounds. Full observability: latency, success, retry, dead-letter, and audit-completeness metrics. Safety metrics instrumented and alerting ([success-metrics.md](../charter/success-metrics.md)).
+> **Phase 13 must not be the first appearance of** tracing, redaction, access control, backup, model governance, cost limits, evaluation, or capability restrictions. Those now appear in the phase that first depends on them — tracing and evaluation in Phase 4.2, model governance and cost limits in Phase 4.0, capability restrictions in Phase 4.1, access control in Phase 8.5, backup in Phase 10.5. **Phase 13 proves them under adversarial conditions and closes the gaps; it does not originate them.**
 
-**Explicit exclusions.** No new agents. No new automation. No new business capability. This phase makes what exists trustworthy; it does not add to it.
+**Key outputs.** Independent verification of signature verification at every boundary ([trust-boundaries.md](./trust-boundaries.md)). Replay protection. Key rotation without downtime. Secret isolation, verified — including proof that Jarvis holds no provider credentials. Log and trace redaction, verified: no secrets, no raw personal data, no chain-of-thought. Adversarial prompt-injection defenses for attacker-influencable content, including multilingual injection. Rate and volume bounds. Full observability: latency, success, retry, dead-letter, cost, and audit-completeness metrics. Safety metrics instrumented and alerting ([success-metrics.md](../charter/success-metrics.md)). Independent verification of the identity, access-control, backup, model-governance, and capability controls introduced in the earlier phases.
+
+**Explicit exclusions.** No new agents. No new automation. No new business capability. This phase makes what exists trustworthy and independently verified; it does not add to it, and it does not introduce a control for the first time.
 
 **Entry criteria.** Phase 12 complete.
 
-**Exit criteria.** A forged event, a forged intent, a replayed message, and an expired intent are each demonstrably rejected. Key rotation completes with no downtime. A log audit finds no secrets, no raw personal data, **no phone numbers, no message bodies, no call transcripts**, and no chain-of-thought. **No WhatsApp or telephony credential exists anywhere in the Jarvis trust zone** — verified, not assumed. Audit completeness measures **100%**. Unauthorized-action count and sensitive-data-logging incidents both read **zero**, and both alert if they ever do not.
+**Exit criteria.** A forged event, a forged intent, a replayed message, and an expired intent are each demonstrably rejected. Key rotation completes with no downtime. A log and trace audit finds no secrets, no raw personal data, **no phone numbers, no message bodies, no call transcripts**, and no chain-of-thought. **No WhatsApp or telephony credential exists anywhere in the Jarvis trust zone** — verified, not assumed. Audit completeness measures **100%**. Unauthorized-action count and sensitive-data-logging incidents both read **zero**, and both alert if they ever do not. The earlier-phase controls are independently re-verified under adversarial conditions.
 
-**Dependencies.** Phase 12.
+**Dependencies.** Phase 12, and the controls established in Phases 4.0–4.2, 8.5, 10.5, and 11A.
 
 **Principal risks.** Deferring this phase because the system already "works." It works and it is not yet trustworthy; those are different properties, and **Phase 14 and 15 are blocked until this one passes.**
 
@@ -499,11 +608,11 @@ Voice is not just another channel. It is synchronous, intrusive, impossible to r
 
 ## Phase 14 — Evaluation and Learning Loop
 
-**Objective.** Measure whether the agents are actually any good — rigorously enough to justify, or refuse, automation.
+**Objective.** Measure whether the agents are actually any good — rigorously enough to justify, or refuse, automation. **This is the real-world business evaluation, distinct from the engineering evaluation harness of Phase 4.2.**
 
-**Key outputs.** Recommendation acceptance rate, per agent and per recommendation type. Outcome correlation: when acted upon, did the business metric move? Confidence calibration. Shadow comparison of agent versions against recorded history. Regression detection when an agent version degrades. Evaluation reporting to the founder. Calibrated numerical targets for the metrics that Phase 0 deliberately left as *future calibration items*.
+**Key outputs.** Recommendation acceptance rate, per agent and per recommendation type. Outcome correlation: when acted upon, did the business metric move? Confidence calibration. Shadow comparison of agent versions against recorded history. Regression detection when an agent version degrades. Automation-candidate evidence. Evaluation reporting to the founder. Calibrated numerical targets for the metrics that Phase 0 deliberately left as *future calibration items*.
 
-**Explicit exclusions.** No automation promotion in this phase — this phase produces the *evidence* on which the next phase decides. No agent tuning based on vibes.
+**Explicit exclusions.** No automation promotion in this phase — this phase produces the *evidence* on which the next phase decides. No agent tuning based on vibes. The **engineering** evaluation harness (grounding, refusal, structured-output, cost, latency, multilingual correctness) is Phase 4.2's; Phase 14 owns **business effectiveness**.
 
 **Entry criteria.** Phase 13 complete. Enough real decision history to evaluate against.
 
@@ -521,7 +630,7 @@ Voice is not just another channel. It is synchronous, intrusive, impossible to r
 
 **Key outputs.** Automation **Level 4 — limited policy automation**, for one class at a time. An explicit, versioned policy in QuickFurno Core authorizing that class automatically. Gate conditions from Phase 14 evidence. Continuous monitoring of the incorrect-automated-action rate, with a target of zero and an automatic revocation on breach. A revocation procedure, tested. A rollback plan per [change-management.md](../governance/change-management.md).
 
-**Explicit exclusions.** **No money-related automation.** Not recharges, not payments, not wallet effects, not package changes, not ad spend. **No Level 5.** No automation of a class that has not passed its Phase 14 gates. No bulk automation. No automation without an off switch that costs nothing to pull.
+**Explicit exclusions.** **No money-related automation.** Not recharges, not payments, not wallet effects, not package changes, not ad spend. **No bulk automation. No unrestricted autonomous communication. No Level 5.** No automation of a class that has not passed its Phase 14 gates. No automation without an off switch that costs nothing to pull.
 
 **Entry criteria.** Phase 14 complete. A specific recommendation class has passed its gates: high acceptance, correlated outcomes, zero incorrect actions, full reversibility.
 

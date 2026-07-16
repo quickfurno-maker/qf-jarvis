@@ -255,6 +255,12 @@ Examples: *"the lead has no phone number"* is a rule. *"the stated budget is imp
 
 **Deterministic logic runs first.** If a rule settles it, the model is not invoked. This is cheaper, faster, reproducible, and trivially explainable — and it is required by [engineering-principles.md](../governance/engineering-principles.md).
 
+### Model reasoning goes through the gateway, never a provider directly
+
+When model reasoning *is* warranted, **the agent calls the internal model gateway; it never imports or calls a model provider directly.** The gateway — a **Gemma-first, model-independent** runtime introduced in **Phase 4.0**, ahead of the first specialist — owns model routing, local-versus-remote placement, privacy classification before any remote call, token and cost budgets, concurrency and queue limits, timeouts and circuit breakers, retry budgets, structured-output validation, prompt and model versioning, provenance, provider fallback, and an emergency kill switch ([model-runtime-and-governance.md](./model-runtime-and-governance.md), [ADR-0028](../decisions/ADR-0028-ai-runtime-foundations-and-roadmap-sequencing.md)).
+
+That is the same containment argument the whole architecture rests on, applied to model invocation: capability you distribute is capability you cannot govern, so there is exactly one place a prompt becomes a model call. **No consumer AI subscription is a production model backend**, and **no raw chat, model output, or business conversation becomes training data automatically.** All of this is **approved architecture; none of it is implemented.**
+
 ---
 
 ## Agent versioning
@@ -278,6 +284,8 @@ An agent that is not evaluated is an agent nobody should trust.
 - **Shadow comparison** — does a new version beat the current one on recorded history?
 
 Evaluation is what turns "the agent seems good" into the evidence required to promote an automation level. See [success-metrics.md](../charter/success-metrics.md).
+
+**Two layers of evaluation, and they answer different questions.** The **engineering evaluation harness** — golden cases, hard negatives, adversarial and multilingual prompt injection, routing correctness, domain-boundary refusal, evidence grounding, structured-output compliance, stale- and incomplete-context behaviour, cost and latency regressions, and the Hindi/Hinglish/Romanized-Hindi and Indian-market categories — is built in **Phase 4.2, before the first specialist**, so each agent is graded by a harness that can fail it ([ai-evaluation-observability-and-data-quality.md](./ai-evaluation-observability-and-data-quality.md)). The **real-world business evaluation** above — acceptance, outcome correlation, calibration, shadow comparison, and automation-candidate evidence — remains **Phase 14**. A correct, grounded agent that moves no business metric has passed the first and failed the second, and that is a valid result ([ADR-0028](../decisions/ADR-0028-ai-runtime-foundations-and-roadmap-sequencing.md)).
 
 ---
 

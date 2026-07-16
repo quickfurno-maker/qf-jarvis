@@ -36,7 +36,7 @@ Results return to QuickFurno Core.
 
 Agents recommend only. They do not authorize and they do not execute.
 
-**None of them is implemented.** They are a design, described in [agent-model.md](docs/architecture/agent-model.md). Jarvis coordination is introduced in Phase 4. Kabir, Riya, Anisha, and Jitin are introduced in Phases 5 through 8.
+**None of them is implemented.** They are a design, described in [agent-model.md](docs/architecture/agent-model.md). Jarvis coordination is introduced in **Phase 4.3**, after the model gateway (4.0), governed knowledge and capabilities (4.1), and the evaluation harness (4.2) — see [ADR-0028](docs/decisions/ADR-0028-ai-runtime-foundations-and-roadmap-sequencing.md). Kabir, Riya, Anisha, and Jitin are introduced in Phases 5 through 8.
 
 ## Current Status
 
@@ -133,6 +133,28 @@ Two things worth knowing up front, because both are limitations rather than feat
 - **The canonical envelope carries no aggregate sequence**, so Phase 3 guarantees deterministic ingestion order and deterministic replay — and **does not claim** per-aggregate ordering or sequence-gap detection. There is no sequence to detect a gap in. That needs a future envelope version and Core's cooperation: **Phase 11**.
 - **Phase 3 uses synthetic fixtures only.** The legal classification and retention policy of a _production_ event log is **deliberately not decided here** — it is an owner-approved hard gate on Phase 11.
 
+**AI runtime foundation roadmap amendment — approved 2026-07-16 ([ADR-0028](docs/decisions/ADR-0028-ai-runtime-foundations-and-roadmap-sequencing.md), Accepted).**
+
+The business owner approved adding the missing AI-runtime, governance, evaluation, identity, production-readiness and multilingual-safety foundations to the roadmap as explicitly sequenced sub-phases. The former Phase 4 (Jarvis coordination) becomes **Phase 4.3**, preceded by **Phase 4.0** (model gateway and AI runtime), **Phase 4.1** (governed knowledge and capabilities), and **Phase 4.2** (continuous evaluation, observability and data quality). **Phase 8.5** (human identity and access) is inserted before Phase 9; **Phase 10.5** (production readiness) between Phases 10 and 11; a **multilingual communication safety gate** is added to Phase 11A; and Phase 12 is expanded into a founder operating system. **Phases 5–15 are not renumbered.** The load-bearing rule: a control appears in the phase that first depends on it — **Phase 13 verifies controls, it does not introduce them.** This amendment **does not weaken the permanent boundary.**
+
+**This is approved architecture, not implementation.** The honest status ledger:
+
+| Foundation                             | Status                                     |
+| -------------------------------------- | ------------------------------------------ |
+| Phase 3                                | **IN PROGRESS**                            |
+| Stage 3.2 (signature verification)     | **COMPLETE, ACCEPTED AND MERGED**          |
+| Stage 3.3 (validated signed ingestion) | **NOT STARTED**                            |
+| Model gateway (Phase 4.0)              | **APPROVED ARCHITECTURE, NOT IMPLEMENTED** |
+| Knowledge system (Phase 4.1)           | **APPROVED ARCHITECTURE, NOT IMPLEMENTED** |
+| Capability registry (Phase 4.1)        | **APPROVED ARCHITECTURE, NOT IMPLEMENTED** |
+| AI evaluation harness (Phase 4.2)      | **APPROVED ARCHITECTURE, NOT IMPLEMENTED** |
+| Human identity and access (Phase 8.5)  | **APPROVED ARCHITECTURE, NOT IMPLEMENTED** |
+| Production readiness (Phase 10.5)      | **APPROVED ARCHITECTURE, NOT IMPLEMENTED** |
+| Agents (Kabir, Riya, Anisha, Jitin)    | **NOT IMPLEMENTED**                        |
+| Founder dashboard / control plane      | **NOT IMPLEMENTED**                        |
+
+The design documents are [model-runtime-and-governance.md](docs/architecture/model-runtime-and-governance.md), [governed-knowledge-and-capabilities.md](docs/architecture/governed-knowledge-and-capabilities.md), [ai-evaluation-observability-and-data-quality.md](docs/architecture/ai-evaluation-observability-and-data-quality.md), and [production-readiness-and-access-control.md](docs/architecture/production-readiness-and-access-control.md). **None of them describes running code.**
+
 ## Getting Started
 
 **Prerequisites:** Node.js **24.18.0** and pnpm **11.11.0**. Both are pinned, and the versions are enforced — an install on a different Node major fails rather than warns.
@@ -199,7 +221,11 @@ Full instructions, including per-platform commands and troubleshooting: [develop
 - [Execution governance](docs/architecture/execution-governance.md)
 - [Data ownership](docs/architecture/data-ownership.md)
 - [Trust boundaries](docs/architecture/trust-boundaries.md)
-- [Phased roadmap](docs/architecture/phased-roadmap.md) — Phases 0 through 15
+- [Phased roadmap](docs/architecture/phased-roadmap.md) — Phases 0 through 15, with the AI-runtime foundations (Phases 4.0–4.3, 8.5, 10.5) added by [ADR-0028](docs/decisions/ADR-0028-ai-runtime-foundations-and-roadmap-sequencing.md)
+- [Model runtime and governance](docs/architecture/model-runtime-and-governance.md) — the model gateway (Phase 4.0, approved architecture, not implemented)
+- [Governed knowledge and capabilities](docs/architecture/governed-knowledge-and-capabilities.md) — knowledge retrieval and the capability registry (Phase 4.1, approved architecture, not implemented)
+- [AI evaluation, observability and data quality](docs/architecture/ai-evaluation-observability-and-data-quality.md) — evaluation harness, tracing, input readiness (Phase 4.2, approved architecture, not implemented)
+- [Production readiness and access control](docs/architecture/production-readiness-and-access-control.md) — identity/MFA/RBAC (Phase 8.5) and backup/DR (Phase 10.5), approved architecture, not implemented
 
 ### Decisions
 
@@ -217,6 +243,9 @@ Full instructions, including per-platform commands and troubleshooting: [develop
 - [ADR-0012 — Runtime contract validation](docs/decisions/ADR-0012-runtime-contract-validation.md) — Zod, strict schemas, why types alone are insufficient at a trust boundary
 - [ADR-0013 — Canonical event envelope and versioning](docs/decisions/ADR-0013-canonical-event-envelope-and-versioning.md) — the envelope, the static registry, failing closed on unknown versions
 - [ADR-0014 — Governed lifecycle contracts](docs/decisions/ADR-0014-governed-lifecycle-contracts.md) — recommendation, approval, execution, communication, and why they cannot execute anything
+- [ADR-0028 — AI runtime foundations and roadmap sequencing](docs/decisions/ADR-0028-ai-runtime-foundations-and-roadmap-sequencing.md) — **Accepted (2026-07-16)**; adds the model gateway (Phase 4.0), governed knowledge and capabilities (4.1), evaluation/tracing/data-quality (4.2), identity and access (8.5), production readiness (10.5), and the Phase 11A multilingual safety gate — **approved architecture, not implemented**
+
+_ADR-0015 through ADR-0027 are referenced in the Current Status section above; they cover the client journey, memory and learning, communication sequencing, the durable event backbone, and Stage 3.2 signature verification._
 
 ### Governance
 

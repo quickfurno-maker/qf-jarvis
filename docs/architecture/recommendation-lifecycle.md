@@ -73,6 +73,7 @@ stateDiagram-v2
 6. **Every transition is attributable and recorded.** Who or what moved it, when, and why. This is what makes the audit trail complete ([auditability-principles.md](../governance/auditability-principles.md)).
 7. **Correlation survives the whole chain.** Source events → recommendation → approval decision → execution intent → execution result → closure all carry the same correlation identifier.
 8. **Rejection is signal, not failure.** A rejected recommendation feeds evaluation. An agent whose recommendations are consistently rejected is an agent to fix or retire.
+9. **Every recommendation carries an input watermark.** During **analyzed**, any model reasoning goes through the internal **model gateway** (Phase 4.0), never a provider directly. The **recommended** artifact then carries an **input-readiness result** — `READY`, `READY_WITH_WARNINGS`, `STALE_CONTEXT`, `INCOMPLETE_CONTEXT`, `CONFLICTED_CONTEXT`, or `SOURCE_UNAVAILABLE` — and an input watermark showing the freshness and completeness of the facts it used, so a recommendation built on stale or incomplete context is **detectably** so rather than indistinguishable from one built on fresh, complete context ([ai-evaluation-observability-and-data-quality.md](./ai-evaluation-observability-and-data-quality.md), [ADR-0028](../decisions/ADR-0028-ai-runtime-foundations-and-roadmap-sequencing.md)). This is **approved architecture, not implemented.**
 
 ---
 

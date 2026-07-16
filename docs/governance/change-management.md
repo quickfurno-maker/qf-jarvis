@@ -42,6 +42,11 @@ Specific review blockers, beyond correctness:
 - Chain-of-thought written to a log or a store.
 - Personal data in a log line.
 - A cross-module import that bypasses an interface ([ADR-0004](../decisions/ADR-0004-modular-monolith-first.md)).
+- **An agent importing or calling a model provider directly**, instead of the internal model gateway ([model-runtime-and-governance.md](../architecture/model-runtime-and-governance.md), [ADR-0028](../decisions/ADR-0028-ai-runtime-foundations-and-roadmap-sequencing.md)).
+- **An open-ended capability** — arbitrary SQL, arbitrary shell, unrestricted filesystem access, arbitrary URL fetching, generic provider invocation, or unrestricted document retrieval ([governed-knowledge-and-capabilities.md](../architecture/governed-knowledge-and-capabilities.md)).
+- **A consumer AI subscription used as a production model backend**, or **raw chat, model output, or business conversation becoming training data automatically** ([ADR-0016](../decisions/ADR-0016-agent-memory-and-learning-boundaries.md)).
+- **Chain-of-thought, a raw personal-data prompt, complete raw model output, a secret, a phone number, a message body, or a call transcript written to an AI trace** ([ai-evaluation-observability-and-data-quality.md](../architecture/ai-evaluation-observability-and-data-quality.md)).
+- **Governed knowledge treated as business authority** rather than evidence, or approval capability exposed to people without the Phase 8.5 identity controls, or live data placed on infrastructure whose restore drill has not succeeded ([ADR-0028](../decisions/ADR-0028-ai-runtime-foundations-and-roadmap-sequencing.md)).
 
 ## 3. CI before merge — once CI exists
 

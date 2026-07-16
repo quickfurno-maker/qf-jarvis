@@ -13,6 +13,7 @@ Every component gets the minimum access it needs, and nothing more.
 
 - **Agents** receive only the data their domain requires. Jitin does not get client phone numbers; Kabir does not get payment history ([ADR-0006](../decisions/ADR-0006-agent-responsibility-boundaries.md)).
 - **QF Jarvis** has no write access to business state, no path to n8n, and no provider credentials.
+- **Model access is mediated, not distributed.** Agents call the internal **model gateway** (Phase 4.0), never a provider directly, and every capability an agent may invoke is a **declared, bounded, contract-typed door** (Phase 4.1) — never arbitrary SQL, shell, filesystem access, URL fetching, generic provider invocation, or unrestricted document retrieval ([model-runtime-and-governance.md](../architecture/model-runtime-and-governance.md), [governed-knowledge-and-capabilities.md](../architecture/governed-knowledge-and-capabilities.md), [ADR-0028](../decisions/ADR-0028-ai-runtime-foundations-and-roadmap-sequencing.md)). **Approved architecture, not implemented.**
 - **Provider credentials in n8n** are scoped to the minimum each integration needs — one compromised credential must not reach another provider.
 - **Human approvers** have delegated limits. Money escalates ([ADR-0005](../decisions/ADR-0005-human-and-policy-approval.md)).
 
@@ -70,6 +71,8 @@ A legitimate operational replay — reprocessing history after fixing a bug — 
 Every authorization decision names its decider: a human, or a named and versioned policy. No shared approver accounts. No anonymous approvals. No inferred approvals.
 
 A policy that authorizes automatically is attributable **exactly as a human approver would be** — which policy, which version, which conditions matched. Automation does not dilute accountability; it relocates it to the person who approved the policy.
+
+**Attribution requires identity, and identity comes first.** Named individual accounts, no shared approver accounts, MFA, role-based access control, step-up authentication for sensitive actions, and session and device revocation are established in the **Phase 8.5 Human Identity and Access Foundation — before approval is exposed to people in Phase 9** ([production-readiness-and-access-control.md](../architecture/production-readiness-and-access-control.md), [ADR-0028](../decisions/ADR-0028-ai-runtime-foundations-and-roadmap-sequencing.md)). Approved architecture, not implemented.
 
 ## 9. Bounded execution
 
