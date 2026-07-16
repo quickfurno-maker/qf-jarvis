@@ -46,6 +46,15 @@ interface Manifest {
       readonly blockedBy: readonly string[];
       readonly satisfiedBy?: readonly string[];
       readonly started?: boolean;
+      readonly completed?: boolean;
+      readonly accepted?: boolean;
+      readonly merged?: boolean;
+      readonly blockerClosed?: boolean;
+      readonly databaseRequired?: boolean;
+      readonly authorizationGranted?: boolean;
+      readonly implementationStatus?: string;
+      readonly prNumber?: number;
+      readonly mergeCommit?: string;
       readonly effectiveOn?: string;
     }
   >;
@@ -183,27 +192,38 @@ describe('the historical GPS evidence survives acceptance', () => {
   });
 });
 
-describe('Stage 3.1.4 is complete; Stage 3.2 is implemented and awaiting acceptance; Stage 3.3 has NOT started', () => {
+describe('Stage 3.1.4 is complete; Stage 3.2 is complete, accepted and merged; Stage 3.3 has NOT started', () => {
   it('Stage 3.1.4 is completed and accepted', () => {
     expect(manifest.stageStatus['stage_3_1_4']).toBe('completed_accepted');
   });
 
-  it('Stage 3.2 is pure signature verification, implemented and awaiting owner acceptance', () => {
-    expect(manifest.stageStatus['stage_3_2']).toBe('implemented_awaiting_owner_acceptance');
+  it('Stage 3.2 is pure signature verification, complete, owner-accepted and merged', () => {
+    expect(manifest.stageStatus['stage_3_2']).toBe('complete_accepted_merged');
     expect(manifest.stageStatus['adr_0027']).toBe('Accepted');
-    expect(manifest.phaseGates['stage_3_2_signature_verification']?.blockedBy).toStrictEqual([]);
-    expect(manifest.phaseGates['stage_3_2_signature_verification']?.satisfiedBy).toContain(
-      'stage-3.1.4',
-    );
+
+    const gate = manifest.phaseGates['stage_3_2_signature_verification'];
+    expect(gate?.blockedBy).toStrictEqual([]);
+    expect(gate?.blockerClosed).toBe(true);
+    expect(gate?.satisfiedBy).toContain('stage-3.1.4');
+    expect(gate?.completed).toBe(true);
+    expect(gate?.accepted).toBe(true);
+    expect(gate?.merged).toBe(true);
+    expect(gate?.databaseRequired).toBe(false);
+    expect(gate?.prNumber).toBe(10);
+    expect(gate?.mergeCommit).toBe('4d041edb10c7a511cbad58e4054ead16c01e2b7e');
   });
 
-  it('records Stage 3.2 as started, and Stage 3.3 as not started and database-gated', () => {
+  it('records Stage 3.2 as started and completed, and Stage 3.3 as not started and database-gated', () => {
     expect(manifest.stageStatus['stage_3_2_started']).toBe('true');
+    expect(manifest.stageStatus['stage_3_2_completed']).toBe('true');
     expect(manifest.stageStatus['stage_3_3']).toBe('not_started');
     expect(manifest.stageStatus['stage_3_3_started']).toBe('false');
-    expect(manifest.phaseGates['stage_3_3_validated_signed_ingestion']?.blockedBy).toContain(
-      'managed-database-readiness',
-    );
+
+    const stage33 = manifest.phaseGates['stage_3_3_validated_signed_ingestion'];
+    expect(stage33?.started).toBe(false);
+    expect(stage33?.databaseRequired).toBe(true);
+    expect(stage33?.authorizationGranted).toBe(false);
+    expect(stage33?.blockedBy).toContain('managed-database-readiness');
   });
 
   it('Phase 11 remains blocked by Stage 3.1.3', () => {
