@@ -18,25 +18,39 @@
  * touches **no database**, and is **not** the signing canonicalisation — signatures still
  * verify the exact raw bytes (ADR-0027).
  *
+ * ### Stage 3.3 slice 2 adds database-free validated-event preparation (ADR-0030) — INTERNAL
+ *
+ * A pure composition (`src/ingest/prepare-validated-event.ts`) turns a raw body that has
+ * **already passed Stage 3.2 signature and freshness verification** into a validated canonical
+ * event bound to its semantic digest: strict fatal UTF-8 decoding, explicit BOM rejection,
+ * `JSON.parse`, validation against the authoritative `@qf-jarvis/contracts` registry, and — on
+ * success — a pristine, deeply frozen snapshot digested by the slice-1 primitive. A refused
+ * body yields one of three pinned identifiers (`contract-validation-failed`,
+ * `unknown-event-type`, `unknown-event-version`). It adds **no `ingest`, no persistence, no
+ * database** and is **not exported** from this barrel — it is reached only by the later,
+ * still-gated ingest composition.
+ *
  * ### What is still deliberately absent (later Stage 3.3 slices)
  *
- * There is **no `ingest` function**, **no database access**, **no contract parsing or
- * validation composition**, **no idempotency or deduplication**, **no conflict handling**, **no
- * dead-letter or replay logic**, **no HTTP endpoint**, and **no worker loop**. Those
- * are later Stage 3.3 slices onward, each already designed in ADR-0020 / ADR-0021 / ADR-0022,
- * and every persistence-touching part **remains gated on managed-database readiness**
- * (ADR-0029). Stage 3.2 refuses a forged, altered, stale, or wrongly-keyed body — it does not
- * yet decide what a *good* one becomes.
+ * There is **no `ingest` function**, **no database access**, **no idempotency or deduplication**,
+ * **no conflict handling**, **no dead-letter or replay logic**, **no HTTP endpoint**, and **no
+ * worker loop**. Those are later Stage 3.3 slices onward, each already designed in
+ * ADR-0020 / ADR-0021 / ADR-0022, and every persistence-touching part **remains gated on
+ * managed-database readiness** (ADR-0029). Stage 3.2 refuses a forged, altered, stale, or
+ * wrongly-keyed body; slice 2 decides whether an authentic body is a recognised, valid canonical
+ * event — but neither one persists anything.
  *
  * ### Importing this package connects to, and reads, nothing
  *
  * No module here reads `process.env`, opens a file, or touches the network. The clock
- * is injected as `now`; the keys are injected as a `registry`. The only runtime it
- * depends on is `node:crypto`. It has **zero third-party runtime dependencies** — not
- * even `@qf-jarvis/contracts` — because it sits *in front of* contract validation and
- * must stay a pure leaf.
+ * is injected as `now`; the keys are injected as a `registry`. Its only runtime dependencies are
+ * `node:crypto` and, since slice 2, `@qf-jarvis/contracts` — a **data-only** package that itself
+ * opens no socket, reads no environment, and touches no filesystem (its transitive `zod` is used
+ * for validation only). Contract validation still runs *behind* signature verification, never in
+ * front of it.
  *
- * See docs/decisions/ADR-0027 (Stage 3.2 protocol) and ADR-0020 (the parent design).
+ * See docs/decisions/ADR-0027 (Stage 3.2 protocol), ADR-0029 (semantic digest), ADR-0030
+ * (validated event preparation), and ADR-0020 (the parent design).
  */
 
 export { verifySignature } from './signature/verify.js';
@@ -75,10 +89,12 @@ export {
   SUPPORTED_ALGORITHM,
 } from './signature/limits.js';
 
-// --- Stage 3.3 slice 1: pure semantic-digest foundation (ADR-0029) — INTERNAL, not exported ---
+// --- Stage 3.3 slices 1 & 2: internal ingest primitives (ADR-0029, ADR-0030) — NOT exported ---
 //
-// The deterministic canonical-JSON + SHA-256 digest (`src/ingest/`) is compiled as part of the
-// package but is DELIBERATELY NOT re-exported here. There is no current package consumer for it,
-// and a public surface is a promise; it will be reached only by the later validated-ingestion
-// composition inside this package. Exposing it now would publish an internal primitive that must
-// only ever see already-validated canonical-event output.
+// The deterministic canonical-JSON + SHA-256 digest (slice 1) and the validated-event
+// preparation that composes verification → UTF-8 → JSON → contract validation → frozen snapshot +
+// digest (slice 2) are compiled as part of the package but are DELIBERATELY NOT re-exported here.
+// A public surface is a promise; these are reached only by the later, still-gated ingest
+// composition inside this package. Exposing them now would publish internal primitives — the
+// digest must only ever see already-validated output, and preparation must only ever see an
+// already-verified body. The package-root runtime surface stays exactly the Stage 3.2 set above.

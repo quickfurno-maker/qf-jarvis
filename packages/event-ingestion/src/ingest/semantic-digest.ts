@@ -26,6 +26,23 @@ export interface SemanticEventDigest {
 }
 
 /**
+ * Digest an **already-created** canonical JSON string — `sha256(utf8(canonicalJson))` as 64
+ * lowercase hex, frozen.
+ *
+ * This is the shared core so a caller that has *already* canonicalised a value (for example, to
+ * derive both a digest and a snapshot from the **one** canonical representation — ADR-0030) hashes
+ * that exact string rather than canonicalising a second time. It is `node:crypto` only, reads no
+ * clock/environment/filesystem/network, logs nothing, and never returns the canonical string.
+ *
+ * Internal: not re-exported from the package barrel.
+ */
+export function digestCanonicalJson(canonicalJson: string): SemanticEventDigest {
+  const hex = createHash('sha256').update(canonicalJson, 'utf8').digest('hex');
+  const digest: SemanticEventDigest = { algorithm: 'sha256', hex };
+  return Object.freeze(digest);
+}
+
+/**
  * Compute the semantic digest of an already-parsed, already-validated canonical event.
  *
  * The input must be a JSON value (the validated envelope and payload). Any value outside
@@ -35,8 +52,5 @@ export interface SemanticEventDigest {
  * The caller's input is never mutated, and the canonical string is never returned or logged.
  */
 export function computeSemanticEventDigest(event: unknown): SemanticEventDigest {
-  const canonical = canonicaliseToJson(event);
-  const hex = createHash('sha256').update(canonical, 'utf8').digest('hex');
-  const digest: SemanticEventDigest = { algorithm: 'sha256', hex };
-  return Object.freeze(digest);
+  return digestCanonicalJson(canonicaliseToJson(event));
 }

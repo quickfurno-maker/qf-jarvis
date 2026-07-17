@@ -56,7 +56,11 @@ importers:
         specifier: 8.20.0
         version: 8.20.0
 
-  packages/event-ingestion: {}
+  packages/event-ingestion:
+    dependencies:
+      '@qf-jarvis/contracts':
+        specifier: workspace:*
+        version: link:../contracts
 
 packages:
 

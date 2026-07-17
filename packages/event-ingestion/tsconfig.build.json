@@ -15,6 +15,11 @@
   // from src/tests reaches dist/. The shipped package (the `exports` map points only
   // at ./dist) therefore contains no private key of any kind. Tests are type-checked,
   // without emit, by tsconfig.json.
+  //
+  // The project reference to @qf-jarvis/contracts makes `tsc --build` compile the
+  // contracts package before this one and resolve its declarations from source,
+  // so validated event preparation can consume the versioned data contracts.
+  "references": [{ "path": "../contracts" }],
   "include": ["src/**/*.ts"],
   "exclude": ["src/tests/**"]
 }
