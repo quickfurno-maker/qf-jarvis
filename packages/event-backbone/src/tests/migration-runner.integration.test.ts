@@ -402,7 +402,10 @@ describe('the managed provider’s roles are revoked — and re-revoked on every
     await resetTestDatabase(pool);
     const result = await runMigrations(pool, defaultMigrationsDirectory());
 
-    expect(result.applied.map((m) => m.filename)).toStrictEqual(['0001_event_log.sql']);
+    expect(result.applied.map((m) => m.filename)).toStrictEqual([
+      '0001_event_log.sql',
+      '0002_event_runtime_grants.sql',
+    ]);
     expect(await tableExists('event')).toBe(true);
   });
 });

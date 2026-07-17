@@ -71,12 +71,56 @@ export interface SignatureVerificationFailure {
 export type SignatureVerificationResult =
   SignatureVerificationSuccess | SignatureVerificationFailure;
 
+/**
+ * The INTERNAL, richer evidence of a successful verification (Stage 3.3 slice 3).
+ *
+ * It carries what the public {@link SignatureVerificationSuccess} deliberately withholds — the
+ * verified signature and the algorithm — because the persistence path must record them, and they
+ * are produced **during the same successful verification** rather than trusted from a caller a
+ * second time.
+ *
+ * **Every field is an immutable primitive string (or the fixed algorithm literal).** There is no
+ * `Buffer` and no `Date` here on purpose: `Object.freeze` on an object holding a `Buffer` does not
+ * freeze the bytes, and a caller could then overwrite `evidence.signature` after verification and
+ * before persistence, storing signature bytes that were never verified. Strings cannot be mutated,
+ * so a frozen object of strings is genuinely immutable. The persistence path decodes
+ * {@link signatureBase64} into a fresh `Buffer` only at the moment it builds the record.
+ *
+ * **This type is not exported from the package barrel.** The public API still exposes no raw body,
+ * no key, and no signature bytes. Only the internal validated-ingestion composition inside this
+ * package may hold evidence, and only immediately after the verification that produced it.
+ */
+export interface VerifiedSignatureEvidence {
+  /** The key id that verified the signature. */
+  readonly keyId: string;
+  /** When the body was signed, as an immutable canonical ISO-8601 string. */
+  readonly signedAtIso: string;
+  /** The verifier-computed `hex(sha256(rawBody))`, lowercase hex. */
+  readonly bodyDigestHex: string;
+  /** The one approved algorithm. Always `ed25519`. */
+  readonly algorithm: typeof SUPPORTED_ALGORITHM;
+  /** The verified Ed25519 signature, as canonical Base64 of exactly the 64 verified bytes. */
+  readonly signatureBase64: string;
+}
+
+/** The INTERNAL result of an evidence-bearing verification: success with evidence, or a reason. */
+export type VerifiedSignatureEvidenceResult =
+  | { readonly ok: true; readonly evidence: VerifiedSignatureEvidence }
+  | SignatureVerificationFailure;
+
 function fail(reason: SignatureVerificationReason): SignatureVerificationFailure {
   return { ok: false, reason };
 }
 
 /**
  * Verify an Ed25519 signature over a raw event body.
+ *
+ * **Pure, safe result.** On success it returns only countable, safe metadata — the key id, the
+ * signed-at instant, and the verifier's own body digest — and never the raw body, the key, or the
+ * signature bytes. This is the public Stage 3.2 surface and its shape is unchanged.
+ *
+ * Internally it is `verifySignatureWithEvidence` projected down to that safe subset, so there is
+ * exactly one verification implementation and the public result cannot drift from it.
  *
  * @param rawBody   The exact bytes as received. Never parsed here.
  * @param envelope  The untrusted signature envelope. Validated in full; cannot make this throw.
@@ -91,6 +135,33 @@ export function verifySignature(
   registry: PublicKeyRegistry,
   options: VerifySignatureOptions = {},
 ): SignatureVerificationResult {
+  const result = verifySignatureWithEvidence(rawBody, envelope, now, registry, options);
+  if (!result.ok) {
+    return result;
+  }
+  // Project the internal evidence down to the safe public subset: no signature bytes, no
+  // algorithm. `signedAt` is reconstructed as a Date from the immutable ISO string so the public
+  // Stage 3.2 result shape is unchanged and backward-compatible.
+  const { keyId, signedAtIso, bodyDigestHex } = result.evidence;
+  return { ok: true, keyId, signedAt: new Date(signedAtIso), bodyDigestHex };
+}
+
+/**
+ * The internal, evidence-bearing verification (Stage 3.3 slice 3). **Not exported from the barrel.**
+ *
+ * Same inputs, same failure reasons, same order, same caller-config throwing as
+ * {@link verifySignature} — but on success it returns the richer {@link VerifiedSignatureEvidence}
+ * (including the verified signature bytes and algorithm), produced from the envelope this call has
+ * *just verified*. The persistence path uses this so it never trusts a second, separately supplied
+ * signature and never re-reads a mutable envelope after authenticity was established.
+ */
+export function verifySignatureWithEvidence(
+  rawBody: Uint8Array,
+  envelope: unknown,
+  now: Date,
+  registry: PublicKeyRegistry,
+  options: VerifySignatureOptions = {},
+): VerifiedSignatureEvidenceResult {
   // 1. Raw-body size is step 1 (ADR-0027): refused FIRST — before the caller-config
   //    checks, before the envelope is touched, before hashing, before cryptography.
   if (rawBody.byteLength > MAX_RAW_BODY_BYTES) {
@@ -191,11 +262,19 @@ export function verifySignature(
     return fail('signature-invalid');
   }
 
-  // 14. A bounded, safe success — no raw body, no signature bytes, no key material.
+  // 14. Success. Package the evidence from THIS verification as immutable strings — the algorithm
+  //     and the signature come from the bytes just proven authentic (`signatureBytes`, decoded at
+  //     step 12), never from re-reading the mutable envelope, and never from a later, separate
+  //     supply. Encoding the signature to Base64 here means the evidence holds no mutable buffer a
+  //     caller could overwrite before persistence. The public `verifySignature` projects this down.
   return {
     ok: true,
-    keyId: env.keyId,
-    signedAt: new Date(signedAtMs),
-    bodyDigestHex: computedDigest.hex,
+    evidence: Object.freeze<VerifiedSignatureEvidence>({
+      keyId: env.keyId,
+      signedAtIso: new Date(signedAtMs).toISOString(),
+      bodyDigestHex: computedDigest.hex,
+      algorithm: SUPPORTED_ALGORITHM,
+      signatureBase64: signatureBytes.toString('base64'),
+    }),
   };
 }

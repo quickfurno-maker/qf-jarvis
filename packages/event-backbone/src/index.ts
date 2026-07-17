@@ -1,25 +1,26 @@
 /**
  * @qf-jarvis/event-backbone — the durable event backbone.
  *
- * **Stage 3.1 provides the persistence foundation, and nothing else.**
+ * **Stage 3.1 provides the persistence foundation; Stage 3.3 slice 3 adds the atomic,
+ * idempotent event-store write primitive on top of it.**
  *
  * What is here: a validated database configuration, a connection pool, a transaction
- * helper, a forward-only migration runner with checksum verification, and the immutable
- * canonical event log.
+ * helper, a forward-only migration runner with checksum verification, the immutable
+ * canonical event log, and `storeValidatedEvent` — the race-safe INSERT that classifies a
+ * duplicate by its semantic digest (ADR-0020 §8).
  *
  * ### What is deliberately absent
  *
- * There is **no ingestion function**, **no signature verification**, **no contract
- * parsing**, **no deduplication behaviour**, **no projection framework**, **no
- * checkpoints**, **no retries**, **no dead letters**, **no replay**, **no quarantine**,
- * **no read models**, **no test emitter**, **no metrics**, and **no worker loop**.
+ * There is **no signature verification** and **no contract parsing** here — those are
+ * `@qf-jarvis/event-ingestion`, which builds the persistence-ready record this package stores.
+ * There is **no projection framework**, **no checkpoints**, **no retries**, **no dead
+ * letters**, **no replay**, **no quarantine**, **no read models**, **no test emitter**, **no
+ * metrics**, and **no worker loop**. Those are later stages, each with an Accepted ADR.
  *
- * Those are Stages 3.2 through 3.8, and each has an Accepted ADR describing it.
- *
- * The `UNIQUE (event_id)` constraint in migration `0001` lays the **foundation** for
- * eventId-based idempotency (ADR-0020). It is not the same thing as the Stage 3.3
- * ingestion behaviour that distinguishes a benign duplicate from a conflicting one, and
- * this package does not claim otherwise.
+ * `storeValidatedEvent` turns the `UNIQUE (event_id)` constraint from migration `0001` into the
+ * Stage 3.3 idempotency **behaviour**: first delivery stores, a same-digest redelivery is a
+ * benign duplicate, and a different-digest redelivery fails closed (ADR-0020 §8). It performs no
+ * verification of its own; the trust boundary is upstream.
  *
  * ### Importing this package connects to nothing
  *
@@ -69,6 +70,16 @@ export {
 } from './persistence/pool.js';
 
 export { withClient, withTransaction } from './persistence/transaction.js';
+
+export {
+  ConflictingEventDigestError,
+  EventPersistenceConsistencyError,
+  storeValidatedEvent,
+  type DuplicateEvent,
+  type EventPersistenceOutcome,
+  type EventPersistenceRecord,
+  type StoredEvent,
+} from './persistence/event-store.js';
 
 /**
  * **`migrateWithPreflight` is the ONLY public migration API, and that is enforced here.**

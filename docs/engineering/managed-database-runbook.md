@@ -1,6 +1,6 @@
 # Managed Database Runbook — QF-Jarvis PostgreSQL
 
-**Status:** Stage 3.1.1 — **nothing here has been executed.** No connection has ever been opened to the managed database.
+**Status:** Managed-database readiness has been established, and migration `0001_event_log.sql` is applied to the managed database. The provider security remediation (`public.rls_auto_enable()`) has been **executed and verified**. Migration `0002_event_runtime_grants.sql` (Stage 3.3 slice 3 — least-privilege runtime grants) is recorded here and is **NOT yet applied to the managed database** — it awaits review and authorization before it is applied.
 **Date:** 2026-07-12
 
 The checklist for the **first migration** against the dedicated, Supabase-managed QF-Jarvis PostgreSQL project ([ADR-0023](../decisions/ADR-0023-dedicated-supabase-managed-postgresql.md), [ADR-0024](../decisions/ADR-0024-verified-tls-and-managed-database-preflight.md)).
@@ -18,7 +18,7 @@ The checklist for the **first migration** against the dedicated, Supabase-manage
 | 1   | **Merge Stage 3.1.1**                                                                                                |
 | 2   | **Owner authorizes provider hardening.** Nothing below happens without it                                            |
 | 3   | **Enable and verify server-side SSL enforcement** ([below](#server-side-ssl-enforcement))                            |
-| 4   | **Revoke `EXECUTE` on `public.rls_auto_enable()` from API roles** ([below](#the-remediation--recorded-not-executed)) |
+| 4   | **Revoke `EXECUTE` on `public.rls_auto_enable()` from API roles** ([below](#the-remediation--executed-and-verified)) |
 | 5   | **Verify `ensure_rls` remains enabled**                                                                              |
 | 6   | **Re-run the Supabase security advisor**                                                                             |
 | 7   | **Run standalone `pnpm db:preflight`**                                                                               |
@@ -121,7 +121,13 @@ pnpm db:preflight     # step 9. Confirm the schema and history are as expected.
 >
 > Step 7 is still worth doing on its own. It lets you see the state and fix problems **without a migration attempt appearing in the log at all**.
 
-`db:migrate` applies `0001_event_log.sql`, which creates the **`qf_jarvis`** schema, the immutable `qf_jarvis.event` log, `qf_jarvis.schema_migration`, both mutation-rejection triggers, and the `REVOKE`s. **It never touches `public`.**
+`db:migrate` applies **every pending migration, in order**, each in its own transaction under the advisory lock. Against a virgin managed database that is `0001_event_log.sql` — which creates the **`qf_jarvis`** schema, the immutable `qf_jarvis.event` log, `qf_jarvis.schema_migration`, both mutation-rejection triggers, and the `REVOKE`s — and it would apply any later migration (such as `0002_event_runtime_grants.sql`) in the same run **once that migration is authorized and its runtime-role precondition is met**. It never applies a migration that is already recorded, and **it never touches `public`.** On the managed database `0001` is applied and `0002` is not yet, so the next authorized `db:migrate` there would apply `0002` alone.
+
+### Migration `0002_event_runtime_grants.sql` — recorded, NOT yet applied
+
+Stage 3.3 slice 3 adds a second migration, `0002_event_runtime_grants.sql`. It grants the deployment **runtime** role the _minimum_ it needs — `USAGE` on the `qf_jarvis` schema and `SELECT, INSERT` on `qf_jarvis.event`, and nothing more (no `UPDATE`/`DELETE`/`TRUNCATE`, no `CREATE`, no sequence grant, no access to `schema_migration`). The grant is conditional on the runtime role already existing, so the same migration runs unchanged on a laptop, in CI, and on the managed database. **The runtime role must be created BEFORE this migration is applied to the managed database** — it is a deployment artifact and is never a `CREATE ROLE ... LOGIN PASSWORD` in Git.
+
+**This migration is NOT yet applied to the managed database.** It is implemented and verified against local PostgreSQL and remains **pending review**. When it is applied, the runner records it as version 2 and the append-only history then reads `0001_event_log.sql`, `0002_event_runtime_grants.sql`. Until then, the managed database carries migration `0001` alone.
 
 ---
 
@@ -146,7 +152,7 @@ Supabase's security advisor reports a finding on a function **the provider itsel
 - **Do not put any of this in `0001_event_log.sql`, and do not make the Jarvis migration runner mutate `public`.** `qf_jarvis` is ours; `public` is the provider's. A migration that reaches into the provider's schema is a migration that will one day fight the provider's own upgrade — and it would lock a change to a schema we do not own inside a checksum-protected file we can never edit again ([ADR-0024](../decisions/ADR-0024-verified-tls-and-managed-database-preflight.md) §8).
 - **Do not use Supabase's `apply_migration` for `0001`.** The Jarvis migration runner owns migration history, checksums and advisory-lock serialisation. A migration applied by a second tool is a migration the runner has no record of, and the checksum reconciliation that protects the schema is then reconciling against a lie.
 
-### The remediation — RECORDED, NOT EXECUTED
+### The remediation — EXECUTED AND VERIFIED
 
 The finding is that the function is **executable by API-facing roles**. A `SECURITY DEFINER` function reachable from the Data API is a privilege-escalation surface: anyone who can call it runs code as its owner. It does not need to be callable directly by anybody — the **event trigger** invokes it, and an event trigger does not check `EXECUTE` on the function it fires.
 
@@ -157,7 +163,7 @@ REVOKE EXECUTE ON FUNCTION public.rls_auto_enable()
 FROM PUBLIC, anon, authenticated, service_role;
 ```
 
-**This statement has NOT been run. It is recorded here for owner review, and it is a provider-console / manual operation — separate from, and never part of, the `qf_jarvis` schema migration.**
+**This statement has been RUN and VERIFIED on the managed database.** The verification queries below were run afterward and confirmed the four API-facing roles hold no `EXECUTE`, the `ensure_rls` event trigger is still enabled, and the function still exists as `SECURITY DEFINER`; the provider security advisor no longer reports the finding. It was a provider-console / manual operation — separate from, and never part of, the `qf_jarvis` schema migration. No project ref, access token, or connection string is recorded here.
 
 ### Verification queries
 

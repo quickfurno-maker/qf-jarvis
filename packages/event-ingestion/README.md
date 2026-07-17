@@ -5,8 +5,10 @@ QuickFurno Core before anything else in the system is allowed to believe it.
 
 ## Stage 3.2 — pure signature verification, and only that
 
-This package currently provides **one capability**: verifying an Ed25519 signature over
-a raw event body. That is the whole of Phase 3, Stage 3.2.
+This package's **public** capability is exactly one: verifying an Ed25519 signature over
+a raw event body — the whole of Phase 3, Stage 3.2. The Stage 3.3 slices below (semantic digest,
+validated event preparation, and the persistence bridge) are **INTERNAL** and are not part of the
+package root surface.
 
 ```ts
 import { PublicKeyRegistry, verifySignature } from '@qf-jarvis/event-ingestion';
@@ -81,20 +83,51 @@ correctly shaped signature that fails cryptographically is `signature-invalid`.
 
 ### What is deliberately **not** here
 
-No `ingest` function, no database, no idempotency or duplicate handling, no dead letters,
-no replay, no HTTP endpoint, and no worker loop. Those are **later Stage 3.3 slices**, which
-compose this verifier and the preparation below with the rest of the pipeline. This package
-authenticates a body and prepares a validated event; it does not yet **persist** anything.
+No end-to-end `ingest` function, no HTTP endpoint, no worker loop, no rejection recording, no
+dead letters, and no replay. Those are **later Stage 3.3 work**. The **public** surface
+**authenticates the body only** — `verifySignature` and the `PublicKeyRegistry` — and exposes **no**
+raw body, key, or signature bytes. **Validated-event preparation (slices 1–2) and the persistence
+bridge (slice 3) are INTERNAL**, not part of the package root; a later ingest composition will
+compose them behind authentication.
 
 `@qf-jarvis/api` and `@qf-jarvis/worker` remain empty boundaries — nothing imports this
 package yet.
 
+## Stage 3.3 slice 3 — the persistence bridge (INTERNAL)
+
+Two INTERNAL additions turn a verified, prepared event into a durable row, without widening the
+public surface:
+
+- **`verifySignatureWithEvidence`** — the same verification as the public `verifySignature`, but on
+  success it also yields the verified signature and the Ed25519 algorithm, **produced from the very
+  envelope it just verified**. The evidence is a **deeply immutable** value: every field is a frozen
+  primitive string — `signatureBase64`, `signedAtIso`, `bodyDigestHex`, `keyId`, and the `algorithm`
+  literal — with **no mutable `Buffer` or `Date`**. That is deliberate: `Object.freeze` on an object
+  holding a `Buffer` would not freeze the bytes, and a caller could otherwise overwrite the signature
+  after verification and before persistence. The public `verifySignature` is literally this projected
+  down to its safe subset, so there is one verification implementation and the public result cannot
+  drift. The evidence type is **not exported** from the barrel.
+- **`buildEventPersistenceRecord` / `persistPreparedEvent`** — build the persistence-ready record
+  from a prepared event and its immutable signature evidence (decoding `signatureBase64` into a
+  fresh `Buffer` at that moment), then hand it to `storeValidatedEvent` in
+  `@qf-jarvis/event-backbone`. The two inputs are **bound by the body digest, key id, and signed-at
+  instant — all immutable strings**: evidence for one body cannot be paired with a prepared event for
+  another (`EvidencePreparationMismatchError`). No raw body and no unverified JSON can reach
+  persistence — there is no path that takes one.
+
+The atomic DATABASE behaviour (first-delivery store, same-digest benign duplicate, different-digest
+typed conflict, real-concurrency, rollback) lives in `storeValidatedEvent` and is proven against a
+real PostgreSQL in `@qf-jarvis/event-backbone`'s integration tests. This package holds **no pool**.
+None of these symbols is exported from the package root (`public-api.test.ts` enforces it), and the
+end-to-end `ingest` composition and worker are still outstanding.
+
 ## Stage 3.3 slice 1 — the semantic-digest foundation (ADR-0029), INTERNAL
 
 A pure, deterministic canonical JSON + SHA-256 digest over an already-validated canonical
-event lives in `src/ingest/` for later semantic duplicate comparison. It is **database-free**
-and **not exported** from the package barrel — only the composition below calls it. It is not
-the signing canonicalisation: signatures still verify the exact raw bytes.
+event lives in `src/ingest/` for semantic duplicate comparison — a comparison now **performed by
+the slice-3 persistence path**, which carries this digest into `storeValidatedEvent`. It is
+**database-free** and **not exported** from the package barrel — only the composition below calls
+it. It is not the signing canonicalisation: signatures still verify the exact raw bytes.
 
 ## Stage 3.3 slice 2 — validated event preparation (ADR-0030), INTERNAL
 
@@ -126,19 +159,25 @@ interpreted, with no coercion or fallback.
 **Known limitation:** `JSON.parse` is the only parser and resolves duplicate object keys
 last-key-wins; this slice **does not detect duplicate keys**, and no custom or third-party parser
 is introduced. Duplicate-key rejection is a pre-activation hardening decision. There is **no
-`ingest`, no persistence, and no database**, and the composition is **not exported** from the
-package barrel — it is reached only by the later, still-gated ingest composition. **Stage 3.3 is
-not complete or production-ready**; persistence-touching work remains gated on managed-database
-readiness (ADR-0029, ADR-0030).
+`ingest` and no database in THIS slice**, and the composition is **not exported** from the
+package barrel — it is reached only by the later ingest composition. Persistence itself arrives in
+**slice 3** (above), via the INTERNAL bridge to `@qf-jarvis/event-backbone`. **Stage 3.3 is not
+complete or production-ready:** the end-to-end `ingest` function and worker are outstanding.
+Managed-database readiness is established and migration `0001_event_log.sql` is applied; the
+slice-3 runtime-grants migration `0002_event_runtime_grants.sql` is verified against local
+PostgreSQL and **not yet applied to the managed database, pending review** (ADR-0029, ADR-0030).
 
 ## Dependencies
 
-**One workspace runtime dependency: `@qf-jarvis/contracts`** — the authoritative owner of the
-canonical event contracts, used by slice-2 validated-event preparation. It is a **data-only**
-package that opens no socket, reads no environment, and touches no filesystem; its transitive
-`zod` is used for validation only. This package takes **no direct `zod` dependency and imports
-`zod` nowhere**. The only other runtime it uses is `node:crypto`. Contract validation runs
-**behind** signature verification, never in front of it.
+**Two workspace runtime dependencies: `@qf-jarvis/contracts`** — the authoritative owner of the
+canonical event contracts, used by slice-2 validated-event preparation — **and `@qf-jarvis/event-backbone`**,
+whose `storeValidatedEvent` the slice-3 persistence bridge delegates to. Both are data/persistence
+packages this one depends on; the dependency direction is one-way (`event-ingestion → event-backbone`
+and `event-ingestion → contracts`), with **no cycle**. `@qf-jarvis/contracts` is **data-only** —
+it opens no socket, reads no environment, and touches no filesystem; its transitive `zod` is used
+for validation only. This package takes **no direct `zod` dependency and imports `zod` nowhere**.
+The only other runtime it uses is `node:crypto`. Contract validation runs **behind** signature
+verification, never in front of it.
 
 ## Tests
 
