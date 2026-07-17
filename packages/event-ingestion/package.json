@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "sideEffects": false,
-  "description": "QF Jarvis event-ingestion trust boundary. Stage 3.2 provides pure, synchronous Ed25519 signature verification and a public-key registry; Stage 3.3 slice 1 adds a pure, database-free semantic-digest foundation (deterministic canonical JSON + SHA-256), and slice 2 adds pure, database-free validated-event preparation (verified body → strict UTF-8 → JSON → contract validation → frozen snapshot + digest). Both are compiled INTERNALLY and not publicly exported — only a later validated-ingestion composition may call them. Still no database, no ingest function, no persistence. node:crypto plus the data-only @qf-jarvis/contracts (its transitive zod is used for validation only); no direct zod dependency or import.",
+  "description": "QF Jarvis event-ingestion trust boundary. Stage 3.2 provides pure, synchronous Ed25519 signature verification and a public-key registry; Stage 3.3 slice 1 adds a database-free semantic-digest foundation (deterministic canonical JSON + SHA-256), slice 2 adds database-free validated-event preparation (verified body → strict UTF-8 → JSON → contract validation → frozen snapshot + digest), and slice 3 adds an INTERNAL persistence bridge that builds a record from immutable verification evidence and delegates to @qf-jarvis/event-backbone's atomic, idempotent storeValidatedEvent. Every Stage 3.3 addition is compiled INTERNALLY and not publicly exported — only a later validated-ingestion composition may call them; the public surface is still signature verification only, exposing no raw body, key, or signature bytes. This package holds no pool and opens no database itself, and exposes no public ingest function. node:crypto plus the data-only @qf-jarvis/contracts and the persistence package @qf-jarvis/event-backbone (contracts' transitive zod is used for validation only); no direct zod dependency or import.",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -17,6 +17,7 @@
     "typecheck:tests": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@qf-jarvis/contracts": "workspace:*"
+    "@qf-jarvis/contracts": "workspace:*",
+    "@qf-jarvis/event-backbone": "workspace:*"
   }
 }

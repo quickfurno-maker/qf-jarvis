@@ -1,13 +1,13 @@
 # The Durable Event Backbone — QF Jarvis
 
-**Status:** Phase 3 — **Stages 3.0–3.1.4 complete and merged/accepted. Stage 3.2 (pure signature verification, in `@qf-jarvis/event-ingestion`) complete, owner-accepted and merged (PR #10, 2026-07-16). Stage 3.3 slice 1 — a database-free semantic-digest foundation ([ADR-0029](../decisions/ADR-0029-stage-3-3-semantic-digest-foundation.md), Accepted) — is implemented as a pure unit; the full ingest composition and all persistence have NOT started and remain gated on managed-database readiness. Phase 3 is NOT complete.**
+**Status:** Phase 3 — **Stages 3.0–3.1.4 complete and merged/accepted. Stage 3.2 (pure signature verification, in `@qf-jarvis/event-ingestion`) complete, owner-accepted and merged (PR #10, 2026-07-16). Managed-database readiness is established and migration `0001_event_log.sql` is applied. Stage 3.3 slices 1–2 (semantic digest, validated event preparation) are database-free internal units; Stage 3.3 slice 3 adds atomic, idempotent persistence — `storeValidatedEvent` plus migration `0002_event_runtime_grants.sql` — implemented and verified locally; pending owner review; not applied to the managed database. The full ingest composition and worker remain outstanding; Stage 3.3 as a whole and Phase 3 are NOT complete.**
 **Date:** 2026-07-12
 
 The load-bearing infrastructure of the entire system. Everything above it inherits its correctness — and its failures.
 
-**What exists today (Stage 3.1):** the `@qf-jarvis/event-backbone` package — a validated database configuration, a connection pool, a transaction helper, a forward-only migration runner with checksum verification, and the **immutable canonical event log**. PostgreSQL 17 for local development and CI. **Stage 3.2 additionally exists**, as **pure Ed25519 signature verification in the separate `@qf-jarvis/event-ingestion` package** — database-free — complete, owner-accepted and merged via PR #10 on 2026-07-16 ([ADR-0027](../decisions/ADR-0027-stage-3-2-signature-verification-protocol.md), Accepted).
+**What exists today (Stage 3.1):** the `@qf-jarvis/event-backbone` package — a validated database configuration, a connection pool, a transaction helper, a forward-only migration runner with checksum verification, and the **immutable canonical event log**. PostgreSQL 17 for local development and CI. **Stage 3.2 additionally exists**, as **pure Ed25519 signature verification in the separate `@qf-jarvis/event-ingestion` package** — database-free — complete, owner-accepted and merged via PR #10 on 2026-07-16 ([ADR-0027](../decisions/ADR-0027-stage-3-2-signature-verification-protocol.md), Accepted). **Stage 3.3 slice 3 additionally exists**, as **`storeValidatedEvent`** in this package — the race-safe, idempotent `INSERT ... ON CONFLICT DO NOTHING` that classifies a duplicate by its semantic digest and fails closed on a conflict ([ADR-0020](../decisions/ADR-0020-event-ingestion-signature-verification-and-idempotency.md) §8), with migration `0002_event_runtime_grants.sql` granting the runtime role least privilege. It is **implemented and verified locally; pending owner review; not applied to the managed database**.
 
-**Everything else in this document is still design.** There is **no ingestion**, **no contract parsing**, **no deduplication behaviour**, **no projection framework**, **no checkpoints**, **no retries**, **no dead letters**, **no replay**, **no quarantine**, **no read models**, **no test emitter**, **no metrics**, and **no worker loop**. **Signature verification now exists — but in `@qf-jarvis/event-ingestion` (Stage 3.2), not in this package**, and it performs no persistence; composing verification with contract validation and this persistence into ingestion is **Stage 3.3**. `apps/api` and `apps/worker` remain compileable boundaries, and no live integration exists.
+**Most of the rest of this document is still design.** The atomic persistence primitive and its duplicate/conflict classification now exist (Stage 3.3 slice 3, above), but there is still **no end-to-end ingestion function**, **no contract parsing in this package**, **no projection framework**, **no checkpoints**, **no retries**, **no dead letters**, **no replay**, **no quarantine**, **no read models**, **no test emitter**, **no metrics**, and **no worker loop**. **Signature verification and validated-event preparation live in `@qf-jarvis/event-ingestion` (Stage 3.2 and Stage 3.3 slices 1–3), not in this package**; composing verification, contract validation and this persistence into the full ingest function is the **remainder of Stage 3.3**. `apps/api` and `apps/worker` remain compileable boundaries, and no live integration exists.
 
 > The `UNIQUE (event_id)` constraint in migration `0001` lays the **foundation** for eventId idempotency. It is **not** the Stage 3.3 behaviour that distinguishes a benign duplicate from a conflicting one, and Stage 3.1 does not claim it is.
 
@@ -53,7 +53,7 @@ The migrations are plain SQL against stock PostgreSQL 17 — no Supabase extensi
 >
 > A future component may introduce a separate transaction-mode connection **only after proving** it depends on no advisory lock, no prepared statement, and no session state. The migration runner and the projection runner will never qualify.
 >
-> **Stage 3.1 has not been validated against Supabase.** No migration has been applied there. Establishing and *proving* the connection mode and TLS configuration belongs to the stage that first connects — and it is **not claimed as done**.
+> **Managed-database readiness has been established, and migration `0001_event_log.sql` is applied.** Migration `0002_event_runtime_grants.sql` — the least-privilege runtime grants added by Stage 3.3 slice 3 — is **implemented and verified locally; pending owner review; not applied to the managed database**. The managed database currently carries migration `0001` alone.
 
 ### Deployment obligations this repository cannot enforce
 
@@ -86,15 +86,19 @@ The envelope lives in **columns** — `event_id`, `event_type`, `event_version`,
 
 It is named `semantic_event_digest`, not `payload_digest`, because it digests the event and not the payload — and a name that says otherwise would be a lie by omission the first time somebody diffed two events whose payloads matched and whose envelopes did not.
 
-**Stage 3.1 stores these. It compares nothing.** Duplicate classification is Stage 3.3. The
-`semantic_event_digest` value itself is now produced by two database-free, INTERNAL Stage 3.3
+**Stage 3.1 stored these and compared nothing.** Duplicate classification is **Stage 3.3 slice 3**,
+now implemented: `storeValidatedEvent` compares an incoming `semantic_event_digest` against the
+committed row for the same `event_id` and returns a benign duplicate on a match or fails closed on a
+mismatch ([ADR-0020](../decisions/ADR-0020-event-ingestion-signature-verification-and-idempotency.md)
+§8). The `semantic_event_digest` value itself is produced by two database-free, INTERNAL Stage 3.3
 slices in `@qf-jarvis/event-ingestion`: a deterministic canonical-JSON + SHA-256 digest
 ([ADR-0029](../decisions/ADR-0029-stage-3-3-semantic-digest-foundation.md)) and the validated
 event preparation that feeds it an already-verified, contract-validated event
-([ADR-0030](../decisions/ADR-0030-stage-3-3-validated-event-preparation.md)). Neither persists or
-compares anything; storage and duplicate classification remain gated on managed-database readiness.
+([ADR-0030](../decisions/ADR-0030-stage-3-3-validated-event-preparation.md)). The persistence
+behaviour is implemented and verified locally; pending owner review; migration `0002` not applied to
+the managed database.
 
-> **Stage 3.3 slice 1 now provides the pure semantic-digest computation** — deterministic canonical JSON + SHA-256 over the validated canonical event — **internally** in `@qf-jarvis/event-ingestion`, database-free ([ADR-0029](../decisions/ADR-0029-stage-3-3-semantic-digest-foundation.md), Accepted). It is **not exported** from the package root (there is no consumer yet); only a later validated-ingestion composition will call it. It is the value a later slice will _compare_; it is **not** wired to any persistence, performs no ingestion, and is **not** the signing canonicalisation. Computing the digest and _using_ it to classify a duplicate against the stored log are different steps — the latter is a persistence-touching Stage 3.3 slice, still gated on managed-database readiness.
+> **Stage 3.3 slice 1 provides the pure semantic-digest computation** — deterministic canonical JSON + SHA-256 over the validated canonical event — **internally** in `@qf-jarvis/event-ingestion`, database-free ([ADR-0029](../decisions/ADR-0029-stage-3-3-semantic-digest-foundation.md), Accepted). It is **not exported** from the package root; only the internal validated-ingestion composition calls it. Its value is **now consumed by Stage 3.3 slice 3**: the slice-3 bridge carries it into `storeValidatedEvent`, which _compares_ it against the committed row to classify a benign duplicate versus a conflict. It is **not** the signing canonicalisation. Computing the digest and _using_ it to classify a duplicate against the stored log are still distinct steps — the classification is the persistence-touching slice 3, implemented and verified locally; pending owner review; migration `0002` not applied to the managed database.
 
 ### Constraints mirror the stable Phase 2 shapes
 
@@ -371,7 +375,7 @@ apps/
 | **3.0** | This document and ADR-0019–0022 | ✅ **Complete and approved, 2026-07-12** |
 | **3.1** | Persistence: `pg`, pool, transactions, migrator, event log, CI + dev database | ✅ **Implemented, pending review.** Migrator idempotent; checksum guard refuses an edited migration; `UPDATE`/`DELETE` on `event` refused by trigger |
 | 3.2 | Signature verification and key registry (pure) | All reason codes; injected clock; test keys refused in production |
-| 3.3 | Ingestion, dedup, conflict detection | **Idempotency proven by deliberate redelivery** |
+| 3.3 | Ingestion, dedup, conflict detection | **Slice 3 done: atomic idempotent persistence (`storeValidatedEvent`) — idempotency, conflict, and concurrency proven against local PostgreSQL by deliberate redelivery and real concurrent clients. Implemented and verified locally; pending owner review; migration `0002` not applied to the managed database. Full `ingest`/worker outstanding** |
 | 3.4 | Projection framework, runner, bounded retries | Poison contained; other projections unaffected |
 | 3.5 | Dead letters and replay | **Dead letters visible and replayable** |
 | 3.6 | `rm_subject_activity`, full rebuild | **Destroy and rebuild ⇒ identical digest** |
@@ -379,4 +383,4 @@ apps/
 | 3.8 | Metrics, structured logs, adversarial suite | **Duplicate and dead-letter metrics instrumented** |
 | 3.9 | Documentation and exit audit | Phase 3 exit criteria demonstrably met |
 
-**Stage 3.1 is reviewed and merged; Stage 3.2 (pure signature verification) is complete, owner-accepted and merged (PR #10, 2026-07-16); Stage 3.3 has not begun.** Approval of the *decisions* is not authorisation to *implement* them, and approval of one stage is not authorisation for the next — with Stage 3.2 now accepted, Stage 3.3 remains gated on managed-database readiness.
+**Stage 3.1 is reviewed and merged; Stage 3.2 (pure signature verification) is complete, owner-accepted and merged (PR #10, 2026-07-16). Managed-database readiness is established and migration `0001_event_log.sql` is applied. Stage 3.3 slice 3 (atomic, idempotent persistence) is implemented and verified locally; pending owner review; migration `0002_event_runtime_grants.sql` is not applied to the managed database. Stage 3.3 as a whole and Phase 3 are NOT complete.** Approval of the *decisions* is not authorisation to *implement* them, and approval of one stage is not authorisation for the next.

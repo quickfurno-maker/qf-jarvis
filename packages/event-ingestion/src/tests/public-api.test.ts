@@ -69,4 +69,15 @@ describe('public API surface', () => {
     expect(runtimeExports).not.toContain('createPool');
     expect(runtimeExports).not.toContain('persist');
   });
+
+  it('keeps the Stage 3.3 slice-3 persistence bridge INTERNAL', () => {
+    // The evidence-bearing verification, the record builder, and the persist composition are
+    // reached only by a future authenticated ingest caller inside this package. None may leak,
+    // and the public surface still exposes no signature bytes.
+    expect(runtimeExports).not.toContain('verifySignatureWithEvidence');
+    expect(runtimeExports).not.toContain('buildEventPersistenceRecord');
+    expect(runtimeExports).not.toContain('persistPreparedEvent');
+    expect(runtimeExports).not.toContain('EvidencePreparationMismatchError');
+    expect(runtimeExports).not.toContain('storeValidatedEvent');
+  });
 });
