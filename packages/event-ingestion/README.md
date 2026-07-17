@@ -81,20 +81,64 @@ correctly shaped signature that fails cryptographically is `signature-invalid`.
 
 ### What is deliberately **not** here
 
-No `ingest` function, no database, no contract parsing or validation, no idempotency or
-duplicate handling, no dead letters, no replay, no HTTP endpoint, and no worker loop.
-Those are **Stage 3.3 (validated signed ingestion) and later**, which compose this
-verifier with the rest of the pipeline. This package refuses a bad body; it does not yet
-decide what a good one becomes.
+No `ingest` function, no database, no idempotency or duplicate handling, no dead letters,
+no replay, no HTTP endpoint, and no worker loop. Those are **later Stage 3.3 slices**, which
+compose this verifier and the preparation below with the rest of the pipeline. This package
+authenticates a body and prepares a validated event; it does not yet **persist** anything.
 
 `@qf-jarvis/api` and `@qf-jarvis/worker` remain empty boundaries — nothing imports this
 package yet.
 
+## Stage 3.3 slice 1 — the semantic-digest foundation (ADR-0029), INTERNAL
+
+A pure, deterministic canonical JSON + SHA-256 digest over an already-validated canonical
+event lives in `src/ingest/` for later semantic duplicate comparison. It is **database-free**
+and **not exported** from the package barrel — only the composition below calls it. It is not
+the signing canonicalisation: signatures still verify the exact raw bytes.
+
+## Stage 3.3 slice 2 — validated event preparation (ADR-0030), INTERNAL
+
+A pure composition, `prepareValidatedEventFromVerifiedRawBody`, turns a raw body into a
+validated canonical event bound to its semantic digest. In order: strict fatal UTF-8 decoding,
+explicit BOM rejection, `JSON.parse` only, validation against the authoritative
+`@qf-jarvis/contracts` registry, and — on success — the validated event is **canonicalised
+once**, the digest is taken over that canonical JSON, and the returned snapshot is a re-parse of
+the **same** canonical JSON, deeply frozen. Snapshot and digest are therefore one identical
+canonical representation; `signedAt` is carried as an immutable ISO-8601 string.
+
+**Authenticity is an internal caller precondition, not something this function proves.** It does
+not perform Ed25519 verification. A future ingest composition must call `verifySignature` first
+and pass this function the **actual** `SignatureVerificationSuccess` and the **exact same bytes**,
+immediately. The function recomputes `sha256(verifiedRawBody)` only to catch an accidental
+body/result **mispairing** — a wiring guard, not a signature check. TypeScript `readonly` and
+structural types are not security capabilities, so the function stays **internal**.
+
+A refused body returns a bounded, **safe** rejection carrying exactly one of three pinned
+identifiers — `contract-validation-failed`, `unknown-event-type`, `unknown-event-version`
+(ADR-0020 §11, ADR-0027) — plus `issuesTruncated`. Issues are **re-owned**, never forwarded from
+the validator: a closed code vocabulary, fixed repository-owned messages, and a structural path
+rebuilt from a canonical-envelope allowlist (every other segment becomes an opaque `[field]`). No
+validator-native message, sender-controlled key, or submitted `eventType`/`eventVersion` ever
+appears in a rejection. The type-versus-version distinction is decided independently and in a
+fixed order against the registry — an unknown type is identified before the version is
+interpreted, with no coercion or fallback.
+
+**Known limitation:** `JSON.parse` is the only parser and resolves duplicate object keys
+last-key-wins; this slice **does not detect duplicate keys**, and no custom or third-party parser
+is introduced. Duplicate-key rejection is a pre-activation hardening decision. There is **no
+`ingest`, no persistence, and no database**, and the composition is **not exported** from the
+package barrel — it is reached only by the later, still-gated ingest composition. **Stage 3.3 is
+not complete or production-ready**; persistence-touching work remains gated on managed-database
+readiness (ADR-0029, ADR-0030).
+
 ## Dependencies
 
-**Zero third-party runtime dependencies.** The only runtime it uses is `node:crypto`.
-It does not depend on `@qf-jarvis/contracts`, because it sits in front of contract
-validation and must stay a pure leaf.
+**One workspace runtime dependency: `@qf-jarvis/contracts`** — the authoritative owner of the
+canonical event contracts, used by slice-2 validated-event preparation. It is a **data-only**
+package that opens no socket, reads no environment, and touches no filesystem; its transitive
+`zod` is used for validation only. This package takes **no direct `zod` dependency and imports
+`zod` nowhere**. The only other runtime it uses is `node:crypto`. Contract validation runs
+**behind** signature verification, never in front of it.
 
 ## Tests
 

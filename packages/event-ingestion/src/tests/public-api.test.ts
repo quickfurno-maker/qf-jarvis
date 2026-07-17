@@ -52,6 +52,18 @@ describe('public API surface', () => {
     expect(runtimeExports).not.toContain('canonicaliseToJson');
   });
 
+  it('keeps the Stage 3.3 validated-event preparation INTERNAL (ADR-0030)', () => {
+    // Slice 2's composition is reached only by the later, still-gated ingest path, so the
+    // package root must not expose the function, its rejection identifiers, or its helpers.
+    expect(runtimeExports).not.toContain('prepareValidatedEventFromVerifiedRawBody');
+    expect(runtimeExports).not.toContain('ValidatedEventPreparationError');
+    expect(runtimeExports).not.toContain('VALIDATED_EVENT_REJECTIONS');
+    expect(runtimeExports).not.toContain('mapSafeValidationIssues');
+    expect(runtimeExports).not.toContain('safeStructuralPath');
+    expect(runtimeExports).not.toContain('deepFreezeJsonValue');
+    expect(runtimeExports).not.toContain('digestCanonicalJson');
+  });
+
   it('exposes no ingest / persistence surface (Stage 3.3+)', () => {
     expect(runtimeExports).not.toContain('ingest');
     expect(runtimeExports).not.toContain('createPool');
