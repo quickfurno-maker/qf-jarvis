@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "sideEffects": false,
-  "description": "QF Jarvis event-ingestion trust boundary. Stage 3.2 provides pure, synchronous Ed25519 signature verification and a public-key registry — no database, no contract parsing, no ingest function. node:crypto only; zero third-party runtime dependencies.",
+  "description": "QF Jarvis event-ingestion trust boundary. Stage 3.2 provides pure, synchronous Ed25519 signature verification and a public-key registry; Stage 3.3 slice 1 adds a pure, database-free semantic-digest foundation (deterministic canonical JSON + SHA-256) that is compiled INTERNALLY and not publicly exported — only a later validated-ingestion composition may call it. Still no database, no ingest function, no persistence. node:crypto only; zero third-party runtime dependencies.",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",

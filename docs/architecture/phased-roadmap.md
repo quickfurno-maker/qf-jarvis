@@ -132,7 +132,7 @@ The design is [event-backbone.md](./event-backbone.md); the decisions are [ADR-0
 | **3.1.3** — QuickFurno Core compatibility and safety remediation | **Not started.** **Runs in the QuickFurno repository, not here** — see below |
 | **3.1.4** — canonical payload privacy hardening | ✅ **Complete and accepted (2026-07-13)** — [ADR-0026](../decisions/ADR-0026-canonical-payload-privacy-boundary.md) **Accepted**. `qf-jarvis` |
 | 3.2 — signature verification | **Complete, owner-accepted and merged (PR #10, 2026-07-16).** Pure Ed25519 signature verification in `@qf-jarvis/event-ingestion` ([ADR-0027](../decisions/ADR-0027-stage-3-2-signature-verification-protocol.md), Accepted); merge commit `4d041edb10c7a511cbad58e4054ead16c01e2b7e`. Fixture-only, database-free; no `ingest`, no persistence, no idempotency |
-| 3.3 — validated signed ingestion | **Not started.** Composes the Stage 3.2 verifier with contract validation and persistence. **Gated on managed-database readiness** (it is the first stage that touches the event store); the pure Stage 3.2 verifier is **not** so gated |
+| 3.3 — validated signed ingestion | **Not started as a whole.** A database-free **semantic-digest foundation** — deterministic canonical JSON + SHA-256 over the validated canonical event — is separately owner-authorized and implemented on local/CI ([ADR-0029](../decisions/ADR-0029-stage-3-3-semantic-digest-foundation.md)); it adds **no `ingest`, no persistence, no repositories, no migrations, no idempotency behaviour**. The full ingest composition and all persistence remain **gated on managed-database readiness** (it is the first stage that touches the event store); the pure Stage 3.2 verifier and this pure digest are **not** so gated |
 | 3.4 — projections and bounded retries | Not started |
 | 3.5 — dead letters and replay | Not started |
 | 3.6 — rebuild determinism | Not started |
@@ -207,7 +207,7 @@ The design is [event-backbone.md](./event-backbone.md); the decisions are [ADR-0
 3. Provider hardening and managed migration             ← owner-authorized; runbook steps 2-7
 4. Stage 3.1.4 — canonical payload privacy hardening    ← qf-jarvis. Complete and accepted. Was the hard gate before 3.2
 5. Stage 3.2 — pure signature verification              ← database-free. Blocker 3.1.4 closed; complete, owner-accepted and merged (PR #10, 2026-07-16)
-6. Stage 3.3 — validated signed ingestion               ← composes 3.2 + contracts + persistence. Not started. 3.2 acceptance satisfied; now gated by managed-database readiness
+6. Stage 3.3 — validated signed ingestion               ← composes 3.2 + contracts + persistence. Semantic-digest foundation authorized and built (ADR-0029, database-free, local/CI); ingest composition and all persistence remain gated by managed-database readiness
 ```
 
 | Gate | Blocked by |
