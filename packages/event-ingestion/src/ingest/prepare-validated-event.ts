@@ -29,9 +29,11 @@
  *    (a mispairing throws — see above).
  * 2. Decode the bytes as **strict, fatal UTF-8** — invalid UTF-8 is refused, never replaced.
  * 3. Reject an explicit **byte-order mark**: a canonical event is UTF-8 without a BOM.
- * 4. Parse with **`JSON.parse` only** — no permissive, streaming, or bespoke parser. (`JSON.parse`
- *    resolves duplicate object keys last-wins and this slice does **not** detect duplicate keys;
- *    duplicate-key hardening is a pre-activation decision — ADR-0030.)
+ * 4. Reject a **duplicate object member name** at any depth, compared by DECODED name, before
+ *    parsing (Stage 3.3.5, ADR-0033) — `JSON.parse` would otherwise collapse `{"a":1,"a":2}`
+ *    last-wins and silently, a security-relevant ambiguity for an authenticated event. Then parse
+ *    with **`JSON.parse` only** — no permissive, streaming, or bespoke parser — which stays the
+ *    single authority for the validity of a non-duplicate body.
  * 5. Validate against the authoritative `@qf-jarvis/contracts` registry (`safeParseCanonicalEvent`).
  * 6. On success, **canonicalise once** (ADR-0029), digest that exact canonical JSON, re-parse the
  *    *same* canonical JSON, and deeply freeze it — so the returned snapshot and the digest are one
@@ -56,9 +58,11 @@ import {
 import { ComputedBodyDigest } from '../signature/computed-body-digest.js';
 import { type SignatureVerificationSuccess } from '../signature/verify.js';
 import { canonicaliseToJson } from './canonical-json.js';
+import { scanForDuplicateObjectKeys } from './duplicate-object-key-scan.js';
 import { digestCanonicalJson, type SemanticEventDigest } from './semantic-digest.js';
 import { deepFreezeJsonValue, type DeepReadonly } from './frozen-snapshot.js';
 import {
+  duplicateObjectKeyIssues,
   malformedBodyIssues,
   mapSafeValidationIssues,
   unrecognisedDiscriminantIssues,
@@ -234,7 +238,19 @@ export function prepareValidatedEventFromVerifiedRawBody(
     return reject('contract-validation-failed', malformedBodyIssues());
   }
 
-  // 4. JSON.parse only. Note: last-key-wins on duplicate keys; this slice does not detect them.
+  // 3a. Duplicate-object-key rejection (Stage 3.3.5, ADR-0033). `JSON.parse` collapses a duplicate
+  //     member last-wins and silently, which is a security-relevant ambiguity for an authenticated
+  //     event. Reject any object with a duplicate member name — compared by DECODED name, so
+  //     escaped-equivalent names (`{"a":1,"a":2}`) collide — BEFORE JSON.parse can accept it.
+  //     The scanner is authoritative only for duplicates; 'malformed' defers to JSON.parse below,
+  //     which stays the single authority for whether a non-duplicate body is valid. The duplicated
+  //     name is never recorded — only the fixed `invalid-format` issue is (§5, ADR-0033).
+  if (scanForDuplicateObjectKeys(text) === 'duplicate-object-key') {
+    return reject('contract-validation-failed', duplicateObjectKeyIssues());
+  }
+
+  // 4. JSON.parse only. Duplicate keys were already refused in step 3a; on any non-duplicate body
+  //    JSON.parse remains the single authority for JSON validity.
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);

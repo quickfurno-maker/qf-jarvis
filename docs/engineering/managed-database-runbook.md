@@ -135,6 +135,16 @@ Stage 3.3.3 adds a third migration, `0003_ingestion_rejection_and_event_conflict
 
 **This migration is NOT yet applied to the managed database.** It is implemented and verified against local PostgreSQL and remains **pending review**. When `0002` and `0003` are applied, the append-only history reads `0001_event_log.sql`, `0002_event_runtime_grants.sql`, `0003_ingestion_rejection_and_event_conflict.sql`. Until then, the managed database carries migration `0001` alone. **No live QuickFurno data is permitted; Phase 3 stores synthetic fixtures only, and the Phase 11 privacy/retention gate is untouched.**
 
+### Stage 3.3.5 managed-readiness gate — `0002` then `0003`, still NOT executed
+
+Stage 3.3.5 does **not** apply `0002` or `0003`. It records the concrete pre-conditions, evidence, and abort conditions for the **separate, owner-authorized** run that eventually will, in [`stage-3.3.5-managed-readiness-report.md`](./stage-3.3.5-managed-readiness-report.md). Before any such run:
+
+- the report's checksums must match the on-disk migrations byte-for-byte (`0003` SHA-256 `407bea56…5b36ab0c`);
+- the deployment **runtime role must exist first**, and **any exposed runtime credential must be rotated** — a credential that has appeared in a shell, a log, or a config is compromised for this purpose;
+- the run is authorized **explicitly by the owner**, executes **only** `0002` then `0003` in that order, and **aborts** on any checksum mismatch, unexpected migration history, wrong database identity, wrong role, unexpected objects, or credential uncertainty.
+
+The readiness report concludes `READY_FOR_SEPARATE_OWNER_AUTHORIZED_MANAGED_RUN`; it does **not** claim the migrations were applied.
+
 ---
 
 ## Provider security baseline: `public.rls_auto_enable()`

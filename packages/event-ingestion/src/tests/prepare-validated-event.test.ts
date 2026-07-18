@@ -295,6 +295,70 @@ describe('prepareValidatedEventFromVerifiedRawBody — malformed authentic bodie
   });
 });
 
+describe('prepareValidatedEventFromVerifiedRawBody — duplicate object keys (Stage 3.3.5, ADR-0033)', () => {
+  /** Sign and prepare an exact raw JSON STRING (bypassing JSON.stringify, which cannot duplicate). */
+  function prepareRaw(rawJson: string): ValidatedEventPreparation {
+    return prepareBytes(new TextEncoder().encode(rawJson));
+  }
+
+  /** Assert the fixed duplicate-key mapping and that nothing sender-controlled is recorded. */
+  function expectDuplicateRejection(result: ValidatedEventPreparation, forbidden: string[]): void {
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('contract-validation-failed');
+    expect(result.issues).toHaveLength(1);
+    expect(result.issues[0]?.code).toBe('invalid-format');
+    expect(result.issues[0]?.path).toBe('');
+    expect(result.issues[0]?.message).toBe(SAFE_VALIDATION_MESSAGES['invalid-format']);
+    expect(result.issuesTruncated).toBe(false);
+    // No duplicated key name, no field path, no parser message escapes into the rejection.
+    const serialized = JSON.stringify(result);
+    for (const fragment of forbidden) {
+      expect(serialized).not.toContain(fragment);
+    }
+  }
+
+  it('rejects a top-level duplicate in an OTHERWISE-VALID canonical event', () => {
+    // Inject a second, earlier eventId into the serialized valid event: valid JSON, duplicate key.
+    const valid = JSON.stringify(VALID_CANONICAL_EVENT);
+    const raw = `{"eventId":"DUPLICATE-SENTINEL-KEYVALUE",${valid.slice(1)}`;
+    expectDuplicateRejection(prepareRaw(raw), ['DUPLICATE-SENTINEL-KEYVALUE', 'eventId']);
+  });
+
+  it('rejects a nested duplicate inside the payload', () => {
+    const raw = '{"eventType":"x","payload":{"secretField":1,"secretField":2}}';
+    expectDuplicateRejection(prepareRaw(raw), ['secretField', 'payload']);
+  });
+
+  it('rejects an escaped-equivalent duplicate (distinctive name, escaped second occurrence)', () => {
+    // "secretKeyName" then "secretKeyName" (s === 's') — same decoded name.
+    const raw = '{"secretKeyName":1,"\\u0073ecretKeyName":2}';
+    expectDuplicateRejection(prepareRaw(raw), ['secretKeyName', 'u0073']);
+  });
+
+  it('rejects a Unicode-escape duplicate name', () => {
+    expectDuplicateRejection(prepareRaw('{"\\u00e9zzz":1,"ézzz":2}'), ['zzz', '00e9']);
+  });
+
+  it('a duplicate is refused as invalid-format, distinct from a malformed-body rejection', () => {
+    const dup = prepareRaw('{"a":1,"a":2}');
+    expect(dup.ok).toBe(false);
+    if (dup.ok) return;
+    expect(dup.issues[0]?.code).toBe('invalid-format');
+    // A truly malformed body still maps to malformed-body — the two are not conflated.
+    const malformed = prepareRaw('{"a":1,');
+    expect(malformed.ok).toBe(false);
+    if (malformed.ok) return;
+    expect(malformed.issues[0]?.code).toBe('malformed-body');
+  });
+
+  it('ACCEPTS the same key name used in separate object scopes (no false positive)', () => {
+    // A valid canonical event legitimately reuses key names across nested objects; it must pass.
+    const result = prepareValue(VALID_CANONICAL_EVENT);
+    expect(result.ok).toBe(true);
+  });
+});
+
 describe('prepareValidatedEventFromVerifiedRawBody — type/version precedence (independent, ordered)', () => {
   it('missing eventType → contract-validation-failed', () => {
     const result = prepareValue(without('eventType'));
@@ -454,20 +518,25 @@ describe('prepareValidatedEventFromVerifiedRawBody — rejections never leak sen
   });
 });
 
-describe('prepareValidatedEventFromVerifiedRawBody — duplicate JSON keys (documented, not detected)', () => {
-  it('JSON.parse resolves duplicate keys last-wins — recorded here, not claimed as detection', () => {
+describe('prepareValidatedEventFromVerifiedRawBody — duplicate JSON keys ARE detected (Stage 3.3.5)', () => {
+  it('records the JSON.parse last-wins hazard this stage now closes', () => {
+    // This is the language fact that made duplicate keys dangerous: JSON.parse silently keeps the
+    // LAST value. Stage 3.3.5 rejects the body BEFORE it reaches JSON.parse, so this ambiguity can
+    // never decide which value an authenticated event carries.
     const parsed = JSON.parse('{"a":1,"a":2}') as { a: number };
     expect(parsed.a).toBe(2);
   });
 
-  it('preparation does not detect duplicate keys; a duplicate discriminant resolves last-wins', () => {
-    // Inject an earlier eventVersion:1 (retired). JSON.parse keeps the LAST eventVersion (2),
-    // so preparation validates the v2 contract and succeeds. This RECORDS last-wins behavior;
-    // it is NOT duplicate-key detection. If first-wins applied, this would reject as v1.
+  it('rejects a duplicate DISCRIMINANT instead of silently resolving it last-wins', () => {
+    // Inject an earlier eventVersion:1 (retired). Under the old last-wins behaviour JSON.parse kept
+    // the LAST eventVersion (2) and preparation SUCCEEDED as v2. Now the duplicate eventVersion is
+    // detected and the body is refused outright — the discriminant ambiguity never reaches parsing.
     const body = JSON.stringify(VALID_CANONICAL_EVENT).replace('{', '{"eventVersion":1,');
     const result = prepareBytes(new TextEncoder().encode(body));
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.canonicalEvent.eventVersion).toBe(2);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('contract-validation-failed');
+    expect(result.issues[0]?.code).toBe('invalid-format');
+    expect(result.issuesTruncated).toBe(false);
   });
 });

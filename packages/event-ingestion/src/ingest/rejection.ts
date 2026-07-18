@@ -253,6 +253,17 @@ export function malformedBodyIssues(): SafeValidationIssues {
 }
 
 /**
+ * The fixed, safe issue list for a body whose JSON contains a duplicate object member name at any
+ * depth (Stage 3.3.5, ADR-0033). Exactly one `invalid-format` issue with an EMPTY path — the
+ * duplicated name is sender-controlled and is never recorded, and neither is a field path or any
+ * parser text. Reused through the existing `contract-validation-failed` reason, so no new reason
+ * code and no migration are introduced.
+ */
+export function duplicateObjectKeyIssues(): SafeValidationIssues {
+  return freezeIssues([safeIssue('invalid-format', '')]);
+}
+
+/**
  * The fixed, generic safe issue list for an unrecognised discriminant (unknown event type or
  * version). It names only the canonical-envelope field (`eventType` / `eventVersion`) and never
  * the submitted value.
