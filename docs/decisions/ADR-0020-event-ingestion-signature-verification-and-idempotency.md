@@ -113,6 +113,8 @@ An empty result means we have seen this `eventId` before.
 
 ### 8. A conflicting duplicate fails closed
 
+> **Note (2026-07-18, [ADR-0031](./ADR-0031-stage-3-3-3-rejection-and-conflict-storage.md)) — §8 narrowed on payload storage.** The sentence below, _"Conflicting payloads are stored,"_ is **narrowed by ADR-0031**: Stage 3.3.3 stores **no** conflicting payload and no rejected payload. `qf_jarvis.event_conflict` stores the refused delivery's `semantic_event_digest` and `body_digest` (one-way hashes), its validated `correlation_id`, and bounded signature evidence (algorithm, key id, signed-at) — never the payload or the signature bytes. The original accepted event is unchanged in `qf_jarvis.event` and its digest is obtained by join, not copied. The reason is the still-closed retention gate ([ADR-0019](./ADR-0019-durable-event-store-and-persistence.md) §7): a canonical payload carries pseudonymous identifiers that are personal data, and keeping a copy of a **refused** one is exactly the question the gate exists to answer. The rest of §8 — first acceptance wins permanently, semantic comparison, recorded/counted/alertable — stands unchanged. The original wording is preserved below for history.
+
 | Case                                           | Outcome                                                                                                                          |
 | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | Same `eventId`, **same** semantic content      | **Benign duplicate.** Counted. The existing sequence is returned. **Nothing reprocesses.** Redelivery is normal, not exceptional |
