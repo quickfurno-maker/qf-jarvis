@@ -33,6 +33,10 @@ const APPROVED_EXPORTS = [
   'SIGNATURE_VERIFICATION_REASONS',
   'SUPPORTED_ALGORITHM',
   'SignatureVerificationConfigError',
+  // Stage 3.3.4 (ADR-0032): the full transactional ingest composition — the one new public symbol.
+  // The primitives it composes (verifySignatureWithEvidence, prepare*, persist*, storeValidatedEvent,
+  // recordIngestionRejection, recordEventConflict) stay internal and never reach this barrel.
+  'createEventIngestor',
   'verifySignature',
 ];
 
