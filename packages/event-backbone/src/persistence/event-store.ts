@@ -33,7 +33,10 @@
  * - **Same eventId, same `semantic_event_digest`** → `duplicate`. Nothing is written; the
  *   original row stands, unmodified.
  * - **Same eventId, a *different* `semantic_event_digest`** → a {@link ConflictingEventDigestError}.
- *   It **fails closed**: the original is never overwritten, updated, replaced, or mutated.
+ *   It **fails closed**: the original is never overwritten, updated, replaced, or mutated. The
+ *   refused delivery is appended as a payload-free `qf_jarvis.event_conflict` audit row **in the
+ *   same transaction** that classified it (Stage 3.3.3, ADR-0031) — the conflict commits, and only
+ *   then is the typed error thrown. Every verified conflicting delivery gets its own row.
  *
  * ### Race-safe by construction
  *
@@ -52,6 +55,7 @@
  * `search_path`.
  */
 
+import { recordEventConflict } from './conflict-store.js';
 import type { DatabasePool } from './pool.js';
 import { withTransaction } from './transaction.js';
 
@@ -183,76 +187,114 @@ interface ExistingRow {
 }
 
 /**
+ * A private, in-module sentinel the transaction callback returns once it has **recorded** a
+ * conflict in `qf_jarvis.event_conflict`. It is never handed to a caller: after the transaction
+ * commits, `storeValidatedEvent` converts it into a thrown {@link ConflictingEventDigestError}. The
+ * sentinel is what lets the conflict record COMMIT — a `throw` inside the transaction would roll it
+ * back — while keeping the public throw-on-conflict contract unchanged.
+ */
+interface RecordedConflictSentinel {
+  readonly outcome: 'conflict';
+  readonly eventId: string;
+}
+
+/**
  * Atomically store a validated event, classifying a duplicate by its semantic digest.
  *
  * The insert and the classification happen in **one transaction**. Returns {@link StoredEvent} on
- * first delivery and {@link DuplicateEvent} for a benign duplicate; throws
- * {@link ConflictingEventDigestError} for a conflicting one. It never issues an UPDATE or a DELETE.
+ * first delivery and {@link DuplicateEvent} for a benign duplicate. For a **conflicting** duplicate
+ * (same eventId, different semantic digest), it appends an `event_conflict` audit row **in the same
+ * transaction**, lets that transaction commit, and only THEN throws {@link ConflictingEventDigestError}
+ * — so the conflict is durably recorded before the error surfaces, the original accepted event is
+ * never touched, and a COMMIT failure propagates as a database error rather than a
+ * silently-recorded conflict. Every verified conflicting delivery produces its own conflict row.
+ * It never issues an UPDATE, a DELETE, or a replacement UPSERT.
  */
 export async function storeValidatedEvent(
   pool: DatabasePool,
   record: EventPersistenceRecord,
 ): Promise<EventPersistenceOutcome> {
-  return withTransaction(pool, async (client) => {
-    // Pin the isolation level BEFORE the first snapshot-taking statement. The classification below
-    // depends on the SELECT taking a fresh snapshot that sees a concurrent winner's committed row —
-    // which is READ COMMITTED behaviour. `withTransaction` opens a plain `BEGIN`, so without this
-    // the transaction would inherit the session's ambient `default_transaction_isolation`; under
-    // REPEATABLE READ or SERIALIZABLE the SELECT would reuse the transaction's first snapshot and a
-    // concurrent duplicate could be misclassified (or the transaction could serialization-fail).
-    // This must be the first statement in the transaction, before INSERT.
-    await client.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
+  const result = await withTransaction<EventPersistenceOutcome | RecordedConflictSentinel>(
+    pool,
+    async (client) => {
+      // Pin the isolation level BEFORE the first snapshot-taking statement. The classification below
+      // depends on the SELECT taking a fresh snapshot that sees a concurrent winner's committed row —
+      // which is READ COMMITTED behaviour. `withTransaction` opens a plain `BEGIN`, so without this
+      // the transaction would inherit the session's ambient `default_transaction_isolation`; under
+      // REPEATABLE READ or SERIALIZABLE the SELECT would reuse the transaction's first snapshot and a
+      // concurrent duplicate could be misclassified (or the transaction could serialization-fail).
+      // This must be the first statement in the transaction, before INSERT.
+      await client.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
 
-    const inserted = await client.query<InsertedRow>(INSERT_ON_CONFLICT_SQL, [
-      record.eventId,
-      record.eventType,
-      record.eventVersion,
-      record.source,
-      record.subjectType,
-      record.subjectId,
-      record.occurredAt,
-      record.emittedAt,
-      record.correlationId,
-      record.causationEventId,
-      JSON.stringify(record.payload),
-      record.semanticEventDigest,
-      record.bodyDigest,
-      record.signatureAlgorithm,
-      record.signatureKeyId,
-      record.signatureSignedAt,
-      record.signature,
-    ]);
+      const inserted = await client.query<InsertedRow>(INSERT_ON_CONFLICT_SQL, [
+        record.eventId,
+        record.eventType,
+        record.eventVersion,
+        record.source,
+        record.subjectType,
+        record.subjectId,
+        record.occurredAt,
+        record.emittedAt,
+        record.correlationId,
+        record.causationEventId,
+        JSON.stringify(record.payload),
+        record.semanticEventDigest,
+        record.bodyDigest,
+        record.signatureAlgorithm,
+        record.signatureKeyId,
+        record.signatureSignedAt,
+        record.signature,
+      ]);
 
-    const insertedRow = inserted.rows[0];
-    if (insertedRow !== undefined) {
-      // First delivery of this eventId. Exactly one row now exists.
-      return Object.freeze<StoredEvent>({
-        outcome: 'stored',
-        sequence: insertedRow.sequence,
-        acceptedAt: insertedRow.accepted_at,
+      const insertedRow = inserted.rows[0];
+      if (insertedRow !== undefined) {
+        // First delivery of this eventId. Exactly one row now exists.
+        return Object.freeze<StoredEvent>({
+          outcome: 'stored',
+          sequence: insertedRow.sequence,
+          acceptedAt: insertedRow.accepted_at,
+        });
+      }
+
+      // The INSERT did nothing, so a row with this eventId already exists — committed, and possibly
+      // by a concurrent client. This SELECT is a SEPARATE statement and therefore takes a fresh
+      // READ COMMITTED snapshot, so it sees that committed row.
+      const existing = await client.query<ExistingRow>(SELECT_EXISTING_SQL, [record.eventId]);
+      const existingRow = existing.rows[0];
+      if (existingRow === undefined) {
+        throw new EventPersistenceConsistencyError(record.eventId);
+      }
+
+      if (existingRow.semantic_event_digest.equals(record.semanticEventDigest)) {
+        // Same identity, same semantic content: a benign duplicate. Nothing is written.
+        return Object.freeze<DuplicateEvent>({
+          outcome: 'duplicate',
+          sequence: existingRow.sequence,
+          acceptedAt: existingRow.accepted_at,
+        });
+      }
+
+      // Same identity, different content: two different facts cannot share one idempotency key.
+      // Record the conflict IN THIS TRANSACTION and return a sentinel so the transaction COMMITS the
+      // record. The original accepted row is never touched — this only INSERTs a separate audit row.
+      await recordEventConflict(client, {
+        eventId: record.eventId,
+        conflictingSemanticEventDigest: record.semanticEventDigest,
+        conflictingBodyDigest: record.bodyDigest,
+        conflictingCorrelationId: record.correlationId,
+        conflictingSignatureAlgorithm: record.signatureAlgorithm,
+        conflictingSignatureKeyId: record.signatureKeyId,
+        conflictingSignatureSignedAt: record.signatureSignedAt,
       });
-    }
+      return { outcome: 'conflict', eventId: record.eventId } satisfies RecordedConflictSentinel;
+    },
+  );
 
-    // The INSERT did nothing, so a row with this eventId already exists — committed, and possibly
-    // by a concurrent client. This SELECT is a SEPARATE statement and therefore takes a fresh
-    // READ COMMITTED snapshot, so it sees that committed row.
-    const existing = await client.query<ExistingRow>(SELECT_EXISTING_SQL, [record.eventId]);
-    const existingRow = existing.rows[0];
-    if (existingRow === undefined) {
-      throw new EventPersistenceConsistencyError(record.eventId);
-    }
-
-    if (existingRow.semantic_event_digest.equals(record.semanticEventDigest)) {
-      // Same identity, same semantic content: a benign duplicate. Nothing is written.
-      return Object.freeze<DuplicateEvent>({
-        outcome: 'duplicate',
-        sequence: existingRow.sequence,
-        acceptedAt: existingRow.accepted_at,
-      });
-    }
-
-    // Same identity, different content: two different facts cannot share one idempotency key.
-    // Fail closed. Nothing is written; the original row is untouched.
-    throw new ConflictingEventDigestError(record.eventId);
-  });
+  if (result.outcome === 'conflict') {
+    // The conflict record has COMMITTED. Surface the typed error only now — AFTER the transaction
+    // resolved — so a COMMIT failure propagates as a database error above rather than as a
+    // successfully-recorded conflict, and the throw contract for callers is unchanged.
+    throw new ConflictingEventDigestError(result.eventId);
+  }
+  return result;
 }

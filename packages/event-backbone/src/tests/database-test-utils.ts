@@ -291,3 +291,69 @@ export async function countAdvisoryLockHolders(pool: DatabasePool, key: number):
     return row === undefined ? 0 : Number.parseInt(row.count, 10);
   });
 }
+
+/**
+ * The DEPLOYMENT runtime role, exactly as migrations 0002/0003 expect to find it.
+ *
+ * It does not exist on a laptop by default — no more than the managed roles do — so tests create it
+ * BEFORE migrating, the only order in which the conditional runtime grants have something to grant
+ * to. A separate low-privilege LOGIN role is what makes the column-level authorization assertions
+ * real: they connect **as this role** and observe what PostgreSQL itself refuses.
+ */
+export const RUNTIME_ROLE = 'qf_jarvis_runtime';
+
+/**
+ * Create the runtime LOGIN role and set this run's password.
+ *
+ * The role is cluster-global and persists between test files; the migrations' grants to it are
+ * conditional and idempotent, so re-migrating in any file neither fails nor over-grants. `ALTER
+ * ROLE ... PASSWORD` cannot take a bind parameter, so the literal is escaped server-side with
+ * `format(%L)` — never string-concatenated — before it is executed.
+ */
+export async function ensureRuntimeRoleExists(
+  admin: DatabasePool,
+  password: string,
+): Promise<void> {
+  assertSafeTestDatabase(requireTestDatabaseUrl());
+
+  await withClient(admin, async (client) => {
+    await client.query(`
+      DO $runtime$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'qf_jarvis_runtime') THEN
+          CREATE ROLE qf_jarvis_runtime LOGIN;
+        END IF;
+      END
+      $runtime$;
+    `);
+
+    const built = await client.query<{ stmt: string }>(
+      `SELECT format('ALTER ROLE qf_jarvis_runtime WITH LOGIN PASSWORD %L', $1::text) AS stmt`,
+      [password],
+    );
+    const stmt = built.rows[0]?.stmt;
+    if (stmt === undefined) {
+      throw new Error('Failed to build the runtime role password statement');
+    }
+    await client.query(stmt);
+  });
+}
+
+/** The test database connection string, re-pointed at the runtime role. Same loopback host/db. */
+export function runtimeConnectionString(password: string): string {
+  const url = new URL(requireTestDatabaseUrl());
+  url.username = RUNTIME_ROLE;
+  url.password = password;
+  return url.toString();
+}
+
+/** A pool that connects AS the least-privileged runtime role. The caller closes it. */
+export function createRuntimePool(password: string, applicationName: string): DatabasePool {
+  return createDatabasePool(
+    createDatabaseConfig({
+      connectionString: runtimeConnectionString(password),
+      maxConnections: 3,
+      applicationName,
+    }),
+  );
+}

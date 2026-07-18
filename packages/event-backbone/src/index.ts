@@ -82,6 +82,26 @@ export {
 } from './persistence/event-store.js';
 
 /**
+ * The append-only ingestion-rejection repository (Stage 3.3.3). A trusted low-level primitive that
+ * appends a safe, payload-free rejection audit row. The conflict repository is deliberately **not**
+ * exported: `recordEventConflict` is INTERNAL to `storeValidatedEvent`, which records a conflict in
+ * the same transaction it classifies it — no external caller may append a conflict.
+ */
+export {
+  recordIngestionRejection,
+  type IngestionRejectionRecord,
+  type RecordedIngestionRejection,
+} from './persistence/rejection-store.js';
+
+export {
+  INGESTION_REJECTION_ISSUE_CODES,
+  INGESTION_REJECTION_REASON_CODES,
+  MAX_INGESTION_REJECTION_ISSUES,
+  type IngestionRejectionIssueCode,
+  type IngestionRejectionReasonCode,
+} from './persistence/ingestion-rejection-reasons.js';
+
+/**
  * **`migrateWithPreflight` is the ONLY public migration API, and that is enforced here.**
  *
  * `runMigrations` and `runMigrationsOnClient` are **deliberately not exported from this

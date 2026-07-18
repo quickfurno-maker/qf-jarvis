@@ -23,6 +23,7 @@ import {
   createDatabaseConfig,
   createDatabasePool,
   defaultMigrationsDirectory,
+  MigrationChecksumMismatchError,
   storeValidatedEvent,
   withClient,
   type DatabasePool,
@@ -131,6 +132,16 @@ async function countRows(eventId: string): Promise<number> {
   return withClient(pool, async (client) => {
     const result = await client.query<{ count: string }>(
       'SELECT count(*)::text AS count FROM qf_jarvis.event WHERE event_id = $1',
+      [eventId],
+    );
+    return Number.parseInt(result.rows[0]?.count ?? '0', 10);
+  });
+}
+
+async function countConflicts(eventId: string): Promise<number> {
+  return withClient(pool, async (client) => {
+    const result = await client.query<{ count: string }>(
+      'SELECT count(*)::text AS count FROM qf_jarvis.event_conflict WHERE event_id = $1',
       [eventId],
     );
     return Number.parseInt(result.rows[0]?.count ?? '0', 10);
@@ -339,6 +350,528 @@ describe('storeValidatedEvent — real concurrent clients', () => {
     }
     expect(rejection.reason).toBeInstanceOf(ConflictingEventDigestError);
     expect(await countRows(eventId)).toBe(1);
+  });
+});
+
+describe('storeValidatedEvent — conflict recording (Stage 3.3.3)', () => {
+  /** Deliver a conflicting event (its `eventId` already accepted); return the caught error. */
+  async function provokeConflict(conflicting: EventPersistenceRecord): Promise<unknown> {
+    try {
+      await storeValidatedEvent(pool, conflicting);
+      throw new Error('expected a ConflictingEventDigestError');
+    } catch (error: unknown) {
+      return error;
+    }
+  }
+
+  it('appends exactly one event_conflict row and still throws the typed error', async () => {
+    const eventId = randomUUID();
+    await storeValidatedEvent(
+      pool,
+      makeRecord({ eventId, semanticEventDigest: Buffer.alloc(32, 0xa1) }),
+    );
+
+    const error = await provokeConflict(
+      makeRecord({ eventId, semanticEventDigest: Buffer.alloc(32, 0xff) }),
+    );
+
+    expect(error).toBeInstanceOf(ConflictingEventDigestError);
+    expect(await countConflicts(eventId)).toBe(1);
+  });
+
+  it('maps the conflicting delivery evidence to the correct columns — and stores NO original digest', async () => {
+    const eventId = randomUUID();
+    const correlationId = randomUUID();
+    await storeValidatedEvent(
+      pool,
+      makeRecord({ eventId, semanticEventDigest: Buffer.alloc(32, 0xa1) }),
+    );
+
+    const conflicting = makeRecord({
+      eventId,
+      correlationId,
+      semanticEventDigest: Buffer.alloc(32, 0xcd),
+      bodyDigest: Buffer.alloc(32, 0xce),
+      signatureAlgorithm: 'ed25519',
+      signatureKeyId: 'core-2026-a',
+      signatureSignedAt: '2026-07-11T09:00:06Z',
+    });
+    await provokeConflict(conflicting);
+
+    const row = await withClient(pool, async (client) => {
+      const result = await client.query(
+        `SELECT event_id, conflicting_semantic_event_digest, conflicting_body_digest,
+                conflicting_correlation_id, conflicting_signature_algorithm,
+                conflicting_signature_key_id, conflicting_signature_signed_at, recorded_at
+           FROM qf_jarvis.event_conflict WHERE event_id = $1`,
+        [eventId],
+      );
+      return result.rows[0] as Record<string, unknown>;
+    });
+
+    expect(row['event_id']).toBe(eventId);
+    expect(
+      (row['conflicting_semantic_event_digest'] as Buffer).equals(Buffer.alloc(32, 0xcd)),
+    ).toBe(true);
+    expect((row['conflicting_body_digest'] as Buffer).equals(Buffer.alloc(32, 0xce))).toBe(true);
+    expect(row['conflicting_correlation_id']).toBe(correlationId);
+    expect(row['conflicting_signature_algorithm']).toBe('ed25519');
+    expect(row['conflicting_signature_key_id']).toBe('core-2026-a');
+    expect((row['conflicting_signature_signed_at'] as Date).getTime()).toBe(
+      new Date('2026-07-11T09:00:06Z').getTime(),
+    );
+    // recorded_at is database-generated.
+    expect(row['recorded_at']).toBeInstanceOf(Date);
+  });
+
+  it('has no original-digest, payload, signature, or subject column — the original is joined', async () => {
+    const columns = await withClient(pool, async (client) => {
+      const result = await client.query<{ column_name: string }>(
+        `SELECT column_name FROM information_schema.columns
+          WHERE table_schema = 'qf_jarvis' AND table_name = 'event_conflict'`,
+      );
+      return result.rows.map((row) => row.column_name);
+    });
+
+    for (const forbidden of [
+      'original_semantic_event_digest',
+      'payload',
+      'conflicting_payload',
+      'raw_body',
+      'signature',
+      'conflicting_signature',
+      'subject_id',
+      'subject_type',
+    ]) {
+      expect(columns).not.toContain(forbidden);
+    }
+
+    // The original semantic digest is obtained by joining the immutable parent row — one copy.
+    const eventId = randomUUID();
+    await storeValidatedEvent(
+      pool,
+      makeRecord({ eventId, semanticEventDigest: Buffer.alloc(32, 0x5a) }),
+    );
+    await provokeConflict(makeRecord({ eventId, semanticEventDigest: Buffer.alloc(32, 0x5b) }));
+    const joined = await withClient(pool, async (client) => {
+      const result = await client.query<{ original: Buffer; conflicting: Buffer }>(
+        `SELECT e.semantic_event_digest AS original, c.conflicting_semantic_event_digest AS conflicting
+           FROM qf_jarvis.event_conflict c
+           JOIN qf_jarvis.event e ON e.event_id = c.event_id
+          WHERE c.event_id = $1`,
+        [eventId],
+      );
+      return result.rows[0];
+    });
+    expect(joined?.original.equals(Buffer.alloc(32, 0x5a))).toBe(true);
+    expect(joined?.conflicting.equals(Buffer.alloc(32, 0x5b))).toBe(true);
+  });
+
+  it('leaves the accepted original byte-for-byte unchanged', async () => {
+    const eventId = randomUUID();
+    await storeValidatedEvent(
+      pool,
+      makeRecord({
+        eventId,
+        subjectId: 'CORE-CLIENT-ORIGINAL',
+        semanticEventDigest: Buffer.alloc(32, 0xa1),
+      }),
+    );
+    const before = await withClient(pool, async (client) => {
+      const result = await client.query<Record<string, unknown>>(
+        'SELECT sequence, subject_id, semantic_event_digest, accepted_at FROM qf_jarvis.event WHERE event_id = $1',
+        [eventId],
+      );
+      return result.rows[0];
+    });
+
+    await provokeConflict(
+      makeRecord({
+        eventId,
+        subjectId: 'CORE-CLIENT-TAMPERED',
+        semanticEventDigest: Buffer.alloc(32, 0xff),
+      }),
+    );
+
+    const after = await withClient(pool, async (client) => {
+      const result = await client.query<Record<string, unknown>>(
+        'SELECT sequence, subject_id, semantic_event_digest, accepted_at FROM qf_jarvis.event WHERE event_id = $1',
+        [eventId],
+      );
+      return result.rows;
+    });
+    expect(after).toHaveLength(1);
+    const row = after[0];
+    if (row === undefined || before === undefined) {
+      throw new Error('Expected the original row to survive the conflict');
+    }
+    expect(row['subject_id']).toBe('CORE-CLIENT-ORIGINAL');
+    expect(row['sequence']).toBe(before['sequence']);
+    expect((row['semantic_event_digest'] as Buffer).equals(Buffer.alloc(32, 0xa1))).toBe(true);
+    expect((row['accepted_at'] as Date).getTime()).toBe((before['accepted_at'] as Date).getTime());
+  });
+
+  it('records NO conflict for a benign (same-digest) redelivery', async () => {
+    const record = makeRecord();
+    await storeValidatedEvent(pool, record);
+    const second = await storeValidatedEvent(pool, record);
+    expect(second.outcome).toBe('duplicate');
+    expect(await countConflicts(record.eventId)).toBe(0);
+  });
+
+  it('records a SEPARATE row for each repeated conflicting delivery — no dedup', async () => {
+    const eventId = randomUUID();
+    await storeValidatedEvent(
+      pool,
+      makeRecord({ eventId, semanticEventDigest: Buffer.alloc(32, 0xa1) }),
+    );
+
+    await provokeConflict(makeRecord({ eventId, semanticEventDigest: Buffer.alloc(32, 0xb1) }));
+    await provokeConflict(makeRecord({ eventId, semanticEventDigest: Buffer.alloc(32, 0xb2) }));
+    // Even the SAME conflicting digest, delivered again, is a separate audit fact.
+    await provokeConflict(makeRecord({ eventId, semanticEventDigest: Buffer.alloc(32, 0xb1) }));
+
+    expect(await countConflicts(eventId)).toBe(3);
+    expect(await countRows(eventId)).toBe(1);
+  });
+
+  it('rolls back the whole transaction if the conflict INSERT fails, leaving no partial record', async () => {
+    const eventId = randomUUID();
+    await storeValidatedEvent(
+      pool,
+      makeRecord({ eventId, semanticEventDigest: Buffer.alloc(32, 0xa1) }),
+    );
+
+    // Force ONLY the event_conflict INSERT to fail, via a temporary always-failing constraint that
+    // applies to new rows. The event INSERT (ON CONFLICT DO NOTHING) is a no-op, so the failure is
+    // isolated to the conflict append.
+    await withClient(pool, (client) =>
+      client.query(
+        'ALTER TABLE qf_jarvis.event_conflict ADD CONSTRAINT tmp_force_fail CHECK (recorded_at IS NULL) NOT VALID',
+      ),
+    );
+    try {
+      const error = await provokeConflict(
+        makeRecord({ eventId, semanticEventDigest: Buffer.alloc(32, 0xff) }),
+      );
+      // The failure surfaces as the database/constraint error — NOT as a recorded conflict.
+      expect(error).not.toBeInstanceOf(ConflictingEventDigestError);
+      expect(String((error as { constraint?: string }).constraint)).toBe('tmp_force_fail');
+      // Nothing partial: no conflict row, and the original event still stands.
+      expect(await countConflicts(eventId)).toBe(0);
+      expect(await countRows(eventId)).toBe(1);
+    } finally {
+      await withClient(pool, (client) =>
+        client.query('ALTER TABLE qf_jarvis.event_conflict DROP CONSTRAINT tmp_force_fail'),
+      );
+    }
+  });
+
+  it('commits the conflict BEFORE the typed error is thrown — the row is durable', async () => {
+    const eventId = randomUUID();
+    await storeValidatedEvent(
+      pool,
+      makeRecord({ eventId, semanticEventDigest: Buffer.alloc(32, 0xa1) }),
+    );
+
+    const error = await provokeConflict(
+      makeRecord({ eventId, semanticEventDigest: Buffer.alloc(32, 0xff) }),
+    );
+    expect(error).toBeInstanceOf(ConflictingEventDigestError);
+    // A FRESH transaction sees the committed conflict row — so it committed before the throw.
+    const persisted = await withClient(pool, async (client) => {
+      const result = await client.query<{ count: string }>(
+        'SELECT count(*)::text AS count FROM qf_jarvis.event_conflict WHERE event_id = $1',
+        [eventId],
+      );
+      return Number.parseInt(result.rows[0]?.count ?? '0', 10);
+    });
+    expect(persisted).toBe(1);
+  });
+});
+
+describe('event_conflict — append-only', () => {
+  it('refuses UPDATE, DELETE, and a bulk DELETE', async () => {
+    const eventId = randomUUID();
+    await storeValidatedEvent(
+      pool,
+      makeRecord({ eventId, semanticEventDigest: Buffer.alloc(32, 0xa1) }),
+    );
+    try {
+      await storeValidatedEvent(
+        pool,
+        makeRecord({ eventId, semanticEventDigest: Buffer.alloc(32, 0xff) }),
+      );
+    } catch {
+      // expected conflict
+    }
+
+    await expect(
+      withClient(pool, (client) =>
+        client.query(
+          'UPDATE qf_jarvis.event_conflict SET conflicting_signature_key_id = $1 WHERE event_id = $2',
+          ['tampered', eventId],
+        ),
+      ),
+    ).rejects.toThrow(/append-only|not permitted/i);
+
+    await expect(
+      withClient(pool, (client) =>
+        client.query('DELETE FROM qf_jarvis.event_conflict WHERE event_id = $1', [eventId]),
+      ),
+    ).rejects.toThrow(/append-only|not permitted/i);
+
+    await expect(
+      withClient(pool, (client) => client.query('DELETE FROM qf_jarvis.event_conflict')),
+    ).rejects.toThrow(/append-only|not permitted/i);
+  });
+
+  it('refuses a direct INSERT whose event_id has no accepted parent (FK)', async () => {
+    await expect(
+      withClient(pool, (client) =>
+        client.query(
+          `INSERT INTO qf_jarvis.event_conflict (
+             event_id, conflicting_semantic_event_digest, conflicting_body_digest,
+             conflicting_correlation_id, conflicting_signature_algorithm,
+             conflicting_signature_key_id, conflicting_signature_signed_at
+           ) VALUES ($1, $2, $3, $4, 'ed25519', 'core-2026-a', '2026-07-11T09:00:06Z')`,
+          [randomUUID(), Buffer.alloc(32, 0x01), Buffer.alloc(32, 0x02), randomUUID()],
+        ),
+      ),
+    ).rejects.toMatchObject({ constraint: 'event_conflict_event_fk' });
+  });
+});
+
+/** The columns the runtime may INSERT into event_conflict; sequence + recorded_at are DB-generated. */
+const EVENT_CONFLICT_CALLER_COLUMNS = [
+  'event_id',
+  'conflicting_semantic_event_digest',
+  'conflicting_body_digest',
+  'conflicting_correlation_id',
+  'conflicting_signature_algorithm',
+  'conflicting_signature_key_id',
+  'conflicting_signature_signed_at',
+] as const;
+
+describe('event_conflict — the runtime role has exactly column-level least privilege', () => {
+  it('stores a first event and then records a conflict THROUGH the runtime connection', async () => {
+    const eventId = randomUUID();
+    // 1. A first validated event can be stored by the runtime role.
+    const stored = await storeValidatedEvent(
+      runtimePool,
+      makeRecord({ eventId, semanticEventDigest: Buffer.alloc(32, 0xa1) }),
+    );
+    expect(stored.outcome).toBe('stored');
+
+    // 2. A conflicting delivery through storeValidatedEvent (runtime connection): appends one
+    //    event_conflict row, commits it, and throws ConflictingEventDigestError.
+    let thrown: unknown;
+    try {
+      await storeValidatedEvent(
+        runtimePool,
+        makeRecord({ eventId, semanticEventDigest: Buffer.alloc(32, 0xff) }),
+      );
+      throw new Error('expected a ConflictingEventDigestError');
+    } catch (error: unknown) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(ConflictingEventDigestError);
+    // Committed before the throw — a fresh read (admin) sees exactly one conflict row.
+    expect(await countConflicts(eventId)).toBe(1);
+  });
+
+  it('holds INSERT on exactly the seven caller columns and none on the generated columns', async () => {
+    const priv = await withClient(pool, async (client) => {
+      const rows = await Promise.all(
+        [...EVENT_CONFLICT_CALLER_COLUMNS, 'sequence', 'recorded_at'].map(async (column) => {
+          const result = await client.query<{ granted: boolean }>(
+            `SELECT has_column_privilege($1, 'qf_jarvis.event_conflict', $2, 'INSERT') AS granted`,
+            [RUNTIME_ROLE, column],
+          );
+          return [column, result.rows[0]?.granted] as const;
+        }),
+      );
+      return new Map(rows);
+    });
+    for (const column of EVENT_CONFLICT_CALLER_COLUMNS) {
+      expect(priv.get(column)).toBe(true);
+    }
+    expect(priv.get('sequence')).toBe(false);
+    expect(priv.get('recorded_at')).toBe(false);
+  });
+
+  it('holds SELECT on only sequence and recorded_at, and none on the content columns', async () => {
+    const priv = await withClient(pool, async (client) => {
+      const rows = await Promise.all(
+        ['sequence', 'recorded_at', ...EVENT_CONFLICT_CALLER_COLUMNS].map(async (column) => {
+          const result = await client.query<{ granted: boolean }>(
+            `SELECT has_column_privilege($1, 'qf_jarvis.event_conflict', $2, 'SELECT') AS granted`,
+            [RUNTIME_ROLE, column],
+          );
+          return [column, result.rows[0]?.granted] as const;
+        }),
+      );
+      return new Map(rows);
+    });
+    expect(priv.get('sequence')).toBe(true);
+    expect(priv.get('recorded_at')).toBe(true);
+    for (const column of EVENT_CONFLICT_CALLER_COLUMNS) {
+      expect(priv.get(column)).toBe(false);
+    }
+  });
+
+  it('cannot SELECT any content column, nor SELECT *', async () => {
+    for (const column of EVENT_CONFLICT_CALLER_COLUMNS) {
+      await expect(
+        withClient(runtimePool, (client) =>
+          client.query(`SELECT ${column} FROM qf_jarvis.event_conflict`),
+        ),
+      ).rejects.toMatchObject({ code: '42501' });
+    }
+    await expect(
+      withClient(runtimePool, (client) => client.query('SELECT * FROM qf_jarvis.event_conflict')),
+    ).rejects.toMatchObject({ code: '42501' });
+
+    // The two granted columns DO select.
+    const ok = await withClient(runtimePool, async (client) => {
+      const result = await client.query(
+        'SELECT sequence, recorded_at FROM qf_jarvis.event_conflict LIMIT 1',
+      );
+      return result.rowCount ?? 0;
+    });
+    expect(ok).toBeGreaterThanOrEqual(0);
+  });
+
+  it('cannot itself supply sequence or recorded_at', async () => {
+    const eventId = randomUUID();
+    await storeValidatedEvent(
+      pool,
+      makeRecord({ eventId, semanticEventDigest: Buffer.alloc(32, 0xa1) }),
+    );
+    // recorded_at is an ordinary defaulted column — a clean permission denial.
+    await expect(
+      withClient(runtimePool, (client) =>
+        client.query(
+          `INSERT INTO qf_jarvis.event_conflict (event_id, conflicting_semantic_event_digest,
+             conflicting_body_digest, conflicting_correlation_id, conflicting_signature_algorithm,
+             conflicting_signature_key_id, conflicting_signature_signed_at, recorded_at)
+           VALUES ($1, $2, $3, $4, 'ed25519', 'core-2026-a', '2026-07-11T09:00:06Z', now())`,
+          [eventId, Buffer.alloc(32, 0x01), Buffer.alloc(32, 0x02), randomUUID()],
+        ),
+      ),
+    ).rejects.toMatchObject({ code: '42501' });
+    // Naming sequence (GENERATED ALWAYS) is refused too.
+    await expect(
+      withClient(runtimePool, (client) =>
+        client.query(
+          `INSERT INTO qf_jarvis.event_conflict (event_id, sequence, conflicting_semantic_event_digest,
+             conflicting_body_digest, conflicting_correlation_id, conflicting_signature_algorithm,
+             conflicting_signature_key_id, conflicting_signature_signed_at)
+           VALUES ($1, 999, $2, $3, $4, 'ed25519', 'core-2026-a', '2026-07-11T09:00:06Z')`,
+          [eventId, Buffer.alloc(32, 0x01), Buffer.alloc(32, 0x02), randomUUID()],
+        ),
+      ),
+    ).rejects.toThrow();
+  });
+
+  it('has no identity-sequence privilege of any kind', async () => {
+    const priv = await withClient(pool, async (client) => {
+      const seq = await client.query<{ seq: string | null }>(
+        `SELECT pg_get_serial_sequence('qf_jarvis.event_conflict', 'sequence') AS seq`,
+      );
+      const sequenceName = seq.rows[0]?.seq;
+      if (sequenceName === null || sequenceName === undefined) {
+        throw new Error('Expected an identity sequence');
+      }
+      const result = await client.query<{ usage: boolean; select: boolean; update: boolean }>(
+        `SELECT has_sequence_privilege($1, $2, 'USAGE')  AS usage,
+                has_sequence_privilege($1, $2, 'SELECT') AS select,
+                has_sequence_privilege($1, $2, 'UPDATE') AS update`,
+        [RUNTIME_ROLE, sequenceName],
+      );
+      return result.rows[0];
+    });
+    expect(priv?.usage).toBe(false);
+    expect(priv?.select).toBe(false);
+    expect(priv?.update).toBe(false);
+  });
+
+  it('is denied UPDATE, DELETE, TRUNCATE, REFERENCES and TRIGGER, and cannot CREATE in qf_jarvis', async () => {
+    const priv = await withClient(pool, async (client) => {
+      const result = await client.query<{
+        upd: boolean;
+        del: boolean;
+        trunc: boolean;
+        refs: boolean;
+        trig: boolean;
+        schema_create: boolean;
+      }>(
+        `SELECT has_table_privilege($1, 'qf_jarvis.event_conflict', 'UPDATE')     AS upd,
+                has_table_privilege($1, 'qf_jarvis.event_conflict', 'DELETE')     AS del,
+                has_table_privilege($1, 'qf_jarvis.event_conflict', 'TRUNCATE')   AS trunc,
+                has_table_privilege($1, 'qf_jarvis.event_conflict', 'REFERENCES') AS refs,
+                has_table_privilege($1, 'qf_jarvis.event_conflict', 'TRIGGER')    AS trig,
+                has_schema_privilege($1, 'qf_jarvis', 'CREATE')                   AS schema_create`,
+        [RUNTIME_ROLE],
+      );
+      return result.rows[0];
+    });
+    expect(priv?.upd).toBe(false);
+    expect(priv?.del).toBe(false);
+    expect(priv?.trunc).toBe(false);
+    expect(priv?.refs).toBe(false);
+    expect(priv?.trig).toBe(false);
+    expect(priv?.schema_create).toBe(false);
+
+    // Behavioural: a CREATE TABLE in qf_jarvis is refused.
+    await expect(
+      withClient(runtimePool, (client) =>
+        client.query('CREATE TABLE qf_jarvis.runtime_probe_conflict (id integer)'),
+      ),
+    ).rejects.toMatchObject({ code: '42501' });
+  });
+
+  it('owns no new table, sequence, or function', async () => {
+    const counts = await withClient(pool, async (client) => {
+      const result = await client.query<{ relations: string; routines: string }>(
+        `SELECT (SELECT count(*) FROM pg_catalog.pg_class c
+                   JOIN pg_catalog.pg_roles r ON r.oid = c.relowner
+                  WHERE r.rolname = $1)::text AS relations,
+                (SELECT count(*) FROM pg_catalog.pg_proc p
+                   JOIN pg_catalog.pg_roles r ON r.oid = p.proowner
+                  WHERE r.rolname = $1)::text AS routines`,
+        [RUNTIME_ROLE],
+      );
+      return result.rows[0];
+    });
+    expect(counts?.relations).toBe('0');
+    expect(counts?.routines).toBe('0');
+  });
+});
+
+describe('event_conflict — nothing else can reach it', () => {
+  it('leaves PUBLIC, anon, authenticated and service_role with no schema/table/column access', async () => {
+    for (const grantee of ['public', ...MANAGED_ROLES]) {
+      const priv = await withClient(pool, async (client) => {
+        const result = await client.query<{
+          schema_usage: boolean;
+          seq_select: boolean;
+          event_id_insert: boolean;
+          seq_insert: boolean;
+        }>(
+          `SELECT has_schema_privilege($1, 'qf_jarvis', 'USAGE')                              AS schema_usage,
+                  has_column_privilege($1, 'qf_jarvis.event_conflict', 'sequence', 'SELECT')  AS seq_select,
+                  has_column_privilege($1, 'qf_jarvis.event_conflict', 'event_id', 'INSERT')  AS event_id_insert,
+                  has_column_privilege($1, 'qf_jarvis.event_conflict', 'sequence', 'INSERT')  AS seq_insert`,
+          [grantee],
+        );
+        return result.rows[0];
+      });
+      expect(priv?.schema_usage).toBe(false);
+      expect(priv?.seq_select).toBe(false);
+      expect(priv?.event_id_insert).toBe(false);
+      expect(priv?.seq_insert).toBe(false);
+    }
   });
 });
 
@@ -568,10 +1101,11 @@ describe('migration 0002 — nothing else can reach the event log', () => {
   });
 });
 
-describe('migration 0002 — the immutability controls survive it', () => {
-  it('keeps event_is_immutable and schema_migration_is_append_only enabled', async () => {
-    // 0002 only touches grants. The two append-only triggers from 0001 and the bootstrap must
-    // still be enabled afterwards — 'O' is "enabled (origin/local)", 'D' would be disabled.
+describe('the immutability controls survive migrations 0002 and 0003', () => {
+  it('keeps ALL FOUR append-only triggers enabled', async () => {
+    // The grant migrations touch no trigger. All four append-only triggers — the event log, the
+    // migration history, and the two Stage 3.3.3 audit tables — must still be enabled afterwards.
+    // 'O' is "enabled (origin/local)"; 'D' would be disabled.
     const triggers = await withClient(pool, async (client) => {
       const result = await client.query<{ tgname: string; tgenabled: string }>(
         `SELECT t.tgname, t.tgenabled
@@ -579,25 +1113,70 @@ describe('migration 0002 — the immutability controls survive it', () => {
            JOIN pg_catalog.pg_class c     ON c.oid = t.tgrelid
            JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
           WHERE n.nspname = 'qf_jarvis'
-            AND t.tgname IN ('event_is_immutable', 'schema_migration_is_append_only')`,
+            AND t.tgname IN (
+              'event_is_immutable', 'schema_migration_is_append_only',
+              'ingestion_rejection_is_immutable', 'event_conflict_is_immutable'
+            )`,
       );
       return new Map(result.rows.map((row) => [row.tgname, row.tgenabled]));
     });
 
     expect(triggers.get('event_is_immutable')).toBe('O');
     expect(triggers.get('schema_migration_is_append_only')).toBe('O');
+    expect(triggers.get('ingestion_rejection_is_immutable')).toBe('O');
+    expect(triggers.get('event_conflict_is_immutable')).toBe('O');
   });
 });
 
-describe('migration 0002 — the runner is idempotent with it applied', () => {
-  it('applies zero additional migrations on a re-run', async () => {
+describe('the runner is idempotent with 0001, 0002 and 0003 applied', () => {
+  it('applies zero additional migrations on a re-run, with history 0001, 0002, 0003', async () => {
     const result = await runMigrations(pool, defaultMigrationsDirectory());
 
     expect(result.applied).toStrictEqual([]);
     expect(result.alreadyApplied.map((m) => m.filename)).toStrictEqual([
       '0001_event_log.sql',
       '0002_event_runtime_grants.sql',
+      '0003_ingestion_rejection_and_event_conflict.sql',
     ]);
+  });
+});
+
+describe('the real 0001/0002/0003 set is checksum-reconciled', () => {
+  it('rejects a re-run after ONLY the copied 0003 is edited (MigrationChecksumMismatchError)', async () => {
+    const realDir = defaultMigrationsDirectory();
+    // Byte-for-byte copies of the REAL migration set into a throwaway directory. The real files
+    // (0001/0002/0003) are never touched — only the copy of 0003 is later edited.
+    const copyDir = await mkdtemp(join(tmpdir(), 'qf-mig-checksum-'));
+    try {
+      await resetTestDatabase(pool);
+      const names = [
+        '0001_event_log.sql',
+        '0002_event_runtime_grants.sql',
+        '0003_ingestion_rejection_and_event_conflict.sql',
+      ];
+      for (const name of names) {
+        await writeFile(join(copyDir, name), await readFile(join(realDir, name)));
+      }
+
+      const applied = await runMigrations(pool, copyDir);
+      expect(applied.applied.map((m) => m.filename)).toStrictEqual(names);
+
+      // Edit ONLY the copied 0003 — a trailing comment changes its checksum, not its behaviour.
+      const copied0003 = join(copyDir, '0003_ingestion_rejection_and_event_conflict.sql');
+      await writeFile(
+        copied0003,
+        `${(await readFile(copied0003)).toString('utf8')}\n-- checksum-mismatch probe (copy only)\n`,
+      );
+
+      await expect(runMigrations(pool, copyDir)).rejects.toBeInstanceOf(
+        MigrationChecksumMismatchError,
+      );
+    } finally {
+      await rm(copyDir, { recursive: true, force: true });
+      // Restore the shared database to the real, fully-migrated state for any later file.
+      await resetTestDatabase(pool);
+      await runMigrations(pool, realDir);
+    }
   });
 });
 
@@ -671,10 +1250,12 @@ describe('migration 0002 — comprehensive stale-grant remediation', () => {
       expect(before?.seq).toBe(true);
       expect(before?.fn).toBe(true);
 
-      // 4. Apply the full directory — 0002 runs for the first time and must revoke all of it.
+      // 4. Apply the full directory — 0002 then 0003 run for the first time; each does a
+      //    comprehensive clean-slate REVOKE, and 0003 is the final grant authority.
       const second = await runMigrations(pool, migrationsDir);
       expect(second.applied.map((m) => m.filename)).toStrictEqual([
         '0002_event_runtime_grants.sql',
+        '0003_ingestion_rejection_and_event_conflict.sql',
       ]);
 
       // 5. Every stale direct privilege is gone. ALL schema_migration privileges, not only SELECT.
@@ -826,7 +1407,10 @@ describe('storeValidatedEvent — enforces READ COMMITTED over an ambient REPEAT
         throw new Error('Expected exactly one conflicting delivery to be rejected');
       }
       expect(rejection.reason).toBeInstanceOf(ConflictingEventDigestError);
+      // One accepted event, one conflict error — and exactly one conflict AUDIT row, recorded by
+      // the losing delivery in the same transaction that classified it, across separate backends.
       expect(await countRows(eventId)).toBe(1);
+      expect(await countConflicts(eventId)).toBe(1);
     } finally {
       await closeDatabasePool(poolA);
       await closeDatabasePool(poolB);

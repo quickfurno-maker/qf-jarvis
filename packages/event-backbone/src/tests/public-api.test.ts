@@ -29,6 +29,7 @@ import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 
 import * as publicApi from '../index.js';
+import * as conflictStore from '../persistence/conflict-store.js';
 import * as migrationRunner from '../persistence/migration-runner.js';
 
 /**
@@ -82,6 +83,31 @@ describe('the public package API does NOT expose the preflight bypass', () => {
       expect(migrationRunner).toHaveProperty(name);
       expect(migrationRunner[name]).toBeTypeOf('function');
     }
+  });
+});
+
+describe('the Stage 3.3.3 rejection repository is public; the conflict repository is INTERNAL', () => {
+  it('exports recordIngestionRejection and its vocabulary from the package root', () => {
+    // The rejection repository is a trusted low-level append primitive a future ingest composition
+    // may call; it is a supported public surface.
+    expect(publicApi).toHaveProperty('recordIngestionRejection');
+    expect(publicApi.recordIngestionRejection).toBeTypeOf('function');
+    expect(publicApi).toHaveProperty('INGESTION_REJECTION_REASON_CODES');
+    expect(publicApi).toHaveProperty('INGESTION_REJECTION_ISSUE_CODES');
+    expect(publicApi).toHaveProperty('MAX_INGESTION_REJECTION_ISSUES');
+  });
+
+  it('does NOT export recordEventConflict — only storeValidatedEvent may record a conflict', () => {
+    // A conflict record must only ever be written by the store that just detected the conflict, in
+    // the same transaction. There is no external append-a-conflict path, and there must not be one.
+    expect(publicApi).not.toHaveProperty('recordEventConflict');
+  });
+
+  it('keeps recordEventConflict INTERNAL rather than pretending it does not exist', () => {
+    // The honest half: it is real and reachable inside the package (storeValidatedEvent calls it),
+    // it is just not reachable from the package root.
+    expect(conflictStore).toHaveProperty('recordEventConflict');
+    expect(conflictStore.recordEventConflict).toBeTypeOf('function');
   });
 });
 

@@ -115,5 +115,7 @@ This slice does **not** add, and this ADR does **not** authorize: `ingest()`; da
 
 ## Follow-up work
 
+> **Erratum (2026-07-18, [ADR-0031](./ADR-0031-stage-3-3-3-rejection-and-conflict-storage.md)) — migration numbering.** The follow-up below (written 2026-07-17) names _"migration `0002`"_ as the home of the `ingestion_rejection`/`event_conflict` tables. Numbering has since advanced: `0002_event_runtime_grants.sql` became the runtime least-privilege grants (Stage 3.3 slice 3, PR #15), and the two audit tables land in **`0003_ingestion_rejection_and_event_conflict.sql`** (Stage 3.3.3, ADR-0031). The `duplicate-conflict` outcome referenced below is now recorded by `storeValidatedEvent` into `event_conflict`; the complete `ingest()` composition remains Stage 3.3.4. The original sentence is preserved below for history; read `0002` there as `0003`.
+
 - **Stage 3.3 persistence slices remain blocked** until the managed-database readiness gate is separately satisfied and separately authorized ([managed-database-runbook.md](../engineering/managed-database-runbook.md)).
 - A future authorized slice composes this preparation into the `ingest` write path — with the event-log, `ingestion_rejection`, and `event_conflict` repositories, migration `0002`, and the `duplicate-conflict` outcome — each with its own review and against local/CI PostgreSQL first.
