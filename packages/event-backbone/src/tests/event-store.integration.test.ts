@@ -26,6 +26,7 @@ import {
   MigrationChecksumMismatchError,
   storeValidatedEvent,
   withClient,
+  type DatabaseClient,
   type DatabasePool,
   type EventPersistenceRecord,
 } from '../index.js';
@@ -682,16 +683,18 @@ describe('event_conflict — the runtime role has exactly column-level least pri
 
   it('holds INSERT on exactly the seven caller columns and none on the generated columns', async () => {
     const priv = await withClient(pool, async (client) => {
-      const rows = await Promise.all(
-        [...EVENT_CONFLICT_CALLER_COLUMNS, 'sequence', 'recorded_at'].map(async (column) => {
-          const result = await client.query<{ granted: boolean }>(
-            `SELECT has_column_privilege($1, 'qf_jarvis.event_conflict', $2, 'INSERT') AS granted`,
-            [RUNTIME_ROLE, column],
-          );
-          return [column, result.rows[0]?.granted] as const;
-        }),
-      );
-      return new Map(rows);
+      // Queries run SEQUENTIALLY on the one borrowed client: a single pg connection cannot execute
+      // queries concurrently, and `Promise.all(... client.query ...)` would trip the pg
+      // concurrent-query deprecation. Correctness, not just tidiness.
+      const rows = new Map<string, boolean | undefined>();
+      for (const column of [...EVENT_CONFLICT_CALLER_COLUMNS, 'sequence', 'recorded_at']) {
+        const result = await client.query<{ granted: boolean }>(
+          `SELECT has_column_privilege($1, 'qf_jarvis.event_conflict', $2, 'INSERT') AS granted`,
+          [RUNTIME_ROLE, column],
+        );
+        rows.set(column, result.rows[0]?.granted);
+      }
+      return rows;
     });
     for (const column of EVENT_CONFLICT_CALLER_COLUMNS) {
       expect(priv.get(column)).toBe(true);
@@ -702,16 +705,17 @@ describe('event_conflict — the runtime role has exactly column-level least pri
 
   it('holds SELECT on only sequence and recorded_at, and none on the content columns', async () => {
     const priv = await withClient(pool, async (client) => {
-      const rows = await Promise.all(
-        ['sequence', 'recorded_at', ...EVENT_CONFLICT_CALLER_COLUMNS].map(async (column) => {
-          const result = await client.query<{ granted: boolean }>(
-            `SELECT has_column_privilege($1, 'qf_jarvis.event_conflict', $2, 'SELECT') AS granted`,
-            [RUNTIME_ROLE, column],
-          );
-          return [column, result.rows[0]?.granted] as const;
-        }),
-      );
-      return new Map(rows);
+      // Sequential on the one client (see the INSERT test above) — no concurrent query on a
+      // single pg connection.
+      const rows = new Map<string, boolean | undefined>();
+      for (const column of ['sequence', 'recorded_at', ...EVENT_CONFLICT_CALLER_COLUMNS]) {
+        const result = await client.query<{ granted: boolean }>(
+          `SELECT has_column_privilege($1, 'qf_jarvis.event_conflict', $2, 'SELECT') AS granted`,
+          [RUNTIME_ROLE, column],
+        );
+        rows.set(column, result.rows[0]?.granted);
+      }
+      return rows;
     });
     expect(priv.get('sequence')).toBe(true);
     expect(priv.get('recorded_at')).toBe(true);
@@ -1329,22 +1333,55 @@ describe('migration 0002 — comprehensive stale-grant remediation', () => {
  * single-connection pools also give two distinct PostgreSQL backends to race across.
  */
 describe('storeValidatedEvent — enforces READ COMMITTED over an ambient REPEATABLE READ default', () => {
+  /**
+   * A TEST-ONLY pool wrapper that runs a per-connection initializer and **fully awaits it before
+   * handing the client back**. This deliberately replaces the older `pool.on('connect', c => void
+   * c.query(...))` pattern: a fire-and-forget connect listener lets the pool return the client while
+   * the unawaited `SET` is still in flight, so the first real query can overlap it — which trips the
+   * pg "client is already executing a query" deprecation and can leave the session un-initialised.
+   * Here `connect()` obtains the real client, awaits the initializer to completion, and returns the
+   * client only on success; on failure it releases the client exactly once and propagates the
+   * original error. Production pool behaviour is untouched — only `connect()` is wrapped, via a Proxy
+   * that delegates `end`/`ended`/everything else to the real pool.
+   */
+  function initializedPool(real: DatabasePool, initSql: string): DatabasePool {
+    const connect = async (): Promise<DatabaseClient> => {
+      const client = await real.connect();
+      try {
+        await client.query(initSql);
+      } catch (error: unknown) {
+        client.release(error instanceof Error ? error : undefined);
+        throw error;
+      }
+      return client;
+    };
+    return new Proxy(real, {
+      get(target, prop): unknown {
+        if (prop === 'connect') {
+          return connect;
+        }
+        // Read against the real pool (getters run with `this` = target), and bind methods to it,
+        // so `end`/`ended`/etc. behave exactly as the underlying pool's.
+        const value: unknown = Reflect.get(target, prop, target);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+  }
+
   function repeatableReadPool(applicationName: string): DatabasePool {
-    const rr = createDatabasePool(
+    const real = createDatabasePool(
       createDatabaseConfig({
         connectionString: requireTestDatabaseUrl(),
         maxConnections: 1,
         applicationName,
       }),
     );
-    // Set the SESSION default to REPEATABLE READ on connect. pg serialises queries per connection,
-    // so this runs before any borrowed query; the SHOW assertion below also forces it to have run.
-    rr.on('connect', (client) => {
-      void client.query(
-        'SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL REPEATABLE READ',
-      );
-    });
-    return rr;
+    // Set the SESSION default to REPEATABLE READ, AWAITED before the client is returned (see
+    // initializedPool). The SHOW assertion below also proves the default really took effect.
+    return initializedPool(
+      real,
+      'SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL REPEATABLE READ',
+    );
   }
 
   async function sessionDefaultIsolation(target: DatabasePool): Promise<string> {
@@ -1415,5 +1452,57 @@ describe('storeValidatedEvent — enforces READ COMMITTED over an ambient REPEAT
       await closeDatabasePool(poolA);
       await closeDatabasePool(poolB);
     }
+  });
+
+  it('the initialized pool AWAITS the initializer fully before returning the client', async () => {
+    // Regression guard for the removed fire-and-forget connect listener: the client must never be
+    // handed back while the SET is still in flight (which is what let the first real query overlap).
+    const log: string[] = [];
+    let initSettled = false;
+    const fakeClient = {
+      query: async (text: string): Promise<{ rows: never[] }> => {
+        log.push(`query:${text}`);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        initSettled = true;
+        log.push('init-settled');
+        return { rows: [] };
+      },
+      release: (): void => {
+        log.push('release');
+      },
+    };
+    const fakeReal = {
+      connect: () => Promise.resolve(fakeClient as unknown as DatabaseClient),
+    } as unknown as DatabasePool;
+
+    const client = await initializedPool(fakeReal, 'SET X').connect();
+
+    // The client is returned ONLY after the initializer settled — no overlap window, no release.
+    expect(initSettled).toBe(true);
+    expect(log).toStrictEqual(['query:SET X', 'init-settled']);
+    expect(client).toBe(fakeClient);
+  });
+
+  it('on initializer failure it releases the client exactly once and propagates the original error', async () => {
+    const original = new Error('synthetic SET failure');
+    let releaseCount = 0;
+    const fakeClient = {
+      query: () => Promise.reject(original),
+      release: (): void => {
+        releaseCount += 1;
+      },
+    };
+    const fakeReal = {
+      connect: () => Promise.resolve(fakeClient as unknown as DatabaseClient),
+    } as unknown as DatabasePool;
+
+    let caught: unknown;
+    try {
+      await initializedPool(fakeReal, 'SET X').connect();
+    } catch (error: unknown) {
+      caught = error;
+    }
+    expect(caught).toBe(original);
+    expect(releaseCount).toBe(1);
   });
 });

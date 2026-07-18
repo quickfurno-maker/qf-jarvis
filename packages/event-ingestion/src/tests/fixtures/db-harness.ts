@@ -78,16 +78,25 @@ export function assertSafeTestDatabase(connectionString: string): {
   return { host, database };
 }
 
+/** The default admin pool size. Concurrency proofs (Stage 3.3.5) override it to force real races. */
+const DEFAULT_MAX_CONNECTIONS = 5;
+
 /** The validated loopback config for the test database. */
-export function testConfig(applicationName: string): DatabaseConfig {
+export function testConfig(
+  applicationName: string,
+  maxConnections: number = DEFAULT_MAX_CONNECTIONS,
+): DatabaseConfig {
   const connectionString = requireTestDatabaseUrl();
   assertSafeTestDatabase(connectionString);
-  return createDatabaseConfig({ connectionString, maxConnections: 5, applicationName });
+  return createDatabaseConfig({ connectionString, maxConnections, applicationName });
 }
 
 /** A pool pointed at the guarded test database. The caller closes it. */
-export function createTestPool(applicationName: string): DatabasePool {
-  return createDatabasePool(testConfig(applicationName));
+export function createTestPool(
+  applicationName: string,
+  maxConnections: number = DEFAULT_MAX_CONNECTIONS,
+): DatabasePool {
+  return createDatabasePool(testConfig(applicationName, maxConnections));
 }
 
 /** Drop QF Jarvis's own schema so a suite starts from nothing. Never touches `public`. */
@@ -161,11 +170,15 @@ export function runtimeConnectionString(password: string): string {
 }
 
 /** A pool that connects AS the least-privileged runtime role. The caller closes it. */
-export function createRuntimePool(password: string, applicationName: string): DatabasePool {
+export function createRuntimePool(
+  password: string,
+  applicationName: string,
+  maxConnections = 3,
+): DatabasePool {
   return createDatabasePool(
     createDatabaseConfig({
       connectionString: runtimeConnectionString(password),
-      maxConnections: 3,
+      maxConnections,
       applicationName,
     }),
   );

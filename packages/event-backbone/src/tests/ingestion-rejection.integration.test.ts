@@ -400,16 +400,18 @@ describe('ingestion_rejection — the runtime role has exactly column-level leas
 
   it('holds INSERT on the caller columns and none on the generated columns', async () => {
     const priv = await withClient(pool, async (client) => {
-      const insert = await Promise.all(
-        [...CALLER_COLUMNS, 'sequence', 'recorded_at'].map(async (column) => {
-          const result = await client.query<{ granted: boolean }>(
-            `SELECT has_column_privilege($1, 'qf_jarvis.ingestion_rejection', $2, 'INSERT') AS granted`,
-            [RUNTIME_ROLE, column],
-          );
-          return [column, result.rows[0]?.granted] as const;
-        }),
-      );
-      return new Map(insert);
+      // Queries run SEQUENTIALLY on the one borrowed client: a single pg connection cannot execute
+      // queries concurrently, and `Promise.all(... client.query ...)` would trip the pg
+      // concurrent-query deprecation. Correctness, not just tidiness.
+      const insert = new Map<string, boolean | undefined>();
+      for (const column of [...CALLER_COLUMNS, 'sequence', 'recorded_at']) {
+        const result = await client.query<{ granted: boolean }>(
+          `SELECT has_column_privilege($1, 'qf_jarvis.ingestion_rejection', $2, 'INSERT') AS granted`,
+          [RUNTIME_ROLE, column],
+        );
+        insert.set(column, result.rows[0]?.granted);
+      }
+      return insert;
     });
 
     for (const column of CALLER_COLUMNS) {
@@ -421,16 +423,17 @@ describe('ingestion_rejection — the runtime role has exactly column-level leas
 
   it('holds SELECT on only sequence and recorded_at, not the content columns', async () => {
     const priv = await withClient(pool, async (client) => {
-      const select = await Promise.all(
-        ['sequence', 'recorded_at', ...CALLER_COLUMNS].map(async (column) => {
-          const result = await client.query<{ granted: boolean }>(
-            `SELECT has_column_privilege($1, 'qf_jarvis.ingestion_rejection', $2, 'SELECT') AS granted`,
-            [RUNTIME_ROLE, column],
-          );
-          return [column, result.rows[0]?.granted] as const;
-        }),
-      );
-      return new Map(select);
+      // Sequential on the one client (see the INSERT test above) — no concurrent query on a
+      // single pg connection.
+      const select = new Map<string, boolean | undefined>();
+      for (const column of ['sequence', 'recorded_at', ...CALLER_COLUMNS]) {
+        const result = await client.query<{ granted: boolean }>(
+          `SELECT has_column_privilege($1, 'qf_jarvis.ingestion_rejection', $2, 'SELECT') AS granted`,
+          [RUNTIME_ROLE, column],
+        );
+        select.set(column, result.rows[0]?.granted);
+      }
+      return select;
     });
 
     expect(priv.get('sequence')).toBe(true);
