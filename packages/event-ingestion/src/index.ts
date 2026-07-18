@@ -89,12 +89,31 @@ export {
   SUPPORTED_ALGORITHM,
 } from './signature/limits.js';
 
-// --- Stage 3.3 slices 1 & 2: internal ingest primitives (ADR-0029, ADR-0030) — NOT exported ---
+// --- Stage 3.3.4: the full transactional ingest composition (ADR-0032) — PUBLIC ---
 //
-// The deterministic canonical-JSON + SHA-256 digest (slice 1) and the validated-event
-// preparation that composes verification → UTF-8 → JSON → contract validation → frozen snapshot +
-// digest (slice 2) are compiled as part of the package but are DELIBERATELY NOT re-exported here.
-// A public surface is a promise; these are reached only by the later, still-gated ingest
-// composition inside this package. Exposing them now would publish internal primitives — the
-// digest must only ever see already-validated output, and preparation must only ever see an
-// already-verified body. The package-root runtime surface stays exactly the Stage 3.2 set above.
+// `createEventIngestor` is the public trust boundary in front of the event log: verify → prepare →
+// persist, with dependency injection and an explicitly supplied `now`. It is the ONLY ingest surface
+// exported; the primitives it composes (evidence-bearing verification, validated-event preparation,
+// the persistence bridge) stay internal.
+export { createEventIngestor } from './ingest/create-event-ingestor.js';
+export type {
+  EventIngestor,
+  EventIngestorDependencies,
+  IngestDuplicate,
+  IngestRejected,
+  IngestRejectionReason,
+  IngestResult,
+  IngestStored,
+} from './ingest/create-event-ingestor.js';
+
+// --- Stage 3.3 slices 1–3: internal ingest primitives (ADR-0029, ADR-0030, ADR-0031) — NOT exported ---
+//
+// The deterministic canonical-JSON + SHA-256 digest (slice 1), the validated-event preparation that
+// composes UTF-8 → JSON → contract validation → frozen snapshot + digest (slice 2), the
+// evidence-bearing verification, and the persistence bridge to `storeValidatedEvent` (slice 3) are
+// compiled as part of the package but are DELIBERATELY NOT re-exported here. A public surface is a
+// promise; these are reached only by the `createEventIngestor` composition above. Exposing them
+// would publish internal primitives — the digest must only ever see already-validated output,
+// preparation must only ever see an already-verified body, and the persistence bridge must only ever
+// see one verification's evidence bound to one prepared event. The package-root runtime surface is
+// exactly the Stage 3.2 set above plus the `createEventIngestor` boundary.

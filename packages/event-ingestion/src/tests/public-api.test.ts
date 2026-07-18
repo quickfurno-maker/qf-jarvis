@@ -10,7 +10,7 @@ import * as api from '../index.js';
 describe('public API surface', () => {
   const runtimeExports = Object.keys(api).sort();
 
-  it('exports exactly the intended Stage 3.2 runtime surface', () => {
+  it('exports exactly the intended Stage 3.2 surface plus the Stage 3.3.4 ingest boundary', () => {
     expect(runtimeExports).toEqual(
       [
         'DEFAULT_FRESHNESS_WINDOW_MS',
@@ -25,9 +25,16 @@ describe('public API surface', () => {
         'SIGNATURE_VERIFICATION_REASONS',
         'SUPPORTED_ALGORITHM',
         'SignatureVerificationConfigError',
+        // Stage 3.3.4: the full transactional ingest composition (ADR-0032) — the ONLY new symbol.
+        'createEventIngestor',
         'verifySignature',
       ].sort(),
     );
+  });
+
+  it('exports the Stage 3.3.4 ingest boundary and it is callable', () => {
+    expect(runtimeExports).toContain('createEventIngestor');
+    expect(typeof api.createEventIngestor).toBe('function');
   });
 
   it('does not export test-only key material or the test signer', () => {
@@ -64,20 +71,26 @@ describe('public API surface', () => {
     expect(runtimeExports).not.toContain('digestCanonicalJson');
   });
 
-  it('exposes no ingest / persistence surface (Stage 3.3+)', () => {
+  it('exposes only the ingest FACTORY, not a pool or a bare low-level ingest/persist symbol', () => {
+    // The Stage 3.3.4 boundary is `createEventIngestor` (above). No database pool, no bare `ingest`
+    // callable, and no `persist*` primitive is published at the root.
     expect(runtimeExports).not.toContain('ingest');
     expect(runtimeExports).not.toContain('createPool');
     expect(runtimeExports).not.toContain('persist');
+    expect(runtimeExports).not.toContain('persistPreparedEvent');
   });
 
-  it('keeps the Stage 3.3 slice-3 persistence bridge INTERNAL', () => {
-    // The evidence-bearing verification, the record builder, and the persist composition are
-    // reached only by a future authenticated ingest caller inside this package. None may leak,
-    // and the public surface still exposes no signature bytes.
+  it('keeps the composed slice-1/2/3 primitives INTERNAL, and never re-exports the store', () => {
+    // The evidence-bearing verification, the record builder, the persist composition, and the
+    // internal conflict primitive are reached only THROUGH `createEventIngestor`. None may leak,
+    // and the public surface still exposes no signature bytes and no `@qf-jarvis/event-backbone`
+    // low-level write.
     expect(runtimeExports).not.toContain('verifySignatureWithEvidence');
     expect(runtimeExports).not.toContain('buildEventPersistenceRecord');
     expect(runtimeExports).not.toContain('persistPreparedEvent');
     expect(runtimeExports).not.toContain('EvidencePreparationMismatchError');
     expect(runtimeExports).not.toContain('storeValidatedEvent');
+    expect(runtimeExports).not.toContain('recordEventConflict');
+    expect(runtimeExports).not.toContain('recordIngestionRejection');
   });
 });

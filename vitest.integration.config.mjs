@@ -7,20 +7,30 @@ import { defineConfig } from 'vitest/config';
  * skipped database test is a green build that proves nothing, and proving the database
  * behaviour is the entire point of the stage that introduced them.
  *
- * ### Why serial, and why `fileParallelism: false` is the whole mechanism
+ * ### Why one worker, and why serialisation is the whole mechanism
  *
- * Every file here drops and recreates its schema so that it starts from nothing. Two files
- * doing that at once destroy each other mid-run, which surfaces as
- * `duplicate key value violates unique constraint "pg_namespace_nspname_index"` — about
- * half the time. **A flake that reproduces half the time is worse than a failure that
- * reproduces every time.**
+ * Every integration file **shares and rebuilds the one `qf_jarvis` schema** in the local test
+ * database: each drops it and re-runs the real migrations so it starts from nothing. Files must
+ * **not** run concurrently, because one file can drop or migrate the schema underneath another —
+ * surfacing as `relation "qf_jarvis.schema_migration" does not exist`, `relation "qf_jarvis.event"
+ * does not exist`, a virgin-database check seeing a table appear underneath it, or `duplicate key
+ * value violates unique constraint "pg_namespace_nspname_index"`.
  *
- * `fileParallelism: false` runs test *files* one at a time. In Vitest 4 it **also forces
- * `maxWorkers` to 1**, so the whole integration suite runs in a single worker/process — which
- * is exactly what the removed `poolOptions.forks.singleFork` used to provide. So the one line
- * now carries both guarantees, and the deprecated `poolOptions` block is gone (Vitest 4 removed
- * it; its options are top-level, and for forks there is no separate `singleFork` to set —
- * `fileParallelism: false` subsumes it). No test is skipped and none is retried.
+ * Three supported Vitest 4 settings together keep the run serial in a single worker:
+ *
+ * - `fileParallelism: false` serialises the integration test *files* (one at a time);
+ * - `maxWorkers: 1` explicitly pins the whole integration run to **one worker**; and
+ * - `isolate: false` preserves the shared-worker execution model — the files reuse one worker
+ *   context rather than each getting a fresh isolated one. This is the supported Vitest 4 way to
+ *   get the single-process behaviour the removed pool option used to provide.
+ *
+ * These three change only *where* the files run, not *what* they assert: **no test is skipped, no
+ * assertion is lowered, nothing is retried, and no database error is suppressed.**
+ *
+ * Concurrency is still tested **explicitly, inside individual tests** (e.g. parallel
+ * `storeValidatedEvent` races and repeated conflicting redeliveries) using concurrent promises and
+ * connections against this shared schema — running the *files* serially does not weaken those
+ * in-test concurrency assertions.
  *
  * The alternative — a PostgreSQL schema per test file — was considered and rejected. It
  * would make the migration runner schema-aware **in production**, purely so that a test
@@ -38,10 +48,14 @@ export default defineConfig({
     include: ['packages/*/src/**/*.integration.test.ts'],
     exclude: ['**/node_modules/**', '**/dist/**'],
 
-    // One file at a time — the load-bearing line that prevents the schema race. In Vitest 4
-    // this also pins maxWorkers to 1, so every integration file runs serially in one process.
+    // One file at a time, in one worker — the load-bearing lines that prevent the shared-schema
+    // race. `fileParallelism: false` serialises the files; `maxWorkers: 1` pins the run to a single
+    // worker; `isolate: false` keeps that worker shared across files (the supported Vitest 4
+    // replacement for the removed single-process pool option).
     fileParallelism: false,
     pool: 'forks',
+    maxWorkers: 1,
+    isolate: false,
 
     // A hung PostgreSQL connection should fail the test, not the CI job's timeout.
     testTimeout: 30_000,
