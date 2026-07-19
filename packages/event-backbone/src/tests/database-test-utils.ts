@@ -357,3 +357,59 @@ export function createRuntimePool(password: string, applicationName: string): Da
     }),
   );
 }
+
+/**
+ * The dedicated PROJECTION deployment role (Stage 3.4, ADR-0034). Separate from `qf_jarvis_runtime`,
+ * so the projection least-privilege assertions connect AS this role and observe what PostgreSQL
+ * itself refuses. Cluster-global; migration 0004's grant to it is conditional and idempotent.
+ */
+export const PROJECTION_ROLE = 'qf_jarvis_projection_runtime';
+
+/** Create the projection LOGIN role and set this run's password (escaped server-side with format(%L)). */
+export async function ensureProjectionRoleExists(
+  admin: DatabasePool,
+  password: string,
+): Promise<void> {
+  assertSafeTestDatabase(requireTestDatabaseUrl());
+
+  await withClient(admin, async (client) => {
+    await client.query(`
+      DO $projection$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'qf_jarvis_projection_runtime') THEN
+          CREATE ROLE qf_jarvis_projection_runtime LOGIN;
+        END IF;
+      END
+      $projection$;
+    `);
+
+    const built = await client.query<{ stmt: string }>(
+      `SELECT format('ALTER ROLE qf_jarvis_projection_runtime WITH LOGIN PASSWORD %L', $1::text) AS stmt`,
+      [password],
+    );
+    const stmt = built.rows[0]?.stmt;
+    if (stmt === undefined) {
+      throw new Error('Failed to build the projection role password statement');
+    }
+    await client.query(stmt);
+  });
+}
+
+/** The test database connection string, re-pointed at the projection role. Same loopback host/db. */
+export function projectionConnectionString(password: string): string {
+  const url = new URL(requireTestDatabaseUrl());
+  url.username = PROJECTION_ROLE;
+  url.password = password;
+  return url.toString();
+}
+
+/** A pool that connects AS the least-privileged projection role. The caller closes it. */
+export function createProjectionPool(password: string, applicationName: string): DatabasePool {
+  return createDatabasePool(
+    createDatabaseConfig({
+      connectionString: projectionConnectionString(password),
+      maxConnections: 3,
+      applicationName,
+    }),
+  );
+}

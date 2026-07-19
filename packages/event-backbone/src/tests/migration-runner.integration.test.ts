@@ -406,6 +406,7 @@ describe('the managed provider’s roles are revoked — and re-revoked on every
       '0001_event_log.sql',
       '0002_event_runtime_grants.sql',
       '0003_ingestion_rejection_and_event_conflict.sql',
+      '0004_projection_foundation.sql',
     ]);
     expect(await tableExists('event')).toBe(true);
   });
