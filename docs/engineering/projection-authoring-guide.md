@@ -1,12 +1,21 @@
 # Projection Authoring Guide (Stage 3.4)
 
-**Status:** Stage 3.4.1 (foundation). The runner and the first two projection handlers arrive in
-later Stage 3.4 slices; this guide is the contract a handler MUST satisfy, locked now so the
-foundation and the handlers agree.
+**Status:** Stage 3.4.1 (foundation) is **complete and merged via PR #19** (merge commit
+`580568dcb342b8017bec25e93d6f8396ac9b3ef0`). **Stage 3.4.2 (the internal projection registry) is
+implemented locally and pending independent review.** The runner, advisory lock, retries, and the
+first two projection handlers arrive in later Stage 3.4 slices (3.4.3–3.4.5); **Stage 3.4 as a whole
+remains incomplete**, and rebuild and Stage 3.5 (dead letters, replay, quarantine, unblock) remain
+later work. This guide is the contract a handler MUST satisfy, locked now so the foundation, the
+registry, and the handlers agree.
 
 **Governing decisions:** [ADR-0021](../decisions/ADR-0021-processing-retries-dead-letters-and-replay.md),
 [ADR-0022](../decisions/ADR-0022-projections-ordering-and-rebuild-determinism.md),
-[ADR-0034](../decisions/ADR-0034-stage-3-4-projections-checkpoints-and-bounded-retries.md).
+[ADR-0034](../decisions/ADR-0034-stage-3-4-projections-checkpoints-and-bounded-retries.md),
+[ADR-0035](../decisions/ADR-0035-stage-3-4-2-projection-registry.md).
+
+> **Managed database.** Managed PostgreSQL remains **`0001`-only**. Migrations `0002`, `0003` and
+> `0004` remain **unapplied**, and **no managed migration is authorized** (ADR-0034 §13a). Stage 3.4.2
+> adds **no migration**; there is no `0005`.
 
 ---
 
@@ -30,6 +39,48 @@ A projection handler is `apply(client, event)`. It MUST:
 - use **deterministic, sequence-aware updates** — see "Idempotency is not free" below;
 - be **explicitly versioned** — a change to a handler's logic is a new `version`, and a version bump
   destroys the derived state and rebuilds from `0` (ADR-0022 §6). There is no read-model migration.
+
+## How a handler is registered (Stage 3.4.2)
+
+A handler reaches the runner only through the **internal, immutable projection registry**
+([ADR-0035](../decisions/ADR-0035-stage-3-4-2-projection-registry.md)). What that means for an author:
+
+- A definition is `{ name, version, apply }`. The `name` is repository-owned, bounded lowercase
+  kebab-case; the `version` is a positive safe integer.
+- **Registration is construction-time only.** There is no `register()` call, no plugin loader, and no
+  way to add a projection while the process is running. Adding a projection is a code change.
+- **One active definition per name**, and a duplicate name is rejected **even at a different
+  version**. This is a deliberate **registry policy**, not a storage constraint: migration `0004`
+  keys the checkpoint by `(projection_name, projection_version)` and ADR-0034 §4 derives the
+  advisory-lock key from the name **and** version, so two versions would in fact get distinct rows
+  and distinct locks. The registry refuses them anyway so that one logical projection name means
+  one active definition. A version bump _replaces_ the definition; running versions side by side
+  is out of scope for Stage 3.4.2 and would need its own ADR and distinct logical naming.
+- Your definition object is **copied and frozen**, and each of `name`, `version` and `apply` is read
+  **exactly once**. Mutating it afterwards changes nothing, extra properties are dropped, and a
+  getter cannot pass validation and then hand over a different value.
+- The `event` your handler receives is **metadata only** — `sequence`, `eventType`, `eventVersion`,
+  and `acceptedAt`. The acceptance instant is an **immutable canonical UTC string, not a `Date`**, so
+  you cannot mutate shared state through it and two runs produce identical bytes. It is validated
+  **semantically**, not just by shape: an impossible instant such as `2026-02-30T…` or `…T24:00:00…`
+  is refused because it does not survive a byte-exact round trip.
+- Enumeration is **deterministic**, sorted by projection name.
+
+Registry construction **fails closed** on an invalid name, a non-positive/fractional/infinite/unsafe
+version, a missing or non-function handler, a malformed definition, a duplicate name, an empty
+registry, a registry larger than the fixed bound, or an input it cannot plainly read (a throwing
+getter, a throwing or revoked proxy, a hostile `length`). Its errors carry a stable `code` — itself
+runtime-normalised to a known value — and a message chosen from a closed repository-owned table;
+there is no constructor path that accepts arbitrary text, so nothing of your handler's source, your
+objects, or any unbounded input can appear in `code`, `message`, `stack`, or `cause`.
+
+A registry holds at most **`MAX_PROJECTION_REGISTRY_SIZE` (1024)** projections; a larger reported
+length is rejected **before any element is read**, as a construction-time denial-of-service and
+configuration safeguard. Phase 3 has two proof projections, so the bound never constrains legitimate
+use. It is an internal repository constant — not exported from the package root.
+
+**No populated registry exists yet.** The two proof handlers — `rm_event_type_activity` and
+`rm_daily_event_acceptance` — are Stage 3.4.5.
 
 ## Idempotency is not free
 
