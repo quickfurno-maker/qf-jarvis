@@ -10,7 +10,7 @@
  * passed EXPLICITLY (an injected clock), never read from `now()` in application code, so processing
  * is deterministic and testable. Mutating operations assert an exact affected-row count and fail
  * closed with a typed {@link ProjectionCheckpointInvalidError} rather than guessing — a blocked
- * checkpoint cannot advance, a sequence cannot decrease, and failure metadata cannot reference an
+ * checkpoint cannot advance, a position cannot decrease, and failure metadata cannot reference an
  * event at or below the checkpoint.
  *
  * Not exported from the package root in Stage 3.4.1.
@@ -32,9 +32,9 @@ import {
 export interface ProjectionCheckpointRow {
   readonly projectionName: ProjectionName;
   readonly projectionVersion: number;
-  readonly lastSequence: bigint;
+  readonly lastPosition: bigint;
   readonly status: ProjectionStatus;
-  readonly blockedSequence: bigint | null;
+  readonly blockedPosition: bigint | null;
   readonly failedAttemptCount: number;
   readonly lastSafeErrorCode: ProjectionSafeErrorCode | null;
   readonly nextAttemptAt: Date | null;
@@ -45,9 +45,9 @@ export interface ProjectionCheckpointRow {
 interface RawCheckpointRow {
   readonly projection_name: string;
   readonly projection_version: number;
-  readonly last_sequence: string;
+  readonly last_position: string;
   readonly status: string;
-  readonly blocked_sequence: string | null;
+  readonly blocked_position: string | null;
   readonly failed_attempt_count: number;
   readonly last_safe_error_code: string | null;
   readonly next_attempt_at: Date | null;
@@ -56,7 +56,7 @@ interface RawCheckpointRow {
 }
 
 const SELECT_COLUMNS = `
-  projection_name, projection_version, last_sequence, status, blocked_sequence,
+  projection_name, projection_version, last_position, status, blocked_position,
   failed_attempt_count, last_safe_error_code, next_attempt_at, created_at, updated_at
 `;
 
@@ -69,7 +69,7 @@ function requirePositiveInteger(value: number, label: string): number {
 
 function requirePositiveBigint(value: bigint, label: string): bigint {
   if (typeof value !== 'bigint' || value <= 0n) {
-    throw new ProjectionInputError(`${label} must be a positive integer sequence.`);
+    throw new ProjectionInputError(`${label} must be a positive integer position.`);
   }
   return value;
 }
@@ -89,9 +89,9 @@ function parseRow(raw: RawCheckpointRow): ProjectionCheckpointRow {
   return {
     projectionName: toProjectionName(raw.projection_name),
     projectionVersion: raw.projection_version,
-    lastSequence: BigInt(raw.last_sequence),
+    lastPosition: BigInt(raw.last_position),
     status: raw.status,
-    blockedSequence: raw.blocked_sequence === null ? null : BigInt(raw.blocked_sequence),
+    blockedPosition: raw.blocked_position === null ? null : BigInt(raw.blocked_position),
     failedAttemptCount: raw.failed_attempt_count,
     lastSafeErrorCode:
       raw.last_safe_error_code === null
@@ -117,7 +117,7 @@ function validateIdentity(identity: CheckpointIdentity): void {
 /**
  * Create the checkpoint for `(name, version)` if it does not already exist. Idempotent: a concurrent
  * or repeated create does not produce a second row (`ON CONFLICT DO NOTHING`). The new row starts at
- * `last_sequence = 0`, `status = 'active'`, `failed_attempt_count = 0`, with no error/next-attempt state.
+ * `last_position = 0`, `status = 'active'`, `failed_attempt_count = 0`, with no error/next-attempt state.
  */
 export async function createCheckpointIfAbsent(
   client: DatabaseClient,
@@ -127,7 +127,7 @@ export async function createCheckpointIfAbsent(
   requireValidDate(input.now, 'now');
   await client.query(
     `INSERT INTO qf_jarvis.projection_checkpoint
-       (projection_name, projection_version, last_sequence, status, failed_attempt_count,
+       (projection_name, projection_version, last_position, status, failed_attempt_count,
         created_at, updated_at)
      VALUES ($1, $2, 0, 'active', 0, $3, $3)
      ON CONFLICT (projection_name, projection_version) DO NOTHING`,
@@ -176,30 +176,30 @@ function assertSingleRow(rowCount: number | null, context: string): void {
 }
 
 /**
- * Advance the checkpoint after a successfully processed event: set `last_sequence` to the processed
- * event's sequence and CLEAR all failure state (active, count 0, no error, no next-attempt, not
- * blocked). The processed event MUST be exactly `last_sequence + 1` — this is the persistence
- * boundary that prevents event SKIPPING: a projection can only advance one immutable sequence step
+ * Advance the checkpoint after a successfully processed event: set `last_position` to the processed
+ * event's position and CLEAR all failure state (active, count 0, no error, no next-attempt, not
+ * blocked). The processed event MUST be exactly `last_position + 1` — this is the persistence
+ * boundary that prevents event SKIPPING: a projection can only advance one immutable position step
  * at a time, and cannot jump over an unprocessed event even if a buggy caller asks it to. Refuses
  * (0 rows -> throws) if the checkpoint is missing, blocked, a regression, a re-application, or a
- * skip (anything other than exactly the next sequence).
+ * skip (anything other than exactly the next position).
  */
 export async function advanceCheckpointOnSuccess(
   client: DatabaseClient,
-  input: CheckpointIdentity & { readonly processedEventSequence: bigint; readonly now: Date },
+  input: CheckpointIdentity & { readonly processedEventPosition: bigint; readonly now: Date },
 ): Promise<void> {
   validateIdentity(input);
-  requirePositiveBigint(input.processedEventSequence, 'processed event sequence');
+  requirePositiveBigint(input.processedEventPosition, 'processed event position');
   requireValidDate(input.now, 'now');
   const result = await client.query(
     `UPDATE qf_jarvis.projection_checkpoint
-       SET last_sequence = $3, status = 'active', failed_attempt_count = 0,
-           last_safe_error_code = NULL, next_attempt_at = NULL, blocked_sequence = NULL,
+       SET last_position = $3, status = 'active', failed_attempt_count = 0,
+           last_safe_error_code = NULL, next_attempt_at = NULL, blocked_position = NULL,
            updated_at = $4
      WHERE projection_name = $1 AND projection_version = $2
        AND status <> 'blocked'
-       AND $3 = last_sequence + 1`,
-    [input.name, input.version, input.processedEventSequence.toString(), input.now],
+       AND $3 = last_position + 1`,
+    [input.name, input.version, input.processedEventPosition.toString(), input.now],
   );
   assertSingleRow(result.rowCount, 'advance-on-success');
 }
@@ -208,14 +208,14 @@ export async function advanceCheckpointOnSuccess(
  * Record an active retry-pending state after a handler failure that has NOT yet exhausted the bound.
  * This enforces a STRICT one-step failure progression: the requested `failedAttemptCount` (1..MAX-1)
  * is applied only if the stored count is EXACTLY one less (0->1, 1->2, 2->3, 3->4). It keeps
- * `last_sequence` unchanged, sets the safe error code, and an optional `next_attempt_at`. Refuses
+ * `last_position` unchanged, sets the safe error code, and an optional `next_attempt_at`. Refuses
  * (0 rows -> throws) a jump (0->2, 0->4), a regression (3->1), a repeat (2->2), a transition from a
  * blocked checkpoint, or a failing event that is not exactly the next one after the checkpoint.
  */
 export async function recordCheckpointRetryPending(
   client: DatabaseClient,
   input: CheckpointIdentity & {
-    readonly failedEventSequence: bigint;
+    readonly failedEventPosition: bigint;
     readonly failedAttemptCount: number;
     readonly safeErrorCode: ProjectionSafeErrorCode;
     readonly nextAttemptAt: Date | null;
@@ -223,7 +223,7 @@ export async function recordCheckpointRetryPending(
   },
 ): Promise<void> {
   validateIdentity(input);
-  requirePositiveBigint(input.failedEventSequence, 'failed event sequence');
+  requirePositiveBigint(input.failedEventPosition, 'failed event position');
   if (
     !Number.isInteger(input.failedAttemptCount) ||
     input.failedAttemptCount < 1 ||
@@ -241,11 +241,11 @@ export async function recordCheckpointRetryPending(
   const result = await client.query(
     `UPDATE qf_jarvis.projection_checkpoint
        SET status = 'active', failed_attempt_count = $3, last_safe_error_code = $4,
-           next_attempt_at = $5, blocked_sequence = NULL, updated_at = $6
+           next_attempt_at = $5, blocked_position = NULL, updated_at = $6
      WHERE projection_name = $1 AND projection_version = $2
        AND status = 'active'
        AND failed_attempt_count = $3 - 1
-       AND $7 = last_sequence + 1`,
+       AND $7 = last_position + 1`,
     [
       input.name,
       input.version,
@@ -253,7 +253,7 @@ export async function recordCheckpointRetryPending(
       input.safeErrorCode,
       input.nextAttemptAt,
       input.now,
-      input.failedEventSequence.toString(),
+      input.failedEventPosition.toString(),
     ],
   );
   assertSingleRow(result.rowCount, 'retry-pending');
@@ -262,40 +262,40 @@ export async function recordCheckpointRetryPending(
 /**
  * Block the checkpoint after the FINAL failure. It is impossible to block a checkpoint directly: the
  * transition applies only if the stored status is `active`, the stored `failed_attempt_count` is
- * exactly MAX-1 (4), and the poison event is exactly `last_sequence + 1`. It then sets
- * `status = 'blocked'`, `failed_attempt_count = MAX` (5), `blocked_sequence` to the poison event,
- * clears `next_attempt_at`, and keeps `last_sequence` unchanged (the poison event is never applied).
+ * exactly MAX-1 (4), and the poison event is exactly `last_position + 1`. It then sets
+ * `status = 'blocked'`, `failed_attempt_count = MAX` (5), `blocked_position` to the poison event,
+ * clears `next_attempt_at`, and keeps `last_position` unchanged (the poison event is never applied).
  * Refuses (0 rows -> throws) a premature block (count 0), an already-blocked checkpoint, or a poison
  * event that is not exactly the next one.
  */
 export async function recordCheckpointBlocked(
   client: DatabaseClient,
   input: CheckpointIdentity & {
-    readonly blockedSequence: bigint;
+    readonly blockedPosition: bigint;
     readonly safeErrorCode: ProjectionSafeErrorCode;
     readonly now: Date;
   },
 ): Promise<void> {
   validateIdentity(input);
-  requirePositiveBigint(input.blockedSequence, 'blocked sequence');
+  requirePositiveBigint(input.blockedPosition, 'blocked position');
   assertProjectionSafeErrorCode(input.safeErrorCode);
   requireValidDate(input.now, 'now');
   const result = await client.query(
     `UPDATE qf_jarvis.projection_checkpoint
-       SET status = 'blocked', failed_attempt_count = $3, blocked_sequence = $4,
+       SET status = 'blocked', failed_attempt_count = $3, blocked_position = $4,
            last_safe_error_code = $5, next_attempt_at = NULL, updated_at = $6
      WHERE projection_name = $1 AND projection_version = $2
        AND status = 'active'
        AND failed_attempt_count = $3 - 1
-       AND $7 = last_sequence + 1`,
+       AND $7 = last_position + 1`,
     [
       input.name,
       input.version,
       MAX_PROJECTION_ATTEMPTS,
-      input.blockedSequence.toString(),
+      input.blockedPosition.toString(),
       input.safeErrorCode,
       input.now,
-      input.blockedSequence.toString(),
+      input.blockedPosition.toString(),
     ],
   );
   assertSingleRow(result.rowCount, 'blocked');

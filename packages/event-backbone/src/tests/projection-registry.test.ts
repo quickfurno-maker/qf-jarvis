@@ -1319,6 +1319,9 @@ describe('the Stage 3.4.2 registry is INTERNAL', () => {
       'MAX_PROJECTION_VERSION',
       'MAX_PROJECTION_REGISTRY_SIZE',
       'PROJECTION_REGISTRY_ERROR_CODES',
+      'readEventAtPosition',
+      'ProjectionStoredDataError',
+      'ProjectionInputError',
     ]) {
       expect(publicApi).not.toHaveProperty(symbol);
     }

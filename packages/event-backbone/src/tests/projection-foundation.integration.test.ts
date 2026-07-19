@@ -72,6 +72,8 @@ const KNOWN_CHECKSUMS: Readonly<Record<string, string>> = {
     '407bea56929b592d93337892f6ee95ac006f3b4001dedb135151ccfb5b36ab0c',
   '0004_projection_foundation.sql':
     '148b31ea95f3ae90274cdc74381b8d1fb3be9caa0dfe7ff96771240a7c29cc30',
+  '0005_projection_event_positions.sql':
+    '96d641ad0c3ea47843ab9de00cf4ab9847fad6a0164bbacadf5c7ed439ccccae',
 };
 
 async function tablePrivilege(role: string, table: string, priv: string): Promise<boolean> {
@@ -133,8 +135,8 @@ afterAll(async () => {
 // Migration
 // ---------------------------------------------------------------------------
 
-describe('migration 0004 — applies in order, idempotently, 0001–0003 unchanged', () => {
-  it('records exactly 0001,0002,0003,0004 in order with the immutable checksums intact', async () => {
+describe('migration 0005 — applies in order, idempotently, 0001–0004 unchanged', () => {
+  it('records exactly 0001..0005 in order with the immutable checksums intact', async () => {
     const rows = await withClient(admin, async (client) => {
       const r = await client.query<{ version: number; filename: string; checksum: Buffer }>(
         `SELECT version, filename, checksum FROM qf_jarvis.schema_migration ORDER BY version ASC`,
@@ -146,8 +148,9 @@ describe('migration 0004 — applies in order, idempotently, 0001–0003 unchang
       '0002_event_runtime_grants.sql',
       '0003_ingestion_rejection_and_event_conflict.sql',
       '0004_projection_foundation.sql',
+      '0005_projection_event_positions.sql',
     ]);
-    expect(rows.map((row) => row.version)).toStrictEqual([1, 2, 3, 4]);
+    expect(rows.map((row) => row.version)).toStrictEqual([1, 2, 3, 4, 5]);
     for (const row of rows) {
       const hex = row.checksum.toString('hex');
       if (KNOWN_CHECKSUMS[row.filename] !== undefined) {
@@ -156,7 +159,7 @@ describe('migration 0004 — applies in order, idempotently, 0001–0003 unchang
     }
   });
 
-  it('re-migrating is idempotent — still exactly four applied migrations', async () => {
+  it('re-migrating is idempotent — still exactly five applied migrations', async () => {
     await runMigrations(admin, defaultMigrationsDirectory());
     const count = await withClient(admin, async (client) => {
       const r = await client.query<{ n: string }>(
@@ -164,19 +167,25 @@ describe('migration 0004 — applies in order, idempotently, 0001–0003 unchang
       );
       return Number.parseInt(r.rows[0]?.n ?? '0', 10);
     });
-    expect(count).toBe(4);
+    expect(count).toBe(5);
   });
 
-  it('records the EXACT reviewed 0004 checksum in the migration history', async () => {
+  it('records the EXACT reviewed 0004 and 0005 checksums in the migration history', async () => {
     // The runner stores sha256(fileContents); this pins the applied checksum to the reviewed value.
-    // If 0004 is edited, this test fails until the reviewed checksum is regenerated (as required).
+    // If either file is edited, this test fails until the reviewed checksum is regenerated (as required).
     const applied = await withClient(admin, async (client) => {
-      const r = await client.query<{ checksum: Buffer }>(
-        `SELECT checksum FROM qf_jarvis.schema_migration WHERE filename = '0004_projection_foundation.sql'`,
+      const r = await client.query<{ filename: string; checksum: Buffer }>(
+        `SELECT filename, checksum FROM qf_jarvis.schema_migration
+         WHERE filename IN ('0004_projection_foundation.sql', '0005_projection_event_positions.sql')`,
       );
-      return r.rows[0]?.checksum.toString('hex');
+      return new Map(r.rows.map((row) => [row.filename, row.checksum.toString('hex')]));
     });
-    expect(applied).toBe('148b31ea95f3ae90274cdc74381b8d1fb3be9caa0dfe7ff96771240a7c29cc30');
+    expect(applied.get('0004_projection_foundation.sql')).toBe(
+      '148b31ea95f3ae90274cdc74381b8d1fb3be9caa0dfe7ff96771240a7c29cc30',
+    );
+    expect(applied.get('0005_projection_event_positions.sql')).toBe(
+      '96d641ad0c3ea47843ab9de00cf4ab9847fad6a0164bbacadf5c7ed439ccccae',
+    );
   });
 });
 
@@ -190,10 +199,10 @@ describe('projection_checkpoint — create, invariants, repository behaviour', (
     await withClient(admin, (c) => createCheckpointIfAbsent(c, { name, version: 1, now: NOW }));
     await withClient(admin, (c) => createCheckpointIfAbsent(c, { name, version: 1, now: NOW }));
     const row = await withClient(admin, (c) => readCheckpoint(c, { name, version: 1 }));
-    expect(row?.lastSequence).toBe(0n);
+    expect(row?.lastPosition).toBe(0n);
     expect(row?.status).toBe('active');
     expect(row?.failedAttemptCount).toBe(0);
-    expect(row?.blockedSequence).toBeNull();
+    expect(row?.blockedPosition).toBeNull();
     const count = await withClient(admin, async (client) => {
       const r = await client.query<{ n: string }>(
         `SELECT count(*)::text AS n FROM qf_jarvis.projection_checkpoint
@@ -207,29 +216,29 @@ describe('projection_checkpoint — create, invariants, repository behaviour', (
 
   it('refuses invalid active/blocked shapes and failure counts at the CHECK layer', async () => {
     const attempts: string[] = [
-      // blocked with no blocked_sequence
+      // blocked with no blocked_position
       `INSERT INTO qf_jarvis.projection_checkpoint
-        (projection_name, projection_version, last_sequence, status, failed_attempt_count, last_safe_error_code, created_at, updated_at)
+        (projection_name, projection_version, last_position, status, failed_attempt_count, last_safe_error_code, created_at, updated_at)
        VALUES ('bad-a', 1, 0, 'blocked', 5, 'projection-handler-failed', now(), now())`,
-      // active with a blocked_sequence
+      // active with a blocked_position
       `INSERT INTO qf_jarvis.projection_checkpoint
-        (projection_name, projection_version, last_sequence, status, blocked_sequence, failed_attempt_count, created_at, updated_at)
+        (projection_name, projection_version, last_position, status, blocked_position, failed_attempt_count, created_at, updated_at)
        VALUES ('bad-b', 1, 0, 'active', 1, 0, now(), now())`,
       // failed_attempt_count out of range
       `INSERT INTO qf_jarvis.projection_checkpoint
-        (projection_name, projection_version, last_sequence, status, failed_attempt_count, last_safe_error_code, created_at, updated_at)
+        (projection_name, projection_version, last_position, status, failed_attempt_count, last_safe_error_code, created_at, updated_at)
        VALUES ('bad-c', 1, 0, 'active', 6, 'projection-handler-failed', now(), now())`,
       // active clean but next_attempt_at set
       `INSERT INTO qf_jarvis.projection_checkpoint
-        (projection_name, projection_version, last_sequence, status, failed_attempt_count, next_attempt_at, created_at, updated_at)
+        (projection_name, projection_version, last_position, status, failed_attempt_count, next_attempt_at, created_at, updated_at)
        VALUES ('bad-d', 1, 0, 'active', 0, now(), now(), now())`,
       // blocked with next_attempt_at set
       `INSERT INTO qf_jarvis.projection_checkpoint
-        (projection_name, projection_version, last_sequence, status, blocked_sequence, failed_attempt_count, last_safe_error_code, next_attempt_at, created_at, updated_at)
+        (projection_name, projection_version, last_position, status, blocked_position, failed_attempt_count, last_safe_error_code, next_attempt_at, created_at, updated_at)
        VALUES ('bad-e', 1, 0, 'blocked', 1, 5, 'projection-handler-failed', now(), now(), now())`,
       // invalid projection name
       `INSERT INTO qf_jarvis.projection_checkpoint
-        (projection_name, projection_version, last_sequence, status, failed_attempt_count, created_at, updated_at)
+        (projection_name, projection_version, last_position, status, failed_attempt_count, created_at, updated_at)
        VALUES ('Bad Name', 1, 0, 'active', 0, now(), now())`,
     ];
     for (const sql of attempts) {
@@ -243,7 +252,7 @@ describe('projection_checkpoint — create, invariants, repository behaviour', (
     await expect(
       withClient(admin, (c) =>
         c.query(`INSERT INTO qf_jarvis.projection_checkpoint
-          (projection_name, projection_version, last_sequence, status, failed_attempt_count, last_safe_error_code, created_at, updated_at)
+          (projection_name, projection_version, last_position, status, failed_attempt_count, last_safe_error_code, created_at, updated_at)
           VALUES ('active-five', 1, 0, 'active', 5, 'projection-handler-failed', now(), now())`),
       ),
     ).rejects.toMatchObject({ code: '23514' });
@@ -267,13 +276,13 @@ describe('projection_checkpoint — create, invariants, repository behaviour', (
     await withClient(admin, (c) => createCheckpointIfAbsent(c, { name, version: 1, now: NOW }));
     // 0 -> 1 -> 2 succeed.
     await withClient(admin, (c) =>
-      advanceCheckpointOnSuccess(c, { name, version: 1, processedEventSequence: 1n, now: NOW }),
+      advanceCheckpointOnSuccess(c, { name, version: 1, processedEventPosition: 1n, now: NOW }),
     );
     await withClient(admin, (c) =>
-      advanceCheckpointOnSuccess(c, { name, version: 1, processedEventSequence: 2n, now: NOW }),
+      advanceCheckpointOnSuccess(c, { name, version: 1, processedEventPosition: 2n, now: NOW }),
     );
     expect(
-      (await withClient(admin, (c) => readCheckpoint(c, { name, version: 1 })))?.lastSequence,
+      (await withClient(admin, (c) => readCheckpoint(c, { name, version: 1 })))?.lastPosition,
     ).toBe(2n);
     // A skip (2 -> 4), a re-application (2 -> 2), and a regression (2 -> 1) all refuse.
     for (const seq of [4n, 2n, 1n]) {
@@ -282,7 +291,7 @@ describe('projection_checkpoint — create, invariants, repository behaviour', (
           advanceCheckpointOnSuccess(c, {
             name,
             version: 1,
-            processedEventSequence: seq,
+            processedEventPosition: seq,
             now: NOW,
           }),
         ),
@@ -299,7 +308,7 @@ describe('projection_checkpoint — create, invariants, repository behaviour', (
         advanceCheckpointOnSuccess(c, {
           name: fresh,
           version: 1,
-          processedEventSequence: 2n,
+          processedEventPosition: 2n,
           now: NOW,
         }),
       ),
@@ -316,7 +325,7 @@ describe('projection_checkpoint — create, invariants, repository behaviour', (
         recordCheckpointBlocked(c, {
           name,
           version: 1,
-          blockedSequence: 1n,
+          blockedPosition: 1n,
           safeErrorCode: 'projection-handler-failed',
           now: NOW,
         }),
@@ -328,7 +337,7 @@ describe('projection_checkpoint — create, invariants, repository behaviour', (
           recordCheckpointRetryPending(c, {
             name,
             version: 1,
-            failedEventSequence: 1n,
+            failedEventPosition: 1n,
             failedAttemptCount: jump,
             safeErrorCode: 'projection-handler-failed',
             nextAttemptAt: null,
@@ -338,14 +347,14 @@ describe('projection_checkpoint — create, invariants, repository behaviour', (
       ).rejects.toThrow(ProjectionCheckpointInvalidError);
     }
 
-    // Valid progression 0 -> 1 -> 2 -> 3 -> 4 (last_sequence stays 0; the poison event is event 1).
+    // Valid progression 0 -> 1 -> 2 -> 3 -> 4 (last_position stays 0; the poison event is event 1).
     const nextAt = new Date(NOW.getTime() + 60_000);
     for (const count of [1, 2, 3, 4]) {
       await withClient(admin, (c) =>
         recordCheckpointRetryPending(c, {
           name,
           version: 1,
-          failedEventSequence: 1n,
+          failedEventPosition: 1n,
           failedAttemptCount: count,
           safeErrorCode: 'projection-handler-failed',
           nextAttemptAt: nextAt,
@@ -354,7 +363,7 @@ describe('projection_checkpoint — create, invariants, repository behaviour', (
       );
       const row = await withClient(admin, (c) => readCheckpoint(c, { name, version: 1 }));
       expect(row?.status).toBe('active');
-      expect(row?.lastSequence).toBe(0n);
+      expect(row?.lastPosition).toBe(0n);
       expect(row?.failedAttemptCount).toBe(count);
       expect(row?.nextAttemptAt?.getTime()).toBe(nextAt.getTime());
     }
@@ -366,7 +375,7 @@ describe('projection_checkpoint — create, invariants, repository behaviour', (
           recordCheckpointRetryPending(c, {
             name,
             version: 1,
-            failedEventSequence: 1n,
+            failedEventPosition: 1n,
             failedAttemptCount: badCount,
             safeErrorCode: 'projection-handler-failed',
             nextAttemptAt: null,
@@ -376,19 +385,19 @@ describe('projection_checkpoint — create, invariants, repository behaviour', (
       ).rejects.toThrow(ProjectionCheckpointInvalidError);
     }
 
-    // The final transition 4 -> blocked (count 5, blocked_sequence = the poison event) succeeds.
+    // The final transition 4 -> blocked (count 5, blocked_position = the poison event) succeeds.
     await withClient(admin, (c) =>
       recordCheckpointBlocked(c, {
         name,
         version: 1,
-        blockedSequence: 1n,
+        blockedPosition: 1n,
         safeErrorCode: 'projection-handler-failed',
         now: NOW,
       }),
     );
     const blocked = await withClient(admin, (c) => readCheckpoint(c, { name, version: 1 }));
     expect(blocked?.status).toBe('blocked');
-    expect(blocked?.blockedSequence).toBe(1n);
+    expect(blocked?.blockedPosition).toBe(1n);
     expect(blocked?.failedAttemptCount).toBe(5);
     expect(blocked?.nextAttemptAt).toBeNull();
 
@@ -398,7 +407,7 @@ describe('projection_checkpoint — create, invariants, repository behaviour', (
         recordCheckpointRetryPending(c, {
           name,
           version: 1,
-          failedEventSequence: 1n,
+          failedEventPosition: 1n,
           failedAttemptCount: 1,
           safeErrorCode: 'projection-handler-failed',
           nextAttemptAt: null,
@@ -411,7 +420,7 @@ describe('projection_checkpoint — create, invariants, repository behaviour', (
         recordCheckpointBlocked(c, {
           name,
           version: 1,
-          blockedSequence: 1n,
+          blockedPosition: 1n,
           safeErrorCode: 'projection-handler-failed',
           now: NOW,
         }),
@@ -419,7 +428,7 @@ describe('projection_checkpoint — create, invariants, repository behaviour', (
     ).rejects.toThrow(ProjectionCheckpointInvalidError);
     await expect(
       withClient(admin, (c) =>
-        advanceCheckpointOnSuccess(c, { name, version: 1, processedEventSequence: 1n, now: NOW }),
+        advanceCheckpointOnSuccess(c, { name, version: 1, processedEventPosition: 1n, now: NOW }),
       ),
     ).rejects.toThrow(ProjectionCheckpointInvalidError);
   });
@@ -436,7 +445,7 @@ describe('projection_attempt — append-only, safe-code only, no duplicate attem
       appendSucceededAttempt(c, {
         name,
         version: 1,
-        eventSequence: 1n,
+        eventPosition: 1n,
         attemptNumber: 1,
         startedAt: NOW,
         completedAt: NOW,
@@ -446,7 +455,7 @@ describe('projection_attempt — append-only, safe-code only, no duplicate attem
       appendFailedAttempt(c, {
         name,
         version: 1,
-        eventSequence: 2n,
+        eventPosition: 2n,
         attemptNumber: 1,
         safeErrorCode: 'projection-handler-failed',
         startedAt: NOW,
@@ -454,10 +463,10 @@ describe('projection_attempt — append-only, safe-code only, no duplicate attem
       }),
     );
     const s = await withClient(admin, (c) =>
-      readAttemptsForEvent(c, { name, version: 1, eventSequence: 1n }),
+      readAttemptsForEvent(c, { name, version: 1, eventPosition: 1n }),
     );
     const f = await withClient(admin, (c) =>
-      readAttemptsForEvent(c, { name, version: 1, eventSequence: 2n }),
+      readAttemptsForEvent(c, { name, version: 1, eventPosition: 2n }),
     );
     expect(s).toHaveLength(1);
     expect(s[0]?.outcome).toBe('succeeded');
@@ -473,7 +482,7 @@ describe('projection_attempt — append-only, safe-code only, no duplicate attem
       appendSucceededAttempt(c, {
         name,
         version: 1,
-        eventSequence: 1n,
+        eventPosition: 1n,
         attemptNumber: 1,
         startedAt: NOW,
         completedAt: NOW,
@@ -484,7 +493,7 @@ describe('projection_attempt — append-only, safe-code only, no duplicate attem
         appendSucceededAttempt(c, {
           name,
           version: 1,
-          eventSequence: 1n,
+          eventPosition: 1n,
           attemptNumber: 1,
           startedAt: NOW,
           completedAt: NOW,
@@ -499,7 +508,7 @@ describe('projection_attempt — append-only, safe-code only, no duplicate attem
       appendSucceededAttempt(c, {
         name,
         version: 1,
-        eventSequence: 1n,
+        eventPosition: 1n,
         attemptNumber: 1,
         startedAt: NOW,
         completedAt: NOW,
@@ -561,18 +570,18 @@ describe('read models — exist, enforce positive counts and sequence ordering, 
     expect(tables).toStrictEqual(['rm_daily_event_acceptance', 'rm_event_type_activity']);
   });
 
-  it('rejects a non-positive count and an out-of-order sequence pair', async () => {
+  it('rejects a non-positive count and an out-of-order position pair', async () => {
     await expect(
       withClient(admin, (c) =>
         c.query(`INSERT INTO qf_jarvis.rm_event_type_activity
-          (event_type, event_version, event_count, first_event_sequence, last_event_sequence, last_accepted_at)
+          (event_type, event_version, event_count, first_event_position, last_event_position, last_accepted_at)
           VALUES ('qf.x', 2, 0, 1, 1, now())`),
       ),
     ).rejects.toMatchObject({ code: '23514' });
     await expect(
       withClient(admin, (c) =>
         c.query(`INSERT INTO qf_jarvis.rm_daily_event_acceptance
-          (accepted_date, event_count, first_event_sequence, last_event_sequence)
+          (accepted_date, event_count, first_event_position, last_event_position)
           VALUES ('2026-07-18', 1, 5, 3)`),
       ),
     ).rejects.toMatchObject({ code: '23514' });
@@ -615,14 +624,14 @@ describe('privileges — projection role least privilege; ingestion role and PUB
     // checkpoint: create + advance (0 -> 1, the exact next sequence)
     await withClient(pool, (c) => createCheckpointIfAbsent(c, { name, version: 1, now: NOW }));
     await withClient(pool, (c) =>
-      advanceCheckpointOnSuccess(c, { name, version: 1, processedEventSequence: 1n, now: NOW }),
+      advanceCheckpointOnSuccess(c, { name, version: 1, processedEventPosition: 1n, now: NOW }),
     );
     // attempt: insert
     await withClient(pool, (c) =>
       appendSucceededAttempt(c, {
         name,
         version: 1,
-        eventSequence: 1n,
+        eventPosition: 1n,
         attemptNumber: 1,
         startedAt: NOW,
         completedAt: NOW,
@@ -631,7 +640,7 @@ describe('privileges — projection role least privilege; ingestion role and PUB
     // read model: upsert
     await withClient(pool, (c) =>
       c.query(`INSERT INTO qf_jarvis.rm_event_type_activity
-        (event_type, event_version, event_count, first_event_sequence, last_event_sequence, last_accepted_at)
+        (event_type, event_version, event_count, first_event_position, last_event_position, last_accepted_at)
         VALUES ('qf.recommendation.created', 2, 1, 1, 1, now())
         ON CONFLICT (event_type, event_version) DO UPDATE SET event_count = qf_jarvis.rm_event_type_activity.event_count + 1`),
     );

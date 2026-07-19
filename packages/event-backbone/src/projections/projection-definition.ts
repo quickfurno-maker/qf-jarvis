@@ -4,9 +4,9 @@
  * A projection definition is the immutable, repository-owned description of ONE projection: its
  * validated {@link ProjectionName}, its positive version, and the single async handler that applies
  * one event to the read model. It is a description, not a runner — nothing here opens a transaction,
- * takes a lock, reads an event, writes a checkpoint, or retries. Those belong to Stage 3.4.3+.
+ * takes a lock, reads an event, writes a checkpoint, or retries. Those belong to later Stage 3.4 slices (the runner is Stage 3.4.4+).
  *
- * The handler receives EVENT METADATA ONLY: the ingestion sequence, the event type and version, and
+ * The handler receives EVENT METADATA ONLY: the gap-free projection position (ADR-0036, NOT the raw storage sequence), the event type and version, and
  * the canonical UTC acceptance instant. It deliberately receives **no** payload, subject id,
  * correlation id, event id, source, signature, free text, environment value, or provider detail. A
  * handler that cannot see personal data cannot leak it into a read model, and erasure then survives a
@@ -136,8 +136,12 @@ export function toCanonicalInstant(value: unknown): CanonicalInstant {
  * write into a read model, so it is a deliberate, ADR-gated decision — not a convenience edit.
  */
 export interface ProjectionEvent {
-  /** The event's monotonic ingestion sequence. */
-  readonly sequence: bigint;
+  /**
+   * The gap-free, commit-ordered PROJECTION POSITION (ADR-0036), NOT the raw event storage identity
+   * `qf_jarvis.event.sequence`. Dense `1..N` in commit order; this is the value the runner traverses
+   * with `= last_position + 1`. The raw storage sequence is never exposed to a handler.
+   */
+  readonly position: bigint;
   /** The canonical event type, e.g. `quote.issued`. Repository vocabulary, not sender free text. */
   readonly eventType: string;
   /** The positive integer contract version of that event type. */
