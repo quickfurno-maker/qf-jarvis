@@ -41,6 +41,55 @@ const BYPASS_EXPORTS = ['runMigrations', 'runMigrationsOnClient'] as const;
 /** The one supported way to migrate. */
 const REQUIRED_EXPORTS = ['migrateWithPreflight', 'PreflightFailedError'] as const;
 
+/**
+ * The COMPLETE package-root export surface, as of Stage 3.4.1.
+ *
+ * Stage 3.4.2 adds the projection registry entirely behind this boundary, so this list must not
+ * change. A failure here means a slice widened (or narrowed) the public API — which is an ADR-level
+ * decision, not an incidental edit. Update this snapshot only alongside the ADR that authorises it.
+ */
+const EXPECTED_ROOT_SURFACE = [
+  'ConflictingEventDigestError',
+  'DATABASE_CONFIG_BOUNDS',
+  'DATABASE_CONFIG_DEFAULTS',
+  'DatabaseConfigError',
+  'DatabaseTlsError',
+  'DuplicateMigrationVersionError',
+  'EventPersistenceConsistencyError',
+  'INGESTION_REJECTION_ISSUE_CODES',
+  'INGESTION_REJECTION_REASON_CODES',
+  'MAX_INGESTION_REJECTION_ISSUES',
+  'MIGRATION_ADVISORY_LOCK_KEY',
+  'MIGRATION_FILENAME_PATTERN',
+  'MIGRATION_SCHEMA',
+  'MIGRATION_TABLE',
+  'MalformedMigrationFilenameError',
+  'MigrationChecksumMismatchError',
+  'MigrationError',
+  'MigrationExecutionError',
+  'MigrationFileMissingError',
+  'OutOfOrderMigrationError',
+  'PreflightFailedError',
+  'REQUIRED_POSTGRES_MAJOR_VERSION',
+  'UnsupportedConnectionModeError',
+  'assertCaCertificateBundle',
+  'assertConnectionUrlIsSupported',
+  'closeDatabasePool',
+  'createDatabaseConfig',
+  'createDatabasePool',
+  'defaultMigrationsDirectory',
+  'describeConnectionTarget',
+  'describeTls',
+  'isLoopbackConnectionTarget',
+  'migrateWithPreflight',
+  'recordIngestionRejection',
+  'runPreflight',
+  'runPreflightOnClient',
+  'storeValidatedEvent',
+  'withClient',
+  'withTransaction',
+] as const;
+
 async function readPackageManifest(): Promise<{
   readonly exports: Record<string, unknown>;
 }> {
@@ -144,6 +193,46 @@ describe('the Stage 3.4.1 projection foundation is INTERNAL — no root export y
     expect(serialized).not.toContain('qf_jarvis_projection_runtime');
     expect(serialized.toLowerCase()).not.toContain('password');
     expect(serialized.toLowerCase()).not.toContain('secret');
+  });
+});
+
+describe('the Stage 3.4.2 projection registry is INTERNAL — still no root export', () => {
+  it('exports no Stage 3.4.2 registry or definition symbol from the package root', () => {
+    // Stage 3.4.2 adds the immutable projection registry and its definition vocabulary. Like the
+    // Stage 3.4.1 foundation, all of it stays internal: no public runtime surface is added by this
+    // slice either (ADR-0035 §7). The root surface is unchanged from Stage 3.4.1.
+    for (const symbol of [
+      'createProjectionRegistry',
+      'ProjectionRegistry',
+      'ProjectionRegistryError',
+      'PROJECTION_REGISTRY_ERROR_CODES',
+      'defineProjection',
+      'ProjectionDefinition',
+      'ProjectionDefinitionError',
+      'PROJECTION_DEFINITION_ERROR_CODES',
+      'ProjectionEvent',
+      'ProjectionHandler',
+      'toCanonicalInstant',
+      'isCanonicalInstant',
+      'CanonicalInstant',
+      'CANONICAL_INSTANT_PATTERN',
+      'isProjectionVersion',
+      'MAX_PROJECTION_VERSION',
+    ]) {
+      expect(publicApi).not.toHaveProperty(symbol);
+    }
+  });
+
+  it('exposes no registry or handler vocabulary under any root key', () => {
+    const rootKeys = Object.keys(publicApi);
+    expect(rootKeys.filter((key) => key.toLowerCase().includes('registry'))).toEqual([]);
+    expect(rootKeys.filter((key) => key.toLowerCase().includes('projection'))).toEqual([]);
+  });
+
+  it('leaves the Stage 3.4.1 root surface byte-identical — no symbol added or removed', () => {
+    // The registry is a pure addition BEHIND the boundary. If this snapshot ever changes, a slice
+    // has widened the public API without an ADR saying so.
+    expect(Object.keys(publicApi).sort()).toEqual(EXPECTED_ROOT_SURFACE);
   });
 });
 
