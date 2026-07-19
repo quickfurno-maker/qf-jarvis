@@ -93,7 +93,12 @@ export interface EventPersistenceRecord {
 /** The event was newly inserted. */
 export interface StoredEvent {
   readonly outcome: 'stored';
-  /** The database ingestion sequence (a `BIGINT`, returned as a string). */
+  /**
+   * The raw database STORAGE IDENTITY (`event.sequence`, a `BIGINT` returned as a string). This is an
+   * arrival identity only; it is NOT gap-free and NOT the projection cursor. A benign duplicate or an
+   * aborted insert consumes an identity value with no committed row (ADR-0036). The gap-free,
+   * commit-ordered projection position lives in `qf_jarvis.projection_event_position`.
+   */
   readonly sequence: string;
   /** The database-generated acceptance instant. */
   readonly acceptedAt: Date;
@@ -102,7 +107,10 @@ export interface StoredEvent {
 /** The event was already present with the SAME semantic digest — a benign duplicate. */
 export interface DuplicateEvent {
   readonly outcome: 'duplicate';
-  /** The sequence of the ALREADY-ACCEPTED row (not a new one). */
+  /**
+   * The raw STORAGE IDENTITY of the ALREADY-ACCEPTED row (not a new one). A storage identity, not the
+   * gap-free projection cursor (ADR-0036).
+   */
   readonly sequence: string;
   /** The acceptance instant of the already-accepted row. */
   readonly acceptedAt: Date;

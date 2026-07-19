@@ -1,6 +1,6 @@
 # Managed Database Runbook — QF-Jarvis PostgreSQL
 
-**Status:** Managed-database readiness has been established, and migration `0001_event_log.sql` is applied to the managed database. The provider security remediation (`public.rls_auto_enable()`) has been **executed and verified**. Migration `0002_event_runtime_grants.sql` (Stage 3.3 slice 3 — least-privilege runtime grants) and migration `0003_ingestion_rejection_and_event_conflict.sql` (Stage 3.3.3 — the append-only `ingestion_rejection` and `event_conflict` audit tables) and migration `0004_projection_foundation.sql` (Stage 3.4.1 — the projection foundation) are recorded here and are **NOT yet applied to the managed database**. **No managed `pnpm db:migrate` is currently authorized:** the default migrator applies **all** pending migrations, so the next managed run would apply `0002`, `0003` **and `0004`** — and it stays blocked until `0004` receives its own managed-readiness review and explicit owner authorization. The managed database carries only `0001`.
+**Status:** Managed-database readiness has been established, and migration `0001_event_log.sql` is applied to the managed database. The provider security remediation (`public.rls_auto_enable()`) has been **executed and verified**. Migration `0002_event_runtime_grants.sql` (Stage 3.3 slice 3 — least-privilege runtime grants) and migration `0003_ingestion_rejection_and_event_conflict.sql` (Stage 3.3.3 — the append-only `ingestion_rejection` and `event_conflict` audit tables) and migration `0004_projection_foundation.sql` (Stage 3.4.1 — the projection foundation) and migration `0005_projection_event_positions.sql` (Stage 3.4.3 — the gap-free projection ordering) are recorded here and are **NOT yet applied to the managed database**. **No managed `pnpm db:migrate` is currently authorized:** the default migrator applies **all** pending migrations, so the next managed run would apply `0002`, `0003`, `0004` **and `0005`** — and it stays blocked until `0004` AND `0005` receive reviewed managed-readiness (or one full-scope report) and explicit owner authorization for the full `0002`→`0005` scope. The managed database carries only `0001`.
 **Date:** 2026-07-12
 
 The checklist for the **first migration** against the dedicated, Supabase-managed QF-Jarvis PostgreSQL project ([ADR-0023](../decisions/ADR-0023-dedicated-supabase-managed-postgresql.md), [ADR-0024](../decisions/ADR-0024-verified-tls-and-managed-database-preflight.md)).
@@ -125,13 +125,13 @@ pnpm db:preflight     # step 9. Confirm the schema and history are as expected.
 
 > ### ⛔ The default migrator CANNOT apply only `0002`/`0003`
 >
-> **`db:migrate` applies EVERY pending migration. There is no target-version option, and no way to ask it to stop after `0003`.** On the managed database `0001` is applied and `0002`, `0003` **and `0004`** are all pending, so a managed run today would apply **`0002`, then `0003`, then `0004`** — not `0002`/`0003` alone.
+> **`db:migrate` applies EVERY pending migration. There is no target-version option, and no way to ask it to stop after `0003`.** On the managed database `0001` is applied and `0002`, `0003`, `0004` **and `0005`** are all pending, so a managed run today would apply **`0002`, then `0003`, then `0004`, then `0005`** — not `0002`/`0003` alone.
 >
-> **NO managed `pnpm db:migrate` is currently authorized.** The run is **blocked** until `0004_projection_foundation.sql` receives its **own separately-reviewed managed-readiness report** and **explicit owner authorization** covering the full `0002`+`0003`+`0004` scope.
+> **NO managed `pnpm db:migrate` is currently authorized.** The run is **blocked** until `0004_projection_foundation.sql` AND `0005_projection_event_positions.sql` receive **separately-reviewed managed-readiness** (or one explicitly full-scope report) and **explicit owner authorization** covering the full `0002`→`0005` scope.
 >
-> That future run additionally requires **both** deployment roles — `qf_jarvis_runtime` (ingestion) **and** `qf_jarvis_projection_runtime` (projections) — to **exist with correctly rotated credentials** before it begins. The conditional grant blocks in `0002`/`0003` and in `0004` respectively depend on them.
+> That future run additionally requires **both** deployment roles to **exist with correctly rotated credentials** before it begins: `0002`/`0003` depend on **`qf_jarvis_runtime`** (ingestion), and `0004`/`0005` depend on **`qf_jarvis_projection_runtime`** (projections). Both roles must exist with correctly rotated credentials.
 >
-> **Managed PostgreSQL remains `0001`-only.** No managed readiness or authorization for `0004` is claimed.
+> **Managed PostgreSQL remains `0001`-only.** No managed readiness or authorization for `0004` or `0005` is claimed.
 
 ### Migration `0002_event_runtime_grants.sql` — recorded, NOT yet applied
 
@@ -147,20 +147,35 @@ Stage 3.3.3 adds a third migration, `0003_ingestion_rejection_and_event_conflict
 
 ### Migration `0004_projection_foundation.sql` — LOCAL/CI ONLY, NOT yet applied
 
-Stage 3.4.1 adds a fourth migration, `0004_projection_foundation.sql` ([ADR-0034](../decisions/ADR-0034-stage-3-4-projections-checkpoints-and-bounded-retries.md)): the `qf_jarvis.projection_checkpoint` and append-only `qf_jarvis.projection_attempt` tables and two disposable, metadata-only read models (`rm_event_type_activity`, `rm_daily_event_acceptance`), with a conditional least-privilege grant to a **new** deployment role `qf_jarvis_projection_runtime` (separate from `qf_jarvis_runtime`; no LOGIN password in Git). **This migration is verified against local PostgreSQL only. It is NOT applied to the managed database, and NO managed-readiness for `0004` is claimed** — a future managed application requires its own separately-reviewed readiness report and explicit owner authorization (a new preflight, checksum verification, credential rotation, backup/PITR evidence, and a synthetic `BEGIN`/`SAVEPOINT`/`ROLLBACK` smoke test). Managed PostgreSQL continues to carry **only `0001`**; `0002`, `0003` and `0004` remain unapplied.
+Stage 3.4.1 adds a fourth migration, `0004_projection_foundation.sql` ([ADR-0034](../decisions/ADR-0034-stage-3-4-projections-checkpoints-and-bounded-retries.md)): the `qf_jarvis.projection_checkpoint` and append-only `qf_jarvis.projection_attempt` tables and two disposable, metadata-only read models (`rm_event_type_activity`, `rm_daily_event_acceptance`), with a conditional least-privilege grant to a **new** deployment role `qf_jarvis_projection_runtime` (separate from `qf_jarvis_runtime`; no LOGIN password in Git). **This migration is verified against local PostgreSQL only. It is NOT applied to the managed database, and NO managed-readiness for `0004` is claimed** — a future managed application requires its own separately-reviewed readiness report and explicit owner authorization (a new preflight, checksum verification, credential rotation, backup/PITR evidence, and a synthetic `BEGIN`/`SAVEPOINT`/`ROLLBACK` smoke test). Managed PostgreSQL continues to carry **only `0001`**; `0002`, `0003`, `0004` and `0005` remain unapplied, and because the default migrator applies every pending migration in order (no target-version option), a managed run would apply **all four** (`0002`→`0005`).
+
+### Migration `0005_projection_event_positions.sql` — LOCAL/CI ONLY, NOT yet applied
+
+Stage 3.4.3 adds a fifth migration, `0005_projection_event_positions.sql` ([ADR-0036](../decisions/ADR-0036-stage-3-4-3-gap-free-projection-ordering.md)): the gap-free, commit-ordered **projection position** foundation. **LOCAL/CI ONLY, verified against local PostgreSQL 17 only. It is NOT applied to the managed database, and NO managed-readiness for `0005` is claimed.**
+
+- **Checksum (SHA-256):** `96d641ad0c3ea47843ab9de00cf4ab9847fad6a0164bbacadf5c7ed439ccccae` (the migration runner pins this; editing the file fails the checksum reconciliation).
+- **Table lock + backfill:** it takes `LOCK TABLE qf_jarvis.event IN SHARE ROW EXCLUSIVE MODE` for the backfill/trigger-install window (blocks concurrent INSERTs, not SELECTs), then backfills existing events to dense positions `1..N` by raw `event.sequence`. On a large managed `event` table this lock and backfill are **not** free and must be scheduled in a maintenance window — a managed-readiness concern to review before any run.
+- **Allocator:** a private singleton counter table `qf_jarvis.projection_event_position_allocator` (one `TRUE` row; serialises position assignment).
+- **SECURITY DEFINER trigger:** an `AFTER INSERT` trigger on `qf_jarvis.event` runs `qf_jarvis.assign_projection_event_position()` as the **function owner** (the migration role that owns the tables), so the ingestion role needs no allocator/mapping write grant. Confirm the owning role is correct in managed before applying.
+- **Role prerequisites:** `qf_jarvis_projection_runtime` must exist (it receives column `SELECT` on the map only); `qf_jarvis_runtime` gets **no** allocator/mapping access. Both deployment roles must exist with rotated credentials before a managed run.
+- **Privilege verification (post-apply):** the ingestion role can INSERT an event (the trigger fires) but cannot read/mutate the allocator or map; the projection role can `SELECT` the map columns but not the allocator or any payload; PUBLIC/managed aliases have none; the definer function has a locked `search_path` and no PUBLIC/runtime `EXECUTE`.
+- **Rollback smoke test:** a synthetic `BEGIN` → raw event INSERT (allocator advances, one map row) → `ROLLBACK` must leave the allocator unchanged and no orphan map row; the next committed insert reuses the position.
+- **Historical-backfill limitation:** the backfill is a deterministic, dense, best-available order by raw storage identity. It does **not** reconstruct pre-0005 commit order, which is unknowable from the stored schema (ADR-0036).
+
+A managed application of `0005` requires reviewed managed-readiness for **both `0004` and `0005`** (or one explicitly full-scope report) and explicit owner authorization for the complete `0002`→`0005` run.
 
 ### Stage 3.3.5 managed-readiness gate — SUPERSEDED; still NOT executed
 
 Stage 3.3.5 does **not** apply `0002` or `0003`. It records the concrete pre-conditions, evidence, and abort conditions for a **separate, owner-authorized** run, in [`stage-3.3.5-managed-readiness-report.md`](./stage-3.3.5-managed-readiness-report.md).
 
-> **That report's execution status is SUPERSEDED (2026-07-19).** Its `READY_FOR_SEPARATE_OWNER_AUTHORIZED_MANAGED_RUN` token is **revoked** and is no longer a valid basis for a managed run; the report now reads `SUPERSEDED_BLOCKED_PENDING_0004_MANAGED_READINESS`. Its **technical readiness evidence for `0002`/`0003` — checksums, preconditions, verification steps, abort conditions — remains valid historical evidence**; only the execution authorization is revoked, because the default migrator would now also apply `0004`.
+> **That report's execution status is SUPERSEDED (2026-07-19).** Its `READY_FOR_SEPARATE_OWNER_AUTHORIZED_MANAGED_RUN` token is **revoked** and is no longer a valid basis for a managed run; the report now reads `SUPERSEDED_BLOCKED_PENDING_0004_0005_MANAGED_READINESS`. Its **technical readiness evidence for `0002`/`0003` — checksums, preconditions, verification steps, abort conditions — remains valid historical evidence**; only the execution authorization is revoked, because the default migrator has **no target-version option** and would now also apply `0004` **and `0005`**. A managed run is authorized only after `0004` **and** `0005` receive reviewed managed-readiness (or one explicitly full-scope report) and explicit owner authorization for the complete `0002`→`0005` scope.
 
 Before any such run:
 
 - the report's checksums must match the on-disk migrations byte-for-byte (`0003` SHA-256 `407bea56…5b36ab0c`);
 - **both** deployment roles — `qf_jarvis_runtime` and `qf_jarvis_projection_runtime` — **must exist first with correctly rotated credentials**; any credential that has appeared in a shell, a log, or a config is compromised for this purpose and must be rotated;
-- `0004` must have its **own separately-reviewed managed-readiness report**, since the default migrator will apply it in the same run;
-- the run is authorized **explicitly by the owner** for the **full `0002`+`0003`+`0004` scope**, and **aborts** on any checksum mismatch, unexpected migration history, wrong database identity, wrong role, unexpected objects, or credential uncertainty.
+- `0004` AND `0005` must receive separately-reviewed managed-readiness, or one explicitly full-scope report, because the default migrator applies both in the same `0002`→`0005` run;
+- the run is authorized **explicitly by the owner** for the **full `0002`→`0005` scope**, and **aborts** on any checksum mismatch, unexpected migration history, wrong database identity, wrong role, unexpected objects, or credential uncertainty.
 
 **No managed `pnpm db:migrate` is currently authorized.** The readiness report does **not** claim any migration was applied, and its execution token is superseded and blocked.
 

@@ -1,28 +1,37 @@
 # Projection Authoring Guide (Stage 3.4)
 
-**Status:** Stage 3.4.1 (foundation) is **complete and merged via PR #19** (merge commit
-`580568dcb342b8017bec25e93d6f8396ac9b3ef0`). **Stage 3.4.2 (the internal projection registry) is
-implemented locally and pending independent review.** The runner, advisory lock, retries, and the
-first two projection handlers arrive in later Stage 3.4 slices (3.4.3–3.4.5); **Stage 3.4 as a whole
-remains incomplete**, and rebuild and Stage 3.5 (dead letters, replay, quarantine, unblock) remain
-later work. This guide is the contract a handler MUST satisfy, locked now so the foundation, the
-registry, and the handlers agree.
+**Status:** Stage 3.4.1 (foundation) is **complete and merged via PR #19**. **Stage 3.4.2 (the
+internal projection registry) is merged via PR #20** (merge commit
+`b1782fb85508144b3be96d0acd62a5e93722f64b`). **Stage 3.4.3 (gap-free, commit-ordered projection
+ordering — migration `0005`, ADR-0036) is implemented locally and pending independent review.** The
+runner and advisory lock **still do not exist**; the runner, retries, and the first two projection
+handlers arrive in later Stage 3.4 slices (3.4.4–3.4.5); **Stage 3.4 as a whole remains incomplete**,
+and rebuild and Stage 3.5 (dead letters, replay, quarantine, unblock) remain later work. This guide is
+the contract a handler MUST satisfy, locked now so the foundation, the registry, and the handlers agree.
 
 **Governing decisions:** [ADR-0021](../decisions/ADR-0021-processing-retries-dead-letters-and-replay.md),
 [ADR-0022](../decisions/ADR-0022-projections-ordering-and-rebuild-determinism.md),
 [ADR-0034](../decisions/ADR-0034-stage-3-4-projections-checkpoints-and-bounded-retries.md),
-[ADR-0035](../decisions/ADR-0035-stage-3-4-2-projection-registry.md).
+[ADR-0035](../decisions/ADR-0035-stage-3-4-2-projection-registry.md),
+[ADR-0036](../decisions/ADR-0036-stage-3-4-3-gap-free-projection-ordering.md).
 
-> **Managed database.** Managed PostgreSQL remains **`0001`-only**. Migrations `0002`, `0003` and
-> `0004` remain **unapplied**, and **no managed migration is authorized** (ADR-0034 §13a). Stage 3.4.2
-> adds **no migration**; there is no `0005`.
+> **Managed database.** Managed PostgreSQL remains **`0001`-only**. Migrations `0002`, `0003`, `0004`
+> and `0005` remain **unapplied**, and **no managed migration is authorized** (ADR-0034 §13a, ADR-0036).
+> Because the default migrator applies every pending migration, a run would apply `0002`→`0005`; there
+> is no `0006`.
+
+> **Projection cursor.** A handler's event carries the gap-free, commit-ordered **projection position**
+> (ADR-0036), never the raw storage identity `qf_jarvis.event.sequence`. The checkpoint advances one
+> `position` at a time (`= last_position + 1`); positions are dense and commit-ordered, so a benign
+> duplicate or aborted ingest cannot create a gap that stalls or skips a projection.
 
 ---
 
 ## What a projection is
 
-A projection is a **pure function of the immutable event log**, replayed in ingestion (`sequence`)
-order, that maintains one or more disposable `rm_*` read-model tables. It is **not** authoritative: it
+A projection is a **pure function of the immutable event log**, replayed in **projection-position**
+order (the gap-free, commit-ordered cursor of ADR-0036, NOT the raw storage `sequence`), that maintains
+one or more disposable `rm_*` read-model tables. It is **not** authoritative: it
 can be destroyed and rebuilt from the log at any time, and a rebuild must produce byte-identical rows
 (ADR-0022 §7).
 
@@ -33,10 +42,10 @@ A projection handler is `apply(client, event)`. It MUST:
 - be **deterministic** — the same event at the same read-model state produces the same write, every
   time and on every machine;
 - take an **immutable, already-frozen event** and read only from it (metadata for the Stage 3.4
-  models: `sequence`, `event_type`, `event_version`, `accepted_at`);
+  models: the gap-free `position` (ADR-0036, NOT the raw storage `sequence`), `eventType`, `eventVersion`, `acceptedAt`);
 - write **only** through the **same borrowed transaction client** it is given, and **only** to its own
   `rm_*` table(s);
-- use **deterministic, sequence-aware updates** — see "Idempotency is not free" below;
+- use **deterministic, position-aware updates** — see "Idempotency is not free" below;
 - be **explicitly versioned** — a change to a handler's logic is a new `version`, and a version bump
   destroys the derived state and rebuilds from `0` (ADR-0022 §6). There is no read-model migration.
 
@@ -59,7 +68,7 @@ A handler reaches the runner only through the **internal, immutable projection r
 - Your definition object is **copied and frozen**, and each of `name`, `version` and `apply` is read
   **exactly once**. Mutating it afterwards changes nothing, extra properties are dropped, and a
   getter cannot pass validation and then hand over a different value.
-- The `event` your handler receives is **metadata only** — `sequence`, `eventType`, `eventVersion`,
+- The `event` your handler receives is **metadata only** — `position` (the gap-free, commit-ordered projection cursor, ADR-0036, never the raw storage `sequence`), `eventType`, `eventVersion`,
   and `acceptedAt`. The acceptance instant is an **immutable canonical UTC string, not a `Date`**, so
   you cannot mutate shared state through it and two runs produce identical bytes. It is validated
   **semantically**, not just by shape: an impossible instant such as `2026-02-30T…` or `…T24:00:00…`
@@ -95,17 +104,18 @@ In particular:
   conflict KEY, nothing more. An aggregate upsert that INCREMENTS a counter
   (`... DO UPDATE SET event_count = event_count + 1`) is **not** idempotent: applying the same event
   twice increments the counter twice. `ON CONFLICT` alone provides **no** deduplication of the effect.
-- **The same event sequence must never increment an aggregate twice.** Correctness rests on the
-  checkpoint advancing exactly one sequence step per successful commit (the persistence boundary
-  enforces `last_sequence + 1`), so under normal operation each event is applied once. But a handler
-  must be written so that if the SAME event is ever re-presented (e.g. a rebuild, or a retry after an
-  ambiguous commit), it does not double-count.
-- **Where direct same-event reapplication must be harmless, the update must include an event-sequence
-  guard** — e.g. only apply when the event's sequence is strictly greater than the row's
-  `last_event_sequence`, so a re-presented lower-or-equal sequence is a no-op. Do not assume
+- **The same event position must never increment an aggregate twice.** Correctness rests on the
+  checkpoint advancing exactly one position step per successful commit (the persistence boundary
+  enforces `last_position + 1` over the gap-free projection position, ADR-0036), so under normal
+  operation each event is applied once. But a handler must be written so that if the SAME event is ever
+  re-presented (e.g. a rebuild, or a retry after an ambiguous commit), it does not double-count.
+- **Where direct same-event reapplication must be harmless, the update must include a projection-position
+  guard** — e.g. only apply when the event's position is strictly greater than the row's
+  `last_event_position`, so a re-presented lower-or-equal position is a no-op. Do not assume
   `ON CONFLICT` provides this.
 - **Handler SQL must not assume `ON CONFLICT` alone provides deduplication.** Determinism plus a
-  sequence-aware update is what makes a rebuild byte-identical (ADR-0022 §7).
+  **projection-position-aware** update (guarding on the gap-free `position`, ADR-0036, never the raw
+  storage `sequence`) is what makes a rebuild byte-identical (ADR-0022 §7).
 
 A projection handler MUST NOT:
 

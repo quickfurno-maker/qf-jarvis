@@ -5,7 +5,7 @@
  * fact. Like the checkpoint repository, every function operates on an **already-borrowed**
  * {@link DatabaseClient} and opens no transaction, takes no lock, and calls no handler.
  *
- * The row carries ONLY: the projection name/version, the event sequence, the attempt number, the
+ * The row carries ONLY: the projection name/version, the event position, the attempt number, the
  * outcome, an OPTIONAL safe error code from the closed vocabulary, and injected timestamps. It can
  * NEVER carry a raw {@link Error}, an exception message, a stack trace, a payload fragment, a
  * correlation/subject id, SQL, or any free text — the API only accepts a {@link ProjectionSafeErrorCode},
@@ -53,7 +53,7 @@ interface RawAttemptRow {
 export interface ProjectionAttemptInput {
   readonly name: ProjectionName;
   readonly version: number;
-  readonly eventSequence: bigint;
+  readonly eventPosition: bigint;
   readonly attemptNumber: number;
   readonly outcome: ProjectionAttemptOutcome;
   readonly safeErrorCode: ProjectionSafeErrorCode | null;
@@ -83,8 +83,8 @@ export async function appendAttempt(
   if (!Number.isInteger(input.version) || input.version <= 0) {
     throw new ProjectionInputError('projection version must be a positive integer.');
   }
-  if (typeof input.eventSequence !== 'bigint' || input.eventSequence <= 0n) {
-    throw new ProjectionInputError('event sequence must be a positive integer sequence.');
+  if (typeof input.eventPosition !== 'bigint' || input.eventPosition <= 0n) {
+    throw new ProjectionInputError('event position must be a positive integer position.');
   }
   if (
     !Number.isInteger(input.attemptNumber) ||
@@ -116,14 +116,14 @@ export async function appendAttempt(
 
   const result = await client.query<{ sequence: string }>(
     `INSERT INTO qf_jarvis.projection_attempt
-       (projection_name, projection_version, event_sequence, attempt_number, outcome,
+       (projection_name, projection_version, event_position, attempt_number, outcome,
         safe_error_code, started_at, completed_at)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING sequence`,
     [
       input.name,
       input.version,
-      input.eventSequence.toString(),
+      input.eventPosition.toString(),
       input.attemptNumber,
       input.outcome,
       input.safeErrorCode,
@@ -172,22 +172,22 @@ export async function readAttemptsForEvent(
   identity: {
     readonly name: ProjectionName;
     readonly version: number;
-    readonly eventSequence: bigint;
+    readonly eventPosition: bigint;
   },
 ): Promise<readonly ProjectionAttemptRow[]> {
   toProjectionName(identity.name);
   if (!Number.isInteger(identity.version) || identity.version <= 0) {
     throw new ProjectionInputError('projection version must be a positive integer.');
   }
-  if (typeof identity.eventSequence !== 'bigint' || identity.eventSequence <= 0n) {
-    throw new ProjectionInputError('event sequence must be a positive integer sequence.');
+  if (typeof identity.eventPosition !== 'bigint' || identity.eventPosition <= 0n) {
+    throw new ProjectionInputError('event position must be a positive integer position.');
   }
   const result = await client.query<RawAttemptRow>(
     `SELECT sequence, attempt_number, outcome, safe_error_code, started_at, completed_at, recorded_at
        FROM qf_jarvis.projection_attempt
-     WHERE projection_name = $1 AND projection_version = $2 AND event_sequence = $3
+     WHERE projection_name = $1 AND projection_version = $2 AND event_position = $3
      ORDER BY attempt_number ASC`,
-    [identity.name, identity.version, identity.eventSequence.toString()],
+    [identity.name, identity.version, identity.eventPosition.toString()],
   );
   return result.rows.map((raw) => {
     if (!isProjectionAttemptOutcome(raw.outcome)) {

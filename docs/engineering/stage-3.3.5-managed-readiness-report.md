@@ -4,19 +4,19 @@
 >
 > **This report's execution status is SUPERSEDED. Its former token `READY_FOR_SEPARATE_OWNER_AUTHORIZED_MANAGED_RUN` is NO LONGER a valid basis for any managed run. NO managed `pnpm db:migrate` is currently authorized.**
 >
-> **Why:** Stage 3.4.1 added `0004_projection_foundation.sql` to the default migration directory. `db:migrate` applies **every pending migration, in order** — it has **no target-version option and cannot be asked to stop after `0003`**. The next managed run would therefore apply **`0002`, then `0003`, then `0004`** — a scope this report never reviewed and never covered.
+> **Why:** Stage 3.4.1 added `0004_projection_foundation.sql` to the default migration directory. `db:migrate` applies **every pending migration, in order** — it has **no target-version option and cannot be asked to stop after `0003`**. The next managed run would therefore apply **`0002`, then `0003`, then `0004`, then `0005`** — a scope this report never reviewed and never covered.
 >
 > **The technical readiness evidence below for `0002`/`0003` remains valid HISTORICAL evidence** — the checksums, preconditions, verification steps, and abort conditions are unchanged and still correct for those two migrations. **Only the execution authorization status is revoked.**
 >
-> **Before any future managed run:** `0004` must receive its **own separately-reviewed managed-readiness report** and **explicit owner authorization** covering the full `0002`+`0003`+`0004` scope; and **both** deployment roles — `qf_jarvis_runtime` **and** `qf_jarvis_projection_runtime` — must exist with correctly rotated credentials.
+> **Before any future managed run:** `0004` AND `0005` must receive separately-reviewed managed-readiness (or one explicitly full-scope report) and **explicit owner authorization** covering the full `0002`+`0003`+`0004`+`0005` scope; and **both** deployment roles — `qf_jarvis_runtime` **and** `qf_jarvis_projection_runtime` — must exist with correctly rotated credentials.
 >
-> **Managed PostgreSQL remains `0001`-only.** No managed readiness or authorization for `0004` is claimed anywhere.
+> **Managed PostgreSQL remains `0001`-only.** No managed readiness or authorization for `0004` or `0005` is claimed anywhere.
 
-**Status:** `SUPERSEDED_BLOCKED_PENDING_0004_MANAGED_READINESS` (was: `READY_FOR_SEPARATE_OWNER_AUTHORIZED_MANAGED_RUN`, revoked 2026-07-19)
+**Status:** `SUPERSEDED_BLOCKED_PENDING_0004_0005_MANAGED_READINESS` (was: `READY_FOR_SEPARATE_OWNER_AUTHORIZED_MANAGED_RUN`, revoked 2026-07-19)
 **Date:** 2026-07-18 · **Superseded:** 2026-07-19
 **Scope (as reviewed):** Managed application of migrations **`0002`** then **`0003`** only. **This scope is no longer achievable with the default migrator — see the banner above.**
 
-> **This report documents readiness. It does NOT authorize, execute, or record a managed migration.** No managed database was contacted during Stage 3.3.5. Managed PostgreSQL continues to carry **only migration `0001`**; `0002`, `0003` and `0004` remain **unapplied**. This report contains **no password, connection string, or secret**.
+> **This report documents readiness. It does NOT authorize, execute, or record a managed migration.** No managed database was contacted during Stage 3.3.5. Managed PostgreSQL continues to carry **only migration `0001`**; `0002`, `0003`, `0004` and `0005` remain **unapplied**. This report contains **no password, connection string, or secret**.
 
 ---
 
@@ -29,7 +29,7 @@ Exactly two migrations, applied **in this order**, each in its own transaction u
 
 No other migration is in scope **for this report**. `0001_event_log.sql` is already applied to the managed database and must **not** be re-applied.
 
-> **Superseded (2026-07-19).** When this report was written there was **no `0004`**. `0004_projection_foundation.sql` now exists in the default migration directory, and `db:migrate` applies **all** pending migrations with no way to stop after `0003`. This two-migration scope is therefore **not executable as written**, and the run is blocked until `0004` has its own managed-readiness review and explicit owner authorization.
+> **Superseded (2026-07-19).** When this report was written there was **no `0004` and no `0005`**. Both `0004_projection_foundation.sql` and `0005_projection_event_positions.sql` now exist in the default migration directory, and `db:migrate` applies **all** pending migrations with no way to stop after `0003`. This original two-migration scope is therefore **not executable as written, and its authorization is inoperative**; the run is blocked until **`0004` AND `0005`** receive reviewed managed-readiness (or one explicitly full-scope report) and explicit owner authorization for the full `0002`→`0005` scope.
 
 ## 2. Migration filenames and SHA-256 checksums
 
@@ -46,8 +46,8 @@ Only versions **2** and **3** are applied by the authorized run; version **1**'s
 ## 3. Current managed state
 
 - Migration **`0001` applied**. Managed `qf_jarvis.schema_migration` history is expected to read exactly `[0001_event_log.sql]`.
-- Migrations **`0002` and `0003` NOT applied**.
-- **Managed application status: NOT AUTHORIZED / NOT EXECUTED** in Stage 3.3.5.
+- Migrations **`0002`, `0003`, `0004` and `0005` NOT applied** (`0004` and `0005` were added after this report — see the banner). The managed database remains `0001`-only.
+- **Managed application status: NOT AUTHORIZED / NOT EXECUTED** in Stage 3.3.5. The **current** gate requires reviewed managed-readiness for **both `0004` and `0005`** (or one explicitly full-scope report) and explicit owner authorization for the full `0002`→`0005` run.
 
 ## 4. Credential-rotation requirement (before any future run)
 
@@ -55,7 +55,7 @@ Any managed **runtime** or **admin** database credential that has been exposed �
 
 ## 5. Owner-authorization gate
 
-The managed run proceeds **only** on an explicit, recorded authorization from the owner for **this exact scope** (`0002` then `0003`). Approval of this readiness report is **not** authorization to apply the migrations. Approval of one stage is not authorization for the next.
+This was the **original reviewed scope** (`0002` then `0003`), recorded here as **historical evidence**. **That original two-migration authorization is INOPERATIVE as of 2026-07-19** (see the banner): the default migrator has no target-version option, so the next managed run would apply `0002`→`0005`. The **current** gate requires reviewed managed-readiness for **both `0004` and `0005`** (or one full-scope report) and explicit owner authorization for the **full `0002`→`0005`** run. Approval of this readiness report is **not** authorization to apply the migrations. Approval of one stage is not authorization for the next.
 
 ## 6. Required preflight evidence (captured before applying)
 
@@ -129,6 +129,6 @@ The authorized run must produce, outside the repository, an evidence bundle cont
 
 Local and CI PostgreSQL 17 verification is complete; the migrations are byte-for-byte stable at the checksums above; the pre-conditions, verification steps, and abort conditions for a managed application are specified. **That technical readiness evidence stands as historical record.**
 
-**The execution conclusion does not.** This report originally concluded `READY_FOR_SEPARATE_OWNER_AUTHORIZED_MANAGED_RUN`; **that token is revoked and superseded as of 2026-07-19**, because the default migrator applies every pending migration and the next managed run would now apply `0002`, `0003` **and `0004`**. The report's current status is **`SUPERSEDED_BLOCKED_PENDING_0004_MANAGED_READINESS`**.
+**The execution conclusion does not.** This report originally concluded `READY_FOR_SEPARATE_OWNER_AUTHORIZED_MANAGED_RUN`; **that token is revoked and superseded as of 2026-07-19**, because the default migrator applies every pending migration and the next managed run would now apply `0002`, `0003`, `0004` **and `0005`**. The report's current status is **`SUPERSEDED_BLOCKED_PENDING_0004_0005_MANAGED_READINESS`**.
 
-**No managed `pnpm db:migrate` is authorized.** It stays blocked until `0004` receives its own separately-reviewed managed-readiness report and explicit owner authorization for the full `0002`+`0003`+`0004` scope, and both `qf_jarvis_runtime` and `qf_jarvis_projection_runtime` exist with correctly rotated credentials. This report does **not** claim any migration was applied; no managed database was contacted; managed PostgreSQL remains `0001`-only.
+**No managed `pnpm db:migrate` is authorized.** It stays blocked until `0004` AND `0005` receive reviewed managed-readiness (or one full-scope report) and explicit owner authorization for the full `0002`+`0003`+`0004`+`0005` scope, and both `qf_jarvis_runtime` and `qf_jarvis_projection_runtime` exist with correctly rotated credentials. This report does **not** claim any migration was applied; no managed database was contacted; managed PostgreSQL remains `0001`-only.

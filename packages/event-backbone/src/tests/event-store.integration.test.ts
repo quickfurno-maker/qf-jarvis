@@ -1132,7 +1132,7 @@ describe('the immutability controls survive migrations 0002 and 0003', () => {
   });
 });
 
-describe('the runner is idempotent with 0001, 0002 and 0003 applied', () => {
+describe('the runner is idempotent with 0001 through 0005 applied', () => {
   it('applies zero additional migrations on a re-run, with history 0001, 0002, 0003, 0004', async () => {
     const result = await runMigrations(pool, defaultMigrationsDirectory());
 
@@ -1142,6 +1142,7 @@ describe('the runner is idempotent with 0001, 0002 and 0003 applied', () => {
       '0002_event_runtime_grants.sql',
       '0003_ingestion_rejection_and_event_conflict.sql',
       '0004_projection_foundation.sql',
+      '0005_projection_event_positions.sql',
     ]);
   });
 });
@@ -1255,7 +1256,7 @@ describe('migration 0002 — comprehensive stale-grant remediation', () => {
       expect(before?.seq).toBe(true);
       expect(before?.fn).toBe(true);
 
-      // 4. Apply the full directory — 0002, 0003, then 0004 run for the first time; each does a
+      // 4. Apply the full directory — 0002, 0003, 0004, then 0005 run for the first time; each does a
       //    comprehensive clean-slate REVOKE. 0003 is the final grant authority for the ingestion
       //    role; 0004 grants only the SEPARATE projection role and leaves the ingestion role's
       //    least-privilege set (and this stale-grant remediation) untouched.
@@ -1264,6 +1265,7 @@ describe('migration 0002 — comprehensive stale-grant remediation', () => {
         '0002_event_runtime_grants.sql',
         '0003_ingestion_rejection_and_event_conflict.sql',
         '0004_projection_foundation.sql',
+        '0005_projection_event_positions.sql',
       ]);
 
       // 5. Every stale direct privilege is gone. ALL schema_migration privileges, not only SELECT.

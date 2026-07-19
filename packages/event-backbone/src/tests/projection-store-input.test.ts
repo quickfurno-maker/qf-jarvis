@@ -21,6 +21,7 @@ import {
   appendSucceededAttempt,
   readAttemptsForEvent,
 } from '../projections/attempt-store.js';
+import { readEventAtPosition } from '../projections/projection-event-reader.js';
 import {
   ProjectionInputError,
   ProjectionStoredDataError,
@@ -53,18 +54,18 @@ describe('checkpoint repository — input validation (no SQL for invalid input)'
       advanceCheckpointOnSuccess(noSql, {
         name: NAME,
         version: -1,
-        processedEventSequence: 1n,
+        processedEventPosition: 1n,
         now: NOW,
       }),
     ).rejects.toThrow(ProjectionInputError);
   });
 
-  it('rejects a non-positive processed sequence', async () => {
+  it('rejects a non-positive processed position', async () => {
     await expect(
       advanceCheckpointOnSuccess(noSql, {
         name: NAME,
         version: 1,
-        processedEventSequence: 0n,
+        processedEventPosition: 0n,
         now: NOW,
       }),
     ).rejects.toThrow(ProjectionInputError);
@@ -76,7 +77,7 @@ describe('checkpoint repository — input validation (no SQL for invalid input)'
         recordCheckpointRetryPending(noSql, {
           name: NAME,
           version: 1,
-          failedEventSequence: 1n,
+          failedEventPosition: 1n,
           failedAttemptCount: count,
           safeErrorCode: 'projection-handler-failed',
           nextAttemptAt: NOW,
@@ -91,7 +92,7 @@ describe('checkpoint repository — input validation (no SQL for invalid input)'
       recordCheckpointRetryPending(noSql, {
         name: NAME,
         version: 1,
-        failedEventSequence: 1n,
+        failedEventPosition: 1n,
         failedAttemptCount: 1,
         // @ts-expect-error — an arbitrary code is not a ProjectionSafeErrorCode
         safeErrorCode: 'boom: raw db message',
@@ -103,7 +104,7 @@ describe('checkpoint repository — input validation (no SQL for invalid input)'
       recordCheckpointBlocked(noSql, {
         name: NAME,
         version: 1,
-        blockedSequence: 1n,
+        blockedPosition: 1n,
         // @ts-expect-error — an arbitrary code is not a ProjectionSafeErrorCode
         safeErrorCode: 'ERROR: deadlock detected',
         now: NOW,
@@ -122,7 +123,7 @@ describe('attempt repository — input validation (no SQL for invalid input)', (
   const base = {
     name: NAME,
     version: 1,
-    eventSequence: 1n,
+    eventPosition: 1n,
     startedAt: NOW,
     completedAt: NOW,
   } as const;
@@ -175,12 +176,12 @@ describe('attempt repository — input validation (no SQL for invalid input)', (
     ).rejects.toThrow(ProjectionSafeErrorCodeError);
   });
 
-  it('rejects a non-positive version and event sequence', async () => {
+  it('rejects a non-positive version and event position', async () => {
     await expect(
       appendSucceededAttempt(noSql, { ...base, version: 0, attemptNumber: 1 }),
     ).rejects.toThrow(ProjectionInputError);
     await expect(
-      appendSucceededAttempt(noSql, { ...base, eventSequence: 0n, attemptNumber: 1 }),
+      appendSucceededAttempt(noSql, { ...base, eventPosition: 0n, attemptNumber: 1 }),
     ).rejects.toThrow(ProjectionInputError);
   });
 });
@@ -198,23 +199,23 @@ describe('readAttemptsForEvent — input validation and fail-closed stored-value
 
   it('rejects a non-positive / negative version before SQL', async () => {
     await expect(
-      readAttemptsForEvent(noSql, { name: NAME, version: 0, eventSequence: 1n }),
+      readAttemptsForEvent(noSql, { name: NAME, version: 0, eventPosition: 1n }),
     ).rejects.toThrow(ProjectionInputError);
     await expect(
-      readAttemptsForEvent(noSql, { name: NAME, version: -3, eventSequence: 1n }),
+      readAttemptsForEvent(noSql, { name: NAME, version: -3, eventPosition: 1n }),
     ).rejects.toThrow(ProjectionInputError);
   });
 
-  it('rejects a non-positive event sequence before SQL', async () => {
+  it('rejects a non-positive event position before SQL', async () => {
     await expect(
-      readAttemptsForEvent(noSql, { name: NAME, version: 1, eventSequence: 0n }),
+      readAttemptsForEvent(noSql, { name: NAME, version: 1, eventPosition: 0n }),
     ).rejects.toThrow(ProjectionInputError);
   });
 
   it('fails closed on a malformed stored outcome', async () => {
     const client = rowsClient([{ ...wellFormedRow, outcome: 'dead-letter' }]);
     await expect(
-      readAttemptsForEvent(client, { name: NAME, version: 1, eventSequence: 1n }),
+      readAttemptsForEvent(client, { name: NAME, version: 1, eventPosition: 1n }),
     ).rejects.toThrow(ProjectionStoredDataError);
   });
 
@@ -223,15 +224,142 @@ describe('readAttemptsForEvent — input validation and fail-closed stored-value
       { ...wellFormedRow, outcome: 'failed', safe_error_code: 'ERROR: raw leaked text' },
     ]);
     await expect(
-      readAttemptsForEvent(client, { name: NAME, version: 1, eventSequence: 1n }),
+      readAttemptsForEvent(client, { name: NAME, version: 1, eventPosition: 1n }),
     ).rejects.toThrow(ProjectionStoredDataError);
   });
 
   it('parses a well-formed stored row', async () => {
     const client = rowsClient([wellFormedRow]);
-    const rows = await readAttemptsForEvent(client, { name: NAME, version: 1, eventSequence: 1n });
+    const rows = await readAttemptsForEvent(client, { name: NAME, version: 1, eventPosition: 1n });
     expect(rows).toHaveLength(1);
     expect(rows[0]?.outcome).toBe('succeeded');
     expect(rows[0]?.safeErrorCode).toBeNull();
+  });
+});
+
+describe('readEventAtPosition — input validation and fail-closed stored-value parsing', () => {
+  const wellFormed = {
+    position: '7',
+    event_type: 'qf.reader.probe',
+    event_version: 3,
+    accepted_at: NOW,
+  };
+
+  it('rejects a non-positive / negative input position before SQL', async () => {
+    await expect(readEventAtPosition(noSql, 0n)).rejects.toThrow(ProjectionInputError);
+    await expect(readEventAtPosition(noSql, -5n)).rejects.toThrow(ProjectionInputError);
+  });
+
+  it('returns null when no row maps to the position', async () => {
+    const client = rowsClient([]);
+    await expect(readEventAtPosition(client, 1n)).resolves.toBeNull();
+  });
+
+  it.each([
+    ['boolean true', true],
+    ['a number', 7],
+    ['empty string', ''],
+    ['whitespace', ' 7 '],
+    ['zero', '0'],
+    ['negative', '-1'],
+    ['leading plus', '+1'],
+    ['leading zero', '07'],
+    ['decimal notation', '7.0'],
+    ['hex', '0x7'],
+  ])('fails closed on a stored position that is %s', async (_label, position) => {
+    const client = rowsClient([{ ...wellFormed, position }]);
+    await expect(readEventAtPosition(client, 7n)).rejects.toThrow(ProjectionStoredDataError);
+  });
+
+  it('fails closed when the returned position differs from the requested one', async () => {
+    const client = rowsClient([{ ...wellFormed, position: '8' }]);
+    await expect(readEventAtPosition(client, 7n)).rejects.toThrow(ProjectionStoredDataError);
+  });
+
+  it.each([
+    ['empty', ''],
+    ['over 64 chars', 'a'.repeat(65)],
+    ['uppercase', 'Qf.Reader'],
+    ['spaces', 'qf reader'],
+    ['leading separator', '.qf.reader'],
+    ['trailing separator', 'qf.reader.'],
+    ['doubled separator', 'qf..reader'],
+    ['underscore', 'qf_reader'],
+    ['non-string', 42],
+  ])('fails closed on a stored event type that is %s', async (_label, eventType) => {
+    const client = rowsClient([{ ...wellFormed, event_type: eventType }]);
+    await expect(readEventAtPosition(client, 7n)).rejects.toThrow(ProjectionStoredDataError);
+  });
+
+  it.each([
+    ['zero', 0],
+    ['negative', -1],
+    ['a fraction', 1.5],
+    ['a string', '3'],
+    ['NaN', Number.NaN],
+    ['Infinity', Number.POSITIVE_INFINITY],
+    ['an unsafe integer', Number.MAX_SAFE_INTEGER + 2],
+    ['above 1000', 1001],
+  ])('fails closed on a stored event version that is %s', async (_label, version) => {
+    const client = rowsClient([{ ...wellFormed, event_version: version }]);
+    await expect(readEventAtPosition(client, 7n)).rejects.toThrow(ProjectionStoredDataError);
+  });
+
+  it('fails closed on a malformed stored acceptance instant', async () => {
+    const client = rowsClient([{ ...wellFormed, accepted_at: new Date(Number.NaN) }]);
+    await expect(readEventAtPosition(client, 7n)).rejects.toThrow(ProjectionStoredDataError);
+  });
+
+  it('leaks no stored marker into message, code, stack, cause, or serialized properties', async () => {
+    const MARKER = 'READER-SECRET-MARKER-4c7e';
+    const client = rowsClient([{ ...wellFormed, event_type: MARKER }]);
+    let caught: unknown;
+    try {
+      await readEventAtPosition(client, 7n);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(ProjectionStoredDataError);
+    const error = caught as Error & { code?: string; cause?: unknown };
+    const rendered = `${error.message} ${error.code ?? ''} ${error.stack ?? ''} ${JSON.stringify(
+      Object.getOwnPropertyNames(error).map(
+        (k) => (error as unknown as Record<string, unknown>)[k],
+      ),
+    )}`;
+    expect(rendered).not.toContain(MARKER);
+    expect(error.cause).toBeUndefined();
+    expect(JSON.stringify(error)).not.toContain(MARKER);
+  });
+
+  it.each([
+    ['minimum version and short type', { event_type: 'a', event_version: 1 }],
+    [
+      'maximum version and dotted type',
+      { event_type: 'qf.recommendation.created', event_version: 1000 },
+    ],
+    ['hyphen-and-digit type', { event_type: 'qf-2.x-1', event_version: 42 }],
+  ])('parses valid boundary values (%s)', async (_label, overrides) => {
+    const client = rowsClient([{ ...wellFormed, ...overrides }]);
+    const event = await readEventAtPosition(client, 7n);
+    expect(event?.eventType).toBe(overrides.event_type);
+    expect(event?.eventVersion).toBe(overrides.event_version);
+  });
+
+  it('parses a well-formed stored row into a frozen metadata-only event', async () => {
+    const client = rowsClient([wellFormed]);
+    const event = await readEventAtPosition(client, 7n);
+    expect(event).not.toBeNull();
+    expect(Object.isFrozen(event)).toBe(true);
+    expect(event?.position).toBe(7n);
+    expect(event?.eventType).toBe('qf.reader.probe');
+    expect(event?.eventVersion).toBe(3);
+    expect(typeof event?.acceptedAt).toBe('string');
+    expect(event as object).not.toHaveProperty('sequence');
+    expect(Object.keys(event as object).sort()).toEqual([
+      'acceptedAt',
+      'eventType',
+      'eventVersion',
+      'position',
+    ]);
   });
 });
