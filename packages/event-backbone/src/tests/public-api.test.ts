@@ -111,6 +111,42 @@ describe('the Stage 3.3.3 rejection repository is public; the conflict repositor
   });
 });
 
+describe('the Stage 3.4.1 projection foundation is INTERNAL — no root export yet', () => {
+  it('exports no Stage 3.4 projection symbol from the package root', () => {
+    // Stage 3.4.1 ships schema, vocabulary and the checkpoint/attempt repositories, all internal.
+    // No public runtime surface is added in this slice (ADR-0034 §12).
+    for (const symbol of [
+      'toProjectionName',
+      'isProjectionName',
+      'ProjectionName',
+      'PROJECTION_STATUSES',
+      'PROJECTION_ATTEMPT_OUTCOMES',
+      'MAX_PROJECTION_ATTEMPTS',
+      'PROJECTION_SAFE_ERROR_CODES',
+      'assertProjectionSafeErrorCode',
+      'createCheckpointIfAbsent',
+      'readCheckpoint',
+      'readCheckpointForUpdate',
+      'advanceCheckpointOnSuccess',
+      'recordCheckpointRetryPending',
+      'recordCheckpointBlocked',
+      'appendAttempt',
+      'appendSucceededAttempt',
+      'appendFailedAttempt',
+      'readAttemptsForEvent',
+    ]) {
+      expect(publicApi).not.toHaveProperty(symbol);
+    }
+  });
+
+  it('exposes no projection role name, password, or secret at the package root', () => {
+    const serialized = JSON.stringify(Object.keys(publicApi));
+    expect(serialized).not.toContain('qf_jarvis_projection_runtime');
+    expect(serialized.toLowerCase()).not.toContain('password');
+    expect(serialized.toLowerCase()).not.toContain('secret');
+  });
+});
+
 describe('no package export subpath can reach the migration runner', () => {
   it('publishes exactly one entry point, ".", and no deep subpaths', async () => {
     const { exports } = await readPackageManifest();
