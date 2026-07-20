@@ -3,17 +3,24 @@
 **Status:** Stage 3.4.1 (foundation) is **complete and merged via PR #19**. **Stage 3.4.2 (the
 internal projection registry) is merged via PR #20** (merge commit
 `b1782fb85508144b3be96d0acd62a5e93722f64b`). **Stage 3.4.3 (gap-free, commit-ordered projection
-ordering — migration `0005`, ADR-0036) is implemented locally and pending independent review.** The
-runner and advisory lock **still do not exist**; the runner, retries, and the first two projection
-handlers arrive in later Stage 3.4 slices (3.4.4–3.4.5); **Stage 3.4 as a whole remains incomplete**,
-and rebuild and Stage 3.5 (dead letters, replay, quarantine, unblock) remain later work. This guide is
-the contract a handler MUST satisfy, locked now so the foundation, the registry, and the handlers agree.
+ordering — migration `0005`, ADR-0036) is complete and merged via PR #21** (merge commit
+`f6123c1e66a596efc2742ed281c7d6d8d2aa5f4e`). **Stage 3.4.4 (the internal projection runner
+`runProjectionOnce` — advisory lock, deterministic equal-jitter backoff, the seven frozen outcomes,
+checkpoint/attempt reconciliation, guarded tri-state SQLSTATE classification, and
+transaction-state-tracked client disposal; ADR-0037, code-only, no new migration) is implemented
+locally and pending independent review.** The
+runner and advisory lock **now exist**; a worker/scheduler to drive the runner and the first two
+projection handlers arrive in the later Stage 3.4 slice (3.4.5); **Stage 3.4 as a whole remains
+incomplete**, and rebuild and Stage 3.5 (dead letters, replay, quarantine, unblock) remain later work.
+This guide is the contract a handler MUST satisfy, locked now so the foundation, the registry, the
+runner, and the handlers agree.
 
 **Governing decisions:** [ADR-0021](../decisions/ADR-0021-processing-retries-dead-letters-and-replay.md),
 [ADR-0022](../decisions/ADR-0022-projections-ordering-and-rebuild-determinism.md),
 [ADR-0034](../decisions/ADR-0034-stage-3-4-projections-checkpoints-and-bounded-retries.md),
 [ADR-0035](../decisions/ADR-0035-stage-3-4-2-projection-registry.md),
-[ADR-0036](../decisions/ADR-0036-stage-3-4-3-gap-free-projection-ordering.md).
+[ADR-0036](../decisions/ADR-0036-stage-3-4-3-gap-free-projection-ordering.md),
+[ADR-0037](../decisions/ADR-0037-stage-3-4-4-projection-runner.md).
 
 > **Managed database.** Managed PostgreSQL remains **`0001`-only**. Migrations `0002`, `0003`, `0004`
 > and `0005` remain **unapplied**, and **no managed migration is authorized** (ADR-0034 §13a, ADR-0036).
@@ -135,12 +142,38 @@ A projection handler MUST NOT:
 ## Failure semantics (what the runner does, so a handler author knows what to expect)
 
 - A handler **rejects deterministically** (throws) when it cannot apply an event. The runner rolls the
-  handler's writes back to the SAVEPOINT, records a bounded `failed` attempt with a **closed safe
-  error code** (never the exception text), and either schedules a retry (`next_attempt_at`) or, on the
-  fifth failure, **blocks** the projection at that event. No later event is processed or skipped
-  (ADR-0021 §3).
-- A handler must therefore fail with information the runner can classify into a safe code — never with
-  data that must be stored. **No raw error, message, or stack trace is ever persisted.**
+  handler's writes back to the SAVEPOINT, records **one** bounded `failed` attempt with a **closed safe
+  error code** (`projection-handler-failed`, never the exception text), and either schedules a retry
+  (`next_attempt_at`) or, on the **fifth** failure, **blocks** the projection at that event. No later
+  event is processed or skipped (ADR-0021 §3, ADR-0037).
+- **The retry maximum is five, fixed.** It is a repository constant (dependency-injectable in tests),
+  **never** environment-configurable (ADR-0034 §6). There is **one** handler-failure bucket, not a
+  `RetryableError`/`TerminalError` split: the runner classifies by inspecting the caught value's
+  SQLSTATE as a closed **tri-state** (ADR-0037 §6). A value with **no own `code`** (an ordinary `Error`
+  or a thrown primitive), or one with a well-formed **handler-side** SQLSTATE, is this deterministic
+  failure. Do not author against `RetryableError`/`TerminalError` — those are design vocabulary and
+  **not implemented**.
+- **Retry timing is deterministic and persisted.** The backoff is deterministic equal-jitter (base 1s
+  ×8, cap 5m) computed as a pure function of the **validated** `(name, version, position, failure)` and
+  stored in `next_attempt_at` — there is no `Math.random`, no wall clock, and no scheduler yet. Two
+  processes and a restart compute the same schedule (ADR-0037 §3).
+- An **infrastructure** failure — a recognised infrastructure SQLSTATE, a well-formed-but-unrecognised
+  SQLSTATE, **or an unreadable `code`** (an accessor/getter, a non-string, or a malformed value) — is
+  **not** a handler rejection: the runner records **no** attempt, rolls the whole transaction back, and
+  throws. The classifier inspects any **property-bearing** thrown value — an **object or a function** —
+  so throwing a function with a hidden `code`, or hiding your `code` behind a getter, does **not** make
+  you a deterministic failure: an accessor is treated as unreadable (conservative infrastructure), the
+  getter is never invoked, and a revoked object/function `Proxy` fails closed without leaking a raw
+  exception. A thrown handler value is always **discarded**, never persisted, wrapped as `cause`, or
+  allowed to dictate its own classification. Fail with information the runner can classify into a safe
+  code, never with data that must be stored. **No raw error, message, or stack trace is ever persisted.**
+- **Invalid invocation input is a caller error, not a runner outcome.** A non-canonical injected `now`
+  (or, in the backoff derivation, a malformed name or unsafe version) fails closed with the repository's
+  `ProjectionInputError` **before** a client is acquired — it is a programming error, distinct from the
+  five operational runner-failure codes (ADR-0037 §8).
+- A **blocked** projection is **observation-only** in Stage 3.4 (ADR-0034 §8): it is queryable but has
+  no auto-unblock and no manual mutation. A dead-letter table, quarantine ledger, and replay/unblock —
+  and any notion of a "terminal" outcome beyond the fifth-failure block — are **Stage 3.5**.
 
 ## Data minimization
 
