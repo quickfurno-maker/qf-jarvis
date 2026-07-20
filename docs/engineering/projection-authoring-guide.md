@@ -7,13 +7,15 @@ ordering — migration `0005`, ADR-0036) is complete and merged via PR #21** (me
 `f6123c1e66a596efc2742ed281c7d6d8d2aa5f4e`). **Stage 3.4.4 (the internal projection runner
 `runProjectionOnce` — advisory lock, deterministic equal-jitter backoff, the seven frozen outcomes,
 checkpoint/attempt reconciliation, guarded tri-state SQLSTATE classification, and
-transaction-state-tracked client disposal; ADR-0037, code-only, no new migration) is implemented
-locally and pending independent review.** The
-runner and advisory lock **now exist**; a worker/scheduler to drive the runner and the first two
-projection handlers arrive in the later Stage 3.4 slice (3.4.5); **Stage 3.4 as a whole remains
-incomplete**, and rebuild and Stage 3.5 (dead letters, replay, quarantine, unblock) remain later work.
+transaction-state-tracked client disposal; ADR-0037, code-only, no new migration) is COMPLETE and
+merged via PR #22 (merge commit `d7c9fbfb286040b7d8f32f927d7185d92d46c52f`).** **Stage 3.4.5A (the
+internal projection worker/scheduler `runProjectionWorker` — deterministic traversal, isolation, no
+busy-spin, bounded injected time/sleep, graceful shutdown; ADR-0038, code-only, no new migration)
+exists on the feature branch `stage-3.4.5a-projection-worker` and remains pending review.** The runner, advisory lock, and worker/scheduler **now exist**; the first two
+real projection handlers arrive in Stage 3.4.5B and rebuild in Stage 3.4.5C; **Stage 3.4 as a whole
+remains incomplete**, and Stage 3.5 (dead letters, replay, quarantine, unblock) remains later work.
 This guide is the contract a handler MUST satisfy, locked now so the foundation, the registry, the
-runner, and the handlers agree.
+runner, the worker, and the handlers agree.
 
 **Governing decisions:** [ADR-0021](../decisions/ADR-0021-processing-retries-dead-letters-and-replay.md),
 [ADR-0022](../decisions/ADR-0022-projections-ordering-and-rebuild-determinism.md),
@@ -95,8 +97,9 @@ length is rejected **before any element is read**, as a construction-time denial
 configuration safeguard. Phase 3 has two proof projections, so the bound never constrains legitimate
 use. It is an internal repository constant — not exported from the package root.
 
-**No populated registry exists yet.** The two proof handlers — `rm_event_type_activity` and
-`rm_daily_event_acceptance` — are Stage 3.4.5.
+**No populated registry exists yet.** The internal worker/scheduler (Stage 3.4.5A) drives whatever
+registry it is given, but the two real proof handlers — `rm_event_type_activity` and
+`rm_daily_event_acceptance` — and the real registry that contains them are Stage 3.4.5B.
 
 ## Idempotency is not free
 
