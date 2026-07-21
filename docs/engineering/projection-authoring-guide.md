@@ -14,8 +14,8 @@ busy-spin, bounded injected time/sleep, graceful shutdown; ADR-0038, code-only, 
 is COMPLETE and merged via PR #23 (merge commit `9d271bbae3121f49f78a74ff6abb3969dcfb7fc6`).**
 **Stage 3.4.5B (the two real read-model handlers `event-type-activity` and `daily-event-acceptance`,
 the internal production registry composition, and `apps/worker` activation; code-only, no migration,
-no package-root export) is implemented locally on branch `stage-3.4.5b-projection-handlers` and pending
-owner review.** The runner, advisory lock, worker/scheduler, and now the two real handlers **exist**;
+no package-root export) is committed and pushed on branch `stage-3.4.5b-projection-handlers` and under
+review in Draft PR #24; not merged and not complete.** The runner, advisory lock, worker/scheduler, and now the two real handlers **exist**;
 the controlled rebuild is Stage 3.4.5C (a distinct slice from Stage 3.6's `rm_subject_activity`);
 **Stage 3.4 as a whole remains incomplete**, and Stage 3.5 (dead letters, replay, quarantine, unblock) remains later work.
 This guide is the contract a handler MUST satisfy, locked now so the foundation, the registry, the
@@ -101,7 +101,7 @@ length is rejected **before any element is read**, as a construction-time denial
 configuration safeguard. Phase 3 has two proof projections, so the bound never constrains legitimate
 use. It is an internal repository constant — not exported from the package root.
 
-**The production registry is composed in Stage 3.4.5B** (implemented locally, pending review). The
+**The production registry is composed in Stage 3.4.5B** (committed and pushed, under review in Draft PR #24). The
 internal worker/scheduler (Stage 3.4.5A) drives whatever registry it is given; the production
 composition holds the two real proof projections. **Mind the name-vs-table distinction:** the two
 projection _names_ are the lowercase kebab-case **`event-type-activity`** and
