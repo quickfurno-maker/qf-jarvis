@@ -3,7 +3,7 @@
 **Status:** Canonical delivery overlay. **Not implementation.** Adopted 2026-07-22 under [ADR-0042](../decisions/ADR-0042-mvp-and-post-mvp-delivery-overlay-and-controlled-launch-sequencing.md). This overlay divides the complete QF Jarvis product into **two product-delivery phases** and maps every capability to its canonical [QFJ-P00…P12](./qf-jarvis-roadmap-v3.md) owner. It **does not** renumber, replace, or supersede Canonical Roadmap v3.0.
 
 > **What this is.** A product-delivery view: what ships in the MVP launch vs. the Post-MVP expansion, with per-capability activation states, intra-Phase-1 milestones, canonical mapping, dependency/migration sequencing, and launch gates.
-> **What this is not.** Runtime, adapters, migrations, or SQL — none exist. No external system is accessed. Migration 0006 remains absent. QFJ-P03.07 remains the active technical priority.
+> **What this is not.** Runtime, adapters, or MVP/Post-MVP SQL — none exist, and **this overlay authorizes no migration**. No external system is accessed. (Migration 0006 was later created by the separately-authorized QFJ-P03.07C projection-failure-persistence slice — applied local/CI only, not deployed; the overlay itself created none.) QFJ-P03.07 remains the active technical priority.
 
 ## The two product-delivery phases
 
@@ -184,4 +184,4 @@ Each mapped item preserves its canonical QFJ owner; the overlay only assigns a p
 
 ## Boundaries preserved
 
-Event-backbone invariants unchanged; QuickFurno Core is the final business authority; Riya/Anisha/Jarvis hold no unrestricted financial, commercial, administrative, or destructive authority; no migration authorized; migration 0006 absent; no implementation performed.
+Event-backbone invariants unchanged; QuickFurno Core is the final business authority; Riya/Anisha/Jarvis hold no unrestricted financial, commercial, administrative, or destructive authority; **this overlay authorizes and creates no migration** (migration 0006 was created separately by QFJ-P03.07C, applied local/CI only, not deployed); no MVP/Post-MVP implementation performed.

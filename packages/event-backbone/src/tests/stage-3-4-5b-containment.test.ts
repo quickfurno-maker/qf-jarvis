@@ -96,8 +96,10 @@ describe('destructive/reset operations are absent from ALL production projection
   });
 });
 
-describe('migrations are frozen at 0001–0005 with no 0006', () => {
-  it('the migrations directory holds EXACTLY the five approved SQL files', () => {
+// Stage 3.4.5B froze migrations at 0001–0005 (no 0006). QFJ-P03.07C added the authorized
+// projection-failure-persistence migration 0006; this guard now bounds the set at 0001–0006 with no 0007.
+describe('migrations are bounded at 0001–0006 with no 0007', () => {
+  it('the migrations directory holds EXACTLY the six approved SQL files', () => {
     const files = readdirSync(MIGRATIONS_DIR)
       .filter((name) => name.endsWith('.sql'))
       .sort();
@@ -107,12 +109,13 @@ describe('migrations are frozen at 0001–0005 with no 0006', () => {
       '0003_ingestion_rejection_and_event_conflict.sql',
       '0004_projection_foundation.sql',
       '0005_projection_event_positions.sql',
+      '0006_projection_failure_operations.sql',
     ]);
   });
 
-  it('no migration numbered 0006 or higher exists', () => {
+  it('no migration numbered 0007 or higher exists', () => {
     const files = readdirSync(MIGRATIONS_DIR);
-    expect(files.some((name) => /^000[6-9]|^0[1-9]\d\d/.test(name))).toBe(false);
+    expect(files.some((name) => /^000[7-9]|^0[1-9]\d\d/.test(name))).toBe(false);
   });
 });
 

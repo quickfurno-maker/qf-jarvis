@@ -119,6 +119,7 @@ describe('db:migrate runs the preflight automatically', () => {
       '0003_ingestion_rejection_and_event_conflict.sql',
       '0004_projection_foundation.sql',
       '0005_projection_event_positions.sql',
+      '0006_projection_failure_operations.sql',
     ]);
     expect(await tableExists(MIGRATION_SCHEMA, 'event')).toBe(true);
   });

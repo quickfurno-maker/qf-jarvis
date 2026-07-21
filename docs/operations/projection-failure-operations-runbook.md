@@ -2,7 +2,9 @@
 
 **Status:** Future operational runbook **design** (QFJ-P03.07A). Adopted 2026-07-21 under [ADR-0040](../decisions/ADR-0040-projection-failure-operations-quarantine-and-authorized-replay.md). Read with [projection-failure-operations.md](../architecture/projection-failure-operations.md).
 
-> **This is a design, not live instructions.** QFJ-P03.07 runtime, commands, and APIs are **not implemented**. Every command below is **CONCEPTUAL** and marked `[UNIMPLEMENTED]`; it does not exist yet and must not be invoked. No ad-hoc SQL mutation is ever a sanctioned operator workflow.
+> **This is a design, not live instructions.** QFJ-P03.07 operator commands, APIs, and replay execution are **not implemented**. Every command below is **CONCEPTUAL** and marked `[UNIMPLEMENTED]`; it does not exist yet and must not be invoked. No ad-hoc SQL mutation is ever a sanctioned operator workflow.
+>
+> **Persistence status (QFJ-P03.07C).** The durable **persistence foundation** now exists — migration `0006_projection_failure_operations.sql` (failure aggregate, append-only action ledger, replay authorizations, replay-attempt/lease evidence) and its repository contracts. It is applied **local/CI only** (not managed, not deployed). The production runner does **not** yet create failure aggregates, and **operator inspection/quarantine (QFJ-P03.07E), authorized replay execution (QFJ-P03.07F), and lease workers remain unimplemented**. The commands below stay conceptual until those slices land.
 
 ## Roles (conceptual)
 
