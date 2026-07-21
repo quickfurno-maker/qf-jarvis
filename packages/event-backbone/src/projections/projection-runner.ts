@@ -57,6 +57,10 @@ import {
 } from './projection-definition.js';
 import { ProjectionInputError } from './projection-errors.js';
 import { readEventAtPosition } from './projection-event-reader.js';
+import {
+  classifyProjectionFailure,
+  type ProjectionFailureCategory,
+} from './projection-failure-taxonomy.js';
 import { projectionAdvisoryLockKeyParameter } from './projection-lock-key.js';
 import type { ProjectionName } from './projection-name.js';
 import type { ProjectionRegistry } from './projection-registry.js';
@@ -108,95 +112,19 @@ interface RunState {
   tx: TransactionState;
 }
 
-// --- SQLSTATE classification (closed tri-state; never invokes a caller getter or method) ----------
+// --- Fail-closed runner code for a non-deterministic handler failure -----------------------------
 
 /**
- * A closed, tri-state inspection of a caught value's SQLSTATE. It is deliberately NOT `string | null`:
- * an ABSENT code (no own `code` at all) is materially different from an UNREADABLE one (an accessor, a
- * non-string, a malformed string, or a value that could not even be inspected). The former is an
- * ordinary deterministic handler rejection; the latter is conservatively treated as infrastructure.
+ * Map a non-deterministic failure category to the runner error code the runner throws. Only
+ * `UNKNOWN_UNCLASSIFIED_FAILURE` gets its own distinct code (the QFJ-P03.07B correction, so an
+ * unclassified/ordinary error is visibly NOT an infrastructure failure and NOT a deterministic one);
+ * infrastructure, repository-invariant, and cancellation all fail closed through the existing
+ * infrastructure code. Deterministic failures never reach here — they take the bounded-retry path.
  */
-export type SqlstateInspection =
-  | { readonly kind: 'absent' }
-  | { readonly kind: 'valid'; readonly code: string }
-  | { readonly kind: 'invalid' };
-
-/** A well-formed SQLSTATE is EXACTLY five characters from `[0-9A-Z]` (digits and UPPERCASE letters). */
-const SQLSTATE_PATTERN = /^[0-9A-Z]{5}$/;
-
-/**
- * Inspect a caught value's own `code` WITHOUT ever invoking a getter, `valueOf`, `toString`, or any
- * other caller method. `Object.getOwnPropertyDescriptor` is itself guarded, because a revoked Proxy or
- * a hostile `getOwnPropertyDescriptor` trap can throw — that throw must never escape, and is treated as
- * `invalid` (conservative infrastructure). Reading `descriptor.value` on a DATA descriptor returns the
- * already-captured value and runs no user code; an ACCESSOR descriptor has no `value` key and is
- * `invalid` (its getter is never called). Exported for focused unit tests; NOT re-exported from root.
- *
- * Eligibility is **property-bearing** — a non-null OBJECT or a FUNCTION — not merely `typeof === 'object'`.
- * A thrown function is a JavaScript value that can carry an own data/accessor `code` (and can be a
- * revoked Proxy or a hostile descriptor trap), so it is inspected exactly like an object; only a true
- * primitive is `absent`. The function is never invoked.
- */
-export function inspectSqlstate(error: unknown): SqlstateInspection {
-  if ((typeof error !== 'object' && typeof error !== 'function') || error === null) {
-    return { kind: 'absent' }; // a true primitive carries no own code
-  }
-  let descriptor: PropertyDescriptor | undefined;
-  try {
-    descriptor = Object.getOwnPropertyDescriptor(error, 'code');
-  } catch {
-    // A revoked Proxy or a hostile descriptor trap: unreadable => conservative infrastructure.
-    return { kind: 'invalid' };
-  }
-  if (descriptor === undefined) {
-    return { kind: 'absent' }; // no own `code` property at all
-  }
-  if (!('value' in descriptor)) {
-    return { kind: 'invalid' }; // an accessor (getter/setter): present but never invoked, so unreadable
-  }
-  const value: unknown = descriptor.value;
-  // Short-circuits BEFORE any coercion: if it is not already a primitive string, we never call
-  // `.test` (which would ToString a hostile object). A real string has no caller-controlled toString.
-  if (typeof value !== 'string' || !SQLSTATE_PATTERN.test(value)) {
-    return { kind: 'invalid' }; // non-string, malformed, empty, or arbitrary caller text
-  }
-  return { kind: 'valid', code: value };
-}
-
-/** Recognised HANDLER-side deterministic SQLSTATEs (the handler's own write deterministically failed). */
-function isDeterministicHandlerSqlstate(code: string): boolean {
-  return (
-    code === '23505' || // unique_violation
-    code === '23514' || // check_violation
-    code === '23503' || // foreign_key_violation
-    code === '23502' || // not_null_violation
-    code.startsWith('22') || // data exceptions
-    code === '42501' || // insufficient_privilege
-    code === '42P01' || // undefined_table
-    code === '42703' || // undefined_column
-    code === '42883' // undefined_function
-  );
-}
-
-/**
- * Classify a handler rejection: `deterministic` (record a bounded failed attempt) vs `infrastructure`
- * (abort, record nothing).
- *   - ABSENT code (ordinary Error / primitive / no own `code`)  => deterministic.
- *   - VALID SQLSTATE => the deterministic/infrastructure tables: a recognised handler-side code is
- *     deterministic; every other well-formed code (recognised infrastructure OR unrecognised) is
- *     CONSERVATIVE infrastructure.
- *   - INVALID/UNREADABLE code (accessor, non-string, malformed, empty, or an inspection that threw)
- *     => conservative infrastructure. A hostile value can never force a deterministic classification.
- */
-export function classifyHandlerError(error: unknown): 'deterministic' | 'infrastructure' {
-  const inspection = inspectSqlstate(error);
-  if (inspection.kind === 'absent') {
-    return 'deterministic';
-  }
-  if (inspection.kind === 'invalid') {
-    return 'infrastructure';
-  }
-  return isDeterministicHandlerSqlstate(inspection.code) ? 'deterministic' : 'infrastructure';
+function failClosedRunnerCode(category: ProjectionFailureCategory): ProjectionRunnerErrorCode {
+  return category === 'UNKNOWN_UNCLASSIFIED_FAILURE'
+    ? 'projection-unknown-failure'
+    : 'projection-infrastructure-failed';
 }
 
 /**
@@ -543,9 +471,14 @@ async function executeRun(
     return abortAndThrow(client, state, 'projection-infrastructure-failed');
   }
 
-  // Infrastructure masquerading through the handler consumes NO attempt.
-  if (classifyHandlerError(handlerError) === 'infrastructure') {
-    return abortAndThrow(client, state, 'projection-infrastructure-failed');
+  // Classify the handler failure into the closed taxonomy (ADR-0040, QFJ-P03.07B). ONLY a provable
+  // deterministic failure — an explicit deterministic-handler-failure contract or a recognised
+  // deterministic SQLSTATE — consumes a bounded attempt. Everything else fails closed and records NO
+  // attempt: infrastructure and a masquerading-through-the-handler infra fault, a repository invariant,
+  // a cancellation/shutdown, and — the correction — an UNKNOWN/ordinary error with no recognised code.
+  const classification = classifyProjectionFailure(handlerError);
+  if (classification.category !== 'DETERMINISTIC_HANDLER_FAILURE') {
+    return abortAndThrow(client, state, failClosedRunnerCode(classification.category));
   }
 
   // Deterministic handler failure: record ONE bounded failed attempt, then retry or block.

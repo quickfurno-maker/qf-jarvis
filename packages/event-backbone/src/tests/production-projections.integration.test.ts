@@ -28,6 +28,7 @@ import {
 } from '../projections/handlers/event-type-activity.js';
 import { createProductionProjectionRegistry } from '../projections/production-registry.js';
 import { toCanonicalInstant, type CanonicalInstant } from '../projections/projection-definition.js';
+import { deterministicHandlerFailure } from '../projections/projection-failure-taxonomy.js';
 import { projectionAdvisoryLockKeyParameter } from '../projections/projection-lock-key.js';
 import { createProjectionRegistry } from '../projections/projection-registry.js';
 import { runProjectionOnce } from '../projections/projection-runner.js';
@@ -233,7 +234,7 @@ describe('production handler — isolation and concurrency', () => {
     const poison = 'isolation-poison';
     const failHandler = async (): Promise<void> => {
       await Promise.resolve();
-      throw new Error('deterministic reducer refusal');
+      throw deterministicHandlerFailure('deterministic reducer refusal');
     };
 
     // Pre-block the poison with five deterministic failures across advancing injected time.

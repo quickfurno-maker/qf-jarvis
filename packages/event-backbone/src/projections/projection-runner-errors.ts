@@ -22,6 +22,8 @@ const PROJECTION_RUNNER_ERROR_MESSAGES = {
     'The stored checkpoint and attempt records for the pending projection position are inconsistent.',
   'projection-infrastructure-failed':
     'A database or infrastructure failure aborted the projection run; no attempt was recorded.',
+  'projection-unknown-failure':
+    'An unclassified handler failure aborted the projection run; it was not treated as a deterministic failure and no attempt was recorded.',
   'projection-commit-outcome-unknown':
     'The projection transaction commit outcome is unknown; the run must be re-invoked to observe the durable state.',
 } as const;
