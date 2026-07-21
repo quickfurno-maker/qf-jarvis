@@ -23,6 +23,7 @@ import type { DatabaseClient } from '../persistence/pool.js';
 import { storeValidatedEvent, type EventPersistenceRecord } from '../persistence/event-store.js';
 import { runMigrations } from '../persistence/migration-runner.js';
 import { toCanonicalInstant, type CanonicalInstant } from '../projections/projection-definition.js';
+import { deterministicHandlerFailure } from '../projections/projection-failure-taxonomy.js';
 import { projectionAdvisoryLockKeyParameter } from '../projections/projection-lock-key.js';
 import { createProjectionRegistry } from '../projections/projection-registry.js';
 import { runProjectionOnce } from '../projections/projection-runner.js';
@@ -76,10 +77,18 @@ function okHandler(projectionName: string) {
     ]);
   };
 }
-// A deterministic reducer refusal (no SQLSTATE).
+// A deterministic reducer refusal declared through the explicit repository-owned contract
+// (QFJ-P03.07B): a plain Error with no recognised code is NO LONGER deterministic.
 const failHandler = async (): Promise<void> => {
   await Promise.resolve();
-  throw new Error('deterministic reducer refusal');
+  throw deterministicHandlerFailure('deterministic reducer refusal');
+};
+// An UNKNOWN/unclassified handler failure: an ordinary Error with no recognised code. Under the
+// QFJ-P03.07B correction this fails closed as UNKNOWN_UNCLASSIFIED — it records NO attempt and never
+// blocks — rather than being treated as a deterministic retry.
+const unknownHandler = async (): Promise<void> => {
+  await Promise.resolve();
+  throw new Error('an unclassified handler bug');
 };
 // An infrastructure-coded rejection (simulated deadlock); the connection stays usable.
 const infraHandler = async (): Promise<void> => {
@@ -478,6 +487,76 @@ describe('infrastructure failure', () => {
     expect(await advisoryKeyHeldByOther(projectionAdvisoryLockKeyParameter(name as never, 1))).toBe(
       false,
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Unknown/unclassified handler failure — the QFJ-P03.07B correction (no attempt, no block)
+// ---------------------------------------------------------------------------
+
+describe('unknown/unclassified handler failure (QFJ-P03.07B)', () => {
+  it('a plain Error with no recognised code fails closed as projection-unknown-failure, records NO attempt, and does not advance/block the checkpoint', async () => {
+    const name = 'runner-unknown';
+    const registry = registryOf(name, 1, unknownHandler);
+    await seedEvents(1);
+    const pending = ((await checkpointRow(name, 1))?.last ?? 0n) + 1n;
+
+    await expect(
+      runProjectionOnce({ pool: admin, registry, name, version: 1, now }),
+    ).rejects.toMatchObject({ code: 'projection-unknown-failure' });
+
+    // The correction: no deterministic attempt is recorded, no next_attempt_at is scheduled, and the
+    // checkpoint is not advanced or blocked (the whole transaction rolled back, exactly like infra).
+    expect(await attemptCount(name, 1, pending)).toBe(0);
+    const cp = await checkpointRow(name, 1);
+    expect(cp === null || (cp.count === 0 && cp.status === 'active' && cp.blocked === null)).toBe(
+      true,
+    );
+    // Advisory lock released after the thrown failure.
+    expect(await advisoryKeyHeldByOther(projectionAdvisoryLockKeyParameter(name as never, 1))).toBe(
+      false,
+    );
+  });
+
+  it('re-invocation after an unknown failure does not observe a fabricated attempt and does not advance', async () => {
+    const name = 'runner-unknown-restart';
+    const registry = registryOf(name, 1, unknownHandler);
+    await seedEvents(1);
+
+    await expect(
+      runProjectionOnce({ pool: admin, registry, name, version: 1, now }),
+    ).rejects.toMatchObject({ code: 'projection-unknown-failure' });
+    await expect(
+      runProjectionOnce({ pool: admin, registry, name, version: 1, now }),
+    ).rejects.toMatchObject({ code: 'projection-unknown-failure' });
+
+    expect(await attemptCount(name, 1, 1n)).toBe(0);
+    const cp = await checkpointRow(name, 1);
+    expect(cp === null || (cp.count === 0 && cp.status === 'active' && cp.last === 0n)).toBe(true);
+  });
+
+  it('once the underlying bug is corrected (handler no longer throws), the same position applies exactly once', async () => {
+    const name = 'runner-unknown-recover';
+    await seedEvents(1);
+    // First: the buggy handler fails closed as unknown, consuming no attempt.
+    await expect(
+      runProjectionOnce({
+        pool: admin,
+        registry: registryOf(name, 1, unknownHandler),
+        name,
+        version: 1,
+        now,
+      }),
+    ).rejects.toMatchObject({ code: 'projection-unknown-failure' });
+    expect(await attemptCount(name, 1, 1n)).toBe(0);
+
+    // Then: the corrected handler applies the SAME position exactly once and advances the checkpoint.
+    const okReg = registryOf(name, 1, okHandler(name));
+    const result = await runProjectionOnce({ pool: admin, registry: okReg, name, version: 1, now });
+    expect(result.outcome).toBe('succeeded');
+    expect((await checkpointRow(name, 1))?.last).toBe(1n);
+    expect(await appliedRows(name)).toEqual([1n]);
+    expect(await attemptCount(name, 1, 1n)).toBe(1);
   });
 });
 
@@ -954,7 +1033,7 @@ describe('confirmed outer ROLLBACK (reusable connection, reprocessed once) (I21)
     const name = 'runner-i21';
     await seedEvents(1);
 
-    // infraHandler => classifyHandlerError=infrastructure => abortAndThrow => outer ROLLBACK confirmed.
+    // infraHandler => classifyProjectionFailure=TRANSIENT_INFRASTRUCTURE => abortAndThrow => outer ROLLBACK confirmed.
     const { pool, releasedDestroy } = wrapPool({});
     await expect(
       runProjectionOnce({

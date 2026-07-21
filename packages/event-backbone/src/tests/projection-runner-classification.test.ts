@@ -1,14 +1,15 @@
 /**
- * Stage 3.4.4 — SQLSTATE classification, attempt/checkpoint reconciliation, and runner-error
- * serialization (ADR-0037). Unit tests (U5, U6). No database.
+ * Runner-owned reconciliation and runner-error serialization (ADR-0037). Unit tests (U6). No database.
+ *
+ * SQLSTATE inspection and failure classification moved to `projection-failure-taxonomy.ts` in
+ * QFJ-P03.07B and are covered by `projection-failure-taxonomy.test.ts`. This file keeps the tests for
+ * the runner's own guarded error recognition and its attempt/checkpoint reconciliation guard.
  */
 import { describe, expect, it } from 'vitest';
 
 import type { ProjectionAttemptRow } from '../projections/attempt-store.js';
 import {
   assertFailedAttempts,
-  classifyHandlerError,
-  inspectSqlstate,
   isProjectionRunnerErrorSafely,
 } from '../projections/projection-runner.js';
 import {
@@ -31,163 +32,6 @@ function failedRow(attemptNumber: number): ProjectionAttemptRow {
 function succeededRow(attemptNumber: number): ProjectionAttemptRow {
   return { ...failedRow(attemptNumber), outcome: 'succeeded', safeErrorCode: null };
 }
-
-describe('inspectSqlstate — closed tri-state, never invokes a caller method (U5)', () => {
-  it('a data-property code that is a well-formed SQLSTATE is valid (C5.3/C5.4)', () => {
-    expect(inspectSqlstate(Object.assign(new Error('x'), { code: '40P01' }))).toEqual({
-      kind: 'valid',
-      code: '40P01',
-    });
-    expect(inspectSqlstate({ code: '23505' })).toEqual({ kind: 'valid', code: '23505' });
-  });
-
-  it('an ordinary Error / thrown primitive / no own code is absent (C5.1/C5.2)', () => {
-    expect(inspectSqlstate(new Error('boom'))).toEqual({ kind: 'absent' });
-    expect(inspectSqlstate('a thrown string')).toEqual({ kind: 'absent' });
-    expect(inspectSqlstate(42)).toEqual({ kind: 'absent' });
-    expect(inspectSqlstate(null)).toEqual({ kind: 'absent' });
-    expect(inspectSqlstate(undefined)).toEqual({ kind: 'absent' });
-    expect(inspectSqlstate({})).toEqual({ kind: 'absent' });
-  });
-
-  it('an accessor (getter) code is invalid and the getter is NEVER invoked (C5.5)', () => {
-    let invoked = false;
-    const hostile = {};
-    Object.defineProperty(hostile, 'code', {
-      get() {
-        invoked = true;
-        return '40P01';
-      },
-      enumerable: true,
-      configurable: true,
-    });
-    expect(inspectSqlstate(hostile)).toEqual({ kind: 'invalid' });
-    expect(invoked).toBe(false);
-  });
-
-  it('a non-string code is invalid (C5.6)', () => {
-    expect(inspectSqlstate({ code: 42 })).toEqual({ kind: 'invalid' });
-    expect(inspectSqlstate({ code: null })).toEqual({ kind: 'invalid' });
-    expect(inspectSqlstate({ code: {} })).toEqual({ kind: 'invalid' });
-    expect(inspectSqlstate({ code: ['40P01'] })).toEqual({ kind: 'invalid' });
-  });
-
-  it('a malformed / empty / arbitrary code string is invalid (C5.7)', () => {
-    for (const code of ['', '4', '40p01', '400011', 'ABCD!', ' 40P0', 'drop table', '2350']) {
-      expect(inspectSqlstate({ code })).toEqual({ kind: 'invalid' });
-    }
-  });
-
-  it('a well-formed but unrecognised SQLSTATE is still valid — the tables decide (C5.8)', () => {
-    expect(inspectSqlstate({ code: '99999' })).toEqual({ kind: 'valid', code: '99999' });
-    expect(inspectSqlstate({ code: 'ZZZZZ' })).toEqual({ kind: 'valid', code: 'ZZZZZ' });
-  });
-
-  it('a hostile getOwnPropertyDescriptor trap is invalid and its secret never leaks (C5.9)', () => {
-    const MARKER = 'DESCRIPTOR-SECRET-7f3a';
-    const hostile = new Proxy(
-      {},
-      {
-        getOwnPropertyDescriptor() {
-          throw new Error(MARKER);
-        },
-      },
-    );
-    let threw: unknown = null;
-    let inspection: unknown;
-    try {
-      inspection = inspectSqlstate(hostile);
-    } catch (error) {
-      threw = error;
-    }
-    expect(threw).toBeNull(); // the trap's throw never escapes
-    expect(inspection).toEqual({ kind: 'invalid' });
-    expect(JSON.stringify(inspection)).not.toContain(MARKER);
-  });
-
-  it('a revoked Proxy is invalid and does not throw a raw TypeError (C5.10)', () => {
-    const { proxy, revoke } = Proxy.revocable({}, {});
-    revoke();
-    expect(() => inspectSqlstate(proxy)).not.toThrow();
-    expect(inspectSqlstate(proxy)).toEqual({ kind: 'invalid' });
-  });
-});
-
-describe('inspectSqlstate — property-bearing FUNCTION values (Correction-3 C1)', () => {
-  it('a plain function with no own code is absent (C3.1)', () => {
-    const fn = (): void => undefined;
-    expect(inspectSqlstate(fn)).toEqual({ kind: 'absent' });
-    expect(classifyHandlerError(fn)).toBe('deterministic');
-  });
-
-  it('a function with an own data-property valid deterministic SQLSTATE is valid (C3.2)', () => {
-    const fn = (): void => undefined;
-    Object.defineProperty(fn, 'code', {
-      value: '23505',
-      enumerable: true,
-      configurable: true,
-      writable: true,
-    });
-    expect(inspectSqlstate(fn)).toEqual({ kind: 'valid', code: '23505' });
-    expect(classifyHandlerError(fn)).toBe('deterministic');
-  });
-
-  it('a function with an own data-property valid infrastructure SQLSTATE is valid (C3.3)', () => {
-    const fn = (): void => undefined;
-    Object.defineProperty(fn, 'code', {
-      value: '40P01',
-      enumerable: true,
-      configurable: true,
-      writable: true,
-    });
-    expect(inspectSqlstate(fn)).toEqual({ kind: 'valid', code: '40P01' });
-    expect(classifyHandlerError(fn)).toBe('infrastructure');
-  });
-
-  it('a function with an ACCESSOR code is invalid and the getter is NEVER invoked (C3.4)', () => {
-    let invoked = false;
-    const fn = (): void => undefined;
-    Object.defineProperty(fn, 'code', {
-      get() {
-        invoked = true;
-        return '23505';
-      },
-      enumerable: true,
-      configurable: true,
-    });
-    expect(inspectSqlstate(fn)).toEqual({ kind: 'invalid' });
-    expect(classifyHandlerError(fn)).toBe('infrastructure');
-    expect(invoked).toBe(false); // the function's own getter never ran
-  });
-
-  it('a revoked FUNCTION Proxy is invalid and does not throw a raw TypeError (C3.5)', () => {
-    const { proxy, revoke } = Proxy.revocable((): void => undefined, {});
-    revoke();
-    expect(() => inspectSqlstate(proxy)).not.toThrow();
-    expect(inspectSqlstate(proxy)).toEqual({ kind: 'invalid' });
-    expect(classifyHandlerError(proxy)).toBe('infrastructure');
-  });
-
-  it('a FUNCTION Proxy whose getOwnPropertyDescriptor trap throws a secret marker is invalid, no leak (C3.6)', () => {
-    const MARKER = 'FN-DESCRIPTOR-SECRET-8e21';
-    const hostile = new Proxy((): void => undefined, {
-      getOwnPropertyDescriptor() {
-        throw new Error(MARKER);
-      },
-    });
-    let threw: unknown = null;
-    let inspection: unknown;
-    try {
-      inspection = inspectSqlstate(hostile);
-    } catch (error) {
-      threw = error;
-    }
-    expect(threw).toBeNull();
-    expect(inspection).toEqual({ kind: 'invalid' });
-    expect(JSON.stringify(inspection)).not.toContain(MARKER);
-    expect(classifyHandlerError(hostile)).toBe('infrastructure');
-  });
-});
 
 describe('isProjectionRunnerErrorSafely — guarded recognition (Correction-3 C2)', () => {
   it('recognises an authentic ProjectionRunnerError, retaining its exact code', () => {
@@ -237,103 +81,6 @@ describe('isProjectionRunnerErrorSafely — guarded recognition (Correction-3 C2
     }
     expect(threw).toBeNull(); // the trap's throw never escapes `instanceof`
     expect(recognised).toBe(false);
-  });
-});
-
-describe('classifyHandlerError (U5)', () => {
-  it('absent code => deterministic (C5.1/C5.2)', () => {
-    expect(classifyHandlerError(new Error('boom'))).toBe('deterministic');
-    expect(classifyHandlerError('a thrown string')).toBe('deterministic');
-    expect(classifyHandlerError({ nope: true })).toBe('deterministic');
-  });
-
-  it.each([
-    '23505',
-    '23514',
-    '23503',
-    '23502',
-    '22001',
-    '22P02',
-    '42501',
-    '42P01',
-    '42703',
-    '42883',
-  ])('recognised handler-side SQLSTATE %s => deterministic (C5.3)', (code) => {
-    expect(classifyHandlerError(Object.assign(new Error('x'), { code }))).toBe('deterministic');
-  });
-
-  it.each([
-    '08006',
-    '08003',
-    '40P01',
-    '40001',
-    '53100',
-    '53200',
-    '55P03',
-    '57014',
-    '57P01',
-    '58030',
-    'XX000',
-  ])('infrastructure SQLSTATE %s => infrastructure (C5.4)', (code) => {
-    expect(classifyHandlerError(Object.assign(new Error('x'), { code }))).toBe('infrastructure');
-  });
-
-  it('a present-but-unrecognised well-formed code is conservative infrastructure (C5.8)', () => {
-    expect(classifyHandlerError(Object.assign(new Error('x'), { code: '99999' }))).toBe(
-      'infrastructure',
-    );
-    expect(classifyHandlerError(Object.assign(new Error('x'), { code: 'ZZZZZ' }))).toBe(
-      'infrastructure',
-    );
-  });
-
-  it('an accessor code is INFRASTRUCTURE and the getter is never invoked (C5.5)', () => {
-    let invoked = false;
-    const hostile = Object.assign(new Error('x'), {});
-    Object.defineProperty(hostile, 'code', {
-      get() {
-        invoked = true;
-        return '40P01';
-      },
-      enumerable: true,
-      configurable: true,
-    });
-    expect(classifyHandlerError(hostile)).toBe('infrastructure');
-    expect(invoked).toBe(false);
-  });
-
-  it('a non-string or malformed code is infrastructure (C5.6/C5.7)', () => {
-    expect(classifyHandlerError({ code: 42 })).toBe('infrastructure');
-    expect(classifyHandlerError({ code: '40p01' })).toBe('infrastructure');
-    expect(classifyHandlerError({ code: '' })).toBe('infrastructure');
-  });
-
-  it('a hostile getOwnPropertyDescriptor trap => infrastructure, never throws, no secret leak (C5.9)', () => {
-    const MARKER = 'CLASSIFY-SECRET-19bc';
-    const hostile = new Proxy(
-      {},
-      {
-        getOwnPropertyDescriptor() {
-          throw new Error(MARKER);
-        },
-      },
-    );
-    let threw: unknown = null;
-    let result = 'unset';
-    try {
-      result = classifyHandlerError(hostile);
-    } catch (error) {
-      threw = error;
-    }
-    expect(threw).toBeNull();
-    expect(result).toBe('infrastructure');
-  });
-
-  it('a revoked Proxy => infrastructure, never a raw TypeError (C5.10)', () => {
-    const { proxy, revoke } = Proxy.revocable({}, {});
-    revoke();
-    expect(() => classifyHandlerError(proxy)).not.toThrow();
-    expect(classifyHandlerError(proxy)).toBe('infrastructure');
   });
 });
 
@@ -396,5 +143,13 @@ describe('ProjectionRunnerError — runtime-normalised, no leak (U5)', () => {
       expect(error.code).toBe(code);
       expect(error.message.length).toBeGreaterThan(0);
     }
+  });
+
+  it('includes the new unknown-failure code, distinct from infrastructure', () => {
+    expect(PROJECTION_RUNNER_ERROR_CODES).toContain('projection-unknown-failure');
+    const unknown = new ProjectionRunnerError('projection-unknown-failure');
+    const infra = new ProjectionRunnerError('projection-infrastructure-failed');
+    expect(unknown.code).not.toBe(infra.code);
+    expect(unknown.message).not.toBe(infra.message);
   });
 });
