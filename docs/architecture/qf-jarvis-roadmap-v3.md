@@ -109,16 +109,25 @@ QFJ-P12  Advanced Intelligence and Future Agents
 | Subphase | Name | Historical alias |
 | --- | --- | --- |
 | **QFJ-P04.01** | Model Gateway | Stage 4.0 |
+| **QFJ-P04.01A** | Provider-Neutral Contracts | (new, [ADR-0041](../decisions/ADR-0041-provider-independent-cloud-local-and-hybrid-model-inference.md)) |
+| **QFJ-P04.01B** | Groq Cloud Adapter | (new) |
+| **QFJ-P04.01C** | Local OpenAI-Compatible Adapter | (new) |
+| **QFJ-P04.01D** | Hybrid Routing and Failover | (new) |
+| **QFJ-P04.01E** | Provider Operations and Governance | (new) |
 | **QFJ-P04.02** | Capability Registry | Stage 4.1 (capabilities) |
 | **QFJ-P04.03** | Governed Knowledge System | Stage 4.1 (knowledge) |
-| **QFJ-P04.04** | Evaluation and Red-Team Framework | Stage 4.2 |
+| **QFJ-P04.04** | Evaluation and Red-Team Framework (per-provider/per-model parity) | Stage 4.2 |
 | **QFJ-P04.05** | No-Op RAG Provisioning | (new) planned RAG provisioning, disabled by default |
+
+**Provider independence (QFJ-P04.01A–E).** The model gateway is **provider-neutral**: the conversation runtime depends only on a repository-owned `ModelProvider` interface, and a selected adapter (`GroqProvider`, `LocalOpenAICompatibleProvider`, `FakeModelProvider`, or a future approved adapter) implements it. Provider SDK objects never cross the adapter boundary; Riya, Anisha, the WhatsApp webhook, memory, queues, RAG, human handoff, and QuickFurno integration never import provider-specific types. Changing provider requires only configuration, adapter activation, a model identifier, and compatibility + evaluation approval — never an agent/transport rewrite. **Model providers perform bounded inference only; communication providers deliver approved messages only; neither provider class has QuickFurno business authority.** Hybrid fallback is **sequential, bounded, and idempotent** (one primary per turn, no model voting, at most one accepted response); routing enforces a request's data class (`HOSTED_ALLOWED` / `LOCAL_ONLY` / `HUMAN_ONLY`) and required capabilities before availability/cost/latency — a `LOCAL_ONLY` request never silently falls back to Groq. Full design: [model-provider-independence.md](./model-provider-independence.md).
+
+**Evaluation parity (QFJ-P04.04).** Every provider **and** every model must pass the **same** evaluation, language (multilingual/Indian-market), authority, security, and failure tests before production use; one that has not passed cannot be activated.
 
 **Dependencies.** QFJ-P03.
 **Entry gate.** Projection integrity complete.
-**Exit gate.** Every model call passes the gateway; budgets/kill-switch enforced; structured-output validation refuses malformed output; knowledge served only through its lifecycle; evaluation harness can fail an agent version.
-**Major exclusions.** No specialist agent; no consumer AI subscription as backend; no raw output auto-becoming training data; RAG remains disabled/no-op until evaluation evidence justifies it. **RAG migration remains unallocated.**
-**Status.** Planned (approved architecture, not implemented — ADR-0028).
+**Exit gate.** Every model call passes the gateway; budgets/kill-switch enforced; structured-output validation refuses malformed output; knowledge served only through its lifecycle; evaluation harness can fail an agent version **or a provider/model**; a provider swap requires only configuration + evaluation approval.
+**Major exclusions.** No specialist agent; no consumer AI subscription as backend; no raw output auto-becoming training data; RAG remains disabled/no-op until evaluation evidence justifies it. **RAG migration remains unallocated. No provider adapter, SDK, key, or model call is implemented by the roadmap; provider selection never alters agent authority.**
+**Status.** Planned (approved architecture, not implemented — ADR-0028, ADR-0041).
 
 ## QFJ-P05 — Jarvis Orchestration, Tasks and Cases
 
@@ -197,13 +206,27 @@ QFJ-P12  Advanced Intelligence and Future Agents
 ## QFJ-P11 — Pilot, Resilience and Scale
 
 **Purpose.** The gated controlled-communication pilot (incl. multilingual safety gate), resilience, and scale.
+
+| Subphase | Name |
+| --- | --- |
+| **QFJ-P11.06** | Inference Deployment Profiles ([ADR-0041](../decisions/ADR-0041-provider-independent-cloud-local-and-hybrid-model-inference.md)) |
+
+**Inference deployment profiles (QFJ-P11.06).** Owner-selected, configuration-only deployment profiles for the conversation runtime — no code rewrite to switch:
+
+- `PROFILE_GROQ_CLOUD` — Groq only.
+- `PROFILE_LOCAL_PC` — local-PC inference only.
+- `PROFILE_HYBRID_LOCAL_PRIMARY` — local primary, explicit Groq fallback.
+- `PROFILE_HYBRID_GROQ_PRIMARY` — Groq primary, explicit local fallback.
+- `PROFILE_HUMAN_ONLY` — emergency human-only mode, always available.
+
+Fallback is explicit; no unexpected provider fallback; the runtime never calls both providers per message; no fallback creates a duplicate outbound reply. Per-profile primary/fallback/failure/privacy/health/timeout/cost/capacity/handoff/rollback: [model-provider-independence.md](./model-provider-independence.md).
 **Historical aliases.** Historical Phase 11A / 12–15.
-**Dependencies.** QFJ-P10.
+**Dependencies.** QFJ-P10; QFJ-P04.01A–E and QFJ-P04.04 for provider readiness.
 **Status.** Planned.
 
 ## QFJ-P12 — Advanced Intelligence and Future Agents
 
-**Purpose.** Future specialist agents and advanced intelligence beyond the three governed agents.
+**Purpose.** Future specialist agents and advanced intelligence beyond the three governed agents; **advanced local-inference scaling** — multiple local inference nodes, multi-GPU operation, model optimization, local specialist models, future LoRA or fine-tuning, and Groq as a controlled fallback.
 **Historical aliases.** Kabir (lead intelligence), Jitin (marketing), and any future specialist — all **PLANNED or DISABLED** unless explicitly activated by a later ADR.
 **Dependencies.** QFJ-P05–P11 as applicable.
 **Status.** Planned / disabled.
