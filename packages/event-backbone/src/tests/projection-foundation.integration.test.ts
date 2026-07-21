@@ -135,8 +135,8 @@ afterAll(async () => {
 // Migration
 // ---------------------------------------------------------------------------
 
-describe('migration 0005 — applies in order, idempotently, 0001–0004 unchanged', () => {
-  it('records exactly 0001..0005 in order with the immutable checksums intact', async () => {
+describe('migrations apply in order, idempotently, with 0001–0005 unchanged', () => {
+  it('records exactly 0001..0006 in order with the immutable checksums intact', async () => {
     const rows = await withClient(admin, async (client) => {
       const r = await client.query<{ version: number; filename: string; checksum: Buffer }>(
         `SELECT version, filename, checksum FROM qf_jarvis.schema_migration ORDER BY version ASC`,
@@ -149,8 +149,9 @@ describe('migration 0005 — applies in order, idempotently, 0001–0004 unchang
       '0003_ingestion_rejection_and_event_conflict.sql',
       '0004_projection_foundation.sql',
       '0005_projection_event_positions.sql',
+      '0006_projection_failure_operations.sql',
     ]);
-    expect(rows.map((row) => row.version)).toStrictEqual([1, 2, 3, 4, 5]);
+    expect(rows.map((row) => row.version)).toStrictEqual([1, 2, 3, 4, 5, 6]);
     for (const row of rows) {
       const hex = row.checksum.toString('hex');
       if (KNOWN_CHECKSUMS[row.filename] !== undefined) {
@@ -159,7 +160,7 @@ describe('migration 0005 — applies in order, idempotently, 0001–0004 unchang
     }
   });
 
-  it('re-migrating is idempotent — still exactly five applied migrations', async () => {
+  it('re-migrating is idempotent — still exactly six applied migrations', async () => {
     await runMigrations(admin, defaultMigrationsDirectory());
     const count = await withClient(admin, async (client) => {
       const r = await client.query<{ n: string }>(
@@ -167,7 +168,7 @@ describe('migration 0005 — applies in order, idempotently, 0001–0004 unchang
       );
       return Number.parseInt(r.rows[0]?.n ?? '0', 10);
     });
-    expect(count).toBe(5);
+    expect(count).toBe(6);
   });
 
   it('records the EXACT reviewed 0004 and 0005 checksums in the migration history', async () => {
