@@ -1,8 +1,10 @@
 # Model Runtime and Governance — QF Jarvis
 
-**Status:** Approved architecture (Phase 4.0). **Not implemented.**
+**Status:** Approved architecture (Phase 4.0 = canonical QFJ-P04.01). **Not implemented.**
 **Date:** 2026-07-16
 **Decision:** [ADR-0028](../decisions/ADR-0028-ai-runtime-foundations-and-roadmap-sequencing.md)
+
+> **Provider independence (2026-07-21, [ADR-0041](../decisions/ADR-0041-provider-independent-cloud-local-and-hybrid-model-inference.md)).** The gateway described here is **provider-neutral**: the same runtime runs against Groq Cloud, a local-PC OpenAI-compatible server, or a hybrid, selected by configuration and evaluation approval — never by rewriting agents or transport. The provider-neutral contract, operating modes, deployment boundaries, security/privacy, memory rules, environment-variable reference, and rollback are specified in [model-provider-independence.md](./model-provider-independence.md) (canonical subphases QFJ-P04.01A–E, evaluation parity QFJ-P04.04, deployment profiles QFJ-P11.06, local scaling QFJ-P12). Still **not implemented** — no provider, adapter, SDK, key, or model call exists.
 
 > **What this document is.** The approved architecture for how QF Jarvis invokes models — the **model gateway** — introduced in **Phase 4.0**, before the first specialist agent.
 >
