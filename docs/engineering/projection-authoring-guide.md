@@ -11,9 +11,13 @@ transaction-state-tracked client disposal; ADR-0037, code-only, no new migration
 merged via PR #22 (merge commit `d7c9fbfb286040b7d8f32f927d7185d92d46c52f`).** **Stage 3.4.5A (the
 internal projection worker/scheduler `runProjectionWorker` — deterministic traversal, isolation, no
 busy-spin, bounded injected time/sleep, graceful shutdown; ADR-0038, code-only, no new migration)
-exists on the feature branch `stage-3.4.5a-projection-worker` and remains pending review.** The runner, advisory lock, and worker/scheduler **now exist**; the first two
-real projection handlers arrive in Stage 3.4.5B and rebuild in Stage 3.4.5C; **Stage 3.4 as a whole
-remains incomplete**, and Stage 3.5 (dead letters, replay, quarantine, unblock) remains later work.
+is COMPLETE and merged via PR #23 (merge commit `9d271bbae3121f49f78a74ff6abb3969dcfb7fc6`).**
+**Stage 3.4.5B (the two real read-model handlers `event-type-activity` and `daily-event-acceptance`,
+the internal production registry composition, and `apps/worker` activation; code-only, no migration,
+no package-root export) is implemented locally on branch `stage-3.4.5b-projection-handlers` and pending
+owner review.** The runner, advisory lock, worker/scheduler, and now the two real handlers **exist**;
+the controlled rebuild is Stage 3.4.5C (a distinct slice from Stage 3.6's `rm_subject_activity`);
+**Stage 3.4 as a whole remains incomplete**, and Stage 3.5 (dead letters, replay, quarantine, unblock) remains later work.
 This guide is the contract a handler MUST satisfy, locked now so the foundation, the registry, the
 runner, the worker, and the handlers agree.
 
@@ -97,9 +101,14 @@ length is rejected **before any element is read**, as a construction-time denial
 configuration safeguard. Phase 3 has two proof projections, so the bound never constrains legitimate
 use. It is an internal repository constant — not exported from the package root.
 
-**No populated registry exists yet.** The internal worker/scheduler (Stage 3.4.5A) drives whatever
-registry it is given, but the two real proof handlers — `rm_event_type_activity` and
-`rm_daily_event_acceptance` — and the real registry that contains them are Stage 3.4.5B.
+**The production registry is composed in Stage 3.4.5B** (implemented locally, pending review). The
+internal worker/scheduler (Stage 3.4.5A) drives whatever registry it is given; the production
+composition holds the two real proof projections. **Mind the name-vs-table distinction:** the two
+projection _names_ are the lowercase kebab-case **`event-type-activity`** and
+**`daily-event-acceptance`** — these key the checkpoint, the advisory lock, and the deterministic
+backoff — while **`rm_event_type_activity`** and **`rm_daily_event_acceptance`** are the read-model
+_tables_ those handlers write. An `rm_*` string contains underscores and is therefore never itself a
+valid projection name (see `projection-name.ts`).
 
 ## Idempotency is not free
 

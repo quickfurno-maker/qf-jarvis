@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./internal/projection-worker-cli": {
+      "types": "./dist/projections/projection-worker-cli.d.ts",
+      "default": "./dist/projections/projection-worker-cli.js"
     }
   },
   "scripts": {

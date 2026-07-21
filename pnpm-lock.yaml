@@ -38,7 +38,11 @@ importers:
 
   apps/api: {}
 
-  apps/worker: {}
+  apps/worker:
+    dependencies:
+      '@qf-jarvis/event-backbone':
+        specifier: workspace:*
+        version: link:../../packages/event-backbone
 
   packages/contracts:
     dependencies:

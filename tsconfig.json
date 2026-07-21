@@ -9,7 +9,7 @@
   "files": [],
   "references": [
     { "path": "./apps/api" },
-    { "path": "./apps/worker" },
+    { "path": "./apps/worker/tsconfig.build.json" },
     { "path": "./packages/contracts" },
     { "path": "./packages/event-backbone" },
     { "path": "./packages/event-ingestion/tsconfig.build.json" }

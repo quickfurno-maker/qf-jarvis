@@ -2,8 +2,18 @@
   "$schema": "https://json.schemastore.org/tsconfig",
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "rootDir": "./src",
-    "outDir": "./dist"
+    // Type-check EVERYTHING — production source and tests — under full strict mode, but emit nothing.
+    // This is the config `pnpm --filter … typecheck:tests` and the ESLint type-aware service use, so
+    // tests are held to the same rules as the rest of the repository even though the emitting build
+    // (tsconfig.build.json) excludes them from dist/. `composite` must be off because it forbids noEmit.
+    // Cross-package types (@qf-jarvis/event-backbone) resolve through node_modules against the built
+    // declarations, exactly as packages/event-ingestion/tsconfig.json does.
+    "noEmit": true,
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "incremental": false
   },
   "include": ["src/**/*.ts"]
 }

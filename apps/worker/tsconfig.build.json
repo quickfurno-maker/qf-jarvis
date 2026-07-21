@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
+  },
+
+  // The EMITTING build, referenced by the root solution. Tests are EXCLUDED so nothing from src/tests
+  // reaches dist/ — the production entry `node ./dist/index.js` loads only index.js and worker-entry.js.
+  // The project reference makes `tsc --build` compile @qf-jarvis/event-backbone first and resolve the
+  // internal `./internal/projection-worker-cli` subpath's declarations. Tests are type-checked, without
+  // emit, by tsconfig.json (typecheck:tests).
+  "references": [{ "path": "../../packages/event-backbone" }],
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/tests/**"]
+}

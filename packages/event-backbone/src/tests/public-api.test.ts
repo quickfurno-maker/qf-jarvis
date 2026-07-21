@@ -236,14 +236,77 @@ describe('the Stage 3.4.2 projection registry is INTERNAL — still no root expo
   });
 });
 
+describe('the Stage 3.4.5B real handlers, production registry, and worker CLI are INTERNAL', () => {
+  it('exports no Stage 3.4.5B handler / production-registry / worker-composition symbol from the root', () => {
+    // Stage 3.4.5B adds the two real read-model handlers, the production registry composition, and the
+    // worker composition root — ALL kept off the barrel (ADR-0038 §9). The barrel's runtime surface is
+    // unchanged at 39. apps/worker reaches ONLY `runProjectionWorkerCli`, through a narrowly scoped
+    // internal subpath (asserted below), never through this root.
+    for (const symbol of [
+      'applyEventTypeActivity',
+      'applyDailyEventAcceptance',
+      'eventTypeActivityProjection',
+      'dailyEventAcceptanceProjection',
+      'createProductionProjectionRegistry',
+      'runProjectionWorker',
+      'runProjectionCycle',
+      'runProjectionWorkerCli',
+      'defaultProjectionWorkerCliDeps',
+      'ProjectionWorkerError',
+      'abortableSleep',
+    ]) {
+      expect(publicApi).not.toHaveProperty(symbol);
+    }
+  });
+
+  it('leaves the package-root runtime surface at exactly 39 symbols (unchanged by Stage 3.4.5B)', () => {
+    expect(EXPECTED_ROOT_SURFACE).toHaveLength(39);
+    expect(Object.keys(publicApi).sort()).toEqual(EXPECTED_ROOT_SURFACE);
+  });
+
+  it('exposes no handler, registry, or worker vocabulary under any root key', () => {
+    const rootKeys = Object.keys(publicApi);
+    expect(rootKeys.filter((key) => key.toLowerCase().includes('worker'))).toEqual([]);
+    expect(rootKeys.filter((key) => key.toLowerCase().includes('handler'))).toEqual([]);
+    expect(rootKeys.some((key) => key.toLowerCase().includes('subject'))).toBe(false);
+  });
+
+  it('exposes runProjectionWorkerCli ONLY through the narrowly scoped internal subpath (not the root)', async () => {
+    const { exports } = await readPackageManifest();
+    // Exactly the root plus one internal worker subpath — nothing else.
+    expect(Object.keys(exports).sort()).toEqual(['.', './internal/projection-worker-cli']);
+    // The subpath resolves to the compiled worker CLI (JS + types) — never the barrel or persistence.
+    const subpath = JSON.stringify(exports['./internal/projection-worker-cli']);
+    expect(subpath).toContain('./dist/projections/projection-worker-cli.js');
+    expect(subpath).toContain('./dist/projections/projection-worker-cli.d.ts');
+    expect(subpath).not.toContain('persistence');
+    expect(subpath).not.toContain('index.js');
+  });
+
+  it('the internal subpath module exposes ONLY the worker entry vocabulary — no handlers/registry/pool', async () => {
+    const workerCli = await import('../projections/projection-worker-cli.js');
+    expect(workerCli.runProjectionWorkerCli).toBeTypeOf('function');
+    expect(workerCli.defaultProjectionWorkerCliDeps).toBeTypeOf('function');
+    // It must NOT re-export handlers, the production registry factory, or pool objects.
+    for (const forbidden of [
+      'applyEventTypeActivity',
+      'applyDailyEventAcceptance',
+      'createProductionProjectionRegistry',
+      'createDatabasePool',
+    ]) {
+      expect(workerCli).not.toHaveProperty(forbidden);
+    }
+  });
+});
+
 describe('no package export subpath can reach the migration runner', () => {
-  it('publishes exactly one entry point, ".", and no deep subpaths', async () => {
+  it('publishes the root plus exactly one narrowly-scoped internal worker subpath — and no bypass path', async () => {
     const { exports } = await readPackageManifest();
 
-    // A single "." entry. A `"./*"` wildcard — or any explicit `./persistence/...` subpath —
-    // would re-open the bypass through a deep import, silently, while this file's other
-    // assertions all still passed.
-    expect(Object.keys(exports)).toStrictEqual(['.']);
+    // The root, plus ONE authorized internal subpath (the worker composition root that apps/worker
+    // imports in-process). A `"./*"` wildcard — or any `./persistence/...` / migration-runner subpath —
+    // would re-open the migration bypass through a deep import; the next assertion forbids exactly that.
+    expect(Object.keys(exports).sort()).toStrictEqual(['.', './internal/projection-worker-cli']);
   });
 
   it('exposes no subpath mentioning persistence, migration-runner, or dist internals', async () => {
