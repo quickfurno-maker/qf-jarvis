@@ -100,7 +100,7 @@ QFJ-P12  Advanced Intelligence and Future Agents
 **Entry gate.** Durable storage complete.
 **Exit gate.** Read models rebuildable to identical results; failure operations (dead-letter, replay, quarantine) visible and proven; managed-readiness and exit audit complete.
 **Major exclusions.** No agent/domain-intelligence/authoritative-business projection during the metadata-proof subphases; `rm_subject_activity` deferred to QFJ-P03.09.
-**Status.** QFJ-P03.06 merged via PR #24. QFJ-P03.07 is **next and not started**.
+**Status.** QFJ-P03.06 merged via PR #24. QFJ-P03.07 **runtime is not started**; its **design (QFJ-P03.07A)** is complete as documentation only — [ADR-0040](../decisions/ADR-0040-projection-failure-operations-quarantine-and-authorized-replay.md), [projection-failure-operations.md](./projection-failure-operations.md), [runbook](../operations/projection-failure-operations-runbook.md) — with schema verdict **SCHEMA_REQUIRED** (migration 0006 required but **absent**, created only in a later separately-authorized slice).
 
 ## QFJ-P04 — Model Gateway, Knowledge and Evaluation Foundation
 
@@ -214,8 +214,9 @@ QFJ-P12  Advanced Intelligence and Future Agents
 
 - **QFJ-P03.06 (Production Projection Activation, historical Stage 3.4.5B) is merged and closed through PR #24**; merge commit `01b164b40d9d34d32b9233e97c4d75ce946121ee` (parents `9d271bb…`, `a4fa500…`).
 - `main` is synchronized (local == `origin/main`).
-- **QFJ-P03.07 (Projection Failure Operations, historical Stage 3.5) is next and has not begun.**
-- **Migration 0006 does not exist.** Managed PostgreSQL remains **migration 0001 only**; migrations **0002–0005 remain unapplied** to managed PostgreSQL.
+- **QFJ-P03.07 (Projection Failure Operations, historical Stage 3.5) runtime has not begun.** Its design slice **QFJ-P03.07A** is complete as documentation only ([ADR-0040](../decisions/ADR-0040-projection-failure-operations-quarantine-and-authorized-replay.md)); schema verdict is **SCHEMA_REQUIRED**.
+- **Migration 0006 does not exist.** QFJ-P03.07A determined migration 0006 is **required** for QFJ-P03.07 but does **not** create it — it is created only in the later, separately-authorized slice QFJ-P03.07C. Managed PostgreSQL remains **migration 0001 only**; migrations **0002–0005 remain unapplied** to managed PostgreSQL.
+- **QFJ-P03.08 (Rebuild Determinism and Erasure) has not begun.**
 - **No RAG, agent, task runtime, model gateway, n8n, WhatsApp, or live QuickFurno Core integration is active.** The feature branch `stage-3.4.5b-projection-handlers` is absent locally and remotely.
 - Package-root runtime surface of `@qf-jarvis/event-backbone` remains exactly **39** symbols.
 
