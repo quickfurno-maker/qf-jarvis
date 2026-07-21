@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "QF Jarvis worker application boundary. Phase 1 establishes a compileable boundary and no runtime behavior.",
+  "description": "QF Jarvis worker application. Stage 3.4.5B activates the projection worker in-process: it imports the internal composition root from @qf-jarvis/event-backbone and runs it, owning the pool and SIGINT/SIGTERM directly (no package-manager delegation).",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -11,7 +11,12 @@
     }
   },
   "scripts": {
-    "build": "tsc --build tsconfig.json",
-    "typecheck": "tsc --build tsconfig.json"
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json",
+    "start": "node ./dist/index.js"
+  },
+  "dependencies": {
+    "@qf-jarvis/event-backbone": "workspace:*"
   }
 }
