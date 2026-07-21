@@ -4,6 +4,8 @@
 
 > **This is architecture, not implementation status.** A phase appearing here is *planned*, not *built*. Current build status is in [§ Current repository status](#current-repository-status). Approval of the taxonomy is not authorization to implement any phase.
 
+> **⚑ Delivery overlay (2026-07-22, [ADR-0042](../decisions/ADR-0042-mvp-and-post-mvp-delivery-overlay-and-controlled-launch-sequencing.md)).** A **product-delivery overlay** divides the complete product into **PHASE 1 — MVP LAUNCH** and **PHASE 2 — POST-MVP EXPANSION**. These are delivery phases, **not** QFJ phases: they add **no** major phase and renumber **nothing**; every capability keeps its canonical QFJ owner. See [qf-jarvis-mvp-post-mvp-delivery-overlay.md](./qf-jarvis-mvp-post-mvp-delivery-overlay.md), [mvp-capability-activation-matrix.md](../governance/mvp-capability-activation-matrix.md), [mvp-launch-readiness-runbook.md](../operations/mvp-launch-readiness-runbook.md). MVP has business priority; advanced marketing/automation and local/hybrid activation are Post-MVP (deferred, not cancelled). **Migration 0006 remains absent and owned only by QFJ-P03.07C; the overlay authorizes no migration.** QFJ-P03.07 remains the active technical priority.
+
 ---
 
 ## Canonical authority (permanent)
