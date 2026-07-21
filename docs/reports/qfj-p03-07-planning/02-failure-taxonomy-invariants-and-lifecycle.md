@@ -15,7 +15,9 @@
 | Unknown COMMIT outcome                                           | Infrastructure (ambiguous)  | No             | No                | No                             | `projection-commit-outcome-unknown`       |
 | Cancellation / shutdown                                          | Controlled                  | No             | No                | No                             | (worker drains; no code)                  |
 
-**Correction/confirmation vs the prompt's expected taxonomy:** the runtime does **not** use an explicit transient-SQLSTATE allowlist; it uses a **deterministic-handler allowlist** and treats everything else (including the listed transient codes) as **conservative infrastructure**. The end behaviour matches the intended taxonomy (transient/infra → no durable failure), and the design formalizes it as such.
+**Correction/confirmation vs the prompt's expected taxonomy:** the runtime does **not** use an explicit transient-SQLSTATE allowlist; it uses a **deterministic-handler allowlist** and treats everything else (including the listed transient codes) as **conservative infrastructure**. The end behaviour for transient/infra matches the intended taxonomy (→ no durable failure).
+
+**UNKNOWN_UNCLASSIFIED correction (owned by QFJ-P03.07B).** The five target categories are `DETERMINISTIC_HANDLER_FAILURE`, `TRANSIENT_INFRASTRUCTURE_FAILURE`, `REPOSITORY_INVARIANT_FAILURE`, `CANCELLATION_OR_SHUTDOWN`, and `UNKNOWN_UNCLASSIFIED_FAILURE`. Unknown / missing-code / unreadable / hostile thrown values **must not** auto-become deterministic. Invalid/unreadable/hostile codes are **already** routed to conservative infrastructure (correct). **But the current runner classifies an absent SQLSTATE (ordinary `Error`, no `code`) as DETERMINISTIC_HANDLER_FAILURE** — so a genuinely unknown value with no code is today consumed as a bounded attempt and can drive exhaustion. This is **current runtime behaviour requiring correction in QFJ-P03.07B**: split "absent code" into a provable deterministic rejection vs `UNKNOWN_UNCLASSIFIED_FAILURE` (rollback, checkpoint unchanged, no deterministic exhaustion, fail closed, sanitized repository-owned code, operator escalation). See [projection-failure-operations.md](../../architecture/projection-failure-operations.md) § Canonical categories.
 
 ## Retryable vs non-retryable
 
@@ -51,6 +53,8 @@ The runner reads exactly `checkpoint.last_position + 1` via the gap-free commit-
 ## Checkpoint safety
 
 Checkpoint advances **only** on a successful handler + atomic advance (normal run or successful replay). Acknowledge/quarantine/authorize never advance it. Resolution requires proof of successful processing; an operator cannot manually resolve.
+
+**Biconditional invariant:** a `blocked` checkpoint ↔ **exactly one** matching unresolved active failure (same name, version, `blocked_position`, event identity). The exhaustion write is one transaction (append final attempt → block → set `blocked_position` → create one `OPEN` failure). Fail-closed reconciliation covers all seven divergences — blocked-without-failure, failure-without-blocked, position mismatch, event-identity mismatch, name/version mismatch, duplicate active failures, inconsistent generation/status — each stops and alerts, never auto-repairs. Full table: [projection-failure-operations.md](../../architecture/projection-failure-operations.md) § Checkpoint ↔ failure-aggregate reconciliation.
 
 ## Isolation
 
