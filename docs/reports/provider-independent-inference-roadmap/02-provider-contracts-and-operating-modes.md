@@ -30,6 +30,13 @@ Riya / Anisha runtime → repository-owned ModelProvider → selected adapter �
 - **No fallback creates a duplicate outbound reply**: one inbound message → at most one accepted outbound result (idempotency key on the conversation turn).
 - Fallback is **idempotent**; `HUMAN_ONLY` is **always available**.
 
+## Routing policy clarifications
+
+- **Provider terminology:** model providers perform bounded inference only; communication providers deliver approved messages only; **neither has QuickFurno business authority.** A model provider never directly sends WhatsApp or mutates Core.
+- **Sequential hybrid fallback:** one primary per turn; fallback only after a classified permitted failure; providers not called simultaneously by default; **no model voting, no untracked judge model**; at most one validated response and one outbound reply.
+- **Data classification (enforced before availability/cost/latency):** `HOSTED_ALLOWED` (sanitized request may use Groq when permitted); `LOCAL_ONLY` (approved local only; outage → safe local/human fallback, **never** silent Groq fallback); `HUMAN_ONLY` (no model-provider call; human handling).
+- **Capability matching:** OpenAI compatibility alone is insufficient; a provider/model declares supported capabilities (structured output, JSON Schema, context size, cancellation, timeout, health, model identity, response mode; later tools/streaming) and is selected only when the request's required capabilities are supported.
+
 ## Agent ownership (unchanged by provider selection)
 
 Provider selection never alters agent authority. **Riya** — Customer Conversation and Qualification Agent. **Anisha** — Vendor Sales, Relationship and Success Agent (complete vendor lifecycle; **not** narrowed to onboarding/support). QuickFurno Core = final business authority; Jarvis recommends/coordinates; n8n executes approved intents; providers deliver only.

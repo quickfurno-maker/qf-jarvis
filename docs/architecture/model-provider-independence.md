@@ -37,6 +37,40 @@ provider SDK / HTTP  (NEVER crosses the adapter boundary)
 
 **Fallback rules (all modes).** Fallback is **explicit** and configured — **no unexpected provider fallback**. The runtime does **not** call both providers for every message (fallback triggers only on a defined primary failure/health/timeout condition). **No fallback may create a duplicate outbound reply**: one inbound message yields at most one accepted outbound result, guarded by idempotency keys on the conversation turn. `HUMAN_ONLY` is **always available** as the ultimate fallback.
 
+## Provider routing and inference policy
+
+### A. Provider terminology — model providers vs communication providers
+
+**Model providers perform bounded inference only. Communication providers deliver approved messages only. Neither provider class has QuickFurno business authority.**
+
+- A **model provider** (Groq, the local OpenAI-compatible server) performs bounded language-model inference; it never holds business authority, never directly sends WhatsApp messages, and never directly mutates QuickFurno Core.
+- A **communication provider** (e.g. the WhatsApp/Meta delivery path reached only through n8n under an approved execution intent) delivers an approved message; it never performs business authorization and never decides agent policy.
+
+Do not use the ambiguous shorthand that "all providers merely deliver": inference and delivery are distinct provider classes with distinct, bounded roles.
+
+### B. Sequential hybrid fallback (no model voting)
+
+- The normal router selects **one** primary provider for a turn.
+- Fallback is attempted **only after a classified, permitted primary failure** (health/timeout/error), and providers are **not** called simultaneously by default.
+- **No automatic model voting; no untracked judge model.** At most **one** validated response may be accepted, and at most **one** outbound reply may be produced.
+- Fallback is **bounded, sequential, and idempotent** (idempotency key on the conversation turn).
+
+### C. Data classification (enforced before availability, cost, or latency)
+
+Every inference request carries a data class, and the router enforces it **before** considering provider availability, cost, or latency:
+
+- **HOSTED_ALLOWED** — a sanitized request **may** use Groq (or another approved hosted model provider) when policy permits.
+- **LOCAL_ONLY** — the request may use **only** approved local inference; a local outage must lead to a **safe fallback within the local/human policy or a human handoff**, and **must not silently fall back to Groq**.
+- **HUMAN_ONLY** — **no** model-provider invocation; route directly to human handling.
+
+### D. Provider capability matching (OpenAI compatibility alone is insufficient)
+
+**OpenAI-endpoint API compatibility alone is not sufficient** to select a provider/model. Every provider/model must **declare** its supported capabilities — at least: structured output; strict JSON Schema; context size; cancellation; timeout; health check; model identity; response mode; plus tool support and streaming when those are introduced later. The router may select a provider **only when the request's required capabilities are supported** by that provider/model; otherwise it fails closed to another eligible provider (respecting the data class) or to human handling.
+
+### E. Current priority
+
+**QFJ-P03.07 is the active workstream; QFJ-P04 (this inference work) remains future.** No model provider is active; no Groq, local, or hybrid implementation has begun; this document changes roadmap governance only.
+
 ## Deployment boundaries
 
 **Jarvis VPS owns:** inbound webhook · queues · task routing · provider selection · memory coordination · response validation · delivery scheduling · monitoring · execution intents.

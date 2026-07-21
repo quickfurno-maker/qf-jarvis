@@ -45,6 +45,15 @@ The **Jarvis VPS** owns inbound webhook, queues, task routing, provider selectio
 
 The Agent Constitution is preserved. **Riya** remains the Customer Conversation and Qualification Agent; **Anisha** remains the Vendor Sales, Relationship and Success Agent (**not** narrowed to onboarding/support). **Provider selection never alters agent authority.** QuickFurno Core remains the final business authority; Jarvis recommends and coordinates; n8n executes approved intents; providers deliver only.
 
+### 5a. Routing clarifications (provider terminology, fallback, data class, capability)
+
+- **Model provider vs communication provider.** Model providers perform bounded inference only; communication providers deliver approved messages only; **neither provider class has QuickFurno business authority.** A model provider never directly sends WhatsApp messages or mutates Core; a communication provider never performs business authorization or decides agent policy.
+- **Sequential hybrid fallback.** One primary provider per turn; fallback only after a classified permitted failure; providers are not called simultaneously by default; **no model voting, no untracked judge model**; at most one validated response and one outbound reply; fallback is bounded, sequential, and idempotent.
+- **Data classification.** `HOSTED_ALLOWED` (sanitized request may use Groq when policy permits), `LOCAL_ONLY` (approved local inference only; a local outage leads to safe local/human fallback and **never** silently falls back to Groq), `HUMAN_ONLY` (no model-provider invocation; route to a human). The data class is enforced **before** availability, cost, or latency.
+- **Capability matching.** OpenAI-endpoint compatibility alone is insufficient; a provider/model must declare supported capabilities (structured output, JSON Schema, context size, cancellation, timeout, health, model identity, response mode; later tools/streaming), and the router may select it only when the request's required capabilities are supported.
+
+Full detail: [model-provider-independence.md](../architecture/model-provider-independence.md) § Provider routing and inference policy.
+
 ### 6. Memory and data boundaries
 
 Groq and the local model are **not** authoritative memory systems; memory remains provider-independent. Every fact is classifiable as `USER_CLAIMED`, `MODEL_INFERRED`, `CORE_VERIFIED`, `HUMAN_CORRECTED`, or `SUPERSEDED`, and (planned) carries source, verification state, prompt version, knowledge version, provider, model, adapter version, timestamp, correction history, and expiry/review status. WhatsApp content is **never** auto-promoted into RAG, training, evaluation, permanent memory, or business knowledge.
