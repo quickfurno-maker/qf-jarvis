@@ -18,6 +18,7 @@ import type { DatabaseClient } from '../persistence/pool.js';
 import { storeValidatedEvent, type EventPersistenceRecord } from '../persistence/event-store.js';
 import { runMigrations } from '../persistence/migration-runner.js';
 import { toCanonicalInstant, type CanonicalInstant } from '../projections/projection-definition.js';
+import { deterministicHandlerFailure } from '../projections/projection-failure-taxonomy.js';
 import { projectionAdvisoryLockKeyParameter } from '../projections/projection-lock-key.js';
 import { createProjectionRegistry } from '../projections/projection-registry.js';
 import { runProjectionOnce } from '../projections/projection-runner.js';
@@ -75,7 +76,7 @@ function okHandler(projectionName: string) {
 }
 const failHandler = async (): Promise<void> => {
   await Promise.resolve();
-  throw new Error('deterministic reducer refusal');
+  throw deterministicHandlerFailure('deterministic reducer refusal');
 };
 const infraHandler = async (): Promise<void> => {
   await Promise.resolve();
