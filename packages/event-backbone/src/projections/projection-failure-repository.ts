@@ -234,6 +234,20 @@ export async function readProjectionFailureById(
   return row === undefined ? null : mapFailure(row);
 }
 
+/** Read and row-lock one failure by id FOR UPDATE (the operator mutation locks it before transition). */
+export async function readProjectionFailureByIdForUpdate(
+  client: DatabaseClient,
+  failureId: ProjectionFailureId,
+): Promise<ProjectionFailureRow | null> {
+  assertUuid(failureId, 'failure id');
+  const result = await client.query<RawFailure>(
+    `SELECT ${FAILURE_COLUMNS} FROM qf_jarvis.projection_failure WHERE failure_id = $1 FOR UPDATE`,
+    [failureId],
+  );
+  const row = result.rows[0];
+  return row === undefined ? null : mapFailure(row);
+}
+
 /** Read the single active (non-terminal) failure for a projection, or null. */
 export async function readActiveProjectionFailure(
   client: DatabaseClient,
@@ -297,7 +311,84 @@ export async function listProjectionFailures(
   return result.rows.map(mapFailure);
 }
 
-/** Advance a failure from an expected prior status to a new status (repository-mediated transition). */
+export interface ListFailuresKeysetInput {
+  readonly name?: ProjectionName | undefined;
+  readonly version?: number | undefined;
+  readonly status?: string | undefined;
+  readonly category?: string | undefined;
+  readonly createdBefore?: Date | undefined;
+  readonly createdAfter?: Date | undefined;
+  readonly activeOnly?: boolean | undefined;
+  /** Keyset cursor: return rows strictly AFTER (created_at, failure_id) in the DESC ordering. */
+  readonly cursorCreatedAt?: Date | undefined;
+  readonly cursorFailureId?: ProjectionFailureId | undefined;
+  readonly limit: number;
+}
+
+/**
+ * Keyset-paginated inspection listing, ordered `created_at DESC, failure_id DESC`. Every filter is a
+ * closed, validated, parameterized value — no arbitrary column, order-by, or raw SQL fragment. The
+ * cursor is a stable `(created_at, failure_id)` pair; there is no OFFSET scan. `limit` is validated by
+ * the caller (the operations boundary clamps it to the approved maximum).
+ */
+export async function listProjectionFailuresKeyset(
+  client: DatabaseClient,
+  input: ListFailuresKeysetInput,
+): Promise<readonly ProjectionFailureRow[]> {
+  const limit = assertPositiveInteger(input.limit, 'limit');
+  if (limit > 500) throw new ProjectionInputError('limit must be at most 500.');
+  if (input.name !== undefined) toProjectionName(input.name);
+  if (input.version !== undefined) assertPositiveInteger(input.version, 'projection version');
+  if (input.status !== undefined && !isProjectionFailureStatus(input.status)) {
+    throw new ProjectionInputError('status filter must be a known failure status.');
+  }
+  if (input.category !== undefined && !isProjectionFailureCategory(input.category)) {
+    throw new ProjectionInputError('category filter must be a known failure category.');
+  }
+  if (input.createdBefore !== undefined) assertValidDate(input.createdBefore, 'created before');
+  if (input.createdAfter !== undefined) assertValidDate(input.createdAfter, 'created after');
+  const cursorGiven = input.cursorCreatedAt !== undefined || input.cursorFailureId !== undefined;
+  if (cursorGiven) {
+    if (input.cursorCreatedAt === undefined || input.cursorFailureId === undefined) {
+      throw new ProjectionInputError('a keyset cursor requires both created_at and failure_id.');
+    }
+    assertValidDate(input.cursorCreatedAt, 'cursor created at');
+    assertUuid(input.cursorFailureId, 'cursor failure id');
+  }
+  const result = await client.query<RawFailure>(
+    `SELECT ${FAILURE_COLUMNS} FROM qf_jarvis.projection_failure
+      WHERE ($1::text IS NULL OR projection_name = $1)
+        AND ($2::int IS NULL OR projection_version = $2)
+        AND ($3::text IS NULL OR status = $3)
+        AND ($4::text IS NULL OR category = $4)
+        AND ($5::timestamptz IS NULL OR created_at < $5)
+        AND ($6::timestamptz IS NULL OR created_at > $6)
+        AND ($7::boolean IS NOT TRUE OR status NOT IN ('resolved','superseded','retired'))
+        AND ($8::timestamptz IS NULL OR (created_at, failure_id) < ($8, $9::uuid))
+      ORDER BY created_at DESC, failure_id DESC
+      LIMIT $10`,
+    [
+      input.name ?? null,
+      input.version ?? null,
+      input.status ?? null,
+      input.category ?? null,
+      input.createdBefore ?? null,
+      input.createdAfter ?? null,
+      input.activeOnly ?? null,
+      input.cursorCreatedAt ?? null,
+      input.cursorFailureId ?? null,
+      limit,
+    ],
+  );
+  return result.rows.map(mapFailure);
+}
+
+/**
+ * Advance a failure from an expected prior status to a new status (repository-mediated transition).
+ * When `expectedGeneration` is supplied, the UPDATE additionally requires the current generation to
+ * match — a DB-enforced optimistic-concurrency guard on top of the prior-status guard. The generation
+ * always increments by exactly one on a successful transition.
+ */
 async function transitionFailure(
   client: DatabaseClient,
   params: {
@@ -305,6 +396,7 @@ async function transitionFailure(
     readonly fromStatuses: readonly string[];
     readonly toStatus: string;
     readonly now: Date;
+    readonly expectedGeneration?: number | undefined;
     readonly extraSet?: string;
     readonly extraParams?: readonly unknown[];
   },
@@ -312,13 +404,25 @@ async function transitionFailure(
   assertUuid(params.failureId, 'failure id');
   assertValidDate(params.now, 'now');
   const extraSet = params.extraSet ?? '';
-  const base = [params.failureId, params.toStatus, params.now];
+  const values: unknown[] = [
+    params.failureId,
+    params.toStatus,
+    params.now,
+    params.fromStatuses,
+    ...(params.extraParams ?? []),
+  ];
+  let generationClause = '';
+  if (params.expectedGeneration !== undefined) {
+    assertNonNegativeInteger(params.expectedGeneration, 'expected generation');
+    values.push(params.expectedGeneration);
+    generationClause = ` AND generation = $${String(values.length)}`;
+  }
   const result = await client.query<RawFailure>(
     `UPDATE qf_jarvis.projection_failure
         SET status = $2, generation = generation + 1, updated_at = $3${extraSet}
-      WHERE failure_id = $1 AND status = ANY($4::text[])
+      WHERE failure_id = $1 AND status = ANY($4::text[])${generationClause}
       RETURNING ${FAILURE_COLUMNS}`,
-    [...base, params.fromStatuses as string[], ...(params.extraParams ?? [])],
+    values,
   );
   const row = result.rows[0];
   if (row === undefined) {
@@ -337,6 +441,7 @@ export function acknowledgeProjectionFailure(
     readonly actorId: string;
     readonly at: Date;
     readonly now: Date;
+    readonly expectedGeneration?: number;
   },
 ): Promise<ProjectionFailureRow> {
   assertBoundedText(input.actorId, B.actorId, 'actor id');
@@ -346,6 +451,7 @@ export function acknowledgeProjectionFailure(
     fromStatuses: ['open'],
     toStatus: 'acknowledged',
     now: input.now,
+    expectedGeneration: input.expectedGeneration,
     extraSet: ', acknowledged_at = $5, acknowledged_by = $6',
     extraParams: [input.at, input.actorId],
   });
@@ -359,6 +465,7 @@ export function quarantineProjectionFailure(
     readonly actorId: string;
     readonly at: Date;
     readonly now: Date;
+    readonly expectedGeneration?: number;
   },
 ): Promise<ProjectionFailureRow> {
   assertBoundedText(input.actorId, B.actorId, 'actor id');
@@ -368,6 +475,7 @@ export function quarantineProjectionFailure(
     fromStatuses: ['open', 'acknowledged'],
     toStatus: 'quarantined',
     now: input.now,
+    expectedGeneration: input.expectedGeneration,
     extraSet: ', quarantined_at = $5, quarantined_by = $6',
     extraParams: [input.at, input.actorId],
   });
@@ -516,6 +624,27 @@ export async function readProjectionFailureActions(
     [failureId],
   );
   return result.rows.map(mapAction);
+}
+
+/**
+ * Read the single action carrying a given idempotency key, or null. The operator-mutation operations
+ * use this to detect an ALREADY-APPLIED request (the action ledger's partial-unique `idempotency_key`
+ * index guarantees at most one), so an exact duplicate returns the stable prior result instead of
+ * appending a second action or double-transitioning.
+ */
+export async function readProjectionFailureActionByIdempotencyKey(
+  client: DatabaseClient,
+  idempotencyKey: string,
+): Promise<ProjectionFailureActionRow | null> {
+  assertBoundedText(idempotencyKey, B.idempotencyKey, 'idempotency key');
+  const result = await client.query<RawAction>(
+    `SELECT sequence, action_id, failure_id, action_type, actor_type, actor_id, reason,
+            idempotency_key, expected_generation, resulting_generation, occurred_at, recorded_at
+       FROM qf_jarvis.projection_failure_action WHERE idempotency_key = $1`,
+    [idempotencyKey],
+  );
+  const row = result.rows[0];
+  return row === undefined ? null : mapAction(row);
 }
 
 // --- Replay authorization ------------------------------------------------------------------------
