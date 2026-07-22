@@ -449,7 +449,8 @@ describe('concurrency', () => {
 describe('expired-lease takeover', () => {
   it('after a transient replay failure leaves a live lease, an expired lease can be taken over and completed', async () => {
     await seedEvents(1);
-    const state: HandlerState = { mode: 'infra' };
+    // Block with a DETERMINISTIC poison (infra failures record no attempt and never block).
+    const state: HandlerState = { mode: 'poison' };
     const name = 'f-takeover';
     const { failureId, generation } = await blockAndQuarantine(name, state);
     const auth = await authorizeProjectionFailureReplay(admin, ALLOW, ctx(), {
@@ -458,7 +459,8 @@ describe('expired-lease takeover', () => {
       expiresAt: EXPIRES,
       now: laterDate(7 * 600000),
     });
-    // A transient infrastructure failure during execute leaves a STARTED attempt with a live lease.
+    // Now make the replay hit a transient infrastructure failure: it leaves a STARTED attempt + live lease.
+    state.mode = 'infra';
     const infra = await executeAuthorizedProjectionReplay(
       admin,
       ALLOW,
