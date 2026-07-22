@@ -489,6 +489,7 @@ export function resolveProjectionFailure(
     readonly resolvedAttemptId: ProjectionReplayAttemptId;
     readonly at: Date;
     readonly now: Date;
+    readonly expectedGeneration?: number | undefined;
   },
 ): Promise<ProjectionFailureRow> {
   assertUuid(input.resolvedAttemptId, 'resolved attempt id');
@@ -498,8 +499,74 @@ export function resolveProjectionFailure(
     fromStatuses: ['replaying'],
     toStatus: 'resolved',
     now: input.now,
+    expectedGeneration: input.expectedGeneration,
     extraSet: ', resolved_at = $5, resolved_attempt_id = $6',
     extraParams: [input.at, input.resolvedAttemptId],
+  });
+}
+
+/**
+ * Transition a QUARANTINED failure to REPLAY_AUTHORIZED (QFJ-P03.07F authorize step). Generation-guarded;
+ * only a quarantined failure may be authorized for replay (ADR-0040 §39 lifecycle).
+ */
+export function transitionFailureToReplayAuthorized(
+  client: DatabaseClient,
+  input: {
+    readonly failureId: ProjectionFailureId;
+    readonly expectedGeneration: number;
+    readonly now: Date;
+  },
+): Promise<ProjectionFailureRow> {
+  return transitionFailure(client, {
+    failureId: input.failureId,
+    fromStatuses: ['quarantined'],
+    toStatus: 'replay-authorized',
+    now: input.now,
+    expectedGeneration: input.expectedGeneration,
+  });
+}
+
+/**
+ * Transition a REPLAY_AUTHORIZED failure to REPLAYING (QFJ-P03.07F replay-start/claim step).
+ * Generation-guarded.
+ */
+export function transitionFailureToReplaying(
+  client: DatabaseClient,
+  input: {
+    readonly failureId: ProjectionFailureId;
+    readonly expectedGeneration: number;
+    readonly now: Date;
+  },
+): Promise<ProjectionFailureRow> {
+  return transitionFailure(client, {
+    failureId: input.failureId,
+    fromStatuses: ['replay-authorized'],
+    toStatus: 'replaying',
+    now: input.now,
+    expectedGeneration: input.expectedGeneration,
+  });
+}
+
+/**
+ * Transition a REPLAYING failure back to QUARANTINED after an UNSUCCESSFUL replay (ADR-0040 §39 "back to
+ * a controlled state"). The failure stays active and blocked; a further replay requires a NEW
+ * authorization (no automatic retry). Generation-guarded. Preserves the original quarantine attribution
+ * (quarantined_at/by are unchanged and remain paired).
+ */
+export function transitionFailureToQuarantinedAfterReplay(
+  client: DatabaseClient,
+  input: {
+    readonly failureId: ProjectionFailureId;
+    readonly expectedGeneration: number;
+    readonly now: Date;
+  },
+): Promise<ProjectionFailureRow> {
+  return transitionFailure(client, {
+    failureId: input.failureId,
+    fromStatuses: ['replaying'],
+    toStatus: 'quarantined',
+    now: input.now,
+    expectedGeneration: input.expectedGeneration,
   });
 }
 
@@ -957,6 +1024,37 @@ export async function readLiveReplayAttempt(
   );
   const row = result.rows[0];
   return row === undefined ? null : mapAttempt(row);
+}
+
+/** Read one replay attempt by id, or null (used to validate a specific attempt during completion/takeover). */
+export async function readReplayAttemptById(
+  client: DatabaseClient,
+  attemptId: ProjectionReplayAttemptId,
+): Promise<ProjectionReplayAttemptRow | null> {
+  assertUuid(attemptId, 'attempt id');
+  const result = await client.query<RawAttempt>(
+    `SELECT ${ATTEMPT_COLUMNS} FROM qf_jarvis.projection_replay_attempt WHERE attempt_id = $1`,
+    [attemptId],
+  );
+  const row = result.rows[0];
+  return row === undefined ? null : mapAttempt(row);
+}
+
+/**
+ * Count all replay attempts (any state) for a failure — used to allocate the next `attempt_number`
+ * (count + 1) for a takeover's fresh attempt. Race-safe under the failure row lock + advisory lock; the
+ * `UNIQUE(failure_id, attempt_number)` constraint is the durable backstop.
+ */
+export async function countReplayAttemptsForFailure(
+  client: DatabaseClient,
+  failureId: ProjectionFailureId,
+): Promise<number> {
+  assertUuid(failureId, 'failure id');
+  const result = await client.query<{ n: string }>(
+    `SELECT count(*)::text AS n FROM qf_jarvis.projection_replay_attempt WHERE failure_id = $1`,
+    [failureId],
+  );
+  return Number(result.rows[0]?.n ?? '0');
 }
 
 export interface CompleteAttemptInput {

@@ -300,3 +300,37 @@ export async function recordCheckpointBlocked(
   );
   assertSingleRow(result.rowCount, 'blocked');
 }
+
+/**
+ * Resume a BLOCKED checkpoint after a proven-successful authorized replay of the poison event
+ * (QFJ-P03.07F). This is the ONLY transition out of `blocked`: it advances `last_position` to exactly
+ * the poison (blocked) position, clears the blocked state and all failure metadata, and returns the
+ * checkpoint to `active` — the same terminal state a normal successful application produces, applied to
+ * the one position that was blocked. It is impossible to skip: the transition applies only if the stored
+ * status is `blocked`, the stored `blocked_position` equals the resolved position, and that position is
+ * exactly `last_position + 1` (the poison event is applied, never jumped over). Refuses (0 rows -> throws)
+ * an unblocked checkpoint, a mismatched blocked position, or any position other than the next one. It is
+ * distinct from {@link advanceCheckpointOnSuccess} precisely because that path REFUSES a blocked
+ * checkpoint (`status <> 'blocked'`), so a blocked projection can be resumed ONLY here, and ONLY after an
+ * authorized replay's handler has applied in the same transaction.
+ */
+export async function resumeCheckpointAfterReplay(
+  client: DatabaseClient,
+  input: CheckpointIdentity & { readonly resolvedPosition: bigint; readonly now: Date },
+): Promise<void> {
+  validateIdentity(input);
+  requirePositiveBigint(input.resolvedPosition, 'resolved position');
+  requireValidDate(input.now, 'now');
+  const result = await client.query(
+    `UPDATE qf_jarvis.projection_checkpoint
+       SET last_position = $3, status = 'active', failed_attempt_count = 0,
+           last_safe_error_code = NULL, next_attempt_at = NULL, blocked_position = NULL,
+           updated_at = $4
+     WHERE projection_name = $1 AND projection_version = $2
+       AND status = 'blocked'
+       AND blocked_position = $3
+       AND $3 = last_position + 1`,
+    [input.name, input.version, input.resolvedPosition.toString(), input.now],
+  );
+  assertSingleRow(result.rowCount, 'resume-after-replay');
+}
