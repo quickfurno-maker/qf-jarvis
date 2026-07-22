@@ -239,13 +239,13 @@ Fallback is explicit; no unexpected provider fallback; the runtime never calls b
 
 - **QFJ-P03.06 (Production Projection Activation, historical Stage 3.4.5B) is merged and closed through PR #24**; merge commit `01b164b40d9d34d32b9233e97c4d75ce946121ee` (parents `9d271bb…`, `a4fa500…`).
 - `main` is synchronized (local == `origin/main`).
-- **QFJ-P03.07 (Projection Failure Operations, historical Stage 3.5) is in progress.** QFJ-P03.07A (design, [ADR-0040](../decisions/ADR-0040-projection-failure-operations-quarantine-and-authorized-replay.md), SCHEMA_REQUIRED) and QFJ-P03.07B (failure contracts and taxonomy) are merged; **QFJ-P03.07C (Failure Persistence Foundation)** is implemented on its branch. The production runner is not yet wired to the new persistence and replay is not implemented (QFJ-P03.07D–F next).
-- **Migration 0006 now exists** (`0006_projection_failure_operations.sql`), created by QFJ-P03.07C: the failure aggregate, append-only action ledger, replay authorizations, and replay-attempt/lease evidence. It is **applied local/CI only**; managed PostgreSQL remains **migration 0001 only**; migrations **0002–0006 remain unapplied** to managed PostgreSQL and are **not deployed**. **Migration 0007 does not exist.**
+- **QFJ-P03.07 (Projection Failure Operations, historical Stage 3.5) is in progress.** QFJ-P03.07A (design, [ADR-0040](../decisions/ADR-0040-projection-failure-operations-quarantine-and-authorized-replay.md), SCHEMA_REQUIRED), QFJ-P03.07B (failure contracts and taxonomy), and **QFJ-P03.07C (Failure Persistence Foundation)** are merged and locked (QFJ-P03.07C via PR #30, merge commit `43137a551c70a09311fcd1815a7a1ce2718a12ba`). **QFJ-P03.07D (Atomic Retry-Exhaustion Integration) is implemented on its branch:** the production runner's fifth deterministic failure now atomically establishes the durable failure aggregate + its `created` action alongside the final attempt and the checkpoint block. **Operator inspection, quarantine, replay authorization, and replay execution remain deferred (QFJ-P03.07E/F next).**
+- **Migration 0006 exists** (`0006_projection_failure_operations.sql`), created by QFJ-P03.07C: the failure aggregate, append-only action ledger, replay authorizations, and replay-attempt/lease evidence. QFJ-P03.07D adds **no** new migration and does **not** modify 0006. It is **applied local/CI only**; managed PostgreSQL remains **migration 0001 only**; migrations **0002–0006 remain unapplied** to managed PostgreSQL and are **not deployed**. **Migration 0007 does not exist.**
 - **QFJ-P03.08 (Rebuild Determinism and Erasure) has not begun.**
 - **No RAG, agent, task runtime, model gateway, n8n, WhatsApp, or live QuickFurno Core integration is active.** The feature branch `stage-3.4.5b-projection-handlers` is absent locally and remotely.
 - Package-root runtime surface of `@qf-jarvis/event-backbone` remains exactly **39** symbols.
 
-**Immediate next planning phase:** QFJ-P03.07 — Projection Failure Operations.
+**Immediate next slice:** QFJ-P03.07E — Operator Inspection and Quarantine (following the merged QFJ-P03.07A–C and the QFJ-P03.07D atomic retry-exhaustion integration). No MVP runtime (M1) has begun.
 
 ---
 
