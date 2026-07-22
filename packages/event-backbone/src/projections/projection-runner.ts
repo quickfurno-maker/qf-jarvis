@@ -19,6 +19,15 @@
  *   retry-pending | read position = last_position + 1 via the map/event join | caught-up |
  *   SAVEPOINT projection_handler | handler | success or classified failure bookkeeping | COMMIT.
  *
+ * Atomic retry exhaustion (QFJ-P03.07D, ADR-0040): the FIFTH deterministic failure blocks the
+ * checkpoint AND, in the SAME transaction, establishes exactly one durable failure aggregate at the
+ * blocked position plus its append-only `created` action (via the internal retry-exhaustion seam over
+ * the QFJ-P03.07C persistence primitives). The final attempt, the blocked checkpoint/position, the
+ * single active failure, and the creation action therefore commit or roll back together. A later
+ * invocation that finds the checkpoint already blocked proves that biconditional (exactly one active
+ * failure, at the blocked position) before returning blocked-existing, and fails closed on a
+ * divergence — it never repairs, replays, or authorizes anything (QFJ-P03.07E/F).
+ *
  * Client lifecycle is PROVEN, not assumed: the outer transaction's state (not-started/open/closed/
  * unknown) is tracked, a NORMAL release happens only after a confirmed COMMIT or a confirmed outer
  * ROLLBACK, and a final safety boundary handles any UNEXPECTED value that escapes with the transaction
@@ -55,12 +64,16 @@ import {
   type CanonicalInstant,
   type ProjectionDefinition,
 } from './projection-definition.js';
-import { ProjectionInputError } from './projection-errors.js';
+import { ProjectionCheckpointInvalidError, ProjectionInputError } from './projection-errors.js';
 import { readEventAtPosition } from './projection-event-reader.js';
 import {
   classifyProjectionFailure,
   type ProjectionFailureCategory,
 } from './projection-failure-taxonomy.js';
+import {
+  establishRetryExhaustionFailure,
+  reconcileBlockedExhaustion,
+} from './projection-retry-exhaustion.js';
 import { projectionAdvisoryLockKeyParameter } from './projection-lock-key.js';
 import type { ProjectionName } from './projection-name.js';
 import type { ProjectionRegistry } from './projection-registry.js';
@@ -372,12 +385,31 @@ async function executeRun(
     return abortAndThrow(client, state, 'projection-attempt-checkpoint-divergent');
   }
 
-  // Already blocked: write nothing.
+  // Already blocked: write nothing. Before returning the stable result, PROVE the active-failure
+  // biconditional (QFJ-P03.07D): a blocked checkpoint must correspond to EXACTLY one active failure at
+  // the blocked position. This makes a restart after a committed exhaustion return the stable
+  // blocked-existing result WITHOUT re-invoking the handler, adding an attempt, or fabricating a
+  // failure; a divergence (missing, duplicated, or position-mismatched active failure) fails closed and
+  // is never repaired here.
   if (checkpoint.status === 'blocked') {
     const blockedPosition = checkpoint.blockedPosition;
     const code = checkpoint.lastSafeErrorCode;
     if (blockedPosition === null || code === null) {
       return abortAndThrow(client, state, 'projection-attempt-checkpoint-divergent');
+    }
+    try {
+      await reconcileBlockedExhaustion(client, {
+        name: definition.name,
+        version: definition.version,
+        blockedPosition,
+      });
+    } catch (reconcileError: unknown) {
+      if (isProjectionRunnerErrorSafely(reconcileError)) throw reconcileError;
+      const reconcileCode: ProjectionRunnerErrorCode =
+        reconcileError instanceof ProjectionCheckpointInvalidError
+          ? 'projection-attempt-checkpoint-divergent'
+          : 'projection-infrastructure-failed';
+      return abortAndThrow(client, state, reconcileCode);
     }
     await outerRollbackClean(client, state);
     return blockedExistingResult(identity, blockedPosition, code);
@@ -530,6 +562,29 @@ async function executeRun(
       safeErrorCode: HANDLER_FAILURE_CODE,
       now: nowDate,
     });
+    // QFJ-P03.07D: atomically establish the durable failure aggregate + its append-only `created`
+    // action in the SAME transaction as the fifth attempt and the checkpoint block, so the five
+    // effects (final attempt + blocked checkpoint + blocked position + exactly one active failure +
+    // creation action) commit or roll back together. A duplicate/partial failure state fails closed as
+    // divergence; any other establishment failure fails closed as infrastructure — either way the whole
+    // transaction (including the fifth attempt and the block) is rolled back and NO durable state is
+    // claimed.
+    try {
+      await establishRetryExhaustionFailure(client, {
+        name: definition.name,
+        version: definition.version,
+        blockedPosition: pending,
+        failedAt: nowDate,
+        now: nowDate,
+      });
+    } catch (establishError: unknown) {
+      if (isProjectionRunnerErrorSafely(establishError)) throw establishError;
+      const establishCode: ProjectionRunnerErrorCode =
+        establishError instanceof ProjectionCheckpointInvalidError
+          ? 'projection-attempt-checkpoint-divergent'
+          : 'projection-infrastructure-failed';
+      return await abortAndThrow(client, state, establishCode);
+    }
     await outerCommit(client, state);
     return blockedResult;
   } catch (error: unknown) {

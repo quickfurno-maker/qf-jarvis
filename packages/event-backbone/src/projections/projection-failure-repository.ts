@@ -252,6 +252,29 @@ export async function readActiveProjectionFailure(
   return row === undefined ? null : mapFailure(row);
 }
 
+/**
+ * Read ALL active (non-terminal) failures for a projection, ordered by position. The retry-exhaustion
+ * reconciliation (QFJ-P03.07D) uses this to prove the active-failure biconditional at a blocked
+ * checkpoint: exactly one active failure must exist, and it must sit at the blocked position. The
+ * single-row {@link readActiveProjectionFailure} cannot distinguish "one" from "many", so the plural
+ * read is the fail-closed primitive for detecting the multiple-active-failure divergence.
+ */
+export async function readActiveProjectionFailuresForProjection(
+  client: DatabaseClient,
+  identity: { readonly name: ProjectionName; readonly version: number },
+): Promise<readonly ProjectionFailureRow[]> {
+  toProjectionName(identity.name);
+  assertPositiveInteger(identity.version, 'projection version');
+  const result = await client.query<RawFailure>(
+    `SELECT ${FAILURE_COLUMNS} FROM qf_jarvis.projection_failure
+      WHERE projection_name = $1 AND projection_version = $2
+        AND status NOT IN ('resolved','superseded','retired')
+      ORDER BY projection_position ASC`,
+    [identity.name, identity.version],
+  );
+  return result.rows.map(mapFailure);
+}
+
 /** Bounded inspection listing (newest first), for a future operator queue. */
 export async function listProjectionFailures(
   client: DatabaseClient,
