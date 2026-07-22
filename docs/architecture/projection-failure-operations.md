@@ -1,6 +1,8 @@
 # Projection Failure Operations — QF Jarvis (QFJ-P03.07 design)
 
-**Status:** Design and planning only (QFJ-P03.07A). Adopted 2026-07-21 under [ADR-0040](../decisions/ADR-0040-projection-failure-operations-quarantine-and-authorized-replay.md). **No runtime behaviour, migration, or SQL is implemented by this document.** Canonical phase: **QFJ-P03.07 — Projection Failure Operations** ([qf-jarvis-roadmap-v3.md](./qf-jarvis-roadmap-v3.md); historical alias Stage 3.5).
+**Status:** Design and planning (QFJ-P03.07A). Adopted 2026-07-21 under [ADR-0040](../decisions/ADR-0040-projection-failure-operations-quarantine-and-authorized-replay.md). **This document is the design; runtime is delivered slice by slice.** Canonical phase: **QFJ-P03.07 — Projection Failure Operations** ([qf-jarvis-roadmap-v3.md](./qf-jarvis-roadmap-v3.md); historical alias Stage 3.5).
+
+> **Implementation status.** QFJ-P03.07B (taxonomy/contracts), QFJ-P03.07C (persistence + migration 0006), and QFJ-P03.07D (atomic retry-exhaustion integration) are merged and locked. **QFJ-P03.07E (failure inspection and quarantine operations) is implemented** as an internal operations boundary: authorized, bounded inspection/history/divergence inspection plus the **acknowledge** and **quarantine** lifecycle mutations (generation-guarded, idempotent, atomic, divergence-gated). Quarantine preserves the blocked checkpoint and never advances/resolves/skips/replays. **Authorized replay authorization and replay execution (QFJ-P03.07F) are NOT implemented.** Migration 0006 is unchanged and applied local/CI only (not managed, not deployed); migration 0007 does not exist.
 
 ## Scope
 
