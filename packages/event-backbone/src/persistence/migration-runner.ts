@@ -34,8 +34,10 @@ import {
   MigrationChecksumMismatchError,
   MigrationExecutionError,
   MigrationFileMissingError,
+  MigrationTargetBehindHistoryError,
   OutOfOrderMigrationError,
 } from './migration-errors.js';
+import { planMigrationSelection } from './migration-target.js';
 import {
   MIGRATION_ADVISORY_LOCK_KEY,
   MIGRATION_FILENAME_PATTERN,
@@ -163,6 +165,16 @@ REVOKE ALL ON ALL FUNCTIONS IN SCHEMA ${MIGRATION_SCHEMA} FROM PUBLIC;
 
 ${REVOKE_FROM_MANAGED_ROLES_SQL}
 `;
+
+/**
+ * How far a migration run is allowed to go.
+ *
+ * `throughVersion` is the INCLUSIVE upper bound. Omitted (or `undefined`) means unbounded — the
+ * historical behaviour, which `migrate-cli.ts` permits only for a local loopback target.
+ */
+export interface MigrationRunOptions {
+  readonly throughVersion?: number | undefined;
+}
 
 /** SHA-256 over the exact file bytes. Not over decoded text — a re-encode is a different file. */
 function checksumOf(bytes: Buffer): Buffer {
@@ -305,12 +317,13 @@ async function applyMigration(client: DatabaseClient, file: MigrationFile): Prom
 export async function runMigrations(
   pool: DatabasePool,
   migrationsDirectory: string,
+  options: MigrationRunOptions = {},
 ): Promise<MigrationResult> {
   // Validate the repository before opening a connection. A malformed filename is not a
   // database problem and should not need a database to discover.
   const files = await loadMigrationFiles(migrationsDirectory);
 
-  return withClient(pool, (client) => runMigrationsOnClient(client, files));
+  return withClient(pool, (client) => runMigrationsOnClient(client, files, options));
 }
 
 /**
@@ -327,6 +340,7 @@ export async function runMigrations(
 export async function runMigrationsOnClient(
   client: DatabaseClient,
   files: readonly MigrationFile[],
+  options: MigrationRunOptions = {},
 ): Promise<MigrationResult> {
   // Session-scoped. Held until explicitly unlocked, or until this session ends —
   // which is what stops a crashed migrator from wedging the database permanently.
@@ -336,13 +350,31 @@ export async function runMigrationsOnClient(
     await client.query(BOOTSTRAP_SQL);
 
     const alreadyApplied = await readAppliedMigrations(client);
+
+    // Reconciliation deliberately sees EVERY file and EVERY applied record, bound or not: a
+    // bounded application must never weaken checksum, missing-file, or out-of-order detection.
     reconcile(files, alreadyApplied);
 
+    const targetVersion = options.throughVersion ?? null;
+
+    // Forward-only: the target may never be behind history. Checked before any migration SQL.
+    if (targetVersion !== null) {
+      const highestApplied = alreadyApplied.reduce(
+        (highest, record) => Math.max(highest, record.version),
+        0,
+      );
+      if (highestApplied > targetVersion) {
+        throw new MigrationTargetBehindHistoryError(targetVersion, highestApplied);
+      }
+    }
+
     const appliedVersions = new Set(alreadyApplied.map((record) => record.version));
-    const pending = files.filter((file) => !appliedVersions.has(file.version));
+    // The bound narrows ONLY which pending migrations run; ordering and stop-on-first-error are
+    // unchanged, so an already-at-target database is a verified no-op (nothing selected).
+    const { selected } = planMigrationSelection(files, appliedVersions, targetVersion);
 
     const applied: MigrationFile[] = [];
-    for (const file of pending) {
+    for (const file of selected) {
       await applyMigration(client, file);
       applied.push(file);
     }

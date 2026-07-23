@@ -114,6 +114,82 @@ export class OutOfOrderMigrationError extends MigrationError {
 }
 
 /**
+ * The `--through` option is missing its value, malformed, repeated, or accompanied by an
+ * unknown argument.
+ *
+ * The message names the RULE that was broken and the offending **option token** only — never a
+ * connection value. Parsing happens before any configuration is resolved and before any
+ * connection is opened, so a bad invocation can never reach a database.
+ */
+export class MigrationTargetInvalidError extends MigrationError {
+  public constructor(reason: string) {
+    super(
+      `Invalid migration target: ${reason} Expected exactly one "--through <version>" ` +
+        `(for example: --through 0005). A bounded migration must name exactly one target version.`,
+    );
+    this.name = 'MigrationTargetInvalidError';
+  }
+}
+
+/** `--through` names a version that no repository migration provides. */
+export class MigrationTargetUnknownError extends MigrationError {
+  public readonly version: number;
+
+  public constructor(version: number, available: readonly number[]) {
+    super(
+      `Migration target ${String(version)} does not resolve to any repository migration. ` +
+        `Available versions: ${available.map((v) => String(v)).join(', ')}. ` +
+        `A target must resolve to exactly one migration.`,
+    );
+    this.name = 'MigrationTargetUnknownError';
+    this.version = version;
+  }
+}
+
+/**
+ * The database is **ahead** of the requested target.
+ *
+ * Applying "through 0005" against a database that already recorded 0006 cannot mean anything
+ * safe: the bound cannot un-apply what is already applied, and silently succeeding would
+ * report a state the database is not in. Forward-only means the target may never be behind
+ * history, so this fails closed before any migration SQL runs.
+ */
+export class MigrationTargetBehindHistoryError extends MigrationError {
+  public readonly targetVersion: number;
+  public readonly highestApplied: number;
+
+  public constructor(targetVersion: number, highestApplied: number) {
+    super(
+      `Migration target ${String(targetVersion)} is behind the database: migration ` +
+        `${String(highestApplied)} is already applied. Migrations are forward-only and a bound ` +
+        `cannot un-apply history — refusing to continue.`,
+    );
+    this.name = 'MigrationTargetBehindHistoryError';
+    this.targetVersion = targetVersion;
+    this.highestApplied = highestApplied;
+  }
+}
+
+/**
+ * A **managed** target was asked to migrate without an explicit `--through` bound.
+ *
+ * A managed database is not a laptop: "apply everything pending" there is an unbounded,
+ * unreviewed blast radius. Managed application must name the exact version it intends to reach,
+ * so the reviewed plan and the executed plan are the same thing. Raised **before** any
+ * migration SQL, any advisory lock, and any history write.
+ */
+export class UnboundedManagedMigrationError extends MigrationError {
+  public constructor() {
+    super(
+      `Refusing to migrate a managed database without an explicit bound. ` +
+        `Pass "--through <version>" (for example: pnpm db:migrate -- --through 0005). ` +
+        `Unbounded application is permitted only for a local loopback database.`,
+    );
+    this.name = 'UnboundedManagedMigrationError';
+  }
+}
+
+/**
  * A migration's SQL failed. The transaction was rolled back; nothing was recorded.
  *
  * The original database error is preserved as `cause` — the SQLSTATE and the message

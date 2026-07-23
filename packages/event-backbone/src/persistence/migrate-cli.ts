@@ -20,13 +20,49 @@
  */
 
 import { resolveCliDatabaseConfig } from './cli-config.js';
-import { describeConnectionTarget, describeTls } from './database-config.js';
+import {
+  describeConnectionTarget,
+  describeTls,
+  isLoopbackConnectionTarget,
+} from './database-config.js';
 import { migrateWithPreflight, PreflightFailedError } from './migrate.js';
+import { UnboundedManagedMigrationError } from './migration-errors.js';
+import { loadMigrationFiles } from './migration-runner.js';
+import {
+  parseMigrationThroughOption,
+  planMigrationSelection,
+  resolveMigrationTarget,
+} from './migration-target.js';
 import { closeDatabasePool, createDatabasePool } from './pool.js';
-import { MIGRATION_SCHEMA } from './migration-types.js';
+import { MIGRATION_SCHEMA, type MigrationFile } from './migration-types.js';
 import { defaultMigrationsDirectory } from './migrations-directory.js';
 
+/** Render a version list as zero-padded versions, or a dash when empty. */
+function describeVersions(files: readonly MigrationFile[]): string {
+  return files.length === 0
+    ? '—'
+    : files.map((file) => String(file.version).padStart(4, '0')).join(', ');
+}
+
 async function main(): Promise<number> {
+  // Parsed FIRST, before any configuration is resolved and before any connection exists: an
+  // unreadable invocation must never reach a database.
+  let throughVersion: number | null;
+  let files: readonly MigrationFile[];
+  let target: MigrationFile | null = null;
+  try {
+    throughVersion = parseMigrationThroughOption(process.argv.slice(2));
+    files = await loadMigrationFiles(defaultMigrationsDirectory());
+    if (throughVersion !== null) {
+      target = resolveMigrationTarget(files, throughVersion);
+    }
+  } catch (error: unknown) {
+    process.stderr.write(
+      `Refusing to migrate: ${error instanceof Error ? error.message : String(error)}\n`,
+    );
+    return 1;
+  }
+
   let config;
   try {
     config = await resolveCliDatabaseConfig('qf-jarvis-migrate');
@@ -42,9 +78,33 @@ async function main(): Promise<number> {
 
   // Redacted. Port and database — never the user, never the password, and never the managed
   // hostname, because that hostname carries the project ref.
-  const target = describeConnectionTarget(config.connectionString);
-  process.stdout.write(`Migrating ${target} (schema ${MIGRATION_SCHEMA})\n`);
+  const redactedTarget = describeConnectionTarget(config.connectionString);
+  const isLocal = isLoopbackConnectionTarget(config.connectionString);
+  const classification = isLocal ? 'local (loopback)' : 'managed';
+
+  // A managed database must name the exact version it intends to reach. Raised BEFORE the pool
+  // is created, before the preflight, before the advisory lock, and before any migration SQL.
+  if (!isLocal && throughVersion === null) {
+    const unbounded = new UnboundedManagedMigrationError();
+    process.stderr.write(`Refusing to migrate: ${unbounded.message}\n`);
+    process.stderr.write('No connection was opened, no advisory lock was taken, and no DDL ran.\n');
+    return 1;
+  }
+
+  process.stdout.write(`Migrating ${redactedTarget} (schema ${MIGRATION_SCHEMA})\n`);
   process.stdout.write(`TLS       ${describeTls(config.tls)}\n`);
+
+  // The sanitized plan: what was asked for, and what the bound deliberately leaves out. Versions
+  // and filenames only — never a host, a user, or a connection value.
+  process.stdout.write('\nPlan\n');
+  process.stdout.write(
+    `  target       ${target === null ? 'unbounded (local only)' : `${String(target.version).padStart(4, '0')} (${target.filename})`}\n`,
+  );
+  process.stdout.write(`  target class ${classification}\n`);
+  process.stdout.write(`  repository   ${describeVersions(files)}\n`);
+  process.stdout.write(
+    `  excluded     ${describeVersions(planMigrationSelection(files, new Set(), throughVersion).excluded)} (beyond target)\n`,
+  );
 
   const pool = createDatabasePool(config);
 
@@ -56,6 +116,7 @@ async function main(): Promise<number> {
       pool,
       config,
       defaultMigrationsDirectory(),
+      { throughVersion: throughVersion ?? undefined },
     );
 
     process.stdout.write('\nPreflight\n');
@@ -65,13 +126,21 @@ async function main(): Promise<number> {
     }
     process.stdout.write('\n');
 
+    const previously = migration.alreadyApplied
+      .map((record) => String(record.version).padStart(4, '0'))
+      .join(', ');
+    process.stdout.write(`  already applied  ${previously.length === 0 ? '—' : previously}\n`);
+
     if (migration.applied.length === 0) {
+      // A bounded run whose target is already reached is a VERIFIED no-op: the history was read,
+      // reconciled and checksum-verified, and nothing was selected.
       process.stdout.write(
-        `Already up to date. ${String(migration.alreadyApplied.length)} migration(s) applied previously.\n`,
+        `  applied now      —\n\nAlready at target. ${String(migration.alreadyApplied.length)} migration(s) applied previously; nothing to do.\n`,
       );
       return 0;
     }
 
+    process.stdout.write(`  applied now      ${describeVersions(migration.applied)}\n\n`);
     for (const applied of migration.applied) {
       process.stdout.write(`  applied  ${applied.filename}\n`);
     }
