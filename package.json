@@ -23,7 +23,7 @@
     "db:up": "docker compose up -d --wait",
     "db:down": "docker compose down",
     "db:reset:destroy-all-local-data": "docker compose down --volumes && docker compose up -d --wait",
-    "db:migrate": "pnpm --filter @qf-jarvis/event-backbone db:migrate",
+    "db:migrate": "pnpm --filter @qf-jarvis/event-backbone db:migrate --",
     "db:preflight": "pnpm --filter @qf-jarvis/event-backbone db:preflight",
     "check:dist-containment": "node scripts/check-dist-containment.mjs",
     "check": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build && pnpm run check:dist-containment"

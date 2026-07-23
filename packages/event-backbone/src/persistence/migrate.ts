@@ -33,7 +33,11 @@
  */
 
 import type { DatabaseConfig } from './database-config.js';
-import { loadMigrationFiles, runMigrationsOnClient } from './migration-runner.js';
+import {
+  loadMigrationFiles,
+  runMigrationsOnClient,
+  type MigrationRunOptions,
+} from './migration-runner.js';
 import type { MigrationResult } from './migration-types.js';
 import type { DatabasePool } from './pool.js';
 import { runPreflightOnClient, type PreflightReport } from './preflight.js';
@@ -89,6 +93,7 @@ export async function migrateWithPreflight(
   pool: DatabasePool,
   config: DatabaseConfig,
   migrationsDirectory: string,
+  options: MigrationRunOptions = {},
 ): Promise<MigrateWithPreflightResult> {
   // Before a connection is opened. A malformed migration filename is a repository defect and
   // has no business costing a round trip to discover.
@@ -103,7 +108,7 @@ export async function migrateWithPreflight(
       throw new PreflightFailedError(preflight);
     }
 
-    const migration = await runMigrationsOnClient(client, files);
+    const migration = await runMigrationsOnClient(client, files, options);
 
     return { preflight, migration };
   });

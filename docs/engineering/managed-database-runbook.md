@@ -1,6 +1,6 @@
 # Managed Database Runbook — QF-Jarvis PostgreSQL
 
-**Status:** Managed-database readiness has been established, and migration `0001_event_log.sql` is applied to the managed database. The provider security remediation (`public.rls_auto_enable()`) has been **executed and verified**. Migration `0002_event_runtime_grants.sql` (Stage 3.3 slice 3 — least-privilege runtime grants) and migration `0003_ingestion_rejection_and_event_conflict.sql` (Stage 3.3.3 — the append-only `ingestion_rejection` and `event_conflict` audit tables) and migration `0004_projection_foundation.sql` (Stage 3.4.1 — the projection foundation) and migration `0005_projection_event_positions.sql` (Stage 3.4.3 — the gap-free projection ordering) are recorded here and are **NOT yet applied to the managed database**. **No managed `pnpm db:migrate` is currently authorized:** the default migrator applies **all** pending migrations, so the next managed run would apply `0002`, `0003`, `0004` **and `0005`** — and it stays blocked until `0004` AND `0005` receive reviewed managed-readiness (or one full-scope report) and explicit owner authorization for the full `0002`→`0005` scope. The managed database carries only `0001`.
+**Status:** Managed-database readiness has been established, and migration `0001_event_log.sql` is applied to the managed database. The provider security remediation (`public.rls_auto_enable()`) has been **executed and verified**. Migration `0002_event_runtime_grants.sql` (Stage 3.3 slice 3 — least-privilege runtime grants) and migration `0003_ingestion_rejection_and_event_conflict.sql` (Stage 3.3.3 — the append-only `ingestion_rejection` and `event_conflict` audit tables) and migration `0004_projection_foundation.sql` (Stage 3.4.1 — the projection foundation) and migration `0005_projection_event_positions.sql` (Stage 3.4.3 — the gap-free projection ordering) are recorded here and are **NOT yet applied to the managed database**. **No managed `pnpm db:migrate` is currently authorized.** A managed run must now be **bounded** — `pnpm db:migrate -- --through 0005` selects exactly `0002`, `0003`, `0004`, `0005` and **excludes `0006`**, and an **unbounded** managed run is refused outright before any connection is opened. Bounded targeting makes that scope _expressible_; it does not make it _approved_. The run stays blocked until `0004` AND `0005` receive reviewed managed-readiness (or one full-scope report) and explicit owner authorization for the full `0002`→`0005` scope. The managed database carries only `0001`.
 **Date:** 2026-07-12
 
 The checklist for the **first migration** against the dedicated, Supabase-managed QF-Jarvis PostgreSQL project ([ADR-0023](../decisions/ADR-0023-dedicated-supabase-managed-postgresql.md), [ADR-0024](../decisions/ADR-0024-verified-tls-and-managed-database-preflight.md)).
@@ -111,8 +111,8 @@ pnpm db:preflight     # step 7. Reads only. Exits non-zero if anything required 
 Every required check must be `ok`. **If any fails, stop.** Nothing has been changed, and the database is exactly as it was.
 
 ```
-pnpm db:migrate       # step 8. Runs the preflight AGAIN, automatically, first.
-pnpm db:preflight     # step 9. Confirm the schema and history are as expected.
+pnpm db:migrate -- --through 0005   # step 8. Bounded. Runs the preflight AGAIN, automatically, first.
+pnpm db:preflight                   # step 9. Confirm the schema and history are as expected.
 ```
 
 > **`db:migrate` will not migrate a database that fails its preflight**, and that is enforced by the code — not by you remembering to run step 7. It takes one client, runs the read-only preflight on it, and only then acquires the advisory lock and runs DDL.
@@ -123,11 +123,24 @@ pnpm db:preflight     # step 9. Confirm the schema and history are as expected.
 
 `db:migrate` applies **every pending migration, in order**, each in its own transaction under the advisory lock. Against a virgin managed database that is `0001_event_log.sql` — which creates the **`qf_jarvis`** schema, the immutable `qf_jarvis.event` log, `qf_jarvis.schema_migration`, both mutation-rejection triggers, and the `REVOKE`s — and it would apply any later migration (such as `0002_event_runtime_grants.sql`) in the same run **once that migration is authorized and its runtime-role precondition is met**. It never applies a migration that is already recorded, and **it never touches `public`.**
 
-> ### ⛔ The default migrator CANNOT apply only `0002`/`0003`
+> ### Bounded managed application — `--through <version>`
 >
-> **`db:migrate` applies EVERY pending migration. There is no target-version option, and no way to ask it to stop after `0003`.** On the managed database `0001` is applied and `0002`, `0003`, `0004` **and `0005`** are all pending, so a managed run today would apply **`0002`, then `0003`, then `0004`, then `0005`** — not `0002`/`0003` alone.
+> A managed run must name the exact version it intends to reach, so the plan that was reviewed is the
+> plan that executes:
 >
-> **NO managed `pnpm db:migrate` is currently authorized.** The run is **blocked** until `0004_projection_foundation.sql` AND `0005_projection_event_positions.sql` receive **separately-reviewed managed-readiness** (or one explicitly full-scope report) and **explicit owner authorization** covering the full `0002`→`0005` scope.
+> ```
+> pnpm db:migrate -- --through 0005
+> ```
+>
+> - The bound is **inclusive** and must resolve to **exactly one** repository migration.
+> - With `0001` applied and a target of `0005`, the run selects exactly **`0002`, `0003`, `0004`, `0005`** and **excludes `0006`**.
+> - **A managed target REFUSES to run unbounded.** Omitting `--through` against a managed database fails with `Refusing to migrate: … Pass "--through <version>"` — raised **before** the pool is created, before the preflight, before the advisory lock, and before any DDL. Unbounded application remains available only for a **local loopback** database.
+> - **Forward-only still holds.** If the database is already **ahead** of the target (for example `0006` applied, target `0005`), the run **fails closed** — a bound cannot un-apply history.
+> - **Already at the target is a verified no-op:** the history is read, reconciled and checksum-verified, and nothing is selected.
+> - Checksum reconciliation, missing-file and out-of-order detection still consider **every** applied record against **every** repository file. The bound narrows only which _pending_ migrations run; it never weakens the guarantees protecting the history.
+> - The printed plan is sanitized: target, target class (`managed` / `local (loopback)`), repository versions, excluded versions, already-applied and applied-now — **never** a host, user, password or connection value.
+>
+> **NO managed `pnpm db:migrate` is currently authorized.** Bounded targeting makes a `0002`→`0005` run _expressible_; it does not make it _approved_. The run remains **blocked** until `0004_projection_foundation.sql` AND `0005_projection_event_positions.sql` receive **separately-reviewed managed-readiness** (or one explicitly full-scope report) and **explicit owner authorization** covering the full `0002`→`0005` scope.
 >
 > That future run additionally requires **both** deployment roles to **exist with correctly rotated credentials** before it begins: `0002`/`0003` depend on **`qf_jarvis_runtime`** (ingestion), and `0004`/`0005` depend on **`qf_jarvis_projection_runtime`** (projections). Both roles must exist with correctly rotated credentials.
 >
