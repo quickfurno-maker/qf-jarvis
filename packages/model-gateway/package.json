@@ -1,0 +1,25 @@
+{
+  "name": "@qf-jarvis/model-gateway",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis provider-neutral model gateway foundation (QFJ-P04.01A). The single governed waist every model call passes through: data-class privacy routing, capability matching, budgets, reliability, structured-output validation, and provenance. No real provider, no network, no key — a deterministic FakeModelProvider only.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "default": "./dist/testing/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.json",
+    "typecheck": "tsc --build tsconfig.json"
+  },
+  "dependencies": {
+    "zod": "4.4.3"
+  }
+}
