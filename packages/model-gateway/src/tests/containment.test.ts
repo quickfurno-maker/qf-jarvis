@@ -83,31 +83,41 @@ describe('model-gateway package containment', () => {
     expect(barrel).not.toMatch(/from ['"][^'"]*testing/);
   });
 
-  it('performs no network / provider-SDK / env / filesystem I/O in production source', () => {
-    const files = walkSource(fileURLToPath(new URL('src', PKG_DIR))).filter(
+  const productionFiles = (): string[] =>
+    walkSource(fileURLToPath(new URL('src', PKG_DIR))).filter(
       (f) => !f.replace(/\\/g, '/').includes('/tests/'),
     );
-    for (const file of files) {
+  const isGroqTransport = (f: string): boolean =>
+    f.replace(/\\/g, '/').endsWith('/providers/groq/groq-transport.ts');
+
+  it('performs no env / filesystem I/O and no provider SDK import in production source', () => {
+    for (const file of productionFiles()) {
       const text = readFileSync(file, 'utf8');
       expect(text).not.toMatch(/from ['"]node:(fs|net|http|https|dns|tls|dgram|child_process)['"]/);
       expect(text).not.toMatch(/process\.env/);
-      expect(text).not.toMatch(/\bfetch\s*\(/);
+      // No provider SDK dependency — the Groq adapter uses the platform fetch, not an SDK.
       expect(text).not.toMatch(
         /from ['"](pg|groq-sdk|openai|@anthropic-ai\/sdk|ollama|axios|undici)['"]/,
       );
     }
   });
 
-  it('contains no real provider adapter and no Kimi reference in production source', () => {
-    const files = walkSource(fileURLToPath(new URL('src', PKG_DIR))).filter(
-      (f) => !f.replace(/\\/g, '/').includes('/tests/'),
-    );
-    for (const file of files) {
+  it('uses fetch ONLY in the Groq transport boundary (the single designated network egress)', () => {
+    for (const file of productionFiles()) {
+      const text = readFileSync(file, 'utf8');
+      if (isGroqTransport(file)) {
+        continue;
+      }
+      expect(text).not.toMatch(/\bfetch\s*\(/);
+    }
+  });
+
+  it('contains no unauthorized provider adapter and no Kimi reference in production source', () => {
+    for (const file of productionFiles()) {
       const text = readFileSync(file, 'utf8');
       expect(text).not.toMatch(/kimi/i);
-      expect(text).not.toMatch(
-        /class\s+GroqProvider|class\s+OpenAIProvider|class\s+LocalOpenAiCompatibleProvider/,
-      );
+      // Groq is the authorized first hosted adapter; no OpenAI/local adapter yet.
+      expect(text).not.toMatch(/class\s+OpenAIProvider|class\s+LocalOpenAiCompatibleProvider/);
     }
   });
 });
