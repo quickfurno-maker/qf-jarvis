@@ -142,6 +142,36 @@ export {
 export { type RoutingPlanSummary, type RoutingExclusion } from './routing/routing-plan.js';
 export { type AttemptLedgerSnapshot } from './routing/attempt-ledger.js';
 
+// Provider operations and rollout governance (QFJ-P04.01E, ADR-0049). Composition + safe observability
+// types only; the canary hash, serving-decision helper, transition validator, and mutable internals stay
+// private. No provider instance, no secret, no execution helper is exported.
+export {
+  createProviderReleaseRef,
+  createRolloutApprovalAttestation,
+  createProviderRolloutPolicy,
+  offRolloutPolicy,
+  createProviderRolloutController,
+  ROLLOUT_MODES,
+  ROLLOUT_SERVE_TARGETS,
+  ROLLOUT_OPERATOR_REASONS,
+  ROLLOUT_REFUSAL_REASONS,
+  ROLLOUT_EVENT_TYPES,
+  NOOP_ROLLOUT_OBSERVABILITY,
+  type ProviderReleaseRef,
+  type RolloutApprovalAttestation,
+  type ProviderRolloutPolicy,
+  type ProviderRolloutPolicyInput,
+  type ProviderRolloutController,
+  type TransitionResult,
+  type RolloutMode,
+  type RolloutServeTarget,
+  type RolloutOperatorReason,
+  type RolloutRefusalReason,
+  type RolloutEventType,
+  type RolloutEvent,
+  type RolloutObservabilityHook,
+} from './operations/index.js';
+
 // The gateway.
 export {
   createModelGateway,
