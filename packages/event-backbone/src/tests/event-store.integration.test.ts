@@ -1144,6 +1144,7 @@ describe('the runner is idempotent with 0001 through 0005 applied', () => {
       '0004_projection_foundation.sql',
       '0005_projection_event_positions.sql',
       '0006_projection_failure_operations.sql',
+      '0007_subject_activity_projection.sql',
     ]);
   });
 });
@@ -1268,6 +1269,7 @@ describe('migration 0002 — comprehensive stale-grant remediation', () => {
         '0004_projection_foundation.sql',
         '0005_projection_event_positions.sql',
         '0006_projection_failure_operations.sql',
+        '0007_subject_activity_projection.sql',
       ]);
 
       // 5. Every stale direct privilege is gone. ALL schema_migration privileges, not only SELECT.

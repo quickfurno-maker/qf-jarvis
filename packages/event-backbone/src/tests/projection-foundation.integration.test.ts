@@ -150,6 +150,7 @@ describe('migrations apply in order, idempotently, with 0001–0005 unchanged', 
       '0004_projection_foundation.sql',
       '0005_projection_event_positions.sql',
       '0006_projection_failure_operations.sql',
+      '0007_subject_activity_projection.sql',
     ]);
     expect(rows.map((row) => row.version)).toStrictEqual([1, 2, 3, 4, 5, 6]);
     for (const row of rows) {

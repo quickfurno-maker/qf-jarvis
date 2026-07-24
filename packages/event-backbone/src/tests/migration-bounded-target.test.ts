@@ -32,6 +32,7 @@ const FILES: readonly MigrationFile[] = [
   [4, '0004_projection_foundation.sql'],
   [5, '0005_projection_event_positions.sql'],
   [6, '0006_projection_failure_operations.sql'],
+  [7, '0007_subject_activity_projection.sql'],
 ].map(([version, filename]) => ({
   version: version as number,
   filename: filename as string,

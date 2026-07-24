@@ -110,6 +110,7 @@ describe('migrations are bounded at 0001–0006 with no 0007', () => {
       '0004_projection_foundation.sql',
       '0005_projection_event_positions.sql',
       '0006_projection_failure_operations.sql',
+      '0007_subject_activity_projection.sql',
     ]);
   });
 
