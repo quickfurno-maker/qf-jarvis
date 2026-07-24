@@ -36,6 +36,7 @@ import { runMigrations } from '../persistence/migration-runner.js';
 import {
   createCheckpointIfAbsent,
   recordCheckpointBlocked,
+  recordCheckpointRetryPending,
 } from '../projections/checkpoint-store.js';
 import { toCanonicalInstant } from '../projections/projection-definition.js';
 import { toProjectionName } from '../projections/projection-name.js';
@@ -80,7 +81,13 @@ async function seedEvent(): Promise<void> {
   await storeValidatedEvent(pool, syntheticEvent());
 }
 
-/** Create one non-terminal failure aggregate at `position`, `ageSeconds` old. */
+/**
+ * Create one failure aggregate at `position`, `ageSeconds` old.
+ *
+ * A `resolved` row must carry BOTH a resolution time and the successful attempt reference — the
+ * `projection_failure_resolved_shape` CHECK makes "resolved" and "has a resolution" the same
+ * proposition, so a resolved row without them is rejected by the database.
+ */
 async function seedFailure(
   projectionName: string,
   position: number,
@@ -88,15 +95,27 @@ async function seedFailure(
   ageSeconds: number,
 ): Promise<void> {
   const createdAt = new Date(NOW_DATE.getTime() - ageSeconds * 1000);
+  const resolvedAt = status === 'resolved' ? createdAt : null;
+  const resolvedAttemptId = status === 'resolved' ? randomUUID() : null;
   await withClient(pool, async (client) => {
     await client.query(
       `INSERT INTO qf_jarvis.projection_failure
          (failure_id, projection_name, projection_version, projection_position,
           event_storage_sequence, category, safe_error_code, status, generation,
-          automatic_attempt_count, first_failed_at, last_failed_at, created_at, updated_at)
+          automatic_attempt_count, resolved_at, resolved_attempt_id,
+          first_failed_at, last_failed_at, created_at, updated_at)
        VALUES ($1, $2, $3, $4, $4, 'DETERMINISTIC_HANDLER_FAILURE', 'projection-handler-failed',
-               $5, 0, 5, $6, $6, $6, $6)`,
-      [randomUUID(), projectionName, VERSION, position, status, createdAt],
+               $5, 0, 5, $6, $7, $8, $8, $8, $8)`,
+      [
+        randomUUID(),
+        projectionName,
+        VERSION,
+        position,
+        status,
+        resolvedAt,
+        resolvedAttemptId,
+        createdAt,
+      ],
     );
   });
 }
@@ -145,8 +164,22 @@ describe('derived health against real data', () => {
   it('reads a blocked checkpoint, its position, and its lag', async () => {
     await seedEvent();
     await seedEvent();
+    // Walk the real bounded-retry path: attempts 1-4 leave the checkpoint active, and only the fifth
+    // may block it. `recordCheckpointBlocked` guards on `failed_attempt_count = 4`, so a checkpoint
+    // cannot be blocked out of nowhere — which is exactly the invariant being relied on here.
     await withClient(pool, async (client) => {
       await createCheckpointIfAbsent(client, { name: NAME, version: VERSION, now: NOW_DATE });
+      for (let attempt = 1; attempt <= 4; attempt += 1) {
+        await recordCheckpointRetryPending(client, {
+          name: NAME,
+          version: VERSION,
+          failedEventPosition: 1n,
+          failedAttemptCount: attempt,
+          safeErrorCode: 'projection-handler-failed',
+          nextAttemptAt: NOW_DATE,
+          now: NOW_DATE,
+        });
+      }
       await recordCheckpointBlocked(client, {
         name: NAME,
         version: VERSION,
