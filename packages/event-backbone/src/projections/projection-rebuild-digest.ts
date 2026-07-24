@@ -208,3 +208,35 @@ export const DAILY_EVENT_ACCEPTANCE_DIGEST_SPEC: ReadModelDigestSpec = Object.fr
   ]),
   orderBy: Object.freeze(['accepted_date']),
 });
+
+/**
+ * The digest spec for the `subject-activity` production read model (`qf_jarvis.rm_subject_activity`,
+ * QFJ-P03.09, ADR-0044). Includes EVERY authoritative column — the opaque subject key, the activity
+ * detail, AND the erasure tombstone fields — so the erased state is part of the digest and survives
+ * rebuild. The BOOLEAN `erased` is rendered to canonical `'true'/'false'` text server-side (the digest
+ * encoder is unchanged); the two `TIMESTAMPTZ` columns use the canonical UTC projection.
+ */
+export const SUBJECT_ACTIVITY_DIGEST_SPEC: ReadModelDigestSpec = Object.freeze({
+  table: 'qf_jarvis.rm_subject_activity',
+  columns: Object.freeze([
+    { name: 'subject_type' },
+    { name: 'subject_id' },
+    { name: 'activity_event_count' },
+    { name: 'first_activity_position' },
+    { name: 'last_activity_position' },
+    {
+      name: 'first_activity_accepted_at',
+      expr: canonicalTimestamptzExpr('first_activity_accepted_at'),
+    },
+    {
+      name: 'last_activity_accepted_at',
+      expr: canonicalTimestamptzExpr('last_activity_accepted_at'),
+    },
+    { name: 'last_activity_event_type' },
+    { name: 'last_activity_event_version' },
+    { name: 'erased', expr: 'erased::text' },
+    { name: 'erased_at_position' },
+    { name: 'erased_at', expr: canonicalTimestamptzExpr('erased_at') },
+  ]),
+  orderBy: Object.freeze(['subject_type', 'subject_id']),
+});

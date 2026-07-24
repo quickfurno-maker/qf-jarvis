@@ -5,6 +5,31 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 /**
+ * The filesystem/network/process/crypto imports a projection reducer must never reach for (ADR-0022 §4,
+ * QFJ-P03.08). Shared so the subject-reader-boundary block can re-state it without drift when it
+ * additionally restricts the subject reader for the metadata reducers.
+ */
+const REDUCER_FORBIDDEN_IO_IMPORTS = [
+  'node:fs',
+  'node:fs/*',
+  'node:net',
+  'node:http',
+  'node:https',
+  'node:child_process',
+  'node:dns',
+  'node:tls',
+  'node:dgram',
+  'node:process',
+  'node:worker_threads',
+  'node:crypto',
+  'fs',
+  'net',
+  'http',
+  'https',
+  'child_process',
+];
+
+/**
  * ESLint flat configuration.
  *
  * The rule set is deliberately small: it is typescript-eslint's maintained
@@ -230,27 +255,41 @@ export default tseslint.config(
         {
           patterns: [
             {
-              group: [
-                'node:fs',
-                'node:fs/*',
-                'node:net',
-                'node:http',
-                'node:https',
-                'node:child_process',
-                'node:dns',
-                'node:tls',
-                'node:dgram',
-                'node:process',
-                'node:worker_threads',
-                'node:crypto',
-                'fs',
-                'net',
-                'http',
-                'https',
-                'child_process',
-              ],
+              group: [...REDUCER_FORBIDDEN_IO_IMPORTS],
               message:
                 'A projection reducer is a pure function of the event log. It performs no filesystem, network, process, or crypto I/O; it only writes its read-model table through the borrowed client.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  // Subject visibility is least-privilege by MODULE BOUNDARY (QFJ-P03.09, ADR-0044). The opaque subject
+  // is resolved only by `projection-subject-reader`, and ONLY the `subject-activity` reducer may import
+  // it — the metadata reducers (event-type-activity, daily-event-acceptance, and any future one) stay
+  // subject-blind in code, even though the shared projection DB role technically holds the column grant.
+  //
+  // This block covers the reducer files EXCEPT subject-activity, so its `no-restricted-imports` REPLACES
+  // (flat-config semantics) the purity block's for those files — it therefore re-states the shared I/O
+  // ban and adds the subject-reader ban.
+  {
+    files: ['packages/event-backbone/src/projections/handlers/**/*.ts'],
+    ignores: ['packages/event-backbone/src/projections/handlers/subject-activity.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: [...REDUCER_FORBIDDEN_IO_IMPORTS],
+              message:
+                'A projection reducer is a pure function of the event log. It performs no filesystem, network, process, or crypto I/O; it only writes its read-model table through the borrowed client.',
+            },
+            {
+              group: ['**/projection-subject-reader.js', '**/projection-subject-reader'],
+              message:
+                'Only the subject-activity reducer may resolve the opaque subject (QFJ-P03.09, ADR-0044). Other projections remain subject-blind.',
             },
           ],
         },
