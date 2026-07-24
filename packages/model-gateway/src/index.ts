@@ -122,6 +122,26 @@ export {
   type LocalTransport,
 } from './providers/local-openai-compatible/index.js';
 
+// Hybrid routing and failover (QFJ-P04.01D, ADR-0048). Composition + safe observability types only;
+// the mutable attempt ledger, the plan/provider references, and the failover internals stay private.
+export {
+  createHybridRoutingPolicy,
+  type HybridRoutingPolicy,
+  type HybridRoutingPolicyInput,
+} from './routing/hybrid-routing-policy.js';
+export {
+  ROUTING_PROFILES,
+  ROUTING_EXCLUSION_REASONS,
+  FALLBACK_DECISION_REASONS,
+  FALLBACK_TRANSIENT_CODES,
+  type RoutingProfile,
+  type RoutingExclusionReason,
+  type FallbackDecisionReason,
+  type FallbackTransientCode,
+} from './routing/routing-reasons.js';
+export { type RoutingPlanSummary, type RoutingExclusion } from './routing/routing-plan.js';
+export { type AttemptLedgerSnapshot } from './routing/attempt-ledger.js';
+
 // The gateway.
 export {
   createModelGateway,

@@ -26,6 +26,10 @@ import { CircuitBreaker, type CircuitBreakerConfig } from './reliability/circuit
 import type { GatewayClock } from './reliability/clock.js';
 import { BoundedSemaphore } from './reliability/semaphore.js';
 import { selectProviders } from './routing/select-providers.js';
+import type { HybridRoutingPolicy } from './routing/hybrid-routing-policy.js';
+import { buildRoutingPlan } from './routing/routing-plan.js';
+import { decideFallover } from './routing/failover-policy.js';
+import { AttemptLedger } from './routing/attempt-ledger.js';
 
 /** The emergency kill switch — one injected predicate that stops all model invocation. */
 export interface GatewayKillSwitch {
@@ -43,6 +47,12 @@ export interface ModelGatewayConfig {
   readonly circuit: CircuitBreakerConfig;
   readonly allowFallback: boolean;
   readonly observability?: GatewayObservabilityHook;
+  /**
+   * OPTIONAL hybrid-routing policy (QFJ-P04.01D, ADR-0048). When present, provider selection and the
+   * single fallback are governed by the profile + failover matrix. When absent, the gateway behaves
+   * exactly as the foundation (array-order selection, allowFallback), unchanged.
+   */
+  readonly routingProfile?: HybridRoutingPolicy;
 }
 
 export interface ModelGatewayInvokeOptions {
@@ -288,6 +298,12 @@ export function createModelGateway(config: ModelGatewayConfig): ModelGateway {
       healthy.set(provider.descriptor.providerId, available);
     }
 
+    // QFJ-P04.01D: when a hybrid-routing policy is configured, selection and the single fallback are
+    // governed by the profile + failover matrix. Otherwise the foundation's array-order path runs.
+    if (config.routingProfile !== undefined) {
+      return serveHybrid(request, signal, healthy, config.routingProfile);
+    }
+
     const selection = selectProviders(request, config.providers, healthy);
     if (!selection.ok) {
       emit({ type: 'invocation-failed', runId: request.runId, code: selection.code });
@@ -344,6 +360,167 @@ export function createModelGateway(config: ModelGatewayConfig): ModelGateway {
     const code = terminalCode(request, primaryOutcome, false);
     emit({ type: 'invocation-failed', runId: request.runId, code, attempts: counter.attempts });
     throw new ModelGatewayError(code);
+  }
+
+  async function serveHybrid(
+    request: ModelRequest,
+    signal: AbortSignal,
+    healthy: ReadonlyMap<string, boolean>,
+    policy: HybridRoutingPolicy,
+  ): Promise<ModelResponse> {
+    const planResult = buildRoutingPlan(
+      request,
+      config.providers,
+      healthy,
+      (id) => !circuit.canAttempt(id),
+      policy,
+    );
+    if (!planResult.ok) {
+      emit({
+        type: 'routing-decided',
+        runId: request.runId,
+        code: planResult.code,
+        profile: policy.profile,
+        dataClass: request.dataClass,
+      });
+      emit({ type: 'invocation-failed', runId: request.runId, code: planResult.code });
+      throw new ModelGatewayError(planResult.code);
+    }
+    const plan = planResult.plan;
+    emit({
+      type: 'routing-decided',
+      runId: request.runId,
+      providerId: plan.primary.descriptor.providerId,
+      profile: policy.profile,
+      dataClass: request.dataClass,
+    });
+    emit({
+      type: 'provider-selected',
+      runId: request.runId,
+      providerId: plan.primary.descriptor.providerId,
+    });
+
+    const ledger = new AttemptLedger(policy.maxTotalAttempts);
+    const counter = { attempts: 0 };
+
+    // Primary: bounded by the request retry budget AND the policy's total-attempt ceiling.
+    const primaryTries = Math.min(1 + request.retryBudget, ledger.remaining());
+    const primaryOutcome = await runProviderLedger(
+      plan.primary,
+      request,
+      signal,
+      primaryTries,
+      counter,
+      ledger,
+      false,
+    );
+    if (primaryOutcome.kind === 'cancelled') {
+      emit({ type: 'cancelled', runId: request.runId });
+      throw new ModelGatewayError('cancelled');
+    }
+    if (primaryOutcome.kind === 'accepted') {
+      ledger.markAccepted();
+      return finish(request, plan.primary, primaryOutcome, false, counter.attempts);
+    }
+
+    // Failover matrix: a single, gated fallback.
+    const decision = decideFallover(
+      {
+        cancelled: signal.aborted,
+        hasEligibleFallback: plan.fallback !== undefined,
+        fallbackExecutionClass: plan.fallbackExecutionClass,
+        dataClass: request.dataClass,
+        primaryCode: primaryOutcome.code,
+        primaryInvoked: primaryOutcome.invoked,
+        primaryRetryable: primaryOutcome.retryable,
+        attemptsRemaining: ledger.remaining(),
+      },
+      policy,
+    );
+    emit({
+      type: 'routing-decided',
+      runId: request.runId,
+      profile: policy.profile,
+      dataClass: request.dataClass,
+      fallbackReason: decision.reason,
+    });
+
+    if (decision.allow && plan.fallback !== undefined) {
+      const fallbackOutcome = await runProviderLedger(
+        plan.fallback,
+        request,
+        signal,
+        Math.min(1, ledger.remaining()),
+        counter,
+        ledger,
+        true,
+      );
+      if (fallbackOutcome.kind === 'cancelled') {
+        emit({ type: 'cancelled', runId: request.runId });
+        throw new ModelGatewayError('cancelled');
+      }
+      if (fallbackOutcome.kind === 'accepted') {
+        ledger.markAccepted();
+        emit({
+          type: 'fallback-used',
+          runId: request.runId,
+          providerId: plan.fallback.descriptor.providerId,
+        });
+        return finish(request, plan.fallback, fallbackOutcome, true, counter.attempts);
+      }
+      const code = terminalCode(request, fallbackOutcome, true);
+      emit({ type: 'invocation-failed', runId: request.runId, code, attempts: counter.attempts });
+      throw new ModelGatewayError(code);
+    }
+
+    const code = terminalCode(request, primaryOutcome, false);
+    emit({ type: 'invocation-failed', runId: request.runId, code, attempts: counter.attempts });
+    throw new ModelGatewayError(code);
+  }
+
+  /** Run one provider under the shared attempt ledger: the ledger caps total invocations across the run. */
+  async function runProviderLedger(
+    provider: ModelProvider,
+    request: ModelRequest,
+    signal: AbortSignal,
+    maxTries: number,
+    counter: { attempts: number },
+    ledger: AttemptLedger,
+    isFallbackProvider: boolean,
+  ): Promise<AttemptOutcome> {
+    let last: FailedAttempt = {
+      kind: 'failure',
+      code: 'provider-failed',
+      invoked: false,
+      retryable: false,
+    };
+    for (let attempt = 0; attempt < maxTries; attempt += 1) {
+      if (signal.aborted) {
+        return { kind: 'cancelled' };
+      }
+      if (!ledger.canAttempt()) {
+        break;
+      }
+      const outcome = await tryOnce(provider, request, signal);
+      if (outcome.kind === 'cancelled') {
+        return outcome;
+      }
+      if (outcome.kind === 'accepted') {
+        // An accepted attempt is a real invocation; count it in the ledger and the provenance counter.
+        ledger.record(provider.descriptor.providerId, isFallbackProvider);
+        counter.attempts += 1;
+        return outcome;
+      }
+      if (outcome.invoked) {
+        ledger.record(provider.descriptor.providerId, isFallbackProvider);
+        counter.attempts += 1;
+      }
+      last = outcome;
+      if (!outcome.invoked || !outcome.retryable) {
+        break;
+      }
+    }
+    return last;
   }
 
   function finish(
