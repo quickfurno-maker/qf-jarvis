@@ -131,7 +131,9 @@ describe('db:migrate runs the preflight automatically', () => {
 
     expect(second.preflight.passed).toBe(true);
     expect(second.migration.applied).toStrictEqual([]);
-    expect(second.migration.alreadyApplied.map((m) => m.version)).toStrictEqual([1, 2, 3, 4, 5, 6]);
+    expect(second.migration.alreadyApplied.map((m) => m.version)).toStrictEqual([
+      1, 2, 3, 4, 5, 6, 7,
+    ]);
   });
 
   it('reports the schema as ABSENT in the preflight of a virgin database — so it ran BEFORE the bootstrap', async () => {

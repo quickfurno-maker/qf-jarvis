@@ -1,33 +1,36 @@
 /**
- * Stage 3.4.5B — the production projection-registry composition (no database).
+ * The production projection-registry composition (no database).
  *
- * Proves the composition holds EXACTLY the two real definitions, in the registry's deterministic
+ * Proves the composition holds EXACTLY the three real definitions, in the registry's deterministic
  * name order, with the exact names/versions, that the enumerated list is frozen, that duplicate
- * protection (owned by the merged registry) is intact, and that `rm_subject_activity` (Stage 3.6) is
- * absent. Synthetic registries remain independently constructible.
+ * protection (owned by the merged registry) is intact, and that `subject-activity` (QFJ-P03.09,
+ * ADR-0044) is present alongside the two metadata projections. Synthetic registries remain
+ * independently constructible.
  */
 import { describe, expect, it } from 'vitest';
 
 import { dailyEventAcceptanceProjection } from '../projections/handlers/daily-event-acceptance.js';
 import { eventTypeActivityProjection } from '../projections/handlers/event-type-activity.js';
+import { subjectActivityProjection } from '../projections/handlers/subject-activity.js';
 import { createProductionProjectionRegistry } from '../projections/production-registry.js';
 import {
   createProjectionRegistry,
   ProjectionRegistryError,
 } from '../projections/projection-registry.js';
 
-describe('production registry — exactly the two real definitions', () => {
-  it('contains exactly two projections', () => {
+describe('production registry — exactly the three real definitions', () => {
+  it('contains exactly three projections', () => {
     const registry = createProductionProjectionRegistry();
-    expect(registry.size).toBe(2);
-    expect(registry.list()).toHaveLength(2);
+    expect(registry.size).toBe(3);
+    expect(registry.list()).toHaveLength(3);
   });
 
-  it('enumerates them in deterministic name order (daily-event-acceptance, then event-type-activity)', () => {
+  it('enumerates them in deterministic name order (daily-event-acceptance, event-type-activity, subject-activity)', () => {
     const registry = createProductionProjectionRegistry();
     expect(registry.list().map((d) => d.name)).toEqual([
       'daily-event-acceptance',
       'event-type-activity',
+      'subject-activity',
     ]);
   });
 
@@ -36,6 +39,7 @@ describe('production registry — exactly the two real definitions', () => {
     expect(registry.list().map((d) => [d.name, d.version])).toEqual([
       ['daily-event-acceptance', 1],
       ['event-type-activity', 1],
+      ['subject-activity', 1],
     ]);
   });
 
@@ -45,12 +49,16 @@ describe('production registry — exactly the two real definitions', () => {
     const registry = createProductionProjectionRegistry();
     const eventType = registry.get('event-type-activity');
     const daily = registry.get('daily-event-acceptance');
+    const subject = registry.get('subject-activity');
     expect(eventType?.apply).toBe(eventTypeActivityProjection.apply);
     expect(eventType?.version).toBe(eventTypeActivityProjection.version);
     expect(daily?.apply).toBe(dailyEventAcceptanceProjection.apply);
     expect(daily?.version).toBe(dailyEventAcceptanceProjection.version);
+    expect(subject?.apply).toBe(subjectActivityProjection.apply);
+    expect(subject?.version).toBe(subjectActivityProjection.version);
     expect(registry.has('event-type-activity')).toBe(true);
     expect(registry.has('daily-event-acceptance')).toBe(true);
+    expect(registry.has('subject-activity')).toBe(true);
   });
 
   it('carries an apply handler for each definition', () => {
@@ -75,15 +83,7 @@ describe('production registry — immutability and freshness', () => {
   });
 });
 
-describe('production registry — duplicate protection intact and Stage 3.6 excluded', () => {
-  it('does NOT register rm_subject_activity / any subject-activity projection (Stage 3.6)', () => {
-    const registry = createProductionProjectionRegistry();
-    for (const name of ['subject-activity', 'rm_subject_activity', 'rm-subject-activity']) {
-      expect(registry.has(name)).toBe(false);
-    }
-    expect(registry.list().some((d) => d.name.includes('subject'))).toBe(false);
-  });
-
+describe('production registry — duplicate protection intact', () => {
   it('has no duplicate projection name', () => {
     const names = createProductionProjectionRegistry()
       .list()
