@@ -55,8 +55,8 @@ every call site is guarded.
 
 | #   | Criterion                               | Status                                                                                                                                                                                  |
 | --- | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| E1  | A–G merged and locked                   | **A–F merged** (PRs #26, #29, #30, #31, #32, #33). **G is merge-ready on its branch**, pending owner review and green CI                                                                |
-| E2  | Quality gates green                     | **Local PASS** (format, lint, typecheck, diff-check, 2659/2659 unit). Integration **pending CI**                                                                                        |
+| E1  | A–G merged and locked                   | **A–F merged** (PRs #26, #29, #30, #31, #32, #33). **G is merge-ready** — PR #35, CI green (run 30066733285) on the PR head at time of review — pending owner review and merge          |
+| E2  | Quality gates green                     | **PASS** — local format, lint, typecheck, diff-check, 2659/2659 unit; CI run 30066733285 **success** with integration **391/391** across 20 files on the PR head at time of review      |
 | E3  | Observability coverage complete         | **PASS** — every lifecycle transition emits its bounded event and updates its metric; the redaction test asserts on full serialised output; no unbounded label exists                   |
 | E4  | Runbook complete                        | **PASS** — zero `[UNIMPLEMENTED]` markers; every named command exists; all nine recovery objectives have concrete numeric thresholds                                                    |
 | E5  | Public API freeze preserved             | **PASS** — exactly 39 root symbols; the CLI is reachable only via an internal subpath                                                                                                   |
@@ -137,8 +137,11 @@ from every commit. Nothing had been pushed. Full detail in report 04.
 
 ## Verdict
 
-**PASS / QFJ_P03_07G_READY_FOR_OWNER_REVIEW** — CI is green on the exact PR head
-(`c82d360d731c78c3b2cd0d9819adf9ba094f762e`), including the PostgreSQL 17 integration suite.
+**PASS / QFJ_P03_07G_READY_FOR_OWNER_REVIEW** — CI is green, including the PostgreSQL 17 integration
+suite. GitHub Actions run **30066733285**, conclusion **success**, verified the **PR head at time of
+independent owner review** — `c50ca6b557468dcc52a59579fa3c9b526f8e9ed9`. The later documentation-only
+remediation commit that corrects these reports does not alter the already-reviewed implementation and
+requires its own new CI run.
 
 **QFJ-P03.07 (Projection Failure Operations) is complete in the repository.** The next slice is
 **QFJ-P03.08**. Managed deployment of migrations 0002–0006 remains a separate, currently paused lane and

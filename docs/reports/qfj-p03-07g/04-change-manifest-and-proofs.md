@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-24.
 
-## Added — source (5 files)
+## Added — source (6 files)
 
 | File                                                                       | Purpose                                                                                                                                                 |
 | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -25,7 +25,7 @@
 `docs/operations/projection-failure-alerting.md` · `docs/operations/projection-failure-queries.md` ·
 `docs/reports/qfj-p03-07g/01..05`
 
-## Modified — source (7 files), telemetry-only
+## Modified — source (8 files), telemetry-only
 
 | File                                   | Change                                                                                                                                                                                                                         | Correctness impact                                                                                                                                                                              |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -36,6 +36,7 @@
 | `projection-failure-operations.ts`     | Optional `logger`/`metrics` on the context; identity captured inside the transaction; acknowledge/quarantine emitted **after** commit; idempotent replays emit nothing                                                         | **None.** The mutation outcome shape is unchanged, so no existing assertion is affected                                                                                                         |
 | `projection-failure-replay.ts`         | Same pattern via a `ReplayIdentityBox`; authorize / lease-acquired / started / succeeded / failed / taken-over emitted after their transactions                                                                                | **None.** Result shapes unchanged                                                                                                                                                               |
 | `packages/event-backbone/package.json` | One internal subpath export; one `inspect:failures` script                                                                                                                                                                     | Export map still narrow (see below)                                                                                                                                                             |
+| `package.json` (root)                  | One `inspect:failures` pnpm passthrough script                                                                                                                                                                                 | No dependency or runtime change                                                                                                                                                                 |
 
 ## Modified — tests (4 files)
 
