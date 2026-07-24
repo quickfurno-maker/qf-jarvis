@@ -172,6 +172,32 @@ export {
   type RolloutObservabilityHook,
 } from './operations/index.js';
 
+// Model capability registry (QFJ-P04.02, ADR-0050). Composition + safe types only; the internal match
+// functions, tuple-key helper, and mutable internals stay private. No provider instance, no secret.
+export {
+  MODEL_TASK_CLASSES,
+  STRUCTURED_OUTPUT_MODES,
+  createModelCapabilityProfile,
+  createModelCapabilityRequirement,
+  deriveCapabilityRequirement,
+  createModelCapabilityRegistry,
+  CAPABILITY_MATCH_REASONS,
+  NOOP_CAPABILITY_OBSERVABILITY,
+  type ModelTaskClass,
+  type StructuredOutputMode,
+  type ModelCapabilityProfile,
+  type ModelCapabilityProfileInput,
+  type ModelCapabilityRequirement,
+  type ModelCapabilityRequirementInput,
+  type RequiredStructuredMode,
+  type ModelCapabilityRegistry,
+  type ModelCapabilityProfileSummary,
+  type CapabilityResolution,
+  type CapabilityMatchReason,
+  type CapabilityEvent,
+  type CapabilityObservabilityHook,
+} from './capabilities/index.js';
+
 // The gateway.
 export {
   createModelGateway,

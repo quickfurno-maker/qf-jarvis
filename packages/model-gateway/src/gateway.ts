@@ -40,6 +40,12 @@ import {
   type RolloutObservabilityHook,
   type RolloutRefusalReason,
 } from './operations/rollout-reasons.js';
+import type { ModelCapabilityRegistry } from './capabilities/capability-registry.js';
+import { deriveCapabilityRequirement } from './capabilities/capability-requirement.js';
+import {
+  NOOP_CAPABILITY_OBSERVABILITY,
+  type CapabilityObservabilityHook,
+} from './capabilities/capability-reasons.js';
 
 /** The emergency kill switch — one injected predicate that stops all model invocation. */
 export interface GatewayKillSwitch {
@@ -71,6 +77,14 @@ export interface ModelGatewayConfig {
   readonly rolloutController?: ProviderRolloutController;
   /** OPTIONAL sink for rollout observability events (QFJ-P04.01E). */
   readonly rolloutObservability?: RolloutObservabilityHook;
+  /**
+   * OPTIONAL model capability registry (QFJ-P04.02, ADR-0050). When present, a provider/release must
+   * resolve to an exact matching profile or it is excluded BEFORE invocation. When absent, the gateway
+   * behaves exactly as QFJ-P04.01E.
+   */
+  readonly capabilityRegistry?: ModelCapabilityRegistry;
+  /** OPTIONAL sink for capability observability events (QFJ-P04.02). */
+  readonly capabilityObservability?: CapabilityObservabilityHook;
 }
 
 export interface ModelGatewayInvokeOptions {
@@ -344,6 +358,43 @@ export function createModelGateway(config: ModelGatewayConfig): ModelGateway {
         available = false;
       }
       healthy.set(provider.descriptor.providerId, available);
+    }
+
+    // QFJ-P04.02: when a capability registry is configured, a provider whose descriptor does not resolve
+    // to an exact matching profile (satisfying this request) is excluded BEFORE any invocation. It is
+    // marked unhealthy so the existing selection/rollout paths drop it; the precise registry reason is
+    // emitted as a content-free capability event.
+    if (config.capabilityRegistry !== undefined) {
+      const registry = config.capabilityRegistry;
+      const capHook = config.capabilityObservability ?? NOOP_CAPABILITY_OBSERVABILITY;
+      const requirement = deriveCapabilityRequirement(request);
+      for (const provider of config.providers) {
+        if (healthy.get(provider.descriptor.providerId) !== true) {
+          continue;
+        }
+        const caps = provider.capabilities();
+        const resolution = registry.resolveDescriptor(caps, requirement);
+        if (resolution.ok) {
+          capHook.record({
+            type: 'capability-matched',
+            runId: request.runId,
+            releaseId: resolution.summary.releaseId,
+            providerId: caps.providerId,
+            modelId: caps.modelId,
+            modelVersion: caps.modelVersion,
+          });
+        } else {
+          healthy.set(provider.descriptor.providerId, false);
+          capHook.record({
+            type: 'capability-rejected',
+            runId: request.runId,
+            providerId: caps.providerId,
+            modelId: caps.modelId,
+            modelVersion: caps.modelVersion,
+            reason: resolution.reason,
+          });
+        }
+      }
     }
 
     // QFJ-P04.01E: a rollout controller governs serving by mode; it takes precedence over routing.
@@ -630,6 +681,11 @@ export function createModelGateway(config: ModelGatewayConfig): ModelGateway {
       emit({ type: 'invocation-failed', runId: request.runId, code: 'capability-mismatch' });
       throw new ModelGatewayError('capability-mismatch');
     }
+    // QFJ-P04.02: the serving release must resolve to an EXACT registry profile (incl. config digest).
+    if (!rolloutReleaseResolves(request, servingRelease, servingProvider)) {
+      emit({ type: 'invocation-failed', runId: request.runId, code: 'no-eligible-provider' });
+      throw new ModelGatewayError('no-eligible-provider');
+    }
 
     rolloutHook.record({
       type: 'serving-release-selected',
@@ -711,7 +767,8 @@ export function createModelGateway(config: ModelGatewayConfig): ModelGateway {
         const fbEligible =
           fbProvider.descriptor.executionClass === fallbackRelease.executionClass &&
           healthy.get(fallbackRelease.providerId) === true &&
-          capabilitiesSatisfy(fbProvider.capabilities(), request.requiredCapabilities);
+          capabilitiesSatisfy(fbProvider.capabilities(), request.requiredCapabilities) &&
+          rolloutReleaseResolves(request, fallbackRelease, fbProvider);
         if (fbEligible) {
           const fbOutcome = await runProviderLedger(
             fbProvider,
@@ -760,6 +817,38 @@ export function createModelGateway(config: ModelGatewayConfig): ModelGateway {
     throw new ModelGatewayError(code);
   }
 
+  /**
+   * QFJ-P04.02: whether a rollout release resolves to an exact registry profile for this request. When no
+   * capability registry is configured this is always true (the release passes through unchanged). On a
+   * mismatch it emits a content-free capability event.
+   */
+  function rolloutReleaseResolves(
+    request: ModelRequest,
+    release: ProviderReleaseRef,
+    provider: ModelProvider,
+  ): boolean {
+    if (config.capabilityRegistry === undefined) {
+      return true;
+    }
+    const requirement = deriveCapabilityRequirement(request);
+    const resolution = config.capabilityRegistry.resolveRelease(
+      release,
+      requirement,
+      provider.capabilities(),
+    );
+    if (!resolution.ok) {
+      (config.capabilityObservability ?? NOOP_CAPABILITY_OBSERVABILITY).record({
+        type: 'capability-rejected',
+        runId: request.runId,
+        releaseId: release.releaseId,
+        providerId: release.providerId,
+        reason: resolution.reason,
+      });
+      return false;
+    }
+    return true;
+  }
+
   /** Run one bounded, non-returning candidate shadow call. Never fatal; output is discarded. */
   async function runShadow(
     request: ModelRequest,
@@ -781,7 +870,8 @@ export function createModelGateway(config: ModelGatewayConfig): ModelGateway {
     if (
       provider.descriptor.executionClass !== shadowRelease.executionClass ||
       healthy.get(shadowRelease.providerId) !== true ||
-      !capabilitiesSatisfy(provider.capabilities(), request.requiredCapabilities)
+      !capabilitiesSatisfy(provider.capabilities(), request.requiredCapabilities) ||
+      !rolloutReleaseResolves(request, shadowRelease, provider)
     ) {
       return;
     }
