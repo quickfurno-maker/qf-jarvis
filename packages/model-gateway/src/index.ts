@@ -102,6 +102,26 @@ export {
   type GroqTransport,
 } from './providers/groq/index.js';
 
+// The local OpenAI-compatible provider (QFJ-P04.01C, ADR-0047) — first LOCAL-execution provider.
+// Composition symbols only; no raw HTTP/SDK type, no token accessor, no internal IP parser. A validated
+// private endpoint + an optional token + a transport are injected at composition.
+export {
+  LocalOpenAICompatibleModelProvider,
+  createLocalProviderConfig,
+  createLocalEndpoint,
+  LocalEndpointDescriptor,
+  LOCAL_CHAT_COMPLETIONS_PATH,
+  createFetchLocalTransport,
+  LocalAuthToken,
+  createLocalAuthToken,
+  type LocalProviderConfig,
+  type LocalProviderConfigInput,
+  type LocalEndpointOptions,
+  type LocalAddressCategory,
+  type LocalStructuredOutputSupport,
+  type LocalTransport,
+} from './providers/local-openai-compatible/index.js';
+
 // The gateway.
 export {
   createModelGateway,
