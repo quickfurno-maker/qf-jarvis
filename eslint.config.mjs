@@ -175,6 +175,89 @@ export default tseslint.config(
     },
   },
 
+  // Projection REDUCERS claim to be pure functions of the event log: a handler reads no clock, no
+  // randomness, no environment, and performs no filesystem/network I/O. That purity is what makes a
+  // read model rebuildable to an identical result (ADR-0022 §4, QFJ-P03.08/ADR-0043). A reducer that
+  // reached for Date.now(), Math.random(), or process.env would silently break rebuild determinism —
+  // usually months later, in an incident, rather than in the pull request.
+  //
+  // These rules are the mechanical enforcement ADR-0022 §4 promised and that the QFJ-P03.08 readiness
+  // audit found MISSING. They are scoped narrowly to the reducer implementation files in
+  // `projections/handlers` — NOT the runner, worker, stores, or reader, which legitimately perform I/O
+  // and own the clock/lock/transaction. Timestamps in a read model must come from the EVENT
+  // (`ProjectionEvent.acceptedAt`), never from the wall clock.
+  {
+    files: ['packages/event-backbone/src/projections/handlers/**/*.ts'],
+    rules: {
+      'no-console': 'error',
+      'no-restricted-globals': [
+        'error',
+        {
+          name: 'process',
+          message:
+            'A projection reducer reads no environment. Its inputs are the borrowed client and the event.',
+        },
+        {
+          name: 'fetch',
+          message: 'A projection reducer performs no network activity.',
+        },
+      ],
+      'no-restricted-properties': [
+        'error',
+        {
+          object: 'Date',
+          property: 'now',
+          message:
+            'A projection reducer reads no clock. A read-model timestamp comes from the event (ProjectionEvent.acceptedAt), never from now().',
+        },
+        {
+          object: 'Math',
+          property: 'random',
+          message:
+            'A projection reducer is deterministic. Randomness would make live and rebuild disagree.',
+        },
+      ],
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'NewExpression[callee.name="Date"][arguments.length=0]',
+          message:
+            'A projection reducer reads no clock. `new Date()` with no argument is the wall clock; derive time from the event instead.',
+        },
+      ],
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: [
+                'node:fs',
+                'node:fs/*',
+                'node:net',
+                'node:http',
+                'node:https',
+                'node:child_process',
+                'node:dns',
+                'node:tls',
+                'node:dgram',
+                'node:process',
+                'node:worker_threads',
+                'node:crypto',
+                'fs',
+                'net',
+                'http',
+                'https',
+                'child_process',
+              ],
+              message:
+                'A projection reducer is a pure function of the event log. It performs no filesystem, network, process, or crypto I/O; it only writes its read-model table through the borrowed client.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
   // Must remain last: turns off every rule that would fight Prettier.
   // Formatting is Prettier's job; ESLint's job is correctness.
   eslintConfigPrettier,
