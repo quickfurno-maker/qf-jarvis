@@ -25,14 +25,14 @@
 
 ## Migration / API invariants (verified at the locked SHA)
 
-| Migration | SHA-256 |
-| --- | --- |
-| 0001 | `dbca835c394dc67f015176af8ae0582faa78e0c1299593ac8970c5abf4389d6a` |
-| 0002 | `4a6536afc23e53eb8f4ab91516e8bdc6700495a27ec386a99dbfb072719f736c` |
-| 0003 | `407bea56929b592d93337892f6ee95ac006f3b4001dedb135151ccfb5b36ab0c` |
-| 0004 | `148b31ea95f3ae90274cdc74381b8d1fb3be9caa0dfe7ff96771240a7c29cc30` |
-| 0005 | `96d641ad0c3ea47843ab9de00cf4ab9847fad6a0164bbacadf5c7ed439ccccae` |
-| 0006 | `e97059a506ec4377fa39194de4fdc54e7d2f237941fb1e5243a0b01ff40a83d4` |
+| Migration | SHA-256                                                            |
+| --------- | ------------------------------------------------------------------ |
+| 0001      | `dbca835c394dc67f015176af8ae0582faa78e0c1299593ac8970c5abf4389d6a` |
+| 0002      | `4a6536afc23e53eb8f4ab91516e8bdc6700495a27ec386a99dbfb072719f736c` |
+| 0003      | `407bea56929b592d93337892f6ee95ac006f3b4001dedb135151ccfb5b36ab0c` |
+| 0004      | `148b31ea95f3ae90274cdc74381b8d1fb3be9caa0dfe7ff96771240a7c29cc30` |
+| 0005      | `96d641ad0c3ea47843ab9de00cf4ab9847fad6a0164bbacadf5c7ed439ccccae` |
+| 0006      | `e97059a506ec4377fa39194de4fdc54e7d2f237941fb1e5243a0b01ff40a83d4` |
 
 - Migration **0007 is absent and unreserved**.
 - Package-root runtime API remains **exactly 39 symbols** (`public-api.test.ts` asserts `toHaveLength(39)`).

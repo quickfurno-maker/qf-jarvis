@@ -41,8 +41,8 @@ No `rm_subject_activity`; no subject/payload widening; no new business/domain pr
 9. Hostile handler errors normalize to safe bounded diagnostics.
 10. Projection purity mechanically enforced.
 11. Real PostgreSQL integration evidence exists and fails-not-skips.
-12. Migrations 0001–0006 exact; 13. migration 0007 absent; 14. package-root API remains 39.
-15. No managed access/deployment. 16. CI green. 17. Implementation reports and owner review pass before merge.
+12. Migrations 0001–0006 exact; migration 0007 absent; package-root API remains 39.
+13. No managed access/deployment; CI green; implementation reports and owner review pass before merge.
 
 ## Risks
 

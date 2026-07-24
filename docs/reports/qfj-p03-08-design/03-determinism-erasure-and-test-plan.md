@@ -29,25 +29,25 @@ Verified gap: ADR-0022 §4 claims projection reducer purity is mechanically lint
 
 ## Test matrix (bounded; U = unit, I = real-PostgreSQL integration)
 
-| # | Test | Kind | Invariant proved |
-| --- | --- | --- | --- |
-| 1 | Live vs rebuild digest equality (both metadata models) | I | `A == B` (ADR-0022 §7) |
-| 2 | Erasure survives rebuild (synthetic tombstone projection) | I | erasure event replayed → identical post-erasure digest |
-| 3 | Version bump → destroy + rebuild from position 1 | I | fresh checkpoint namespace; identical rebuilt digest |
-| 4 | Late event before horizon applied deterministically | I | out-of-business-order arrival → same digest live/rebuild |
-| 5 | Event after horizon excluded | I | positions `> horizon` ignored; digest stable |
-| 6 | Crash/abort mid-rebuild leaves live untouched | I | aborted tx → live checkpoint/read-models unchanged |
-| 7 | Rebuild isolation from live checkpoint | I | live `(name,version)` row unmodified |
-| 8 | Rebuild isolation from failure rows | I | no `projection_failure` / `projection_attempt` rows created |
-| 9 | Deterministic ordering (ORDER BY full PK) | U | canonicalization order stable across runs |
-| 10 | No `event.sequence` ordering | U/I | reader/driver use `position` only |
-| 11 | No package-root expansion | U | `public-api.test.ts` still 39 |
-| 12 | Migration conformance / no 0007 | U | 0001–0006 hashes; 0007 absent |
-| 13 | Security / redaction of rebuild diagnostics | U | closed safe codes only; no payload/subject in output |
-| 14 | Real PostgreSQL integration (the digest property) | I | fails-not-skips without `DATABASE_URL` |
-| 15 | Repeated rebuild idempotence | I | rebuild twice → identical digest each time |
-| 16 | Concurrent live ingestion policy (prohibited) | U | driver documents/asserts quiescent-input contract |
-| 17 | Hostile handler error values | U | throwing reducer aborts rebuild with a closed code, no leak |
-| 18 | Commit-outcome-unknown (N/A) | — | documented not-applicable for the bounded proof |
+| #   | Test                                                      | Kind | Invariant proved                                            |
+| --- | --------------------------------------------------------- | ---- | ----------------------------------------------------------- |
+| 1   | Live vs rebuild digest equality (both metadata models)    | I    | `A == B` (ADR-0022 §7)                                      |
+| 2   | Erasure survives rebuild (synthetic tombstone projection) | I    | erasure event replayed → identical post-erasure digest      |
+| 3   | Version bump → destroy + rebuild from position 1          | I    | fresh checkpoint namespace; identical rebuilt digest        |
+| 4   | Late event before horizon applied deterministically       | I    | out-of-business-order arrival → same digest live/rebuild    |
+| 5   | Event after horizon excluded                              | I    | positions `> horizon` ignored; digest stable                |
+| 6   | Crash/abort mid-rebuild leaves live untouched             | I    | aborted tx → live checkpoint/read-models unchanged          |
+| 7   | Rebuild isolation from live checkpoint                    | I    | live `(name,version)` row unmodified                        |
+| 8   | Rebuild isolation from failure rows                       | I    | no `projection_failure` / `projection_attempt` rows created |
+| 9   | Deterministic ordering (ORDER BY full PK)                 | U    | canonicalization order stable across runs                   |
+| 10  | No `event.sequence` ordering                              | U/I  | reader/driver use `position` only                           |
+| 11  | No package-root expansion                                 | U    | `public-api.test.ts` still 39                               |
+| 12  | Migration conformance / no 0007                           | U    | 0001–0006 hashes; 0007 absent                               |
+| 13  | Security / redaction of rebuild diagnostics               | U    | closed safe codes only; no payload/subject in output        |
+| 14  | Real PostgreSQL integration (the digest property)         | I    | fails-not-skips without `DATABASE_URL`                      |
+| 15  | Repeated rebuild idempotence                              | I    | rebuild twice → identical digest each time                  |
+| 16  | Concurrent live ingestion policy (prohibited)             | U    | driver documents/asserts quiescent-input contract           |
+| 17  | Hostile handler error values                              | U    | throwing reducer aborts rebuild with a closed code, no leak |
+| 18  | Commit-outcome-unknown (N/A)                              | —    | documented not-applicable for the bounded proof             |
 
 Tests 1, 2, and 14 are the core acceptance evidence and **must** be real-PostgreSQL integration tests that **fail rather than skip** without the integration environment (the QFJ-P03.07G health-integration precedent).
