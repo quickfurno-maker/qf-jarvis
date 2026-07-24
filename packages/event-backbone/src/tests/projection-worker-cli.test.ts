@@ -155,6 +155,7 @@ describe('worker CLI — valid startup and clean stop', () => {
     expect(captured?.registry.list().map((d) => d.name)).toEqual([
       'daily-event-acceptance',
       'event-type-activity',
+      'subject-activity',
     ]);
     expect(captured?.now()).toBe(NOW);
     expect(captured?.signal).toBeInstanceOf(AbortSignal);

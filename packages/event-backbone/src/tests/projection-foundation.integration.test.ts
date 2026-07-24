@@ -150,8 +150,9 @@ describe('migrations apply in order, idempotently, with 0001–0005 unchanged', 
       '0004_projection_foundation.sql',
       '0005_projection_event_positions.sql',
       '0006_projection_failure_operations.sql',
+      '0007_subject_activity_projection.sql',
     ]);
-    expect(rows.map((row) => row.version)).toStrictEqual([1, 2, 3, 4, 5, 6]);
+    expect(rows.map((row) => row.version)).toStrictEqual([1, 2, 3, 4, 5, 6, 7]);
     for (const row of rows) {
       const hex = row.checksum.toString('hex');
       if (KNOWN_CHECKSUMS[row.filename] !== undefined) {
@@ -160,7 +161,7 @@ describe('migrations apply in order, idempotently, with 0001–0005 unchanged', 
     }
   });
 
-  it('re-migrating is idempotent — still exactly six applied migrations', async () => {
+  it('re-migrating is idempotent — still exactly seven applied migrations', async () => {
     await runMigrations(admin, defaultMigrationsDirectory());
     const count = await withClient(admin, async (client) => {
       const r = await client.query<{ n: string }>(
@@ -168,7 +169,7 @@ describe('migrations apply in order, idempotently, with 0001–0005 unchanged', 
       );
       return Number.parseInt(r.rows[0]?.n ?? '0', 10);
     });
-    expect(count).toBe(6);
+    expect(count).toBe(7);
   });
 
   it('records the EXACT reviewed 0004 and 0005 checksums in the migration history', async () => {
@@ -684,13 +685,17 @@ describe('privileges — projection role least privilege; ingestion role and PUB
     );
   });
 
-  it('the projection role reads only event metadata columns, never payload or identifiers', async () => {
+  it('the projection role reads event metadata and the opaque subject, never payload or free-text identifiers', async () => {
     expect(await columnPrivilege(PROJECTION_ROLE, 'event', 'sequence', 'SELECT')).toBe(true);
     expect(await columnPrivilege(PROJECTION_ROLE, 'event', 'event_type', 'SELECT')).toBe(true);
     expect(await columnPrivilege(PROJECTION_ROLE, 'event', 'event_version', 'SELECT')).toBe(true);
     expect(await columnPrivilege(PROJECTION_ROLE, 'event', 'accepted_at', 'SELECT')).toBe(true);
+    // QFJ-P03.09 (migration 0007, ADR-0044): the opaque Phase-2 subject reference is now readable by
+    // the projection role so the subject-activity handler can resolve it. It is NOT personal data.
+    expect(await columnPrivilege(PROJECTION_ROLE, 'event', 'subject_type', 'SELECT')).toBe(true);
+    expect(await columnPrivilege(PROJECTION_ROLE, 'event', 'subject_id', 'SELECT')).toBe(true);
+    // The payload and the correlation identifier remain ungranted.
     expect(await columnPrivilege(PROJECTION_ROLE, 'event', 'payload', 'SELECT')).toBe(false);
-    expect(await columnPrivilege(PROJECTION_ROLE, 'event', 'subject_id', 'SELECT')).toBe(false);
     expect(await columnPrivilege(PROJECTION_ROLE, 'event', 'correlation_id', 'SELECT')).toBe(false);
     // and it can never mutate the immutable log
     expect(await tablePrivilege(PROJECTION_ROLE, 'event', 'UPDATE')).toBe(false);

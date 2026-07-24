@@ -120,6 +120,7 @@ describe('db:migrate runs the preflight automatically', () => {
       '0004_projection_foundation.sql',
       '0005_projection_event_positions.sql',
       '0006_projection_failure_operations.sql',
+      '0007_subject_activity_projection.sql',
     ]);
     expect(await tableExists(MIGRATION_SCHEMA, 'event')).toBe(true);
   });
@@ -130,7 +131,9 @@ describe('db:migrate runs the preflight automatically', () => {
 
     expect(second.preflight.passed).toBe(true);
     expect(second.migration.applied).toStrictEqual([]);
-    expect(second.migration.alreadyApplied.map((m) => m.version)).toStrictEqual([1, 2, 3, 4, 5, 6]);
+    expect(second.migration.alreadyApplied.map((m) => m.version)).toStrictEqual([
+      1, 2, 3, 4, 5, 6, 7,
+    ]);
   });
 
   it('reports the schema as ABSENT in the preflight of a virgin database — so it ran BEFORE the bootstrap', async () => {

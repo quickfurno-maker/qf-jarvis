@@ -1,16 +1,19 @@
 /**
- * Stage 3.4.5B — containment proofs (no database).
+ * Projection containment proofs (no database).
  *
- * These fail if the slice ever grows beyond its approved envelope: a new migration (`0006`+), a
- * changed migration set, a widened package-root surface, a destructive read-model operation
- * (`TRUNCATE`/`DELETE FROM`/`DROP TABLE` — i.e. rebuild/reset machinery) or a write to the deferred
- * `rm_subject_activity` table ANYWHERE under the projection tree, a third production projection, or an
- * ambiguous `worker:start` production path.
+ * Originally Stage 3.4.5B, these bound the projection slice's envelope. They have been extended as
+ * later slices landed: QFJ-P03.07C added migration `0006`; QFJ-P03.09 (ADR-0044) adds migration `0007`
+ * and the third production projection `subject-activity` writing `qf_jarvis.rm_subject_activity`.
  *
- * F5 correction: the destructive-operation scan **discovers all production projection source
- * recursively** (not a hardcoded file list), so a newly-added file cannot evade it. The substring/regex
- * scan is supplementary defense; the primary containment is structural — the projection role holds no
- * `DELETE`/`TRUNCATE` grant (migration `0004`, proven unchanged here) and there is no migration `0006`.
+ * The still-load-bearing properties they protect are unchanged:
+ *   - NO production projection source performs a destructive read-model operation
+ *     (`TRUNCATE`/`DELETE FROM`/`DROP TABLE`) — rebuild/reset destroy remains a trusted admin/test
+ *     operation, and the projection role holds no `DELETE`/`TRUNCATE` grant (migrations 0004/0007);
+ *   - the migration set is bounded and gap-free;
+ *   - the package-root exports map stays narrow (no wildcard, nothing reaching persistence/migration).
+ *
+ * The destructive-operation scan **discovers all production projection source recursively** (not a
+ * hardcoded file list), so a newly-added file cannot evade it.
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -46,17 +49,15 @@ function discoverProductionSource(dir: URL): string[] {
   return found;
 }
 
-/** The destructive / deferred-write patterns no production projection source may contain. */
-const PROHIBITED_SQL = [
-  /\bTRUNCATE\b/i,
-  /\bDELETE\s+FROM\b/i,
-  /\bDROP\s+TABLE\b/i,
-  // A write to the Stage 3.6 read model (fully qualified, so the deferral COMMENT in
-  // production-registry.ts — which names the bare `rm_subject_activity` — is not a false positive).
-  /qf_jarvis\.rm_subject_activity/i,
-];
+/**
+ * The DESTRUCTIVE read-model statements no production projection source may contain. A version-bump
+ * rebuild destroys derived state, but ONLY through a trusted admin/test capability outside production
+ * source (QFJ-P03.08). Note: the subject-activity reducer legitimately WRITES `rm_subject_activity`
+ * (INSERT/UPSERT and NULL-clears on a tombstone), which is not destructive and is not scanned here.
+ */
+const PROHIBITED_SQL = [/\bTRUNCATE\b/i, /\bDELETE\s+FROM\b/i, /\bDROP\s+TABLE\b/i];
 
-describe('destructive/reset operations are absent from ALL production projection source (F5)', () => {
+describe('destructive/reset operations are absent from ALL production projection source', () => {
   const sources = discoverProductionSource(PROJECTIONS_DIR);
 
   it('discovers the whole projection tree recursively — not a hardcoded file list', () => {
@@ -72,6 +73,7 @@ describe('destructive/reset operations are absent from ALL production projection
     expect(asNames.some((p) => p.endsWith('/projections/handlers/daily-event-acceptance.ts'))).toBe(
       true,
     );
+    expect(asNames.some((p) => p.endsWith('/projections/handlers/subject-activity.ts'))).toBe(true);
   });
 
   it('the guard actually fires — a destructive statement in ANY file would be caught (positive control)', () => {
@@ -81,12 +83,12 @@ describe('destructive/reset operations are absent from ALL production projection
     expect(
       PROHIBITED_SQL.some((re) => re.test('DELETE FROM qf_jarvis.rm_daily_event_acceptance')),
     ).toBe(true);
-    expect(
-      PROHIBITED_SQL.some((re) => re.test('INSERT INTO qf_jarvis.rm_subject_activity ...')),
-    ).toBe(true);
+    expect(PROHIBITED_SQL.some((re) => re.test('DROP TABLE qf_jarvis.rm_subject_activity'))).toBe(
+      true,
+    );
   });
 
-  it('no production projection source contains TRUNCATE / DELETE FROM / DROP TABLE / rm_subject_activity write', () => {
+  it('no production projection source contains TRUNCATE / DELETE FROM / DROP TABLE', () => {
     for (const file of sources) {
       const text = readFileSync(file, 'utf8');
       for (const pattern of PROHIBITED_SQL) {
@@ -96,10 +98,10 @@ describe('destructive/reset operations are absent from ALL production projection
   });
 });
 
-// Stage 3.4.5B froze migrations at 0001–0005 (no 0006). QFJ-P03.07C added the authorized
-// projection-failure-persistence migration 0006; this guard now bounds the set at 0001–0006 with no 0007.
-describe('migrations are bounded at 0001–0006 with no 0007', () => {
-  it('the migrations directory holds EXACTLY the six approved SQL files', () => {
+// The migration set grew as authorized slices landed: 0006 (QFJ-P03.07C) and now 0007 (QFJ-P03.09).
+// This guard bounds the set at 0001–0007 with no 0008.
+describe('migrations are bounded at 0001–0007 with no 0008', () => {
+  it('the migrations directory holds EXACTLY the seven approved SQL files', () => {
     const files = readdirSync(MIGRATIONS_DIR)
       .filter((name) => name.endsWith('.sql'))
       .sort();
@@ -110,12 +112,13 @@ describe('migrations are bounded at 0001–0006 with no 0007', () => {
       '0004_projection_foundation.sql',
       '0005_projection_event_positions.sql',
       '0006_projection_failure_operations.sql',
+      '0007_subject_activity_projection.sql',
     ]);
   });
 
-  it('no migration numbered 0007 or higher exists', () => {
+  it('no migration numbered 0008 or higher exists', () => {
     const files = readdirSync(MIGRATIONS_DIR);
-    expect(files.some((name) => /^000[7-9]|^0[1-9]\d\d/.test(name))).toBe(false);
+    expect(files.some((name) => /^000[89]|^0[1-9]\d\d/.test(name))).toBe(false);
   });
 });
 
@@ -147,11 +150,10 @@ describe('the package exports map exposes only the root and narrow internal CLI 
 });
 
 describe('the production registry stays within scope', () => {
-  it('registers exactly the two approved projections and never rm_subject_activity (Stage 3.6)', () => {
+  it('registers exactly the three approved projections, including subject-activity (QFJ-P03.09)', () => {
     const names = createProductionProjectionRegistry()
       .list()
       .map((d) => d.name);
-    expect(names).toEqual(['daily-event-acceptance', 'event-type-activity']);
-    expect(names.some((name) => name.includes('subject'))).toBe(false);
+    expect(names).toEqual(['daily-event-acceptance', 'event-type-activity', 'subject-activity']);
   });
 });
