@@ -110,7 +110,7 @@ QFJ-P12  Advanced Intelligence and Future Agents
 
 | Subphase | Name | Historical alias |
 | --- | --- | --- |
-| **QFJ-P04.01** | Model Gateway | Stage 4.0 |
+| **QFJ-P04.01** | Model Gateway (foundation **QFJ-P04.01A** implemented on a feature branch / draft PR, [ADR-0045](../decisions/ADR-0045-qfj-p04-01a-model-gateway-foundation.md), not merged) | Stage 4.0 |
 | **QFJ-P04.01A** | Provider-Neutral Contracts | (new, [ADR-0041](../decisions/ADR-0041-provider-independent-cloud-local-and-hybrid-model-inference.md)) |
 | **QFJ-P04.01B** | Groq Cloud Adapter | (new) |
 | **QFJ-P04.01C** | Local OpenAI-Compatible Adapter | (new) |
@@ -129,7 +129,7 @@ QFJ-P12  Advanced Intelligence and Future Agents
 **Entry gate.** Projection integrity complete.
 **Exit gate.** Every model call passes the gateway; budgets/kill-switch enforced; structured-output validation refuses malformed output; knowledge served only through its lifecycle; evaluation harness can fail an agent version **or a provider/model**; a provider swap requires only configuration + evaluation approval.
 **Major exclusions.** No specialist agent; no consumer AI subscription as backend; no raw output auto-becoming training data; RAG remains disabled/no-op until evaluation evidence justifies it. **RAG migration remains unallocated. No provider adapter, SDK, key, or model call is implemented by the roadmap; provider selection never alters agent authority.**
-**Status.** Planned (approved architecture, not implemented — ADR-0028, ADR-0041).
+**Status.** Approved architecture (ADR-0028, ADR-0041). **QFJ-P04.01A (Model Gateway Foundation) is implemented on a feature branch / draft PR (not merged, [ADR-0045](../decisions/ADR-0045-qfj-p04-01a-model-gateway-foundation.md)):** a new provider-neutral `@qf-jarvis/model-gateway` package (data-class privacy routing, capability matching, budgets, timeout/retry/circuit/kill-switch, structured-output validation, provenance, observability hooks) with a deterministic `FakeModelProvider` only — **no real provider, no key, no network, no agent, NO_MIGRATION (0008 absent); the `@qf-jarvis/event-backbone` root API remains 39.** The first real hosted provider is **Groq** (owner-fixed) in **QFJ-P04.01B**; a local OpenAI-compatible workstation adapter follows in **QFJ-P04.01C**. Kimi is excluded. The remaining P04 slices (04.01B–E, 04.02–04.05) are planned. Managed deployment remains a separate paused lane.
 
 ## QFJ-P05 — Jarvis Orchestration, Tasks and Cases
 
