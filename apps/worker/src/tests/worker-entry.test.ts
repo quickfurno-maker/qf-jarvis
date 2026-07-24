@@ -26,6 +26,19 @@ function fakeDeps(overrides: Partial<ProjectionWorkerCliDeps> = {}): ProjectionW
     registerShutdownSignals: () => () => undefined,
     writeOut: () => undefined,
     writeErr: () => undefined,
+    // QFJ-P03.07G seams. The schema probe reports a complete schema so these entry tests keep
+    // exercising the invocation path itself; the startup gate has its own coverage.
+    probeSchema: () => Promise.resolve(true),
+    createLogger: () => ({ projectionEvent: () => undefined, workerEvent: () => undefined }),
+    metrics: {
+      increment: () => undefined,
+      setGauge: () => undefined,
+      replaceGauge: () => undefined,
+      observe: () => undefined,
+      snapshot: () => [],
+      rejectedSamples: () => 0,
+      reset: () => undefined,
+    },
   } as unknown as ProjectionWorkerCliDeps;
   return { ...base, ...overrides };
 }

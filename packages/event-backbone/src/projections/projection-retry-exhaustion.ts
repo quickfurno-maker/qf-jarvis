@@ -26,6 +26,7 @@
 import { randomUUID } from 'node:crypto';
 
 import type { DatabaseClient } from '../persistence/pool.js';
+import type { ProjectionDivergenceKind } from '../observability/projection-log-events.js';
 import {
   ProjectionCheckpointInvalidError,
   ProjectionStoredDataError,
@@ -43,6 +44,38 @@ import {
   readActiveProjectionFailuresForProjection,
 } from './projection-failure-repository.js';
 import { MAX_PROJECTION_ATTEMPTS } from './projection-status.js';
+
+/**
+ * A divergence that additionally names WHICH invariant broke, drawn from a closed vocabulary
+ * (QFJ-P03.07G).
+ *
+ * It EXTENDS {@link ProjectionCheckpointInvalidError} rather than replacing it, so every existing
+ * `instanceof ProjectionCheckpointInvalidError` check — including the runner's two error-mapping
+ * branches — continues to match exactly as before. This is purely additive: the classification, the
+ * fail-closed behaviour, and the resulting runner error code are unchanged. The kind exists so
+ * observability can report a bounded discriminator instead of parsing a message, which it must never
+ * do.
+ */
+export class ProjectionDivergenceError extends ProjectionCheckpointInvalidError {
+  public readonly divergenceKind: ProjectionDivergenceKind;
+
+  public constructor(divergenceKind: ProjectionDivergenceKind, message: string) {
+    super(message);
+    this.name = 'ProjectionDivergenceError';
+    this.divergenceKind = divergenceKind;
+  }
+}
+
+/** Read a closed divergence kind off a caught value, or `null` when it is not one of ours. */
+export function divergenceKindOf(value: unknown): ProjectionDivergenceKind | null {
+  try {
+    return value instanceof ProjectionDivergenceError ? value.divergenceKind : null;
+  } catch {
+    // `instanceof` performs [[GetPrototypeOf]] and THROWS for a revoked Proxy. Anything that cannot be
+    // safely identified is simply not one of ours.
+    return null;
+  }
+}
 
 /** The persisted category + safe code for a retry-exhausted deterministic failure (ADR-0040). */
 const EXHAUSTION_CATEGORY = 'DETERMINISTIC_HANDLER_FAILURE' as const;
@@ -103,7 +136,8 @@ async function readPoisonEventStorageIdentity(
   );
   const row = result.rows[0];
   if (row === undefined) {
-    throw new ProjectionCheckpointInvalidError(
+    throw new ProjectionDivergenceError(
+      'missing-event-at-position',
       'no event maps to the blocked projection position; retry exhaustion cannot be established.',
     );
   }
@@ -133,6 +167,12 @@ export interface EstablishRetryExhaustionInput {
 /** The identity of the failure aggregate this establishment created. */
 export interface EstablishedRetryExhaustion {
   readonly failureId: ProjectionFailureId;
+  /**
+   * The aggregate's generation at creation. Returned so post-commit observability can report it
+   * WITHOUT a second query — re-reading after the commit would race a concurrent operator action and
+   * could report a generation the creating transaction never saw.
+   */
+  readonly generation: number;
 }
 
 /**
@@ -179,7 +219,7 @@ export async function establishRetryExhaustionFailure(
     occurredAt: input.failedAt,
   });
 
-  return { failureId: failure.failureId };
+  return { failureId: failure.failureId, generation: failure.generation };
 }
 
 /**
@@ -202,18 +242,21 @@ export async function reconcileBlockedExhaustion(
     version: input.version,
   });
   if (active.length === 0) {
-    throw new ProjectionCheckpointInvalidError(
+    throw new ProjectionDivergenceError(
+      'blocked-checkpoint-without-active-failure',
       'a blocked checkpoint has no matching active failure (blocked-checkpoint-without-active-failure).',
     );
   }
   if (active.length > 1) {
-    throw new ProjectionCheckpointInvalidError(
+    throw new ProjectionDivergenceError(
+      'blocked-checkpoint-with-multiple-active-failures',
       'a blocked checkpoint has more than one active failure (blocked-checkpoint-with-multiple-active-failures).',
     );
   }
   const failure = active[0];
   if (failure?.projectionPosition !== input.blockedPosition) {
-    throw new ProjectionCheckpointInvalidError(
+    throw new ProjectionDivergenceError(
+      'active-failure-position-mismatch',
       'the active failure position does not match the blocked checkpoint (active-failure-position-mismatch).',
     );
   }

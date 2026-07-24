@@ -20,10 +20,27 @@
 
 import { randomUUID } from 'node:crypto';
 
+import {
+  isProjectionLogSafeCode,
+  type ProjectionLogIdentity,
+  type ProjectionScopedLogEvent,
+} from '../observability/projection-log-events.js';
+import {
+  NOOP_PROJECTION_LOGGER,
+  type ProjectionLogger,
+} from '../observability/projection-logger.js';
+import {
+  NOOP_PROJECTION_METRICS,
+  type ProjectionMetricsRegistry,
+} from '../observability/projection-metrics.js';
 import type { DatabaseClient, DatabasePool } from '../persistence/pool.js';
 import { withTransaction } from '../persistence/transaction.js';
 import { readCheckpointForUpdate, resumeCheckpointAfterReplay } from './checkpoint-store.js';
-import type { ProjectionDefinition } from './projection-definition.js';
+import {
+  toCanonicalInstant,
+  type CanonicalInstant,
+  type ProjectionDefinition,
+} from './projection-definition.js';
 import { ProjectionCheckpointInvalidError } from './projection-errors.js';
 import { readEventAtPosition } from './projection-event-reader.js';
 import { classifyProjectionFailure } from './projection-failure-taxonomy.js';
@@ -88,6 +105,74 @@ export interface ProjectionReplayContext {
   readonly actorType: ProjectionFailureActorType;
   readonly actorId: string;
   readonly correlationId: string;
+  /**
+   * Optional structured logger (QFJ-P03.07G). Defaults to discarding. Every emission happens after the
+   * owning transaction has committed, and the operator's free-text `reason` is never emitted.
+   */
+  readonly logger?: ProjectionLogger;
+  /** Optional metrics registry (QFJ-P03.07G). Defaults to discarding. */
+  readonly metrics?: ProjectionMetricsRegistry;
+}
+
+/**
+ * A one-slot recording box for the projection identity a replay operation discovers INSIDE its
+ * transaction (QFJ-P03.07G).
+ *
+ * The public results deliberately do not carry the projection name and version, and re-reading the
+ * failure row after the commit would race a concurrent operator action. So the identity is captured
+ * where it is already in hand and emitted once the transaction has settled. Recording only — nothing
+ * in this box is ever written to a log or a counter by the code that fills it.
+ */
+interface ReplayIdentityBox {
+  identity: ProjectionLogIdentity | null;
+}
+
+/** Record the identity of a failure row into a box, if one was supplied. */
+function captureReplayIdentity(
+  box: ReplayIdentityBox | undefined,
+  failure: { readonly projectionName: string; readonly projectionVersion: number } | null,
+): void {
+  if (box === undefined || failure === null) return;
+  box.identity = {
+    projectionName: failure.projectionName as ProjectionName,
+    projectionVersion: failure.projectionVersion,
+  };
+}
+
+/** Emit a replay event, guarded. */
+function emitReplayEvent(
+  context: ProjectionReplayContext,
+  box: ReplayIdentityBox,
+  build: () => ProjectionScopedLogEvent,
+): void {
+  if (box.identity === null) return;
+  const logger = context.logger ?? NOOP_PROJECTION_LOGGER;
+  try {
+    logger.projectionEvent(box.identity, build());
+  } catch {
+    // Swallowed without inspection: the transaction has already committed.
+  }
+}
+
+/** Increment a replay counter, guarded. */
+function countReplay(
+  context: ProjectionReplayContext,
+  box: ReplayIdentityBox,
+  apply: (
+    metrics: ProjectionMetricsRegistry,
+    labels: { readonly projection_name: string; readonly projection_version: number },
+  ) => void,
+): void {
+  if (box.identity === null) return;
+  const metrics = context.metrics ?? NOOP_PROJECTION_METRICS;
+  try {
+    apply(metrics, {
+      projection_name: box.identity.projectionName,
+      projection_version: box.identity.projectionVersion,
+    });
+  } catch {
+    // Swallowed without inspection.
+  }
 }
 
 /** The decision input handed to the injected replay authorizer. Carries no secret and no token. */
@@ -269,8 +354,11 @@ export async function authorizeProjectionFailureReplay(
   }
   const idempotencyKey = `authorize-replay:${input.failureId}:g${String(input.expectedGeneration)}`;
 
-  return runReplayTransaction(pool, async (client) => {
+  // Captured inside the transaction, emitted after it commits (QFJ-P03.07G).
+  const box: ReplayIdentityBox = { identity: null };
+  const result = await runReplayTransaction(pool, async (client) => {
     const failure = await readProjectionFailureByIdForUpdate(client, input.failureId);
+    captureReplayIdentity(box, failure);
     await authorizeOrThrow(authorizer, {
       capability: 'projection-failure:authorize-replay',
       actorType: context.actorType,
@@ -348,6 +436,37 @@ export async function authorizeProjectionFailureReplay(
       idempotent: false,
     };
   });
+
+  // Post-commit. A replayed (idempotent) authorize emits nothing: the governance event it describes
+  // was already reported by the call that actually created the authorization.
+  if (!result.idempotent) {
+    countReplay(context, box, (metrics, labels) => {
+      metrics.increment('projection_replay_authorizations_total', {
+        ...labels,
+        authorization_state: 'active',
+      });
+    });
+    emitReplayEvent(context, box, () => ({
+      event: 'projection.replay.authorized',
+      failureId: result.failureId,
+      authorizationId: result.authorizationId,
+      actorType: context.actorType,
+      actorId: context.actorId,
+      expiresAt: toCanonicalInstantOrNull(input.expiresAt),
+      resultingGeneration: result.generation,
+    }));
+  }
+  return result;
+}
+
+/** Render a Date as a canonical instant, or `null` when it does not round-trip. Never throws. */
+function toCanonicalInstantOrNull(value: Date | null): CanonicalInstant | null {
+  if (value === null) return null;
+  try {
+    return toCanonicalInstant(value);
+  } catch {
+    return null;
+  }
 }
 
 /** Read the single active replay authorization for a failure (inspection). */
@@ -440,16 +559,73 @@ export async function executeAuthorizedProjectionReplay(
     throw new ProjectionReplayError('invalid-lease-duration');
   }
 
+  // Captured inside phase 1, emitted after each phase's transaction commits (QFJ-P03.07G).
+  const box: ReplayIdentityBox = { identity: null };
+
   // Phase 1 — claim (or reconcile to) exactly one live attempt owned by us.
   const claim = await runReplayTransaction(pool, (client) =>
-    claimReplayAttempt(client, authorizer, context, input, leaseOwner),
+    claimReplayAttempt(client, authorizer, context, input, leaseOwner, box),
   );
   if (claim === 'already-resolved') {
     return { outcome: 'already-resolved', failureId: input.failureId };
   }
 
+  // Post-commit for the claim: the lease is now durably ours, and the handler is about to run.
+  emitReplayEvent(context, box, () => ({
+    event: 'projection.replay.lease.acquired',
+    failureId: input.failureId,
+    authorizationId: input.authorizationId,
+    attemptId: claim.attemptId,
+    attemptNumber: claim.failureGeneration,
+    leaseExpiresAt: toCanonicalInstantOrNull(new Date(input.now.getTime() + input.leaseDurationMs)),
+  }));
+  emitReplayEvent(context, box, () => ({
+    event: 'projection.replay.started',
+    failureId: input.failureId,
+    attemptId: claim.attemptId,
+    position: 0n,
+  }));
+
   // Phase 2 — apply the handler and complete atomically; on handler failure, record it terminally.
-  return completeReplay(pool, registry, context, input, leaseOwner, claim);
+  const outcome = await completeReplay(pool, registry, context, input, leaseOwner, claim);
+
+  // Post-commit for the completion transaction.
+  if (outcome.outcome === 'replay-succeeded') {
+    countReplay(context, box, (metrics, labels) => {
+      metrics.increment('projection_replay_attempts_total', {
+        ...labels,
+        attempt_state: 'succeeded',
+      });
+    });
+    emitReplayEvent(context, box, () => ({
+      event: 'projection.replay.succeeded',
+      failureId: outcome.failureId,
+      attemptId: outcome.attemptId,
+      position: outcome.resolvedPosition,
+      // Success resumes the checkpoint by EXACTLY one position — carried so the log alone proves that
+      // no position was skipped.
+      resumedToPosition: outcome.resolvedPosition,
+    }));
+  } else if (outcome.outcome === 'replay-failed') {
+    countReplay(context, box, (metrics, labels) => {
+      metrics.increment('projection_replay_attempts_total', {
+        ...labels,
+        attempt_state: 'failed',
+      });
+    });
+    emitReplayEvent(context, box, () => ({
+      event: 'projection.replay.failed',
+      failureId: outcome.failureId,
+      attemptId: outcome.attemptId,
+      position: 0n,
+      // The persisted code is already a closed repository-owned value; anything else is reported as the
+      // generic handler-failure code rather than passed through as free text.
+      safeErrorCode: isProjectionLogSafeCode(outcome.safeErrorCode)
+        ? outcome.safeErrorCode
+        : 'projection-handler-failed',
+    }));
+  }
+  return outcome;
 }
 
 async function claimReplayAttempt(
@@ -458,8 +634,10 @@ async function claimReplayAttempt(
   context: ProjectionReplayContext,
   input: ExecuteReplayInput,
   leaseOwner: string,
+  box?: ReplayIdentityBox,
 ): Promise<ReplayClaim | 'already-resolved'> {
   const failure = await readProjectionFailureByIdForUpdate(client, input.failureId);
+  captureReplayIdentity(box, failure);
   await authorizeOrThrow(authorizer, {
     capability: 'projection-failure:execute-replay',
     actorType: context.actorType,
@@ -780,8 +958,11 @@ export async function takeOverExpiredProjectionReplayLease(
     throw new ProjectionReplayError('invalid-lease-duration');
   }
 
-  return runReplayTransaction(pool, async (client) => {
+  // Captured inside the transaction, emitted after it commits (QFJ-P03.07G).
+  const box: ReplayIdentityBox = { identity: null };
+  const result = await runReplayTransaction(pool, async (client) => {
     const failure = await readProjectionFailureByIdForUpdate(client, input.failureId);
+    captureReplayIdentity(box, failure);
     await authorizeOrThrow(authorizer, {
       capability: 'projection-failure:take-over-replay',
       actorType: context.actorType,
@@ -862,6 +1043,31 @@ export async function takeOverExpiredProjectionReplayLease(
       idempotent: false,
     };
   });
+
+  // Post-commit. A takeover is a lease CONFLICT resolution — it means an executor died holding a lease —
+  // so it counts as a conflict as well as emitting its own `warn` event. An idempotent takeover (the
+  // fresh attempt was already ours) emits nothing.
+  if (!result.idempotent) {
+    countReplay(context, box, (metrics, labels) => {
+      metrics.increment('projection_replay_lease_conflicts_total', labels);
+      metrics.increment('projection_replay_attempts_total', {
+        ...labels,
+        attempt_state: 'abandoned',
+      });
+    });
+    emitReplayEvent(context, box, () => ({
+      event: 'projection.replay.lease.takenOver',
+      failureId: result.failureId,
+      authorizationId: input.authorizationId,
+      attemptId: result.newAttemptId,
+      attemptNumber: 0,
+      leaseExpiresAt: toCanonicalInstantOrNull(
+        new Date(input.now.getTime() + input.leaseDurationMs),
+      ),
+      abandonedAttemptId: result.previousAttemptId,
+    }));
+  }
+  return result;
 }
 
 // --- Reconcile ----------------------------------------------------------------------------------

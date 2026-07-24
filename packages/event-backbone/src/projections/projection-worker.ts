@@ -41,6 +41,14 @@
  * Not exported from the package root — internal projection vocabulary (the barrel is unchanged).
  */
 import type { DatabasePool } from '../persistence/pool.js';
+import {
+  NOOP_PROJECTION_LOGGER,
+  type ProjectionLogger,
+} from '../observability/projection-logger.js';
+import {
+  NOOP_PROJECTION_METRICS,
+  type ProjectionMetricsRegistry,
+} from '../observability/projection-metrics.js';
 
 import {
   isCanonicalInstant,
@@ -48,6 +56,7 @@ import {
   type ProjectionDefinition,
 } from './projection-definition.js';
 import { ProjectionInputError } from './projection-errors.js';
+import type { ProjectionName } from './projection-name.js';
 import type { ProjectionRegistry } from './projection-registry.js';
 import type { ProjectionRunResult } from './projection-run-result.js';
 import { runProjectionOnce } from './projection-runner.js';
@@ -153,6 +162,13 @@ export interface ProjectionWorkerDeps {
   readonly maxCycles?: number;
   /** Injected single-invocation runner. Defaults to {@link runProjectionOnce}. */
   readonly runOnce?: RunProjectionOnce;
+  /**
+   * Optional structured logger (QFJ-P03.07G). Passed through to the runner and used for the
+   * worker-scoped started/stopped/cycle events. Defaults to a discarding logger.
+   */
+  readonly logger?: ProjectionLogger;
+  /** Optional metrics registry (QFJ-P03.07G). Passed through to the runner. Defaults to discarding. */
+  readonly metrics?: ProjectionMetricsRegistry;
 }
 
 // --- Repository-owned abortable sleep -----------------------------------------------------------
@@ -300,6 +316,10 @@ export async function runProjectionCycle(
         name,
         version,
         now: deps.now(),
+        // Only forward when configured: `exactOptionalPropertyTypes` forbids an explicit `undefined`,
+        // and the runner already applies its own discarding defaults.
+        ...(deps.logger !== undefined ? { logger: deps.logger } : {}),
+        ...(deps.metrics !== undefined ? { metrics: deps.metrics } : {}),
       });
 
       const rawOutcome: unknown = (result as { outcome?: unknown }).outcome;
@@ -331,11 +351,45 @@ export async function runProjectionCycle(
     }
   }
 
+  // QFJ-P03.07G. Emitted AFTER the whole cycle has been recorded, never inside the guarded per-
+  // definition region: a throwing logger or registry must not be able to abort a cycle that already
+  // completed successfully. The per-cycle event is `debug` and sampled off by default (see the logger).
+  emitCycleTelemetry(deps, outcomes);
+
   return Object.freeze({
     outcomes: Object.freeze(outcomes),
     progressed,
     earliestNextAttemptAt,
   });
+}
+
+/**
+ * Record one `projection.worker.cycle` event and one `projection_worker_cycles_total` increment per
+ * projection outcome. Wholly guarded — the cycle result is already decided by the time this runs.
+ *
+ * No position is carried: a cycle outcome names WHAT happened, and the runner already emits the
+ * position-bearing events for the outcomes that have one.
+ */
+function emitCycleTelemetry(
+  deps: ProjectionWorkerDeps,
+  outcomes: readonly ProjectionWorkerOutcome[],
+): void {
+  const logger = deps.logger ?? NOOP_PROJECTION_LOGGER;
+  const metrics = deps.metrics ?? NOOP_PROJECTION_METRICS;
+  try {
+    for (const outcome of outcomes) {
+      metrics.increment('projection_worker_cycles_total', { outcome: outcome.outcome });
+      logger.projectionEvent(
+        {
+          projectionName: outcome.projectionName as ProjectionName,
+          projectionVersion: outcome.projectionVersion,
+        },
+        { event: 'projection.worker.cycle', outcome: outcome.outcome, position: null },
+      );
+    }
+  } catch {
+    // Swallowed without inspection: telemetry must never alter a completed cycle.
+  }
 }
 
 /**
@@ -364,6 +418,37 @@ function computeWakeDelayMs(
 }
 
 /**
+ * Emit a worker lifecycle event and maintain the `projection_worker_up` gauge.
+ *
+ * Worker-scoped: `started`/`stopped` describe a run that spans the whole registry, so they carry no
+ * projection identity. Wholly guarded — a telemetry failure must never turn a clean stop into a throw.
+ */
+function emitWorkerLifecycle(
+  logger: ProjectionLogger,
+  metrics: ProjectionMetricsRegistry,
+  kind: 'started' | 'stopped',
+  summary: ProjectionWorkerSummary | null,
+): void {
+  try {
+    metrics.setGauge('projection_worker_up', {}, kind === 'started' ? 1 : 0);
+    if (kind === 'started') {
+      logger.workerEvent({ event: 'projection.worker.started' });
+      return;
+    }
+    if (summary !== null) {
+      logger.workerEvent({
+        event: 'projection.worker.stopped',
+        cycles: summary.cycles,
+        succeeded: summary.succeeded,
+        stoppedBy: summary.stoppedBy,
+      });
+    }
+  } catch {
+    // Swallowed without inspection.
+  }
+}
+
+/**
  * Drive the whole registry in a loop until the signal aborts (or `maxCycles` is reached). Cancellation
  * is observed BEFORE a cycle and AFTER the complete cycle (never mid-cycle — the active cycle drains).
  * A cycle that advanced a position loops again immediately; one that advanced nothing sleeps until the
@@ -379,15 +464,27 @@ export async function runProjectionWorker(
   const sleep = deps.sleep ?? abortableSleep;
   const aborted = (): boolean => deps.signal?.aborted === true;
 
+  const logger = deps.logger ?? NOOP_PROJECTION_LOGGER;
+  const metrics = deps.metrics ?? NOOP_PROJECTION_METRICS;
+
   let cycles = 0;
   let succeeded = 0;
 
+  // QFJ-P03.07G. `projection_worker_up` is the one process gauge: 1 while the loop owns the process.
+  // It is cleared on every clean return below. A crash leaves it stale in memory only — the process is
+  // gone, so nothing reads it.
+  emitWorkerLifecycle(logger, metrics, 'started', null);
+
   for (;;) {
     if (aborted()) {
-      return Object.freeze({ cycles, succeeded, stoppedBy: 'aborted' });
+      const summary = Object.freeze({ cycles, succeeded, stoppedBy: 'aborted' as const });
+      emitWorkerLifecycle(logger, metrics, 'stopped', summary);
+      return summary;
     }
     if (deps.maxCycles !== undefined && cycles >= deps.maxCycles) {
-      return Object.freeze({ cycles, succeeded, stoppedBy: 'max-cycles' });
+      const summary = Object.freeze({ cycles, succeeded, stoppedBy: 'max-cycles' as const });
+      emitWorkerLifecycle(logger, metrics, 'stopped', summary);
+      return summary;
     }
 
     // Once a cycle begins it drains to completion; a non-result failure propagates (no summary).
@@ -401,7 +498,9 @@ export async function runProjectionWorker(
 
     // Abort observed AFTER the complete cycle: stop before sleeping or starting another (drain complete).
     if (aborted()) {
-      return Object.freeze({ cycles, succeeded, stoppedBy: 'aborted' });
+      const summary = Object.freeze({ cycles, succeeded, stoppedBy: 'aborted' as const });
+      emitWorkerLifecycle(logger, metrics, 'stopped', summary);
+      return summary;
     }
 
     if (cycle.progressed) {
