@@ -42,9 +42,9 @@ every call site is guarded.
 - Local: `format:check`, `lint`, `typecheck`, `git diff --check` **pass**; unit **2659/2659** across 67
   files (from 2533/59 at F), including the unchanged 39-symbol public-API test and the
   migration-conformance/checksum tests.
-- Integration: `projection-health.integration.test.ts` is written and typechecks but was **not executed
-  locally** — `DATABASE_URL` is absent and this task forbids handling credentials. It runs in **CI
-  against PostgreSQL 17**. No claim is made about its result here.
+- Integration: **PASS in CI against PostgreSQL 17** — **391/391** across 20 files, including the 9 new
+  `projection-health.integration.test.ts` tests. It was not run locally (`DATABASE_URL` is absent and
+  this task forbids handling credentials); the result above is taken from the CI log.
 - Migration 0006 checksum unchanged; 0007 absent; managed PostgreSQL untouched.
 
 ---
@@ -137,8 +137,8 @@ from every commit. Nothing had been pushed. Full detail in report 04.
 
 ## Verdict
 
-**PASS / QFJ_P03_07G_READY_FOR_OWNER_REVIEW** — pending green CI on the exact PR head, including the
-PostgreSQL 17 integration suite that was not executed locally.
+**PASS / QFJ_P03_07G_READY_FOR_OWNER_REVIEW** — CI is green on the exact PR head
+(`c82d360d731c78c3b2cd0d9819adf9ba094f762e`), including the PostgreSQL 17 integration suite.
 
 **QFJ-P03.07 (Projection Failure Operations) is complete in the repository.** The next slice is
 **QFJ-P03.08**. Managed deployment of migrations 0002–0006 remains a separate, currently paused lane and

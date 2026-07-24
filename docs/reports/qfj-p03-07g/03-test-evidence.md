@@ -3,8 +3,9 @@
 **Date:** 2026-07-24.
 
 > **Only executed results are reported here.** Nothing below is claimed unless it was run. The
-> PostgreSQL integration suite was **not** executed locally — see § _Integration status_ — and is
-> reported as pending CI, not as passing.
+> PostgreSQL integration suite was **not** executed locally — `DATABASE_URL` is absent and this task
+> forbids handling credentials — so it was run in **CI against PostgreSQL 17**. Its result is recorded
+> below from the CI log, not inferred.
 
 ## Executed locally — results
 
@@ -95,22 +96,47 @@ assertion changed.
 
 No test was skipped, no assertion lowered, nothing retried, and no database error suppressed.
 
-## Integration status — NOT executed locally
+## Integration status — executed in CI
 
-`projection-health.integration.test.ts` (9 tests) is written and typechecks, but was **not run**.
+`projection-health.integration.test.ts` (9 tests) was **not run locally**. A local PostgreSQL container
+is present, but `DATABASE_URL` is not set in this environment and this task forbids reading, requesting,
+or handling any credential — so the connection string the harness requires was deliberately not
+obtained.
 
-A local PostgreSQL container is present, but `DATABASE_URL` is not set in this environment and this task
-forbids reading, requesting, or handling any credential — so the connection string required by the
-harness was deliberately not obtained. The suite therefore runs **in CI against PostgreSQL 17**, and
-this report claims nothing about its result.
+It ran in **CI against PostgreSQL 17** and **passed**:
 
-Per the repository's integration configuration, these tests **fail rather than skip** without
+```
+✓ packages/event-backbone/src/tests/projection-health.integration.test.ts (9 tests) 255ms
+  Test Files  20 passed (20)
+       Tests  391 passed (391)
+```
+
+Per the repository's integration configuration these tests **fail rather than skip** without
 `DATABASE_URL`; a skipped database test is a green build that proves nothing.
 
-What it will prove in CI: that the health queries are correct against the schema as actually migrated —
-column names, the active-failure predicate matching the partial index, the position-map join through the
-gap-free ordering authority, and the catalog probe — plus the restart property (a fresh registry
-rebuilding the correct blocked set) and the gauge-clearing property.
+What CI proved: the health queries are correct against the schema as actually migrated — column names,
+the active-failure predicate matching the partial index, the position-map join through the gap-free
+ordering authority, and the catalog probe — plus the restart property (a fresh registry rebuilding the
+correct blocked set) and the gauge-clearing property.
+
+**Two fixture defects only a real database could surface** were found and fixed on the first CI run,
+which is precisely why the suite exists:
+
+1. A `resolved` failure row must carry both a resolution time and the successful attempt reference —
+   `projection_failure_resolved_shape` makes "resolved" and "has a resolution" the same proposition.
+2. A checkpoint cannot be blocked out of nowhere: `recordCheckpointBlocked` guards on
+   `failed_attempt_count = 4`. The fixture now walks the real bounded-retry path (attempts 1–4 leave it
+   active; only the fifth blocks it), which exercises the invariant rather than bypassing it.
+
+Neither was a defect in the implementation.
+
+## CI result
+
+`Quality gate` — **pass**, 1m31s
+(run `30066613449`, head `c82d360d731c78c3b2cd0d9819adf9ba094f762e`).
+
+Unit **2659/2659** across 67 files · integration **391/391** across 20 files · build, migrations, and
+the working-tree-clean check all green.
 
 ## Commands as run
 
