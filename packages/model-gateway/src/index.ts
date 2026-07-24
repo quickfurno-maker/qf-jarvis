@@ -85,8 +85,22 @@ export {
 } from './observability/events.js';
 
 // Reliability (injected clock + circuit type).
-export { createManualClock, type GatewayClock } from './reliability/clock.js';
+export { createManualClock, createSystemClock, type GatewayClock } from './reliability/clock.js';
 export { type CircuitBreakerConfig, type CircuitState } from './reliability/circuit-breaker.js';
+
+// The Groq Cloud provider (QFJ-P04.01B, ADR-0046) — first real HOSTED provider. Composition symbols
+// only; no raw HTTP/SDK type, no key accessor. A real key + transport are injected at composition.
+export {
+  GroqModelProvider,
+  GroqApiKey,
+  createGroqApiKey,
+  createGroqProviderConfig,
+  createFetchGroqTransport,
+  GROQ_CHAT_COMPLETIONS_ENDPOINT,
+  type GroqProviderConfig,
+  type GroqProviderConfigInput,
+  type GroqTransport,
+} from './providers/groq/index.js';
 
 // The gateway.
 export {

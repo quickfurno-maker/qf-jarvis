@@ -21,3 +21,12 @@ export function createManualClock(startMs = 0): GatewayClock & { advance(ms: num
     },
   };
 }
+
+/** The production clock (monotonic wall time). Injected at composition; never used by unit tests. */
+export function createSystemClock(): GatewayClock {
+  return {
+    now(): number {
+      return Date.now();
+    },
+  };
+}
