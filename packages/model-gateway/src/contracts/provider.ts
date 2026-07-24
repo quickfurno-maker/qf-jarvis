@@ -31,6 +31,12 @@ export interface ProviderInvocationInput {
     readonly content: string;
   }[];
   readonly resultMode: 'STRUCTURED' | 'TEXT';
+  /**
+   * For a STRUCTURED request, the request schema rendered to JSON Schema, so a real provider (e.g. Groq)
+   * can request `response_format.json_schema`. Absent for TEXT requests. The gateway still validates the
+   * provider's returned value against the original schema — this is a hint, never the authority.
+   */
+  readonly structuredJsonSchema?: unknown;
   readonly timeoutMs: number;
   /** Cooperative cancellation. A provider that supports cancellation must honour this. */
   readonly signal: AbortSignal;
@@ -55,8 +61,8 @@ export type ProviderInvocationResult =
     }
   | { readonly status: 'timeout'; readonly latencyMs: number }
   | { readonly status: 'cancelled' }
-  | { readonly status: 'unavailable' }
-  | { readonly status: 'failed' }
+  | { readonly status: 'unavailable'; readonly retryable?: boolean }
+  | { readonly status: 'failed'; readonly retryable?: boolean }
   | { readonly status: 'malformed'; readonly latencyMs: number };
 
 /** A provider-neutral inference engine. */

@@ -8,6 +8,8 @@
  * + circuit) → at most ONE fallback → validate output → provenance. No voting, no parallel fan-out, at
  * most one accepted response. All time is injected; there is no wall-clock sleep and no background work.
  */
+import { z } from 'zod';
+
 import type { GatewayMode } from './contracts/enums.js';
 import type { ModelProvider, ProviderOutput } from './contracts/provider.js';
 import { validateModelRequest, type ModelRequest } from './contracts/request.js';
@@ -62,11 +64,29 @@ interface FailedAttempt {
   readonly kind: 'failure';
   readonly code: ModelGatewayErrorCode;
   readonly invoked: boolean;
+  /** Whether retrying this provider could plausibly succeed. A non-retryable failure stops retries. */
+  readonly retryable: boolean;
 }
 interface CancelledAttempt {
   readonly kind: 'cancelled';
 }
 type AttemptOutcome = AcceptedAttempt | FailedAttempt | CancelledAttempt;
+
+/**
+ * Render a STRUCTURED request's zod schema to a JSON Schema hint for a real provider (e.g. Groq's
+ * `response_format.json_schema`). On any conversion failure it returns `{}` — the provider may then fall
+ * back to best-effort JSON mode, and the gateway's local zod validation remains the authority.
+ */
+function toStructuredJsonSchema(request: ModelRequest): unknown {
+  if (request.structuredSchema === undefined) {
+    return {};
+  }
+  try {
+    return z.toJSONSchema(request.structuredSchema);
+  } catch {
+    return {};
+  }
+}
 
 function validateOutput(
   request: ModelRequest,
@@ -119,7 +139,7 @@ export function createModelGateway(config: ModelGatewayConfig): ModelGateway {
     }
     const providerId = provider.descriptor.providerId;
     if (!circuit.canAttempt(providerId)) {
-      return { kind: 'failure', code: 'circuit-open', invoked: false };
+      return { kind: 'failure', code: 'circuit-open', invoked: false, retryable: false };
     }
 
     let result;
@@ -130,10 +150,13 @@ export function createModelGateway(config: ModelGatewayConfig): ModelGateway {
         resultMode: request.resultMode,
         timeoutMs: request.timeoutMs,
         signal,
+        ...(request.resultMode === 'STRUCTURED'
+          ? { structuredJsonSchema: toStructuredJsonSchema(request) }
+          : {}),
       });
     } catch {
       circuit.recordFailure(providerId);
-      return { kind: 'failure', code: 'provider-failed', invoked: true };
+      return { kind: 'failure', code: 'provider-failed', invoked: true, retryable: false };
     }
 
     switch (result.status) {
@@ -141,7 +164,7 @@ export function createModelGateway(config: ModelGatewayConfig): ModelGateway {
         if (result.latencyMs > request.timeoutMs) {
           circuit.recordFailure(providerId);
           emit({ type: 'timeout', runId: request.runId, providerId });
-          return { kind: 'failure', code: 'timeout', invoked: true };
+          return { kind: 'failure', code: 'timeout', invoked: true, retryable: true };
         }
         const validation = validateOutput(request, result.output);
         if (!validation.ok) {
@@ -149,7 +172,7 @@ export function createModelGateway(config: ModelGatewayConfig): ModelGateway {
           if (validation.code === 'structured-output-invalid') {
             emit({ type: 'structured-output-failed', runId: request.runId, providerId });
           }
-          return { kind: 'failure', code: validation.code, invoked: true };
+          return { kind: 'failure', code: validation.code, invoked: true, retryable: false };
         }
         circuit.recordSuccess(providerId);
         return {
@@ -162,18 +185,33 @@ export function createModelGateway(config: ModelGatewayConfig): ModelGateway {
       case 'timeout':
         circuit.recordFailure(providerId);
         emit({ type: 'timeout', runId: request.runId, providerId });
-        return { kind: 'failure', code: 'timeout', invoked: true };
+        return { kind: 'failure', code: 'timeout', invoked: true, retryable: true };
       case 'cancelled':
         return { kind: 'cancelled' };
       case 'unavailable':
         circuit.recordFailure(providerId);
-        return { kind: 'failure', code: 'provider-unavailable', invoked: true };
+        return {
+          kind: 'failure',
+          code: 'provider-unavailable',
+          invoked: true,
+          retryable: result.retryable ?? true,
+        };
       case 'failed':
         circuit.recordFailure(providerId);
-        return { kind: 'failure', code: 'provider-failed', invoked: true };
+        return {
+          kind: 'failure',
+          code: 'provider-failed',
+          invoked: true,
+          retryable: result.retryable ?? true,
+        };
       case 'malformed':
         circuit.recordFailure(providerId);
-        return { kind: 'failure', code: 'malformed-provider-output', invoked: true };
+        return {
+          kind: 'failure',
+          code: 'malformed-provider-output',
+          invoked: true,
+          retryable: false,
+        };
     }
   }
 
@@ -184,7 +222,12 @@ export function createModelGateway(config: ModelGatewayConfig): ModelGateway {
     maxTries: number,
     counter: { attempts: number },
   ): Promise<AttemptOutcome> {
-    let last: FailedAttempt = { kind: 'failure', code: 'provider-failed', invoked: false };
+    let last: FailedAttempt = {
+      kind: 'failure',
+      code: 'provider-failed',
+      invoked: false,
+      retryable: false,
+    };
     for (let attempt = 0; attempt < maxTries; attempt += 1) {
       if (signal.aborted) {
         return { kind: 'cancelled' };
@@ -201,8 +244,8 @@ export function createModelGateway(config: ModelGatewayConfig): ModelGateway {
         counter.attempts += 1;
       }
       last = outcome;
-      if (!outcome.invoked) {
-        // Circuit is open — retrying the same provider is pointless.
+      if (!outcome.invoked || !outcome.retryable) {
+        // Circuit open, or a non-retryable failure — retrying the same provider is pointless.
         break;
       }
     }
@@ -217,7 +260,7 @@ export function createModelGateway(config: ModelGatewayConfig): ModelGateway {
     if (!last.invoked) {
       return 'circuit-open';
     }
-    if (!usedFallback && request.retryBudget > 0) {
+    if (last.retryable && !usedFallback && request.retryBudget > 0) {
       return 'retry-budget-exhausted';
     }
     return last.code;
