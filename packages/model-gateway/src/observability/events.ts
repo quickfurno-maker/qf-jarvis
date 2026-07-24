@@ -6,9 +6,10 @@
  * enum, and numeric counters. It NEVER carries a prompt, a message, user/client/vendor content, a
  * subject reference, a provider header, or a secret.
  */
-import type { GatewayMode } from '../contracts/enums.js';
+import type { GatewayMode, ModelDataClass } from '../contracts/enums.js';
 import type { ModelGatewayErrorCode } from '../errors/gateway-error.js';
 import type { CircuitState } from '../reliability/circuit-breaker.js';
+import type { FallbackDecisionReason, RoutingProfile } from '../routing/routing-reasons.js';
 
 /** The closed set of gateway event types. */
 export const GATEWAY_EVENT_TYPES = [
@@ -25,6 +26,7 @@ export const GATEWAY_EVENT_TYPES = [
   'concurrency-refused',
   'structured-output-failed',
   'kill-switch',
+  'routing-decided',
 ] as const;
 export type GatewayEventType = (typeof GATEWAY_EVENT_TYPES)[number];
 
@@ -38,6 +40,10 @@ export interface GatewayEvent {
   readonly attempts?: number;
   readonly latencyMs?: number;
   readonly circuitState?: CircuitState;
+  /** Hybrid-routing evidence (QFJ-P04.01D) — all bounded, content-free enums/ids. */
+  readonly profile?: RoutingProfile;
+  readonly dataClass?: ModelDataClass;
+  readonly fallbackReason?: FallbackDecisionReason;
 }
 
 /** The injected sink for gateway events. */
