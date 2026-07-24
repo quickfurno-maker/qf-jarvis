@@ -13,13 +13,18 @@
     "./internal/projection-worker-cli": {
       "types": "./dist/projections/projection-worker-cli.d.ts",
       "default": "./dist/projections/projection-worker-cli.js"
+    },
+    "./internal/projection-inspection-cli": {
+      "types": "./dist/projections/projection-inspection-cli.d.ts",
+      "default": "./dist/projections/projection-inspection-cli.js"
     }
   },
   "scripts": {
     "build": "tsc --build tsconfig.json",
     "typecheck": "tsc --build tsconfig.json",
     "db:migrate": "node ./dist/persistence/migrate-cli.js",
-    "db:preflight": "node ./dist/persistence/preflight-cli.js"
+    "db:preflight": "node ./dist/persistence/preflight-cli.js",
+    "inspect:failures": "node ./dist/projections/projection-inspection-cli-bin.js"
   },
   "dependencies": {
     "pg": "8.22.0"

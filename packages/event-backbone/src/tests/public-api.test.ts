@@ -273,14 +273,52 @@ describe('the Stage 3.4.5B real handlers, production registry, and worker CLI ar
 
   it('exposes runProjectionWorkerCli ONLY through the narrowly scoped internal subpath (not the root)', async () => {
     const { exports } = await readPackageManifest();
-    // Exactly the root plus one internal worker subpath — nothing else.
-    expect(Object.keys(exports).sort()).toEqual(['.', './internal/projection-worker-cli']);
+    // Exactly the root plus the two internal CLI subpaths — nothing else. QFJ-P03.07G added the
+    // read-only inspection CLI here rather than to the root, so the 39-symbol barrel is untouched.
+    expect(Object.keys(exports).sort()).toEqual([
+      '.',
+      './internal/projection-inspection-cli',
+      './internal/projection-worker-cli',
+    ]);
     // The subpath resolves to the compiled worker CLI (JS + types) — never the barrel or persistence.
     const subpath = JSON.stringify(exports['./internal/projection-worker-cli']);
     expect(subpath).toContain('./dist/projections/projection-worker-cli.js');
     expect(subpath).toContain('./dist/projections/projection-worker-cli.d.ts');
     expect(subpath).not.toContain('persistence');
     expect(subpath).not.toContain('index.js');
+  });
+
+  it('exposes the read-only inspection CLI through an equally narrow internal subpath', async () => {
+    const { exports } = await readPackageManifest();
+    const subpath = JSON.stringify(exports['./internal/projection-inspection-cli']);
+    expect(subpath).toContain('./dist/projections/projection-inspection-cli.js');
+    expect(subpath).toContain('./dist/projections/projection-inspection-cli.d.ts');
+    expect(subpath).not.toContain('persistence');
+    expect(subpath).not.toContain('index.js');
+  });
+
+  it('the inspection CLI module exposes NO mutating operator command', async () => {
+    const cli = await import('../projections/projection-inspection-cli.js');
+    // The command table is the enforcement point: an operator (or a script) cannot reach acknowledge,
+    // quarantine, authorize, or replay through this surface, because those verbs are not in it.
+    expect([...cli.INSPECTION_COMMANDS].sort()).toEqual([
+      'divergence',
+      'history',
+      'inspect',
+      'list',
+    ]);
+    for (const mutating of ['acknowledge', 'quarantine', 'authorize', 'replay', 'execute']) {
+      expect(cli.isInspectionCommand(mutating)).toBe(false);
+    }
+    // It must not re-export the E/F mutating operations either.
+    for (const forbidden of [
+      'acknowledgeProjectionFailureOperation',
+      'quarantineProjectionFailureOperation',
+      'authorizeProjectionFailureReplay',
+      'executeAuthorizedProjectionReplay',
+    ]) {
+      expect(cli).not.toHaveProperty(forbidden);
+    }
   });
 
   it('the internal subpath module exposes ONLY the worker entry vocabulary — no handlers/registry/pool', async () => {
@@ -303,10 +341,15 @@ describe('no package export subpath can reach the migration runner', () => {
   it('publishes the root plus exactly one narrowly-scoped internal worker subpath — and no bypass path', async () => {
     const { exports } = await readPackageManifest();
 
-    // The root, plus ONE authorized internal subpath (the worker composition root that apps/worker
-    // imports in-process). A `"./*"` wildcard — or any `./persistence/...` / migration-runner subpath —
-    // would re-open the migration bypass through a deep import; the next assertion forbids exactly that.
-    expect(Object.keys(exports).sort()).toStrictEqual(['.', './internal/projection-worker-cli']);
+    // The root, plus the authorized internal subpaths (the worker composition root that apps/worker
+    // imports in-process, and the QFJ-P03.07G read-only inspection CLI). A `"./*"` wildcard — or any
+    // `./persistence/...` / migration-runner subpath — would re-open the migration bypass through a
+    // deep import; the next assertion forbids exactly that.
+    expect(Object.keys(exports).sort()).toStrictEqual([
+      '.',
+      './internal/projection-inspection-cli',
+      './internal/projection-worker-cli',
+    ]);
   });
 
   it('exposes no subpath mentioning persistence, migration-runner, or dist internals', async () => {

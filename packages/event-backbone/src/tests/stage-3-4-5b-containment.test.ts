@@ -119,15 +119,19 @@ describe('migrations are bounded at 0001–0006 with no 0007', () => {
   });
 });
 
-describe('the package exports map exposes only the root and one narrow internal worker subpath', () => {
+describe('the package exports map exposes only the root and narrow internal CLI subpaths', () => {
   const manifest = JSON.parse(readFileSync(fileURLToPath(PACKAGE_MANIFEST), 'utf8')) as {
     readonly exports: Record<string, unknown>;
     readonly scripts: Record<string, string>;
   };
 
-  it('publishes exactly ["." , "./internal/projection-worker-cli"] — no bypass subpath', () => {
+  it('publishes exactly the root and the two internal CLI subpaths — no bypass subpath', () => {
+    // QFJ-P03.07G added the read-only inspection CLI as a second narrowly scoped internal subpath. The
+    // containment property this test protects is unchanged: no wildcard, and nothing reaching
+    // persistence or the migration runner.
     expect(Object.keys(manifest.exports).sort()).toStrictEqual([
       '.',
+      './internal/projection-inspection-cli',
       './internal/projection-worker-cli',
     ]);
     for (const subpath of Object.keys(manifest.exports)) {

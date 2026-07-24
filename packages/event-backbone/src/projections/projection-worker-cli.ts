@@ -40,6 +40,15 @@
  * outcomes, signal-registration failure, double-signal safety, and exit codes deterministically with no
  * real process, pool, timer, or clock. Importing this module runs nothing.
  */
+import { probeProjectionFailureSchema } from '../observability/projection-health.js';
+import {
+  createProjectionLogger,
+  type ProjectionLogger,
+} from '../observability/projection-logger.js';
+import {
+  createProjectionMetricsRegistry,
+  type ProjectionMetricsRegistry,
+} from '../observability/projection-metrics.js';
 import { resolveCliDatabaseConfig } from '../persistence/cli-config.js';
 import type { DatabaseConfig } from '../persistence/database-config.js';
 import { closeDatabasePool, createDatabasePool, type DatabasePool } from '../persistence/pool.js';
@@ -71,6 +80,14 @@ export const RUNTIME_FAILURE_LINE =
   'The projection worker stopped on a non-result failure. The pool was closed and the process exits non-zero.';
 export const POOL_CLOSE_FAILURE_LINE =
   'The projection worker could not close its PostgreSQL pool cleanly; the process exits non-zero.';
+/**
+ * QFJ-P03.07G. The ONE health condition that blocks startup: if the projection-failure relations are
+ * absent, the retry-exhaustion seam cannot record a failure at all, and processing events anyway would
+ * mean running with a silently broken failure path. Names no relation and no connection detail.
+ */
+export const SCHEMA_MISMATCH_FAILURE_LINE =
+  'Refusing to start the projection worker: the projection-failure schema is incomplete (migrations ' +
+  'are behind the repository). No worker loop was started.';
 
 /**
  * The injected process seams. Every one defaults to a real implementation via
@@ -99,6 +116,18 @@ export interface ProjectionWorkerCliDeps {
   readonly writeOut: (line: string) => void;
   /** Write one line to standard error. */
   readonly writeErr: (line: string) => void;
+  /**
+   * Verify the projection-failure relations exist before any cycle runs (QFJ-P03.07G). Returns `true`
+   * when the schema is complete. Injected so tests drive both outcomes without a database.
+   */
+  readonly probeSchema: (pool: DatabasePool) => Promise<boolean>;
+  /**
+   * Build the structured logger for this run (QFJ-P03.07G). The default writes JSON Lines through
+   * `writeOut`, so the worker still owns its only two output streams.
+   */
+  readonly createLogger: (deps: ProjectionWorkerCliDeps) => ProjectionLogger;
+  /** The process-local metrics registry for this run (QFJ-P03.07G). */
+  readonly metrics: ProjectionMetricsRegistry;
   /** Optional bounded poll interval (ms). Validated by {@link runProjectionWorker}; undefined => default. */
   readonly pollIntervalMs?: number;
 }
@@ -115,6 +144,29 @@ async function runWorkerPhase(
   let registry: ProjectionRegistry;
   try {
     registry = deps.buildRegistry();
+  } catch {
+    deps.writeErr(STARTUP_FAILURE_LINE);
+    return 'failed';
+  }
+
+  // QFJ-P03.07G startup gate. A probe that throws is treated exactly like a probe reporting an
+  // incomplete schema: fail closed and start nothing. The thrown value is never inspected.
+  let schemaComplete: boolean;
+  try {
+    schemaComplete = await deps.probeSchema(pool);
+  } catch {
+    deps.writeErr(SCHEMA_MISMATCH_FAILURE_LINE);
+    return 'failed';
+  }
+  if (!schemaComplete) {
+    deps.writeErr(SCHEMA_MISMATCH_FAILURE_LINE);
+    return 'failed';
+  }
+
+  // Built once per run; a construction failure is a startup failure like any other.
+  let logger: ProjectionLogger;
+  try {
+    logger = deps.createLogger(deps);
   } catch {
     deps.writeErr(STARTUP_FAILURE_LINE);
     return 'failed';
@@ -147,6 +199,8 @@ async function runWorkerPhase(
       registry,
       now: deps.now,
       signal: controller.signal,
+      logger,
+      metrics: deps.metrics,
       // Only pass an override when configured — exactOptionalPropertyTypes forbids an explicit
       // `undefined`, and the scheduler already applies its bounded default.
       ...(deps.pollIntervalMs !== undefined ? { pollIntervalMs: deps.pollIntervalMs } : {}),
@@ -257,5 +311,26 @@ export function defaultProjectionWorkerCliDeps(): ProjectionWorkerCliDeps {
     registerShutdownSignals: registerRealShutdownSignals,
     writeOut: (line) => process.stdout.write(`${line}\n`),
     writeErr: (line) => process.stderr.write(`${line}\n`),
+    probeSchema: async (pool) => {
+      const client = await pool.connect();
+      try {
+        const probe = await probeProjectionFailureSchema(client);
+        return probe.present;
+      } finally {
+        client.release();
+      }
+    },
+    createLogger: (cliDeps) =>
+      createProjectionLogger({
+        // Writes through the SAME injected seam the worker already owns, so this module still holds no
+        // direct reference to a process stream.
+        sink: {
+          write: (line) => {
+            cliDeps.writeOut(line);
+          },
+        },
+        now: cliDeps.now,
+      }),
+    metrics: createProjectionMetricsRegistry(),
   };
 }

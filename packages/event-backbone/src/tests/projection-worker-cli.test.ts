@@ -14,6 +14,8 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 
+import { NOOP_PROJECTION_LOGGER } from '../observability/projection-logger.js';
+import { createProjectionMetricsRegistry } from '../observability/projection-metrics.js';
 import type { DatabaseConfig } from '../persistence/database-config.js';
 import type { DatabasePool } from '../persistence/pool.js';
 import { toCanonicalInstant, type CanonicalInstant } from '../projections/projection-definition.js';
@@ -82,6 +84,11 @@ function makeHarness(overrides: Partial<ProjectionWorkerCliDeps> = {}): Harness 
   const writeErr = vi.fn();
   const writeOut = vi.fn();
   const now = vi.fn((): CanonicalInstant => NOW);
+  // QFJ-P03.07G seams. The schema probe defaults to "complete" so the pre-existing startup/shutdown
+  // cases exercise exactly what they did before; the gate itself is covered by its own tests.
+  const probeSchema = vi.fn(() => Promise.resolve(true));
+  const metrics = createProjectionMetricsRegistry();
+  const createLogger = vi.fn(() => NOOP_PROJECTION_LOGGER);
 
   const deps: ProjectionWorkerCliDeps = {
     resolveConfig,
@@ -93,6 +100,9 @@ function makeHarness(overrides: Partial<ProjectionWorkerCliDeps> = {}): Harness 
     registerShutdownSignals,
     writeErr,
     writeOut,
+    probeSchema,
+    createLogger,
+    metrics,
     ...overrides,
   };
 

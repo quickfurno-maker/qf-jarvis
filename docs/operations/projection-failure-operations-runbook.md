@@ -1,106 +1,258 @@
-# Projection Failure Operations — Operator Runbook (design)
+# Projection Failure Operations — Operator Runbook
 
-**Status:** Future operational runbook **design** (QFJ-P03.07A). Adopted 2026-07-21 under [ADR-0040](../decisions/ADR-0040-projection-failure-operations-quarantine-and-authorized-replay.md). Read with [projection-failure-operations.md](../architecture/projection-failure-operations.md).
+**Status:** Operational (QFJ-P03.07G, 2026-07-24). Adopted under [ADR-0040](../decisions/ADR-0040-projection-failure-operations-quarantine-and-authorized-replay.md).
+**Read with:** [projection-failure-operations.md](../architecture/projection-failure-operations.md) · [projection-failure-alerting.md](./projection-failure-alerting.md) · [projection-failure-queries.md](./projection-failure-queries.md)
 
-> **This is a design, not live instructions.** QFJ-P03.07 operator commands, APIs, and replay execution are **not implemented**. Every command below is **CONCEPTUAL** and marked `[UNIMPLEMENTED]`; it does not exist yet and must not be invoked. No ad-hoc SQL mutation is ever a sanctioned operator workflow.
+> **Scope of what exists.** QFJ-P03.07A–G are merged. Retry exhaustion, the durable failure aggregate,
+> inspection, acknowledge, quarantine, authorized replay, lease takeover, reconciliation, and
+> observability are all **implemented**. The **read** half of the operator surface is available as a
+> CLI (`pnpm inspect:failures`); the **mutating** half — acknowledge, quarantine, authorize, execute —
+> is available only through the **internal application boundary**, which requires an authenticated,
+> attributed caller. There is deliberately no mutating shell command (§ _Why there is no mutating
+> CLI_).
 >
-> **Persistence status (QFJ-P03.07C).** The durable **persistence foundation** exists — migration `0006_projection_failure_operations.sql` (failure aggregate, append-only action ledger, replay authorizations, replay-attempt/lease evidence) and its repository contracts. It is applied **local/CI only** (not managed, not deployed).
->
-> **Runtime status (QFJ-P03.07D — live in code).** The production runner **automatically establishes a durable failure aggregate** on the fifth deterministic failure: in the SAME transaction that blocks the checkpoint, it creates exactly one `open` failure aggregate at the blocked position (category `DETERMINISTIC_HANDLER_FAILURE`, safe code `projection-handler-failed`, automatic attempt count 5) and appends one append-only `created` action attributed to the `system` actor `projection-runner`. On a restart it re-verifies that a blocked checkpoint has exactly one matching active failure and otherwise fails closed.
->
-> **Operations status (QFJ-P03.07E — now live in code, internal API only).** An internal operations boundary now provides **authorized failure inspection and the two non-replay lifecycle mutations**: bounded keyset-paginated `list`, `inspect` (bounded detail with checkpoint/attempt correlation and divergence codes — **never** a payload, message, stack, SQL, or secret), action-history `inspect`, divergence `inspect`, **acknowledge** (`open → acknowledged`), and **quarantine** (`open`/`acknowledged → quarantined`). Every mutation is **authorized** (closed `projection-failure:inspect`/`:acknowledge`/`:quarantine` capabilities, quarantine strictly stronger than inspect), **generation-guarded** (a stale expected generation is rejected), **idempotent** (a deterministic action idempotency key means an exact repeat returns the prior result and writes nothing), **atomic** (status transition + exactly one append-only action in one transaction), and — for quarantine — **gated on the fail-closed divergence detector** (any divergence refuses the mutation). **Acknowledge** records operator review; **quarantine** isolates the position for controlled handling. **Both preserve the blocked checkpoint, the blocked position, `last_position`, every attempt, and the action history — neither advances/resets the checkpoint, skips the event, resolves the failure, or creates/executes a replay.** There is still **no CLI/dashboard**, so these functions are invoked only through the internal application boundary. **What an operator must NOT do:** never edit any row in `projection_failure*`/`projection_checkpoint` by hand, never run ad-hoc SQL against the failure/event tables, and never advance a blocked checkpoint. There is still **no CLI/dashboard** for these functions.
->
-> **Replay status (QFJ-P03.07F — now live in code, internal API only).** An internal replay service now provides the **explicit, human-authorized, lease-protected, idempotent, one-shot** replay path. **Prerequisite:** only a **quarantined** failure may be authorized for replay — a replay never happens merely because a failure is quarantined. **Roles/capabilities (closed, each strictly stronger than inspect/acknowledge/quarantine):** `projection-failure:authorize-replay` (a `replay-approver`/`administrator` — separation of duties: the approver is not the acknowledger), `projection-failure:execute-replay` (the `system` runner), and `projection-failure:take-over-replay`. **Authorization** is generation-guarded, divergence-gated, single-active-per-failure, and carries a bounded **expiry** (future, ≤ 24h); it transitions the failure quarantined → replay-authorized and leaves the checkpoint blocked. **Execution** claims exactly one lease-protected `started` attempt (lease ≤ 1h) under the name+version advisory lock, moves the failure to replaying, applies the **registered** production handler to the **exact** blocked event (no payload/handler substitution), and on **success** atomically applies the read model, resumes the checkpoint exactly one position, succeeds the attempt, resolves the failure, and consumes the authorization. **Failure result:** a deterministic replay failure records a `failed` attempt, consumes the (one-shot) authorization, and returns the failure to **quarantined** with the checkpoint **still blocked** — a further replay needs a **new** authorization (no automatic retry). **Lease/takeover:** one live attempt per failure; another owner may take over ONLY after the lease **expires**, and takeover abandons the expired attempt and starts a fresh one (it never executes the handler by itself). **Evidence:** every step appends an immutable `replay-authorized`/`replay-started`/`replay-succeeded`/`replay-failed`/`lease-taken-over`/`authorization-consumed`/`resolved` action. **Unknown-commit:** an ambiguous COMMIT is **reconciled** (read the durable failure/attempt/authorization/checkpoint state) before any retry — never a blind replay. **What an operator must NOT do:** never edit any row in `projection_failure*`/`projection_checkpoint` by hand, never run ad-hoc SQL against the failure/event tables, never advance or skip a blocked checkpoint, and never resolve a failure without a proven-successful replay. **There is no CLI/dashboard, no automatic replay, no scheduler/poller, and no bulk replay.** The `[UNIMPLEMENTED]` command syntax below is illustrative of the _conceptual_ CLI; the underlying authorize/execute/takeover/reconcile operations are backed by the internal replay service. **QFJ-P03.07G (observability, exit audit) remains next.**
+> **Managed deployment is paused and this is not live in production.** Managed PostgreSQL is at
+> migration **0001**; migrations **0002–0006 are unapplied and not deployed**; the `qf_jarvis_migrator`
+> password is unresolved; no migration retry is authorized. Everything below is exercised in local and
+> CI. Repository completeness is **not** production readiness.
 
-## Roles (conceptual)
+---
 
-- **READ_ONLY_OPERATOR** — inspect status/metadata/sanitized diagnostics. No state change.
-- **FAILURE_OPERATOR** — acknowledge, quarantine, request replay. Cannot self-approve replay.
-- **REPLAY_APPROVER** — approve one bounded replay (reason required). ≠ requester.
-- **SYSTEM_RUNNER** — executes only a valid authorized replay. Cannot self-authorize.
-- **ADMINISTRATOR** — retire a projection version only via a separately-governed process; never edits events/checkpoints directly.
+## Roles
 
-## 1. Detect a blocked projection
+| Role                   | May do                                                                      | May not do                           |
+| ---------------------- | --------------------------------------------------------------------------- | ------------------------------------ |
+| **READ_ONLY_OPERATOR** | Inspect status, metadata, sanitized diagnostics. The CLI runs as this role. | Any state change.                    |
+| **FAILURE_OPERATOR**   | Acknowledge, quarantine, request replay.                                    | Approve their own replay.            |
+| **REPLAY_APPROVER**    | Approve one bounded replay (reason required).                               | Be the same person as the requester. |
+| **SYSTEM_RUNNER**      | Execute a valid authorized replay.                                          | Self-authorize.                      |
+| **ADMINISTRATOR**      | Retire/supersede a projection version through separate governance.          | Edit events or checkpoints directly. |
 
-Signals: `blocked-projection duration` metric > 0; "blocked production projection" alert; projection lag rising; `runProjectionOnce` returning `blocked-existing` for a name+version.
-Conceptual: `[UNIMPLEMENTED] failops list --status blocked` → shows name, version, position, first/last failed time, sanitized code.
+Capabilities are closed: `projection-failure:inspect` · `:acknowledge` · `:quarantine` ·
+`:authorize-replay` · `:execute-replay` · `:take-over-replay`.
 
-## 2. Inspect sanitized failure details
+---
 
-`[UNIMPLEMENTED] failops show <failure-id>` → name, version, position, event type, classification, normalized safe code, bounded digest, automatic attempt count, lifecycle status, generation, prior operator actions. **Never** exposes raw payload, message, stack, SQL, or secrets.
+## Recovery objectives (ratified)
 
-## 3. Assess severity
+| Objective                             | Target                                                            |
+| ------------------------------------- | ----------------------------------------------------------------- |
+| Blocked-projection detection          | Immediate — under **2 minutes**                                   |
+| Initial acknowledgement               | Within **15 minutes**                                             |
+| Detailed triage                       | Within **30 minutes**                                             |
+| Replay-or-quarantine decision         | Within **60 minutes**                                             |
+| Divergence escalation                 | Immediate — within **5 minutes**                                  |
+| Commit-outcome-unknown response       | Immediate — within **5 minutes**                                  |
+| Oldest-active-failure alert threshold | **60 minutes**                                                    |
+| Worker no-progress alert              | **15 minutes**                                                    |
+| Backlog-growth alert                  | Sustained **30 minutes**                                          |
+| No silent data loss                   | Every failed position is resolved or governed — **never skipped** |
 
-- **Invariant failure** (`projection-attempt-checkpoint-divergent`) → highest severity; do **not** attempt replay; escalate to engineering (§11).
-- **Deterministic handler failure** (`projection-handler-failed`) at exhaustion → normal failure-ops path.
-- **Infrastructure pattern** (many transient aborts, no durable failure) → treat as outage (§12), not a failure-ops case.
+---
 
-## 4. Acknowledge
+## 1. Symptoms
 
-`[UNIMPLEMENTED] failops acknowledge <failure-id> --actor <id> --reason "<why>" --idempotency-key <key>`. Acknowledgement records review; it does **not** permit replay, resolve, or skip. Idempotent.
+| You see                                                                                | Meaning                                                                     |
+| -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Alert **A1**, `projection_blocked_checkpoints > 0`                                     | A projection is halted on a poison event and is processing nothing further. |
+| Log `projection.blocked` / `projection.retry.exhausted` / `projection.failure.created` | The transition just happened (fires once, not per cycle).                   |
+| Alert **A6**, `projection.divergence.detected`                                         | **Stop.** Fail-closed invariant break — § _Divergence handling_.            |
+| Alert **A5**, `projection.commit.outcomeUnknown`                                       | Ambiguous write — § _Commit-outcome-unknown handling_.                      |
+| Alert **A4**, rising `projection_infrastructure_failures_total`                        | An **outage**, not a projection defect — § _Infrastructure distinction_.    |
+| Alert **A7/A8**, lag rising with no successes                                          | Stall or backlog.                                                           |
+| `pnpm inspect:failures list` exits **10**                                              | Blocked or active failures exist.                                           |
+| `pnpm inspect:failures list` exits **20**                                              | Divergence detected.                                                        |
 
-## 5. Quarantine
+## 2. Diagnosis
 
-`[UNIMPLEMENTED] failops quarantine <failure-id> --actor <id> --reason "<why>" --idempotency-key <key>`. Isolates the position for controlled investigation, disables uncontrolled automatic retry, keeps the version blocked, preserves evidence. Does **not** delete/edit the event, edit the position, advance the checkpoint, or let later positions process. Idempotent.
+```
+pnpm inspect:failures list                          # what is blocked, health summary
+pnpm inspect:failures inspect --failure-id <uuid>   # one failure, sanitized detail
+pnpm inspect:failures history --failure-id <uuid>   # the append-only action ledger
+pnpm inspect:failures divergence                    # the fail-closed divergence sweep
+```
 
-## 6. Request replay
+Exit codes: `0` clean · `10` findings · `20` divergence · `30` configuration/schema mismatch ·
+`40` operational failure. Add `--json` for machine-readable output; `--limit <n>` bounds the page.
 
-`[UNIMPLEMENTED] failops replay-request <failure-id> --generation <g> --actor <id> --reason "<why>" --idempotency-key <key>`. Binds to exact name+version+position+event identity+failure generation. A request is **not** an authorization.
+For shapes the CLI does not produce, use the read-only SQL in
+[projection-failure-queries.md](./projection-failure-queries.md). **Never mutate.**
 
-## 7. Independent approval (four-eyes)
+**Classify before acting:**
 
-`[UNIMPLEMENTED] failops replay-approve <request-id> --approver <id> --reason "<why>" [--expires-at <ts>]`. The approver **must differ** from the requester. Produces a single-use, generation-bound, optionally-expiring authorization.
+- **Deterministic handler failure** (`projection-handler-failed`) at exhaustion → the normal path below.
+- **Divergence** (`projection-attempt-checkpoint-divergent`) → escalate, do not act.
+- **Infrastructure pattern** (many transient aborts, _no_ durable failure) → outage, not failure-ops.
 
-## 8. Execute authorized replay
+## 3. Safe inspection
 
-Executed by SYSTEM_RUNNER, not by hand: `[UNIMPLEMENTED] failops replay-run <authorization-id>`. It acquires the name+version advisory lock, re-checks checkpoint/status/position/event identity/version/authorization validity+expiry, runs the **same** production handler, and on success atomically applies + advances the checkpoint once + records evidence + resolves + consumes the authorization. On failure it keeps the checkpoint unchanged, records one bounded attempt, and returns the failure to a controlled state.
+Inspection is read-only and never exposes an event payload, subject, metadata value, raw message,
+stack, SQL, SQLSTATE, or secret. What you get: name, version, position, category, closed safe code,
+status, generation, attempt counts, checkpoint correlation, divergence codes, action count, and whether
+an active authorization or live attempt exists.
 
-## 9. Validate resolution
+The operator **free-text reason** is persisted in the ledger for audit and is deliberately **not**
+printed by the CLI. Read it only inside a formal audit.
 
-`[UNIMPLEMENTED] failops show <failure-id>` → status `RESOLVED`, a successful attempt reference, checkpoint advanced by exactly one position, authorization consumed. Confirm the projection resumes and lag falls.
+## 4. Acknowledgement — _within 15 minutes_
 
-## 10. Repeated replay failure
+Records that a human has reviewed the failure. `open → acknowledged`.
 
-If replay fails repeatedly, do **not** loop. Re-quarantine, collect evidence (§13), and escalate: the cause is likely a genuine handler/data defect requiring a **new projection version + rebuild** (QFJ-P03.08), not further replay against the same version.
+Invoked through the internal boundary as a FAILURE_OPERATOR with a reason and the current
+`generation`. Authorized, generation-guarded, idempotent, atomic (transition + exactly one
+`acknowledged` action in one transaction).
 
-## 11. Invariant-failure escalation
+It does **not** permit replay, resolve anything, or move the checkpoint.
 
-A reconciliation/invariant failure is a stop-the-world engineering incident. Do not acknowledge, quarantine, or replay it as a routine failure. Page engineering; preserve state; treat as potential data-integrity corruption.
+## 5. Quarantine — _decide within 60 minutes_
 
-## 12. Infrastructure-outage distinction
+Isolates the position for controlled handling. `open`/`acknowledged → quarantined`.
 
-Transient infrastructure failures (`40P01/40001/08*/57P0*/53*`, connectivity) create **no** durable failure and need **no** failure-ops action — they resolve when the database recovers. Do not manufacture a failure record or a replay for an outage.
+Additionally **gated on the fail-closed divergence detector**: if any divergence is present the
+quarantine is refused. Preserves the blocked checkpoint, the blocked position, `last_position`, every
+attempt, and the full action history.
 
-## 13. Evidence collection
+**Quarantine is the prerequisite for replay.** A replay never happens merely because a failure is
+quarantined.
 
-For any escalation, capture: failure ID, name/version/position, event type, normalized code, bounded digest, attempt history, operator action ledger entries, correlation IDs, and metric/alert timestamps. Never copy raw payloads or secrets.
+## 6. Replay authorization — four-eyes
 
-## 14. Projection retirement escalation
+`quarantined → replay-authorized`, performed by a **REPLAY_APPROVER who is not the requester**.
 
-Retiring/superseding a version is an ADMINISTRATOR action through a separate governance process (not failure-ops). It never claims the event was processed and never advances a checkpoint.
+Generation-guarded, divergence-gated, at most one active authorization per failure, with a bounded
+future expiry (≤ 24h). The checkpoint stays blocked and no handler runs. One atomic transaction:
+authorization row + status transition + one `replay-authorized` action.
 
-## 15. Incident closure
+## 7. Replay execution — one shot
 
-Close only when: the failure is RESOLVED (successful replay) **or** formally superseded/retired via governance; metrics/alerts are clear; the action ledger is complete and attributed; and a short post-incident note records cause and decision.
+Executed by the SYSTEM_RUNNER, never by hand. It claims exactly one lease-protected `started` attempt
+(lease ≤ 1h) under the name+version advisory lock, moves the failure to `replaying`, and applies the
+**registered** production handler to the **exact** blocked event. No payload substitution, no handler
+substitution, no scheduler, no bulk replay.
+
+## 8. Resolving a successful replay
+
+On success, one transaction atomically: applies the read model · **resumes the checkpoint by exactly
+one position** · succeeds the attempt · resolves the failure · consumes the authorization · appends
+evidence.
+
+Verify: status `resolved`, a successful attempt reference, `last_position` advanced by exactly one, the
+authorization consumed, lag falling, and `projection_blocked_checkpoints` cleared for that projection.
+
+**Checkpoint resumption is the only transition out of `blocked`.** There is no skip.
+
+## 9. Failed replay handling
+
+A deterministic replay failure records a `failed` attempt, consumes the one-shot authorization, and
+returns the failure to `quarantined`. **The checkpoint stays blocked**, no read model is committed, and
+there is no automatic retry. A further replay requires a **new** authorization.
+
+**Do not loop.** A second failure on the same position means the handler is genuinely wrong for this
+event. Collect evidence and escalate: the fix is a code change plus a **new projection version and
+rebuild** (QFJ-P03.08), not another replay against the same version.
+
+## 10. Divergence handling — **STOP**
+
+A divergence means the checkpoint↔failure biconditional is broken. The bounded kind is one of:
+
+`blocked-checkpoint-without-active-failure` · `blocked-checkpoint-with-multiple-active-failures` ·
+`active-failure-position-mismatch` · `attempt-count-mismatch` · `missing-event-at-position`
+
+**Do not** acknowledge, quarantine, authorize, replay, or run any SQL mutation. Page engineering
+immediately (**within 5 minutes**); treat as potential data-integrity corruption; preserve state.
+
+The divergent transaction **rolled back and persisted nothing**, so the emitted log line and
+`projection_divergence_total` are the only record — capture both, plus the query-10 output. The logger
+emits the first observation at `critical` and rate-limits repeats, so the absence of repeated lines does
+**not** mean the condition cleared.
+
+## 11. Commit-outcome-unknown handling
+
+The write may or may not have landed. **Re-invoke to observe the durable state. Never blind-retry the
+write.** The next invocation establishes the truth and emits the correct terminal event. For a replay,
+use `reconcileProjectionReplayOutcome`, which reports the durable failure/attempt/authorization/
+checkpoint state and **never repairs**.
+
+Never suppressed and never downgraded below `critical`.
+
+## 12. Infrastructure distinction
+
+Transient infrastructure failures (deadlock/serialization `40P01`/`40001`, connectivity `08*`,
+`57P0*`, `53*`) create **no** durable failure and need **no** failure-ops action. They resolve when the
+database recovers.
+
+**Do not manufacture a failure record or a replay for an outage.** There is nothing to act on: no
+attempt was recorded and no aggregate was created.
+
+## 13. Rollback and containment
+
+- Every failure and replay path is **transactional**. A rollback leaves no partial resolution.
+- The exhaustion transaction commits **five effects together or none**: final attempt + blocked
+  checkpoint + blocked position + exactly one active failure + creation action.
+- The ledgers are **append-only** — `UPDATE`/`DELETE` are refused by trigger. There is no runtime
+  delete.
+- A poison event blocks **one** name+version. It must not affect any other projection, the event log,
+  the position map, or unrelated workers.
+- A blocked projection does **not** fail process liveness, process readiness, or deployment health. It
+  reports **degraded** projection health. Restart-looping the worker on a block would take down every
+  other healthy projection in the process.
+- The worker **refuses to start** if the projection-failure schema is incomplete — the one health
+  condition that blocks startup, because the exhaustion seam could not record a failure at all.
+
+## 14. Escalation
+
+Page engineering immediately for: any divergence, any commit-outcome-unknown, a second replay failure
+on the same position, or any suspicion of data-integrity corruption. Retiring or superseding a
+projection version is an ADMINISTRATOR action through separate governance — never failure-ops, never a
+claim that the event was processed, and never a checkpoint advance.
+
+## 15. Audit evidence
+
+**The append-only action ledger (`projection_failure_action`) is authoritative.** Logs are
+**at-least-once** evidence: a crash between COMMIT and emission loses a line, and a retry after an
+ambiguous commit may duplicate one. Never reconstruct a lifecycle from logs alone.
+
+Capture for any escalation: failure id · name/version/position · category and closed safe code ·
+attempt history · the action ledger · alert and metric timestamps · CLI output. **Never copy raw
+payloads, subjects, operator free text, or secrets.**
+
+## Why there is no mutating CLI
+
+Three reasons, none of them effort:
+
+1. The E/F operations require an authorizer context with closed capabilities and an **attributed actor
+   identity**. A shell has no authenticated principal; adding one would mean inventing an
+   authentication model inside an observability slice.
+2. Replay is designed around **four-eyes approval**. A local shell command trivially defeats it.
+3. ADR-0040 places operator authority behind an **application/command boundary**. A CLI is not that
+   boundary.
+
+Mutating operator tooling is legitimate future work with its own authorization design.
 
 ## Prohibited operator actions
 
 - Editing event payload, identity, or position.
-- Advancing a checkpoint manually or after quarantine.
-- Resetting the retry counter.
-- Direct SQL mutation of checkpoints, failures, authorizations, or audit rows.
-- Marking a failure resolved without a successful replay.
-- Reusing one projection's authorization for another projection/version/position/generation.
+- Direct SQL mutation of checkpoints, failures, authorizations, attempts, or audit rows.
+- **Repairing a divergence by hand.**
+- Advancing or resetting a checkpoint manually, or after quarantine.
+- **Skipping a failed event to "continue."**
+- Resetting the retry counter, or forcing a sixth automatic attempt.
+- **Blind-retrying after an ambiguous COMMIT** instead of reconciling.
+- Marking a failure resolved without a proven-successful replay.
+- Reusing an authorization across projections, versions, positions, or generations.
 - Replaying against changed handler code for the same production version (use a new version + rebuild).
-- Skipping a failed event to "continue."
+- Clearing a replay lease by hand instead of using the expired-lease takeover.
+- Running the query document's SQL against managed PostgreSQL while that lane is paused.
 
-## Recovery objectives (targets to ratify in QFJ-P03.07G)
+## Known operational limitations (QFJ-P03.07G)
 
-- **Detection:** blocked projection alerted within minutes.
-- **Triage:** severity assessed and acknowledged within the failure SLA.
-- **Recovery:** resolved by authorized replay or escalated to version+rebuild within the incident SLA.
-- **No silent data loss:** every failed position is either resolved or governed — never skipped.
-
-## Future command / API placeholders
-
-All `[UNIMPLEMENTED]` commands above are conceptual and will be defined in **QFJ-P03.07E** (inspection/quarantine) and **QFJ-P03.07F** (authorized replay) behind an application/command boundary. Until then there is **no** operator tooling; this runbook is design guidance only.
+- **No metrics exporter.** Metrics are process-local and in-memory; the CLI and its exit codes are the
+  supported external read path.
+- **No alert delivery.** [projection-failure-alerting.md](./projection-failure-alerting.md) is a
+  specification; wiring it to a pager/webhook is separate work.
+- **No mutating CLI.** Acknowledge, quarantine, authorize and execute need a programmatic authorized
+  caller.
+- **`retired` has no automated producer.** Retirement is escalation-only, through governance.
+- **Divergence and commit-outcome-unknown persist nothing.** Logs and counters are their only trace.
+- **None of this is active in the managed environment.** The managed migration lane and the
+  password-rotation lane both remain paused.

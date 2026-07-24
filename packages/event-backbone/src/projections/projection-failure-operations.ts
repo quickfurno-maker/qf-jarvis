@@ -17,6 +17,12 @@
 
 import { randomUUID } from 'node:crypto';
 
+import type { ProjectionLogIdentity } from '../observability/projection-log-events.js';
+import {
+  NOOP_PROJECTION_LOGGER,
+  type ProjectionLogger,
+} from '../observability/projection-logger.js';
+import type { ProjectionMetricsRegistry } from '../observability/projection-metrics.js';
 import type { DatabaseClient, DatabasePool } from '../persistence/pool.js';
 import { withTransaction } from '../persistence/transaction.js';
 import { readAttemptsForEvent } from './attempt-store.js';
@@ -72,6 +78,15 @@ export interface ProjectionFailureOperationContext {
   readonly actorType: ProjectionFailureActorType;
   readonly actorId: string;
   readonly correlationId: string;
+  /**
+   * Optional structured logger (QFJ-P03.07G). Defaults to discarding. Emission happens only after the
+   * mutation transaction has committed, and the operator's free-text `reason` is NEVER emitted — it is
+   * persisted in the action ledger for audit and is the one unbounded operator-supplied string in the
+   * whole lifecycle.
+   */
+  readonly logger?: ProjectionLogger;
+  /** Optional metrics registry (QFJ-P03.07G). Defaults to discarding. */
+  readonly metrics?: ProjectionMetricsRegistry;
 }
 
 /** The decision input handed to the injected authorizer. Carries no secret and no token. */
@@ -695,12 +710,23 @@ async function runMutation(
     input.expectedGeneration,
   );
 
+  // Captured inside the transaction, emitted after it commits (QFJ-P03.07G).
+  let observedIdentity: ProjectionLogIdentity | null = null;
+
   try {
-    return await withTransaction(pool, async (client) => {
+    const outcome = await withTransaction(pool, async (client) => {
       // Lock the row first so a concurrent mutation serialises behind us; then authorize with the real
       // current status. Authorization runs even when the failure is absent (currentStatus null) so an
       // unauthorized caller cannot probe existence.
       const failure = await readProjectionFailureByIdForUpdate(client, input.failureId);
+      if (failure !== null) {
+        // Captured for POST-COMMIT observability. Recording only; nothing is emitted inside the
+        // transaction.
+        observedIdentity = {
+          projectionName: failure.projectionName as ProjectionName,
+          projectionVersion: failure.projectionVersion,
+        };
+      }
       await authorizeOrThrow(authorizer, {
         capability: spec.capability,
         actorType: context.actorType,
@@ -780,11 +806,56 @@ async function runMutation(
         idempotent: false,
       });
     });
+    // Reached ONLY after the transaction committed. A replayed (idempotent) call emits nothing: the
+    // lifecycle transition it describes was already reported by the call that actually performed it.
+    if (!outcome.idempotent) {
+      emitMutationTelemetry(context, spec, observedIdentity, outcome);
+    }
+    return outcome;
   } catch (error: unknown) {
     if (error instanceof ProjectionFailureOperationError) throw error;
     // Any other failure (including an ambiguous COMMIT) fails closed as commit-outcome-unknown; the
     // caller re-invokes with the SAME idempotency key and the action ledger reconciles the truth.
     throw new ProjectionFailureOperationError('commit-outcome-unknown');
+  }
+}
+
+/**
+ * Emit the post-commit observability for an operator mutation (QFJ-P03.07G).
+ *
+ * Carries the bounded actor attribution the action ledger already persists — and deliberately NOT the
+ * operator's free-text reason. Wholly guarded: the mutation has committed, so telemetry must not be
+ * able to turn a successful operation into a thrown error.
+ */
+function emitMutationTelemetry(
+  context: ProjectionFailureOperationContext,
+  spec: MutationSpec,
+  identity: ProjectionLogIdentity | null,
+  outcome: ProjectionFailureMutationOutcome,
+): void {
+  if (identity === null) return;
+  const logger = context.logger ?? NOOP_PROJECTION_LOGGER;
+  try {
+    logger.projectionEvent(
+      identity,
+      spec.operation === 'acknowledge'
+        ? {
+            event: 'projection.failure.acknowledged',
+            failureId: outcome.failureId,
+            actorType: context.actorType,
+            actorId: context.actorId,
+            resultingGeneration: outcome.generation,
+          }
+        : {
+            event: 'projection.failure.quarantined',
+            failureId: outcome.failureId,
+            actorType: context.actorType,
+            actorId: context.actorId,
+            resultingGeneration: outcome.generation,
+          },
+    );
+  } catch {
+    // Swallowed without inspection.
   }
 }
 
