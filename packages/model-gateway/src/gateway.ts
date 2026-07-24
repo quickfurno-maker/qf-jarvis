@@ -30,6 +30,16 @@ import type { HybridRoutingPolicy } from './routing/hybrid-routing-policy.js';
 import { buildRoutingPlan } from './routing/routing-plan.js';
 import { decideFallover } from './routing/failover-policy.js';
 import { AttemptLedger } from './routing/attempt-ledger.js';
+import type { ProviderRolloutController } from './operations/rollout-controller.js';
+import { decideServing } from './operations/rollout-execution.js';
+import { capabilitiesSatisfy } from './contracts/capabilities.js';
+import { approvalPermitsMode } from './operations/rollout-approval.js';
+import type { ProviderReleaseRef } from './operations/provider-release.js';
+import {
+  NOOP_ROLLOUT_OBSERVABILITY,
+  type RolloutObservabilityHook,
+  type RolloutRefusalReason,
+} from './operations/rollout-reasons.js';
 
 /** The emergency kill switch — one injected predicate that stops all model invocation. */
 export interface GatewayKillSwitch {
@@ -53,6 +63,14 @@ export interface ModelGatewayConfig {
    * exactly as the foundation (array-order selection, allowFallback), unchanged.
    */
   readonly routingProfile?: HybridRoutingPolicy;
+  /**
+   * OPTIONAL provider-rollout controller (QFJ-P04.01E, ADR-0049). When present, serving is governed by
+   * the rollout mode (OFF/SHADOW/CANARY/ACTIVE/FALLBACK); it takes precedence over `routingProfile`. When
+   * absent, the gateway behaves exactly as QFJ-P04.01D.
+   */
+  readonly rolloutController?: ProviderRolloutController;
+  /** OPTIONAL sink for rollout observability events (QFJ-P04.01E). */
+  readonly rolloutObservability?: RolloutObservabilityHook;
 }
 
 export interface ModelGatewayInvokeOptions {
@@ -96,6 +114,36 @@ function toStructuredJsonSchema(request: ModelRequest): unknown {
   } catch {
     return {};
   }
+}
+
+/** Map a rollout serving refusal to a safe closed gateway error code (never a rollout-internal reason). */
+function mapRolloutRefusal(
+  reason: RolloutRefusalReason,
+  dataClass: ModelRequest['dataClass'],
+): ModelGatewayErrorCode {
+  if (reason === 'mode-off') {
+    return 'gateway-off';
+  }
+  if (reason === 'privacy-forbidden') {
+    return dataClass === 'LOCAL_ONLY' ? 'local-provider-required' : 'human-only';
+  }
+  return 'no-eligible-provider';
+}
+
+/** True iff a serving failure is a bounded transient category that a rollout fallback may act on. */
+function isRolloutTransient(outcome: {
+  readonly code: ModelGatewayErrorCode;
+  readonly invoked: boolean;
+  readonly retryable: boolean;
+}): boolean {
+  if (!outcome.invoked && outcome.code === 'circuit-open') {
+    return true;
+  }
+  return (
+    outcome.invoked &&
+    outcome.retryable &&
+    (outcome.code === 'provider-unavailable' || outcome.code === 'timeout')
+  );
 }
 
 function validateOutput(
@@ -298,6 +346,10 @@ export function createModelGateway(config: ModelGatewayConfig): ModelGateway {
       healthy.set(provider.descriptor.providerId, available);
     }
 
+    // QFJ-P04.01E: a rollout controller governs serving by mode; it takes precedence over routing.
+    if (config.rolloutController !== undefined) {
+      return serveRollout(request, signal, healthy, config.rolloutController);
+    }
     // QFJ-P04.01D: when a hybrid-routing policy is configured, selection and the single fallback are
     // governed by the profile + failover matrix. Otherwise the foundation's array-order path runs.
     if (config.routingProfile !== undefined) {
@@ -521,6 +573,233 @@ export function createModelGateway(config: ModelGatewayConfig): ModelGateway {
       }
     }
     return last;
+  }
+
+  async function serveRollout(
+    request: ModelRequest,
+    signal: AbortSignal,
+    healthy: ReadonlyMap<string, boolean>,
+    controller: ProviderRolloutController,
+  ): Promise<ModelResponse> {
+    const rolloutHook: RolloutObservabilityHook =
+      config.rolloutObservability ?? NOOP_ROLLOUT_OBSERVABILITY;
+    const policy = controller.snapshot();
+    const decision = decideServing(policy, request.runId);
+    const providersById = new Map(config.providers.map((p) => [p.descriptor.providerId, p]));
+
+    const rolloutRefuse = (reason: RolloutRefusalReason): ModelGatewayError => {
+      rolloutHook.record({
+        type: 'rollout-refused',
+        rolloutId: policy.rolloutId,
+        runId: request.runId,
+        mode: policy.mode,
+        reason,
+      });
+      const code = mapRolloutRefusal(reason, request.dataClass);
+      emit({ type: 'invocation-failed', runId: request.runId, code });
+      return new ModelGatewayError(code);
+    };
+
+    if (!decision.serve || decision.servingRelease === undefined) {
+      throw rolloutRefuse(decision.reason ?? 'mode-off');
+    }
+    const servingRelease = decision.servingRelease;
+
+    // Privacy: a LOCAL_ONLY request may serve only a LOCAL release (HUMAN_ONLY is refused before serving).
+    if (request.dataClass === 'LOCAL_ONLY' && servingRelease.executionClass !== 'LOCAL') {
+      throw rolloutRefuse('privacy-forbidden');
+    }
+    // ACTIVE requires an approval that permits ACTIVE (defense in depth beyond the transition check).
+    if (
+      policy.mode === 'ACTIVE' &&
+      (policy.approval === undefined || !approvalPermitsMode(policy.approval, 'ACTIVE'))
+    ) {
+      throw rolloutRefuse('approval-mode-ceiling');
+    }
+    const servingProvider = providersById.get(servingRelease.providerId);
+    if (servingProvider === undefined) {
+      throw rolloutRefuse('no-serving-provider');
+    }
+    if (servingProvider.descriptor.executionClass !== servingRelease.executionClass) {
+      throw rolloutRefuse('no-serving-provider');
+    }
+    if (healthy.get(servingRelease.providerId) !== true) {
+      throw rolloutRefuse('readiness-unhealthy');
+    }
+    if (!capabilitiesSatisfy(servingProvider.capabilities(), request.requiredCapabilities)) {
+      emit({ type: 'invocation-failed', runId: request.runId, code: 'capability-mismatch' });
+      throw new ModelGatewayError('capability-mismatch');
+    }
+
+    rolloutHook.record({
+      type: 'serving-release-selected',
+      rolloutId: policy.rolloutId,
+      runId: request.runId,
+      mode: policy.mode,
+      ...(decision.servingTarget === undefined ? {} : { serve: decision.servingTarget }),
+      releaseId: servingRelease.releaseId,
+      providerId: servingRelease.providerId,
+    });
+    if (decision.mode === 'CANARY' && decision.canaryBucket !== undefined) {
+      rolloutHook.record({
+        type: 'canary-assigned',
+        rolloutId: policy.rolloutId,
+        runId: request.runId,
+        ...(decision.servingTarget === undefined ? {} : { serve: decision.servingTarget }),
+        ...(decision.canaryBasisPoints === undefined
+          ? {}
+          : { canaryBasisPoints: decision.canaryBasisPoints }),
+        canaryBucket: decision.canaryBucket,
+      });
+    }
+    emit({
+      type: 'provider-selected',
+      runId: request.runId,
+      providerId: servingProvider.descriptor.providerId,
+    });
+
+    const ledger = new AttemptLedger(policy.maxServingAttempts);
+    const counter = { attempts: 0 };
+    const servingTries = Math.min(1 + request.retryBudget, ledger.remaining());
+    const outcome = await runProviderLedger(
+      servingProvider,
+      request,
+      signal,
+      servingTries,
+      counter,
+      ledger,
+      false,
+    );
+    if (outcome.kind === 'cancelled') {
+      emit({ type: 'cancelled', runId: request.runId });
+      throw new ModelGatewayError('cancelled');
+    }
+    if (outcome.kind === 'accepted') {
+      ledger.markAccepted();
+      const response = finish(request, servingProvider, outcome, false, counter.attempts);
+      // SHADOW: after a stable acceptance, at most one sequential candidate shadow call; output discarded.
+      if (decision.shadowRelease !== undefined) {
+        await runShadow(
+          request,
+          signal,
+          decision.shadowRelease,
+          providersById,
+          healthy,
+          policy,
+          controller,
+          rolloutHook,
+        );
+      }
+      return response;
+    }
+
+    // A single bounded candidate/stable fallback (CANARY candidate→stable, FALLBACK stable→candidate).
+    const fallbackRelease = decision.fallbackRelease;
+    const privacyOkForFallback =
+      fallbackRelease !== undefined &&
+      !(request.dataClass === 'LOCAL_ONLY' && fallbackRelease.executionClass !== 'LOCAL');
+    if (
+      fallbackRelease !== undefined &&
+      privacyOkForFallback &&
+      !signal.aborted &&
+      ledger.remaining() > 0 &&
+      controller.snapshot().revision === policy.revision &&
+      isRolloutTransient(outcome)
+    ) {
+      const fbProvider = providersById.get(fallbackRelease.providerId);
+      if (fbProvider !== undefined) {
+        const fbEligible =
+          fbProvider.descriptor.executionClass === fallbackRelease.executionClass &&
+          healthy.get(fallbackRelease.providerId) === true &&
+          capabilitiesSatisfy(fbProvider.capabilities(), request.requiredCapabilities);
+        if (fbEligible) {
+          const fbOutcome = await runProviderLedger(
+            fbProvider,
+            request,
+            signal,
+            Math.min(1, ledger.remaining()),
+            counter,
+            ledger,
+            true,
+          );
+          if (fbOutcome.kind === 'cancelled') {
+            emit({ type: 'cancelled', runId: request.runId });
+            throw new ModelGatewayError('cancelled');
+          }
+          if (fbOutcome.kind === 'accepted') {
+            ledger.markAccepted();
+            rolloutHook.record({
+              type: 'candidate-fallback-to-stable',
+              rolloutId: policy.rolloutId,
+              runId: request.runId,
+              ...(decision.fallbackTarget === undefined ? {} : { serve: decision.fallbackTarget }),
+              releaseId: fallbackRelease.releaseId,
+              providerId: fallbackRelease.providerId,
+            });
+            emit({
+              type: 'fallback-used',
+              runId: request.runId,
+              providerId: fbProvider.descriptor.providerId,
+            });
+            return finish(request, fbProvider, fbOutcome, true, counter.attempts);
+          }
+          const code = terminalCode(request, fbOutcome, true);
+          emit({
+            type: 'invocation-failed',
+            runId: request.runId,
+            code,
+            attempts: counter.attempts,
+          });
+          throw new ModelGatewayError(code);
+        }
+      }
+    }
+
+    const code = terminalCode(request, outcome, false);
+    emit({ type: 'invocation-failed', runId: request.runId, code, attempts: counter.attempts });
+    throw new ModelGatewayError(code);
+  }
+
+  /** Run one bounded, non-returning candidate shadow call. Never fatal; output is discarded. */
+  async function runShadow(
+    request: ModelRequest,
+    signal: AbortSignal,
+    shadowRelease: ProviderReleaseRef,
+    providersById: ReadonlyMap<string, ModelProvider>,
+    healthy: ReadonlyMap<string, boolean>,
+    policy: { readonly rolloutId: string; readonly revision: number },
+    controller: ProviderRolloutController,
+    rolloutHook: RolloutObservabilityHook,
+  ): Promise<void> {
+    if (signal.aborted || controller.snapshot().revision !== policy.revision) {
+      return;
+    }
+    const provider = providersById.get(shadowRelease.providerId);
+    if (provider === undefined) {
+      return;
+    }
+    if (
+      provider.descriptor.executionClass !== shadowRelease.executionClass ||
+      healthy.get(shadowRelease.providerId) !== true ||
+      !capabilitiesSatisfy(provider.capabilities(), request.requiredCapabilities)
+    ) {
+      return;
+    }
+    rolloutHook.record({
+      type: 'shadow-started',
+      rolloutId: policy.rolloutId,
+      runId: request.runId,
+      releaseId: shadowRelease.releaseId,
+      providerId: shadowRelease.providerId,
+    });
+    const outcome = await tryOnce(provider, request, signal);
+    rolloutHook.record({
+      type: outcome.kind === 'accepted' ? 'shadow-completed' : 'shadow-failed',
+      rolloutId: policy.rolloutId,
+      runId: request.runId,
+      releaseId: shadowRelease.releaseId,
+      providerId: shadowRelease.providerId,
+    });
   }
 
   function finish(
