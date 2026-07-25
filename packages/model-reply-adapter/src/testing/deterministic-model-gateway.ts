@@ -2,9 +2,10 @@
  * Deterministic gateway + state fakes for tests (QFJ-M4, ADR-0057).
  *
  * The ONLY concrete gateway-invoker/state implementations, shipped under `./testing`. All synthetic —
- * no real gateway, provider, network, key, or token. A scripted invoker echoes the request's bound
- * provenance with a chosen structured reply; raw/text/mismatched/refusing/throwing variants drive the
- * fail-closed paths; a scripted state reader drives the pre/post-gateway gate.
+ * no real gateway, provider, network, key, or token. Every I/O-capable boundary is asynchronous
+ * (ADR-0058 §4): a scripted invoker echoes the request's bound provenance with a chosen structured
+ * reply; raw/text/mismatched/refusing/rejecting variants drive the fail-closed paths; a scripted state
+ * reader drives the pre/post-gateway gate.
  */
 import type { ModelRequest, ModelResponse } from '@qf-jarvis/model-gateway';
 
@@ -61,9 +62,9 @@ function buildResponse(
 export function scriptedGatewayInvoker(reply: StructuredReply): ModelGatewayInvoker & Recording {
   const counter = { n: 0 };
   return Object.freeze({
-    invoke(request: ModelRequest): ModelGatewayInvocation {
+    invoke(request: ModelRequest): Promise<ModelGatewayInvocation> {
       counter.n += 1;
-      return { ok: true, response: buildResponse(request, reply, {}) };
+      return Promise.resolve({ ok: true, response: buildResponse(request, reply, {}) });
     },
     invoked: () => counter.n,
   });
@@ -75,9 +76,9 @@ export function rawStructuredGatewayInvoker(
 ): ModelGatewayInvoker & Recording {
   const counter = { n: 0 };
   return Object.freeze({
-    invoke(request: ModelRequest): ModelGatewayInvocation {
+    invoke(request: ModelRequest): Promise<ModelGatewayInvocation> {
       counter.n += 1;
-      return { ok: true, response: buildResponse(request, structuredResult, {}) };
+      return Promise.resolve({ ok: true, response: buildResponse(request, structuredResult, {}) });
     },
     invoked: () => counter.n,
   });
@@ -87,7 +88,7 @@ export function rawStructuredGatewayInvoker(
 export function textModeGatewayInvoker(): ModelGatewayInvoker & Recording {
   const counter = { n: 0 };
   return Object.freeze({
-    invoke(request: ModelRequest): ModelGatewayInvocation {
+    invoke(request: ModelRequest): Promise<ModelGatewayInvocation> {
       counter.n += 1;
       const response: ModelResponse = {
         runId: request.runId,
@@ -109,7 +110,7 @@ export function textModeGatewayInvoker(): ModelGatewayInvoker & Recording {
         latencyMs: 3,
         finishStatus: 'completed',
       };
-      return { ok: true, response };
+      return Promise.resolve({ ok: true, response });
     },
     invoked: () => counter.n,
   });
@@ -122,9 +123,9 @@ export function mismatchedProvenanceGatewayInvoker(
 ): ModelGatewayInvoker & Recording {
   const counter = { n: 0 };
   return Object.freeze({
-    invoke(request: ModelRequest): ModelGatewayInvocation {
+    invoke(request: ModelRequest): Promise<ModelGatewayInvocation> {
       counter.n += 1;
-      return { ok: true, response: buildResponse(request, reply, over) };
+      return Promise.resolve({ ok: true, response: buildResponse(request, reply, over) });
     },
     invoked: () => counter.n,
   });
@@ -134,21 +135,21 @@ export function mismatchedProvenanceGatewayInvoker(
 export function refusingGatewayInvoker(transient: boolean): ModelGatewayInvoker & Recording {
   const counter = { n: 0 };
   return Object.freeze({
-    invoke(_request: ModelRequest): ModelGatewayInvocation {
+    invoke(_request: ModelRequest): Promise<ModelGatewayInvocation> {
       counter.n += 1;
-      return { ok: false, transient };
+      return Promise.resolve({ ok: false, transient });
     },
     invoked: () => counter.n,
   });
 }
 
-/** A gateway invoker that throws (simulating an unexpected fault). */
+/** A gateway invoker that rejects (simulating an unexpected fault). */
 export function throwingGatewayInvoker(): ModelGatewayInvoker & Recording {
   const counter = { n: 0 };
   return Object.freeze({
-    invoke(_request: ModelRequest): ModelGatewayInvocation {
+    invoke(_request: ModelRequest): Promise<ModelGatewayInvocation> {
       counter.n += 1;
-      throw new Error('synthetic gateway fault (raw error must not escape)');
+      return Promise.reject(new Error('synthetic gateway fault (raw error must not escape)'));
     },
     invoked: () => counter.n,
   });
@@ -179,11 +180,11 @@ export function scriptedReplyStateReader(
   let index = 0;
   const counter = { n: 0 };
   return Object.freeze({
-    read(): ReplyState {
+    read(): Promise<ReplyState> {
       counter.n += 1;
       const value = states[Math.min(index, states.length - 1)] ?? clearReplyState();
       index += 1;
-      return value;
+      return Promise.resolve(value);
     },
     reads: () => counter.n,
   });

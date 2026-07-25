@@ -40,7 +40,7 @@ import { postGatewayBlockReason, stateBlockReason } from './state-gates.js';
 
 /** A model reply adapter: an M2 `ModelReplyPort` plus a detailed drafting method. */
 export interface ModelReplyAdapter extends ModelReplyPort {
-  draftReplyDetailed(plan: ReplyPlan): ModelReplyAdapterResult;
+  draftReplyDetailed(plan: ReplyPlan): Promise<ModelReplyAdapterResult>;
 }
 
 export interface ModelReplyAdapterConfig {
@@ -75,7 +75,7 @@ export function createModelReplyAdapter(config: ModelReplyAdapterConfig): ModelR
   const hook = config.observability ?? NOOP_MODEL_REPLY_ADAPTER_OBSERVABILITY;
   const budgets: GatewayRequestBudgets = { ...DEFAULT_GATEWAY_REQUEST_BUDGETS, ...config.budgets };
 
-  function draftReplyDetailed(plan: ReplyPlan): ModelReplyAdapterResult {
+  async function draftReplyDetailed(plan: ReplyPlan): Promise<ModelReplyAdapterResult> {
     const emit = (
       type: ModelReplyAdapterEventType,
       reason: ModelReplyAdapterReason,
@@ -167,7 +167,7 @@ export function createModelReplyAdapter(config: ModelReplyAdapterConfig): ModelR
     }
 
     // Pre-gateway state gate — a blocking/mismatched state stops before any gateway call.
-    const before = config.stateReader.read();
+    const before = await config.stateReader.read();
     const block1 = stateBlockReason(before, plan);
     if (block1 !== null) {
       return refuse(block1, false);
@@ -197,7 +197,7 @@ export function createModelReplyAdapter(config: ModelReplyAdapterConfig): ModelR
     emit('model-gateway-requested', 'model-adapter-completed', undefined, undefined, undefined);
     let invocation;
     try {
-      invocation = config.invoker.invoke(request);
+      invocation = await config.invoker.invoke(request);
     } catch {
       return refuse('model-gateway-transient', true);
     }
@@ -232,7 +232,7 @@ export function createModelReplyAdapter(config: ModelReplyAdapterConfig): ModelR
       return refuse('model-citation-mismatch', true);
     }
     // Post-gateway state gate — a change during the round-trip prevents a draft.
-    const after = config.stateReader.read();
+    const after = await config.stateReader.read();
     const block2 = postGatewayBlockReason(before, after, plan);
     if (block2 !== null) {
       return refuse(block2, true);
@@ -283,8 +283,8 @@ export function createModelReplyAdapter(config: ModelReplyAdapterConfig): ModelR
     );
   }
 
-  function draftReply(plan: ReplyPlan): unknown {
-    return draftReplyDetailed(plan).draft;
+  async function draftReply(plan: ReplyPlan): Promise<unknown> {
+    return (await draftReplyDetailed(plan)).draft;
   }
 
   const base = {

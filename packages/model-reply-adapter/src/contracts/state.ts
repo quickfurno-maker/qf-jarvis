@@ -5,7 +5,8 @@
  * IMMEDIATELY AFTER the gateway result (the pre/post-gateway state gate). The reader is provider-
  * neutral and content-free — it exposes only the revision, party type, assigned actor, data class,
  * the human-takeover / AI-pause / cancellation flags, and the subject privacy status. It reads no
- * message content; the only concrete implementation is the deterministic fake under `./testing`.
+ * message content; a live read is database-backed, so it is asynchronous (ADR-0058 §1). The only
+ * concrete implementation is the deterministic fake under `./testing`.
  */
 import type {
   RuntimeActor,
@@ -27,7 +28,7 @@ export interface ReplyState {
   readonly subjectStatus: RuntimeSubjectStatus;
 }
 
-/** Supplies the current content-free conversation state. Read at the pre- and post-gateway gates. */
+/** Supplies the current content-free conversation state. Awaited at the pre- and post-gateway gates. */
 export interface ReplyStateReader {
-  read(): ReplyState;
+  read(): Promise<ReplyState>;
 }
