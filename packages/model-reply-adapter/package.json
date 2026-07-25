@@ -1,0 +1,28 @@
+{
+  "name": "@qf-jarvis/model-reply-adapter",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis model-gateway reply adapter foundation (QFJ-M4). A concrete implementation of the M2 ModelReplyPort that composes the existing @qf-jarvis/model-gateway: it translates an authority-safe reply plan into an exact gateway request, obtains a result through a narrow injected synchronous gateway invoker, and strictly validates the returned structured result, its provenance, and its citations into a bounded structured reply draft behind pre/post-gateway state gates. The existing gateway remains the only routing authority (no second router, no hard-coded provider/model id, no fallback, no activation, no rollout promotion). No live Groq/local call, no key/token/env, no network; no live Core; no WhatsApp/n8n/send; no persistence/DB; no knowledge retrieval; no semantic/vector/embedding/RAG. Model output is a draft/proposal input only, never a Core ACCEPTED, never sent/delivered/executed. Depends on @qf-jarvis/agent-runtime, @qf-jarvis/model-gateway, and zod.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "default": "./dist/testing/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/agent-runtime": "workspace:*",
+    "@qf-jarvis/model-gateway": "workspace:*",
+    "zod": "4.4.3"
+  }
+}

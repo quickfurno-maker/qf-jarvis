@@ -1,0 +1,39 @@
+/**
+ * The detailed result of a reply-drafting attempt (QFJ-M4, ADR-0057 §G, §K, §M).
+ *
+ * The adapter's rich surface: the closed result kind, a safe reason, the validated M2 `ModelReplyDraft`
+ * (present ONLY for a `REPLY` that passed every gate), the full closed structured reply, whether the
+ * gateway was invoked, and safe provenance/usage. Model output is a draft/proposal input only — this
+ * result contains no Core `ACCEPTED`, no send/deliver/execute instruction, and no raw provider object.
+ */
+import type { ModelReplyDraft } from '@qf-jarvis/agent-runtime';
+
+import type { ModelReplyAdapterReason } from './reasons.js';
+import type { StructuredReply, StructuredReplyKind } from './reply-schema.js';
+
+/** Safe, content-free provenance surfaced from a validated gateway result. */
+export interface SafeReplyProvenance {
+  readonly releaseId: string;
+  readonly providerId: string;
+  readonly modelId: string;
+  readonly modelVersion: string;
+  readonly promptId: string;
+  readonly promptVersion: string;
+  readonly usedFallback: boolean;
+  readonly attempts: number;
+}
+
+/** The detailed outcome of `draftReplyDetailed`. */
+export interface ModelReplyAdapterResult {
+  readonly ok: boolean;
+  readonly kind: StructuredReplyKind | undefined;
+  readonly reason: ModelReplyAdapterReason;
+  /** The validated M2 reply draft — present only for a `REPLY` that passed every gate. */
+  readonly draft: ModelReplyDraft | undefined;
+  /** The full closed structured reply — present when the result validated. */
+  readonly structuredReply: StructuredReply | undefined;
+  readonly gatewayInvoked: boolean;
+  readonly provenance: SafeReplyProvenance | undefined;
+  readonly outputTokens: number | undefined;
+  readonly latencyMs: number | undefined;
+}
