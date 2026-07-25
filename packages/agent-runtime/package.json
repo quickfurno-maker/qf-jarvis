@@ -1,0 +1,26 @@
+{
+  "name": "@qf-jarvis/agent-runtime",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis authority-first agent and conversation runtime foundation (QFJ-M1). Deterministic, provider-neutral runtime contracts for the future WhatsApp coordinator: a closed actor/party/channel vocabulary, strict agent assignment (Riya=client-only, Anisha=vendor-only, Jarvis=coordination), a validated conversation-state machine with human-takeover/AI-pause gates, a content-minimized inbound envelope, and proposal-only decisions that always remain PENDING_CORE_VALIDATION. No transport/provider/database/n8n coupling; no WhatsApp API, no dashboard UI, no persistence, no live model call, no real message data. QuickFurno Core remains final authority. Depends only on zod.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "default": "./dist/testing/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "zod": "4.4.3"
+  }
+}
