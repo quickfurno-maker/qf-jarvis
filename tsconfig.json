@@ -15,6 +15,7 @@
     { "path": "./packages/event-ingestion/tsconfig.build.json" },
     { "path": "./packages/governed-knowledge/tsconfig.build.json" },
     { "path": "./packages/model-evaluation/tsconfig.build.json" },
-    { "path": "./packages/model-gateway" }
+    { "path": "./packages/model-gateway" },
+    { "path": "./packages/rag-provisioning/tsconfig.build.json" }
   ]
 }
