@@ -105,6 +105,9 @@ export {
 // QFJ-S1 Groq staging provider binding (ADR-0060) — a release-driven factory over the existing Groq
 // adapter (an injected async credential resolver + fail-closed data-class/execution/attestation gates +
 // content-free bind observability). No real key, no live call, no activation/rollout.
+// QFJ-S1A (ADR-0061 §D, §E) makes the approval references EXACT and REQUIRED — capability profile,
+// evaluation, data-controls (ZDR) attestation, and prompt family + integer version — and emits them as
+// identifiers in the content-free bind event. Prompt TEXT never enters the gateway's staging binding.
 export {
   bindGroqStagingProvider,
   GROQ_STAGING_BIND_REASONS,

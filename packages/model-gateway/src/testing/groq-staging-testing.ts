@@ -110,6 +110,10 @@ export function syntheticGroqStagingRelease(
     dataControlsAttested: true,
     capabilityProfileRef: 'cap.groq.reply.v1',
     evaluationRef: 'evref-groq-0001',
+    // QFJ-S1A (ADR-0061 §D, §E): the exact approval + prompt identity references. Synthetic ids only.
+    dataControlsAttestationRef: 'zdr.groq.staging.0001',
+    promptFamily: 'qfj.s1a.synthetic.smoke',
+    promptVersion: 1,
     ...over,
   };
 }
