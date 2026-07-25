@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
+  },
+
+  // The EMITTING build, referenced by the root solution. The vitest specs under src/tests
+  // are EXCLUDED so nothing test-only reaches dist/; the shipped test support under
+  // src/testing IS emitted (the public `./testing` subpath). Project references: the
+  // composition root wires @qf-jarvis/agent-runtime (M1/M2 ports + orchestrator),
+  // @qf-jarvis/core-decision-adapter (M3), and @qf-jarvis/model-reply-adapter (M4) — all one-way.
+  "references": [
+    { "path": "../agent-runtime/tsconfig.build.json" },
+    { "path": "../core-decision-adapter/tsconfig.build.json" },
+    { "path": "../model-reply-adapter/tsconfig.build.json" }
+  ],
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/tests/**"]
+}
