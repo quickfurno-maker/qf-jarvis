@@ -14,6 +14,7 @@
     { "path": "./packages/event-backbone" },
     { "path": "./packages/event-ingestion/tsconfig.build.json" },
     { "path": "./packages/governed-knowledge/tsconfig.build.json" },
+    { "path": "./packages/model-evaluation/tsconfig.build.json" },
     { "path": "./packages/model-gateway" }
   ]
 }

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
+  },
+
+  // The EMITTING build, referenced by the root solution. The vitest specs under src/tests
+  // are EXCLUDED so nothing test-only reaches dist/; the shipped synthetic fixtures under
+  // src/testing ARE emitted because they are the public `./testing` subpath. Tests are
+  // type-checked, without emit, by tsconfig.json. Depends only on zod — no project references.
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/tests/**"]
+}
