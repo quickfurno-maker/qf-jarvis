@@ -159,7 +159,10 @@ export function createCoreDecisionAdapter(config: CoreDecisionAdapterConfig): Co
     emit('response-received', OUTCOME_REASON[response.outcome], response.outcome);
 
     // Post-response state gate — a change after the response prevents ACCEPTED.
-    if (response.outcome === 'ACCEPTED' && isStateBlocked(await config.stateReader.read(), request)) {
+    if (
+      response.outcome === 'ACCEPTED' &&
+      isStateBlocked(await config.stateReader.read(), request)
+    ) {
       emit('response-refused', 'adapter-state-blocked', 'STALE_REVISION');
       return result('STALE_REVISION', 'adapter-state-blocked', true, response);
     }

@@ -206,7 +206,13 @@ export async function orchestrateInbound(
     actor: assignedActor,
     dataClass: ctx1.dataClass,
   });
-  const candidate = await orch.modelReplyPort.draftReply(plan);
+  // A rejected model Promise fails closed — it is never an unhandled rejection or a raw error.
+  let candidate: unknown;
+  try {
+    candidate = await orch.modelReplyPort.draftReply(plan);
+  } catch {
+    return refuse('orchestration-model-unavailable');
+  }
 
   // 11. Validate the draft (fabricated/versionless citation or raw body/CoT → refuse).
   const validated = validateReplyDraft(candidate, plan);
@@ -256,21 +262,26 @@ export async function orchestrateInbound(
       actor: assignedActor,
       proposalKind: kind,
     });
-    const coreResponse = await orch.coreDecisionPort.decide({
-      proposalId: proposal.proposalId,
-      proposalVersion: proposal.proposalVersion,
-      conversationId: proposal.conversationId,
-      expectedRevision: proposal.expectedRevision,
-      assignedActor,
-      partyType: ctx1.partyType,
-      proposalKind: kind,
-      structuredIntent: proposal.structuredIntent,
-      policyRevision: orch.policy.policyRevision,
-      evaluationRef: orch.modelReplyPort.evaluationRef,
-      citations,
-      proposedReplyBody: validated.draft.replyBody,
-    });
-    outcome = coreResponse.outcome;
+    // A rejected Core Promise fails closed to CORE_UNAVAILABLE — never fabricated, never a raw error.
+    try {
+      const coreResponse = await orch.coreDecisionPort.decide({
+        proposalId: proposal.proposalId,
+        proposalVersion: proposal.proposalVersion,
+        conversationId: proposal.conversationId,
+        expectedRevision: proposal.expectedRevision,
+        assignedActor,
+        partyType: ctx1.partyType,
+        proposalKind: kind,
+        structuredIntent: proposal.structuredIntent,
+        policyRevision: orch.policy.policyRevision,
+        evaluationRef: orch.modelReplyPort.evaluationRef,
+        citations,
+        proposedReplyBody: validated.draft.replyBody,
+      });
+      outcome = coreResponse.outcome;
+    } catch {
+      outcome = 'CORE_UNAVAILABLE';
+    }
   }
   const decision = coreDecision(outcome, ctx1.conversationId, proposal.proposalId, ctx1.revision);
   emit('core-decision-received', 'orchestration-completed', {
