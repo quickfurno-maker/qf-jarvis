@@ -84,3 +84,6 @@ export type {
 } from './runtime/create-agent-runtime.js';
 export { processInbound } from './runtime/process-inbound.js';
 export type { RuntimeDecision } from './runtime/process-inbound.js';
+
+// M2 — Core decision and reply orchestration (ADR-0055).
+export * from './orchestration/index.js';

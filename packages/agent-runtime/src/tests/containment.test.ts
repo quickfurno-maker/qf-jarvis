@@ -149,6 +149,19 @@ describe('containment', () => {
       'isActorPartyCompatible',
       'isValidConversationTransition',
       'processInbound',
+      // M2 orchestration (ADR-0055).
+      'ORCHESTRATION_PROPOSAL_KINDS',
+      'CORE_DECISION_OUTCOMES',
+      'ORCHESTRATION_REASONS',
+      'ORCHESTRATION_EVENT_TYPES',
+      'NOOP_ORCHESTRATION_OBSERVABILITY',
+      'createOrchestrationContext',
+      'createOrchestrationProposal',
+      'coreDecision',
+      'createReplyPlan',
+      'validateReplyDraft',
+      'createOrchestrator',
+      'orchestrateInbound',
     ];
     expect(Object.keys(barrel).sort()).toEqual([...EXPECTED].sort());
     const b = barrel as Record<string, unknown>;
