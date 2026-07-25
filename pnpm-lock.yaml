@@ -90,6 +90,18 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
 
+  packages/jarvis-runtime:
+    dependencies:
+      '@qf-jarvis/agent-runtime':
+        specifier: workspace:*
+        version: link:../agent-runtime
+      '@qf-jarvis/core-decision-adapter':
+        specifier: workspace:*
+        version: link:../core-decision-adapter
+      '@qf-jarvis/model-reply-adapter':
+        specifier: workspace:*
+        version: link:../model-reply-adapter
+
   packages/model-evaluation:
     dependencies:
       zod:

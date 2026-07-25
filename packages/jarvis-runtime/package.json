@@ -1,0 +1,28 @@
+{
+  "name": "@qf-jarvis/jarvis-runtime",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis orchestrated reply composition foundation (QFJ-M5). One pre-transport composition root that wires the merged M1 runtime, M2 orchestration, M3 Core decision adapter, and M4 model reply adapter into a deterministic, fail-closed, async end-to-end flow (inbound -> model draft -> PENDING_CORE_VALIDATION proposal -> Core decision) behind ONE authoritative content-free async conversation-state source that every lower state reader delegates to (no split-brain). It duplicates no business rule and performs no delivery, persistence, or live call. Model output is a draft/proposal input only, never a Core ACCEPTED, never sent/delivered/executed/persisted; QuickFurno Core remains the only business authority. Depends on @qf-jarvis/agent-runtime, @qf-jarvis/core-decision-adapter, and @qf-jarvis/model-reply-adapter.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "default": "./dist/testing/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/agent-runtime": "workspace:*",
+    "@qf-jarvis/core-decision-adapter": "workspace:*",
+    "@qf-jarvis/model-reply-adapter": "workspace:*"
+  }
+}
