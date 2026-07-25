@@ -1,0 +1,27 @@
+{
+  "name": "@qf-jarvis/core-decision-adapter",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis QuickFurno Core decision adapter foundation (QFJ-M3). A concrete implementation of the M2 CoreDecisionPort behind a narrow injected transport: it converts a revision-bound proposal into a versioned Core command, obtains the response through the injected transport (missing transport -> CORE_UNAVAILABLE; exception/timeout normalized fail-closed; deterministic idempotency), and strictly validates response identity. A double state gate re-checks revision/takeover/pause/cancel/assignment/privacy before transport and after response. Only a Core response yields ACCEPTED (never fabricated/upgraded); ACCEPTED is approved only, never sent/delivered/executed/persisted. PROPOSED protocol pending Core-side adoption; no live Core/network/auth/secret, no WhatsApp/n8n/send, no persistence/DB, no live model/RAG. Depends on @qf-jarvis/agent-runtime and zod.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "default": "./dist/testing/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/agent-runtime": "workspace:*",
+    "zod": "4.4.3"
+  }
+}

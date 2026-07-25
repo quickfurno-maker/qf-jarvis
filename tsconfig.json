@@ -16,6 +16,7 @@
     { "path": "./packages/governed-knowledge/tsconfig.build.json" },
     { "path": "./packages/model-evaluation/tsconfig.build.json" },
     { "path": "./packages/agent-runtime/tsconfig.build.json" },
+    { "path": "./packages/core-decision-adapter/tsconfig.build.json" },
     { "path": "./packages/model-gateway" },
     { "path": "./packages/rag-provisioning/tsconfig.build.json" }
   ]
