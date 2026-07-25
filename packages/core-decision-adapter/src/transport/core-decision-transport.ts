@@ -1,0 +1,38 @@
+/**
+ * The narrow injected Core decision transport (QFJ-M3, ADR-0056 §F).
+ *
+ * It accepts a VALIDATED serialized command and returns a VALIDATED serialized response. It contains
+ * no business logic, no hidden retry, and no live network implementation. A missing transport →
+ * `CORE_UNAVAILABLE`; an exception/timeout is normalized by the adapter to a safe fail-closed outcome.
+ * The only concrete implementation is the deterministic fake under `./testing`.
+ */
+import type { CoreCommand } from '../contracts/command.js';
+import { canonicalJson } from '../contracts/digest.js';
+
+/** Send a serialized command to Core and return the serialized response. Synchronous; may throw. */
+export interface CoreDecisionTransport {
+  send(serializedCommand: string): string;
+}
+
+/** Serialize a command to the canonical, content-free wire form the transport receives. */
+export function serializeCommand(command: CoreCommand): string {
+  return canonicalJson({
+    protocol: command.protocol,
+    commandId: command.commandId,
+    idempotencyKey: command.idempotencyKey,
+    correlationId: command.correlationId,
+    proposalId: command.proposalId,
+    proposalVersion: command.proposalVersion,
+    conversationId: command.conversationId,
+    expectedRevision: command.expectedRevision,
+    assignedActor: command.assignedActor,
+    partyType: command.partyType,
+    proposalKind: command.proposalKind,
+    structuredIntent: command.structuredIntent,
+    policyRevision: command.policyRevision,
+    evaluationRef: command.evaluationRef ?? null,
+    citations: command.citations,
+    proposedReplyBody: command.proposedReplyBody ?? null,
+    createdAt: command.createdAt,
+  });
+}
