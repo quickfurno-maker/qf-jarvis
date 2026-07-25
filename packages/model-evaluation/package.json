@@ -1,0 +1,26 @@
+{
+  "name": "@qf-jarvis/model-evaluation",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis evaluation and red-team foundation (QFJ-P04.04). A dedicated, provider-neutral, version-bound, deterministic evaluation + red-team EVIDENCE system that scores pre-supplied candidate observations against synthetic fixtures and closed thresholds, producing immutable approval evidence for later rollout approval. It invokes NO model: no live Groq/local call, no real key/token, no LLM-as-judge, no model voting, no real conversation data. Evaluation evidence informs operations; it activates and promotes nothing. No database/persistence, no schema/migration, no semantic retrieval/embeddings/vector DB/RAG. Depends only on zod.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "default": "./dist/testing/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "zod": "4.4.3"
+  }
+}
