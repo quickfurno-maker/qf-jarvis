@@ -159,4 +159,13 @@ describe('containment', () => {
       expect(CONTROL_BYTE.test(readFileSync(file, 'utf8'))).toBe(false);
     }
   });
+
+  it('(ADR-0058 §5) production source uses no sync-over-async blocking primitive', () => {
+    for (const file of productionFiles()) {
+      const text = readFileSync(file, 'utf8');
+      expect(text).not.toMatch(/Atomics\s*\.\s*wait\b/);
+      expect(text).not.toMatch(/\b(execSync|spawnSync|deasync)\b/);
+      expect(text).not.toMatch(/from ['"]deasync['"]/);
+    }
+  });
 });

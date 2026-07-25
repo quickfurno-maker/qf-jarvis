@@ -19,8 +19,8 @@ import type { RuntimeExecutionClass } from '../contracts/vocabularies.js';
  */
 export interface RuntimeModelInterface {
   readonly executionClass: RuntimeExecutionClass;
-  /** MUST NOT be invoked by the runtime in this slice. */
-  draftReply(request: unknown): unknown;
+  /** MUST NOT be invoked by the runtime in this slice. Async — a live binding performs I/O (ADR-0058 §1). */
+  draftReply(request: unknown): Promise<unknown>;
 }
 
 /** The immutable, deterministic agent runtime. */

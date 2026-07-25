@@ -48,7 +48,7 @@ function recorder(): { hook: CoreAdapterObservabilityHook; events: CoreAdapterEv
 }
 
 describe('observability', () => {
-  it('emits only closed, content-free event types for a completed acceptance', () => {
+  it('emits only closed, content-free event types for a completed acceptance', async () => {
     const { hook, events } = recorder();
     const adapter = createCoreDecisionAdapter({
       stateReader: scriptedStateReader(syntheticState()),
@@ -56,7 +56,7 @@ describe('observability', () => {
       transport: scriptedCoreTransport('ACCEPTED'),
       observability: hook,
     });
-    adapter.decideDetailed(coreRequest());
+    await adapter.decideDetailed(coreRequest());
     expect(events.length).toBeGreaterThan(0);
     for (const event of events) {
       expect(CORE_ADAPTER_EVENT_TYPES).toContain(event.type);
@@ -64,7 +64,7 @@ describe('observability', () => {
     expect(events.map((e) => e.type)).toContain('completed');
   });
 
-  it('carries no message, subject, or secret content in any event', () => {
+  it('carries no message, subject, or secret content in any event', async () => {
     const { hook, events } = recorder();
     const adapter = createCoreDecisionAdapter({
       stateReader: scriptedStateReader(syntheticState()),
@@ -72,7 +72,7 @@ describe('observability', () => {
       transport: scriptedCoreTransport('ACCEPTED'),
       observability: hook,
     });
-    adapter.decideDetailed(
+    await adapter.decideDetailed(
       coreRequest({ proposedReplyBody: 'SECRET-REPLY-BODY', policyRevision: 'policy.rev.1' }),
     );
     const serialized = JSON.stringify(events);
@@ -81,7 +81,7 @@ describe('observability', () => {
     }
   });
 
-  it('emits a refusal event, not completion, when the pre-transport gate blocks', () => {
+  it('emits a refusal event, not completion, when the pre-transport gate blocks', async () => {
     const { hook, events } = recorder();
     const adapter = createCoreDecisionAdapter({
       stateReader: scriptedStateReader(syntheticState({ cancelled: true })),
@@ -89,19 +89,19 @@ describe('observability', () => {
       transport: scriptedCoreTransport('ACCEPTED'),
       observability: hook,
     });
-    adapter.decideDetailed(coreRequest());
+    await adapter.decideDetailed(coreRequest());
     const types = events.map((e) => e.type);
     expect(types).toContain('response-refused');
     expect(types).not.toContain('completed');
     expect(types).not.toContain('transport-requested');
   });
 
-  it('the default hook is a silent no-op', () => {
+  it('the default hook is a silent no-op', async () => {
     const adapter = createCoreDecisionAdapter({
       stateReader: scriptedStateReader(syntheticState()),
       clock: fixedClock(),
       transport: scriptedCoreTransport('ACCEPTED'),
     });
-    expect(() => adapter.decideDetailed(coreRequest())).not.toThrow();
+    await expect(adapter.decideDetailed(coreRequest())).resolves.toBeDefined();
   });
 });

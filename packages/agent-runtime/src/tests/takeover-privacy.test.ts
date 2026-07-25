@@ -42,21 +42,21 @@ function run(
   return processInbound(runtime, context, envelope);
 }
 
-function hasKind(decision: ReturnType<typeof run>, kind: string): boolean {
+function hasKind(decision: Awaited<ReturnType<typeof run>>, kind: string): boolean {
   return decision.ok && decision.proposals.some((p) => p.kind === kind);
 }
 
 describe('human takeover and AI pause', () => {
-  it('(7) HUMAN_TAKEOVER blocks AI before any model call', () => {
-    const decision = run({ humanTakeover: true });
+  it('(7) HUMAN_TAKEOVER blocks AI before any model call', async () => {
+    const decision = await run({ humanTakeover: true });
     expect(decision.ok && decision.aiEligible).toBe(false);
     expect(decision.ok && decision.reason).toBe('runtime-human-takeover');
     expect(hasKind(decision, 'REPLY')).toBe(false);
     expect(hasKind(decision, 'ESCALATION')).toBe(true);
   });
 
-  it('(8) AI pause blocks AI before any model call (fail closed)', () => {
-    const decision = run({ aiPaused: true });
+  it('(8) AI pause blocks AI before any model call (fail closed)', async () => {
+    const decision = await run({ aiPaused: true });
     expect(decision.ok && decision.aiEligible).toBe(false);
     expect(decision.ok && decision.reason).toBe('runtime-ai-paused');
     expect(hasKind(decision, 'REPLY')).toBe(false);
@@ -78,22 +78,22 @@ describe('human takeover and AI pause', () => {
 });
 
 describe('data class', () => {
-  it('(10) HUMAN_ONLY never reaches a model', () => {
-    const decision = run({ dataClass: 'HUMAN_ONLY' }, {}, { dataClass: 'HUMAN_ONLY' });
+  it('(10) HUMAN_ONLY never reaches a model', async () => {
+    const decision = await run({ dataClass: 'HUMAN_ONLY' }, {}, { dataClass: 'HUMAN_ONLY' });
     expect(decision.ok && decision.aiEligible).toBe(false);
     expect(decision.ok && decision.reason).toBe('runtime-human-only');
     expect(hasKind(decision, 'REPLY')).toBe(false);
   });
 
-  it('(11) LOCAL_ONLY cannot use a hosted interface but can use a local one', () => {
-    const hosted = run(
+  it('(11) LOCAL_ONLY cannot use a hosted interface but can use a local one', async () => {
+    const hosted = await run(
       { dataClass: 'LOCAL_ONLY' },
       { modelInterface: throwingModelInterface('HOSTED') },
       { dataClass: 'LOCAL_ONLY' },
     );
     expect(hosted.ok && hosted.reason).toBe('runtime-data-class-unserviceable');
     expect(hasKind(hosted, 'REPLY')).toBe(false);
-    const local = run(
+    const local = await run(
       { dataClass: 'LOCAL_ONLY' },
       { modelInterface: throwingModelInterface('LOCAL') },
       { dataClass: 'LOCAL_ONLY' },
@@ -104,31 +104,31 @@ describe('data class', () => {
 });
 
 describe('privacy gate before model/knowledge', () => {
-  it('(12) a subject-linked conversation without a privacy gate fails closed', () => {
-    const decision = run({ subjectRef: 'subject.person.1' });
+  it('(12) a subject-linked conversation without a privacy gate fails closed', async () => {
+    const decision = await run({ subjectRef: 'subject.person.1' });
     expect(decision.ok).toBe(false);
     expect(decision.ok ? '' : decision.reason).toBe('runtime-privacy-gate-missing');
   });
 
-  it('(13) erased/tombstoned/in-progress subjects are blocked before content/model', () => {
+  it('(13) erased/tombstoned/in-progress subjects are blocked before content/model', async () => {
     for (const status of ['erased', 'tombstoned', 'in-progress', 'anonymised'] as const) {
       const gate = createDeterministicPrivacyGate({ statuses: { 'subject.person.1': status } });
-      const decision = run({ subjectRef: 'subject.person.1' }, { privacyGate: gate });
+      const decision = await run({ subjectRef: 'subject.person.1' }, { privacyGate: gate });
       expect(decision.ok).toBe(false);
       expect(decision.ok ? '' : decision.reason).toBe('runtime-subject-blocked');
     }
   });
 
-  it('(14) a cleared subject passes the gate', () => {
+  it('(14) a cleared subject passes the gate', async () => {
     const gate = createDeterministicPrivacyGate({ statuses: { 'subject.person.1': 'clear' } });
-    const decision = run({ subjectRef: 'subject.person.1' }, { privacyGate: gate });
+    const decision = await run({ subjectRef: 'subject.person.1' }, { privacyGate: gate });
     expect(decision.ok).toBe(true);
   });
 });
 
 describe('authority (proposals only)', () => {
-  it('(21,22) proposals stay PENDING_CORE_VALIDATION and the runtime/decision grant no authority', () => {
-    const decision = run({});
+  it('(21,22) proposals stay PENDING_CORE_VALIDATION and the runtime/decision grant no authority', async () => {
+    const decision = await run({});
     expect(decision.ok).toBe(true);
     if (decision.ok) {
       for (const proposal of decision.proposals) {

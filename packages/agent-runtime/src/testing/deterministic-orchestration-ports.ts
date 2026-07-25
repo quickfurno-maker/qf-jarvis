@@ -2,9 +2,10 @@
  * Deterministic orchestration port fakes for tests (QFJ-M2, ADR-0055).
  *
  * The ONLY concrete port implementations, shipped under `./testing`. All synthetic — no real model,
- * Core, provider, knowledge store, key, or token. A recording model port proves the runtime called it
- * (or not); a scripted context port drives the double gate; a scripted Core port returns a chosen
- * outcome; a scripted knowledge port returns exact citations or a refusal.
+ * Core, provider, knowledge store, key, or token. Every I/O-capable port is asynchronous (ADR-0058
+ * §4): a recording model port proves the runtime called it (or not); a scripted context port drives
+ * the double gate; a scripted Core port returns a chosen outcome; a scripted knowledge port returns
+ * exact citations or a refusal.
  */
 import type { InboundEnvelope } from '../contracts/inbound-envelope.js';
 import type {
@@ -79,14 +80,14 @@ export function scriptedContextPort(
   let index = 0;
   const readsCounter = { n: 0 };
   return Object.freeze({
-    read(): OrchestrationContext {
+    read(): Promise<OrchestrationContext> {
       readsCounter.n += 1;
       const value = contexts[Math.min(index, contexts.length - 1)];
       index += 1;
       if (value === undefined) {
-        throw new Error('scriptedContextPort: no context supplied');
+        return Promise.reject(new Error('scriptedContextPort: no context supplied'));
       }
-      return value;
+      return Promise.resolve(value);
     },
     reads: () => readsCounter.n,
   });
@@ -114,10 +115,10 @@ export function scriptedModelReplyPort(
     promptVersion: 1,
     capabilityProfileRef: 'cap.profile.a',
     ...(config.evaluationRef === undefined ? {} : { evaluationRef: config.evaluationRef }),
-    draftReply(plan: ReplyPlan): unknown {
+    draftReply(plan: ReplyPlan): Promise<unknown> {
       counter.n += 1;
       if (config.draft !== undefined) {
-        return config.draft(plan);
+        return Promise.resolve(config.draft(plan));
       }
       const draft: ModelReplyDraft = {
         structured: true,
@@ -125,7 +126,7 @@ export function scriptedModelReplyPort(
         citations: plan.citations.map((c) => ({ knowledgeId: c.knowledgeId, version: c.version })),
         usageTraceId: 'trace.1',
       };
-      return draft;
+      return Promise.resolve(draft);
     },
     invoked: () => counter.n,
   });
@@ -138,9 +139,9 @@ export interface RecordingCoreDecisionPort extends CoreDecisionPort {
 export function scriptedCoreDecisionPort(outcome: CoreDecisionOutcome): RecordingCoreDecisionPort {
   const counter = { n: 0 };
   return Object.freeze({
-    decide(_request: CoreDecisionRequest): CoreDecisionResponse {
+    decide(_request: CoreDecisionRequest): Promise<CoreDecisionResponse> {
       counter.n += 1;
-      return { outcome };
+      return Promise.resolve({ outcome });
     },
     invoked: () => counter.n,
   });
@@ -153,10 +154,12 @@ export function scriptedKnowledgePort(
     | { readonly ok: false },
 ): KnowledgePort {
   return Object.freeze({
-    retrieve(_request: KnowledgeRetrievalRequest): KnowledgeRetrievalResult {
-      return result.ok
-        ? { ok: true, citations: result.citations }
-        : { ok: false, reason: 'orchestration-knowledge-refused' };
+    retrieve(_request: KnowledgeRetrievalRequest): Promise<KnowledgeRetrievalResult> {
+      return Promise.resolve(
+        result.ok
+          ? { ok: true, citations: result.citations }
+          : { ok: false, reason: 'orchestration-knowledge-refused' },
+      );
     },
   });
 }

@@ -102,6 +102,18 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
 
+  packages/model-reply-adapter:
+    dependencies:
+      '@qf-jarvis/agent-runtime':
+        specifier: workspace:*
+        version: link:../agent-runtime
+      '@qf-jarvis/model-gateway':
+        specifier: workspace:*
+        version: link:../model-gateway
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+
   packages/rag-provisioning:
     dependencies:
       zod:

@@ -73,7 +73,7 @@ function recorder(): { hook: RuntimeObservabilityHook; events: RuntimeEvent[] } 
 }
 
 describe('observability', () => {
-  it('(24,25) emits content-free events with no message text, subject, or token', () => {
+  it('(24,25) emits content-free events with no message text, subject, or token', async () => {
     const { hook, events } = recorder();
     const runtime = createAgentRuntime({
       policy: syntheticPolicy(),
@@ -84,7 +84,7 @@ describe('observability', () => {
     const envelope = createInboundEnvelope(
       envelopeInput({ normalizedText: 'SECRET-MESSAGE-BODY' }),
     );
-    processInbound(runtime, context, envelope);
+    await processInbound(runtime, context, envelope);
     expect(events.length).toBeGreaterThan(0);
     const serialized = JSON.stringify(events);
     for (const forbidden of ['SECRET-MESSAGE-BODY', 'subject.SECRET', 'wamid', 'sk-']) {
@@ -194,6 +194,15 @@ describe('containment', () => {
   it('(34) contains no NUL/control byte in production source', () => {
     for (const file of productionFiles()) {
       expect(CONTROL_BYTE.test(readFileSync(file, 'utf8'))).toBe(false);
+    }
+  });
+
+  it('(ADR-0058 §5) uses no sync-over-async blocking primitive in production source', () => {
+    for (const file of productionFiles()) {
+      const text = readFileSync(file, 'utf8');
+      expect(text).not.toMatch(/Atomics\s*\.\s*wait\b/);
+      expect(text).not.toMatch(/\b(execSync|spawnSync|deasync)\b/);
+      expect(text).not.toMatch(/from ['"]deasync['"]/);
     }
   });
 });

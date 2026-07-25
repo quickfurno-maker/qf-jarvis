@@ -3,15 +3,16 @@
  *
  * It accepts a VALIDATED serialized command and returns a VALIDATED serialized response. It contains
  * no business logic, no hidden retry, and no live network implementation. A missing transport →
- * `CORE_UNAVAILABLE`; an exception/timeout is normalized by the adapter to a safe fail-closed outcome.
- * The only concrete implementation is the deterministic fake under `./testing`.
+ * `CORE_UNAVAILABLE`; an exception/timeout (a rejected Promise) is normalized by the adapter to a safe
+ * fail-closed outcome. A live Core call is a network round-trip, so the transport is asynchronous
+ * (ADR-0058 §1). The only concrete implementation is the deterministic fake under `./testing`.
  */
 import type { CoreCommand } from '../contracts/command.js';
 import { canonicalJson } from '../contracts/digest.js';
 
-/** Send a serialized command to Core and return the serialized response. Synchronous; may throw. */
+/** Send a serialized command to Core and resolve the serialized response. Awaited; may reject. */
 export interface CoreDecisionTransport {
-  send(serializedCommand: string): string;
+  send(serializedCommand: string): Promise<string>;
 }
 
 /** Serialize a command to the canonical, content-free wire form the transport receives. */

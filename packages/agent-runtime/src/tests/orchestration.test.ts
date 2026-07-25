@@ -5,6 +5,9 @@
  * draft validation; proposal contract; Core decision port + outcomes; the double gate; knowledge/
  * evaluation/RAG boundaries; content-free observability; and authority/containment. (Items 1–5 are the
  * M1 regression — the M1 specs remain green and the merge is proven separately.)
+ *
+ * The orchestration entry point and its injected ports are asynchronous (ADR-0058); `run` awaits
+ * `orchestrateInbound` and every case awaits `run`.
  */
 import { describe, expect, it } from 'vitest';
 
@@ -63,7 +66,7 @@ interface RunOpts {
   readonly envelope?: Partial<InboundEnvelopeInput>;
 }
 
-function run(opts: RunOpts = {}) {
+async function run(opts: RunOpts = {}) {
   const contexts = opts.contexts ?? [ctx()];
   const contextPort = scriptedContextPort(...contexts);
   const model =
@@ -83,48 +86,48 @@ function run(opts: RunOpts = {}) {
     observability: { onEvent: (e) => events.push(e) },
     ...opts.config,
   });
-  const result = orchestrateInbound(orch, env(opts.envelope));
+  const result = await orchestrateInbound(orch, env(opts.envelope));
   return { result, model, core, contextPort, events };
 }
 
 describe('processing order and short-circuit', () => {
-  it('(6) an envelope that does not match the context invokes nothing', () => {
-    const { result, model, core } = run({ envelope: { conversationId: 'conv.OTHER' } });
+  it('(6) an envelope that does not match the context invokes nothing', async () => {
+    const { result, model, core } = await run({ envelope: { conversationId: 'conv.OTHER' } });
     expect(result.ok ? '' : result.reason).toBe('orchestration-envelope-invalid');
     expect(model?.invoked()).toBe(0);
     expect(core?.invoked()).toBe(0);
   });
 
-  it('(7) human takeover invokes no model/Core', () => {
-    const { result, model, core } = run({ contexts: [ctx({ humanTakeover: true })] });
+  it('(7) human takeover invokes no model/Core', async () => {
+    const { result, model, core } = await run({ contexts: [ctx({ humanTakeover: true })] });
     expect(result.ok ? '' : result.reason).toBe('orchestration-human-takeover');
     expect(model?.invoked()).toBe(0);
     expect(core?.invoked()).toBe(0);
   });
 
-  it('(8) AI pause invokes no model/Core', () => {
-    const { result, model, core } = run({ contexts: [ctx({ aiPaused: true })] });
+  it('(8) AI pause invokes no model/Core', async () => {
+    const { result, model, core } = await run({ contexts: [ctx({ aiPaused: true })] });
     expect(result.ok ? '' : result.reason).toBe('orchestration-ai-paused');
     expect(model?.invoked()).toBe(0);
     expect(core?.invoked()).toBe(0);
   });
 
-  it('(9,13) a non-AI assignment / cancelled context invokes no model/Core', () => {
-    const human = run({
+  it('(9,13) a non-AI assignment / cancelled context invokes no model/Core', async () => {
+    const human = await run({
       contexts: [ctx({ partyType: 'UNKNOWN' })],
       envelope: { partyType: 'UNKNOWN' },
       config: { policy: syntheticPolicy('HUMAN') },
     });
     expect(human.result.ok).toBe(false);
     expect(human.model?.invoked()).toBe(0);
-    const cancelled = run({ contexts: [ctx({ cancelled: true })] });
+    const cancelled = await run({ contexts: [ctx({ cancelled: true })] });
     expect(cancelled.result.ok ? '' : cancelled.result.reason).toBe('orchestration-cancelled');
     expect(cancelled.model?.invoked()).toBe(0);
     expect(cancelled.core?.invoked()).toBe(0);
   });
 
-  it('(10) HUMAN_ONLY invokes no model/Core', () => {
-    const { result, model, core } = run({
+  it('(10) HUMAN_ONLY invokes no model/Core', async () => {
+    const { result, model, core } = await run({
       contexts: [ctx({ dataClass: 'HUMAN_ONLY' })],
       envelope: { dataClass: 'HUMAN_ONLY' },
     });
@@ -133,8 +136,8 @@ describe('processing order and short-circuit', () => {
     expect(core?.invoked()).toBe(0);
   });
 
-  it('(11) LOCAL_ONLY with a hosted-only model invokes no model/Core', () => {
-    const { result, model, core } = run({
+  it('(11) LOCAL_ONLY with a hosted-only model invokes no model/Core', async () => {
+    const { result, model, core } = await run({
       contexts: [ctx({ dataClass: 'LOCAL_ONLY' })],
       envelope: { dataClass: 'LOCAL_ONLY' },
       modelConfig: { executionClass: 'HOSTED' },
@@ -144,13 +147,13 @@ describe('processing order and short-circuit', () => {
     expect(core?.invoked()).toBe(0);
   });
 
-  it('(12) a privacy refusal invokes no model/Core', () => {
-    const missing = run({ contexts: [ctx({ subjectRef: 'subject.1' })] });
+  it('(12) a privacy refusal invokes no model/Core', async () => {
+    const missing = await run({ contexts: [ctx({ subjectRef: 'subject.1' })] });
     expect(missing.result.ok ? '' : missing.result.reason).toBe(
       'orchestration-privacy-gate-missing',
     );
     expect(missing.model?.invoked()).toBe(0);
-    const blocked = run({
+    const blocked = await run({
       contexts: [ctx({ subjectRef: 'subject.1' })],
       config: {
         privacyGate: createDeterministicPrivacyGate({ statuses: { 'subject.1': 'erased' } }),
@@ -161,8 +164,8 @@ describe('processing order and short-circuit', () => {
     expect(blocked.core?.invoked()).toBe(0);
   });
 
-  it('(15) a malformed model draft invokes no Core', () => {
-    const { result, model, core } = run({
+  it('(15) a malformed model draft invokes no Core', async () => {
+    const { result, model, core } = await run({
       modelConfig: { draft: () => ({ notStructured: true }) },
     });
     expect(result.ok ? '' : result.reason).toBe('orchestration-draft-invalid');
@@ -170,18 +173,18 @@ describe('processing order and short-circuit', () => {
     expect(core?.invoked()).toBe(0);
   });
 
-  it('(16) the valid path is deterministic', () => {
-    const a = run();
-    const b = run();
+  it('(16) the valid path is deterministic', async () => {
+    const a = await run();
+    const b = await run();
     expect(JSON.stringify(a.result)).toBe(JSON.stringify(b.result));
     expect(a.result.ok).toBe(true);
   });
 });
 
 describe('model plan and draft', () => {
-  it('(22,24,25) a fabricated/versionless citation or a raw body/CoT field makes the draft invalid', () => {
+  it('(22,24,25) a fabricated/versionless citation or a raw body/CoT field makes the draft invalid', async () => {
     // Fabricated citation not in the (empty) plan citation set.
-    const fabricated = run({
+    const fabricated = await run({
       modelConfig: {
         draft: () => ({
           structured: true,
@@ -195,7 +198,7 @@ describe('model plan and draft', () => {
       'orchestration-draft-invalid',
     );
     // Extra raw-body / chain-of-thought field rejected by the strict schema.
-    const rawBody = run({
+    const rawBody = await run({
       modelConfig: {
         draft: () => ({
           structured: true,
@@ -209,9 +212,9 @@ describe('model plan and draft', () => {
     expect(rawBody.result.ok ? '' : rawBody.result.reason).toBe('orchestration-draft-invalid');
   });
 
-  it('(21) exact knowledge citations flow through when the model echoes them', () => {
+  it('(21) exact knowledge citations flow through when the model echoes them', async () => {
     const citation = syntheticCitation('kb.policy', 3);
-    const { result } = run({
+    const { result } = await run({
       config: {
         knowledgePort: scriptedKnowledgePort({ ok: true, citations: [citation] }),
         knowledgeTopics: ['sla'],
@@ -237,8 +240,8 @@ describe('model plan and draft', () => {
 });
 
 describe('proposals', () => {
-  it('(27,31,32) a REPLY proposal is bounded, frozen, PENDING_CORE_VALIDATION, with no send/execute method', () => {
-    const { result } = run();
+  it('(27,31,32) a REPLY proposal is bounded, frozen, PENDING_CORE_VALIDATION, with no send/execute method', async () => {
+    const { result } = await run();
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.proposal.kind).toBe('REPLY');
@@ -269,7 +272,7 @@ describe('proposals', () => {
     }
   });
 
-  it('(33,34) Riya cannot propose a vendor-scoped reply and Anisha cannot propose a client-scoped reply', () => {
+  it('(33,34) Riya cannot propose a vendor-scoped reply and Anisha cannot propose a client-scoped reply', async () => {
     const attempt = (assignedActor: 'RIYA' | 'ANISHA', partyType: 'CLIENT' | 'VENDOR') =>
       createOrchestrationProposal({
         proposalId: 'p',
@@ -285,8 +288,10 @@ describe('proposals', () => {
     expect(() => attempt('RIYA', 'VENDOR')).toThrow(AgentRuntimeError);
     expect(() => attempt('ANISHA', 'CLIENT')).toThrow(AgentRuntimeError);
     // Deterministic assignment never produces a crossover: CLIENT → RIYA, VENDOR → ANISHA.
-    expect(run({ contexts: [ctx({ partyType: 'CLIENT' })] }).result.ok && 'RIYA').toBe('RIYA');
-    const vendor = run({
+    expect((await run({ contexts: [ctx({ partyType: 'CLIENT' })] })).result.ok && 'RIYA').toBe(
+      'RIYA',
+    );
+    const vendor = await run({
       contexts: [ctx({ partyType: 'VENDOR' })],
       envelope: { partyType: 'VENDOR' },
     });
@@ -295,15 +300,15 @@ describe('proposals', () => {
 });
 
 describe('Core decision', () => {
-  it('(36,43) a missing Core port fails closed to CORE_UNAVAILABLE and cannot be fabricated', () => {
-    const { result } = run({ core: null });
+  it('(36,43) a missing Core port fails closed to CORE_UNAVAILABLE and cannot be fabricated', async () => {
+    const { result } = await run({ core: null });
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.decision.outcome).toBe('CORE_UNAVAILABLE');
     }
   });
 
-  it('(37,38,39,40,41,44) each Core outcome is returned safely and ACCEPTED is not sent/executed', () => {
+  it('(37,38,39,40,41,44) each Core outcome is returned safely and ACCEPTED is not sent/executed', async () => {
     for (const outcome of [
       'ACCEPTED',
       'REJECTED',
@@ -311,7 +316,7 @@ describe('Core decision', () => {
       'RETRY_LATER',
       'STALE_REVISION',
     ] as const) {
-      const { result } = run({ coreOutcome: outcome });
+      const { result } = await run({ coreOutcome: outcome });
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.decision.outcome).toBe(outcome);
@@ -324,10 +329,10 @@ describe('Core decision', () => {
     }
   });
 
-  it('(42,45) the decision is immutable and there is no delivery command', () => {
-    const { result } = run({ coreOutcome: 'ACCEPTED' });
+  it('(42,45) the decision is immutable and there is no delivery command', async () => {
+    const { result } = await run({ coreOutcome: 'ACCEPTED' });
     expect(result.ok && Object.isFrozen(result.decision)).toBe(true);
-    const orchModule = run();
+    const orchModule = await run();
     const asRecord = orchModule.result as unknown as Record<string, unknown>;
     for (const method of ['send', 'deliver', 'transmit', 'dispatch']) {
       expect(asRecord[method]).toBeUndefined();
@@ -336,34 +341,34 @@ describe('Core decision', () => {
 });
 
 describe('double gate', () => {
-  it('(46) takeover after model drafting blocks the Core request', () => {
-    const { result, model, core } = run({ contexts: [ctx(), ctx({ humanTakeover: true })] });
+  it('(46) takeover after model drafting blocks the Core request', async () => {
+    const { result, model, core } = await run({ contexts: [ctx(), ctx({ humanTakeover: true })] });
     expect(result.ok ? '' : result.reason).toBe('orchestration-human-takeover');
     expect(model?.invoked()).toBe(1);
     expect(core?.invoked()).toBe(0);
   });
 
-  it('(47) AI pause after drafting blocks the Core request', () => {
-    const { result, core } = run({ contexts: [ctx(), ctx({ aiPaused: true })] });
+  it('(47) AI pause after drafting blocks the Core request', async () => {
+    const { result, core } = await run({ contexts: [ctx(), ctx({ aiPaused: true })] });
     expect(result.ok ? '' : result.reason).toBe('orchestration-ai-paused');
     expect(core?.invoked()).toBe(0);
   });
 
-  it('(48) cancellation after drafting blocks the Core request', () => {
-    const { result, model, core } = run({ contexts: [ctx(), ctx({ cancelled: true })] });
+  it('(48) cancellation after drafting blocks the Core request', async () => {
+    const { result, model, core } = await run({ contexts: [ctx(), ctx({ cancelled: true })] });
     expect(result.ok ? '' : result.reason).toBe('orchestration-cancelled');
     expect(model?.invoked()).toBe(1);
     expect(core?.invoked()).toBe(0);
   });
 
-  it('(49) a revision change after drafting blocks the Core request', () => {
-    const { result, core } = run({ contexts: [ctx({ revision: 1 }), ctx({ revision: 2 })] });
+  it('(49) a revision change after drafting blocks the Core request', async () => {
+    const { result, core } = await run({ contexts: [ctx({ revision: 1 }), ctx({ revision: 2 })] });
     expect(result.ok ? '' : result.reason).toBe('orchestration-stale-revision');
     expect(core?.invoked()).toBe(0);
   });
 
-  it('(50) a privacy change after drafting blocks the Core request', () => {
-    const { result, model, core } = run({
+  it('(50) a privacy change after drafting blocks the Core request', async () => {
+    const { result, model, core } = await run({
       contexts: [ctx(), ctx({ subjectRef: 'subject.1' })],
       config: {
         privacyGate: createDeterministicPrivacyGate({ statuses: { 'subject.1': 'tombstoned' } }),
@@ -374,8 +379,8 @@ describe('double gate', () => {
     expect(core?.invoked()).toBe(0);
   });
 
-  it('(51) an assignment (party) change after drafting blocks the Core request', () => {
-    const { result, core } = run({
+  it('(51) an assignment (party) change after drafting blocks the Core request', async () => {
+    const { result, core } = await run({
       contexts: [ctx({ partyType: 'CLIENT' }), ctx({ partyType: 'VENDOR' })],
     });
     expect(result.ok ? '' : result.reason).toBe('orchestration-stale-revision');
@@ -384,8 +389,8 @@ describe('double gate', () => {
 });
 
 describe('knowledge / evaluation / RAG', () => {
-  it('(53,54) a knowledge refusal fails closed before model/Core', () => {
-    const { result, model, core } = run({
+  it('(53,54) a knowledge refusal fails closed before model/Core', async () => {
+    const { result, model, core } = await run({
       config: { knowledgePort: scriptedKnowledgePort({ ok: false }) },
     });
     expect(result.ok ? '' : result.reason).toBe('orchestration-knowledge-refused');
@@ -393,11 +398,14 @@ describe('knowledge / evaluation / RAG', () => {
     expect(core?.invoked()).toBe(0);
   });
 
-  it('(56) a required evaluation ref that is absent is refused before model invocation', () => {
-    const { result, model } = run({ config: { requireEvaluationRef: true }, modelConfig: {} });
+  it('(56) a required evaluation ref that is absent is refused before model invocation', async () => {
+    const { result, model } = await run({
+      config: { requireEvaluationRef: true },
+      modelConfig: {},
+    });
     expect(result.ok ? '' : result.reason).toBe('orchestration-evaluation-mismatch');
     expect(model?.invoked()).toBe(0);
-    const withEval = run({
+    const withEval = await run({
       config: { requireEvaluationRef: true },
       modelConfig: { evaluationRef: 'evref-000000' },
     });
@@ -406,8 +414,8 @@ describe('knowledge / evaluation / RAG', () => {
 });
 
 describe('observability', () => {
-  it('(60,61,62) events are content-free with no inbound/reply text, prompt, subject, or token', () => {
-    const { events } = run({
+  it('(60,61,62) events are content-free with no inbound/reply text, prompt, subject, or token', async () => {
+    const { events } = await run({
       config: {
         privacyGate: createDeterministicPrivacyGate({ statuses: { 'subject.SECRET': 'clear' } }),
       },

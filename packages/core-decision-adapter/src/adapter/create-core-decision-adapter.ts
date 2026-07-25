@@ -46,7 +46,7 @@ export interface CoreAdapterResult {
 
 /** A Core decision adapter: an M2 `CoreDecisionPort` plus a detailed decision method. */
 export interface CoreDecisionAdapter extends CoreDecisionPort {
-  decideDetailed(request: CoreDecisionRequest): CoreAdapterResult;
+  decideDetailed(request: CoreDecisionRequest): Promise<CoreAdapterResult>;
 }
 
 export interface CoreDecisionAdapterConfig {
@@ -74,7 +74,7 @@ export function createCoreDecisionAdapter(config: CoreDecisionAdapterConfig): Co
   const hook = config.observability ?? NOOP_CORE_ADAPTER_OBSERVABILITY;
   const correlationId = config.correlationId ?? 'run.default';
 
-  function decideDetailed(request: CoreDecisionRequest): CoreAdapterResult {
+  async function decideDetailed(request: CoreDecisionRequest): Promise<CoreAdapterResult> {
     const idempotencyKey = idempotencyKeyFor({
       protocol,
       proposalId: request.proposalId,
@@ -120,7 +120,7 @@ export function createCoreDecisionAdapter(config: CoreDecisionAdapterConfig): Co
       });
 
     // Pre-transport state gate — a changed/blocking state stops before any transport.
-    if (isStateBlocked(config.stateReader.read(), request)) {
+    if (isStateBlocked(await config.stateReader.read(), request)) {
       emit('response-refused', 'adapter-state-blocked', 'STALE_REVISION');
       return result('STALE_REVISION', 'adapter-state-blocked', false);
     }
@@ -143,7 +143,7 @@ export function createCoreDecisionAdapter(config: CoreDecisionAdapterConfig): Co
     emit('transport-requested', 'core-unavailable');
     let serialized: string;
     try {
-      serialized = config.transport.send(serializeCommand(command));
+      serialized = await config.transport.send(serializeCommand(command));
     } catch {
       emit('response-refused', 'adapter-transport-error', 'CORE_UNAVAILABLE');
       return result('CORE_UNAVAILABLE', 'adapter-transport-error', true);
@@ -159,7 +159,10 @@ export function createCoreDecisionAdapter(config: CoreDecisionAdapterConfig): Co
     emit('response-received', OUTCOME_REASON[response.outcome], response.outcome);
 
     // Post-response state gate — a change after the response prevents ACCEPTED.
-    if (response.outcome === 'ACCEPTED' && isStateBlocked(config.stateReader.read(), request)) {
+    if (
+      response.outcome === 'ACCEPTED' &&
+      isStateBlocked(await config.stateReader.read(), request)
+    ) {
       emit('response-refused', 'adapter-state-blocked', 'STALE_REVISION');
       return result('STALE_REVISION', 'adapter-state-blocked', true, response);
     }
@@ -170,8 +173,8 @@ export function createCoreDecisionAdapter(config: CoreDecisionAdapterConfig): Co
     return result(response.outcome, reason, true, response);
   }
 
-  function decide(request: CoreDecisionRequest): CoreDecisionResponse {
-    return { outcome: decideDetailed(request).outcome };
+  async function decide(request: CoreDecisionRequest): Promise<CoreDecisionResponse> {
+    return { outcome: (await decideDetailed(request)).outcome };
   }
 
   return Object.freeze({ decide, decideDetailed });
