@@ -102,6 +102,25 @@ export {
   type GroqTransport,
 } from './providers/groq/index.js';
 
+// QFJ-S1 Groq staging provider binding (ADR-0060) — a release-driven factory over the existing Groq
+// adapter (an injected async credential resolver + fail-closed data-class/execution/attestation gates +
+// content-free bind observability). No real key, no live call, no activation/rollout.
+export {
+  bindGroqStagingProvider,
+  GROQ_STAGING_BIND_REASONS,
+  GROQ_STAGING_EVENT_TYPES,
+  NOOP_GROQ_STAGING_OBSERVABILITY,
+  type GroqCredentialReference,
+  type GroqCredentialResolver,
+  type GroqStagingRelease,
+  type GroqStagingBindingConfig,
+  type GroqStagingBindResult,
+  type GroqStagingBindReason,
+  type GroqStagingEventType,
+  type GroqStagingBindEvent,
+  type GroqStagingObservabilityHook,
+} from './providers/groq/index.js';
+
 // The local OpenAI-compatible provider (QFJ-P04.01C, ADR-0047) — first LOCAL-execution provider.
 // Composition symbols only; no raw HTTP/SDK type, no token accessor, no internal IP parser. A validated
 // private endpoint + an optional token + a transport are injected at composition.

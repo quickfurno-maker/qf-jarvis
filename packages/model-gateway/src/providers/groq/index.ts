@@ -17,3 +17,24 @@ export {
   GROQ_CHAT_COMPLETIONS_ENDPOINT,
   type GroqTransport,
 } from './groq-transport.js';
+
+// QFJ-S1 staging binding (ADR-0060) — a release-driven factory over the existing adapter. No live call.
+export type {
+  GroqCredentialReference,
+  GroqCredentialResolver,
+} from './groq-credential-resolver.js';
+export {
+  bindGroqStagingProvider,
+  type GroqStagingRelease,
+  type GroqStagingBindingConfig,
+  type GroqStagingBindResult,
+} from './groq-staging-binding.js';
+export {
+  GROQ_STAGING_BIND_REASONS,
+  GROQ_STAGING_EVENT_TYPES,
+  NOOP_GROQ_STAGING_OBSERVABILITY,
+  type GroqStagingBindReason,
+  type GroqStagingEventType,
+  type GroqStagingBindEvent,
+  type GroqStagingObservabilityHook,
+} from './groq-staging-observability.js';
