@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // Type-check EVERYTHING — production source, the shipped ./testing support, and
+    // the vitest specs — under full strict mode, but emit nothing. This is the config
+    // the ESLint type-aware project service and `typecheck:tests` use, so tests are
+    // held to the same rules as the rest of the repository even though the emitting
+    // build (tsconfig.build.json) excludes src/tests to keep specs out of dist/.
+    // `composite` must be off because it requires emit.
+    "noEmit": true,
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "incremental": false
+  },
+  "include": ["src/**/*.ts"]
+}
