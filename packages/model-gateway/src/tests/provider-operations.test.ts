@@ -411,6 +411,13 @@ describe('canary bucket', () => {
       expect(canaryCohort('roll-1', run, 10_000).serve).toBe('candidate');
     }
   });
+
+  it('separates the rollout and run domains (ambiguous splits do not collide)', () => {
+    // The separator (a space) is forbidden by the identifier grammar, so the two shifted splits
+    // below are distinct joined strings and must not be conflated into the same bucket.
+    expect(canaryBucket('roll', '1-run')).not.toBe(canaryBucket('roll-1', 'run'));
+    expect(canaryBucket('a', 'b')).not.toBe(canaryBucket('ab', ''));
+  });
 });
 
 // ===================================================================================================
