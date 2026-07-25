@@ -2,9 +2,9 @@
  * Deterministic Core transport + state fakes for tests (QFJ-M3, ADR-0056).
  *
  * The ONLY concrete transport/state implementations, shipped under `./testing`. All synthetic — no
- * real Core, network, auth, or secret. A scripted transport echoes the command identity with a chosen
- * outcome; throwing/malformed/mismatched variants drive the fail-closed paths; a scripted state reader
- * drives the double gate.
+ * real Core, network, auth, or secret. Every I/O-capable boundary is asynchronous (ADR-0058 §4): a
+ * scripted transport echoes the command identity with a chosen outcome; throwing/malformed/mismatched
+ * variants drive the fail-closed paths; a scripted state reader drives the double gate.
  */
 import type { CoreDecisionOutcome } from '@qf-jarvis/agent-runtime';
 
@@ -26,33 +26,35 @@ export function scriptedCoreTransport(
 ): CoreDecisionTransport & Recording {
   const counter = { n: 0 };
   return Object.freeze({
-    send(serializedCommand: string): string {
+    send(serializedCommand: string): Promise<string> {
       counter.n += 1;
       const c = parseCommand(serializedCommand);
-      return canonicalJson({
-        protocol: c['protocol'],
-        commandId: c['commandId'],
-        idempotencyKey: c['idempotencyKey'],
-        proposalId: c['proposalId'],
-        proposalVersion: c['proposalVersion'],
-        conversationId: c['conversationId'],
-        boundRevision: c['expectedRevision'],
-        outcome,
-        reason: 'core-decided',
-        decidedAt: '2026-07-25T00:00:05Z',
-      });
+      return Promise.resolve(
+        canonicalJson({
+          protocol: c['protocol'],
+          commandId: c['commandId'],
+          idempotencyKey: c['idempotencyKey'],
+          proposalId: c['proposalId'],
+          proposalVersion: c['proposalVersion'],
+          conversationId: c['conversationId'],
+          boundRevision: c['expectedRevision'],
+          outcome,
+          reason: 'core-decided',
+          decidedAt: '2026-07-25T00:00:05Z',
+        }),
+      );
     },
     invoked: () => counter.n,
   });
 }
 
-/** A transport that throws (simulating an exception/timeout). Records invocation. */
+/** A transport that rejects (simulating an exception/timeout). Records invocation. */
 export function throwingCoreTransport(): CoreDecisionTransport & Recording {
   const counter = { n: 0 };
   return Object.freeze({
-    send(_serializedCommand: string): string {
+    send(_serializedCommand: string): Promise<string> {
       counter.n += 1;
-      throw new Error('synthetic transport failure (raw error must not escape)');
+      return Promise.reject(new Error('synthetic transport failure (raw error must not escape)'));
     },
     invoked: () => counter.n,
   });
@@ -62,9 +64,9 @@ export function throwingCoreTransport(): CoreDecisionTransport & Recording {
 export function malformedCoreTransport(): CoreDecisionTransport & Recording {
   const counter = { n: 0 };
   return Object.freeze({
-    send(_serializedCommand: string): string {
+    send(_serializedCommand: string): Promise<string> {
       counter.n += 1;
-      return 'not-json-at-all';
+      return Promise.resolve('not-json-at-all');
     },
     invoked: () => counter.n,
   });
@@ -76,21 +78,23 @@ export function mismatchedCoreTransport(
 ): CoreDecisionTransport & Recording {
   const counter = { n: 0 };
   return Object.freeze({
-    send(serializedCommand: string): string {
+    send(serializedCommand: string): Promise<string> {
       counter.n += 1;
       const c = parseCommand(serializedCommand);
-      return canonicalJson({
-        protocol: c['protocol'],
-        commandId: c['commandId'],
-        idempotencyKey: c['idempotencyKey'],
-        proposalId: 'wrong.proposal',
-        proposalVersion: c['proposalVersion'],
-        conversationId: c['conversationId'],
-        boundRevision: c['expectedRevision'],
-        outcome,
-        reason: 'core-decided',
-        decidedAt: '2026-07-25T00:00:05Z',
-      });
+      return Promise.resolve(
+        canonicalJson({
+          protocol: c['protocol'],
+          commandId: c['commandId'],
+          idempotencyKey: c['idempotencyKey'],
+          proposalId: 'wrong.proposal',
+          proposalVersion: c['proposalVersion'],
+          conversationId: c['conversationId'],
+          boundRevision: c['expectedRevision'],
+          outcome,
+          reason: 'core-decided',
+          decidedAt: '2026-07-25T00:00:05Z',
+        }),
+      );
     },
     invoked: () => counter.n,
   });
@@ -117,11 +121,11 @@ export function scriptedStateReader(...states: readonly CoreDecisionState[]): Re
   let index = 0;
   const counter = { n: 0 };
   return Object.freeze({
-    read(): CoreDecisionState {
+    read(): Promise<CoreDecisionState> {
       counter.n += 1;
       const value = states[Math.min(index, states.length - 1)] ?? syntheticState();
       index += 1;
-      return value;
+      return Promise.resolve(value);
     },
     reads: () => counter.n,
   });

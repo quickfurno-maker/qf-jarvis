@@ -4,7 +4,8 @@
  * The adapter re-reads the current conversation state BEFORE transport and AFTER the response (the
  * double state gate). The reader is provider-neutral and content-free — it exposes only the revision,
  * party type, human-takeover / AI-pause / cancellation flags, and the subject privacy status. It reads
- * no message content; the only concrete implementation is the deterministic fake under `./testing`.
+ * no message content; a live read is database-backed, so it is asynchronous (ADR-0058 §1). The only
+ * concrete implementation is the deterministic fake under `./testing`.
  */
 import type { RuntimePartyType, RuntimeSubjectStatus } from '@qf-jarvis/agent-runtime';
 
@@ -19,7 +20,7 @@ export interface CoreDecisionState {
   readonly subjectStatus: RuntimeSubjectStatus;
 }
 
-/** Supplies the current content-free conversation state. Read at the pre-transport and post-response gates. */
+/** Supplies the current content-free conversation state. Awaited at the pre-transport and post-response gates. */
 export interface CoreDecisionStateReader {
-  read(): CoreDecisionState;
+  read(): Promise<CoreDecisionState>;
 }
