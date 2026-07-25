@@ -145,6 +145,19 @@ describe('mapSafeValidationIssues', () => {
     expect(mapped.issuesTruncated).toBe(false);
   });
 
+  it('keeps distinct (path, code) pairs separated (dedup-key domain separation)', () => {
+    // Same safe path, different codes must not collapse: the key join must separate the two
+    // fields. Neither a path nor a code can contain a space, so the single-space key is
+    // unambiguous.
+    const mapped = mapSafeValidationIssues([
+      issue('payload', 'invalid_type', 'm1'), // → path 'payload', code 'invalid-type'
+      issue('payload', 'too_big', 'm2'), //      → path 'payload', code 'constraint-violation'
+      issue('subject', 'invalid_type', 'm3'), //  → path 'subject', code 'invalid-type'
+    ]);
+    expect(mapped.issues.length).toBe(3);
+    expect(mapped.issuesTruncated).toBe(false);
+  });
+
   it('orders issues deterministically regardless of input order', () => {
     const inputs = [
       issue('subject', 'invalid_type', 'a'),
