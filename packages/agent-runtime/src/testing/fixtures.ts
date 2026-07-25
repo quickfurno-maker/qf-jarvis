@@ -57,7 +57,7 @@ export function throwingModelInterface(
 ): RuntimeModelInterface {
   return Object.freeze({
     executionClass,
-    draftReply(_request: unknown): unknown {
+    draftReply(_request: unknown): Promise<unknown> {
       throw new Error('QFJ-M1: the runtime must not call a model interface');
     },
   });

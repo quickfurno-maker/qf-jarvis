@@ -33,7 +33,10 @@ export interface CoreDecisionResponse {
   readonly outcome: CoreDecisionOutcome;
 }
 
-/** Decides a proposal. Owned by the integration boundary; a missing port fails closed. */
+/**
+ * Decides a proposal. Owned by the integration boundary; a missing port fails closed. Awaited (a live
+ * Core decision is a network round-trip) (ADR-0058 §1).
+ */
 export interface CoreDecisionPort {
-  decide(request: CoreDecisionRequest): CoreDecisionResponse;
+  decide(request: CoreDecisionRequest): Promise<CoreDecisionResponse>;
 }

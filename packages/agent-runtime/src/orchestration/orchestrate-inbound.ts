@@ -77,11 +77,11 @@ export function createOrchestrator(config: OrchestratorConfig): Orchestrator {
 }
 
 /** The first/second gate: the first content-free reason a context blocks the AI reply path, or null. */
-function gateReason(
+async function gateReason(
   orch: Orchestrator,
   context: OrchestrationContext,
   assignedActor: RuntimeActor,
-): OrchestrationReason | null {
+): Promise<OrchestrationReason | null> {
   if (context.cancelled) {
     return 'orchestration-cancelled';
   }
@@ -98,7 +98,7 @@ function gateReason(
     if (orch.privacyGate === undefined) {
       return 'orchestration-privacy-gate-missing';
     }
-    if (orch.privacyGate.subjectStatus(context.subjectRef) !== 'clear') {
+    if ((await orch.privacyGate.subjectStatus(context.subjectRef)) !== 'clear') {
       return 'orchestration-subject-blocked';
     }
   }
@@ -116,10 +116,10 @@ function gateReason(
 }
 
 /** Orchestrate one inbound envelope end to end. Deterministic, fail-closed, proposal-only. */
-export function orchestrateInbound(
+export async function orchestrateInbound(
   orch: Orchestrator,
   envelope: InboundEnvelope,
-): OrchestrationResult {
+): Promise<OrchestrationResult> {
   const hook = orch.observability;
   const runId = `${envelope.conversationId}-${envelope.messageId}`;
 
@@ -153,7 +153,7 @@ export function orchestrateInbound(
   emit('orchestration-started', 'orchestration-completed');
 
   // 1–2. Read the revision-bound context and confirm the envelope belongs to it.
-  const ctx1 = orch.contextPort.read();
+  const ctx1 = await orch.contextPort.read();
   if (
     envelope.conversationId !== ctx1.conversationId ||
     envelope.tenantId !== ctx1.tenantId ||
@@ -165,7 +165,7 @@ export function orchestrateInbound(
   const assignedActor = assignAgent(ctx1.partyType, ctx1.humanTakeover, orch.policy);
 
   // 3–7. First gate — before any knowledge/model access.
-  const block1 = gateReason(orch, ctx1, assignedActor);
+  const block1 = await gateReason(orch, ctx1, assignedActor);
   if (block1 !== null) {
     emit('model-invocation-skipped', block1, { actor: assignedActor, dataClass: ctx1.dataClass });
     return refuse(block1);
@@ -174,7 +174,7 @@ export function orchestrateInbound(
   // 8. Exact knowledge retrieval (only when a port is configured); fail closed on refusal.
   let citations: KnowledgeCitation[] = [];
   if (orch.knowledgePort !== undefined) {
-    const kres = orch.knowledgePort.retrieve({
+    const kres = await orch.knowledgePort.retrieve({
       conversationId: ctx1.conversationId,
       topics: orch.knowledgeTopics,
       dataClass: ctx1.dataClass,
@@ -206,7 +206,7 @@ export function orchestrateInbound(
     actor: assignedActor,
     dataClass: ctx1.dataClass,
   });
-  const candidate = orch.modelReplyPort.draftReply(plan);
+  const candidate = await orch.modelReplyPort.draftReply(plan);
 
   // 11. Validate the draft (fabricated/versionless citation or raw body/CoT → refuse).
   const validated = validateReplyDraft(candidate, plan);
@@ -215,14 +215,14 @@ export function orchestrateInbound(
   }
 
   // Double gate — re-read context; any state change after drafting prevents Core acceptance.
-  const ctx2 = orch.contextPort.read();
+  const ctx2 = await orch.contextPort.read();
   if (ctx2.cancelled) {
     return refuse('orchestration-cancelled');
   }
   if (ctx2.revision !== ctx1.revision || ctx2.partyType !== ctx1.partyType) {
     return refuse('orchestration-stale-revision');
   }
-  const block2 = gateReason(
+  const block2 = await gateReason(
     orch,
     ctx2,
     assignAgent(ctx2.partyType, ctx2.humanTakeover, orch.policy),
@@ -256,7 +256,7 @@ export function orchestrateInbound(
       actor: assignedActor,
       proposalKind: kind,
     });
-    outcome = orch.coreDecisionPort.decide({
+    const coreResponse = await orch.coreDecisionPort.decide({
       proposalId: proposal.proposalId,
       proposalVersion: proposal.proposalVersion,
       conversationId: proposal.conversationId,
@@ -269,7 +269,8 @@ export function orchestrateInbound(
       evaluationRef: orch.modelReplyPort.evaluationRef,
       citations,
       proposedReplyBody: validated.draft.replyBody,
-    }).outcome;
+    });
+    outcome = coreResponse.outcome;
   }
   const decision = coreDecision(outcome, ctx1.conversationId, proposal.proposalId, ctx1.revision);
   emit('core-decision-received', 'orchestration-completed', {

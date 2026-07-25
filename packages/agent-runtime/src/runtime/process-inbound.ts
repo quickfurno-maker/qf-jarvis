@@ -59,11 +59,11 @@ function replyEligibility(
 }
 
 /** Process one inbound envelope for a conversation. Deterministic, fail-closed, proposal-only. */
-export function processInbound(
+export async function processInbound(
   runtime: AgentRuntime,
   context: ConversationContext,
   envelope: InboundEnvelope,
-): RuntimeDecision {
+): Promise<RuntimeDecision> {
   const hook = runtime.observability;
   const emit = (
     type: RuntimeEventType,
@@ -101,7 +101,7 @@ export function processInbound(
       emit('runtime-proposal-refused', 'runtime-privacy-gate-missing');
       return { ok: false, reason: 'runtime-privacy-gate-missing' };
     }
-    if (runtime.privacyGate.subjectStatus(context.subjectRef) !== 'clear') {
+    if ((await runtime.privacyGate.subjectStatus(context.subjectRef)) !== 'clear') {
       emit('runtime-proposal-refused', 'runtime-subject-blocked');
       return { ok: false, reason: 'runtime-subject-blocked' };
     }
