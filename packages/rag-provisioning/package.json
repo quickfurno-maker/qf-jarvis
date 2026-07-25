@@ -1,0 +1,26 @@
+{
+  "name": "@qf-jarvis/rag-provisioning",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis no-op RAG provisioning boundary (QFJ-P04.05). A dedicated, provider-neutral RAG provisioning boundary that does NOT enable RAG: exactly two modes (DISABLED, PROVISIONED_NO_OP), no ENABLED/ACTIVE mode and no enabled=true, absent/malformed config fails closed to DISABLED, and every invocation returns an immutable content-free NO_OP result with exact zero retrieval/embedding/vector/augmentation counters. No embeddings, vector database, semantic search, chunking, indexing, retrieval, augmentation, external service, network, or side effect; no database/schema/migration; no live model call, key, token, or provider activation. Depends only on zod.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "default": "./dist/testing/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "zod": "4.4.3"
+  }
+}
