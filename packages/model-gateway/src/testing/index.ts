@@ -15,3 +15,17 @@ export {
   providerCancelled,
   type FakeModelProviderConfig,
 } from './fake-model-provider.js';
+
+// QFJ-S1 Groq staging-binding fakes (ADR-0060) — obvious fake sentinel credential, injected resolver,
+// deterministic canned HTTP transport, synthetic approved release. No real key, no network.
+export {
+  FAKE_GROQ_SENTINEL_KEY,
+  SYNTHETIC_GROQ_CREDENTIAL_REFERENCE,
+  fakeGroqCredentialResolver,
+  missingGroqCredentialResolver,
+  fakeGroqTransport,
+  groqStructuredResponseBody,
+  syntheticGroqStagingRelease,
+  type RecordingGroqCredentialResolver,
+  type RecordingGroqTransport,
+} from './groq-staging-testing.js';
