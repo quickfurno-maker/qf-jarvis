@@ -5,8 +5,8 @@
  * missing or ineligible id fails the whole retrieval) and each EXACT topic selector (to the single
  * current record via authority resolution), enforces `maxRecords` and the content-size bound, and
  * returns every surviving record WITH a citation. Every outcome — success or a single content-free
- * reason — is reported through the injected observability hook. No free-text, no semantic search, no
- * model or network call.
+ * reason — is reported through the injected observability hook. No free-text query, no fuzzy
+ * matching, no model or network call.
  */
 import { buildCitation } from '../contracts/citation.js';
 import type { KnowledgeEvent, KnowledgeObservabilityHook } from '../contracts/observability.js';

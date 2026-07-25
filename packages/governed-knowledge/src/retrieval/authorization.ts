@@ -38,11 +38,13 @@ export function recordEligibility(
   request: KnowledgeRetrievalRequest,
   privacyGate: KnowledgePrivacyGate | undefined,
 ): KnowledgeRetrievalReason | null {
-  if (record.lifecycleState !== 'ACTIVE') {
-    return 'knowledge-not-active';
-  }
+  // Supersession is the most specific exclusion, so it is reported ahead of a plain
+  // not-active state (a superseded record is typically also RETIRED).
   if (record.supersededBy !== undefined) {
     return 'knowledge-superseded';
+  }
+  if (record.lifecycleState !== 'ACTIVE') {
+    return 'knowledge-not-active';
   }
   const asOf = parseInstant(request.asOf);
   if (asOf < parseInstant(record.effectiveFrom)) {

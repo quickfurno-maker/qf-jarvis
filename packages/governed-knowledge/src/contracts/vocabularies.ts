@@ -3,7 +3,7 @@
  *
  * Every categorical value a record, request, permission, or event may carry is one of these
  * fixed sets — there is no open-ended string enum, no arbitrary metadata bag, and no wildcard.
- * Kimi is deliberately absent everywhere.
+ * The excluded vendor identifier appears nowhere in this package.
  */
 
 /**
