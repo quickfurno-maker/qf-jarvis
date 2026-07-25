@@ -1,7 +1,7 @@
 /**
  * The M5 composition-root configuration (QFJ-M5, ADR-0059 §G).
  *
- * All collaborators are INJECTED — no `process.env`, service locator, or global registry. Mandatory
+ * All collaborators are INJECTED — no environment reads, service locator, or global registry. Mandatory
  * dependencies (authoritative state, model identity, policy, clock) fail closed at construction; a
  * missing optional integration dependency (gateway invoker, Core transport, knowledge port) fails
  * closed at RUNTIME through the lower adapter. The root duplicates no business rule: assignment,

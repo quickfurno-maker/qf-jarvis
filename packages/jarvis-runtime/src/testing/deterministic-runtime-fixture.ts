@@ -10,16 +10,26 @@
 import { createInboundEnvelope, createRuntimePolicy } from '@qf-jarvis/agent-runtime';
 import type { InboundEnvelope, InboundEnvelopeInput } from '@qf-jarvis/agent-runtime';
 import { scriptedCoreTransport } from '@qf-jarvis/core-decision-adapter/testing';
-import { scriptedGatewayInvoker, structuredReply, syntheticRelease } from '@qf-jarvis/model-reply-adapter/testing';
+import {
+  scriptedGatewayInvoker,
+  structuredReply,
+  syntheticRelease,
+} from '@qf-jarvis/model-reply-adapter/testing';
 
 import type { JarvisRuntimeConfig } from '../contracts/runtime-config.js';
-import { clearControlState, fixedClock, scriptedAuthoritativeState } from './deterministic-authoritative-state.js';
+import {
+  clearControlState,
+  fixedClock,
+  scriptedAuthoritativeState,
+} from './deterministic-authoritative-state.js';
 
 /**
  * A ready-to-run runtime config that produces `CORE_ACCEPTED` on the happy path (clear state, CLIENT →
  * Riya, hosted, no knowledge → empty citations). Override any field for a specific test.
  */
-export function syntheticRuntimeConfig(over: Partial<JarvisRuntimeConfig> = {}): JarvisRuntimeConfig {
+export function syntheticRuntimeConfig(
+  over: Partial<JarvisRuntimeConfig> = {},
+): JarvisRuntimeConfig {
   return {
     authoritativeState: scriptedAuthoritativeState(clearControlState()),
     policy: createRuntimePolicy({ policyRevision: 'policy.rev.1' }),

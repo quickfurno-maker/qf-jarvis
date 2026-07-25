@@ -9,7 +9,11 @@
  * the lower packages. A rejected Promise anywhere is normalized to a fail-closed REFUSED with no raw
  * error. Nothing is sent, delivered, executed, or persisted.
  */
-import type { CoreDecisionOutcome, InboundEnvelope, OrchestrationResult } from '@qf-jarvis/agent-runtime';
+import type {
+  CoreDecisionOutcome,
+  InboundEnvelope,
+  OrchestrationResult,
+} from '@qf-jarvis/agent-runtime';
 import { createOrchestrator, orchestrateInbound } from '@qf-jarvis/agent-runtime';
 import { createCoreDecisionAdapter } from '@qf-jarvis/core-decision-adapter';
 import { createModelReplyAdapter } from '@qf-jarvis/model-reply-adapter';
@@ -29,14 +33,16 @@ import {
   replyStateReaderFor,
 } from './state-adapters.js';
 
-const CORE_OUTCOME_MAP: Readonly<Record<CoreDecisionOutcome, JarvisRuntimeOutcome>> = Object.freeze({
-  ACCEPTED: 'CORE_ACCEPTED',
-  REJECTED: 'CORE_REJECTED',
-  HUMAN_REVIEW_REQUIRED: 'HUMAN_REVIEW_REQUIRED',
-  RETRY_LATER: 'RETRY_LATER',
-  STALE_REVISION: 'STALE_REVISION',
-  CORE_UNAVAILABLE: 'CORE_UNAVAILABLE',
-});
+const CORE_OUTCOME_MAP: Readonly<Record<CoreDecisionOutcome, JarvisRuntimeOutcome>> = Object.freeze(
+  {
+    ACCEPTED: 'CORE_ACCEPTED',
+    REJECTED: 'CORE_REJECTED',
+    HUMAN_REVIEW_REQUIRED: 'HUMAN_REVIEW_REQUIRED',
+    RETRY_LATER: 'RETRY_LATER',
+    STALE_REVISION: 'STALE_REVISION',
+    CORE_UNAVAILABLE: 'CORE_UNAVAILABLE',
+  },
+);
 
 /** Compose M1–M4 for one envelope and return the closed, frozen runtime result. */
 export async function composeAndProcess(
@@ -72,7 +78,9 @@ export async function composeAndProcess(
 
   const frozen = (
     outcome: JarvisRuntimeOutcome,
-    fields: Partial<Omit<JarvisRuntimeResult, 'outcome' | 'runId' | 'conversationId' | 'coreConsulted'>>,
+    fields: Partial<
+      Omit<JarvisRuntimeResult, 'outcome' | 'runId' | 'conversationId' | 'coreConsulted'>
+    >,
   ): JarvisRuntimeResult =>
     Object.freeze({
       outcome,

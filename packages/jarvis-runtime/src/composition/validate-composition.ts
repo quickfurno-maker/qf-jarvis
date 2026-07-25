@@ -11,16 +11,19 @@ import type { JarvisRuntimeConfig } from '../contracts/runtime-config.js';
 
 /** Assert the mandatory dependencies are present, or throw a safe fail-closed wiring error. */
 export function assertMandatoryDependencies(config: JarvisRuntimeConfig): void {
+  // Guard against untyped callers that bypass the compile-time contract: view the config through a
+  // partial lens so a genuinely-absent mandatory dependency is caught at runtime and fails closed.
+  const c: Partial<JarvisRuntimeConfig> = config;
   const missing =
-    config.authoritativeState === undefined ||
-    config.policy === undefined ||
-    typeof config.clock !== 'function' ||
-    config.release === undefined ||
-    typeof config.promptFamily !== 'string' ||
-    config.promptFamily.length === 0 ||
-    typeof config.promptVersion !== 'number' ||
-    typeof config.capabilityProfileRef !== 'string' ||
-    config.capabilityProfileRef.length === 0;
+    c.authoritativeState === undefined ||
+    c.policy === undefined ||
+    typeof c.clock !== 'function' ||
+    c.release === undefined ||
+    typeof c.promptFamily !== 'string' ||
+    c.promptFamily.length === 0 ||
+    typeof c.promptVersion !== 'number' ||
+    typeof c.capabilityProfileRef !== 'string' ||
+    c.capabilityProfileRef.length === 0;
   if (missing) {
     throw new JarvisRuntimeError('invalid-config');
   }
