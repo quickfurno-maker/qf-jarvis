@@ -14,3 +14,14 @@ export {
   contextInput,
   throwingModelInterface,
 } from './fixtures.js';
+export {
+  orchestrationEnvelopeFields,
+  scriptedContextPort,
+  scriptedModelReplyPort,
+  scriptedCoreDecisionPort,
+  scriptedKnowledgePort,
+  syntheticCitation,
+  type RecordingContextPort,
+  type RecordingModelReplyPort,
+  type RecordingCoreDecisionPort,
+} from './deterministic-orchestration-ports.js';
