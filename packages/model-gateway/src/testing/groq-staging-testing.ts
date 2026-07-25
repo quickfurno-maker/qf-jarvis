@@ -4,7 +4,7 @@
  * Shipped ONLY under `./testing` so they can never become a production default. All synthetic — an
  * OBVIOUS fake sentinel credential (never a real key), an injected async resolver, a deterministic HTTP
  * transport that returns a canned Groq response WITHOUT any network, and a synthetic approved staging
- * release. No `process.env`, no secret store, no live Groq call.
+ * release. No environment reads, no secret store, no live Groq call.
  */
 import { createProviderReleaseRef } from '../operations/provider-release.js';
 import { createGroqApiKey, type GroqApiKey } from '../providers/groq/groq-secret.js';
@@ -75,15 +75,16 @@ export function fakeGroqTransport(bodyText: string, status = 200): RecordingGroq
 }
 
 /** Build a valid Groq Chat Completions response body carrying a structured JSON value. */
-export function groqStructuredResponseBody(
-  value: unknown,
-  model = 'llama-3.1-8b-instant',
-): string {
+export function groqStructuredResponseBody(value: unknown, model = 'llama-3.1-8b-instant'): string {
   return JSON.stringify({
     id: 'chatcmpl-fake-staging',
     model,
     choices: [
-      { index: 0, message: { role: 'assistant', content: JSON.stringify(value) }, finish_reason: 'stop' },
+      {
+        index: 0,
+        message: { role: 'assistant', content: JSON.stringify(value) },
+        finish_reason: 'stop',
+      },
     ],
     usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
   });

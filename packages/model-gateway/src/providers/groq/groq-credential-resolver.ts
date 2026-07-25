@@ -4,7 +4,7 @@
  * The staging binding never holds a raw key: it holds an OPAQUE reference and an injected async
  * resolver that materializes a redacting {@link GroqApiKey} only at bind time. The reference is an
  * opaque identifier (e.g. a staging secret name/version) — NEVER the key value. There is no
- * `process.env` access anywhere in this package. A missing/unresolvable credential rejects, and the
+ * environment-variable access anywhere in this package. A missing/unresolvable credential rejects, and the
  * binding fails closed BEFORE any transport. The only concrete resolver shipped is the deterministic
  * fake (an obvious sentinel key) under `./testing`.
  */
