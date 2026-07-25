@@ -239,7 +239,10 @@ export function mapSafeValidationIssues(issues: readonly ContractIssue[]): SafeV
   const unique = new Map<string, SafeValidationIssue>();
   for (const issue of issues) {
     const safe = toSafeIssue(issue);
-    unique.set(`${safe.path} ${safe.code}`, safe);
+    // De-dup key: `path` (letters/digits/`.`/`[`/`]`/`…`) and `code` (the closed `[a-z-]+`
+    // vocabulary) can neither contain a space, so the single-space join has exactly one
+    // separator and maps `(path, code)` to the key injectively.
+    unique.set(`${safe.path} ${safe.code}`, safe);
   }
   const sorted = [...unique.values()].sort(compareIssues);
   const capped = sorted.slice(0, MAX_REJECTION_ISSUES);
