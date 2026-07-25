@@ -25,9 +25,9 @@ The ADR was written and committed **before** any implementation:
 ```
 07ca3ce  docs(adr): define S1A Groq smoke activation enablement          (1 file: ADR-0061)
 5f82c6b  feat(model-gateway): bind prompt and approval references for Groq staging
-<sha>    feat(groq-staging-smoke): add secure one-shot harness
-<sha>    test(groq-staging-smoke): prove secret safety and one-request limit
-<sha>    docs(reports): record S1A activation-enablement evidence
+9a0ad0c  feat(groq-staging-smoke): add secure one-shot harness
+fcbc818  test(groq-staging-smoke): prove secret safety and one-request limit
+c68d98e  docs(reports): record S1A activation-enablement evidence
 ```
 
 ## New gateway refusal reasons (additive, closed vocabulary)
