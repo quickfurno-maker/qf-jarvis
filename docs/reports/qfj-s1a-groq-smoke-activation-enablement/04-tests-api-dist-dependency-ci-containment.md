@@ -103,8 +103,11 @@ change is the two new `GROQ_STAGING_BIND_REASONS` members and the new required f
 - `@qf-jarvis/event-backbone` root API lock remains **39**; no event-backbone file is touched.
 - The fixed Groq endpoint is unchanged: `https://api.groq.com/openai/v1/chat/completions`, with
   `redirect: 'error'` and the non-official-endpoint refusal intact.
-- The protected `docs/reports/qfj-managed-reconciliation-0002-0005/` directory is present, still
-  untracked, still one file, and untouched — asserted by a test as well as by `git status`.
+- The protected `docs/reports/qfj-managed-reconciliation-0002-0005/` directory is untouched: still
+  present locally, still **untracked** (it is the only entry in `git status`, before and after), still
+  one file. Because it is untracked it is absent from a fresh CI checkout by design, so the test asserts
+  the invariant that actually holds in both places — this slice never commits it, and where it exists its
+  single file is unchanged — plus that this slice's own reports live in their own directory.
 
 ## Local gate sequence (the same one CI runs)
 

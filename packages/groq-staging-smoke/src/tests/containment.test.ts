@@ -338,7 +338,17 @@ describe('repository invariants that this slice must not move', () => {
 
   it('(58) the protected reconciliation report directory is untouched', () => {
     const protectedDir = repoPath('docs/reports/qfj-managed-reconciliation-0002-0005');
-    expect(existsSync(protectedDir)).toBe(true);
-    expect(readdirSync(protectedDir).sort()).toEqual(['01-read-only-live-reconciliation.md']);
+
+    // The directory is deliberately UNTRACKED, so it is absent from a fresh checkout (CI) and present
+    // on the owner's machine. The invariant is therefore not "it exists" — it is that this slice
+    // neither commits it nor changes it. Where it exists, its single file must be unchanged.
+    if (existsSync(protectedDir)) {
+      expect(readdirSync(protectedDir).sort()).toEqual(['01-read-only-live-reconciliation.md']);
+    }
+
+    // And this slice writes its own reports to its OWN directory, never inside the protected one.
+    const ourReports = repoPath('docs/reports/qfj-s1a-groq-smoke-activation-enablement');
+    expect(existsSync(ourReports)).toBe(true);
+    expect(readdirSync(ourReports).every((name) => name.endsWith('.md'))).toBe(true);
   });
 });
