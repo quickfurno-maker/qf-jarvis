@@ -45,8 +45,8 @@ function makeAdapter(
 const run = (invoker: ModelGatewayInvoker) => makeAdapter(invoker).draftReplyDetailed(replyPlan());
 
 describe('provenance validation', () => {
-  it('(48) exact provenance is accepted', () => {
-    expect(run(scriptedGatewayInvoker(structuredReply())).ok).toBe(true);
+  it('(48) exact provenance is accepted', async () => {
+    expect((await run(scriptedGatewayInvoker(structuredReply()))).ok).toBe(true);
   });
 
   const mismatches = [
@@ -58,8 +58,8 @@ describe('provenance validation', () => {
     { label: '(50) run-id mismatch', over: { runId: 'other.run' } },
   ];
   for (const { label, over } of mismatches) {
-    it(`${label} fails closed`, () => {
-      const result = run(mismatchedProvenanceGatewayInvoker(structuredReply(), over));
+    it(`${label} fails closed`, async () => {
+      const result = await run(mismatchedProvenanceGatewayInvoker(structuredReply(), over));
       expect(result.ok).toBe(false);
       expect(result.reason).toBe('model-provenance-mismatch');
     });
@@ -67,22 +67,22 @@ describe('provenance validation', () => {
 });
 
 describe('plan-identity validation', () => {
-  it('(52) a capability-profile mismatch fails closed', () => {
+  it('(52) a capability-profile mismatch fails closed', async () => {
     const adapter = makeAdapter(scriptedGatewayInvoker(structuredReply()), {
       capabilityProfileRef: 'cap.other',
     });
-    expect(adapter.draftReplyDetailed(replyPlan()).reason).toBe('model-plan-invalid');
+    expect((await adapter.draftReplyDetailed(replyPlan())).reason).toBe('model-plan-invalid');
   });
 
-  it('(53) an evaluation-reference mismatch fails closed', () => {
+  it('(53) an evaluation-reference mismatch fails closed', async () => {
     const adapter = makeAdapter(scriptedGatewayInvoker(structuredReply()), {
       evaluationRef: 'evref-999999',
     });
-    expect(adapter.draftReplyDetailed(replyPlan()).reason).toBe('model-plan-invalid');
+    expect((await adapter.draftReplyDetailed(replyPlan())).reason).toBe('model-plan-invalid');
   });
 
-  it('(54) an execution-class mismatch (LOCAL_ONLY + hosted) fails closed', () => {
-    const result = makeAdapter(scriptedGatewayInvoker(structuredReply())).draftReplyDetailed(
+  it('(54) an execution-class mismatch (LOCAL_ONLY + hosted) fails closed', async () => {
+    const result = await makeAdapter(scriptedGatewayInvoker(structuredReply())).draftReplyDetailed(
       replyPlan({ dataClass: 'LOCAL_ONLY' }),
     );
     expect(result.reason).toBe('model-plan-invalid');
@@ -90,18 +90,18 @@ describe('plan-identity validation', () => {
 });
 
 describe('citation validation', () => {
-  it('(55) an exact citation subset is accepted', () => {
+  it('(55) an exact citation subset is accepted', async () => {
     const reply = structuredReply({ citations: [{ knowledgeId: 'kb.fact', version: 1 }] });
-    expect(run(scriptedGatewayInvoker(reply)).ok).toBe(true);
+    expect((await run(scriptedGatewayInvoker(reply))).ok).toBe(true);
   });
 
-  it('(56) a fabricated citation is rejected', () => {
+  it('(56) a fabricated citation is rejected', async () => {
     const reply = structuredReply({ citations: [{ knowledgeId: 'kb.ghost', version: 1 }] });
-    expect(run(scriptedGatewayInvoker(reply)).reason).toBe('model-citation-mismatch');
+    expect((await run(scriptedGatewayInvoker(reply))).reason).toBe('model-citation-mismatch');
   });
 
-  it('(57) a versionless citation is rejected', () => {
-    const result = run(
+  it('(57) a versionless citation is rejected', async () => {
+    const result = await run(
       rawStructuredGatewayInvoker({
         kind: 'REPLY',
         replyBody: 'x',
@@ -112,19 +112,19 @@ describe('citation validation', () => {
     expect(result.reason).toBe('model-structured-output-invalid');
   });
 
-  it('(58) a superseded (wrong-version) citation is rejected', () => {
+  it('(58) a superseded (wrong-version) citation is rejected', async () => {
     const reply = structuredReply({ citations: [{ knowledgeId: 'kb.fact', version: 2 }] });
-    expect(run(scriptedGatewayInvoker(reply)).reason).toBe('model-citation-mismatch');
+    expect((await run(scriptedGatewayInvoker(reply))).reason).toBe('model-citation-mismatch');
   });
 
-  it('(59) a mix of valid and fabricated citations is rejected, not silently trimmed', () => {
+  it('(59) a mix of valid and fabricated citations is rejected, not silently trimmed', async () => {
     const reply = structuredReply({
       citations: [
         { knowledgeId: 'kb.fact', version: 1 },
         { knowledgeId: 'kb.ghost', version: 1 },
       ],
     });
-    const result = run(scriptedGatewayInvoker(reply));
+    const result = await run(scriptedGatewayInvoker(reply));
     expect(result.reason).toBe('model-citation-mismatch');
     expect(result.draft).toBeUndefined();
   });

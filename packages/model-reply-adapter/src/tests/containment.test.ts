@@ -81,6 +81,15 @@ describe('containment', () => {
     }
   });
 
+  it('(ADR-0058 §5) production source uses no sync-over-async blocking primitive', () => {
+    for (const file of productionFiles()) {
+      const text = readFileSync(file, 'utf8');
+      expect(text).not.toMatch(/Atomics\s*\.\s*wait\b/);
+      expect(text).not.toMatch(/\b(execSync|spawnSync|deasync)\b/);
+      expect(text).not.toMatch(/from ['"]deasync['"]/);
+    }
+  });
+
   it('(69,73) agent-runtime and model-gateway are the only workspace deps used', () => {
     for (const file of productionFiles()) {
       const text = readFileSync(file, 'utf8');

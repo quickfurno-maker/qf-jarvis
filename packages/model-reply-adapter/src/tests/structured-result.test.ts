@@ -41,8 +41,8 @@ const run = (invoker: ModelGatewayInvoker) => makeAdapter(invoker).draftReplyDet
 const valid = [{ knowledgeId: 'kb.fact', version: 1 }];
 
 describe('structured output — accepted kinds', () => {
-  it('(36) a valid REPLY is accepted with a draft', () => {
-    const result = run(scriptedGatewayInvoker(structuredReply()));
+  it('(36) a valid REPLY is accepted with a draft', async () => {
+    const result = await run(scriptedGatewayInvoker(structuredReply()));
     expect(result.ok).toBe(true);
     expect(result.kind).toBe('REPLY');
     expect(result.draft?.replyBody).toBeTruthy();
@@ -55,8 +55,8 @@ describe('structured output — accepted kinds', () => {
     { kind: 'NO_ACTION', citations: [] },
   ];
   for (const reply of others) {
-    it(`(37,38,39) a valid ${reply.kind} is accepted with no reply body`, () => {
-      const result = run(scriptedGatewayInvoker(reply));
+    it(`(37,38,39) a valid ${reply.kind} is accepted with no reply body`, async () => {
+      const result = await run(scriptedGatewayInvoker(reply));
       expect(result.ok).toBe(true);
       expect(result.kind).toBe(reply.kind);
       expect(result.draft).toBeUndefined();
@@ -90,8 +90,8 @@ describe('structured output — rejected results', () => {
     '(46) REPLY without a body': { kind: 'REPLY', citations: valid },
   };
   for (const [label, structuredResult] of Object.entries(rejected)) {
-    it(`${label} is rejected`, () => {
-      const result = run(rawStructuredGatewayInvoker(structuredResult));
+    it(`${label} is rejected`, async () => {
+      const result = await run(rawStructuredGatewayInvoker(structuredResult));
       expect(result.ok).toBe(false);
       expect(result.reason).toBe('model-structured-output-invalid');
     });
@@ -99,9 +99,9 @@ describe('structured output — rejected results', () => {
 });
 
 describe('structured output — determinism', () => {
-  it('(47) the same valid result yields the same draft', () => {
-    const a = run(scriptedGatewayInvoker(structuredReply()));
-    const b = run(scriptedGatewayInvoker(structuredReply()));
+  it('(47) the same valid result yields the same draft', async () => {
+    const a = await run(scriptedGatewayInvoker(structuredReply()));
+    const b = await run(scriptedGatewayInvoker(structuredReply()));
     expect(JSON.stringify(a.draft)).toBe(JSON.stringify(b.draft));
   });
 });

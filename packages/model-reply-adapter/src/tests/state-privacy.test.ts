@@ -41,22 +41,22 @@ function makeAdapter(
 }
 
 describe('data class', () => {
-  it('(17) HUMAN_ONLY reaches no gateway', () => {
+  it('(17) HUMAN_ONLY reaches no gateway', async () => {
     const invoker = scriptedGatewayInvoker(structuredReply());
     const adapter = makeAdapter(scriptedReplyStateReader(clearReplyState()), invoker);
-    const result = adapter.draftReplyDetailed(replyPlan({ dataClass: 'HUMAN_ONLY' }));
+    const result = await adapter.draftReplyDetailed(replyPlan({ dataClass: 'HUMAN_ONLY' }));
     expect(result.reason).toBe('model-state-blocked');
     expect(result.gatewayInvoked).toBe(false);
     expect(invoker.invoked()).toBe(0);
   });
 
-  it('(18) LOCAL_ONLY cannot use a hosted release', () => {
+  it('(18) LOCAL_ONLY cannot use a hosted release', async () => {
     const invoker = scriptedGatewayInvoker(structuredReply());
     const adapter = makeAdapter(
       scriptedReplyStateReader(clearReplyState({ dataClass: 'LOCAL_ONLY' })),
       invoker,
     );
-    const result = adapter.draftReplyDetailed(replyPlan({ dataClass: 'LOCAL_ONLY' }));
+    const result = await adapter.draftReplyDetailed(replyPlan({ dataClass: 'LOCAL_ONLY' }));
     expect(result.reason).toBe('model-plan-invalid');
     expect(invoker.invoked()).toBe(0);
   });
@@ -84,10 +84,10 @@ describe('pre-gateway state gate', () => {
     },
   ];
   for (const { label, over, reason } of cases) {
-    it(`${label} invokes no gateway`, () => {
+    it(`${label} invokes no gateway`, async () => {
       const invoker = scriptedGatewayInvoker(structuredReply());
       const adapter = makeAdapter(scriptedReplyStateReader(clearReplyState(over)), invoker);
-      const result = adapter.draftReplyDetailed(replyPlan());
+      const result = await adapter.draftReplyDetailed(replyPlan());
       expect(result.reason).toBe(reason);
       expect(result.gatewayInvoked).toBe(false);
       expect(invoker.invoked()).toBe(0);
@@ -96,37 +96,37 @@ describe('pre-gateway state gate', () => {
 });
 
 describe('post-gateway state gate', () => {
-  it('(25) a revision change after the result blocks the draft', () => {
+  it('(25) a revision change after the result blocks the draft', async () => {
     const invoker = scriptedGatewayInvoker(structuredReply());
     const reader = scriptedReplyStateReader(clearReplyState(), clearReplyState({ revision: 2 }));
     const adapter = makeAdapter(reader, invoker);
-    const result = adapter.draftReplyDetailed(replyPlan());
+    const result = await adapter.draftReplyDetailed(replyPlan());
     expect(result.reason).toBe('model-state-blocked');
     expect(result.gatewayInvoked).toBe(true);
     expect(result.draft).toBeUndefined();
     expect(reader.reads()).toBe(2);
   });
 
-  it('(26) a privacy/tombstone change after the result blocks the draft', () => {
+  it('(26) a privacy/tombstone change after the result blocks the draft', async () => {
     const invoker = scriptedGatewayInvoker(structuredReply());
     const reader = scriptedReplyStateReader(
       clearReplyState(),
       clearReplyState({ subjectStatus: 'erased' }),
     );
     const adapter = makeAdapter(reader, invoker);
-    const result = adapter.draftReplyDetailed(replyPlan());
+    const result = await adapter.draftReplyDetailed(replyPlan());
     expect(result.reason).toBe('model-state-blocked');
     expect(result.gatewayInvoked).toBe(true);
     expect(result.draft).toBeUndefined();
   });
 
-  it('(25) a cancellation after the result blocks the draft as cancelled', () => {
+  it('(25) a cancellation after the result blocks the draft as cancelled', async () => {
     const invoker = scriptedGatewayInvoker(structuredReply());
     const reader = scriptedReplyStateReader(
       clearReplyState(),
       clearReplyState({ cancelled: true }),
     );
     const adapter = makeAdapter(reader, invoker);
-    expect(adapter.draftReplyDetailed(replyPlan()).reason).toBe('model-cancelled');
+    expect((await adapter.draftReplyDetailed(replyPlan())).reason).toBe('model-cancelled');
   });
 });

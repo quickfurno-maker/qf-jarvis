@@ -56,9 +56,9 @@ function makeAdapter(hook?: ModelReplyAdapterObservabilityHook) {
 const SECRET_INPUT = 'SECRET-INBOUND-TEXT-XYZ';
 
 describe('observability — content-free', () => {
-  it('(60,61,62,63,64) emits only closed event types with safe ids and no content/secret', () => {
+  it('(60,61,62,63,64) emits only closed event types with safe ids and no content/secret', async () => {
     const { hook, events } = recorder();
-    makeAdapter(hook).draftReplyDetailed(replyPlan({ normalizedText: SECRET_INPUT }));
+    await makeAdapter(hook).draftReplyDetailed(replyPlan({ normalizedText: SECRET_INPUT }));
     expect(events.length).toBeGreaterThan(0);
     for (const e of events) {
       expect(MODEL_REPLY_ADAPTER_EVENT_TYPES).toContain(e.type);
@@ -71,9 +71,9 @@ describe('observability — content-free', () => {
     expect(events.map((e) => e.type)).toContain('model-adapter-completed');
   });
 
-  it('(64) usage/latency counters are bounded numbers when present', () => {
+  it('(64) usage/latency counters are bounded numbers when present', async () => {
     const { hook, events } = recorder();
-    makeAdapter(hook).draftReplyDetailed(replyPlan());
+    await makeAdapter(hook).draftReplyDetailed(replyPlan());
     const completed = events.find((e) => e.type === 'model-adapter-completed');
     expect(typeof completed?.outputTokens).toBe('number');
     expect(typeof completed?.latencyMs).toBe('number');
@@ -97,8 +97,8 @@ describe('request — content minimization', () => {
 });
 
 describe('authority — draft only, no send', () => {
-  it('(66,67) the result is a draft only — no Core ACCEPTED, sent, or executed field', () => {
-    const result = makeAdapter().draftReplyDetailed(replyPlan());
+  it('(66,67) the result is a draft only — no Core ACCEPTED, sent, or executed field', async () => {
+    const result = await makeAdapter().draftReplyDetailed(replyPlan());
     expect(result.ok).toBe(true);
     expect(Object.keys(result).sort()).toEqual([
       'draft',
@@ -117,9 +117,9 @@ describe('authority — draft only, no send', () => {
     }
   });
 
-  it('(68) neither the adapter nor the draft exposes authorize/execute/send/deliver/callN8n', () => {
+  it('(68) neither the adapter nor the draft exposes authorize/execute/send/deliver/callN8n', async () => {
     const adapter = makeAdapter();
-    const result = adapter.draftReplyDetailed(replyPlan());
+    const result = await adapter.draftReplyDetailed(replyPlan());
     const adapterSurface = adapter as unknown as Record<string, unknown>;
     const draftSurface = (result.draft ?? {}) as unknown as Record<string, unknown>;
     for (const forbidden of ['authorize', 'execute', 'send', 'deliver', 'callN8n']) {

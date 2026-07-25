@@ -39,43 +39,42 @@ function makeAdapter(invoker: ModelGatewayInvoker | undefined) {
 }
 
 describe('gateway authority', () => {
-  it('(27) a missing invoker fails closed', () => {
-    const result = makeAdapter(undefined).draftReplyDetailed(replyPlan());
+  it('(27) a missing invoker fails closed', async () => {
+    const result = await makeAdapter(undefined).draftReplyDetailed(replyPlan());
     expect(result.reason).toBe('model-adapter-unavailable');
     expect(result.gatewayInvoked).toBe(false);
   });
 
-  it('(28,29) an invoker exception is normalized and no raw error leaks', () => {
+  it('(28,29) a rejected invocation is normalized and no raw error leaks', async () => {
     const invoker = throwingGatewayInvoker();
-    let result: ReturnType<ReturnType<typeof makeAdapter>['draftReplyDetailed']> | undefined;
-    expect(() => {
-      result = makeAdapter(invoker).draftReplyDetailed(replyPlan());
-    }).not.toThrow();
-    expect(result?.reason).toBe('model-gateway-transient');
-    expect(result?.gatewayInvoked).toBe(true);
+    // The rejected invocation Promise never surfaces as an unhandled rejection: draftReplyDetailed
+    // resolves to a safe fail-closed outcome (awaiting it here would throw if it rejected).
+    const result = await makeAdapter(invoker).draftReplyDetailed(replyPlan());
+    expect(result.reason).toBe('model-gateway-transient');
+    expect(result.gatewayInvoked).toBe(true);
     expect(invoker.invoked()).toBe(1);
     expect(JSON.stringify(result)).not.toContain('synthetic gateway fault');
   });
 
-  it('(30,32) invokes the gateway at most once and selects no provider itself', () => {
+  it('(30,32) invokes the gateway at most once and selects no provider itself', async () => {
     const invoker = scriptedGatewayInvoker(structuredReply());
-    const result = makeAdapter(invoker).draftReplyDetailed(replyPlan());
+    const result = await makeAdapter(invoker).draftReplyDetailed(replyPlan());
     expect(result.ok).toBe(true);
     expect(invoker.invoked()).toBe(1);
     // The provider in the result is the plan's — the adapter passed it through, it did not choose one.
     expect(result.provenance?.providerId).toBe('prov.fake');
   });
 
-  it('(31,33) performs no independent retry or fallback on a transient refusal', () => {
+  it('(31,33) performs no independent retry or fallback on a transient refusal', async () => {
     const invoker = refusingGatewayInvoker(true);
-    const result = makeAdapter(invoker).draftReplyDetailed(replyPlan());
+    const result = await makeAdapter(invoker).draftReplyDetailed(replyPlan());
     expect(result.reason).toBe('model-gateway-transient');
     expect(invoker.invoked()).toBe(1);
   });
 
-  it('(35) a permanent gateway refusal remains a refusal', () => {
+  it('(35) a permanent gateway refusal remains a refusal', async () => {
     const invoker = refusingGatewayInvoker(false);
-    expect(makeAdapter(invoker).draftReplyDetailed(replyPlan()).reason).toBe(
+    expect((await makeAdapter(invoker).draftReplyDetailed(replyPlan())).reason).toBe(
       'model-gateway-refused',
     );
   });
