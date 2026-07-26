@@ -277,6 +277,119 @@ describe('cancellation and error normalization through the bound provider', () =
   });
 });
 
+describe('QFJ-S1A — exact prompt identity and approval references (ADR-0061 §D, §E)', () => {
+  const badPromptFamilies = ['', '*', 'latest', 'LATEST', 'a b', 'x'.repeat(129)];
+  for (const promptFamily of badPromptFamilies) {
+    it(`refuses prompt family ${JSON.stringify(promptFamily.slice(0, 12))} before credential resolution`, async () => {
+      const resolver = fakeGroqCredentialResolver();
+      const transport = fakeGroqTransport(groqStructuredResponseBody({ kind: 'REPLY' }));
+      const result = await bindGroqStagingProvider(
+        bindConfig({
+          stagingRelease: syntheticGroqStagingRelease({ promptFamily }),
+          credentialResolver: resolver,
+          transport,
+        }),
+      );
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.reason).toBe('groq-bind-prompt-invalid');
+      expect(resolver.resolved()).toBe(0);
+      expect(transport.calls()).toBe(0);
+    });
+  }
+
+  const badPromptVersions = [0, -1, 1.5, Number.NaN, 1_000_001];
+  for (const promptVersion of badPromptVersions) {
+    it(`refuses a non-exact prompt version (${String(promptVersion)}) before credential resolution`, async () => {
+      const resolver = fakeGroqCredentialResolver();
+      const result = await bindGroqStagingProvider(
+        bindConfig({
+          stagingRelease: syntheticGroqStagingRelease({ promptVersion }),
+          credentialResolver: resolver,
+        }),
+      );
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.reason).toBe('groq-bind-prompt-invalid');
+      expect(resolver.resolved()).toBe(0);
+    });
+  }
+
+  const missingRefs = [
+    { capabilityProfileRef: '' },
+    { capabilityProfileRef: 'latest' },
+    { evaluationRef: '' },
+    { evaluationRef: '*' },
+    { dataControlsAttestationRef: '' },
+    { dataControlsAttestationRef: 'not a reference' },
+  ];
+  for (const over of missingRefs) {
+    it(`refuses a missing/invalid approval reference (${Object.keys(over)[0] ?? ''}) before credential resolution`, async () => {
+      const resolver = fakeGroqCredentialResolver();
+      const transport = fakeGroqTransport(groqStructuredResponseBody({ kind: 'REPLY' }));
+      const result = await bindGroqStagingProvider(
+        bindConfig({
+          stagingRelease: syntheticGroqStagingRelease(over),
+          credentialResolver: resolver,
+          transport,
+        }),
+      );
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.reason).toBe('groq-bind-approval-refs-missing');
+      expect(resolver.resolved()).toBe(0);
+      expect(transport.calls()).toBe(0);
+    });
+  }
+
+  it('emits the prompt family/version and approval references — and never prompt text', async () => {
+    const events: GroqStagingBindEvent[] = [];
+    const result = await bindGroqStagingProvider(
+      bindConfig({ observability: { onEvent: (e) => events.push(e) } }),
+    );
+    expect(result.ok).toBe(true);
+    const event = events[0];
+    expect(event?.promptFamily).toBe('qfj.s1a.synthetic.smoke');
+    expect(event?.promptVersion).toBe(1);
+    expect(event?.capabilityProfileRef).toBe('cap.groq.reply.v1');
+    expect(event?.evaluationRef).toBe('evref-groq-0001');
+    expect(event?.dataControlsAttestationRef).toBe('zdr.groq.staging.0001');
+    // The event field set stays CLOSED — no prompt/message/output/key/reference-value field appears.
+    expect(Object.keys(event ?? {}).sort()).toEqual(
+      [
+        'capabilityProfileRef',
+        'configDigest',
+        'credentialResolved',
+        'dataClass',
+        'dataControlsAttestationRef',
+        'evaluationRef',
+        'executionClass',
+        'modelId',
+        'modelVersion',
+        'promptFamily',
+        'promptVersion',
+        'providerId',
+        'reason',
+        'type',
+      ].sort(),
+    );
+  });
+
+  it('runs the prompt/approval gates AFTER the data-class gate (privacy first)', async () => {
+    const resolver = fakeGroqCredentialResolver();
+    const result = await bindGroqStagingProvider(
+      bindConfig({
+        stagingRelease: syntheticGroqStagingRelease({
+          dataClass: 'LOCAL_ONLY',
+          promptFamily: 'latest',
+          capabilityProfileRef: '',
+        }),
+        credentialResolver: resolver,
+      }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe('groq-bind-data-class-refused');
+    expect(resolver.resolved()).toBe(0);
+  });
+});
+
 describe('observability and authority', () => {
   it('emits only closed, content-free bind events', async () => {
     const okEvents: GroqStagingBindEvent[] = [];

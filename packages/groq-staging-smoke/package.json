@@ -1,0 +1,30 @@
+{
+  "name": "@qf-jarvis/groq-staging-smoke",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis Groq STAGING smoke harness (QFJ-S1A, ADR-0061). A one-shot, staging-only, synthetic-only executable that clears the four S1 activation blockers: a concrete masked-TTY credential resolver outside the model gateway, a single-run harness over the existing bindGroqStagingProvider, harness-owned AbortController/timeout, and an exact prompt identity. It accepts only a non-secret config path, owns one fixed synthetic prompt literal, binds once, invokes once, prints only sanitized codes and reference ids, and exits. No key in argv/config/env/disk/log/event/report/Git; no retry; one HTTP request maximum. No QuickFurno Core, Jarvis runtime, n8n, WhatsApp, send, delivery, persistence, database, rollout, or activation. Model output is a discarded staging draft; QuickFurno Core remains the final business authority.",
+  "bin": {
+    "qfj-groq-staging-smoke": "./dist/bin.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "default": "./dist/testing/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/model-gateway": "workspace:*",
+    "zod": "4.4.3"
+  }
+}

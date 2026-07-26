@@ -5,10 +5,16 @@
  * does not re-implement. Given a model-gateway-approved `ProviderReleaseRef`, an opaque credential
  * reference, an injected async resolver, and the injected transport, it fails closed (BEFORE any
  * credential resolution or transport) on a wildcard/`latest` identity, a non-`HOSTED` execution class,
- * a non-`HOSTED_ALLOWED` data class, a provider mismatch, or a missing data-controls attestation; then
- * it resolves the credential exactly once and returns a ready `GroqModelProvider`. It performs NO
- * invocation and makes NO live call. It selects no provider, activates no release, and promotes no
- * rollout — the gateway stays the only router and the sole owner of retry/timeout/circuit/failover.
+ * a non-`HOSTED_ALLOWED` data class, an invalid prompt identity, a missing approval reference, a
+ * provider mismatch, or a missing data-controls attestation; then it resolves the credential exactly
+ * once and returns a ready `GroqModelProvider`. It performs NO invocation and makes NO live call. It
+ * selects no provider, activates no release, and promotes no rollout — the gateway stays the only
+ * router and the sole owner of retry/timeout/circuit/failover.
+ *
+ * QFJ-S1A (ADR-0061 §D, §E) makes the approval references EXACT and REQUIRED — the capability profile,
+ * the evaluation record, the data-controls (ZDR) attestation, and the prompt family + integer version —
+ * so a staging run can always be traced to the exact approved prompt and approval evidence. Only
+ * IDENTIFIERS are bound and emitted; prompt text never enters this module or its events.
  */
 import type { ModelDataClass } from '../../contracts/enums.js';
 import type { GatewayClock } from '../../reliability/clock.js';
@@ -37,8 +43,16 @@ export interface GroqStagingRelease {
   readonly supportsStrictJsonSchema: boolean;
   /** A positive Groq data-controls / Zero-Data-Retention attestation is REQUIRED to bind. */
   readonly dataControlsAttested: boolean;
-  readonly capabilityProfileRef?: string;
-  readonly evaluationRef?: string;
+  /** The exact approved capability-profile reference (ADR-0050). REQUIRED since QFJ-S1A. */
+  readonly capabilityProfileRef: string;
+  /** The exact approved evaluation reference (ADR-0052). REQUIRED since QFJ-S1A. */
+  readonly evaluationRef: string;
+  /** The exact data-controls / ZDR attestation reference. REQUIRED since QFJ-S1A. An id, not a document. */
+  readonly dataControlsAttestationRef: string;
+  /** The exact prompt FAMILY identifier. REQUIRED since QFJ-S1A. Never the prompt text. */
+  readonly promptFamily: string;
+  /** The exact prompt VERSION — a positive integer. REQUIRED since QFJ-S1A. Never `latest`. */
+  readonly promptVersion: number;
 }
 
 export interface GroqStagingBindingConfig {
@@ -62,6 +76,31 @@ export type GroqStagingBindResult =
   | { readonly ok: false; readonly reason: GroqStagingBindReason };
 
 const WILDCARDS: ReadonlySet<string> = new Set(['*', 'latest']);
+
+/** The bounded shape every exact reference identifier must satisfy. No wildcard, no free text. */
+const REFERENCE_PATTERN = /^[A-Za-z0-9._:-]+$/;
+const MAX_REFERENCE_LENGTH = 128;
+/** A prompt version is an exact positive integer, never a range and never `latest`. */
+const MAX_PROMPT_VERSION = 1_000_000;
+
+function isExactReference(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length >= 1 &&
+    value.length <= MAX_REFERENCE_LENGTH &&
+    REFERENCE_PATTERN.test(value) &&
+    !WILDCARDS.has(value.toLowerCase())
+  );
+}
+
+function isExactPromptVersion(value: unknown): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isSafeInteger(value) &&
+    value >= 1 &&
+    value <= MAX_PROMPT_VERSION
+  );
+}
 
 function hasWildcardIdentity(release: ProviderReleaseRef): boolean {
   return [
@@ -100,6 +139,9 @@ export async function bindGroqStagingProvider(
         dataClass: sr.dataClass,
         capabilityProfileRef: sr.capabilityProfileRef,
         evaluationRef: sr.evaluationRef,
+        dataControlsAttestationRef: sr.dataControlsAttestationRef,
+        promptFamily: sr.promptFamily,
+        promptVersion: sr.promptVersion,
         reason,
         credentialResolved,
       } satisfies GroqStagingBindEvent),
@@ -121,6 +163,20 @@ export async function bindGroqStagingProvider(
   // HOSTED_ALLOWED only — LOCAL_ONLY / HUMAN_ONLY fail before credential resolution.
   if (sr.dataClass !== 'HOSTED_ALLOWED') {
     return refuse('groq-bind-data-class-refused');
+  }
+  // QFJ-S1A: an EXACT prompt identity is required — no wildcard/`latest`, no empty/oversized family,
+  // no non-integer version. A staging run that cannot name its prompt cannot be traced.
+  if (!isExactReference(sr.promptFamily) || !isExactPromptVersion(sr.promptVersion)) {
+    return refuse('groq-bind-prompt-invalid');
+  }
+  // QFJ-S1A: the exact approval references (capability profile, evaluation, ZDR attestation) are
+  // required. They are identifiers only — the binding does not fabricate or resolve their contents.
+  if (
+    !isExactReference(sr.capabilityProfileRef) ||
+    !isExactReference(sr.evaluationRef) ||
+    !isExactReference(sr.dataControlsAttestationRef)
+  ) {
+    return refuse('groq-bind-approval-refs-missing');
   }
   // Data-controls (ZDR) attestation is required to bind.
   if (!sr.dataControlsAttested) {

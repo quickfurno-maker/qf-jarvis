@@ -90,6 +90,15 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
 
+  packages/groq-staging-smoke:
+    dependencies:
+      '@qf-jarvis/model-gateway':
+        specifier: workspace:*
+        version: link:../model-gateway
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+
   packages/jarvis-runtime:
     dependencies:
       '@qf-jarvis/agent-runtime':
