@@ -1,0 +1,40 @@
+{
+  "approvalId": "approval.groq.qfj.staging.smoke.v1",
+  "approvalDate": "2026-07-28",
+  "slice": "QFJ-S1C",
+  "scope": "ONE synthetic staging connectivity smoke",
+  "release": {
+    "releaseId": "rel.groq.qfj.staging.smoke.v1",
+    "providerId": "groq",
+    "modelId": "openai/gpt-oss-20b",
+    "modelVersion": "groq-catalog-snapshot-2026-07-28",
+    "executionClass": "HOSTED",
+    "configDigest": "4f97ef1e9e46905db253912bd56dab8aea4f38e4d606dfe93b16fc024f0c2be1"
+  },
+  "credentialReference": "groq.qfj.staging.smoke.v1",
+  "dataClass": "HOSTED_ALLOWED",
+  "maxInputTokens": 512,
+  "maxCompletionTokens": 256,
+  "supportsStrictJsonSchema": true,
+  "capabilityProfileRef": "cap.groq.openai-gpt-oss-20b.strict-json.2026-07-28",
+  "evaluationRef": "eval.qfj.synthetic-connectivity-smoke.v1",
+  "dataControlsAttestationRef": "att.groq.qfj-staging.global-zdr.2026-07-28",
+  "dataControlsAttested": true,
+  "promptFamily": "qfj.s1a.synthetic.smoke",
+  "promptVersion": 1,
+  "schemaRevision": "qfj.s1a.synthetic.smoke.schema.v1",
+  "timeoutMs": 30000,
+  "digest": {
+    "algorithm": "SHA-256",
+    "encoding": "lowercase-hex",
+    "canonicalisation": "recursive object-key sort by Unicode code point; array order preserved; JSON.stringify with no indentation; UTF-8; no BOM; no trailing newline",
+    "excludesField": "release.configDigest",
+    "canonicalPayloadByteLength": 709,
+    "value": "4f97ef1e9e46905db253912bd56dab8aea4f38e4d606dfe93b16fc024f0c2be1"
+  },
+  "authorizesSmokeExecution": false,
+  "authorizesProductionActivation": false,
+  "authorizesRollout": false,
+  "consumesOneTimeSmokeAuthorization": false,
+  "consoleAttestationStatus": "OWNER-ATTESTED / NOT INDEPENDENTLY API-VERIFIED"
+}
