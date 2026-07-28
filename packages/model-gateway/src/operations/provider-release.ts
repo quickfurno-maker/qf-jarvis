@@ -10,6 +10,7 @@ import { z } from 'zod';
 
 import type { ProviderExecutionClass } from '../contracts/enums.js';
 import { PROVIDER_EXECUTION_CLASSES } from '../contracts/enums.js';
+import { providerModelIdSchema } from '../contracts/model-id.js';
 
 const IDENTIFIER = z
   .string()
@@ -36,7 +37,9 @@ const releaseSchema = z
   .object({
     releaseId: IDENTIFIER,
     providerId: IDENTIFIER,
-    modelId: IDENTIFIER,
+    // QFJ-S1C-A: namespaced model ids (`openai/gpt-oss-20b`) are real catalogue identities. Only
+    // `modelId` uses the slash-segment grammar; the rest of the release stays a generic identifier.
+    modelId: providerModelIdSchema,
     modelVersion: IDENTIFIER,
     executionClass: z.enum(PROVIDER_EXECUTION_CLASSES),
     configDigest: DIGEST,

@@ -19,6 +19,7 @@
  */
 import { readFileSync } from 'node:fs';
 
+import { providerModelIdSchema } from '@qf-jarvis/model-gateway';
 import { z } from 'zod';
 
 import {
@@ -42,6 +43,16 @@ const EXACT_REFERENCE = z
     message: 'A wildcard or `latest` reference is not an exact reference.',
   });
 
+/**
+ * QFJ-S1C-A: `modelId` alone uses the shared provider-model-id grammar, so a namespaced catalogue
+ * identity such as `openai/gpt-oss-20b` is expressible. The wildcard/`latest` refusal is re-applied
+ * on top, because a well-formed model id may still be a forbidden moving target.
+ */
+const EXACT_MODEL_ID = providerModelIdSchema.refine(
+  (value) => !WILDCARDS.has(value.toLowerCase()),
+  { message: 'A wildcard or `latest` model id is not an exact model id.' },
+);
+
 const DIGEST_REFERENCE = z
   .string()
   .min(8)
@@ -55,7 +66,7 @@ const smokeReleaseSchema = z
   .object({
     releaseId: EXACT_REFERENCE,
     providerId: EXACT_REFERENCE,
-    modelId: EXACT_REFERENCE,
+    modelId: EXACT_MODEL_ID,
     modelVersion: EXACT_REFERENCE,
     executionClass: z.literal('HOSTED'),
     configDigest: DIGEST_REFERENCE,
