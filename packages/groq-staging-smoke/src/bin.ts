@@ -11,11 +11,20 @@
  * No test imports this file — every test drives `runSmokeCli`/`runGroqStagingSmokeOnce` with injected
  * fakes instead, so the suite never opens a terminal and never touches the network.
  */
-import { createFetchGroqTransport, createSystemClock } from '@qf-jarvis/model-gateway';
+import { createSystemClock } from '@qf-jarvis/model-gateway';
 
 import { runSmokeCli } from './cli.js';
+import { createDiagnosticRecorder, createSystemMonotonicClock } from './diagnostic-telemetry.js';
+import {
+  createInstrumentedGroqTransport,
+  createSystemFetchLike,
+} from './instrumented-transport.js';
 import { createNodeMaskedSecretSource } from './masked-tty-credential-resolver.js';
 import { createSystemSmokeTimer } from './run-once.js';
+
+// ONE recorder for the whole run, shared by the transport and the runner so the wire milestones and
+// the run milestones sit on a single timeline. Its origin is this moment.
+const recorder = createDiagnosticRecorder(createSystemMonotonicClock());
 
 const exitCode = await runSmokeCli(
   process.argv.slice(2),
@@ -26,10 +35,14 @@ const exitCode = await runSmokeCli(
     nowIso: (): string => new Date().toISOString(),
   },
   {
-    transport: createFetchGroqTransport(),
+    transport: createInstrumentedGroqTransport({
+      fetchLike: createSystemFetchLike(),
+      recorder,
+    }),
     credentialSource: createNodeMaskedSecretSource(),
     clock: createSystemClock(),
     timer: createSystemSmokeTimer(),
+    diagnostics: recorder,
   },
 );
 

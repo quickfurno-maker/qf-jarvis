@@ -20,6 +20,7 @@ import {
   bindGroqStagingProvider,
   createProviderReleaseRef,
   type GatewayClock,
+  type GroqCredentialReference,
   type GroqStagingBindReason,
   type GroqTransport,
   type ModelUsage,
@@ -27,6 +28,12 @@ import {
 } from '@qf-jarvis/model-gateway';
 
 import type { SmokeConfig } from './config.js';
+import {
+  createDiagnosticRecorder,
+  createSystemMonotonicClock,
+  type DiagnosticRecorder,
+  type SmokeDiagnostics,
+} from './diagnostic-telemetry.js';
 import {
   createMaskedTtyCredentialResolver,
   type MaskedSecretSource,
@@ -67,6 +74,12 @@ export interface SmokeRunDeps {
   readonly credentialSource: MaskedSecretSource;
   readonly clock: GatewayClock;
   readonly timer: SmokeTimer;
+  /**
+   * QFJ-S1D-B. The run-local diagnostic recorder. Optional so every pre-existing composition keeps
+   * working unchanged; production supplies the SAME recorder the instrumented transport holds, which
+   * is what lets the wire milestones and the run milestones share one timeline.
+   */
+  readonly diagnostics?: DiagnosticRecorder;
 }
 
 /** The one-request counters. They are the proof that "exactly once" held, not a claim that it did. */
@@ -102,6 +115,7 @@ export type SmokeRunResult =
       readonly latencyMs: number;
       readonly usage: ModelUsage;
       readonly counters: SmokeCounters;
+      readonly diagnostics: SmokeDiagnostics;
     }
   | {
       readonly ok: false;
@@ -112,6 +126,7 @@ export type SmokeRunResult =
       /** The normalized provider retryability, when the provider refused. Never acted upon here. */
       readonly retryable?: boolean;
       readonly counters: SmokeCounters;
+      readonly diagnostics: SmokeDiagnostics;
     };
 
 /** The outcome BEFORE counters are attached, so the `finally` cleanup is reflected in what is reported. */
@@ -156,8 +171,10 @@ async function bindAndInvokeOnce(
   controller: AbortController,
   timedOut: { value: boolean },
   counters: MutableCounters,
+  recorder: DiagnosticRecorder,
 ): Promise<SmokeOutcome> {
   counters.binds += 1;
+  recorder.mark('bindStarted');
   const bind = await bindGroqStagingProvider({
     stagingRelease: {
       release: createProviderReleaseRef(config.release),
@@ -198,6 +215,9 @@ async function bindAndInvokeOnce(
     timeoutMs: config.timeoutMs,
     signal: controller.signal,
   };
+  // The smoke has finished building the single invocation input. The gateway serialises the wire body
+  // itself, so this marks OUR construction, not the HTTP payload.
+  recorder.mark('requestConstructed');
 
   counters.invocations += 1;
   if (counters.invocations > 1) {
@@ -207,6 +227,7 @@ async function bindAndInvokeOnce(
 
   let result;
   try {
+    recorder.mark('invokeStarted');
     result = await bind.provider.invoke(input);
   } catch {
     // A provider signals a normal failure by RETURNING a status; a throw is an adapter/harness invariant.
@@ -241,6 +262,28 @@ async function bindAndInvokeOnce(
 }
 
 /**
+ * Wrap the resolver so a SUCCESSFUL credential resolution stamps its milestone.
+ *
+ * It is a pass-through in every other respect: the resolved key is returned untouched and is never
+ * inspected, copied, logged, or retained here, and `reads`/`lastFailure` delegate verbatim. A rejection
+ * stamps nothing, so `credentialResolved` proves a real read rather than an attempt.
+ */
+function withCredentialMilestone(
+  resolver: StagingCredentialResolver,
+  recorder: DiagnosticRecorder,
+): StagingCredentialResolver {
+  return Object.freeze({
+    async resolve(reference: GroqCredentialReference) {
+      const key = await resolver.resolve(reference);
+      recorder.mark('credentialResolved');
+      return key;
+    },
+    reads: () => resolver.reads(),
+    lastFailure: () => resolver.lastFailure(),
+  });
+}
+
+/**
  * Run the single synthetic staging smoke.
  *
  * Ordering matters and is asserted by the tests: the TTY gate runs FIRST, so a non-interactive session
@@ -253,6 +296,7 @@ export async function runGroqStagingSmokeOnce(
   deps: SmokeRunDeps,
 ): Promise<SmokeRunResult> {
   const references = referencesOf(config);
+  const recorder = deps.diagnostics ?? createDiagnosticRecorder(createSystemMonotonicClock());
   const counters: MutableCounters = {
     binds: 0,
     credentialReads: 0,
@@ -269,23 +313,41 @@ export async function runGroqStagingSmokeOnce(
       reason: 'smoke-tty-required' as const,
       references,
       counters: Object.freeze({ ...counters }),
+      diagnostics: recorder.snapshot(),
     });
   }
 
-  const resolver = createMaskedTtyCredentialResolver(deps.credentialSource);
+  // The resolver is wrapped only to stamp the credential milestone. The wrapper adds no behaviour: it
+  // never inspects, copies, or retains the key, and it forwards `reads`/`lastFailure` untouched.
+  const resolver = withCredentialMilestone(
+    createMaskedTtyCredentialResolver(deps.credentialSource),
+    recorder,
+  );
 
-  // Exactly one AbortController and exactly one timer, both owned here.
+  // Exactly one AbortController and exactly one timer, both owned here. The arm order is UNCHANGED:
+  // the timer is still armed before credential resolution, so the 30 s bound still covers typing time.
   const controller = new AbortController();
   const timedOut = { value: false };
   const cancelTimer = deps.timer.arm(config.timeoutMs, () => {
     timedOut.value = true;
+    // Freeze the phase from the milestones proven at THIS instant, before the abort propagates.
+    recorder.markAbort();
     controller.abort();
   });
   counters.timersArmed += 1;
+  recorder.mark('timerArmed');
 
   let outcome: SmokeOutcome;
   try {
-    outcome = await bindAndInvokeOnce(config, deps, resolver, controller, timedOut, counters);
+    outcome = await bindAndInvokeOnce(
+      config,
+      deps,
+      resolver,
+      controller,
+      timedOut,
+      counters,
+      recorder,
+    );
   } catch {
     outcome = { ok: false, reason: 'smoke-invariant' };
   } finally {
@@ -293,10 +355,12 @@ export async function runGroqStagingSmokeOnce(
     // and an un-cancelled abort would fire after the run had already reported its outcome.
     cancelTimer();
     counters.timersCleared += 1;
+    recorder.mark('invokeSettled');
   }
 
   counters.credentialReads = resolver.reads();
   const finalCounters = Object.freeze({ ...counters });
+  const diagnostics = recorder.snapshot();
 
   if (outcome.ok) {
     return Object.freeze({
@@ -306,6 +370,7 @@ export async function runGroqStagingSmokeOnce(
       latencyMs: outcome.latencyMs,
       usage: outcome.usage,
       counters: finalCounters,
+      diagnostics,
     });
   }
   return Object.freeze({
@@ -315,5 +380,6 @@ export async function runGroqStagingSmokeOnce(
     ...(outcome.bindReason === undefined ? {} : { bindReason: outcome.bindReason }),
     ...(outcome.retryable === undefined ? {} : { retryable: outcome.retryable }),
     counters: finalCounters,
+    diagnostics,
   });
 }

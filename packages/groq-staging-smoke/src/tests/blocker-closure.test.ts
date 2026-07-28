@@ -78,7 +78,10 @@ describe('(2) QFJ-S1-BLOCK-002 — a one-shot executable harness exists', () => 
   it('the entry point exists, carries a shebang, and composes the real capabilities once', () => {
     const bin = readPackageFile('src/bin.ts');
     expect(bin.startsWith('#!/usr/bin/env node')).toBe(true);
-    expect(bin).toContain('createFetchGroqTransport()');
+    // Since QFJ-S1D-B the real transport is the instrumented one, still targeting the gateway's
+    // fixed endpoint through the platform fetch seam.
+    expect(bin).toContain('createInstrumentedGroqTransport({');
+    expect(bin).toContain('createSystemFetchLike()');
     expect(bin).toContain('createNodeMaskedSecretSource()');
     expect(bin).toContain('createSystemSmokeTimer()');
     expect(bin).toContain('runSmokeCli(');
@@ -180,7 +183,7 @@ describe('(5) all four blocker codes are demonstrably cleared by code and contra
 
     // BLOCK-002: an executable one-shot harness exists and has a real, non-test call site.
     expect(manifest.bin?.['qfj-groq-staging-smoke']).toBe('./dist/bin.js');
-    expect(readPackageFile('src/bin.ts')).toContain('createFetchGroqTransport()');
+    expect(readPackageFile('src/bin.ts')).toContain('createInstrumentedGroqTransport({');
 
     // BLOCK-003: the harness owns the abort and the timer, and always clears it.
     const result = await runOnce({});
