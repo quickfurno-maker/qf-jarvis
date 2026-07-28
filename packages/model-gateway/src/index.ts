@@ -27,6 +27,16 @@ export {
   type ModelResultMode,
 } from './contracts/enums.js';
 
+// The provider MODEL ID grammar (QFJ-S1C-A). Exported because `@qf-jarvis/groq-staging-smoke` must
+// validate `release.modelId` with the SAME grammar, and this package exposes no deep import path —
+// the alternative would be duplicating the regex across packages.
+export {
+  PROVIDER_MODEL_ID_PATTERN,
+  MAX_PROVIDER_MODEL_ID_LENGTH,
+  providerModelIdSchema,
+  isProviderModelId,
+} from './contracts/model-id.js';
+
 // Capabilities.
 export {
   providerCapabilitiesSchema,

@@ -12,6 +12,7 @@ import {
   defineProviderCapabilities,
   type ProviderCapabilities,
 } from '../../contracts/capabilities.js';
+import { providerModelIdSchema } from '../../contracts/model-id.js';
 import { GroqApiKey } from './groq-secret.js';
 import type { GroqTransport } from './groq-transport.js';
 
@@ -51,7 +52,9 @@ export interface GroqProviderConfigInput {
 const configPrimitivesSchema = z
   .object({
     providerId: IDENTIFIER,
-    modelId: IDENTIFIER,
+    // QFJ-S1C-A: the Groq catalogue namespaces models with a slash, and the wire `model` field must
+    // carry that identity verbatim. Only `modelId` uses the slash-segment grammar.
+    modelId: providerModelIdSchema,
     modelVersion: IDENTIFIER,
     maxInputTokens: z.int().min(1).max(10_000_000),
     maxCompletionTokens: z.int().min(1).max(1_000_000),

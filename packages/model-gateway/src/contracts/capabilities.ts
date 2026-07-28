@@ -8,6 +8,7 @@
 import { z } from 'zod';
 
 import { PROVIDER_EXECUTION_CLASSES } from './enums.js';
+import { providerModelIdSchema } from './model-id.js';
 
 /** A provider/model's declared, immutable capabilities. */
 export interface ProviderCapabilities {
@@ -35,7 +36,9 @@ const IDENTIFIER = z
 export const providerCapabilitiesSchema = z
   .object({
     providerId: IDENTIFIER,
-    modelId: IDENTIFIER,
+    // QFJ-S1C-A: a model id may be namespaced (`openai/gpt-oss-20b`). Only this field uses the
+    // slash-segment grammar; every neighbouring identifier keeps the generic charset.
+    modelId: providerModelIdSchema,
     modelVersion: IDENTIFIER,
     executionClass: z.enum(PROVIDER_EXECUTION_CLASSES),
     supportsStructuredOutput: z.boolean(),
