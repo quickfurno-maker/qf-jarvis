@@ -71,6 +71,19 @@ describe('(38) a successful run prints sanitized references and counters only', 
       'invocations',
       'timersArmed',
       'timersCleared',
+      // QFJ-S1D-B diagnostics. Numbers and closed enums only; a milestone never reached is omitted,
+      // which is itself the signal. `fetchStarted`..`responseBodyCompleted` are absent here because
+      // this run uses a fake transport that never touches the instrumented wire seam.
+      'timerArmedMs',
+      'bindStartedMs',
+      'credentialResolvedMs',
+      'requestConstructedMs',
+      'invokeStartedMs',
+      'invokeSettledMs',
+      'credentialEntryMs',
+      'totalElapsedMs',
+      'timeoutPhase',
+      'transportErrorCode',
       'modelOutput',
       'authority',
     ]);
@@ -187,6 +200,8 @@ describe('(40, 41) nothing sensitive escapes, and the model output is discarded'
     expect(result.ok).toBe(true);
     expect(Object.keys(result).sort()).toEqual([
       'counters',
+      // QFJ-S1D-B: milliseconds and closed enums only — asserted field-by-field in the S1D-B suite.
+      'diagnostics',
       'latencyMs',
       'ok',
       'reason',

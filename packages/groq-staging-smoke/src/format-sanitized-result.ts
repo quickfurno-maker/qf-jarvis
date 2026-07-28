@@ -10,7 +10,32 @@
  * text, model output, a raw body/header/error, PII, subject/client/vendor data, or chain-of-thought.
  * The timestamp is injected rather than read, so the function is pure and the output is deterministic.
  */
+import type { SmokeDiagnostics } from './diagnostic-telemetry.js';
 import type { SmokeRunResult } from './run-once.js';
+
+/**
+ * The closed diagnostic field list, in emission order (QFJ-S1D-B).
+ *
+ * Every entry is a NUMBER of milliseconds or a member of a closed enum. A milestone that was never
+ * reached is simply omitted, which is itself the signal — the last line present is the last phase the
+ * run proved it completed.
+ */
+const DIAGNOSTIC_MS_FIELDS: readonly (keyof SmokeDiagnostics)[] = [
+  'timerArmedMs',
+  'bindStartedMs',
+  'credentialResolvedMs',
+  'requestConstructedMs',
+  'invokeStartedMs',
+  'fetchStartedMs',
+  'headersReceivedMs',
+  'responseBodyStartedMs',
+  'responseBodyCompletedMs',
+  'invokeSettledMs',
+  'abortSignalledMs',
+  'credentialEntryMs',
+  'networkElapsedMs',
+  'totalElapsedMs',
+];
 
 /** Render the outcome as deterministic `key=value` lines. Pure: no clock, no I/O, no mutation. */
 export function formatSanitizedSmokeResult(result: SmokeRunResult, timestampIso: string): string {
@@ -52,6 +77,17 @@ export function formatSanitizedSmokeResult(result: SmokeRunResult, timestampIso:
   lines.push(`invocations=${String(result.counters.invocations)}`);
   lines.push(`timersArmed=${String(result.counters.timersArmed)}`);
   lines.push(`timersCleared=${String(result.counters.timersCleared)}`);
+  // QFJ-S1D-B diagnostics: numbers and closed enums only. No message, cause, URL, header, or body can
+  // reach this block — the recorder has no field capable of holding one.
+  for (const field of DIAGNOSTIC_MS_FIELDS) {
+    const value = result.diagnostics[field];
+    if (typeof value === 'number') {
+      lines.push(`${field}=${String(value)}`);
+    }
+  }
+  lines.push(`timeoutPhase=${result.diagnostics.timeoutPhase}`);
+  lines.push(`transportErrorCode=${result.diagnostics.transportErrorCode}`);
+
   lines.push('modelOutput=DISCARDED');
   lines.push('authority=QUICKFURNO_CORE');
 

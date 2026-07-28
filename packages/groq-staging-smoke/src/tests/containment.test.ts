@@ -71,8 +71,12 @@ describe('containment — the harness reaches nothing it must not reach', () => 
   it('(48, 42) production source performs no direct network, DB, n8n, WhatsApp, or Core access', () => {
     for (const file of productionFiles()) {
       const text = readFileSync(file, 'utf8');
-      // The ONLY network capability is the gateway transport handed in at composition.
-      expect(text).not.toMatch(/\bfetch\s*\(/);
+      // QFJ-S1D-B: exactly ONE production module may name `fetch` — the instrumented transport, whose
+      // whole purpose is to own the wire call so header/body phases become observable. Everywhere else
+      // the only network capability is still the transport handed in at composition.
+      if (!file.replace(/\\/g, '/').endsWith('/instrumented-transport.ts')) {
+        expect(text).not.toMatch(/\bfetch\s*\(/);
+      }
       expect(text).not.toMatch(/\bXMLHttpRequest\b/);
       expect(text).not.toMatch(
         /from ['"]node:(net|http|http2|https|dns|tls|dgram|child_process|worker_threads)['"]/,
@@ -84,6 +88,38 @@ describe('containment — the harness reaches nothing it must not reach', () => 
         /from ['"]@qf-jarvis\/(core-decision-adapter|jarvis-runtime|agent-runtime|event-backbone|event-ingestion|governed-knowledge|rag-provisioning|model-evaluation|model-reply-adapter)['"]/,
       );
     }
+  });
+
+  it('(QFJ-S1D-B) the one fetch call site is confined, guarded, and single-shot', () => {
+    const transport = readFileSync(
+      fileURLToPath(new URL('src/instrumented-transport.ts', PKG_DIR)),
+      'utf8',
+    );
+    // `fetch` appears exactly once, inside the injectable seam — never in the send path directly.
+    expect(transport.match(/\bfetch\s*\(/g)).toHaveLength(1);
+    expect(transport).toContain('export function createSystemFetchLike()');
+    // One delegation per send, and no loop that could produce a second.
+    expect(transport.match(/await deps\.fetchLike\(/g)).toHaveLength(1);
+    expect(transport).not.toMatch(/\b(while|for)\s*\(/);
+    // The SSRF guard and the fixed endpoint come from the gateway, not from a local literal.
+    expect(transport).toContain('GROQ_CHAT_COMPLETIONS_ENDPOINT');
+    expect(transport).toContain('Refusing a Groq request to a non-official endpoint.');
+    expect(transport).toContain("redirect: 'error'");
+    // The original error is rethrown unchanged; only a closed enum class is recorded.
+    expect(transport.match(/throw error;/g)).toHaveLength(2);
+    // No REQUEST header value is ever read or copied. Checked against the code with comments stripped,
+    // so the prose that documents this guarantee cannot be mistaken for a violation of it.
+    const code = transport
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '')
+      .replace(/\/\*\*[\s\S]*?\*\//g, '');
+    expect(code).not.toMatch(/authorization/i);
+    expect(code).not.toMatch(/headers\s*\[/);
+    // The only header read anywhere is the RESPONSE `retry-after`, matching the gateway's own rule.
+    expect(code.match(/headers\.get\(/g)).toHaveLength(1);
+    expect(code).toContain("headers.get('retry-after')");
+    // Request headers are spread through untouched.
+    expect(code).toContain('headers: { ...request.headers }');
   });
 
   it('(12) production source reads no environment variable', () => {
@@ -302,7 +338,9 @@ describe('the S1 safety contract is preserved, not re-implemented', () => {
       expect(text).not.toMatch(/credentialSource:\s*createNodeMaskedSecretSource/);
     }
     // The one real transport call site is the executable composition root, which no spec imports.
-    expect(readPackageSource('src/bin.ts')).toContain('createFetchGroqTransport()');
+    // Since QFJ-S1D-B it composes the instrumented transport over the platform fetch seam.
+    expect(readPackageSource('src/bin.ts')).toContain('createInstrumentedGroqTransport({');
+    expect(readPackageSource('src/bin.ts')).toContain('createSystemFetchLike()');
     for (const file of specs) {
       expect(readFileSync(file, 'utf8')).not.toMatch(/from ['"][./]*bin\.js['"]/);
     }
