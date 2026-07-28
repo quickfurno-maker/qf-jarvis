@@ -10,6 +10,7 @@ import { z } from 'zod';
 
 import { EvaluationError } from './errors.js';
 import { isCanonicalInstant } from './instant.js';
+import { providerModelIdSchema } from './model-id.js';
 import { EVALUATION_EXECUTION_CLASSES } from './vocabularies.js';
 import type { EvaluationExecutionClass } from './vocabularies.js';
 
@@ -72,7 +73,10 @@ const releaseSchema = z
   .object({
     releaseId: IDENTIFIER,
     providerId: IDENTIFIER,
-    modelId: IDENTIFIER,
+    // QFJ-S1C-B: a provider model id may be namespaced (`openai/gpt-oss-20b`), so evidence can name
+    // the real catalogue identity. Only this field uses the slash-segment grammar; every neighbouring
+    // identifier keeps the generic charset.
+    modelId: providerModelIdSchema,
     modelVersion: IDENTIFIER,
     configDigest: DIGEST,
     executionClass: z.enum(EVALUATION_EXECUTION_CLASSES),
