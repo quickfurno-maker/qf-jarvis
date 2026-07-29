@@ -76,6 +76,7 @@ describe('(38) a successful run prints sanitized references and counters only', 
       // this run uses a fake transport that never touches the instrumented wire seam.
       'timerArmedMs',
       'bindStartedMs',
+      'credentialReadSettledMs',
       'credentialResolvedMs',
       'requestConstructedMs',
       'invokeStartedMs',
@@ -84,6 +85,10 @@ describe('(38) a successful run prints sanitized references and counters only', 
       'totalElapsedMs',
       'timeoutPhase',
       'transportErrorCode',
+      // QFJ-S1D-E credential ingress: one closed enum plus two integers.
+      'credentialOutcome',
+      'credentialReadAttempts',
+      'credentialResolutions',
       'modelOutput',
       'authority',
     ]);

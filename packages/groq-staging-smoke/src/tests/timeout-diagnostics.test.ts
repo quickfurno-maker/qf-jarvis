@@ -22,11 +22,13 @@ import {
   createDiagnosticRecorder,
   deriveTimeoutPhase,
   normaliseTransportError,
+  CREDENTIAL_OUTCOMES,
   SMOKE_TIMEOUT_PHASES,
   TRANSPORT_ERROR_CODES,
   type DiagnosticRecorder,
   type MonotonicClock,
   type SmokeDiagnostics,
+  type CredentialOutcome,
   type SmokeTimeoutPhase,
   type TransportErrorCode,
 } from '../diagnostic-telemetry.js';
@@ -475,6 +477,10 @@ describe('(17, 18) nothing sensitive can reach the telemetry', () => {
         expect(TRANSPORT_ERROR_CODES).toContain(value as TransportErrorCode);
         continue;
       }
+      if (key === 'credentialOutcome') {
+        expect(CREDENTIAL_OUTCOMES).toContain(value as CredentialOutcome);
+        continue;
+      }
       expect(typeof value).toBe('number');
     }
   });
@@ -499,6 +505,10 @@ describe('(17, 18) nothing sensitive can reach the telemetry', () => {
       'totalElapsedMs',
       'timeoutPhase',
       'transportErrorCode',
+      'credentialReadSettledMs',
+      'credentialOutcome',
+      'credentialReadAttempts',
+      'credentialResolutions',
     ];
     expect(Object.keys(result.diagnostics).sort()).toEqual([...ALLOWED].sort());
   });
@@ -550,6 +560,10 @@ describe('(17, 18) nothing sensitive can reach the telemetry', () => {
       'totalElapsedMs',
       'timeoutPhase',
       'transportErrorCode',
+      'credentialReadSettledMs',
+      'credentialOutcome',
+      'credentialReadAttempts',
+      'credentialResolutions',
       'modelOutput',
       'authority',
     ]);

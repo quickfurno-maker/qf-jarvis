@@ -23,6 +23,7 @@ import type { SmokeRunResult } from './run-once.js';
 const DIAGNOSTIC_MS_FIELDS: readonly (keyof SmokeDiagnostics)[] = [
   'timerArmedMs',
   'bindStartedMs',
+  'credentialReadSettledMs',
   'credentialResolvedMs',
   'requestConstructedMs',
   'invokeStartedMs',
@@ -87,6 +88,11 @@ export function formatSanitizedSmokeResult(result: SmokeRunResult, timestampIso:
   }
   lines.push(`timeoutPhase=${result.diagnostics.timeoutPhase}`);
   lines.push(`transportErrorCode=${result.diagnostics.transportErrorCode}`);
+  // QFJ-S1D-E credential ingress: one closed enum and two integers. Explicit fields, never an object
+  // walk — nothing derived from the credential has a representable place here.
+  lines.push(`credentialOutcome=${result.diagnostics.credentialOutcome}`);
+  lines.push(`credentialReadAttempts=${String(result.diagnostics.credentialReadAttempts)}`);
+  lines.push(`credentialResolutions=${String(result.diagnostics.credentialResolutions)}`);
 
   lines.push('modelOutput=DISCARDED');
   lines.push('authority=QUICKFURNO_CORE');

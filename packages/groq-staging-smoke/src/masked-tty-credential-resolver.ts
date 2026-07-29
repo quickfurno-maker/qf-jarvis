@@ -25,6 +25,7 @@
 import { createGroqApiKey, type GroqApiKey } from '@qf-jarvis/model-gateway';
 import type { GroqCredentialReference, GroqCredentialResolver } from '@qf-jarvis/model-gateway';
 
+import type { CredentialOutcome, DiagnosticRecorder } from './diagnostic-telemetry.js';
 import type { SmokeFailureReason } from './smoke-reasons.js';
 
 /** The bounded shape an accepted staging credential must have. No provider prefix is asserted. */
@@ -34,6 +35,29 @@ const CREDENTIAL_PATTERN = /^[A-Za-z0-9_-]+$/;
 
 /** The label shown at the prompt. It names the reference, never a value. */
 export const CREDENTIAL_PROMPT_LABEL = 'Staging Groq credential (input hidden): ';
+
+/**
+ * How a masked read failed, as TYPED identity rather than a parsed message.
+ *
+ * `aborted` is claimed ONLY when the source itself signalled an explicit operator abort (Ctrl-C /
+ * Ctrl-D) through its own control flow. Everything else — a consumed source, an unavailable raw mode,
+ * or any foreign rejection — is `unavailable`, the safe fallback. Classifying by error message would
+ * mean trusting arbitrary text; this cannot.
+ */
+export const SECRET_READ_FAILURE_KINDS = ['aborted', 'unavailable'] as const;
+export type SecretReadFailureKind = (typeof SECRET_READ_FAILURE_KINDS)[number];
+
+/** The one typed rejection the production source raises. Carries a kind, never a value or a cause. */
+export class MaskedSecretReadError extends Error {
+  public readonly kind: SecretReadFailureKind;
+
+  public constructor(kind: SecretReadFailureKind) {
+    // A fixed message. It quotes no path, no cause, no reference, and no typed character.
+    super('QFJ_SMOKE_SECRET_READ_FAILED');
+    this.name = 'MaskedSecretReadError';
+    this.kind = kind;
+  }
+}
 
 /**
  * The narrow terminal seam. Production reads a real masked TTY; tests inject a deterministic fake, so no
@@ -49,12 +73,36 @@ export interface MaskedSecretSource {
 /** A `GroqCredentialResolver` that also reports its read count and its sanitized failure code. */
 export interface StagingCredentialResolver extends GroqCredentialResolver {
   /**
-   * How many credential reads were actually PERFORMED. A refused second `resolve` does not increment
-   * it, because nothing was read — so the harness can assert this never exceeds one.
+   * LEGACY (QFJ-S1D-E). A count of read ATTEMPTS, retained only for output compatibility with the
+   * pre-S1D-E `credentialReads` field. It equals {@link StagingCredentialResolver.readAttempts} in this
+   * one-shot harness. It has never meant "a credential was resolved" — use `resolutions` for that.
    */
   readonly reads: () => number;
   /** The sanitized code for the last refusal, or `undefined` if none. Never a cause or a value. */
   readonly lastFailure: () => SmokeFailureReason | undefined;
+  /** QFJ-S1D-E: which local ingress branch ran. A code path, never a property of the value. */
+  readonly outcome: () => CredentialOutcome;
+  /** QFJ-S1D-E: how many times the source read was ENTERED (0 when the TTY gate refused). */
+  readonly readAttempts: () => number;
+  /** QFJ-S1D-E: how many credential objects were successfully created. */
+  readonly resolutions: () => number;
+}
+
+/** The narrow recorder slice the resolver needs. Optional, so existing compositions are unchanged. */
+export type CredentialIngressRecorder = Pick<
+  DiagnosticRecorder,
+  'mark' | 'recordCredentialOutcome' | 'countCredentialReadAttempt' | 'countCredentialResolution'
+>;
+
+/** Injection points added for diagnostics. Both optional; neither changes acceptance semantics. */
+export interface MaskedResolverOptions {
+  readonly recorder?: CredentialIngressRecorder;
+  /**
+   * The credential holder factory. Production always uses `createGroqApiKey`. A test may inject a
+   * refusing factory to exercise `rejected-holder`, which the real bounds make unreachable — the
+   * production guards are NOT weakened to make that branch testable.
+   */
+  readonly createHolder?: (value: string) => GroqApiKey;
 }
 
 function isBoundedCredential(value: string): boolean {
@@ -66,58 +114,121 @@ function isBoundedCredential(value: string): boolean {
 }
 
 /**
+ * Name WHY a value that has ALREADY failed {@link isBoundedCredential} was refused.
+ *
+ * This decides nothing. Acceptance remains exactly `length >= MIN && length <= MAX && pattern`,
+ * byte-for-byte the baseline rule; this only reports which clause of it was the one that said no.
+ */
+function classifyRejection(value: string): CredentialOutcome {
+  if (value.length === 0) {
+    return 'rejected-empty';
+  }
+  if (value.length < MIN_CREDENTIAL_LENGTH) {
+    return 'rejected-too-short';
+  }
+  if (value.length > MAX_CREDENTIAL_LENGTH) {
+    return 'rejected-too-long';
+  }
+  return 'rejected-charset';
+}
+
+/**
  * Build the resolver over an injected terminal seam. `resolve` rejects with a FIXED, value-free error;
  * the specific sanitized code is read from {@link StagingCredentialResolver.lastFailure}, because the
  * gateway binding deliberately collapses every resolver rejection to `groq-bind-credential-unavailable`.
+ *
+ * QFJ-S1D-E adds a closed {@link CredentialOutcome} naming the exact local branch that ran. It reports;
+ * it never decides. Which values are accepted is unchanged.
  */
 export function createMaskedTtyCredentialResolver(
   source: MaskedSecretSource,
+  options: MaskedResolverOptions = {},
 ): StagingCredentialResolver {
-  const state: { reads: number; failure: SmokeFailureReason | undefined } = {
+  const recorder = options.recorder;
+  const createHolder = options.createHolder ?? createGroqApiKey;
+  const state: {
+    entered: boolean;
+    reads: number;
+    resolutions: number;
+    failure: SmokeFailureReason | undefined;
+    outcome: CredentialOutcome;
+  } = {
+    entered: false,
     reads: 0,
+    resolutions: 0,
     failure: undefined,
+    outcome: 'not-attempted',
   };
 
-  const fail = (reason: SmokeFailureReason): Promise<GroqApiKey> => {
+  const record = (outcome: CredentialOutcome): void => {
+    // First non-default wins locally, mirroring the recorder, so a refused re-entry cannot overwrite.
+    if (state.outcome === 'not-attempted') {
+      state.outcome = outcome;
+    }
+    recorder?.recordCredentialOutcome(outcome);
+  };
+
+  const fail = (reason: SmokeFailureReason, outcome: CredentialOutcome): Promise<GroqApiKey> => {
     state.failure = reason;
+    record(outcome);
     // A fixed message. It quotes no path, no cause, no reference, and no typed character.
     return Promise.reject(new Error('QFJ_SMOKE_CREDENTIAL_REFUSED'));
   };
 
   return Object.freeze({
     async resolve(_reference: GroqCredentialReference): Promise<GroqApiKey> {
-      // Exactly one read per process. A second call fails closed rather than re-prompting.
-      if (state.reads >= 1) {
-        return fail('smoke-credential-invalid');
+      // Exactly one entry per process. A second call fails closed rather than re-prompting, and
+      // deliberately does NOT overwrite the first call's recorded outcome.
+      if (state.entered) {
+        state.failure = 'smoke-credential-invalid';
+        return Promise.reject(new Error('QFJ_SMOKE_CREDENTIAL_REFUSED'));
       }
-      state.reads += 1;
+      state.entered = true;
 
       // The TTY gate is re-checked here so the resolver is safe on its own, not only via the harness.
+      // It runs BEFORE any attempt is counted, so a refusal leaves the attempt counter at zero.
       if (!source.isInteractive()) {
-        return fail('smoke-tty-required');
+        return fail('smoke-tty-required', 'tty-required');
       }
+
+      // Counted immediately before the read is entered — an attempt, never a success.
+      state.reads += 1;
+      recorder?.countCredentialReadAttempt();
 
       let typed: string;
       try {
         typed = await source.readOnce(CREDENTIAL_PROMPT_LABEL);
-      } catch {
-        return fail('smoke-credential-invalid');
+      } catch (error: unknown) {
+        recorder?.mark('credentialReadSettled');
+        // TYPED identity only. An explicit abort is claimed solely when the source itself said so;
+        // every other rejection, including a foreign one, falls back to `read-unavailable`.
+        const aborted = error instanceof MaskedSecretReadError && error.kind === 'aborted';
+        return fail('smoke-credential-invalid', aborted ? 'read-aborted' : 'read-unavailable');
       }
+      recorder?.mark('credentialReadSettled');
 
       if (!isBoundedCredential(typed)) {
-        return fail('smoke-credential-invalid');
+        return fail('smoke-credential-invalid', classifyRejection(typed));
       }
 
-      // `createGroqApiKey` wraps the value in the redacting holder. From here the value has no
-      // accessor: `toString`, `toJSON`, and the Node inspect hook all return the redaction marker.
+      // The holder wraps the value in the redacting type. From here the value has no accessor:
+      // `toString`, `toJSON`, and the Node inspect hook all return the redaction marker.
+      let holder: GroqApiKey;
       try {
-        return createGroqApiKey(typed);
+        holder = createHolder(typed);
       } catch {
-        return fail('smoke-credential-invalid');
+        return fail('smoke-credential-invalid', 'rejected-holder');
       }
+      state.resolutions += 1;
+      recorder?.countCredentialResolution();
+      record('resolved');
+      return holder;
     },
     reads: () => state.reads,
     lastFailure: () => state.failure,
+    outcome: () => state.outcome,
+    readAttempts: () => state.reads,
+    resolutions: () => state.resolutions,
   });
 }
 
@@ -149,13 +260,13 @@ export function createNodeMaskedSecretSource(): MaskedSecretSource {
 
     readOnce(label: string): Promise<string> {
       if (consumed) {
-        return Promise.reject(new Error('QFJ_SMOKE_SECRET_ALREADY_READ'));
+        return Promise.reject(new MaskedSecretReadError('unavailable'));
       }
       consumed = true;
 
       const input = process.stdin;
       if (typeof input.setRawMode !== 'function') {
-        return Promise.reject(new Error('QFJ_SMOKE_TTY_UNAVAILABLE'));
+        return Promise.reject(new MaskedSecretReadError('unavailable'));
       }
 
       return new Promise<string>((resolve, reject) => {
@@ -190,7 +301,7 @@ export function createNodeMaskedSecretSource(): MaskedSecretSource {
           restore();
           characters.fill('');
           characters.length = 0;
-          reject(new Error('QFJ_SMOKE_SECRET_READ_ABORTED'));
+          reject(new MaskedSecretReadError('aborted'));
         };
 
         const onData = (chunk: string): void => {
