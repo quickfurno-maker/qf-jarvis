@@ -41,6 +41,22 @@ export interface RolloutApprovalAttestation {
   readonly approvedModeCeiling: GatewayMode;
   readonly approvedCanaryBasisPoints: number;
   readonly revision: number;
+  /**
+   * QFJ-S2-C-B (ADR-0063 §7). These three bind the attestation to REGISTERED evaluation evidence.
+   *
+   * They are OPTIONAL at the schema boundary so the constructor stays additive and no existing caller
+   * breaks — and MANDATORY for any candidate transition above OFF, where their absence is refused as
+   * `evidence-missing`. An old attestation carrying only `evaluationRef` therefore cannot authorize
+   * SHADOW, CANARY or ACTIVE.
+   *
+   * `evidenceDigest` is a CLAIM. A verifier recomputes the digest from registered evidence and
+   * compares; it never trusts this value.
+   */
+  readonly evidenceDigest: string | undefined;
+  /** The approval target the evidence must carry, as a bounded string (the gateway owns no target enum). */
+  readonly approvalTarget: string | undefined;
+  /** The exact capability profile the approval was granted against. */
+  readonly capabilityProfileRef: string | undefined;
 }
 
 const approvalSchema = z
@@ -56,6 +72,15 @@ const approvalSchema = z
     approvedModeCeiling: z.enum(GATEWAY_MODES),
     approvedCanaryBasisPoints: z.int().min(0).max(10_000),
     revision: z.int().min(0).max(1_000_000),
+    // QFJ-S2-C-B: additive and optional here, mandatory above OFF (see the interface note).
+    evidenceDigest: z
+      .string()
+      .min(8)
+      .max(128)
+      .regex(/^[A-Za-z0-9._:-]+$/)
+      .optional(),
+    approvalTarget: IDENTIFIER.optional(),
+    capabilityProfileRef: IDENTIFIER.optional(),
   })
   .strict();
 
@@ -68,7 +93,33 @@ export function createRolloutApprovalAttestation(input: unknown): RolloutApprova
   return Object.freeze({
     ...parsed.data,
     privacyRefs: Object.freeze([...parsed.data.privacyRefs]),
+    // Normalise the optional evidence fields to an explicit `undefined` so the frozen shape is total.
+    evidenceDigest: parsed.data.evidenceDigest,
+    approvalTarget: parsed.data.approvalTarget,
+    capabilityProfileRef: parsed.data.capabilityProfileRef,
   });
+}
+
+/**
+ * QFJ-S2-C-B: the evidence fields an attestation must carry before it may back a candidate transition
+ * above OFF. Returns the complete triple, or `undefined` when any part is absent.
+ */
+export function approvalEvidenceClaim(approval: RolloutApprovalAttestation):
+  | {
+      readonly evidenceDigest: string;
+      readonly approvalTarget: string;
+      readonly capabilityProfileRef: string;
+    }
+  | undefined {
+  const { evidenceDigest, approvalTarget, capabilityProfileRef } = approval;
+  if (
+    evidenceDigest === undefined ||
+    approvalTarget === undefined ||
+    capabilityProfileRef === undefined
+  ) {
+    return undefined;
+  }
+  return { evidenceDigest, approvalTarget, capabilityProfileRef };
 }
 
 /** True iff the approval is bound to exactly this candidate release (id + config digest). */

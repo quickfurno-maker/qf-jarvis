@@ -32,6 +32,7 @@ import type {
   ProductionCompositionRefusal,
   ProductionCompositionResult,
 } from './contracts/production-composition-config.js';
+import { createEvaluationEvidenceRegistry } from './evidence/evaluation-evidence-registry.js';
 
 /** Identity tokens that may never bind a production release. Mirrors the S1 staging-binding rule. */
 const WILDCARDS: ReadonlySet<string> = new Set(['*', 'latest']);
@@ -138,7 +139,16 @@ export function createProductionModelGateway(
     }
   }
 
-  // 5. Compose the EXISTING gateway. No rollout controller and no routing profile are supplied, so the
+  // 5. QFJ-S2-C-B (ADR-0063 §6): build the frozen evaluation-evidence registry. Invalid or conflicting
+  //    evidence refuses the WHOLE composition rather than being silently dropped. The verifier this
+  //    produces is deliberately NOT wired to a rollout controller — none is constructed — so registering
+  //    evidence activates nothing. It exists so a later authorized slice inherits a closed gate.
+  const registryResult = createEvaluationEvidenceRegistry(config.evaluationEvidence ?? []);
+  if (!registryResult.ok) {
+    return refuse(registryResult.reason);
+  }
+
+  // 6. Compose the EXISTING gateway. No rollout controller and no routing profile are supplied, so the
   //    rollout and hybrid paths are not merely unused — they are unreachable through this composition.
   const inner = createModelGateway({
     mode: 'OFF',
@@ -174,6 +184,7 @@ export function createProductionModelGateway(
         providerIds: Object.freeze(config.providers.map((p) => p.descriptor.providerId)),
         releaseIds: Object.freeze(config.approvedReleases.map((r) => r.releaseId)),
         credentialResolverSupplied: config.credentialResolver !== undefined,
+        registeredEvidenceCount: registryResult.registry.size(),
       }),
     }),
   });

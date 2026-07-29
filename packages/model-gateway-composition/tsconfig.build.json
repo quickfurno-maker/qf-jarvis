@@ -14,6 +14,7 @@
   // contracts) and @qf-jarvis/model-reply-adapter (the QFJ-M4 ModelGatewayInvoker seam) — both one-way.
   "references": [
     { "path": "../model-gateway" },
+    { "path": "../model-evaluation/tsconfig.build.json" },
     { "path": "../model-reply-adapter/tsconfig.build.json" }
   ],
   "include": ["src/**/*.ts"],

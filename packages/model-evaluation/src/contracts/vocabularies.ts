@@ -6,11 +6,20 @@
  * bag, no wildcard. The excluded vendor identifier appears nowhere.
  */
 
-/** Closed approval targets. The semantic-retrieval target is RESEARCH evidence only. */
+/**
+ * Closed approval targets. The semantic-retrieval target is RESEARCH evidence only.
+ *
+ * QFJ-S2-C-B adds `CONNECTIVITY_SMOKE`: evidence that a transport reached a provider and returned a
+ * well-formed response. It says NOTHING about model quality, so it authorizes NO rollout mode — the
+ * target→mode ladder that enforces this lives in `@qf-jarvis/model-gateway-composition`, the one layer
+ * that may see both this vocabulary and the gateway's rollout modes (ADR-0063 §2). Connectivity
+ * evidence is always `synthetic: true` / `productionApproval: false`.
+ */
 export const EVALUATION_APPROVAL_TARGETS = [
   'ACTIVE_MODEL_RELEASE',
   'SHADOW_ELIGIBILITY',
   'CANARY_ELIGIBILITY',
+  'CONNECTIVITY_SMOKE',
   'SEMANTIC_RETRIEVAL_RESEARCH_ELIGIBILITY',
 ] as const;
 export type EvaluationApprovalTarget = (typeof EVALUATION_APPROVAL_TARGETS)[number];

@@ -39,7 +39,19 @@ import {
 } from '../testing/index.js';
 import { decideServing } from '../operations/rollout-execution.js';
 import { validateTransition } from '../operations/rollout-transitions.js';
+import type { EvaluationEvidenceVerifier } from '../operations/evaluation-evidence-verifier.js';
 import { canaryBucket, canaryCohort } from '../operations/canary-bucket.js';
+
+/**
+ * QFJ-S2-C-B: a permissive stub so the matrix specs keep testing the MATRIX in isolation.
+ *
+ * `validateTransition` now refuses every candidate transition above OFF when no verifier is
+ * injected, which is the point of the slice — the fail-closed behaviour is asserted separately in
+ * the QFJ-S2-C-B suites rather than by weakening these.
+ */
+const PERMISSIVE_VERIFIER: EvaluationEvidenceVerifier = Object.freeze({
+  verify: () => ({ ok: true as const }),
+});
 
 const OFF_KILL: GatewayKillSwitch = { active: (): boolean => false };
 
@@ -98,6 +110,12 @@ function approval(overrides: Partial<RolloutApprovalAttestation> = {}): RolloutA
     approvedModeCeiling: 'ACTIVE',
     approvedCanaryBasisPoints: 10_000,
     revision: 1,
+    // QFJ-S2-C-B: an approval backing a candidate above OFF must carry its evidence claim. These are
+    // SHAPE-valid placeholders; the claim is PROVED against registered evidence by the verifier, which
+    // the QFJ-S2-C-B suites exercise directly.
+    evidenceDigest: 'evidence-digest-placeholder',
+    approvalTarget: 'ACTIVE_MODEL_RELEASE',
+    capabilityProfileRef: 'cap.profile.test',
     ...overrides,
   });
 }
@@ -195,20 +213,30 @@ describe('validateTransition — the transition matrix', () => {
   const active = policy({ revision: 3, mode: 'ACTIVE', shadow: false });
 
   it('allows the promotion path OFF->SHADOW->CANARY->ACTIVE', () => {
-    expect(validateTransition(off, shadow, 0).ok).toBe(true);
-    expect(validateTransition(shadow, canary, 1).ok).toBe(true);
-    expect(validateTransition(canary, active, 2).ok).toBe(true);
+    expect(validateTransition(off, shadow, 0, PERMISSIVE_VERIFIER).ok).toBe(true);
+    expect(validateTransition(shadow, canary, 1, PERMISSIVE_VERIFIER).ok).toBe(true);
+    expect(validateTransition(canary, active, 2, PERMISSIVE_VERIFIER).ok).toBe(true);
   });
 
   it('rejects OFF->ACTIVE and SHADOW->ACTIVE', () => {
     expect(
-      validateTransition(off, policy({ revision: 1, mode: 'ACTIVE', shadow: false }), 0),
+      validateTransition(
+        off,
+        policy({ revision: 1, mode: 'ACTIVE', shadow: false }),
+        0,
+        PERMISSIVE_VERIFIER,
+      ),
     ).toEqual({
       ok: false,
       reason: 'invalid-transition',
     });
     expect(
-      validateTransition(shadow, policy({ revision: 2, mode: 'ACTIVE', shadow: false }), 1),
+      validateTransition(
+        shadow,
+        policy({ revision: 2, mode: 'ACTIVE', shadow: false }),
+        1,
+        PERMISSIVE_VERIFIER,
+      ),
     ).toEqual({
       ok: false,
       reason: 'invalid-transition',
@@ -221,15 +249,28 @@ describe('validateTransition — the transition matrix', () => {
         active,
         policy({ revision: 4, mode: 'CANARY', shadow: false, canaryBasisPoints: 100 }),
         3,
+        PERMISSIVE_VERIFIER,
       ).ok,
     ).toBe(true);
     expect(
-      validateTransition(active, policy({ revision: 4, mode: 'FALLBACK', shadow: false }), 3).ok,
+      validateTransition(
+        active,
+        policy({ revision: 4, mode: 'FALLBACK', shadow: false }),
+        3,
+        PERMISSIVE_VERIFIER,
+      ).ok,
     ).toBe(true);
     expect(
-      validateTransition(canary, policy({ revision: 3, mode: 'SHADOW', shadow: true }), 2).ok,
+      validateTransition(
+        canary,
+        policy({ revision: 3, mode: 'SHADOW', shadow: true }),
+        2,
+        PERMISSIVE_VERIFIER,
+      ).ok,
     ).toBe(true);
-    expect(validateTransition(active, offRolloutPolicy('roll-1', STABLE), 3).ok).toBe(false); // revision 0 not monotonic
+    expect(
+      validateTransition(active, offRolloutPolicy('roll-1', STABLE), 3, PERMISSIVE_VERIFIER).ok,
+    ).toBe(false); // revision 0 not monotonic
     expect(
       validateTransition(
         active,
@@ -241,17 +282,22 @@ describe('validateTransition — the transition matrix', () => {
           approval: undefined,
         }),
         3,
+        PERMISSIVE_VERIFIER,
       ).ok,
     ).toBe(true);
   });
 
   it('rejects a stale expectedRevision and a non-monotonic revision', () => {
-    expect(validateTransition(shadow, canary, 0)).toEqual({ ok: false, reason: 'stale-revision' });
+    expect(validateTransition(shadow, canary, 0, PERMISSIVE_VERIFIER)).toEqual({
+      ok: false,
+      reason: 'stale-revision',
+    });
     expect(
       validateTransition(
         shadow,
         policy({ revision: 1, mode: 'CANARY', shadow: false, canaryBasisPoints: 1 }),
         1,
+        PERMISSIVE_VERIFIER,
       ),
     ).toEqual({
       ok: false,
@@ -282,6 +328,7 @@ describe('validateTransition — the transition matrix', () => {
           approval: changedApproval,
         }),
         2,
+        PERMISSIVE_VERIFIER,
       ),
     ).toEqual({ ok: false, reason: 'invalid-transition' });
     // CANARY -> SHADOW with a changed candidate is allowed (re-shadow).
@@ -296,6 +343,7 @@ describe('validateTransition — the transition matrix', () => {
           approval: changedApproval,
         }),
         2,
+        PERMISSIVE_VERIFIER,
       ).ok,
     ).toBe(true);
   });
@@ -326,6 +374,7 @@ describe('validateTransition — the transition matrix', () => {
           approval: cappedApproval,
         }),
         1,
+        PERMISSIVE_VERIFIER,
       ),
     ).toEqual({ ok: false, reason: 'approval-canary-ceiling' });
     expect(
@@ -339,6 +388,7 @@ describe('validateTransition — the transition matrix', () => {
           approval: cappedApproval,
         }),
         2,
+        PERMISSIVE_VERIFIER,
       ).ok,
     ).toBe(true);
   });
@@ -349,7 +399,11 @@ describe('validateTransition — the transition matrix', () => {
 // ===================================================================================================
 describe('createProviderRolloutController', () => {
   it('applies a valid transition and rejects a stale one', () => {
-    const controller = createProviderRolloutController(offRolloutPolicy('roll-1', STABLE));
+    const controller = createProviderRolloutController(
+      offRolloutPolicy('roll-1', STABLE),
+      undefined,
+      PERMISSIVE_VERIFIER,
+    );
     expect(controller.snapshot().mode).toBe('OFF');
     const ok = controller.transition(policy({ revision: 1, mode: 'SHADOW', shadow: true }), 0);
     expect(ok.ok).toBe(true);
@@ -365,6 +419,8 @@ describe('createProviderRolloutController', () => {
   it('emergency-disables from any mode and a stale revision cannot re-enable', () => {
     const controller = createProviderRolloutController(
       policy({ revision: 5, mode: 'ACTIVE', shadow: false }),
+      undefined,
+      PERMISSIVE_VERIFIER,
     );
     const disabled = controller.emergencyDisable(5, 'emergency-disable');
     expect(disabled.ok).toBe(true);
@@ -378,11 +434,15 @@ describe('createProviderRolloutController', () => {
 
   it('emits safe content-free transition events', () => {
     const events: RolloutEvent[] = [];
-    const controller = createProviderRolloutController(offRolloutPolicy('roll-1', STABLE), {
-      record: (e) => {
-        events.push(e);
+    const controller = createProviderRolloutController(
+      offRolloutPolicy('roll-1', STABLE),
+      {
+        record: (e) => {
+          events.push(e);
+        },
       },
-    });
+      PERMISSIVE_VERIFIER,
+    );
     controller.transition(policy({ revision: 1, mode: 'SHADOW', shadow: true }), 0);
     expect(events.some((e) => e.type === 'rollout-transitioned' && e.mode === 'SHADOW')).toBe(true);
     expect(JSON.stringify(events)).not.toMatch(/secret|token|prompt|message/i);
@@ -485,6 +545,10 @@ describe('gateway — rollout integration', () => {
       circuit: { failureThreshold: 3, cooldownMs: 1000 },
       allowFallback: false,
       rolloutController: controller,
+      // QFJ-S2-C-B amendment: the serving boundary refuses a candidate-bearing policy without a
+      // verifier. These specs exercise ROLLOUT behaviour, so they inject the permissive stub; the
+      // fail-closed path is proved separately in the S2-C-B suites.
+      evidenceVerifier: PERMISSIVE_VERIFIER,
       ...overrides,
     });
   }
@@ -525,7 +589,7 @@ describe('gateway — rollout integration', () => {
     p: ProviderRolloutPolicy,
     events?: RolloutEvent[],
   ): { controller: ProviderRolloutController; obs?: { record: (e: RolloutEvent) => void } } => {
-    const controller = createProviderRolloutController(p);
+    const controller = createProviderRolloutController(p, undefined, PERMISSIVE_VERIFIER);
     return events === undefined
       ? { controller }
       : {
@@ -691,6 +755,8 @@ describe('gateway — rollout integration', () => {
     const candidate = providerFor(CANDIDATE, { responses: [completedText('cand')] });
     const controller = createProviderRolloutController(
       policy({ revision: 4, mode: 'ACTIVE', shadow: false }),
+      undefined,
+      PERMISSIVE_VERIFIER,
     );
     controller.emergencyDisable(4, 'emergency-disable');
     await expectCode(gateway(controller, [stable, candidate]).invoke(textRequest()), 'gateway-off');

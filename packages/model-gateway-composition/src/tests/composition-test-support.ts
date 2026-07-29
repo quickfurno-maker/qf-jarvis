@@ -24,7 +24,12 @@ export const PROVIDER_ID = 'groq.staging';
 export const MODEL_ID = 'openai/gpt-oss-20b';
 export const MODEL_VERSION = '2026-07-01';
 export const RELEASE_ID = 'release.s2b.synthetic.v1';
-export const CONFIG_DIGEST = 'fakedigest0000000000000000000000';
+/**
+ * A synthetic config digest that satisfies BOTH grammars: the gateway's release digest
+ * (`/^[A-Za-z0-9._:-]+$/`) and model-evaluation's stricter `/^[0-9a-f]{8,64}$/`. Lowercase hex only, so
+ * the same fixture release can appear in a gateway release ref and in an evaluation binding.
+ */
+export const CONFIG_DIGEST = '0fadedbeef000000000000000000000a';
 
 /** A synthetic approved release. Exact identity only — never a wildcard, never `latest`. */
 export function syntheticRelease(over: Record<string, unknown> = {}): ProviderReleaseRef {

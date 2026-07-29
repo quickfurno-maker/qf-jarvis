@@ -41,6 +41,24 @@ export const ROLLOUT_REFUSAL_REASONS = [
   'stale-revision',
   'candidate-required',
   'canary-out-of-range',
+  // QFJ-S2-C-B (ADR-0063): verified evaluation-evidence binding. Each names a distinct condition an
+  // operator can act on — none carries a payload, a message, or a dataset/prompt/output fragment.
+  /** No verifier was injected, so no attestation above OFF can be backed. Fails closed. */
+  'evidence-verifier-unavailable',
+  /** The cited `evaluationRef` is not registered, or the attestation omits its evidence fields. */
+  'evidence-missing',
+  /** The attestation's claimed digest does not match the digest derived from registered evidence. */
+  'evidence-digest-mismatch',
+  /** Registered evidence is bound to a different release identity than the candidate. */
+  'evidence-release-mismatch',
+  /** Registered evidence is bound to a different capability profile than the approval. */
+  'evidence-capability-mismatch',
+  /** The evidence target does not permit the requested rollout mode. */
+  'evidence-target-insufficient',
+  /** Synthetic evidence cannot authorize this mode. */
+  'synthetic-evidence-forbidden',
+  /** The mode requires production approval, and the evidence is not production-approved. */
+  'production-approval-required',
 ] as const;
 export type RolloutRefusalReason = (typeof ROLLOUT_REFUSAL_REASONS)[number];
 

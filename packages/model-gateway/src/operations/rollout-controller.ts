@@ -8,9 +8,11 @@
  * blocks any further serving until an explicit, non-stale re-enable. There is no environment access, no
  * persistence, no remote API, and no CLI.
  */
+import type { EvaluationEvidenceVerifier } from './evaluation-evidence-verifier.js';
 import { offRolloutPolicy, type ProviderRolloutPolicy } from './rollout-policy.js';
 import { createProviderRolloutPolicy } from './rollout-policy.js';
 import { validateTransition } from './rollout-transitions.js';
+import { verifyCandidateEvidence } from './verify-policy-evidence.js';
 import {
   NOOP_ROLLOUT_OBSERVABILITY,
   type RolloutObservabilityHook,
@@ -40,7 +42,24 @@ export interface ProviderRolloutController {
 export function createProviderRolloutController(
   initial: ProviderRolloutPolicy,
   observability: RolloutObservabilityHook = NOOP_ROLLOUT_OBSERVABILITY,
+  evidenceVerifier?: EvaluationEvidenceVerifier,
 ): ProviderRolloutController {
+  // QFJ-S2-C-B amendment (ADR-0063 §10): the INITIAL policy is verified exactly like a transition.
+  // Without this, seeding a controller with a candidate-bearing SHADOW/CANARY/ACTIVE policy reached the
+  // serving path having never passed `validateTransition`. Construction throws rather than returning an
+  // unverified controller, so an unverified non-OFF state cannot exist behind this factory at all.
+  const initialEvidence = verifyCandidateEvidence({
+    mode: initial.mode,
+    candidate: initial.candidate,
+    approval: initial.approval,
+    verifier: evidenceVerifier,
+  });
+  if (!initialEvidence.ok) {
+    throw new Error(
+      'A rollout controller cannot be seeded with an unverified candidate-bearing policy.',
+    );
+  }
+
   let current = initial;
 
   const emit = observability.record.bind(observability);
@@ -51,7 +70,9 @@ export function createProviderRolloutController(
     },
 
     transition(next: ProviderRolloutPolicy, expectedRevision: number): TransitionResult {
-      const check = validateTransition(current, next, expectedRevision);
+      // QFJ-S2-C-B: an absent verifier is NOT permissive — `validateTransition` refuses every
+      // candidate transition above OFF with `evidence-verifier-unavailable`.
+      const check = validateTransition(current, next, expectedRevision, evidenceVerifier);
       if (!check.ok) {
         emit({
           type: 'rollout-refused',
