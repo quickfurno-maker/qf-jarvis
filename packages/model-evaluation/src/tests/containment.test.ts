@@ -149,6 +149,65 @@ describe('observability and authority', () => {
     expect(evidence.ok && evidence.evidence.synthetic).toBe(true);
   });
 
+  /**
+   * QFJ-S2-C-B (ADR-0063 §3, §4). `CONNECTIVITY_SMOKE` joins the closed target vocabulary, and the
+   * approval flags widen from literals to booleans so a future non-synthetic production path can exist.
+   *
+   * The target→rollout-mode ladder is NOT asserted here: it needs the gateway's `GatewayMode`, which
+   * this package must never import. It lives — and is tested — in `@qf-jarvis/model-gateway-composition`.
+   */
+  it('(1) CONNECTIVITY_SMOKE is a member of the closed approval-target vocabulary', () => {
+    expect([...EVALUATION_APPROVAL_TARGETS]).toContain('CONNECTIVITY_SMOKE');
+    expect(EVALUATION_APPROVAL_TARGETS).toHaveLength(5);
+    expect(new Set(EVALUATION_APPROVAL_TARGETS).size).toBe(5);
+  });
+
+  it('(8, 12, 15) the approval flags are booleans, evidence stays frozen, and none is production', () => {
+    const suite = buildFoundationSuite();
+    const result = evaluateSuite(suite, safeObservations(suite));
+    for (const target of EVALUATION_APPROVAL_TARGETS) {
+      const evidence = createApprovalEvidence(result, target);
+      if (!evidence.ok) {
+        continue;
+      }
+      // (8) booleans, not literals — the type widened, the runtime values did not.
+      expect(typeof evidence.evidence.synthetic).toBe('boolean');
+      expect(typeof evidence.evidence.productionApproval).toBe('boolean');
+      // (15) this slice manufactures NO production artifact: the generator still emits synthetic-only.
+      expect(evidence.evidence.synthetic).toBe(true);
+      expect(evidence.evidence.productionApproval).toBe(false);
+      // Synthetic AND production-approved is the combination that must never appear.
+      expect(evidence.evidence.synthetic && evidence.evidence.productionApproval).toBe(false);
+      // (12) still frozen.
+      expect(Object.isFrozen(evidence.evidence)).toBe(true);
+      expect(Object.isFrozen(evidence.evidence.binding)).toBe(true);
+    }
+  });
+
+  it('(13, 14) the digest stays deterministic and the existing evidence gates are unchanged', () => {
+    const suite = buildFoundationSuite();
+    const a = createApprovalEvidence(
+      evaluateSuite(suite, safeObservations(suite)),
+      'CONNECTIVITY_SMOKE',
+    );
+    const b = createApprovalEvidence(
+      evaluateSuite(suite, safeObservations(suite)),
+      'CONNECTIVITY_SMOKE',
+    );
+    expect(a.ok && b.ok).toBe(true);
+    if (a.ok && b.ok) {
+      // (13) same inputs, same reference and same digests — no clock, no randomness.
+      expect(a.evidence.evaluationRef).toBe(b.evidence.evaluationRef);
+      expect(a.evidence.suiteResultDigest).toBe(b.evidence.suiteResultDigest);
+      expect(a.evidence.caseSetDigest).toBe(b.evidence.caseSetDigest);
+    }
+    // (14) a tampered case-set digest is still refused by the pre-existing integrity gate.
+    const result = evaluateSuite(suite, safeObservations(suite));
+    const tampered = { ...result, caseSetDigest: 'deadbeef' };
+    const refused = createApprovalEvidence(tampered, 'ACTIVE_MODEL_RELEASE');
+    expect(refused).toEqual({ ok: false, code: 'evidence-digest-invalid' });
+  });
+
   it('(56) implements no semantic retrieval — the target is a research label only', () => {
     expect([...EVALUATION_APPROVAL_TARGETS]).toContain('SEMANTIC_RETRIEVAL_RESEARCH_ELIGIBILITY');
     for (const file of productionFiles()) {

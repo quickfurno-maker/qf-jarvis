@@ -26,6 +26,11 @@ import {
   syntheticRequest,
   validCompositionConfig,
 } from './composition-test-support.js';
+import {
+  CAPABILITY_PROFILE_REF,
+  evidenceFor,
+  productionEvidenceFor,
+} from './evidence-test-support.js';
 
 const PKG_DIR = new URL('../../', import.meta.url);
 
@@ -339,6 +344,85 @@ describe('(16, 17, 18, 19, 20) source containment', () => {
     expect(source).not.toMatch(
       /circuit\.|semaphore\.|selectProviders|buildRoutingPlan|decideFallover/,
     );
+  });
+});
+
+describe('(57-63) QFJ-S2-C-B: registering evidence activates nothing', () => {
+  it('(57, 58, 59, 60, 61) a valid, production-approved evidence set still serves nothing', async () => {
+    const provider = countingProvider();
+    const resolver = fakeGroqCredentialResolver();
+    const result = createProductionModelGateway(
+      validCompositionConfig({
+        providers: [provider],
+        credentialResolver: resolver,
+        evaluationEvidence: [productionEvidenceFor('ACTIVE_MODEL_RELEASE')],
+      }),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    // The evidence registered, and the composition is STILL OFF and non-activatable.
+    expect(result.composition.status.registeredEvidenceCount).toBe(1);
+    expect(result.composition.status.mode).toBe('OFF');
+    expect(result.composition.status.activatable).toBe(false);
+
+    await expect(result.composition.gateway.invoke(syntheticRequest())).rejects.toMatchObject({
+      code: 'gateway-off',
+    });
+    // (58, 59, 60, 61) nothing was invoked, checked, resolved or transported.
+    expect(provider.invocations()).toBe(0);
+    expect(provider.healthChecks()).toBe(0);
+    expect(resolver.resolved()).toBe(0);
+  });
+
+  it('(62) no verifier, registry or rollout controller is reachable through the composition', () => {
+    const result = createProductionModelGateway(
+      validCompositionConfig({
+        evaluationEvidence: [productionEvidenceFor('ACTIVE_MODEL_RELEASE')],
+      }),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(Object.keys(result.composition).sort()).toEqual(['gateway', 'status']);
+    const surface = result.composition as unknown as Record<string, unknown>;
+    for (const forbidden of ['verifier', 'registry', 'evidence', 'controller', 'rollout']) {
+      expect(surface[forbidden]).toBeUndefined();
+    }
+    // The status carries a COUNT only — no reference, digest, binding or evidence content.
+    const status = JSON.stringify(result.composition.status);
+    expect(status).not.toContain('evref-');
+    expect(status).not.toContain(CAPABILITY_PROFILE_REF);
+    expect(status).not.toContain('binding');
+  });
+
+  it('invalid or conflicting evidence refuses the WHOLE composition, fail-closed', () => {
+    const illegal = createProductionModelGateway(
+      validCompositionConfig({
+        evaluationEvidence: [
+          evidenceFor('ACTIVE_MODEL_RELEASE', { synthetic: true, productionApproval: true }),
+        ],
+      }),
+    );
+    expect(illegal.ok).toBe(false);
+    if (!illegal.ok) expect(illegal.reason).toBe('evidence-approval-flags-invalid');
+
+    const conflicting = createProductionModelGateway(
+      validCompositionConfig({
+        evaluationEvidence: [
+          evidenceFor('SHADOW_ELIGIBILITY', { evaluationRef: 'evref-same' }),
+          evidenceFor('CANARY_ELIGIBILITY', { evaluationRef: 'evref-same' }),
+        ],
+      }),
+    );
+    expect(conflicting.ok).toBe(false);
+    if (!conflicting.ok) expect(conflicting.reason).toBe('conflicting-evidence-registration');
+  });
+
+  it('an absent evidence set is legal and registers nothing', () => {
+    const result = createProductionModelGateway(validCompositionConfig());
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.composition.status.registeredEvidenceCount).toBe(0);
   });
 });
 

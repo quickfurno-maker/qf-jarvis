@@ -204,6 +204,16 @@ export {
   type RolloutObservabilityHook,
 } from './operations/index.js';
 
+// QFJ-S2-C-B (ADR-0063). The evaluation-evidence verifier seam — TYPE-ONLY, so the root runtime count
+// stays at 71. The gateway declares WHAT must be proved before a candidate rollout above OFF; the
+// implementation lives in `@qf-jarvis/model-gateway-composition`, which may depend on both this package
+// and `@qf-jarvis/model-evaluation`. This package depends on neither and stays locked to `zod`.
+export type {
+  EvaluationEvidenceVerifier,
+  EvidenceVerificationRequest,
+  EvidenceVerificationResult,
+} from './operations/index.js';
+
 // Model capability registry (QFJ-P04.02, ADR-0050). Composition + safe types only; the internal match
 // functions, tuple-key helper, and mutable internals stay private. No provider instance, no secret.
 export {

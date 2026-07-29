@@ -11,7 +11,11 @@
 import { z } from 'zod';
 
 import { GATEWAY_MODES, type GatewayMode } from '../contracts/enums.js';
-import { approvalBindsRelease, type RolloutApprovalAttestation } from './rollout-approval.js';
+import {
+  approvalBindsRelease,
+  approvalEvidenceClaim,
+  type RolloutApprovalAttestation,
+} from './rollout-approval.js';
 import { createProviderReleaseRef, type ProviderReleaseRef } from './provider-release.js';
 import { ROLLOUT_OPERATOR_REASONS, type RolloutOperatorReason } from './rollout-reasons.js';
 
@@ -140,6 +144,15 @@ export function createProviderRolloutPolicy(
     }
     if (!approvalBindsRelease(input.approval, candidate)) {
       throw new Error('The rollout approval does not bind the candidate release.');
+    }
+    // QFJ-S2-C-B (ADR-0063 §7): above OFF, the approval must carry its evidence claim. This is a SHAPE
+    // gate only — the claim is PROVED against registered evidence by the verifier in
+    // `validateTransition`. Requiring it at birth stops a pre-S2-C-B attestation from being seeded
+    // straight into a serving policy without ever passing a transition.
+    if (p.mode !== 'OFF' && approvalEvidenceClaim(input.approval) === undefined) {
+      throw new Error(
+        'A rollout policy above OFF requires an approval carrying evidence references.',
+      );
     }
   }
 

@@ -18,8 +18,21 @@ export interface ApprovalEvidence {
   readonly suiteResultDigest: string;
   readonly caseSetDigest: string;
   readonly createdAt: string;
-  /** ALWAYS true in this foundation slice: the evidence is synthetic, not production approval. */
-  readonly synthetic: true;
-  /** ALWAYS false: this evidence never constitutes production rollout approval on its own. */
-  readonly productionApproval: false;
+  /**
+   * Whether the evidence came from synthetic fixtures rather than a real evaluation run.
+   *
+   * QFJ-S2-C-B widened this from the literal `true` to a validated boolean so a future non-synthetic
+   * production-evidence path can exist at all (ADR-0063 §4). `createApprovalEvidence` still emits
+   * `true` — it scores synthetic fixtures — and this slice manufactures NO production artifact.
+   */
+  readonly synthetic: boolean;
+  /**
+   * Whether the evidence constitutes production rollout approval.
+   *
+   * `synthetic: true` together with `productionApproval: true` is INVALID: evidence cannot be both
+   * synthetic and production-approved. CANARY and ACTIVE require `synthetic: false` AND
+   * `productionApproval: true`; the rule is enforced where untrusted evidence enters, in the
+   * composition registry.
+   */
+  readonly productionApproval: boolean;
 }

@@ -580,6 +580,10 @@ describe('rollout integration — capability registry', () => {
       approvedModeCeiling: 'ACTIVE',
       approvedCanaryBasisPoints: 10000,
       revision: 1,
+      // QFJ-S2-C-B: shape-valid evidence references, required for any policy above OFF.
+      evidenceDigest: 'evidence-digest-placeholder',
+      approvalTarget: 'ACTIVE_MODEL_RELEASE',
+      capabilityProfileRef: 'cap.profile.test',
     });
   }
 

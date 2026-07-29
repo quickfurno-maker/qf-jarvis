@@ -21,6 +21,13 @@ export {
   type ProviderRolloutController,
   type TransitionResult,
 } from './rollout-controller.js';
+// QFJ-S2-C-B (ADR-0063 §1): the evidence-verifier seam is TYPE-ONLY. It adds no runtime binding, so the
+// package-root runtime count is unchanged, and it imports nothing from `@qf-jarvis/model-evaluation`.
+export type {
+  EvaluationEvidenceVerifier,
+  EvidenceVerificationRequest,
+  EvidenceVerificationResult,
+} from './evaluation-evidence-verifier.js';
 export {
   ROLLOUT_MODES,
   ROLLOUT_SERVE_TARGETS,

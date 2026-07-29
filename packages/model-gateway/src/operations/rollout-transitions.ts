@@ -9,7 +9,12 @@
  * self-approval; the controller consumes an already-authorized attestation.
  */
 import type { GatewayMode } from '../contracts/enums.js';
-import { approvalPermitsCanary, approvalPermitsMode } from './rollout-approval.js';
+import {
+  approvalEvidenceClaim,
+  approvalPermitsCanary,
+  approvalPermitsMode,
+} from './rollout-approval.js';
+import type { EvaluationEvidenceVerifier } from './evaluation-evidence-verifier.js';
 import type { ProviderRolloutPolicy } from './rollout-policy.js';
 import { sameRelease } from './provider-release.js';
 import type { RolloutRefusalReason } from './rollout-reasons.js';
@@ -36,11 +41,19 @@ function candidateChanged(current: ProviderRolloutPolicy, next: ProviderRolloutP
   return !sameRelease(current.candidate, next.candidate);
 }
 
-/** Validate a proposed transition. Emergency disable (ANY→OFF) is handled separately by the controller. */
+/**
+ * Validate a proposed transition. Emergency disable (ANY→OFF) is handled separately by the controller.
+ *
+ * QFJ-S2-C-B (ADR-0063 §2): when the next policy carries a candidate above OFF, the approval must ALSO
+ * be backed by registered evaluation evidence. That check runs LAST, after the transition matrix, so
+ * evidence permission can never rescue a transition the matrix forbids — the two gates are conjunctive,
+ * and the matrix is unchanged.
+ */
 export function validateTransition(
   current: ProviderRolloutPolicy,
   next: ProviderRolloutPolicy,
   expectedRevision: number,
+  evidenceVerifier?: EvaluationEvidenceVerifier,
 ): TransitionCheck {
   if (current.rolloutId !== next.rolloutId) {
     return { ok: false, reason: 'invalid-transition' };
@@ -72,6 +85,27 @@ export function validateTransition(
     }
     if (next.mode === 'CANARY' && !approvalPermitsCanary(next.approval, next.canaryBasisPoints)) {
       return { ok: false, reason: 'approval-canary-ceiling' };
+    }
+    // QFJ-S2-C-B: the ceiling above is CALLER-ASSERTED. Everything below proves it is backed by
+    // registered evidence. Without a verifier nothing can be proved, so nothing is permitted.
+    if (evidenceVerifier === undefined) {
+      return { ok: false, reason: 'evidence-verifier-unavailable' };
+    }
+    const claim = approvalEvidenceClaim(next.approval);
+    if (claim === undefined) {
+      // A pre-S2-C-B attestation carrying only `evaluationRef` cannot back a candidate transition.
+      return { ok: false, reason: 'evidence-missing' };
+    }
+    const verification = evidenceVerifier.verify({
+      evaluationRef: next.approval.evaluationRef,
+      evidenceDigest: claim.evidenceDigest,
+      approvalTarget: claim.approvalTarget,
+      release: next.candidate,
+      capabilityProfileRef: claim.capabilityProfileRef,
+      mode: next.mode,
+    });
+    if (!verification.ok) {
+      return { ok: false, reason: verification.reason };
     }
   }
   return { ok: true };

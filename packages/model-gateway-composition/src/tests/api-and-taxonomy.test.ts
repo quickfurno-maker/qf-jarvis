@@ -204,7 +204,10 @@ describe('(48, 49, 50) dependency and test containment', () => {
       exports: Record<string, unknown>;
     };
     const deps = manifest.dependencies ?? {};
+    // QFJ-S2-C-B adds model-evaluation: the composition is the ONE layer that may see both leaves, so
+    // the evidence bridge lives here rather than forcing a dependency between them (ADR-0063 §1).
     expect(Object.keys(deps).sort()).toEqual([
+      '@qf-jarvis/model-evaluation',
       '@qf-jarvis/model-gateway',
       '@qf-jarvis/model-reply-adapter',
     ]);

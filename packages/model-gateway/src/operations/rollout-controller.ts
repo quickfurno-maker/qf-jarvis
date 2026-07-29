@@ -8,6 +8,7 @@
  * blocks any further serving until an explicit, non-stale re-enable. There is no environment access, no
  * persistence, no remote API, and no CLI.
  */
+import type { EvaluationEvidenceVerifier } from './evaluation-evidence-verifier.js';
 import { offRolloutPolicy, type ProviderRolloutPolicy } from './rollout-policy.js';
 import { createProviderRolloutPolicy } from './rollout-policy.js';
 import { validateTransition } from './rollout-transitions.js';
@@ -40,6 +41,7 @@ export interface ProviderRolloutController {
 export function createProviderRolloutController(
   initial: ProviderRolloutPolicy,
   observability: RolloutObservabilityHook = NOOP_ROLLOUT_OBSERVABILITY,
+  evidenceVerifier?: EvaluationEvidenceVerifier,
 ): ProviderRolloutController {
   let current = initial;
 
@@ -51,7 +53,9 @@ export function createProviderRolloutController(
     },
 
     transition(next: ProviderRolloutPolicy, expectedRevision: number): TransitionResult {
-      const check = validateTransition(current, next, expectedRevision);
+      // QFJ-S2-C-B: an absent verifier is NOT permissive — `validateTransition` refuses every
+      // candidate transition above OFF with `evidence-verifier-unavailable`.
+      const check = validateTransition(current, next, expectedRevision, evidenceVerifier);
       if (!check.ok) {
         emit({
           type: 'rollout-refused',

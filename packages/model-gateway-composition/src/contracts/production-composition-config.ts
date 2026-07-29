@@ -9,6 +9,7 @@
  * `GroqCredentialResolver` interface, carried as an opaque reference only; S2-B ships no implementation
  * of it and never calls it.
  */
+import type { ApprovalEvidence } from '@qf-jarvis/model-evaluation';
 import type {
   CircuitBreakerConfig,
   GatewayBudgetPolicy,
@@ -45,7 +46,13 @@ export type ProductionCompositionRefusal =
   /** A default retry budget other than 0 was requested. */
   | 'retry-budget-not-zero'
   /** Fallback execution was requested. It is disabled for the whole slice. */
-  | 'fallback-not-disabled';
+  | 'fallback-not-disabled'
+  /** QFJ-S2-C-B: a supplied evaluation-evidence object is not structurally valid. */
+  | 'evidence-invalid'
+  /** QFJ-S2-C-B: an evidence object's synthetic/productionApproval combination is illegal. */
+  | 'evidence-approval-flags-invalid'
+  /** QFJ-S2-C-B: the same `evaluationRef` was supplied twice with different content. */
+  | 'conflicting-evidence-registration';
 
 /**
  * What a caller injects to build a production composition.
@@ -79,6 +86,15 @@ export interface ProductionCompositionConfig {
    * already constructed, so no credential is resolved anywhere in this package.
    */
   readonly credentialResolver?: GroqCredentialResolver;
+  /**
+   * QFJ-S2-C-B (ADR-0063 §6): the evaluation evidence this composition will honour.
+   *
+   * Registered ONCE into a deeply frozen in-memory registry at construction; there is no way to add
+   * evidence afterwards. Supplying evidence grants NO activation — the composition stays OFF-only and
+   * constructs no rollout controller, so the verifier built from this set is unreachable in S2-B/S2-C-B
+   * and exists so a later, separately-authorized slice inherits a closed gate rather than an open one.
+   */
+  readonly evaluationEvidence?: readonly ApprovalEvidence[];
 }
 
 /**
@@ -96,6 +112,11 @@ export interface ProductionCompositionStatus {
   readonly releaseIds: readonly string[];
   /** Whether a credential-resolver seam was supplied. Never the resolver, never a credential. */
   readonly credentialResolverSupplied: boolean;
+  /**
+   * QFJ-S2-C-B: how many distinct evaluation references were registered. A COUNT only — never a
+   * reference, a digest, a binding, or any evidence content.
+   */
+  readonly registeredEvidenceCount: number;
 }
 
 /**
