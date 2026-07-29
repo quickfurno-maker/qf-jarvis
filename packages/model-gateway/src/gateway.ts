@@ -31,6 +31,8 @@ import { buildRoutingPlan } from './routing/routing-plan.js';
 import { decideFallover } from './routing/failover-policy.js';
 import { AttemptLedger } from './routing/attempt-ledger.js';
 import type { ProviderRolloutController } from './operations/rollout-controller.js';
+import type { EvaluationEvidenceVerifier } from './operations/evaluation-evidence-verifier.js';
+import { verifyCandidateEvidence } from './operations/verify-policy-evidence.js';
 import { decideServing } from './operations/rollout-execution.js';
 import { capabilitiesSatisfy } from './contracts/capabilities.js';
 import { approvalPermitsMode } from './operations/rollout-approval.js';
@@ -85,6 +87,13 @@ export interface ModelGatewayConfig {
   readonly capabilityRegistry?: ModelCapabilityRegistry;
   /** OPTIONAL sink for capability observability events (QFJ-P04.02). */
   readonly capabilityObservability?: CapabilityObservabilityHook;
+  /**
+   * OPTIONAL evaluation-evidence verifier (QFJ-S2-C-B, ADR-0063 §10). When a `rolloutController` is
+   * configured, a candidate-bearing policy is refused BEFORE any provider is consulted unless this
+   * verifier confirms it against registered evidence. Absent verifier + candidate-bearing policy fails
+   * closed; with no rollout controller it is never consulted.
+   */
+  readonly evidenceVerifier?: EvaluationEvidenceVerifier;
 }
 
 export interface ModelGatewayInvokeOptions {
@@ -347,6 +356,37 @@ export function createModelGateway(config: ModelGatewayConfig): ModelGateway {
 
   async function serve(request: ModelRequest, signal: AbortSignal): Promise<ModelResponse> {
     emit({ type: 'invocation-started', runId: request.runId, mode: config.mode });
+
+    // QFJ-S2-C-B amendment (ADR-0063 §10): the serving boundary.
+    //
+    // `rolloutController` is an INTERFACE, so a foreign implementation can return any policy from
+    // `snapshot()` — construction-time verification inside the real factory cannot cover that. This
+    // proves the CURRENT candidate-bearing state is evidence-backed before ANY provider is consulted:
+    // it runs ahead of budget admission, the health map, capability filtering, selection and invocation.
+    // It changes no routing, retry, fallback, budget, circuit, timeout or observability payload.
+    if (config.rolloutController !== undefined) {
+      const policy = config.rolloutController.snapshot();
+      const evidence = verifyCandidateEvidence({
+        mode: policy.mode,
+        candidate: policy.candidate,
+        approval: policy.approval,
+        verifier: config.evidenceVerifier,
+      });
+      if (!evidence.ok) {
+        (config.rolloutObservability ?? NOOP_ROLLOUT_OBSERVABILITY).record({
+          type: 'rollout-refused',
+          rolloutId: policy.rolloutId,
+          runId: request.runId,
+          mode: policy.mode,
+          reason: evidence.reason,
+        });
+        // Mapped through the existing table, which returns the fail-closed default for any reason it
+        // does not name specially. No new gateway error code is introduced.
+        const code = mapRolloutRefusal(evidence.reason, request.dataClass);
+        emit({ type: 'invocation-failed', runId: request.runId, code });
+        throw new ModelGatewayError(code);
+      }
+    }
 
     // Budget admission.
     const budget = config.budgetPolicy.admit(request);

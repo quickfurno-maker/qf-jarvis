@@ -136,6 +136,41 @@ and the full `ApprovalEvidence` object is **not** embedded in the attestation.
 `groq-staging-smoke` 24 · `event-backbone` 39. Every addition is array membership, a type-only export, an
 optional parameter, or an internal module.
 
+### 10. Evidence is verified for INITIAL and restored state, not only transitions
+
+_(Amended 2026-07-29, before merge. The first revision of this ADR gated only transitions and recorded
+the initial-state gap as an accepted residual. Owner review rejected that; the gap is now closed. The
+interim state is recorded rather than erased.)_
+
+The gap was real and reproducible: a fabricated attestation citing
+`eval.qfj.synthetic-connectivity-smoke.v1`, seeded as the **initial `ACTIVE` policy** with **no verifier
+at all**, reached provider execution and served a response.
+
+One shared gate, `verifyCandidateEvidence`, is now called from **three** sites, so a fourth cannot invent
+a weaker rule:
+
+1. `validateTransition` — a proposed transition above OFF;
+2. `createProviderRolloutController` — the **initial** policy, which now **throws** rather than
+   returning an unverified controller;
+3. the **gateway serving boundary** — the current `snapshot()`, checked **before any provider is
+   consulted**.
+
+Gate 2 alone would be sufficient for controllers built by the factory: OFF needs no evidence, every
+transition is verified, and `emergencyDisable` can only reach OFF, so the invariant holds inductively.
+It is **not** sufficient overall, because `rolloutController` is an _interface_ — a foreign
+implementation returning a fabricated policy from `snapshot()` never passes the factory. Gate 3 is
+therefore mandatory, and it is placed ahead of budget admission, the health map, capability filtering,
+selection and invocation, because the gateway otherwise calls `health()` on **every** provider before the
+rollout controller is consulted.
+
+`gateway.ts` receives one guard block and one optional config field. No routing, retry, fallback, budget,
+circuit, timeout, cancellation or observability-payload change; no `default` clause; no provider-specific
+logic; no `model-evaluation` import. Refusals map through the existing `mapRolloutRefusal` table, whose
+fail-closed default covers every evidence reason, so **no new gateway error code is introduced**.
+
+Nothing the caller supplies is trusted on its own — `evaluationRef`, `evidenceDigest`, `approvalTarget`,
+`approvedModeCeiling`, `releaseId` and `configDigest` are all claims, checked against the frozen registry.
+
 ### 9. This slice activates nothing
 
 The production composition remains OFF-only and structurally non-activatable. Registering valid,

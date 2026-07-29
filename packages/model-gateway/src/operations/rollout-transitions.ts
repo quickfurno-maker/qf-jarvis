@@ -9,12 +9,9 @@
  * self-approval; the controller consumes an already-authorized attestation.
  */
 import type { GatewayMode } from '../contracts/enums.js';
-import {
-  approvalEvidenceClaim,
-  approvalPermitsCanary,
-  approvalPermitsMode,
-} from './rollout-approval.js';
+import { approvalPermitsCanary, approvalPermitsMode } from './rollout-approval.js';
 import type { EvaluationEvidenceVerifier } from './evaluation-evidence-verifier.js';
+import { verifyCandidateEvidence } from './verify-policy-evidence.js';
 import type { ProviderRolloutPolicy } from './rollout-policy.js';
 import { sameRelease } from './provider-release.js';
 import type { RolloutRefusalReason } from './rollout-reasons.js';
@@ -86,26 +83,16 @@ export function validateTransition(
     if (next.mode === 'CANARY' && !approvalPermitsCanary(next.approval, next.canaryBasisPoints)) {
       return { ok: false, reason: 'approval-canary-ceiling' };
     }
-    // QFJ-S2-C-B: the ceiling above is CALLER-ASSERTED. Everything below proves it is backed by
-    // registered evidence. Without a verifier nothing can be proved, so nothing is permitted.
-    if (evidenceVerifier === undefined) {
-      return { ok: false, reason: 'evidence-verifier-unavailable' };
-    }
-    const claim = approvalEvidenceClaim(next.approval);
-    if (claim === undefined) {
-      // A pre-S2-C-B attestation carrying only `evaluationRef` cannot back a candidate transition.
-      return { ok: false, reason: 'evidence-missing' };
-    }
-    const verification = evidenceVerifier.verify({
-      evaluationRef: next.approval.evaluationRef,
-      evidenceDigest: claim.evidenceDigest,
-      approvalTarget: claim.approvalTarget,
-      release: next.candidate,
-      capabilityProfileRef: claim.capabilityProfileRef,
+    // QFJ-S2-C-B: the ceiling above is CALLER-ASSERTED. The shared gate below proves it is backed by
+    // registered evidence — the SAME function the controller and the serving boundary use.
+    const evidence = verifyCandidateEvidence({
       mode: next.mode,
+      candidate: next.candidate,
+      approval: next.approval,
+      verifier: evidenceVerifier,
     });
-    if (!verification.ok) {
-      return { ok: false, reason: verification.reason };
+    if (!evidence.ok) {
+      return { ok: false, reason: evidence.reason };
     }
   }
   return { ok: true };

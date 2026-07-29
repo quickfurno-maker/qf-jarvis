@@ -419,6 +419,8 @@ describe('createProviderRolloutController', () => {
   it('emergency-disables from any mode and a stale revision cannot re-enable', () => {
     const controller = createProviderRolloutController(
       policy({ revision: 5, mode: 'ACTIVE', shadow: false }),
+      undefined,
+      PERMISSIVE_VERIFIER,
     );
     const disabled = controller.emergencyDisable(5, 'emergency-disable');
     expect(disabled.ok).toBe(true);
@@ -543,6 +545,10 @@ describe('gateway — rollout integration', () => {
       circuit: { failureThreshold: 3, cooldownMs: 1000 },
       allowFallback: false,
       rolloutController: controller,
+      // QFJ-S2-C-B amendment: the serving boundary refuses a candidate-bearing policy without a
+      // verifier. These specs exercise ROLLOUT behaviour, so they inject the permissive stub; the
+      // fail-closed path is proved separately in the S2-C-B suites.
+      evidenceVerifier: PERMISSIVE_VERIFIER,
       ...overrides,
     });
   }
@@ -583,7 +589,7 @@ describe('gateway — rollout integration', () => {
     p: ProviderRolloutPolicy,
     events?: RolloutEvent[],
   ): { controller: ProviderRolloutController; obs?: { record: (e: RolloutEvent) => void } } => {
-    const controller = createProviderRolloutController(p);
+    const controller = createProviderRolloutController(p, undefined, PERMISSIVE_VERIFIER);
     return events === undefined
       ? { controller }
       : {
@@ -749,6 +755,8 @@ describe('gateway — rollout integration', () => {
     const candidate = providerFor(CANDIDATE, { responses: [completedText('cand')] });
     const controller = createProviderRolloutController(
       policy({ revision: 4, mode: 'ACTIVE', shadow: false }),
+      undefined,
+      PERMISSIVE_VERIFIER,
     );
     controller.emergencyDisable(4, 'emergency-disable');
     await expectCode(gateway(controller, [stable, candidate]).invoke(textRequest()), 'gateway-off');

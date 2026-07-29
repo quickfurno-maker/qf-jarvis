@@ -130,14 +130,31 @@ model-evaluation **33** · model-gateway **71** · model-gateway-composition **2
 groq-staging-smoke **24** · event-backbone **39**. Every addition is array membership, a type-only
 export, an optional parameter, or an internal module.
 
-## 11. Known residual
+## 11. The initial-state bypass — found before merge, now CLOSED
 
-A caller who hand-seeds `createProviderRolloutController` with an initial non-OFF policy bypasses
-transition-time verification. The construction-time shape gate in `createProviderRolloutPolicy` blocks a
-pre-S2-C-B attestation from being seeded, but a fabricated _shape_ would still pass until a transition.
-Closing it fully needs verification inside `gateway.ts`'s serving path, which is out of scope. **The
-production composition constructs no rollout controller at all, so this residual is unreachable through
-the production path.**
+The first revision of this slice gated only **transitions**, and shipped that gap as an accepted
+residual. Owner review rejected that, correctly. The bypass was **reproduced** against the pre-fix code:
+a fabricated attestation citing `eval.qfj.synthetic-connectivity-smoke.v1` with a fabricated digest,
+seeded as the **initial `ACTIVE` policy** with **no verifier at all**, served a real response —
+`textResult=served`, `providerInvocations=1`.
+
+It is now closed by two gates sharing **one** implementation, `verifyCandidateEvidence`:
+
+1. **`createProviderRolloutController` verifies its initial policy** and throws rather than returning an
+   unverified controller. Combined with the existing transition gate and an `emergencyDisable` that can
+   only reach OFF, every policy the factory can ever hold is inductively verified.
+2. **The gateway serving boundary** verifies `snapshot()` **before any provider is consulted** — ahead of
+   budget admission, the health map, capability filtering, selection and invocation. This is required
+   because `rolloutController` is an _interface_: a foreign implementation never passes the factory.
+
+**Evidence verification now applies to transitions, initial state, and restored or externally supplied
+state alike. No candidate can reach provider execution without verified evidence** — proved with a
+foreign controller, where provider invocation, health-check, credential-resolver and transport counts all
+remain **0**, both with a verifier present (`evidence-missing`) and absent
+(`evidence-verifier-unavailable`).
+
+The production composition remains OFF-only and constructs no rollout controller; that is no longer the
+thing holding the gate shut.
 
 ## 12. Boundaries
 

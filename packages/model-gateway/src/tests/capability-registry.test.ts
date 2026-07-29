@@ -32,11 +32,17 @@ import {
   type ProviderCapabilities,
   type ProviderReleaseRef,
   type RequiredCapabilities,
+  type EvaluationEvidenceVerifier,
 } from '../index.js';
 import { FakeModelProvider, completedText } from '../testing/index.js';
 import { matchDescriptor, matchRequirement } from '../capabilities/capability-match.js';
 
 const OFF_KILL: GatewayKillSwitch = { active: (): boolean => false };
+
+/** QFJ-S2-C-B amendment: a permissive evidence stub so these specs keep testing the registry. */
+const PERMISSIVE_VERIFIER: EvaluationEvidenceVerifier = Object.freeze({
+  verify: () => ({ ok: true as const }),
+});
 
 function release(overrides: Partial<ProviderReleaseRef> = {}): ProviderReleaseRef {
   return createProviderReleaseRef({
@@ -617,6 +623,10 @@ describe('rollout integration — capability registry', () => {
       circuit: { failureThreshold: 3, cooldownMs: 1000 },
       allowFallback: false,
       rolloutController: controller,
+      // QFJ-S2-C-B amendment: the serving boundary refuses a candidate-bearing policy without a
+      // verifier. These specs exercise ROLLOUT behaviour, so they inject the permissive stub; the
+      // fail-closed path is proved separately in the S2-C-B suites.
+      evidenceVerifier: PERMISSIVE_VERIFIER,
       ...(registry === undefined ? {} : { capabilityRegistry: registry }),
     });
   }
@@ -655,7 +665,11 @@ describe('rollout integration — capability registry', () => {
 
   it('ACTIVE serves the candidate when its release resolves in the registry', async () => {
     const registry = createModelCapabilityRegistry([profile(stableRel), profile(candRel)]);
-    const controller = createProviderRolloutController(policy('ACTIVE'));
+    const controller = createProviderRolloutController(
+      policy('ACTIVE'),
+      undefined,
+      PERMISSIVE_VERIFIER,
+    );
     const stable = provider(stableRel);
     const cand = provider(candRel, { responses: [completedText('active-cand')] });
     const response = await gw(controller, [stable, cand], registry).invoke(textReq());
@@ -665,7 +679,11 @@ describe('rollout integration — capability registry', () => {
   it('ACTIVE approval alone cannot bypass a registry mismatch (candidate release missing)', async () => {
     // Registry has stable only — the ACTIVE candidate release does not resolve.
     const registry = createModelCapabilityRegistry([profile(stableRel)]);
-    const controller = createProviderRolloutController(policy('ACTIVE'));
+    const controller = createProviderRolloutController(
+      policy('ACTIVE'),
+      undefined,
+      PERMISSIVE_VERIFIER,
+    );
     const stable = provider(stableRel);
     const cand = provider(candRel);
     await expectCode(
@@ -679,7 +697,11 @@ describe('rollout integration — capability registry', () => {
     // Registry has stable only -> stable serves, but the candidate shadow release does not resolve, so
     // the shadow is skipped (candidate never invoked). The stable response is still returned.
     const registry = createModelCapabilityRegistry([profile(stableRel)]);
-    const controller = createProviderRolloutController(policy('SHADOW'));
+    const controller = createProviderRolloutController(
+      policy('SHADOW'),
+      undefined,
+      PERMISSIVE_VERIFIER,
+    );
     const stable = provider(stableRel, { responses: [completedText('stable-ok')] });
     const cand = provider(candRel);
     const response = await gw(controller, [stable, cand], registry).invoke(textReq());
