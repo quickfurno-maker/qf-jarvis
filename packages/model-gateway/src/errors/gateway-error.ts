@@ -29,12 +29,10 @@ const MODEL_GATEWAY_ERROR_MESSAGES = {
    * QFJ-S2-B: the provider refused the request because a rate/quota limit was reached — a distinct
    * condition from "the provider is down", which `provider-unavailable` means.
    *
-   * NOT YET PRODUCIBLE BY THE GATEWAY, deliberately. Surfacing a Groq HTTP 429 as this code requires a
-   * new `ProviderInvocationResult` status, and that breaks the exhaustive switch in `gateway.ts`
-   * (`TS2366`) — a file S2-B must not modify. `normalizeGroqHttpStatus` is therefore unchanged: 429
-   * still yields `{ status: 'unavailable', retryable: true }`. The code is declared here so the closed
-   * taxonomy and the live invoker's total transient map can express the condition, and so S2-C closes
-   * the gap with a one-line change rather than a contract redesign. A test pins both facts.
+   * Reachable end to end: a Groq HTTP 429 normalizes to the `rate-limited` provider status, which
+   * `gateway.ts` maps to this code, which the live invoker reports as `transient: true`. It is
+   * transient METADATA only — the gateway treats the attempt as non-retryable because it has no
+   * backoff, so no retry and no fallback follow from it.
    */
   'rate-limited': 'The provider refused the request because a rate or quota limit was reached.',
   'provider-failed': 'The provider invocation failed.',

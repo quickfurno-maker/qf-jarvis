@@ -10,13 +10,14 @@ import type { ProviderInvocationResult } from '../../contracts/provider.js';
 
 /**
  * Classify a Groq HTTP status into a normalized failure result:
- *   - 429 and transient 5xx / 498 → `unavailable`, retryable;
+ *   - 429 → `rate-limited` (QFJ-S2-B: a quota condition, distinct from the provider being down);
+ *   - transient 5xx / 498 → `unavailable`, retryable;
  *   - 499 → `cancelled`;
  *   - 401/403 (auth), 400/404/413/422 (client), and unknown → `failed`, non-retryable.
  */
 export function normalizeGroqHttpStatus(status: number): ProviderInvocationResult {
   if (status === 429) {
-    return { status: 'unavailable', retryable: true };
+    return { status: 'rate-limited' };
   }
   if (status === 499) {
     return { status: 'cancelled' };

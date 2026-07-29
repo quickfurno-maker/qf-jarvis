@@ -1,12 +1,12 @@
 /**
  * QFJ-S2-B — the rate-limit taxonomy and every package/repository invariant (ADR-0062 §6, §7).
  *
- * The `rate-limited` code joins the closed gateway vocabulary, and the specs below pin BOTH facts about
- * it: the code exists and the live invoker classifies it, AND it is not yet producible from a Groq 429
- * because that needs a `gateway.ts` change S2-B must not make. The blocker is an executable assertion
- * here rather than a comment someone can forget.
+ * The `rate-limited` path is proved END TO END: a Groq HTTP 429 normalizes to the distinct
+ * `rate-limited` provider status, `gateway.ts` maps that status to the `rate-limited` error code, and
+ * the live invoker reports `transient: true` — while still performing zero retries and zero fallback.
  *
- * Every test is offline: file reads and pure functions only. No provider, network, database or Docker.
+ * Every test is offline: a fake transport, file reads and pure functions only. No real provider, no
+ * network, no credential, no database, no Docker.
  */
 import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
@@ -59,31 +59,35 @@ describe('(35, 39, 40) the rate-limited code', () => {
     expect(error.message).toBe('A gateway internal invariant was violated.');
   });
 
-  /**
-   * (35) BLOCKED AND RECORDED, not silently skipped.
-   *
-   * Making a Groq 429 surface as `rate-limited` end to end needs a new `ProviderInvocationResult`
-   * status, which makes the exhaustive switch in `gateway.ts` non-exhaustive:
-   *
-   *   packages/model-gateway/src/gateway.ts(208,6): error TS2366:
-   *     Function lacks ending return statement and return type does not include 'undefined'.
-   *
-   * `gateway.ts` is out of scope for S2-B, so `normalizeGroqHttpStatus` is left byte-identical and this
-   * spec pins the CURRENT behaviour plus the exact remaining work for S2-C.
-   */
-  it('(35) is NOT yet producible from a 429 — the S2-C gateway.ts change is still required', () => {
+  it('(1, 2) a Groq 429 normalizes to rate-limited, and the gateway maps that status to the code', () => {
     const normalization = readRepo(
       'packages/model-gateway/src/providers/groq/groq-error-normalization.ts',
     );
-    // 429 still maps to the pre-existing transient provider status. Unchanged by S2-B.
     expect(normalization).toContain(
-      "if (status === 429) {\n    return { status: 'unavailable', retryable: true };",
+      "if (status === 429) {\n    return { status: 'rate-limited' };",
     );
-    expect(normalization).not.toContain('rate-limited');
-    // The gateway still owns the only status -> code mapping, and it has no rate-limit case.
     const gateway = readRepo('packages/model-gateway/src/gateway.ts');
-    expect(gateway).not.toContain('rate-limited');
-    expect(gateway).toContain("code: 'provider-unavailable'");
+    expect(gateway).toContain("case 'rate-limited':");
+    expect(gateway).toContain(
+      "return { kind: 'failure', code: 'rate-limited', invoked: true, retryable: false };",
+    );
+  });
+
+  it('(17) the provider-result switch stays exhaustive — no default hides a future status', () => {
+    // A `default:` would silently absorb the next status added to the union. Exhaustiveness is what
+    // made THIS change a compile error rather than a silent misclassification, and it must stay so.
+    const gateway = readRepo('packages/model-gateway/src/gateway.ts');
+    const block = /switch \(result\.status\) \{([\s\S]*?)\n {4}\}/.exec(gateway);
+    expect(block).not.toBeNull();
+    expect(block?.[1] ?? '').not.toMatch(/^\s*default:/m);
+    const cases = (block?.[1] ?? '').match(/^\s*case '/gm) ?? [];
+    expect(cases).toHaveLength(7);
+  });
+
+  it('(18) the ModelGatewayError vocabulary remains closed and frozen', () => {
+    expect(Object.isFrozen(MODEL_GATEWAY_ERROR_CODES)).toBe(true);
+    expect(MODEL_GATEWAY_ERROR_CODES).toHaveLength(21);
+    expect(new Set(MODEL_GATEWAY_ERROR_CODES).size).toBe(21);
   });
 });
 

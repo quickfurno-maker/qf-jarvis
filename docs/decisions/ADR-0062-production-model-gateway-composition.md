@@ -35,9 +35,13 @@ Four gaps block a production model call, none of which is a gateway capability g
 ### 1. Compose; do not reimplement
 
 A new package `@qf-jarvis/model-gateway-composition` **calls** `createModelGateway`. It copies no
-routing, selection, retry, fallback, circuit, budget, or validation logic. `gateway.ts` is not
-modified. Any behaviour the composition appears to add must be traceable to an existing gateway
+routing, selection, retry, fallback, circuit, budget, or validation logic, and it changes nothing in
+`gateway.ts`. Any behaviour the composition appears to add must be traceable to an existing gateway
 contract field, or it does not belong here.
+
+(`gateway.ts` does receive one change in this slice — a single `case` in its provider-status switch,
+covered in §6. It belongs to the rate-limit taxonomy, not to the composition, which remains a pure
+caller.)
 
 ### 2. The composition is born OFF and cannot be activated in this slice
 
@@ -71,25 +75,53 @@ provider, retries nothing, falls back to nothing, mutates no rollout, resolves n
 no credential. Transient classification is a total map over the closed `ModelGatewayErrorCode` set —
 never a message parse.
 
-### 6. `rate-limited` joins the closed error vocabulary, but is not yet reachable
+### 6. `rate-limited` is reachable end to end
 
-`rate-limited` is added to `MODEL_GATEWAY_ERROR_CODES` so the taxonomy can express "over quota"
-distinctly from "provider is down", and so the live invoker's total transient map has a home for it.
+_(Amended 2026-07-29. The first revision of this ADR shipped `rate-limited` as a declared-but-unreachable
+code, because closing it required editing `gateway.ts`, which S2-B's original scope forbade. The owner
+subsequently authorized the minimum contract change, and it is now complete. The interim state is
+recorded here rather than erased.)_
 
-**It is deliberately not yet producible, and this is recorded rather than hidden.** Making Groq's HTTP
-429 surface as `rate-limited` end to end requires a new `ProviderInvocationResult` status, and that
-provably breaks `gateway.ts`:
+The path is:
 
 ```
-packages/model-gateway/src/gateway.ts(208,6): error TS2366:
-  Function lacks ending return statement and return type does not include 'undefined'.
+Groq HTTP 429
+  → ProviderInvocationResult { status: 'rate-limited' }        (groq-error-normalization.ts)
+  → ModelGatewayError('rate-limited')                          (gateway.ts, one switch case)
+  → ModelGatewayInvocation { ok: false, transient: true }      (live-model-gateway-invoker.ts)
 ```
 
-`gateway.ts` owns the sole `status → code` mapping and is explicitly out of scope for S2-B. Rather than
-edit a forbidden file or ship a second parallel mapping that nothing consumes,
-`normalizeGroqHttpStatus` is left **byte-identical**: 429 still yields
-`{ status: 'unavailable', retryable: true }`, exactly as before. A test pins that current behaviour and
-names the one-line `gateway.ts` change S2-C requires. The gap is executable knowledge, not a comment.
+Three deliberate properties:
+
+**The new provider status carries no `retryable` flag.** A rate limit is transient in principle, but the
+gateway has no backoff, so an immediate in-loop retry would deepen the limit rather than clear it. The
+gateway therefore classifies the attempt non-retryable, which also means the surfaced code stays
+`rate-limited` at any retry budget instead of degrading to `retry-budget-exhausted`.
+
+**`transient: true` is metadata, not an instruction.** It tells QuickFurno Core the condition may clear;
+it triggers nothing. `retryBudget` is 0, `allowFallback` is false, and `rate-limited` is not in
+`isRolloutTransient`'s set, so no retry and no fallback follow from it — proved by tests at retry budgets
+0, 1 and 3, and by a second eligible provider that is never called.
+
+**Nothing from the response escapes.** The whole input to normalization is an HTTP status _number_, so a
+body, header, `Retry-After` value or URL has no representable path out. The error message is fixed and
+no `cause` is retained.
+
+The `gateway.ts` change is one `case` in the existing `switch (result.status)`. **No `default` clause was
+added** — exhaustiveness is what turned this contract change into a compile error rather than a silent
+misclassification, and a test now pins the absence of a `default` and the case count at 7.
+
+### 6a. One consequential edit outside the gateway
+
+Widening `ProviderInvocationResult` also reaches `packages/groq-staging-smoke/src/run-once.ts`, whose
+switch has a pre-existing `default:` clause. Without a case there, a 429 during any future authorized
+smoke would be misreported as `smoke-invariant` — a harness bug — instead of
+`smoke-provider-unavailable`.
+
+A single case was therefore added mapping `rate-limited` to the S1A outcome the 429 already produced:
+same sanitized reason, same `retryable` flag. **The S1A outcome vocabulary is unchanged and all three
+affected smoke specs pass unmodified**, which is the proof that the harness's observable behaviour did
+not move. Preserving behaviour was preferred to editing those specs to enshrine a regression.
 
 ### 7. API locks
 
@@ -114,10 +146,18 @@ create two routers with divergent failure semantics.
 **Return the rollout controller and document that it must not be used.** Rejected: a documented
 prohibition is weaker than an absent method.
 
-**Edit `gateway.ts` for the 429 mapping.** Rejected: explicitly out of scope; deferred with proof.
-
 **Add a second Groq-429 mapping function for the composition to consume.** Rejected: two mappings for
 one condition is the bug this taxonomy exists to prevent.
+
+**Leave `rate-limited` declared but unreachable.** Rejected on amendment: a code the gateway cannot
+produce reads as working handling and is worse than no code at all.
+
+**Give the new provider status `retryable: true`.** Rejected: the gateway has no backoff, so it would
+retry straight into the limit, and `terminalCode` would surface `retry-budget-exhausted` instead of
+`rate-limited` whenever a retry budget was set — defeating the mapping this change exists to create.
+
+**Update the three smoke specs to expect `smoke-invariant`.** Rejected: that records a regression as if
+it were intended. One case in the harness's switch preserves the behaviour those specs already assert.
 
 ## Consequences
 

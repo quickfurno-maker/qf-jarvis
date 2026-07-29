@@ -19,8 +19,9 @@ vocabulary, and content-free observability.
 The audit found exactly one reference to `createModelGateway` outside its own package: a containment
 test asserting it is **never called**. The engine was built and never bolted in.
 
-S2-B therefore **composes**. It copies no routing, retry, fallback, circuit, budget or validation logic,
-and `gateway.ts` is not modified.
+S2-B therefore **composes**. It copies no routing, retry, fallback, circuit, budget or validation logic.
+The composition itself changes nothing in `gateway.ts`; the one `case` added there belongs to the
+rate-limit taxonomy (§6), not to the composition.
 
 ## 2. Composition architecture
 
@@ -76,28 +77,55 @@ never a message parse: an error whose text says "timeout rate-limited transient"
 A foreign thrown value becomes `{ ok: false, transient: false }` retaining no message, name, cause or
 stack. The adapter contains exactly one `gateway.invoke(` call site and no loop of any kind.
 
-## 6. The `rate-limited` taxonomy — added, and honestly bounded
+## 6. The `rate-limited` taxonomy — complete end to end
 
-`rate-limited` is now a member of `MODEL_GATEWAY_ERROR_CODES` with a fixed, low-cardinality message, and
-the live invoker classifies it transient.
+_(Amended. The first revision of this slice shipped `rate-limited` as a declared-but-unreachable code,
+because closing it needed a `gateway.ts` edit the original scope forbade. The owner then authorized the
+minimum contract change, and it is now complete. The interim state is recorded, not erased.)_
 
-**It is deliberately not yet producible from a Groq 429, and that is recorded as an executable test
-rather than a comment.** Surfacing 429 as `rate-limited` end to end requires a new
-`ProviderInvocationResult` status, which provably breaks `gateway.ts`:
+**HTTP 429 is normalized end to end as `rate-limited`:**
 
 ```
-packages/model-gateway/src/gateway.ts(208,6): error TS2366:
-  Function lacks ending return statement and return type does not include 'undefined'.
+Groq HTTP 429
+  → ProviderInvocationResult { status: 'rate-limited' }        groq-error-normalization.ts
+  → ModelGatewayError('rate-limited')                          gateway.ts   (one switch case)
+  → ModelGatewayInvocation { ok: false, transient: true }      live-model-gateway-invoker.ts
 ```
 
-`gateway.ts` owns the sole `status → code` mapping and is out of scope for this slice. Rather than edit
-a forbidden file or ship a second parallel mapping that nothing consumes, `normalizeGroqHttpStatus` is
-left **byte-identical**: 429 still yields `{ status: 'unavailable', retryable: true }`. All non-429
-mappings — 401/403/4xx `failed`, 5xx and 498 `unavailable`, 499 `cancelled` — are unchanged and pinned.
-S2-C closes the gap with a one-line change.
+**`rate-limited` is transient METADATA only.** The new provider status carries no `retryable` flag on
+purpose: the gateway has no backoff, so an immediate in-loop retry would deepen the limit rather than
+clear it. Two consequences, both tested — the surfaced code stays `rate-limited` at any retry budget
+instead of degrading to `retry-budget-exhausted`, and nothing acts on the transient flag.
 
-Because `retryBudget` is 0 and fallback is disabled, `transient: true` changes no behaviour in this
-slice. It informs the caller; QuickFurno Core remains the authority on what happens next.
+**S2-B still performs zero retries and zero fallback.** Proved at retry budgets 0, 1 and 3 (one transport
+call each) and with a second eligible provider that is never called. `retryBudget` is 0, `allowFallback`
+is false, and `rate-limited` is not in `isRolloutTransient`'s set.
+
+**`gateway.ts` received only the minimum exhaustive status-mapping addition** — one `case` in the
+existing `switch (result.status)`. **No `default` clause was added**; a test pins its absence and the
+case count at 7, because exhaustiveness is what turned this contract change into a compile error rather
+than a silent misclassification.
+
+**Nothing from the response escapes.** The whole input to normalization is an HTTP status _number_, so a
+raw body, header, `Retry-After` value or URL has no representable path out. The message is fixed and no
+`cause` is retained. Tests assert that the body, the provider error code, `Retry-After`, the sentinel
+key, `Bearer`, `authorization`, the endpoint host and even the string `429` appear in no surface.
+
+**Non-429 behaviour is unchanged and pinned:** 401/403/400 → `provider-failed`; 500/503/498 →
+`provider-unavailable`; 499 → `cancelled`; unparseable body → `malformed-provider-output`; unknown code →
+fail-closed `internal-invariant`. The local OpenAI-compatible adapter is untouched — its 429 still
+normalizes to `unavailable`, pending a separate reviewed decision.
+
+### 6a. One consequential edit outside the gateway
+
+Widening `ProviderInvocationResult` also reaches `packages/groq-staging-smoke/src/run-once.ts`, whose
+switch has a pre-existing `default:` clause. Without a case there, a 429 during any future authorized
+smoke would be misreported as `smoke-invariant` — a harness bug — instead of `smoke-provider-unavailable`.
+
+A single case was added mapping `rate-limited` to the S1A outcome the 429 already produced: same
+sanitized reason, same `retryable` flag. **The S1A outcome vocabulary is unchanged and all three affected
+smoke specs pass unmodified**, which is the proof the harness's observable behaviour did not move.
+Preserving behaviour was preferred to editing those specs to enshrine a regression.
 
 ## 7. Credential-resolver seam — interface only
 
