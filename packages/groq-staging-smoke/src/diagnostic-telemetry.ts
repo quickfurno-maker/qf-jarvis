@@ -40,6 +40,7 @@ export function createSystemMonotonicClock(): MonotonicClock {
 export const SMOKE_MILESTONES = [
   'timerArmed',
   'bindStarted',
+  'credentialReadSettled',
   'credentialResolved',
   'invokeStarted',
   'requestConstructed',
@@ -86,6 +87,42 @@ export const TRANSPORT_ERROR_CODES = [
   'OTHER',
 ] as const;
 export type TransportErrorCode = (typeof TRANSPORT_ERROR_CODES)[number];
+
+/**
+ * The closed set of CREDENTIAL INGRESS outcomes (QFJ-S1D-B / S1D-E).
+ *
+ * S1D-C failed locally with a single `smoke-credential-invalid`, which collapsed six distinct causes
+ * into one word and left the operator with nothing to act on. These members name the exact local branch
+ * that ran — and nothing about the value that ran through it.
+ *
+ * Each member is a CODE PATH, never a property of the credential:
+ *   - `not-attempted`     the resolver was never entered (a bind gate refused first)
+ *   - `tty-required`      the interactive gate failed before any source read
+ *   - `read-aborted`      the source signalled an explicit operator abort (Ctrl-C / Ctrl-D)
+ *   - `read-unavailable`  the source failed for any other reason — the SAFE FALLBACK
+ *   - `rejected-empty`    a zero-character value
+ *   - `rejected-too-short` non-empty but under the existing lower bound
+ *   - `rejected-too-long` over the existing upper bound
+ *   - `rejected-charset`  violates the existing allowed-character predicate
+ *   - `rejected-holder`   the credential holder refused construction after the earlier guards
+ *   - `resolved`          a credential object was successfully created
+ *
+ * A finer member is NEVER inferred when the source cannot prove it; unclassified source failures are
+ * `read-unavailable`. Classification uses typed error identity, never message parsing.
+ */
+export const CREDENTIAL_OUTCOMES = [
+  'not-attempted',
+  'tty-required',
+  'read-aborted',
+  'read-unavailable',
+  'rejected-empty',
+  'rejected-too-short',
+  'rejected-too-long',
+  'rejected-charset',
+  'rejected-holder',
+  'resolved',
+] as const;
+export type CredentialOutcome = (typeof CREDENTIAL_OUTCOMES)[number];
 
 /** Codes that map to themselves when observed verbatim on an error. */
 const PASSTHROUGH_CODES: ReadonlySet<string> = new Set([
@@ -160,6 +197,8 @@ export function normaliseTransportError(error: unknown): TransportErrorCode {
 export interface SmokeDiagnostics {
   readonly timerArmedMs: number | undefined;
   readonly bindStartedMs: number | undefined;
+  /** When `source.readOnce` settled — resolved OR rejected. Absent when no read was attempted. */
+  readonly credentialReadSettledMs: number | undefined;
   readonly credentialResolvedMs: number | undefined;
   readonly invokeStartedMs: number | undefined;
   readonly requestConstructedMs: number | undefined;
@@ -178,6 +217,12 @@ export interface SmokeDiagnostics {
   /** The phase the abort landed in, frozen AT abort. `unknown` when no abort fired. */
   readonly timeoutPhase: SmokeTimeoutPhase;
   readonly transportErrorCode: TransportErrorCode;
+  /** Which local credential-ingress branch ran. Says nothing about the value. */
+  readonly credentialOutcome: CredentialOutcome;
+  /** How many times the source read was ENTERED. The TTY refusal never reaches it, so it stays 0. */
+  readonly credentialReadAttempts: number;
+  /** How many credential objects were successfully created. 0 or 1 in this one-shot harness. */
+  readonly credentialResolutions: number;
 }
 
 /** The recorder. Accepts only closed-vocabulary milestones and enum codes — never caller strings. */
@@ -192,6 +237,12 @@ export interface DiagnosticRecorder {
   markAbort(): void;
   /** Record the normalized transport failure class. The first non-`NONE` code wins. */
   recordTransportError(code: TransportErrorCode): void;
+  /** Record the credential-ingress branch. The FIRST non-default outcome wins. */
+  recordCredentialOutcome(outcome: CredentialOutcome): void;
+  /** Count one entry into the source read. Stamped immediately before `source.readOnce`. */
+  countCredentialReadAttempt(): void;
+  /** Count one successfully constructed credential object. */
+  countCredentialResolution(): void;
   snapshot(): SmokeDiagnostics;
 }
 
@@ -236,9 +287,18 @@ function difference(later: number | undefined, earlier: number | undefined): num
 export function createDiagnosticRecorder(clock: MonotonicClock): DiagnosticRecorder {
   const origin = clock.nowMs();
   const marks: Partial<Record<SmokeMilestone, number>> = {};
-  const state: { phase: SmokeTimeoutPhase; error: TransportErrorCode } = {
+  const state: {
+    phase: SmokeTimeoutPhase;
+    error: TransportErrorCode;
+    credential: CredentialOutcome;
+    readAttempts: number;
+    resolutions: number;
+  } = {
     phase: 'unknown',
     error: 'NONE',
+    credential: 'not-attempted',
+    readAttempts: 0,
+    resolutions: 0,
   };
 
   const stamp = (milestone: SmokeMilestone): void => {
@@ -255,6 +315,18 @@ export function createDiagnosticRecorder(clock: MonotonicClock): DiagnosticRecor
       }
       stamp('abortSignalled');
     },
+    recordCredentialOutcome(outcome: CredentialOutcome): void {
+      // First non-default wins, so a refused re-entry cannot overwrite the real outcome.
+      if (state.credential === 'not-attempted') {
+        state.credential = outcome;
+      }
+    },
+    countCredentialReadAttempt(): void {
+      state.readAttempts += 1;
+    },
+    countCredentialResolution(): void {
+      state.resolutions += 1;
+    },
     recordTransportError(code: TransportErrorCode): void {
       if (state.error === 'NONE') {
         state.error = code;
@@ -264,6 +336,7 @@ export function createDiagnosticRecorder(clock: MonotonicClock): DiagnosticRecor
       return Object.freeze({
         timerArmedMs: marks.timerArmed,
         bindStartedMs: marks.bindStarted,
+        credentialReadSettledMs: marks.credentialReadSettled,
         credentialResolvedMs: marks.credentialResolved,
         invokeStartedMs: marks.invokeStarted,
         requestConstructedMs: marks.requestConstructed,
@@ -278,6 +351,9 @@ export function createDiagnosticRecorder(clock: MonotonicClock): DiagnosticRecor
         totalElapsedMs: marks.invokeSettled ?? clock.nowMs() - origin,
         timeoutPhase: state.phase,
         transportErrorCode: state.error,
+        credentialOutcome: state.credential,
+        credentialReadAttempts: state.readAttempts,
+        credentialResolutions: state.resolutions,
       });
     },
   };

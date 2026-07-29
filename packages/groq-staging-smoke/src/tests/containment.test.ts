@@ -330,7 +330,11 @@ describe('the S1 safety contract is preserved, not re-implemented', () => {
       expect(text).not.toMatch(/\bfetch\s*\(/);
       // A spec may ASSERT on the name as a string, but it must never IMPORT the real transport — an
       // unimported symbol cannot be called, so no spec can open a socket.
-      const importStatements = text.match(/import[\s\S]*?from\s*['"][^'"]+['"]/g) ?? [];
+      //
+      // QFJ-S1D-E: anchored to line starts. Unanchored, `import` also matched `import.meta.url`, and
+      // the lazy span then swallowed unrelated assertion text — a false positive. Real import
+      // statements are line-initial, so anchoring drops only the false matches.
+      const importStatements = text.match(/^import[\s\S]*?from\s*['"][^'"]+['"]/gm) ?? [];
       for (const statement of importStatements) {
         expect(statement).not.toContain('createFetchGroqTransport');
       }

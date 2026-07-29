@@ -159,7 +159,7 @@ describe('(10, 11, 14) the credential, its reference, and the Authorization head
   });
 
   it('a refused run leaks nothing either, and its error carries no cause', async () => {
-    const source = scriptedSecretSource({ value: 'too-short' });
+    const source = scriptedSecretSource({ value: 'zzprobe' });
     const resolver = createMaskedTtyCredentialResolver(source);
     let thrown: unknown;
     try {
@@ -169,24 +169,26 @@ describe('(10, 11, 14) the credential, its reference, and the Authorization head
     }
     const message = thrown instanceof Error ? thrown.message : String(thrown);
     expect(message).toBe('QFJ_SMOKE_CREDENTIAL_REFUSED');
-    expect(message).not.toContain('too-short');
+    expect(message).not.toContain('zzprobe');
     expect(message).not.toContain('groq.staging.secret.v1');
 
     const result = await runGroqStagingSmokeOnce(validConfig(), {
       transport: fakeGroqTransport(smokeProbeResponseBody()),
-      credentialSource: scriptedSecretSource({ value: 'too-short' }),
+      credentialSource: scriptedSecretSource({ value: 'zzprobe' }),
       clock: createManualClock(),
       timer: manualSmokeTimer(),
     });
     const surface = `${JSON.stringify(result)}\n${formatSanitizedSmokeResult(result, 'T')}`;
-    expect(surface).not.toContain('too-short');
+    expect(surface).not.toContain('zzprobe');
     expect(surface).not.toContain('groq.staging.secret.v1');
     expect(surface).not.toContain('QFJ_SMOKE_CREDENTIAL_REFUSED');
   });
 
   it('the resolver exposes no accessor that could return the credential', () => {
     const resolver = createMaskedTtyCredentialResolver(scriptedSecretSource());
-    expect(Object.keys(resolver).sort()).toEqual(['lastFailure', 'reads', 'resolve']);
+    expect(Object.keys(resolver).sort()).toEqual(
+      ['lastFailure', 'outcome', 'readAttempts', 'resolutions', 'reads', 'resolve'].sort(),
+    );
     const surface = resolver as unknown as Record<string, unknown>;
     for (const forbidden of ['value', 'key', 'apiKey', 'secret', 'reveal', 'unwrap']) {
       expect(surface[forbidden]).toBeUndefined();

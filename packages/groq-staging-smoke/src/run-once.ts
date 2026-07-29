@@ -280,6 +280,9 @@ function withCredentialMilestone(
     },
     reads: () => resolver.reads(),
     lastFailure: () => resolver.lastFailure(),
+    outcome: () => resolver.outcome(),
+    readAttempts: () => resolver.readAttempts(),
+    resolutions: () => resolver.resolutions(),
   });
 }
 
@@ -308,6 +311,9 @@ export async function runGroqStagingSmokeOnce(
   // An interactive terminal is required. Refused BEFORE the resolver is even constructed, so a piped or
   // redirected session can never reach a prompt — and never leaves a key in a shell pipeline.
   if (!deps.credentialSource.isInteractive()) {
+    // The gate refused before the resolver existed, so record the outcome here. No read was entered,
+    // so the attempt and resolution counters stay at zero.
+    recorder.recordCredentialOutcome('tty-required');
     return Object.freeze({
       ok: false as const,
       reason: 'smoke-tty-required' as const,
@@ -320,7 +326,7 @@ export async function runGroqStagingSmokeOnce(
   // The resolver is wrapped only to stamp the credential milestone. The wrapper adds no behaviour: it
   // never inspects, copies, or retains the key, and it forwards `reads`/`lastFailure` untouched.
   const resolver = withCredentialMilestone(
-    createMaskedTtyCredentialResolver(deps.credentialSource),
+    createMaskedTtyCredentialResolver(deps.credentialSource, { recorder }),
     recorder,
   );
 
