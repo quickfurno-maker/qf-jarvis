@@ -123,6 +123,15 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
 
+  packages/model-gateway-composition:
+    dependencies:
+      '@qf-jarvis/model-gateway':
+        specifier: workspace:*
+        version: link:../model-gateway
+      '@qf-jarvis/model-reply-adapter':
+        specifier: workspace:*
+        version: link:../model-reply-adapter
+
   packages/model-reply-adapter:
     dependencies:
       '@qf-jarvis/agent-runtime':

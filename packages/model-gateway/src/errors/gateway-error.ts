@@ -25,6 +25,18 @@ const MODEL_GATEWAY_ERROR_MESSAGES = {
   'circuit-open': 'The provider circuit is open and the request cannot be served.',
   'kill-switch-active': 'The emergency kill switch is active; no model invocation is permitted.',
   'provider-unavailable': 'The selected provider reported itself unavailable.',
+  /**
+   * QFJ-S2-B: the provider refused the request because a rate/quota limit was reached — a distinct
+   * condition from "the provider is down", which `provider-unavailable` means.
+   *
+   * NOT YET PRODUCIBLE BY THE GATEWAY, deliberately. Surfacing a Groq HTTP 429 as this code requires a
+   * new `ProviderInvocationResult` status, and that breaks the exhaustive switch in `gateway.ts`
+   * (`TS2366`) — a file S2-B must not modify. `normalizeGroqHttpStatus` is therefore unchanged: 429
+   * still yields `{ status: 'unavailable', retryable: true }`. The code is declared here so the closed
+   * taxonomy and the live invoker's total transient map can express the condition, and so S2-C closes
+   * the gap with a one-line change rather than a contract redesign. A test pins both facts.
+   */
+  'rate-limited': 'The provider refused the request because a rate or quota limit was reached.',
   'provider-failed': 'The provider invocation failed.',
   'malformed-provider-output': 'The provider returned output that could not be parsed.',
   'structured-output-invalid':

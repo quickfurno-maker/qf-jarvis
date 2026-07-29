@@ -1,0 +1,23 @@
+{
+  "name": "@qf-jarvis/model-gateway-composition",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis production Model Gateway composition and live invoker (QFJ-S2-B). It COMPOSES the existing @qf-jarvis/model-gateway rather than reimplementing it: createProductionModelGateway assembles createModelGateway from injected providers, capability registry, budget policy, kill switch and clock, and createLiveModelGatewayInvoker adapts the existing QFJ-M4 ModelGatewayInvoker seam onto a real gateway instance. The composition is born OFF and is structurally non-activatable: no ACTIVE/CANARY configuration is accepted, no rollout controller is constructed or returned, allowFallback is false, and a non-zero retryBudget is refused. It copies no routing, retry, fallback, circuit or validation logic; the existing gateway remains the only router. The production credential-resolver seam is interface-only and never invoked: no environment variable, file, keychain, cloud secret store or masked TTY implementation. No secret, no network, no provider activation, no rollout mutation, no database, no deployment. QuickFurno Core remains final authority.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/model-gateway": "workspace:*",
+    "@qf-jarvis/model-reply-adapter": "workspace:*"
+  }
+}
