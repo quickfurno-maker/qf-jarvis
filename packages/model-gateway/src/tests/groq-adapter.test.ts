@@ -436,7 +436,8 @@ describe('GroqModelProvider.invoke — completed responses', () => {
 // ---------------------------------------------------------------------------------------------------
 describe('GroqModelProvider.invoke — error normalization', () => {
   const cases: { status: number; expected: Record<string, unknown> }[] = [
-    { status: 429, expected: { status: 'unavailable', retryable: true } },
+    // QFJ-S2-B: a rate/quota refusal is its own status, distinct from the provider being down.
+    { status: 429, expected: { status: 'rate-limited' } },
     { status: 498, expected: { status: 'unavailable', retryable: true } },
     { status: 500, expected: { status: 'unavailable', retryable: true } },
     { status: 503, expected: { status: 'unavailable', retryable: true } },
@@ -665,8 +666,8 @@ describe('gateway integration — Groq behind the governed waist', () => {
     expect(harness.calls).toHaveLength(0);
   });
 
-  it('respects the retry budget for a RETRYABLE Groq failure (429)', async () => {
-    const harness = makeTransport(() => ({ status: 429, bodyText: 'rate limited' }));
+  it('respects the retry budget for a RETRYABLE Groq failure (503)', async () => {
+    const harness = makeTransport(() => ({ status: 503, bodyText: 'unavailable' }));
     const provider = new GroqModelProvider(makeConfig(harness.transport), createManualClock());
     await expectCode(
       gatewayWith(provider).invoke(textRequest({ retryBudget: 1 })),
@@ -674,6 +675,15 @@ describe('gateway integration — Groq behind the governed waist', () => {
     );
     // One initial attempt + one retry = two transport calls.
     expect(harness.calls).toHaveLength(2);
+  });
+
+  it('surfaces a Groq 429 as rate-limited and does NOT retry it, even with retry budget', async () => {
+    // QFJ-S2-B: the gateway has no backoff, so an immediate retry would deepen a rate limit. The
+    // condition's transient nature is reported to the caller, not acted on inside the attempt loop.
+    const harness = makeTransport(() => ({ status: 429, bodyText: 'SECRET-RATE-BODY' }));
+    const provider = new GroqModelProvider(makeConfig(harness.transport), createManualClock());
+    await expectCode(gatewayWith(provider).invoke(textRequest({ retryBudget: 3 })), 'rate-limited');
+    expect(harness.calls).toHaveLength(1);
   });
 
   it('does NOT retry a NON-RETRYABLE Groq failure (401), even with retry budget', async () => {

@@ -25,6 +25,16 @@ const MODEL_GATEWAY_ERROR_MESSAGES = {
   'circuit-open': 'The provider circuit is open and the request cannot be served.',
   'kill-switch-active': 'The emergency kill switch is active; no model invocation is permitted.',
   'provider-unavailable': 'The selected provider reported itself unavailable.',
+  /**
+   * QFJ-S2-B: the provider refused the request because a rate/quota limit was reached — a distinct
+   * condition from "the provider is down", which `provider-unavailable` means.
+   *
+   * Reachable end to end: a Groq HTTP 429 normalizes to the `rate-limited` provider status, which
+   * `gateway.ts` maps to this code, which the live invoker reports as `transient: true`. It is
+   * transient METADATA only — the gateway treats the attempt as non-retryable because it has no
+   * backoff, so no retry and no fallback follow from it.
+   */
+  'rate-limited': 'The provider refused the request because a rate or quota limit was reached.',
   'provider-failed': 'The provider invocation failed.',
   'malformed-provider-output': 'The provider returned output that could not be parsed.',
   'structured-output-invalid':

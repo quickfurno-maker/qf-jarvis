@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
+  },
+
+  // The EMITTING build, referenced by the root solution. The vitest specs under src/tests are
+  // EXCLUDED so nothing test-only reaches dist/. This package ships NO ./testing subpath: every
+  // fake it needs for its own specs already exists in @qf-jarvis/model-gateway/testing.
+  // Project references: it composes @qf-jarvis/model-gateway (createModelGateway and the public
+  // contracts) and @qf-jarvis/model-reply-adapter (the QFJ-M4 ModelGatewayInvoker seam) — both one-way.
+  "references": [
+    { "path": "../model-gateway" },
+    { "path": "../model-reply-adapter/tsconfig.build.json" }
+  ],
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/tests/**"]
+}

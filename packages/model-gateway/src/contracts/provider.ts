@@ -61,6 +61,17 @@ export type ProviderInvocationResult =
     }
   | { readonly status: 'timeout'; readonly latencyMs: number }
   | { readonly status: 'cancelled' }
+  /**
+   * QFJ-S2-B: the provider refused because a RATE or QUOTA limit was reached — a different condition
+   * from `unavailable`, which means the provider itself is down.
+   *
+   * It carries NO `retryable` flag on purpose. A rate limit is transient in principle, but the gateway
+   * has no backoff, so an immediate in-loop retry would deepen the limit rather than clear it. The
+   * gateway therefore treats it as non-retryable for its own attempt loop, and the transient nature is
+   * reported to the caller through the invoker's `transient` flag instead. It carries no `Retry-After`
+   * value, no header, and no body — the whole input to normalization is an HTTP status number.
+   */
+  | { readonly status: 'rate-limited' }
   | { readonly status: 'unavailable'; readonly retryable?: boolean }
   | { readonly status: 'failed'; readonly retryable?: boolean }
   | { readonly status: 'malformed'; readonly latencyMs: number };

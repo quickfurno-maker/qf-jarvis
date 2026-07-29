@@ -260,6 +260,13 @@ export function createModelGateway(config: ModelGatewayConfig): ModelGateway {
         return { kind: 'failure', code: 'timeout', invoked: true, retryable: true };
       case 'cancelled':
         return { kind: 'cancelled' };
+      // QFJ-S2-B: a rate/quota refusal is its own terminal code, not `provider-unavailable`. It is
+      // NON-retryable here on purpose: the gateway has no backoff, so an immediate retry would deepen
+      // the limit. The condition's transient nature is reported to the caller by the live invoker's
+      // `transient` flag, which leaves the retry decision with QuickFurno Core.
+      case 'rate-limited':
+        circuit.recordFailure(providerId);
+        return { kind: 'failure', code: 'rate-limited', invoked: true, retryable: false };
       case 'unavailable':
         circuit.recordFailure(providerId);
         return {

@@ -265,14 +265,15 @@ describe('cancellation and error normalization through the bound provider', () =
     expect(transport.calls()).toBe(0);
   });
 
-  it('a 429 normalizes to rate-limited (unavailable, retryable) with no raw leak', async () => {
+  it('a 429 normalizes to the rate-limited status with no raw leak', async () => {
     const transport = fakeGroqTransport('{"error":"SECRET-RATE-BODY"}', 429);
     const result = await bindGroqStagingProvider(bindConfig({ transport }));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     const controller = new AbortController();
     const invocation = await result.provider.invoke(structuredInput(controller.signal));
-    expect(invocation.status === 'unavailable' || invocation.status === 'failed').toBe(true);
+    // QFJ-S2-B: a distinct closed status, carrying no body, no header and no Retry-After value.
+    expect(invocation).toEqual({ status: 'rate-limited' });
     expect(JSON.stringify(invocation)).not.toContain('SECRET-RATE-BODY');
   });
 });

@@ -76,6 +76,19 @@ describe('model-gateway package containment', () => {
     expect(Object.keys(manifest.exports).sort()).toEqual(['.', './testing']);
   });
 
+  /**
+   * QFJ-S2-B (ADR-0062 §7): the package-root RUNTIME surface is frozen at 71.
+   *
+   * This package had no numeric count lock while its siblings did (groq-staging-smoke 24,
+   * model-evaluation 33, event-backbone 39), so its 71-symbol surface could drift silently. Counting
+   * the imported barrel counts runtime exports only — `export type` produces no runtime binding — so
+   * adding a type costs nothing and adding a value is a deliberate, reviewed change.
+   */
+  it('freezes the package-root runtime API at exactly 71 symbols', async () => {
+    const barrel = (await import('../index.js')) as unknown as Record<string, unknown>;
+    expect(Object.keys(barrel)).toHaveLength(71);
+  });
+
   it('does not export FakeModelProvider from the production root', () => {
     const barrel = readRepo('packages/model-gateway/src/index.ts');
     // The barrel must not RE-EXPORT the fake provider or reach the ./testing subpath.

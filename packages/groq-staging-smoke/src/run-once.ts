@@ -254,6 +254,13 @@ async function bindAndInvokeOnce(
       };
     case 'failed':
       return { ok: false, reason: 'smoke-provider-failed', retryable: result.retryable ?? false };
+    // QFJ-S2-B: a 429 now normalizes to the distinct `rate-limited` provider status instead of
+    // `unavailable`. This case exists ONLY to keep the harness's observable outcome byte-identical to
+    // what it was before that change — same sanitized reason, same retryable flag. Without it the new
+    // status would fall to `default` and a rate limit would be misreported as a harness invariant
+    // failure. The S1A outcome vocabulary is unchanged and its specs pass unmodified.
+    case 'rate-limited':
+      return { ok: false, reason: 'smoke-provider-unavailable', retryable: true };
     case 'malformed':
       return { ok: false, reason: 'smoke-provider-malformed' };
     default:
