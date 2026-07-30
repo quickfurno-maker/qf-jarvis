@@ -140,7 +140,27 @@ groq-staging-smoke **24** · event-backbone **39**. `apps/api` adds **no** packa
 `@qf-jarvis/model-gateway` in production and on the composition **test-only**, with a spec asserting no
 production file imports it.
 
-## 16. Boundaries
+## 16. The authoritative boundary was clarified before merge
+
+The first revision of this slice flagged a conflict rather than resolving it: `system-boundary.md` said
+"Hold provider credentials. It has none and must never be given any" without qualification. That
+document predates the model gateway and named no model-inference provider — every neighbouring clause
+concerns execution and advertising providers reached through n8n after Core authorizes.
+
+Under an explicit owner decision, `system-boundary.md` now distinguishes the two categories:
+**execution/integration credentials remain forbidden to Jarvis entirely** and stay with n8n or the
+relevant execution service, while **one narrow model-inference credential** may be held only at an
+executable process boundary under ADR-0064, may never enter Core state, agent memory, a prompt, an
+event, a log, provenance, a report or a database row, and confers no execution authority. The
+document's own change-control rule — "a superseding ADR and an explicit decision by the business owner"
+— is exactly the process this went through (ADR-0046, ADR-0060, ADR-0062, ADR-0064).
+
+Two supporting documents whose wording had become literally false were corrected in the same bounded
+way: `system-context.md` and `repository-structure.md` now say "execution credential" where they said
+"any credential". Historical ADRs and slice reports were **not** rewritten — they are records of what
+each slice authorized at the time, and ADR-0064 supersedes rather than edits them.
+
+## 17. Boundaries
 
 No credential accessed, requested, validated, displayed, hashed, stored or used — every fixture is an
 unmistakable `FAKE_QFJ_CREDENTIAL_DO_NOT_USE_*` written to a temporary directory this suite creates and

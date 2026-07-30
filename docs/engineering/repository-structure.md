@@ -267,7 +267,7 @@ This is not a Phase 1 convention. It is [the permanent boundary](../architecture
 
 Introducing any of them is a boundary violation. It requires a superseding ADR and the business owner's explicit decision — not a code review comment, and not a sprint deadline.
 
-The reason this survives contact with a real deadline is that it is not a permission check that could be misconfigured: **Jarvis holds no credential and has no integration.** A fully compromised agent still cannot dial anyone. Its maximum output is a misleading recommendation aimed at a human who can see the evidence ([security-principles.md](../governance/security-principles.md)).
+The reason this survives contact with a real deadline is that it is not a permission check that could be misconfigured: **Jarvis holds no execution credential and has no execution integration.** A fully compromised agent still cannot dial anyone — its one governed model-inference credential buys a draft, and no draft delivers anything ([system-boundary.md](../architecture/system-boundary.md) § Two kinds of provider credential). Its maximum output is a misleading recommendation aimed at a human who can see the evidence ([security-principles.md](../governance/security-principles.md)).
 
 ---
 

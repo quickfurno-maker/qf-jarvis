@@ -147,7 +147,7 @@ sequenceDiagram
     end
 ```
 
-The sequence makes the invariant visible: **the only path from a recommendation to a real-world effect runs through QuickFurno Core.** Jarvis cannot short-circuit it, because Jarvis has no edge to n8n and no credentials for any provider.
+The sequence makes the invariant visible: **the only path from a recommendation to a real-world effect runs through QuickFurno Core.** Jarvis cannot short-circuit it, because Jarvis has no edge to n8n and no credentials for any **execution** provider. Its one governed model-inference credential buys a draft and can deliver nothing ([system-boundary.md](./system-boundary.md) § Two kinds of provider credential).
 
 Note the approval round trip. The approver interacts with **Jarvis**, because that is where the evidence is — but the click produces an **approval request**, and Core is what validates, decides, records, and emits. Jarvis then *displays* an outcome it did not choose, and which may be a rejection. Hosting the button is not holding the authority ([execution-governance.md](./execution-governance.md) §2a, [ADR-0007](../decisions/ADR-0007-founder-approval-interface-and-authority.md)).
 
