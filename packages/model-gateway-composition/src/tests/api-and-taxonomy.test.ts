@@ -128,6 +128,33 @@ describe('(41, 42) package-root runtime API locks', () => {
     const barrel = (await import('../index.js')) as unknown as Record<string, unknown>;
     expect(Object.keys(barrel)).toHaveLength(2);
   });
+
+  it('the ONE internal subpath exports exactly one factory, and the root does not', async () => {
+    // QFJ-S2-E-B (ADR-0065 §5): `apps/api` needs the evidence registry to compose a process-local
+    // SHADOW gateway. It is exposed through one explicit internal subpath rather than the root, so the
+    // root API count stays at 2 and the registry does not become a general extension surface.
+    const internal =
+      (await import('../evidence/evaluation-evidence-registry.js')) as unknown as Record<
+        string,
+        unknown
+      >;
+    expect(Object.keys(internal)).toEqual(['createEvaluationEvidenceRegistry']);
+
+    const manifest = JSON.parse(readRepo('packages/model-gateway-composition/package.json')) as {
+      exports?: Record<string, Record<string, string>>;
+    };
+    const exports = manifest.exports ?? {};
+    expect(Object.keys(exports).sort()).toEqual(['.', './internal/evidence-registry']);
+    // Every target resolves into `dist/`: a subpath into `src/` would publish unbuilt source.
+    for (const entry of Object.values(exports)) {
+      for (const target of Object.values(entry)) {
+        expect(target.startsWith('./dist/')).toBe(true);
+      }
+    }
+
+    const root = (await import('../index.js')) as unknown as Record<string, unknown>;
+    expect(root['createEvaluationEvidenceRegistry']).toBeUndefined();
+  });
 });
 
 describe('(43, 44, 45) sibling package API locks are undisturbed', () => {
@@ -220,8 +247,9 @@ describe('(48, 49, 50) dependency and test containment', () => {
         /event-backbone|pg|postgres|supabase|dockerode|groq|openai|anthropic|axios|node-fetch|undici/i,
       );
     }
-    // A single public entry point; no ./testing subpath is shipped.
-    expect(Object.keys(manifest.exports)).toEqual(['.']);
+    // One public entry point plus the ONE internal process-boundary subpath ADR-0065 §5 authorises.
+    // No `./testing` subpath is shipped, and no other extension surface exists.
+    expect(Object.keys(manifest.exports).sort()).toEqual(['.', './internal/evidence-registry']);
   });
 
   it('(50) the specs import nothing network-, database-, or container-capable', () => {
