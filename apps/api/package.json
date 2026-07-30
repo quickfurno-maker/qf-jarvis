@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "QF Jarvis API application boundary. Phase 1 establishes a compileable boundary and no runtime behavior.",
+  "description": "QF Jarvis API application boundary. QFJ-S2-D-B (ADR-0064) makes this the process boundary that acquires the production Groq credential: a file-mounted backend implementing the existing GroqCredentialResolver, with an explicitly injected absolute path, lazy single-flight resolution, and a refreshable holder with last-known-good semantics. Reusable packages receive configuration explicitly and read no environment; only an executable process boundary acquires deployment configuration. This application reads no process.env, constructs no provider, opens no transport, and activates nothing.",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -11,7 +11,14 @@
     }
   },
   "scripts": {
-    "build": "tsc --build tsconfig.json",
-    "typecheck": "tsc --build tsconfig.json"
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/model-gateway": "workspace:*"
+  },
+  "devDependencies": {
+    "@qf-jarvis/model-gateway-composition": "workspace:*"
   }
 }

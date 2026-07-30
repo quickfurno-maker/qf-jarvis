@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
+  },
+
+  // The EMITTING build, referenced by the root solution. Tests are EXCLUDED so nothing from src/tests
+  // reaches dist/ — mirroring apps/worker. The project reference makes `tsc --build` compile
+  // @qf-jarvis/model-gateway first, so the existing GroqCredentialResolver / GroqApiKey declarations
+  // resolve. Tests are type-checked, without emit, by tsconfig.json (typecheck:tests).
+  "references": [{ "path": "../../packages/model-gateway" }],
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/tests/**"]
+}

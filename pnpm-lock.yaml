@@ -36,7 +36,15 @@ importers:
         specifier: 4.1.10
         version: 4.1.10(@types/node@24.9.2)
 
-  apps/api: {}
+  apps/api:
+    dependencies:
+      '@qf-jarvis/model-gateway':
+        specifier: workspace:*
+        version: link:../../packages/model-gateway
+    devDependencies:
+      '@qf-jarvis/model-gateway-composition':
+        specifier: workspace:*
+        version: link:../../packages/model-gateway-composition
 
   apps/worker:
     dependencies:
