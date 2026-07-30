@@ -11,7 +11,11 @@
   // reaches dist/ — mirroring apps/worker. The project reference makes `tsc --build` compile
   // @qf-jarvis/model-gateway first, so the existing GroqCredentialResolver / GroqApiKey declarations
   // resolve. Tests are type-checked, without emit, by tsconfig.json (typecheck:tests).
-  "references": [{ "path": "../../packages/model-gateway" }],
+  "references": [
+    { "path": "../../packages/model-gateway" },
+    { "path": "../../packages/model-evaluation/tsconfig.build.json" },
+    { "path": "../../packages/model-gateway-composition/tsconfig.build.json" }
+  ],
   "include": ["src/**/*.ts"],
   "exclude": ["src/tests/**"]
 }

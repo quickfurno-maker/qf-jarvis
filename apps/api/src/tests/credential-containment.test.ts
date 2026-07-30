@@ -53,10 +53,45 @@ const allFiles = (): string[] =>
 /** Production source only — the specs are held to their own, narrower rules below. */
 const productionFiles = (): string[] => allFiles().filter((f) => !normalise(f).includes('/tests/'));
 
-/** THE one file permitted to import `node:fs`. */
-const DESIGNATED_FS_ADAPTER = 'src/secrets/credential-file-reader.ts';
+/**
+ * THE two files permitted to import `node:fs`, each with a single narrow job.
+ *
+ * S2-D-B allowed exactly one, for the CREDENTIAL. S2-E-B adds exactly one more, for the NON-SECRET run
+ * configuration and evidence artifact (ADR-0065 §5). They are separate modules deliberately: the
+ * credential reader enforces a 514-byte ceiling and POSIX mode bits, the JSON reader does not, and
+ * merging them would let a non-secret path inherit secret-file handling or the reverse.
+ */
+const DESIGNATED_FS_ADAPTERS: readonly string[] = Object.freeze([
+  'src/secrets/credential-file-reader.ts',
+  'src/shadow/shadow-json-reader.ts',
+]);
 const isDesignatedAdapter = (f: string): boolean =>
-  normalise(f).endsWith(`/${DESIGNATED_FS_ADAPTER}`);
+  DESIGNATED_FS_ADAPTERS.some((a) => normalise(f).endsWith(`/${a}`));
+
+/**
+ * The files permitted to touch `process` at all, and the exact member each may touch.
+ *
+ * `process.env` is never in this table: no file in `apps/api` may read the environment (ADR-0064 §7,
+ * ADR-0065 §12), asserted separately and unconditionally below.
+ */
+const PROCESS_ALLOWLIST: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  // The credential reader asks the platform whether POSIX mode bits are meaningful. Nothing else.
+  'src/secrets/credential-file-reader.ts': ['process.platform'],
+  // The two bin entries are the ONLY modules that read argv or set an exit code.
+  'src/bin/run-shadow-once.ts': ['process.exitCode', 'process.argv'],
+  'src/bin/generate-shadow-evidence.ts': ['process.exitCode', 'process.argv'],
+  // The default IO factories are the ONLY modules that touch a stream, and only for WRITING.
+  'src/cli/run-shadow-once.ts': ['process.stdout'],
+  'src/cli/generate-shadow-evidence.ts': ['process.stdout', 'process.stderr'],
+});
+
+/** THE one file permitted to arm a timer: the single hard run deadline (ADR-0065 §11). */
+const DESIGNATED_TIMER_MODULE = 'src/shadow/create-controlled-shadow-runner.ts';
+
+function allowlistFor(file: string): readonly string[] {
+  const key = Object.keys(PROCESS_ALLOWLIST).find((k) => normalise(file).endsWith(`/${k}`));
+  return key === undefined ? [] : (PROCESS_ALLOWLIST[key] ?? []);
+}
 
 /**
  * Strip documentation so a containment scan reads CODE.
@@ -79,13 +114,29 @@ describe('(67) the process boundary reads no environment', () => {
     }
   });
 
-  it('the only `process` access anywhere is the platform predicate', () => {
+  it('every `process` access is on the allowlist, and only in its designated file', () => {
+    const seen = new Set<string>();
     for (const file of productionFiles()) {
       const code = codeOnly(readFileSync(file, 'utf8'));
-      const uses = code.match(/process\s*\.\s*[A-Za-z]+/g) ?? [];
-      for (const use of uses) {
-        expect(use.replace(/\s/g, '')).toBe('process.platform');
+      const allowed = allowlistFor(file);
+      for (const raw of code.match(/process\s*\.\s*[A-Za-z]+/g) ?? []) {
+        const use = raw.replace(/\s/g, '');
+        expect(allowed).toContain(use);
+        seen.add(`${normalise(file).split('/src/')[1] ?? ''}:${use}`);
       }
+    }
+    // Every entry in the allowlist is actually used: a stale permission cannot linger unnoticed.
+    const declared = Object.entries(PROCESS_ALLOWLIST).flatMap(([f, uses]) =>
+      uses.map((u) => `${f.replace('src/', '')}:${u}`),
+    );
+    expect([...seen].sort()).toEqual([...declared].sort());
+  });
+
+  it('no file reads a stream — argv and exit codes are written, never stdin', () => {
+    for (const file of allFiles()) {
+      const code = codeOnly(readFileSync(file, 'utf8'));
+      expect(code).not.toMatch(/process\s*\.\s*stdin/);
+      expect(code).not.toMatch(/\bprompt\s*\(|setRawMode|createInterface/);
     }
   });
 });
@@ -102,9 +153,35 @@ describe('(68) node:fs is confined to one designated adapter', () => {
     }
   });
 
-  it('the designated adapter exists and is exactly one file', () => {
-    const designated = productionFiles().filter(isDesignatedAdapter);
-    expect(designated).toHaveLength(1);
+  it('the designated adapters exist and are exactly the two declared files', () => {
+    expect(productionFiles().filter(isDesignatedAdapter)).toHaveLength(
+      DESIGNATED_FS_ADAPTERS.length,
+    );
+    expect(DESIGNATED_FS_ADAPTERS).toHaveLength(2);
+  });
+
+  it('neither adapter writes, deletes or changes a file', () => {
+    for (const adapter of productionFiles().filter(isDesignatedAdapter)) {
+      const code = codeOnly(readFileSync(adapter, 'utf8'));
+      // Read-only by construction: `open` in the default 'r' mode, `lstat`, and nothing else.
+      expect(code).toMatch(/import \{ open, lstat \} from 'node:fs\/promises'/);
+      for (const mutation of [
+        'writeFile',
+        'appendFile',
+        'unlink',
+        'rm(',
+        'rmdir',
+        'mkdir',
+        'rename',
+        'chmod',
+        'chown',
+        'copyFile',
+        'createWriteStream',
+        'truncate',
+      ]) {
+        expect(code).not.toContain(mutation);
+      }
+    }
   });
 });
 
@@ -116,10 +193,11 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
     for (const file of productionFiles()) {
       const code = codeOnly(readFileSync(file, 'utf8'));
       expect(code).not.toMatch(FORBIDDEN_MODULES);
+      // The one live HTTP call a SHADOW run makes is issued by the gateway's Groq transport inside
+      // `packages/model-gateway`. `apps/api` supplies the credential and the composition; it never
+      // opens a socket itself.
       expect(code).not.toMatch(/\bfetch\s*\(/);
       expect(code).not.toMatch(/\bexec\w*\s*\(|\bspawn\w*\s*\(/);
-      expect(code).not.toMatch(/process\s*\.\s*(stdin|stdout|stderr)/);
-      expect(code).not.toMatch(/setRawMode|createInterface/);
     }
   });
 
@@ -146,15 +224,30 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
     }
   });
 
-  it('production source creates no timer, watcher or polling loop, and logs nothing', () => {
+  it('production source creates no watcher or polling loop, and logs nothing', () => {
     for (const file of productionFiles()) {
       const code = codeOnly(readFileSync(file, 'utf8'));
-      expect(code).not.toMatch(/setInterval|setTimeout|setImmediate/);
+      expect(code).not.toMatch(/setInterval|setImmediate/);
       expect(code).not.toMatch(/watchFile|fs\.watch|\bwatch\s*\(/);
       expect(code).not.toMatch(/console\s*\./);
       // No logging library is imported, and no error is serialised for output.
       expect(code).not.toMatch(/from ['"](pino|winston|bunyan|debug|log4js)['"]/);
     }
+  });
+
+  it('exactly one module arms a timer, and it clears it', () => {
+    const timerFiles = productionFiles().filter((file) =>
+      codeOnly(readFileSync(file, 'utf8')).includes('setTimeout'),
+    );
+    expect(timerFiles.map((f) => normalise(f).split('/apps/api/')[1] ?? '')).toEqual([
+      DESIGNATED_TIMER_MODULE,
+    ]);
+    const code = codeOnly(readFileSync(timerFiles[0] ?? '', 'utf8'));
+    // One arm, one clear — the single hard deadline, released on every path.
+    expect(code.match(/setTimeout/g)).toHaveLength(1);
+    expect(code.match(/clearTimeout/g)).toHaveLength(1);
+    // Not a repeating or rescheduling timer.
+    expect(code).not.toMatch(/setInterval|refresh\s*\(\s*\)/);
   });
 });
 
@@ -170,15 +263,35 @@ describe('the staging smoke stays out of the production boundary', () => {
       dependencies?: Record<string, string>;
       devDependencies?: Record<string, string>;
     };
-    // Production depends on the gateway alone. The composition is a TEST-ONLY dependency, present
-    // solely so the OFF-only activation-safety spec can drive the real composition — production source
-    // never imports it, asserted immediately below.
-    expect(Object.keys(manifest.dependencies ?? {})).toEqual(['@qf-jarvis/model-gateway']);
-    expect(Object.keys(manifest.devDependencies ?? {})).toEqual([
+    // S2-E-B promotes the composition to a RUNTIME dependency: the controlled SHADOW runner is
+    // production source that composes the real gateway (ADR-0065 §6). `zod` is the schema validator
+    // already pinned by nine other workspace packages — no new third-party resolution (ADR-0065 §14).
+    expect(Object.keys(manifest.dependencies ?? {}).sort()).toEqual([
+      '@qf-jarvis/model-evaluation',
+      '@qf-jarvis/model-gateway',
       '@qf-jarvis/model-gateway-composition',
+      'zod',
     ]);
-    for (const file of productionFiles()) {
-      expect(readFileSync(file, 'utf8')).not.toContain('model-gateway-composition');
+    expect(manifest.devDependencies).toBeUndefined();
+    expect(manifest.dependencies?.['zod']).toBe('4.4.3');
+  });
+
+  it('the composition is reached only through its declared entry points', () => {
+    // Production source may import the composition root and the ONE internal subpath ADR-0065 §5
+    // authorises. A deep `dist/` or `src/` reach-around would bypass the package boundary.
+    const ALLOWED = new Set([
+      '@qf-jarvis/model-gateway-composition',
+      '@qf-jarvis/model-gateway-composition/internal/evidence-registry',
+    ]);
+    for (const file of allFiles()) {
+      const text = readFileSync(file, 'utf8');
+      for (const specifier of text.match(/@qf-jarvis\/[a-z-]+(?:\/[A-Za-z0-9/_.-]+)?/g) ?? []) {
+        if (!specifier.startsWith('@qf-jarvis/model-gateway-composition')) {
+          continue;
+        }
+        expect(ALLOWED.has(specifier)).toBe(true);
+      }
+      expect(text).not.toMatch(/@qf-jarvis\/[a-z-]+\/(dist|src)\//);
     }
   });
 });

@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "QF Jarvis API application boundary. QFJ-S2-D-B (ADR-0064) makes this the process boundary that acquires the production Groq credential: a file-mounted backend implementing the existing GroqCredentialResolver, with an explicitly injected absolute path, lazy single-flight resolution, and a refreshable holder with last-known-good semantics. Reusable packages receive configuration explicitly and read no environment; only an executable process boundary acquires deployment configuration. This application reads no process.env, constructs no provider, opens no transport, and activates nothing.",
+  "description": "QF Jarvis API application boundary. QFJ-S2-D-B (ADR-0064) made this the process boundary that acquires the production Groq model-inference credential from a mounted file. QFJ-S2-E-B (ADR-0065) adds two internal one-shot executables: a deterministic offline SHADOW evidence generator, and a controlled SHADOW runner that composes the existing gateway with a process-local rollout controller, resolves one credential, builds two Groq providers, transitions OFF->SHADOW->OFF, discards every model output, and enforces a hard call budget. Reusable packages receive configuration explicitly and read no environment; only an executable process boundary acquires deployment configuration. This application reads no process.env, exports nothing from its package root, and activates nothing by itself.",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -16,9 +16,13 @@
     "typecheck:tests": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@qf-jarvis/model-gateway": "workspace:*"
+    "@qf-jarvis/model-evaluation": "workspace:*",
+    "@qf-jarvis/model-gateway": "workspace:*",
+    "@qf-jarvis/model-gateway-composition": "workspace:*",
+    "zod": "4.4.3"
   },
-  "devDependencies": {
-    "@qf-jarvis/model-gateway-composition": "workspace:*"
+  "bin": {
+    "qfj-generate-shadow-evidence": "./dist/bin/generate-shadow-evidence.js",
+    "qfj-run-shadow-once": "./dist/bin/run-shadow-once.js"
   }
 }

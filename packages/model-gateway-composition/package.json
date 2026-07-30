@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./internal/evidence-registry": {
+      "types": "./dist/evidence/evaluation-evidence-registry.d.ts",
+      "default": "./dist/evidence/evaluation-evidence-registry.js"
     }
   },
   "scripts": {
