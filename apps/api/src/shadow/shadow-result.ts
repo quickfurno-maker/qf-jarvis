@@ -39,6 +39,42 @@ const SHADOW_REASONS = [
   'internal-invariant',
 ] as const;
 
+/**
+ * The closed diagnostic class of the CANDIDATE leg's outcome (QFJ-S2-E-C-R1).
+ *
+ * `reason` stays authoritative for the run. This field exists because `reason` deliberately folds four
+ * operationally different candidate failures into `provider-unavailable`, and the first live run could
+ * not be acted on as a result: a client rejection means stop and check the account, a server or
+ * transport failure means the attempt may simply be retried under a fresh authorisation.
+ *
+ * It is a COARSE class by design. It carries no HTTP status, no provider message, no header, no body and
+ * no retryable flag — the class answers "which broad category" and nothing that describes the account or
+ * the response.
+ *
+ * The partition is "did we obtain a provider response, and what did it say?":
+ */
+const CANDIDATE_FAILURE_CLASSES = [
+  /** The candidate completed and the gateway accepted its output. */
+  'none',
+  /** The candidate was never delegated to — the run stopped before, or refused at, the boundary. */
+  'not-invoked',
+  /** A response was obtained and it REJECTED the request (the 4xx family, rate limits included). */
+  'client-rejected',
+  /** A response was obtained and it declined to serve (the 5xx family), or it served too late. */
+  'server-unavailable',
+  /** No usable response was obtained: the transport failed, was cut off, or the call threw. */
+  'transport-error',
+  /** A response was obtained and served, but its payload failed the strict output contract. */
+  'output-invalid',
+] as const;
+
+export type CandidateFailureClass = (typeof CANDIDATE_FAILURE_CLASSES)[number];
+
+/** The frozen closed vocabulary. Exposed so a spec can assert it has not grown. */
+export const SHADOW_CANDIDATE_FAILURE_CLASSES: readonly CandidateFailureClass[] = Object.freeze([
+  ...CANDIDATE_FAILURE_CLASSES,
+]);
+
 /** One closed one-shot reason. */
 export type ShadowReason = (typeof SHADOW_REASONS)[number];
 
@@ -55,6 +91,8 @@ export interface ShadowRunResult {
   readonly timestamp: string;
   readonly outcome: 'PASS' | 'FAIL';
   readonly reason: ShadowReason;
+  /** Diagnostic context for the candidate leg. Always present; never undefined or null. */
+  readonly candidateFailureClass: CandidateFailureClass;
   readonly mode: 'SHADOW';
   readonly finalMode: 'OFF' | 'UNKNOWN';
   readonly policyRevision: number;
@@ -101,6 +139,7 @@ export const SHADOW_RESULT_KEYS: readonly (keyof ShadowRunResult)[] = Object.fre
   'timestamp',
   'outcome',
   'reason',
+  'candidateFailureClass',
   'mode',
   'finalMode',
   'policyRevision',

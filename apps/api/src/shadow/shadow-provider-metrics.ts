@@ -22,6 +22,7 @@ import type {
 } from '@qf-jarvis/model-gateway';
 
 import type { CountedOperation, ShadowCounters } from './shadow-counters.js';
+import type { CandidateFailureClass } from './shadow-result.js';
 
 /** What the runner learns about one provider. Status, latency and token counts — never content. */
 export interface ProviderObservation {
@@ -122,21 +123,111 @@ export interface CountedTransportLike<Request, Response> {
 }
 
 /**
+ * Whether this leg's transport ever delivered a response (QFJ-S2-E-C-R1).
+ *
+ * This is the ONE fact that makes `server-unavailable` and `transport-error` distinguishable. The Groq
+ * adapter maps an HTTP 5xx and a network-level rejection to the SAME
+ * `{ status: 'unavailable', retryable: true }`, so the provider result alone cannot separate "the server
+ * answered and declined" from "we never got an answer". The counting wrapper already sits between the
+ * provider and the real transport, so it can record which happened — without reading the request, the
+ * response, or the rejection value.
+ */
+export type TransportOutcome = 'not-sent' | 'responded' | 'rejected';
+
+export interface CountedTransport<Request, Response> extends CountedTransportLike<
+  Request,
+  Response
+> {
+  outcome(): TransportOutcome;
+}
+
+/**
  * Wrap a transport so every network request is counted and a third is refused before delegation.
  *
  * The request is passed through untouched and never inspected — in particular its `headers`, which carry
- * the `Authorization` value.
+ * the `Authorization` value. A rejection is observed only for the FACT that it happened: the rejection
+ * value is re-thrown unchanged and never read, stored or classified.
  */
 export function countTransport<Request, Response>(
   inner: CountedTransportLike<Request, Response>,
   counters: ShadowCounters,
-): CountedTransportLike<Request, Response> {
+): CountedTransport<Request, Response> {
+  const state: { outcome: TransportOutcome } = { outcome: 'not-sent' };
   return Object.freeze({
     send(request: Request, signal: AbortSignal): Promise<Response> {
       if (!counters.claim('transportRequests')) {
+        // A budget refusal is the runner's own, not the transport's: it leaves `outcome` untouched.
         return Promise.reject(new Error('QFJ_SHADOW_TRANSPORT_BUDGET_EXCEEDED'));
       }
-      return inner.send(request, signal);
+      return inner.send(request, signal).then(
+        (response: Response): Response => {
+          state.outcome = 'responded';
+          return response;
+        },
+        (error: unknown): never => {
+          state.outcome = 'rejected';
+          // Re-thrown untouched. Nothing about it is read or retained.
+          throw error;
+        },
+      );
     },
+    outcome: (): TransportOutcome => state.outcome,
   });
+}
+
+/** What the classifier needs. Closed values only — no result, no response, no error. */
+export interface CandidateClassificationInput {
+  readonly status: ProviderObservation['status'];
+  readonly latencyMs: number;
+  readonly transportOutcome: TransportOutcome;
+  /** Whether the gateway recorded `shadow-completed` for this leg. */
+  readonly accepted: boolean;
+  /** The per-attempt bound, so a response that arrived too late is distinguishable. */
+  readonly timeoutMs: number;
+}
+
+/**
+ * Derive the closed candidate failure class (QFJ-S2-E-C-R1).
+ *
+ * TOTAL over the observation vocabulary and derived only from closed values — never from an exception
+ * message, an HTTP status, or a response body.
+ */
+export function classifyCandidateFailure(
+  input: CandidateClassificationInput,
+): CandidateFailureClass {
+  switch (input.status) {
+    // Never delegated to: the run stopped earlier, or the invocation budget refused before the call.
+    case 'not-invoked':
+    case 'refused-by-budget':
+      return 'not-invoked';
+
+    case 'completed':
+      if (input.accepted) {
+        return 'none';
+      }
+      // The gateway rejected an otherwise-completed attempt. Lateness is the one rejection that is not
+      // about the payload, and `latencyMs` separates it without describing the payload at all.
+      return input.latencyMs > input.timeoutMs ? 'server-unavailable' : 'output-invalid';
+
+    // A response arrived and its payload failed the strict contract.
+    case 'malformed':
+      return 'output-invalid';
+
+    // A response arrived and rejected the request. 429 belongs here — it is a 4xx rejection — and the
+    // top-level `reason` still reports `rate-limited`, so no specificity is lost.
+    case 'failed':
+    case 'rate-limited':
+      return 'client-rejected';
+
+    // The attempt was cut off, or threw before yielding any provider response.
+    case 'cancelled':
+    case 'threw':
+      return 'transport-error';
+
+    // The adapter collapses 5xx and network failure into one status; the transport outcome separates
+    // them. `not-sent` means the provider decided without ever reaching the wire.
+    case 'unavailable':
+    case 'timeout':
+      return input.transportOutcome === 'responded' ? 'server-unavailable' : 'transport-error';
+  }
 }

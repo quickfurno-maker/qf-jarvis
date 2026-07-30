@@ -215,7 +215,9 @@ Asserted on the happy path and, separately, after a candidate failure — the `f
 
 ## 12. The result contract
 
-One single-line JSON object with exactly the 37 declared keys, emitted in a fixed order via `SHADOW_RESULT_KEYS`. The CLI re-projects onto that key list as defence in depth, so a runner that somehow returned more could not leak it.
+One single-line JSON object with exactly the declared keys, emitted in a fixed order via `SHADOW_RESULT_KEYS`. The CLI re-projects onto that key list as defence in depth, so a runner that somehow returned more could not leak it.
+
+> **Amended by QFJ-S2-E-C-R1.** The contract was 37 keys as shipped in this phase. It is now **38**: `candidateFailureClass` was added immediately after `reason` after the first live run showed that `provider-unavailable` folds four operationally opposite candidate failures into one string. See the [ADR-0065 amendment](../decisions/ADR-0065-controlled-shadow-validation-at-the-process-boundary.md#amendment--qfj-s2-e-c-r1-the-closed-candidate-failure-class). `reason` remains authoritative; the new field is a coarse closed class carrying no HTTP status, message, header, body or retryable flag.
 
 Closed reasons — nothing finer is exposed at the CLI boundary:
 

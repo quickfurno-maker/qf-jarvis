@@ -47,6 +47,8 @@ function refusal(io: ShadowCliIo, reason: ShadowReason): 1 {
     timestamp: io.nowIso(),
     outcome: 'FAIL',
     reason,
+    // A pre-run refusal never reached the candidate, so the class is the pre-delegation literal.
+    candidateFailureClass: 'not-invoked',
     mode: 'SHADOW',
     finalMode: 'OFF',
     policyRevision: 0,
