@@ -117,8 +117,12 @@ fallback and no refresh.
 ### 7. Prompt boundary
 
 One bounded, versioned, opaque `promptRef`. No prompt text, no registry, no template — S3-I resolves
-the reference. Anything resembling prose is rejected by the reference grammar, so prompt text cannot
-be smuggled through this field.
+the reference.
+
+The decisive proof is contractual, not lexical: the field accepts **only** a bounded opaque
+reference (at most 128 identifier characters), and this PR introduces no production prompt text
+anywhere in the repository. The grammar's rejection of spaces is a secondary bound — a character
+class is not by itself a proof of semantic secrecy, and it should not be cited as one.
 
 ### 8. Provenance, persistence and execution
 
