@@ -286,15 +286,17 @@ stream false · n 1 · messages [system, user]
 
 ### The blocker, stated rather than papered over
 
-With `strict: true` and a valid schema, the remaining explanation for a `json_validate_failed` after
-exactly `max_completion_tokens` output tokens is that generation was **truncated before the constrained
-document closed**: `openai/gpt-oss-20b` is a reasoning model, its reasoning tokens count against
-`max_completion_tokens`, and `reasoning_effort` is absent so the provider default applies. A truncated
-prefix is not a valid document, and Groq rejects it with HTTP 400.
+With `strict: true` and a valid schema, the strongest available explanation for a `json_validate_failed`
+after exactly `max_completion_tokens` output tokens is that generation was **truncated before the
+constrained document closed**: `openai/gpt-oss-20b` is a reasoning model, reasoning models commonly
+charge reasoning tokens against the completion budget — but this phase did not verify that
+provider-specific accounting rule against a primary source — and `reasoning_effort` is absent so the
+provider default applies. A truncated prefix is not a valid document, and Groq rejects it with HTTP 400.
 
-That the stable leg finished in 48 and 69 output tokens while the candidate hit the 256 ceiling twice on
-**byte-identical** requests is exactly the variance a reasoning model produces. The budget is marginal,
-not wrong.
+Truncation is the leading explanation, **not a proven root cause**. That the stable leg finished in 48
+and 69 output tokens while the candidate hit the 256 ceiling twice on **byte-identical** requests is
+consistent with the variance a reasoning model can produce. On this evidence, the budget looks marginal
+rather than wrong.
 
 **This amendment deliberately changes NO generation parameter.** `max_completion_tokens` stays 256 and
 `reasoning_effort` stays absent. Raising a token limit or pinning reasoning effort is a separate decision
