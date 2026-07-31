@@ -162,8 +162,22 @@ describe('containment', () => {
       'validateReplyDraft',
       'createOrchestrator',
       'orchestrateInbound',
+      // S3-B shared runtime and provenance (ADR-0066). Six additive runtime symbols; no merged
+      // contract changed, and no second role/party/routing/proposal/state mechanism was introduced.
+      'createRuntimeProvenance',
+      'RUNTIME_PROVENANCE_VERSION',
+      'RUNTIME_PROVENANCE_AUTHORITY',
+      'RUNTIME_MODEL_OUTPUT_RETENTION',
+      'runAgentTurn',
+      'SHARED_RUNTIME_VERSION',
     ];
+    expect(EXPECTED).toHaveLength(45);
+    expect(Object.keys(barrel)).toHaveLength(45);
     expect(Object.keys(barrel).sort()).toEqual([...EXPECTED].sort());
+    // No provider-, transport- or storage-specific symbol reached the root.
+    for (const forbidden of ['groq', 'whatsapp', 'n8n', 'http', 'sql', 'postgres', 'fetch']) {
+      expect(Object.keys(barrel).filter((k) => k.toLowerCase().includes(forbidden))).toEqual([]);
+    }
     const b = barrel as Record<string, unknown>;
     expect(b['createDeterministicPrivacyGate']).toBeUndefined();
     expect(b['envelopeInput']).toBeUndefined();

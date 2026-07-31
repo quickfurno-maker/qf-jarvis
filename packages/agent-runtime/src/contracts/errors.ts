@@ -10,6 +10,7 @@ export const RUNTIME_ERROR_CODES = [
   'invalid-proposal',
   'invalid-context',
   'scope-violation',
+  'invalid-provenance',
 ] as const;
 export type RuntimeErrorCode = (typeof RUNTIME_ERROR_CODES)[number];
 
@@ -18,6 +19,7 @@ const RUNTIME_ERROR_MESSAGES: Readonly<Record<RuntimeErrorCode, string>> = Objec
   'invalid-proposal': 'A runtime proposal is invalid.',
   'invalid-context': 'A conversation context is invalid.',
   'scope-violation': 'An actor may not act on this party type.',
+  'invalid-provenance': 'A runtime provenance record is invalid.',
 });
 
 /**

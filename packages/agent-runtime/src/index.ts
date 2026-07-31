@@ -76,6 +76,28 @@ export type {
 } from './contracts/operations-center.js';
 
 // Runtime.
+// QFJ-S3-B (ADR-0066): the provenance envelope and the shared agent-turn entry point.
+export {
+  createRuntimeProvenance,
+  RUNTIME_PROVENANCE_VERSION,
+  RUNTIME_PROVENANCE_AUTHORITY,
+  RUNTIME_MODEL_OUTPUT_RETENTION,
+} from './contracts/provenance.js';
+export type {
+  RuntimeProvenance,
+  RuntimeProvenanceInput,
+  RuntimeProvenanceVersion,
+  RuntimeProvenanceAuthority,
+  RuntimeModelOutputRetention,
+} from './contracts/provenance.js';
+export { runAgentTurn, SHARED_RUNTIME_VERSION } from './runtime/run-agent-turn.js';
+export type {
+  AgentTurnInput,
+  AgentTurnResult,
+  AgentTurnProvenanceRefs,
+  SharedRuntimeVersion,
+} from './runtime/run-agent-turn.js';
+
 export { createAgentRuntime } from './runtime/create-agent-runtime.js';
 export type {
   AgentRuntime,
