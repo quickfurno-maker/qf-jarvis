@@ -27,7 +27,7 @@ import {
   groqChatResponseSchema,
   type GroqChatRequestBody,
 } from './groq-contracts.js';
-import { normalizeGroqHttpStatus } from './groq-error-normalization.js';
+import { normalizeGroqHttpFailure } from './groq-error-normalization.js';
 import { buildResponseFormat } from './groq-structured-output.js';
 import { GROQ_CHAT_COMPLETIONS_ENDPOINT, type GroqTransport } from './groq-transport.js';
 
@@ -136,7 +136,9 @@ export class GroqModelProvider implements ModelProvider {
     const latencyMs = Math.max(0, this.clock.now() - start);
 
     if (response.status !== HTTP_OK) {
-      return normalizeGroqHttpStatus(response.status);
+      // Consults the body ONLY for the one closed `json_validate_failed` code (QFJ-S2-E-C-R3); every
+      // other status keeps its existing classification, and no message or payload is ever read.
+      return normalizeGroqHttpFailure(response.status, response.bodyText, latencyMs);
     }
 
     let parsedJson: unknown;
