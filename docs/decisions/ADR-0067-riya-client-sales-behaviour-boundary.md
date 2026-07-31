@@ -1,6 +1,6 @@
 # ADR-0067 — Riya Client-Sales Behaviour Boundary
 
-**Status:** Accepted — QFJ-S3-C
+**Status:** Accepted — QFJ-S3-C-A (behaviour foundation; runtime composition deferred to S3-C-B)
 **Deciders:** Owner
 **Relates to:** [ADR-0054](./ADR-0054-qfj-m1-agent-and-conversation-runtime-foundation.md) · [ADR-0055](./ADR-0055-qfj-m2-core-decision-and-reply-orchestration-foundation.md) · [ADR-0057](./ADR-0057-qfj-m4-model-gateway-reply-adapter-foundation.md) · [ADR-0059](./ADR-0059-qfj-m5-orchestrated-reply-composition-foundation.md) · [ADR-0066](./ADR-0066-shared-agent-runtime-execution-boundary.md) · [ADR-0006](./ADR-0006-agent-responsibility-boundaries.md) · [ADR-0016](./ADR-0016-agent-memory-and-learning-boundaries.md)
 
@@ -105,6 +105,15 @@ pause, human takeover, a non-CLIENT party, and a turn owned by another actor.
 Gate order is load-bearing and mirrors the merged pipeline's own precedence: pause and takeover
 outrank everything, then the role boundary, then intent.
 
+**What this package does and does not guarantee.** Zero model calls from `riya-agent` itself is
+structural: there is no gateway, adapter, port or transport import through which a call could be
+made. `modelReplyEligible` is an eligibility DECISION, not a call-budget enforcer — one boolean on
+one decision object does not, and cannot, enforce process-wide at-most-one invocation. That budget
+remains owned by the merged `orchestrateInbound` pipeline and the `ModelReplyPort` /
+model-reply-adapter contracts (ADR-0055/0057), which are also where pause, takeover and
+role-violation zero-call behaviour is authoritative at runtime. This package adds no retry, no
+fallback and no refresh.
+
 ### 7. Prompt boundary
 
 One bounded, versioned, opaque `promptRef`. No prompt text, no registry, no template — S3-I resolves
@@ -130,6 +139,21 @@ import and no tool surface.
 - **Depending on `@qf-jarvis/contracts`** for bounded-text helpers. A 369-export data-contracts
   dependency for three lines of zod is heavier coupling than the reuse is worth; the sweep confirmed
   it carries no furniture-domain vocabulary to reuse.
+
+## Phase status
+
+This ADR records **S3-C-A: the Riya behaviour foundation**, and S3-C overall is therefore
+**partial**. `@qf-jarvis/riya-agent` is a leaf package that nothing yet imports: no production
+runtime or composition module invokes `decideRiyaTurn`, so eligible CLIENT turns do not reach Riya
+behaviour through `jarvis-runtime` / `orchestrateInbound` today.
+
+The remaining work is a narrow, separate **S3-C-B composition bridge**: route eligible CLIENT turns
+into `decideRiyaTurn` on the authoritative path, map its disposition onto the existing reply and
+`PENDING_CORE_VALIDATION` proposal flow, keep provenance stamped through the merged composition, and
+create no parallel runtime path. Deliberately deferred rather than bundled here, so the behaviour
+kernel and the wiring that gives it reach are reviewed as separate, individually revertible changes.
+
+Production rollout remains OFF. Nothing in this ADR activates a provider, a mode or a deployment.
 
 ## Consequences
 

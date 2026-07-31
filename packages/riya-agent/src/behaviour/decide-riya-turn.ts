@@ -81,7 +81,15 @@ export interface RiyaTurnDecision {
   readonly intent: ClientSalesIntent;
   readonly disposition: RiyaDisposition;
   readonly needDiscovery: NeedDiscovery | undefined;
-  /** Whether the merged model-reply boundary may be invoked for this turn. */
+  /**
+   * Whether the merged model-reply boundary MAY be invoked for this turn.
+   *
+   * An eligibility decision, not a budget enforcer. It does not — and cannot — enforce process-wide
+   * at-most-one invocation; that remains owned by the merged `orchestrateInbound` pipeline and the
+   * `ModelReplyPort` / model-reply-adapter contracts (ADR-0055/0057). What this package guarantees is
+   * narrower and structural: it invokes nothing itself, and it returns `false` on every pause,
+   * takeover, role-violation and refusal path.
+   */
   readonly modelReplyEligible: boolean;
   /** A closed runtime reason. Reused from agent-runtime — this package invents no reason codes. */
   readonly reason: RuntimeReason;
