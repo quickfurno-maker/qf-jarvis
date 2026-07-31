@@ -322,6 +322,9 @@ describe('(133-148) the declared budget and every prior lock', () => {
       'model-gateway-composition',
       'model-reply-adapter',
       'rag-provisioning',
+      // QFJ-S3-C (ADR-0067): the Riya client-sales behaviour package. Still an EXACT set match --
+      // this records an authorised addition, it does not relax the assertion.
+      'riya-agent',
     ]);
     expect(dirs('apps')).toEqual(['api', 'worker']);
   });

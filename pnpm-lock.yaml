@@ -166,6 +166,15 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
 
+  packages/riya-agent:
+    dependencies:
+      '@qf-jarvis/agent-runtime':
+        specifier: workspace:*
+        version: link:../agent-runtime
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+
 packages:
 
   '@emnapi/core@1.11.1':
