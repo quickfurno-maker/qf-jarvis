@@ -245,3 +245,111 @@ unchanged.
 `apps/api` only. No change to `model-gateway`, `model-evaluation`, the credential boundary, the provider
 request, or any package API lock. No new dependency. No retry was added, and this amendment grants no
 run: a live execution still requires a fresh single-use owner authorisation.
+
+## Amendment — QFJ-S2-E-C-R3: `json_validate_failed` is an output failure
+
+**Status:** accepted. Corrects the R1 amendment's characterisation of `client-rejected` and repairs one
+Groq error mapping. Every other decision stands unchanged.
+
+### The evidence
+
+Two independent, correctly formed live SHADOW runs produced the same shape, confirmed from the Groq
+dashboard:
+
+| Run | Stable                    | Candidate                      | Groq error class       |
+| --- | ------------------------- | ------------------------------ | ---------------------- |
+| V2  | HTTP 200, 247 in / 48 out | HTTP 400, 247 in / **256 out** | `json_validate_failed` |
+| V3  | HTTP 200, 247 in / 69 out | HTTP 400, 247 in / **256 out** | `json_validate_failed` |
+
+The key, project, model permission and network path all work — the stable leg proves it. This was not a
+401/403, not a 429, not a 5xx and not a transport failure. Both failed candidates stopped at exactly
+`max_completion_tokens` (256).
+
+### What the wire payload actually contains
+
+Captured from the real adapter through a synthetic no-I/O transport:
+
+```
+response_format.type          json_schema
+json_schema.name              qf_structured_output
+json_schema.strict            true          <- already correct
+json_schema.schema            { type: object, properties: { status: { type: string, const: ok } },
+                                required: ["status"], additionalProperties: false }
+max_completion_tokens         256
+reasoning_effort              absent (provider default)
+temperature / reasoning_format / include_reasoning   absent
+stream false · n 1 · messages [system, user]
+```
+
+**Strict mode was never the defect.** `strict: true` is already on the wire, the schema is an object with
+`additionalProperties: false`, and every property is required. There was nothing to enable.
+
+### The blocker, stated rather than papered over
+
+With `strict: true` and a valid schema, the strongest available explanation for a `json_validate_failed`
+after exactly `max_completion_tokens` output tokens is that generation was **truncated before the
+constrained document closed**: `openai/gpt-oss-20b` is a reasoning model, reasoning models commonly
+charge reasoning tokens against the completion budget — but this phase did not verify that
+provider-specific accounting rule against a primary source — and `reasoning_effort` is absent so the
+provider default applies. A truncated prefix is not a valid document, and Groq rejects it with HTTP 400.
+
+Truncation is the leading explanation, **not a proven root cause**. That the stable leg finished in 48
+and 69 output tokens while the candidate hit the 256 ceiling twice on **byte-identical** requests is
+consistent with the variance a reasoning model can produce. On this evidence, the budget looks marginal
+rather than wrong.
+
+**This amendment deliberately changes NO generation parameter.** `max_completion_tokens` stays 256 and
+`reasoning_effort` stays absent. Raising a token limit or pinning reasoning effort is a separate decision
+that needs its own evidence and its own authorisation; doing it here would be guessing with the owner's
+tokens.
+
+### The decision
+
+One mapping repair, in the Groq adapter only.
+
+A non-2xx response is now classified by `normalizeGroqHttpFailure(status, bodyText, latencyMs)`, which
+consults the body for **exactly one closed literal** — `json_validate_failed` — and, on HTTP 400 with
+that code, returns the existing provider-neutral `{ status: 'malformed', latencyMs }`. Everything else
+delegates to `normalizeGroqHttpStatus` unchanged.
+
+`malformed` already means "a response was served but its payload does not satisfy the contract", and it
+already flows to `provider-output-invalid` / `output-invalid`. So the repair needs **no new status, no new
+type, no new public field and no API change**.
+
+| Candidate response                           | reason                    | candidateFailureClass |
+| -------------------------------------------- | ------------------------- | --------------------- |
+| HTTP 400 + `json_validate_failed`            | `provider-output-invalid` | `output-invalid`      |
+| HTTP 400, any other or no code               | `provider-unavailable`    | `client-rejected`     |
+| HTTP 401 / 403 / 404 / 408 / 409 / 413 / 422 | `provider-unavailable`    | `client-rejected`     |
+| HTTP 429                                     | `rate-limited`            | `client-rejected`     |
+| HTTP 498 / 5xx                               | `provider-unavailable`    | `server-unavailable`  |
+| HTTP 499                                     | `cancelled`               | `transport-error`     |
+| transport rejection                          | `provider-unavailable`    | `transport-error`     |
+| HTTP 200, payload fails the schema           | `provider-output-invalid` | `output-invalid`      |
+
+### Privacy
+
+The body is read for one comparison against one literal. The message, `failed_generation`, `type`,
+request id and every other field are never read, stored, logged or returned. The exact HTTP status, the
+provider code string, the URL, the headers and the response body remain absent from the result line —
+asserted with sentinels in both new suites.
+
+### Correction to the R1 amendment
+
+The R1 amendment described `client-rejected` as "a response was obtained and it **rejected the request**
+(the 4xx family)", and the V3 runbook told the operator to stop and inspect the Groq project, key and
+model permissions. **That guidance was over-confident**, and this evidence shows why: a `json_validate_failed`
+400 is a rejection of the model's own _output_, not of the caller's credentials, and it was reaching that
+class. It is now `output-invalid`.
+
+Two residual conflations remain in `client-rejected`, and are recorded here rather than left implicit:
+a genuine HTTP 4xx and an HTTP 200 whose `finish_reason` falls outside
+`{ stop, length, complete, eos }` still produce the same class, because the adapter maps both to
+`{ status: 'failed' }`. Separating those is a future slice.
+
+### Scope
+
+`packages/model-gateway` Groq adapter and tests, plus `apps/api` tests and this document. No change to
+`model-evaluation`, `model-gateway-composition`, `event-backbone`, the credential boundary, the request
+payload, the call budget, the `OFF → SHADOW → OFF` lifecycle or any package API lock. No retry, fallback
+or refresh was added. This amendment grants no run.

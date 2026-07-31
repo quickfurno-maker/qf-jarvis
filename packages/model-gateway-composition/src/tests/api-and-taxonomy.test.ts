@@ -106,14 +106,50 @@ describe('(36, 37, 38) existing Groq HTTP mappings are unchanged', () => {
     expect(normalization).toContain("return { status: 'failed', retryable: false };");
   });
 
-  it('(37, 38) no Retry-After text, header, body or URL can be surfaced', () => {
+  it('(37, 38) no Retry-After text, header or URL can be surfaced', () => {
     const normalization = codeOnly(
       readRepo('packages/model-gateway/src/providers/groq/groq-error-normalization.ts'),
     );
-    // The function's whole input is a NUMBER, so a header or body has no representable path out.
+    // The status classifier's whole input is still a NUMBER.
     expect(normalization).toContain('normalizeGroqHttpStatus(status: number)');
-    for (const forbidden of ['retryAfter', 'header', 'body', 'https://']) {
+    for (const forbidden of ['retryAfter', 'header', 'https://']) {
       expect(normalization.toLowerCase()).not.toContain(forbidden.toLowerCase());
+    }
+  });
+
+  it('(37, 38) the body is COMPARED against one closed literal and never surfaced', () => {
+    // QFJ-S2-E-C-R3: `normalizeGroqHttpFailure` now receives the response body, because a Groq
+    // `json_validate_failed` 400 is an OUTPUT failure and was otherwise indistinguishable from a
+    // credential rejection. The original assertion rested on the input being a bare number; that premise
+    // no longer holds, so the invariant is asserted directly instead — and more precisely: the body may
+    // be read, but nothing derived from it may escape.
+    const source = codeOnly(
+      readRepo('packages/model-gateway/src/providers/groq/groq-error-normalization.ts'),
+    );
+
+    // Exactly one recognised code, declared once as a literal.
+    expect(source.match(/'json_validate_failed'/g)).toHaveLength(1);
+
+    // The body is parsed and compared. It is never spread, returned, or attached to a result.
+    expect(source).toContain('JSON.parse(bodyText)');
+    expect(source).not.toMatch(/return[^;]*bodyText/);
+    expect(source).not.toMatch(/\.\.\.\s*(parsed|envelope|error|body)/);
+    // `bodyText` appears ONLY as a parameter declaration; the returned-shape check below proves it is
+    // never carried out of the module. A bare /bodyText\s*:/ scan would flag the signature itself.
+    expect(source.match(/bodyText/g) ?? []).toHaveLength(4);
+
+    // No field of the error envelope other than the code is ever read.
+    for (const forbidden of ['message', 'failed_generation', 'request_id', 'stack', 'cause']) {
+      expect(source).not.toContain(forbidden);
+    }
+
+    // Every returned object is a closed provider status; none carries the status code or the body.
+    const returns = source.match(/return \{[^}]*\}/g) ?? [];
+    expect(returns.length).toBeGreaterThan(0);
+    for (const returned of returns) {
+      expect(returned).toMatch(/status: '(rate-limited|cancelled|unavailable|failed|malformed)'/);
+      expect(returned).not.toContain('bodyText');
+      expect(returned).not.toContain('code');
     }
   });
 });
