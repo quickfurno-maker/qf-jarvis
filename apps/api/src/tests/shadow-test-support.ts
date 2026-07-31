@@ -161,6 +161,29 @@ export function unreachableTransport(): GroqTransport {
   };
 }
 
+/**
+ * A transport that RESOLVES a synthetic response without performing any I/O.
+ *
+ * Used to reproduce the "the server answered" half of the QFJ-S2-E-C-R1 split: an HTTP 5xx is a
+ * delivered response, so the leg must classify as `server-unavailable` rather than `transport-error`.
+ */
+export function respondingTransport(): GroqTransport {
+  return {
+    send: () => Promise.resolve({ status: 503, retryAfterSeconds: null, bodyText: '' }),
+  };
+}
+
+/**
+ * A transport that REJECTS, standing in for a DNS/connect/TLS/socket failure.
+ *
+ * The rejection value is deliberately opaque: the wrapper records only that a rejection happened.
+ */
+export function rejectingTransport(): GroqTransport {
+  return {
+    send: () => Promise.reject(new Error('QFJ_TEST_SYNTHETIC_TRANSPORT_REJECTION')),
+  };
+}
+
 /** A scripted provider outcome per leg. */
 export interface LegScript {
   readonly result: ProviderInvocationResult;
@@ -174,6 +197,11 @@ export function fakeLegProvider(args: {
   readonly release: ProviderReleaseRef;
   readonly script: LegScript;
   readonly onInvoke?: () => void;
+  /**
+   * When supplied, the fake calls this transport before returning its scripted result, exactly as the
+   * real Groq adapter does. That is what lets a spec drive the `responded` / `rejected` distinction.
+   */
+  readonly transport?: GroqTransport;
 }): ModelProvider {
   const capabilities = defineProviderCapabilities({
     providerId: args.release.providerId,
@@ -192,9 +220,20 @@ export function fakeLegProvider(args: {
     descriptor: { providerId: args.release.providerId, executionClass: 'HOSTED' },
     capabilities: () => capabilities,
     health: () => Promise.resolve({ available: true }),
-    invoke: (_input: ProviderInvocationInput): Promise<ProviderInvocationResult> => {
+    invoke: async (input: ProviderInvocationInput): Promise<ProviderInvocationResult> => {
       args.onInvoke?.();
-      return Promise.resolve(args.script.result);
+      if (args.transport !== undefined) {
+        try {
+          await args.transport.send(
+            { url: 'https://example.invalid/never-fetched', headers: {}, body: '{}' },
+            input.signal,
+          );
+        } catch {
+          // The adapter collapses a transport rejection into `unavailable`; the scripted result stands
+          // in for whatever the adapter would have returned.
+        }
+      }
+      return args.script.result;
     },
   };
 }

@@ -163,3 +163,85 @@ credential path. **No provider is production-active.**
 Executing it against a real credential and a real provider is **S2-E-C** and requires a fresh,
 single-use owner authorisation naming the exact commit, model, config digest, credential reference,
 evidence reference, call budget and stop conditions. This ADR supplies a capability; it grants no run.
+
+## Amendment — QFJ-S2-E-C-R1: the closed candidate failure class
+
+**Status:** accepted. Amends §10 (the result contract) only. Every other decision above stands
+unchanged.
+
+### Why
+
+The first correctly formed live SHADOW run completed safely — one credential read, two provider
+constructions, two health checks, one stable invocation that succeeded, one candidate invocation,
+`OFF → SHADOW → OFF` at revision 2, both outputs discarded, no retry, no fallback, no refresh — and
+returned `outcome: FAIL`, `reason: provider-unavailable`.
+
+The offline audit that followed established that the stable and candidate legs send **byte-identical**
+HTTP requests: the per-leg `providerId`, `releaseId` and `configDigest` are governance identities and
+never reach the wire. So the candidate failed on the same bytes that had succeeded moments earlier, and
+no composition defect could explain it.
+
+The result could not be acted on. `provider-unavailable` folds four operationally opposite situations
+into one string: an HTTP 4xx rejection means _stop and check the account_, an HTTP 5xx or a network
+failure means _the attempt may simply be retried_. Choosing between them would have been a guess, and a
+rerun under the old contract would have consumed a single-use authorisation to produce an equally
+unreadable line.
+
+### Decision
+
+The result carries **one** additional field, `candidateFailureClass`, from a frozen closed vocabulary of
+exactly six literals. It is diagnostic context; **`reason` remains authoritative** for the run outcome
+and is unchanged by this amendment.
+
+| Class                | Meaning                                                                                       |
+| -------------------- | --------------------------------------------------------------------------------------------- |
+| `none`               | The candidate completed and the gateway accepted its output.                                  |
+| `not-invoked`        | The candidate was never delegated to — the run stopped before, or refused at, the boundary.   |
+| `client-rejected`    | A response was obtained and it **rejected the request** (the 4xx family).                     |
+| `server-unavailable` | A response was obtained and it **declined to serve** (the 5xx family), or it served too late. |
+| `transport-error`    | **No usable response was obtained**: the transport failed, was cut off, or the call threw.    |
+| `output-invalid`     | A response was obtained and served, but its payload failed the strict output contract.        |
+
+The partition is a single question — _did we obtain a provider response, and what did it say?_
+
+### How `server-unavailable` and `transport-error` became separable
+
+They are **not** separable from the provider result alone, and this is the point at which fabricating a
+distinction was the real risk. The Groq adapter maps an HTTP 5xx and a network-level rejection to the
+identical `{ status: 'unavailable', retryable: true }`.
+
+The distinction is instead **derived from a fact `apps/api` already owns**: the counting transport
+wrapper sits between the provider and the real transport, so it can record whether `send` resolved or
+rejected. It records that one bit and nothing else — the request, the response and the rejection value
+are never read, and the rejection is re-thrown untouched.
+
+A budget refusal is deliberately _not_ recorded as a transport rejection: it is the runner's own refusal,
+and conflating the two would mislabel a self-imposed stop as a provider failure.
+
+### Two mappings that required a judgement, recorded explicitly
+
+1. **`rate-limited` classes as `client-rejected`.** HTTP 429 is a 4xx rejection — a response was obtained
+   and it rejected the request. The top-level `reason` still reports `rate-limited`, so no specificity is
+   lost, and no seventh enum value was invented to hold it.
+2. **`timeout` and `cancelled` class as `transport-error`** when no response was delivered. Both mean no
+   usable provider response was obtained, which is exactly what that class denotes. Their `reason` values
+   are likewise unchanged.
+
+### What the class must never carry
+
+No HTTP status, no provider or error message, no cause, no stack, no header, no URL or endpoint, no
+response body, no retryable flag, no free-form string. A coarse class answers the operational question;
+an exact status would begin to describe the account rather than the run.
+
+### Contract effect
+
+The one-line result grows from **37 to 38 keys**. The new key sits immediately after `reason`, is always
+present, is never null or undefined, and is included in the CLI's explicit safe-key projection. Output
+disposal, the call budget, the `OFF → SHADOW → OFF` lifecycle and the final emergency disable are all
+unchanged.
+
+### Scope
+
+`apps/api` only. No change to `model-gateway`, `model-evaluation`, the credential boundary, the provider
+request, or any package API lock. No new dependency. No retry was added, and this amendment grants no
+run: a live execution still requires a fresh single-use owner authorisation.

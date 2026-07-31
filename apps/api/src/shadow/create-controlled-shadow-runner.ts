@@ -43,7 +43,13 @@ import { createEvaluationEvidenceRegistry } from '@qf-jarvis/model-gateway-compo
 import type { ApprovalEvidence } from '@qf-jarvis/model-evaluation';
 
 import { createShadowCounters, type ShadowCounters } from './shadow-counters.js';
-import { countTransport, observeProvider } from './shadow-provider-metrics.js';
+import {
+  classifyCandidateFailure,
+  countTransport,
+  observeProvider,
+  type ProviderObservation,
+  type TransportOutcome,
+} from './shadow-provider-metrics.js';
 import { createShadowRequest, SHADOW_PROMPT_ID } from './shadow-request.js';
 import { hardDeadlineMs, type ShadowRunConfig } from './shadow-run-config.js';
 import type { ShadowReason, ShadowRunResult } from './shadow-result.js';
@@ -99,7 +105,13 @@ function reasonForGatewayCode(code: ModelGatewayErrorCode): ShadowReason {
   }
 }
 
-/** Build a Groq provider for one leg. One credential, two configs, two instances. */
+/**
+ * Build a Groq provider for one leg. One credential, two configs, two instances.
+ *
+ * Returns the leg's transport outcome accessor alongside the provider: the counting wrapper is the only
+ * place that can see whether the transport delivered a response or rejected, and that fact is what makes
+ * `server-unavailable` and `transport-error` distinguishable (QFJ-S2-E-C-R1).
+ */
 function buildProvider(args: {
   readonly config: ShadowRunConfig;
   readonly release: ProviderReleaseRef;
@@ -107,16 +119,21 @@ function buildProvider(args: {
   readonly apiKey: ReturnType<typeof createGroqApiKey>;
   readonly counters: ShadowCounters;
   readonly seams: ShadowRunnerSeams;
-}): ModelProvider {
-  const transport = countTransport(
+}): { readonly provider: ModelProvider; readonly transportOutcome: () => TransportOutcome } {
+  const counted = countTransport(
     args.seams.transportFactory?.() ?? createFetchGroqTransport(),
     args.counters,
-  ) as GroqTransport;
+  );
+  const transport = counted as unknown as GroqTransport;
+  const transportOutcome = (): TransportOutcome => counted.outcome();
 
   if (args.seams.providerFactory !== undefined) {
-    return args.seams.providerFactory({ release: args.release, leg: args.leg, transport });
+    return {
+      provider: args.seams.providerFactory({ release: args.release, leg: args.leg, transport }),
+      transportOutcome,
+    };
   }
-  return new GroqModelProvider(
+  const provider = new GroqModelProvider(
     createGroqProviderConfig({
       providerId: args.release.providerId,
       modelId: args.config.modelId,
@@ -130,6 +147,7 @@ function buildProvider(args: {
     }),
     createSystemClock(),
   );
+  return { provider, transportOutcome };
 }
 
 /**
@@ -154,7 +172,7 @@ export async function runControlledShadowOnce(input: ShadowRunnerInput): Promise
   let stableLatencyMs = 0;
   let stableInputTokens = 0;
   let stableOutputTokens = 0;
-  let candidateObservation = {
+  let candidateObservation: Omit<ProviderObservation, 'invocations'> = {
     status: 'not-invoked',
     latencyMs: 0,
     inputTokens: 0,
@@ -162,12 +180,23 @@ export async function runControlledShadowOnce(input: ShadowRunnerInput): Promise
   };
   let controller: ReturnType<typeof createProviderRolloutController> | undefined;
   let clearDeadline: (() => void) | undefined;
+  // QFJ-S2-E-C-R1 diagnostic inputs. Both default to the pre-delegation state, so a run that refuses
+  // before the providers exist reports `not-invoked` rather than an inferred class.
+  let candidateTransportOutcome: () => TransportOutcome = () => 'not-sent';
+  let candidateAccepted = false;
 
   const finish = (): ShadowRunResult =>
     Object.freeze({
       timestamp: new Date(startedAt).toISOString(),
       outcome,
       reason,
+      candidateFailureClass: classifyCandidateFailure({
+        status: candidateObservation.status,
+        latencyMs: candidateObservation.latencyMs,
+        transportOutcome: candidateTransportOutcome(),
+        accepted: candidateAccepted,
+        timeoutMs: config.timeoutMs,
+      }),
       mode: 'SHADOW' as const,
       finalMode,
       policyRevision,
@@ -275,20 +304,26 @@ export async function runControlledShadowOnce(input: ShadowRunnerInput): Promise
       reason = 'call-budget-exceeded';
       return;
     }
-    const stableObserved = observeProvider(
-      buildProvider({ config, release: stableRelease, leg: 'stable', apiKey, counters, seams }),
+    const stableBuilt = buildProvider({
+      config,
+      release: stableRelease,
+      leg: 'stable',
+      apiKey,
       counters,
-      'stableInvocations',
-    );
+      seams,
+    });
+    const candidateBuilt = buildProvider({
+      config,
+      release: candidateRelease,
+      leg: 'candidate',
+      apiKey,
+      counters,
+      seams,
+    });
+    candidateTransportOutcome = candidateBuilt.transportOutcome;
+    const stableObserved = observeProvider(stableBuilt.provider, counters, 'stableInvocations');
     const candidateObserved = observeProvider(
-      buildProvider({
-        config,
-        release: candidateRelease,
-        leg: 'candidate',
-        apiKey,
-        counters,
-        seams,
-      }),
+      candidateBuilt.provider,
       counters,
       'candidateInvocations',
     );
@@ -440,6 +475,9 @@ export async function runControlledShadowOnce(input: ShadowRunnerInput): Promise
     const started = events.filter((e) => e.type === 'shadow-started').length;
     const completed = events.filter((e) => e.type === 'shadow-completed').length;
     const failed = events.filter((e) => e.type === 'shadow-failed').length;
+    // `shadow-completed` is the gateway's own verdict on the candidate, so it — not the raw provider
+    // status — is what separates `none` from a failure class.
+    candidateAccepted = started === 1 && completed === 1 && failed === 0;
     if (started !== 1 || completed !== 1 || failed !== 0) {
       reason =
         candidateObservation.status === 'timeout'
