@@ -84,14 +84,29 @@ combination that would be a lie.
 
 Riya adds two sales meanings and maps them onto **existing** generic kinds:
 
-| Riya meaning          | Merged kind  |
-| --------------------- | ------------ |
-| `SALES_FOLLOW_UP`     | `FOLLOW_UP`  |
-| `HUMAN_SALES_CONTACT` | `ESCALATION` |
+| Riya meaning          | Merged M1 kind |
+| --------------------- | -------------- |
+| `SALES_FOLLOW_UP`     | `FOLLOW_UP`    |
+| `HUMAN_SALES_CONTACT` | `ESCALATION`   |
 
-No new kind was needed, so none was added; `RUNTIME_PROPOSAL_KINDS` stays at five. Every proposal is
-built by the merged `createProposal`, which stamps `PENDING_CORE_VALIDATION` and independently
-re-checks actor↔party scope — so the boundary holds even if this package is refactored badly.
+No new M1 kind was needed, so none was added; `RUNTIME_PROPOSAL_KINDS` stays at five. Every proposal
+built here goes through the merged `createProposal`, which stamps `PENDING_CORE_VALIDATION` and
+independently re-checks actor↔party scope — so the boundary holds even if this package is refactored
+badly.
+
+> **Correction (QFJ-S3-C-B, ADR-0068).** The table above describes the **M1 `RuntimeProposal`**
+> vocabulary, and only that. When it was written, S3-C-A verified the mapping against M1 and concluded
+> that no new kind was required. That conclusion was correct for M1 and **incomplete for the runtime**:
+> the authoritative path does not use `RuntimeProposal` at all. It builds an **M2
+> `OrchestrationProposal`** through `createOrchestrationProposal`, whose separate
+> `ORCHESTRATION_PROPOSAL_KINDS` vocabulary contained neither `FOLLOW_UP` nor `ESCALATION`.
+>
+> Consequently: M2 **did** require one bounded addition, `FOLLOW_UP`, so that
+> `PROPOSE_SALES_FOLLOW_UP` is represented truthfully rather than flattened into `REPLY`. And
+> `createRiyaProposal`/`proposalKindFor` are **not called by S3-C-B** — they remain the M1-vocabulary
+> surface, exported and unchanged, because calling them beside the M2 flow would produce a second,
+> revision-unbound proposal for one turn. There is exactly one proposal path, and it is M2. The two
+> vocabularies stay deliberately separate; ADR-0068 governs the runtime mapping.
 
 A proposal has no field an executable instruction could occupy: it carries an id, a version, a kind,
 an actor, a party type, a conversation id and an authority status. Nothing else.
@@ -146,18 +161,19 @@ import and no tool surface.
 
 ## Phase status
 
-This ADR records **S3-C-A: the Riya behaviour foundation**, and S3-C overall is therefore
-**partial**. `@qf-jarvis/riya-agent` is a leaf package that nothing yet imports: no production
-runtime or composition module invokes `decideRiyaTurn`, so eligible CLIENT turns do not reach Riya
-behaviour through `jarvis-runtime` / `orchestrateInbound` today.
+This ADR records **S3-C-A: the Riya behaviour foundation**. When it was written, S3-C overall was
+**partial**: `@qf-jarvis/riya-agent` was a leaf package nothing imported, so eligible CLIENT turns did
+not reach Riya behaviour through `jarvis-runtime`.
 
-The remaining work is a narrow, separate **S3-C-B composition bridge**: route eligible CLIENT turns
-into `decideRiyaTurn` on the authoritative path, map its disposition onto the existing reply and
-`PENDING_CORE_VALIDATION` proposal flow, keep provenance stamped through the merged composition, and
-create no parallel runtime path. Deliberately deferred rather than bundled here, so the behaviour
-kernel and the wiring that gives it reach are reviewed as separate, individually revertible changes.
+**S3-C-B (ADR-0068) has since supplied the composition bridge.** `jarvis-runtime` now wires an
+optional client-sales behaviour input port into a generic behaviour seam inside the merged
+orchestrator, and all five dispositions are reachable through `createJarvisRuntime`. The behaviour
+kernel and the wiring that gives it reach were reviewed as separate, individually revertible changes,
+which is why they are two ADRs rather than one.
 
-Production rollout remains OFF. Nothing in this ADR activates a provider, a mode or a deployment.
+Production rollout remains OFF. Nothing in either ADR activates a provider, a mode or a deployment,
+and no production data source supplies `ClientSalesSignals` today — the seam is defined and wired, not
+switched on.
 
 ## Consequences
 

@@ -16,6 +16,7 @@ import { AI_AGENT_ACTORS } from '../contracts/vocabularies.js';
 import type { RuntimeActor } from '../contracts/vocabularies.js';
 import { coreDecision, createOrchestrationProposal } from './contracts.js';
 import type { KnowledgeCitation, OrchestrationContext, OrchestrationResult } from './contracts.js';
+import type { BehaviourDecision, BehaviourDecisionPort } from './behaviour-port.js';
 import { createReplyPlan } from './create-reply-plan.js';
 import { validateReplyDraft } from './validate-reply-draft.js';
 import type { ConversationContextPort, KnowledgePort, ModelReplyPort } from './model-reply-port.js';
@@ -26,11 +27,8 @@ import type {
   OrchestrationObservabilityHook,
 } from './observability.js';
 import { NOOP_ORCHESTRATION_OBSERVABILITY } from './observability.js';
-import type {
-  CoreDecisionOutcome,
-  OrchestrationProposalKind,
-  OrchestrationReason,
-} from './vocabularies.js';
+import { ORCHESTRATION_PROPOSAL_KINDS } from './vocabularies.js';
+import type { CoreDecisionOutcome, OrchestrationReason } from './vocabularies.js';
 
 export interface OrchestratorConfig {
   readonly policy: RuntimePolicy;
@@ -45,6 +43,8 @@ export interface OrchestratorConfig {
   readonly requireEvaluationRef?: boolean;
   /** Topics for the optional exact knowledge retrieval. */
   readonly knowledgeTopics?: readonly string[];
+  /** Optional behaviour seam (ADR-0068). Absent -> the legacy eligible/`REPLY` default. */
+  readonly behaviourPort?: BehaviourDecisionPort;
 }
 
 export interface Orchestrator {
@@ -58,6 +58,7 @@ export interface Orchestrator {
   readonly taskClass: string;
   readonly requireEvaluationRef: boolean;
   readonly knowledgeTopics: readonly string[];
+  readonly behaviourPort: BehaviourDecisionPort | undefined;
 }
 
 /** Build a frozen orchestrator from injected collaborators. */
@@ -73,7 +74,46 @@ export function createOrchestrator(config: OrchestratorConfig): Orchestrator {
     taskClass: config.taskClass ?? 'RESPONSE_GENERATION',
     requireEvaluationRef: config.requireEvaluationRef ?? false,
     knowledgeTopics: Object.freeze([...(config.knowledgeTopics ?? [])]),
+    behaviourPort: config.behaviourPort,
   });
+}
+
+/**
+ * The behaviour decision the orchestrator has always implicitly made: reply, and ask a model to draft
+ * it. Used verbatim when no behaviour port is configured, so an unwired runtime is byte-identical to
+ * the pre-ADR-0068 pipeline.
+ */
+function legacyBehaviour(taskClass: string): BehaviourDecision {
+  return Object.freeze({
+    modelReplyEligible: true,
+    proposalKind: 'REPLY' as const,
+    structuredIntent: Object.freeze({ taskClass, replyKind: 'REPLY' }),
+  });
+}
+
+/** True iff a value is a structurally valid behaviour decision. Anything else fails closed. */
+function isBehaviourDecision(value: unknown): value is BehaviourDecision {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const candidate = value as Partial<BehaviourDecision>;
+  if (typeof candidate.modelReplyEligible !== 'boolean') {
+    return false;
+  }
+  if (
+    typeof candidate.proposalKind !== 'string' ||
+    !(ORCHESTRATION_PROPOSAL_KINDS as readonly string[]).includes(candidate.proposalKind)
+  ) {
+    return false;
+  }
+  const intent: unknown = candidate.structuredIntent;
+  if (typeof intent !== 'object' || intent === null) {
+    return false;
+  }
+  // The proposal schema validates the record again; this only rejects shapes it could never accept.
+  return Object.values(intent as Record<string, unknown>).every(
+    (entry) => typeof entry === 'string' || typeof entry === 'number' || typeof entry === 'boolean',
+  );
 }
 
 /** The first/second gate: the first content-free reason a context blocks the AI reply path, or null. */
@@ -171,53 +211,94 @@ export async function orchestrateInbound(
     return refuse(block1);
   }
 
-  // 8. Exact knowledge retrieval (only when a port is configured); fail closed on refusal.
+  // 7b. Behaviour decision (ADR-0068) — AFTER the complete first gate, so a blocked conversation
+  // never reaches a behaviour port, and BEFORE knowledge/model, so an ineligible turn costs nothing.
+  let behaviour: BehaviourDecision;
+  if (orch.behaviourPort === undefined) {
+    behaviour = legacyBehaviour(orch.taskClass);
+  } else {
+    let decided: BehaviourDecision | undefined;
+    try {
+      decided = await orch.behaviourPort.decide({
+        conversationId: ctx1.conversationId,
+        partyType: ctx1.partyType,
+        assignedActor,
+        revision: ctx1.revision,
+      });
+    } catch {
+      // A rejected behaviour port fails closed with no raw error, exactly like the model and Core.
+      emit('model-invocation-skipped', 'orchestration-invariant', { actor: assignedActor });
+      return refuse('orchestration-invariant');
+    }
+    if (decided === undefined) {
+      behaviour = legacyBehaviour(orch.taskClass);
+    } else if (!isBehaviourDecision(decided)) {
+      emit('model-invocation-skipped', 'orchestration-invariant', { actor: assignedActor });
+      return refuse('orchestration-invariant');
+    } else {
+      behaviour = decided;
+    }
+  }
+
+  // 8. Exact knowledge retrieval — only on the model path, and only when a port is configured.
   let citations: KnowledgeCitation[] = [];
-  if (orch.knowledgePort !== undefined) {
-    const kres = await orch.knowledgePort.retrieve({
-      conversationId: ctx1.conversationId,
-      topics: orch.knowledgeTopics,
+  let replyBody: string | undefined;
+
+  if (behaviour.modelReplyEligible) {
+    if (orch.knowledgePort !== undefined) {
+      const kres = await orch.knowledgePort.retrieve({
+        conversationId: ctx1.conversationId,
+        topics: orch.knowledgeTopics,
+        dataClass: ctx1.dataClass,
+      });
+      if (!kres.ok) {
+        return refuse('orchestration-knowledge-refused');
+      }
+      citations = kres.citations.map((c) => ({ ...c }));
+    }
+
+    // 9–10. Model plan + injected model reply port (no live call here).
+    if (orch.modelReplyPort === undefined) {
+      emit('model-invocation-skipped', 'orchestration-model-unavailable', { actor: assignedActor });
+      return refuse('orchestration-model-unavailable');
+    }
+    if (orch.requireEvaluationRef && orch.modelReplyPort.evaluationRef === undefined) {
+      return refuse('orchestration-evaluation-mismatch');
+    }
+    const plan = createReplyPlan({
+      context: ctx1,
+      envelope,
+      assignedActor,
+      modelPort: orch.modelReplyPort,
+      policyRevision: orch.policy.policyRevision,
+      taskClass: orch.taskClass,
+      citations,
+    });
+    emit('model-plan-created', 'orchestration-completed', {
+      actor: assignedActor,
       dataClass: ctx1.dataClass,
     });
-    if (!kres.ok) {
-      return refuse('orchestration-knowledge-refused');
+    // A rejected model Promise fails closed — it is never an unhandled rejection or a raw error.
+    let candidate: unknown;
+    try {
+      candidate = await orch.modelReplyPort.draftReply(plan);
+    } catch {
+      return refuse('orchestration-model-unavailable');
     }
-    citations = kres.citations.map((c) => ({ ...c }));
-  }
 
-  // 9–10. Model plan + injected model reply port (no live call here).
-  if (orch.modelReplyPort === undefined) {
-    emit('model-invocation-skipped', 'orchestration-model-unavailable', { actor: assignedActor });
-    return refuse('orchestration-model-unavailable');
-  }
-  if (orch.requireEvaluationRef && orch.modelReplyPort.evaluationRef === undefined) {
-    return refuse('orchestration-evaluation-mismatch');
-  }
-  const plan = createReplyPlan({
-    context: ctx1,
-    envelope,
-    assignedActor,
-    modelPort: orch.modelReplyPort,
-    policyRevision: orch.policy.policyRevision,
-    taskClass: orch.taskClass,
-    citations,
-  });
-  emit('model-plan-created', 'orchestration-completed', {
-    actor: assignedActor,
-    dataClass: ctx1.dataClass,
-  });
-  // A rejected model Promise fails closed — it is never an unhandled rejection or a raw error.
-  let candidate: unknown;
-  try {
-    candidate = await orch.modelReplyPort.draftReply(plan);
-  } catch {
-    return refuse('orchestration-model-unavailable');
-  }
-
-  // 11. Validate the draft (fabricated/versionless citation or raw body/CoT → refuse).
-  const validated = validateReplyDraft(candidate, plan);
-  if (!validated.ok) {
-    return refuse('orchestration-draft-invalid');
+    // 11. Validate the draft (fabricated/versionless citation or raw body/CoT → refuse).
+    const validated = validateReplyDraft(candidate, plan);
+    if (!validated.ok) {
+      return refuse('orchestration-draft-invalid');
+    }
+    replyBody = validated.draft.replyBody;
+  } else {
+    // Ineligible: no knowledge retrieval, no plan, no invocation, no draft to validate. The proposal
+    // below carries no reply body, and the double gate still runs — a refusal is not a shortcut.
+    emit('model-invocation-skipped', 'orchestration-completed', {
+      actor: assignedActor,
+      dataClass: ctx1.dataClass,
+    });
   }
 
   // Double gate — re-read context; any state change after drafting prevents Core acceptance.
@@ -237,8 +318,9 @@ export async function orchestrateInbound(
     return refuse(block2);
   }
 
-  // 12. Proposal — PENDING_CORE_VALIDATION.
-  const kind: OrchestrationProposalKind = 'REPLY';
+  // 12. Proposal — PENDING_CORE_VALIDATION. Kind and intent come from the behaviour decision; every
+  // other field, and the authority status, remain owned by the merged contract.
+  const kind = behaviour.proposalKind;
   const proposal = createOrchestrationProposal({
     proposalId: `${runId}-reply`,
     proposalVersion: 1,
@@ -247,9 +329,9 @@ export async function orchestrateInbound(
     assignedActor,
     partyType: ctx1.partyType,
     kind,
-    structuredIntent: { taskClass: orch.taskClass, replyKind: kind },
+    structuredIntent: behaviour.structuredIntent,
     citations,
-    replyBody: validated.draft.replyBody,
+    replyBody,
   });
   emit('proposal-created', 'orchestration-completed', { actor: assignedActor, proposalKind: kind });
 
@@ -274,9 +356,9 @@ export async function orchestrateInbound(
         proposalKind: kind,
         structuredIntent: proposal.structuredIntent,
         policyRevision: orch.policy.policyRevision,
-        evaluationRef: orch.modelReplyPort.evaluationRef,
+        evaluationRef: orch.modelReplyPort?.evaluationRef,
         citations,
-        proposedReplyBody: validated.draft.replyBody,
+        proposedReplyBody: replyBody,
       });
       outcome = coreResponse.outcome;
     } catch {

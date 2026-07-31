@@ -10,14 +10,15 @@
  * error. Nothing is sent, delivered, executed, or persisted.
  */
 import type {
+  AgentTurnResult,
   CoreDecisionOutcome,
   InboundEnvelope,
-  OrchestrationResult,
 } from '@qf-jarvis/agent-runtime';
-import { createOrchestrator, orchestrateInbound } from '@qf-jarvis/agent-runtime';
+import { createOrchestrator, runAgentTurn } from '@qf-jarvis/agent-runtime';
 import { createCoreDecisionAdapter } from '@qf-jarvis/core-decision-adapter';
 import { createModelReplyAdapter } from '@qf-jarvis/model-reply-adapter';
 
+import { riyaBehaviourPort } from './riya-behaviour-adapter.js';
 import type { JarvisRuntimeConfig } from '../contracts/runtime-config.js';
 import type { JarvisRuntimeResult } from '../contracts/runtime-result.js';
 import type { JarvisRuntimeOutcome } from '../contracts/reasons.js';
@@ -43,6 +44,12 @@ const CORE_OUTCOME_MAP: Readonly<Record<CoreDecisionOutcome, JarvisRuntimeOutcom
     CORE_UNAVAILABLE: 'CORE_UNAVAILABLE',
   },
 );
+
+/** The shared-runtime implementation reference stamped into provenance when none is configured. */
+const DEFAULT_RUNTIME_REF = 'qfj.jarvis-runtime.s3cb';
+
+/** The default task class, kept in one place so the orchestrator and the behaviour port agree. */
+const DEFAULT_TASK_CLASS = 'RESPONSE_GENERATION';
 
 /** Compose M1–M4 for one envelope and return the closed, frozen runtime result. */
 export async function composeAndProcess(
@@ -92,6 +99,7 @@ export async function composeAndProcess(
       modelDrafted: fields.modelDrafted ?? false,
       coreConsulted,
       refusalReason: fields.refusalReason,
+      provenance: fields.provenance,
     });
 
   emit('jarvis-inbound-received', undefined, undefined);
@@ -125,6 +133,14 @@ export async function composeAndProcess(
       })
     : undefined;
 
+  // The Riya behaviour seam — wired ONLY when a client-sales input port is injected. Absent, the
+  // orchestrator uses its legacy eligible/`REPLY` default and nothing about this run changes.
+  const taskClass = config.taskClass ?? DEFAULT_TASK_CLASS;
+  const behaviourPort =
+    config.behaviourInput === undefined
+      ? undefined
+      : riyaBehaviourPort(config.behaviourInput, source, taskClass);
+
   // M2 orchestrator — the existing double-gated processing order over the injected ports.
   const orch = createOrchestrator({
     policy: config.policy,
@@ -133,40 +149,67 @@ export async function composeAndProcess(
     ...(coreDecisionPort === undefined ? {} : { coreDecisionPort }),
     privacyGate,
     ...(config.knowledgePort === undefined ? {} : { knowledgePort: config.knowledgePort }),
-    ...(config.taskClass === undefined ? {} : { taskClass: config.taskClass }),
+    taskClass,
     ...(config.knowledgeTopics === undefined ? {} : { knowledgeTopics: config.knowledgeTopics }),
     ...(config.requireEvaluationRef === undefined
       ? {}
       : { requireEvaluationRef: config.requireEvaluationRef }),
+    ...(behaviourPort === undefined ? {} : { behaviourPort }),
   });
 
   emit('jarvis-composition-started', undefined, undefined);
 
-  // Await the whole flow; a rejected Promise anywhere fails closed with no raw error.
-  let result: OrchestrationResult;
+  // ONE agent turn: `runAgentTurn` delegates to `orchestrateInbound` exactly once and stamps the
+  // provenance sibling. The orchestrator is never invoked separately — one turn, one pipeline.
+  const refs = config.provenanceRefs;
+  let turn: AgentTurnResult;
   try {
-    result = await orchestrateInbound(orch, envelope);
+    turn = await runAgentTurn(orch, {
+      envelope,
+      provenance: {
+        runtimeRef: refs?.runtimeRef ?? DEFAULT_RUNTIME_REF,
+        policyRef: refs?.policyRef ?? config.policy.policyRevision,
+        ...(refs?.promptRef === undefined ? {} : { promptRef: refs.promptRef }),
+        ...(refs?.modelRef === undefined ? {} : { modelRef: refs.modelRef }),
+        ...(refs?.providerRef === undefined ? {} : { providerRef: refs.providerRef }),
+        releaseRef: refs?.releaseRef ?? config.release.releaseId,
+        configRef: refs?.configRef ?? config.release.configDigest,
+        correlationId: config.correlationId ?? runId,
+        occurredAt: config.clock(),
+      },
+    });
   } catch {
+    // A rejected turn — including a provenance record that could not be built from unsafe references
+    // — fails closed with no raw error, no retry, no second run, and no fabricated provenance.
     const res = frozen('REFUSED', { refusalReason: 'orchestration-invariant' });
     emit('jarvis-refused', res.outcome, res);
     return res;
   }
 
+  const result = turn.outcome;
+  const provenance = turn.provenance;
+
   if (!result.ok) {
-    const res = frozen('REFUSED', { refusalReason: result.reason });
+    const res = frozen('REFUSED', { refusalReason: result.reason, provenance });
     emit('jarvis-refused', res.outcome, res);
     return res;
   }
 
-  // A valid proposal + decision. Map the Core outcome, or MODEL_DRAFTED when Core was deferred.
+  // A valid proposal + decision. A proposal with no reply body was produced without a model draft.
+  const modelDrafted = result.proposal.replyBody !== undefined;
   const outcome: JarvisRuntimeOutcome = coreConsulted
     ? CORE_OUTCOME_MAP[result.decision.outcome]
-    : 'MODEL_DRAFTED';
+    : // Core deferred: a drafted reply is MODEL_DRAFTED, a no-model proposal is NO_ACTION — the value
+      // ADR-0059 reserved for exactly this case rather than a new outcome.
+      modelDrafted
+      ? 'MODEL_DRAFTED'
+      : 'NO_ACTION';
   const res = frozen(outcome, {
     boundRevision: result.decision.boundRevision,
     assignedActor: result.assignedActor,
     proposalId: result.proposal.proposalId,
-    modelDrafted: true,
+    modelDrafted,
+    provenance,
   });
   emit('jarvis-completed', res.outcome, res);
   return res;

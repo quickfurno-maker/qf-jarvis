@@ -54,6 +54,13 @@ export type { ReplyDraftValidation } from './validate-reply-draft.js';
 export { createOrchestrator, orchestrateInbound } from './orchestrate-inbound.js';
 export type { Orchestrator, OrchestratorConfig } from './orchestrate-inbound.js';
 
+// The generic behaviour seam (ADR-0068). Types only — no runtime symbol reaches the root.
+export type {
+  BehaviourDecision,
+  BehaviourDecisionPort,
+  BehaviourDecisionRequest,
+} from './behaviour-port.js';
+
 export { NOOP_ORCHESTRATION_OBSERVABILITY, ORCHESTRATION_EVENT_TYPES } from './observability.js';
 export type {
   OrchestrationEvent,

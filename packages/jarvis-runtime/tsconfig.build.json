@@ -11,11 +11,14 @@
   // are EXCLUDED so nothing test-only reaches dist/; the shipped test support under
   // src/testing IS emitted (the public `./testing` subpath). Project references: the
   // composition root wires @qf-jarvis/agent-runtime (M1/M2 ports + orchestrator),
-  // @qf-jarvis/core-decision-adapter (M3), and @qf-jarvis/model-reply-adapter (M4) — all one-way.
+  // @qf-jarvis/core-decision-adapter (M3), @qf-jarvis/model-reply-adapter (M4), and
+  // @qf-jarvis/riya-agent (S3-C behaviour) — all one-way, and riya-agent depends only on
+  // agent-runtime, so the graph stays acyclic.
   "references": [
     { "path": "../agent-runtime/tsconfig.build.json" },
     { "path": "../core-decision-adapter/tsconfig.build.json" },
-    { "path": "../model-reply-adapter/tsconfig.build.json" }
+    { "path": "../model-reply-adapter/tsconfig.build.json" },
+    { "path": "../riya-agent/tsconfig.build.json" }
   ],
   "include": ["src/**/*.ts"],
   "exclude": ["src/tests/**"]

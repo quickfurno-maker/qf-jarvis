@@ -15,4 +15,7 @@ export {
 export {
   syntheticRuntimeConfig,
   syntheticInboundEnvelope,
+  scriptedBehaviourInput,
+  rejectingBehaviourInput,
+  syntheticSignals,
 } from './deterministic-runtime-fixture.js';

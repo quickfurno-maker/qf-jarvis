@@ -25,6 +25,7 @@ import type {
   OrchestrationContextInput,
 } from '../orchestration/contracts.js';
 import { PROPOSAL_AUTHORITY_STATUS } from '../index.js';
+import { ORCHESTRATION_PROPOSAL_KINDS } from '../orchestration/vocabularies.js';
 import type { CoreDecisionOutcome } from '../orchestration/vocabularies.js';
 import { createOrchestrator, orchestrateInbound } from '../orchestration/orchestrate-inbound.js';
 import type { OrchestratorConfig } from '../orchestration/orchestrate-inbound.js';
@@ -254,8 +255,23 @@ describe('proposals', () => {
     }
   });
 
-  it('(28,29,30) escalation / clarification / no-action proposals are constructible and pending', () => {
-    for (const kind of ['ESCALATE_TO_HUMAN', 'REQUEST_CLARIFICATION', 'NO_ACTION'] as const) {
+  it('the M2 proposal vocabulary is exactly five kinds, in order (ADR-0068)', () => {
+    expect([...ORCHESTRATION_PROPOSAL_KINDS]).toEqual([
+      'REPLY',
+      'FOLLOW_UP',
+      'ESCALATE_TO_HUMAN',
+      'REQUEST_CLARIFICATION',
+      'NO_ACTION',
+    ]);
+  });
+
+  it('(28,29,30) follow-up / escalation / clarification / no-action proposals are constructible and pending', () => {
+    for (const kind of [
+      'FOLLOW_UP',
+      'ESCALATE_TO_HUMAN',
+      'REQUEST_CLARIFICATION',
+      'NO_ACTION',
+    ] as const) {
       const proposal = createOrchestrationProposal({
         proposalId: `p-${kind}`,
         proposalVersion: 1,
