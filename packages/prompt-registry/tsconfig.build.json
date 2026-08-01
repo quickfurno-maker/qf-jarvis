@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
+  },
+
+  // The EMITTING build, referenced by the root solution. The vitest specs under src/tests are
+  // EXCLUDED so nothing test-only reaches dist/. NO project references at all: this is a true leaf.
+  // It knows nothing of agents, the runtime, the gateway, providers, Core or evaluation -- which is
+  // what lets S3-I-B depend on it from the model-reply adapter without inverting anything.
+  "references": [],
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/tests/**"]
+}

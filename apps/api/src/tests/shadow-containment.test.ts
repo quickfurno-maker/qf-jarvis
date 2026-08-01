@@ -324,6 +324,9 @@ describe('(133-148) the declared budget and every prior lock', () => {
       'model-gateway',
       'model-gateway-composition',
       'model-reply-adapter',
+      // QFJ-S3-I-A (ADR-0072): the versioned prompt registry foundation. Still an EXACT set match --
+      // this records an authorised addition, it does not relax the assertion.
+      'prompt-registry',
       'rag-provisioning',
       // QFJ-S3-C (ADR-0067): the Riya client-sales behaviour package. Still an EXACT set match --
       // this records an authorised addition, it does not relax the assertion.
@@ -341,6 +344,8 @@ describe('(133-148) the declared budget and every prior lock', () => {
       'event-backbone': 39,
       // QFJ-S3-D-A (ADR-0070): the new Anisha behaviour package, locked from the day it lands.
       'anisha-agent': 14,
+      // QFJ-S3-I-A (ADR-0072): the prompt registry foundation, locked from the day it lands.
+      'prompt-registry': 7,
     };
     for (const [pkg, count] of Object.entries(expected)) {
       const barrel = (await import(
