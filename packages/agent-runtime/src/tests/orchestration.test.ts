@@ -30,6 +30,8 @@ import type { CoreDecisionOutcome } from '../orchestration/vocabularies.js';
 import { createOrchestrator, orchestrateInbound } from '../orchestration/orchestrate-inbound.js';
 import type { OrchestratorConfig } from '../orchestration/orchestrate-inbound.js';
 import type { OrchestrationEvent } from '../orchestration/observability.js';
+import type { BehaviourDecision, BehaviourDecisionPort } from '../orchestration/behaviour-port.js';
+import type { KnowledgePort, KnowledgeRetrievalResult } from '../orchestration/model-reply-port.js';
 import {
   orchestrationEnvelopeFields,
   scriptedContextPort,
@@ -449,6 +451,181 @@ describe('observability', () => {
     const serialized = JSON.stringify(events);
     for (const forbidden of ['SECRET-INBOUND', 'SECRET-REPLY', 'subject.SECRET']) {
       expect(serialized).not.toContain(forbidden);
+    }
+  });
+});
+
+describe('the behaviour seam fails closed BEFORE knowledge retrieval and the model call', () => {
+  /** A knowledge port that counts retrievals, so "stage 8 never ran" is observed, not argued. */
+  function countingKnowledgePort(): KnowledgePort & { readonly invoked: () => number } {
+    let calls = 0;
+    return {
+      invoked: (): number => calls,
+      retrieve: (): Promise<KnowledgeRetrievalResult> => {
+        calls += 1;
+        return Promise.resolve({ ok: true, citations: [] });
+      },
+    };
+  }
+
+  /** A behaviour port that answers with an arbitrary (possibly malformed) value, and counts calls. */
+  function scriptedBehaviourPort(
+    decision: unknown,
+  ): BehaviourDecisionPort & { readonly invoked: () => number } {
+    let calls = 0;
+    return {
+      invoked: (): number => calls,
+      decide: (): Promise<BehaviourDecision | undefined> => {
+        calls += 1;
+        return Promise.resolve(decision as BehaviourDecision | undefined);
+      },
+    };
+  }
+
+  const valid = {
+    modelReplyEligible: true,
+    proposalKind: 'REPLY',
+    structuredIntent: { taskClass: 'RESPONSE_GENERATION', replyKind: 'REPLY' },
+  };
+
+  const LONG_KEY = 'k'.repeat(65);
+  const LONG_VALUE = 'x'.repeat(1025);
+
+  const malformed: readonly { readonly name: string; readonly decision: unknown }[] = [
+    {
+      name: 'structuredIntent is an array of strings',
+      decision: { ...valid, structuredIntent: ['a', 'b'] },
+    },
+    {
+      name: 'an intent key containing a space',
+      decision: { ...valid, structuredIntent: { 'bad key': 'x' } },
+    },
+    {
+      name: 'an intent key containing a slash',
+      decision: { ...valid, structuredIntent: { 'bad/key': 'x' } },
+    },
+    { name: 'an empty intent key', decision: { ...valid, structuredIntent: { '': 'x' } } },
+    {
+      name: 'an intent key longer than 64',
+      decision: { ...valid, structuredIntent: { [LONG_KEY]: 'x' } },
+    },
+    {
+      name: 'a string value longer than 1024',
+      decision: { ...valid, structuredIntent: { taskClass: LONG_VALUE } },
+    },
+    { name: 'a NaN value', decision: { ...valid, structuredIntent: { taskClass: Number.NaN } } },
+    {
+      name: 'an Infinity value',
+      decision: { ...valid, structuredIntent: { taskClass: Number.POSITIVE_INFINITY } },
+    },
+    { name: 'an unknown top-level field', decision: { ...valid, replyBody: 'smuggled' } },
+    {
+      name: 'a nested object value',
+      decision: { ...valid, structuredIntent: { taskClass: { nested: 1 } } },
+    },
+    { name: 'a null value', decision: { ...valid, structuredIntent: { taskClass: null } } },
+    {
+      name: 'an undefined value',
+      decision: { ...valid, structuredIntent: { taskClass: undefined } },
+    },
+    { name: 'a bigint value', decision: { ...valid, structuredIntent: { taskClass: BigInt(1) } } },
+    {
+      name: 'a proposalKind outside the closed vocabulary',
+      decision: { ...valid, proposalKind: 'SEND' },
+    },
+    { name: 'a non-boolean modelReplyEligible', decision: { ...valid, modelReplyEligible: 'yes' } },
+    { name: 'a decision that is an array', decision: [] },
+    {
+      name: 'a missing top-level field',
+      decision: { modelReplyEligible: true, proposalKind: 'REPLY' },
+    },
+  ];
+
+  for (const scenario of malformed) {
+    it(`refuses ${scenario.name} with zero knowledge, model and Core calls`, async () => {
+      const knowledge = countingKnowledgePort();
+      const behaviour = scriptedBehaviourPort(scenario.decision);
+      const { result, model, core } = await run({
+        config: { knowledgePort: knowledge, behaviourPort: behaviour },
+      });
+      expect(result.ok).toBe(false);
+      expect(result.ok ? '' : result.reason).toBe('orchestration-invariant');
+      // The port is consulted once; nothing downstream of it runs.
+      expect(behaviour.invoked()).toBe(1);
+      expect(knowledge.invoked()).toBe(0);
+      expect(model?.invoked()).toBe(0);
+      expect(core?.invoked()).toBe(0);
+    });
+  }
+
+  it('a rejecting behaviour port fails closed the same way', async () => {
+    const knowledge = countingKnowledgePort();
+    const { result, model, core } = await run({
+      config: {
+        knowledgePort: knowledge,
+        behaviourPort: {
+          decide: (): Promise<BehaviourDecision | undefined> => Promise.reject(new Error('x')),
+        },
+      },
+    });
+    expect(result.ok ? '' : result.reason).toBe('orchestration-invariant');
+    expect(knowledge.invoked()).toBe(0);
+    expect(model?.invoked()).toBe(0);
+    expect(core?.invoked()).toBe(0);
+  });
+
+  it('a VALID decision still reaches knowledge, the model and Core exactly once', async () => {
+    const knowledge = countingKnowledgePort();
+    const behaviour = scriptedBehaviourPort(valid);
+    const { result, model, core } = await run({
+      config: { knowledgePort: knowledge, behaviourPort: behaviour },
+    });
+    expect(result.ok).toBe(true);
+    expect(behaviour.invoked()).toBe(1);
+    expect(knowledge.invoked()).toBe(1);
+    expect(model?.invoked()).toBe(1);
+    expect(core?.invoked()).toBe(1);
+  });
+
+  it('a valid NO-MODEL decision skips knowledge and the model but still reaches Core', async () => {
+    const knowledge = countingKnowledgePort();
+    const { result, model, core } = await run({
+      config: {
+        knowledgePort: knowledge,
+        behaviourPort: scriptedBehaviourPort({
+          modelReplyEligible: false,
+          proposalKind: 'NO_ACTION',
+          structuredIntent: { taskClass: 'RESPONSE_GENERATION', replyKind: 'NO_ACTION' },
+        }),
+      },
+    });
+    expect(result.ok).toBe(true);
+    expect(knowledge.invoked()).toBe(0);
+    expect(model?.invoked()).toBe(0);
+    expect(core?.invoked()).toBe(1);
+    if (result.ok) {
+      expect(result.proposal.kind).toBe('NO_ACTION');
+      expect(result.proposal.replyBody).toBeUndefined();
+      expect(result.proposal.authorityStatus).toBe(PROPOSAL_AUTHORITY_STATUS);
+    }
+  });
+
+  it('no behaviour port, and a port returning undefined, both keep the exact legacy REPLY default', async () => {
+    const configs: Partial<OrchestratorConfig>[] = [
+      {},
+      { behaviourPort: scriptedBehaviourPort(undefined) },
+    ];
+    for (const config of configs) {
+      const { result, model } = await run({ config });
+      expect(result.ok).toBe(true);
+      expect(model?.invoked()).toBe(1);
+      if (result.ok) {
+        expect(result.proposal.kind).toBe('REPLY');
+        expect(result.proposal.structuredIntent).toEqual({
+          taskClass: 'RESPONSE_GENERATION',
+          replyKind: 'REPLY',
+        });
+      }
     }
   });
 });

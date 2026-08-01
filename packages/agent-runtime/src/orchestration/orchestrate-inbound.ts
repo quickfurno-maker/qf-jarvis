@@ -8,6 +8,8 @@
  * immutable result. It NEVER calls a model when a gate blocks, NEVER fabricates a Core `ACCEPTED`
  * (a missing port → `CORE_UNAVAILABLE`), and NEVER sends, executes, or persists anything.
  */
+import { z } from 'zod';
+
 import type { InboundEnvelope } from '../contracts/inbound-envelope.js';
 import type { ConversationPrivacyGate } from '../contracts/privacy-gate.js';
 import type { RuntimePolicy } from '../contracts/policy.js';
@@ -91,28 +93,88 @@ function legacyBehaviour(taskClass: string): BehaviourDecision {
   });
 }
 
-/** True iff a value is a structurally valid behaviour decision. Anything else fails closed. */
+/** The exact own keys a behaviour decision may carry. An unknown field is a refusal, not a passenger. */
+const BEHAVIOUR_DECISION_KEYS = ['modelReplyEligible', 'proposalKind', 'structuredIntent'] as const;
+
+/** The intent key grammar, identical to the one `createOrchestrationProposal` enforces downstream. */
+const INTENT_KEY = /^[A-Za-z0-9._:-]{1,64}$/;
+
+/**
+ * One bounded intent value.
+ *
+ * Deliberately narrower than the downstream schema in one respect: a non-finite number is refused
+ * here. `z.number()` accepts `Infinity`, and a proposal field that cannot be serialized to a finite
+ * value has no business travelling to Core. Being stricter BEFORE the model can only fail closed
+ * earlier, never later.
+ */
+const intentValueSchema = z.union([
+  z.boolean(),
+  z.number().refine((value) => Number.isFinite(value)),
+  z.string().max(1024),
+]);
+
+/**
+ * A plain, own-keys-only object.
+ *
+ * Arrays are excluded because their indices (`"0"`, `"1"`, …) satisfy the intent-key grammar, so an
+ * array of primitives would otherwise validate as a record and reach the proposal. An inherited
+ * enumerable key is excluded because it does not appear in `Object.keys` yet would still be visible
+ * to a downstream spread or serializer — validating one view of an object and forwarding another is
+ * exactly the gap this check exists to close.
+ */
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const prototype: unknown = Object.getPrototypeOf(value);
+  if (prototype !== null && prototype !== Object.prototype) {
+    return false;
+  }
+  const own = new Set(Object.keys(value));
+  for (const key in value) {
+    if (!own.has(key)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * True iff a value is a structurally valid behaviour decision.
+ *
+ * This runs BEFORE knowledge retrieval and before the sole model call, and it validates the WHOLE
+ * decision — including every intent key and value — rather than deferring to
+ * `createOrchestrationProposal`. Deferring would mean a malformed decision could still cost a
+ * knowledge read and a model invocation before being rejected at the very end, which is precisely
+ * the guarantee this stage exists to hold. It does not loosen the downstream schema; it front-runs it.
+ */
 function isBehaviourDecision(value: unknown): value is BehaviourDecision {
-  if (typeof value !== 'object' || value === null) {
+  if (!isPlainRecord(value)) {
     return false;
   }
-  const candidate = value as Partial<BehaviourDecision>;
-  if (typeof candidate.modelReplyEligible !== 'boolean') {
-    return false;
-  }
+  const keys = Object.keys(value);
   if (
-    typeof candidate.proposalKind !== 'string' ||
-    !(ORCHESTRATION_PROPOSAL_KINDS as readonly string[]).includes(candidate.proposalKind)
+    keys.length !== BEHAVIOUR_DECISION_KEYS.length ||
+    !BEHAVIOUR_DECISION_KEYS.every((key) => keys.includes(key))
   ) {
     return false;
   }
-  const intent: unknown = candidate.structuredIntent;
-  if (typeof intent !== 'object' || intent === null) {
+  if (typeof value['modelReplyEligible'] !== 'boolean') {
     return false;
   }
-  // The proposal schema validates the record again; this only rejects shapes it could never accept.
-  return Object.values(intent as Record<string, unknown>).every(
-    (entry) => typeof entry === 'string' || typeof entry === 'number' || typeof entry === 'boolean',
+  const kind: unknown = value['proposalKind'];
+  if (
+    typeof kind !== 'string' ||
+    !(ORCHESTRATION_PROPOSAL_KINDS as readonly string[]).includes(kind)
+  ) {
+    return false;
+  }
+  const intent: unknown = value['structuredIntent'];
+  if (!isPlainRecord(intent)) {
+    return false;
+  }
+  return Object.entries(intent).every(
+    ([key, entry]) => INTENT_KEY.test(key) && intentValueSchema.safeParse(entry).success,
   );
 }
 

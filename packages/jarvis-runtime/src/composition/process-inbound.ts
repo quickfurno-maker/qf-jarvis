@@ -174,7 +174,12 @@ export async function composeAndProcess(
         ...(refs?.providerRef === undefined ? {} : { providerRef: refs.providerRef }),
         releaseRef: refs?.releaseRef ?? config.release.releaseId,
         configRef: refs?.configRef ?? config.release.configDigest,
-        correlationId: config.correlationId ?? runId,
+        // `envelope.messageId`, NOT `runId`. `runId` concatenates two 128-character identifiers, so a
+        // perfectly valid envelope can produce a 257-character value that the 128-character opaque
+        // grammar refuses — turning a legitimate turn into a refusal. `messageId` is already
+        // validated, already opaque, already bounded, and already unique per inbound message. This is
+        // also NOT `config.correlationId`: that field belongs to the M3 Core adapter and stays there.
+        correlationId: refs?.correlationId ?? envelope.messageId,
         occurredAt: config.clock(),
       },
     });

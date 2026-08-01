@@ -677,3 +677,115 @@ describe('(9) one turn, one orchestration, one proposal', () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// (10) Provenance correlation bounds — the final-review regression.
+// ---------------------------------------------------------------------------
+
+describe('(10) the provenance correlation reference is bounded independently of runId', () => {
+  const MAX_ID = 'c'.repeat(128);
+  const MAX_MSG = 'm'.repeat(128);
+
+  /** A max-length envelope: both identifiers at the contract's 128-character ceiling. */
+  function maxLengthRun(over: Partial<JarvisRuntimeConfig> = {}): Promise<JarvisRuntimeResult> {
+    return createJarvisRuntime(
+      syntheticRuntimeConfig({
+        authoritativeState: scriptedAuthoritativeState(
+          clearControlState({ conversationId: MAX_ID, ...over.authoritativeState }),
+        ),
+        ...over,
+      }),
+    ).processInbound(syntheticInboundEnvelope({ conversationId: MAX_ID, messageId: MAX_MSG }));
+  }
+
+  it('a maximum-length envelope produces provenance; correlationId is the 128-char messageId', async () => {
+    const invoker = countingInvoker();
+    const result = await maxLengthRun({
+      gatewayInvoker: invoker,
+      authoritativeState: scriptedAuthoritativeState(
+        clearControlState({ conversationId: MAX_ID, aiPaused: true }),
+      ),
+      behaviourInput: countingBehaviourInput(behaviourInput({ providedRequirementDetail: true })),
+    });
+
+    // `runId` concatenates both identifiers, so it is 257 characters — past the 128-character opaque
+    // grammar. Using it as the correlation reference made `createRuntimeProvenance` throw, which
+    // turned a perfectly valid envelope into a provenance-less refusal. `messageId` is bounded.
+    expect(result.runId).toHaveLength(257);
+    expect(result.provenance).toBeDefined();
+    expect(result.provenance?.correlationId).toBe(MAX_MSG);
+    expect(result.provenance?.correlationId).toHaveLength(128);
+    // A refused turn is still fully attributed — that is the guarantee this regression threatened.
+    expect(result.outcome).toBe('REFUSED');
+    expect(result.refusalReason).toBe('orchestration-ai-paused');
+    expect(result.provenance?.actor).toBe('SYSTEM');
+    expect(invoker.count()).toBe(0);
+  });
+
+  it('provenance survives a max-length SERVED turn too, and its remaining failure is pre-existing', async () => {
+    const withRiya = await maxLengthRun({
+      behaviourInput: countingBehaviourInput(behaviourInput({ providedRequirementDetail: true })),
+    });
+    // Provenance is built and correlation-bounded: the S3-C-B regression is fixed on this path too.
+    expect(withRiya.provenance).toBeDefined();
+    expect(withRiya.provenance?.correlationId).toBe(MAX_MSG);
+
+    // The turn nonetheless does not reach Core, for a reason that has nothing to do with this PR:
+    // the M4 draft's `usageTraceId` is also derived from the concatenated run id and blows the same
+    // 128-character identifier bound. Proof that it is pre-existing rather than caused by the
+    // behaviour seam: the identical envelope fails identically with NO behaviour port configured,
+    // i.e. on the untouched legacy path. Fixing that bound is outside this correction's scope.
+    const legacy = await maxLengthRun();
+    expect(legacy.refusalReason).toBe('orchestration-draft-invalid');
+    expect(withRiya.refusalReason).toBe(legacy.refusalReason);
+    expect(legacy.provenance?.correlationId).toBe(MAX_MSG);
+  });
+
+  it('the provenance correlation is the messageId, never the Core adapter correlationId', async () => {
+    const { result } = await run({
+      correlationId: 'core.adapter.correlation.1',
+      behaviourInput: countingBehaviourInput(behaviourInput({ providedRequirementDetail: true })),
+    });
+    // config.correlationId belongs to the M3 Core adapter and must not leak into the audit record.
+    expect(result.provenance?.correlationId).toBe('msg.1');
+    expect(result.provenance?.correlationId).not.toBe('core.adapter.correlation.1');
+  });
+
+  it('an explicitly supplied provenance correlationId is used verbatim', async () => {
+    const { result } = await run({
+      provenanceRefs: { correlationId: 'prov.correlation.7' },
+      behaviourInput: countingBehaviourInput(behaviourInput({ providedRequirementDetail: true })),
+    });
+    expect(result.provenance?.correlationId).toBe('prov.correlation.7');
+  });
+
+  const unsafe: readonly { readonly name: string; readonly value: string }[] = [
+    { name: 'a value containing a slash', value: 'tenant/abc' },
+    { name: 'a value longer than 128', value: 'z'.repeat(129) },
+  ];
+
+  for (const scenario of unsafe) {
+    it(`${scenario.name} fails the turn closed and is never normalized`, async () => {
+      const core = recordingCoreTransport();
+      const { result, models } = await run({
+        provenanceRefs: { correlationId: scenario.value },
+        coreTransport: core,
+        behaviourInput: countingBehaviourInput(behaviourInput({ providedRequirementDetail: true })),
+      });
+      expect(result.outcome).toBe('REFUSED');
+      expect(result.refusalReason).toBe('orchestration-invariant');
+      expect(result.provenance).toBeUndefined();
+      // Neither the raw value nor any repaired form of it appears anywhere in the result.
+      expect(JSON.stringify(result)).not.toContain(scenario.value);
+      expect(JSON.stringify(result)).not.toContain(scenario.value.replace('/', '-'));
+      expect(JSON.stringify(result)).not.toContain(scenario.value.slice(0, 128));
+
+      // HONEST ACCOUNTING: provenance is built by runAgentTurn AFTER orchestrateInbound returns, so
+      // an unsafe reference is caught only once the pipeline has already run. The orchestration still
+      // happens exactly once — there is no retry and no second run — and nothing was sent, persisted
+      // or executed, but this path is NOT a zero-model path and is not claimed to be.
+      expect(models).toBe(1);
+      expect(core.count()).toBe(1);
+    });
+  }
+});

@@ -27,6 +27,14 @@ import type { JarvisRuntimeObservabilityHook } from './observability.js';
 export interface JarvisProvenanceRefs {
   readonly runtimeRef?: string;
   readonly policyRef?: string;
+  /**
+   * The provenance correlation reference.
+   *
+   * Separate from `JarvisRuntimeConfig.correlationId`, which belongs to the M3 Core-decision adapter.
+   * The two are different contracts with different bounds and different audiences, and coupling them
+   * would mean a change made for Core silently rewrote the audit trail. Absent -> `envelope.messageId`.
+   */
+  readonly correlationId?: string;
   /** A deployment-level opaque prompt reference. Never prompt text. */
   readonly promptRef?: string;
   readonly modelRef?: string;
