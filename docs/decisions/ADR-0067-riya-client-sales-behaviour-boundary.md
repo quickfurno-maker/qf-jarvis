@@ -184,11 +184,27 @@ unchanged.
 ## S3-D handoff
 
 Anisha mirrors this package's **structure**, not its content: fixed actor/party constants, a closed
-intent vocabulary, a content-minimised discovery contract, a deterministic decision with the same
-gate order, and proposal meanings mapped onto existing generic kinds. What must differ is the
-vocabulary itself — vendor-care intents are about issues, status and fulfilment, not qualification —
-and the mapping target, since escalation semantics differ between a sales lead and a vendor issue.
-The role constants invert to `ANISHA`/`VENDOR`, and `isActorPartyCompatible` enforces it identically.
+intent vocabulary, a content-minimised context contract, and a deterministic decision with the same
+gate order. The role constants invert to `ANISHA`/`VENDOR`, and `isActorPartyCompatible` enforces it
+identically. S3-D is split the same way this phase was: **S3-D-A** the behaviour foundation
+(ADR-0070), **S3-D-B** the authoritative runtime composition.
+
+> **Correction (QFJ-S3-D-A, ADR-0070).** An earlier version of this paragraph called the next phase
+> "vendor care" and said its intents were "about issues, status and fulfilment, not qualification".
+> Both were wrong. The governed name is the **vendor journey** (`agent-model.md:72`, QFJ-P07), and
+> ADR-0006 §1 gives Anisha the full lifecycle — acquisition, **qualification**, onboarding, profile
+> completion, package/recharge readiness, retention, upgrade, inactivity recovery and win-back — plus
+> complaint intake, routine vendor guidance and lead-response guidance from QFJ-P07. Conversion,
+> upsell and cross-sell are hers too.
+>
+> What Anisha never owns is equally explicit (`agent-model.md:76`): verification, activation,
+> eligibility, ranking, packages, wallets, credits, money and assignments are QuickFurno Core's, and
+> lead-quality scoring is Kabir's while client communication is Riya's. Money-adjacent signals reach
+> her as **bands, never balances**.
+>
+> The M1 proposal mapping described above is also **not** what S3-D reuses: `createRiyaProposal` and
+> `proposalKindFor` are the M1 surface, and the authoritative path uses M2 (ADR-0068 §2). S3-D-A adds
+> no proposal helper at all.
 
 ## Non-goals
 

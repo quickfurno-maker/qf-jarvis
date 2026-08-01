@@ -310,6 +310,9 @@ describe('(133-148) the declared budget and every prior lock', () => {
         .sort();
     expect(dirs('packages')).toEqual([
       'agent-runtime',
+      // QFJ-S3-D-A (ADR-0070): the Anisha vendor-journey behaviour package. Still an EXACT set
+      // match -- this records an authorised addition, it does not relax the assertion.
+      'anisha-agent',
       'contracts',
       'core-decision-adapter',
       'event-backbone',
@@ -336,6 +339,8 @@ describe('(133-148) the declared budget and every prior lock', () => {
       'model-gateway-composition': 2,
       'groq-staging-smoke': 24,
       'event-backbone': 39,
+      // QFJ-S3-D-A (ADR-0070): the new Anisha behaviour package, locked from the day it lands.
+      'anisha-agent': 14,
     };
     for (const [pkg, count] of Object.entries(expected)) {
       const barrel = (await import(

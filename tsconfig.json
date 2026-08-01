@@ -23,6 +23,7 @@
     { "path": "./packages/model-gateway-composition/tsconfig.build.json" },
     { "path": "./packages/jarvis-runtime/tsconfig.build.json" },
     { "path": "./packages/rag-provisioning/tsconfig.build.json" },
-    { "path": "./packages/riya-agent/tsconfig.build.json" }
+    { "path": "./packages/riya-agent/tsconfig.build.json" },
+    { "path": "./packages/anisha-agent/tsconfig.build.json" }
   ]
 }

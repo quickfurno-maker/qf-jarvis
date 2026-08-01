@@ -146,4 +146,4 @@ here activates a provider, a mode or a deployment.
 
 A derived identifier must carry its own bound. Deriving one by concatenating caller-supplied values
 requires an ADR amendment, and any new derived identity must be fixed-width or provably shorter than
-the smallest field it reaches. The six identities above stay distinct.
+the smallest field it reaches. The seven identities above stay distinct.

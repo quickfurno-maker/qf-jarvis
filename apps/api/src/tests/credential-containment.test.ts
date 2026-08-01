@@ -348,6 +348,8 @@ describe('(71-77) package API and dependency locks are untouched', () => {
       'model-gateway-composition': 2,
       'groq-staging-smoke': 24,
       'event-backbone': 39,
+      // QFJ-S3-D-A (ADR-0070): the new Anisha behaviour package, locked from the day it lands.
+      'anisha-agent': 14,
     };
     for (const [pkg, count] of Object.entries(expected)) {
       const barrel = (await import(
