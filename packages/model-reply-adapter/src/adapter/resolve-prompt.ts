@@ -11,7 +11,7 @@
  * quietly sending a different prompt is the failure this module exists to prevent.
  */
 import { MODEL_AGENT_SCOPES, type ModelAgentScope } from '@qf-jarvis/model-gateway';
-import { PROMPT_AGENT_SCOPES_FROZEN, PromptRegistryError } from '@qf-jarvis/prompt-registry';
+import { PROMPT_AGENT_SCOPES_FROZEN } from '@qf-jarvis/prompt-registry';
 import type { PromptDefinition, PromptRegistry } from '@qf-jarvis/prompt-registry';
 import type { ReplyPlan } from '@qf-jarvis/agent-runtime';
 
@@ -91,6 +91,7 @@ export function resolveAuthoritativePrompt(args: {
 
   let resolved: PromptDefinition | undefined;
   try {
+    // The one resolution. A throw is a refusal, not a reason to ask again or ask differently.
     resolved = registry.resolve({
       promptId: plan.promptFamily,
       promptVersion: plan.promptVersion,
@@ -98,12 +99,14 @@ export function resolveAuthoritativePrompt(args: {
       taskClass: plan.taskClass,
       resultMode: 'STRUCTURED',
     });
-  } catch (error) {
-    // A malformed request is the registry's own bounded error; nothing else is swallowed.
-    if (error instanceof PromptRegistryError) {
-      return { reason: 'model-plan-invalid' };
-    }
-    throw error;
+  } catch {
+    // ANY throw, not just `PromptRegistryError`. `PromptRegistry` is a structural interface an
+    // injected implementation may satisfy without being the shipped one, so rethrowing "unexpected"
+    // errors would let a foreign exception escape `draftReplyDetailed` as a rejected promise instead
+    // of the closed refusal every other failure here produces. The thrown value is discarded rather
+    // than inspected or reported: it comes from foreign code and could carry conversation content,
+    // and no reason code depends on WHY resolution failed.
+    return { reason: 'model-plan-invalid' };
   }
   // A well-formed miss. No nearest version, no `latest`, no other scope or task.
   if (resolved === undefined) {

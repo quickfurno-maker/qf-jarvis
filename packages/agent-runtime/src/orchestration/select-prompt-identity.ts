@@ -61,6 +61,13 @@ function isExactIdentity(value: unknown): value is ModelPromptIdentity {
  *   returns `undefined` the turn fails closed — falling back to the legacy fields here would let a
  *   scope with no configured prompt quietly borrow another agent's;
  * - a port without a selector uses its legacy `promptFamily`/`promptVersion`, exactly as before.
+ *
+ * A selector that THROWS is treated exactly like one that returned `undefined`. `ModelReplyPort` is a
+ * structural interface any deployment may implement, and this call happens before the orchestrator's
+ * model try/catch — so an unnormalized throw would escape `orchestrateInbound` as a rejected promise
+ * instead of the closed refusal every other injected-boundary failure produces. The thrown value is
+ * discarded rather than inspected, logged or reported: it comes from foreign code and could carry
+ * conversation content, and no reason code here depends on WHY the selector failed.
  */
 export function selectModelPromptIdentity(
   modelPort: ModelReplyPort,
@@ -68,7 +75,13 @@ export function selectModelPromptIdentity(
   taskClass: string,
 ): ModelPromptIdentity | undefined {
   if (typeof modelPort.selectPromptIdentity === 'function') {
-    const selected: unknown = modelPort.selectPromptIdentity({ assignedActor, taskClass });
+    let selected: unknown;
+    try {
+      // The one call. A throw is a refusal, not a reason to ask again.
+      selected = modelPort.selectPromptIdentity({ assignedActor, taskClass });
+    } catch {
+      return undefined;
+    }
     if (selected === undefined || !isExactIdentity(selected)) {
       return undefined;
     }

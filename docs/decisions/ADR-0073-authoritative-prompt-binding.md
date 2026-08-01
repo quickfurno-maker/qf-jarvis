@@ -66,6 +66,14 @@ No nearest version, no `latest`, no cross-scope or cross-task substitution, no f
 miss is a refusal, because quietly sending a different prompt is the failure this module exists to
 prevent.
 
+Both injected boundaries — `PromptRegistry.resolve` and `ModelReplyPort.selectPromptIdentity` — are
+structural interfaces a deployment may implement, so a throw from either is normalized to the same
+closed refusal that an `undefined` answer produces (`model-plan-invalid` and
+`orchestration-model-unavailable` respectively). The thrown value is discarded rather than inspected,
+logged or reported: it comes from foreign code and could carry conversation content, and no reason
+code depends on WHY the boundary failed. Normalizing does not mean retrying — each is still called at
+most once per turn.
+
 The scope-vocabulary check is where ADR-0072's deliberate duplication is held honest. S3-I-A
 duplicated the four scope strings so `prompt-registry` could stay a leaf importing nothing; this is the
 first boundary where `MODEL_AGENT_SCOPES` and `PROMPT_AGENT_SCOPES_FROZEN` are both visible, so it is
@@ -178,10 +186,10 @@ Every package-root runtime API count is unchanged: contracts 369, model-evaluati
 model-reply-adapter 8, core-decision-adapter 18, jarvis-runtime 6, riya-agent 16, anisha-agent 14,
 prompt-registry 7, apps/api 0. The new M2 and M4 modules are internal and exported from neither root.
 
-Known follow-up: `packages/prompt-registry/src/index.ts` still carries an S3-I-A doc comment saying
-`REPLY_PROMPT_CONTRACT` "is untouched, and S3-I-B is where it is replaced." That sentence is now stale.
-`prompt-registry` is a forbidden production path for this phase, so it was left alone rather than
-edited outside scope.
+`packages/prompt-registry/src/index.ts` carried an S3-I-A doc comment saying `REPLY_PROMPT_CONTRACT`
+"is untouched, and S3-I-B is where it is replaced", which this PR makes stale. It is corrected
+documentation-only, under a narrow authorised exception: no import, export, contract, digest or test
+in that package changes, and its root API count stays 7.
 
 ## Phase status
 
@@ -207,5 +215,7 @@ module-constant prompt body, a default registry, a `latest` or nearest-version f
 or cross-task substitution, an optional `promptDigest` on the request, provenance or evaluation
 binding, or a merge of the two configuration shapes each require an ADR amendment.
 `selectPromptIdentity` stays a lookup keyed by the actor M1 assigned — giving it the envelope, the
-party type or the conversation would make it a router, and requires an ADR amendment. Prompt
+party type or the conversation would make it a router, and requires an ADR amendment. Letting an
+exception from either injected boundary escape as a rejected promise, or turning a normalized failure
+into a retry or a second resolution, likewise requires an ADR amendment. Prompt
 definition never becomes approval, evaluation, rollout or business authority.

@@ -168,6 +168,43 @@ describe('the executed prompt comes from the registry', () => {
     expect(invoker.seen()).toHaveLength(0);
   });
 
+  it('normalizes a THROWING registry to the same closed refusal, leaking nothing', async () => {
+    // `PromptRegistry` is a structural interface an injected implementation may satisfy without being
+    // the shipped one. Rethrowing "unexpected" errors would let a foreign exception escape
+    // `draftReplyDetailed` as a rejected promise instead of the closed result every other failure
+    // here produces -- and a generic `Error` is exactly what a foreign registry throws.
+    const SECRET = 'registry-exploded-with-conversation-detail';
+    let resolves = 0;
+    const throwing: PromptRegistry = {
+      ...REGISTRY,
+      resolve: () => {
+        resolves += 1;
+        throw new Error(SECRET);
+      },
+    };
+    const invoker = capturingInvoker();
+    const events: unknown[] = [];
+
+    // Resolves, does not reject.
+    const result = await adapterWith(
+      {
+        ...legacyConfig({ promptRegistry: throwing }),
+        observability: { onEvent: (e) => events.push(e) },
+      },
+      invoker,
+    ).draftReplyDetailed(replyPlan());
+
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe('model-plan-invalid');
+    expect(result.gatewayInvoked).toBe(false);
+    expect(invoker.seen()).toHaveLength(0);
+    // A throw is a refusal, not a reason to resolve again or resolve differently.
+    expect(resolves).toBe(1);
+    // The thrown value is discarded, never copied into the result or an event.
+    expect(JSON.stringify({ result, events })).not.toContain(SECRET);
+    expect(JSON.stringify({ result, events })).not.toContain('Error');
+  });
+
   it('refuses a plan whose identity disagrees with the configured binding', async () => {
     const invoker = capturingInvoker();
     const result = await adapterWith(legacyConfig(), invoker).draftReplyDetailed(

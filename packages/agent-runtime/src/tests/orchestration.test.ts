@@ -524,6 +524,33 @@ describe('(ADR-0073) prompt identity is selected once, from the assignment M1 al
     expect(accepted.result.ok).toBe(true);
   });
 
+  it('normalizes a THROWING selector to the same closed refusal, leaking nothing', async () => {
+    // `ModelReplyPort` is a structural interface any deployment may implement, and this call happens
+    // BEFORE the orchestrator's model try/catch -- so an unnormalized throw would escape
+    // `orchestrateInbound` as a rejected promise instead of the closed result every other
+    // injected-boundary failure produces.
+    const SECRET = 'selector-exploded-with-conversation-detail';
+    let calls = 0;
+    const base = scriptedModelReplyPort();
+    const model: RecordingModelReplyPort = Object.freeze({
+      ...base,
+      selectPromptIdentity: (): ModelPromptIdentity | undefined => {
+        calls += 1;
+        throw new Error(SECRET);
+      },
+    });
+
+    // Resolves, does not reject.
+    const { result, events } = await run({ model });
+    expect(result.ok ? '' : result.reason).toBe('orchestration-model-unavailable');
+    expect(model.invoked()).toBe(0);
+    // A throw is a refusal, not a reason to ask again.
+    expect(calls).toBe(1);
+    // The thrown value is discarded, never copied into the result or an event.
+    expect(JSON.stringify({ result, events })).not.toContain(SECRET);
+    expect(JSON.stringify({ result, events })).not.toContain('Error');
+  });
+
   it('still uses the legacy flat fields when the port has no selector', async () => {
     // ADR-0073 does not retire the single-prompt shape; every existing deployment uses it.
     const { result, model } = await run({ modelConfig: { evaluationRef: 'evref-000000' } });
