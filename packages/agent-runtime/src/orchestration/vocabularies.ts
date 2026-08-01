@@ -6,9 +6,21 @@
  * and obtains a Core decision, and sends nothing. The excluded vendor identifier appears nowhere.
  */
 
-/** Closed orchestration proposal kinds. No business-mutation/tool-execution kind exists. */
+/**
+ * Closed orchestration proposal kinds. No business-mutation/tool-execution kind exists.
+ *
+ * `FOLLOW_UP` (QFJ-S3-C-B, ADR-0068) names the one meaning the original four could not carry: "this
+ * conversation is ready for a follow-up, here is the drafted acknowledgement". `REPLY` would omit the
+ * follow-up commitment, `REQUEST_CLARIFICATION` would assert information is still missing — the exact
+ * opposite of the precondition that gates it — and `NO_ACTION` would assert nothing should happen. A
+ * behaviour package that had to pick one of those would be telling QuickFurno Core something other
+ * than what it decided, so the vocabulary grew by one rather than a mapping becoming a lie.
+ *
+ * This is still M2. The M1 `RUNTIME_PROPOSAL_KINDS` is a separate, deliberately un-merged vocabulary.
+ */
 export const ORCHESTRATION_PROPOSAL_KINDS = [
   'REPLY',
+  'FOLLOW_UP',
   'ESCALATE_TO_HUMAN',
   'REQUEST_CLARIFICATION',
   'NO_ACTION',

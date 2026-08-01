@@ -123,6 +123,9 @@ importers:
       '@qf-jarvis/model-reply-adapter':
         specifier: workspace:*
         version: link:../model-reply-adapter
+      '@qf-jarvis/riya-agent':
+        specifier: workspace:*
+        version: link:../riya-agent
 
   packages/model-evaluation:
     dependencies:

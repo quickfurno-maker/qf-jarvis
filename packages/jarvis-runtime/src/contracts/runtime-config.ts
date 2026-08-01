@@ -12,7 +12,36 @@ import type { CoreDecisionProtocol, CoreDecisionTransport } from '@qf-jarvis/cor
 import type { ModelGatewayInvoker } from '@qf-jarvis/model-reply-adapter';
 
 import type { AuthoritativeConversationStatePort } from './authoritative-state.js';
+import type { ClientSalesBehaviourInputPort } from './behaviour-input.js';
 import type { JarvisRuntimeObservabilityHook } from './observability.js';
+
+/**
+ * Deployment-level provenance references (QFJ-S3-C-B, ADR-0068).
+ *
+ * All opaque and identifier-safe: `[A-Za-z0-9._:-]{1,128}`, enforced by `createRuntimeProvenance`.
+ * `modelRef`/`providerRef` are optional and must be supplied explicitly when wanted — they are NOT
+ * derived from `release.modelId` or `release.providerId`, because a real catalogue identifier such as
+ * `openai/gpt-oss-20b` contains `/` and would violate the grammar. A provenance record that quietly
+ * rewrote its own references would be worse than one that declines to make a claim.
+ */
+export interface JarvisProvenanceRefs {
+  readonly runtimeRef?: string;
+  readonly policyRef?: string;
+  /**
+   * The provenance correlation reference.
+   *
+   * Separate from `JarvisRuntimeConfig.correlationId`, which belongs to the M3 Core-decision adapter.
+   * The two are different contracts with different bounds and different audiences, and coupling them
+   * would mean a change made for Core silently rewrote the audit trail. Absent -> `envelope.messageId`.
+   */
+  readonly correlationId?: string;
+  /** A deployment-level opaque prompt reference. Never prompt text. */
+  readonly promptRef?: string;
+  readonly modelRef?: string;
+  readonly providerRef?: string;
+  readonly releaseRef?: string;
+  readonly configRef?: string;
+}
 
 export interface JarvisRuntimeConfig {
   /** MANDATORY. The ONE authoritative content-free conversation-state source all readers delegate to. */
@@ -44,6 +73,15 @@ export interface JarvisRuntimeConfig {
   readonly taskClass?: string;
   /** When true, a model identity without an evaluation reference is refused. */
   readonly requireEvaluationRef?: boolean;
+
+  /**
+   * Optional client-sales behaviour inputs (ADR-0068). Absent -> the runtime takes the legacy `REPLY`
+   * path unchanged and Riya behaviour is never consulted. Defining the seam does not activate it.
+   */
+  readonly behaviourInput?: ClientSalesBehaviourInputPort;
+
+  /** Optional deployment-level provenance references; safe defaults are derived when absent. */
+  readonly provenanceRefs?: JarvisProvenanceRefs;
 
   readonly observability?: JarvisRuntimeObservabilityHook;
 }

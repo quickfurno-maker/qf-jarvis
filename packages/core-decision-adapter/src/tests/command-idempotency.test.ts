@@ -42,8 +42,14 @@ describe('command construction', () => {
     expect(command.idempotencyKey).toMatch(/^[0-9a-f]{32}$/);
   });
 
-  it('includes a reply body only for a REPLY proposal', () => {
+  it('includes a reply body only for the kinds that carry client-facing text', () => {
+    // QFJ-S3-C-B (ADR-0068): FOLLOW_UP joins REPLY, because a sales follow-up proposal genuinely
+    // carries a drafted acknowledgement Core must validate. The other three propose no text at all,
+    // so a body arriving with one of them is dropped rather than forwarded.
     expect(build({ proposalKind: 'REPLY' }).proposedReplyBody).toBe('synthetic reply body');
+    expect(build({ proposalKind: 'FOLLOW_UP' }).proposedReplyBody).toBe('synthetic reply body');
+    expect(build({ proposalKind: 'ESCALATE_TO_HUMAN' }).proposedReplyBody).toBeUndefined();
+    expect(build({ proposalKind: 'REQUEST_CLARIFICATION' }).proposedReplyBody).toBeUndefined();
     expect(build({ proposalKind: 'NO_ACTION' }).proposedReplyBody).toBeUndefined();
   });
 

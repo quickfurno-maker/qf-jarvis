@@ -7,7 +7,11 @@
  * knowledge content, no subject/PII/secret, and no raw error. `CORE_ACCEPTED` is Core-approved only —
  * never sent, delivered, executed, or persisted; the result exposes no send/deliver/execute method.
  */
-import type { OrchestrationReason, RuntimeActor } from '@qf-jarvis/agent-runtime';
+import type {
+  OrchestrationReason,
+  RuntimeActor,
+  RuntimeProvenance,
+} from '@qf-jarvis/agent-runtime';
 
 import type { JarvisRuntimeOutcome } from './reasons.js';
 
@@ -26,4 +30,12 @@ export interface JarvisRuntimeResult {
   readonly coreConsulted: boolean;
   /** The safe orchestration reason, present ONLY when `outcome === 'REFUSED'`. */
   readonly refusalReason: OrchestrationReason | undefined;
+  /**
+   * The content-free provenance sibling stamped by the merged `runAgentTurn` (ADR-0066, ADR-0068).
+   *
+   * Present for every result a completed agent turn produced — served AND refused, so a blocked turn
+   * is as auditable as a served one. `undefined` only when the composition failed before a turn could
+   * complete, because a fabricated record would be worse than an absent one.
+   */
+  readonly provenance: RuntimeProvenance | undefined;
 }

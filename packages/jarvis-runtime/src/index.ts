@@ -20,8 +20,15 @@ export type {
   ConversationControlState,
 } from './contracts/authoritative-state.js';
 
+// The optional client-sales behaviour input seam (ADR-0068). Types only.
+export type {
+  ClientSalesBehaviourInput,
+  ClientSalesBehaviourInputPort,
+  ClientSalesBehaviourInputRequest,
+} from './contracts/behaviour-input.js';
+
 // Config + result + outcome vocabulary.
-export type { JarvisRuntimeConfig } from './contracts/runtime-config.js';
+export type { JarvisRuntimeConfig, JarvisProvenanceRefs } from './contracts/runtime-config.js';
 export type { JarvisRuntimeResult } from './contracts/runtime-result.js';
 export { JARVIS_RUNTIME_OUTCOMES } from './contracts/reasons.js';
 export type { JarvisRuntimeOutcome } from './contracts/reasons.js';

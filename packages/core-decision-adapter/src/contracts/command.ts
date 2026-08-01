@@ -101,8 +101,13 @@ export function buildCoreCommand(args: {
     policyRevision: request.policyRevision,
     evaluationRef: request.evaluationRef,
     citations: Object.freeze(request.citations.map((c) => Object.freeze({ ...c }))),
-    // A reply body is included only for a REPLY, and only when Core must validate it.
-    proposedReplyBody: request.proposalKind === 'REPLY' ? request.proposedReplyBody : undefined,
+    // A reply body is included only for the kinds that actually carry client-facing text — REPLY and
+    // FOLLOW_UP (ADR-0068). ESCALATE_TO_HUMAN, REQUEST_CLARIFICATION and NO_ACTION propose no text,
+    // so a body arriving with one of them is dropped rather than forwarded to Core.
+    proposedReplyBody:
+      request.proposalKind === 'REPLY' || request.proposalKind === 'FOLLOW_UP'
+        ? request.proposedReplyBody
+        : undefined,
     createdAt,
   });
 }
