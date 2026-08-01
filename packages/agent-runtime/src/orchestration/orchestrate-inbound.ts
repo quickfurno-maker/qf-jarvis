@@ -19,6 +19,7 @@ import type { RuntimeActor } from '../contracts/vocabularies.js';
 import { coreDecision, createOrchestrationProposal } from './contracts.js';
 import type { KnowledgeCitation, OrchestrationContext, OrchestrationResult } from './contracts.js';
 import type { BehaviourDecision, BehaviourDecisionPort } from './behaviour-port.js';
+import { deriveProposalId } from './derive-proposal-id.js';
 import { createReplyPlan } from './create-reply-plan.js';
 import { validateReplyDraft } from './validate-reply-draft.js';
 import type { ConversationContextPort, KnowledgePort, ModelReplyPort } from './model-reply-port.js';
@@ -223,7 +224,9 @@ export async function orchestrateInbound(
   envelope: InboundEnvelope,
 ): Promise<OrchestrationResult> {
   const hook = orch.observability;
-  const runId = `${envelope.conversationId}-${envelope.messageId}`;
+  // The canonical run identifier for this turn (ADR-0069). Not a concatenation: two 128-character
+  // identifiers joined together overflow every downstream 128-character bound at once.
+  const runId = envelope.runtimeId;
 
   const emit = (
     type: OrchestrationEventType,
@@ -383,9 +386,20 @@ export async function orchestrateInbound(
   // 12. Proposal — PENDING_CORE_VALIDATION. Kind and intent come from the behaviour decision; every
   // other field, and the authority status, remain owned by the merged contract.
   const kind = behaviour.proposalKind;
+  // Derived only now, because the kind is part of the identity and is not settled until the behaviour
+  // decision and both gates have run. Fixed width, so no combination of caller identifiers can push
+  // it past the proposal bound (ADR-0069).
+  const proposalVersion = 1;
   const proposal = createOrchestrationProposal({
-    proposalId: `${runId}-reply`,
-    proposalVersion: 1,
+    proposalId: deriveProposalId({
+      runtimeId: envelope.runtimeId,
+      conversationId: ctx1.conversationId,
+      messageId: envelope.messageId,
+      expectedRevision: ctx1.revision,
+      proposalVersion,
+      proposalKind: kind,
+    }),
+    proposalVersion,
     conversationId: ctx1.conversationId,
     expectedRevision: ctx1.revision,
     assignedActor,

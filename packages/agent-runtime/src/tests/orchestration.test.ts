@@ -629,3 +629,127 @@ describe('the behaviour seam fails closed BEFORE knowledge retrieval and the mod
     }
   });
 });
+
+describe('the canonical run identifier is the envelope runtimeId (ADR-0069)', () => {
+  const MAX_RT = 'r'.repeat(128);
+  const MAX_ID = 'c'.repeat(128);
+  const MAX_MSG = 'm'.repeat(128);
+
+  it('the reply plan, observability and proposal all carry the runtimeId, never a concatenation', async () => {
+    const { result, events } = await run({
+      envelope: { runtimeId: 'rt.canonical' },
+    });
+    expect(result.ok).toBe(true);
+    for (const event of events) {
+      expect(event.runId).toBe('rt.canonical');
+      expect(event.runId).not.toContain('conv.1-msg.1');
+    }
+    if (result.ok) {
+      // A bounded derived identity, not `${runId}-reply`.
+      expect(result.proposal.proposalId).toMatch(/^proposal\.[0-9a-f]{32}$/);
+      expect(result.proposal.proposalId).not.toContain('rt.canonical');
+    }
+  });
+
+  it('the plan handed to the model port carries the runtimeId as its runId', async () => {
+    let seen: string | undefined;
+    const model = scriptedModelReplyPort({
+      draft: (plan) => {
+        seen = plan.runId;
+        return {
+          structured: true,
+          replyBody: 'ok',
+          citations: [],
+          // usageTraceId travels back as the same canonical value and must satisfy the 128-char bound.
+          usageTraceId: plan.runId,
+        };
+      },
+    });
+    const { result } = await run({ model, envelope: { runtimeId: MAX_RT } });
+    expect(seen).toBe(MAX_RT);
+    expect(seen).toHaveLength(128);
+    expect(result.ok).toBe(true);
+  });
+
+  it('a maximum-length envelope produces a valid draft, proposal and Core call', async () => {
+    const model = scriptedModelReplyPort({
+      draft: (plan) => ({
+        structured: true,
+        replyBody: 'ok',
+        citations: [],
+        usageTraceId: plan.runId,
+      }),
+    });
+    const { result, core } = await run({
+      model,
+      contexts: [ctx({ conversationId: MAX_ID })],
+      envelope: { runtimeId: MAX_RT, conversationId: MAX_ID, messageId: MAX_MSG },
+    });
+    // Before ADR-0069 the 257-character run id made the draft's usageTraceId invalid here.
+    expect(result.ok).toBe(true);
+    expect(model.invoked()).toBe(1);
+    expect(core?.invoked()).toBe(1);
+    if (result.ok) {
+      expect(result.proposal.proposalId).toMatch(/^proposal\.[0-9a-f]{32}$/);
+      expect(result.proposal.proposalId.length).toBeLessThan(128);
+      expect(result.proposal.expectedRevision).toBe(1);
+      expect(result.proposal.authorityStatus).toBe(PROPOSAL_AUTHORITY_STATUS);
+    }
+  });
+
+  it('the derived proposal id is deterministic and identity-sensitive', async () => {
+    const idFor = async (over: Partial<InboundEnvelopeInput>): Promise<string> => {
+      const { result } = await run({ envelope: { runtimeId: MAX_RT, ...over } });
+      return result.ok ? result.proposal.proposalId : 'refused';
+    };
+    const base = await idFor({});
+    expect(await idFor({})).toBe(base);
+    expect(await idFor({ runtimeId: 'rt.other' })).not.toBe(base);
+    expect(await idFor({ messageId: 'msg.other' })).not.toBe(base);
+
+    // A different expected revision is a different proposal identity.
+    const otherRevision = await run({
+      contexts: [ctx({ revision: 2 })],
+      envelope: { runtimeId: MAX_RT },
+    });
+    expect(otherRevision.result.ok ? otherRevision.result.proposal.proposalId : '').not.toBe(base);
+
+    // A different proposal KIND is a different proposal identity.
+    const otherKind = await run({
+      envelope: { runtimeId: MAX_RT },
+      config: {
+        behaviourPort: {
+          decide: (): Promise<BehaviourDecision | undefined> =>
+            Promise.resolve({
+              modelReplyEligible: false,
+              proposalKind: 'NO_ACTION',
+              structuredIntent: { taskClass: 'RESPONSE_GENERATION', replyKind: 'NO_ACTION' },
+            }),
+        },
+      },
+    });
+    expect(otherKind.result.ok ? otherKind.result.proposal.proposalId : '').not.toBe(base);
+  });
+
+  it('the derived id leaks no raw identity and uses only the allowed grammar', async () => {
+    const { result } = await run({
+      contexts: [ctx({ conversationId: MAX_ID })],
+      envelope: { runtimeId: MAX_RT, conversationId: MAX_ID, messageId: MAX_MSG },
+      model: scriptedModelReplyPort({
+        draft: (plan) => ({
+          structured: true,
+          replyBody: 'ok',
+          citations: [],
+          usageTraceId: plan.runId,
+        }),
+      }),
+    });
+    if (result.ok) {
+      const id = result.proposal.proposalId;
+      expect(id).toMatch(/^[A-Za-z0-9._:-]{1,128}$/);
+      for (const raw of [MAX_RT, MAX_ID, MAX_MSG, 'ref.opaque', 'prompt.family.a']) {
+        expect(id).not.toContain(raw);
+      }
+    }
+  });
+});

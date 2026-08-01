@@ -23,7 +23,11 @@ export function createReplyPlan(args: {
 }): ReplyPlan {
   const { context, envelope, assignedActor, modelPort } = args;
   return Object.freeze({
-    runId: `${context.conversationId}-${envelope.messageId}`,
+    // The canonical run identifier (ADR-0069). Concatenating the conversation and message ids could
+    // reach 257 characters, which the gateway's own 128-character `runId` bound then rejected — so a
+    // valid envelope produced an invalid request. `runtimeId` is already caller-supplied, validated,
+    // bounded and immutable; it is the identity this field was always meant to carry.
+    runId: envelope.runtimeId,
     conversationId: context.conversationId,
     assignedActor,
     partyType: context.partyType,
