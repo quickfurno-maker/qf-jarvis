@@ -1,0 +1,23 @@
+{
+  "name": "@qf-jarvis/anisha-agent",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis Anisha vendor-journey behaviour (QFJ-S3-D-A, ADR-0070). The vendor half of the agent layer, and nothing else: a closed vendor-journey intent vocabulary, a content-minimised context snapshot carrying opaque references and money-adjacent BANDS (never balances), and one deterministic turn decision. Anisha is fixed to ANISHA/VENDOR and refuses client work before any model is reached. She notices and explains; she never verifies, activates, ranks, assigns, mutates a profile, changes a package, touches money, or scores lead quality -- every one of those is QuickFurno Core's. It builds no runtime, no router, no state machine, no port and no proposal helper -- those are owned by ADR-0054/0055/0057/0059/0066/0068 and are reused, never replaced. No prompt text (opaque promptRef only), no model call, no memory, no transport, no persistence, no external action. Depends on @qf-jarvis/agent-runtime and zod.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/agent-runtime": "workspace:*",
+    "zod": "4.4.3"
+  }
+}

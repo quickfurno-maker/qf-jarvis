@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
+  },
+
+  // The EMITTING build, referenced by the root solution. The vitest specs under src/tests are
+  // EXCLUDED so nothing test-only reaches dist/. One project reference: behaviour composes
+  // @qf-jarvis/agent-runtime's public contracts, one-way and never the reverse. There is
+  // deliberately NO reference to riya-agent or jarvis-runtime -- the two behaviour packages are
+  // siblings that never see each other, and composition is S3-D-B's job, not this package's.
+  "references": [{ "path": "../agent-runtime/tsconfig.build.json" }],
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/tests/**"]
+}
