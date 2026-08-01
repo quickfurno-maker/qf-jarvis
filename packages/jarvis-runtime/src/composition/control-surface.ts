@@ -116,6 +116,91 @@ function isSafeRevision(value: unknown): value is number {
 }
 
 /**
+ * Is the returned post-state actually the one this ACTION produces?
+ *
+ * The revision arithmetic alone is not enough. A faulty adapter can return `APPLIED` for
+ * `TAKE_OWNERSHIP`, bump the revision, and hand back `humanTakeover: false / aiPaused: false` with an
+ * audit record that agrees with those flags — internally consistent, arithmetically sound, and a
+ * report that the stop switch was applied when its own evidence proves it was not. That is the one
+ * failure this whole phase exists to prevent, so it is checked here rather than trusted.
+ *
+ * These are POSTCONDITIONS inferable from the decision itself (ADR-0074 §3). The composition does not
+ * re-run the reducer and does not read state: an `APPLIED` `nextState` is post-state, so pre-state
+ * cannot be reconstructed, and a second reducer call would be a second decision path. The adapter
+ * remains responsible for evaluating the command against the real pre-state atomically; this only
+ * refuses answers that cannot be true whatever the pre-state was.
+ *
+ * `revision-mismatch` is deliberately NOT action-checked: staleness is decided before the action
+ * semantics ever run, so the flags carry no claim about the action. `human-takeover-active` is
+ * checked at its own call site, where the exact `RESUME_AI` precondition already lives.
+ */
+function actionSemanticsMatch(
+  action: ConversationControlCommand['action'],
+  outcome: string,
+  reason: string,
+  nextState: ConversationControlSnapshot,
+): boolean {
+  const { humanTakeover, aiPaused } = nextState;
+
+  if (outcome === 'APPLIED') {
+    switch (action) {
+      // Taking ownership ALWAYS forces the pause.
+      case 'TAKE_OWNERSHIP':
+        return humanTakeover && aiPaused;
+      // Releasing ownership never resumes AI (ADR-0054 E).
+      case 'RELEASE_OWNERSHIP':
+        return !humanTakeover && aiPaused;
+      // Pausing leaves ownership alone, so takeover may be either.
+      case 'PAUSE_AI':
+        return aiPaused;
+      // The only action that may clear the pause, and only with no takeover.
+      case 'RESUME_AI':
+        return !humanTakeover && !aiPaused;
+      default:
+        return false;
+    }
+  }
+
+  if (outcome === 'NO_CHANGE') {
+    // "Already satisfied" means the state ALREADY meets what the action would have established.
+    switch (action) {
+      case 'TAKE_OWNERSHIP':
+        return humanTakeover && aiPaused;
+      // Nothing to release; the pause is not this action's business either way.
+      case 'RELEASE_OWNERSHIP':
+        return !humanTakeover;
+      case 'PAUSE_AI':
+        return aiPaused;
+      case 'RESUME_AI':
+        return !humanTakeover && !aiPaused;
+      default:
+        return false;
+    }
+  }
+
+  if (reason === 'revision-exhausted') {
+    // Exhaustion is only reachable when the action would REQUIRE a change. If the state already
+    // satisfies it, the reducer would have answered NO_CHANGE (or, for RESUME_AI under a takeover,
+    // `human-takeover-active`) long before the counter mattered.
+    switch (action) {
+      case 'TAKE_OWNERSHIP':
+        return !(humanTakeover && aiPaused);
+      case 'RELEASE_OWNERSHIP':
+        return humanTakeover;
+      case 'PAUSE_AI':
+        return !aiPaused;
+      case 'RESUME_AI':
+        return !humanTakeover && aiPaused;
+      default:
+        return false;
+    }
+  }
+
+  // `revision-mismatch` and `human-takeover-active` are decided elsewhere.
+  return true;
+}
+
+/**
  * Rebuild a foreign decision as a fresh, deeply frozen, internally consistent record.
  *
  * `WritableAuthoritativeConversationStatePort` is a STRUCTURAL interface any deployment may implement,
@@ -210,6 +295,13 @@ function canonicalizeDecision(
     hasReasonRef !== (command.reasonRef !== undefined) ||
     (hasReasonRef && audit['reasonRef'] !== command.reasonRef)
   ) {
+    return undefined;
+  }
+
+  // The post-state each ACTION implies. Checked before the arithmetic because it is the stronger
+  // claim: a decision can be arithmetically perfect and still report that a takeover was applied
+  // while its own flags say otherwise.
+  if (!actionSemanticsMatch(command.action, outcome, reason, nextState)) {
     return undefined;
   }
 

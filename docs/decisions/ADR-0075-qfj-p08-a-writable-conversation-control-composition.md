@@ -174,6 +174,37 @@ every command correlation field, and the revision arithmetic each outcome implie
 cross-checked, and a fresh deeply frozen record is rebuilt from the command and the validated next
 state. A source could otherwise keep a reference to the object it returned and mutate it afterwards.
 
+### 8a. A decision is not trusted merely because it is self-consistent
+
+Final review found that internal consistency was **not sufficient**. A faulty adapter could return
+`APPLIED` for `TAKE_OWNERSHIP`, advance the revision correctly, and hand back
+`humanTakeover: false / aiPaused: false` with an audit record that agreed with those flags. Every
+correlation field matched, the arithmetic was sound — and the result told Jarvis the stop switch had
+been applied while the decision's own evidence proved it had not. That is precisely the failure this
+phase exists to prevent, so it is now refused.
+
+The composition therefore validates every **action/post-state postcondition inferable from the
+returned decision**:
+
+| Action              | `APPLIED` post-state            | `NO_CHANGE` requires             | `revision-exhausted` requires a change |
+| ------------------- | ------------------------------- | -------------------------------- | -------------------------------------- |
+| `TAKE_OWNERSHIP`    | takeover **and** paused         | already takeover **and** paused  | not (takeover and paused)              |
+| `RELEASE_OWNERSHIP` | not takeover **and** paused     | already not takeover             | takeover held                          |
+| `PAUSE_AI`          | paused (takeover either)        | already paused                   | not paused                             |
+| `RESUME_AI`         | not takeover **and** not paused | already not takeover, not paused | not takeover **and** paused            |
+
+Two deliberate exceptions. `revision-mismatch` is **not** action-checked, because staleness is decided
+before the action semantics ever run, so the returned flags carry no claim about the action.
+`human-takeover-active` keeps its existing rule — `RESUME_AI`, matching revisions, takeover held — and
+does **not** additionally require `aiPaused`, because ADR-0074 deliberately accepts an external state
+of takeover-without-pause and `RESUME_AI` still refuses under it.
+
+These are postconditions only. An `APPLIED` `nextState` is post-state, so pre-state cannot be
+reconstructed from it; the composition still does **not** re-run the reducer, does **not** read state
+before or after the call, and adds no retry, fallback or second source. The adapter remains solely
+responsible for evaluating the command against the real pre-state atomically. This check refuses only
+answers that cannot be true whatever the pre-state was.
+
 ## Rejected alternatives
 
 - **A second writable state config field.** The split brain in §1.
@@ -183,6 +214,10 @@ state. A source could otherwise keep a reference to the object it returned and m
 - **Inferring `conversationState` from the control flags in production.** Defines conversation-state
   transitions as a side effect of a boolean.
 - **Returning the foreign decision object directly.** Unvalidated, and still mutable by its source.
+- **Trusting a self-consistent decision.** See §8a: arithmetic and correlation can both be perfect
+  while the reported post-state is one the action cannot produce.
+- **Re-running the reducer to check the post-state.** An `APPLIED` `nextState` is post-state; the
+  reducer needs pre-state, which cannot be recovered from it. It would also be a second decision path.
 - **Bumping `DEFAULT_RUNTIME_REF`.** Provenance churn on every inbound turn for an unrelated change.
 - **Reusing the approval contracts for these four commands.** A conversation takeover is an operator
   control action, not approval of a proposed business action; `ApprovalDecisionV1` stays future work.
@@ -258,7 +293,9 @@ There stays exactly ONE `authoritativeState` config field; adding a second writa
 requires a superseding ADR. `applyControlCommand` stays the atomic application boundary — moving the
 reducer into the composition, or adding a retry, a fallback or a second call, requires a superseding
 ADR. `assignedActor` stays derived only through `assignAgent`, and the projection contract never gains
-an actor field. Production never infers `conversationState`, `escalationStatus`, `followUpStatus`,
+an actor field. The action/post-state postconditions in §8a stay enforced; weakening one, or
+satisfying them by re-running the reducer or reading state around the call, requires a superseding
+ADR. Production never infers `conversationState`, `escalationStatus`, `followUpStatus`,
 `deliveryStatePlaceholder` or `auditRef`. The snapshot stays content-free and token-only. Failures at
 either injected boundary stay normalized with the thrown value discarded. And conversation control
 never becomes business, financial, approval or Core authority.

@@ -635,6 +635,428 @@ describe('(I, J) a foreign control source fails closed', () => {
 });
 
 // ---------------------------------------------------------------------------
+// (J2) Action semantics. Arithmetic consistency is NOT enough.
+// ---------------------------------------------------------------------------
+
+describe('(J2) a foreign decision must also match what the ACTION does', () => {
+  const MAX = Number.MAX_SAFE_INTEGER;
+
+  /**
+   * Build a decision that is internally consistent — audit agrees with `nextState`, revisions line
+   * up — but whose post-state flags may or may not be the ones the action actually produces.
+   *
+   * Everything except the flags is derived, so each case below varies only the thing under test.
+   */
+  function consistent(args: {
+    readonly action: ConversationControlCommandInput['action'];
+    readonly outcome: 'APPLIED' | 'NO_CHANGE' | 'REFUSED';
+    readonly reason: string;
+    readonly humanTakeover: boolean;
+    readonly aiPaused: boolean;
+    readonly observedRevision?: number;
+  }): { readonly decision: Record<string, unknown>; readonly expectedRevision: number } {
+    const observedRevision = args.observedRevision ?? 1;
+    const revision = args.outcome === 'APPLIED' ? observedRevision + 1 : observedRevision;
+    const nextState = {
+      conversationId: 'conv.1',
+      revision,
+      humanTakeover: args.humanTakeover,
+      aiPaused: args.aiPaused,
+    };
+    return {
+      expectedRevision: observedRevision,
+      decision: {
+        outcome: args.outcome,
+        reason: args.reason,
+        nextState,
+        auditRecord: {
+          recordVersion: 1,
+          commandId: 'ctrl.1',
+          conversationId: 'conv.1',
+          action: args.action,
+          operatorRef: 'operator.synthetic.1',
+          expectedRevision: observedRevision,
+          observedRevision,
+          outcome: args.outcome,
+          reason: args.reason,
+          resultingRevision: revision,
+          humanTakeover: args.humanTakeover,
+          aiPaused: args.aiPaused,
+          issuedAt: AT(1),
+        },
+      },
+    };
+  }
+
+  async function reject(label: string, args: Parameters<typeof consistent>[0]): Promise<void> {
+    const { decision, expectedRevision } = consistent(args);
+    const source = foreignControlSource(() => Promise.resolve(decision));
+    const result = await runtimeOver(source).applyConversationControlCommand(
+      commandInput({ action: args.action, expectedRevision }),
+    );
+    expect(result, label).toEqual({ ok: false, reason: 'control-invalid-result' });
+    // Rejected on the way OUT. The adapter was still called exactly once, and never again.
+    expect(source.applies(), label).toBe(1);
+  }
+
+  it('(1-7) rejects an APPLIED post-state the action could not have produced', async () => {
+    // The merge-blocking case: a faulty adapter reports the stop switch applied while its own
+    // evidence says takeover is false. Arithmetic is perfect; the claim is still untrue.
+    await reject('(1) TAKE -> false/false', {
+      action: 'TAKE_OWNERSHIP',
+      outcome: 'APPLIED',
+      reason: 'applied',
+      humanTakeover: false,
+      aiPaused: false,
+    });
+    await reject('(2) TAKE -> true/false (takeover always forces the pause)', {
+      action: 'TAKE_OWNERSHIP',
+      outcome: 'APPLIED',
+      reason: 'applied',
+      humanTakeover: true,
+      aiPaused: false,
+    });
+    await reject('(3) RELEASE -> false/false (release never resumes AI)', {
+      action: 'RELEASE_OWNERSHIP',
+      outcome: 'APPLIED',
+      reason: 'applied',
+      humanTakeover: false,
+      aiPaused: false,
+    });
+    await reject('(4) RELEASE -> true/true (ownership not released)', {
+      action: 'RELEASE_OWNERSHIP',
+      outcome: 'APPLIED',
+      reason: 'applied',
+      humanTakeover: true,
+      aiPaused: true,
+    });
+    await reject('(5) PAUSE -> not paused', {
+      action: 'PAUSE_AI',
+      outcome: 'APPLIED',
+      reason: 'applied',
+      humanTakeover: false,
+      aiPaused: false,
+    });
+    await reject('(6) RESUME -> still paused', {
+      action: 'RESUME_AI',
+      outcome: 'APPLIED',
+      reason: 'applied',
+      humanTakeover: false,
+      aiPaused: true,
+    });
+    await reject('(7) RESUME -> takeover still held', {
+      action: 'RESUME_AI',
+      outcome: 'APPLIED',
+      reason: 'applied',
+      humanTakeover: true,
+      aiPaused: false,
+    });
+  });
+
+  it('(8-13) rejects a NO_CHANGE whose state does not already satisfy the action', async () => {
+    await reject('(8) TAKE already-satisfied at false/false', {
+      action: 'TAKE_OWNERSHIP',
+      outcome: 'NO_CHANGE',
+      reason: 'already-satisfied',
+      humanTakeover: false,
+      aiPaused: false,
+    });
+    await reject('(9) TAKE already-satisfied at true/false', {
+      action: 'TAKE_OWNERSHIP',
+      outcome: 'NO_CHANGE',
+      reason: 'already-satisfied',
+      humanTakeover: true,
+      aiPaused: false,
+    });
+    await reject('(10) RELEASE already-satisfied while takeover held', {
+      action: 'RELEASE_OWNERSHIP',
+      outcome: 'NO_CHANGE',
+      reason: 'already-satisfied',
+      humanTakeover: true,
+      aiPaused: true,
+    });
+    await reject('(11) PAUSE already-satisfied while not paused', {
+      action: 'PAUSE_AI',
+      outcome: 'NO_CHANGE',
+      reason: 'already-satisfied',
+      humanTakeover: false,
+      aiPaused: false,
+    });
+    await reject('(12) RESUME already-satisfied while paused', {
+      action: 'RESUME_AI',
+      outcome: 'NO_CHANGE',
+      reason: 'already-satisfied',
+      humanTakeover: false,
+      aiPaused: true,
+    });
+    await reject('(13) RESUME already-satisfied while takeover held', {
+      action: 'RESUME_AI',
+      outcome: 'NO_CHANGE',
+      reason: 'already-satisfied',
+      humanTakeover: true,
+      aiPaused: true,
+    });
+  });
+
+  it('(14-18) rejects revision-exhausted when the action needed no change anyway', async () => {
+    // At the ceiling the counter only matters if a change was actually required. If the state
+    // already satisfies the action, the correct answer was NO_CHANGE -- or, for RESUME_AI under a
+    // takeover, `human-takeover-active` -- long before overflow came into it.
+    await reject('(14) TAKE exhausted at true/true (should be NO_CHANGE)', {
+      action: 'TAKE_OWNERSHIP',
+      outcome: 'REFUSED',
+      reason: 'revision-exhausted',
+      humanTakeover: true,
+      aiPaused: true,
+      observedRevision: MAX,
+    });
+    await reject('(15) RELEASE exhausted with no takeover (should be NO_CHANGE)', {
+      action: 'RELEASE_OWNERSHIP',
+      outcome: 'REFUSED',
+      reason: 'revision-exhausted',
+      humanTakeover: false,
+      aiPaused: true,
+      observedRevision: MAX,
+    });
+    await reject('(16) PAUSE exhausted while already paused (should be NO_CHANGE)', {
+      action: 'PAUSE_AI',
+      outcome: 'REFUSED',
+      reason: 'revision-exhausted',
+      humanTakeover: false,
+      aiPaused: true,
+      observedRevision: MAX,
+    });
+    await reject('(17) RESUME exhausted under takeover (should be human-takeover-active)', {
+      action: 'RESUME_AI',
+      outcome: 'REFUSED',
+      reason: 'revision-exhausted',
+      humanTakeover: true,
+      aiPaused: true,
+      observedRevision: MAX,
+    });
+    await reject('(18) RESUME exhausted at false/false (should be NO_CHANGE)', {
+      action: 'RESUME_AI',
+      outcome: 'REFUSED',
+      reason: 'revision-exhausted',
+      humanTakeover: false,
+      aiPaused: false,
+      observedRevision: MAX,
+    });
+  });
+
+  it('still ACCEPTS every legitimate action/post-state pairing', async () => {
+    const good: readonly [string, Parameters<typeof consistent>[0]][] = [
+      [
+        'TAKE applied',
+        {
+          action: 'TAKE_OWNERSHIP',
+          outcome: 'APPLIED',
+          reason: 'applied',
+          humanTakeover: true,
+          aiPaused: true,
+        },
+      ],
+      [
+        'RELEASE applied',
+        {
+          action: 'RELEASE_OWNERSHIP',
+          outcome: 'APPLIED',
+          reason: 'applied',
+          humanTakeover: false,
+          aiPaused: true,
+        },
+      ],
+      [
+        'PAUSE applied, no takeover',
+        {
+          action: 'PAUSE_AI',
+          outcome: 'APPLIED',
+          reason: 'applied',
+          humanTakeover: false,
+          aiPaused: true,
+        },
+      ],
+      // PAUSE_AI leaves ownership alone, so takeover may be either.
+      [
+        'PAUSE applied, takeover held',
+        {
+          action: 'PAUSE_AI',
+          outcome: 'APPLIED',
+          reason: 'applied',
+          humanTakeover: true,
+          aiPaused: true,
+        },
+      ],
+      [
+        'RESUME applied',
+        {
+          action: 'RESUME_AI',
+          outcome: 'APPLIED',
+          reason: 'applied',
+          humanTakeover: false,
+          aiPaused: false,
+        },
+      ],
+      [
+        'TAKE no-change',
+        {
+          action: 'TAKE_OWNERSHIP',
+          outcome: 'NO_CHANGE',
+          reason: 'already-satisfied',
+          humanTakeover: true,
+          aiPaused: true,
+        },
+      ],
+      // RELEASE is satisfied by "no takeover"; the pause is not its business either way.
+      [
+        'RELEASE no-change, unpaused',
+        {
+          action: 'RELEASE_OWNERSHIP',
+          outcome: 'NO_CHANGE',
+          reason: 'already-satisfied',
+          humanTakeover: false,
+          aiPaused: false,
+        },
+      ],
+      [
+        'RELEASE no-change, paused',
+        {
+          action: 'RELEASE_OWNERSHIP',
+          outcome: 'NO_CHANGE',
+          reason: 'already-satisfied',
+          humanTakeover: false,
+          aiPaused: true,
+        },
+      ],
+      [
+        'PAUSE no-change',
+        {
+          action: 'PAUSE_AI',
+          outcome: 'NO_CHANGE',
+          reason: 'already-satisfied',
+          humanTakeover: false,
+          aiPaused: true,
+        },
+      ],
+      [
+        'RESUME no-change',
+        {
+          action: 'RESUME_AI',
+          outcome: 'NO_CHANGE',
+          reason: 'already-satisfied',
+          humanTakeover: false,
+          aiPaused: false,
+        },
+      ],
+      [
+        'TAKE exhausted',
+        {
+          action: 'TAKE_OWNERSHIP',
+          outcome: 'REFUSED',
+          reason: 'revision-exhausted',
+          humanTakeover: false,
+          aiPaused: false,
+          observedRevision: MAX,
+        },
+      ],
+      [
+        'RELEASE exhausted',
+        {
+          action: 'RELEASE_OWNERSHIP',
+          outcome: 'REFUSED',
+          reason: 'revision-exhausted',
+          humanTakeover: true,
+          aiPaused: true,
+          observedRevision: MAX,
+        },
+      ],
+      [
+        'PAUSE exhausted',
+        {
+          action: 'PAUSE_AI',
+          outcome: 'REFUSED',
+          reason: 'revision-exhausted',
+          humanTakeover: false,
+          aiPaused: false,
+          observedRevision: MAX,
+        },
+      ],
+      [
+        'RESUME exhausted',
+        {
+          action: 'RESUME_AI',
+          outcome: 'REFUSED',
+          reason: 'revision-exhausted',
+          humanTakeover: false,
+          aiPaused: true,
+          observedRevision: MAX,
+        },
+      ],
+    ];
+    for (const [label, args] of good) {
+      const { decision, expectedRevision } = consistent(args);
+      const source = foreignControlSource(() => Promise.resolve(decision));
+      const result = await runtimeOver(source).applyConversationControlCommand(
+        commandInput({ action: args.action, expectedRevision }),
+      );
+      expect(result.ok, label).toBe(true);
+    }
+  });
+
+  it('preserves the takeover=true / aiPaused=false refusal edge', async () => {
+    // ADR-0074 deliberately ACCEPTS an external state of takeover-without-pause, and RESUME_AI still
+    // refuses under it. Requiring `aiPaused` here would reject a legitimate decision, so the
+    // human-takeover-active rule checks the takeover flag and nothing else.
+    const { decision, expectedRevision } = consistent({
+      action: 'RESUME_AI',
+      outcome: 'REFUSED',
+      reason: 'human-takeover-active',
+      humanTakeover: true,
+      aiPaused: false,
+    });
+    const source = foreignControlSource(() => Promise.resolve(decision));
+    const result = await runtimeOver(source).applyConversationControlCommand(
+      commandInput({ action: 'RESUME_AI', expectedRevision }),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.decision.reason).toBe('human-takeover-active');
+    expect(result.decision.nextState.humanTakeover).toBe(true);
+    expect(result.decision.nextState.aiPaused).toBe(false);
+  });
+
+  it('does not action-check a revision-mismatch, which is decided first', async () => {
+    // Staleness is settled before the action semantics ever run, so the returned flags carry no claim
+    // about the action -- action-checking them here would reject correct refusals.
+    const stale = {
+      outcome: 'REFUSED',
+      reason: 'revision-mismatch',
+      nextState: { conversationId: 'conv.1', revision: 9, humanTakeover: false, aiPaused: false },
+      auditRecord: {
+        recordVersion: 1,
+        commandId: 'ctrl.1',
+        conversationId: 'conv.1',
+        action: 'TAKE_OWNERSHIP',
+        operatorRef: 'operator.synthetic.1',
+        expectedRevision: 1,
+        observedRevision: 9,
+        outcome: 'REFUSED',
+        reason: 'revision-mismatch',
+        resultingRevision: 9,
+        humanTakeover: false,
+        aiPaused: false,
+        issuedAt: AT(1),
+      },
+    };
+    const source = foreignControlSource(() => Promise.resolve(stale));
+    const result = await runtimeOver(source).applyConversationControlCommand(commandInput());
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.decision.reason).toBe('revision-mismatch');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // (K, L, M, N) The operations query.
 // ---------------------------------------------------------------------------
 
