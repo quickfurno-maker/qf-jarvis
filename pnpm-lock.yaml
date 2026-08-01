@@ -175,6 +175,12 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
 
+  packages/prompt-registry:
+    dependencies:
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+
   packages/rag-provisioning:
     dependencies:
       zod:

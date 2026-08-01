@@ -1,0 +1,22 @@
+{
+  "name": "@qf-jarvis/prompt-registry",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis versioned prompt registry foundation (QFJ-S3-I-A, ADR-0072). An immutable, provider-neutral, CONTENT-BOUND prompt definition and registry: an exact promptId + promptVersion identity, a closed agent scope and result mode, an exact task class, a literal system template, and a byte-exact UTF-8 SHA-256 digest of that template. A definition is content-bound by construction -- the digest is computed here, never supplied -- so an identity can no longer name a body it does not match. It is a MECHANISM only: it registers no production prompt, wires into no runtime, and its existence is not evaluation evidence, provider rollout approval, production selection or business authority. No lifecycle state, no template engine, no mutation after construction, no persistence, no network, no provider, no environment. Depends on zod; imports node:crypto internally for the digest.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "zod": "4.4.3"
+  }
+}

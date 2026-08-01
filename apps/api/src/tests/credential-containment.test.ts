@@ -350,6 +350,8 @@ describe('(71-77) package API and dependency locks are untouched', () => {
       'event-backbone': 39,
       // QFJ-S3-D-A (ADR-0070): the new Anisha behaviour package, locked from the day it lands.
       'anisha-agent': 14,
+      // QFJ-S3-I-A (ADR-0072): the prompt registry foundation, locked from the day it lands.
+      'prompt-registry': 7,
     };
     for (const [pkg, count] of Object.entries(expected)) {
       const barrel = (await import(
