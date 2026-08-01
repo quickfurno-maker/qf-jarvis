@@ -1,8 +1,10 @@
 /**
  * `@qf-jarvis/jarvis-runtime` — the QFJ-M5 Orchestrated Reply Composition Foundation (ADR-0059).
  *
- * The smallest stable composition surface: the runtime factory and its async `processInbound`, the ONE
- * authoritative content-free conversation-state source contract, the injected config, the closed
+ * The smallest stable composition surface: the runtime factory and its three async methods
+ * (`processInbound`, plus the QFJ-P08-A operator `applyConversationControlCommand` and
+ * `readConversationOperationsSnapshot`), the ONE authoritative content-free conversation-state source
+ * contract and its two OPTIONAL operator capability extensions, the injected config, the closed
  * result/outcome vocabulary, the safe error, and the content-free observability contract. It does NOT
  * export mutable internals (the projection adapters, the flow, the validators) or the test fakes/
  * fixtures (those live under `./testing`). The composition wires M1–M4 without duplicating any business
@@ -14,11 +16,21 @@
 export { createJarvisRuntime } from './composition/create-jarvis-runtime.js';
 export type { JarvisRuntime } from './composition/create-jarvis-runtime.js';
 
-// The ONE authoritative conversation-state source.
+// The ONE authoritative conversation-state source, plus its OPTIONAL operator capabilities
+// (QFJ-P08-A, ADR-0075). Types only -- there is still exactly one `authoritativeState` config field,
+// and no runtime detection helper is exported.
 export type {
   AuthoritativeConversationStatePort,
   ConversationControlState,
+  ConversationOperationsProjection,
+  OperationsProjectingAuthoritativeConversationStatePort,
+  OperatorAuthoritativeConversationStatePort,
+  WritableAuthoritativeConversationStatePort,
 } from './contracts/authoritative-state.js';
+
+// The operator control/query result unions (QFJ-P08-A, ADR-0075). Types only.
+export type { JarvisConversationControlResult } from './composition/control-surface.js';
+export type { JarvisConversationOperationsResult } from './composition/operations-snapshot.js';
 
 // The optional client-sales behaviour input seam (ADR-0068). Types only.
 export type {

@@ -11,10 +11,15 @@
  * authoritative.
  */
 import type {
+  ConversationState,
   RuntimeDataClass,
   RuntimePartyType,
   RuntimeSubjectStatus,
 } from '@qf-jarvis/agent-runtime';
+import type {
+  ConversationControlCommand,
+  ConversationControlDecision,
+} from '@qf-jarvis/conversation-control';
 
 /** The safe, content-free control state of one conversation, keyed by conversation id. */
 export interface ConversationControlState {
@@ -38,3 +43,76 @@ export interface ConversationControlState {
 export interface AuthoritativeConversationStatePort {
   read(conversationId: string): Promise<ConversationControlState>;
 }
+
+/**
+ * The OPTIONAL operator capabilities the same source may also implement (QFJ-P08-A, ADR-0075).
+ *
+ * These EXTEND the read port above; they do not replace it, and `read` is unchanged, so every
+ * existing read-only implementation stays valid and every existing inbound path is untouched.
+ *
+ * Crucially there is still exactly ONE `authoritativeState` field on `JarvisRuntimeConfig`. A second
+ * writable-state field would be a split brain: an operator could set a takeover on one object while
+ * the next inbound turn read another and kept replying. The runtime therefore DETECTS these
+ * capabilities on the same object it already reads from, rather than accepting a second source.
+ */
+
+/**
+ * A source that can also APPLY an operator control command.
+ *
+ * This is an ATOMIC boundary, not a convenience wrapper. An implementation must:
+ *
+ * - apply exactly the semantics of `applyConversationControlCommand` from
+ *   `@qf-jarvis/conversation-control` (ADR-0074) — it may not invent its own;
+ * - compare `expectedRevision` against the authoritative CURRENT revision;
+ * - make an `APPLIED` control state authoritative before the promise resolves, so the very next
+ *   `read` observes it;
+ * - leave control state untouched on `NO_CHANGE` and `REFUSED`;
+ * - combine read + decide + write into ONE atomic/transactional/compare-and-set operation. A
+ *   persistent implementation that read, decided, then wrote would let a second operator change the
+ *   revision in between, and the later write would silently clobber a decision made against state
+ *   that no longer existed;
+ * - never silently retry a stale command, and never alter `commandId`, `operatorRef` or `reasonRef`;
+ * - return the exact decision and evidence for THIS application.
+ *
+ * It performs no business authorization. QuickFurno Core remains the final business authority.
+ *
+ * **No persistent implementation exists in this repository.** The only implementation is the
+ * deterministic in-process fake under `@qf-jarvis/jarvis-runtime/testing`, which is test support and
+ * not durability: no restart survival, no cross-process concurrency, no durable command-id dedup.
+ */
+export interface WritableAuthoritativeConversationStatePort extends AuthoritativeConversationStatePort {
+  applyControlCommand(command: ConversationControlCommand): Promise<ConversationControlDecision>;
+}
+
+/**
+ * One authoritative operations projection.
+ *
+ * The nested `state` is the SAME authoritative control record the inbound path reads, so
+ * `conversationId`, `revision`, `partyType`, `humanTakeover` and `aiPaused` all come from one record
+ * rather than from a second projection cache that could disagree with it. A persistent adapter can
+ * fetch the record and its six supplemental tokens atomically from its own store.
+ *
+ * There is deliberately NO `assignedActor` field. The Jarvis composition computes the actor with M1's
+ * `assignAgent`; letting a projection source name it would make an injected object an assignment
+ * authority, which ADR-0054 reserves for that one function.
+ */
+export interface ConversationOperationsProjection {
+  readonly state: ConversationControlState;
+  readonly conversationState: ConversationState;
+  readonly lastActivityAt: string;
+  readonly escalationStatus: string;
+  readonly followUpStatus: string;
+  readonly deliveryStatePlaceholder: string;
+  readonly auditRef: string;
+}
+
+/** A source that can also supply the operations projection for a conversation. */
+export interface OperationsProjectingAuthoritativeConversationStatePort extends AuthoritativeConversationStatePort {
+  readOperationsProjection(conversationId: string): Promise<ConversationOperationsProjection>;
+}
+
+/** A source implementing both operator capabilities. Neither is required by the inbound path. */
+export interface OperatorAuthoritativeConversationStatePort
+  extends
+    WritableAuthoritativeConversationStatePort,
+    OperationsProjectingAuthoritativeConversationStatePort {}

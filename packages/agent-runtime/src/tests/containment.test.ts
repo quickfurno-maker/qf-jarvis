@@ -158,6 +158,8 @@ describe('containment', () => {
       'createOrchestrationContext',
       'createOrchestrationProposal',
       'coreDecision',
+      // QFJ-P08-A (ADR-0075): the ONE new root runtime symbol -- the operations snapshot constructor.
+      'createConversationOperationsSnapshot',
       'createReplyPlan',
       'validateReplyDraft',
       'createOrchestrator',
@@ -171,8 +173,9 @@ describe('containment', () => {
       'runAgentTurn',
       'SHARED_RUNTIME_VERSION',
     ];
-    expect(EXPECTED).toHaveLength(45);
-    expect(Object.keys(barrel)).toHaveLength(45);
+    // QFJ-P08-A (ADR-0075): 45 -> 46, the operations snapshot constructor and nothing else.
+    expect(EXPECTED).toHaveLength(46);
+    expect(Object.keys(barrel)).toHaveLength(46);
     expect(Object.keys(barrel).sort()).toEqual([...EXPECTED].sort());
     // No provider-, transport- or storage-specific symbol reached the root.
     for (const forbidden of ['groq', 'whatsapp', 'n8n', 'http', 'sql', 'postgres', 'fetch']) {

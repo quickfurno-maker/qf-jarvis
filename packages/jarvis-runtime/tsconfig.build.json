@@ -14,14 +14,16 @@
   // @qf-jarvis/core-decision-adapter (M3), @qf-jarvis/model-reply-adapter (M4), and
   // @qf-jarvis/riya-agent (S3-C) and @qf-jarvis/anisha-agent (S3-D) — all one-way, and both
   // behaviour packages depend only on
-  // agent-runtime, so the graph stays acyclic.
+  // agent-runtime, so the graph stays acyclic. QFJ-P08-A (ADR-0075) adds
+  // @qf-jarvis/conversation-control, a zod-only leaf, for the operator control surface.
   "references": [
     { "path": "../agent-runtime/tsconfig.build.json" },
     { "path": "../core-decision-adapter/tsconfig.build.json" },
     { "path": "../model-reply-adapter/tsconfig.build.json" },
     { "path": "../riya-agent/tsconfig.build.json" },
     { "path": "../anisha-agent/tsconfig.build.json" },
-    { "path": "../prompt-registry/tsconfig.build.json" }
+    { "path": "../prompt-registry/tsconfig.build.json" },
+    { "path": "../conversation-control/tsconfig.build.json" }
   ],
   "include": ["src/**/*.ts"],
   "exclude": ["src/tests/**"]

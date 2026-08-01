@@ -69,10 +69,17 @@ export type {
   RuntimeEventType,
   RuntimeObservabilityHook,
 } from './contracts/observability.js';
-export { CONVERSATION_OPERATIONS_SNAPSHOT_FIELDS } from './contracts/operations-center.js';
+// QFJ-P08-A (ADR-0075): the snapshot gains `revision` and its first constructor. The constructor is
+// the ONE new root runtime symbol in that phase; the operations center still has no dashboard, no
+// persistence and no producer other than an injected authoritative projection.
+export {
+  CONVERSATION_OPERATIONS_SNAPSHOT_FIELDS,
+  createConversationOperationsSnapshot,
+} from './contracts/operations-center.js';
 export type {
   ConversationOperationsSnapshot,
   ConversationOperationsSnapshotField,
+  ConversationOperationsSnapshotInput,
 } from './contracts/operations-center.js';
 
 // Runtime.

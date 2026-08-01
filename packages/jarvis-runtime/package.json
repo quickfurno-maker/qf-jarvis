@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "sideEffects": false,
-  "description": "QF Jarvis orchestrated reply composition foundation (QFJ-M5). One pre-transport composition root that wires the merged M1 runtime, M2 orchestration, M3 Core decision adapter, and M4 model reply adapter into a deterministic, fail-closed, async end-to-end flow (inbound -> model draft -> PENDING_CORE_VALIDATION proposal -> Core decision) behind ONE authoritative content-free async conversation-state source that every lower state reader delegates to (no split-brain). It duplicates no business rule and performs no delivery, persistence, or live call. Model output is a draft/proposal input only, never a Core ACCEPTED, never sent/delivered/executed/persisted; QuickFurno Core remains the only business authority. Depends on @qf-jarvis/agent-runtime, @qf-jarvis/core-decision-adapter, and @qf-jarvis/model-reply-adapter.",
+  "description": "QF Jarvis orchestrated reply composition foundation (QFJ-M5). One pre-transport composition root that wires the merged M1 runtime, M2 orchestration, M3 Core decision adapter, and M4 model reply adapter into a deterministic, fail-closed, async end-to-end flow (inbound -> model draft -> PENDING_CORE_VALIDATION proposal -> Core decision) behind ONE authoritative content-free async conversation-state source that every lower state reader delegates to (no split-brain). It duplicates no business rule and performs no delivery, persistence, or live call. Model output is a draft/proposal input only, never a Core ACCEPTED, never sent/delivered/executed/persisted; QuickFurno Core remains the only business authority. QFJ-P08-A (ADR-0075) adds two OPTIONAL operator methods on the same runtime object -- applyConversationControlCommand and readConversationOperationsSnapshot -- which use the SAME authoritative state source and are available only when that one source implements the capability. They add no HTTP route, no authentication, no UI, no persistence and no durable idempotency. Depends on @qf-jarvis/agent-runtime, @qf-jarvis/anisha-agent, @qf-jarvis/conversation-control, @qf-jarvis/core-decision-adapter, @qf-jarvis/model-reply-adapter, @qf-jarvis/prompt-registry and @qf-jarvis/riya-agent.",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -23,6 +23,7 @@
   "dependencies": {
     "@qf-jarvis/agent-runtime": "workspace:*",
     "@qf-jarvis/anisha-agent": "workspace:*",
+    "@qf-jarvis/conversation-control": "workspace:*",
     "@qf-jarvis/core-decision-adapter": "workspace:*",
     "@qf-jarvis/model-reply-adapter": "workspace:*",
     "@qf-jarvis/prompt-registry": "workspace:*",

@@ -351,6 +351,11 @@ describe('(133-148) the declared budget and every prior lock', () => {
       'prompt-registry': 7,
       // QFJ-P08-A (ADR-0074): the conversation control foundation, locked from the day it lands.
       'conversation-control': 9,
+      // QFJ-P08-A (ADR-0075): agent-runtime 45 -> 46 (the operations snapshot constructor) and
+      // jarvis-runtime unchanged at 6. Both are named here so the composition phase that touched
+      // them is locked centrally, not only in their own packages.
+      'agent-runtime': 46,
+      'jarvis-runtime': 6,
     };
     for (const [pkg, count] of Object.entries(expected)) {
       const barrel = (await import(
