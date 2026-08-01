@@ -62,13 +62,41 @@ const EXACT_IDENTIFIER = z
   .refine((value) => !value.includes('*'))
   .refine((value) => value.toLowerCase() !== 'latest');
 
+/**
+ * True only for a well-formed Unicode scalar-value sequence — no unpaired UTF-16 surrogate.
+ *
+ * This guard is what makes the SHA-256 claim honest. Node's UTF-8 encoder replaces EVERY unpaired
+ * surrogate with U+FFFD before hashing, so `\uD800`, `\uD801` and `\uDC00` all encode to the same
+ * three bytes `ef bf bd` and therefore produce the same digest — three distinct JavaScript strings
+ * with one digest, and not because SHA-256 failed. Without this rule the package would promise
+ * byte-exact content binding while the encoder quietly collapsed the input.
+ *
+ * The fix is to REFUSE, never to repair. `toWellFormed()` or any other substitution would hash text
+ * the reviewer never wrote, which is the same defect wearing a different hat.
+ *
+ * String iteration yields whole code points: a valid surrogate PAIR arrives as one code point above
+ * U+FFFF and passes, so emoji and every supplementary character remain accepted; only a lone
+ * surrogate is still in the D800–DFFF range and is rejected.
+ */
+function isWellFormedUnicode(value: string): boolean {
+  for (const character of value) {
+    const codePoint = character.codePointAt(0);
+    if (codePoint !== undefined && codePoint >= 0xd800 && codePoint <= 0xdfff) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /** The literal system template. Hashed exactly as supplied — see `internal/prompt-digest.ts`. */
 const SYSTEM_TEMPLATE = z
   .string()
   .min(1)
   .max(MAX_TEMPLATE_CHARS)
   // A NUL byte is not review-visible and would truncate the text in several consumers.
-  .refine((value) => !value.includes(String.fromCharCode(0)));
+  .refine((value) => !value.includes(String.fromCharCode(0)))
+  // Ill-formed Unicode is refused BEFORE the digest is computed, so no lossy encoding can occur.
+  .refine(isWellFormedUnicode);
 
 /** What a caller may supply. No digest, no registry version, no lifecycle, no metadata. */
 export interface PromptDefinitionInput {

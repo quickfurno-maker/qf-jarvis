@@ -672,3 +672,129 @@ describe('(J, K) source containment and the exact public API', () => {
     expect(Object.keys(manifest.dependencies)).toEqual(['zod']);
   });
 });
+
+// ---------------------------------------------------------------------------
+// (L) Unicode well-formedness — the final-review regression.
+//
+// Node's UTF-8 encoder replaces EVERY unpaired UTF-16 surrogate with U+FFFD before hashing, so
+// several distinct JavaScript strings encode to the same three bytes and therefore share a digest.
+// That is not a SHA-256 collision; it is a lossy encoder meeting an input the contract never
+// excluded. Templates must now be well-formed Unicode, and ill-formed ones are REFUSED, never
+// repaired — repairing would hash text the reviewer never wrote.
+// ---------------------------------------------------------------------------
+
+describe('(L) a system template must be well-formed Unicode', () => {
+  const HIGH_D800 = String.fromCharCode(0xd800);
+  const HIGH_D801 = String.fromCharCode(0xd801);
+  const LOW_DC00 = String.fromCharCode(0xdc00);
+
+  it('demonstrates the encoding hazard this rule exists to close', () => {
+    // All three are distinct strings...
+    expect(HIGH_D800).not.toBe(HIGH_D801);
+    expect(HIGH_D800).not.toBe(LOW_DC00);
+    // ...yet Node encodes every one of them to the same replacement bytes.
+    const bytes = [HIGH_D800, HIGH_D801, LOW_DC00].map((s) =>
+      Buffer.from(s, 'utf8').toString('hex'),
+    );
+    expect(bytes).toEqual(['efbfbd', 'efbfbd', 'efbfbd']);
+    const digests = [HIGH_D800, HIGH_D801, LOW_DC00].map((s) =>
+      createHash('sha256').update(s, 'utf8').digest('hex'),
+    );
+    expect(new Set(digests).size).toBe(1);
+  });
+
+  const illFormed: readonly { readonly name: string; readonly template: string }[] = [
+    { name: 'a lone high surrogate D800', template: HIGH_D800 },
+    { name: 'a different lone high surrogate D801', template: HIGH_D801 },
+    { name: 'a lone low surrogate DC00', template: LOW_DC00 },
+    { name: 'a lone high surrogate embedded in text', template: `prefix${HIGH_D800}suffix` },
+    { name: 'a lone low surrogate embedded in text', template: `prefix${LOW_DC00}suffix` },
+    { name: 'a reversed pair (low then high)', template: `${LOW_DC00}${HIGH_D800}` },
+    { name: 'a trailing high surrogate', template: `Synthetic prompt.${HIGH_D800}` },
+  ];
+
+  for (const scenario of illFormed) {
+    it(`rejects ${scenario.name}`, () => {
+      expect(() => definition({ systemTemplate: scenario.template })).toThrow(PromptRegistryError);
+    });
+  }
+
+  it('rejects the previously-colliding strings BEFORE any definition can exist', () => {
+    // Neither can be constructed, so the shared digest is now unreachable rather than merely unlikely.
+    for (const template of [HIGH_D800, HIGH_D801, LOW_DC00]) {
+      try {
+        definition({ systemTemplate: template });
+        throw new Error('expected a rejection');
+      } catch (error) {
+        expect(error).toBeInstanceOf(PromptRegistryError);
+        expect((error as PromptRegistryError).code).toBe('invalid-definition');
+        expect((error as PromptRegistryError).message).toBe('A prompt definition is invalid.');
+        // The offending value never appears in the message.
+        expect((error as PromptRegistryError).message).not.toContain(template);
+        expect((error as PromptRegistryError).message.toLowerCase()).not.toContain('surrogate');
+      }
+    }
+  });
+
+  it('still accepts valid surrogate pairs and supplementary characters', () => {
+    const emoji = '🙂';
+    const fromCodePoint = String.fromCodePoint(0x1f642);
+    expect(emoji).toBe(fromCodePoint);
+
+    for (const template of [
+      emoji,
+      fromCodePoint,
+      `Synthetic prompt ${emoji} tail.`,
+      '日本語 — é',
+    ]) {
+      const built = definition({ systemTemplate: template });
+      expect(built.systemTemplate).toBe(template);
+      // Independently computed: the digest is still plain SHA-256 over exact UTF-8 bytes.
+      expect(built.contentDigest).toBe(createHash('sha256').update(template, 'utf8').digest('hex'));
+    }
+
+    // A valid pair encodes to real four-byte UTF-8, not to the replacement character.
+    expect(Buffer.from(emoji, 'utf8').toString('hex')).toBe('f09f9982');
+  });
+
+  it('does not repair: a rejected template is never silently normalized into an accepted one', () => {
+    const illFormedTemplate = `prefix${HIGH_D800}suffix`;
+    expect(() => definition({ systemTemplate: illFormedTemplate })).toThrow(PromptRegistryError);
+    // The caller's string is untouched, and the "repaired" form is a DIFFERENT template that the
+    // caller would have to write deliberately.
+    expect(illFormedTemplate).toContain(HIGH_D800);
+    const repaired = 'prefixsuffix';
+    expect(definition({ systemTemplate: repaired }).systemTemplate).toBe(repaired);
+    expect(definition({ systemTemplate: repaired }).contentDigest).not.toBe(
+      createHash('sha256').update(illFormedTemplate, 'utf8').digest('hex'),
+    );
+  });
+
+  it('rejects a forged materialized definition whose digest matches the lossy encoding', () => {
+    // The forgery: an ill-formed template plus the digest Node WOULD produce for it. Before this
+    // rule the digest check would have passed, because the encoder makes both sides agree.
+    const illFormedTemplate = HIGH_D800;
+    const lossyDigest = createHash('sha256').update(illFormedTemplate, 'utf8').digest('hex');
+    expect(lossyDigest).toBe(createHash('sha256').update(HIGH_D801, 'utf8').digest('hex'));
+
+    const forged = {
+      registryVersion: 1,
+      promptId: 'reply.client',
+      promptVersion: 1,
+      agentScope: 'CLIENT',
+      taskClass: 'RESPONSE_GENERATION',
+      resultMode: 'STRUCTURED',
+      systemTemplate: illFormedTemplate,
+      contentDigest: lossyDigest,
+    };
+
+    try {
+      createPromptRegistry([asDefinition(forged)]);
+      throw new Error('expected a rejection');
+    } catch (error) {
+      expect(error).toBeInstanceOf(PromptRegistryError);
+      expect((error as PromptRegistryError).code).toBe('invalid-definition');
+      expect((error as PromptRegistryError).message).toBe('A prompt definition is invalid.');
+    }
+  });
+});

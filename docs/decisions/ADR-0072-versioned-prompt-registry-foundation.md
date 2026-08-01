@@ -92,6 +92,25 @@ SHA-256 over the UTF-8 bytes of `systemTemplate`, lowercase hex. The template is
 supplied** — no trimming, whitespace collapsing, line-ending normalization or Unicode normalization.
 A reviewer approved specific bytes; tidying them would mean the digest attests to text nobody read.
 
+**`systemTemplate` must be a well-formed Unicode scalar-value sequence.** Unpaired UTF-16 surrogates
+are rejected; valid surrogate pairs and supplementary code points (emoji, CJK, accented text) are
+accepted unchanged.
+
+This rule is what makes the byte-exact claim truthful. Node's UTF-8 encoder replaces **every**
+unpaired surrogate with U+FFFD before hashing, so `\uD800`, `\uD801` and `\uDC00` all encode to the
+same three bytes `ef bf bd` and therefore share one digest — three distinct JavaScript strings, one
+digest, and not because SHA-256 failed. Without the guard the package would promise exact content
+binding while the encoder quietly collapsed the input.
+
+Ill-formed templates are **refused, never repaired**. `toWellFormed()` or any other substitution would
+hash text the reviewer never wrote, which is the same defect wearing a different hat. The check runs
+**before** the digest is computed, so no lossy encoding can occur, and it applies equally in
+`createPromptRegistry`, where a forged materialized definition carrying the lossy digest is rejected
+rather than accepted on a matching-but-meaningless comparison.
+
+After this validation, SHA-256 over UTF-8 is a truthful byte-level content binding for every accepted
+template.
+
 The digest covers **the template alone** — no id, version, scope, task, result mode, salt or JSON
 wrapper. That is the point: it answers "what system-template bytes were reviewed and executed?", and
 hashing a metadata wrapper would make an id rename look like a content change, destroying the very
