@@ -58,7 +58,10 @@ export async function composeAndProcess(
 ): Promise<JarvisRuntimeResult> {
   const hook: JarvisRuntimeObservabilityHook =
     config.observability ?? NOOP_JARVIS_RUNTIME_OBSERVABILITY;
-  const runId = `${envelope.conversationId}-${envelope.messageId}`;
+  // The canonical run identifier (ADR-0069), shared with M2/M4 rather than rebuilt here. It replaces
+  // the old `conversationId-messageId` concatenation, which could reach 257 characters and had no
+  // bound of its own even though every field it fed did.
+  const runId = envelope.runtimeId;
   const conversationId = envelope.conversationId;
   const source = config.authoritativeState;
   const coreConsulted = config.coreTransport !== undefined;

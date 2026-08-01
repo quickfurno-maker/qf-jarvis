@@ -645,7 +645,9 @@ describe('(9) one turn, one orchestration, one proposal', () => {
     });
     expect(models).toBe(1);
     expect(core.count()).toBe(1);
-    expect(result.proposalId).toBe('conv.1-msg.1-reply');
+    // ADR-0069: a bounded derived identity, not `${runId}-reply`.
+    expect(result.proposalId).toMatch(/^proposal\.[0-9a-f]{32}$/);
+    expect(result.runId).toBe('rt.1');
   });
 
   it('createRiyaProposal is never reachable from the composed runtime source', () => {
@@ -682,23 +684,26 @@ describe('(9) one turn, one orchestration, one proposal', () => {
 // (10) Provenance correlation bounds — the final-review regression.
 // ---------------------------------------------------------------------------
 
-describe('(10) the provenance correlation reference is bounded independently of runId', () => {
+describe('(10) every derived identifier stays bounded at maximum-length input', () => {
+  const MAX_RT = 'r'.repeat(128);
   const MAX_ID = 'c'.repeat(128);
   const MAX_MSG = 'm'.repeat(128);
 
-  /** A max-length envelope: both identifiers at the contract's 128-character ceiling. */
+  /** A max-length envelope: runtimeId, conversationId and messageId all at the 128-char ceiling. */
   function maxLengthRun(over: Partial<JarvisRuntimeConfig> = {}): Promise<JarvisRuntimeResult> {
     return createJarvisRuntime(
       syntheticRuntimeConfig({
         authoritativeState: scriptedAuthoritativeState(
-          clearControlState({ conversationId: MAX_ID, ...over.authoritativeState }),
+          clearControlState({ conversationId: MAX_ID }),
         ),
         ...over,
       }),
-    ).processInbound(syntheticInboundEnvelope({ conversationId: MAX_ID, messageId: MAX_MSG }));
+    ).processInbound(
+      syntheticInboundEnvelope({ runtimeId: MAX_RT, conversationId: MAX_ID, messageId: MAX_MSG }),
+    );
   }
 
-  it('a maximum-length envelope produces provenance; correlationId is the 128-char messageId', async () => {
+  it('a refused max-length turn keeps bounded provenance and the canonical run id', async () => {
     const invoker = countingInvoker();
     const result = await maxLengthRun({
       gatewayInvoker: invoker,
@@ -708,38 +713,131 @@ describe('(10) the provenance correlation reference is bounded independently of 
       behaviourInput: countingBehaviourInput(behaviourInput({ providedRequirementDetail: true })),
     });
 
-    // `runId` concatenates both identifiers, so it is 257 characters — past the 128-character opaque
-    // grammar. Using it as the correlation reference made `createRuntimeProvenance` throw, which
-    // turned a perfectly valid envelope into a provenance-less refusal. `messageId` is bounded.
-    expect(result.runId).toHaveLength(257);
+    // The run id used to be `conversationId-messageId` — 257 characters, past every 128-character
+    // bound it fed. It is now the envelope's own runtimeId (ADR-0069).
+    expect(result.runId).toBe(MAX_RT);
+    expect(result.runId).toHaveLength(128);
     expect(result.provenance).toBeDefined();
     expect(result.provenance?.correlationId).toBe(MAX_MSG);
     expect(result.provenance?.correlationId).toHaveLength(128);
-    // A refused turn is still fully attributed — that is the guarantee this regression threatened.
     expect(result.outcome).toBe('REFUSED');
     expect(result.refusalReason).toBe('orchestration-ai-paused');
     expect(result.provenance?.actor).toBe('SYSTEM');
     expect(invoker.count()).toBe(0);
   });
 
-  it('provenance survives a max-length SERVED turn too, and its remaining failure is pre-existing', async () => {
-    const withRiya = await maxLengthRun({
+  it('a max-length MODEL-BACKED served turn now completes end to end', async () => {
+    const invoker = countingInvoker();
+    const core = recordingCoreTransport();
+    const result = await maxLengthRun({
+      gatewayInvoker: invoker,
+      coreTransport: core,
       behaviourInput: countingBehaviourInput(behaviourInput({ providedRequirementDetail: true })),
     });
-    // Provenance is built and correlation-bounded: the S3-C-B regression is fixed on this path too.
-    expect(withRiya.provenance).toBeDefined();
-    expect(withRiya.provenance?.correlationId).toBe(MAX_MSG);
 
-    // The turn nonetheless does not reach Core, for a reason that has nothing to do with this PR:
-    // the M4 draft's `usageTraceId` is also derived from the concatenated run id and blows the same
-    // 128-character identifier bound. Proof that it is pre-existing rather than caused by the
-    // behaviour seam: the identical envelope fails identically with NO behaviour port configured,
-    // i.e. on the untouched legacy path. Fixing that bound is outside this correction's scope.
-    const legacy = await maxLengthRun();
-    expect(legacy.refusalReason).toBe('orchestration-draft-invalid');
-    expect(withRiya.refusalReason).toBe(legacy.refusalReason);
-    expect(legacy.provenance?.correlationId).toBe(MAX_MSG);
+    // Before ADR-0069 this exact envelope failed `orchestration-draft-invalid`, because the M4
+    // draft's usageTraceId inherited the 257-character run id.
+    expect(result.outcome).toBe('CORE_ACCEPTED');
+    expect(result.refusalReason).toBeUndefined();
+    expect(invoker.count()).toBe(1);
+    expect(core.count()).toBe(1);
+
+    expect(result.runId).toBe(MAX_RT);
+    expect(result.runId).toHaveLength(128);
+    expect(result.provenance).toBeDefined();
+    expect(result.provenance?.correlationId).toBe(MAX_MSG);
+    expect(result.provenance?.correlationId).toHaveLength(128);
+
+    // The proposal id is a fixed-width derived identity, comfortably inside the 128-char bound.
+    expect(result.proposalId).toMatch(/^proposal\.[0-9a-f]{32}$/);
+    expect(result.proposalId?.length).toBe(41);
+    expect(result.proposalId?.length).toBeLessThan(128);
+
+    // The Core command concatenates a 128-char conversation id with the proposal id and a revision
+    // suffix; the response schema caps commandId at 256.
+    const commandId = core.last()?.['commandId'];
+    expect(typeof commandId).toBe('string');
+    expect(String(commandId).length).toBeLessThanOrEqual(256);
+    expect(core.last()?.['proposalId']).toBe(result.proposalId);
+    expect(typeof core.last()?.['proposedReplyBody']).toBe('string');
   });
+
+  it('a max-length NO-MODEL served turn completes with zero model calls', async () => {
+    const invoker = countingInvoker();
+    const core = recordingCoreTransport();
+    const result = await maxLengthRun({
+      gatewayInvoker: invoker,
+      coreTransport: core,
+      behaviourInput: countingBehaviourInput(behaviourInput({ requestedHumanAssistance: true })),
+    });
+
+    expect(result.outcome).toBe('CORE_ACCEPTED');
+    expect(invoker.count()).toBe(0);
+    expect(core.count()).toBe(1);
+    expect(result.modelDrafted).toBe(false);
+    expect(result.runId).toBe(MAX_RT);
+    expect(result.provenance?.correlationId).toBe(MAX_MSG);
+    expect(result.proposalId).toMatch(/^proposal\.[0-9a-f]{32}$/);
+    // Kind and reply-body rules are unchanged by the identifier repair.
+    expect(core.last()?.['proposalKind']).toBe('ESCALATE_TO_HUMAN');
+    expect(core.last()?.['proposedReplyBody']).toBeNull();
+    expect(String(core.last()?.['commandId']).length).toBeLessThanOrEqual(256);
+  });
+
+  it('the run id is the runtimeId, never a concatenation of conversation and message ids', async () => {
+    const core = recordingCoreTransport();
+    const { result } = await run({
+      coreTransport: core,
+      behaviourInput: countingBehaviourInput(behaviourInput({ providedRequirementDetail: true })),
+    });
+    expect(result.runId).toBe('rt.1');
+    expect(result.runId).not.toContain('conv.1-msg.1');
+    // usageTraceId travels through the M4 draft as the same canonical value; a proposal exists, which
+    // it could not if the draft had been rejected.
+    expect(result.proposalId).toMatch(/^proposal\.[0-9a-f]{32}$/);
+  });
+
+  it('the proposal id is deterministic, and changes when the identity changes', async () => {
+    const first = await maxLengthRun({
+      behaviourInput: countingBehaviourInput(behaviourInput({ providedRequirementDetail: true })),
+    });
+    const again = await maxLengthRun({
+      behaviourInput: countingBehaviourInput(behaviourInput({ providedRequirementDetail: true })),
+    });
+    expect(again.proposalId).toBe(first.proposalId);
+
+    // A different message id is a different proposal identity.
+    const otherMessage = await createJarvisRuntime(
+      syntheticRuntimeConfig({
+        authoritativeState: scriptedAuthoritativeState(
+          clearControlState({ conversationId: MAX_ID }),
+        ),
+        behaviourInput: countingBehaviourInput(behaviourInput({ providedRequirementDetail: true })),
+      }),
+    ).processInbound(
+      syntheticInboundEnvelope({
+        runtimeId: MAX_RT,
+        conversationId: MAX_ID,
+        messageId: 'm'.repeat(127),
+      }),
+    );
+    expect(otherMessage.proposalId).not.toBe(first.proposalId);
+
+    // A different proposal KIND is a different proposal identity.
+    const escalation = await maxLengthRun({
+      behaviourInput: countingBehaviourInput(behaviourInput({ requestedHumanAssistance: true })),
+    });
+    expect(escalation.proposalId).not.toBe(first.proposalId);
+
+    // The derived id leaks none of the raw identity it was derived from.
+    for (const raw of [MAX_RT, MAX_ID, MAX_MSG, 'conv.1', 'msg.1', PROMPT_REF]) {
+      expect(first.proposalId).not.toContain(raw);
+    }
+  });
+});
+
+describe('(11) the provenance correlation source is separate from every other identity', () => {
+  const MAX_ID = 'c'.repeat(128);
 
   it('the provenance correlation is the messageId, never the Core adapter correlationId', async () => {
     const { result } = await run({
@@ -749,6 +847,9 @@ describe('(10) the provenance correlation reference is bounded independently of 
     // config.correlationId belongs to the M3 Core adapter and must not leak into the audit record.
     expect(result.provenance?.correlationId).toBe('msg.1');
     expect(result.provenance?.correlationId).not.toBe('core.adapter.correlation.1');
+    // ...and it is not the run id either: four identities, four contracts (ADR-0069).
+    expect(result.provenance?.correlationId).not.toBe(result.runId);
+    expect(MAX_ID.length).toBe(128);
   });
 
   it('an explicitly supplied provenance correlationId is used verbatim', async () => {

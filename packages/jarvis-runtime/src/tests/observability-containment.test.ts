@@ -86,7 +86,8 @@ describe('content-free observability', () => {
     expect(events.length).toBeGreaterThan(0);
     for (const e of events) {
       expect(JARVIS_RUNTIME_EVENT_TYPES).toContain(e.type);
-      expect(e.runId).toBe('conv.1-msg.1');
+      // ADR-0069: the canonical run identifier is the envelope's runtimeId, not a concatenation.
+      expect(e.runId).toBe('rt.1');
     }
     expect(events.map((e) => e.type)).toContain('jarvis-completed');
     const serialized = JSON.stringify(events);

@@ -13,6 +13,7 @@ import { DEFAULT_CORE_DECISION_PROTOCOL } from '../contracts/protocol.js';
 import { buildCoreCommand, idempotencyKeyFor } from '../contracts/command.js';
 import { CoreAdapterError } from '../contracts/errors.js';
 import { serializeCommand } from '../transport/core-decision-transport.js';
+import { coreCommandResponseSchema } from '../contracts/response.js';
 import { coreRequest } from '../testing/index.js';
 
 const protocol = DEFAULT_CORE_DECISION_PROTOCOL;
@@ -134,5 +135,60 @@ describe('serialized command privacy', () => {
     const parsed = JSON.parse(wire) as Record<string, unknown>;
     expect(parsed['idempotencyKey']).toBe(command.idempotencyKey);
     expect(parsed['expectedRevision']).toBe(1);
+  });
+});
+
+describe('maximum-length command identity (ADR-0069)', () => {
+  const MAX_CONVERSATION = 'c'.repeat(128);
+  // A derived proposal id: `proposal.` + 32 hex characters = 41 characters, fixed width.
+  const DERIVED_PROPOSAL = `proposal.${'a1b2c3d4'.repeat(4)}`;
+
+  it('a 128-char conversation id plus a derived proposal id stays inside the 256-char commandId bound', () => {
+    const command = build({
+      conversationId: MAX_CONVERSATION,
+      proposalId: DERIVED_PROPOSAL,
+      expectedRevision: 1_000_000,
+    });
+    expect(DERIVED_PROPOSAL).toHaveLength(41);
+    expect(command.commandId.length).toBeLessThanOrEqual(256);
+    expect(command.commandId).toBe(`${MAX_CONVERSATION}-${DERIVED_PROPOSAL}-r1000000`);
+    expect(command.idempotencyKey).toMatch(/^[0-9a-f]{32}$/);
+
+    // The response schema accepts a matching response at that same maximum length.
+    const parsed = coreCommandResponseSchema.safeParse({
+      protocol: { name: 'qfj.core.decision', version: 1, contractDigest: 'c0de0001' },
+      commandId: command.commandId,
+      idempotencyKey: command.idempotencyKey,
+      proposalId: DERIVED_PROPOSAL,
+      proposalVersion: 1,
+      conversationId: MAX_CONVERSATION,
+      boundRevision: 1_000_000,
+      outcome: 'ACCEPTED',
+      reason: 'core.accepted',
+      decidedAt: '2026-07-25T00:00:00Z',
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  it('identical maximum-length identity is idempotent; a changed field is not', () => {
+    const a = build({
+      conversationId: MAX_CONVERSATION,
+      proposalId: DERIVED_PROPOSAL,
+      expectedRevision: 1_000_000,
+    });
+    const b = build({
+      conversationId: MAX_CONVERSATION,
+      proposalId: DERIVED_PROPOSAL,
+      expectedRevision: 1_000_000,
+    });
+    expect(b.idempotencyKey).toBe(a.idempotencyKey);
+    expect(b.commandId).toBe(a.commandId);
+
+    const c = build({
+      conversationId: MAX_CONVERSATION,
+      proposalId: DERIVED_PROPOSAL,
+      expectedRevision: 999_999,
+    });
+    expect(c.idempotencyKey).not.toBe(a.idempotencyKey);
   });
 });
