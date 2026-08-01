@@ -13,6 +13,7 @@ import type { ModelGatewayInvoker } from '@qf-jarvis/model-reply-adapter';
 
 import type { AuthoritativeConversationStatePort } from './authoritative-state.js';
 import type { ClientSalesBehaviourInputPort } from './behaviour-input.js';
+import type { VendorJourneyBehaviourInputPort } from './vendor-journey-behaviour-input.js';
 import type { JarvisRuntimeObservabilityHook } from './observability.js';
 
 /**
@@ -77,8 +78,18 @@ export interface JarvisRuntimeConfig {
   /**
    * Optional client-sales behaviour inputs (ADR-0068). Absent -> the runtime takes the legacy `REPLY`
    * path unchanged and Riya behaviour is never consulted. Defining the seam does not activate it.
+   *
+   * The generic-sounding name is a naming debt from S3-C-B, when Riya was the only agent. It is
+   * deliberately NOT renamed here: it is externally visible TypeScript API, and a rename would be a
+   * breaking change made for tidiness. ADR-0071 records the debt; S3-D-B does not repair it.
    */
   readonly behaviourInput?: ClientSalesBehaviourInputPort;
+
+  /**
+   * Optional vendor-journey behaviour inputs (ADR-0071). Additive and non-breaking. Absent -> VENDOR
+   * turns take the legacy `REPLY` path unchanged and Anisha behaviour is never consulted.
+   */
+  readonly vendorJourneyBehaviourInput?: VendorJourneyBehaviourInputPort;
 
   /** Optional deployment-level provenance references; safe defaults are derived when absent. */
   readonly provenanceRefs?: JarvisProvenanceRefs;
