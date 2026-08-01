@@ -9,8 +9,11 @@ export {
   scriptedAuthoritativeState,
   mutableAuthoritativeState,
   fixedClock,
+  // QFJ-P08-A (ADR-0075): the TEST-ONLY controllable source. Not persistence -- process memory only.
+  controllableAuthoritativeState,
   type RecordingAuthoritativeState,
   type MutableAuthoritativeState,
+  type ControllableAuthoritativeState,
 } from './deterministic-authoritative-state.js';
 export {
   syntheticRuntimeConfig,

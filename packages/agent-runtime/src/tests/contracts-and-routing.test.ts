@@ -146,4 +146,45 @@ describe('operations-center contract', () => {
     expect(CONVERSATION_OPERATIONS_SNAPSHOT_FIELDS).toContain('assignedActor');
     expect(CONVERSATION_OPERATIONS_SNAPSHOT_FIELDS).toContain('humanTakeover');
   });
+
+  it('(26, ADR-0075) carries the authoritative revision, in exact order', () => {
+    // The revision is the concurrency token an operator command's `expectedRevision` must present.
+    // Without it, a surface that showed a conversation could not build a bound command for it.
+    expect([...CONVERSATION_OPERATIONS_SNAPSHOT_FIELDS]).toEqual([
+      'conversationId',
+      'revision',
+      'assignedActor',
+      'partyType',
+      'conversationState',
+      'lastActivityAt',
+      'aiPaused',
+      'humanTakeover',
+      'escalationStatus',
+      'followUpStatus',
+      'deliveryStatePlaceholder',
+      'auditRef',
+    ]);
+    expect(CONVERSATION_OPERATIONS_SNAPSHOT_FIELDS).toHaveLength(12);
+  });
+
+  it('(26, ADR-0075) still names no tenant, subject, operator or business field', () => {
+    const fields = CONVERSATION_OPERATIONS_SNAPSHOT_FIELDS.join(' ').toLowerCase();
+    for (const forbidden of [
+      'tenant',
+      'dataclass',
+      'cancelled',
+      'subjectref',
+      'operator',
+      'reason',
+      'recipient',
+      'email',
+      'phone',
+      'payment',
+      'price',
+      'approval',
+      'consent',
+    ]) {
+      expect(fields).not.toContain(forbidden);
+    }
+  });
 });

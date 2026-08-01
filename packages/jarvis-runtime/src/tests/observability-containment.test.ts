@@ -130,14 +130,67 @@ describe('public API lock', () => {
     }
   });
 
-  it('exposes only processInbound on the runtime (no send/deliver/execute/persist)', () => {
+  it('exposes only the three composition methods (no send/deliver/execute/persist)', () => {
+    // QFJ-P08-A (ADR-0075) adds two OPERATOR methods beside the one inbound method. Still an EXACT
+    // set match, and still nothing that sends, delivers, executes, persists or authorizes.
     const runtime = createJarvisRuntime(syntheticRuntimeConfig());
-    expect(Object.keys(runtime)).toEqual(['processInbound']);
+    expect(Object.keys(runtime).sort()).toEqual([
+      'applyConversationControlCommand',
+      'processInbound',
+      'readConversationOperationsSnapshot',
+    ]);
     const surface = runtime as unknown as Record<string, unknown>;
-    for (const forbidden of ['send', 'deliver', 'execute', 'persist', 'callN8n', 'authorize']) {
+    for (const forbidden of [
+      'send',
+      'deliver',
+      'execute',
+      'persist',
+      'callN8n',
+      'authorize',
+      'approve',
+      'dispatch',
+      'webhook',
+      'startWorker',
+    ]) {
       expect(surface[forbidden]).toBeUndefined();
     }
     expect(Object.isFrozen(runtime)).toBe(true);
+  });
+
+  it('(ADR-0075) the operator surface performs no I/O, transport, persistence or business action', () => {
+    // The two new production modules ARE the operator surface. They must be as inert as the inbound
+    // composition: a control plane that could reach a database or a provider would be a second
+    // authority, and this one is deliberately a decision boundary only.
+    const withoutComments = (text: string): string =>
+      text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+    for (const file of ['control-surface.ts', 'operations-snapshot.ts']) {
+      const code = withoutComments(
+        readFileSync(fileURLToPath(new URL(`../composition/${file}`, import.meta.url)), 'utf8'),
+      );
+      expect(code).not.toMatch(/process\.env/);
+      expect(code).not.toMatch(/\bfetch\s*\(/);
+      expect(code).not.toMatch(
+        /from ['"]node:(fs|net|http|https|dns|tls|dgram|child_process|crypto)['"]/,
+      );
+      expect(code).not.toMatch(
+        /from ['"](pg|groq-sdk|openai|@anthropic-ai\/sdk|ollama|axios|undici)['"]/,
+      );
+      expect(code).not.toMatch(/supabase|postgres|redis|SELECT |INSERT |UPDATE |DELETE /i);
+      expect(code).not.toMatch(/\bn8n\b|whatsapp|groq/i);
+      // Note the trailing `\s*\(`: `applyConversationControlCommand` is the sanctioned method name,
+      // so the scan bans the ACTIONS, not every identifier that happens to contain "apply".
+      expect(code).not.toMatch(/\b(send|deliver|execute|persist|approve|dispatch)\s*\(/);
+      expect(code).not.toMatch(/\b(payment|refund|entitlement|verification)\b/i);
+      // No production store, and no clock: the operator's own instant is the evidence. A collection
+      // built INSIDE a function is a local and is fine -- the validators use one; what would be a
+      // store is a MODULE-LEVEL one, so only unindented declarations are checked.
+      const moduleLevel = code.split('\n').filter((line) => /^[A-Za-z]/.test(line));
+      expect(moduleLevel.some((line) => /=\s*new\s+(Map|Set|WeakMap|WeakSet)/.test(line))).toBe(
+        false,
+      );
+      expect(code).not.toMatch(/^(let|var)\s/m);
+      expect(code).not.toMatch(/Date\.now|Math\.random|config\.clock/);
+    }
   });
 
   it('depends only on the three lower packages + the two behaviour agents, exposes root + ./testing', () => {
@@ -148,6 +201,8 @@ describe('public API lock', () => {
     expect(Object.keys(manifest.dependencies ?? {}).sort()).toEqual([
       '@qf-jarvis/agent-runtime',
       '@qf-jarvis/anisha-agent',
+      // QFJ-P08-A (ADR-0075): the pure control reducer behind the operator surface. EXACT set match.
+      '@qf-jarvis/conversation-control',
       '@qf-jarvis/core-decision-adapter',
       '@qf-jarvis/model-reply-adapter',
       // QFJ-S3-I-B (ADR-0073): the injected prompt registry. Still an EXACT set match.
