@@ -47,6 +47,9 @@ importers:
       '@qf-jarvis/model-gateway-composition':
         specifier: workspace:*
         version: link:../../packages/model-gateway-composition
+      '@qf-jarvis/prompt-registry':
+        specifier: workspace:*
+        version: link:../../packages/prompt-registry
       zod:
         specifier: 4.4.3
         version: 4.4.3
@@ -135,6 +138,9 @@ importers:
       '@qf-jarvis/model-reply-adapter':
         specifier: workspace:*
         version: link:../model-reply-adapter
+      '@qf-jarvis/prompt-registry':
+        specifier: workspace:*
+        version: link:../prompt-registry
       '@qf-jarvis/riya-agent':
         specifier: workspace:*
         version: link:../riya-agent
@@ -171,6 +177,9 @@ importers:
       '@qf-jarvis/model-gateway':
         specifier: workspace:*
         version: link:../model-gateway
+      '@qf-jarvis/prompt-registry':
+        specifier: workspace:*
+        version: link:../prompt-registry
       zod:
         specifier: 4.4.3
         version: 4.4.3

@@ -20,7 +20,8 @@
     { "path": "../core-decision-adapter/tsconfig.build.json" },
     { "path": "../model-reply-adapter/tsconfig.build.json" },
     { "path": "../riya-agent/tsconfig.build.json" },
-    { "path": "../anisha-agent/tsconfig.build.json" }
+    { "path": "../anisha-agent/tsconfig.build.json" },
+    { "path": "../prompt-registry/tsconfig.build.json" }
   ],
   "include": ["src/**/*.ts"],
   "exclude": ["src/tests/**"]

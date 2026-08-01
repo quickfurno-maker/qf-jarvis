@@ -9,7 +9,7 @@
 import type { InboundEnvelope } from '../contracts/inbound-envelope.js';
 import type { RuntimeActor } from '../contracts/vocabularies.js';
 import type { KnowledgeCitation, OrchestrationContext, ReplyPlan } from './contracts.js';
-import type { ModelReplyPort } from './model-reply-port.js';
+import type { ModelPromptIdentity, ModelReplyPort } from './model-reply-port.js';
 
 /** Build a frozen reply plan. Pure and deterministic. */
 export function createReplyPlan(args: {
@@ -17,6 +17,11 @@ export function createReplyPlan(args: {
   readonly envelope: InboundEnvelope;
   readonly assignedActor: RuntimeActor;
   readonly modelPort: ModelReplyPort;
+  /**
+   * The prompt identity M2 already selected for this actor (ADR-0073). Passed explicitly so the
+   * selector runs exactly once per turn, and so this builder cannot quietly choose a different one.
+   */
+  readonly promptIdentity: ModelPromptIdentity;
   readonly policyRevision: string;
   readonly taskClass: string;
   readonly citations: readonly KnowledgeCitation[];
@@ -35,10 +40,10 @@ export function createReplyPlan(args: {
     taskClass: args.taskClass,
     requiresStructuredOutput: true,
     release: Object.freeze({ ...modelPort.release }),
-    promptFamily: modelPort.promptFamily,
-    promptVersion: modelPort.promptVersion,
+    promptFamily: args.promptIdentity.promptFamily,
+    promptVersion: args.promptIdentity.promptVersion,
     capabilityProfileRef: modelPort.capabilityProfileRef,
-    evaluationRef: modelPort.evaluationRef,
+    evaluationRef: args.promptIdentity.evaluationRef,
     policyRevision: args.policyRevision,
     citations: Object.freeze(args.citations.map((c) => Object.freeze({ ...c }))),
     normalizedText: envelope.normalizedText,

@@ -17,4 +17,10 @@ export {
   type ProvenanceOverride,
   type RecordingReplyStateReader,
 } from './deterministic-model-gateway.js';
-export { syntheticRelease, syntheticCitation, replyPlan, structuredReply } from './fixtures.js';
+export {
+  syntheticRelease,
+  syntheticCitation,
+  replyPlan,
+  structuredReply,
+  syntheticPromptDefinition,
+} from './fixtures.js';

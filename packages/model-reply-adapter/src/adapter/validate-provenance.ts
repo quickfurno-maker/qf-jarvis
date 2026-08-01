@@ -24,6 +24,9 @@ export function provenanceMatches(
     p.modelId === plan.release.modelId &&
     p.modelVersion === plan.release.modelVersion &&
     p.promptId === request.promptId &&
-    p.promptVersion === request.promptVersion
+    p.promptVersion === request.promptVersion &&
+    // ADR-0073: the digest must match too. Identity alone would let a provider echo the right name
+    // for the wrong bytes, which is precisely the drift this phase closes.
+    p.promptDigest === request.promptDigest
   );
 }

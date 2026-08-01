@@ -10,11 +10,14 @@
  * prompt-injection content. It asks for a two-token JSON object and nothing else.
  */
 import { validateModelRequest, type ModelRequest } from '@qf-jarvis/model-gateway';
+import { createPromptDefinition } from '@qf-jarvis/prompt-registry';
 import { z } from 'zod';
 
 /** The fixed prompt identity. Config must declare exactly this value; it is never taken FROM config. */
 export const SHADOW_PROMPT_ID = 'qfj.s2e.synthetic.shadow.v1';
-export const SHADOW_PROMPT_VERSION = '1';
+
+/** The numeric form the prompt-definition and evaluation contracts use. */
+const SHADOW_PROMPT_VERSION_NUMBER = 1;
 
 /** The maximum accepted result length. A two-field object needs nothing close to this. */
 export const SHADOW_MAX_RESULT_CHARS = 128;
@@ -29,6 +32,34 @@ export const SHADOW_SYSTEM_PROMPT =
   'You are a connectivity and schema probe for an internal engineering validation. ' +
   'Reply with ONLY the required JSON object. Do not explain, do not add fields, do not use tools, ' +
   'and do not include any other text.';
+
+/**
+ * The one canonical definition of this probe (QFJ-S3-I-B, ADR-0073).
+ *
+ * Built with the governed `createPromptDefinition`, so the digest is a real SHA-256 of the exact
+ * bytes above, computed by the same constructor M4 uses -- not a second hand-rolled hash and not a
+ * placeholder. Every consumer below reads identity AND content from this single object, which is why
+ * the SHADOW request and the SHADOW evaluation evidence can no longer disagree about which prompt
+ * ran. Before this, the request said `qfj.s2e.synthetic.shadow.v1` while the evidence generator said
+ * `qfj.s2e.synthetic.shadow`; that drift is corrected here.
+ *
+ * A DEFINITION, not a registry: this probe has one fixed compile-time prompt and needs no selection.
+ * A registry here would add a capability the probe does not want and cannot use.
+ */
+export const SHADOW_PROMPT_DEFINITION = createPromptDefinition({
+  promptId: SHADOW_PROMPT_ID,
+  promptVersion: SHADOW_PROMPT_VERSION_NUMBER,
+  agentScope: 'SYSTEM',
+  taskClass: 'RESPONSE_GENERATION',
+  resultMode: 'STRUCTURED',
+  systemTemplate: SHADOW_SYSTEM_PROMPT,
+});
+
+/** The wire form of the prompt version, sourced from the canonical definition. */
+export const SHADOW_PROMPT_VERSION = String(SHADOW_PROMPT_DEFINITION.promptVersion);
+
+/** The exact SHA-256 of the synthetic prompt bytes above. */
+export const SHADOW_PROMPT_DIGEST = SHADOW_PROMPT_DEFINITION.contentDigest;
 
 export const SHADOW_USER_PROMPT =
   'Return the JSON object {"status":"ok"} exactly, with no other field and no commentary.';
@@ -58,7 +89,7 @@ export function createShadowRequest(args: {
     agentScope: 'SYSTEM',
     dataClass: 'HOSTED_ALLOWED',
     messages: [
-      { role: 'system', content: SHADOW_SYSTEM_PROMPT },
+      { role: 'system', content: SHADOW_PROMPT_DEFINITION.systemTemplate },
       { role: 'user', content: SHADOW_USER_PROMPT },
     ],
     requiredCapabilities: {
@@ -70,8 +101,9 @@ export function createShadowRequest(args: {
     resultMode: 'STRUCTURED',
     structuredSchema: shadowReplySchema,
     maxResultChars: SHADOW_MAX_RESULT_CHARS,
-    promptId: SHADOW_PROMPT_ID,
+    promptId: SHADOW_PROMPT_DEFINITION.promptId,
     promptVersion: SHADOW_PROMPT_VERSION,
+    promptDigest: SHADOW_PROMPT_DEFINITION.contentDigest,
     tokenBudget: 4096,
     costBudget: 1,
     timeoutMs: args.timeoutMs,

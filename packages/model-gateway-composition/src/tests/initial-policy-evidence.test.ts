@@ -173,6 +173,7 @@ const REQUEST = {
   maxResultChars: 1024,
   promptId: 'qfj.s2cb',
   promptVersion: '1',
+  promptDigest: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
   tokenBudget: 4096,
   costBudget: 1,
   timeoutMs: 30_000,

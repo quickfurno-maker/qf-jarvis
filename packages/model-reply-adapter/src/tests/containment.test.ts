@@ -99,10 +99,12 @@ describe('containment', () => {
     }
   });
 
-  it('(81) depends only on agent-runtime + model-gateway + zod, exposes root + ./testing', () => {
+  it('(81) depends only on agent-runtime + model-gateway + prompt-registry + zod, exposes root + ./testing', () => {
     expect(Object.keys(manifest.dependencies ?? {}).sort()).toEqual([
       '@qf-jarvis/agent-runtime',
       '@qf-jarvis/model-gateway',
+      // QFJ-S3-I-B (ADR-0073): the injected prompt registry. Still an EXACT set match.
+      '@qf-jarvis/prompt-registry',
       'zod',
     ]);
     expect(Object.keys(manifest.exports).sort()).toEqual(['.', './testing']);

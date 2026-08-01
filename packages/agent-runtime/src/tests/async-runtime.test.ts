@@ -230,6 +230,7 @@ describe('async orchestration — determinism and purity', () => {
       envelope: env(),
       assignedActor: 'RIYA',
       modelPort: model,
+      promptIdentity: { promptFamily: 'prompt.family.a', promptVersion: 1 },
       policyRevision: 'policy.rev.1',
       taskClass: 'RESPONSE_GENERATION',
       citations: [],

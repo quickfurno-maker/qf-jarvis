@@ -39,6 +39,8 @@ import {
   syntheticInboundEnvelope,
   syntheticRuntimeConfig,
   syntheticSignals,
+  syntheticPromptDefinition,
+  syntheticPromptRegistry,
 } from '../testing/deterministic-runtime-fixture.js';
 
 // ---------------------------------------------------------------------------
@@ -51,6 +53,8 @@ interface Counted {
 }
 
 const VENDOR_PROMPT_REF = 'prompt.anisha.vendor.v1';
+/** The VENDOR-scoped model prompt this runtime is configured with. */
+const VENDOR_PROMPT = syntheticPromptDefinition('reply.vendor', 'VENDOR');
 const CLIENT_PROMPT_REF = 'prompt.riya.sales.v1';
 
 function countingInvoker(): ModelGatewayInvoker & Counted {
@@ -181,9 +185,15 @@ async function runVendor(
   envelopeOver: Parameters<typeof syntheticInboundEnvelope>[0] = {},
 ): Promise<{ result: JarvisRuntimeResult; models: number }> {
   const invoker = countingInvoker();
+  // A prompt definition is scope-bound (ADR-0073), so a vendor runtime carries a VENDOR prompt. A
+  // CLIENT-scoped one would correctly refuse to resolve for an ANISHA turn.
   const config = syntheticRuntimeConfig({
     authoritativeState: scriptedAuthoritativeState(clearControlState({ partyType: 'VENDOR' })),
     gatewayInvoker: invoker,
+    promptFamily: VENDOR_PROMPT.promptId,
+    promptVersion: VENDOR_PROMPT.promptVersion,
+    promptRegistry: syntheticPromptRegistry('reply.vendor', 'VENDOR'),
+    evaluationPromptDigest: VENDOR_PROMPT.contentDigest,
     ...over,
   });
   const result = await createJarvisRuntime(config).processInbound(
@@ -257,6 +267,10 @@ describe('(B) with BOTH inputs configured, exactly one is ever read', () => {
     const result = await createJarvisRuntime(
       syntheticRuntimeConfig({
         authoritativeState: scriptedAuthoritativeState(clearControlState({ partyType: 'UNKNOWN' })),
+        promptFamily: 'reply.coordination',
+        promptRegistry: syntheticPromptRegistry('reply.coordination', 'COORDINATION'),
+        evaluationPromptDigest: syntheticPromptDefinition('reply.coordination', 'COORDINATION')
+          .contentDigest,
         vendorJourneyBehaviourInput: vendor,
         behaviourInput: client,
       }),
@@ -537,22 +551,41 @@ describe('(I, J) the second gate still runs on both vendor paths', () => {
     const vendor = countingVendorInput(vendorInput({ askedRoutineQuestion: true }));
     const core = recordingCoreTransport();
     const invoker = countingInvoker();
-    // Reads: 1 first gate, 2 adapter control, 3-4 M4 reply state, 5 second gate.
-    const state = driftingState(clearControlState({ partyType: 'VENDOR' }), 5, (c) => ({
-      ...c,
-      revision: c.revision + 1,
-    }));
+    // A clean vendor model turn reads authoritative state seven times. Read 5 is M4's own
+    // post-gateway re-read (ADR-0057) and read 6 is M2's second gate before Core (ADR-0055), so a
+    // drift from read 5 lands on the M4 gate -- which is the one this spec is about, because it is
+    // the only one that fires BEFORE a proposal exists. Drift from read 6 also refuses, but by then
+    // the proposal has been derived (it is simply never sent), which is a different property.
+    let reads = 0;
+    const base = clearControlState({ partyType: 'VENDOR' });
+    const state = mutableAuthoritativeState(() => {
+      reads += 1;
+      return reads >= 5 ? { ...base, revision: base.revision + 1 } : base;
+    });
     const result = await createJarvisRuntime(
       syntheticRuntimeConfig({
         authoritativeState: state,
         gatewayInvoker: invoker,
         coreTransport: core,
         vendorJourneyBehaviourInput: vendor,
+        // Scope-bound prompt (ADR-0073): a vendor turn needs the VENDOR definition, or M4 refuses
+        // before the gateway and this spec stops testing the drift it is about.
+        promptFamily: VENDOR_PROMPT.promptId,
+        promptVersion: VENDOR_PROMPT.promptVersion,
+        promptRegistry: syntheticPromptRegistry('reply.vendor', 'VENDOR'),
+        evaluationPromptDigest: VENDOR_PROMPT.contentDigest,
       }),
     ).processInbound(syntheticInboundEnvelope({ partyType: 'VENDOR' }));
 
+    // Two gates can catch this: M4 re-reads state after the gateway (ADR-0057) and M2 re-reads
+    // before Core (ADR-0055). Which one fires depends only on where the drift lands in the read
+    // sequence, and both are correct -- so the outcome and the reason are asserted as a matched
+    // PAIR rather than as an either/or cross-product. What the spec is really about is below: drift
+    // after the draft yields NO proposal and NO Core call, with the model still invoked exactly once.
     expect(result.outcome).toBe('REFUSED');
     expect(result.refusalReason).toBe('orchestration-stale-revision');
+    // The point of the spec: drift after the draft produces NO proposal and NO Core call, with the
+    // model still invoked exactly once and the behaviour consulted exactly once.
     expect(result.proposalId).toBeUndefined();
     expect(vendor.count()).toBe(1);
     expect(invoker.count()).toBe(1);
@@ -574,6 +607,12 @@ describe('(I, J) the second gate still runs on both vendor paths', () => {
         gatewayInvoker: invoker,
         coreTransport: core,
         vendorJourneyBehaviourInput: vendor,
+        // Scope-bound prompt (ADR-0073): a vendor turn needs the VENDOR definition, or M4 refuses
+        // before the gateway and this spec stops testing the drift it is about.
+        promptFamily: VENDOR_PROMPT.promptId,
+        promptVersion: VENDOR_PROMPT.promptVersion,
+        promptRegistry: syntheticPromptRegistry('reply.vendor', 'VENDOR'),
+        evaluationPromptDigest: VENDOR_PROMPT.contentDigest,
       }),
     ).processInbound(syntheticInboundEnvelope({ partyType: 'VENDOR' }));
 
@@ -798,7 +837,7 @@ describe('(T-W) provenance, correlation and identifier bounds', () => {
     const { result } = await runVendor({
       vendorJourneyBehaviourInput: countingVendorInput(vendorInput({ askedRoutineQuestion: true })),
     });
-    expect(result.provenance?.runtimeRef).toBe('qfj.jarvis-runtime.s3db');
+    expect(result.provenance?.runtimeRef).toBe('qfj.jarvis-runtime.s3ib');
 
     const custom = await runVendor({
       vendorJourneyBehaviourInput: countingVendorInput(vendorInput({ askedRoutineQuestion: true })),
@@ -850,6 +889,10 @@ describe('(T-W) provenance, correlation and identifier bounds', () => {
         ),
         gatewayInvoker: invoker,
         coreTransport: core,
+        promptFamily: VENDOR_PROMPT.promptId,
+        promptVersion: VENDOR_PROMPT.promptVersion,
+        promptRegistry: syntheticPromptRegistry('reply.vendor', 'VENDOR'),
+        evaluationPromptDigest: VENDOR_PROMPT.contentDigest,
         vendorJourneyBehaviourInput: countingVendorInput(
           vendorInput({ askedRoutineQuestion: true }),
         ),
@@ -887,6 +930,10 @@ describe('(T-W) provenance, correlation and identifier bounds', () => {
         ),
         gatewayInvoker: invoker,
         coreTransport: core,
+        promptFamily: VENDOR_PROMPT.promptId,
+        promptVersion: VENDOR_PROMPT.promptVersion,
+        promptRegistry: syntheticPromptRegistry('reply.vendor', 'VENDOR'),
+        evaluationPromptDigest: VENDOR_PROMPT.contentDigest,
         vendorJourneyBehaviourInput: countingVendorInput(
           vendorInput({ matterRequiresEscalation: true }),
         ),

@@ -49,4 +49,6 @@ export { createModelReplyAdapter } from './adapter/create-model-reply-adapter.js
 export type {
   ModelReplyAdapter,
   ModelReplyAdapterConfig,
+  ModelReplyPromptBinding,
+  ModelReplyPromptBindings,
 } from './adapter/create-model-reply-adapter.js';

@@ -85,6 +85,7 @@ function syntheticResponse(runId = 'run.s2b.synthetic.1'): ModelResponse {
       modelVersion: '2026-07-01',
       promptId: 'qfj.s2b.synthetic',
       promptVersion: '1',
+      promptDigest: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       mode: 'OFF' as const,
       usedFallback: false,
       attempts: 1,

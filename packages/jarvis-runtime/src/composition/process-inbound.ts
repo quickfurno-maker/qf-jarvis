@@ -51,12 +51,13 @@ const CORE_OUTCOME_MAP: Readonly<Record<CoreDecisionOutcome, JarvisRuntimeOutcom
 /**
  * The shared-runtime implementation reference stamped into provenance when none is configured.
  *
- * Bumped s3cb -> s3db because S3-D-B materially changes what this composition IS: a second bounded
- * business-agent bridge behind a deterministic selector. Default provenance should name the
- * implementation that actually ran, not the one that used to. An explicit
+ * Bumped again s3db -> s3ib because S3-I-B materially changes what this composition IS: the model
+ * reply now carries an authoritative, content-bound prompt resolved from a registry, rather than a
+ * hard-coded constant. Default provenance should name the implementation that actually ran, not the
+ * one that used to. An explicit
  * `config.provenanceRefs.runtimeRef` still overrides it untouched.
  */
-const DEFAULT_RUNTIME_REF = 'qfj.jarvis-runtime.s3db';
+const DEFAULT_RUNTIME_REF = 'qfj.jarvis-runtime.s3ib';
 
 /** The default task class, kept in one place so the orchestrator and the behaviour port agree. */
 const DEFAULT_TASK_CLASS = 'RESPONSE_GENERATION';
@@ -126,10 +127,17 @@ export async function composeAndProcess(
   // M4 model reply adapter (existing gateway stays the only routing authority).
   const modelReplyPort = createModelReplyAdapter({
     release: config.release,
-    promptFamily: config.promptFamily,
-    promptVersion: config.promptVersion,
+    ...(config.promptFamily === undefined ? {} : { promptFamily: config.promptFamily }),
+    ...(config.promptVersion === undefined ? {} : { promptVersion: config.promptVersion }),
+    ...(config.promptBindings === undefined ? {} : { promptBindings: config.promptBindings }),
     capabilityProfileRef: config.capabilityProfileRef,
     ...(config.evaluationRef === undefined ? {} : { evaluationRef: config.evaluationRef }),
+    // Passed straight through: jarvis-runtime never resolves a prompt itself. Resolution belongs to
+    // M4, after its own first state gate (ADR-0073).
+    ...(config.promptRegistry === undefined ? {} : { promptRegistry: config.promptRegistry }),
+    ...(config.evaluationPromptDigest === undefined
+      ? {}
+      : { evaluationPromptDigest: config.evaluationPromptDigest }),
     stateReader: replyStateReader,
     clock: config.clock,
     ...(config.gatewayInvoker === undefined ? {} : { invoker: config.gatewayInvoker }),

@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 /**
  * Deterministic offline fixtures for the QFJ-S2-C-B evidence specs.
  *
@@ -22,6 +24,13 @@ import {
   RELEASE_ID,
 } from './composition-test-support.js';
 
+/** A REAL SHA-256 of the synthetic fixture prompt below - not a sentinel value. */
+export const SYNTHETIC_EVIDENCE_PROMPT_TEMPLATE =
+  'Synthetic composition-evidence fixture prompt. Not a production instruction.';
+export const SYNTHETIC_EVIDENCE_PROMPT_DIGEST = createHash('sha256')
+  .update(SYNTHETIC_EVIDENCE_PROMPT_TEMPLATE, 'utf8')
+  .digest('hex');
+
 export const CAPABILITY_PROFILE_REF = 'cap.s2cb.synthetic.v1';
 
 /** The binding every fixture shares: exact identities matching the synthetic release. */
@@ -43,6 +52,7 @@ export function evidenceBinding(over: Record<string, unknown> = {}) {
     },
     promptFamily: 'qfj.s2cb.synthetic',
     promptVersion: 1,
+    promptDigest: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
     capabilityProfileRef: CAPABILITY_PROFILE_REF,
     policyContractRevision: 'policy.v1',
     createdAt: '2026-07-29T00:00:00.000Z',

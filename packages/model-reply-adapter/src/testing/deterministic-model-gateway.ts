@@ -27,6 +27,8 @@ export interface ProvenanceOverride {
   readonly modelVersion?: string;
   readonly promptId?: string;
   readonly promptVersion?: string;
+  /** Forge a digest that disagrees with the request, to prove the adapter refuses it (ADR-0073). */
+  readonly promptDigest?: string;
   readonly runId?: string;
 }
 
@@ -48,6 +50,9 @@ function buildResponse(
       modelVersion: over.modelVersion ?? String(md['modelVersion']),
       promptId: over.promptId ?? request.promptId,
       promptVersion: over.promptVersion ?? request.promptVersion,
+      // Echoed from the request, exactly as the real gateway does. The override exists so a spec can
+      // forge a mismatch and prove the adapter refuses it.
+      promptDigest: over.promptDigest ?? request.promptDigest,
       mode: 'ACTIVE',
       usedFallback: false,
       attempts: 1,
@@ -100,6 +105,7 @@ export function textModeGatewayInvoker(): ModelGatewayInvoker & Recording {
           providerId: String(request.metadata['providerId']),
           modelId: String(request.metadata['modelId']),
           modelVersion: String(request.metadata['modelVersion']),
+          promptDigest: request.promptDigest,
           promptId: request.promptId,
           promptVersion: request.promptVersion,
           mode: 'ACTIVE',

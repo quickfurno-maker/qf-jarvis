@@ -1,9 +1,10 @@
 /**
  * `@qf-jarvis/prompt-registry` — the versioned prompt registry foundation (QFJ-S3-I-A, ADR-0072).
  *
- * A MECHANISM, not a prompt set. This package registers no production QuickFurno prompt, wires into
- * no runtime, and changes nothing about what the model is currently told: the hard-coded
- * `REPLY_PROMPT_CONTRACT` in the M4 adapter is untouched, and S3-I-B is where it is replaced.
+ * A MECHANISM, not a prompt set. S3-I-A landed as mechanism-only and deliberately left the M4
+ * hard-coded prompt untouched; S3-I-B (ADR-0073) subsequently binds M4 to this registry and removes
+ * that constant. This package itself still registers no production QuickFurno prompt and owns no
+ * runtime activation.
  *
  * What it adds is the one property the runtime lacks today — a prompt identity that is BOUND to its
  * exact bytes. The digest is computed at construction from the template, never accepted from a

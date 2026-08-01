@@ -17,6 +17,8 @@ import {
 import {
   syntheticInboundEnvelope,
   syntheticRuntimeConfig,
+  syntheticPromptDefinition,
+  syntheticPromptRegistry,
 } from '../testing/deterministic-runtime-fixture.js';
 import { scriptedCoreTransport } from '@qf-jarvis/core-decision-adapter/testing';
 import {
@@ -59,9 +61,16 @@ describe('end-to-end composition', () => {
   });
 
   it('a valid VENDOR inbound routes to Anisha', async () => {
+    // A prompt definition is scope-bound, so a runtime serving VENDOR turns is configured with a
+    // VENDOR prompt -- a CLIENT-scoped prompt would (correctly) refuse to resolve here (ADR-0073).
+    const vendorPrompt = syntheticPromptDefinition('reply.vendor', 'VENDOR');
     const config = syntheticRuntimeConfig({
       authoritativeState: scriptedAuthoritativeState(clearControlState({ partyType: 'VENDOR' })),
       release: syntheticRelease(),
+      promptFamily: vendorPrompt.promptId,
+      promptVersion: vendorPrompt.promptVersion,
+      promptRegistry: syntheticPromptRegistry('reply.vendor', 'VENDOR'),
+      evaluationPromptDigest: vendorPrompt.contentDigest,
     });
     const runtime = createJarvisRuntime(config);
     const result = await runtime.processInbound(syntheticInboundEnvelope({ partyType: 'VENDOR' }));
@@ -88,9 +97,13 @@ describe('end-to-end composition', () => {
       policy: config.policy,
       clock: config.clock,
       release: config.release,
-      promptFamily: config.promptFamily,
-      promptVersion: config.promptVersion,
+      ...(config.promptFamily === undefined ? {} : { promptFamily: config.promptFamily }),
+      ...(config.promptVersion === undefined ? {} : { promptVersion: config.promptVersion }),
       capabilityProfileRef: config.capabilityProfileRef,
+      ...(config.promptRegistry === undefined ? {} : { promptRegistry: config.promptRegistry }),
+      ...(config.evaluationPromptDigest === undefined
+        ? {}
+        : { evaluationPromptDigest: config.evaluationPromptDigest }),
       ...(config.evaluationRef === undefined ? {} : { evaluationRef: config.evaluationRef }),
       ...(config.gatewayInvoker === undefined ? {} : { gatewayInvoker: config.gatewayInvoker }),
     });

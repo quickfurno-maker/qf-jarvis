@@ -51,8 +51,8 @@ describe('fail-closed dependencies', () => {
       policy: base.policy,
       clock: base.clock,
       release: base.release,
-      promptFamily: base.promptFamily,
-      promptVersion: base.promptVersion,
+      ...(base.promptFamily === undefined ? {} : { promptFamily: base.promptFamily }),
+      ...(base.promptVersion === undefined ? {} : { promptVersion: base.promptVersion }),
       capabilityProfileRef: base.capabilityProfileRef,
       coreTransport: transport,
     };

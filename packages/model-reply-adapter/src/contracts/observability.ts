@@ -34,6 +34,8 @@ export interface ModelReplyAdapterEvent {
   readonly providerId: string;
   readonly modelId: string;
   readonly promptId: string;
+  /** The resolved prompt-content digest (ADR-0073). Undefined before resolution. Never the body. */
+  readonly promptDigest: string | undefined;
   readonly promptVersion: string;
   readonly capabilityProfileRef: string;
   readonly evaluationRef: string | undefined;

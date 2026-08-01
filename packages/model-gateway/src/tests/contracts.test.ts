@@ -54,6 +54,7 @@ function textReq(overrides: Record<string, unknown> = {}): Record<string, unknow
     maxResultChars: 100,
     promptId: 'p',
     promptVersion: '1',
+    promptDigest: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
     tokenBudget: 100,
     costBudget: 1,
     timeoutMs: 1000,

@@ -5,6 +5,8 @@
  * valid M2 `ReplyPlan` and matching model identity a test can vary, plus a valid structured reply.
  */
 import type { KnowledgeCitation, ModelReleaseRef, ReplyPlan } from '@qf-jarvis/agent-runtime';
+import { createPromptDefinition } from '@qf-jarvis/prompt-registry';
+import type { PromptDefinition } from '@qf-jarvis/prompt-registry';
 
 import type { StructuredReply } from '../contracts/reply-schema.js';
 
@@ -56,4 +58,26 @@ export function structuredReply(over: Partial<StructuredReply> = {}): Structured
     citations: [{ knowledgeId: 'kb.fact', version: 1 }],
     ...over,
   };
+}
+
+/**
+ * A synthetic prompt definition matching the default `replyPlan()` identity (QFJ-S3-I-B, ADR-0073).
+ *
+ * Built through the real `createPromptDefinition`, so its digest is a genuine SHA-256 of the body
+ * below. Clearly synthetic: this is not, and must never become, a production instruction.
+ */
+export function syntheticPromptDefinition(
+  over: Partial<Parameters<typeof createPromptDefinition>[0]> = {},
+): PromptDefinition {
+  return createPromptDefinition({
+    // Matches `replyPlan()`'s promptFamily exactly -- a definition that did not would (correctly)
+    // refuse to resolve, which is a confusing way for an unrelated spec to fail.
+    promptId: 'reply.client',
+    promptVersion: 1,
+    agentScope: 'CLIENT',
+    taskClass: 'RESPONSE_GENERATION',
+    resultMode: 'STRUCTURED',
+    systemTemplate: 'Synthetic M4 fixture prompt. Not a production instruction.',
+    ...over,
+  });
 }

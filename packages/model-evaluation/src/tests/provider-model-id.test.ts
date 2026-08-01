@@ -1,3 +1,4 @@
+import { SYNTHETIC_PROMPT_DIGEST } from '../testing/fixtures.js';
 /**
  * QFJ-S1C-B — evaluation bindings accept a namespaced provider model id, and the mirrored grammar is
  * proven identical to the canonical one.
@@ -87,6 +88,7 @@ function bindingWith(modelId: string): () => unknown {
       },
       promptFamily: 'qfj.s1a.synthetic.smoke',
       promptVersion: 1,
+      promptDigest: SYNTHETIC_PROMPT_DIGEST,
       capabilityProfileRef: 'cap.groq.reply.v1',
       policyContractRevision: 'policy.v1',
       createdAt: '2026-07-28T00:00:00.000Z',
@@ -144,6 +146,7 @@ describe('an evaluation binding accepts the approved namespaced model id', () =>
       },
       promptFamily: 'qfj.s1a.synthetic.smoke',
       promptVersion: 1,
+      promptDigest: SYNTHETIC_PROMPT_DIGEST,
       capabilityProfileRef: 'cap.groq.reply.v1',
       policyContractRevision: 'policy.v1',
       createdAt: '2026-07-28T00:00:00.000Z',
@@ -269,6 +272,7 @@ describe('generic identifiers in this package did NOT learn to accept a slash', 
           },
           promptFamily: 'qfj.s1a.synthetic.smoke',
           promptVersion: 1,
+          promptDigest: SYNTHETIC_PROMPT_DIGEST,
           capabilityProfileRef: 'cap.groq.reply.v1',
           policyContractRevision: 'policy.v1',
           createdAt: '2026-07-28T00:00:00.000Z',
@@ -303,6 +307,7 @@ describe('generic identifiers in this package did NOT learn to accept a slash', 
         },
         promptFamily: 'qfj.s1a.synthetic.smoke',
         promptVersion: 1,
+        promptDigest: SYNTHETIC_PROMPT_DIGEST,
         capabilityProfileRef: 'cap.groq.reply.v1',
         policyContractRevision: 'policy.v1',
         createdAt: '2026-07-28T00:00:00.000Z',

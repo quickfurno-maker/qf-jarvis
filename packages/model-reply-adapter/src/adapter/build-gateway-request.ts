@@ -1,14 +1,21 @@
 /**
  * Build the exact model-gateway request from a reply plan (QFJ-M4, ADR-0057 §D, §E, §F).
  *
- * Translates the M2 `ReplyPlan` into the gateway's own validated `ModelRequest`: a STRUCTURED request
- * carrying the versioned prompt contract, the minimized normalized input, the strict reply schema, and
- * a closed scalar metadata bag binding every exact reference (release/provider/model/version/config/
+ * Translates the M2 `ReplyPlan` plus an already-RESOLVED `PromptDefinition` into the gateway's own
+ * validated `ModelRequest`: a STRUCTURED request carrying the exact system prompt, its content
+ * digest, the minimized normalized input, the strict reply schema, and a closed scalar metadata bag
+ * binding every exact reference (release/provider/model/version/config/
  * execution/prompt/capability/evaluation/policy/task, the citation-reference digest, and a canonical
  * requested-at instant). No wildcard/`latest`, no arbitrary metadata, no raw provider object. Throws
  * `ModelReplyAdapterError('invalid-request')` when the derived request is not gateway-valid.
+ *
+ * The builder does NOT resolve a prompt. Resolution happens once, upstream, after the first state
+ * gate; this file only re-asserts that the definition it was handed is the one the plan asked for,
+ * and then sources identity AND content from that single object. A builder that could pick a prompt
+ * would be a second prompt source, which is the defect ADR-0073 closes.
  */
 import type { ReplyPlan } from '@qf-jarvis/agent-runtime';
+import type { PromptDefinition } from '@qf-jarvis/prompt-registry';
 import {
   validateModelRequest,
   type ModelRequest,
@@ -38,19 +45,6 @@ export const DEFAULT_GATEWAY_REQUEST_BUDGETS: GatewayRequestBudgets = Object.fre
   minContextTokens: 1,
 });
 
-/**
- * The exact versioned prompt contract. It preserves the authority boundary (Riya client-only, Anisha
- * vendor-only, Jarvis coordinator, QuickFurno Core final authority), demands reply/proposal only with
- * exact citations, and forbids execution/n8n/business mutation and chain-of-thought. It carries no
- * provider-specific construction and no conversation content.
- */
-const REPLY_PROMPT_CONTRACT =
-  'You are a QuickFurno assistant drafting a PROPOSED reply only. Riya serves clients only; ' +
-  'Anisha serves vendors only; Jarvis coordinates. QuickFurno Core is the final business authority ' +
-  'and decides whether any reply is permitted. Return ONLY the required structured reply. Do not ' +
-  'execute actions, call tools, trigger n8n, send messages, or mutate business state. Cite only the ' +
-  'exact provided knowledge. Do not include chain-of-thought or private reasoning.';
-
 /** Map an assigned actor to the gateway agent scope. HUMAN never reaches the gateway. */
 function agentScopeFor(actor: ReplyPlan['assignedActor']): ModelAgentScope {
   switch (actor) {
@@ -70,11 +64,25 @@ function agentScopeFor(actor: ReplyPlan['assignedActor']): ModelAgentScope {
 /** Build and validate the gateway request. Throws `ModelReplyAdapterError('invalid-request')`. */
 export function buildGatewayRequest(args: {
   readonly plan: ReplyPlan;
+  /** The already-resolved definition. Its content and identity are the only ones used. */
+  readonly prompt: PromptDefinition;
   readonly requestedAt: string;
   readonly budgets: GatewayRequestBudgets;
 }): ModelRequest {
-  const { plan, requestedAt, budgets } = args;
+  const { plan, prompt, requestedAt, budgets } = args;
   if (!isCanonicalInstant(requestedAt)) {
+    throw new ModelReplyAdapterError('invalid-request');
+  }
+  // Defensive: the caller resolved this, but a definition that does not match the plan would mean the
+  // request reported one prompt while carrying another -- exactly the drift being closed.
+  if (
+    prompt.promptId !== plan.promptFamily ||
+    prompt.promptVersion !== plan.promptVersion ||
+    prompt.agentScope !== agentScopeFor(plan.assignedActor) ||
+    prompt.taskClass !== plan.taskClass ||
+    prompt.resultMode !== 'STRUCTURED' ||
+    !/^[0-9a-f]{64}$/.test(prompt.contentDigest)
+  ) {
     throw new ModelReplyAdapterError('invalid-request');
   }
   const r = plan.release;
@@ -93,7 +101,7 @@ export function buildGatewayRequest(args: {
       throw new ModelReplyAdapterError('invalid-request');
     }
   }
-  const promptVersion = String(plan.promptVersion);
+  const promptVersion = String(prompt.promptVersion);
   const citationsDigest = contentDigest(
     plan.citations.map((c) => ({ knowledgeId: c.knowledgeId, version: c.version })),
   );
@@ -111,8 +119,9 @@ export function buildGatewayRequest(args: {
     executionClass: r.executionClass,
     capabilityProfileRef: plan.capabilityProfileRef,
     policyRevision: plan.policyRevision,
-    promptFamily: plan.promptFamily,
+    promptFamily: prompt.promptId,
     promptVersion,
+    promptDigest: prompt.contentDigest,
     citationsDigest,
     citationCount: plan.citations.length,
     requestedAt,
@@ -127,7 +136,9 @@ export function buildGatewayRequest(args: {
     agentScope: agentScopeFor(plan.assignedActor),
     dataClass: plan.dataClass,
     messages: [
-      { role: 'system', content: REPLY_PROMPT_CONTRACT },
+      // The system message IS the resolved definition's bytes -- no prefix, no suffix, no appended
+      // policy, no interpolation. The user message stays separate, as it always has.
+      { role: 'system', content: prompt.systemTemplate },
       { role: 'user', content: plan.normalizedText ?? '' },
     ],
     requiredCapabilities: {
@@ -139,8 +150,9 @@ export function buildGatewayRequest(args: {
     resultMode: 'STRUCTURED',
     structuredSchema: structuredReplySchema,
     maxResultChars: budgets.maxResultChars,
-    promptId: plan.promptFamily,
+    promptId: prompt.promptId,
     promptVersion,
+    promptDigest: prompt.contentDigest,
     tokenBudget: budgets.tokenBudget,
     costBudget: budgets.costBudget,
     timeoutMs: budgets.timeoutMs,

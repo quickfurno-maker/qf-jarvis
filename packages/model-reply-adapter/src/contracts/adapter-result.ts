@@ -18,6 +18,8 @@ export interface SafeReplyProvenance {
   readonly modelId: string;
   readonly modelVersion: string;
   readonly promptId: string;
+  /** The exact prompt-content digest the gateway echoed back (ADR-0073). */
+  readonly promptDigest: string;
   readonly promptVersion: string;
   readonly usedFallback: boolean;
   readonly attempts: number;
