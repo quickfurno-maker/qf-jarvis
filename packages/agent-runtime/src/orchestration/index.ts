@@ -37,6 +37,8 @@ export type {
 export type {
   ConversationContextPort,
   ModelReplyPort,
+  ModelPromptIdentity,
+  ModelPromptSelectionRequest,
   KnowledgePort,
   KnowledgeRetrievalRequest,
   KnowledgeRetrievalResult,

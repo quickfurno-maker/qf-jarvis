@@ -36,6 +36,16 @@ export interface ModelRequest {
   readonly maxResultChars: number;
   readonly promptId: string;
   readonly promptVersion: string;
+  /**
+   * The lowercase 64-hex SHA-256 of the exact system-prompt content this request carries
+   * (QFJ-S3-I-B, ADR-0073).
+   *
+   * REQUIRED, not optional. `promptId` and `promptVersion` name a prompt; only this says which bytes
+   * were actually sent. Before it existed, the identity and the system message were assembled
+   * independently and never compared, so a request could truthfully report a version whose text it
+   * was not carrying. A caller that cannot produce a digest cannot produce a request.
+   */
+  readonly promptDigest: string;
   readonly tokenBudget: number;
   readonly costBudget: number;
   readonly timeoutMs: number;
@@ -83,6 +93,7 @@ const requestPrimitivesSchema = z
     maxResultChars: z.int().min(1).max(1_000_000),
     promptId: IDENTIFIER,
     promptVersion: IDENTIFIER,
+    promptDigest: z.string().regex(/^[0-9a-f]{64}$/),
     tokenBudget: z.int().min(1).max(100_000_000),
     costBudget: z.number().min(0).max(1_000_000),
     timeoutMs: z.int().min(1).max(600_000),

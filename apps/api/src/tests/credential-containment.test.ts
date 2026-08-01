@@ -270,6 +270,9 @@ describe('the staging smoke stays out of the production boundary', () => {
       '@qf-jarvis/model-evaluation',
       '@qf-jarvis/model-gateway',
       '@qf-jarvis/model-gateway-composition',
+      // QFJ-S3-I-B (ADR-0073): the SHADOW runner's fixed synthetic prompt is now a real
+      // `PromptDefinition`, so its identity and its bytes cannot drift apart. Still an EXACT set.
+      '@qf-jarvis/prompt-registry',
       'zod',
     ]);
     expect(manifest.devDependencies).toBeUndefined();

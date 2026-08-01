@@ -18,4 +18,6 @@ export {
   scriptedBehaviourInput,
   rejectingBehaviourInput,
   syntheticSignals,
+  syntheticPromptRegistry,
+  syntheticPromptDefinition,
 } from './deterministic-runtime-fixture.js';

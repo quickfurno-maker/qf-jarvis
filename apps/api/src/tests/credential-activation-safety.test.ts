@@ -114,6 +114,9 @@ const REQUEST = {
   maxResultChars: 1024,
   promptId: 'qfj.s2db',
   promptVersion: '1',
+  // QFJ-S3-I-B (ADR-0073): the real SHA-256 of this probe's only content, not a placeholder --
+  // the point of the field is that it names the exact bytes being sent.
+  promptDigest: '3969b414915cd54e79bb1331880379e7e29b26d0bd1f8dbd85985cc55634324d',
   tokenBudget: 4096,
   costBudget: 1,
   timeoutMs: 30_000,

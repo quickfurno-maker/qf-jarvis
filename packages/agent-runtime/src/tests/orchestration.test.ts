@@ -31,7 +31,12 @@ import { createOrchestrator, orchestrateInbound } from '../orchestration/orchest
 import type { OrchestratorConfig } from '../orchestration/orchestrate-inbound.js';
 import type { OrchestrationEvent } from '../orchestration/observability.js';
 import type { BehaviourDecision, BehaviourDecisionPort } from '../orchestration/behaviour-port.js';
-import type { KnowledgePort, KnowledgeRetrievalResult } from '../orchestration/model-reply-port.js';
+import type {
+  KnowledgePort,
+  KnowledgeRetrievalResult,
+  ModelPromptIdentity,
+  ModelPromptSelectionRequest,
+} from '../orchestration/model-reply-port.js';
 import {
   orchestrationEnvelopeFields,
   scriptedContextPort,
@@ -428,6 +433,102 @@ describe('knowledge / evaluation / RAG', () => {
       modelConfig: { evaluationRef: 'evref-000000' },
     });
     expect(withEval.result.ok).toBe(true);
+  });
+});
+
+/**
+ * QFJ-S3-I-B — configured prompt-identity selection (ADR-0073).
+ *
+ * A prompt definition is scope-bound, so a port carrying one global `promptFamily` can serve one
+ * agent. A port that implements `selectPromptIdentity` is asked which prompt is configured for the
+ * actor M1 ALREADY assigned. That is a configuration lookup, not a second router: nothing here can
+ * change the assignment, and the selector cannot see the party type, envelope or conversation.
+ */
+describe('(ADR-0073) prompt identity is selected once, from the assignment M1 already made', () => {
+  /** A port with the per-scope selector, plus a record of exactly what it was asked. */
+  function selectingPort(
+    answers: Partial<
+      Record<string, { promptFamily: string; promptVersion: number; evaluationRef?: string }>
+    >,
+  ): RecordingModelReplyPort & {
+    readonly asks: () => readonly { actor: string; taskClass: string }[];
+  } {
+    const base = scriptedModelReplyPort();
+    const asks: { actor: string; taskClass: string }[] = [];
+    return Object.freeze({
+      ...base,
+      selectPromptIdentity: ({
+        assignedActor,
+        taskClass,
+      }: ModelPromptSelectionRequest): ModelPromptIdentity | undefined => {
+        asks.push({ actor: assignedActor, taskClass });
+        return answers[assignedActor];
+      },
+      asks: () => asks,
+    });
+  }
+
+  it('asks the port exactly once, for the assigned actor, and drafts with the answer', async () => {
+    const model = selectingPort({
+      RIYA: { promptFamily: 'prompt.riya.client', promptVersion: 3, evaluationRef: 'evref-riya' },
+    });
+    const { result } = await run({ model });
+    expect(result.ok).toBe(true);
+    // Exactly once: a second lookup could disagree with the first, and the plan would then name a
+    // prompt the request did not use.
+    expect(model.asks()).toEqual([{ actor: 'RIYA', taskClass: 'RESPONSE_GENERATION' }]);
+  });
+
+  it('refuses when the port has no prompt configured for the assigned scope', async () => {
+    // The port answers for ANISHA only, so a CLIENT turn finds nothing. Falling back to the legacy
+    // flat fields here would let this scope quietly borrow the other agent's prompt.
+    const model = selectingPort({ ANISHA: { promptFamily: 'prompt.vendor', promptVersion: 1 } });
+    const { result } = await run({ model });
+    expect(result.ok ? '' : result.reason).toBe('orchestration-model-unavailable');
+    expect(model.invoked()).toBe(0);
+  });
+
+  it('emits model-invocation-skipped, content-free, when no prompt is configured', async () => {
+    const model = selectingPort({});
+    const { events } = await run({ model });
+    const skipped = events.filter((e) => e.type === 'model-invocation-skipped');
+    expect(skipped).toHaveLength(1);
+    expect(JSON.stringify(skipped)).not.toContain('prompt.');
+  });
+
+  it('refuses a selected identity that is a wildcard or `latest` rather than an exact version', async () => {
+    for (const promptFamily of ['*', 'latest', 'LATEST']) {
+      const model = selectingPort({ RIYA: { promptFamily, promptVersion: 1 } });
+      const { result } = await run({ model });
+      expect(result.ok ? '' : result.reason).toBe('orchestration-model-unavailable');
+      expect(model.invoked()).toBe(0);
+    }
+  });
+
+  it('applies requireEvaluationRef to the SELECTED identity, not the port-wide field', async () => {
+    // One scope may be evaluated while another is not, so the gate has to read the scope's own
+    // answer. The port-level `evaluationRef` says nothing about which scope it covers.
+    const unevaluated = selectingPort({
+      RIYA: { promptFamily: 'prompt.riya.client', promptVersion: 3 },
+    });
+    const refused = await run({ model: unevaluated, config: { requireEvaluationRef: true } });
+    expect(refused.result.ok ? '' : refused.result.reason).toBe(
+      'orchestration-evaluation-mismatch',
+    );
+    expect(unevaluated.invoked()).toBe(0);
+
+    const evaluated = selectingPort({
+      RIYA: { promptFamily: 'prompt.riya.client', promptVersion: 3, evaluationRef: 'evref-riya' },
+    });
+    const accepted = await run({ model: evaluated, config: { requireEvaluationRef: true } });
+    expect(accepted.result.ok).toBe(true);
+  });
+
+  it('still uses the legacy flat fields when the port has no selector', async () => {
+    // ADR-0073 does not retire the single-prompt shape; every existing deployment uses it.
+    const { result, model } = await run({ modelConfig: { evaluationRef: 'evref-000000' } });
+    expect(result.ok).toBe(true);
+    expect(model?.invoked()).toBe(1);
   });
 });
 

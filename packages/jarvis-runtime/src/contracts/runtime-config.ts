@@ -9,7 +9,8 @@
  */
 import type { KnowledgePort, ModelReleaseRef, RuntimePolicy } from '@qf-jarvis/agent-runtime';
 import type { CoreDecisionProtocol, CoreDecisionTransport } from '@qf-jarvis/core-decision-adapter';
-import type { ModelGatewayInvoker } from '@qf-jarvis/model-reply-adapter';
+import type { ModelGatewayInvoker, ModelReplyPromptBindings } from '@qf-jarvis/model-reply-adapter';
+import type { PromptRegistry } from '@qf-jarvis/prompt-registry';
 
 import type { AuthoritativeConversationStatePort } from './authoritative-state.js';
 import type { ClientSalesBehaviourInputPort } from './behaviour-input.js';
@@ -54,10 +55,26 @@ export interface JarvisRuntimeConfig {
 
   // MANDATORY exact model identity (threaded into the M4 adapter and the M2 plan).
   readonly release: ModelReleaseRef;
-  readonly promptFamily: string;
-  readonly promptVersion: number;
+  /**
+   * The LEGACY single prompt identity. Required unless `promptBindings` is supplied; it can serve
+   * only the one scope its definition is bound to (ADR-0073).
+   */
+  readonly promptFamily?: string;
+  readonly promptVersion?: number;
+  /**
+   * Per-scope prompt bindings (ADR-0073). One runtime can serve Riya AND Anisha by configuring a
+   * CLIENT and a VENDOR binding. When present, every legacy prompt/evaluation field must be absent.
+   */
+  readonly promptBindings?: ModelReplyPromptBindings;
   readonly capabilityProfileRef: string;
   readonly evaluationRef?: string;
+  /**
+   * The injected immutable prompt registry (ADR-0073). Absent -> a model-backed draft fails closed
+   * in M4; no-model paths are unaffected and need no registry. There is no default registry.
+   */
+  readonly promptRegistry?: PromptRegistry;
+  /** The exact prompt-content digest the bound evaluation covers. Pairs with `evaluationRef`. */
+  readonly evaluationPromptDigest?: string;
 
   /** Optional M4 gateway invoker; absent -> the model adapter fails closed (unavailable) at runtime. */
   readonly gatewayInvoker?: ModelGatewayInvoker;

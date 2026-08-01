@@ -23,6 +23,7 @@
   "dependencies": {
     "@qf-jarvis/agent-runtime": "workspace:*",
     "@qf-jarvis/model-gateway": "workspace:*",
+    "@qf-jarvis/prompt-registry": "workspace:*",
     "zod": "4.4.3"
   }
 }

@@ -24,6 +24,8 @@ import {
 import {
   syntheticInboundEnvelope,
   syntheticRuntimeConfig,
+  syntheticPromptDefinition,
+  syntheticPromptRegistry,
 } from '../testing/deterministic-runtime-fixture.js';
 
 describe('pre-model authority gates', () => {
@@ -32,6 +34,11 @@ describe('pre-model authority gates', () => {
     const jarvis = await createJarvisRuntime(
       syntheticRuntimeConfig({
         authoritativeState: scriptedAuthoritativeState(clearControlState({ partyType: 'UNKNOWN' })),
+        // JARVIS maps to the COORDINATION prompt scope (ADR-0073).
+        promptFamily: 'reply.coordination',
+        promptRegistry: syntheticPromptRegistry('reply.coordination', 'COORDINATION'),
+        evaluationPromptDigest: syntheticPromptDefinition('reply.coordination', 'COORDINATION')
+          .contentDigest,
         gatewayInvoker: invoker,
       }),
     ).processInbound(syntheticInboundEnvelope({ partyType: 'UNKNOWN' }));
@@ -43,6 +50,11 @@ describe('pre-model authority gates', () => {
       syntheticRuntimeConfig({
         policy: createRuntimePolicy({ policyRevision: 'policy.rev.1', unknownRouting: 'HUMAN' }),
         authoritativeState: scriptedAuthoritativeState(clearControlState({ partyType: 'UNKNOWN' })),
+        // JARVIS maps to the COORDINATION prompt scope (ADR-0073).
+        promptFamily: 'reply.coordination',
+        promptRegistry: syntheticPromptRegistry('reply.coordination', 'COORDINATION'),
+        evaluationPromptDigest: syntheticPromptDefinition('reply.coordination', 'COORDINATION')
+          .contentDigest,
         gatewayInvoker: humanInvoker,
       }),
     ).processInbound(syntheticInboundEnvelope({ partyType: 'UNKNOWN' }));

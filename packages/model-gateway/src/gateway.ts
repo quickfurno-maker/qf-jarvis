@@ -956,6 +956,9 @@ export function createModelGateway(config: ModelGatewayConfig): ModelGateway {
       modelVersion: capabilities.modelVersion,
       promptId: request.promptId,
       promptVersion: request.promptVersion,
+      // Copied from the request, never from the provider: provenance must report the bytes that
+      // were sent, and a provider that could choose this could disown what it was given.
+      promptDigest: request.promptDigest,
       mode: config.mode,
       usedFallback,
       attempts,

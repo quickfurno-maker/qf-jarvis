@@ -9,6 +9,8 @@
  */
 import { describe, expect, it } from 'vitest';
 
+import { syntheticPromptDefinition } from '../testing/fixtures.js';
+
 import {
   buildGatewayRequest,
   DEFAULT_GATEWAY_REQUEST_BUDGETS,
@@ -18,7 +20,12 @@ import { replyPlan, syntheticRelease } from '../testing/index.js';
 
 const requestedAt = '2026-07-25T00:00:00Z';
 const build = (plan = replyPlan()) =>
-  buildGatewayRequest({ plan, requestedAt, budgets: DEFAULT_GATEWAY_REQUEST_BUDGETS });
+  buildGatewayRequest({
+    prompt: syntheticPromptDefinition(),
+    plan,
+    requestedAt,
+    budgets: DEFAULT_GATEWAY_REQUEST_BUDGETS,
+  });
 
 const EXPECTED_METADATA_KEYS = [
   'assignedActor',
@@ -33,6 +40,8 @@ const EXPECTED_METADATA_KEYS = [
   'modelVersion',
   'partyType',
   'policyRevision',
+  // QFJ-S3-I-B (ADR-0073): the exact prompt-content digest travels with the identity.
+  'promptDigest',
   'promptFamily',
   'promptVersion',
   'providerId',
@@ -104,6 +113,7 @@ describe('request translation — exact binding', () => {
   it('(14) rejects a non-canonical requested-at instant', () => {
     expect(() =>
       buildGatewayRequest({
+        prompt: syntheticPromptDefinition(),
         plan: replyPlan(),
         requestedAt: 'not-an-instant',
         budgets: DEFAULT_GATEWAY_REQUEST_BUDGETS,

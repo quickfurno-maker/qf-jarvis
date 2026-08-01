@@ -150,6 +150,8 @@ describe('public API lock', () => {
       '@qf-jarvis/anisha-agent',
       '@qf-jarvis/core-decision-adapter',
       '@qf-jarvis/model-reply-adapter',
+      // QFJ-S3-I-B (ADR-0073): the injected prompt registry. Still an EXACT set match.
+      '@qf-jarvis/prompt-registry',
       '@qf-jarvis/riya-agent',
     ]);
     expect(Object.keys(manifest.exports).sort()).toEqual(['.', './testing']);

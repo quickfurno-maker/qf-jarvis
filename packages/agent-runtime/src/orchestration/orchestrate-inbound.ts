@@ -21,6 +21,7 @@ import type { KnowledgeCitation, OrchestrationContext, OrchestrationResult } fro
 import type { BehaviourDecision, BehaviourDecisionPort } from './behaviour-port.js';
 import { deriveProposalId } from './derive-proposal-id.js';
 import { createReplyPlan } from './create-reply-plan.js';
+import { selectModelPromptIdentity } from './select-prompt-identity.js';
 import { validateReplyDraft } from './validate-reply-draft.js';
 import type { ConversationContextPort, KnowledgePort, ModelReplyPort } from './model-reply-port.js';
 import type { CoreDecisionPort } from './core-decision-port.js';
@@ -308,6 +309,9 @@ export async function orchestrateInbound(
   // 8. Exact knowledge retrieval — only on the model path, and only when a port is configured.
   let citations: KnowledgeCitation[] = [];
   let replyBody: string | undefined;
+  // The evaluation reference of the SELECTED prompt, needed again at the Core call. On a no-model
+  // path no prompt is selected, so it stays undefined — as it did before, when no model ran.
+  let replyEvaluationRef: string | undefined;
 
   if (behaviour.modelReplyEligible) {
     if (orch.knowledgePort !== undefined) {
@@ -327,14 +331,30 @@ export async function orchestrateInbound(
       emit('model-invocation-skipped', 'orchestration-model-unavailable', { actor: assignedActor });
       return refuse('orchestration-model-unavailable');
     }
-    if (orch.requireEvaluationRef && orch.modelReplyPort.evaluationRef === undefined) {
+    // Select the configured prompt identity ONCE, from the actor M1 already assigned (ADR-0073).
+    // This is configuration lookup, not routing: `assignAgent` decided the actor above and nothing
+    // here can change it.
+    const promptIdentity = selectModelPromptIdentity(
+      orch.modelReplyPort,
+      assignedActor,
+      orch.taskClass,
+    );
+    if (promptIdentity === undefined) {
+      // No prompt configured for this scope. Refusing beats borrowing another agent's prompt.
+      emit('model-invocation-skipped', 'orchestration-model-unavailable', { actor: assignedActor });
+      return refuse('orchestration-model-unavailable');
+    }
+    // The gate now reads the SELECTED identity: one scope may be evaluated while another is not.
+    if (orch.requireEvaluationRef && promptIdentity.evaluationRef === undefined) {
       return refuse('orchestration-evaluation-mismatch');
     }
+    replyEvaluationRef = promptIdentity.evaluationRef;
     const plan = createReplyPlan({
       context: ctx1,
       envelope,
       assignedActor,
       modelPort: orch.modelReplyPort,
+      promptIdentity,
       policyRevision: orch.policy.policyRevision,
       taskClass: orch.taskClass,
       citations,
@@ -432,7 +452,7 @@ export async function orchestrateInbound(
         proposalKind: kind,
         structuredIntent: proposal.structuredIntent,
         policyRevision: orch.policy.policyRevision,
-        evaluationRef: orch.modelReplyPort?.evaluationRef,
+        evaluationRef: replyEvaluationRef,
         citations,
         proposedReplyBody: replyBody,
       });

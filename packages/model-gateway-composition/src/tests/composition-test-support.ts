@@ -139,6 +139,7 @@ export function syntheticRequest(over: Record<string, unknown> = {}): Record<str
     maxResultChars: 1024,
     promptId: 'qfj.s2b.synthetic',
     promptVersion: '1',
+    promptDigest: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
     tokenBudget: 4096,
     costBudget: 1,
     timeoutMs: 30_000,

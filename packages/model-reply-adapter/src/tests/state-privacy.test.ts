@@ -7,6 +7,9 @@
  */
 import { describe, expect, it } from 'vitest';
 
+import { createPromptRegistry } from '@qf-jarvis/prompt-registry';
+import { syntheticPromptDefinition } from '../testing/fixtures.js';
+
 import {
   createModelReplyAdapter,
   type ModelReplyAdapterConfig,
@@ -31,14 +34,19 @@ function makeAdapter(
     release: syntheticRelease(),
     promptFamily: 'reply.client',
     promptVersion: 1,
+    promptRegistry: createPromptRegistry([M4_PROMPT]),
     capabilityProfileRef: 'cap.reply.v1',
     evaluationRef: 'evref-000000',
+    evaluationPromptDigest: M4_PROMPT.contentDigest,
     stateReader,
     clock: fixedClock(),
     ...(invoker ? { invoker } : {}),
   };
   return createModelReplyAdapter(config);
 }
+
+/** The one synthetic CLIENT prompt every adapter in this spec resolves (ADR-0073). */
+const M4_PROMPT = syntheticPromptDefinition();
 
 describe('data class', () => {
   it('(17) HUMAN_ONLY reaches no gateway', async () => {

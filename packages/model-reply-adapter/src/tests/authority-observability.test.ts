@@ -7,6 +7,9 @@
  */
 import { describe, expect, it } from 'vitest';
 
+import { createPromptRegistry } from '@qf-jarvis/prompt-registry';
+import { syntheticPromptDefinition } from '../testing/fixtures.js';
+
 import {
   buildGatewayRequest,
   DEFAULT_GATEWAY_REQUEST_BUDGETS,
@@ -43,8 +46,10 @@ function makeAdapter(hook?: ModelReplyAdapterObservabilityHook) {
     release: syntheticRelease(),
     promptFamily: 'reply.client',
     promptVersion: 1,
+    promptRegistry: createPromptRegistry([M4_PROMPT]),
     capabilityProfileRef: 'cap.reply.v1',
     evaluationRef: 'evref-000000',
+    evaluationPromptDigest: M4_PROMPT.contentDigest,
     stateReader: scriptedReplyStateReader(clearReplyState(), clearReplyState()),
     clock: fixedClock(),
     invoker: scriptedGatewayInvoker(structuredReply({ replyBody: 'SECRET-REPLY-BODY-XYZ' })),
@@ -54,6 +59,9 @@ function makeAdapter(hook?: ModelReplyAdapterObservabilityHook) {
 }
 
 const SECRET_INPUT = 'SECRET-INBOUND-TEXT-XYZ';
+
+/** The one synthetic CLIENT prompt every adapter in this spec resolves (ADR-0073). */
+const M4_PROMPT = syntheticPromptDefinition();
 
 describe('observability — content-free', () => {
   it('(60,61,62,63,64) emits only closed event types with safe ids and no content/secret', async () => {
@@ -83,6 +91,7 @@ describe('observability — content-free', () => {
 describe('request — content minimization', () => {
   it('(65) the minimized request carries only the prompt + normalized input and no subject/internal note', () => {
     const req = buildGatewayRequest({
+      prompt: syntheticPromptDefinition(),
       plan: replyPlan({ normalizedText: SECRET_INPUT }),
       requestedAt: '2026-07-25T00:00:00Z',
       budgets: DEFAULT_GATEWAY_REQUEST_BUDGETS,

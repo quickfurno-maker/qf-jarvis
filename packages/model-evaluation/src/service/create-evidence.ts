@@ -126,6 +126,9 @@ export function createApprovalEvidence(
       evaluationSuiteVersion: suiteResult.binding.evaluationSuiteVersion,
       promptFamily: suiteResult.binding.promptFamily,
       promptVersion: suiteResult.binding.promptVersion,
+      // ADR-0073: the digest is part of the evidence identity, so two runs that differ only in the
+      // prompt BYTES produce a different suiteResultDigest and therefore a different evaluationRef.
+      promptDigest: suiteResult.binding.promptDigest,
       capabilityProfileRef: suiteResult.binding.capabilityProfileRef,
       knowledgeRevision: suiteResult.binding.knowledgeRevision,
       policyContractRevision: suiteResult.binding.policyContractRevision,

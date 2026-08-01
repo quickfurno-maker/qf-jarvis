@@ -732,6 +732,7 @@ describe('gateway integration — hybrid Groq + local', () => {
       maxResultChars: 1000,
       promptId: 'p.qualify',
       promptVersion: '1',
+      promptDigest: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       tokenBudget: 1000,
       costBudget: 1,
       timeoutMs: 5000,

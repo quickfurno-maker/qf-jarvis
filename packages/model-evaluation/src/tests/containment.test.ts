@@ -21,6 +21,8 @@ import { scenarioKey } from '../contracts/scenario.js';
 import { evaluateSuite } from '../service/evaluate-suite.js';
 import { createApprovalEvidence } from '../service/create-evidence.js';
 import {
+  SYNTHETIC_PROMPT_DIGEST,
+  SYNTHETIC_PROMPT_TEMPLATE,
   buildFoundationScenarios,
   buildFoundationSuite,
   safeObservations,
@@ -235,6 +237,14 @@ describe('containment', () => {
       );
       expect(text).not.toMatch(/\bn8n\b|kimi/i);
     }
+  });
+
+  it("(57,61) the fixture's literal prompt digest is genuinely SHA-256 of the fixture template", () => {
+    // The fixture cannot hash it itself -- the lock directly above forbids that import in this
+    // package's production source. Proving the literal here keeps both properties.
+    expect(SYNTHETIC_PROMPT_DIGEST).toBe(
+      createHash('sha256').update(SYNTHETIC_PROMPT_TEMPLATE, 'utf8').digest('hex'),
+    );
   });
 
   it('(61) depends only on zod and exposes only the root and ./testing', () => {

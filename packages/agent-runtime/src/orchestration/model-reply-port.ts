@@ -15,7 +15,7 @@ import type {
   ReplyPlan,
 } from './contracts.js';
 import type { OrchestrationReason } from './vocabularies.js';
-import type { RuntimeDataClass } from '../contracts/vocabularies.js';
+import type { RuntimeActor, RuntimeDataClass } from '../contracts/vocabularies.js';
 
 /**
  * Supplies the current revision-bound conversation context. Awaited at start and again before Core
@@ -32,11 +32,43 @@ export interface ConversationContextPort {
  */
 export interface ModelReplyPort {
   readonly release: ModelReleaseRef;
+  readonly capabilityProfileRef: string;
+  /**
+   * The legacy single prompt identity.
+   *
+   * Optional since QFJ-S3-I-B (ADR-0073): a port that implements `selectPromptIdentity` configures a
+   * prompt per agent scope instead, because one global prompt identity cannot serve both Riya and
+   * Anisha once definitions are scope-bound. A port supplies one shape or the other, never both.
+   */
+  readonly promptFamily?: string;
+  readonly promptVersion?: number;
+  readonly evaluationRef?: string;
+  /**
+   * Select the configured prompt identity for an already-assigned actor (ADR-0073).
+   *
+   * This is prompt CONFIGURATION lookup, not assignment. M1's `assignAgent` remains the sole
+   * assignment authority; the actor arriving here has already been decided, and this call only asks
+   * which prompt the deployment configured for it. Returning `undefined` means "no prompt configured
+   * for this scope", which fails the turn closed — there is deliberately no fallback to another
+   * scope's prompt, because answering a vendor with a client prompt is the failure being prevented.
+   *
+   * Synchronous and pure: a selector that performed I/O could observe state between the gates.
+   */
+  selectPromptIdentity?(request: ModelPromptSelectionRequest): ModelPromptIdentity | undefined;
+  draftReply(plan: ReplyPlan): Promise<unknown>;
+}
+
+/** The exact prompt identity a deployment configured for one agent scope. Content lives in M4. */
+export interface ModelPromptIdentity {
   readonly promptFamily: string;
   readonly promptVersion: number;
-  readonly capabilityProfileRef: string;
   readonly evaluationRef?: string;
-  draftReply(plan: ReplyPlan): Promise<unknown>;
+}
+
+/** What the orchestrator tells a port about the turn. Already-assigned actor, nothing else. */
+export interface ModelPromptSelectionRequest {
+  readonly assignedActor: RuntimeActor;
+  readonly taskClass: string;
 }
 
 /** A bounded, exact knowledge retrieval request (no free-text query). */

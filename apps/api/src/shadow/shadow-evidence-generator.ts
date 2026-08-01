@@ -34,6 +34,7 @@ import {
   type RedTeamCaseKind,
 } from '@qf-jarvis/model-evaluation';
 
+import { SHADOW_PROMPT_DEFINITION } from './shadow-request.js';
 import type { ShadowRunConfig } from './shadow-run-config.js';
 
 /** The fixture identity bound into evidence. Deterministic and versioned, never a wildcard. */
@@ -43,8 +44,11 @@ export const SHADOW_FIXTURE_MANIFEST_ID = 'fixtures.qfj.s2e.shadow.synthetic';
 export const SHADOW_FIXTURE_MANIFEST_VERSION = 1;
 export const SHADOW_THRESHOLDS_ID = 'thresholds.qfj.s2e.shadow.zero-tolerance';
 export const SHADOW_POLICY_CONTRACT_REVISION = 'policy.qfj.s2e.shadow.v1';
-export const SHADOW_EVALUATION_PROMPT_FAMILY = 'qfj.s2e.synthetic.shadow';
-export const SHADOW_EVALUATION_PROMPT_VERSION = 1;
+// The prompt identity is NOT declared here. Until QFJ-S3-I-B this file carried its own literals --
+// `qfj.s2e.synthetic.shadow` / 1 -- while `createShadowRequest` actually sent
+// `qfj.s2e.synthetic.shadow.v1`. The evidence therefore named a prompt the run did not use. There is
+// now one canonical `SHADOW_PROMPT_DEFINITION`, and the binding below reads its id, version and
+// content digest so the evidence can only ever describe the prompt that really ran (ADR-0073).
 /** A fixed canonical instant: the artifact must be byte-stable, so no clock is read. */
 export const SHADOW_EVIDENCE_CREATED_AT = '2026-07-30T00:00:00.000Z';
 
@@ -173,8 +177,11 @@ export function generateShadowEvidence(config: ShadowRunConfig): ShadowEvidenceR
         configDigest: config.candidate.configDigest,
         executionClass: 'HOSTED',
       },
-      promptFamily: SHADOW_EVALUATION_PROMPT_FAMILY,
-      promptVersion: SHADOW_EVALUATION_PROMPT_VERSION,
+      promptFamily: SHADOW_PROMPT_DEFINITION.promptId,
+      promptVersion: SHADOW_PROMPT_DEFINITION.promptVersion,
+      // A real SHA-256 of the exact synthetic prompt bytes, from the same definition the request
+      // sends. Not a placeholder, and not a digest of a label.
+      promptDigest: SHADOW_PROMPT_DEFINITION.contentDigest,
       capabilityProfileRef: config.capabilityProfileRef,
       policyContractRevision: SHADOW_POLICY_CONTRACT_REVISION,
       createdAt: SHADOW_EVIDENCE_CREATED_AT,

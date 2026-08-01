@@ -18,6 +18,7 @@
   "dependencies": {
     "@qf-jarvis/model-evaluation": "workspace:*",
     "@qf-jarvis/model-gateway": "workspace:*",
+    "@qf-jarvis/prompt-registry": "workspace:*",
     "@qf-jarvis/model-gateway-composition": "workspace:*",
     "zod": "4.4.3"
   },

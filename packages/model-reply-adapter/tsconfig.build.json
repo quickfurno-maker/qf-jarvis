@@ -14,7 +14,8 @@
   // (public request/response/provenance contracts) — both one-way.
   "references": [
     { "path": "../agent-runtime/tsconfig.build.json" },
-    { "path": "../model-gateway" }
+    { "path": "../model-gateway" },
+    { "path": "../prompt-registry/tsconfig.build.json" }
   ],
   "include": ["src/**/*.ts"],
   "exclude": ["src/tests/**"]

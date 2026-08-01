@@ -24,6 +24,26 @@ import type {
 } from '../contracts/vocabularies.js';
 import { DEFAULT_MANDATORY_RED_TEAM_KINDS } from '../red-team/mandatory-suite.js';
 
+/**
+ * The synthetic prompt these fixtures pretend was evaluated, and its real digest.
+ *
+ * Exported so a spec can prove the binding's digest is genuinely SHA-256 of these bytes rather than
+ * an arbitrary 64-hex string.
+ */
+export const SYNTHETIC_PROMPT_TEMPLATE =
+  'Synthetic evaluation fixture prompt. Not a production instruction.';
+/**
+ * The literal SHA-256 of `SYNTHETIC_PROMPT_TEMPLATE`, written out rather than computed.
+ *
+ * `src/testing` counts as production source for this package's containment lock (ADR-0052 section R),
+ * which forbids importing the Node crypto module here -- a lock worth keeping, since it is what stops
+ * an evaluation package from acquiring the ability to make live calls. So the value is a literal, and
+ * `tests/containment.test.ts` hashes the template and asserts this exact string: a wrong literal fails
+ * there rather than silently.
+ */
+export const SYNTHETIC_PROMPT_DIGEST =
+  'a861c3b7ea94c9dc502ce0bba9bae4d8356945e78bb399d13770ae225cba660b';
+
 /** A synthetic exact binding. Override any field for a mismatch test. */
 export function createSyntheticBinding(
   overrides: Partial<Parameters<typeof createEvaluationBinding>[0]> = {},
@@ -47,6 +67,10 @@ export function createSyntheticBinding(
     },
     promptFamily: 'prompt.family.a',
     promptVersion: 1,
+    // A REAL SHA-256 of the synthetic fixture template above -- not a sentinel, not a hash of a
+    // label. model-evaluation deliberately does not depend on prompt-registry, so the digest is
+    // computed here from the same bytes a definition would carry.
+    promptDigest: SYNTHETIC_PROMPT_DIGEST,
     capabilityProfileRef: 'cap.profile.a',
     knowledgeRevision: 'know.rev.1',
     policyContractRevision: 'policy.rev.1',

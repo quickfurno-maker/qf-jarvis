@@ -27,6 +27,8 @@ import type {
   ModelReplyAdapterObservabilityHook,
 } from '../contracts/observability.js';
 import { NOOP_MODEL_REPLY_ADAPTER_OBSERVABILITY } from '../contracts/observability.js';
+import type { ModelPromptIdentity } from '@qf-jarvis/agent-runtime';
+import type { PromptRegistry } from '@qf-jarvis/prompt-registry';
 import type { ModelGatewayInvoker } from '../gateway/model-gateway-invoker.js';
 import {
   buildGatewayRequest,
@@ -36,6 +38,7 @@ import {
 import { provenanceMatches } from './validate-provenance.js';
 import { validateStructuredResult } from './validate-gateway-result.js';
 import { citationsAuthorized } from './validate-citations.js';
+import { resolveAuthoritativePrompt } from './resolve-prompt.js';
 import { postGatewayBlockReason, stateBlockReason } from './state-gates.js';
 
 /** A model reply adapter: an M2 `ModelReplyPort` plus a detailed drafting method. */
@@ -43,13 +46,53 @@ export interface ModelReplyAdapter extends ModelReplyPort {
   draftReplyDetailed(plan: ReplyPlan): Promise<ModelReplyAdapterResult>;
 }
 
+/** One agent scope's configured prompt identity and its evaluated content digest (ADR-0073). */
+export interface ModelReplyPromptBinding {
+  readonly promptFamily: string;
+  readonly promptVersion: number;
+  readonly evaluationRef?: string;
+  readonly evaluationPromptDigest?: string;
+}
+
+/**
+ * Per-scope prompt configuration (ADR-0073).
+ *
+ * A prompt definition is scope-bound, so one runtime serving both Riya and Anisha configures one
+ * binding per scope. There is no HUMAN entry: a human turn never reaches a model.
+ */
+export interface ModelReplyPromptBindings {
+  readonly CLIENT?: ModelReplyPromptBinding;
+  readonly VENDOR?: ModelReplyPromptBinding;
+  readonly COORDINATION?: ModelReplyPromptBinding;
+  readonly SYSTEM?: ModelReplyPromptBinding;
+}
+
 export interface ModelReplyAdapterConfig {
   /** The exact model identity this port represents; a plan must bind the same identity. */
   readonly release: ModelReleaseRef;
-  readonly promptFamily: string;
-  readonly promptVersion: number;
+  /**
+   * The LEGACY single prompt identity. Valid only when `promptBindings` is absent, and then it can
+   * serve only the one scope its definition is bound to. Mixing the two shapes is rejected.
+   */
+  readonly promptFamily?: string;
+  readonly promptVersion?: number;
   readonly capabilityProfileRef: string;
   readonly evaluationRef?: string;
+  /** Per-scope bindings. When present, every legacy prompt/evaluation field must be absent. */
+  readonly promptBindings?: ModelReplyPromptBindings;
+  /**
+   * The injected immutable prompt registry (ADR-0073). Optional so a runtime that never drafts a
+   * reply can still be constructed; a model-backed draft without it fails closed at
+   * `model-adapter-unavailable` rather than falling back to any built-in text. There is no default
+   * registry and no built-in prompt anywhere in this package.
+   */
+  readonly promptRegistry?: PromptRegistry;
+  /**
+   * The exact prompt-content digest the bound evaluation was produced against (ADR-0073). It pairs
+   * with `evaluationRef`: both absent is fine, both present must agree with the resolved prompt, and
+   * one without the other is a wiring error rather than a partial claim.
+   */
+  readonly evaluationPromptDigest?: string;
   readonly stateReader: ReplyStateReader;
   /** Injected canonical-instant clock (no wall-clock read inside the adapter). */
   readonly clock: () => string;
@@ -70,12 +113,75 @@ function releaseEqual(a: ModelReleaseRef, b: ModelReleaseRef): boolean {
   );
 }
 
+/** Map an assigned actor to its prompt scope. HUMAN never reaches a model, so it has no binding. */
+function scopeKeyFor(
+  actor: ReplyPlan['assignedActor'],
+): keyof ModelReplyPromptBindings | undefined {
+  switch (actor) {
+    case 'RIYA':
+      return 'CLIENT';
+    case 'ANISHA':
+      return 'VENDOR';
+    case 'JARVIS':
+      return 'COORDINATION';
+    case 'SYSTEM':
+      return 'SYSTEM';
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * The one binding configured for an actor, or `undefined` to fail closed.
+ *
+ * In per-scope mode a missing scope is a refusal: there is deliberately no search for "a binding that
+ * would work", because the only ones available belong to other agents.
+ */
+function bindingFor(
+  config: ModelReplyAdapterConfig,
+  actor: ReplyPlan['assignedActor'],
+): ModelReplyPromptBinding | undefined {
+  if (config.promptBindings !== undefined) {
+    const key = scopeKeyFor(actor);
+    return key === undefined ? undefined : config.promptBindings[key];
+  }
+  if (config.promptFamily === undefined || config.promptVersion === undefined) {
+    return undefined;
+  }
+  return {
+    promptFamily: config.promptFamily,
+    promptVersion: config.promptVersion,
+    ...(config.evaluationRef === undefined ? {} : { evaluationRef: config.evaluationRef }),
+    ...(config.evaluationPromptDigest === undefined
+      ? {}
+      : { evaluationPromptDigest: config.evaluationPromptDigest }),
+  };
+}
+
+/** True iff the config declares exactly one prompt shape. A mixed config is a wiring error. */
+function promptConfigModeValid(config: ModelReplyAdapterConfig): boolean {
+  const legacyPresent =
+    config.promptFamily !== undefined ||
+    config.promptVersion !== undefined ||
+    config.evaluationRef !== undefined ||
+    config.evaluationPromptDigest !== undefined;
+  if (config.promptBindings !== undefined) {
+    return !legacyPresent;
+  }
+  return config.promptFamily !== undefined && config.promptVersion !== undefined;
+}
+
 /** Build a model reply adapter from injected collaborators. */
 export function createModelReplyAdapter(config: ModelReplyAdapterConfig): ModelReplyAdapter {
   const hook = config.observability ?? NOOP_MODEL_REPLY_ADAPTER_OBSERVABILITY;
   const budgets: GatewayRequestBudgets = { ...DEFAULT_GATEWAY_REQUEST_BUDGETS, ...config.budgets };
 
   async function draftReplyDetailed(plan: ReplyPlan): Promise<ModelReplyAdapterResult> {
+    // Set once the prompt is resolved; observability before that point reports it as undefined. The
+    // DIGEST is emitted, never the template -- an event carrying the prompt body would make the log
+    // the one place system instructions leak.
+    const resolved: { promptDigest?: string } = {};
+
     const emit = (
       type: ModelReplyAdapterEventType,
       reason: ModelReplyAdapterReason,
@@ -97,6 +203,7 @@ export function createModelReplyAdapter(config: ModelReplyAdapterConfig): ModelR
           modelId: plan.release.modelId,
           promptId: plan.promptFamily,
           promptVersion: String(plan.promptVersion),
+          promptDigest: resolved.promptDigest,
           capabilityProfileRef: plan.capabilityProfileRef,
           evaluationRef: plan.evaluationRef,
           resultKind,
@@ -148,13 +255,22 @@ export function createModelReplyAdapter(config: ModelReplyAdapterConfig): ModelR
       );
     };
 
+    // Exactly one prompt configuration shape; a mixed config is a wiring error, not a preference.
+    if (!promptConfigModeValid(config)) {
+      return refuse('model-plan-invalid', false);
+    }
+    // The binding configured for THIS actor -- per-scope or legacy. Missing means fail closed.
+    const binding = bindingFor(config, plan.assignedActor);
+    if (binding === undefined) {
+      return refuse('model-plan-invalid', false);
+    }
     // Plan must bind THIS port's exact model identity (no wildcard/latest; exact release/prompt/etc.).
     if (
       !releaseEqual(plan.release, config.release) ||
-      plan.promptFamily !== config.promptFamily ||
-      plan.promptVersion !== config.promptVersion ||
+      plan.promptFamily !== binding.promptFamily ||
+      plan.promptVersion !== binding.promptVersion ||
       plan.capabilityProfileRef !== config.capabilityProfileRef ||
-      plan.evaluationRef !== config.evaluationRef
+      plan.evaluationRef !== binding.evaluationRef
     ) {
       return refuse('model-plan-invalid', false);
     }
@@ -180,10 +296,24 @@ export function createModelReplyAdapter(config: ModelReplyAdapterConfig): ModelR
       undefined,
     );
 
-    // Build the exact gateway request.
+    // Resolve the authoritative prompt -- ONCE, and only after the first state gate has passed, so a
+    // blocked conversation costs no resolution and a missing registry can never mask a state block.
+    const resolution = resolveAuthoritativePrompt({
+      plan,
+      registry: config.promptRegistry,
+      evaluationRef: binding.evaluationRef,
+      evaluationPromptDigest: binding.evaluationPromptDigest,
+    });
+    if (resolution.prompt === undefined) {
+      return refuse(resolution.reason, false);
+    }
+    const prompt = resolution.prompt;
+    resolved.promptDigest = prompt.contentDigest;
+
+    // Build the exact gateway request from that one definition.
     let request;
     try {
-      request = buildGatewayRequest({ plan, requestedAt: config.clock(), budgets });
+      request = buildGatewayRequest({ plan, prompt, requestedAt: config.clock(), budgets });
     } catch {
       return refuse('model-plan-invalid', false);
     }
@@ -245,6 +375,7 @@ export function createModelReplyAdapter(config: ModelReplyAdapterConfig): ModelR
       modelVersion: response.provenance.modelVersion,
       promptId: response.provenance.promptId,
       promptVersion: response.provenance.promptVersion,
+      promptDigest: response.provenance.promptDigest,
       usedFallback: response.provenance.usedFallback,
       attempts: response.provenance.attempts,
     });
@@ -287,15 +418,42 @@ export function createModelReplyAdapter(config: ModelReplyAdapterConfig): ModelR
     return (await draftReplyDetailed(plan)).draft;
   }
 
-  const base = {
-    release: config.release,
-    promptFamily: config.promptFamily,
-    promptVersion: config.promptVersion,
-    capabilityProfileRef: config.capabilityProfileRef,
-    draftReply,
-    draftReplyDetailed,
-  };
+  /**
+   * Per-scope mode exposes the M2 selector; legacy mode keeps the flat fields it always had.
+   *
+   * The selector answers from the configured binding for the actor M1 already assigned. It performs
+   * no routing and no I/O, and a missing scope returns `undefined` so the turn fails closed rather
+   * than borrowing another agent's prompt.
+   */
   const port: ModelReplyAdapter =
-    config.evaluationRef === undefined ? base : { ...base, evaluationRef: config.evaluationRef };
+    config.promptBindings === undefined
+      ? {
+          release: config.release,
+          capabilityProfileRef: config.capabilityProfileRef,
+          ...(config.promptFamily === undefined ? {} : { promptFamily: config.promptFamily }),
+          ...(config.promptVersion === undefined ? {} : { promptVersion: config.promptVersion }),
+          ...(config.evaluationRef === undefined ? {} : { evaluationRef: config.evaluationRef }),
+          draftReply,
+          draftReplyDetailed,
+        }
+      : {
+          release: config.release,
+          capabilityProfileRef: config.capabilityProfileRef,
+          selectPromptIdentity: ({ assignedActor }): ModelPromptIdentity | undefined => {
+            const binding = bindingFor(config, assignedActor);
+            if (binding === undefined) {
+              return undefined;
+            }
+            return {
+              promptFamily: binding.promptFamily,
+              promptVersion: binding.promptVersion,
+              ...(binding.evaluationRef === undefined
+                ? {}
+                : { evaluationRef: binding.evaluationRef }),
+            };
+          },
+          draftReply,
+          draftReplyDetailed,
+        };
   return Object.freeze(port);
 }

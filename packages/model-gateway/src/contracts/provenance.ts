@@ -17,6 +17,11 @@ export interface ModelRunProvenance {
   readonly modelVersion: string;
   readonly promptId: string;
   readonly promptVersion: string;
+  /**
+   * The exact prompt-content digest the request carried (ADR-0073). Copied from the request by the
+   * gateway; a provider neither supplies nor selects it, so it cannot be re-pointed at other text.
+   */
+  readonly promptDigest: string;
   readonly mode: GatewayMode;
   /** Whether the accepted result came from the primary provider or the single fallback. */
   readonly usedFallback: boolean;

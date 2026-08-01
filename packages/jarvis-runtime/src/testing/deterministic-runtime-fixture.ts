@@ -16,6 +16,12 @@ import {
   syntheticRelease,
 } from '@qf-jarvis/model-reply-adapter/testing';
 
+import { createPromptDefinition, createPromptRegistry } from '@qf-jarvis/prompt-registry';
+import type {
+  PromptAgentScope,
+  PromptDefinition,
+  PromptRegistry,
+} from '@qf-jarvis/prompt-registry';
 import type { ClientSalesSignals } from '@qf-jarvis/riya-agent';
 
 import type { JarvisRuntimeConfig } from '../contracts/runtime-config.js';
@@ -28,6 +34,40 @@ import {
   fixedClock,
   scriptedAuthoritativeState,
 } from './deterministic-authoritative-state.js';
+
+/**
+ * A synthetic prompt registry for one agent scope (QFJ-S3-I-B, ADR-0073).
+ *
+ * A prompt definition is scope-bound and `(promptId, promptVersion)` is globally unique, so ONE
+ * runtime configuration -- which carries a single `promptFamily` -- can serve exactly one scope. A
+ * VENDOR test therefore supplies both a vendor prompt id and a VENDOR-scoped registry, exactly as a
+ * real vendor deployment would.
+ */
+export function syntheticPromptDefinition(
+  promptId = 'reply.client',
+  agentScope: PromptAgentScope = 'CLIENT',
+  promptVersion = 1,
+): PromptDefinition {
+  return createPromptDefinition({
+    promptId,
+    promptVersion,
+    agentScope,
+    taskClass: 'RESPONSE_GENERATION',
+    resultMode: 'STRUCTURED',
+    systemTemplate: `Synthetic ${agentScope} runtime fixture prompt. Not a production instruction.`,
+  });
+}
+
+export function syntheticPromptRegistry(
+  promptId = 'reply.client',
+  agentScope: PromptAgentScope = 'CLIENT',
+  promptVersion = 1,
+): PromptRegistry {
+  return createPromptRegistry([syntheticPromptDefinition(promptId, agentScope, promptVersion)]);
+}
+
+/** The default CLIENT definition the fixture config below binds -- registry AND evaluation digest. */
+const DEFAULT_PROMPT = syntheticPromptDefinition();
 
 /**
  * A ready-to-run runtime config that produces `CORE_ACCEPTED` on the happy path (clear state, CLIENT →
@@ -43,8 +83,14 @@ export function syntheticRuntimeConfig(
     release: syntheticRelease(),
     promptFamily: 'reply.client',
     promptVersion: 1,
+    // A model-backed draft now requires an injected registry (ADR-0073); the default one is
+    // CLIENT-scoped to match `promptFamily` above.
+    promptRegistry: createPromptRegistry([DEFAULT_PROMPT]),
     capabilityProfileRef: 'cap.reply.v1',
     evaluationRef: 'evref-000000',
+    // `evaluationRef` and `evaluationPromptDigest` are a pair: an evaluation reference that does not
+    // say WHICH prompt bytes it covers is the gap ADR-0073 closes, so M4 refuses a half-supplied one.
+    evaluationPromptDigest: DEFAULT_PROMPT.contentDigest,
     gatewayInvoker: scriptedGatewayInvoker(structuredReply({ citations: [] })),
     coreTransport: scriptedCoreTransport('ACCEPTED'),
     ...over,

@@ -14,7 +14,8 @@
   "references": [
     { "path": "../../packages/model-gateway" },
     { "path": "../../packages/model-evaluation/tsconfig.build.json" },
-    { "path": "../../packages/model-gateway-composition/tsconfig.build.json" }
+    { "path": "../../packages/model-gateway-composition/tsconfig.build.json" },
+    { "path": "../../packages/prompt-registry/tsconfig.build.json" }
   ],
   "include": ["src/**/*.ts"],
   "exclude": ["src/tests/**"]

@@ -37,6 +37,15 @@ export interface EvaluationBinding {
   readonly release: ProviderReleaseRef;
   readonly promptFamily: string;
   readonly promptVersion: number;
+  /**
+   * The exact prompt-content digest the evaluation was produced against (QFJ-S3-I-B, ADR-0073).
+   *
+   * REQUIRED. `promptFamily` + `promptVersion` name a prompt; only this says which BYTES were
+   * evaluated. Without it a binding could attest a version whose text later changed, which is the
+   * drift ADR-0073 closes at the runtime end -- an evaluation that cannot name the content it covers
+   * is evidence about a label, not about a prompt.
+   */
+  readonly promptDigest: string;
   readonly capabilityProfileRef: string;
   readonly knowledgeRevision: string | undefined;
   readonly policyContractRevision: string;
@@ -53,6 +62,8 @@ export interface EvaluationBindingInput {
   readonly release: ProviderReleaseRef;
   readonly promptFamily: string;
   readonly promptVersion: number;
+  /** The exact prompt-content digest the evaluation covers (ADR-0073). Required. */
+  readonly promptDigest: string;
   readonly capabilityProfileRef: string;
   readonly policyContractRevision: string;
   readonly createdAt: string;
@@ -94,6 +105,7 @@ const bindingSchema = z
     release: releaseSchema,
     promptFamily: IDENTIFIER,
     promptVersion: VERSION,
+    promptDigest: z.string().regex(/^[0-9a-f]{64}$/),
     capabilityProfileRef: IDENTIFIER,
     policyContractRevision: IDENTIFIER,
     createdAt: z.string().refine(isCanonicalInstant),
@@ -144,6 +156,7 @@ export function createEvaluationBinding(input: EvaluationBindingInput): Evaluati
     release: Object.freeze({ ...b.release }),
     promptFamily: b.promptFamily,
     promptVersion: b.promptVersion,
+    promptDigest: b.promptDigest,
     capabilityProfileRef: b.capabilityProfileRef,
     knowledgeRevision: b.knowledgeRevision,
     policyContractRevision: b.policyContractRevision,
@@ -175,6 +188,9 @@ export function bindingsMatch(a: EvaluationBinding, b: EvaluationBinding): boole
     releaseKey(a.release) === releaseKey(b.release) &&
     a.promptFamily === b.promptFamily &&
     a.promptVersion === b.promptVersion &&
+    // Two bindings that agree on every label but cover different prompt bytes are NOT the same
+    // binding (ADR-0073).
+    a.promptDigest === b.promptDigest &&
     a.capabilityProfileRef === b.capabilityProfileRef &&
     a.knowledgeRevision === b.knowledgeRevision &&
     a.policyContractRevision === b.policyContractRevision
