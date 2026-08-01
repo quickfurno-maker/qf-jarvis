@@ -63,9 +63,13 @@ export interface ProposalIdentity {
  * M3 `commandId` limit that concatenates a 128-character conversation id with this value.
  *
  * Nothing is truncated, rewritten, randomized or time-derived: the same tuple always yields the same
- * id, and a different tuple yields a different one. No raw caller text, provider value, prompt
- * reference, model output or subject data enters the digest — only bounded identifiers, two integers
- * and a closed vocabulary value, none of which is client content.
+ * id. Changed tuples are expected to change the digest, and bounded regression tests cover the cases
+ * that matter here, but collision-freedom is NOT claimed — a non-cryptographic digest cannot promise
+ * it. This is identity/idempotency evidence, not authentication and not a uniqueness guarantee.
+ *
+ * No raw caller text, provider value, prompt reference, model output or subject data enters the
+ * digest — only bounded identifiers, two integers and a closed vocabulary value, none of which is
+ * client content.
  */
 export function deriveProposalId(identity: ProposalIdentity): string {
   const canonical = canonicalJson({

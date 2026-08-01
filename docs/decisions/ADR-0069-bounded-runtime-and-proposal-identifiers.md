@@ -11,7 +11,8 @@ That label was too small. The real defect is one unbounded value feeding an enti
 ones.
 
 `InboundEnvelope.conversationId` and `messageId` are each independently allowed to reach **128**
-characters. Four layers derived a run identifier by concatenating them:
+characters. Three layers concatenated a run identifier, and a fourth site appended `-reply` to that
+value to derive the proposal identifier:
 
 ```
 agent-runtime/src/orchestration/orchestrate-inbound.ts   `${envelope.conversationId}-${envelope.messageId}`
@@ -44,8 +45,9 @@ composed path, despite being exactly the identity these fields wanted.
 
 ### 1. Separate identities stay separate
 
-Six identifiers, six contracts. Collapsing any pair would mean one contract's change silently
-rewriting another's meaning.
+Seven identities, seven contracts. Collapsing any pair would mean one contract's change silently
+rewriting another's meaning. (`runId` is an eighth named field, but not an eighth identity — it is the
+downstream carrier of the `runtimeId` value, which is exactly the point of this repair.)
 
 | Identity                   | Source                                      | Bound     | Purpose                          |
 | -------------------------- | ------------------------------------------- | --------- | -------------------------------- |
@@ -79,7 +81,8 @@ proposal.<32 lowercase hex characters>        // 41 characters, fixed width
 from the exact tuple that distinguishes one proposal from another: `runtimeId`, `conversationId`,
 `messageId`, `expectedRevision`, `proposalVersion`, `proposalKind`. Fixed width is the point — no
 combination of caller identifiers can push it past the proposal bound, and it leaves ample room under
-the `commandId` limit that prefixes it with a 128-character conversation id (worst case 178 of 256).
+the `commandId` limit that prefixes it with a 128-character conversation id: 128 + `-` + 41 + `-r` +
+seven revision digits = **179 of 256**.
 
 It is derived only after the second gate, once the proposal kind is settled, because the kind is part
 of the identity.
