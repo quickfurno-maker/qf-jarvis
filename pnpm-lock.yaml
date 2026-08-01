@@ -126,6 +126,9 @@ importers:
       '@qf-jarvis/agent-runtime':
         specifier: workspace:*
         version: link:../agent-runtime
+      '@qf-jarvis/anisha-agent':
+        specifier: workspace:*
+        version: link:../anisha-agent
       '@qf-jarvis/core-decision-adapter':
         specifier: workspace:*
         version: link:../core-decision-adapter

@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@qf-jarvis/agent-runtime": "workspace:*",
+    "@qf-jarvis/anisha-agent": "workspace:*",
     "@qf-jarvis/core-decision-adapter": "workspace:*",
     "@qf-jarvis/model-reply-adapter": "workspace:*",
     "@qf-jarvis/riya-agent": "workspace:*"

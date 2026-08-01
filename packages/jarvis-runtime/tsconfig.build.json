@@ -12,13 +12,15 @@
   // src/testing IS emitted (the public `./testing` subpath). Project references: the
   // composition root wires @qf-jarvis/agent-runtime (M1/M2 ports + orchestrator),
   // @qf-jarvis/core-decision-adapter (M3), @qf-jarvis/model-reply-adapter (M4), and
-  // @qf-jarvis/riya-agent (S3-C behaviour) — all one-way, and riya-agent depends only on
+  // @qf-jarvis/riya-agent (S3-C) and @qf-jarvis/anisha-agent (S3-D) — all one-way, and both
+  // behaviour packages depend only on
   // agent-runtime, so the graph stays acyclic.
   "references": [
     { "path": "../agent-runtime/tsconfig.build.json" },
     { "path": "../core-decision-adapter/tsconfig.build.json" },
     { "path": "../model-reply-adapter/tsconfig.build.json" },
-    { "path": "../riya-agent/tsconfig.build.json" }
+    { "path": "../riya-agent/tsconfig.build.json" },
+    { "path": "../anisha-agent/tsconfig.build.json" }
   ],
   "include": ["src/**/*.ts"],
   "exclude": ["src/tests/**"]

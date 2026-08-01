@@ -27,6 +27,13 @@ export type {
   ClientSalesBehaviourInputRequest,
 } from './contracts/behaviour-input.js';
 
+// The optional vendor-journey behaviour input seam (ADR-0071). Types only.
+export type {
+  VendorJourneyBehaviourInput,
+  VendorJourneyBehaviourInputPort,
+  VendorJourneyBehaviourInputRequest,
+} from './contracts/vendor-journey-behaviour-input.js';
+
 // Config + result + outcome vocabulary.
 export type { JarvisRuntimeConfig, JarvisProvenanceRefs } from './contracts/runtime-config.js';
 export type { JarvisRuntimeResult } from './contracts/runtime-result.js';

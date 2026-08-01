@@ -140,12 +140,14 @@ describe('public API lock', () => {
     expect(Object.isFrozen(runtime)).toBe(true);
   });
 
-  it('depends only on the three lower packages + riya-agent, exposes root + ./testing', () => {
-    // QFJ-S3-C-B (ADR-0068) adds @qf-jarvis/riya-agent. The composition root is the ONE layer allowed
-    // to know both the generic pipeline and a business agent, and riya-agent depends only on
-    // agent-runtime, so the graph stays acyclic. Still an EXACT set match, not a relaxed one.
+  it('depends only on the three lower packages + the two behaviour agents, exposes root + ./testing', () => {
+    // QFJ-S3-C-B (ADR-0068) added @qf-jarvis/riya-agent; QFJ-S3-D-B (ADR-0071) adds
+    // @qf-jarvis/anisha-agent. The composition root is the ONE layer allowed to know both the generic
+    // pipeline and a business agent, and each behaviour package depends only on agent-runtime, so the
+    // graph stays acyclic and the two agents never see each other. Still an EXACT set match.
     expect(Object.keys(manifest.dependencies ?? {}).sort()).toEqual([
       '@qf-jarvis/agent-runtime',
+      '@qf-jarvis/anisha-agent',
       '@qf-jarvis/core-decision-adapter',
       '@qf-jarvis/model-reply-adapter',
       '@qf-jarvis/riya-agent',

@@ -18,6 +18,8 @@ import { createOrchestrator, runAgentTurn } from '@qf-jarvis/agent-runtime';
 import { createCoreDecisionAdapter } from '@qf-jarvis/core-decision-adapter';
 import { createModelReplyAdapter } from '@qf-jarvis/model-reply-adapter';
 
+import { anishaBehaviourPort } from './anisha-behaviour-adapter.js';
+import { behaviourMux } from './behaviour-mux.js';
 import { riyaBehaviourPort } from './riya-behaviour-adapter.js';
 import type { JarvisRuntimeConfig } from '../contracts/runtime-config.js';
 import type { JarvisRuntimeResult } from '../contracts/runtime-result.js';
@@ -46,7 +48,15 @@ const CORE_OUTCOME_MAP: Readonly<Record<CoreDecisionOutcome, JarvisRuntimeOutcom
 );
 
 /** The shared-runtime implementation reference stamped into provenance when none is configured. */
-const DEFAULT_RUNTIME_REF = 'qfj.jarvis-runtime.s3cb';
+/**
+ * The shared-runtime implementation reference stamped into provenance when none is configured.
+ *
+ * Bumped s3cb -> s3db because S3-D-B materially changes what this composition IS: a second bounded
+ * business-agent bridge behind a deterministic selector. Default provenance should name the
+ * implementation that actually ran, not the one that used to. An explicit
+ * `config.provenanceRefs.runtimeRef` still overrides it untouched.
+ */
+const DEFAULT_RUNTIME_REF = 'qfj.jarvis-runtime.s3db';
 
 /** The default task class, kept in one place so the orchestrator and the behaviour port agree. */
 const DEFAULT_TASK_CLASS = 'RESPONSE_GENERATION';
@@ -136,13 +146,19 @@ export async function composeAndProcess(
       })
     : undefined;
 
-  // The Riya behaviour seam — wired ONLY when a client-sales input port is injected. Absent, the
-  // orchestrator uses its legacy eligible/`REPLY` default and nothing about this run changes.
+  // The behaviour seam — at most ONE port reaches the orchestrator. Each agent adapter is built only
+  // when its own input port is injected, and a deterministic mux selects exactly one of them per turn
+  // from the actor/party pair the merged router decided. With neither configured the mux is absent
+  // and the orchestrator uses its legacy eligible/`REPLY` default, unchanged.
   const taskClass = config.taskClass ?? DEFAULT_TASK_CLASS;
-  const behaviourPort =
-    config.behaviourInput === undefined
-      ? undefined
-      : riyaBehaviourPort(config.behaviourInput, source, taskClass);
+  const behaviourPort = behaviourMux({
+    ...(config.behaviourInput === undefined
+      ? {}
+      : { riya: riyaBehaviourPort(config.behaviourInput, source, taskClass) }),
+    ...(config.vendorJourneyBehaviourInput === undefined
+      ? {}
+      : { anisha: anishaBehaviourPort(config.vendorJourneyBehaviourInput, source, taskClass) }),
+  });
 
   // M2 orchestrator — the existing double-gated processing order over the injected ports.
   const orch = createOrchestrator({
@@ -177,11 +193,11 @@ export async function composeAndProcess(
         ...(refs?.providerRef === undefined ? {} : { providerRef: refs.providerRef }),
         releaseRef: refs?.releaseRef ?? config.release.releaseId,
         configRef: refs?.configRef ?? config.release.configDigest,
-        // `envelope.messageId`, NOT `runId`. `runId` concatenates two 128-character identifiers, so a
-        // perfectly valid envelope can produce a 257-character value that the 128-character opaque
-        // grammar refuses — turning a legitimate turn into a refusal. `messageId` is already
-        // validated, already opaque, already bounded, and already unique per inbound message. This is
-        // also NOT `config.correlationId`: that field belongs to the M3 Core adapter and stays there.
+        // `envelope.messageId`, and deliberately none of the others. Since ADR-0069 the canonical
+        // `runId` IS `envelope.runtimeId` — it no longer concatenates anything — but it remains a
+        // different identity from the audit correlation, and collapsing the two would make one
+        // contract's change silently rewrite the other's meaning. `config.correlationId` is a third
+        // identity again: it belongs to the M3 Core adapter and stays there.
         correlationId: refs?.correlationId ?? envelope.messageId,
         occurredAt: config.clock(),
       },
