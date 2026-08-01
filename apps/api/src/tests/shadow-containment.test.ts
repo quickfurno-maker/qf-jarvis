@@ -314,6 +314,9 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // match -- this records an authorised addition, it does not relax the assertion.
       'anisha-agent',
       'contracts',
+      // QFJ-P08-A (ADR-0074): the conversation control command foundation. Still an EXACT set match
+      // -- this records an authorised addition, it does not relax the assertion.
+      'conversation-control',
       'core-decision-adapter',
       'event-backbone',
       'event-ingestion',
@@ -346,6 +349,8 @@ describe('(133-148) the declared budget and every prior lock', () => {
       'anisha-agent': 14,
       // QFJ-S3-I-A (ADR-0072): the prompt registry foundation, locked from the day it lands.
       'prompt-registry': 7,
+      // QFJ-P08-A (ADR-0074): the conversation control foundation, locked from the day it lands.
+      'conversation-control': 9,
     };
     for (const [pkg, count] of Object.entries(expected)) {
       const barrel = (await import(
