@@ -32,8 +32,20 @@ import type { JarvisRuntimeConfig } from '../contracts/runtime-config.js';
 import type {
   ConversationControlState,
   ConversationOperationsProjection,
+  ConversationStateKey,
   OperationsProjectingAuthoritativeConversationStatePort,
 } from '../contracts/authoritative-state.js';
+
+/**
+ * One operations query, explicitly tenant-scoped (QFJ-P08-B1, ADR-0076).
+ *
+ * A query by conversation alone could be answered from another tenant's record. `conversationId` is
+ * not assumed globally unique, so the caller states which tenant it is asking about.
+ */
+export interface ConversationOperationsQueryInput {
+  readonly tenantId: string;
+  readonly conversationId: string;
+}
 
 /** The outcome of one operations query. Type-only; no new runtime vocabulary. */
 export type JarvisConversationOperationsResult =
@@ -234,13 +246,22 @@ function asProjecting(
  */
 export async function readOperationsSnapshotThroughSource(
   config: JarvisRuntimeConfig,
-  conversationId: string,
+  input: ConversationOperationsQueryInput,
 ): Promise<JarvisConversationOperationsResult> {
-  if (!isQueryableConversationId(conversationId)) {
-    // Checked BEFORE any source call: a wildcard query is not a query, and a source should never be
-    // asked to interpret one.
+  // Both identifiers are checked BEFORE any source call: a wildcard query is not a query, and a
+  // source should never be asked to interpret one. An invalid tenant reuses the existing closed
+  // reason rather than adding a second one -- the caller's remedy is identical either way.
+  if (
+    !isPlainRecord(input) ||
+    !isQueryableConversationId(input.tenantId) ||
+    !isQueryableConversationId(input.conversationId)
+  ) {
     return failure('operations-invalid-conversation');
   }
+  const key: ConversationStateKey = Object.freeze({
+    tenantId: input.tenantId,
+    conversationId: input.conversationId,
+  });
 
   const projecting = asProjecting(config.authoritativeState);
   if (projecting === undefined) {
@@ -249,16 +270,19 @@ export async function readOperationsSnapshotThroughSource(
 
   let raw: unknown;
   try {
-    raw = await projecting.readOperationsProjection(conversationId);
+    raw = await projecting.readOperationsProjection(key);
   } catch {
     // Foreign code. The thrown value is discarded, never logged or re-emitted.
     return failure('operations-source-failure');
   }
 
   const projection = canonicalizeProjection(raw);
-  if (projection?.state.conversationId !== conversationId) {
-    // A projection for a different conversation is not a near miss; answering with it would attribute
-    // one conversation's control state to another.
+  if (
+    projection?.state.conversationId !== key.conversationId ||
+    projection.state.tenantId !== key.tenantId
+  ) {
+    // A projection for a different conversation -- or the right conversation under the WRONG TENANT
+    // -- is not a near miss; answering with it would attribute one tenant's control state to another.
     return failure('operations-invalid-result');
   }
 

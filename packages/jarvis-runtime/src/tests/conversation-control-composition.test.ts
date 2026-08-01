@@ -29,6 +29,7 @@ import type {
   AuthoritativeConversationStatePort,
   ConversationControlState,
   ConversationOperationsProjection,
+  ConversationStateKey,
 } from '../contracts/authoritative-state.js';
 import {
   clearControlState,
@@ -42,6 +43,9 @@ import {
 } from '../testing/deterministic-runtime-fixture.js';
 
 const AT = (n: number): string => `2026-08-0${String(n)}T00:00:00.000Z`;
+
+/** The tenant every synthetic fixture already uses. */
+const TENANT = 'tenant.a';
 
 /** Counting model + Core fakes, so "AI did not run" is an observed zero rather than an argument. */
 interface Counted {
@@ -84,6 +88,11 @@ function commandInput(
   };
 }
 
+/** The tenant-scoped operator input the runtime now takes (QFJ-P08-B1, ADR-0076). */
+function scoped(over: Partial<ConversationControlCommandInput> = {}) {
+  return { tenantId: TENANT, command: commandInput(over) };
+}
+
 /** One runtime over ONE controllable source, with counting model/Core fakes. */
 function harness(state: Partial<ConversationControlState> = {}) {
   const source = controllableAuthoritativeState(clearControlState(state));
@@ -107,7 +116,7 @@ describe('(A, B, C) take -> release -> resume, proven against real inbound turns
   it('(A) TAKE_OWNERSHIP stops the NEXT real Jarvis turn before model and Core', async () => {
     const { source, invoker, core, runtime } = harness();
 
-    const applied = await runtime.applyConversationControlCommand(commandInput());
+    const applied = await runtime.applyConversationControlCommand(scoped());
     expect(applied.ok).toBe(true);
     if (!applied.ok) return;
     expect(applied.decision.outcome).toBe('APPLIED');
@@ -119,7 +128,10 @@ describe('(A, B, C) take -> release -> resume, proven against real inbound turns
     });
     expect(source.controlApplications()).toBe(1);
 
-    const snapshot = await runtime.readConversationOperationsSnapshot('conv.1');
+    const snapshot = await runtime.readConversationOperationsSnapshot({
+      tenantId: TENANT,
+      conversationId: 'conv.1',
+    });
     expect(snapshot.ok).toBe(true);
     if (!snapshot.ok) return;
     expect(snapshot.snapshot.revision).toBe(2);
@@ -149,10 +161,10 @@ describe('(A, B, C) take -> release -> resume, proven against real inbound turns
 
   it('(B) RELEASE_OWNERSHIP leaves AI paused, and the next turn is still refused', async () => {
     const { source, invoker, core, runtime } = harness();
-    await runtime.applyConversationControlCommand(commandInput());
+    await runtime.applyConversationControlCommand(scoped());
 
     const released = await runtime.applyConversationControlCommand(
-      commandInput({
+      scoped({
         commandId: 'ctrl.release',
         expectedRevision: 2,
         action: 'RELEASE_OWNERSHIP',
@@ -169,7 +181,10 @@ describe('(A, B, C) take -> release -> resume, proven against real inbound turns
       aiPaused: true,
     });
 
-    const snapshot = await runtime.readConversationOperationsSnapshot('conv.1');
+    const snapshot = await runtime.readConversationOperationsSnapshot({
+      tenantId: TENANT,
+      conversationId: 'conv.1',
+    });
     expect(snapshot.ok).toBe(true);
     if (!snapshot.ok) return;
     expect(snapshot.snapshot.revision).toBe(3);
@@ -192,9 +207,9 @@ describe('(A, B, C) take -> release -> resume, proven against real inbound turns
 
   it('(C) only an explicit RESUME_AI makes the next turn model-eligible again', async () => {
     const { invoker, core, runtime } = harness();
-    await runtime.applyConversationControlCommand(commandInput());
+    await runtime.applyConversationControlCommand(scoped());
     await runtime.applyConversationControlCommand(
-      commandInput({
+      scoped({
         commandId: 'ctrl.release',
         expectedRevision: 2,
         action: 'RELEASE_OWNERSHIP',
@@ -203,7 +218,7 @@ describe('(A, B, C) take -> release -> resume, proven against real inbound turns
     );
 
     const resumed = await runtime.applyConversationControlCommand(
-      commandInput({
+      scoped({
         commandId: 'ctrl.resume',
         expectedRevision: 3,
         action: 'RESUME_AI',
@@ -219,7 +234,10 @@ describe('(A, B, C) take -> release -> resume, proven against real inbound turns
       aiPaused: false,
     });
 
-    const snapshot = await runtime.readConversationOperationsSnapshot('conv.1');
+    const snapshot = await runtime.readConversationOperationsSnapshot({
+      tenantId: TENANT,
+      conversationId: 'conv.1',
+    });
     expect(snapshot.ok).toBe(true);
     if (!snapshot.ok) return;
     expect(snapshot.snapshot.revision).toBe(4);
@@ -246,9 +264,7 @@ describe('(D, E, F) refusals and no-ops', () => {
   it('(D) RESUME_AI under an active takeover is refused, and the runtime stays blocked', async () => {
     const { source, invoker, core, runtime } = harness({ humanTakeover: true, aiPaused: true });
 
-    const result = await runtime.applyConversationControlCommand(
-      commandInput({ action: 'RESUME_AI' }),
-    );
+    const result = await runtime.applyConversationControlCommand(scoped({ action: 'RESUME_AI' }));
     // A refusal is a SUCCESSFUL application of the rules: ok true, decision REFUSED.
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -265,12 +281,12 @@ describe('(D, E, F) refusals and no-ops', () => {
 
   it('(E) a stale expectedRevision refuses and mutates nothing', async () => {
     const { source, runtime } = harness();
-    await runtime.applyConversationControlCommand(commandInput());
+    await runtime.applyConversationControlCommand(scoped());
     expect(source.current().revision).toBe(2);
 
     for (const expectedRevision of [1, 5]) {
       const stale = await runtime.applyConversationControlCommand(
-        commandInput({ commandId: 'ctrl.stale', expectedRevision, action: 'RESUME_AI' }),
+        scoped({ commandId: 'ctrl.stale', expectedRevision, action: 'RESUME_AI' }),
       );
       expect(stale.ok).toBe(true);
       if (!stale.ok) return;
@@ -285,7 +301,7 @@ describe('(D, E, F) refusals and no-ops', () => {
 
   it('(F) a redundant command is NO_CHANGE and does not bump the revision', async () => {
     const { source, runtime } = harness({ humanTakeover: true, aiPaused: true });
-    const result = await runtime.applyConversationControlCommand(commandInput());
+    const result = await runtime.applyConversationControlCommand(scoped());
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.decision.outcome).toBe('NO_CHANGE');
@@ -315,9 +331,12 @@ describe('(G, H) optional capability and input validation', () => {
     expect(turn.outcome).not.toBe('REFUSED');
     expect(invoker.count()).toBe(1);
 
-    const control = await runtime.applyConversationControlCommand(commandInput());
+    const control = await runtime.applyConversationControlCommand(scoped());
     expect(control).toEqual({ ok: false, reason: 'control-unavailable' });
-    const query = await runtime.readConversationOperationsSnapshot('conv.1');
+    const query = await runtime.readConversationOperationsSnapshot({
+      tenantId: TENANT,
+      conversationId: 'conv.1',
+    });
     expect(query).toEqual({ ok: false, reason: 'operations-unavailable' });
   });
 
@@ -332,7 +351,7 @@ describe('(G, H) optional capability and input validation', () => {
       { operatorRef: 'latest' },
     ];
     for (const over of invalid) {
-      const result = await runtime.applyConversationControlCommand(commandInput(over));
+      const result = await runtime.applyConversationControlCommand(scoped(over));
       expect(result).toEqual({ ok: false, reason: 'control-invalid-command' });
     }
     // The whole point of validating at the composition boundary.
@@ -342,9 +361,12 @@ describe('(G, H) optional capability and input validation', () => {
   it('(H) a caller-supplied controlVersion is rejected before the source', async () => {
     const { source, runtime } = harness();
     const result = await runtime.applyConversationControlCommand({
-      ...commandInput(),
-      controlVersion: 1,
-    } as unknown as ConversationControlCommandInput);
+      tenantId: TENANT,
+      command: {
+        ...commandInput(),
+        controlVersion: 1,
+      } as unknown as ConversationControlCommandInput,
+    });
     expect(result).toEqual({ ok: false, reason: 'control-invalid-command' });
     expect(source.controlApplications()).toBe(0);
   });
@@ -359,16 +381,25 @@ const SENTINEL = 'sentinel-conversation-detail';
 /** A structural writable source under full test control. */
 function foreignControlSource(
   apply: (command: ConversationControlCommand) => Promise<unknown>,
-): AuthoritativeConversationStatePort & { readonly applies: () => number } {
+): AuthoritativeConversationStatePort & {
+  readonly applies: () => number;
+  readonly keys: () => readonly ConversationStateKey[];
+} {
   const counter = { n: 0 };
+  const seen: ConversationStateKey[] = [];
   return {
     read: () => Promise.resolve(clearControlState()),
-    applyControlCommand: (command: ConversationControlCommand) => {
+    applyControlCommand: (key: ConversationStateKey, command: ConversationControlCommand) => {
       counter.n += 1;
+      seen.push(key);
       return apply(command);
     },
     applies: () => counter.n,
-  } as AuthoritativeConversationStatePort & { readonly applies: () => number };
+    keys: () => seen,
+  } as AuthoritativeConversationStatePort & {
+    readonly applies: () => number;
+    readonly keys: () => readonly ConversationStateKey[];
+  };
 }
 
 function runtimeOver(source: AuthoritativeConversationStatePort) {
@@ -406,7 +437,7 @@ describe('(I, J) a foreign control source fails closed', () => {
     const source = foreignControlSource(() => {
       throw new Error(SENTINEL);
     });
-    const result = await runtimeOver(source).applyConversationControlCommand(commandInput());
+    const result = await runtimeOver(source).applyConversationControlCommand(scoped());
     expect(result).toEqual({ ok: false, reason: 'control-source-failure' });
     expect(JSON.stringify(result)).not.toContain(SENTINEL);
     expect(JSON.stringify(result)).not.toContain('Error');
@@ -416,7 +447,7 @@ describe('(I, J) a foreign control source fails closed', () => {
 
   it('(I) a REJECTING source normalizes the same way', async () => {
     const source = foreignControlSource(() => Promise.reject(new Error(SENTINEL)));
-    const result = await runtimeOver(source).applyConversationControlCommand(commandInput());
+    const result = await runtimeOver(source).applyConversationControlCommand(scoped());
     expect(result).toEqual({ ok: false, reason: 'control-source-failure' });
     expect(source.applies()).toBe(1);
   });
@@ -424,7 +455,7 @@ describe('(I, J) a foreign control source fails closed', () => {
   it('(J) accepts a canonical decision and returns a FRESH frozen object, not the source’s', async () => {
     const returned = goodDecision();
     const source = foreignControlSource(() => Promise.resolve(returned));
-    const result = await runtimeOver(source).applyConversationControlCommand(commandInput());
+    const result = await runtimeOver(source).applyConversationControlCommand(scoped());
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     // Same values...
@@ -471,7 +502,7 @@ describe('(I, J) a foreign control source fails closed', () => {
     ];
     for (const decision of cases) {
       const source = foreignControlSource(() => Promise.resolve(decision));
-      const result = await runtimeOver(source).applyConversationControlCommand(commandInput());
+      const result = await runtimeOver(source).applyConversationControlCommand(scoped());
       expect(result.ok).toBe(true);
     }
   });
@@ -491,7 +522,7 @@ describe('(I, J) a foreign control source fails closed', () => {
     };
     const resumeSource = foreignControlSource(() => Promise.resolve(takeoverActive));
     const resumed = await runtimeOver(resumeSource).applyConversationControlCommand(
-      commandInput({ action: 'RESUME_AI' }),
+      scoped({ action: 'RESUME_AI' }),
     );
     expect(resumed.ok).toBe(true);
 
@@ -513,7 +544,7 @@ describe('(I, J) a foreign control source fails closed', () => {
     };
     const maxSource = foreignControlSource(() => Promise.resolve(exhausted));
     const maxed = await runtimeOver(maxSource).applyConversationControlCommand(
-      commandInput({ expectedRevision: MAX }),
+      scoped({ expectedRevision: MAX }),
     );
     expect(maxed.ok).toBe(true);
   });
@@ -627,7 +658,7 @@ describe('(I, J) a foreign control source fails closed', () => {
 
     for (const [label, decision] of bad) {
       const source = foreignControlSource(() => Promise.resolve(decision));
-      const result = await runtimeOver(source).applyConversationControlCommand(commandInput());
+      const result = await runtimeOver(source).applyConversationControlCommand(scoped());
       expect(result, label).toEqual({ ok: false, reason: 'control-invalid-result' });
       expect(source.applies()).toBe(1);
     }
@@ -692,7 +723,7 @@ describe('(J2) a foreign decision must also match what the ACTION does', () => {
     const { decision, expectedRevision } = consistent(args);
     const source = foreignControlSource(() => Promise.resolve(decision));
     const result = await runtimeOver(source).applyConversationControlCommand(
-      commandInput({ action: args.action, expectedRevision }),
+      scoped({ action: args.action, expectedRevision }),
     );
     expect(result, label).toEqual({ ok: false, reason: 'control-invalid-result' });
     // Rejected on the way OUT. The adapter was still called exactly once, and never again.
@@ -997,7 +1028,7 @@ describe('(J2) a foreign decision must also match what the ACTION does', () => {
       const { decision, expectedRevision } = consistent(args);
       const source = foreignControlSource(() => Promise.resolve(decision));
       const result = await runtimeOver(source).applyConversationControlCommand(
-        commandInput({ action: args.action, expectedRevision }),
+        scoped({ action: args.action, expectedRevision }),
       );
       expect(result.ok, label).toBe(true);
     }
@@ -1016,7 +1047,7 @@ describe('(J2) a foreign decision must also match what the ACTION does', () => {
     });
     const source = foreignControlSource(() => Promise.resolve(decision));
     const result = await runtimeOver(source).applyConversationControlCommand(
-      commandInput({ action: 'RESUME_AI', expectedRevision }),
+      scoped({ action: 'RESUME_AI', expectedRevision }),
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -1049,7 +1080,7 @@ describe('(J2) a foreign decision must also match what the ACTION does', () => {
       },
     };
     const source = foreignControlSource(() => Promise.resolve(stale));
-    const result = await runtimeOver(source).applyConversationControlCommand(commandInput());
+    const result = await runtimeOver(source).applyConversationControlCommand(scoped());
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.decision.reason).toBe('revision-mismatch');
@@ -1062,17 +1093,26 @@ describe('(J2) a foreign decision must also match what the ACTION does', () => {
 
 /** A structural projecting source under full test control. */
 function foreignProjectionSource(
-  project: (conversationId: string) => Promise<unknown>,
-): AuthoritativeConversationStatePort & { readonly projections: () => number } {
+  project: (key: ConversationStateKey) => Promise<unknown>,
+): AuthoritativeConversationStatePort & {
+  readonly projections: () => number;
+  readonly keys: () => readonly ConversationStateKey[];
+} {
   const counter = { n: 0 };
+  const seen: ConversationStateKey[] = [];
   return {
     read: () => Promise.resolve(clearControlState()),
-    readOperationsProjection: (conversationId: string) => {
+    readOperationsProjection: (key: ConversationStateKey) => {
       counter.n += 1;
-      return project(conversationId);
+      seen.push(key);
+      return project(key);
     },
     projections: () => counter.n,
-  } as AuthoritativeConversationStatePort & { readonly projections: () => number };
+    keys: () => seen,
+  } as AuthoritativeConversationStatePort & {
+    readonly projections: () => number;
+    readonly keys: () => readonly ConversationStateKey[];
+  };
 }
 
 function goodProjection(over: Record<string, unknown> = {}): Record<string, unknown> {
@@ -1093,7 +1133,10 @@ describe('(K, L, M) the operations query fails closed', () => {
     const source = foreignProjectionSource(() => Promise.resolve(goodProjection()));
     const runtime = runtimeOver(source);
     for (const id of ['', 'has space', '*', 'conv.*', 'latest', 'LATEST', 'a'.repeat(129)]) {
-      const result = await runtime.readConversationOperationsSnapshot(id);
+      const result = await runtime.readConversationOperationsSnapshot({
+        tenantId: TENANT,
+        conversationId: id,
+      });
       expect(result).toEqual({ ok: false, reason: 'operations-invalid-conversation' });
     }
     expect(source.projections()).toBe(0);
@@ -1103,7 +1146,10 @@ describe('(K, L, M) the operations query fails closed', () => {
     const source = foreignProjectionSource(() => {
       throw new Error(SENTINEL);
     });
-    const result = await runtimeOver(source).readConversationOperationsSnapshot('conv.1');
+    const result = await runtimeOver(source).readConversationOperationsSnapshot({
+      tenantId: TENANT,
+      conversationId: 'conv.1',
+    });
     expect(result).toEqual({ ok: false, reason: 'operations-source-failure' });
     expect(JSON.stringify(result)).not.toContain(SENTINEL);
     expect(source.projections()).toBe(1);
@@ -1133,7 +1179,10 @@ describe('(K, L, M) the operations query fails closed', () => {
     ];
     for (const [label, projection] of bad) {
       const source = foreignProjectionSource(() => Promise.resolve(projection));
-      const result = await runtimeOver(source).readConversationOperationsSnapshot('conv.1');
+      const result = await runtimeOver(source).readConversationOperationsSnapshot({
+        tenantId: TENANT,
+        conversationId: 'conv.1',
+      });
       expect(result, label).toEqual({ ok: false, reason: 'operations-invalid-result' });
       expect(source.projections()).toBe(1);
     }
@@ -1141,7 +1190,10 @@ describe('(K, L, M) the operations query fails closed', () => {
 
   it('(L) returns a frozen snapshot and result on the happy path', async () => {
     const source = foreignProjectionSource(() => Promise.resolve(goodProjection()));
-    const result = await runtimeOver(source).readConversationOperationsSnapshot('conv.1');
+    const result = await runtimeOver(source).readConversationOperationsSnapshot({
+      tenantId: TENANT,
+      conversationId: 'conv.1',
+    });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(Object.isFrozen(result)).toBe(true);
@@ -1180,7 +1232,10 @@ describe('(N) M1 remains the sole assignment authority', () => {
     const source = foreignProjectionSource(() =>
       Promise.resolve(goodProjection({ assignedActor: 'JARVIS' })),
     );
-    const result = await runtimeOver(source).readConversationOperationsSnapshot('conv.1');
+    const result = await runtimeOver(source).readConversationOperationsSnapshot({
+      tenantId: TENANT,
+      conversationId: 'conv.1',
+    });
     expect(result).toEqual({ ok: false, reason: 'operations-invalid-result' });
   });
 
@@ -1219,7 +1274,10 @@ describe('(N) M1 remains the sole assignment authority', () => {
       const runtime = createJarvisRuntime(
         syntheticRuntimeConfig({ authoritativeState: source, policy: runtimePolicy }),
       );
-      const result = await runtime.readConversationOperationsSnapshot('conv.1');
+      const result = await runtime.readConversationOperationsSnapshot({
+        tenantId: TENANT,
+        conversationId: 'conv.1',
+      });
       expect(result.ok).toBe(true);
       if (!result.ok) return;
       // Compared against the imported router itself -- no mapping table is duplicated here.
@@ -1238,20 +1296,26 @@ describe('(O, P) one source, one revision', () => {
   it('(O) the snapshot revision IS the token the next command must present', async () => {
     const { runtime } = harness();
 
-    const first = await runtime.readConversationOperationsSnapshot('conv.1');
+    const first = await runtime.readConversationOperationsSnapshot({
+      tenantId: TENANT,
+      conversationId: 'conv.1',
+    });
     expect(first.ok).toBe(true);
     if (!first.ok) return;
     const observed = first.snapshot.revision;
 
     // A command built from exactly what the operator saw succeeds.
     const applied = await runtime.applyConversationControlCommand(
-      commandInput({ expectedRevision: observed, action: 'PAUSE_AI' }),
+      scoped({ expectedRevision: observed, action: 'PAUSE_AI' }),
     );
     expect(applied.ok).toBe(true);
     if (!applied.ok) return;
     expect(applied.decision.outcome).toBe('APPLIED');
 
-    const second = await runtime.readConversationOperationsSnapshot('conv.1');
+    const second = await runtime.readConversationOperationsSnapshot({
+      tenantId: TENANT,
+      conversationId: 'conv.1',
+    });
     expect(second.ok).toBe(true);
     if (!second.ok) return;
     expect(second.snapshot.revision).toBe(observed + 1);
@@ -1259,7 +1323,7 @@ describe('(O, P) one source, one revision', () => {
     // A command built from the STALE snapshot now refuses. This is the whole reason the M1 snapshot
     // contract gained `revision`: without it an operator surface could not build a bound command.
     const stale = await runtime.applyConversationControlCommand(
-      commandInput({ commandId: 'ctrl.stale', expectedRevision: observed, action: 'RESUME_AI' }),
+      scoped({ commandId: 'ctrl.stale', expectedRevision: observed, action: 'RESUME_AI' }),
     );
     expect(stale.ok).toBe(true);
     if (!stale.ok) return;
@@ -1278,10 +1342,13 @@ describe('(O, P) one source, one revision', () => {
     expect(source.controlApplications()).toBe(0);
     expect(source.operationsReads()).toBe(0);
 
-    await runtime.applyConversationControlCommand(commandInput());
+    await runtime.applyConversationControlCommand(scoped());
     expect(source.controlApplications()).toBe(1);
 
-    await runtime.readConversationOperationsSnapshot('conv.1');
+    await runtime.readConversationOperationsSnapshot({
+      tenantId: TENANT,
+      conversationId: 'conv.1',
+    });
     expect(source.operationsReads()).toBe(1);
 
     await runtime.processInbound(syntheticInboundEnvelope());

@@ -21,6 +21,7 @@ import { createModelReplyAdapter } from '@qf-jarvis/model-reply-adapter';
 import { anishaBehaviourPort } from './anisha-behaviour-adapter.js';
 import { behaviourMux } from './behaviour-mux.js';
 import { riyaBehaviourPort } from './riya-behaviour-adapter.js';
+import type { ConversationStateKey } from '../contracts/authoritative-state.js';
 import type { JarvisRuntimeConfig } from '../contracts/runtime-config.js';
 import type { JarvisRuntimeResult } from '../contracts/runtime-result.js';
 import type { JarvisRuntimeOutcome } from '../contracts/reasons.js';
@@ -47,17 +48,16 @@ const CORE_OUTCOME_MAP: Readonly<Record<CoreDecisionOutcome, JarvisRuntimeOutcom
   },
 );
 
-/** The shared-runtime implementation reference stamped into provenance when none is configured. */
 /**
  * The shared-runtime implementation reference stamped into provenance when none is configured.
  *
- * Bumped again s3db -> s3ib because S3-I-B materially changes what this composition IS: the model
- * reply now carries an authoritative, content-bound prompt resolved from a registry, rather than a
- * hard-coded constant. Default provenance should name the implementation that actually ran, not the
- * one that used to. An explicit
- * `config.provenanceRefs.runtimeRef` still overrides it untouched.
+ * Bumped again s3ib -> p08b1 because QFJ-P08-B1 materially changes how this composition ADDRESSES
+ * authoritative state: every gate now reads a tenant-scoped `(tenantId, conversationId)` key instead
+ * of a conversation id alone, which is a different isolation guarantee for every inbound turn.
+ * Default provenance should name the implementation that actually ran, not the one that used to. An
+ * explicit `config.provenanceRefs.runtimeRef` still overrides it untouched.
  */
-const DEFAULT_RUNTIME_REF = 'qfj.jarvis-runtime.s3ib';
+const DEFAULT_RUNTIME_REF = 'qfj.jarvis-runtime.p08b1';
 
 /** The default task class, kept in one place so the orchestrator and the behaviour port agree. */
 const DEFAULT_TASK_CLASS = 'RESPONSE_GENERATION';
@@ -74,6 +74,13 @@ export async function composeAndProcess(
   // bound of its own even though every field it fed did.
   const runId = envelope.runtimeId;
   const conversationId = envelope.conversationId;
+  // The ONE tenant-scoped key, derived once from the validated envelope (QFJ-P08-B1, ADR-0076) and
+  // handed to every projection below. Deriving it per adapter -- or re-deriving the tenant from what
+  // the source returned -- would be two scopes for one turn, which is the addressing bug this fixes.
+  const stateKey: ConversationStateKey = Object.freeze({
+    tenantId: envelope.tenantId,
+    conversationId,
+  });
   const source = config.authoritativeState;
   const coreConsulted = config.coreTransport !== undefined;
 
@@ -119,10 +126,10 @@ export async function composeAndProcess(
   emit('jarvis-inbound-received', undefined, undefined);
 
   // Project the ONE authoritative source into every lower reader (no split-brain).
-  const contextPort = conversationContextPortFor(source, conversationId);
-  const replyStateReader = replyStateReaderFor(source, conversationId, config.policy);
-  const coreStateReader = coreStateReaderFor(source, conversationId);
-  const privacyGate = privacyGateFor(source, conversationId);
+  const contextPort = conversationContextPortFor(source, stateKey);
+  const replyStateReader = replyStateReaderFor(source, stateKey, config.policy);
+  const coreStateReader = coreStateReaderFor(source, stateKey);
+  const privacyGate = privacyGateFor(source, stateKey);
 
   // M4 model reply adapter (existing gateway stays the only routing authority).
   const modelReplyPort = createModelReplyAdapter({
@@ -162,10 +169,17 @@ export async function composeAndProcess(
   const behaviourPort = behaviourMux({
     ...(config.behaviourInput === undefined
       ? {}
-      : { riya: riyaBehaviourPort(config.behaviourInput, source, taskClass) }),
+      : { riya: riyaBehaviourPort(config.behaviourInput, source, stateKey, taskClass) }),
     ...(config.vendorJourneyBehaviourInput === undefined
       ? {}
-      : { anisha: anishaBehaviourPort(config.vendorJourneyBehaviourInput, source, taskClass) }),
+      : {
+          anisha: anishaBehaviourPort(
+            config.vendorJourneyBehaviourInput,
+            source,
+            stateKey,
+            taskClass,
+          ),
+        }),
   });
 
   // M2 orchestrator — the existing double-gated processing order over the injected ports.

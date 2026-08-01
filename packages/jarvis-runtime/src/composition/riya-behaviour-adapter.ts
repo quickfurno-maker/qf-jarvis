@@ -29,7 +29,10 @@ import {
 } from '@qf-jarvis/riya-agent';
 import type { NeedDiscovery, RiyaDisposition } from '@qf-jarvis/riya-agent';
 
-import type { AuthoritativeConversationStatePort } from '../contracts/authoritative-state.js';
+import type {
+  AuthoritativeConversationStatePort,
+  ConversationStateKey,
+} from '../contracts/authoritative-state.js';
 import type { ClientSalesBehaviourInputPort } from '../contracts/behaviour-input.js';
 
 /** Opaque reference grammar — identical to the merged provenance/proposal grammar. */
@@ -91,6 +94,8 @@ function revalidated(discovery: NeedDiscovery): NeedDiscovery {
 export function riyaBehaviourPort(
   input: ClientSalesBehaviourInputPort,
   state: AuthoritativeConversationStatePort,
+  /** The ONE tenant-scoped key this turn is bound to (QFJ-P08-B1, ADR-0076). */
+  key: ConversationStateKey,
   taskClass: string,
 ): BehaviourDecisionPort {
   return Object.freeze({
@@ -116,7 +121,12 @@ export function riyaBehaviourPort(
         supplied.needDiscovery === undefined ? undefined : revalidated(supplied.needDiscovery);
 
       // Conversation control comes from the ONE authoritative source, never from the input port.
-      const control = await state.read(request.conversationId);
+      // The orchestrator is bound to one conversation for the whole turn; a request naming another
+      // is a wiring error, not a second conversation to serve.
+      if (request.conversationId !== key.conversationId) {
+        throw new Error('invalid-behaviour-conversation');
+      }
+      const control = await state.read(key);
 
       const decision = decideRiyaTurn({
         partyType: request.partyType,

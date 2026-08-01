@@ -837,7 +837,8 @@ describe('(T-W) provenance, correlation and identifier bounds', () => {
     const { result } = await runVendor({
       vendorJourneyBehaviourInput: countingVendorInput(vendorInput({ askedRoutineQuestion: true })),
     });
-    expect(result.provenance?.runtimeRef).toBe('qfj.jarvis-runtime.s3ib');
+    // QFJ-P08-B1 (ADR-0076): bumped because authoritative-state addressing is now tenant-scoped.
+    expect(result.provenance?.runtimeRef).toBe('qfj.jarvis-runtime.p08b1');
 
     const custom = await runVendor({
       vendorJourneyBehaviourInput: countingVendorInput(vendorInput({ askedRoutineQuestion: true })),
