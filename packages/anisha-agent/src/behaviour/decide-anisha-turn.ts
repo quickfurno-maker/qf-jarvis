@@ -19,7 +19,11 @@ import { z } from 'zod';
 
 import { AnishaBehaviourError } from '../contracts/errors.js';
 import { createVendorJourneyContext } from '../contracts/vendor-journey-context.js';
-import type { VendorJourneyContext } from '../contracts/vendor-journey-context.js';
+import type {
+  VendorJourneyContext,
+  VendorJourneyContextCompleteness,
+  VendorJourneyContextField,
+} from '../contracts/vendor-journey-context.js';
 import {
   ANISHA_BEHAVIOUR_VERSION,
   classifyVendorJourneyIntent,
@@ -27,6 +31,7 @@ import {
 } from '../contracts/vendor-journey-intent.js';
 import type {
   AnishaBehaviourVersion,
+  PackageReadinessBand,
   VendorJourneyIntent,
   VendorJourneySignals,
 } from '../contracts/vendor-journey-intent.js';
@@ -120,8 +125,16 @@ const turnInputSchema = z
   })
   .strict();
 
+/**
+ * Build one frozen decision.
+ *
+ * `context` is passed EXPLICITLY rather than read off `input`, so the canonical record is the only
+ * one that can reach a decision. Reading `input.context` here is exactly the mistake this shape
+ * prevents.
+ */
 function decision(
   input: AnishaTurnInput,
+  context: VendorJourneyContext | undefined,
   intent: VendorJourneyIntent,
   disposition: AnishaDisposition,
   reason: RuntimeReason,
@@ -132,34 +145,85 @@ function decision(
     actor: ANISHA_ACTOR,
     intent,
     disposition,
-    context: input.context,
+    context,
     modelReplyEligible,
     reason,
     promptRef: input.promptRef,
   });
 }
 
+/** The exact own keys a materialized `VendorJourneyContext` carries. Every one, and nothing else. */
+const MATERIALIZED_CONTEXT_KEYS = [
+  'behaviourVersion',
+  'vendorStageRef',
+  'onboardingStepRef',
+  'verificationStatusRef',
+  'packageReadinessBand',
+  'completeness',
+  'missingFields',
+] as const;
+
 /**
- * Re-validate a supplied context through the constructor.
+ * Canonicalize a supplied context, returning a fresh constructor-created record.
  *
- * The caller already built it, but re-running the constructor re-checks every bound and every
- * contradiction rule. A boundary that trusts its input is not a boundary.
+ * The caller already built one, but re-running the constructor re-checks every bound and every
+ * contradiction rule, and — crucially — the value this RETURNS is what the decision carries. An
+ * earlier version validated and then discarded the result, so a caller's own mutable object travelled
+ * out on the decision while the frozen canonical one was thrown away. Validating one object and
+ * forwarding a different one is not a boundary.
+ *
+ * The own-key set is checked exactly, including `behaviourVersion`. A forged record with a bogus
+ * version or an extra key would otherwise have its recognised fields reconstructed successfully and
+ * then be returned verbatim; refusing it is cheaper than reasoning about what else it carried. A key
+ * whose value is legitimately `undefined` must still be PRESENT, because that is what the constructor
+ * materializes and the shape is exact rather than merely sufficient.
+ *
+ * Every failure here — including one raised by the constructor — is normalized to
+ * `invalid-turn-input`. The lower-level `invalid-vendor-journey-context` belongs to callers of
+ * `createVendorJourneyContext` directly; leaking it through the turn boundary would report the wrong
+ * contract and name an internal step the caller never invoked.
  */
-function revalidated(context: VendorJourneyContext): void {
-  createVendorJourneyContext({
-    ...(context.vendorStageRef === undefined ? {} : { vendorStageRef: context.vendorStageRef }),
-    ...(context.onboardingStepRef === undefined
-      ? {}
-      : { onboardingStepRef: context.onboardingStepRef }),
-    ...(context.verificationStatusRef === undefined
-      ? {}
-      : { verificationStatusRef: context.verificationStatusRef }),
-    ...(context.packageReadinessBand === undefined
-      ? {}
-      : { packageReadinessBand: context.packageReadinessBand }),
-    completeness: context.completeness,
-    missingFields: context.missingFields,
-  });
+function revalidated(supplied: unknown): VendorJourneyContext {
+  // Typed as `unknown` deliberately. The declared parameter type says this is already a
+  // `VendorJourneyContext`, which is exactly the assumption a forged object breaks — and a guard the
+  // compiler believes is unreachable is a guard that gets deleted. At a trust boundary the runtime
+  // shape is the only thing that is actually known.
+  if (typeof supplied !== 'object' || supplied === null || Array.isArray(supplied)) {
+    throw new AnishaBehaviourError('invalid-turn-input');
+  }
+  const candidate = supplied as Record<string, unknown>;
+  const keys = Object.keys(candidate);
+  if (
+    keys.length !== MATERIALIZED_CONTEXT_KEYS.length ||
+    !MATERIALIZED_CONTEXT_KEYS.every((key) => keys.includes(key))
+  ) {
+    throw new AnishaBehaviourError('invalid-turn-input');
+  }
+  if (candidate['behaviourVersion'] !== ANISHA_BEHAVIOUR_VERSION) {
+    throw new AnishaBehaviourError('invalid-turn-input');
+  }
+  try {
+    // Every value below is re-validated by the constructor's own schema, so passing them through
+    // unchecked here is safe: an invalid one becomes a refusal, never a repair.
+    return createVendorJourneyContext({
+      ...(candidate['vendorStageRef'] === undefined
+        ? {}
+        : { vendorStageRef: candidate['vendorStageRef'] as string }),
+      ...(candidate['onboardingStepRef'] === undefined
+        ? {}
+        : { onboardingStepRef: candidate['onboardingStepRef'] as string }),
+      ...(candidate['verificationStatusRef'] === undefined
+        ? {}
+        : { verificationStatusRef: candidate['verificationStatusRef'] as string }),
+      ...(candidate['packageReadinessBand'] === undefined
+        ? {}
+        : { packageReadinessBand: candidate['packageReadinessBand'] as PackageReadinessBand }),
+      completeness: candidate['completeness'] as VendorJourneyContextCompleteness,
+      missingFields: candidate['missingFields'] as readonly VendorJourneyContextField[],
+    });
+  } catch {
+    throw new AnishaBehaviourError('invalid-turn-input');
+  }
 }
 
 /** True when the turn must go to a person before anything else happens. */
@@ -183,13 +247,16 @@ export function decideAnishaTurn(input: AnishaTurnInput): AnishaTurnDecision {
   if (!parsed.success || !isVendorJourneySignals(input.signals)) {
     throw new AnishaBehaviourError('invalid-turn-input');
   }
-  if (input.context !== undefined) {
-    revalidated(input.context);
+  // Canonicalize once. Everything downstream reads THIS value, never `input.context`, so the
+  // caller's own object can neither be trusted nor returned.
+  const validatedContext = input.context === undefined ? undefined : revalidated(input.context);
+
+  if (validatedContext !== undefined) {
     // Two sources naming the same money-adjacent band must agree. Repairing a disagreement, or
     // silently preferring one side, would mean deciding a vendor's package position from a value
     // nobody reconciled — the exact failure the band rule exists to prevent.
     const signalBand = input.signals.packageReadinessBand;
-    const contextBand = input.context.packageReadinessBand;
+    const contextBand = validatedContext.packageReadinessBand;
     if (signalBand !== undefined && contextBand !== undefined && signalBand !== contextBand) {
       throw new AnishaBehaviourError('invalid-turn-input');
     }
@@ -197,30 +264,79 @@ export function decideAnishaTurn(input: AnishaTurnInput): AnishaTurnDecision {
 
   if (input.currentActor !== undefined && !AI_AGENT_ACTORS.has(input.currentActor)) {
     // HUMAN or SYSTEM already owns the turn; Anisha does not take it back on her own.
-    return decision(input, 'INSUFFICIENT_CONTEXT', 'REFUSE', 'runtime-human-takeover', false);
+    return decision(
+      input,
+      validatedContext,
+      'INSUFFICIENT_CONTEXT',
+      'REFUSE',
+      'runtime-human-takeover',
+      false,
+    );
   }
   if (input.aiPaused) {
-    return decision(input, 'INSUFFICIENT_CONTEXT', 'REFUSE', 'runtime-ai-paused', false);
+    return decision(
+      input,
+      validatedContext,
+      'INSUFFICIENT_CONTEXT',
+      'REFUSE',
+      'runtime-ai-paused',
+      false,
+    );
   }
   if (input.humanTakeover) {
-    return decision(input, 'INSUFFICIENT_CONTEXT', 'REFUSE', 'runtime-human-takeover', false);
+    return decision(
+      input,
+      validatedContext,
+      'INSUFFICIENT_CONTEXT',
+      'REFUSE',
+      'runtime-human-takeover',
+      false,
+    );
   }
   // The role boundary, refused while this is still data.
   if (input.partyType !== ANISHA_SUPPORTED_PARTY) {
-    return decision(input, 'INSUFFICIENT_CONTEXT', 'REFUSE', 'runtime-scope-violation', false);
+    return decision(
+      input,
+      validatedContext,
+      'INSUFFICIENT_CONTEXT',
+      'REFUSE',
+      'runtime-scope-violation',
+      false,
+    );
   }
   if (input.currentActor !== undefined && input.currentActor !== ANISHA_ACTOR) {
     // Another AI agent owns it. Coordination is Jarvis's job, not Anisha's.
-    return decision(input, 'INSUFFICIENT_CONTEXT', 'REFUSE', 'runtime-scope-violation', false);
+    return decision(
+      input,
+      validatedContext,
+      'INSUFFICIENT_CONTEXT',
+      'REFUSE',
+      'runtime-scope-violation',
+      false,
+    );
   }
 
   const intent = classifyVendorJourneyIntent(input.signals);
   const escalate = (): AnishaTurnDecision =>
-    decision(input, intent, 'REQUEST_VENDOR_ESCALATION', 'runtime-escalation-required', false);
+    decision(
+      input,
+      validatedContext,
+      intent,
+      'REQUEST_VENDOR_ESCALATION',
+      'runtime-escalation-required',
+      false,
+    );
 
   switch (intent) {
     case 'UNSUPPORTED_NON_VENDOR_REQUEST':
-      return decision(input, intent, 'REFUSE', 'runtime-escalation-required', false);
+      return decision(
+        input,
+        validatedContext,
+        intent,
+        'REFUSE',
+        'runtime-escalation-required',
+        false,
+      );
 
     case 'ESCALATION_REQUIRED_MATTER':
     case 'HUMAN_VENDOR_SUPPORT_REQUEST':
@@ -229,28 +345,49 @@ export function decideAnishaTurn(input: AnishaTurnInput): AnishaTurnDecision {
     case 'COMPLAINT_INTAKE':
       // Acknowledge and intake only. Resolving a complaint is Core's, and a reply that promised a
       // resolution would be an outcome this agent has no authority to deliver.
-      return needsHumanReview(input.context)
+      return needsHumanReview(validatedContext)
         ? escalate()
-        : decision(input, intent, 'DRAFT_REPLY', 'runtime-assigned', true);
+        : decision(input, validatedContext, intent, 'DRAFT_REPLY', 'runtime-assigned', true);
 
     case 'PACKAGE_OR_RECHARGE_READINESS':
-      if (needsHumanReview(input.context)) {
+      if (needsHumanReview(validatedContext)) {
         return escalate();
       }
       // A follow-up may be REQUESTED only on a snapshot Core can actually review. Absent context is
       // not sufficient context, so it continues clarification rather than proposing from a guess.
-      return input.context?.completeness === 'SUFFICIENT_FOR_CORE_REVIEW'
-        ? decision(input, intent, 'PROPOSE_VENDOR_FOLLOW_UP', 'runtime-assigned', true)
-        : decision(input, intent, 'CONTINUE_CLARIFICATION', 'runtime-assigned', true);
+      return validatedContext?.completeness === 'SUFFICIENT_FOR_CORE_REVIEW'
+        ? decision(
+            input,
+            validatedContext,
+            intent,
+            'PROPOSE_VENDOR_FOLLOW_UP',
+            'runtime-assigned',
+            true,
+          )
+        : decision(
+            input,
+            validatedContext,
+            intent,
+            'CONTINUE_CLARIFICATION',
+            'runtime-assigned',
+            true,
+          );
 
     case 'ONBOARDING_OR_PROFILE_GUIDANCE':
     case 'LEAD_RESPONSE_GUIDANCE':
     case 'ROUTINE_VENDOR_QUERY':
-      return needsHumanReview(input.context)
+      return needsHumanReview(validatedContext)
         ? escalate()
-        : decision(input, intent, 'DRAFT_REPLY', 'runtime-assigned', true);
+        : decision(input, validatedContext, intent, 'DRAFT_REPLY', 'runtime-assigned', true);
 
     case 'INSUFFICIENT_CONTEXT':
-      return decision(input, intent, 'CONTINUE_CLARIFICATION', 'runtime-assigned', true);
+      return decision(
+        input,
+        validatedContext,
+        intent,
+        'CONTINUE_CLARIFICATION',
+        'runtime-assigned',
+        true,
+      );
   }
 }

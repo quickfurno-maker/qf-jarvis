@@ -727,11 +727,15 @@ describe('(J-L) determinism, the prompt boundary and error normalization', () =>
     expect(a.promptRef).toBe(PROMPT_REF);
   });
 
-  it('retains the supplied frozen context on the decision', () => {
+  it('carries a canonical frozen context, re-derived rather than passed through', () => {
     const supplied = context({ vendorStageRef: 'stage.7' });
     const decided = decideAnishaTurn(turn({ context: supplied }));
-    expect(decided.context).toBe(supplied);
+    // Deliberately NOT identity: the boundary canonicalizes, so what leaves is the constructor's
+    // record, not the caller's object. Values are preserved exactly.
+    expect(decided.context).toEqual(supplied);
     expect(Object.isFrozen(decided.context)).toBe(true);
+    expect(Object.isFrozen(decided.context?.missingFields)).toBe(true);
+    expect(decided.context?.vendorStageRef).toBe('stage.7');
   });
 
   it('rejects an empty, overlong, slashed or spaced prompt reference', () => {
@@ -907,5 +911,230 @@ describe('(M-P) authority containment, the public API and frozen vocabularies', 
     };
     expect(manifest.name).toBe('@qf-jarvis/anisha-agent');
     expect(Object.keys(manifest.dependencies).sort()).toEqual(['@qf-jarvis/agent-runtime', 'zod']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// (Q) The turn-level context boundary — the final-review regression.
+//
+// The defect: `decideAnishaTurn` validated a supplied context by rebuilding it, then DISCARDED the
+// canonical result and returned the caller's own object. So a mutable, forged, or wrong-version
+// record could travel out on a decision, and the constructor's lower-level error code could leak
+// through the turn boundary. These specs pin the corrected boundary shut.
+// ---------------------------------------------------------------------------
+
+describe('(Q) a supplied context is canonicalized at the turn boundary', () => {
+  const TURN_MESSAGE = 'An Anisha turn input is invalid.';
+  const CONTEXT_MESSAGE = 'An Anisha vendor-journey context is invalid.';
+
+  /** A plain, MUTABLE object with the exact materialized shape the constructor produces. */
+  function materialized(over: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      behaviourVersion: 1,
+      vendorStageRef: 'stage.4',
+      onboardingStepRef: undefined,
+      verificationStatusRef: undefined,
+      packageReadinessBand: undefined,
+      completeness: 'SUFFICIENT_FOR_CORE_REVIEW',
+      missingFields: [],
+      ...over,
+    };
+  }
+
+  const asContext = (value: unknown): VendorJourneyContext => value as VendorJourneyContext;
+
+  /** Run a turn and hand back the thrown AnishaBehaviourError, or fail loudly. */
+  function thrownBy(input: Partial<AnishaTurnInput>): AnishaBehaviourError {
+    try {
+      decideAnishaTurn(turn(input));
+    } catch (error) {
+      expect(error).toBeInstanceOf(AnishaBehaviourError);
+      return error as AnishaBehaviourError;
+    }
+    throw new Error('expected decideAnishaTurn to throw');
+  }
+
+  it('(1) the constructor called DIRECTLY still reports the lower-level context code', () => {
+    try {
+      createVendorJourneyContext({
+        completeness: 'SUFFICIENT_FOR_CORE_REVIEW',
+        vendorStageRef: 'bad/reference',
+      });
+      throw new Error('expected createVendorJourneyContext to throw');
+    } catch (error) {
+      expect(error).toBeInstanceOf(AnishaBehaviourError);
+      expect((error as AnishaBehaviourError).code).toBe('invalid-vendor-journey-context');
+      expect((error as AnishaBehaviourError).message).toBe(CONTEXT_MESSAGE);
+    }
+  });
+
+  it('(2) a malformed context inside a TURN normalizes to invalid-turn-input and leaks nothing', () => {
+    const forged: readonly { readonly name: string; readonly context: Record<string, unknown> }[] =
+      [
+        { name: 'an invalid completeness', context: materialized({ completeness: 'MAYBE' }) },
+        {
+          name: 'a contradiction: sufficient while a field is missing',
+          context: materialized({ missingFields: ['ONBOARDING_STEP'] }),
+        },
+        {
+          name: 'a contradiction: more-context-required with nothing missing',
+          context: materialized({ completeness: 'MORE_CONTEXT_REQUIRED', missingFields: [] }),
+        },
+        {
+          name: 'an invalid reference',
+          context: materialized({ vendorStageRef: 'bad/reference' }),
+        },
+        {
+          name: 'a field listed missing whose value is supplied',
+          context: materialized({
+            completeness: 'MORE_CONTEXT_REQUIRED',
+            missingFields: ['VENDOR_STAGE'],
+          }),
+        },
+        {
+          name: 'a duplicated missing field',
+          context: materialized({
+            vendorStageRef: undefined,
+            completeness: 'MORE_CONTEXT_REQUIRED',
+            missingFields: ['VENDOR_STAGE', 'VENDOR_STAGE'],
+          }),
+        },
+        { name: 'an invalid band', context: materialized({ packageReadinessBand: 'urgent' }) },
+      ];
+
+    for (const scenario of forged) {
+      const error = thrownBy({ context: asContext(scenario.context) });
+      expect(error.code).toBe('invalid-turn-input');
+      expect(error.message).toBe(TURN_MESSAGE);
+      // The lower-level contract must not surface through the turn boundary.
+      expect(error.code).not.toBe('invalid-vendor-journey-context');
+      expect(error.message).not.toContain('vendor-journey context');
+    }
+  });
+
+  it('(3) a wrong behaviourVersion is refused, never silently repaired', () => {
+    for (const version of [999, 0, 2, '1', undefined, null]) {
+      const error = thrownBy({ context: asContext(materialized({ behaviourVersion: version })) });
+      expect(error.code).toBe('invalid-turn-input');
+    }
+  });
+
+  it('(4) an unknown materialized key is refused, not stripped', () => {
+    const error = thrownBy({ context: asContext(materialized({ unexpectedKey: 'x' })) });
+    expect(error.code).toBe('invalid-turn-input');
+    expect(error.message).toBe(TURN_MESSAGE);
+  });
+
+  it('(5) a missing materialized key is refused, even when its value would be undefined', () => {
+    for (const key of [
+      'behaviourVersion',
+      'vendorStageRef',
+      'onboardingStepRef',
+      'verificationStatusRef',
+      'packageReadinessBand',
+      'completeness',
+      'missingFields',
+    ]) {
+      const partial = Object.fromEntries(
+        Object.entries(materialized()).filter(([name]) => name !== key),
+      );
+      const error = thrownBy({ context: asContext(partial) });
+      expect(error.code).toBe('invalid-turn-input');
+    }
+  });
+
+  it('(6) a primitive, an array or null yields invalid-turn-input with no raw exception', () => {
+    for (const value of [null, [], 'context', 42, true]) {
+      const error = thrownBy({ context: asContext(value) });
+      expect(error).toBeInstanceOf(AnishaBehaviourError);
+      expect(error.code).toBe('invalid-turn-input');
+      expect(error.name).toBe('AnishaBehaviourError');
+    }
+  });
+
+  it('(7) a MUTABLE structurally-valid caller object is canonicalized, never returned', () => {
+    const caller = materialized({
+      vendorStageRef: 'stage.9',
+      verificationStatusRef: 'verify.pending',
+    });
+    expect(Object.isFrozen(caller)).toBe(false);
+
+    const decided = decideAnishaTurn(turn({ context: asContext(caller) }));
+
+    expect(decided.context).toBeDefined();
+    // The decisive assertion: what leaves is NOT the object that came in.
+    expect(decided.context).not.toBe(caller);
+    expect(Object.isFrozen(decided.context)).toBe(true);
+    expect(Object.isFrozen(decided.context?.missingFields)).toBe(true);
+    expect(decided.context?.vendorStageRef).toBe('stage.9');
+    expect(decided.context?.verificationStatusRef).toBe('verify.pending');
+    expect(decided.context?.completeness).toBe('SUFFICIENT_FOR_CORE_REVIEW');
+    expect(decided.context?.behaviourVersion).toBe(1);
+    // The caller's object is left exactly as it was — not mutated, not frozen as a side effect.
+    expect(Object.isFrozen(caller)).toBe(false);
+    expect(caller['vendorStageRef']).toBe('stage.9');
+  });
+
+  it('(8) a legitimate constructor result is re-canonicalized with its values preserved', () => {
+    const supplied = createVendorJourneyContext({
+      completeness: 'MORE_CONTEXT_REQUIRED',
+      missingFields: ['ONBOARDING_STEP', 'VERIFICATION_STATUS'],
+      vendorStageRef: 'stage.1',
+    });
+    const decided = decideAnishaTurn(turn({ context: supplied }));
+    expect(decided.context).toEqual(supplied);
+    expect(Object.isFrozen(decided.context)).toBe(true);
+    expect(decided.context?.missingFields).toEqual(['ONBOARDING_STEP', 'VERIFICATION_STATUS']);
+  });
+
+  it('(9) a band mismatch reports the turn code and the stable turn message', () => {
+    const error = thrownBy({
+      signals: signals({ askedAboutPackageOrRecharge: true, packageReadinessBand: 'low' }),
+      context: context({ packageReadinessBand: 'critical' }),
+    });
+    expect(error.code).toBe('invalid-turn-input');
+    expect(error.message).toBe(TURN_MESSAGE);
+    expect(error.message).not.toContain('critical');
+    expect(error.message).not.toContain('low');
+  });
+
+  it('(10) every context-using path returns the canonical frozen context', () => {
+    const followUp = decideAnishaTurn(
+      turn({
+        signals: signals({ askedAboutPackageOrRecharge: true }),
+        context: asContext(materialized()),
+      }),
+    );
+    expect(followUp.disposition).toBe('PROPOSE_VENDOR_FOLLOW_UP');
+    expect(Object.isFrozen(followUp.context)).toBe(true);
+
+    const escalated = decideAnishaTurn(
+      turn({
+        signals: signals({ raisedComplaint: true }),
+        context: asContext(
+          materialized({ completeness: 'HUMAN_REVIEW_REQUIRED', vendorStageRef: undefined }),
+        ),
+      }),
+    );
+    expect(escalated.disposition).toBe('REQUEST_VENDOR_ESCALATION');
+    expect(escalated.modelReplyEligible).toBe(false);
+    expect(Object.isFrozen(escalated.context)).toBe(true);
+    expect(escalated.context?.completeness).toBe('HUMAN_REVIEW_REQUIRED');
+
+    // A clarification path carries it too.
+    const clarify = decideAnishaTurn(
+      turn({
+        signals: signals({ askedAboutPackageOrRecharge: true }),
+        context: asContext(
+          materialized({
+            vendorStageRef: undefined,
+            completeness: 'MORE_CONTEXT_REQUIRED',
+            missingFields: ['VENDOR_STAGE'],
+          }),
+        ),
+      }),
+    );
+    expect(clarify.disposition).toBe('CONTINUE_CLARIFICATION');
+    expect(Object.isFrozen(clarify.context)).toBe(true);
   });
 });
