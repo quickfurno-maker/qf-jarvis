@@ -22,6 +22,7 @@ import type { ConversationControlCommandInput } from '@qf-jarvis/conversation-co
 
 import { createPostgresConversationStateAdapter } from '../index.js';
 import type { PostgresConversationStateAdapter } from '../index.js';
+import { SELECT_COMMAND } from '../internal/sql.js';
 import {
   closeDatabasePool,
   createTestPool,
@@ -257,6 +258,123 @@ describe('migration 0008 and the schema it creates', () => {
         ),
       ).rejects.toBeDefined();
     });
+  });
+
+  it('refuses the reserved token `latest` in every identifier and reference column', async () => {
+    // The runtime's exact-identifier contract refuses `*` and the whole token `latest`, both of which
+    // mean "any of them". The SQL grammar excludes `*` by character class, but a regex alone accepts
+    // `latest` -- so the database would have been the weaker of the two, and direct SQL (which the
+    // runtime role may issue) could store an identity the adapter then refuses to read back.
+    const stateRow = {
+      tenant_id: 'tenant.ok',
+      conversation_id: 'conv.ok',
+      party_type: 'CLIENT',
+      data_class: 'HOSTED_ALLOWED',
+      cancelled: false,
+      subject_status: 'clear',
+      subject_ref: null as string | null,
+      observed_at: '2026-08-01T00:00:00.000Z',
+    };
+    const insertState = async (over: Partial<typeof stateRow>): Promise<void> => {
+      const row = { ...stateRow, ...over };
+      await withClient(pool, async (client) => {
+        await client.query(
+          `INSERT INTO qf_jarvis.conversation_runtime_state
+             (tenant_id, conversation_id, revision, party_type, data_class,
+              cancelled, subject_status, subject_ref, human_takeover, ai_paused, observed_at)
+           VALUES ($1, $2, 0, $3, $4, $5, $6, $7, false, false, $8)`,
+          [
+            row.tenant_id,
+            row.conversation_id,
+            row.party_type,
+            row.data_class,
+            row.cancelled,
+            row.subject_status,
+            row.subject_ref,
+            row.observed_at,
+          ],
+        );
+      });
+    };
+
+    // Otherwise-valid rows, so each rejection is attributable to exactly ONE named CHECK. Asserting
+    // the constraint name is what makes this a proof rather than "something went wrong".
+    const stateCases: readonly [Partial<typeof stateRow>, string][] = [
+      [{ tenant_id: 'latest' }, 'conversation_runtime_state_tenant_is_exact_identifier'],
+      [{ tenant_id: 'LATEST' }, 'conversation_runtime_state_tenant_is_exact_identifier'],
+      [{ tenant_id: 'LaTeSt' }, 'conversation_runtime_state_tenant_is_exact_identifier'],
+      [
+        { conversation_id: 'latest' },
+        'conversation_runtime_state_conversation_is_exact_identifier',
+      ],
+      [
+        { conversation_id: 'LATEST' },
+        'conversation_runtime_state_conversation_is_exact_identifier',
+      ],
+      [{ subject_ref: 'latest' }, 'conversation_runtime_state_subject_ref_is_opaque_reference'],
+      [{ subject_ref: 'LATEST' }, 'conversation_runtime_state_subject_ref_is_opaque_reference'],
+      [{ observed_at: 'latest' }, 'conversation_runtime_state_observed_at_is_safe_reference'],
+      [{ observed_at: 'LATEST' }, 'conversation_runtime_state_observed_at_is_safe_reference'],
+      // The wildcard proof, kept: `*` is in neither character class.
+      [{ tenant_id: '*' }, 'conversation_runtime_state_tenant_is_exact_identifier'],
+      [{ conversation_id: '*' }, 'conversation_runtime_state_conversation_is_exact_identifier'],
+      [{ subject_ref: '*' }, 'conversation_runtime_state_subject_ref_is_opaque_reference'],
+      [{ observed_at: '*' }, 'conversation_runtime_state_observed_at_is_safe_reference'],
+    ];
+    for (const [over, constraint] of stateCases) {
+      await expect(insertState(over), JSON.stringify(over)).rejects.toMatchObject({ constraint });
+    }
+    // The control: the same shape with no reserved token is accepted.
+    await expect(insertState({})).resolves.toBeUndefined();
+
+    const commandRow = {
+      tenant_id: 'tenant.ok',
+      command_id: 'cmd.ok',
+      conversation_id: 'conv.ok',
+      operator_ref: 'operator.ok',
+      reason_ref: null as string | null,
+    };
+    const insertCommand = async (over: Partial<typeof commandRow>): Promise<void> => {
+      const row = { ...commandRow, ...over };
+      await withClient(pool, async (client) => {
+        await client.query(
+          `INSERT INTO qf_jarvis.conversation_control_command
+             (tenant_id, command_id, conversation_id, control_version, expected_revision,
+              action, operator_ref, reason_ref, issued_at, outcome, reason,
+              observed_revision, resulting_revision, resulting_human_takeover,
+              resulting_ai_paused, record_version)
+           VALUES ($1, $2, $3, 1, 0, 'TAKE_OWNERSHIP', $4, $5,
+                   '2026-08-01T00:00:00.000Z', 'APPLIED', 'applied', 0, 1, true, true, 1)`,
+          [row.tenant_id, row.command_id, row.conversation_id, row.operator_ref, row.reason_ref],
+        );
+      });
+    };
+
+    // Naming the constraint also settles the obvious objection: `tenant_id: 'latest'` fails its own
+    // CHECK, not merely the foreign key it would also have violated.
+    const commandCases: readonly [Partial<typeof commandRow>, string][] = [
+      [{ tenant_id: 'latest' }, 'conversation_control_command_tenant_is_exact_identifier'],
+      [{ tenant_id: 'LATEST' }, 'conversation_control_command_tenant_is_exact_identifier'],
+      [{ command_id: 'latest' }, 'conversation_control_command_command_is_exact_identifier'],
+      [{ command_id: 'LATEST' }, 'conversation_control_command_command_is_exact_identifier'],
+      [
+        { conversation_id: 'latest' },
+        'conversation_control_command_conversation_is_exact_identifier',
+      ],
+      [{ operator_ref: 'latest' }, 'conversation_control_command_operator_is_exact_identifier'],
+      [{ operator_ref: 'LATEST' }, 'conversation_control_command_operator_is_exact_identifier'],
+      [{ reason_ref: 'latest' }, 'conversation_control_command_reason_ref_is_opaque_code'],
+      [{ reason_ref: 'LATEST' }, 'conversation_control_command_reason_ref_is_opaque_code'],
+      [{ tenant_id: '*' }, 'conversation_control_command_tenant_is_exact_identifier'],
+      [{ command_id: '*' }, 'conversation_control_command_command_is_exact_identifier'],
+      [{ operator_ref: '*' }, 'conversation_control_command_operator_is_exact_identifier'],
+      [{ reason_ref: '*' }, 'conversation_control_command_reason_ref_is_opaque_code'],
+    ];
+    for (const [over, constraint] of commandCases) {
+      await expect(insertCommand(over), JSON.stringify(over)).rejects.toMatchObject({ constraint });
+    }
+    // The control: the same shape with no reserved token is accepted against the row seeded above.
+    await expect(insertCommand({})).resolves.toBeUndefined();
   });
 
   it('revokes both tables from PUBLIC', async () => {
@@ -785,4 +903,177 @@ describe('concurrency across separate sessions', () => {
     expect(released.outcome).toBe('APPLIED');
     expect((await adapter.read(keyA)).revision).toBe(2);
   });
+});
+
+// ---------------------------------------------------------------------------
+// The duplicate race itself, forced rather than hoped for.
+// ---------------------------------------------------------------------------
+//
+// The `Promise.all` tests above are real concurrency but not a proof of the LOSING-INSERT path: the
+// event loop is free to let one caller finish entirely before the other issues its first ledger
+// lookup, in which case the second caller replays through the ordinary duplicate branch and the
+// `ON CONFLICT DO NOTHING` reconciliation is never reached. That is the branch a crash-recovery
+// retry arriving mid-flight actually takes, so it needs a test that cannot accidentally miss it.
+//
+// These two force it. Both sessions are held at a rendezvous immediately after their first
+// `SELECT_COMMAND`, so both provably observed "no such command" before either could lock the state
+// row; then the winner is allowed to commit before the loser is released. The loser therefore
+// reaches `INSERT_COMMAND` against a row that already exists and MUST recover by reading the winner.
+
+/** A two-party rendezvous. Neither side proceeds until both have arrived. */
+function twoPartyBarrier(): () => Promise<void> {
+  let waiting: (() => void) | undefined;
+  return () =>
+    new Promise<void>((resolve) => {
+      if (waiting === undefined) {
+        waiting = resolve;
+        return;
+      }
+      const other = waiting;
+      waiting = undefined;
+      other();
+      resolve();
+    });
+}
+
+/** The minimal surface the adapter uses, so the wrapper below can delegate without a `pg` mock. */
+interface Queryable {
+  query: (
+    text: string,
+    values?: unknown[],
+  ) => Promise<{ rows: unknown[]; rowCount: number | null }>;
+}
+
+/**
+ * A pool that pauses each transaction immediately AFTER its first ledger lookup.
+ *
+ * Test-only, and deliberately outside the adapter: nothing in production source knows this exists.
+ * It delegates every call and changes no SQL — it only decides WHEN the adapter is allowed to
+ * continue, which is the one thing an ordinary concurrency test cannot control.
+ */
+function pausingAfterLedgerRead(base: DatabasePool, pause: () => Promise<void>): DatabasePool {
+  const wrapper = {
+    query: (text: string, values?: unknown[]) => (base as unknown as Queryable).query(text, values),
+    connect: async () => {
+      const client = await base.connect();
+      const inner = client as unknown as Queryable;
+      let paused = false;
+      return {
+        query: async (text: string, values?: unknown[]) => {
+          const result = await inner.query(text, values);
+          if (!paused && text === SELECT_COMMAND) {
+            paused = true;
+            await pause();
+          }
+          return result;
+        },
+        release: (): void => {
+          client.release();
+        },
+      };
+    },
+  };
+  return wrapper as unknown as DatabasePool;
+}
+
+describe('the duplicate race forced at the initial ledger read', () => {
+  beforeEach(async () => {
+    await seedConversation(pool, { tenantId: TENANT_A, conversationId: CONVERSATION });
+  });
+
+  /**
+   * Run two commands whose transactions both pass the initial ledger lookup seeing nothing, then let
+   * the winner commit before the loser is released.
+   */
+  async function racedAtTheLedgerRead(
+    winnerCommand: ReturnType<typeof command>,
+    loserCommand: ReturnType<typeof command>,
+  ): Promise<{
+    readonly winner: Awaited<ReturnType<PostgresConversationStateAdapter['applyControlCommand']>>;
+    readonly loser: PromiseSettledResult<
+      Awaited<ReturnType<PostgresConversationStateAdapter['applyControlCommand']>>
+    >;
+  }> {
+    const loserPool = createTestPool('qf-p08b2-forced-race');
+    try {
+      const barrier = twoPartyBarrier();
+      let releaseLoser = (): void => {
+        /* replaced synchronously below */
+      };
+      const loserGate = new Promise<void>((resolve) => {
+        releaseLoser = resolve;
+      });
+
+      const winnerAdapter = createPostgresConversationStateAdapter({
+        pool: pausingAfterLedgerRead(pool, barrier),
+      });
+      const loserAdapter = createPostgresConversationStateAdapter({
+        pool: pausingAfterLedgerRead(loserPool, async () => {
+          await barrier();
+          await loserGate;
+        }),
+      });
+
+      const winnerPromise = winnerAdapter.applyControlCommand(keyA, winnerCommand);
+      const loserPromise = loserAdapter.applyControlCommand(keyA, loserCommand);
+      // Keep the rejection attached from the start; awaiting it later would be an unhandled rejection.
+      const loserSettled = Promise.allSettled([loserPromise]);
+
+      const winner = await winnerPromise;
+      releaseLoser();
+      const [loser] = await loserSettled;
+      return { winner, loser };
+    } finally {
+      await closeDatabasePool(loserPool);
+    }
+  }
+
+  it('replays the winner to an exact duplicate whose INSERT lost the race', async () => {
+    const { winner, loser } = await racedAtTheLedgerRead(command(), command());
+
+    expect(winner.outcome).toBe('APPLIED');
+    // The losing session re-evaluated against revision 1 and would have said `revision-mismatch`.
+    // That candidate decision is discarded: the caller must learn what actually happened, which is
+    // the winner's APPLIED decision, verbatim.
+    expect(loser.status).toBe('fulfilled');
+    if (loser.status !== 'fulfilled') {
+      throw new Error('unreachable');
+    }
+    expect(loser.value).toEqual(winner);
+    // Emphatically NOT a transient fault. Before this correction the sentinel was swallowed by the
+    // transaction helper's classifier and surfaced as `database-unavailable`.
+    expect(loser.value.outcome).toBe('APPLIED');
+
+    expect((await adapter.read(keyA)).revision).toBe(1);
+    expect(await ledgerRows(TENANT_A)).toHaveLength(1);
+  }, 60_000);
+
+  it('refuses a conflicting duplicate whose INSERT lost, rolling its candidate state back', async () => {
+    // The winner pauses AI; the loser reuses the command id for a DIFFERENT command that would
+    // legitimately apply at the winner's post-state. So the loser really does perform a candidate
+    // state UPDATE to revision 2 before its ledger INSERT is refused -- and that update must vanish.
+    const { winner, loser } = await racedAtTheLedgerRead(
+      command({ action: 'PAUSE_AI' }),
+      command({
+        action: 'TAKE_OWNERSHIP',
+        expectedRevision: 1,
+        operatorRef: 'operator.synthetic.2',
+        issuedAt: AT(2),
+      }),
+    );
+
+    expect(winner.outcome).toBe('APPLIED');
+    expect(loser.status).toBe('rejected');
+    if (loser.status !== 'rejected') {
+      throw new Error('unreachable');
+    }
+    expect(loser.reason).toMatchObject({ code: 'command-conflict' });
+
+    const state = await adapter.read(keyA);
+    // Exactly one increment, and the loser's takeover is nowhere: its whole transaction rolled back.
+    expect(state.revision).toBe(1);
+    expect(state.aiPaused).toBe(true);
+    expect(state.humanTakeover).toBe(false);
+    expect(await ledgerRows(TENANT_A)).toHaveLength(1);
+  }, 60_000);
 });

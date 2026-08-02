@@ -20,7 +20,12 @@
  * It creates no pool, reads no environment and starts nothing on import. The caller injects a `pg`
  * Pool and owns its lifecycle.
  */
-import { applyConversationControlCommand } from '@qf-jarvis/conversation-control';
+import {
+  CONVERSATION_CONTROL_ACTIONS_FROZEN,
+  CONVERSATION_CONTROL_VERSION,
+  applyConversationControlCommand,
+  createConversationControlCommand,
+} from '@qf-jarvis/conversation-control';
 import type {
   ConversationControlCommand,
   ConversationControlDecision,
@@ -52,10 +57,12 @@ import {
   DATA_CLASSES,
   PARTY_TYPES,
   SUBJECT_STATUSES,
+  isCanonicalInstant,
   isExactIdentifier,
   isMember,
   isPlainRecord,
   isSafeReference,
+  isSafeRevision,
 } from '../internal/validation.js';
 
 /**
@@ -125,24 +132,79 @@ function validKey(key: unknown): ConversationStateKey {
   return Object.freeze({ tenantId: key['tenantId'], conversationId: key['conversationId'] });
 }
 
-/** Validate a materialized command. It is a structural interface; the type is not evidence. */
+/** The exact own keys a materialized command carries. `reasonRef` is the only optional one. */
+const COMMAND_KEYS_REQUIRED: readonly string[] = Object.freeze([
+  'controlVersion',
+  'commandId',
+  'conversationId',
+  'expectedRevision',
+  'action',
+  'operatorRef',
+  'issuedAt',
+]);
+const COMMAND_KEY_OPTIONAL = 'reasonRef';
+
+/**
+ * Validate a materialized command and rebuild it canonically, BEFORE any SQL runs.
+ *
+ * `ConversationControlCommand` is a structural interface, so the type is not evidence: an untyped
+ * caller, a JSON body or a `structuredClone` across a boundary all arrive here as a plain object
+ * that TypeScript never saw. The pure reducer does revalidate — but it runs at step 3, after the
+ * ledger lookup and the row lock have already gone to the database. A command carrying a nonsense
+ * action or an extra `message` key must be refused before it reaches a connection at all.
+ *
+ * So this checks the exact own-key set (an unknown key is a payload smuggled beside the contract,
+ * not a harmless extra), then hands the fields to the PUBLIC constructor, which is the single
+ * authority on the grammar. Its result — not the caller's object — is what the rest of this method
+ * uses, so a caller cannot retain a reference and mutate a field after validation. Anything the
+ * constructor rejects becomes `invalid-input`; its error is not propagated, because this package's
+ * error vocabulary is closed and a foreign error type crossing the boundary would widen it.
+ */
 function validCommand(command: unknown): ConversationControlCommand {
+  if (!isPlainRecord(command)) {
+    return invalidInput();
+  }
+  const keys = Object.keys(command);
+  for (const key of keys) {
+    if (!COMMAND_KEYS_REQUIRED.includes(key) && key !== COMMAND_KEY_OPTIONAL) {
+      return invalidInput();
+    }
+  }
+  for (const key of COMMAND_KEYS_REQUIRED) {
+    if (!keys.includes(key)) {
+      return invalidInput();
+    }
+  }
+
+  const reasonRef = command[COMMAND_KEY_OPTIONAL];
   if (
-    !isPlainRecord(command) ||
-    command['controlVersion'] !== 1 ||
+    command['controlVersion'] !== CONVERSATION_CONTROL_VERSION ||
     !isExactIdentifier(command['commandId']) ||
     !isExactIdentifier(command['conversationId']) ||
     !isExactIdentifier(command['operatorRef']) ||
-    typeof command['expectedRevision'] !== 'number' ||
-    !Number.isSafeInteger(command['expectedRevision']) ||
-    command['expectedRevision'] < 0 ||
-    typeof command['action'] !== 'string' ||
-    typeof command['issuedAt'] !== 'string' ||
-    (command['reasonRef'] !== undefined && !isExactIdentifier(command['reasonRef']))
+    !isSafeRevision(command['expectedRevision']) ||
+    !isMember(CONVERSATION_CONTROL_ACTIONS_FROZEN, command['action']) ||
+    !isCanonicalInstant(command['issuedAt']) ||
+    (reasonRef !== undefined && !isExactIdentifier(reasonRef))
   ) {
     return invalidInput();
   }
-  return command as unknown as ConversationControlCommand;
+
+  try {
+    // The constructor refuses a caller-supplied `controlVersion`, so it is deliberately not passed:
+    // it was checked above and the constructor stamps the canonical value itself.
+    return createConversationControlCommand({
+      commandId: command['commandId'],
+      conversationId: command['conversationId'],
+      expectedRevision: command['expectedRevision'],
+      action: command['action'],
+      operatorRef: command['operatorRef'],
+      ...(reasonRef === undefined ? {} : { reasonRef }),
+      issuedAt: command['issuedAt'],
+    });
+  } catch {
+    return invalidInput();
+  }
 }
 
 async function readStateRow(
@@ -345,6 +407,10 @@ export function createPostgresConversationStateAdapter(config: {
         return decision;
       });
     } catch (error) {
+      // THE classification boundary for this method. `withControlTransaction` rethrows whatever the
+      // work threw, unclassified, precisely so the sentinel below is still recognisable here; every
+      // other value -- including a raw `pg` error -- is reduced to a bounded code before it can
+      // leave. The order matters: classify first and the duplicate race becomes an invented fault.
       if (!(error instanceof DuplicateRace)) {
         throw classifyDatabaseError(error);
       }

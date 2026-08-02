@@ -315,7 +315,7 @@ describe('repository invariants this repair must not move', () => {
     '0007_subject_activity_projection.sql':
       '8823b528d9e5aaccad7ddb6e16ebe254662c9759d14321fd3a6fa2e62b6dee49',
     '0008_conversation_control_persistence.sql':
-      'e8fb1c3eda96f9291fdb7f104b1b01ed6a3c100a4bcb4bb316cf2ee5a3e81509',
+      'e79f1f097407f4e630ce13858545dde80ec7ba5cc155bc117b1a62aa7d2b8a10',
   };
 
   it('migrations 0001-0008 are byte-identical and 0009 is neither present nor reserved', () => {

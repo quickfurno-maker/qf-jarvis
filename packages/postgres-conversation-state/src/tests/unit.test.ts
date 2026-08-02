@@ -467,6 +467,157 @@ describe('input validation happens before any SQL', () => {
       ),
     ).rejects.toMatchObject({ code: 'invalid-input' });
   });
+
+  /**
+   * A MATERIALIZED command is not evidence of anything.
+   *
+   * `ConversationControlCommand` is a structural interface, so an untyped caller, a JSON body or a
+   * value that crossed a worker boundary all arrive as a plain object TypeScript never inspected.
+   * The pure reducer does revalidate — but only at step 3, after the ledger lookup and the row lock
+   * have already gone to the database. Everything below must be refused before a connection is even
+   * requested, which the counting pool makes a measurement rather than an inference.
+   */
+  const KEY = { tenantId: 'tenant.a', conversationId: 'conv.1' };
+  const VALID = {
+    controlVersion: 1,
+    commandId: 'ctrl.1',
+    conversationId: 'conv.1',
+    expectedRevision: 0,
+    action: 'TAKE_OWNERSHIP',
+    operatorRef: 'op.1',
+    issuedAt: AT,
+  };
+
+  function countingAdapter(): {
+    readonly adapter: ReturnType<typeof createPostgresConversationStateAdapter>;
+    touches: () => number;
+  } {
+    let touched = 0;
+    const pool = {
+      query: () => {
+        touched += 1;
+        throw new Error('unreachable for invalid input');
+      },
+      connect: () => {
+        touched += 1;
+        throw new Error('unreachable for invalid input');
+      },
+    } as unknown as Parameters<typeof createPostgresConversationStateAdapter>[0]['pool'];
+    return { adapter: createPostgresConversationStateAdapter({ pool }), touches: () => touched };
+  }
+
+  it('refuses an unknown action before any SQL', async () => {
+    const { adapter: counting, touches } = countingAdapter();
+    for (const action of ['ASSIGN', 'APPROVE', 'SEND', 'take_ownership', 'RESUME', '']) {
+      await expect(
+        counting.applyControlCommand(KEY, { ...VALID, action } as never),
+      ).rejects.toMatchObject({ code: 'invalid-input' });
+    }
+    expect(touches()).toBe(0);
+  });
+
+  it('refuses a non-canonical or impossible issuedAt before any SQL', async () => {
+    const { adapter: counting, touches } = countingAdapter();
+    for (const issuedAt of [
+      '2026-08-01T00:00:00Z', // second precision
+      '2026-08-01T00:00:00.000+00:00', // offset form
+      '2026-08-01T00:00:00.000', // no zone
+      '2026-08-01 00:00:00.000Z', // space separator
+      '2026-08-01T00:00:00.0000Z', // microseconds
+      // Shaped correctly and still not a date. `Date.parse` rolls these over silently, so the
+      // round-trip check is the only thing that catches them.
+      '2026-02-30T00:00:00.000Z',
+      '2026-13-01T00:00:00.000Z',
+      '2026-08-32T00:00:00.000Z',
+      'not-an-instant',
+      '',
+    ]) {
+      await expect(
+        counting.applyControlCommand(KEY, { ...VALID, issuedAt } as never),
+      ).rejects.toMatchObject({ code: 'invalid-input' });
+    }
+    expect(touches()).toBe(0);
+  });
+
+  it('refuses an unknown own key before any SQL', async () => {
+    // An extra key is how a content-free contract stops being content-free.
+    const { adapter: counting, touches } = countingAdapter();
+    for (const extra of [
+      { message: 'the customer sounded upset' },
+      { note: 'x' },
+      { tenantId: 'tenant.a' },
+      { recordVersion: 1 },
+    ]) {
+      await expect(
+        counting.applyControlCommand(KEY, { ...VALID, ...extra } as never),
+      ).rejects.toMatchObject({ code: 'invalid-input' });
+    }
+    // A MISSING required key is equally refused; the key set is exact in both directions.
+    for (const missing of [
+      'controlVersion',
+      'commandId',
+      'conversationId',
+      'expectedRevision',
+      'action',
+      'operatorRef',
+      'issuedAt',
+    ]) {
+      const partial: Record<string, unknown> = { ...VALID };
+      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+      delete partial[missing];
+      await expect(counting.applyControlCommand(KEY, partial as never)).rejects.toMatchObject({
+        code: 'invalid-input',
+      });
+    }
+    expect(touches()).toBe(0);
+  });
+
+  it('refuses a foreign controlVersion, a bad revision and an inherited object before any SQL', async () => {
+    const { adapter: counting, touches } = countingAdapter();
+    for (const over of [
+      { controlVersion: 2 },
+      { controlVersion: '1' },
+      { expectedRevision: -1 },
+      { expectedRevision: 1.5 },
+      { expectedRevision: Number.NaN },
+      { expectedRevision: Number.MAX_SAFE_INTEGER + 2 },
+      { commandId: 'latest' },
+      { operatorRef: '*' },
+      { reasonRef: 'has space' },
+    ]) {
+      await expect(
+        counting.applyControlCommand(KEY, { ...VALID, ...over } as never),
+      ).rejects.toMatchObject({ code: 'invalid-input' });
+    }
+
+    // A prototype-carrying object supplies the fields through inheritance, which is a different
+    // object than the one whose own keys were checked.
+    const inherited = Object.create(VALID) as Record<string, unknown>;
+    await expect(counting.applyControlCommand(KEY, inherited as never)).rejects.toMatchObject({
+      code: 'invalid-input',
+    });
+    for (const value of [null, undefined, 'x', 7, [VALID], new Date()]) {
+      await expect(counting.applyControlCommand(KEY, value as never)).rejects.toMatchObject({
+        code: 'invalid-input',
+      });
+    }
+    expect(touches()).toBe(0);
+  });
+
+  it('still accepts a valid canonical command, and only then reaches the database', async () => {
+    // The control for every refusal above: a legitimate command DOES get as far as a connection,
+    // so the checks are refusing malformed input rather than refusing everything.
+    const { adapter: counting, touches } = countingAdapter();
+    await expect(counting.applyControlCommand(KEY, VALID as never)).rejects.toMatchObject({
+      code: 'database-unavailable',
+    });
+    expect(touches()).toBe(1);
+    // `reasonRef` is optional, not forbidden.
+    await expect(
+      counting.applyControlCommand(KEY, { ...VALID, reasonRef: 'reason.escalation' } as never),
+    ).rejects.toMatchObject({ code: 'database-unavailable' });
+    expect(touches()).toBe(2);
+  });
 });
 
 // ---------------------------------------------------------------------------

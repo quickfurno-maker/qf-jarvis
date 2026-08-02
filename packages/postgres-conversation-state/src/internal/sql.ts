@@ -89,9 +89,21 @@ export const INSERT_COMMAND = `
  * serialises writers for a conversation — and `SERIALIZABLE` would add a retry obligation this
  * adapter deliberately does not have (see `errors.ts`).
  *
- * A thrown value rolls the transaction back and is then classified. The rollback itself is guarded:
- * if the connection has already failed, the original error is the one worth reporting, not the
- * secondary failure of trying to undo on a dead socket.
+ * ### The callback's error survives rollback UNCLASSIFIED
+ *
+ * This helper owns the connection and the transaction, so it classifies the failures that are its
+ * own: connecting, beginning and committing. It does NOT classify what `work` threw.
+ *
+ * That distinction is load-bearing rather than tidy. The adapter uses a private sentinel to say
+ * "a concurrent session claimed this command id, roll everything back and let me reconcile" — and
+ * rollback is exactly the mechanism it is asking for. If this helper classified that sentinel, the
+ * caller could never see it: an ordinary, correct duplicate race would be reported as
+ * `database-unavailable`, and the reconciliation branch written for it would be unreachable. So the
+ * work error is rolled back and rethrown AS THE ORIGINAL VALUE; the public adapter method remains
+ * the single classification boundary, and no raw driver error escapes past it.
+ *
+ * Every rollback is guarded: if the connection has already failed, the original error is the one
+ * worth reporting, not the secondary failure of trying to undo on a dead socket.
  */
 export async function withControlTransaction<T>(
   pool: Pool,
@@ -103,18 +115,36 @@ export async function withControlTransaction<T>(
   } catch (error) {
     throw classifyDatabaseError(error);
   }
-  try {
-    await client.query('BEGIN ISOLATION LEVEL READ COMMITTED');
-    const result = await work(client);
-    await client.query('COMMIT');
-    return result;
-  } catch (error) {
+  async function rollbackQuietly(open: PoolClient): Promise<void> {
     try {
-      await client.query('ROLLBACK');
+      await open.query('ROLLBACK');
     } catch {
       // The connection is already unusable. The original failure is the informative one.
     }
-    throw classifyDatabaseError(error);
+  }
+  try {
+    try {
+      await client.query('BEGIN ISOLATION LEVEL READ COMMITTED');
+    } catch (error) {
+      // No transaction was opened, so there is nothing to undo.
+      throw classifyDatabaseError(error);
+    }
+
+    let result: T;
+    try {
+      result = await work(client);
+    } catch (error) {
+      await rollbackQuietly(client);
+      throw error;
+    }
+
+    try {
+      await client.query('COMMIT');
+    } catch (error) {
+      await rollbackQuietly(client);
+      throw classifyDatabaseError(error);
+    }
+    return result;
   } finally {
     client.release();
   }

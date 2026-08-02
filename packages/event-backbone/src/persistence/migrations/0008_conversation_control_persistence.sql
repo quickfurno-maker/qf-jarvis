@@ -76,16 +76,26 @@ CREATE TABLE qf_jarvis.conversation_runtime_state (
   CONSTRAINT conversation_runtime_state_pk PRIMARY KEY (tenant_id, conversation_id),
 
   -- --- Identifier grammar — mirrors the runtime's exact-identifier contract --------------------
+  --
+  -- The grammar already excludes `*`: it is not in either character class. The RESERVED WHOLE TOKEN
+  -- `latest` is not, and a regex alone would let it through. Both strings mean "any of them" to the
+  -- runtime contract, so both must be impossible HERE too — otherwise direct SQL, which the runtime
+  -- role is permitted to issue, could store an identity the application layer declares invalid and
+  -- would then refuse to read back. The database must never be the weaker of the two.
 
   CONSTRAINT conversation_runtime_state_tenant_is_exact_identifier
-    CHECK (length(tenant_id) BETWEEN 1 AND 128 AND tenant_id ~ '^[A-Za-z0-9._:-]+$'),
+    CHECK (length(tenant_id) BETWEEN 1 AND 128 AND tenant_id ~ '^[A-Za-z0-9._:-]+$'
+           AND lower(tenant_id) <> 'latest'),
   CONSTRAINT conversation_runtime_state_conversation_is_exact_identifier
-    CHECK (length(conversation_id) BETWEEN 1 AND 128 AND conversation_id ~ '^[A-Za-z0-9._:-]+$'),
+    CHECK (length(conversation_id) BETWEEN 1 AND 128 AND conversation_id ~ '^[A-Za-z0-9._:-]+$'
+           AND lower(conversation_id) <> 'latest'),
   CONSTRAINT conversation_runtime_state_subject_ref_is_opaque_reference
     CHECK (subject_ref IS NULL
-           OR (length(subject_ref) BETWEEN 1 AND 128 AND subject_ref ~ '^[A-Za-z0-9._:-]+$')),
+           OR (length(subject_ref) BETWEEN 1 AND 128 AND subject_ref ~ '^[A-Za-z0-9._:-]+$'
+               AND lower(subject_ref) <> 'latest')),
   CONSTRAINT conversation_runtime_state_observed_at_is_safe_reference
-    CHECK (length(observed_at) BETWEEN 1 AND 128 AND observed_at ~ '^[A-Za-z0-9._:+-]+$'),
+    CHECK (length(observed_at) BETWEEN 1 AND 128 AND observed_at ~ '^[A-Za-z0-9._:+-]+$'
+           AND lower(observed_at) <> 'latest'),
 
   -- --- Bounds and closed vocabularies ----------------------------------------------------------
 
@@ -221,20 +231,29 @@ CREATE TABLE qf_jarvis.conversation_control_command (
     REFERENCES qf_jarvis.conversation_runtime_state (tenant_id, conversation_id),
 
   -- --- Identifier grammar ------------------------------------------------------------------------
+  --
+  -- Same rule as the state table: the grammar excludes `*`, and the reserved whole token `latest` is
+  -- excluded explicitly. An audit row naming operator `latest` would be an accountability hole, not
+  -- merely a validation gap.
 
   CONSTRAINT conversation_control_command_tenant_is_exact_identifier
-    CHECK (length(tenant_id) BETWEEN 1 AND 128 AND tenant_id ~ '^[A-Za-z0-9._:-]+$'),
+    CHECK (length(tenant_id) BETWEEN 1 AND 128 AND tenant_id ~ '^[A-Za-z0-9._:-]+$'
+           AND lower(tenant_id) <> 'latest'),
   CONSTRAINT conversation_control_command_command_is_exact_identifier
-    CHECK (length(command_id) BETWEEN 1 AND 128 AND command_id ~ '^[A-Za-z0-9._:-]+$'),
+    CHECK (length(command_id) BETWEEN 1 AND 128 AND command_id ~ '^[A-Za-z0-9._:-]+$'
+           AND lower(command_id) <> 'latest'),
   CONSTRAINT conversation_control_command_conversation_is_exact_identifier
-    CHECK (length(conversation_id) BETWEEN 1 AND 128 AND conversation_id ~ '^[A-Za-z0-9._:-]+$'),
+    CHECK (length(conversation_id) BETWEEN 1 AND 128 AND conversation_id ~ '^[A-Za-z0-9._:-]+$'
+           AND lower(conversation_id) <> 'latest'),
   CONSTRAINT conversation_control_command_operator_is_exact_identifier
-    CHECK (length(operator_ref) BETWEEN 1 AND 128 AND operator_ref ~ '^[A-Za-z0-9._:-]+$'),
+    CHECK (length(operator_ref) BETWEEN 1 AND 128 AND operator_ref ~ '^[A-Za-z0-9._:-]+$'
+           AND lower(operator_ref) <> 'latest'),
   -- An opaque reason CODE, never free text. A value with a space is prose, and prose is how a message
   -- body enters a record this table promises is content-free.
   CONSTRAINT conversation_control_command_reason_ref_is_opaque_code
     CHECK (reason_ref IS NULL
-           OR (length(reason_ref) BETWEEN 1 AND 128 AND reason_ref ~ '^[A-Za-z0-9._:-]+$')),
+           OR (length(reason_ref) BETWEEN 1 AND 128 AND reason_ref ~ '^[A-Za-z0-9._:-]+$'
+               AND lower(reason_ref) <> 'latest')),
 
   -- --- Closed vocabularies and versions ----------------------------------------------------------
 

@@ -71,6 +71,16 @@ invalidating in-flight gates.
 Importing an already-controlled conversation is **not** authorized by that insert rule. It needs its
 own governed path.
 
+**Identifier parity with the runtime contract.** Every identifier and reference column on both tables
+is constrained to the runtime's exact-identifier grammar — and, separately, to reject the reserved
+whole token `latest` in any casing. The grammar alone already excludes `*` (it is in neither
+character class), but a regex accepts `latest`, and both strings mean "any of them" to the contract
+ADR-0076 ratified. Without the explicit exclusion the **database would be the weaker of the two
+layers**: direct SQL, which the runtime role is permitted to issue, could store an identity the
+adapter declares invalid and would then refuse to read back. A storage layer that accepts what the
+application will not read is a latent inconsistency, not a harmless divergence. PR #80's final review
+caught this; the constraints and a direct-SQL rejection matrix now close it.
+
 ### 5. `conversation_control_command` — one table for idempotency and audit
 
 `UNIQUE (tenant_id, command_id)` is the durable idempotency claim. The same row is the content-free
@@ -125,6 +135,20 @@ transaction rolls back — including any `APPLIED` state update — and reconcil
 that won: an exact match returns the original decision, a different command is a `command-conflict`.
 Committing the candidate first and reconciling afterwards would apply one command twice.
 
+The rollback is requested with a private sentinel thrown from inside the transaction callback, which
+forces a rule on the transaction helper: **it classifies the failures it owns — connecting, beginning
+and committing — and rethrows whatever the callback threw as the original value.** The public adapter
+method is the single classification boundary, and it recognises the sentinel _before_ classifying.
+
+That ordering is not a detail. Classifying inside the helper turns an ordinary, correct duplicate
+race into an invented `database-unavailable` and makes the reconciliation branch above unreachable —
+which is exactly what the first implementation of this ADR did, and what PR #80's final review
+caught. A `Promise.all` test cannot be relied on to find it: the scheduler is free to let one caller
+finish before the other issues its first ledger lookup, in which case the loser replays through the
+ordinary duplicate branch and never reaches the losing insert. The regression test therefore holds
+both sessions at a rendezvous immediately after their first `SELECT_COMMAND`, so both provably
+observed "no such command" before either could lock the state row.
+
 ### 8. Errors
 
 Seven bounded codes with fixed messages. A `pg` error carries the failing SQL, the constraint, the
@@ -136,6 +160,23 @@ reaches a message.
 
 Every row is re-canonicalized before it becomes a decision. "The CHECK constraints prevent that" is a
 claim about a schema this process did not verify it is connected to.
+
+`classifyDatabaseError` is deliberately **not** a universal classifier for internal control flow. It
+preserves an adapter error, reduces a SQLSTATE-bearing driver error, and normalizes an unknown
+database failure — and the adapter's own sentinel is handled before it is ever consulted.
+
+**The supplied command is validated and rebuilt before any SQL runs.** `ConversationControlCommand`
+is a structural interface, so a materialized value is not evidence: an untyped caller or a
+deserialized body arrives as a plain object TypeScript never inspected. The adapter therefore
+requires the exact own-key set (an unknown key is a payload smuggled beside a content-free contract),
+requires `controlVersion` 1, checks the action against the closed vocabulary and `issuedAt` against
+the canonical UTC millisecond form, and then rebuilds the command through the **public**
+`createConversationControlCommand`, whose result — not the caller's object — is what the transaction
+uses. Anything it rejects becomes `invalid-input` with no connection requested; the constructor's own
+error is not propagated, because this package's error vocabulary is closed.
+
+Relying on the pure reducer for this would be too late: it runs at step 3, after the ledger lookup
+and the row lock have already reached the database.
 
 ### 9. Least privilege
 
@@ -180,6 +221,11 @@ UI. **No** P09 transport.
 - **Storing a canonical command digest instead of discrete columns.** A digest cannot be read by a
   human reviewing an audit row.
 - **Surfacing `pg` errors.** A schema-and-identity disclosure wearing a stack trace.
+- **Classifying the transaction callback's error inside the transaction helper.** Convenient, and it
+  destroys the adapter's own control flow — see §7.
+- **Leaving `latest` to the application layer alone.** The database would be the weaker of the two.
+- **Trusting a materialized command because its TypeScript type says so.** A structural interface is
+  not evidence, and the reducer's revalidation happens after SQL has already run.
 
 ## Consequences
 
@@ -189,7 +235,7 @@ replays the original decision even after the revision advanced; a conflicting du
 effect.
 
 Migration inventory becomes `0001`–`0008`. `0008` checksum:
-`e8fb1c3eda96f9291fdb7f104b1b01ed6a3c100a4bcb4bb316cf2ee5a3e81509`. Migrations `0001`–`0007` are
+`e79f1f097407f4e630ce13858545dde80ec7ba5cc155bc117b1a62aa7d2b8a10`. Migrations `0001`–`0007` are
 byte-identical, asserted in-suite against the locked values.
 
 The migration ledger was **stale at 0006** and is corrected here: `0007` (QFJ-P03.09) is recorded with
