@@ -50,15 +50,18 @@ import type {
   RecordingModelReplyPort,
 } from '../testing/deterministic-orchestration-ports.js';
 
-function ctx(over: Partial<OrchestrationContextInput> = {}): OrchestrationContext {
-  return createOrchestrationContext({
+function ctxInput(over: Partial<OrchestrationContextInput> = {}): OrchestrationContextInput {
+  return {
     conversationId: 'conv.1',
     tenantId: 'tenant.a',
     partyType: 'CLIENT',
     dataClass: 'HOSTED_ALLOWED',
     revision: 1,
     ...over,
-  });
+  };
+}
+function ctx(over: Partial<OrchestrationContextInput> = {}): OrchestrationContext {
+  return createOrchestrationContext(ctxInput(over));
 }
 function env(over: Partial<InboundEnvelopeInput> = {}) {
   return createInboundEnvelope({ ...orchestrationEnvelopeFields(), ...over });
@@ -879,5 +882,143 @@ describe('the canonical run identifier is the envelope runtimeId (ADR-0069)', ()
         expect(id).not.toContain(raw);
       }
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The conversation revision domain (QFJ-P08-B3 final review, ADR-0078).
+// ---------------------------------------------------------------------------
+//
+// A conversation revision is NOT an authored version, and validating it as one was a
+// semantic-domain conflation with two real consequences: a freshly provisioned conversation --
+// revision 0, which migration 0008's trigger REQUIRES -- could never be served, and any conversation
+// whose revision passed 1,000,000 would have become permanently unservable, silently, in production.
+//
+// The durable schema owns this domain: `revision BIGINT` CHECKed to `0 .. 9007199254740991`. These
+// specs pin M2's validators to exactly that, and pin the UNRELATED authored-version bounds to prove
+// the fix widened one domain rather than three.
+
+describe('(revision domain) conversation revision is 0..MAX_SAFE_INTEGER, not a version', () => {
+  const proposalInput = (expectedRevision: number) => ({
+    proposalId: 'prop.1',
+    proposalVersion: 1,
+    conversationId: 'conv.1',
+    expectedRevision,
+    kind: 'REPLY' as const,
+    structuredIntent: { intent: 'reply' },
+    citations: [],
+    replyBody: 'hello',
+    assignedActor: 'RIYA' as const,
+    partyType: 'CLIENT' as const,
+  });
+
+  it('accepts every revision the durable schema can produce, in the context', () => {
+    // 0 is the value migration 0008 REQUIRES a new row to start at; MAX_SAFE_INTEGER is its ceiling.
+    for (const revision of [0, 1, 1_000_000, 1_000_001, Number.MAX_SAFE_INTEGER]) {
+      expect(
+        createOrchestrationContext({ ...ctxInput(), revision }).revision,
+        String(revision),
+      ).toBe(revision);
+    }
+  });
+
+  it('refuses a revision no durable row could hold, in the context', () => {
+    for (const revision of [
+      -1,
+      0.5,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      // The exact boundary: representable, an integer, and one past what a BIGINT round-trips
+      // through a JavaScript number exactly.
+      Number.MAX_SAFE_INTEGER + 1,
+      Number.MAX_SAFE_INTEGER + 2,
+    ]) {
+      expect(
+        () => createOrchestrationContext({ ...ctxInput(), revision }),
+        String(revision),
+      ).toThrow(AgentRuntimeError);
+    }
+  });
+
+  it('binds a proposal to the same revision domain the context accepts', () => {
+    // Both fields must move together. Widening only the context would let a revision-0 conversation
+    // pass the gate and then fail to produce a proposal -- a worse failure, because it happens later.
+    for (const expectedRevision of [0, 1, 1_000_001, Number.MAX_SAFE_INTEGER]) {
+      expect(
+        createOrchestrationProposal(proposalInput(expectedRevision)).expectedRevision,
+        String(expectedRevision),
+      ).toBe(expectedRevision);
+    }
+    for (const expectedRevision of [
+      -1,
+      0.5,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      Number.MAX_SAFE_INTEGER + 1,
+    ]) {
+      expect(
+        () => createOrchestrationProposal(proposalInput(expectedRevision)),
+        String(expectedRevision),
+      ).toThrow(AgentRuntimeError);
+    }
+  });
+
+  it('leaves every AUTHORED version bound exactly where it was', () => {
+    // The reason `VERSION` was not simply widened: doing so would have admitted version 0 into three
+    // unrelated contracts to fix a fourth.
+
+    // proposalVersion: one-based, capped at 1,000,000.
+    expect(
+      createOrchestrationProposal({ ...proposalInput(0), proposalVersion: 1 }).proposalVersion,
+    ).toBe(1);
+    for (const proposalVersion of [0, 1_000_001, -1]) {
+      expect(
+        () => createOrchestrationProposal({ ...proposalInput(0), proposalVersion }),
+        String(proposalVersion),
+      ).toThrow(AgentRuntimeError);
+    }
+
+    // knowledge citation version: same bounds, reached through the proposal's citation array.
+    expect(
+      createOrchestrationProposal({
+        ...proposalInput(0),
+        citations: [syntheticCitation('kb.fact', 1)],
+      }).citations,
+    ).toHaveLength(1);
+    for (const version of [0, 1_000_001]) {
+      expect(
+        () =>
+          createOrchestrationProposal({
+            ...proposalInput(0),
+            citations: [syntheticCitation('kb.fact', version)],
+          }),
+        String(version),
+      ).toThrow(AgentRuntimeError);
+    }
+  });
+
+  it('serves a revision-0 conversation end to end, with a model draft and a Core decision', async () => {
+    // The property the whole correction exists for, at the orchestration layer: a conversation that
+    // has been provisioned and never touched by an operator is servable.
+    const { result, model, core } = await run({
+      contexts: [ctx({ revision: 0 }), ctx({ revision: 0 })],
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error('unreachable');
+    }
+    expect(result.proposal.expectedRevision).toBe(0);
+    expect(model?.invoked()).toBe(1);
+    expect(core?.invoked()).toBe(1);
+  });
+
+  it('serves a conversation past the old 1,000,000 ceiling', async () => {
+    const revision = 1_000_001;
+    const { result } = await run({ contexts: [ctx({ revision }), ctx({ revision })] });
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error('unreachable');
+    }
+    expect(result.proposal.expectedRevision).toBe(revision);
   });
 });

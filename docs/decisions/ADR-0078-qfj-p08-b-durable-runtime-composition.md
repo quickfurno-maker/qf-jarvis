@@ -131,30 +131,52 @@ The durable adapter does not implement `readOperationsProjection`, so
 governed writer exists for the six supplemental fields (ADR-0076 §9), and fabricating tokens to make
 an interface light up is worse than an honest refusal.
 
-## A contradiction this phase found and did NOT fix
+### 9. A conversation REVISION is not an authored VERSION
 
-**A freshly provisioned conversation cannot be served.**
+B3's first attempt at the restart proof could not serve a freshly provisioned conversation, and the
+cause turned out to be a **semantic-domain conflation pre-existing on merged `main`**: a generic
+authored-version schema was being reused to validate conversation revisions.
 
-- Migration 0008's guard trigger REQUIRES every new state row to start at `revision = 0`.
-- `agent-runtime` validates a conversation context with `z.int().min(1).max(1_000_000)`
-  (`packages/agent-runtime/src/orchestration/contracts.ts`), so the INBOUND path refuses revision 0
-  as `orchestration-invariant`.
+An authored **VERSION** — a knowledge citation, a model reply citation, a proposal — is one-based and
+small: there is no version 0 of a document that exists, and a version in the millions is a bug rather
+than a catalogue. A conversation **REVISION** is a different thing entirely. It is a monotonic
+compare-and-set counter over one conversation's safe state, and its domain is fixed by the durable
+schema that owns it: migration 0008 requires every new state row to start at **0** and permits values
+through `Number.MAX_SAFE_INTEGER` (`9007199254740991`).
 
-So a conversation that has been provisioned and never touched by an operator is refused by the
-durable runtime. It is **pre-existing on merged `main`**, not introduced here: the same refusal
-reproduces with the in-memory fake and no B3 code at all. No test caught it because
-`clearControlState()` starts at revision 1 — a value the durable schema cannot produce, which is
-exactly why an in-memory fake is not evidence about a database.
+Both were `z.int().min(1).max(1_000_000)`, at three sites in two packages:
 
-The same mismatch exists at the top: 0008 permits revisions to `9007199254740991`, the runtime to
-`1_000_000`.
+| Package                 | Field                                     | Was       | Now        |
+| ----------------------- | ----------------------------------------- | --------- | ---------- |
+| `agent-runtime`         | `contextSchema.revision`                  | `VERSION` | `REVISION` |
+| `agent-runtime`         | `proposalSchema.expectedRevision`         | `VERSION` | `REVISION` |
+| `core-decision-adapter` | `coreCommandResponseSchema.boundRevision` | `VERSION` | `REVISION` |
 
-Fixing either means changing `agent-runtime` production, which this phase's file scope forbids. B3
-therefore **pins the defect with a failing-by-design regression** that asserts the current refusal, so
-it is visible in CI and any future fix breaks the test loudly rather than passing unnoticed. The
-restart proof reaches a servable revision through two cancelling operator commands (`PAUSE_AI` then
-`RESUME_AI`), documented at the call site. **This needs an owner decision before P08-B is operable in
-production.**
+Two real consequences. A conversation provisioned and never touched by an operator — revision 0,
+which the durable trigger REQUIRES — could never be served. And any conversation whose revision passed
+1,000,000 would have become permanently unservable, silently, long after deployment.
+
+The `core-decision-adapter` site failed later and more misleadingly than the other two: a revision-0
+conversation passed every M1/M2 gate, produced a model draft, reached Core, received a legitimate
+`ACCEPTED` echoing `boundRevision: 0`, and was then discarded during response validation as
+**`CORE_UNAVAILABLE`** — a bounds bug wearing the costume of a Core outage.
+
+**`VERSION` was not widened.** It also governs `proposalVersion` and both citation versions, so
+relaxing it would have admitted version 0 into three unrelated contracts to repair a fourth. Instead
+each of the two files gained a **private** `REVISION = z.int().min(0).max(Number.MAX_SAFE_INTEGER)`,
+reaching only the revision-bearing fields. Neither constant is exported; no package root API changes.
+
+At `Number.MAX_SAFE_INTEGER` a read, a gate and a proposal binding all remain valid; a
+**state-changing** control command is still governed by the existing `revision-exhausted` semantics in
+`@qf-jarvis/conversation-control`, which are untouched.
+
+**Why nothing caught this earlier.** The in-memory fake starts at revision 1 — a value the durable
+schema cannot produce. That is the precise reason a fake is not evidence about a database, and it is
+why the correction is proved against a real revision-0 row rather than a fixture.
+
+A sweep confirmed there are no other sites:
+`agent-runtime/contracts/operations-center.ts` and `conversation-control/internal/grammar.ts` already
+used `0..MAX_SAFE_INTEGER`; `jarvis-runtime` passes the revision through without re-validating it.
 
 ## Rejected alternatives
 
@@ -168,15 +190,24 @@ production.**
   library, and the root API lock exists to prevent exactly that.
 - **Requiring an EXACT privilege match at startup.** Least privilege is proved by 0008's own tests; a
   startup check that refused a principal holding MORE would fail every owner-run local database.
-- **Changing `agent-runtime`'s revision bound to unblock revision 0.** Out of this phase's scope, and
-  a lower-package production change made under time pressure is how a validated bound becomes a
-  guess. Recorded above instead.
+- **Widening the shared `VERSION` schema to unblock revision 0.** A one-line fix that would also
+  have admitted `proposalVersion: 0` and citation `version: 0` — loosening three unrelated contracts
+  to repair a fourth. Two private `REVISION` schemas instead.
+- **Correcting only `agent-runtime` and leaving the Core response bound.** A revision-0 turn would
+  have drafted, reached Core, been accepted, and then failed as `CORE_UNAVAILABLE`: a worse failure
+  than the original, because it is expensive and misattributed.
+- **Keeping the `PAUSE_AI`/`RESUME_AI` warm-up.** It moved a fresh conversation off revision 0 and
+  would have left two meaningless commands in the durable audit of every new conversation, hiding a
+  contract defect behind operator noise.
 
 ## Consequences
 
 A human takeover now survives a real process restart through the real `createJarvisRuntime` path,
 proved across four independent pools/adapters/runtimes with a database as the only continuity, and
-with the model and Core call counts at zero for every blocked turn. A database outage after startup
+with the model and Core call counts at zero for every blocked turn. The sequence runs on the natural
+revisions the durable schema produces — `0 → 1 → 2 → 3`, with exactly three operator commands in the
+ledger (`TAKE_OWNERSHIP`, `RELEASE_OWNERSHIP`, `RESUME_AI`) and no warm-up records. A freshly
+provisioned revision-0 conversation is served directly. A database outage after startup
 fails closed with no fallback. A schema, trigger, constraint or grant mismatch refuses at startup and
 closes the pool it opened.
 

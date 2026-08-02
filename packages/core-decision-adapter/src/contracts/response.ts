@@ -34,7 +34,28 @@ const IDENTIFIER = z
   .min(1)
   .max(128)
   .regex(/^[A-Za-z0-9._:-]+$/);
+/** An authored artefact version: one-based and bounded. Used here for `proposalVersion` only. */
 const VERSION = z.int().min(1).max(1_000_000);
+
+/**
+ * A CONVERSATION REVISION, which is not an authored version (QFJ-P08-B3 final review, ADR-0078).
+ *
+ * `boundRevision` is the conversation revision the Core response echoes back, and
+ * `validate-response.ts` compares it to `command.expectedRevision`. Its domain therefore belongs to
+ * the durable schema that owns conversation state: migration 0008 requires a new state row to start
+ * at **0** and permits values through `Number.MAX_SAFE_INTEGER`.
+ *
+ * It was validated as an authored `VERSION` — the same semantic-domain conflation found in
+ * `@qf-jarvis/agent-runtime`, one layer further out. The consequence was worse here because it
+ * arrived late: a revision-0 conversation would pass every M1/M2 gate, produce a model draft, reach
+ * Core, receive a legitimate `ACCEPTED` echoing `boundRevision: 0` — and then be discarded as
+ * `CORE_UNAVAILABLE` during response validation. The turn looked like a Core outage rather than a
+ * bounds bug, which is precisely the kind of misattribution that survives a long time in production.
+ *
+ * `VERSION` is unchanged. Widening it would have admitted `proposalVersion: 0`, loosening an
+ * unrelated contract to fix this one. `REVISION` is private and reaches only `boundRevision`.
+ */
+const REVISION = z.int().min(0).max(Number.MAX_SAFE_INTEGER);
 
 /** The strict schema a serialized Core response must satisfy. */
 export const coreCommandResponseSchema = z
@@ -45,7 +66,7 @@ export const coreCommandResponseSchema = z
     proposalId: IDENTIFIER,
     proposalVersion: VERSION,
     conversationId: IDENTIFIER,
-    boundRevision: VERSION,
+    boundRevision: REVISION,
     outcome: z.enum(CORE_DECISION_OUTCOMES),
     reason: z
       .string()

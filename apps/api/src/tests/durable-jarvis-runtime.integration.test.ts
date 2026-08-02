@@ -97,43 +97,6 @@ async function startProcess(applicationName: string): Promise<{
 
 const AT = (n: number): string => `2026-08-0${String(n)}T00:00:00.000Z`;
 
-/**
- * Move a freshly provisioned conversation off revision 0, through two real operator commands.
- *
- * This exists because of a CONTRADICTION between merged `main` and migration 0008, which QFJ-P08-B3
- * discovered and does not fix (see the pinned regression at the bottom of this file):
- *
- * - `0008`'s guard trigger REQUIRES every new state row to start at `revision = 0`;
- * - `agent-runtime`'s `contracts.ts` validates a conversation context with `z.int().min(1)`, so the
- *   INBOUND path refuses revision 0 as `orchestration-invariant`.
- *
- * No existing test caught it because the in-memory fake `clearControlState()` starts at revision 1,
- * a value the durable schema cannot produce. Fixing it means changing `agent-runtime` production,
- * which this phase's file scope forbids.
- *
- * `PAUSE_AI` then `RESUME_AI` is the honest way through: two legitimate operator actions that cancel
- * out, leaving the conversation not taken over and not paused — the same logical state as a fresh
- * one, at a revision the runtime will serve.
- */
-async function reachServableRevision(
-  runtime: DurableJarvisRuntimeLifecycle['runtime'],
-): Promise<void> {
-  for (const [index, action] of (['PAUSE_AI', 'RESUME_AI'] as const).entries()) {
-    const result = await runtime.applyConversationControlCommand({
-      tenantId: TENANT,
-      command: {
-        commandId: `ctrl.warmup.${String(index)}`,
-        conversationId: CONVERSATION,
-        expectedRevision: index,
-        action,
-        operatorRef: 'operator.synthetic.1',
-        issuedAt: AT(1),
-      },
-    });
-    expect(result.ok, action).toBe(true);
-  }
-}
-
 beforeAll(async () => {
   // Migrations are applied HERE, in test setup. The application never runs one.
   await resetAndMigrate(APP);
@@ -155,10 +118,6 @@ describe('a human takeover survives a process restart', () => {
     // ---- PROCESS A: a clear conversation is served, then an operator takes ownership. ----
     const a = await startProcess('qf-p08b3-A');
     try {
-      // See `reachServableRevision`: merged main refuses revision 0 on the inbound path, which
-      // migration 0008 requires every new row to start at. Two cancelling operator commands.
-      await reachServableRevision(a.lifecycle.runtime);
-
       const served = await a.lifecycle.runtime.processInbound(syntheticInboundEnvelope());
       expect(served.outcome).toBe('CORE_ACCEPTED');
       expect(served.modelDrafted).toBe(true);
@@ -174,7 +133,7 @@ describe('a human takeover survives a process restart', () => {
         command: {
           commandId: 'ctrl.take.1',
           conversationId: CONVERSATION,
-          expectedRevision: 2,
+          expectedRevision: 0,
           action: 'TAKE_OWNERSHIP',
           operatorRef: 'operator.synthetic.1',
           issuedAt: AT(1),
@@ -186,7 +145,7 @@ describe('a human takeover survives a process restart', () => {
       }
       expect(taken.decision.outcome).toBe('APPLIED');
       expect(taken.decision.nextState).toMatchObject({
-        revision: 3,
+        revision: 1,
         humanTakeover: true,
         aiPaused: true,
       });
@@ -196,7 +155,7 @@ describe('a human takeover survives a process restart', () => {
 
     // The row, read on a connection of its own: this is the only thing crossing the boundary.
     expect(await readStateRow(APP, TENANT, CONVERSATION)).toMatchObject({
-      revision: '3',
+      revision: '1',
       human_takeover: true,
       ai_paused: true,
     });
@@ -219,7 +178,7 @@ describe('a human takeover survives a process restart', () => {
         command: {
           commandId: 'ctrl.release.1',
           conversationId: CONVERSATION,
-          expectedRevision: 3,
+          expectedRevision: 1,
           action: 'RELEASE_OWNERSHIP',
           operatorRef: 'operator.synthetic.1',
           issuedAt: AT(2),
@@ -231,7 +190,7 @@ describe('a human takeover survives a process restart', () => {
       }
       // ADR-0054 E: releasing ownership does NOT resume the AI. There is no automatic return.
       expect(released.decision.nextState).toMatchObject({
-        revision: 4,
+        revision: 2,
         humanTakeover: false,
         aiPaused: true,
       });
@@ -254,7 +213,7 @@ describe('a human takeover survives a process restart', () => {
         command: {
           commandId: 'ctrl.resume.1',
           conversationId: CONVERSATION,
-          expectedRevision: 4,
+          expectedRevision: 2,
           action: 'RESUME_AI',
           operatorRef: 'operator.synthetic.1',
           issuedAt: AT(3),
@@ -265,7 +224,7 @@ describe('a human takeover survives a process restart', () => {
         throw new Error('unreachable');
       }
       expect(resumed.decision.nextState).toMatchObject({
-        revision: 5,
+        revision: 3,
         humanTakeover: false,
         aiPaused: false,
       });
@@ -285,10 +244,10 @@ describe('a human takeover survives a process restart', () => {
       await d.lifecycle.close();
     }
 
-    // Two warm-up commands plus TAKE/RELEASE/RESUME: five durable audit rows, one final revision.
-    expect(await countLedgerRows(APP, TENANT)).toBe(5);
+    // Exactly TAKE, RELEASE and RESUME: three durable audit rows, and nothing else was needed.
+    expect(await countLedgerRows(APP, TENANT)).toBe(3);
     expect(await readStateRow(APP, TENANT, CONVERSATION)).toMatchObject({
-      revision: '5',
+      revision: '3',
       human_takeover: false,
       ai_paused: false,
     });
@@ -311,7 +270,6 @@ describe('provenance', () => {
       },
     });
     try {
-      await reachServableRevision(lifecycle.runtime);
       const result = await lifecycle.runtime.processInbound(syntheticInboundEnvelope());
       expect(result.provenance?.runtimeRef).toBe(DURABLE_JARVIS_RUNTIME_REF);
       expect(result.provenance?.runtimeRef).toBe('qfj.jarvis-runtime.p08b3');
@@ -322,6 +280,27 @@ describe('provenance', () => {
       await lifecycle.close();
     }
   }, 120_000);
+
+  it('serves revisions far past the old 1,000,000 ceiling, through the real composition', async () => {
+    // A durable revision of 1,000,001 cannot be manufactured honestly: reaching it would take a
+    // million control commands, and forcing the row would mean bypassing 0008's monotonic trigger --
+    // which is the guarantee under test everywhere else in this file. So the HIGH end of the domain
+    // is proved through the real `createJarvisRuntime` over an in-memory source, which can hold any
+    // revision the schema permits. The LOW end (0) is proved above against the real database.
+    const { createJarvisRuntime } = await import('@qf-jarvis/jarvis-runtime');
+    const { scriptedAuthoritativeState, clearControlState } =
+      await import('@qf-jarvis/jarvis-runtime/testing');
+    for (const revision of [1_000_001, Number.MAX_SAFE_INTEGER]) {
+      const runtime = createJarvisRuntime(
+        syntheticRuntimeConfig({
+          authoritativeState: scriptedAuthoritativeState({ ...clearControlState(), revision }),
+        }),
+      );
+      const result = await runtime.processInbound(syntheticInboundEnvelope());
+      expect(result.outcome, String(revision)).toBe('CORE_ACCEPTED');
+      expect(result.boundRevision, String(revision)).toBe(revision);
+    }
+  });
 
   it('leaves the GENERIC jarvis-runtime default at p08b1', async () => {
     // The library describes what the library is. Only the durable APPLICATION composition claims
@@ -464,7 +443,6 @@ describe('a database outage after startup fails closed', () => {
   it('consults no model and no Core, and never falls back to an in-memory source', async () => {
     await seedConversation(APP, { tenantId: TENANT, conversationId: CONVERSATION });
     const started = await startProcess('qf-p08b3-outage');
-    await reachServableRevision(started.lifecycle.runtime);
 
     // A served turn first, so the failure below is provably a change of circumstance rather than a
     // runtime that never worked.
@@ -488,7 +466,7 @@ describe('a database outage after startup fails closed', () => {
       command: {
         commandId: 'ctrl.outage.1',
         conversationId: CONVERSATION,
-        expectedRevision: 2,
+        expectedRevision: 0,
         action: 'TAKE_OWNERSHIP',
         operatorRef: 'operator.synthetic.1',
         issuedAt: AT(1),
@@ -540,7 +518,7 @@ describe('durable control semantics through the composed runtime', () => {
     const command = {
       commandId: 'ctrl.dup.1',
       conversationId: CONVERSATION,
-      expectedRevision: 2,
+      expectedRevision: 0,
       action: 'TAKE_OWNERSHIP' as const,
       operatorRef: 'operator.synthetic.1',
       issuedAt: AT(1),
@@ -549,7 +527,6 @@ describe('durable control semantics through the composed runtime', () => {
     const first = await startProcess('qf-p08b3-dup-a');
     let original;
     try {
-      await reachServableRevision(first.lifecycle.runtime);
       const applied = await first.lifecycle.runtime.applyConversationControlCommand({
         tenantId: TENANT,
         command,
@@ -581,19 +558,18 @@ describe('durable control semantics through the composed runtime', () => {
     }
 
     // One effect, one audit row: the replay decided nothing.
-    expect(await readStateRow(APP, TENANT, CONVERSATION)).toMatchObject({ revision: '3' });
-    expect(await countLedgerRows(APP, TENANT)).toBe(3);
+    expect(await readStateRow(APP, TENANT, CONVERSATION)).toMatchObject({ revision: '1' });
+    expect(await countLedgerRows(APP, TENANT)).toBe(1);
   }, 300_000);
 
   it('normalizes a conflicting duplicate to control-source-failure with no database detail', async () => {
     await seedConversation(APP, { tenantId: TENANT, conversationId: CONVERSATION });
     const started = await startProcess('qf-p08b3-conflict');
     try {
-      await reachServableRevision(started.lifecycle.runtime);
       const base = {
         commandId: 'ctrl.conflict.1',
         conversationId: CONVERSATION,
-        expectedRevision: 2,
+        expectedRevision: 0,
         action: 'TAKE_OWNERSHIP' as const,
         operatorRef: 'operator.synthetic.1',
         issuedAt: AT(1),
@@ -621,8 +597,8 @@ describe('durable control semantics through the composed runtime', () => {
       }
 
       // Zero second effect.
-      expect(await readStateRow(APP, TENANT, CONVERSATION)).toMatchObject({ revision: '3' });
-      expect(await countLedgerRows(APP, TENANT)).toBe(3);
+      expect(await readStateRow(APP, TENANT, CONVERSATION)).toMatchObject({ revision: '1' });
+      expect(await countLedgerRows(APP, TENANT)).toBe(1);
     } finally {
       await started.lifecycle.close();
     }
@@ -706,39 +682,40 @@ describe('durable control semantics through the composed runtime', () => {
   }, 180_000);
 
   /**
-   * A PINNED, CURRENTLY-FAILING-BY-DESIGN property, recorded rather than worked around silently.
+   * The property the final-review correction delivers, proved end to end.
    *
-   * Migration 0008's guard trigger requires every new state row to start at `revision = 0`; merged
-   * `main`'s `agent-runtime` validates a conversation context with `z.int().min(1)`
-   * (`packages/agent-runtime/src/orchestration/contracts.ts`). So a conversation that has been
-   * provisioned and never touched by an operator CANNOT be served by the durable runtime — it is
-   * refused as `orchestration-invariant` on the inbound path.
+   * Migration 0008's guard trigger REQUIRES every new state row to start at `revision = 0`. Until
+   * this correction, `agent-runtime` validated a conversation revision through the generic authored
+   * `VERSION` schema (`z.int().min(1).max(1_000_000)`), so a conversation that had been provisioned
+   * and never touched by an operator was refused as `orchestration-invariant` and could never be
+   * served — and any conversation past 1,000,000 would have become unservable in production.
    *
-   * It is pre-existing, not introduced here: the same refusal reproduces with the in-memory fake and
-   * no B3 code at all. No test caught it because `clearControlState()` starts at revision 1, which
-   * the durable schema cannot produce.
-   *
-   * Fixing it means changing `agent-runtime` production, which this phase's file scope forbids. This
-   * test therefore ASSERTS the broken behaviour, so the defect is visible in CI and any future fix
-   * fails this test loudly rather than passing unnoticed.
+   * A dedicated private `REVISION` schema (`0 .. Number.MAX_SAFE_INTEGER`) now covers exactly the two
+   * revision-bearing conversation fields. There is no warm-up anywhere in this file.
    */
-  it('(KNOWN DEFECT) refuses a freshly provisioned revision-0 conversation on the inbound path', async () => {
+  it('serves a freshly provisioned revision-0 conversation directly, with no warm-up', async () => {
     await seedConversation(APP, { tenantId: TENANT, conversationId: CONVERSATION });
     const started = await startProcess('qf-p08b3-revision-zero');
     try {
       expect(await readStateRow(APP, TENANT, CONVERSATION)).toMatchObject({ revision: '0' });
-      const result = await started.lifecycle.runtime.processInbound(syntheticInboundEnvelope());
-      expect(result.outcome).toBe('REFUSED');
-      expect(result.refusalReason).toBe('orchestration-invariant');
-      // Fails closed, as everything else does: no model, no Core, no proposal.
-      expect(started.modelCalls()).toBe(0);
-      expect(started.coreCalls()).toBe(0);
 
-      // One operator round-trip later, the SAME conversation in the SAME logical state is served.
-      // That is what makes this a revision-bound arithmetic defect and not a policy decision.
-      await reachServableRevision(started.lifecycle.runtime);
-      const served = await started.lifecycle.runtime.processInbound(syntheticInboundEnvelope());
-      expect(served.outcome).toBe('CORE_ACCEPTED');
+      const result = await started.lifecycle.runtime.processInbound(syntheticInboundEnvelope());
+      expect(result.outcome).toBe('CORE_ACCEPTED');
+      expect(result.modelDrafted).toBe(true);
+      expect(result.coreConsulted).toBe(true);
+      // The proposal is BOUND to revision 0 -- the context and the proposal share one domain, so a
+      // conversation cannot pass the gate and then fail to produce a proposal.
+      expect(result.boundRevision).toBe(0);
+      expect(started.modelCalls()).toBe(1);
+      expect(started.coreCalls()).toBe(1);
+
+      // Serving changed no control state and wrote no audit row: a turn is not a control command.
+      expect(await readStateRow(APP, TENANT, CONVERSATION)).toMatchObject({
+        revision: '0',
+        human_takeover: false,
+        ai_paused: false,
+      });
+      expect(await countLedgerRows(APP, TENANT)).toBe(0);
     } finally {
       await started.lifecycle.close();
     }
