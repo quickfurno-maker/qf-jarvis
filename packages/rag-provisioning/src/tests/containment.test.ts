@@ -61,6 +61,8 @@ const LOCKED_MIGRATION_HASHES: Record<string, string> = {
     '8823b528d9e5aaccad7ddb6e16ebe254662c9759d14321fd3a6fa2e62b6dee49',
   '0008_conversation_control_persistence.sql':
     'e79f1f097407f4e630ce13858545dde80ec7ba5cc155bc117b1a62aa7d2b8a10',
+  '0009_durable_approval_queue.sql':
+    'e834bc3cd0bc8fd30b04f4849a00d29d49b5a19d1636b912535fdbd6d86f20f6',
 };
 
 describe('authority and Conversation Operations boundary', () => {
@@ -129,7 +131,7 @@ describe('containment', () => {
     expect(b['tryCreateRagProvisioningProfile']).toBeUndefined();
   });
 
-  it('(32,33) migrations 0001–0008 are byte-exact and there is no 0009', () => {
+  it('(32,33) migrations 0001–0009 are byte-exact and there is no 0010', () => {
     const dir = repoPath('packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
       .filter((n) => n.endsWith('.sql'))
@@ -142,7 +144,7 @@ describe('containment', () => {
           .digest('hex'),
       ).toBe(hash);
     }
-    expect(sql.some((n) => n.startsWith('0009'))).toBe(false);
+    expect(sql.some((n) => n.startsWith('0010'))).toBe(false);
   });
 
   it('(34) the event-backbone public-api lock remains 39', () => {

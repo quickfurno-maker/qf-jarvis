@@ -782,7 +782,7 @@ describe('(29-35) package, repository, and hygiene invariants', () => {
     ).toContain('toHaveLength(39)');
   });
 
-  it('(32, 33) migrations 0001-0008 are byte-identical and 0009 is absent', () => {
+  it('(32, 33) migrations 0001-0009 are byte-identical and 0010 is absent', () => {
     const LOCKED: Record<string, string> = {
       '0001_event_log.sql': 'dbca835c394dc67f015176af8ae0582faa78e0c1299593ac8970c5abf4389d6a',
       '0002_event_runtime_grants.sql':
@@ -799,6 +799,8 @@ describe('(29-35) package, repository, and hygiene invariants', () => {
         '8823b528d9e5aaccad7ddb6e16ebe254662c9759d14321fd3a6fa2e62b6dee49',
       '0008_conversation_control_persistence.sql':
         'e79f1f097407f4e630ce13858545dde80ec7ba5cc155bc117b1a62aa7d2b8a10',
+      '0009_durable_approval_queue.sql':
+        'e834bc3cd0bc8fd30b04f4849a00d29d49b5a19d1636b912535fdbd6d86f20f6',
     };
     const dir = join(REPO_ROOT, 'packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
@@ -812,7 +814,7 @@ describe('(29-35) package, repository, and hygiene invariants', () => {
           .digest('hex'),
       ).toBe(hash);
     }
-    expect(sql.some((name) => name.startsWith('0009'))).toBe(false);
+    expect(sql.some((name) => name.startsWith('0010'))).toBe(false);
   });
 
   it('(34) no S1D-B source references the protected reconciliation directory', () => {

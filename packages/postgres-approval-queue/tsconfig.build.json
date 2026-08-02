@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
+  },
+
+  // The EMITTING build, referenced by the root solution. `src/tests` is EXCLUDED so nothing
+  // test-only reaches dist/. Three project references, and `event-backbone` is deliberately NOT one
+  // of them: it is a DEV dependency for the integration harness's migration tooling only, so a
+  // production import of it fails the build rather than quietly creating an edge.
+  "references": [
+    { "path": "../../packages/contracts" },
+    { "path": "../../packages/approval-runtime/tsconfig.build.json" },
+    { "path": "../../packages/recommendation-runtime/tsconfig.build.json" }
+  ],
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/tests/**"]
+}

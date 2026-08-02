@@ -4,7 +4,7 @@
  * Prove the slice stays within its envelope: the new package depends only on zod (no network/provider
  * SDK/database/env); it exposes only the root and the `./testing` subpath; the FakeModelProvider is not
  * a production-root export; there is no real provider adapter; the event-backbone root API remains 39
- * and its barrel is untouched; migrations 0001–0008 are exact and there is no 0009; and Kimi appears
+ * and its barrel is untouched; migrations 0001–0009 are exact and there is no 0010; and Kimi appears
  * nowhere in the package. No database is used.
  */
 import { createHash } from 'node:crypto';
@@ -53,6 +53,8 @@ const LOCKED_MIGRATION_HASHES: Record<string, string> = {
     '8823b528d9e5aaccad7ddb6e16ebe254662c9759d14321fd3a6fa2e62b6dee49',
   '0008_conversation_control_persistence.sql':
     'e79f1f097407f4e630ce13858545dde80ec7ba5cc155bc117b1a62aa7d2b8a10',
+  '0009_durable_approval_queue.sql':
+    'e834bc3cd0bc8fd30b04f4849a00d29d49b5a19d1636b912535fdbd6d86f20f6',
 };
 
 describe('model-gateway package containment', () => {
@@ -150,7 +152,7 @@ describe('cross-package invariants (QFJ-P04.01A must not disturb the event backb
     expect(test).toContain('toHaveLength(39)');
   });
 
-  it('migrations 0001–0008 are byte-exact and there is no 0009', () => {
+  it('migrations 0001–0009 are byte-exact and there is no 0010', () => {
     const dir = repoPath('packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
       .filter((n) => n.endsWith('.sql'))
@@ -162,6 +164,6 @@ describe('cross-package invariants (QFJ-P04.01A must not disturb the event backb
         .digest('hex');
       expect(actual).toBe(hash);
     }
-    expect(sql.some((n) => n.startsWith('0009'))).toBe(false);
+    expect(sql.some((n) => n.startsWith('0010'))).toBe(false);
   });
 });

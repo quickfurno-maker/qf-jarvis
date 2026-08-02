@@ -4,8 +4,8 @@
  * Matrix: no WhatsApp/n8n/provider/DB/network library, no `process.env`/`node:` I/O, and no P04 or
  * event-backbone package import in production source (the M2 agent-runtime is the ONLY workspace
  * dependency); the package depends solely on agent-runtime + zod and exposes only the root and
- * `./testing`; the public API surface is locked; migrations 0001–0008 are byte-exact and there is no
- * 0009; the event-backbone public-api lock remains 39; production source holds no NUL/control byte;
+ * `./testing`; the public API surface is locked; migrations 0001–0009 are byte-exact and there is no
+ * 0010; the event-backbone public-api lock remains 39; production source holds no NUL/control byte;
  * the test fakes never leak into the root barrel.
  */
 import { createHash } from 'node:crypto';
@@ -62,6 +62,8 @@ const LOCKED_MIGRATION_HASHES: Record<string, string> = {
     '8823b528d9e5aaccad7ddb6e16ebe254662c9759d14321fd3a6fa2e62b6dee49',
   '0008_conversation_control_persistence.sql':
     'e79f1f097407f4e630ce13858545dde80ec7ba5cc155bc117b1a62aa7d2b8a10',
+  '0009_durable_approval_queue.sql':
+    'e834bc3cd0bc8fd30b04f4849a00d29d49b5a19d1636b912535fdbd6d86f20f6',
 };
 
 describe('containment', () => {
@@ -134,7 +136,7 @@ describe('containment', () => {
     }
   });
 
-  it('(migrations) 0001–0008 are byte-exact and there is no 0009', () => {
+  it('(migrations) 0001–0009 are byte-exact and there is no 0010', () => {
     const dir = repoPath('packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
       .filter((n) => n.endsWith('.sql'))
@@ -147,7 +149,7 @@ describe('containment', () => {
           .digest('hex'),
       ).toBe(hash);
     }
-    expect(sql.some((n) => n.startsWith('0009'))).toBe(false);
+    expect(sql.some((n) => n.startsWith('0010'))).toBe(false);
   });
 
   it('(event-backbone) the public-api lock remains 39', () => {

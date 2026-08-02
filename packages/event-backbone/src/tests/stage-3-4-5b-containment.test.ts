@@ -4,8 +4,9 @@
  * Originally Stage 3.4.5B, these bound the projection slice's envelope. They have been extended as
  * later slices landed: QFJ-P03.07C added migration `0006`; QFJ-P03.09 (ADR-0044) added migration `0007`
  * and the third production projection `subject-activity` writing `qf_jarvis.rm_subject_activity`;
- * QFJ-P08-B2 (ADR-0077) adds migration `0008`, which introduces no projection at all — it is durable
- * conversation control state, written by a separate package and by no projection in this one.
+ * QFJ-P08-B2 (ADR-0077) added migration `0008`, and the QFJ-P08 durable approval queue (ADR-0081)
+ * adds `0009`. Neither introduces a projection at all — both are written by separate packages, and by
+ * no projection in this one.
  *
  * The still-load-bearing properties they protect are unchanged:
  *   - NO production projection source performs a destructive read-model operation
@@ -100,10 +101,10 @@ describe('destructive/reset operations are absent from ALL production projection
   });
 });
 
-// The migration set grew as authorized slices landed: 0006 (QFJ-P03.07C), 0007 (QFJ-P03.09) and now
-// 0008 (QFJ-P08-B2). This guard bounds the set at 0001–0008 with no 0009.
-describe('migrations are bounded at 0001–0008 with no 0009', () => {
-  it('the migrations directory holds EXACTLY the eight approved SQL files', () => {
+// The migration set grew as authorized slices landed: 0006 (QFJ-P03.07C), 0007 (QFJ-P03.09), 0008
+// (QFJ-P08-B2) and now 0009 (QFJ-P08 durable approval queue). This guard bounds it at 0001–0009.
+describe('migrations are bounded at 0001–0009 with no 0010', () => {
+  it('the migrations directory holds EXACTLY the nine approved SQL files', () => {
     const files = readdirSync(MIGRATIONS_DIR)
       .filter((name) => name.endsWith('.sql'))
       .sort();
@@ -116,12 +117,13 @@ describe('migrations are bounded at 0001–0008 with no 0009', () => {
       '0006_projection_failure_operations.sql',
       '0007_subject_activity_projection.sql',
       '0008_conversation_control_persistence.sql',
+      '0009_durable_approval_queue.sql',
     ]);
   });
 
-  it('no migration numbered 0009 or higher exists', () => {
+  it('no migration numbered 0010 or higher exists', () => {
     const files = readdirSync(MIGRATIONS_DIR);
-    expect(files.some((name) => /^0009|^0[1-9]\d\d/.test(name))).toBe(false);
+    expect(files.some((name) => /^0010|^0[1-9]\d\d/.test(name))).toBe(false);
   });
 });
 
