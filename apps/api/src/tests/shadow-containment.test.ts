@@ -351,6 +351,9 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // QFJ-S3-D-A (ADR-0070): the Anisha vendor-journey behaviour package. Still an EXACT set
       // match -- this records an authorised addition, it does not relax the assertion.
       'anisha-agent',
+      // QFJ-P08 (ADR-0080): the approval runtime foundation -- Jarvis asks, Core decides. Still an
+      // EXACT set match; it records an authorised addition, it does not relax the assertion.
+      'approval-runtime',
       'contracts',
       // QFJ-P08-A (ADR-0074): the conversation control command foundation. Still an EXACT set match
       // -- this records an authorised addition, it does not relax the assertion.
@@ -399,6 +402,8 @@ describe('(133-148) the declared budget and every prior lock', () => {
       'postgres-conversation-state': 3,
       // QFJ-P05.05 (ADR-0079): the governed recommendation runtime, locked from the day it lands.
       'recommendation-runtime': 4,
+      // QFJ-P08 (ADR-0080): the approval runtime foundation, locked from the day it lands.
+      'approval-runtime': 3,
       // QFJ-P08-A (ADR-0075): agent-runtime 45 -> 46 (the operations snapshot constructor) and
       // jarvis-runtime unchanged at 6. Both are named here so the composition phase that touched
       // them is locked centrally, not only in their own packages.
