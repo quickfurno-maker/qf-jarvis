@@ -127,11 +127,26 @@ const REQUIRED_CONSTRAINT_DEFINITIONS: Readonly<Record<string, string>> = Object
 
 /** Foreign keys, matched by prefix so a later ON DELETE clause does not break readiness. */
 const REQUIRED_FOREIGN_KEYS: Readonly<Record<string, string>> = Object.freeze({
-  approval_active_slot_request_fk: 'FOREIGN KEY (active_approval_request_id) REFERENCES',
   approval_request_decision_link_request_fk: 'FOREIGN KEY (approval_request_id) REFERENCES',
   approval_request_decision_link_decision_fk: 'FOREIGN KEY (decision_id) REFERENCES',
   approval_queue_audit_request_fk: 'FOREIGN KEY (approval_request_id) REFERENCES',
 });
+
+/**
+ * The slot pointer's reference, checked on BOTH sides.
+ *
+ * A prefix check would pass a foreign key that named the right three referencing columns and pointed
+ * them at the wrong three, so the referenced tuple is required too. And a definition check is the
+ * only way to reject the version this migration originally shipped: a single-column
+ * `FOREIGN KEY (active_approval_request_id)` has the same NAME and resolves perfectly well, while
+ * leaving the runtime role — which holds UPDATE on that one column — free to point action A's slot at
+ * action B's request. A database still carrying that FK is not a database this adapter's invariant
+ * holds on, so startup refuses it rather than trusting itself to never write the wrong pointer.
+ */
+const SLOT_REQUEST_FK_NAME = 'approval_active_slot_request_fk';
+const SLOT_REQUEST_FK_REFERENCING =
+  'FOREIGN KEY (recommendation_id, proposed_action_id, active_approval_request_id) REFERENCES';
+const SLOT_REQUEST_FK_REFERENCED = '(recommendation_id, proposed_action_id, approval_request_id)';
 
 /** Append-only enforcement, plus the slot key guard. A disabled guard is worse than a missing one. */
 const REQUIRED_TRIGGERS: readonly string[] = Object.freeze([
@@ -204,9 +219,20 @@ export async function assertQueueReady(pool: Pool): Promise<void> {
       return incompatible();
     }
   }
-  // The uniques that carry the one-answer-per-ask rule and the request identity.
+  const slotFk = definitions.get(SLOT_REQUEST_FK_NAME);
+  if (
+    slotFk === undefined ||
+    !slotFk.startsWith(SLOT_REQUEST_FK_REFERENCING) ||
+    !slotFk.includes(SLOT_REQUEST_FK_REFERENCED)
+  ) {
+    return incompatible();
+  }
+  // The uniques that carry the one-answer-per-ask rule and the request identity, plus the composite
+  // one the slot's pointer reference is built on — without it the FK above cannot exist at all.
   for (const [name, definition] of Object.entries({
     approval_request_record_approval_request_id_key: 'UNIQUE (approval_request_id)',
+    approval_request_record_action_request_key:
+      'UNIQUE (recommendation_id, proposed_action_id, approval_request_id)',
     approval_decision_record_decision_id_key: 'UNIQUE (decision_id)',
     approval_request_decision_link_approval_request_id_key: 'UNIQUE (approval_request_id)',
   })) {

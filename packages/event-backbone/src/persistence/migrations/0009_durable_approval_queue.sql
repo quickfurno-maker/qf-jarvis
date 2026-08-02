@@ -71,6 +71,19 @@ CREATE TABLE qf_jarvis.approval_request_record (
 
   recorded_at           TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
 
+  -- The target of the slot's COMPOSITE foreign key, and the reason it can exist.
+  --
+  -- `approval_request_id` is already unique on its own, so a single-column FK from the slot would
+  -- resolve. It would also be too weak to carry the invariant: the runtime role legitimately holds
+  -- UPDATE (active_approval_request_id), so it could point action A's slot at action B's request and
+  -- the database would accept the row. That silently transfers an outstanding ask to a different
+  -- action -- exactly what the slot key's immutability trigger exists to prevent, defeated through
+  -- the one column the trigger deliberately lets move. Widening the reference to include the action
+  -- identity makes the pointer's membership in its own slot a structural fact rather than a promise
+  -- the writing adapter keeps.
+  CONSTRAINT approval_request_record_action_request_key
+    UNIQUE (recommendation_id, proposed_action_id, approval_request_id),
+
   CONSTRAINT approval_request_record_expires_after_created
     CHECK (created_at < expires_at),
   -- Lowercase hex only. An uppercase digest is a different string that means the same thing, and a
@@ -116,6 +129,17 @@ CREATE INDEX approval_request_record_by_expiry
 -- `active_approval_request_id` is NULLABLE and is the ONLY mutable column in this migration. NULL
 -- means "no ask is currently outstanding for this action", which is a coordination fact. It is not
 -- "rejected", not "approved", and not "done".
+--
+-- THE POINTER'S REFERENCE IS COMPOSITE, and that is not decoration. A foreign key on the request id
+-- alone would resolve perfectly well and still let the one mutable column in this migration point
+-- action A's slot at action B's request -- the slot-key trigger below refuses to move the KEY, so a
+-- weak pointer reference is precisely the way around it. Naming (recommendation, action, request) on
+-- both sides means a non-null pointer must belong to the exact action this slot coordinates, proved
+-- by the database rather than by whoever wrote the UPDATE.
+--
+-- NULL still means no outstanding pointer: under the default MATCH SIMPLE a composite foreign key
+-- with any NULL column is satisfied, and the other two columns are NOT NULL, so the only way to
+-- reach that case is the intended one.
 
 CREATE TABLE qf_jarvis.approval_active_slot (
   recommendation_id          UUID NOT NULL,
@@ -125,14 +149,17 @@ CREATE TABLE qf_jarvis.approval_active_slot (
   CONSTRAINT approval_active_slot_pk
     PRIMARY KEY (recommendation_id, proposed_action_id),
   CONSTRAINT approval_active_slot_request_fk
-    FOREIGN KEY (active_approval_request_id)
-    REFERENCES qf_jarvis.approval_request_record (approval_request_id)
+    FOREIGN KEY (recommendation_id, proposed_action_id, active_approval_request_id)
+    REFERENCES qf_jarvis.approval_request_record
+      (recommendation_id, proposed_action_id, approval_request_id)
 );
 
 COMMENT ON TABLE qf_jarvis.approval_active_slot IS
   'Coordination only, never authority. At most ONE active ask per (recommendation, action), because '
   'ApprovalDecisionV1 carries no approvalRequestId and two overlapping asks would make an arriving '
-  'decision ambiguous. NULL means no outstanding ask - it does not mean approved, rejected or done.';
+  'decision ambiguous. The pointer''s foreign key is COMPOSITE, so a non-null pointer must name a '
+  'request belonging to this exact action - the runtime role may move the pointer but cannot move it '
+  'elsewhere. NULL means no outstanding ask - it does not mean approved, rejected or done.';
 
 -- ---------------------------------------------------------------------------
 -- 3. The decision record -- Core's artifact, verbatim

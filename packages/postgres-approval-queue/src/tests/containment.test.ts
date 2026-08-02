@@ -372,6 +372,19 @@ describe('migration 0009 carries no authority column', () => {
     ]);
   });
 
+  it('references the slot pointer COMPOSITELY, over the action identity too', () => {
+    // The one mutable column in the whole migration is `active_approval_request_id`, and the runtime
+    // role holds UPDATE on it. A single-column reference would therefore let that role point action
+    // A's slot at action B's request -- around the key-immutability trigger, through the one door it
+    // deliberately leaves open. Asserted against the SQL, not only against a live database, because
+    // this is the shape a future edit would quietly narrow.
+    expect(sql).toContain(
+      'FOREIGN KEY (recommendation_id, proposed_action_id, active_approval_request_id)',
+    );
+    expect(sql).toContain('UNIQUE (recommendation_id, proposed_action_id, approval_request_id)');
+    expect(sql).not.toMatch(/FOREIGN KEY \(active_approval_request_id\)/);
+  });
+
   it('is the last migration: 0001-0009 with no 0010', () => {
     const dir = fileURLToPath(
       new URL('packages/event-backbone/src/persistence/migrations/', REPO_ROOT),

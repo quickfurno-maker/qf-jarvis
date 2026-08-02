@@ -31,6 +31,7 @@ import {
   approvalDecisionV1Schema,
   approvalRequestIdSchema,
   approvalRequestV1Schema,
+  utcTimestampSchema,
 } from '@qf-jarvis/contracts';
 import type { ApprovalDecisionV1, ApprovalRequestV1 } from '@qf-jarvis/contracts';
 import { createApprovalRuntime } from '@qf-jarvis/approval-runtime';
@@ -73,7 +74,18 @@ import {
   withQueueTransaction,
 } from '../internal/sql.js';
 
-/** A private sentinel: a concurrent session claimed this identity while we were writing. */
+/**
+ * A private sentinel: a concurrent session claimed this identity while we were writing.
+ *
+ * Raised ONLY where the winner must have produced the same durable effect this caller wanted, so
+ * that reading back what won is a complete answer: the request row (conflict on
+ * `approval_request_id`) and the request→decision link (conflict on `approval_request_id` again).
+ *
+ * Deliberately NOT raised for a decision-row conflict. A decision is recommendation-level and may be
+ * recorded concurrently by the requests for two different actions, so losing that insert says
+ * nothing about whether THIS ask was answered — reconciling from it reported `repository-invariant`
+ * for a lawful sequence.
+ */
 class DuplicateRace extends Error {
   constructor() {
     super('duplicate-race');
@@ -360,22 +372,24 @@ export function createPostgresApprovalQueue(config: {
     if (!isRecord(input)) {
       throw new PostgresApprovalQueueError('invalid-input');
     }
-    const observedAt: unknown = input['observedAt'];
+    // The observation instant, by the CONTRACT's own grammar, before any SQL runs. A
+    // `typeof string && length > 0` check would hand `not-a-time`, `2026-07-11` or `+05:30` straight
+    // to PostgreSQL, where it becomes a driver error and then `database-unavailable` — a caller
+    // mistake reported as an outage. `utcTimestampSchema` is also the only thing that rejects
+    // `2026-02-30T00:00:00Z`, which is well-formed, parses, and does not exist. This package does not
+    // define timestamp rules of its own; it asks the contract.
+    const parsedObservedAt = utcTimestampSchema.safeParse(input['observedAt']);
+    if (!parsedObservedAt.success) {
+      throw new PostgresApprovalQueueError('invalid-input');
+    }
     const limit: unknown = input['limit'];
-    if (
-      typeof observedAt !== 'string' ||
-      observedAt.length === 0 ||
-      typeof limit !== 'number' ||
-      !Number.isSafeInteger(limit) ||
-      limit < 1 ||
-      limit > 500
-    ) {
+    if (typeof limit !== 'number' || !Number.isSafeInteger(limit) || limit < 1 || limit > 500) {
       throw new PostgresApprovalQueueError('invalid-input');
     }
 
     let rows: unknown[];
     try {
-      rows = (await pool.query(SELECT_ACTIVE_REQUESTS, [observedAt, limit])).rows;
+      rows = (await pool.query(SELECT_ACTIVE_REQUESTS, [parsedObservedAt.data, limit])).rows;
     } catch (error) {
       throw classifyDatabaseError(error);
     }
@@ -459,31 +473,56 @@ export function createPostgresApprovalQueue(config: {
         // The correlation, through the PUBLIC runtime, against the PERSISTED source and request.
         const correlation = correlate(stored, decision);
 
-        // The decision row. One per Core decision even when it answers several actions: copies
-        // could diverge, and the link table is what expresses the one-to-many.
-        const existingDecision = await loadDecision(client, decision.decisionId);
-        if (existingDecision === undefined) {
+        // The decision row. ONE per Core decision even when it answers several actions: copies could
+        // diverge, and the link table is what expresses the one-to-many.
+        //
+        // A conflict HERE is not a duplicate-race signal, and treating it as one was a real defect.
+        // A decision is recommendation-level, so the requests for actions A and B may legitimately
+        // record the SAME decision concurrently. The loser's `ON CONFLICT DO NOTHING` reports zero
+        // rows — which says only that another session won the decision IDENTITY, never that it
+        // answered THIS ask. Rolling back and reconciling would then hunt for a link for B that the
+        // winner (which linked only A) never created, and report `repository-invariant` for an
+        // entirely lawful sequence. So the durable row is re-read and REUSED, and this transaction
+        // goes on to create its own independent link.
+        //
+        // Re-reading inside the transaction is sound because this is READ COMMITTED and because
+        // `ON CONFLICT DO NOTHING` waits for the conflicting transaction to finish: zero rows means
+        // that transaction COMMITTED, and the next statement takes a fresh snapshot that sees it.
+        let durableDecision = await loadDecision(client, decision.decisionId);
+        if (durableDecision === undefined) {
           const inserted = await client.query(INSERT_DECISION, [
             decision.decisionId,
             decision.recommendationId,
             decision.decidedAt,
             decision,
           ]);
-          if (inserted.rowCount !== 1) {
-            // A concurrent session inserted the same decision between the read and the write.
-            throw new DuplicateRace();
+          if (inserted.rowCount === 1) {
+            durableDecision = decision;
+          } else {
+            durableDecision = await loadDecision(client, decision.decisionId);
+            if (durableDecision === undefined) {
+              // A conflict was reported and yet no row is there. Nothing in this schema permits it.
+              return invariant();
+            }
           }
-        } else if (!deepEquals(existingDecision, decision)) {
+        }
+        // Whether it was already stored, inserted here, or won by a concurrent session, the durable
+        // decision must be THE decision this caller is recording. Same id, different content is a
+        // conflict regardless of who wrote it.
+        if (!deepEquals(durableDecision, decision)) {
           throw new PostgresApprovalQueueError('decision-conflict');
         }
 
+        // THIS is where a duplicate race is real: the conflict target is `approval_request_id`, so
+        // zero rows means another session answered THIS EXACT ask, and the winner must therefore
+        // have created a link this caller can reconcile against. (The request row above is held
+        // FOR UPDATE, so in practice the two serialise; the branch is defence, not the common path.)
         const linked = await client.query(INSERT_LINK, [
           approvalRequestId,
           decision.decisionId,
           correlation.actionDecision.decision,
         ]);
         if (linked.rowCount !== 1) {
-          // Another session answered this same ask first. Roll back entirely and reconcile.
           throw new DuplicateRace();
         }
 

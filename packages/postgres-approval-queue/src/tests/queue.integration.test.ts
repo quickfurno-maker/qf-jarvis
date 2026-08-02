@@ -84,6 +84,90 @@ async function auditTypes(approvalRequestId: string): Promise<string[]> {
   return (await queue.readAuditForRequest(approvalRequestId)).map((row) => row.eventType);
 }
 
+/**
+ * A two-party rendezvous, for the races `Promise.all` alone does not reliably produce.
+ *
+ * `Promise.all` USUALLY interleaves two sessions the way a concurrency test needs — and "usually" is
+ * exactly how a concurrency regression gets merged on a quiet CI run. These barriers hold both
+ * sessions at the one instruction boundary that matters, so the interleaving is a fact of the test
+ * rather than a property of the machine it ran on.
+ */
+interface Barrier {
+  readonly arriveAndWait: () => Promise<void>;
+}
+
+function createBarrier(parties: number): Barrier {
+  let arrived = 0;
+  let release: (() => void) | undefined;
+  const opened = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return {
+    arriveAndWait: async (): Promise<void> => {
+      arrived += 1;
+      if (arrived >= parties) {
+        release?.();
+      }
+      await opened;
+    },
+  };
+}
+
+/**
+ * The real pool, with every session held at the decision lookup.
+ *
+ * A facade rather than a patched client: `withQueueTransaction` uses exactly `pool.connect()`,
+ * `client.query(...)` and `client.release()`, so forwarding those three is the whole surface and
+ * nothing of `pg`'s internals is reached into. After a session's FIRST read of the decision table
+ * returns, it waits — so when the barrier opens, every party has already looked and found nothing,
+ * which is precisely the state where the loser's `ON CONFLICT DO NOTHING` reports zero rows for a
+ * decision it is entitled to reuse.
+ */
+function poolHeldAtDecisionLookup(real: DatabasePool, gate: Barrier): DatabasePool {
+  const forward = real.query.bind(real) as unknown as (...args: readonly unknown[]) => unknown;
+  return {
+    query: (...args: readonly unknown[]): unknown => forward(...args),
+    connect: async (): Promise<unknown> => {
+      const client = await real.connect();
+      const run = client.query.bind(client) as unknown as (
+        ...args: readonly unknown[]
+      ) => Promise<unknown>;
+      let held = false;
+      return {
+        query: async (...args: readonly unknown[]): Promise<unknown> => {
+          const result = await run(...args);
+          const text = args[0];
+          if (
+            !held &&
+            typeof text === 'string' &&
+            text.includes('FROM qf_jarvis.approval_decision_record')
+          ) {
+            held = true;
+            await gate.arriveAndWait();
+          }
+          return result;
+        },
+        release: (): void => {
+          client.release();
+        },
+      };
+    },
+  } as unknown as DatabasePool;
+}
+
+/** A pool that answers nothing and counts every attempt, for the "no SQL was run" proofs. */
+function countingPool(): { readonly pool: DatabasePool; readonly calls: () => number } {
+  let calls = 0;
+  const refuse = (): never => {
+    calls += 1;
+    throw new Error('the test pool was reached, which this specification forbids');
+  };
+  return {
+    pool: { query: refuse, connect: refuse } as unknown as DatabasePool,
+    calls: (): number => calls,
+  };
+}
+
 async function slotPointer(source: RecommendationRuntimeResult, index = 0): Promise<unknown> {
   const action = source.recommendation.proposedActions[index];
   return withClient(pool, async (client) => {
@@ -187,6 +271,16 @@ describe('migration 0009 and the schema it creates', () => {
     expect(constraints.get('approval_decision_record_decision_id_key')).toBe(
       'UNIQUE (decision_id)',
     );
+    // The slot's pointer reference carries the action identity on BOTH sides, so a non-null pointer
+    // structurally belongs to the slot holding it.
+    expect(constraints.get('approval_active_slot_request_fk')).toBe(
+      'FOREIGN KEY (recommendation_id, proposed_action_id, active_approval_request_id) ' +
+        'REFERENCES qf_jarvis.approval_request_record' +
+        '(recommendation_id, proposed_action_id, approval_request_id)',
+    );
+    expect(constraints.get('approval_request_record_action_request_key')).toBe(
+      'UNIQUE (recommendation_id, proposed_action_id, approval_request_id)',
+    );
   });
 
   it('refuses an UPDATE or DELETE on every append-only table', async () => {
@@ -245,6 +339,56 @@ describe('migration 0009 and the schema it creates', () => {
     });
   });
 
+  it('refuses a slot pointer that names a request belonging to a DIFFERENT action', async () => {
+    // The correction PR #84's final review asked for. The slot-key trigger stops the KEY moving, and
+    // the runtime role holds UPDATE on the pointer -- so with a single-column foreign key the pointer
+    // was the way around the trigger: action A's slot could be made to name action B's request, and
+    // the database would have accepted it. The composite reference is what closes that.
+    const source = twoActionSource('a3a3a3a3');
+    const [first, second] = source.recommendation.proposedActions;
+    if (first === undefined || second === undefined) {
+      throw new Error('unreachable');
+    }
+    const a = approvalRequest(source, { actionIndex: 0 });
+    const b = approvalRequest(source, { actionIndex: 1 });
+    await queue.enqueueRequest({ source, request: a });
+    await queue.enqueueRequest({ source, request: b });
+
+    await withClient(pool, async (client) => {
+      // Direct SQL, deliberately bypassing the adapter: this must be refused by the DATABASE.
+      await expect(
+        client.query(
+          `UPDATE qf_jarvis.approval_active_slot
+              SET active_approval_request_id = $3
+            WHERE recommendation_id = $1 AND proposed_action_id = $2`,
+          [source.recommendation.recommendationId, first.actionId, b.approvalRequestId],
+        ),
+        "action A's slot pointed at action B's request",
+      ).rejects.toMatchObject({ code: '23503' });
+    });
+
+    // Neither pointer moved.
+    expect(await slotPointer(source, 0)).toBe(a.approvalRequestId);
+    expect(await slotPointer(source, 1)).toBe(b.approvalRequestId);
+
+    await withClient(pool, async (client) => {
+      // NULL is still a valid pointer: under MATCH SIMPLE a composite key with a NULL column is
+      // satisfied, and NULL is how "no outstanding ask" is expressed. Re-pointing at the SAME
+      // action's own request is valid too.
+      await client.query(
+        `UPDATE qf_jarvis.approval_active_slot SET active_approval_request_id = NULL
+          WHERE recommendation_id = $1 AND proposed_action_id = $2`,
+        [source.recommendation.recommendationId, first.actionId],
+      );
+      await client.query(
+        `UPDATE qf_jarvis.approval_active_slot SET active_approval_request_id = $3
+          WHERE recommendation_id = $1 AND proposed_action_id = $2`,
+        [source.recommendation.recommendationId, first.actionId, a.approvalRequestId],
+      );
+    });
+    expect(await slotPointer(source, 0)).toBe(a.approvalRequestId);
+  }, 90_000);
+
   it('revokes every approval table from PUBLIC', async () => {
     const grants = await withClient(pool, async (client) => {
       const result = await client.query(
@@ -287,6 +431,41 @@ describe('migration 0009 and the schema it creates', () => {
     await damage(
       'ALTER TABLE qf_jarvis.approval_decision_record DROP CONSTRAINT approval_decision_record_issuer_is_core',
     );
+  }, 300_000);
+
+  it('refuses readiness against the OLD single-column slot foreign key', async () => {
+    // The exact shape this migration originally shipped. It has the same NAME and resolves perfectly
+    // well, so an existence check passes it -- and it leaves the invariant unenforced. A database
+    // still carrying it is not one this adapter's guarantee holds on, so startup refuses rather than
+    // trusting itself never to write the wrong pointer.
+    await withClient(pool, async (client) => {
+      await client.query(
+        'ALTER TABLE qf_jarvis.approval_active_slot DROP CONSTRAINT approval_active_slot_request_fk',
+      );
+      await client.query(
+        `ALTER TABLE qf_jarvis.approval_active_slot
+           ADD CONSTRAINT approval_active_slot_request_fk
+           FOREIGN KEY (active_approval_request_id)
+           REFERENCES qf_jarvis.approval_request_record (approval_request_id)`,
+      );
+    });
+    await expectCode(queue.assertReady(), 'schema-incompatible', 'single-column slot FK');
+    await resetAndMigrate(pool, testDatabaseConfig('qf-p08-queue-test'));
+  }, 300_000);
+
+  it('refuses readiness when the composite request UNIQUE is gone', async () => {
+    // Renamed rather than dropped, on purpose: the foreign key depends on the INDEX and survives a
+    // rename, so the slot FK is still the correct composite one and the ONLY thing missing is the
+    // named UNIQUE the FK is built on. That isolates this check instead of letting the FK check
+    // above pass the test for it.
+    await withClient(pool, async (client) => {
+      await client.query(
+        `ALTER TABLE qf_jarvis.approval_request_record
+           RENAME CONSTRAINT approval_request_record_action_request_key TO approval_request_record_renamed`,
+      );
+    });
+    await expectCode(queue.assertReady(), 'schema-incompatible', 'missing composite UNIQUE');
+    await resetAndMigrate(pool, testDatabaseConfig('qf-p08-queue-test'));
   }, 300_000);
 
   it('refuses readiness when the database is unavailable', async () => {
@@ -704,6 +883,88 @@ describe('listActiveRequests', () => {
       );
     }
   });
+
+  it('refuses a malformed observation instant by the CONTRACT’s grammar', async () => {
+    // `typeof string && length > 0` accepted every one of these and handed it to PostgreSQL, where a
+    // caller's mistake came back as a driver error and then `database-unavailable` -- an outage
+    // reported for a typo. The grammar is `utcTimestampSchema`'s, not one invented here.
+    for (const observedAt of [
+      '',
+      'not-a-time',
+      'now()',
+      '2026-08-02', // date only
+      '2026-08-02T12:00:00', // no zone at all
+      '2026-08-02 12:00:00Z', // space instead of T
+      '2026-08-02T12:00:00+05:30', // a local offset: two systems would have to agree on a tz database
+      '2026-08-02t12:00:00z', // lowercase designators
+      '2026-02-30T00:00:00Z', // well-formed, parses, and does not exist
+      '2026-13-02T00:00:00Z', // impossible month
+      '2026-08-02T25:00:00Z', // impossible hour
+      '2026-08-02T12:60:00Z', // impossible minute
+      ' 2026-08-02T12:00:00Z', // leading whitespace
+      '2026-08-02T12:00:00Z ', // trailing whitespace
+      "2026-08-02T12:00:00Z'; DROP TABLE qf_jarvis.approval_request_record; --",
+    ]) {
+      await expectCode(
+        queue.listActiveRequests({ observedAt, limit: 10 }),
+        'invalid-input',
+        JSON.stringify(observedAt),
+      );
+    }
+    for (const [index, observedAt] of [
+      undefined,
+      null,
+      12345,
+      1_754_136_000_000,
+      {},
+      [],
+      true,
+    ].entries()) {
+      await expectCode(
+        queue.listActiveRequests({ observedAt, limit: 10 } as never),
+        'invalid-input',
+        `non-string #${String(index)} (${typeof observedAt})`,
+      );
+    }
+  }, 60_000);
+
+  it('reaches the database ZERO times for a malformed instant', async () => {
+    // The refusal must be a validation, not a round trip that happens to fail. A pool that throws on
+    // contact proves it: if anything reached it the error would be that, not `invalid-input`.
+    const counting = countingPool();
+    const isolated = createPostgresApprovalQueue({ pool: counting.pool });
+    for (const observedAt of ['', 'not-a-time', '2026-02-30T00:00:00Z', '2026-08-02']) {
+      await expectCode(
+        isolated.listActiveRequests({ observedAt, limit: 10 }),
+        'invalid-input',
+        observedAt,
+      );
+    }
+    // And the same for the limit, which is validated on the same pre-SQL path.
+    await expectCode(
+      isolated.listActiveRequests({ observedAt: '2026-08-02T12:00:00Z', limit: 5000 }),
+      'invalid-input',
+    );
+    expect(counting.calls()).toBe(0);
+  });
+
+  it('accepts every well-formed UTC instant the contract admits', async () => {
+    const source = recommendationSource('c4c4c4c4');
+    const request = approvalRequest(source);
+    await queue.enqueueRequest({ source, request });
+    for (const observedAt of [
+      '2026-08-02T12:00:00Z',
+      '2026-08-02T12:00:00.5Z',
+      '2026-08-02T12:00:00.123456789Z',
+      '2026-08-02T23:59:59Z',
+    ]) {
+      const active = await queue.listActiveRequests({ observedAt, limit: 10 });
+      expect(
+        active.map((e) => e.approvalRequestId),
+        observedAt,
+      ).toEqual([request.approvalRequestId]);
+    }
+  }, 60_000);
 });
 
 // ---------------------------------------------------------------------------
@@ -1039,6 +1300,151 @@ describe('recordDecision', () => {
       await closeDatabasePool(poolTwo);
     }
   }, 60_000);
+
+  it('records ONE shared decision from two concurrent requests, held at the barrier', async () => {
+    // The defect PR #84's final review found. A decision is RECOMMENDATION-level, so the requests for
+    // actions A and B may lawfully record the same one at the same time. Both look, neither finds it,
+    // both insert; one wins the identity and the other's `ON CONFLICT DO NOTHING` reports zero rows.
+    // That said only "someone else won the decision ROW" -- never "someone else answered MY ask" --
+    // and treating it as a duplicate race sent the loser to reconcile against a link the winner had
+    // no reason to create. `repository-invariant`, for an entirely lawful sequence.
+    const source = twoActionSource('dededede');
+    const [first, second] = source.recommendation.proposedActions;
+    if (first === undefined || second === undefined) {
+      throw new Error('unreachable');
+    }
+    const a = approvalRequest(source, { actionIndex: 0 });
+    const b = approvalRequest(source, { actionIndex: 1 });
+    await queue.enqueueRequest({ source, request: a });
+    await queue.enqueueRequest({ source, request: b });
+
+    // Partial approval: overall approved, A rejected, B approved. Each ask must get ITS verdict.
+    const decision = coreDecision(source, [
+      { actionId: first.actionId, decision: 'rejected' },
+      { actionId: second.actionId, decision: 'approved' },
+    ]);
+
+    const gate = createBarrier(2);
+    const poolOne = createTestPool('qf-p08-queue-shared-a');
+    const poolTwo = createTestPool('qf-p08-queue-shared-b');
+    try {
+      const sideA = createPostgresApprovalQueue({ pool: poolHeldAtDecisionLookup(poolOne, gate) });
+      const sideB = createPostgresApprovalQueue({ pool: poolHeldAtDecisionLookup(poolTwo, gate) });
+      const [resultA, resultB] = await Promise.all([
+        sideA.recordDecision({ approvalRequestId: a.approvalRequestId, decision }),
+        sideB.recordDecision({ approvalRequestId: b.approvalRequestId, decision }),
+      ]);
+
+      // BOTH succeed. Neither leaks repository-invariant, database-unavailable or the sentinel.
+      expect(resultA.outcome).toBe('CREATED');
+      expect(resultB.outcome).toBe('CREATED');
+      // Each ask keeps its OWN verdict; the overall outcome does not overwrite it.
+      expect(resultA.correlation.decision.outcome).toBe('approved');
+      expect(resultA.correlation.actionDecision.decision).toBe('rejected');
+      expect(resultB.correlation.actionDecision.decision).toBe('approved');
+    } finally {
+      await closeDatabasePool(poolOne);
+      await closeDatabasePool(poolTwo);
+    }
+
+    const counts = await withClient(pool, async (client) => {
+      const result = await client.query(
+        `SELECT (SELECT count(*)::text FROM qf_jarvis.approval_decision_record) AS decisions,
+                (SELECT count(*)::text FROM qf_jarvis.approval_request_decision_link) AS links,
+                (SELECT count(*)::text FROM qf_jarvis.approval_queue_audit
+                  WHERE event_type = 'DECISION_LINKED') AS linked_audits`,
+      );
+      return result.rows[0] as Record<string, string>;
+    });
+    // ONE decision row, TWO links, TWO audit rows -- the same durable shape as the sequential case.
+    expect(counts).toEqual({ decisions: '1', links: '2', linked_audits: '2' });
+    expect(await slotPointer(source, 0)).toBeNull();
+    expect(await slotPointer(source, 1)).toBeNull();
+
+    // And re-read from durable evidence, each request still correlates to its own verdict.
+    expect((await queue.readDecisionForRequest(a.approvalRequestId)).actionDecision.decision).toBe(
+      'rejected',
+    );
+    expect((await queue.readDecisionForRequest(b.approvalRequestId)).actionDecision.decision).toBe(
+      'approved',
+    );
+  }, 120_000);
+
+  it('refuses the loser when two concurrent requests share a decision ID but not its content', async () => {
+    // Same rendezvous, opposite verdict. One decision identity wins; the other caller is told the
+    // identity already names something else, and its candidate link and audit roll back with it.
+    const source = twoActionSource('dfdfdfdf');
+    const [first, second] = source.recommendation.proposedActions;
+    if (first === undefined || second === undefined) {
+      throw new Error('unreachable');
+    }
+    const a = approvalRequest(source, { actionIndex: 0 });
+    const b = approvalRequest(source, { actionIndex: 1 });
+    await queue.enqueueRequest({ source, request: a });
+    await queue.enqueueRequest({ source, request: b });
+
+    const sharedId = 'eeeeeeee-9999-4000-8000-777777777777';
+    const decisionOne = coreDecision(
+      source,
+      [
+        { actionId: first.actionId, decision: 'approved' },
+        { actionId: second.actionId, decision: 'approved' },
+      ],
+      { decisionId: sharedId },
+    );
+    const decisionTwo = coreDecision(
+      source,
+      [
+        { actionId: first.actionId, decision: 'rejected' },
+        { actionId: second.actionId, decision: 'rejected' },
+      ],
+      { decisionId: sharedId },
+    );
+
+    const gate = createBarrier(2);
+    const poolOne = createTestPool('qf-p08-queue-split-a');
+    const poolTwo = createTestPool('qf-p08-queue-split-b');
+    let results: PromiseSettledResult<unknown>[];
+    try {
+      const sideA = createPostgresApprovalQueue({ pool: poolHeldAtDecisionLookup(poolOne, gate) });
+      const sideB = createPostgresApprovalQueue({ pool: poolHeldAtDecisionLookup(poolTwo, gate) });
+      results = await Promise.allSettled([
+        sideA.recordDecision({ approvalRequestId: a.approvalRequestId, decision: decisionOne }),
+        sideB.recordDecision({ approvalRequestId: b.approvalRequestId, decision: decisionTwo }),
+      ]);
+    } finally {
+      await closeDatabasePool(poolOne);
+      await closeDatabasePool(poolTwo);
+    }
+
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    const loser = results.find((r) => r.status === 'rejected');
+    expect(loser?.reason).toMatchObject({ code: 'decision-conflict' });
+
+    // Exactly one durable decision payload, one link, one audit row: the loser wrote nothing.
+    const counts = await withClient(pool, async (client) => {
+      const result = await client.query(
+        `SELECT (SELECT count(*)::text FROM qf_jarvis.approval_decision_record) AS decisions,
+                (SELECT count(*)::text FROM qf_jarvis.approval_request_decision_link) AS links,
+                (SELECT count(*)::text FROM qf_jarvis.approval_queue_audit
+                  WHERE event_type = 'DECISION_LINKED') AS linked_audits`,
+      );
+      return result.rows[0] as Record<string, string>;
+    });
+    expect(counts).toEqual({ decisions: '1', links: '1', linked_audits: '1' });
+
+    // The losing ask remains unanswered and still active -- nothing about it was decided.
+    const undecided = results[0]?.status === 'rejected' ? a : b;
+    await expectCode(
+      queue.readDecisionForRequest(undecided.approvalRequestId),
+      'request-not-found',
+    );
+    expect(
+      (await queue.listActiveRequests({ observedAt: '2026-08-02T13:00:00Z', limit: 10 })).map(
+        (e) => e.approvalRequestId,
+      ),
+    ).toEqual([undecided.approvalRequestId]);
+  }, 120_000);
 
   it('lets exactly one of two concurrent CONFLICTING decisions win', async () => {
     const source = recommendationSource('dcdcdcdc');

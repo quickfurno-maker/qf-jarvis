@@ -39,6 +39,20 @@ can be edited after the fact is not an authorization record. The slot's
 `(recommendation_id, proposed_action_id)` key is immutable and it cannot be deleted; its pointer is
 the **only mutable column anywhere in the migration**.
 
+**The pointer's reference is composite, and it has to be.** `approval_request_record` carries
+`UNIQUE (recommendation_id, proposed_action_id, approval_request_id)`, and the slot's foreign key
+names all three columns on both sides. A reference on `approval_request_id` alone resolves perfectly
+well — and is too weak, because the runtime role legitimately holds
+`UPDATE (active_approval_request_id)`: with a single-column reference it could point action A's slot
+at action B's request and the database would accept the row. That is the key-immutability trigger
+defeated through the one column the trigger deliberately lets move, and it silently transfers an
+outstanding ask to a different action. Widening the reference makes the pointer's membership in its
+own slot a structural fact. `NULL` still means no outstanding ask: under the default `MATCH SIMPLE` a
+composite key with a NULL column is satisfied, and the other two columns are `NOT NULL`.
+
+Startup refuses the single-column form by definition rather than by name, because the weak version
+shipped under the same constraint name.
+
 ### 2. There is no local approval status, and there cannot be
 
 No `status`, `pending`, `approved`, `authorized`, `can_execute` or `can_send` column exists, and no
@@ -113,6 +127,23 @@ private sentinel requests that rollback, and the transaction helper rethrows the
 **unclassified** so the sentinel survives — the lesson from QFJ-P08-B2, where classifying it turned a
 correct duplicate race into an invented `database-unavailable`.
 
+**A decision-row conflict is not a duplicate race, and treating it as one was a defect.** The
+sentinel is raised only where the winner must have produced the effect this caller wanted, so that
+reading back what won is a complete answer: the request row, and the request→decision link. Both
+conflict on `approval_request_id`. A decision, by contrast, is recommendation-level, so the requests
+for actions A and B may lawfully record the **same** decision concurrently — and the loser's
+`ON CONFLICT DO NOTHING` then reports zero rows for a decision it is entitled to reuse. That says
+only "another session won the decision identity", never "another session answered my ask". Rolling
+back and reconciling sent it hunting for a link for B that the winner, which linked only A, had no
+reason to create, and it reported `repository-invariant` for an entirely lawful sequence.
+
+So on a decision conflict the row is **re-read inside the same transaction and reused**, and the
+transaction goes on to create its own independent link. This is sound precisely because the
+isolation level is READ COMMITTED and because `ON CONFLICT DO NOTHING` waits for the conflicting
+transaction to finish: zero rows means that transaction committed, and the next statement takes a
+fresh snapshot that sees it. Same id, different content is still `decision-conflict`, whoever wrote
+it — the check moved after the reuse rather than being dropped.
+
 ### 7. One decision may answer several asks
 
 `decision_id` is unique in the decision RECORD (one row per Core decision — copies could diverge) and
@@ -143,6 +174,16 @@ different action even if the trigger were ever dropped. No `DELETE`, no `TRUNCAT
 consult `schema_migration`: that is tooling state, and startup should trust the _actual_ schema, not
 a recorded checksum a hand-repaired database would still satisfy.
 
+### 10. The observation instant is validated by the contract, before any SQL
+
+`listActiveRequests` takes `observedAt: UtcTimestamp`, and it now parses it with the contract's own
+`utcTimestampSchema` before a connection is used. A `typeof string && length > 0` check let
+`not-a-time`, `2026-07-11`, `+05:30` and `2026-02-30T00:00:00Z` through to PostgreSQL, where a
+caller's mistake came back as a driver error and was classified `database-unavailable` — an outage
+reported for a typo, on the read an operator surface would call most often. This package defines no
+timestamp grammar of its own; it asks the contract, which is also the only thing that rejects a
+well-formed date that does not exist.
+
 ## Rejected alternatives
 
 - **A `status` column, or an `approved` boolean.** The easiest thing to add to a queue, and exactly
@@ -162,6 +203,29 @@ a recorded checksum a hand-repaired database would still satisfy.
   ask silently cancel its replacement.
 - **Looking up the request before locking the slot.** Misreports an exact concurrent replay as an
   overlap — found by test, not by reading.
+- **A single-column foreign key from the slot to the request.** Resolves, and leaves the one mutable
+  column free to point a slot at another action's request.
+- **Treating a decision-row conflict as a duplicate race.** Reports `repository-invariant` when two
+  actions of one recommendation lawfully record the same Core decision at the same time.
+- **Validating `observedAt` as "a non-empty string".** Turns a caller's typo into
+  `database-unavailable`, and accepts dates that do not exist.
+
+## Final-review corrections (PR #84, before merge)
+
+All three were found in final review of head `42ed7eb` and corrected in a second commit on the same
+PR. Each is described in the sections above; recorded together here because each closes a failure the
+original commit could not detect from inside itself:
+
+1. the slot pointer's **composite** foreign key (§1) — the single-column form let the runtime role
+   point one action's slot at another action's request;
+2. the shared-decision **reload-and-reuse** algorithm (§6) — a decision-row conflict is not a
+   duplicate race;
+3. **canonical validation of `observedAt`** (§10) — a caller's malformed instant is `invalid-input`,
+   not a database error.
+
+Migration `0009` was unmerged and never applied to any managed database, so correcting it is
+permitted. Its first hash `1927f32a…` is **superseded**; the final hash below is authoritative.
+`0001`–`0008` remain byte-identical and there is no `0010`.
 
 ## Consequences
 
@@ -176,7 +240,7 @@ gains one leaf: `contracts` + `approval-runtime` + `recommendation-runtime` + `p
 `event-backbone` **dev-only** for the migration harness. No new third-party resolution, no cycle.
 
 Migrations become `0001`–`0009`; `0009` is
-`1927f32aff3b3b42a987fe6ff0c53f1caa2403040377c3effbba88817a1d2257`, `0001`–`0008` are byte-identical,
+`e834bc3cd0bc8fd30b04f4849a00d29d49b5a19d1636b912535fdbd6d86f20f6`, `0001`–`0008` are byte-identical,
 and there is no `0010`. **Managed PostgreSQL was not accessed and still carries `0001` only**;
 `0002`–`0009` remain unapplied. Production rollout remains **OFF**.
 
@@ -195,6 +259,7 @@ wiring. No migration beyond `0009` and no `0010`. No managed database access or 
 ## Change-control rule
 
 The five-table model and the non-overlap invariant are the contract this slice establishes. Adding a
-status column, relaxing the slot's uniqueness, making `decision_id` unique in the link, or clearing
+status column, relaxing the slot's uniqueness, narrowing the slot's composite pointer reference back
+to one column, making `decision_id` unique in the link, or clearing
 the slot without the exact-request predicate each reopens a failure this ADR closes, and is a
 governed change requiring its own decision.
