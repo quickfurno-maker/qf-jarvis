@@ -736,14 +736,33 @@ describe('API surface, dependencies and containment', () => {
     ).toBe(false);
   });
 
-  it('exposes exactly the three port methods', () => {
+  it('exposes exactly the four port methods', () => {
     const adapter = createPostgresConversationStateAdapter({
       pool: { query: () => undefined } as unknown as Parameters<
         typeof createPostgresConversationStateAdapter
       >[0]['pool'],
     });
-    expect(Object.keys(adapter).sort()).toEqual(['applyControlCommand', 'provision', 'read']);
+    // QFJ-P08-B3 (ADR-0078) adds `assertReady`, the non-mutating startup probe. Still an EXACT set
+    // match, and still nothing that sends, delivers, executes, migrates or authorizes.
+    expect(Object.keys(adapter).sort()).toEqual([
+      'applyControlCommand',
+      'assertReady',
+      'provision',
+      'read',
+    ]);
     expect(Object.isFrozen(adapter)).toBe(true);
+    const surface = adapter as unknown as Record<string, unknown>;
+    for (const forbidden of [
+      'migrate',
+      'createSchema',
+      'send',
+      'deliver',
+      'execute',
+      'authorize',
+      'readOperationsProjection',
+    ]) {
+      expect(surface[forbidden], forbidden).toBeUndefined();
+    }
   });
 
   it('adds exactly one migration: 0001-0008, and no 0009', () => {

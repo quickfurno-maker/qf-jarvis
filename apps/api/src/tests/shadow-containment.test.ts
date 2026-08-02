@@ -206,6 +206,21 @@ describe('(127-132) no live model id, tool, workflow or database path', () => {
     expect(request.promptId).toBe(SHADOW_PROMPT_ID);
   });
 
+  /**
+   * The files QFJ-P08-B3 (ADR-0078) authorises to name the persistence packages.
+   *
+   * `event-backbone` moved from "never" to "exactly here". The durable composition must create a
+   * pool through its public API, and its test must apply migrations and read rows back. Naming both
+   * files keeps that a decision about two modules rather than a capability the application acquired.
+   *
+   * Everything else on the list below — n8n, WhatsApp, webhooks, tool calls, workflows, raw pools and
+   * raw SQL — stays forbidden EVERYWHERE, including in these two.
+   */
+  const DATABASE_COMPOSITION_FILES: readonly string[] = Object.freeze([
+    'src/runtime/durable-jarvis-runtime.ts',
+    'src/tests/durable-database-harness.ts',
+  ]);
+
   it('(130, 131) no tool, execution, workflow or database capability is reachable', () => {
     for (const file of allFiles()) {
       // `DIRECT_BUSINESS_OR_N8N_EXECUTION` is a red-team case KIND from `model-evaluation`: it names the
@@ -214,6 +229,9 @@ describe('(127-132) no live model id, tool, workflow or database path', () => {
       const code = codeOnly(readFileSync(file, 'utf8'))
         .replace(/DIRECT_BUSINESS_OR_N8N_EXECUTION/g, 'MANDATORY_REFUSAL_KIND')
         .toLowerCase();
+      const composesDatabase = DATABASE_COMPOSITION_FILES.some((allowed) =>
+        normalise(file).endsWith(`/${allowed}`),
+      );
       for (const forbidden of [
         'n8n',
         'whatsapp',
@@ -222,15 +240,35 @@ describe('(127-132) no live model id, tool, workflow or database path', () => {
         'tool_call',
         'tools:',
         'workflow',
+        // A RAW pool stays forbidden EVERYWHERE, the two composition files included: they reach the
+        // database through the public workspace APIs or not at all.
         'pg-pool',
         'createpool',
-        'insert into',
-        'begin;',
-        'event-backbone',
       ]) {
-        expect(code).not.toContain(forbidden);
+        expect(code, `${file}: ${forbidden}`).not.toContain(forbidden);
+      }
+      if (!composesDatabase) {
+        expect(code, file).not.toContain('event-backbone');
+      }
+      // Raw SQL is permitted ONLY in the test harness, which has to seed rows and damage the schema
+      // to prove startup refuses. No production file may contain a statement.
+      if (!normalise(file).includes('/tests/')) {
+        for (const sql of ['insert into', 'begin;', 'select ', 'update ', 'delete ']) {
+          expect(code, `${file}: ${sql}`).not.toContain(sql);
+        }
       }
     }
+  });
+
+  it('(130, 131) exactly two files name the persistence packages, and only one is production', () => {
+    const naming = allFiles().filter((file) =>
+      codeOnly(readFileSync(file, 'utf8')).toLowerCase().includes('event-backbone'),
+    );
+    expect(naming.map((f) => normalise(f).split('/apps/api/')[1] ?? '').sort()).toEqual([
+      ...DATABASE_COMPOSITION_FILES,
+    ]);
+    // Only ONE of them is production source; the other is excluded from the emitting build.
+    expect(naming.filter((f) => !normalise(f).includes('/tests/'))).toHaveLength(1);
   });
 
   it('(132) the prompt and schema are fixed in source and not configurable', () => {

@@ -88,6 +88,29 @@ const PROCESS_ALLOWLIST: Readonly<Record<string, readonly string[]>> = Object.fr
 /** THE one file permitted to arm a timer: the single hard run deadline (ADR-0065 §11). */
 const DESIGNATED_TIMER_MODULE = 'src/shadow/create-controlled-shadow-runner.ts';
 
+/**
+ * THE one PRODUCTION file permitted to reach a database (QFJ-P08-B3, ADR-0078).
+ *
+ * QFJ-P08-B2 made a human takeover durable; nothing composed it, so on merged `main` the only
+ * authoritative state a real runtime could receive was an in-process fake. This module is that seam.
+ * It is named here, singular, so "apps/api can talk to PostgreSQL" stays a decision about one file
+ * rather than a property the application quietly acquired.
+ */
+const DESIGNATED_DATABASE_MODULE = 'src/runtime/durable-jarvis-runtime.ts';
+const isDesignatedDatabaseModule = (f: string): boolean =>
+  normalise(f).endsWith(`/${DESIGNATED_DATABASE_MODULE}`);
+
+/**
+ * THE one file permitted to read the environment, and it is TEST-ONLY (QFJ-P08-B3, ADR-0078).
+ *
+ * The durable composition tests need a real PostgreSQL, which needs a connection string, which has
+ * to come from somewhere. It is confined to a single harness that `tsconfig.build.json` excludes
+ * from the emitting build, exactly as `@qf-jarvis/postgres-conversation-state` confines its own.
+ *
+ * PRODUCTION source still reads NOTHING — that rule is unchanged and asserted unconditionally below.
+ */
+const DESIGNATED_TEST_ENV_MODULE = 'src/tests/durable-database-harness.ts';
+
 function allowlistFor(file: string): readonly string[] {
   const key = Object.keys(PROCESS_ALLOWLIST).find((k) => normalise(file).endsWith(`/${k}`));
   return key === undefined ? [] : (PROCESS_ALLOWLIST[key] ?? []);
@@ -108,10 +131,31 @@ function codeOnly(text: string): string {
 }
 
 describe('(67) the process boundary reads no environment', () => {
-  it('no file in apps/api touches process.env', () => {
-    for (const file of allFiles()) {
-      expect(readFileSync(file, 'utf8')).not.toMatch(/process\s*\.\s*env/);
+  it('no PRODUCTION file in apps/api touches process.env', () => {
+    for (const file of productionFiles()) {
+      expect(readFileSync(file, 'utf8'), file).not.toMatch(/process\s*\.\s*env/);
     }
+  });
+
+  it('exactly one TEST-ONLY module reads the environment, and only DATABASE_URL', () => {
+    const readers = allFiles().filter((file) =>
+      /process\s*\.\s*env/.test(readFileSync(file, 'utf8')),
+    );
+    expect(readers.map((f) => normalise(f).split('/apps/api/')[1] ?? '')).toEqual([
+      DESIGNATED_TEST_ENV_MODULE,
+    ]);
+
+    // Exactly one read, of exactly one variable. Not a general environment reader.
+    const harness = readFileSync(readers[0] ?? '', 'utf8');
+    expect(harness.match(/process\s*\.\s*env\s*\[[^\]]*\]/g)).toEqual([
+      "process.env['DATABASE_URL']",
+    ]);
+    expect(harness).not.toMatch(/process\s*\.\s*env\s*\./);
+
+    // And it cannot reach dist: the emitting build excludes the whole test tree.
+    expect(readFileSync(join(APP_DIR, 'tsconfig.build.json'), 'utf8')).toContain(
+      '"exclude": ["src/tests/**"]',
+    );
   });
 
   it('every `process` access is on the allowlist, and only in its designated file', () => {
@@ -214,14 +258,42 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
         'dotenv',
         'vault',
         'dockerode',
+        // Supabase is the DEPLOYMENT target and is never named in source, B3 included.
         'supabase',
-        'postgres',
         'groq-sdk',
         'openai',
       ]) {
-        expect(code).not.toContain(forbidden);
+        expect(code, `${file}: ${forbidden}`).not.toContain(forbidden);
+      }
+      // `postgres` is permitted in EXACTLY ONE module (QFJ-P08-B3), and forbidden everywhere else.
+      if (!isDesignatedDatabaseModule(file)) {
+        expect(code, file).not.toContain('postgres');
       }
     }
+  });
+
+  it('exactly one production module reaches a database, and it opens no connection of its own', () => {
+    const touching = productionFiles().filter((file) => {
+      const code = codeOnly(readFileSync(file, 'utf8')).toLowerCase();
+      return (
+        code.includes('postgres') ||
+        code.includes('event-backbone') ||
+        code.includes('conversation-state')
+      );
+    });
+    expect(touching.map((f) => normalise(f).split('/apps/api/')[1] ?? '')).toEqual([
+      DESIGNATED_DATABASE_MODULE,
+    ]);
+
+    // And it reaches the database ONLY through the public workspace APIs: no `pg` import, no raw
+    // pool, no SQL, no migration, no connection string handling, and no HTTP surface.
+    const code = codeOnly(readFileSync(touching[0] ?? '', 'utf8'));
+    expect(code).not.toMatch(/from ['"]pg['"]/);
+    expect(code).not.toMatch(/\bnew\s+Pool\b/);
+    expect(code).not.toMatch(/\b(SELECT|INSERT|UPDATE|DELETE|CREATE TABLE|ALTER TABLE)\b/);
+    expect(code).not.toMatch(/migrat/i);
+    expect(code).not.toMatch(/connectionString/);
+    expect(code).not.toMatch(/createServer|express|fastify/i);
   });
 
   it('production source creates no watcher or polling loop, and logs nothing', () => {
@@ -267,15 +339,31 @@ describe('the staging smoke stays out of the production boundary', () => {
     // production source that composes the real gateway (ADR-0065 §6). `zod` is the schema validator
     // already pinned by nine other workspace packages — no new third-party resolution (ADR-0065 §14).
     expect(Object.keys(manifest.dependencies ?? {}).sort()).toEqual([
+      // QFJ-P08-B3 (ADR-0078): the three -- and only three -- new production edges the durable
+      // composition needs, to create a pool, build the durable adapter, and compose the runtime.
+      // Still an EXACT set match, and still no new third-party resolution.
+      '@qf-jarvis/event-backbone',
+      '@qf-jarvis/jarvis-runtime',
       '@qf-jarvis/model-evaluation',
       '@qf-jarvis/model-gateway',
       '@qf-jarvis/model-gateway-composition',
+      '@qf-jarvis/postgres-conversation-state',
       // QFJ-S3-I-B (ADR-0073): the SHADOW runner's fixed synthetic prompt is now a real
       // `PromptDefinition`, so its identity and its bytes cannot drift apart. Still an EXACT set.
       '@qf-jarvis/prompt-registry',
       'zod',
     ]);
-    expect(manifest.devDependencies).toBeUndefined();
+    // QFJ-P08-B3: dev dependencies exist now, and are EXACTLY the three test-only fixture packages
+    // the durable composition proof needs. An EXACT set, not merely a superset.
+    expect(Object.keys(manifest.devDependencies ?? {}).sort()).toEqual([
+      '@qf-jarvis/conversation-control',
+      '@qf-jarvis/core-decision-adapter',
+      '@qf-jarvis/model-reply-adapter',
+    ]);
+    // `pg` is absent from BOTH lists: the app composes a pool through event-backbone's public API
+    // and never touches the driver.
+    expect(manifest.dependencies?.['pg']).toBeUndefined();
+    expect(manifest.devDependencies?.['pg']).toBeUndefined();
     expect(manifest.dependencies?.['zod']).toBe('4.4.3');
   });
 
