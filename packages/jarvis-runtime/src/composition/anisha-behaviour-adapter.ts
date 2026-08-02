@@ -90,6 +90,9 @@ export function anishaBehaviourPort(
       }
 
       const supplied = await input.read({
+        // The tenant comes from the ONE key derived from the validated envelope -- never from the
+        // supplied business facts, and never from what the state source returned (ADR-0076).
+        tenantId: key.tenantId,
         conversationId: request.conversationId,
         revision: request.revision,
       });
@@ -111,6 +114,12 @@ export function anishaBehaviourPort(
         throw new Error('invalid-behaviour-conversation');
       }
       const control = await state.read(key);
+      // This adapter is an authoritative-state reader too, so it honours the same rule as the four
+      // general projections: a source that answered correctly at the first gate could still answer
+      // with another tenant's state here, and that state would reach the behaviour decision.
+      if (control.tenantId !== key.tenantId || control.conversationId !== key.conversationId) {
+        throw new Error('invalid-behaviour-state');
+      }
 
       const decision = decideAnishaTurn({
         partyType: request.partyType,

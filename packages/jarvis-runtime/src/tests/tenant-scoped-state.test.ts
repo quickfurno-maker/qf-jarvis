@@ -22,11 +22,30 @@ import type {
   ConversationControlState,
   ConversationStateKey,
 } from '../contracts/authoritative-state.js';
+import type { VendorJourneySignals } from '@qf-jarvis/anisha-agent';
+import { scriptedCoreTransport } from '@qf-jarvis/core-decision-adapter/testing';
+
+import type {
+  ClientSalesBehaviourInput,
+  ClientSalesBehaviourInputPort,
+  ClientSalesBehaviourInputRequest,
+} from '../contracts/behaviour-input.js';
+import type {
+  VendorJourneyBehaviourInput,
+  VendorJourneyBehaviourInputPort,
+  VendorJourneyBehaviourInputRequest,
+} from '../contracts/vendor-journey-behaviour-input.js';
 import { clearControlState } from '../testing/deterministic-authoritative-state.js';
 import {
   syntheticInboundEnvelope,
+  syntheticPromptDefinition,
+  syntheticPromptRegistry,
   syntheticRuntimeConfig,
+  syntheticSignals,
 } from '../testing/deterministic-runtime-fixture.js';
+
+/** A VENDOR-scoped prompt, since a definition is scope-bound (ADR-0073). */
+const VENDOR_PROMPT = syntheticPromptDefinition('reply.vendor', 'VENDOR');
 
 const AT = '2026-08-01T00:00:00.000Z';
 const SHARED_CONVERSATION = 'conv.shared';
@@ -347,5 +366,364 @@ describe('operator surfaces validate the tenant before touching the source', () 
     });
     expect(seen).toHaveLength(1);
     expect(Object.keys(seen[0] as Record<string, unknown>)).not.toContain('tenantId');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Behaviour input seams (QFJ-P08-B1 final review).
+//
+// These two ports are where Core-owned, already-validated business facts enter the composition. They
+// are conversation-keyed external reads, so ADR-0076's rule applies to them too: a supplier handed
+// only a conversation id cannot select the right tenant's facts, and two tenants sharing one
+// conversation id would receive each other's signals.
+// ---------------------------------------------------------------------------
+
+/** A client-sales supplier that records every request and answers per tenant. */
+function recordingClientInput(byTenant: Readonly<Record<string, ClientSalesBehaviourInput>>) {
+  const requests: ClientSalesBehaviourInputRequest[] = [];
+  const port: ClientSalesBehaviourInputPort = {
+    read(request: ClientSalesBehaviourInputRequest) {
+      // A supplier must never be asked without a tenant; throwing here makes the omission loud
+      // rather than a silently-wrong answer.
+      if (typeof request.tenantId !== 'string' || request.tenantId.length === 0) {
+        throw new Error('behaviour-request-missing-tenant');
+      }
+      requests.push(request);
+      return Promise.resolve(byTenant[request.tenantId]);
+    },
+  };
+  return { port, requests: (): readonly ClientSalesBehaviourInputRequest[] => requests };
+}
+
+/** A vendor-journey supplier that records every request and answers per tenant. */
+function recordingVendorInput(byTenant: Readonly<Record<string, VendorJourneyBehaviourInput>>) {
+  const requests: VendorJourneyBehaviourInputRequest[] = [];
+  const port: VendorJourneyBehaviourInputPort = {
+    read(request: VendorJourneyBehaviourInputRequest) {
+      if (typeof request.tenantId !== 'string' || request.tenantId.length === 0) {
+        throw new Error('behaviour-request-missing-tenant');
+      }
+      requests.push(request);
+      return Promise.resolve(byTenant[request.tenantId]);
+    },
+  };
+  return { port, requests: (): readonly VendorJourneyBehaviourInputRequest[] => requests };
+}
+
+const CLIENT_ESCALATE: ClientSalesBehaviourInput = {
+  signals: syntheticSignals({ requestedHumanAssistance: true }),
+  promptRef: 'prompt.riya.sales.v1',
+};
+/** Ordinary sales facts: Riya continues discovery, which drafts a reply through the model. */
+const CLIENT_REPLY: ClientSalesBehaviourInput = {
+  signals: syntheticSignals({ providedRequirementDetail: true }),
+  promptRef: 'prompt.riya.sales.v1',
+};
+
+function vendorInput(over: Partial<VendorJourneySignals>): VendorJourneyBehaviourInput {
+  return {
+    signals: {
+      hasPriorVendorContext: false,
+      requestedHumanAssistance: false,
+      raisedComplaint: false,
+      askedAboutPackageOrRecharge: false,
+      askedAboutOnboardingOrProfile: false,
+      askedAboutLeadResponse: false,
+      askedRoutineQuestion: false,
+      matterRequiresEscalation: false,
+      outOfVendorScope: false,
+      missingContextFieldCount: 0,
+      ...over,
+    },
+    promptRef: 'prompt.anisha.vendor.v1',
+  };
+}
+
+/** A source serving exactly one tenant's row, so the behaviour seam is the thing under test. */
+function oneTenantSource(state: ConversationControlState): AuthoritativeConversationStatePort {
+  return {
+    read: (key: ConversationStateKey) =>
+      state.tenantId === key.tenantId && state.conversationId === key.conversationId
+        ? Promise.resolve(state)
+        : Promise.reject(new Error('no such conversation')),
+  };
+}
+
+describe('the behaviour input seams are tenant-scoped', () => {
+  it('(A) the Riya request carries the envelope tenant, conversation and bound revision', async () => {
+    const supplied = recordingClientInput({ 'tenant.a': CLIENT_ESCALATE });
+    const runtime = createJarvisRuntime(
+      syntheticRuntimeConfig({
+        authoritativeState: oneTenantSource(
+          clearControlState({
+            tenantId: 'tenant.a',
+            conversationId: SHARED_CONVERSATION,
+            revision: 7,
+          }),
+        ),
+        behaviourInput: supplied.port,
+      }),
+    );
+    await runtime.processInbound(
+      syntheticInboundEnvelope({
+        tenantId: 'tenant.a',
+        conversationId: SHARED_CONVERSATION,
+        partyType: 'CLIENT',
+      }),
+    );
+    expect(supplied.requests()).toEqual([
+      { tenantId: 'tenant.a', conversationId: SHARED_CONVERSATION, revision: 7 },
+    ]);
+  });
+
+  it('(B) the Anisha request carries the envelope tenant, conversation and bound revision', async () => {
+    const supplied = recordingVendorInput({
+      'tenant.b': vendorInput({ requestedHumanAssistance: true }),
+    });
+    const runtime = createJarvisRuntime(
+      syntheticRuntimeConfig({
+        authoritativeState: oneTenantSource(
+          clearControlState({
+            tenantId: 'tenant.b',
+            conversationId: SHARED_CONVERSATION,
+            partyType: 'VENDOR',
+            revision: 4,
+          }),
+        ),
+        vendorJourneyBehaviourInput: supplied.port,
+      }),
+    );
+    await runtime.processInbound(
+      syntheticInboundEnvelope({
+        tenantId: 'tenant.b',
+        conversationId: SHARED_CONVERSATION,
+        partyType: 'VENDOR',
+      }),
+    );
+    expect(supplied.requests()).toEqual([
+      { tenantId: 'tenant.b', conversationId: SHARED_CONVERSATION, revision: 4 },
+    ]);
+  });
+
+  it('(C) each tenant receives ONLY its own Riya facts on the same conversation id', async () => {
+    // The two data sets produce observably different, both-valid dispositions. A supplier handed only
+    // the conversation id could not tell these apart, and would answer one tenant with the other's.
+    const supplied = recordingClientInput({
+      // tenant.a asks for a human -> Riya escalates, and NO model runs.
+      'tenant.a': CLIENT_ESCALATE,
+      // tenant.b's facts lead to an ordinary reply -> exactly ONE model call.
+      'tenant.b': CLIENT_REPLY,
+    });
+    const runFor = async (tenantId: string) => {
+      const invoker = countingInvoker();
+      const result = await createJarvisRuntime(
+        syntheticRuntimeConfig({
+          authoritativeState: oneTenantSource(
+            clearControlState({ tenantId, conversationId: SHARED_CONVERSATION }),
+          ),
+          behaviourInput: supplied.port,
+          gatewayInvoker: invoker,
+        }),
+      ).processInbound(
+        syntheticInboundEnvelope({
+          tenantId,
+          conversationId: SHARED_CONVERSATION,
+          partyType: 'CLIENT',
+        }),
+      );
+      return { result, models: invoker.count() };
+    };
+
+    const a = await runFor('tenant.a');
+    const b = await runFor('tenant.b');
+
+    expect(supplied.requests().map((r) => r.tenantId)).toEqual(['tenant.a', 'tenant.b']);
+    // The tenant-specific facts drove genuinely different behaviour, not just different bookkeeping.
+    expect(a.models).toBe(0);
+    expect(b.models).toBe(1);
+    expect(a.result.modelDrafted).toBe(false);
+    expect(b.result.modelDrafted).toBe(true);
+  });
+
+  it('(D) each tenant receives ONLY its own Anisha facts on the same conversation id', async () => {
+    const supplied = recordingVendorInput({
+      // tenant.a asks for a human -> Anisha escalates, and NO model runs.
+      'tenant.a': vendorInput({ requestedHumanAssistance: true }),
+      // tenant.b asks a routine question -> a drafted reply, so exactly ONE model call.
+      'tenant.b': vendorInput({ askedRoutineQuestion: true }),
+    });
+    const runFor = async (tenantId: string) => {
+      const invoker = countingInvoker();
+      const result = await createJarvisRuntime(
+        syntheticRuntimeConfig({
+          authoritativeState: oneTenantSource(
+            clearControlState({
+              tenantId,
+              conversationId: SHARED_CONVERSATION,
+              partyType: 'VENDOR',
+            }),
+          ),
+          vendorJourneyBehaviourInput: supplied.port,
+          gatewayInvoker: invoker,
+          promptFamily: VENDOR_PROMPT.promptId,
+          promptVersion: VENDOR_PROMPT.promptVersion,
+          promptRegistry: syntheticPromptRegistry('reply.vendor', 'VENDOR'),
+          evaluationPromptDigest: VENDOR_PROMPT.contentDigest,
+        }),
+      ).processInbound(
+        syntheticInboundEnvelope({
+          tenantId,
+          conversationId: SHARED_CONVERSATION,
+          partyType: 'VENDOR',
+        }),
+      );
+      return { result, models: invoker.count() };
+    };
+
+    const a = await runFor('tenant.a');
+    const b = await runFor('tenant.b');
+
+    expect(supplied.requests().map((r) => r.tenantId)).toEqual(['tenant.a', 'tenant.b']);
+    // The tenant-specific facts drove genuinely different behaviour, not just different bookkeeping.
+    expect(a.models).toBe(0);
+    expect(b.models).toBe(1);
+    expect(a.result.modelDrafted).toBe(false);
+    expect(b.result.modelDrafted).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The behaviour adapters' own state reread.
+// ---------------------------------------------------------------------------
+
+/**
+ * A source that answers correctly for the first `n` reads and then hands back a foreign record.
+ *
+ * This is the case the four general projections already cover but the behaviour adapters did not: a
+ * structural source may be right at the first gate, wrong during the behaviour read, and right again
+ * afterwards. Only a check at the behaviour read itself catches it.
+ */
+function poisonedAfter(
+  n: number,
+  good: ConversationControlState,
+  poisoned: ConversationControlState,
+): AuthoritativeConversationStatePort {
+  const counter = { n: 0 };
+  return {
+    read: () => {
+      counter.n += 1;
+      return Promise.resolve(counter.n > n ? poisoned : good);
+    },
+  };
+}
+
+describe('the behaviour adapters validate their own state reread', () => {
+  function countingGateway() {
+    const inner = scriptedGatewayInvoker(structuredReply({ citations: [] }));
+    const counter = { n: 0 };
+    return {
+      invoke: (request: Parameters<typeof inner.invoke>[0]) => {
+        counter.n += 1;
+        return inner.invoke(request);
+      },
+      count: () => counter.n,
+    };
+  }
+
+  it('(E) a WRONG-TENANT state during the Riya behaviour read fails the turn closed', async () => {
+    const invoker = countingGateway();
+    const core = scriptedCoreTransport('ACCEPTED');
+    const coreCalls = { n: 0 };
+    const runtime = createJarvisRuntime(
+      syntheticRuntimeConfig({
+        authoritativeState: poisonedAfter(
+          1,
+          clearControlState({ tenantId: 'tenant.a', conversationId: SHARED_CONVERSATION }),
+          clearControlState({ tenantId: 'tenant.OTHER', conversationId: SHARED_CONVERSATION }),
+        ),
+        behaviourInput: { read: () => Promise.resolve(CLIENT_ESCALATE) },
+        gatewayInvoker: invoker,
+        coreTransport: {
+          send: (serialized) => {
+            coreCalls.n += 1;
+            return core.send(serialized);
+          },
+        },
+      }),
+    );
+
+    const result = await runtime.processInbound(
+      syntheticInboundEnvelope({
+        tenantId: 'tenant.a',
+        conversationId: SHARED_CONVERSATION,
+        partyType: 'CLIENT',
+      }),
+    );
+    expect(result.outcome).toBe('REFUSED');
+    expect(result.proposalId).toBeUndefined();
+    // The foreign state never reached a model call, a Core call, or a proposal.
+    expect(invoker.count()).toBe(0);
+    expect(coreCalls.n).toBe(0);
+  });
+
+  it('(F) a WRONG-TENANT state during the Anisha behaviour read fails the turn closed', async () => {
+    const invoker = countingGateway();
+    const runtime = createJarvisRuntime(
+      syntheticRuntimeConfig({
+        authoritativeState: poisonedAfter(
+          1,
+          clearControlState({
+            tenantId: 'tenant.b',
+            conversationId: SHARED_CONVERSATION,
+            partyType: 'VENDOR',
+          }),
+          clearControlState({
+            tenantId: 'tenant.OTHER',
+            conversationId: SHARED_CONVERSATION,
+            partyType: 'VENDOR',
+          }),
+        ),
+        vendorJourneyBehaviourInput: {
+          read: () => Promise.resolve(vendorInput({ requestedHumanAssistance: true })),
+        },
+        gatewayInvoker: invoker,
+      }),
+    );
+
+    const result = await runtime.processInbound(
+      syntheticInboundEnvelope({
+        tenantId: 'tenant.b',
+        conversationId: SHARED_CONVERSATION,
+        partyType: 'VENDOR',
+      }),
+    );
+    expect(result.outcome).toBe('REFUSED');
+    expect(result.proposalId).toBeUndefined();
+    expect(invoker.count()).toBe(0);
+  });
+
+  it('(G) a WRONG-CONVERSATION state during the behaviour read fails the turn closed', async () => {
+    const invoker = countingGateway();
+    const runtime = createJarvisRuntime(
+      syntheticRuntimeConfig({
+        authoritativeState: poisonedAfter(
+          1,
+          clearControlState({ tenantId: 'tenant.a', conversationId: SHARED_CONVERSATION }),
+          clearControlState({ tenantId: 'tenant.a', conversationId: 'conv.OTHER' }),
+        ),
+        behaviourInput: { read: () => Promise.resolve(CLIENT_ESCALATE) },
+        gatewayInvoker: invoker,
+      }),
+    );
+
+    const result = await runtime.processInbound(
+      syntheticInboundEnvelope({
+        tenantId: 'tenant.a',
+        conversationId: SHARED_CONVERSATION,
+        partyType: 'CLIENT',
+      }),
+    );
+    expect(result.outcome).toBe('REFUSED');
+    expect(invoker.count()).toBe(0);
   });
 });

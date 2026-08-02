@@ -106,6 +106,32 @@ The operator surfaces are explicitly tenant-scoped:
 the exact-token grammar **before** any source call. Invalid input yields the existing closed reasons —
 `control-invalid-command` and `operations-invalid-conversation` — with **no new reason** added.
 
+### 4a. Every conversation-keyed external read seam, not just the state port
+
+Final review found the rule had been applied to the authoritative state port but not to the two
+business-fact seams. `ClientSalesBehaviourInputRequest` and `VendorJourneyBehaviourInputRequest`
+still carried only `conversationId` and `revision`, so a real supplier had nothing with which to
+select the right tenant's Core-owned facts — and two tenants sharing one conversation id could have
+received each other's signals.
+
+Tenant-scoped conversation identity therefore applies to **every conversation-keyed external read
+seam in the Jarvis composition**, not merely the state port. Both requests now carry
+`tenantId` + `conversationId` + `revision`, with the tenant taken from the one key already derived
+from the validated envelope — never from the supplied facts, and never from what the state source
+returned. `revision` stays: a future supplier must fetch facts for the exact tenant-scoped
+conversation _and_ revision.
+
+This does **not** merge business facts into authoritative control state. The two seams remain separate
+by design: one supplies Core-owned business facts, the other runtime gating state. Scoping both does
+not join them, and **no business-fact persistence is introduced**.
+
+The behaviour adapters are also authoritative-state readers, so they now validate identity on their
+own state reread as well. A structural source could otherwise answer correctly at the first gate,
+return another tenant's state during the behaviour read, and answer correctly again afterwards — and
+that foreign `humanTakeover` / `aiPaused` would reach the behaviour decision. The check is one
+comparison after the existing single read: no extra read, no retry, and no public error vocabulary
+added.
+
 ### 5. The pure reducer stays tenant-free
 
 `@qf-jarvis/conversation-control` is unchanged: no `tenantId` on `ConversationControlCommand`,
