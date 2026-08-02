@@ -38,6 +38,7 @@ import type {
 import type { Pool, PoolClient } from 'pg';
 
 import { PostgresConversationStateError, classifyDatabaseError } from '../contracts/errors.js';
+import { assertStorageReady } from '../internal/readiness.js';
 import {
   canonicalizeCommandRow,
   canonicalizeStateRow,
@@ -105,6 +106,19 @@ export interface TrustedConversationStateProvisioningResult {
  * capability detection correctly reports `operations-unavailable` rather than a fabricated snapshot.
  */
 export interface PostgresConversationStateAdapter extends WritableAuthoritativeConversationStatePort {
+  /**
+   * Verify the runtime-visible storage contract. Resolves when ready; rejects otherwise.
+   *
+   * Intended to be awaited ONCE at startup, before a runtime is composed (ADR-0078). It is strictly
+   * non-mutating and needs no conversation row: every probe is a zero-row `SELECT` or a catalog
+   * read, so calling it proves the schema without creating, locking or altering anything.
+   *
+   * The point is to move a schema or grant mismatch from the first real conversation to the moment
+   * the process starts. Every path in this adapter already fails closed — but failing closed one
+   * inbound message at a time, in production, is not the same as refusing to start.
+   */
+  assertReady(): Promise<void>;
+
   provision(
     input: TrustedConversationStateProvisioningInput,
   ): Promise<TrustedConversationStateProvisioningResult>;
@@ -435,5 +449,9 @@ export function createPostgresConversationStateAdapter(config: {
     return winner.decision;
   }
 
-  return Object.freeze({ read, provision, applyControlCommand });
+  async function assertReady(): Promise<void> {
+    await assertStorageReady(pool);
+  }
+
+  return Object.freeze({ read, assertReady, provision, applyControlCommand });
 }

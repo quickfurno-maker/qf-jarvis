@@ -98,6 +98,67 @@ export function createTestPool(applicationName: string): DatabasePool {
   return createDatabasePool(testDatabaseConfig(applicationName));
 }
 
+/**
+ * The same validated test database, reached as a DIFFERENT login role (QFJ-P08-B3).
+ *
+ * Startup readiness makes a claim about the privileges of the CURRENT principal, and the only
+ * honest way to test that is to connect as a principal that actually has them — or does not. `SET
+ * ROLE` would not do: a pool hands out connections without a per-connection hook, so the role would
+ * apply to some queries and not others.
+ *
+ * Host and database are taken from the already-validated URL and are NOT changed, so every guard
+ * above still governs the target. Only the credentials are swapped, and the resulting string is
+ * never logged.
+ */
+export function testDatabaseConfigAs(
+  role: string,
+  password: string,
+  applicationName: string,
+): DatabaseConfig {
+  const parsed = new URL(requireTestDatabaseUrl());
+  parsed.username = encodeURIComponent(role);
+  parsed.password = encodeURIComponent(password);
+  return createDatabaseConfig({ connectionString: parsed.toString(), applicationName });
+}
+
+/**
+ * Ensure a LOGIN role exists with a known local-only password and may connect.
+ *
+ * The password is a literal supplied by the caller and is interpolated through `format(%L)` on the
+ * server, never concatenated into SQL here. These roles are local test-cluster fixtures; nothing
+ * about them exists in, or applies to, any managed database.
+ */
+export async function ensureLoginRole(
+  pool: DatabasePool,
+  role: string,
+  password: string,
+): Promise<void> {
+  await withClient(pool, async (client) => {
+    // A `DO` block accepts no bind parameters, so existence is checked with a parameterized SELECT
+    // and each statement is then rendered server-side through `format`, never string-concatenated.
+    const existing = await client.query('SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = $1', [
+      role,
+    ]);
+    if (existing.rowCount === 0) {
+      const create = await client.query<{ stmt: string }>(
+        `SELECT format('CREATE ROLE %I LOGIN', $1::text) AS stmt`,
+        [role],
+      );
+      await client.query(create.rows[0]?.stmt ?? '');
+    }
+    const statement = await client.query<{ stmt: string }>(
+      `SELECT format('ALTER ROLE %I WITH LOGIN PASSWORD %L', $1::text, $2::text) AS stmt`,
+      [role, password],
+    );
+    await client.query(statement.rows[0]?.stmt ?? '');
+    const grant = await client.query<{ stmt: string }>(
+      `SELECT format('GRANT CONNECT ON DATABASE %I TO %I', current_database(), $1::text) AS stmt`,
+      [role],
+    );
+    await client.query(grant.rows[0]?.stmt ?? '');
+  });
+}
+
 export { closeDatabasePool, withClient };
 export type { DatabaseClient, DatabaseConfig, DatabasePool };
 

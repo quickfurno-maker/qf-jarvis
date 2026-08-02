@@ -44,8 +44,10 @@ export default defineConfig({
   test: {
     environment: 'node',
 
-    // Only the database tests. The naming convention is the boundary.
-    include: ['packages/*/src/**/*.integration.test.ts'],
+    // Only the database tests. The naming convention is the boundary. `apps/*` joined the glob in
+    // QFJ-P08-B3 (ADR-0078), when the durable runtime composition landed in `apps/api` and had to be
+    // proved against the same real PostgreSQL — under the same serialisation, for the same reason.
+    include: ['packages/*/src/**/*.integration.test.ts', 'apps/*/src/**/*.integration.test.ts'],
     exclude: ['**/node_modules/**', '**/dist/**'],
 
     // One file at a time, in one worker — the load-bearing lines that prevent the shared-schema

@@ -38,6 +38,12 @@ importers:
 
   apps/api:
     dependencies:
+      '@qf-jarvis/event-backbone':
+        specifier: workspace:*
+        version: link:../../packages/event-backbone
+      '@qf-jarvis/jarvis-runtime':
+        specifier: workspace:*
+        version: link:../../packages/jarvis-runtime
       '@qf-jarvis/model-evaluation':
         specifier: workspace:*
         version: link:../../packages/model-evaluation
@@ -47,12 +53,25 @@ importers:
       '@qf-jarvis/model-gateway-composition':
         specifier: workspace:*
         version: link:../../packages/model-gateway-composition
+      '@qf-jarvis/postgres-conversation-state':
+        specifier: workspace:*
+        version: link:../../packages/postgres-conversation-state
       '@qf-jarvis/prompt-registry':
         specifier: workspace:*
         version: link:../../packages/prompt-registry
       zod:
         specifier: 4.4.3
         version: 4.4.3
+    devDependencies:
+      '@qf-jarvis/conversation-control':
+        specifier: workspace:*
+        version: link:../../packages/conversation-control
+      '@qf-jarvis/core-decision-adapter':
+        specifier: workspace:*
+        version: link:../../packages/core-decision-adapter
+      '@qf-jarvis/model-reply-adapter':
+        specifier: workspace:*
+        version: link:../../packages/model-reply-adapter
 
   apps/worker:
     dependencies:

@@ -20,14 +20,21 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createConversationControlCommand } from '@qf-jarvis/conversation-control';
 import type { ConversationControlCommandInput } from '@qf-jarvis/conversation-control';
 
-import { createPostgresConversationStateAdapter } from '../index.js';
+import { createDatabasePool } from '@qf-jarvis/event-backbone';
+
+import {
+  PostgresConversationStateError,
+  createPostgresConversationStateAdapter,
+} from '../index.js';
 import type { PostgresConversationStateAdapter } from '../index.js';
 import { SELECT_COMMAND } from '../internal/sql.js';
 import {
   closeDatabasePool,
   createTestPool,
+  ensureLoginRole,
   resetAndMigrate,
   testDatabaseConfig,
+  testDatabaseConfigAs,
   seedConversation,
   withClient,
   type DatabasePool,
@@ -1076,4 +1083,286 @@ describe('the duplicate race forced at the initial ledger read', () => {
     expect(state.humanTakeover).toBe(false);
     expect(await ledgerRows(TENANT_A)).toHaveLength(1);
   }, 60_000);
+});
+
+// ---------------------------------------------------------------------------
+// Startup readiness (QFJ-P08-B3, ADR-0078).
+// ---------------------------------------------------------------------------
+//
+// Readiness is what lets an application refuse to START rather than refuse every conversation. That
+// claim is worth only as much as its failure cases, so each destructive case below genuinely breaks
+// the schema, asserts the refusal, and then rebuilds it.
+
+describe('startup readiness', () => {
+  async function restoreSchema(): Promise<void> {
+    await resetAndMigrate(pool, testDatabaseConfig('qf-p08b2-test'));
+  }
+
+  async function exec(sql: string): Promise<void> {
+    await withClient(pool, async (client) => {
+      await client.query(sql);
+    });
+  }
+
+  /** Break the schema, assert readiness refuses, then rebuild so no case inherits the damage. */
+  async function refusesAfter(sql: string): Promise<void> {
+    await exec(sql);
+    await expect(adapter.assertReady(), sql).rejects.toMatchObject({
+      code: 'schema-incompatible',
+    });
+    await restoreSchema();
+  }
+
+  afterAll(async () => {
+    // Leave the database migrated, as every other block in this file expects to find it.
+    await restoreSchema();
+  });
+
+  async function rowCounts(): Promise<{ states: string; commands: string }> {
+    return withClient(pool, async (client) => {
+      const result = await client.query(
+        `SELECT (SELECT count(*) FROM qf_jarvis.conversation_runtime_state)::text   AS states,
+                (SELECT count(*) FROM qf_jarvis.conversation_control_command)::text AS commands`,
+      );
+      return result.rows[0] as { states: string; commands: string };
+    });
+  }
+
+  it('resolves against a fully migrated 0001-0008 schema with no rows at all', async () => {
+    const before = await rowCounts();
+    // No conversation exists. Readiness must not need one, and must not create one.
+    expect(before).toEqual({ states: '0', commands: '0' });
+
+    await expect(adapter.assertReady()).resolves.toBeUndefined();
+
+    expect(await rowCounts()).toEqual(before);
+  });
+
+  it('writes nothing, even with rows present', async () => {
+    await seedConversation(pool, { tenantId: TENANT_A, conversationId: CONVERSATION });
+    await adapter.applyControlCommand(keyA, command());
+
+    const snapshot = async (): Promise<unknown> =>
+      withClient(pool, async (client) => {
+        const state = await client.query(
+          'SELECT * FROM qf_jarvis.conversation_runtime_state ORDER BY tenant_id, conversation_id',
+        );
+        const ledger = await client.query(
+          'SELECT * FROM qf_jarvis.conversation_control_command ORDER BY sequence',
+        );
+        return { state: state.rows, ledger: ledger.rows };
+      });
+
+    const before = await snapshot();
+    await expect(adapter.assertReady()).resolves.toBeUndefined();
+    await expect(adapter.assertReady()).resolves.toBeUndefined();
+    // Byte-for-byte, including the revision and the database-stamped recorded_at.
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it('refuses when either table is missing', async () => {
+    await refusesAfter('DROP TABLE qf_jarvis.conversation_control_command');
+    await refusesAfter(
+      'DROP TABLE qf_jarvis.conversation_control_command, qf_jarvis.conversation_runtime_state',
+    );
+  }, 180_000);
+
+  it('refuses when a column the adapter uses is missing', async () => {
+    await refusesAfter('ALTER TABLE qf_jarvis.conversation_runtime_state DROP COLUMN observed_at');
+    await refusesAfter(
+      'ALTER TABLE qf_jarvis.conversation_control_command DROP COLUMN recorded_at',
+    );
+  }, 180_000);
+
+  it('refuses when a critical trigger is DISABLED rather than dropped', async () => {
+    // The dangerous case: the table still looks entirely correct and the guard silently stops firing.
+    await refusesAfter(
+      'ALTER TABLE qf_jarvis.conversation_runtime_state DISABLE TRIGGER conversation_runtime_state_guard_trigger',
+    );
+    await refusesAfter(
+      'ALTER TABLE qf_jarvis.conversation_control_command DISABLE TRIGGER conversation_control_command_append_only_trigger',
+    );
+    // REPLICA fires only on a replica, which for this process is indistinguishable from disabled.
+    await refusesAfter(
+      'ALTER TABLE qf_jarvis.conversation_runtime_state ENABLE REPLICA TRIGGER conversation_runtime_state_guard_trigger',
+    );
+  }, 300_000);
+
+  it('refuses when a critical trigger is dropped', async () => {
+    await refusesAfter(
+      'DROP TRIGGER conversation_runtime_state_guard_trigger ON qf_jarvis.conversation_runtime_state',
+    );
+    await refusesAfter(
+      'DROP TRIGGER conversation_control_command_append_only_trigger ON qf_jarvis.conversation_control_command',
+    );
+  }, 180_000);
+
+  it('refuses when a critical constraint is removed', async () => {
+    for (const [table, constraint] of [
+      ['conversation_runtime_state', 'conversation_runtime_state_tenant_is_exact_identifier'],
+      ['conversation_runtime_state', 'conversation_runtime_state_revision_in_safe_range'],
+      ['conversation_runtime_state', 'conversation_runtime_state_subject_status_known'],
+      ['conversation_control_command', 'conversation_control_command_action_known'],
+      ['conversation_control_command', 'conversation_control_command_outcome_reason_pairing'],
+      ['conversation_control_command', 'conversation_control_command_applied_advances_one'],
+      ['conversation_control_command', 'conversation_control_command_applied_post_state'],
+      ['conversation_control_command', 'conversation_control_command_no_change_post_state'],
+      ['conversation_control_command', 'conversation_control_command_exhausted_needed_a_change'],
+      ['conversation_control_command', 'conversation_control_command_state_fk'],
+      ['conversation_control_command', 'conversation_control_command_identity_unique'],
+    ] as const) {
+      await refusesAfter(`ALTER TABLE qf_jarvis.${table} DROP CONSTRAINT ${constraint}`);
+    }
+  }, 900_000);
+
+  it('refuses a plausible-but-wrong key shape, not merely a missing one', async () => {
+    // A primary key on the conversation ALONE satisfies any existence check while silently
+    // re-imposing the global-uniqueness assumption ADR-0076 exists to remove. That is why the two
+    // key constraints are compared by DEFINITION rather than by name.
+    await refusesAfter(
+      [
+        'ALTER TABLE qf_jarvis.conversation_control_command DROP CONSTRAINT conversation_control_command_state_fk',
+        'ALTER TABLE qf_jarvis.conversation_runtime_state DROP CONSTRAINT conversation_runtime_state_pk',
+        'ALTER TABLE qf_jarvis.conversation_runtime_state ADD CONSTRAINT conversation_runtime_state_pk PRIMARY KEY (conversation_id)',
+      ].join('; '),
+    );
+    await refusesAfter(
+      [
+        'ALTER TABLE qf_jarvis.conversation_control_command DROP CONSTRAINT conversation_control_command_identity_unique',
+        'ALTER TABLE qf_jarvis.conversation_control_command ADD CONSTRAINT conversation_control_command_identity_unique UNIQUE (command_id)',
+      ].join('; '),
+    );
+  }, 300_000);
+
+  it('refuses when the database is unavailable', async () => {
+    const dead = createTestPool('qf-p08b3-dead');
+    await closeDatabasePool(dead);
+    const deadAdapter = createPostgresConversationStateAdapter({ pool: dead });
+    await expect(deadAdapter.assertReady()).rejects.toMatchObject({
+      code: 'database-unavailable',
+    });
+  });
+
+  it('leaks nothing about the database, schema or principal in a refusal', async () => {
+    await exec('DROP TABLE qf_jarvis.conversation_control_command');
+    const caught: unknown = await adapter.assertReady().then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    await restoreSchema();
+
+    expect(caught).toBeInstanceOf(PostgresConversationStateError);
+    const error = caught as Error;
+    const serialized = `${error.message} ${String(error.stack)}`;
+    for (const forbidden of [
+      'conversation_control_command',
+      'conversation_runtime_state',
+      'qf_jarvis_dev',
+      'password',
+      'localhost',
+      '127.0.0.1',
+      '42P01',
+      'relation',
+    ]) {
+      expect(serialized, forbidden).not.toContain(forbidden);
+    }
+  }, 180_000);
+
+  it('never reads, and never needs privilege on, schema_migration', async () => {
+    // Readiness trusts the ACTUAL schema, not a recorded checksum row -- a hand-repaired database
+    // with an intact ledger row is exactly what a checksum cannot catch. And a deployment principal
+    // has no operational reason to read migration tooling state.
+    await exec('REVOKE ALL ON qf_jarvis.schema_migration FROM PUBLIC');
+    await expect(adapter.assertReady()).resolves.toBeUndefined();
+
+    // The CODE, not the prose that explains why the code avoids it.
+    const withoutComments = readFileSync(
+      fileURLToPath(new URL('../internal/readiness.ts', import.meta.url)),
+      'utf8',
+    )
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/(^|[^:])\/\/.*$/gm, '$1');
+    expect(withoutComments).not.toContain('schema_migration');
+    // Read-only by construction, not merely by intent.
+    for (const forbidden of ['INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'FOR UPDATE', 'BEGIN']) {
+      // `INSERT` and `UPDATE` survive only inside the `has_*_privilege` probes, which ASK whether a
+      // privilege is held rather than exercise it. Those call sites are the one allowed occurrence.
+      const offending = withoutComments
+        .split('\n')
+        .filter((line) => line.includes(forbidden) && !/has_\w+_privilege/.test(line));
+      expect(offending, forbidden).toEqual([]);
+    }
+  });
+
+  describe('the privileges of the CURRENT principal', () => {
+    const RUNTIME_ROLE = 'qf_jarvis_runtime';
+    const WEAK_ROLE = 'qfj_b3_readonly_probe';
+    const LOCAL_ONLY_PASSWORD = 'local-b3-only';
+
+    beforeAll(async () => {
+      // Created BEFORE migrating, so 0008's conditional grant block actually fires: this is the real
+      // deployment role receiving the real migration-issued grants, not an imitation of them.
+      await ensureLoginRole(pool, RUNTIME_ROLE, LOCAL_ONLY_PASSWORD);
+      await ensureLoginRole(pool, WEAK_ROLE, LOCAL_ONLY_PASSWORD);
+      await restoreSchema();
+    }, 180_000);
+
+    it('is ready as the exact least-privilege role migration 0008 grants to', async () => {
+      const runtimePool = createDatabasePool(
+        testDatabaseConfigAs(RUNTIME_ROLE, LOCAL_ONLY_PASSWORD, 'qf-p08b3-runtime-role'),
+      );
+      try {
+        const roleAdapter = createPostgresConversationStateAdapter({ pool: runtimePool });
+        await expect(roleAdapter.assertReady()).resolves.toBeUndefined();
+      } finally {
+        await closeDatabasePool(runtimePool);
+      }
+    }, 60_000);
+
+    it('refuses a principal missing a minimum privilege', async () => {
+      // SELECT on both tables but no INSERT: it passes every column probe and still could not record
+      // a decision. Exactly the misconfiguration a startup check exists to catch.
+      await exec(
+        [
+          `GRANT USAGE ON SCHEMA qf_jarvis TO ${WEAK_ROLE}`,
+          `GRANT SELECT ON qf_jarvis.conversation_runtime_state TO ${WEAK_ROLE}`,
+          `GRANT SELECT ON qf_jarvis.conversation_control_command TO ${WEAK_ROLE}`,
+        ].join('; '),
+      );
+      const weakPool = createDatabasePool(
+        testDatabaseConfigAs(WEAK_ROLE, LOCAL_ONLY_PASSWORD, 'qf-p08b3-weak-role'),
+      );
+      try {
+        const weakAdapter = createPostgresConversationStateAdapter({ pool: weakPool });
+        await expect(weakAdapter.assertReady()).rejects.toMatchObject({
+          code: 'schema-incompatible',
+        });
+      } finally {
+        await closeDatabasePool(weakPool);
+      }
+    }, 60_000);
+
+    it('refuses a principal that cannot read the tables at all', async () => {
+      // SQLSTATE 42501. A GRANTS problem, not a corrupt-data problem, so it classifies as
+      // schema-incompatible rather than repository-invariant (QFJ-P08-B3).
+      await exec(
+        [
+          `REVOKE ALL ON qf_jarvis.conversation_runtime_state FROM ${WEAK_ROLE}`,
+          `REVOKE ALL ON qf_jarvis.conversation_control_command FROM ${WEAK_ROLE}`,
+          `GRANT USAGE ON SCHEMA qf_jarvis TO ${WEAK_ROLE}`,
+        ].join('; '),
+      );
+      const weakPool = createDatabasePool(
+        testDatabaseConfigAs(WEAK_ROLE, LOCAL_ONLY_PASSWORD, 'qf-p08b3-blind-role'),
+      );
+      try {
+        const weakAdapter = createPostgresConversationStateAdapter({ pool: weakPool });
+        await expect(weakAdapter.assertReady()).rejects.toMatchObject({
+          code: 'schema-incompatible',
+        });
+      } finally {
+        await closeDatabasePool(weakPool);
+      }
+    }, 60_000);
+  });
 });

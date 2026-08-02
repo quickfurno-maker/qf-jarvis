@@ -31,7 +31,38 @@ const IDENTIFIER = z
   .min(1)
   .max(128)
   .regex(/^[A-Za-z0-9._:-]+$/);
+/**
+ * A VERSION of an authored artefact: a knowledge citation, a model reply citation, a proposal.
+ *
+ * One-based and bounded, because there is no such thing as version 0 of a document that exists, and
+ * a version in the millions is a bug rather than a catalogue. Deliberately NOT used for conversation
+ * revision — see `REVISION` below.
+ */
 const VERSION = z.int().min(1).max(1_000_000);
+
+/**
+ * A CONVERSATION REVISION. A different domain that happened to share `VERSION`'s shape.
+ *
+ * A conversation revision is not an authored version. It is a monotonic compare-and-set counter over
+ * one conversation's safe state, and its domain is fixed by the durable schema that owns it:
+ * migration 0008 requires every new state row to start at **0** and permits values through
+ * `Number.MAX_SAFE_INTEGER`.
+ *
+ * Validating it through `VERSION` was a semantic-domain conflation, and it had two real consequences
+ * (QFJ-P08-B3 final review). A freshly provisioned conversation — revision 0, which the durable
+ * trigger REQUIRES — was refused as `invalid-context` and could never be served. And any conversation
+ * whose revision passed 1,000,000 would have become permanently unservable, silently, long after
+ * deployment.
+ *
+ * Nothing caught it because the in-memory fake starts at revision 1: a value the durable schema
+ * cannot produce. That is the precise reason a fake is not evidence about a database.
+ *
+ * `VERSION` is left exactly as it was. Widening it would have let version 0 into knowledge
+ * citations, reply citations and `proposalVersion`, which is a real loosening of three unrelated
+ * contracts to fix a fourth. This schema is private and reaches only the two revision-bearing
+ * conversation fields.
+ */
+const REVISION = z.int().min(0).max(Number.MAX_SAFE_INTEGER);
 const DIGEST = z.string().regex(/^[0-9a-f]{8,64}$/);
 
 // ---------------------------------------------------------------------------
@@ -85,7 +116,9 @@ const contextSchema = z
     tenantId: IDENTIFIER,
     partyType: z.enum(['CLIENT', 'VENDOR', 'UNKNOWN']),
     dataClass: z.enum(['HOSTED_ALLOWED', 'LOCAL_ONLY', 'HUMAN_ONLY']),
-    revision: VERSION,
+    // A conversation revision, not an authored version: 0 is legitimate and required by the durable
+    // schema for a freshly provisioned conversation.
+    revision: REVISION,
     humanTakeover: z.boolean().default(false),
     aiPaused: z.boolean().default(false),
     cancelled: z.boolean().default(false),
@@ -208,9 +241,12 @@ const intentSchema = z.record(
 const proposalSchema = z
   .object({
     proposalId: IDENTIFIER,
+    // The proposal's OWN version stays a one-based authored version.
     proposalVersion: VERSION,
     conversationId: IDENTIFIER,
-    expectedRevision: VERSION,
+    // The conversation revision this proposal binds to. It must accept exactly what the context
+    // accepts, or a revision-0 conversation would pass the gate and then fail to produce a proposal.
+    expectedRevision: REVISION,
     kind: z.enum(ORCHESTRATION_PROPOSAL_KINDS),
     structuredIntent: intentSchema,
     citations: z.array(knowledgeCitationSchema).max(64),

@@ -15,7 +15,15 @@
     { "path": "../../packages/model-gateway" },
     { "path": "../../packages/model-evaluation/tsconfig.build.json" },
     { "path": "../../packages/model-gateway-composition/tsconfig.build.json" },
-    { "path": "../../packages/prompt-registry/tsconfig.build.json" }
+    { "path": "../../packages/prompt-registry/tsconfig.build.json" },
+    // QFJ-P08-B3 (ADR-0078): the durable runtime composition module. These three are the only new
+    // production edges, and they exist solely so `src/runtime/durable-jarvis-runtime.ts` can create a
+    // pool, build the durable adapter, and compose the runtime.
+    // `event-backbone` has no separate emitting project; its root tsconfig is the build, exactly as
+    // `model-gateway` above is referenced.
+    { "path": "../../packages/event-backbone" },
+    { "path": "../../packages/jarvis-runtime/tsconfig.build.json" },
+    { "path": "../../packages/postgres-conversation-state/tsconfig.build.json" }
   ],
   "include": ["src/**/*.ts"],
   "exclude": ["src/tests/**"]

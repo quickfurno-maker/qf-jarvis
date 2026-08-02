@@ -74,10 +74,36 @@ function isUnavailableSqlState(code: string): boolean {
   );
 }
 
-/** SQLSTATEs that mean the schema is not the one this adapter was written against. */
+/**
+ * SQLSTATEs that mean the schema is not the one this adapter was written against.
+ *
+ * `42P01` undefined_table, `42703` undefined_column, `42883` undefined_function — and `42501`
+ * insufficient_privilege, which belongs here rather than with the invariant breaches (QFJ-P08-B3).
+ * A principal refused permission on its own tables has not encountered a transient fault and has not
+ * found contradictory data: it is connected to a database whose GRANTS are not the ones migration
+ * 0008 issues. That is the same class of problem as a missing column, and a caller that reads
+ * `repository-invariant` would go looking for corrupt rows instead of a deployment misconfiguration.
+ */
 function isSchemaSqlState(code: string): boolean {
-  // 42P01 undefined_table, 42703 undefined_column, 42883 undefined_function.
-  return code === '42P01' || code === '42703' || code === '42883';
+  return code === '42P01' || code === '42703' || code === '42883' || code === '42501';
+}
+
+/**
+ * Is this `code` actually a SQLSTATE, or a Node socket errno wearing the same property name?
+ *
+ * `pg` puts the server's five-character SQLSTATE on `error.code` — but a connection that never
+ * reached a server carries a Node errno there instead (`ECONNREFUSED`, `ETIMEDOUT`, `EPIPE`). Both
+ * are strings on `.code`, and treating an errno as a SQLSTATE sends it down the "the server rejected
+ * this" branch, where it becomes `repository-invariant`: the adapter would report corrupt durable
+ * evidence when in fact nothing was ever reached. That is the opposite of the truth, and it is the
+ * one misclassification an operator would act on incorrectly.
+ *
+ * Every PostgreSQL SQLSTATE is five characters whose two-character class begins with a digit, apart
+ * from the classes `F0`, `HV`, `P0` and `XX`. `EPIPE` is five characters and would pass a naive
+ * length check; it does not pass this one. (QFJ-P08-B3.)
+ */
+function isSqlState(value: unknown): value is string {
+  return typeof value === 'string' && /^([0-9][0-9A-Z]|F0|HV|P0|XX)[0-9A-Z]{3}$/.test(value);
 }
 
 /**
@@ -92,8 +118,9 @@ export function classifyDatabaseError(error: unknown): PostgresConversationState
   if (error instanceof PostgresConversationStateError) {
     return error;
   }
-  const sqlState: unknown =
+  const code: unknown =
     typeof error === 'object' && error !== null ? (error as { code?: unknown }).code : undefined;
+  const sqlState: unknown = isSqlState(code) ? code : undefined;
   if (typeof sqlState === 'string') {
     if (isUnavailableSqlState(sqlState)) {
       return new PostgresConversationStateError('database-unavailable');
