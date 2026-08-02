@@ -94,6 +94,18 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
 
+  packages/approval-runtime:
+    dependencies:
+      '@qf-jarvis/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@qf-jarvis/recommendation-runtime':
+        specifier: workspace:*
+        version: link:../recommendation-runtime
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+
   packages/contracts:
     dependencies:
       zod:

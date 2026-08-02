@@ -1,0 +1,24 @@
+{
+  "name": "@qf-jarvis/approval-runtime",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis approval runtime foundation (QFJ-P08, ADR-0080). Two responsibilities and no third: construct a POWERLESS ApprovalRequestV1 for one exact proposed action of an already-governed recommendation, and correlate an authoritative ApprovalDecisionV1 that QuickFurno Core has already issued against that recommendation, request, action and canonical fingerprint. Risk and requested authority are DERIVED from the recommendation, never restated by the caller, so an existing recommendation's governance cannot be rewritten at ask time. It approves nothing, decides nothing, persists nothing, queues nothing, calls Core, emits no event, creates no execution intent, and confers no communication authorization. Jarvis asks; QuickFurno Core decides. Depends on @qf-jarvis/contracts, @qf-jarvis/recommendation-runtime, zod, and node:crypto randomUUID only.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/contracts": "workspace:*",
+    "@qf-jarvis/recommendation-runtime": "workspace:*",
+    "zod": "4.4.3"
+  }
+}
