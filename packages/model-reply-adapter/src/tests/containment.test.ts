@@ -4,7 +4,7 @@
  * Matrix 66–84: no direct provider SDK/fetch/network/`process.env`/transport/n8n/DB import in the
  * adapter package (agent-runtime + model-gateway are the only workspace dependencies); no live Core;
  * the package depends solely on agent-runtime + model-gateway + zod and exposes only the root and
- * `./testing`; the public API is locked; migrations 0001–0007 are byte-exact with no 0008; the
+ * `./testing`; the public API is locked; migrations 0001–0008 are byte-exact with no 0009; the
  * event-backbone public-api lock remains 39; production source holds no NUL/control byte; the test
  * fakes never leak into the root barrel.
  */
@@ -60,6 +60,8 @@ const LOCKED_MIGRATION_HASHES: Record<string, string> = {
     'e97059a506ec4377fa39194de4fdc54e7d2f237941fb1e5243a0b01ff40a83d4',
   '0007_subject_activity_projection.sql':
     '8823b528d9e5aaccad7ddb6e16ebe254662c9759d14321fd3a6fa2e62b6dee49',
+  '0008_conversation_control_persistence.sql':
+    'e8fb1c3eda96f9291fdb7f104b1b01ed6a3c100a4bcb4bb316cf2ee5a3e81509',
 };
 
 describe('containment', () => {
@@ -133,7 +135,7 @@ describe('containment', () => {
     }
   });
 
-  it('(75,76) migrations 0001–0007 are byte-exact and there is no 0008', () => {
+  it('(75,76) migrations 0001–0008 are byte-exact and there is no 0009', () => {
     const dir = repoPath('packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
       .filter((n) => n.endsWith('.sql'))
@@ -146,7 +148,7 @@ describe('containment', () => {
           .digest('hex'),
       ).toBe(hash);
     }
-    expect(sql.some((n) => n.startsWith('0008'))).toBe(false);
+    expect(sql.some((n) => n.startsWith('0009'))).toBe(false);
   });
 
   it('(77) the event-backbone public-api lock remains 39', () => {

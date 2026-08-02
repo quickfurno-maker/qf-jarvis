@@ -327,6 +327,9 @@ describe('(133-148) the declared budget and every prior lock', () => {
       'model-gateway',
       'model-gateway-composition',
       'model-reply-adapter',
+      // QFJ-P08-B2 (ADR-0077): the durable PostgreSQL conversation-state adapter. Still an EXACT
+      // set match -- this records an authorised addition, it does not relax the assertion.
+      'postgres-conversation-state',
       // QFJ-S3-I-A (ADR-0072): the versioned prompt registry foundation. Still an EXACT set match --
       // this records an authorised addition, it does not relax the assertion.
       'prompt-registry',
@@ -351,6 +354,8 @@ describe('(133-148) the declared budget and every prior lock', () => {
       'prompt-registry': 7,
       // QFJ-P08-A (ADR-0074): the conversation control foundation, locked from the day it lands.
       'conversation-control': 9,
+      // QFJ-P08-B2 (ADR-0077): the durable adapter, locked from the day it lands.
+      'postgres-conversation-state': 3,
       // QFJ-P08-A (ADR-0075): agent-runtime 45 -> 46 (the operations snapshot constructor) and
       // jarvis-runtime unchanged at 6. Both are named here so the composition phase that touched
       // them is locked centrally, not only in their own packages.
