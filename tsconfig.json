@@ -27,6 +27,7 @@
     { "path": "./packages/anisha-agent/tsconfig.build.json" },
     { "path": "./packages/prompt-registry/tsconfig.build.json" },
     { "path": "./packages/conversation-control/tsconfig.build.json" },
-    { "path": "./packages/postgres-conversation-state/tsconfig.build.json" }
+    { "path": "./packages/postgres-conversation-state/tsconfig.build.json" },
+    { "path": "./packages/recommendation-runtime/tsconfig.build.json" }
   ]
 }

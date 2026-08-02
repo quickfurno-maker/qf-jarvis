@@ -1,0 +1,23 @@
+{
+  "name": "@qf-jarvis/recommendation-runtime",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis governed recommendation runtime (QFJ-P05.05, ADR-0079). The missing PRODUCER for contracts that already existed: it builds a validated, inert RecommendationV1 from explicit semantics and computes the canonical SHA-256 actionFingerprint that ApprovalRequestV1 requires and the contracts package deliberately does not compute. It infers no risk and no approval level -- the caller states both, and RecommendationV1's own invariants govern their relationship. It creates no approval request, makes no decision, executes nothing, emits no event, persists nothing, and calls no model, provider, Core or transport. Jarvis recommends; QuickFurno Core authorizes. Depends on @qf-jarvis/contracts, zod, and node:crypto only.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/contracts": "workspace:*",
+    "zod": "4.4.3"
+  }
+}

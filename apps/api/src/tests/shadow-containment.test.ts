@@ -372,6 +372,9 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // this records an authorised addition, it does not relax the assertion.
       'prompt-registry',
       'rag-provisioning',
+      // QFJ-P05.05 (ADR-0079): the governed recommendation runtime -- the producer for contracts
+      // that already existed. Still an EXACT set match; it records an authorised addition.
+      'recommendation-runtime',
       // QFJ-S3-C (ADR-0067): the Riya client-sales behaviour package. Still an EXACT set match --
       // this records an authorised addition, it does not relax the assertion.
       'riya-agent',
@@ -394,6 +397,8 @@ describe('(133-148) the declared budget and every prior lock', () => {
       'conversation-control': 9,
       // QFJ-P08-B2 (ADR-0077): the durable adapter, locked from the day it lands.
       'postgres-conversation-state': 3,
+      // QFJ-P05.05 (ADR-0079): the governed recommendation runtime, locked from the day it lands.
+      'recommendation-runtime': 4,
       // QFJ-P08-A (ADR-0075): agent-runtime 45 -> 46 (the operations snapshot constructor) and
       // jarvis-runtime unchanged at 6. Both are named here so the composition phase that touched
       // them is locked centrally, not only in their own packages.

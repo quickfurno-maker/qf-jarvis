@@ -447,6 +447,8 @@ describe('(71-77) package API and dependency locks are untouched', () => {
       'conversation-control': 9,
       // QFJ-P08-B2 (ADR-0077): the durable adapter, locked from the day it lands.
       'postgres-conversation-state': 3,
+      // QFJ-P05.05 (ADR-0079): the governed recommendation runtime, locked from the day it lands.
+      'recommendation-runtime': 4,
       // QFJ-P08-A (ADR-0075): agent-runtime 45 -> 46 (the operations snapshot constructor) and
       // jarvis-runtime unchanged at 6. Both are named here so the composition phase that touched
       // them is locked centrally, not only in their own packages.
