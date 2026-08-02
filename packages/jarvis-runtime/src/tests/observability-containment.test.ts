@@ -4,8 +4,8 @@
  * Composition events are closed and content-free (no inbound/reply/subject/secret); the runtime exposes
  * only processInbound; the root barrel surface is locked and the fakes stay under ./testing; production
  * source imports no provider SDK/network/env/transport/DB and no sync-over-async primitive; the
- * dependency direction is one-way (no reverse dependency / cycle); migrations 0001–0008 are byte-exact
- * with no 0009; the event-backbone public-api lock remains 39; production source holds no control byte;
+ * dependency direction is one-way (no reverse dependency / cycle); migrations 0001–0009 are byte-exact
+ * with no 0010; the event-backbone public-api lock remains 39; production source holds no control byte;
  * the emitting build excludes tests so dist is production-only.
  */
 import { createHash } from 'node:crypto';
@@ -71,6 +71,8 @@ const LOCKED_MIGRATION_HASHES: Record<string, string> = {
     '8823b528d9e5aaccad7ddb6e16ebe254662c9759d14321fd3a6fa2e62b6dee49',
   '0008_conversation_control_persistence.sql':
     'e79f1f097407f4e630ce13858545dde80ec7ba5cc155bc117b1a62aa7d2b8a10',
+  '0009_durable_approval_queue.sql':
+    '1927f32aff3b3b42a987fe6ff0c53f1caa2403040377c3effbba88817a1d2257',
 };
 
 describe('content-free observability', () => {
@@ -256,7 +258,7 @@ describe('containment', () => {
     expect(buildTsconfig).toMatch(/"exclude"\s*:\s*\[\s*"src\/tests\/\*\*"\s*\]/);
   });
 
-  it('migrations 0001–0008 are byte-exact and there is no 0009', () => {
+  it('migrations 0001–0009 are byte-exact and there is no 0010', () => {
     const dir = repoPath('packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
       .filter((n) => n.endsWith('.sql'))
@@ -269,7 +271,7 @@ describe('containment', () => {
           .digest('hex'),
       ).toBe(hash);
     }
-    expect(sql.some((n) => n.startsWith('0009'))).toBe(false);
+    expect(sql.some((n) => n.startsWith('0010'))).toBe(false);
   });
 
   it('the event-backbone public-api lock remains 39', () => {

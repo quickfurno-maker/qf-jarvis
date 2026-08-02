@@ -411,6 +411,7 @@ describe('the managed provider’s roles are revoked — and re-revoked on every
       '0006_projection_failure_operations.sql',
       '0007_subject_activity_projection.sql',
       '0008_conversation_control_persistence.sql',
+      '0009_durable_approval_queue.sql',
     ]);
     expect(await tableExists('event')).toBe(true);
   });

@@ -3,7 +3,7 @@
  *
  * Matrix items 24, 25, 27–35: content-free events; no message/subject/PII/token in events; no
  * WhatsApp/n8n/provider/DB/network coupling and no P04 package import; this package adds no schema/migration;
- * migrations 0001–0008 exact; event-backbone API 39; locked public API; production-only dist; no
+ * migrations 0001–0009 exact; event-backbone API 39; locked public API; production-only dist; no
  * control byte.
  */
 import { createHash } from 'node:crypto';
@@ -67,6 +67,8 @@ const LOCKED_MIGRATION_HASHES: Record<string, string> = {
     '8823b528d9e5aaccad7ddb6e16ebe254662c9759d14321fd3a6fa2e62b6dee49',
   '0008_conversation_control_persistence.sql':
     'e79f1f097407f4e630ce13858545dde80ec7ba5cc155bc117b1a62aa7d2b8a10',
+  '0009_durable_approval_queue.sql':
+    '1927f32aff3b3b42a987fe6ff0c53f1caa2403040377c3effbba88817a1d2257',
 };
 
 function recorder(): { hook: RuntimeObservabilityHook; events: RuntimeEvent[] } {
@@ -188,7 +190,7 @@ describe('containment', () => {
     expect(b['envelopeInput']).toBeUndefined();
   });
 
-  it('(29,30) migrations 0001–0008 are byte-exact and there is no 0009', () => {
+  it('(29,30) migrations 0001–0009 are byte-exact and there is no 0010', () => {
     const dir = repoPath('packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
       .filter((n) => n.endsWith('.sql'))
@@ -201,7 +203,7 @@ describe('containment', () => {
           .digest('hex'),
       ).toBe(hash);
     }
-    expect(sql.some((n) => n.startsWith('0009'))).toBe(false);
+    expect(sql.some((n) => n.startsWith('0010'))).toBe(false);
   });
 
   it('(31) the event-backbone public-api lock remains 39', () => {

@@ -1,0 +1,29 @@
+{
+  "name": "@qf-jarvis/postgres-approval-queue",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis durable approval queue and audit (QFJ-P08, ADR-0081). PostgreSQL durability for the approval-runtime foundation: it stores the exact ApprovalRequestV1 with a canonical source snapshot, stores Core's ApprovalDecisionV1 verbatim, links one to the other without editing either, and enforces at most ONE active ask per (recommendation, action) -- because ApprovalDecisionV1 deliberately carries no approvalRequestId, so two overlapping asks would make an arriving decision ambiguous. It holds NO status, pending or approved column: a request exists, a decision may exist, a link may exist, and authority lives only in the immutable Core artifact. Every approval semantic is re-proved through the PUBLIC approval runtime rather than reimplemented. No Core call, operator API, consent, execution intent, transport or clock. Depends on @qf-jarvis/contracts, @qf-jarvis/approval-runtime, @qf-jarvis/recommendation-runtime and pg.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/approval-runtime": "workspace:*",
+    "@qf-jarvis/contracts": "workspace:*",
+    "@qf-jarvis/recommendation-runtime": "workspace:*",
+    "pg": "8.22.0"
+  },
+  "devDependencies": {
+    "@qf-jarvis/event-backbone": "workspace:*",
+    "@types/pg": "8.20.0"
+  }
+}

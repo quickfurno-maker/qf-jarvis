@@ -3,7 +3,7 @@
  *
  * Matrix items 58–76: knowledge grants no business authority; agent scopes stay distinct; the
  * Conversation Operations Center is documented-mandatory but absent; no provider/RAG/DB/secret/n8n
- * dependency; the public API is locked; migrations 0001–0008 are exact with no 0009; the event-backbone
+ * dependency; the public API is locked; migrations 0001–0009 are exact with no 0010; the event-backbone
  * root API remains 39; and no tracked source carries a control byte.
  */
 import { createHash } from 'node:crypto';
@@ -67,6 +67,8 @@ const LOCKED_MIGRATION_HASHES: Record<string, string> = {
     '8823b528d9e5aaccad7ddb6e16ebe254662c9759d14321fd3a6fa2e62b6dee49',
   '0008_conversation_control_persistence.sql':
     'e79f1f097407f4e630ce13858545dde80ec7ba5cc155bc117b1a62aa7d2b8a10',
+  '0009_durable_approval_queue.sql':
+    '1927f32aff3b3b42a987fe6ff0c53f1caa2403040377c3effbba88817a1d2257',
 };
 
 describe('authority and integration boundaries', () => {
@@ -185,7 +187,7 @@ describe('containment', () => {
     expect(Object.keys(barrel).sort()).toEqual(EXPECTED);
   });
 
-  it('(67,68) migrations 0001–0008 are byte-exact and there is no 0009', () => {
+  it('(67,68) migrations 0001–0009 are byte-exact and there is no 0010', () => {
     const dir = repoPath('packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
       .filter((n) => n.endsWith('.sql'))
@@ -198,7 +200,7 @@ describe('containment', () => {
           .digest('hex'),
       ).toBe(hash);
     }
-    expect(sql.some((n) => n.startsWith('0009'))).toBe(false);
+    expect(sql.some((n) => n.startsWith('0010'))).toBe(false);
   });
 
   it('(69) the event-backbone public-api lock remains 39', () => {

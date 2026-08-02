@@ -451,6 +451,8 @@ describe('(71-77) package API and dependency locks are untouched', () => {
       'recommendation-runtime': 4,
       // QFJ-P08 (ADR-0080): the approval runtime foundation, locked from the day it lands.
       'approval-runtime': 3,
+      // QFJ-P08 (ADR-0081): the durable approval queue, locked from the day it lands.
+      'postgres-approval-queue': 3,
       // QFJ-P08-A (ADR-0075): agent-runtime 45 -> 46 (the operations snapshot constructor) and
       // jarvis-runtime unchanged at 6. Both are named here so the composition phase that touched
       // them is locked centrally, not only in their own packages.
@@ -472,7 +474,7 @@ describe('(71-77) package API and dependency locks are untouched', () => {
 });
 
 describe('(78, 79, 80, 81) repository invariants', () => {
-  it('(78, 79) migrations 0001-0008 are byte-identical and 0009 is absent', () => {
+  it('(78, 79) migrations 0001-0009 are byte-identical and 0010 is absent', () => {
     const LOCKED: Record<string, string> = {
       '0001_event_log.sql': 'dbca835c394dc67f015176af8ae0582faa78e0c1299593ac8970c5abf4389d6a',
       '0002_event_runtime_grants.sql':
@@ -489,6 +491,8 @@ describe('(78, 79, 80, 81) repository invariants', () => {
         '8823b528d9e5aaccad7ddb6e16ebe254662c9759d14321fd3a6fa2e62b6dee49',
       '0008_conversation_control_persistence.sql':
         'e79f1f097407f4e630ce13858545dde80ec7ba5cc155bc117b1a62aa7d2b8a10',
+      '0009_durable_approval_queue.sql':
+        '1927f32aff3b3b42a987fe6ff0c53f1caa2403040377c3effbba88817a1d2257',
     };
     const dir = join(REPO_ROOT, 'packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
@@ -502,7 +506,7 @@ describe('(78, 79, 80, 81) repository invariants', () => {
           .digest('hex'),
       ).toBe(hash);
     }
-    expect(sql.some((name) => name.startsWith('0009'))).toBe(false);
+    expect(sql.some((name) => name.startsWith('0010'))).toBe(false);
   });
 
   it('(80) no source references the protected reconciliation directory', () => {

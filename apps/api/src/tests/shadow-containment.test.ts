@@ -368,6 +368,9 @@ describe('(133-148) the declared budget and every prior lock', () => {
       'model-gateway',
       'model-gateway-composition',
       'model-reply-adapter',
+      // QFJ-P08 (ADR-0081): the durable approval queue and audit. Still an EXACT set match -- this
+      // records an authorised addition, it does not relax the assertion.
+      'postgres-approval-queue',
       // QFJ-P08-B2 (ADR-0077): the durable PostgreSQL conversation-state adapter. Still an EXACT
       // set match -- this records an authorised addition, it does not relax the assertion.
       'postgres-conversation-state',
@@ -404,6 +407,8 @@ describe('(133-148) the declared budget and every prior lock', () => {
       'recommendation-runtime': 4,
       // QFJ-P08 (ADR-0080): the approval runtime foundation, locked from the day it lands.
       'approval-runtime': 3,
+      // QFJ-P08 (ADR-0081): the durable approval queue, locked from the day it lands.
+      'postgres-approval-queue': 3,
       // QFJ-P08-A (ADR-0075): agent-runtime 45 -> 46 (the operations snapshot constructor) and
       // jarvis-runtime unchanged at 6. Both are named here so the composition phase that touched
       // them is locked centrally, not only in their own packages.
