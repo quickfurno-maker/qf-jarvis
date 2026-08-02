@@ -22,6 +22,7 @@ export type { JarvisRuntime } from './composition/create-jarvis-runtime.js';
 export type {
   AuthoritativeConversationStatePort,
   ConversationControlState,
+  ConversationStateKey,
   ConversationOperationsProjection,
   OperationsProjectingAuthoritativeConversationStatePort,
   OperatorAuthoritativeConversationStatePort,
@@ -29,8 +30,14 @@ export type {
 } from './contracts/authoritative-state.js';
 
 // The operator control/query result unions (QFJ-P08-A, ADR-0075). Types only.
-export type { JarvisConversationControlResult } from './composition/control-surface.js';
-export type { JarvisConversationOperationsResult } from './composition/operations-snapshot.js';
+export type {
+  JarvisConversationControlInput,
+  JarvisConversationControlResult,
+} from './composition/control-surface.js';
+export type {
+  ConversationOperationsQueryInput,
+  JarvisConversationOperationsResult,
+} from './composition/operations-snapshot.js';
 
 // The optional client-sales behaviour input seam (ADR-0068). Types only.
 export type {

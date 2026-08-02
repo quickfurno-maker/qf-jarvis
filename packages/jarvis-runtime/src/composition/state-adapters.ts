@@ -3,7 +3,8 @@
  * ADR-0059 §C, §D).
  *
  * Every adapter here closes over the SAME `AuthoritativeConversationStatePort` instance and the same
- * conversation id, so the M2 conversation-context port, the M4 `ReplyStateReader`, the M3
+ * tenant-scoped `ConversationStateKey` (QFJ-P08-B1, ADR-0076), so the M2 conversation-context port,
+ * the M4 `ReplyStateReader`, the M3
  * `CoreDecisionStateReader`, and the privacy gate all observe one truth. None caches state across an
  * awaited boundary: each `read`/`subjectStatus` re-reads the source, so a change during any await is
  * seen at the next gate and fails closed. These are PURE projections — no business rule; the derived
@@ -20,19 +21,38 @@ import { assignAgent, createOrchestrationContext } from '@qf-jarvis/agent-runtim
 import type { CoreDecisionState, CoreDecisionStateReader } from '@qf-jarvis/core-decision-adapter';
 import type { ReplyState, ReplyStateReader } from '@qf-jarvis/model-reply-adapter';
 
+import { JarvisRuntimeError } from '../contracts/errors.js';
 import type {
   AuthoritativeConversationStatePort,
   ConversationControlState,
+  ConversationStateKey,
 } from '../contracts/authoritative-state.js';
+
+/**
+ * Assert that the source answered about the conversation that was ASKED about.
+ *
+ * `AuthoritativeConversationStatePort` is a structural interface a deployment may implement, so a
+ * scoped key is what the composition requests, not what it can assume it received. A record whose
+ * tenant differs is the cross-tenant answer the key exists to prevent; a record whose conversation
+ * differs is a wiring error. Either way the state is not this conversation's, so it fails closed
+ * rather than being repaired -- silently accepting it would attribute one tenant's control state to
+ * another.
+ */
+function assertKeyMatch(key: ConversationStateKey, state: ConversationControlState): void {
+  if (state.tenantId !== key.tenantId || state.conversationId !== key.conversationId) {
+    throw new JarvisRuntimeError('invalid-config');
+  }
+}
 
 /** The M2 conversation-context port, projected from the single authoritative source. */
 export function conversationContextPortFor(
   source: AuthoritativeConversationStatePort,
-  conversationId: string,
+  key: ConversationStateKey,
 ): ConversationContextPort {
   return Object.freeze({
     async read(): Promise<OrchestrationContext> {
-      const s = await source.read(conversationId);
+      const s = await source.read(key);
+      assertKeyMatch(key, s);
       return createOrchestrationContext({
         conversationId: s.conversationId,
         tenantId: s.tenantId,
@@ -51,12 +71,13 @@ export function conversationContextPortFor(
 /** The M4 reply-state reader, projected from the single authoritative source. */
 export function replyStateReaderFor(
   source: AuthoritativeConversationStatePort,
-  conversationId: string,
+  key: ConversationStateKey,
   policy: RuntimePolicy,
 ): ReplyStateReader {
   return Object.freeze({
     async read(): Promise<ReplyState> {
-      const s = await source.read(conversationId);
+      const s = await source.read(key);
+      assertKeyMatch(key, s);
       return {
         revision: s.revision,
         partyType: s.partyType,
@@ -75,11 +96,12 @@ export function replyStateReaderFor(
 /** The M3 Core-decision-state reader, projected from the single authoritative source. */
 export function coreStateReaderFor(
   source: AuthoritativeConversationStatePort,
-  conversationId: string,
+  key: ConversationStateKey,
 ): CoreDecisionStateReader {
   return Object.freeze({
     async read(): Promise<CoreDecisionState> {
-      const s = await source.read(conversationId);
+      const s = await source.read(key);
+      assertKeyMatch(key, s);
       return {
         revision: s.revision,
         partyType: s.partyType,
@@ -95,11 +117,12 @@ export function coreStateReaderFor(
 /** The M1 privacy gate, projected from the single authoritative source (same tombstone truth). */
 export function privacyGateFor(
   source: AuthoritativeConversationStatePort,
-  conversationId: string,
+  key: ConversationStateKey,
 ): ConversationPrivacyGate {
   return Object.freeze({
     async subjectStatus(_subjectRef: string): Promise<RuntimeSubjectStatus> {
-      const s: ConversationControlState = await source.read(conversationId);
+      const s: ConversationControlState = await source.read(key);
+      assertKeyMatch(key, s);
       return s.subjectStatus;
     },
   });

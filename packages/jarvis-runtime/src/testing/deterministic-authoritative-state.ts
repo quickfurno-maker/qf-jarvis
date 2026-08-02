@@ -20,9 +20,23 @@ import type { ConversationState } from '@qf-jarvis/agent-runtime';
 import type {
   AuthoritativeConversationStatePort,
   ConversationControlState,
+  ConversationStateKey,
   ConversationOperationsProjection,
   OperatorAuthoritativeConversationStatePort,
 } from '../contracts/authoritative-state.js';
+
+/**
+ * Every fake below is TENANT-SCOPED (QFJ-P08-B1, ADR-0076).
+ *
+ * A fake that ignored the key would let a tenant-scoping regression pass, which is the one thing
+ * these fakes now exist to catch. Each therefore verifies BOTH identifiers against the state it is
+ * about to return, and refuses rather than answering about a conversation nobody asked for.
+ */
+function assertServes(key: ConversationStateKey, state: ConversationControlState): void {
+  if (state.tenantId !== key.tenantId || state.conversationId !== key.conversationId) {
+    throw new Error('synthetic-state-key-mismatch');
+  }
+}
 
 /** A clear synthetic control state; override any field for a specific test. */
 export function clearControlState(
@@ -54,10 +68,11 @@ export function scriptedAuthoritativeState(
   let index = 0;
   const counter = { n: 0 };
   return Object.freeze({
-    read(_conversationId: string): Promise<ConversationControlState> {
+    read(key: ConversationStateKey): Promise<ConversationControlState> {
       counter.n += 1;
       const value = states[Math.min(index, states.length - 1)] ?? clearControlState();
       index += 1;
+      assertServes(key, value);
       return Promise.resolve(value);
     },
     reads: () => counter.n,
@@ -73,9 +88,11 @@ export function mutableAuthoritativeState(
 ): MutableAuthoritativeState {
   const counter = { n: 0 };
   return Object.freeze({
-    read(_conversationId: string): Promise<ConversationControlState> {
+    read(key: ConversationStateKey): Promise<ConversationControlState> {
       counter.n += 1;
-      return Promise.resolve(get());
+      const value = get();
+      assertServes(key, value);
+      return Promise.resolve(value);
     },
     reads: () => counter.n,
   });
@@ -142,13 +159,22 @@ export function controllableAuthoritativeState(
   };
 
   return Object.freeze({
-    read(_conversationId: string): Promise<ConversationControlState> {
+    read(key: ConversationStateKey): Promise<ConversationControlState> {
       counters.reads += 1;
+      assertServes(key, state);
       return Promise.resolve(state);
     },
 
-    applyControlCommand(command: ConversationControlCommand): Promise<ConversationControlDecision> {
+    applyControlCommand(
+      key: ConversationStateKey,
+      command: ConversationControlCommand,
+    ): Promise<ConversationControlDecision> {
       counters.controls += 1;
+      assertServes(key, state);
+      // The command names the conversation the key already scoped; disagreement is a wiring error.
+      if (command.conversationId !== key.conversationId) {
+        throw new Error('synthetic-command-key-mismatch');
+      }
       const fragment = createConversationControlSnapshot({
         conversationId: state.conversationId,
         revision: state.revision,
@@ -172,8 +198,9 @@ export function controllableAuthoritativeState(
       return Promise.resolve(decision);
     },
 
-    readOperationsProjection(_conversationId: string): Promise<ConversationOperationsProjection> {
+    readOperationsProjection(key: ConversationStateKey): Promise<ConversationOperationsProjection> {
       counters.operations += 1;
+      assertServes(key, state);
       return Promise.resolve(
         Object.freeze({
           state,

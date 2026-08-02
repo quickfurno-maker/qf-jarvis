@@ -10,7 +10,9 @@
  *   by the authoritative source itself);
  * - `readConversationOperationsSnapshot` — the operator query entry point.
  *
- * All three use the SAME `config.authoritativeState` object. That is the point: a separate writable
+ * All three address state through the SAME `config.authoritativeState` object and, since QFJ-P08-B1
+ * (ADR-0076), through the same tenant-scoped `(tenantId, conversationId)` key. That is the point: a
+ * separate writable
  * store would let an operator set a takeover on one object while the next inbound turn read another
  * and kept replying. The two operator methods are OPTIONAL capabilities detected on that object, so a
  * read-only source stays valid and existing inbound composition is untouched.
@@ -21,7 +23,6 @@
  * QuickFurno Core remains the only business authority; model output is a draft only.
  */
 import type { InboundEnvelope } from '@qf-jarvis/agent-runtime';
-import type { ConversationControlCommandInput } from '@qf-jarvis/conversation-control';
 
 import type { JarvisRuntimeConfig } from '../contracts/runtime-config.js';
 import type { JarvisRuntimeResult } from '../contracts/runtime-result.js';
@@ -29,10 +30,12 @@ import { assertMandatoryDependencies } from './validate-composition.js';
 import { composeAndProcess } from './process-inbound.js';
 import {
   applyControlCommandThroughSource,
+  type JarvisConversationControlInput,
   type JarvisConversationControlResult,
 } from './control-surface.js';
 import {
   readOperationsSnapshotThroughSource,
+  type ConversationOperationsQueryInput,
   type JarvisConversationOperationsResult,
 } from './operations-snapshot.js';
 
@@ -40,16 +43,16 @@ import {
 export interface JarvisRuntime {
   processInbound(envelope: InboundEnvelope): Promise<JarvisRuntimeResult>;
   /**
-   * Apply one operator control command. Takes INPUT, not a pre-built command, so the composition
-   * boundary itself validates — untrusted structural input cannot reach the authoritative source
-   * having skipped `createConversationControlCommand`.
+   * Apply one operator control command, TENANT-SCOPED (QFJ-P08-B1, ADR-0076). Takes INPUT, not a
+   * pre-built command, so the composition boundary itself validates — untrusted structural input
+   * cannot reach the authoritative source having skipped `createConversationControlCommand`.
    */
   applyConversationControlCommand(
-    input: ConversationControlCommandInput,
+    input: JarvisConversationControlInput,
   ): Promise<JarvisConversationControlResult>;
   /** Read one conversation's validated, content-free operations snapshot. A query, not a console. */
   readConversationOperationsSnapshot(
-    conversationId: string,
+    input: ConversationOperationsQueryInput,
   ): Promise<JarvisConversationOperationsResult>;
 }
 
@@ -61,14 +64,14 @@ export function createJarvisRuntime(config: JarvisRuntimeConfig): JarvisRuntime 
       return composeAndProcess(config, envelope);
     },
     applyConversationControlCommand(
-      input: ConversationControlCommandInput,
+      input: JarvisConversationControlInput,
     ): Promise<JarvisConversationControlResult> {
       return applyControlCommandThroughSource(config, input);
     },
     readConversationOperationsSnapshot(
-      conversationId: string,
+      input: ConversationOperationsQueryInput,
     ): Promise<JarvisConversationOperationsResult> {
-      return readOperationsSnapshotThroughSource(config, conversationId);
+      return readOperationsSnapshotThroughSource(config, input);
     },
   });
 }

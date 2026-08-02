@@ -26,7 +26,24 @@ import type {
 } from '@qf-jarvis/conversation-control';
 
 import type { JarvisRuntimeConfig } from '../contracts/runtime-config.js';
-import type { WritableAuthoritativeConversationStatePort } from '../contracts/authoritative-state.js';
+import type {
+  ConversationStateKey,
+  WritableAuthoritativeConversationStatePort,
+} from '../contracts/authoritative-state.js';
+
+/**
+ * One operator control command, explicitly tenant-scoped (QFJ-P08-B1, ADR-0076).
+ *
+ * The tenant sits BESIDE the pure command rather than inside it. `@qf-jarvis/conversation-control`
+ * stays tenant-neutral and zod-only: its reducer operates on one already-addressed conversation, and
+ * tenant isolation is an addressing concern belonging to this composition and to the future
+ * persistence adapter. Putting `tenantId` into the command would also put it into the audit record,
+ * duplicating a value the store already keys by.
+ */
+export interface JarvisConversationControlInput {
+  readonly tenantId: string;
+  readonly command: ConversationControlCommandInput;
+}
 
 /**
  * The outcome of one control attempt.
@@ -51,6 +68,16 @@ function failure(
   reason: Extract<JarvisConversationControlResult, { ok: false }>['reason'],
 ): JarvisConversationControlResult {
   return Object.freeze({ ok: false as const, reason });
+}
+
+/** An exact scope token: no wildcard, no `latest` -- the two strings that mean "any of them". */
+function isExactScopeToken(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    /^[A-Za-z0-9._:-]{1,128}$/.test(value) &&
+    !value.includes('*') &&
+    value.toLowerCase() !== 'latest'
+  );
 }
 
 /** A plain, non-array object with no inherited enumerable payload. */
@@ -385,11 +412,18 @@ function canonicalizeDecision(
  */
 export async function applyControlCommandThroughSource(
   config: JarvisRuntimeConfig,
-  input: ConversationControlCommandInput,
+  input: JarvisConversationControlInput,
 ): Promise<JarvisConversationControlResult> {
+  // The tenant is validated BEFORE the command, and before the source is touched: an unscoped or
+  // wildcard tenant is not a command to be refused by the reducer, it is a request that must never
+  // reach an authoritative store.
+  if (!isPlainRecord(input) || !isExactScopeToken(input.tenantId)) {
+    return failure('control-invalid-command');
+  }
+
   let command: ConversationControlCommand;
   try {
-    command = createConversationControlCommand(input);
+    command = createConversationControlCommand(input.command);
   } catch {
     // The thrown value is discarded: it comes from validating operator-supplied input, and echoing it
     // would put that input back in front of a caller. The reason code says which of the four things
@@ -409,9 +443,14 @@ export async function applyControlCommandThroughSource(
     return failure('control-unavailable');
   }
 
+  const key: ConversationStateKey = Object.freeze({
+    tenantId: input.tenantId,
+    conversationId: command.conversationId,
+  });
+
   let raw: unknown;
   try {
-    raw = await writable.applyControlCommand(command);
+    raw = await writable.applyControlCommand(key, command);
   } catch {
     // Foreign code, possibly holding conversation detail. Discarded, never logged or re-emitted.
     return failure('control-source-failure');

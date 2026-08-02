@@ -28,7 +28,10 @@ import {
 } from '@qf-jarvis/anisha-agent';
 import type { AnishaDisposition } from '@qf-jarvis/anisha-agent';
 
-import type { AuthoritativeConversationStatePort } from '../contracts/authoritative-state.js';
+import type {
+  AuthoritativeConversationStatePort,
+  ConversationStateKey,
+} from '../contracts/authoritative-state.js';
 import type { VendorJourneyBehaviourInputPort } from '../contracts/vendor-journey-behaviour-input.js';
 
 /** Opaque reference grammar — identical to the merged provenance/proposal grammar. */
@@ -75,6 +78,8 @@ const OUTCOME_BY_DISPOSITION: Readonly<
 export function anishaBehaviourPort(
   input: VendorJourneyBehaviourInputPort,
   state: AuthoritativeConversationStatePort,
+  /** The ONE tenant-scoped key this turn is bound to (QFJ-P08-B1, ADR-0076). */
+  key: ConversationStateKey,
   taskClass: string,
 ): BehaviourDecisionPort {
   return Object.freeze({
@@ -85,6 +90,9 @@ export function anishaBehaviourPort(
       }
 
       const supplied = await input.read({
+        // The tenant comes from the ONE key derived from the validated envelope -- never from the
+        // supplied business facts, and never from what the state source returned (ADR-0076).
+        tenantId: key.tenantId,
         conversationId: request.conversationId,
         revision: request.revision,
       });
@@ -100,7 +108,18 @@ export function anishaBehaviourPort(
       }
 
       // Conversation control comes from the ONE authoritative source, never from the input port.
-      const control = await state.read(request.conversationId);
+      // The orchestrator is bound to one conversation for the whole turn; a request naming another
+      // is a wiring error, not a second conversation to serve.
+      if (request.conversationId !== key.conversationId) {
+        throw new Error('invalid-behaviour-conversation');
+      }
+      const control = await state.read(key);
+      // This adapter is an authoritative-state reader too, so it honours the same rule as the four
+      // general projections: a source that answered correctly at the first gate could still answer
+      // with another tenant's state here, and that state would reach the behaviour decision.
+      if (control.tenantId !== key.tenantId || control.conversationId !== key.conversationId) {
+        throw new Error('invalid-behaviour-state');
+      }
 
       const decision = decideAnishaTurn({
         partyType: request.partyType,

@@ -17,8 +17,20 @@
  */
 import type { ClientSalesSignals, NeedDiscovery } from '@qf-jarvis/riya-agent';
 
-/** What the composition asks for: one conversation, at one exact revision. */
+/**
+ * What the composition asks for: one TENANT-SCOPED conversation, at one exact revision.
+ *
+ * `tenantId` is required since QFJ-P08-B1 (ADR-0076), which ratified that `conversationId` is NOT
+ * globally unique. A supplier handed only a conversation id has nothing with which to select the
+ * right tenant's business facts, so two tenants sharing one conversation id could receive each
+ * other's signals. The tenant is the already-validated one from the inbound envelope -- this seam
+ * never derives it from the supplied facts, and never from what the state source returned.
+ *
+ * Scoping this request does NOT merge business facts into authoritative control state: the two seams
+ * stay separate by design, and this one still supplies Core-owned facts only.
+ */
 export interface ClientSalesBehaviourInputRequest {
+  readonly tenantId: string;
   readonly conversationId: string;
   /** The revision the turn is bound to, so a stale answer is detectable rather than silently used. */
   readonly revision: number;

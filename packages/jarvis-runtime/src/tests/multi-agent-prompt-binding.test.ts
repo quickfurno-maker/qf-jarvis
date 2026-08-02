@@ -23,6 +23,7 @@ import { scriptedGatewayInvoker, structuredReply } from '@qf-jarvis/model-reply-
 import { createPromptRegistry } from '@qf-jarvis/prompt-registry';
 
 import { createJarvisRuntime } from '../composition/create-jarvis-runtime.js';
+import type { ConversationStateKey } from '../contracts/authoritative-state.js';
 import type { JarvisRuntimeConfig } from '../contracts/runtime-config.js';
 import type { JarvisRuntimeResult } from '../contracts/runtime-result.js';
 import {
@@ -139,13 +140,13 @@ describe('(A, B) one runtime serves CLIENT and VENDOR', () => {
     const runtime = createJarvisRuntime(
       multiAgentConfig({
         authoritativeState: {
-          // The state's own conversationId must match the envelope's, or the runtime would (rightly)
-          // refuse a state record belonging to a different conversation.
-          read: (conversationId: string) =>
+          // The state's own tenant AND conversation must match the key, or the runtime would
+          // (rightly) refuse a record belonging to a different conversation (QFJ-P08-B1, ADR-0076).
+          read: (key: ConversationStateKey) =>
             Promise.resolve(
-              conversationId === 'conv.vendor'
-                ? clearControlState({ conversationId, partyType: 'VENDOR' })
-                : clearControlState({ conversationId }),
+              key.conversationId === 'conv.vendor'
+                ? clearControlState({ ...key, partyType: 'VENDOR' })
+                : clearControlState({ ...key }),
             ),
         },
         gatewayInvoker: invoker,
