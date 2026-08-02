@@ -218,7 +218,7 @@ describe('(43, 44, 45) sibling package API locks are undisturbed', () => {
 });
 
 describe('(46, 47) migrations are undisturbed', () => {
-  it('(46, 47) 0001-0007 are byte-identical and 0008 is absent', () => {
+  it('(46, 47) 0001-0008 are byte-identical and 0009 is absent', () => {
     const LOCKED: Record<string, string> = {
       '0001_event_log.sql': 'dbca835c394dc67f015176af8ae0582faa78e0c1299593ac8970c5abf4389d6a',
       '0002_event_runtime_grants.sql':
@@ -233,6 +233,8 @@ describe('(46, 47) migrations are undisturbed', () => {
         'e97059a506ec4377fa39194de4fdc54e7d2f237941fb1e5243a0b01ff40a83d4',
       '0007_subject_activity_projection.sql':
         '8823b528d9e5aaccad7ddb6e16ebe254662c9759d14321fd3a6fa2e62b6dee49',
+      '0008_conversation_control_persistence.sql':
+        'e79f1f097407f4e630ce13858545dde80ec7ba5cc155bc117b1a62aa7d2b8a10',
     };
     const dir = join(REPO_ROOT, 'packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
@@ -246,7 +248,7 @@ describe('(46, 47) migrations are undisturbed', () => {
           .digest('hex'),
       ).toBe(hash);
     }
-    expect(sql.some((name) => name.startsWith('0008'))).toBe(false);
+    expect(sql.some((name) => name.startsWith('0009'))).toBe(false);
   });
 });
 

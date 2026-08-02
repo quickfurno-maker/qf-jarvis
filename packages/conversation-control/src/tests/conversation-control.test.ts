@@ -934,7 +934,7 @@ describe('vocabularies, API surface and containment', () => {
     }
   });
 
-  it('adds no migration: 0001-0007 exactly, and no 0008', () => {
+  it('adds no migration: 0001-0008 exactly, and no 0009', () => {
     const dir = fileURLToPath(
       new URL('packages/event-backbone/src/persistence/migrations/', REPO_ROOT),
     );
@@ -950,6 +950,7 @@ describe('vocabularies, API surface and containment', () => {
       '0005_projection_event_positions.sql',
       '0006_projection_failure_operations.sql',
       '0007_subject_activity_projection.sql',
+      '0008_conversation_control_persistence.sql',
     ]);
   });
 });

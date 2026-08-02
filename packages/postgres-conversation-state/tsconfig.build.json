@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
+  },
+
+  // The EMITTING build. src/tests is EXCLUDED so nothing test-only reaches dist/ -- in particular the
+  // real-PostgreSQL harness, which is the one place DATABASE_URL is read.
+  //
+  // PRODUCTION references only: the reducer and the M5 type contracts. @qf-jarvis/event-backbone and
+  // @qf-jarvis/agent-runtime are DEV-only (migration tooling for the integration harness, and
+  // vocabulary conformance) and are deliberately absent here, so a production import of either
+  // fails the build rather than quietly creating an edge.
+  "references": [
+    { "path": "../conversation-control/tsconfig.build.json" },
+    { "path": "../jarvis-runtime/tsconfig.build.json" }
+  ],
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/tests/**"]
+}

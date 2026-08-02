@@ -357,6 +357,8 @@ describe('(71-77) package API and dependency locks are untouched', () => {
       'prompt-registry': 7,
       // QFJ-P08-A (ADR-0074): the conversation control foundation, locked from the day it lands.
       'conversation-control': 9,
+      // QFJ-P08-B2 (ADR-0077): the durable adapter, locked from the day it lands.
+      'postgres-conversation-state': 3,
       // QFJ-P08-A (ADR-0075): agent-runtime 45 -> 46 (the operations snapshot constructor) and
       // jarvis-runtime unchanged at 6. Both are named here so the composition phase that touched
       // them is locked centrally, not only in their own packages.
@@ -378,7 +380,7 @@ describe('(71-77) package API and dependency locks are untouched', () => {
 });
 
 describe('(78, 79, 80, 81) repository invariants', () => {
-  it('(78, 79) migrations 0001-0007 are byte-identical and 0008 is absent', () => {
+  it('(78, 79) migrations 0001-0008 are byte-identical and 0009 is absent', () => {
     const LOCKED: Record<string, string> = {
       '0001_event_log.sql': 'dbca835c394dc67f015176af8ae0582faa78e0c1299593ac8970c5abf4389d6a',
       '0002_event_runtime_grants.sql':
@@ -393,6 +395,8 @@ describe('(78, 79, 80, 81) repository invariants', () => {
         'e97059a506ec4377fa39194de4fdc54e7d2f237941fb1e5243a0b01ff40a83d4',
       '0007_subject_activity_projection.sql':
         '8823b528d9e5aaccad7ddb6e16ebe254662c9759d14321fd3a6fa2e62b6dee49',
+      '0008_conversation_control_persistence.sql':
+        'e79f1f097407f4e630ce13858545dde80ec7ba5cc155bc117b1a62aa7d2b8a10',
     };
     const dir = join(REPO_ROOT, 'packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
@@ -406,7 +410,7 @@ describe('(78, 79, 80, 81) repository invariants', () => {
           .digest('hex'),
       ).toBe(hash);
     }
-    expect(sql.some((name) => name.startsWith('0008'))).toBe(false);
+    expect(sql.some((name) => name.startsWith('0009'))).toBe(false);
   });
 
   it('(80) no source references the protected reconciliation directory', () => {

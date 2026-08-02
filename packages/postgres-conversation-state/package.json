@@ -1,0 +1,29 @@
+{
+  "name": "@qf-jarvis/postgres-conversation-state",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis durable PostgreSQL conversation-control state (QFJ-P08-B2, ADR-0077). The concrete tenant-scoped implementation of the M5 authoritative-state read port and its writable operator capability: trusted provisioning, atomic revision-bound command application through the real @qf-jarvis/conversation-control reducer, durable (tenant, commandId) idempotency, and an append-only content-free audit — state and audit committed in one transaction. It deliberately does NOT implement readOperationsProjection (no governed writers exist for the six supplemental fields), performs no Core synchronization, and stores no consent, approval, communication-authorization or business data. Importing it connects nowhere, creates no pool, reads no environment and starts nothing: the caller injects an explicit pg Pool and owns its lifecycle. Depends on @qf-jarvis/conversation-control, @qf-jarvis/jarvis-runtime (type contracts) and pg.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/conversation-control": "workspace:*",
+    "@qf-jarvis/jarvis-runtime": "workspace:*",
+    "pg": "8.22.0"
+  },
+  "devDependencies": {
+    "@qf-jarvis/agent-runtime": "workspace:*",
+    "@qf-jarvis/event-backbone": "workspace:*",
+    "@types/pg": "8.20.0"
+  }
+}

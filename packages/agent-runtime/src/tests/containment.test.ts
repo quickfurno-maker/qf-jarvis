@@ -2,8 +2,8 @@
  * QFJ-M1 — observability and containment (ADR-0054 §K, §M).
  *
  * Matrix items 24, 25, 27–35: content-free events; no message/subject/PII/token in events; no
- * WhatsApp/n8n/provider/DB/network coupling and no P04 package import; no schema/migration 0008;
- * migrations 0001–0007 exact; event-backbone API 39; locked public API; production-only dist; no
+ * WhatsApp/n8n/provider/DB/network coupling and no P04 package import; this package adds no schema/migration;
+ * migrations 0001–0008 exact; event-backbone API 39; locked public API; production-only dist; no
  * control byte.
  */
 import { createHash } from 'node:crypto';
@@ -65,6 +65,8 @@ const LOCKED_MIGRATION_HASHES: Record<string, string> = {
     'e97059a506ec4377fa39194de4fdc54e7d2f237941fb1e5243a0b01ff40a83d4',
   '0007_subject_activity_projection.sql':
     '8823b528d9e5aaccad7ddb6e16ebe254662c9759d14321fd3a6fa2e62b6dee49',
+  '0008_conversation_control_persistence.sql':
+    'e79f1f097407f4e630ce13858545dde80ec7ba5cc155bc117b1a62aa7d2b8a10',
 };
 
 function recorder(): { hook: RuntimeObservabilityHook; events: RuntimeEvent[] } {
@@ -186,7 +188,7 @@ describe('containment', () => {
     expect(b['envelopeInput']).toBeUndefined();
   });
 
-  it('(29,30) migrations 0001–0007 are byte-exact and there is no 0008', () => {
+  it('(29,30) migrations 0001–0008 are byte-exact and there is no 0009', () => {
     const dir = repoPath('packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
       .filter((n) => n.endsWith('.sql'))
@@ -199,7 +201,7 @@ describe('containment', () => {
           .digest('hex'),
       ).toBe(hash);
     }
-    expect(sql.some((n) => n.startsWith('0008'))).toBe(false);
+    expect(sql.some((n) => n.startsWith('0009'))).toBe(false);
   });
 
   it('(31) the event-backbone public-api lock remains 39', () => {

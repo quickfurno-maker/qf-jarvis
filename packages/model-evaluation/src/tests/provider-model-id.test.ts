@@ -384,9 +384,11 @@ describe('public API and repository invariants', () => {
       'e97059a506ec4377fa39194de4fdc54e7d2f237941fb1e5243a0b01ff40a83d4',
     '0007_subject_activity_projection.sql':
       '8823b528d9e5aaccad7ddb6e16ebe254662c9759d14321fd3a6fa2e62b6dee49',
+    '0008_conversation_control_persistence.sql':
+      'e79f1f097407f4e630ce13858545dde80ec7ba5cc155bc117b1a62aa7d2b8a10',
   };
 
-  it('(11, 12) migrations 0001-0007 are byte-identical and 0008 is absent', () => {
+  it('(11, 12) migrations 0001-0008 are byte-identical and 0009 is absent', () => {
     const dir = fileURLToPath(
       new URL('packages/event-backbone/src/persistence/migrations', REPO_ROOT),
     );
@@ -401,7 +403,7 @@ describe('public API and repository invariants', () => {
           .digest('hex'),
       ).toBe(hash);
     }
-    expect(sql.some((name) => name.startsWith('0008'))).toBe(false);
+    expect(sql.some((name) => name.startsWith('0009'))).toBe(false);
   });
 
   it('(13) the event-backbone root API lock remains 39', () => {
