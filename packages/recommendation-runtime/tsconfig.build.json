@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
+  },
+
+  // The EMITTING build, referenced by the root solution. The vitest specs under src/tests are
+  // EXCLUDED so nothing test-only reaches dist/. ONE project reference: `@qf-jarvis/contracts`,
+  // which owns every schema this package validates against. It knows nothing of the agent runtime,
+  // the composition root, Core, the gateway, providers, persistence or transport -- a recommendation
+  // is inert, and a package that could reach any of those would not be.
+  "references": [{ "path": "../../packages/contracts" }],
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/tests/**"]
+}
