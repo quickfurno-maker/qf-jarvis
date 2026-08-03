@@ -159,6 +159,52 @@ dispatch semantics belong to Core and the later execution runtime. If a future n
 wire-level information, that is a separate, versioned protocol decision **after** this correlation
 foundation.
 
+### 11. One snapshot of the approval evidence, taken before anything reads it
+
+Approval evidence is **caller-controlled and may be dynamic**. It is also loosely typed where it
+crosses into the approval runtime — `approvalDecisionValidationInputSchema` declares
+`source: z.unknown()` on purpose, so that the runtime validates it internally rather than
+re-declaring a contract `@qf-jarvis/contracts` owns. Correct, and it has a consequence: a caller may
+pass an object whose `recommendation` is an **accessor**, and an accessor can answer differently each
+time it is asked.
+
+Validation needs the recommendation twice — once for the re-proof, once to recover the approved
+action and the expiry bounds. Reading the caller's value twice therefore opened a
+time-of-check/time-of-use gap:
+
+- the **first** read returns the original content, whose fingerprint the approval request genuinely
+  covers, so the re-proof succeeds honestly;
+- the **second** read returns a different, individually schema-valid recommendation carrying the same
+  `recommendationId`, `approvedActionId` and `correlationId` but different action parameters, or a
+  later `expiresAt`.
+
+The intent would then be compared against content nobody approved, or measured against a window that
+had never been granted — defeating the anti-substitution guarantee this package exists to provide.
+
+**So exactly one detached snapshot is taken before the re-proof, and the same snapshot feeds both
+phases.** After it is taken, no production path reads the caller's raw evidence again; an accessor
+is invoked exactly once, by the clone. A containment spec pins this structurally: `input['approval']`
+appears in exactly one place in the runtime, that place is the snapshot call, and both
+`proveApproval` and the recommendation recovery consume `approvalEvidence`.
+
+The mechanism is `structuredClone`. It detaches every nested object, so no reference into the
+caller's graph survives and a later mutation of their object cannot change what was validated, and it
+resolves accessors as it walks, so the result is plain data with no behaviour left in it.
+`JSON.parse(JSON.stringify(x))` is deliberately **not** used: it honours a `toJSON` hook, so a
+hostile object could still choose what the snapshot sees, and it silently drops `undefined` members
+and coerces others. A shallow spread is worse — one level copied, every nested object shared. Any
+clone failure normalizes to `approval-invalid`, with the thrown value discarded rather than
+inspected.
+
+**Snapshotting confers no authority and performs no I/O.** A snapshot of evidence is still evidence;
+it is validated afterwards exactly as before, by the same public approval runtime and the same
+governed schemas. No contract change was required, and none was made.
+
+Two adversarial regressions hold this: one substitutes the approved action's parameters and one
+substitutes a later recommendation expiry, each visible only to a second read. Both **succeeded**
+against the pre-fix implementation and now fail closed — `action-mismatch` and `timing-mismatch`
+respectively — with the accessor proved to have been read exactly once.
+
 ## Rejected alternatives
 
 - **Letting Jarvis construct an `ExecutionIntentV1`.** Core issues intents from its own recorded
@@ -179,6 +225,12 @@ foundation.
 - **Accepting a caller-supplied correlation or a boolean.** The caller would be the authority.
 - **Adding a recipient, provider or communication id to `ExecutionIntentV1`.** Possibly a future
   need; a versioned contract decision either way, and not this slice's to take.
+- **Reading the caller's approval evidence twice.** A time-of-check/time-of-use gap an accessor can
+  walk straight through — see §11.
+- **`JSON.parse(JSON.stringify(evidence))` as the snapshot.** Honours `toJSON`, so the hostile object
+  still chooses what the snapshot sees; also drops `undefined` and coerces.
+- **A shallow spread as the snapshot.** Copies one level and leaves every nested object shared, which
+  is the reference the caller would mutate.
 
 ## Consequences
 
@@ -223,8 +275,9 @@ migration and no `0010`. No managed database access or deployment. No Mini Brain
 
 The absence of intent issuance, the four exact identity equalities with no content fallback, the
 exact-content parameter comparison, the per-action verdict, the artifact-relative temporal rules with
-no clock, the observe-only treatment of idempotency, and the exclusion of communication
-authorization as an input are the contract this slice establishes. Adding a builder, a permission or
-freshness field, a content-based fallback, a parameter tolerance of any kind, key bookkeeping, or a
-communication-eligibility inference each reopens a failure this ADR closes, and is a governed change
+no clock, the observe-only treatment of idempotency, the exclusion of communication
+authorization as an input, and the single-snapshot rule of §11 are the contract this slice
+establishes. Adding a builder, a permission or freshness field, a content-based fallback, a parameter
+tolerance of any kind, key bookkeeping, a communication-eligibility inference, or a second read of
+the caller's raw approval evidence each reopens a failure this ADR closes, and is a governed change
 requiring its own decision.

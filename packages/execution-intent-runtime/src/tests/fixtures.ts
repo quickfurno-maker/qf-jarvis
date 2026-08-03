@@ -226,6 +226,86 @@ export function partiallyApprovedScenario(tag: string): Scenario {
 }
 
 /**
+ * A HOSTILE approval evidence bundle whose `source.recommendation` changes between reads.
+ *
+ * This is the adversary the snapshot exists to stop. `approvalDecisionValidationInputSchema`
+ * declares `source: z.unknown()` on purpose — the approval runtime validates it internally rather
+ * than re-declaring a contract `@qf-jarvis/contracts` owns — so a caller may hand over an object
+ * whose `recommendation` is an accessor. If validation reads that accessor twice, it can be shown
+ * two different, individually schema-valid recommendations:
+ *
+ *   read 1..N (the approval proof)  -> ORIGINAL, whose content the fingerprint actually covers;
+ *   read N+1  (any later recovery)  -> SUBSTITUTED, same ids, different content or expiry.
+ *
+ * `N` is MEASURED rather than assumed: a probe runs the real `validateDecision` against a
+ * counting source and records how many reads it performs, so the fixture stays correct if the
+ * approval runtime's internals ever change.
+ */
+export function substitutingEvidence(
+  from: Scenario,
+  substituted: unknown,
+): { readonly evidence: unknown; readonly reads: () => number } {
+  const original = from.source;
+
+  // Probe: how many times does the approval proof itself read `source.recommendation`?
+  let probeReads = 0;
+  createApprovalRuntime().validateDecision({
+    source: {
+      get recommendation(): unknown {
+        probeReads += 1;
+        return original.recommendation;
+      },
+      actionBindings: original.actionBindings,
+    },
+    request: from.evidence.request,
+    decision: from.evidence.decision,
+  });
+  const proofReads = probeReads;
+
+  let reads = 0;
+  const hostileSource = {
+    get recommendation(): unknown {
+      reads += 1;
+      // Everything the approval proof sees is ORIGINAL, so the proof succeeds honestly. Anything
+      // read AFTER it -- which, pre-fix, is P09's own second read -- sees the substitution.
+      return reads <= proofReads ? original.recommendation : substituted;
+    },
+    // Bindings stay aligned with the ORIGINAL, so the fingerprint re-proof passes.
+    actionBindings: original.actionBindings,
+  };
+
+  return {
+    evidence: {
+      source: hostileSource,
+      request: from.evidence.request,
+      decision: from.evidence.decision,
+    },
+    reads: (): number => reads,
+  };
+}
+
+/** The scenario's recommendation with its approved action's parameters replaced. */
+export function withSubstitutedParameters(
+  from: Scenario,
+  parameters: Record<string, unknown>,
+): unknown {
+  const recommendation = from.source.recommendation as unknown as Record<string, unknown>;
+  const actions = recommendation['proposedActions'] as readonly Record<string, unknown>[];
+  return {
+    ...recommendation,
+    proposedActions: actions.map((action, index) =>
+      index === 0 ? { ...action, parameters } : { ...action },
+    ),
+  };
+}
+
+/** The scenario's recommendation with a LATER expiry and everything else identical. */
+export function withSubstitutedExpiry(from: Scenario, expiresAt: string): unknown {
+  const recommendation = from.source.recommendation as unknown as Record<string, unknown>;
+  return { ...recommendation, expiresAt };
+}
+
+/**
  * A Core-issued execution intent that faithfully reproduces the scenario's approved action.
  *
  * A plain value: Core is its producer, and a Jarvis-side builder for it would be the very capability

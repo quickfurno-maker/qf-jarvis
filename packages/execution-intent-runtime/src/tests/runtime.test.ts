@@ -30,6 +30,9 @@ import {
   executionIntent,
   partiallyApprovedScenario,
   scenario,
+  substitutingEvidence,
+  withSubstitutedExpiry,
+  withSubstitutedParameters,
 } from './fixtures.js';
 
 const runtime = createExecutionIntentRuntime();
@@ -437,6 +440,92 @@ describe('the intent contract is what proves issuer, executor and semantics', ()
         } as never),
       'intent-invalid',
     );
+  });
+});
+
+describe('approval evidence is snapshotted, so it cannot change under validation', () => {
+  it('refuses SUBSTITUTED action content shown only to the second read', () => {
+    // The TOCTOU this snapshot closes. `source` is caller-controlled and `source: z.unknown()` in
+    // the approval runtime's input, so a hostile object can expose `recommendation` as an accessor:
+    // the approval proof is shown the ORIGINAL content its fingerprint actually covers, and any
+    // LATER read is shown a different, individually schema-valid recommendation with the same
+    // recommendationId, actionId and correlationId but different parameters. An intent built on the
+    // substituted content would then validate against content nobody approved.
+    const s = scenario('7a7a7a7a');
+    expect(s.parameters['delayHours']).toBe(48);
+
+    const substituted = withSubstitutedParameters(s, { ...s.parameters, delayHours: 96 });
+    const hostile = substitutingEvidence(s, substituted);
+
+    // The intent claims the SUBSTITUTED content.
+    const intent = executionIntent(s, { parameters: { ...s.parameters, delayHours: 96 } });
+
+    // There must be no successful observation for substituted content. `action-mismatch` is the
+    // deterministic outcome once one stable snapshot feeds both phases: the recovered action still
+    // says 48, and the intent says 96.
+    expectCode(
+      () => runtime.validate({ intent, approval: hostile.evidence } as never),
+      'action-mismatch',
+    );
+
+    // And the accessor could not serve two different values to two phases: the snapshot reads it
+    // ONCE, before the proof, and everything downstream works from that detached copy.
+    expect(hostile.reads()).toBe(1);
+  });
+
+  it('refuses a SUBSTITUTED, later recommendation expiry shown only to the second read', () => {
+    // The same gap reaches the timing bounds. A later `expiresAt` presented after the proof would
+    // make a stale intent look like it sits inside the recommendation's window.
+    const s = scenario('7b7b7b7b');
+    const substituted = withSubstitutedExpiry(s, '2026-08-10T09:00:00Z');
+    const hostile = substitutingEvidence(s, substituted);
+
+    // Issued and expiring AFTER the original recommendation expired (2026-08-04T09:00:00Z), but
+    // comfortably inside the substituted window.
+    const intent = executionIntent(s, {
+      issuedAt: '2026-08-05T00:00:00Z',
+      expiresAt: '2026-08-06T00:00:00Z',
+    });
+
+    expectCode(
+      () => runtime.validate({ intent, approval: hostile.evidence } as never),
+      'timing-mismatch',
+    );
+    expect(hostile.reads()).toBe(1);
+  });
+
+  it('is unaffected by the caller mutating its own evidence afterwards', () => {
+    // The ordinary half of the same property: the observation is built from validated, detached
+    // artifacts, so a caller holding a reference to the nested source cannot edit what was proved.
+    const s = scenario('7c7c7c7c');
+    const mutable = {
+      source: {
+        recommendation: JSON.parse(JSON.stringify(s.source.recommendation)) as Record<
+          string,
+          unknown
+        >,
+        actionBindings: s.source.actionBindings,
+      },
+      request: s.evidence.request,
+      decision: s.evidence.decision,
+    };
+    const observation = runtime.validate({
+      intent: executionIntent(s),
+      approval: mutable,
+    } as never);
+    expect(observation.approvedAction.parameters['delayHours']).toBe(48);
+
+    // Edit the caller's own object after the fact.
+    const actions = mutable.source.recommendation['proposedActions'] as Record<string, unknown>[];
+    const first = actions[0];
+    if (first === undefined) {
+      throw new Error('unreachable');
+    }
+    (first['parameters'] as Record<string, unknown>)['delayHours'] = 96;
+
+    // The observation is unchanged, and still frozen.
+    expect(observation.approvedAction.parameters['delayHours']).toBe(48);
+    expect(Object.isFrozen(observation.approvedAction)).toBe(true);
   });
 });
 

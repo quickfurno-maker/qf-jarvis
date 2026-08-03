@@ -220,6 +220,59 @@ describe('no communication-eligibility heuristic', () => {
   });
 });
 
+describe('approval evidence is read exactly once', () => {
+  /**
+   * The structural pin for ADR-0084 §11.
+   *
+   * Not a substring count over the whole file -- that would break on a comment or a reformat. It
+   * asserts the two facts that actually carry the property, over documentation-stripped code:
+   *
+   *   1. `input['approval']` is reached in exactly ONE place, and that place is the snapshot call;
+   *   2. both the approval re-proof and the recommendation recovery consume `approvalEvidence`.
+   *
+   * If someone later reads the caller's raw evidence a second time -- which is the whole defect --
+   * the first assertion fails.
+   */
+  const runtimeSource = (): string =>
+    codeOnly(
+      readFileSync(
+        fileURLToPath(new URL('src/create-execution-intent-runtime.ts', PKG_DIR)),
+        'utf8',
+      ),
+    );
+
+  it('reaches the caller’s raw approval evidence in exactly one place: the snapshot', () => {
+    const code = runtimeSource();
+    const reads = code.match(/input\['approval'\]/g) ?? [];
+    expect(reads).toHaveLength(1);
+    expect(code).toContain("snapshotApprovalEvidence(input['approval'])");
+  });
+
+  it('feeds the SAME snapshot to the approval proof and to the recommendation recovery', () => {
+    const code = runtimeSource();
+    expect(code).toContain('proveApproval(approvalEvidence)');
+    // The recovery reads the snapshot, not the caller's object.
+    expect(code).toMatch(/isRecord\(approvalEvidence\)/);
+    expect(code).toMatch(/approvalEvidence\['source'\]\['recommendation'\]/);
+  });
+
+  it('snapshots by detaching, never by stringify or a shallow spread', () => {
+    // `JSON.parse(JSON.stringify(x))` honours a `toJSON` hook, so a hostile object would still
+    // choose what the snapshot sees; a spread copies one level and leaves every nested object
+    // shared. Neither is a security snapshot.
+    const snapshot = codeOnly(
+      readFileSync(fileURLToPath(new URL('src/internal/snapshot.ts', PKG_DIR)), 'utf8'),
+    );
+    expect(snapshot).toContain('structuredClone(value)');
+    expect(snapshot).not.toContain('JSON.parse');
+    expect(snapshot).not.toContain('JSON.stringify');
+    expect(snapshot).not.toMatch(/\.\.\.value/);
+    // Every clone failure is one bounded code, and the thrown value is never inspected.
+    expect(snapshot).toContain("ExecutionIntentRuntimeError('approval-invalid')");
+    expect(snapshot).toMatch(/catch \{/);
+  });
+});
+
 describe('side-effect containment', () => {
   it('opens no socket, reads no environment, touches no filesystem and holds no clock', () => {
     for (const file of productionFiles()) {

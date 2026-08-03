@@ -21,6 +21,18 @@
  * So the binding is checked, never guessed. There is no fallback that matches on a template, a
  * purpose code, a channel or a summary when the ids disagree: ids that disagree are a refusal.
  *
+ * ### The approval evidence is snapshotted ONCE, before anything reads it
+ *
+ * The evidence is caller-controlled and loosely typed at its boundary (`source: z.unknown()`), so a
+ * hostile object can expose `recommendation` as an accessor that answers differently each time. This
+ * function needs the recommendation twice — for the approval re-proof, and to recover the approved
+ * action and the expiry bounds — so reading the caller's value twice would let the proof and the
+ * comparison see two different, individually valid recommendations sharing the same ids. The intent
+ * would then be checked against content nobody approved.
+ *
+ * So exactly one detached snapshot is taken up front and BOTH phases work from it. After that line,
+ * no path here reads `input['approval']` again.
+ *
  * ### It reads no clock, and makes no freshness claim
  *
  * Every temporal rule here is a relationship BETWEEN artifacts — a decision cannot post-date the
@@ -43,6 +55,7 @@ import { ExecutionIntentRuntimeError } from './contracts/errors.js';
 import type { ExecutionIntentObservation, ExecutionIntentRuntime } from './contracts/result.js';
 import { deepEqualJson } from './internal/deep-equal-json.js';
 import { deepFreeze } from './internal/freeze.js';
+import { snapshotApprovalEvidence } from './internal/snapshot.js';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -95,17 +108,25 @@ export function createExecutionIntentRuntime(): ExecutionIntentRuntime {
     }
     const intent: ExecutionIntentV1 = parsedIntent.data;
 
-    // 2. The approval evidence, re-proved independently.
-    const approvalCorrelation = proveApproval(input['approval']);
+    // 2. ONE detached snapshot of the caller's evidence, taken BEFORE anything inspects it.
+    //
+    //    This is the only place `input['approval']` is read. Everything below -- the re-proof, the
+    //    approved-action recovery, the expiry bounds -- works from `approvalEvidence`, so a getter or
+    //    proxy gets exactly one chance to decide what the evidence is, and cannot present one
+    //    recommendation to the proof and a different one to the comparison (ADR-0084 §11).
+    const approvalEvidence = snapshotApprovalEvidence(input['approval']);
 
-    // 3. The PER-ACTION verdict, not the overall outcome. Under partial approval a decision may be
+    // 3. The approval evidence, re-proved independently -- against the snapshot.
+    const approvalCorrelation = proveApproval(approvalEvidence);
+
+    // 4. The PER-ACTION verdict, not the overall outcome. Under partial approval a decision may be
     //    `approved` overall because a DIFFERENT action was approved while this one was rejected --
     //    and an intent that ran on the overall outcome would execute an action a human refused.
     if (approvalCorrelation.actionDecision.decision !== 'approved') {
       throw new ExecutionIntentRuntimeError('approval-not-approved');
     }
 
-    // 4. IDENTITY. Four exact equalities, and no fallback: this is the binding P08 could not make,
+    // 5. IDENTITY. Four exact equalities, and no fallback: this is the binding P08 could not make,
     //    and a near-match is a refusal rather than a hint.
     if (
       intent.recommendationId !== approvalCorrelation.recommendationId ||
@@ -116,14 +137,15 @@ export function createExecutionIntentRuntime(): ExecutionIntentRuntime {
       return mismatch();
     }
 
-    // 5. The recommendation, re-parsed with the governed schema so the action and the expiry below
-    //    are read off a validated artifact rather than off whatever the caller's object happened to
-    //    hold. `validateDecision` already proved this source; this is how its canonical form is
-    //    obtained without reaching into another package's internals.
-    const evidence: unknown = input['approval'];
+    // 6. The recommendation, taken from the SAME SNAPSHOT the proof consumed and re-parsed with the
+    //    governed schema. Two properties matter here and they are separate:
+    //
+    //      - the SNAPSHOT is why this is the same recommendation the approval runtime saw; and
+    //      - re-parsing is why the action and expiry below are read off a validated artifact rather
+    //        than a raw object, without reaching into another package's internals for its result.
     const parsedSource = recommendationV1Schema.safeParse(
-      isRecord(evidence) && isRecord(evidence['source'])
-        ? evidence['source']['recommendation']
+      isRecord(approvalEvidence) && isRecord(approvalEvidence['source'])
+        ? approvalEvidence['source']['recommendation']
         : undefined,
     );
     if (!parsedSource.success) {
@@ -136,13 +158,13 @@ export function createExecutionIntentRuntime(): ExecutionIntentRuntime {
       (action) => action.actionId === intent.approvedActionId,
     );
     if (approvedAction === undefined) {
-      // Also unreachable: step 4 tied the intent's action id to the one the approval runtime proved
+      // Also unreachable: step 5 tied the intent's action id to the one the approval runtime proved
       // is in this recommendation. Refused rather than assumed, because the alternative is reading
       // `undefined` as "nothing to compare against" and passing.
       return mismatch();
     }
 
-    // 6. CONTENT. The intent must reproduce the approved action exactly -- not approximately, not
+    // 7. CONTENT. The intent must reproduce the approved action exactly -- not approximately, not
     //    compatibly, not "with defaults filled in". Parameters are compared structurally, so key
     //    ORDER is irrelevant while the key SET and every value are not: an extra key, a missing key,
     //    a changed value or a reordered array is a different instruction to the world.
@@ -154,8 +176,8 @@ export function createExecutionIntentRuntime(): ExecutionIntentRuntime {
       throw new ExecutionIntentRuntimeError('action-mismatch');
     }
 
-    // 7. TIME, as relationships between artifacts. No clock is read, and none of this claims the
-    //    intent is live now.
+    // 8. TIME, as relationships between artifacts, and against the SNAPSHOT's recommendation. No
+    //    clock is read, and none of this claims the intent is live now.
     //
     //    a. An intent cannot predate the Core decision it cites. Whatever that artifact is, it was
     //       not derived from a decision that had not been made.
