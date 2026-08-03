@@ -394,7 +394,11 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // this records an authorised addition, it does not relax the assertion.
       'riya-agent',
     ]);
-    expect(dirs('apps')).toEqual(['api', 'worker']);
+    // JOS-01A (docs/architecture/jarvis-os.md): the Jarvis OS operator control plane. Still an
+    // EXACT set match -- this records an authorised addition, it does not relax the assertion.
+    // It is a POWERLESS read surface: it reaches no database, no provider, no n8n and no Core,
+    // and its own suite scans its source to prove it.
+    expect(dirs('apps')).toEqual(['api', 'jarvis-os', 'worker']);
   });
 
   it('(141-148) every prior package-root runtime API lock still holds', async () => {
