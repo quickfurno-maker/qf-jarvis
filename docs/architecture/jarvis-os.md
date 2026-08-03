@@ -123,11 +123,22 @@ Aarohi is an **owner-locked product surface with no runtime**. Every funnel stag
 prospect exists, no outreach has been attempted, and no channel is attached. This track adds
 no Aarohi runtime and broadens no Anisha behaviour.
 
-> **JOS merge dependency.** If canonical Aarohi / QuickFurno Vendor Growth Engine governance
-> is not yet merged on `main`, this application still represents Aarohi only as a
-> `PLANNED`/disabled product surface with no runtime. Merging the owner-approved governance
-> update remains a separate, prerequisite change; nothing in this track rewrites the agent
-> constitution or the authority matrix.
+> **JOS merge dependency — satisfied.** Canonical Aarohi / QuickFurno Vendor Growth Engine
+> governance is **merged**: [ADR-0085](../decisions/ADR-0085-qfj-p12-aarohi-vendor-growth-and-roadmap-reconciliation.md)
+> (PR #89, merge commit `22f48b09`) adopts Aarohi as the fourth governed agent under **QFJ-P12**,
+> narrows Anisha to the registered-vendor lifecycle, and records the AVG-0…AVG-12 overlay.
+> This surface therefore now agrees with the constitution rather than anticipating it.
+>
+> That ordering was deliberate. This track never rewrote the agent constitution or the authority
+> matrix — the governance change landed first, on its own branch, under its own ADR and review.
+> A product surface must not be the first canonical statement that an agent exists.
+>
+> What is unchanged: Aarohi remains a **`PLANNED`/disabled product surface with no runtime**, no
+> outreach, no channel and no credential, and the canonical boundary it renders is Core's
+> registration truth — **on Core's authoritative `ACTIVE` confirmation, acquisition selling stops
+> and relationship ownership moves to Anisha**, and a party Core reports as registered, active,
+> inactive, dormant, former, previously contacted, duplicate or do-not-contact is never an
+> acquisition target.
 
 ## Phase track
 
