@@ -367,6 +367,9 @@ describe('(133-148) the declared budget and every prior lock', () => {
       'core-decision-adapter',
       'event-backbone',
       'event-ingestion',
+      // QFJ-P09.01 (ADR-0084): the execution intent correlation runtime -- Core issues, n8n executes,
+      // this only correlates. Still an EXACT set match; it records an authorised addition.
+      'execution-intent-runtime',
       'governed-knowledge',
       'groq-staging-smoke',
       'jarvis-runtime',
@@ -420,6 +423,9 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // QFJ-P08 (ADR-0083): the communication authorization correlation runtime, locked from the
       // day it lands.
       'communication-authorization-runtime': 3,
+      // QFJ-P09.01 (ADR-0084): the execution intent correlation runtime, locked from the day it
+      // lands. It validates Core's intent; it issues none.
+      'execution-intent-runtime': 3,
       // QFJ-P08-A (ADR-0075): agent-runtime 45 -> 46 (the operations snapshot constructor) and
       // jarvis-runtime unchanged at 6. Both are named here so the composition phase that touched
       // them is locked centrally, not only in their own packages.

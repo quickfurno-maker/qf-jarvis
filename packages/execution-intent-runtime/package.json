@@ -1,0 +1,26 @@
+{
+  "name": "@qf-jarvis/execution-intent-runtime",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis execution intent correlation runtime (QFJ-P09.01, ADR-0084). One pure function: given a Core-issued ExecutionIntentV1 and raw approval evidence the PUBLIC approval runtime can independently re-prove, prove that the intent names and exactly reproduces the approved proposed action -- same recommendation, same Core decision, same action id, same action type, same contract version, and structurally identical governed parameters. This is where P09 gains the exact action identity that P08 communication authorization deliberately cannot express. It issues nothing: only QuickFurno Core creates execution intents, only n8n is the named executor, and this package cannot dispatch, send, execute, retry, persist, emit, resolve a recipient, choose a provider, generate or consume an idempotency key, or read a clock. The result is an OBSERVATION with no canExecute, isAuthorized, isFresh or consentValid -- static provenance, never dispatch-time freshness and never execution authorization. Depends on @qf-jarvis/contracts and @qf-jarvis/approval-runtime only.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/approval-runtime": "workspace:*",
+    "@qf-jarvis/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@qf-jarvis/recommendation-runtime": "workspace:*"
+  }
+}
