@@ -1,0 +1,27 @@
+{
+  "name": "@qf-jarvis/approval-core-adapter",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis Core approval submission protocol (QFJ-P08, ADR-0082). Serializes ONE authenticated human's POWERLESS intent about ONE existing ApprovalRequestV1 into a versioned wire command, hands it to an INJECTED transport together with an opaque authorization proof, and validates the ApprovalDecisionV1 QuickFurno Core returns by correlating it through the public approval runtime. APPROVE, REJECT and REQUEST_CHANGES are human intents and confer nothing: Core independently validates identity, authority, current state, risk, expiry and eligibility, and may refuse the intent the human expressed. A negative intent can never come back as an approval of the selected action. It holds no approved state, defines no endpoint, no URL, no header and no credential format, persists nothing, retries nothing, and calls no live network. Depends on @qf-jarvis/contracts, @qf-jarvis/approval-runtime, zod, and node:crypto createHash only.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/approval-runtime": "workspace:*",
+    "@qf-jarvis/contracts": "workspace:*",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@qf-jarvis/recommendation-runtime": "workspace:*"
+  }
+}

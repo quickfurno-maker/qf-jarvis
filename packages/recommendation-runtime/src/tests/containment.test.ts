@@ -128,9 +128,9 @@ describe('dependencies', () => {
     }
   });
 
-  it('is referenced by no lower package, and wires into no application', () => {
+  it('is referenced by no lower package, and by no application at runtime', () => {
     // A recommendation producer that the runtime imported would put proposal creation on the
-    // inbound path, which is not what QFJ-P05.05 authorises. The edge does not exist yet.
+    // inbound path, which is not what QFJ-P05.05 authorises. That edge still does not exist.
     const importers = [
       'packages/jarvis-runtime/package.json',
       'packages/agent-runtime/package.json',
@@ -138,12 +138,21 @@ describe('dependencies', () => {
       'packages/core-decision-adapter/package.json',
       'packages/event-backbone/package.json',
       'packages/postgres-conversation-state/package.json',
-      'apps/api/package.json',
     ];
     for (const relative of importers) {
       const text = readFileSync(fileURLToPath(new URL(relative, REPO_ROOT)), 'utf8');
       expect(text, relative).not.toContain('@qf-jarvis/recommendation-runtime');
     }
+
+    // QFJ-P08 (ADR-0082): `apps/api` names this package, and ONLY as a test-only fixture edge --
+    // the operator-boundary specs build a REAL governed recommendation rather than hand-assembling
+    // one, which would prove only that the service agrees with a fixture. Proposal creation is
+    // still on no application's runtime path. The assertion narrowed; it did not relax.
+    const api = JSON.parse(
+      readFileSync(fileURLToPath(new URL('apps/api/package.json', REPO_ROOT)), 'utf8'),
+    ) as { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
+    expect(Object.keys(api.dependencies ?? {})).not.toContain('@qf-jarvis/recommendation-runtime');
+    expect(Object.keys(api.devDependencies ?? {})).toContain('@qf-jarvis/recommendation-runtime');
   });
 });
 

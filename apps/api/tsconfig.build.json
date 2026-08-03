@@ -23,7 +23,14 @@
     // `model-gateway` above is referenced.
     { "path": "../../packages/event-backbone" },
     { "path": "../../packages/jarvis-runtime/tsconfig.build.json" },
-    { "path": "../../packages/postgres-conversation-state/tsconfig.build.json" }
+    { "path": "../../packages/postgres-conversation-state/tsconfig.build.json" },
+    // QFJ-P08 (ADR-0082): the authenticated operator boundary. `contracts` is a real runtime edge --
+    // the service validates an identifier and two instants with the governed schemas -- while the
+    // approval adapter and the durable queue are named as TYPES ONLY: both are INJECTED, so the
+    // service composes them without importing a line of either at runtime.
+    { "path": "../../packages/contracts" },
+    { "path": "../../packages/approval-core-adapter/tsconfig.build.json" },
+    { "path": "../../packages/postgres-approval-queue/tsconfig.build.json" }
   ],
   "include": ["src/**/*.ts"],
   "exclude": ["src/tests/**"]

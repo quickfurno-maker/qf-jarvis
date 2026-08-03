@@ -221,7 +221,7 @@ describe('dependencies', () => {
     }
   });
 
-  it('is imported by no other package and wired into no application', () => {
+  it('is imported by no lower package, and named by an application only as a TYPE', () => {
     for (const relative of [
       'packages/jarvis-runtime/package.json',
       'packages/agent-runtime/package.json',
@@ -229,11 +229,31 @@ describe('dependencies', () => {
       'packages/recommendation-runtime/package.json',
       'packages/core-decision-adapter/package.json',
       'packages/postgres-conversation-state/package.json',
-      'apps/api/package.json',
     ]) {
       const text = readFileSync(fileURLToPath(new URL(relative, REPO_ROOT)), 'utf8');
       expect(text, relative).not.toContain('@qf-jarvis/postgres-approval-queue');
     }
+
+    // QFJ-P08 (ADR-0082): the authenticated operator boundary composes this queue -- but receives it
+    // already built and names it with `import type`, which the compiler erases. So `apps/api`
+    // declares the edge (its emitted declarations reference the shapes) while executing no line of
+    // this package and constructing no pool. The assertion narrowed to that exact claim; it did not
+    // relax to "an application may import it now".
+    const api = JSON.parse(
+      readFileSync(fileURLToPath(new URL('apps/api/package.json', REPO_ROOT)), 'utf8'),
+    ) as { dependencies?: Record<string, string> };
+    expect(Object.keys(api.dependencies ?? {})).toContain('@qf-jarvis/postgres-approval-queue');
+
+    const runtimeDir = fileURLToPath(new URL('apps/api/src/runtime/', REPO_ROOT));
+    const namers = readdirSync(runtimeDir)
+      .filter((name) => name.endsWith('.ts'))
+      .filter((name) =>
+        readFileSync(join(runtimeDir, name), 'utf8').includes('@qf-jarvis/postgres-approval-queue'),
+      );
+    expect(namers).toEqual(['approval-operator-service.ts']);
+    const service = readFileSync(join(runtimeDir, 'approval-operator-service.ts'), 'utf8');
+    expect(service).toMatch(/import type \{[\s\S]*?\} from '@qf-jarvis\/postgres-approval-queue';/);
+    expect(service).not.toMatch(/^import \{[^}]*\} from '@qf-jarvis\/postgres-approval-queue'/m);
   });
 });
 

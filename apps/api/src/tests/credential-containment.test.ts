@@ -101,6 +101,19 @@ const isDesignatedDatabaseModule = (f: string): boolean =>
   normalise(f).endsWith(`/${DESIGNATED_DATABASE_MODULE}`);
 
 /**
+ * The one production file permitted to NAME the durable approval queue (QFJ-P08, ADR-0082).
+ *
+ * Deliberately a separate list from the one above, and deliberately a weaker permission. The
+ * operator boundary never REACHES a database: the queue arrives already built, and this module
+ * imports it as a TYPE, which the compiler erases. What it may do is say the word — and the scan
+ * below still holds it to every rule the designated database module is held to, plus one more:
+ * the import must be `import type`.
+ */
+const DESIGNATED_QUEUE_TYPE_MODULE = 'src/runtime/approval-operator-service.ts';
+const isDesignatedQueueTypeModule = (f: string): boolean =>
+  normalise(f).endsWith(`/${DESIGNATED_QUEUE_TYPE_MODULE}`);
+
+/**
  * THE one file permitted to read the environment, and it is TEST-ONLY (QFJ-P08-B3, ADR-0078).
  *
  * The durable composition tests need a real PostgreSQL, which needs a connection string, which has
@@ -265,14 +278,16 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
       ]) {
         expect(code, `${file}: ${forbidden}`).not.toContain(forbidden);
       }
-      // `postgres` is permitted in EXACTLY ONE module (QFJ-P08-B3), and forbidden everywhere else.
-      if (!isDesignatedDatabaseModule(file)) {
+      // `postgres` is permitted in EXACTLY TWO modules and forbidden everywhere else: the one that
+      // creates a pool (QFJ-P08-B3), and the operator boundary that names the durable queue as a
+      // TYPE (QFJ-P08, ADR-0082). The test above proves the second holds no runtime reference.
+      if (!isDesignatedDatabaseModule(file) && !isDesignatedQueueTypeModule(file)) {
         expect(code, file).not.toContain('postgres');
       }
     }
   });
 
-  it('exactly one production module reaches a database, and it opens no connection of its own', () => {
+  it('exactly two production modules name a database, and neither opens a connection of its own', () => {
     const touching = productionFiles().filter((file) => {
       const code = codeOnly(readFileSync(file, 'utf8')).toLowerCase();
       return (
@@ -281,19 +296,37 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
         code.includes('conversation-state')
       );
     });
-    expect(touching.map((f) => normalise(f).split('/apps/api/')[1] ?? '')).toEqual([
-      DESIGNATED_DATABASE_MODULE,
-    ]);
+    // An EXACT set, not a superset. QFJ-P08 (ADR-0082) adds the operator boundary, which names the
+    // durable approval queue as a TYPE; the seam that actually creates a pool is still exactly one.
+    expect(touching.map((f) => normalise(f).split('/apps/api/')[1] ?? '').sort()).toEqual(
+      [DESIGNATED_DATABASE_MODULE, DESIGNATED_QUEUE_TYPE_MODULE].sort(),
+    );
 
-    // And it reaches the database ONLY through the public workspace APIs: no `pg` import, no raw
-    // pool, no SQL, no migration, no connection string handling, and no HTTP surface.
-    const code = codeOnly(readFileSync(touching[0] ?? '', 'utf8'));
-    expect(code).not.toMatch(/from ['"]pg['"]/);
-    expect(code).not.toMatch(/\bnew\s+Pool\b/);
-    expect(code).not.toMatch(/\b(SELECT|INSERT|UPDATE|DELETE|CREATE TABLE|ALTER TABLE)\b/);
-    expect(code).not.toMatch(/migrat/i);
-    expect(code).not.toMatch(/connectionString/);
-    expect(code).not.toMatch(/createServer|express|fastify/i);
+    // BOTH reach persistence only through public workspace APIs: no `pg` import, no raw pool, no
+    // SQL, no migration, no connection string handling, and no HTTP surface.
+    for (const file of touching) {
+      const code = codeOnly(readFileSync(file, 'utf8'));
+      const label = normalise(file).split('/apps/api/')[1] ?? '';
+      expect(code, label).not.toMatch(/from ['"]pg['"]/);
+      expect(code, label).not.toMatch(/\bnew\s+Pool\b/);
+      expect(code, label).not.toMatch(/\b(SELECT|INSERT|UPDATE|DELETE|CREATE TABLE|ALTER TABLE)\b/);
+      expect(code, label).not.toMatch(/migrat/i);
+      expect(code, label).not.toMatch(/connectionString/);
+      expect(code, label).not.toMatch(/createServer|express|fastify/i);
+    }
+
+    // And the operator boundary names the queue as a TYPE ONLY -- erased at compile time, so it
+    // holds no reference to the adapter at runtime and receives one already built.
+    const operator = touching.find(isDesignatedQueueTypeModule) ?? '';
+    const operatorCode = codeOnly(readFileSync(operator, 'utf8'));
+    expect(operatorCode).toMatch(
+      /import type \{[\s\S]*?\} from '@qf-jarvis\/postgres-approval-queue';/,
+    );
+    expect(operatorCode).not.toMatch(
+      /^import \{[^}]*\} from '@qf-jarvis\/postgres-approval-queue'/m,
+    );
+    // It composes; it does not configure. Nothing here builds a pool or reads a database setting.
+    expect(operatorCode).not.toMatch(/createDatabasePool|createDatabaseConfig|DATABASE_URL/);
   });
 
   it('production source creates no watcher or polling loop, and logs nothing', () => {
@@ -339,26 +372,38 @@ describe('the staging smoke stays out of the production boundary', () => {
     // production source that composes the real gateway (ADR-0065 §6). `zod` is the schema validator
     // already pinned by nine other workspace packages — no new third-party resolution (ADR-0065 §14).
     expect(Object.keys(manifest.dependencies ?? {}).sort()).toEqual([
+      // QFJ-P08 (ADR-0082): the authenticated operator boundary. `contracts` is a real runtime edge
+      // -- the service validates an identifier and two instants with the governed schemas -- while
+      // `approval-core-adapter` and `postgres-approval-queue` are named as TYPES ONLY, because both
+      // are INJECTED. They are declared as production edges because the emitted declarations
+      // reference them, not because a line of either executes here. Still an EXACT set match, and
+      // still no new third-party resolution.
+      '@qf-jarvis/approval-core-adapter',
+      '@qf-jarvis/contracts',
       // QFJ-P08-B3 (ADR-0078): the three -- and only three -- new production edges the durable
       // composition needs, to create a pool, build the durable adapter, and compose the runtime.
-      // Still an EXACT set match, and still no new third-party resolution.
       '@qf-jarvis/event-backbone',
       '@qf-jarvis/jarvis-runtime',
       '@qf-jarvis/model-evaluation',
       '@qf-jarvis/model-gateway',
       '@qf-jarvis/model-gateway-composition',
+      '@qf-jarvis/postgres-approval-queue',
       '@qf-jarvis/postgres-conversation-state',
       // QFJ-S3-I-B (ADR-0073): the SHADOW runner's fixed synthetic prompt is now a real
       // `PromptDefinition`, so its identity and its bytes cannot drift apart. Still an EXACT set.
       '@qf-jarvis/prompt-registry',
       'zod',
     ]);
-    // QFJ-P08-B3: dev dependencies exist now, and are EXACTLY the three test-only fixture packages
-    // the durable composition proof needs. An EXACT set, not merely a superset.
+    // QFJ-P08-B3: dev dependencies exist now, and are EXACTLY the test-only fixture packages the
+    // proofs need. An EXACT set, not merely a superset. QFJ-P08 (ADR-0082) adds two: the operator
+    // boundary's specs build a REAL governed recommendation and a REAL approval request rather than
+    // hand-assembling fixtures, which would prove only that the service agrees with a fixture.
     expect(Object.keys(manifest.devDependencies ?? {}).sort()).toEqual([
+      '@qf-jarvis/approval-runtime',
       '@qf-jarvis/conversation-control',
       '@qf-jarvis/core-decision-adapter',
       '@qf-jarvis/model-reply-adapter',
+      '@qf-jarvis/recommendation-runtime',
     ]);
     // `pg` is absent from BOTH lists: the app composes a pool through event-backbone's public API
     // and never touches the driver.
@@ -453,6 +498,8 @@ describe('(71-77) package API and dependency locks are untouched', () => {
       'approval-runtime': 3,
       // QFJ-P08 (ADR-0081): the durable approval queue, locked from the day it lands.
       'postgres-approval-queue': 3,
+      // QFJ-P08 (ADR-0082): the Core approval submission adapter, locked from the day it lands.
+      'approval-core-adapter': 3,
       // QFJ-P08-A (ADR-0075): agent-runtime 45 -> 46 (the operations snapshot constructor) and
       // jarvis-runtime unchanged at 6. Both are named here so the composition phase that touched
       // them is locked centrally, not only in their own packages.
@@ -526,6 +573,15 @@ describe('(78, 79, 80, 81) repository invariants', () => {
       expect(statements.length).toBeGreaterThan(0);
       for (const statement of statements) {
         expect(statement).not.toMatch(/node:(net|http|https|dns|tls|dgram|child_process)/);
+        if (statement.startsWith('import type')) {
+          // A TYPE import is erased: it grants a spec no capability at all, only a name for a shape
+          // it must build a fake of. QFJ-P08 (ADR-0082): the operator spec names the durable queue's
+          // result types so its fake cannot drift from the real contract. `pg` itself is still
+          // forbidden here -- a driver type would mean the spec was reasoning about rows.
+          expect(statement, name).not.toMatch(/from ['"]pg['"]/);
+          expect(statement, name).not.toMatch(/\b(supabase|dockerode|groq-sdk|openai)\b/);
+          continue;
+        }
         expect(statement).not.toMatch(/\b(pg|postgres|supabase|dockerode|groq-sdk|openai)\b/);
       }
       expect(text).not.toMatch(/\bfetch\s*\(/);
