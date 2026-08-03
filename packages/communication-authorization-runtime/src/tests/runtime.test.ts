@@ -32,6 +32,7 @@ import {
   approvalEvidence,
   authorized,
   communicationRequest,
+  multiActionApprovedEvidence,
   partiallyApprovedEvidence,
   rejected,
 } from './fixtures.js';
@@ -188,6 +189,56 @@ describe('an AUTHORIZED communication', () => {
         } as never),
       'approval-not-approved',
     );
+  });
+
+  it('proves an approved action in Core’s named decision but does not invent communication-action identity', () => {
+    // THE limit of the guarantee, written as a test so it cannot be forgotten.
+    //
+    // One `ApprovalDecisionV1` covering TWO actions, both approved. The supplied evidence selects the
+    // first. Validation succeeds -- the authorization names that decision, and an approved action
+    // exists within it on the same correlation thread.
+    //
+    // What the observation does NOT say is which of those two actions the communication request
+    // represents. `CommunicationAuthorizationV1` carries a decision id and no `approvalRequestId`,
+    // `proposedActionId` or `actionFingerprint`, so there is no field by which the comparison could
+    // be made -- and Jarvis must not infer one from `actionType`, parameters, summary, template or
+    // purpose. Core owns that binding, because Core issues the authorization (ADR-0083 §11).
+    const { evidence, selectedActionId, otherActionId } = multiActionApprovedEvidence('a7a7a7a7');
+    expect(evidence.decision.actionDecisions).toHaveLength(2);
+    expect(selectedActionId).not.toBe(otherActionId);
+
+    const observation = runtime.validate({
+      request: communicationRequest(),
+      authorization: authorized(evidence.decision.decisionId),
+      approval: evidence,
+    } as never);
+
+    expect(observation.authorization.outcome).toBe('authorized');
+    // The action id belongs to the SUPPLIED EVIDENCE, and says so.
+    expect(observation.approvalCorrelation?.proposedActionId).toBe(selectedActionId);
+    expect(observation.approvalCorrelation?.actionDecision.decision).toBe('approved');
+    expect(observation.approvalCorrelation?.decision.decisionId).toBe(evidence.decision.decisionId);
+    // ...and it is NOT the other approved action in the same decision, which the observation is
+    // equally unable to rule out as the one this communication is about.
+    expect(observation.approvalCorrelation?.proposedActionId).not.toBe(otherActionId);
+
+    // And no field claims it is the communication's action, or an execution action.
+    const surface = observation as unknown as Record<string, unknown>;
+    for (const forbidden of [
+      'approvedActionId',
+      'communicationActionId',
+      'actionBinding',
+      'executionActionId',
+      'canExecute',
+      'canSend',
+    ]) {
+      expect(surface[forbidden], forbidden).toBeUndefined();
+    }
+    expect(Object.keys(observation).sort()).toEqual([
+      'approvalCorrelation',
+      'authorization',
+      'request',
+    ]);
   });
 
   it('refuses when Core names a DIFFERENT approval decision', () => {

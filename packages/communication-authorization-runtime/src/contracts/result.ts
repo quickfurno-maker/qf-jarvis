@@ -4,7 +4,11 @@
  * ### The result is an OBSERVATION, and the field set is chosen so it cannot be anything else
  *
  * It says: "this authorization, issued by QuickFurno Core, provably answers this communication
- * request — and when Core said yes, here is the re-proved human approval it rests on."
+ * request — and when Core said yes, here is the re-proved human approval decision it names, with an
+ * approved action inside it."
+ *
+ * It does NOT say which action the communication request itself represents. See
+ * `approvalCorrelation` below, and ADR-0083 §11.
  *
  * There is deliberately no `canSend`, `canExecute`, `isAuthorized`, `communicationAllowed`,
  * `consentValid`, `eligible`, `permitted`, `permission`, `validUntil`, `authorizedUntil`, `pending`
@@ -43,10 +47,34 @@ export interface CommunicationAuthorizationObservation {
   readonly request: CommunicationRequestV1;
   readonly authorization: CommunicationAuthorizationV1;
   /**
-   * The approval runtime's own observation, present whenever evidence was supplied AND held up.
+   * The re-proved approval EVIDENCE that was supplied to validation.
    *
-   * Always present on an authorized outcome, because an authorization cannot be observed without
-   * one. Optional on a refusal, because Core may refuse before any human has been asked.
+   * Present whenever evidence was supplied and held up. Always present on an authorized outcome,
+   * because an authorization cannot be observed without one; optional on a refusal, because Core may
+   * refuse before any human has been asked.
+   *
+   * ### Precisely what it proves, and what it does not
+   *
+   * It proves its OWN binding: that the supplied source, approval request, proposed action,
+   * recomputed action fingerprint and Core decision agree with each other, and that this
+   * authorization names that same decision.
+   *
+   * `approvalCorrelation.proposedActionId` is therefore **the action the supplied approval evidence
+   * selected**. It is NOT the communication request's action id, and reading it as one is the
+   * mistake this comment exists to prevent. `CommunicationAuthorizationV1` carries a decision id and
+   * no `approvalRequestId`, `proposedActionId` or `actionFingerprint`, and `ApprovalDecisionV1` may
+   * cover several actions — so no field exists by which the two could be compared, and Jarvis must
+   * not infer the mapping from `actionType`, parameters, the summary, the template or the purpose
+   * code. QuickFurno Core owns that binding, because Core issues the authorization.
+   *
+   * ### It is not execution authorization
+   *
+   * This must not be used to authorize execution, and it must not be used to manufacture an
+   * `ExecutionIntentV1`. P09 begins from a Core-issued execution intent and proves its
+   * `recommendationId`, `approvalDecisionId`, `approvedActionId`, `actionType`,
+   * `actionContractVersion` and `parameters` against Core approval evidence. Communication
+   * authorization is a separate eligibility and consent artifact: both are needed, and neither
+   * substitutes for the other (ADR-0083 §11, §12).
    */
   readonly approvalCorrelation?: ApprovalDecisionCorrelation;
   /**

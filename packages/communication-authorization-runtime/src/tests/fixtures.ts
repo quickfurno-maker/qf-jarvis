@@ -194,6 +194,38 @@ export function partiallyApprovedEvidence(tag: string): CommunicationAuthorizati
 }
 
 /**
+ * A multi-action decision whose SELECTED action is APPROVED.
+ *
+ * The mirror of `partiallyApprovedEvidence`, and the one that shows the LIMIT of the guarantee
+ * rather than a safety rule: one `ApprovalDecisionV1` covering two actions, with the supplied
+ * approval request naming the approved one. Validation succeeds — and the observation still says
+ * nothing about which of the two actions the communication request represents, because the
+ * communication contracts carry no field that could say.
+ */
+export function multiActionApprovedEvidence(tag: string): {
+  /** EXACTLY the three keys the approval runtime's strict input schema accepts. */
+  readonly evidence: CommunicationAuthorizationEvidence;
+  readonly selectedActionId: string;
+  readonly otherActionId: string;
+} {
+  const source = twoActionSource(tag);
+  const [first, second] = source.recommendation.proposedActions;
+  if (first === undefined || second === undefined) {
+    throw new Error('fixture: unreachable');
+  }
+  const request = approvalRequest(source, 0);
+  const decision = coreDecision(source, [
+    { actionId: first.actionId, decision: 'approved' },
+    { actionId: second.actionId, decision: 'approved' },
+  ]);
+  return {
+    evidence: { source, request, decision },
+    selectedActionId: first.actionId,
+    otherActionId: second.actionId,
+  };
+}
+
+/**
  * A powerless communication request.
  *
  * A plain value, validated by `communicationRequestV1Schema` inside the runtime: Jarvis has no

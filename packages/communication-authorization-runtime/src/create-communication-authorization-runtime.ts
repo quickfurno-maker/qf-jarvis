@@ -22,12 +22,23 @@
  * different questions were asked; a communication needs *both* answers to be yes, and this one is
  * no.
  *
- * ### What "authorized" is allowed to mean here
+ * ### What "authorized" is allowed to mean here — and exactly where the claim stops
  *
- * Only that Core's artifact says so, and that a human approval genuinely stands behind it. So an
- * authorized outcome requires approval evidence, re-proved through the PUBLIC approval runtime, whose
- * **per-action** verdict must be `approved` — not merely the overall decision outcome, which under
- * partial approval may be `approved` because some *other* action was.
+ * The authorization NAMES a Core approval decision, and the supplied evidence proves an approved
+ * action WITHIN that named decision, on the same correlation thread. So an authorized outcome
+ * requires approval evidence, re-proved through the PUBLIC approval runtime, whose **per-action**
+ * verdict must be `approved` — not merely the overall decision outcome, which under partial approval
+ * may be `approved` because some *other* action was.
+ *
+ * **That is the whole guarantee, and it is decision-level rather than action-level.**
+ * `CommunicationAuthorizationV1` carries `approvalDecisionId` and no `approvalRequestId`,
+ * `proposedActionId` or `actionFingerprint`; `ApprovalDecisionV1` is recommendation-level and may
+ * cover several actions. So nothing here proves that the action the supplied evidence selected is
+ * structurally the action this `CommunicationRequestV1` represents — there is no field by which that
+ * comparison could be made, and inferring it from `actionType`, parameters, the summary, the template
+ * reference or the purpose code would be a heuristic standing in for an authority decision. QuickFurno
+ * Core owns that semantic binding, because Core is the party that issues the authorization
+ * (ADR-0083 §11).
  *
  * And even then, the result carries no permission. Core's record says what Core decided WHEN it
  * decided; the contract carries no `validUntil` and no consent snapshot precisely so it cannot travel
@@ -67,9 +78,13 @@ function mismatch(): never {
  * Re-prove approval evidence through the PUBLIC approval runtime.
  *
  * Rebuild rather than believe. A caller could hand over an `ApprovalDecisionCorrelation` it built
- * itself, and accepting one would let it assert the very thing this runtime exists to prove — that a
- * human approved THIS exact action of THIS exact recommendation, against a RECOMPUTED action
- * fingerprint. So the raw evidence goes back through `validateDecision` every time.
+ * itself, and accepting one would let it assert the very thing this runtime exists to prove — that
+ * the SUPPLIED approval request, recommendation and Core decision genuinely agree, against a
+ * RECOMPUTED action fingerprint. So the raw evidence goes back through `validateDecision` every time.
+ *
+ * What comes back is a proof about the EVIDENCE, not about the communication request. Its
+ * `proposedActionId` is the action the supplied approval evidence selected; the communication
+ * contracts carry no action identity to compare it against (ADR-0083 §11).
  *
  * The runtime's own error vocabulary is deliberately not propagated. It distinguishes
  * `decision-invalid` from `decision-mismatch`, and both would be quoting a decision that names an
@@ -164,20 +179,25 @@ export function createCommunicationAuthorizationRuntime(): CommunicationAuthoriz
       // 6. Core said yes, so a human must have said yes too. The contract already forces Core's
       //    artifact to NAME an approval decision; this is where the named decision is actually
       //    produced and re-proved rather than assumed to exist somewhere.
+      //
+      //    Note what this establishes: an approved action WITHIN the decision Core named. Not that
+      //    the communication request represents that action -- the artifacts carry no field that
+      //    would let anything here check it (ADR-0083 §11).
       if (approvalCorrelation === undefined) {
         throw new CommunicationAuthorizationRuntimeError('approval-required');
       }
 
       // 7. The PER-ACTION verdict, not the overall outcome. Under partial approval a decision may be
-      //    `approved` overall because a DIFFERENT action was approved while this one was rejected --
-      //    and reading the overall outcome would turn that into an authorized communication nobody
-      //    agreed to send.
+      //    `approved` overall because a DIFFERENT action was approved while the supplied evidence's
+      //    action was rejected -- and reading the overall outcome would accept an authorization
+      //    backed by a refusal.
       if (approvalCorrelation.actionDecision.decision !== 'approved') {
         throw new CommunicationAuthorizationRuntimeError('approval-not-approved');
       }
 
       // 8. And it must be the EXACT decision Core named. Any other approved decision, however
-      //    genuine, is not the one this authorization rests on.
+      //    genuine, is not the one this authorization cites. This is the tightest binding the
+      //    current contracts can express: decision identity, not action identity.
       if (authorization.approvalDecisionId !== approvalCorrelation.decision.decisionId) {
         return mismatch();
       }

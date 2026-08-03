@@ -91,16 +91,21 @@ When evidence _is_ supplied, on either outcome, it is re-proved by calling the *
 accepted: a correlation is a conclusion, and taking one would let a caller assert the very thing this
 runtime exists to prove. It must also sit on the same correlation thread as the request.
 
-### 6. "Authorized" requires a re-proved, per-action APPROVED verdict
+### 6. "Authorized" requires an approved action WITHIN the Core decision it names
 
 On an `authorized` outcome: evidence is mandatory (`approval-required` if absent), must hold up
 (`approval-invalid`), must be the exact decision Core named in `approvalDecisionId`
 (`binding-mismatch`), and its **per-action** verdict must be `approved`.
 
 Per-action, **not** `decision.outcome`. Under partial approval an overall `approved` decision may
-reject _this_ action while approving another, and a runtime reading the overall outcome would
-authorize a communication nobody agreed to send. `approval-not-approved` is its own code precisely so
-"you did not show me the approval" and "the approval you showed me says no" cannot be confused.
+reject the supplied evidence's action while approving another, and a runtime reading the overall
+outcome would accept an authorization backed by a refusal. `approval-not-approved` is its own code
+precisely so "you did not show me the approval" and "the approval you showed me says no" cannot be
+confused.
+
+Stated exactly: **the authorization names a Core approval decision, and the supplied evidence proves
+an approved action within that named decision on the same correlation thread.** That is the whole
+guarantee, and §11 says why it stops there.
 
 ### 7. Core may authorize a different channel
 
@@ -139,6 +144,67 @@ decided_; the world may change before the scheduled moment, and Core and the QF 
 Runtime **re-validate eligibility at execution time**, where the answer that counts is produced. That
 execution-time revalidation remains mandatory and is not in this repository.
 
+### 11. Decision-level approval binding, not communication-action identity
+
+This is the boundary of the guarantee, and it is written down because the code reads as though it
+proves more than it does.
+
+`CommunicationAuthorizationV1` carries `communicationId`, `communicationRequestId`,
+`approvalDecisionId` and `correlationId`. It carries **no** `approvalRequestId`, **no**
+`proposedActionId` and **no** `actionFingerprint`. `ApprovalDecisionV1` is recommendation-level and
+may hold several `actionDecisions`. So the authorization names a **decision**, never a specific
+approval request and never a specific action.
+
+What the runtime therefore proves:
+
+1. this Core authorization answers this `CommunicationRequestV1`;
+2. the authorization names this exact `ApprovalDecisionV1`;
+3. the supplied approval evidence is a valid source/request/decision correlation in its own right,
+   with a recomputed action fingerprint;
+4. the action selected by that supplied evidence was `approved`;
+5. all of it sits on one correlation thread.
+
+What it **cannot** prove, and does not claim:
+
+> the approved action selected by the supplied `ApprovalRequestV1` is structurally the same action
+> the `CommunicationRequestV1` represents.
+
+There is no field by which that comparison could be made. `approvalCorrelation.proposedActionId`
+identifies the action **in the supplied approval evidence** — it is not, and must not be read as, the
+communication request's action id.
+
+**Jarvis must not invent the missing mapping.** Inferring it from `actionType`, `parameters`,
+`summary`, the template reference or the purpose code would be a heuristic standing in for an
+authority decision, and it would be wrong silently. QuickFurno Core owns that semantic binding: Core
+is the party that issues `CommunicationAuthorizationV1`, and Core knows which approved action a
+communication corresponds to because Core decided it.
+
+**This observation must never be used to derive an execution action id**, and P09 must not read
+`approvalCorrelation.proposedActionId` as one.
+
+If a future architecture genuinely requires Jarvis to prove communication-request ↔ approval-action
+identity independently, that is a **separately governed, versioned contract change** — a field that
+carries the binding — and never a heuristic bolted onto this runtime.
+
+### 12. P09 forward lock
+
+**P09 MUST NOT construct or validate an execution intent by reading only
+`CommunicationAuthorizationObservation.approvalCorrelation.proposedActionId`.**
+
+Exact execution binding must begin from a Core-issued `ExecutionIntentV1`, which already carries the
+fields this observation lacks, and must prove them against the corresponding Core approval evidence:
+
+- `recommendationId`
+- `approvalDecisionId`
+- `approvedActionId`
+- `actionType`
+- `actionContractVersion`
+- `parameters`
+
+Communication authorization remains a separate eligibility and consent artifact. **Both are needed;
+neither substitutes for the other** — an execution intent does not establish that a recipient may be
+contacted, and a communication authorization does not establish which action is being executed.
+
 ## Rejected alternatives
 
 - **A `canSend` / `eligible` boolean on the result.** The single easiest thing to add, and it ages:
@@ -161,12 +227,21 @@ execution-time revalidation remains mandatory and is not in this repository.
 - **Accepting a caller-supplied approval correlation.** Lets the caller assert the conclusion.
 - **Adding `validUntil` to the authorization contract.** The exact stale-permission field the
   contract omits on purpose.
+- **Inferring which approved action a communication "really is"** from `actionType`, `parameters`,
+  `summary`, the template reference or the purpose code. A heuristic standing in for an authority
+  decision, wrong silently, in the one place being wrong reaches a real person.
+- **Adding `approvalRequestId`, `proposedActionId` or `actionFingerprint` to
+  `CommunicationAuthorizationV1`.** Possibly the right future answer, and not one this slice may take:
+  it is a versioned contract change with its own governance, and Core issues the artifact.
 
 ## Consequences
 
 Jarvis can now hold Core's communication answer as **evidence** rather than as a permission, with the
-paperwork proved: the artifacts describe each other, an authorization rests on a re-proved approved
-action, and a refusal is authoritative regardless of who approved what.
+paperwork proved: the artifacts describe each other, the authorization names a Core approval decision
+and the supplied evidence proves an approved action within that named decision on the same
+correlation thread, and a refusal is authoritative regardless of who approved what. It does **not**
+prove that the communication request represents that exact action — see §11 — and nothing downstream
+may read it as though it did.
 
 The new package root is locked at **3** runtime symbols and 5 types. Every existing package-root count
 is unchanged, `apps/api` stays **0**, and **no package or application imports this one** — it is a
@@ -204,8 +279,10 @@ provider. No migration and no `0010`. No managed database access or deployment. 
 
 The absence of local consent state, the powerlessness of the observation, the per-action approval
 verdict, the openness of Core's refusal taxonomy, and the rule that a Core refusal is authoritative
-are the contract this slice establishes. Adding any permission or eligibility field, caching Core's
-answer, adding a `validUntil`, closing `reasonCode`, reading the overall approval outcome instead of
-the per-action verdict, requiring the authorized channel to match the proposed one, or letting an
-approval soften a refusal each reopens a failure this ADR closes, and is a governed change requiring
-its own decision.
+are the contract this slice establishes, together with the **limit** on the guarantee recorded in §11
+and the P09 forward lock in §12. Adding any permission or eligibility field, caching Core's answer,
+adding a `validUntil`, closing `reasonCode`, reading the overall approval outcome instead of the
+per-action verdict, requiring the authorized channel to match the proposed one, letting an approval
+soften a refusal, inferring communication-action identity by heuristic, or deriving an execution
+action id from this observation each reopens a failure this ADR closes, and is a governed change
+requiring its own decision.
