@@ -1,6 +1,6 @@
 # Jarvis OS — the operator control plane
 
-**Status:** JOS-01A implemented on a feature branch, not merged. Not deployed.
+**Status:** JOS-01A **merged** (PR #88, `b90073cc`). JOS-01B — the governed read-only control-plane contract and snapshot API ([ADR-0086](../decisions/ADR-0086-jos-01b-read-only-control-plane-contract-and-snapshot-api.md)) — implemented on a feature branch, **not merged**. **Not deployed.** JOS-01C (authentication) is next.
 **Relates to:** [ADR-0001](../decisions/ADR-0001-source-of-truth-boundary.md) · [ADR-0002](../decisions/ADR-0002-recommend-authorize-execute-model.md) · [ADR-0007](../decisions/ADR-0007-approval-request-submission-model.md) · [ADR-0083](../decisions/ADR-0083-qfj-p08-communication-authorization-correlation-runtime.md) · [ADR-0084](../decisions/ADR-0084-qfj-p09-01-execution-intent-correlation-runtime.md) · [communication-model.md](./communication-model.md) · [system-boundary.md](./system-boundary.md)
 
 ## Purpose
@@ -16,7 +16,9 @@ switched off.
 
 ## It is powerless, and that is a design constraint rather than a phase
 
-Jarvis OS holds **no business authority**, and JOS-01A holds no backend connection at all.
+Jarvis OS holds **no business authority**, and holds no backend connection at all. QuickFurno Core
+and n8n are both `NOT_CONNECTED`: no live read protocol has been adopted in this repository, and
+neither is contacted from here.
 
 It creates no approval and answers none. It sends no communication and reaches no provider.
 It invokes no n8n workflow and calls no Meta API. It mutates no QuickFurno Core record and no
@@ -52,7 +54,7 @@ apps/jarvis-os/src/lib/control-plane/
 
 **No business decision lives in a React component.** A component receives a `SystemHealth`
 and paints it; it does not decide what healthy means, which agent owns which vendor, or
-whether anything may be sent. JOS-01B replaces the demo provider with an API adapter and no
+whether anything may be sent. JOS-01B replaced the demo provider with a repository baseline and no
 screen changes. A later Android client consumes that same API — the conceptual contracts
 travel, the transport does not, and Next.js internals are never a dependency of anything but
 the web app.
@@ -86,7 +88,18 @@ Tests pin that `AVAILABLE` is the only interactive state, and that `approval.sub
 
 ## The demo read model
 
-JOS-01A renders a local synthetic snapshot. Two rules make that honest:
+**JOS-01B changed the default.** JOS-01A rendered a local synthetic snapshot on every screen; the
+default is now a **repository baseline** built from merged governance and merged packages, and the
+demo fixture is reachable only from tests and visual fixtures.
+
+The rule that replaced it: **unreadable is not empty.** Every operational section carries an explicit
+availability — `AVAILABLE`, `STATIC_BASELINE`, `NOT_CONNECTED`, `PLANNED`, `ROLLOUT_OFF` — with a
+reason and the source that will eventually supply it, and the contract parser REJECTS any unavailable
+section that carries rows or any unavailable series that carries points. An empty array reads as
+"zero"; "the approval source is not connected" is the opposite fact, and the two can no longer render
+alike. No chart draws a flat zero line for a source nobody connected.
+
+The retained fixture still obeys the JOS-01A rules:
 
 - **Nothing real.** No person, vendor, customer, phone number or email address appears.
   Identifiers carry a `-DEMO-` segment (`CONV-DEMO-1042`, `VENDOR-DEMO-18`) so a screenshot or
@@ -148,7 +161,7 @@ nothing, and there is no QFJ-P13.
 | Phase | Scope |
 | --- | --- |
 | **JOS-01A** | Premium dashboard foundation — shell, design system, capability model, demo read model. |
-| **JOS-01B** | Read-only control-plane API and views. Replaces the demo provider. |
+| **JOS-01B** | Read-only control-plane contract and snapshot API; truthful default surface. Replaces the demo provider. |
 | **JOS-01C** | Authentication and operator session boundary. |
 | **JOS-01D** | Isolated Docker image, VPS deployment, Traefik TLS, auth-protected staging. |
 | **JOS-01E** | Progressive backend wiring, capability by capability. |
@@ -159,7 +172,17 @@ the Execution and Governance surfaces so it cannot be lost, and a test asserts i
 
 ## Deployment topology
 
-**Nothing is deployed in JOS-01A.** The VPS is untouched, no Traefik route is added, no DNS is
+**The read API exists in source and is NOT deployed.** `GET /api/control-plane/v1/snapshot` has no
+authentication; JOS-01C adds it and JOS-01D deploys only afterwards. **`apps/api` was not turned into
+an HTTP server** — it still exports nothing and runs none — and server components call the pure
+snapshot builder directly rather than self-fetching, so the page and the API cannot drift.
+
+The shared `@qf-jarvis/control-plane-read-contract` package is framework-neutral: zod is its only
+dependency, and it carries no Next, React, Node or browser type, no filesystem path, no cookie or
+session assumption and no `process.env`. A future React Native / Expo Android client compiles it
+unchanged. **No Android files are added in this track.**
+
+**Nothing is deployed.** The VPS is untouched, no Traefik route is added, no DNS is
 changed, and no container is built. `next.config.ts` sets `output: 'standalone'` so that
 JOS-01D can build an isolated image without a configuration change landing alongside a
 deployment.
