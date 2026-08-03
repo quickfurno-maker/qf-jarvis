@@ -39,6 +39,7 @@
  */
 import {
   approvalRequestIdSchema,
+  humanActorSchema,
   isStrictlyBefore,
   utcTimestampSchema,
 } from '@qf-jarvis/contracts';
@@ -275,6 +276,23 @@ export function createApprovalOperatorService(config: {
    * resolves with a shape that is not an authenticated operator, is `auth-unavailable`. Neither is
    * ever treated as permission: an authentication outage that let calls through would be the single
    * worst failure mode this boundary has.
+   *
+   * ### The actor is parsed with the GOVERNED schema, not shape-checked here
+   *
+   * `humanActorSchema`, not `actorType === 'human'`. The difference is the whole point: an
+   * authenticator that returned `{ actorType: 'human', actor: {} }` would satisfy a hand-written
+   * check while carrying no Core entity reference at all — and `listActive` authenticates and then
+   * reads the queue, so that caller would already have seen the outstanding asks before anything
+   * downstream noticed. `submit` would eventually fail inside the Core adapter; the read would not,
+   * and a read is the disclosure.
+   *
+   * Re-implementing the shape here would also make this the SECOND definition of a `HumanActor`,
+   * free to drift from the one `@qf-jarvis/contracts` owns. The nested `entityReferenceSchema` is
+   * strict and carries real controls — a lowercase machine-token entity type, an opaque identifier
+   * whose character set structurally excludes an email address or an E.164 phone number, and no
+   * extra keys — none of which an `actorType` check enforces.
+   *
+   * The PARSED actor is what travels onward, never the object the port handed back.
    */
   async function authenticate(credential: unknown): Promise<AuthenticatedApprovalOperator> {
     let operator: unknown;
@@ -288,16 +306,26 @@ export function createApprovalOperatorService(config: {
         codeOf(error) === 'auth-unavailable' ? 'auth-unavailable' : 'unauthenticated',
       );
     }
-    if (
-      !isRecord(operator) ||
-      !isRecord(operator['actor']) ||
-      operator['actor']['actorType'] !== 'human' ||
-      !isRecord(operator['coreAuthorization']) ||
-      typeof operator['coreAuthorization']['use'] !== 'function'
-    ) {
+    if (!isRecord(operator)) {
       throw new ApprovalOperatorServiceError('auth-unavailable');
     }
-    return operator as unknown as AuthenticatedApprovalOperator;
+    const parsedActor = humanActorSchema.safeParse(operator['actor']);
+    const proof: unknown = operator['coreAuthorization'];
+    if (
+      !parsedActor.success ||
+      !isRecord(proof) ||
+      typeof proof['use'] !== 'function'
+      // The proof is checked for SHAPE only. Opening it here would defeat the holder: its contents
+      // are for Core to validate, and this service must never be able to read them.
+    ) {
+      // Zod's issues are discarded: they would quote the malformed actor, which is an identity the
+      // authenticator was handling.
+      throw new ApprovalOperatorServiceError('auth-unavailable');
+    }
+    return Object.freeze({
+      actor: parsedActor.data,
+      coreAuthorization: proof as unknown as ApprovalCoreAuthorizationProof,
+    });
   }
 
   async function listActive(

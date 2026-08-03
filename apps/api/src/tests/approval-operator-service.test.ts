@@ -270,6 +270,26 @@ function authFake(
   };
 }
 
+/**
+ * An authentication port that resolves with an ARBITRARY value.
+ *
+ * The port is an interface this application does not implement, so the service must treat whatever
+ * it returns as untrusted structural input -- exactly as it treats a caller's payload. This fake is
+ * how a faulty or hostile adapter's output is put in front of it.
+ */
+function authReturning(result: unknown): OperatorAuthenticationPort & {
+  readonly calls: () => number;
+} {
+  let calls = 0;
+  return {
+    calls: (): number => calls,
+    authenticate: (): Promise<AuthenticatedApprovalOperator> => {
+      calls += 1;
+      return Promise.resolve(result as never);
+    },
+  };
+}
+
 /** A counting transport, so "Core was never contacted" is observable. */
 interface TransportFake extends ApprovalCoreTransport {
   readonly sends: () => number;
@@ -357,6 +377,202 @@ describe('authentication gates access, and it is not authority', () => {
     // is something Core applies, not a person who can be sitting at a screen.
     expect(queue.calls()).toEqual([]);
     expect(transport.sends()).toBe(0);
+  });
+
+  /**
+   * Authenticator results whose actor is not a governed `HumanActor`.
+   *
+   * Every one of these carries `actorType: 'human'` and a perfectly VALID proof holder, so a
+   * hand-written `actorType === 'human'` check waves them all through. That was the defect: the
+   * nested Core entity reference is what identifies the person, and `listActive` authenticates and
+   * then READS the queue -- so a caller the authenticator could not actually identify would already
+   * have seen the outstanding asks before anything downstream noticed. `submit` would fail later,
+   * inside the Core adapter. A read has no later.
+   *
+   * The shapes below are the ones `humanActorSchema` and its strict `entityReferenceSchema` actually
+   * reject, verified against the tracked schema rather than assumed.
+   */
+  const MALFORMED_HUMAN_ACTORS: readonly (readonly [string, unknown])[] = Object.freeze([
+    ['no entity reference at all', { actorType: 'human', actor: {} }],
+    ['empty entity type and id', { actorType: 'human', actor: { entityType: '', entityId: '' } }],
+    // The entity type is a lowercase machine token; `Operator` is a different string that looks like
+    // the same thing, and a reference that sometimes matches is a reference that lies.
+    [
+      'uppercase entity type',
+      { actorType: 'human', actor: { entityType: 'Operator', entityId: 'human.approver.1' } },
+    ],
+    // The opaque-identifier character set structurally excludes `@` and `+`, so an email address and
+    // an E.164 number cannot be smuggled in as an identity. That is a privacy control, and an
+    // `actorType` check does not enforce it.
+    [
+      'an email address as the identifier',
+      { actorType: 'human', actor: { entityType: 'operator', entityId: 'ops@example.com' } },
+    ],
+    [
+      'a phone number as the identifier',
+      { actorType: 'human', actor: { entityType: 'operator', entityId: '+919876543210' } },
+    ],
+    // `entityReferenceSchema` is strict: a pointer must not quietly become a copy of Core's record.
+    [
+      'a name attached to the reference',
+      {
+        actorType: 'human',
+        actor: { entityType: 'operator', entityId: 'human.approver.1', name: 'A Person' },
+      },
+    ],
+    ['the reference is a string', { actorType: 'human', actor: 'operator:human.approver.1' }],
+    ['the reference is missing', { actorType: 'human' }],
+    // `humanActorSchema` is strict too -- an authenticator cannot bolt scopes onto an actor.
+    [
+      'extra keys on the actor',
+      {
+        actorType: 'human',
+        actor: { entityType: 'operator', entityId: 'human.approver.1' },
+        scopes: ['*'],
+      },
+    ],
+    ['the actor is null', { actorType: 'human', actor: null }],
+  ]);
+
+  it('refuses a malformed human actor on listActive, with ZERO queue and Core contact', async () => {
+    for (const [label, actor] of MALFORMED_HUMAN_ACTORS) {
+      const queue = queueFake({});
+      const transport = transportFake(() => '{}');
+      const auth = authReturning({ actor, coreAuthorization: proofHolder() });
+      const service = serviceWith({ auth, queue, transport });
+
+      await expectCode(
+        service.listActive({ credential: CREDENTIAL, observedAt: REQUESTED_AT, limit: 10 }),
+        'auth-unavailable',
+        label,
+      );
+      // THE assertion this spec exists for: the queue was never read.
+      expect(queue.calls(), label).toEqual([]);
+      expect(transport.sends(), label).toBe(0);
+      expect(auth.calls(), label).toBe(1);
+    }
+  });
+
+  it('refuses a malformed human actor on submit, with ZERO queue and Core contact', async () => {
+    for (const [label, actor] of MALFORMED_HUMAN_ACTORS) {
+      const queue = queueFake({});
+      const transport = transportFake(() => '{}');
+      const auth = authReturning({ actor, coreAuthorization: proofHolder() });
+      const service = serviceWith({ auth, queue, transport });
+
+      await expectCode(
+        service.submit({
+          credential: CREDENTIAL,
+          approvalRequestId: 'dddddddd-0000-4000-8000-000000000001',
+          action: 'APPROVE',
+          requestedAt: REQUESTED_AT,
+        }),
+        'auth-unavailable',
+        label,
+      );
+      expect(queue.calls(), label).toEqual([]);
+      expect(transport.sends(), label).toBe(0);
+      expect(auth.calls(), label).toBe(1);
+    }
+  });
+
+  it('refuses a valid human actor carrying no usable proof holder', async () => {
+    // The other half of the pair: the actor parses, and there is nothing to forward to Core. The
+    // proof is checked for SHAPE only -- opening it here would defeat the holder.
+    for (const [label, coreAuthorization] of [
+      ['no proof', undefined],
+      ['null proof', null],
+      ['a bare secret string', PROOF_SECRET],
+      ['an object with no use()', { proof: PROOF_SECRET }],
+      ['use is not a function', { use: 'yes' }],
+    ] as const) {
+      const queue = queueFake({});
+      const transport = transportFake(() => '{}');
+      const service = serviceWith({
+        auth: authReturning({ actor: OPERATOR, coreAuthorization }),
+        queue,
+        transport,
+      });
+      await expectCode(
+        service.listActive({ credential: CREDENTIAL, observedAt: REQUESTED_AT, limit: 10 }),
+        'auth-unavailable',
+        label,
+      );
+      expect(queue.calls(), label).toEqual([]);
+      expect(transport.sends(), label).toBe(0);
+    }
+  });
+
+  it('leaks nothing about the malformed identity it refused', async () => {
+    // A failing authenticator commonly reports the identity it was handling, and Zod's issues would
+    // quote the offending value. Neither may reach the caller.
+    const marker = 'LEAKY-ACTOR-MARKER-c0ffee';
+    const service = serviceWith({
+      auth: authReturning({
+        actor: {
+          actorType: 'human',
+          actor: { entityType: 'operator', entityId: marker + '@example.com' },
+        },
+        coreAuthorization: proofHolder(),
+      }),
+      queue: queueFake({}),
+      transport: transportFake(() => '{}'),
+    });
+    const error = await service
+      .listActive({ credential: CREDENTIAL, observedAt: REQUESTED_AT, limit: 10 })
+      .catch((e: unknown) => e);
+    expect((error as ApprovalOperatorServiceError).code).toBe('auth-unavailable');
+    expect((error as Error).message).not.toContain(marker);
+    expect((error as Error).stack ?? '').not.toContain(marker);
+    expect(JSON.stringify({ ...(error as object) })).not.toContain(marker);
+  });
+
+  it('accepts a governed human actor and forwards the PARSED one downstream', async () => {
+    // The service must not hand onward the object the port returned. It hands onward what the
+    // governed schema produced -- so an authenticator cannot attach anything to an identity that
+    // reaches the wire command Core will read.
+    const from = source('ab6ab6ab');
+    const request = approvalRequest(from);
+    const decision = coreDecision(from, [
+      { actionId: request.proposedActionId, decision: 'approved' },
+    ]);
+    const queue = queueFake({
+      record: { request, source: from },
+      onRecord: () => ({
+        outcome: 'CREATED',
+        correlation: { actionDecision: { decision: 'approved' } } as never,
+      }),
+    });
+    const transport = transportFake(() => JSON.stringify(decision));
+    // A well-formed human, in a MUTABLE object the caller keeps a reference to.
+    const supplied = {
+      actorType: 'human',
+      actor: { entityType: 'operator', entityId: 'human.approver.1' },
+    };
+    const service = serviceWith({
+      auth: authReturning({ actor: supplied, coreAuthorization: proofHolder() }),
+      queue,
+      transport,
+    });
+
+    const result = await service.submit({
+      credential: CREDENTIAL,
+      approvalRequestId: request.approvalRequestId,
+      action: 'APPROVE',
+      requestedAt: REQUESTED_AT,
+    });
+    expect(result.outcome).toBe('DECIDED');
+
+    // What reached Core is the schema's own value: equal by content, and NOT the caller's object.
+    const command = JSON.parse(transport.commands()[0] ?? '{}') as { operator: unknown };
+    expect(command.operator).toEqual({
+      actorType: 'human',
+      actor: { entityType: 'operator', entityId: 'human.approver.1' },
+    });
+    expect(command.operator).not.toBe(supplied);
+    // Mutating the object the authenticator returned, after the fact, changes nothing that was sent.
+    supplied.actor.entityId = 'human.someone.else';
+    expect(JSON.stringify(command.operator)).not.toContain('someone.else');
   });
 
   it('holds no role store, RBAC table, founder list or authority cache', () => {
