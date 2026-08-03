@@ -171,7 +171,7 @@ describe('dependencies', () => {
     }
   });
 
-  it('is imported by no other package and wired into no application', () => {
+  it('is imported by no lower package, and by no application at runtime', () => {
     const importers = [
       'packages/jarvis-runtime/package.json',
       'packages/agent-runtime/package.json',
@@ -180,12 +180,21 @@ describe('dependencies', () => {
       'packages/core-decision-adapter/package.json',
       'packages/event-backbone/package.json',
       'packages/postgres-conversation-state/package.json',
-      'apps/api/package.json',
     ];
     for (const relative of importers) {
       const text = readFileSync(fileURLToPath(new URL(relative, REPO_ROOT)), 'utf8');
       expect(text, relative).not.toContain('@qf-jarvis/approval-runtime');
     }
+
+    // QFJ-P08 (ADR-0082): `apps/api` names this package, and ONLY as a test-only fixture edge --
+    // the operator-boundary specs build a REAL approval request rather than hand-assembling one.
+    // The application's production dependencies still do not contain it, so no runtime path in any
+    // application reaches this package. The assertion narrowed; it did not relax.
+    const api = JSON.parse(
+      readFileSync(fileURLToPath(new URL('apps/api/package.json', REPO_ROOT)), 'utf8'),
+    ) as { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
+    expect(Object.keys(api.dependencies ?? {})).not.toContain('@qf-jarvis/approval-runtime');
+    expect(Object.keys(api.devDependencies ?? {})).toContain('@qf-jarvis/approval-runtime');
   });
 });
 

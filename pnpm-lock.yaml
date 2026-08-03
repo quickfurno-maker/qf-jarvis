@@ -38,6 +38,12 @@ importers:
 
   apps/api:
     dependencies:
+      '@qf-jarvis/approval-core-adapter':
+        specifier: workspace:*
+        version: link:../../packages/approval-core-adapter
+      '@qf-jarvis/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@qf-jarvis/event-backbone':
         specifier: workspace:*
         version: link:../../packages/event-backbone
@@ -53,6 +59,9 @@ importers:
       '@qf-jarvis/model-gateway-composition':
         specifier: workspace:*
         version: link:../../packages/model-gateway-composition
+      '@qf-jarvis/postgres-approval-queue':
+        specifier: workspace:*
+        version: link:../../packages/postgres-approval-queue
       '@qf-jarvis/postgres-conversation-state':
         specifier: workspace:*
         version: link:../../packages/postgres-conversation-state
@@ -63,6 +72,9 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
     devDependencies:
+      '@qf-jarvis/approval-runtime':
+        specifier: workspace:*
+        version: link:../../packages/approval-runtime
       '@qf-jarvis/conversation-control':
         specifier: workspace:*
         version: link:../../packages/conversation-control
@@ -72,6 +84,9 @@ importers:
       '@qf-jarvis/model-reply-adapter':
         specifier: workspace:*
         version: link:../../packages/model-reply-adapter
+      '@qf-jarvis/recommendation-runtime':
+        specifier: workspace:*
+        version: link:../../packages/recommendation-runtime
 
   apps/worker:
     dependencies:
@@ -93,6 +108,22 @@ importers:
       zod:
         specifier: 4.4.3
         version: 4.4.3
+
+  packages/approval-core-adapter:
+    dependencies:
+      '@qf-jarvis/approval-runtime':
+        specifier: workspace:*
+        version: link:../approval-runtime
+      '@qf-jarvis/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@qf-jarvis/recommendation-runtime':
+        specifier: workspace:*
+        version: link:../recommendation-runtime
 
   packages/approval-runtime:
     dependencies:

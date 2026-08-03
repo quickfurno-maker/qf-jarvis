@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
+  },
+
+  // The EMITTING build, referenced by the root solution. The vitest specs under src/tests are
+  // EXCLUDED so nothing test-only -- above all the transport fake -- reaches dist/. Exactly two
+  // project references: `contracts`, which owns every schema this package validates against, and
+  // `approval-runtime`, whose PUBLIC surface is how a supplied request is re-proved against its
+  // source and how Core's answer is correlated. It references no persistence, no composition root,
+  // no application, and no transport implementation -- the transport is an interface a caller
+  // supplies, and a package that could construct one would be able to reach the network.
+  "references": [
+    { "path": "../../packages/contracts" },
+    { "path": "../../packages/approval-runtime/tsconfig.build.json" }
+  ],
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/tests/**"]
+}

@@ -16,19 +16,24 @@
     "typecheck:tests": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@qf-jarvis/approval-core-adapter": "workspace:*",
+    "@qf-jarvis/contracts": "workspace:*",
     "@qf-jarvis/event-backbone": "workspace:*",
     "@qf-jarvis/jarvis-runtime": "workspace:*",
     "@qf-jarvis/model-evaluation": "workspace:*",
     "@qf-jarvis/model-gateway": "workspace:*",
+    "@qf-jarvis/model-gateway-composition": "workspace:*",
+    "@qf-jarvis/postgres-approval-queue": "workspace:*",
     "@qf-jarvis/postgres-conversation-state": "workspace:*",
     "@qf-jarvis/prompt-registry": "workspace:*",
-    "@qf-jarvis/model-gateway-composition": "workspace:*",
     "zod": "4.4.3"
   },
   "devDependencies": {
+    "@qf-jarvis/approval-runtime": "workspace:*",
     "@qf-jarvis/conversation-control": "workspace:*",
     "@qf-jarvis/core-decision-adapter": "workspace:*",
-    "@qf-jarvis/model-reply-adapter": "workspace:*"
+    "@qf-jarvis/model-reply-adapter": "workspace:*",
+    "@qf-jarvis/recommendation-runtime": "workspace:*"
   },
   "bin": {
     "qfj-generate-shadow-evidence": "./dist/bin/generate-shadow-evidence.js",
