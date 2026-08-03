@@ -1,0 +1,154 @@
+@import 'tailwindcss';
+
+/**
+ * Jarvis OS design tokens (JOS-01A).
+ *
+ * A mission-control surface, not an admin template. The base is graphite and deep navy;
+ * accent is restrained electric blue through violet, used to mean something rather than to
+ * decorate. Semantic colour is always paired with a text label, because colour alone must
+ * never carry a critical operational meaning.
+ */
+@theme {
+  /* Base surfaces — near-black graphite through a faint navy lift. */
+  --color-base-950: #06080d;
+  --color-base-900: #0a0d14;
+  --color-base-850: #0e121b;
+  --color-base-800: #131824;
+  --color-base-750: #181e2c;
+  --color-base-700: #1f2637;
+
+  /* Hairlines. Two weights: structural, and merely separating. */
+  --color-line-strong: #2a3348;
+  --color-line: #1e2534;
+
+  /* Type. */
+  --color-ink: #e8ecf5;
+  --color-ink-muted: #98a3b8;
+  --color-ink-faint: #64708a;
+
+  /* Accent — electric blue, cyan, violet. */
+  --color-accent: #4d8dff;
+  --color-accent-bright: #7aa9ff;
+  --color-accent-dim: #2a4d8f;
+  --color-cyan: #38d1e0;
+  --color-violet: #9d7bff;
+
+  /* Semantic operational states. */
+  --color-healthy: #2fd39b;
+  --color-warning: #f0b34a;
+  --color-critical: #f96b6b;
+  --color-offline: #6b7690;
+  --color-info: #4d8dff;
+  --color-planned: #9d7bff;
+  --color-shadow-state: #38d1e0;
+
+  /* Radii — restrained. A control plane is made of panels, not pills. */
+  --radius-panel: 10px;
+  --radius-control: 7px;
+  --radius-pill: 999px;
+
+  /* Motion. Short, and disabled entirely under reduced-motion. */
+  --ease-out-quick: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Type stack — local/system only. No Google Fonts, no runtime CDN. */
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    'Noto Sans', sans-serif;
+  --font-mono:
+    ui-monospace, 'SF Mono', 'Cascadia Mono', 'Segoe UI Mono', 'Roboto Mono', Menlo, Consolas,
+    monospace;
+}
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html,
+  body {
+    height: 100%;
+  }
+
+  body {
+    background-color: var(--color-base-950);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Operational numbers line up in columns. A metric that jitters is a metric misread. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
+  }
+
+  /* Keyboard focus is always visible, and never removed by a hover style. */
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--color-accent) 35%, transparent);
+  }
+
+  /* Scrollbars, so a dark surface does not sprout a bright default one. */
+  * {
+    scrollbar-color: var(--color-line-strong) transparent;
+    scrollbar-width: thin;
+  }
+}
+
+@layer utilities {
+  /* One faint top-light on a panel: depth without a gradient blob. */
+  .surface-lift {
+    background-image: linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--color-ink) 4%, transparent) 0%,
+      transparent 42%
+    );
+  }
+
+  .grid-hairline {
+    background-image:
+      linear-gradient(to right, var(--color-line) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--color-line) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+
+  @keyframes jos-pulse {
+    0%,
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.45;
+      transform: scale(0.82);
+    }
+  }
+
+  /* Used ONLY where liveness is the meaning — never as decoration. */
+  .pulse-live {
+    animation: jos-pulse 2.4s var(--ease-out-quick) infinite;
+  }
+}
+
+/**
+ * Reduced motion is honoured globally.
+ *
+ * Every animation here is informational rather than essential, so removing all of them
+ * costs nothing and respects an operator who asked for stillness.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

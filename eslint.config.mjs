@@ -49,6 +49,7 @@ export default tseslint.config(
     ignores: [
       '**/node_modules/**',
       '**/dist/**',
+      '**/.next/**',
       '**/coverage/**',
       '**/.cache/**',
       '**/*.tsbuildinfo',
@@ -63,7 +64,7 @@ export default tseslint.config(
   // tsconfig, which is what lets apps/api and apps/worker be linted (and
   // type-checked) independently of one another.
   {
-    files: ['**/*.ts', '**/*.mts', '**/*.cts'],
+    files: ['**/*.ts', '**/*.mts', '**/*.cts', '**/*.tsx'],
     extends: [tseslint.configs.strictTypeChecked, tseslint.configs.stylisticTypeChecked],
     languageOptions: {
       globals: { ...globals.node },
@@ -91,6 +92,39 @@ export default tseslint.config(
       '@typescript-eslint/consistent-type-imports': [
         'error',
         { prefer: 'type-imports', fixStyle: 'inline-type-imports' },
+      ],
+    },
+  },
+
+  // Jarvis OS — the browser surface (JOS-01A, docs/architecture/jarvis-os.md).
+  //
+  // Two things differ from every other project here, and both are consequences of it being
+  // the first thing that renders rather than reasons: it contains JSX, and it runs in a
+  // browser as well as during a server render. So the parser is told about JSX and the
+  // globals are widened to include the DOM — the STRICTNESS is unchanged, because a
+  // dashboard that shows an operator whether a system is live deserves the same rule set as
+  // the runtime behind it.
+  {
+    files: ['apps/jarvis-os/src/**/*.{ts,tsx}'],
+    languageOptions: {
+      globals: { ...globals.node, ...globals.browser },
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+        ecmaFeatures: { jsx: true },
+      },
+    },
+    rules: {
+      // Jarvis OS holds no authority and must never acquire one by accident. `console` in a
+      // surface that renders approval state is also a leak of exactly the content the
+      // backend's error contracts are careful never to quote.
+      'no-console': 'error',
+      'no-alert': 'error',
+      'no-restricted-globals': [
+        'error',
+        { name: 'fetch', message: 'Jarvis OS performs no network access (JOS-01A).' },
+        { name: 'localStorage', message: 'Jarvis OS stores nothing (JOS-01A).' },
+        { name: 'sessionStorage', message: 'Jarvis OS stores nothing (JOS-01A).' },
       ],
     },
   },
