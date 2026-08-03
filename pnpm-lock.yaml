@@ -137,6 +137,19 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
 
+  packages/communication-authorization-runtime:
+    dependencies:
+      '@qf-jarvis/approval-runtime':
+        specifier: workspace:*
+        version: link:../approval-runtime
+      '@qf-jarvis/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+    devDependencies:
+      '@qf-jarvis/recommendation-runtime':
+        specifier: workspace:*
+        version: link:../recommendation-runtime
+
   packages/contracts:
     dependencies:
       zod:
