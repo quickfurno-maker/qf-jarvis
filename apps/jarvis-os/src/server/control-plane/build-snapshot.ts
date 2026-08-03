@@ -18,14 +18,21 @@ import {
  *
  * ### Pure, and deliberately awkward about it
  *
- * `observedAt` is INJECTED. The builder reads no clock, no environment variable, no file, no
+ * `generatedAt` is INJECTED. The builder reads no clock, no environment variable, no file, no
  * network and no database, and it is deterministic: the same instant in gives byte-identical
  * output. That is what lets the HTTP route and the server-rendered page share one implementation
  * and be provably the same — a self-fetching page could drift from its own API, and this cannot.
  *
- * Reading the clock is the caller's job precisely because the caller knows what the instant MEANS.
- * A statically prerendered page is a `BUILD_DECLARATION`; a request to the route is `REQUEST_TIME`.
- * The builder must not guess which, so it is not given the choice.
+ * ### Freshness is DERIVED, not accepted
+ *
+ * The builder used to take `freshness` alongside the instant, and the route passed `REQUEST_TIME`.
+ * That was wrong. Serving a request stamps a new envelope; it re-reads nothing. A deployed binary
+ * could be a week old, answer every call with a brand-new timestamp, and still be reciting facts
+ * compiled into it at build time — while the payload claimed they were request-fresh.
+ *
+ * Everything this builder emits is a compiled-in repository declaration, so the source block is
+ * fixed here: `REPOSITORY_BASELINE`, `BUILD_DECLARATION`, `liveOperationalData: false`. A caller
+ * cannot vary it, and the contract rejects the combination even if one tried.
  *
  * ### It validates its own output
  *
@@ -36,27 +43,31 @@ import {
  * for a surface whose only job is to be believed.
  */
 export interface SnapshotRequest {
-  /** The instant this reading was taken. Supplied by the boundary, never read here. */
-  readonly observedAt: CanonicalInstant;
   /**
-   * What the instant means.
+   * When this JSON snapshot is being produced. Supplied by the boundary; no clock is read here.
    *
-   * `REQUEST_TIME` for the HTTP route; `BUILD_DECLARATION` for a prerendered page, whose figures
-   * were fixed when the build ran and would be a lie to present as fresh.
+   * This is the ONLY thing a caller may vary. It stamps the envelope and nothing else — see the
+   * note above about why freshness is not a parameter.
    */
-  readonly freshness: 'REQUEST_TIME' | 'BUILD_DECLARATION';
+  readonly generatedAt: CanonicalInstant;
 }
 
 export function buildControlPlaneSnapshot(request: SnapshotRequest): ControlPlaneSnapshotV1 {
   const draft = {
     contractVersion: '1',
-    observedAt: request.observedAt,
+    generatedAt: request.generatedAt,
     mode: 'READ_ONLY',
     source: {
-      // Everything below is declared by merged repository and governance state. No adapter reads a
-      // running system, so this is never LIVE_ADAPTER and liveOperationalData is never true.
+      // Everything below is declared by merged repository and governance state and compiled into
+      // this build. No adapter reads a running system, so this is never LIVE_ADAPTER, freshness is
+      // always BUILD_DECLARATION, and liveOperationalData is never true.
+      //
+      // These three are DERIVED here rather than accepted from the caller. That is the fix for the
+      // defect this builder previously had: it took `freshness` as a parameter, so the route passed
+      // REQUEST_TIME and the payload claimed a compiled-in baseline had been freshly observed. The
+      // contract now rejects that combination, and the builder no longer offers the choice.
       kind: 'REPOSITORY_BASELINE',
-      freshness: request.freshness,
+      freshness: 'BUILD_DECLARATION',
       liveOperationalData: false,
     },
     authority: {

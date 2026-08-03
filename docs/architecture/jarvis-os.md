@@ -1,6 +1,14 @@
 # Jarvis OS — the operator control plane
 
-**Status:** JOS-01A **merged** (PR #88, `b90073cc`). JOS-01B — the governed read-only control-plane contract and snapshot API ([ADR-0086](../decisions/ADR-0086-jos-01b-read-only-control-plane-contract-and-snapshot-api.md)) — implemented on a feature branch, **not merged**. **Not deployed.** JOS-01C (authentication) is next.
+**Status:** **JOS-01B is the current implemented Jarvis OS slice** in this build ([ADR-0086](../decisions/ADR-0086-jos-01b-read-only-control-plane-contract-and-snapshot-api.md), PR #90) — the governed read-only control-plane contract and snapshot API. JOS-01A is **merged** (PR #88, `b90073cc`). **JOS-01C — authentication and the operator session boundary — is next.** **Nothing is deployed.**
+
+> **Why this reads as "current" and not as a branch status.** An architecture document that says a
+> slice is "on a feature branch, not merged" is false the instant that branch merges, and nobody
+> goes back to fix it. GitHub owns merge state and tracks it accurately; this document describes the
+> architecture and the software slice compiled into this build, which is true before and after a
+> pull request lands. The same reasoning applies to the roadmap markers the surface renders: the
+> running slice is `current`, never `next`.
+
 **Relates to:** [ADR-0001](../decisions/ADR-0001-source-of-truth-boundary.md) · [ADR-0002](../decisions/ADR-0002-recommend-authorize-execute-model.md) · [ADR-0007](../decisions/ADR-0007-approval-request-submission-model.md) · [ADR-0083](../decisions/ADR-0083-qfj-p08-communication-authorization-correlation-runtime.md) · [ADR-0084](../decisions/ADR-0084-qfj-p09-01-execution-intent-correlation-runtime.md) · [communication-model.md](./communication-model.md) · [system-boundary.md](./system-boundary.md)
 
 ## Purpose

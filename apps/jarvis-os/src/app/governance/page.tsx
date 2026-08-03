@@ -4,6 +4,8 @@ import { PageHeader } from '@/components/shell/PageHeader';
 import { CapabilityBadge, Tag } from '@/components/system/StatusPill';
 import { CAPABILITY_SNAPSHOT } from '@/lib/capabilities/catalog';
 import { controlPlane } from '@/lib/control-plane';
+import type { RoadmapMarker } from '@/lib/control-plane/types';
+import type { Tone } from '@/components/primitives/Panel';
 
 /**
  * Governance (JOS-01A).
@@ -12,6 +14,27 @@ import { controlPlane } from '@/lib/control-plane';
  * catalog every other screen reads. That is the point: a governance page assembled from its
  * own prose would be the first thing to drift, and the last thing anyone would check.
  */
+/**
+ * `current` is the slice this build IS, and it is rendered distinctly from `next`.
+ *
+ * Marking the running slice as "next" was the defect this replaces: it was false the day it
+ * shipped, and it stayed false. `current` describes compiled-in software rather than a GitHub
+ * merge state, so it does not invalidate itself when a pull request lands.
+ */
+const STATE_TONE: Readonly<Record<RoadmapMarker['state'], Tone>> = {
+  merged: 'healthy',
+  current: 'info',
+  next: 'warning',
+  planned: 'planned',
+};
+
+const STATE_LABEL: Readonly<Record<RoadmapMarker['state'], string>> = {
+  merged: 'Merged',
+  current: 'This build',
+  next: 'Next',
+  planned: 'Planned',
+};
+
 export default function GovernancePage() {
   const roadmap = controlPlane().roadmap();
 
@@ -44,30 +67,22 @@ export default function GovernancePage() {
           QuickFurno Core at execution time — not carried forward from an earlier decision.
         </Notice>
 
-        <Panel title="Roadmap position" subtitle="Read from the control-plane model">
+        <Panel
+          title="Roadmap position"
+          subtitle="Read from the control-plane model. The two tracks advance independently, so each has its own next."
+        >
           <DataTable
-            caption="Roadmap markers and their states."
-            head={['Phase', 'State', 'Detail']}
+            caption="Roadmap markers, their track and their state."
+            head={['Track', 'Phase', 'State', 'Detail']}
           >
             {roadmap.map((marker) => (
               <Row key={marker.id}>
+                <Cell nowrap>
+                  <Tag tone={marker.track === 'QFJ' ? 'info' : 'shadow'}>{marker.track}</Tag>
+                </Cell>
                 <Cell>{marker.label}</Cell>
                 <Cell nowrap>
-                  <Tag
-                    tone={
-                      marker.state === 'merged'
-                        ? 'healthy'
-                        : marker.state === 'next'
-                          ? 'warning'
-                          : 'planned'
-                    }
-                  >
-                    {marker.state === 'merged'
-                      ? 'Merged'
-                      : marker.state === 'next'
-                        ? 'Next'
-                        : 'Planned'}
-                  </Tag>
+                  <Tag tone={STATE_TONE[marker.state]}>{STATE_LABEL[marker.state]}</Tag>
                 </Cell>
                 <Cell muted>{marker.detail}</Cell>
               </Row>

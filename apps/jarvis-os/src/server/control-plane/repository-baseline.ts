@@ -170,8 +170,11 @@ export const BASELINE_AGENTS: readonly BaselineAgent[] = Object.freeze<readonly 
 export const BASELINE_ROADMAP: readonly BaselineRoadmap[] = Object.freeze<
   readonly BaselineRoadmap[]
 >([
+  // The two tracks advance independently, so each has its own `next`. A single flat list could
+  // not say "QFJ-P09.02 is next" and "JOS-01C is next" at once without one of them being wrong.
   {
     id: 'qfj-p08',
+    track: 'QFJ',
     label: 'QFJ-P08 - Consent, approval and human control',
     state: 'merged',
     detail:
@@ -179,33 +182,55 @@ export const BASELINE_ROADMAP: readonly BaselineRoadmap[] = Object.freeze<
   },
   {
     id: 'qfj-p09-01',
+    track: 'QFJ',
     label: 'QFJ-P09.01 - Execution intent correlation',
     state: 'merged',
     detail: 'Validates a Core-issued ExecutionIntentV1 against re-proved approval evidence.',
   },
   {
     id: 'qfj-p09-02',
+    track: 'QFJ',
     label: 'QFJ-P09.02 - Authorized dispatch envelope / n8n bridge (test-only)',
     state: 'next',
     detail: 'MAIN JARVIS RESUME POINT after the bounded Jarvis OS foundation track.',
   },
   {
     id: 'qfj-p09',
+    track: 'QFJ',
     label: 'QFJ-P09 - Communication lifecycle and provider dispatch',
     state: 'planned',
     detail: 'Eighteen-state lifecycle and provider delivery. Nothing sends today.',
   },
   {
     id: 'qfj-p12-aarohi',
+    track: 'QFJ',
     label: 'QFJ-P12 - Aarohi / QVGE overlay AVG-0 to AVG-12',
     state: 'planned',
     detail: 'Owner-locked governance merged (ADR-0085). Runtime is PLANNED and DISABLED.',
   },
   {
+    id: 'jos-01a',
+    track: 'JOS',
+    label: 'JOS-01A - Premium dashboard foundation',
+    state: 'merged',
+    detail: 'Shell, design system, capability model and the control-plane read seam.',
+  },
+  {
+    // `current`, not `next`. This build IS JOS-01B, so calling it next was false the day it
+    // shipped. `current` describes the software slice compiled into this build; merge state is
+    // GitHub's to track and would invalidate itself the moment a pull request landed.
     id: 'jos-01b',
+    track: 'JOS',
     label: 'JOS-01B - Read-only control-plane contract and snapshot API',
+    state: 'current',
+    detail: 'This build. Present in source and not deployed; the route has no authentication.',
+  },
+  {
+    id: 'jos-01c',
+    track: 'JOS',
+    label: 'JOS-01C - Authentication and operator session boundary',
     state: 'next',
-    detail: 'This surface. Present in source, not deployed; JOS-01C adds authentication.',
+    detail: 'NEXT JARVIS OS SLICE. Deployment (JOS-01D) follows only after it.',
   },
 ]);
 

@@ -33,6 +33,7 @@ const CONSTITUTION = 'docs/governance/agent-constitution.md';
 const MATRIX = 'docs/governance/authority-routing-data-access-matrix.md';
 const OVERLAY = 'docs/architecture/aarohi-vendor-growth-roadmap-overlay.md';
 const ADR = 'docs/decisions/ADR-0085-qfj-p12-aarohi-vendor-growth-and-roadmap-reconciliation.md';
+const JARVIS_OS = 'docs/architecture/jarvis-os.md';
 
 const CANONICAL: readonly string[] = Object.freeze([ROADMAP, CONSTITUTION, MATRIX, OVERLAY, ADR]);
 
@@ -157,6 +158,41 @@ describe('QFJ-P12 (ADR-0085) canonical governance consistency', () => {
       expect(overlay).toContain('ANI-COLD-AQUI');
       expect(overlay).toMatch(/non-canonical/u);
       expect(overlay).toMatch(/retired/u);
+    });
+  });
+
+  describe('canonical status lines do not invalidate themselves (JOS-01B, ADR-0086)', () => {
+    it('never describes a JOS slice by its branch or merge state', () => {
+      // The defect: "JOS-01B is implemented on a feature branch, not merged" is false the instant
+      // that branch merges, and nobody goes back to fix it. GitHub owns merge state and tracks it
+      // accurately; these documents describe architecture and build state, which stays true either
+      // side of a pull request.
+      for (const file of [JARVIS_OS, ROADMAP]) {
+        const offending = sentences(read(file)).filter((sentence) => {
+          if (!/JOS-01[A-E]/u.test(sentence)) {
+            return false;
+          }
+          return (
+            /implemented on a feature branch/iu.test(sentence) ||
+            /is not merged/iu.test(sentence) ||
+            /, not merged/iu.test(sentence)
+          );
+        });
+        expect({ file, offending }).toEqual({ file, offending: [] });
+      }
+    });
+
+    it('records JOS-01B as the current slice and JOS-01C as next', () => {
+      const jarvisOs = flat(read(JARVIS_OS));
+      expect(jarvisOs).toMatch(/JOS-01B is the current implemented Jarvis OS slice/u);
+      expect(jarvisOs).toMatch(/JOS-01C[^.]*is next/u);
+      expect(jarvisOs).toContain('Nothing is deployed');
+    });
+
+    it('keeps QFJ-P09.02 as the main-track resume point alongside the JOS track', () => {
+      const roadmap = flat(read(ROADMAP));
+      expect(roadmap).toMatch(/NEXT bounded slice is QFJ-P09.02/u);
+      expect(roadmap).toMatch(/generatedAt records when the JSON was produced/u);
     });
   });
 

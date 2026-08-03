@@ -42,42 +42,43 @@ function walk(dir: string): string[] {
 
 describe('the snapshot builder', () => {
   it('is pure: the same instant in gives byte-identical output', () => {
-    const a = buildControlPlaneSnapshot({
-      observedAt: '2026-08-03T12:00:00.000Z',
-      freshness: 'REQUEST_TIME',
-    });
-    const b = buildControlPlaneSnapshot({
-      observedAt: '2026-08-03T12:00:00.000Z',
-      freshness: 'REQUEST_TIME',
-    });
+    const a = buildControlPlaneSnapshot({ generatedAt: '2026-08-03T12:00:00.000Z' });
+    const b = buildControlPlaneSnapshot({ generatedAt: '2026-08-03T12:00:00.000Z' });
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
   });
 
   it('uses the injected instant rather than reading a clock', () => {
-    const snapshot = buildControlPlaneSnapshot({
-      observedAt: '1999-12-31T23:59:59.999Z',
-      freshness: 'BUILD_DECLARATION',
-    });
-    expect(snapshot.observedAt).toBe('1999-12-31T23:59:59.999Z');
+    const snapshot = buildControlPlaneSnapshot({ generatedAt: '1999-12-31T23:59:59.999Z' });
+    expect(snapshot.generatedAt).toBe('1999-12-31T23:59:59.999Z');
+  });
+
+  it('derives source freshness rather than accepting it', () => {
+    // The defect this replaces: the builder took `freshness` and the route passed REQUEST_TIME,
+    // so a compiled-in baseline claimed it had just been observed. A caller can no longer say.
+    const snapshot = buildControlPlaneSnapshot({ generatedAt: '2026-08-03T12:00:00.000Z' });
+    expect(snapshot.source.kind).toBe('REPOSITORY_BASELINE');
+    expect(snapshot.source.freshness).toBe('BUILD_DECLARATION');
+    expect(snapshot.source.liveOperationalData).toBe(false);
+  });
+
+  it('moves generatedAt without moving source freshness', () => {
+    const early = buildControlPlaneSnapshot({ generatedAt: '2020-01-01T00:00:00.000Z' });
+    const late = buildControlPlaneSnapshot({ generatedAt: '2030-01-01T00:00:00.000Z' });
+    expect(early.generatedAt).not.toBe(late.generatedAt);
+    // Ten years apart, and the facts are exactly as fresh -- which is to say, not fresh at all.
+    expect(early.source).toEqual(late.source);
+    expect(late.source.freshness).toBe('BUILD_DECLARATION');
   });
 
   it('validates its own output through the shared contract', () => {
-    const snapshot = buildControlPlaneSnapshot({
-      observedAt: '2026-08-03T12:00:00.000Z',
-      freshness: 'REQUEST_TIME',
-    });
+    const snapshot = buildControlPlaneSnapshot({ generatedAt: '2026-08-03T12:00:00.000Z' });
     // Re-parsing must succeed: the server holds itself to exactly what a client will enforce.
     expect(() => parseControlPlaneSnapshotV1(JSON.parse(JSON.stringify(snapshot)))).not.toThrow();
     expect(Object.isFrozen(snapshot)).toBe(true);
   });
 
   it('never claims live operational data', () => {
-    const snapshot = buildControlPlaneSnapshot({
-      observedAt: '2026-08-03T12:00:00.000Z',
-      freshness: 'REQUEST_TIME',
-    });
-    expect(snapshot.source.kind).toBe('REPOSITORY_BASELINE');
-    expect(snapshot.source.liveOperationalData).toBe(false);
+    const snapshot = buildControlPlaneSnapshot({ generatedAt: '2026-08-03T12:00:00.000Z' });
     expect(snapshot.mode).toBe('READ_ONLY');
     expect(snapshot.rollout.enabled).toBe(false);
     expect(snapshot.rollout.state).toBe('ROLLOUT_OFF');
@@ -119,15 +120,54 @@ describe('GET /api/control-plane/v1/snapshot', () => {
     const aarohi = body.agents.find((agent) => agent.id === 'aarohi');
     expect(aarohi?.lifecycle).toBe('PLANNED');
 
-    const merged = body.roadmap.filter((marker) => marker.state === 'merged');
-    expect(merged.map((marker) => marker.label).join(' ')).toContain('QFJ-P09.01');
-    const next = body.roadmap.filter((marker) => marker.state === 'next');
-    expect(next.map((marker) => marker.label).join(' ')).toContain('QFJ-P09.02');
+    // Each track carries exactly one `next`, and JOS carries exactly one `current`.
+    const qfj = body.roadmap.filter((marker) => marker.track === 'QFJ');
+    const jos = body.roadmap.filter((marker) => marker.track === 'JOS');
+
+    const qfjNext = qfj.filter((marker) => marker.state === 'next');
+    expect(qfjNext).toHaveLength(1);
+    expect(qfjNext[0]?.label).toContain('QFJ-P09.02');
+    expect(
+      qfj
+        .filter((marker) => marker.state === 'merged')
+        .map((m) => m.label)
+        .join(' '),
+    ).toContain('QFJ-P09.01');
+
+    const josCurrent = jos.filter((marker) => marker.state === 'current');
+    expect(josCurrent).toHaveLength(1);
+    expect(josCurrent[0]?.label).toContain('JOS-01B');
+
+    const josNext = jos.filter((marker) => marker.state === 'next');
+    expect(josNext).toHaveLength(1);
+    expect(josNext[0]?.label).toContain('JOS-01C');
+
+    // The specific defect: JOS-01B must never be the JOS `next` marker.
+    expect(josNext[0]?.label).not.toContain('JOS-01B');
+    expect(
+      jos
+        .filter((marker) => marker.state === 'merged')
+        .map((m) => m.label)
+        .join(' '),
+    ).toContain('JOS-01A');
   });
 
-  it('reports request-time freshness, unlike the prerendered pages', async () => {
-    const body = parseControlPlaneSnapshotV1(await (await call()).json());
-    expect(body.source.freshness).toBe('REQUEST_TIME');
+  it('stamps the envelope at request time WITHOUT promoting source freshness', async () => {
+    // The correction, asserted end to end. Two separate requests genuinely produce two different
+    // `generatedAt` values -- and the facts underneath are compiled in, so freshness does not
+    // budge. A request re-reads no Git, no governance document, no Core and no n8n.
+    const first = parseControlPlaneSnapshotV1(await (await call()).json());
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const second = parseControlPlaneSnapshotV1(await (await call()).json());
+
+    expect(Date.parse(second.generatedAt)).toBeGreaterThanOrEqual(Date.parse(first.generatedAt));
+    for (const body of [first, second]) {
+      expect(body.source.kind).toBe('REPOSITORY_BASELINE');
+      expect(body.source.freshness).toBe('BUILD_DECLARATION');
+      expect(body.source.liveOperationalData).toBe(false);
+    }
+    // Everything except the envelope instant is identical between calls.
+    expect({ ...first, generatedAt: '' }).toEqual({ ...second, generatedAt: '' });
   });
 
   it('rejects any query parameter rather than ignoring it', async () => {

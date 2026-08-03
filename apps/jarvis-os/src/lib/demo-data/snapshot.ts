@@ -741,6 +741,7 @@ export const ROADMAP: readonly RoadmapMarker[] = Object.freeze<readonly RoadmapM
   {
     id: 'p08',
     label: 'QFJ-P08 — Consent, approval & human control',
+    track: 'QFJ',
     state: 'merged',
     detail:
       'Approval runtime, durable queue, operator boundary, communication-authorization correlation.',
@@ -748,18 +749,21 @@ export const ROADMAP: readonly RoadmapMarker[] = Object.freeze<readonly RoadmapM
   {
     id: 'p09-01',
     label: 'QFJ-P09.01 — Execution intent correlation',
+    track: 'QFJ',
     state: 'merged',
     detail: 'Validates a Core-issued ExecutionIntentV1 against re-proved approval evidence.',
   },
   {
     id: 'p09-02',
     label: 'QFJ-P09.02 — Authorized dispatch envelope / n8n bridge (test-only)',
+    track: 'QFJ',
     state: 'next',
     detail: 'MAIN JARVIS RESUME POINT after the Jarvis OS foundation track.',
   },
   {
     id: 'p09-rest',
     label: 'QFJ-P09 — Communication lifecycle & provider dispatch',
+    track: 'QFJ',
     state: 'planned',
     detail: 'Eighteen-state lifecycle and provider delivery. Nothing sends today.',
   },

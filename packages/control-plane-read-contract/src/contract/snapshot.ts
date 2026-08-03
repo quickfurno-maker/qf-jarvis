@@ -36,16 +36,39 @@ import {
  * in an operator's browser. The bounds are stated once, here, before anything depends on the slack.
  */
 
-/** Where the data came from, and whether any of it is a live operational reading. */
+/**
+ * Where the DATA came from, and how fresh the underlying FACTS are.
+ *
+ * ### `source.freshness` is not `generatedAt`
+ *
+ * This distinction is the whole reason the two fields are separate, and getting it wrong is the
+ * defect this schema now makes unrepresentable. Serving a response stamps a new instant on the
+ * envelope; it does not re-read anything. A deployed binary could be a week old, answer every
+ * request with a brand-new timestamp, and still be reciting facts compiled into it at build time.
+ *
+ * So `generatedAt` answers "when was this JSON produced" and `freshness` answers "when were the
+ * underlying facts last actually observed". A request may move the first. It may never move the
+ * second.
+ *
+ * There is deliberately no `NOT_CONNECTED` freshness. Connectivity is a per-section fact and
+ * `SectionAvailability` already owns it; a second, coarser copy at snapshot level could only
+ * disagree with the sections beneath it.
+ */
 export const snapshotSourceSchema = z
   .object({
     /**
-     * `REPOSITORY_BASELINE` — declared by merged repository and governance state.
+     * `REPOSITORY_BASELINE` — declared by merged repository and governance state, compiled in.
      * `LIVE_ADAPTER` — read from an adopted runtime source. No such adapter exists in this release.
      * `DEMO_FIXTURE` — synthetic. Test and visual-fixture use only; never the default surface.
      */
     kind: z.enum(['REPOSITORY_BASELINE', 'LIVE_ADAPTER', 'DEMO_FIXTURE']),
-    freshness: z.enum(['REQUEST_TIME', 'BUILD_DECLARATION', 'NOT_CONNECTED']),
+    /**
+     * When the underlying FACTS were observed.
+     *
+     * `BUILD_DECLARATION` — fixed when this build was produced. `REQUEST_TIME` — genuinely
+     * re-read while answering this request, which only a live adapter can honestly claim.
+     */
+    freshness: z.enum(['REQUEST_TIME', 'BUILD_DECLARATION']),
     /**
      * Whether ANY figure in this snapshot is a live operational observation.
      *
@@ -125,11 +148,24 @@ export const agentSchema = z
   })
   .strict();
 
+/**
+ * A roadmap marker.
+ *
+ * `track` exists because the main Jarvis backend and the Jarvis OS product overlay advance
+ * independently, and a single flat list of states cannot say "QFJ-P09.02 is next" and
+ * "JOS-01C is next" at the same time without one of them being wrong.
+ *
+ * `current` exists because `next` was wrong for the slice a build is actually running. Marking
+ * JOS-01B as `next` inside a build that IS JOS-01B is false on the day it ships and stays false.
+ * `current` describes the software slice in this build — not a GitHub merge state, which the
+ * repository is not the right place to track and which would invalidate itself on merge.
+ */
 export const roadmapMarkerSchema = z
   .object({
     id: identifierSchema,
     label: labelSchema,
-    state: z.enum(['merged', 'next', 'planned']),
+    track: z.enum(['QFJ', 'JOS']),
+    state: z.enum(['merged', 'current', 'next', 'planned']),
     detail: sentenceSchema,
   })
   .strict();
@@ -317,7 +353,11 @@ export const sectionsSchema = z
 export const controlPlaneSnapshotV1Schema = z
   .object({
     contractVersion: z.literal(CONTROL_PLANE_READ_CONTRACT_VERSION),
-    observedAt: canonicalInstantSchema,
+    /**
+     * When this JSON snapshot was PRODUCED — not when the facts in it were observed.
+     * See `snapshotSourceSchema`: `source.freshness` owns that, and a request cannot move it.
+     */
+    generatedAt: canonicalInstantSchema,
     /** There is no other mode in V1, and adding one is a contract-version decision. */
     mode: z.literal('READ_ONLY'),
     source: snapshotSourceSchema,
@@ -343,12 +383,43 @@ export const controlPlaneSnapshotV1Schema = z
       }
     }
 
-    // A snapshot may not claim live operational data while every source says otherwise.
-    if (snapshot.source.liveOperationalData && snapshot.source.kind !== 'LIVE_ADAPTER') {
+    // Cross-field source invariants: the combinations that are simply impossible.
+    //
+    // A compiled-in baseline cannot become fresher because someone made a request. Stating this in
+    // the parser rather than in a builder means no future caller -- and no future client, on any
+    // platform -- can construct the claim at all.
+    const { kind, freshness, liveOperationalData } = snapshot.source;
+
+    if (liveOperationalData && kind !== 'LIVE_ADAPTER') {
       ctx.addIssue({
         code: 'custom',
         path: ['source', 'liveOperationalData'],
         message: 'only a LIVE_ADAPTER source may report live operational data',
+      });
+    }
+
+    if (kind === 'REPOSITORY_BASELINE' && freshness !== 'BUILD_DECLARATION') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['source', 'freshness'],
+        message:
+          'a REPOSITORY_BASELINE is compiled in and is always BUILD_DECLARATION: serving a request re-reads nothing',
+      });
+    }
+
+    if (kind === 'DEMO_FIXTURE' && freshness !== 'BUILD_DECLARATION') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['source', 'freshness'],
+        message: 'a DEMO_FIXTURE observes nothing and is always BUILD_DECLARATION',
+      });
+    }
+
+    if (kind === 'LIVE_ADAPTER' && liveOperationalData && freshness !== 'REQUEST_TIME') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['source', 'freshness'],
+        message: 'a LIVE_ADAPTER claiming live operational data must have read it at REQUEST_TIME',
       });
     }
 

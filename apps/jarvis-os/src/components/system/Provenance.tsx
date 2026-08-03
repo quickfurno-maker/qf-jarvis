@@ -74,8 +74,13 @@ export function ProvenanceBar({ provenance }: { readonly provenance: Provenance 
             : 'Read from an adopted runtime source.'}
       </span>
       <span className="tabular ml-auto text-[var(--color-ink-faint)]">
-        {provenance.freshness === 'REQUEST_TIME' ? 'Observed' : 'Declared at build'} ·{' '}
-        {provenance.observedAt.replace('T', ' ').replace('.000Z', 'Z')}
+        {/*
+          Two different instants, stated as two different things. "Facts" is the freshness of the
+          data; "snapshot" is when this JSON was produced. Collapsing them into one timestamp is
+          how a week-old build starts looking freshly observed.
+        */}
+        Facts: {provenance.freshness === 'REQUEST_TIME' ? 'read this request' : 'declared at build'}{' '}
+        · Snapshot {provenance.generatedAt.replace('T', ' ').replace('.000Z', 'Z')}
       </span>
     </div>
   );

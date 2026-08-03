@@ -65,11 +65,13 @@ export function createDemoControlPlane(): ControlPlaneReadModel {
     provenance: () =>
       Object.freeze({
         kind: 'DEMO_FIXTURE' as const,
-        freshness: 'NOT_CONNECTED' as const,
+        // A fixture observes nothing, so its facts are as old as the file: BUILD_DECLARATION.
+        // There is no NOT_CONNECTED freshness -- connectivity is a per-section fact.
+        freshness: 'BUILD_DECLARATION' as const,
         liveOperationalData: false,
         // A fixed instant: a fixture that moved with the clock would make every snapshot test
         // non-deterministic for no benefit.
-        observedAt: '2026-01-01T00:00:00.000Z',
+        generatedAt: '2026-01-01T00:00:00.000Z',
       }),
     systemHealth: () => SYSTEM_HEALTH,
     headlineMetrics: () => fixtureSection(HEADLINE_METRICS),

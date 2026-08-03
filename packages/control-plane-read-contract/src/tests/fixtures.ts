@@ -10,7 +10,7 @@ import type { ControlPlaneSnapshotV1 } from '../contract/snapshot.js';
 export function validSnapshot(): ControlPlaneSnapshotV1 {
   return {
     contractVersion: '1',
-    observedAt: '2026-08-03T12:00:00.000Z',
+    generatedAt: '2026-08-03T12:00:00.000Z',
     mode: 'READ_ONLY',
     source: {
       kind: 'REPOSITORY_BASELINE',
@@ -55,6 +55,7 @@ export function validSnapshot(): ControlPlaneSnapshotV1 {
       {
         id: 'qfj-p09-02',
         label: 'QFJ-P09.02',
+        track: 'QFJ',
         state: 'next',
         detail: 'Test-only authorized dispatch envelope and n8n bridge validation.',
       },

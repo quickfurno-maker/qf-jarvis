@@ -15,11 +15,11 @@ import type { ControlPlaneReadModel } from './types';
  *
  * ### This is the boundary, so this is where the clock is read
  *
- * The snapshot builder is pure and takes `observedAt` as an argument. Reading the clock is the
- * caller's job because only the caller knows what the instant means. These pages are statically
- * prerendered, so their figures were fixed when the build ran — `BUILD_DECLARATION`, not
- * `REQUEST_TIME`. The HTTP route, which runs per request, says `REQUEST_TIME`. Both call the same
- * builder, which is why the page and the API cannot disagree.
+ * The snapshot builder is pure and takes `generatedAt` as an argument. That instant stamps the
+ * envelope — when this snapshot was produced — and nothing else. It is NOT the freshness of the
+ * facts: those are compiled-in repository declarations, so the builder fixes
+ * `source.freshness = BUILD_DECLARATION` for the page and the route alike, and neither can raise
+ * it by being called more often.
  *
  * ### It does not self-fetch
  *
@@ -37,7 +37,7 @@ import type { ControlPlaneReadModel } from './types';
 const BUILD_INSTANT = new Date().toISOString();
 
 const INSTANCE: ControlPlaneReadModel = mapSnapshotToReadModel(
-  buildControlPlaneSnapshot({ observedAt: BUILD_INSTANT, freshness: 'BUILD_DECLARATION' }),
+  buildControlPlaneSnapshot({ generatedAt: BUILD_INSTANT }),
 );
 
 /** The read model this build renders. Read-only, and honest about where it came from. */

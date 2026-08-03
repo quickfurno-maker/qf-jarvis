@@ -230,7 +230,10 @@ export interface OwnershipRow {
 export interface RoadmapMarker {
   readonly id: string;
   readonly label: string;
-  readonly state: 'merged' | 'next' | 'planned';
+  /** The main Jarvis backend track, or the Jarvis OS product overlay. Each has its own `next`. */
+  readonly track: 'QFJ' | 'JOS';
+  /** `current` is the slice this build IS — not a merge state, which would self-invalidate. */
+  readonly state: 'merged' | 'current' | 'next' | 'planned';
   readonly detail: string;
 }
 
@@ -276,9 +279,16 @@ export function isReadable(availability: SectionAvailability): boolean {
 /** Where this whole snapshot came from, rendered as a provenance badge on every page. */
 export interface Provenance {
   readonly kind: 'REPOSITORY_BASELINE' | 'LIVE_ADAPTER' | 'DEMO_FIXTURE';
-  readonly freshness: 'REQUEST_TIME' | 'BUILD_DECLARATION' | 'NOT_CONNECTED';
+  /**
+   * How fresh the underlying FACTS are — not when this snapshot was produced.
+   *
+   * A compiled-in baseline stays `BUILD_DECLARATION` however often it is served. `generatedAt`
+   * moves per response; this does not.
+   */
+  readonly freshness: 'REQUEST_TIME' | 'BUILD_DECLARATION';
   readonly liveOperationalData: boolean;
-  readonly observedAt: string;
+  /** When this snapshot was produced. Says nothing about when the facts were observed. */
+  readonly generatedAt: string;
 }
 
 /**

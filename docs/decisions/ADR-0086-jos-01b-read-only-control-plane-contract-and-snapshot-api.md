@@ -75,15 +75,55 @@ unrepresentable rather than merely discouraged.
 
 ### 4. One pure builder, two callers — and no self-fetch
 
-`buildControlPlaneSnapshot({ observedAt, freshness })` reads no clock, no environment, no file, no
-network and no database, and is deterministic. It validates its own output through
+`buildControlPlaneSnapshot({ generatedAt })` reads no clock, no environment, no file, no network
+and no database, and is deterministic. It validates its own output through
 `parseControlPlaneSnapshotV1` before returning, so the server holds itself to exactly what a client
 enforces and fails closed on an invalid construction.
 
-`observedAt` is injected because only the caller knows what the instant **means**: the prerendered
-pages declare `BUILD_DECLARATION`, the per-request route declares `REQUEST_TIME`. A server component
-calling its own HTTP route would add a hop, a failure mode and a second source of truth; the page and
-the route are two callers of one function, which is why they cannot drift.
+A server component calling its own HTTP route would add a hop, a failure mode and a second source
+of truth; the page and the route are two callers of one function, which is why they cannot drift.
+
+### 4a. Generation time is not source freshness
+
+`generatedAt` answers **when this JSON was produced**. `source.freshness` answers **when the
+underlying facts were last actually observed**. They are different questions and the contract keeps
+them apart.
+
+An earlier revision of this phase conflated them: the builder accepted `freshness` as a parameter
+and the route passed `REQUEST_TIME`, so every response labelled a compiled-in repository baseline as
+request-time fresh. That is wrong in a way that matters. A deployed binary could be a week old,
+answer every call with a brand-new timestamp, and still be reciting facts fixed when it was built —
+while the payload asserted they had just been read. The request re-read no Git, no governance
+document, no QuickFurno Core, no n8n and no adapter.
+
+The correction has three parts, and the third is the one that lasts:
+
+1. The field is named `generatedAt`, so its meaning is not open to interpretation.
+2. The builder **derives** the source block instead of accepting it. A caller may vary the envelope
+   instant and nothing else.
+3. The **parser** enforces the cross-field invariants, so no future caller on any platform can
+   construct the claim even if the builder is bypassed:
+   - `REPOSITORY_BASELINE` ⇒ `BUILD_DECLARATION`, `liveOperationalData: false`
+   - `DEMO_FIXTURE` ⇒ `BUILD_DECLARATION`, `liveOperationalData: false`
+   - `LIVE_ADAPTER` claiming live data ⇒ `REQUEST_TIME`
+
+There is deliberately no source-level `NOT_CONNECTED` freshness. Connectivity is a per-section fact
+and `SectionAvailability` already owns it; a second, coarser copy could only disagree with the
+sections beneath it.
+
+### 4b. Roadmap markers carry a track, and the running slice is `current`
+
+Markers carry `track: QFJ | JOS` and `state: merged | current | next | planned`.
+
+`track` exists because the two tracks advance independently: a single flat list cannot say
+"QFJ-P09.02 is next" and "JOS-01C is next" at the same time without one of them being wrong.
+
+`current` exists because `next` was wrong for the slice a build is actually running. Marking
+JOS-01B as `next` inside a build that **is** JOS-01B was false the day it shipped and would have
+stayed false. `current` describes the software slice compiled into this build — not a GitHub merge
+state, which the repository is the wrong place to track and which invalidates itself the moment a
+pull request lands. The same reasoning governs the architecture documents: they describe build and
+architecture state, and leave merge state to GitHub.
 
 ### 5. `GET /api/control-plane/v1/snapshot`, and nothing else
 

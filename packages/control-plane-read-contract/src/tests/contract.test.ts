@@ -95,7 +95,7 @@ describe('parsing', () => {
     expect(codeOf(() => parseControlPlaneSnapshotV1(deep))).toBe('snapshot-invalid');
   });
 
-  it('rejects an observedAt that is not a canonical UTC instant', () => {
+  it('rejects a generatedAt that is not a canonical UTC instant', () => {
     for (const instant of [
       '2026-08-03T12:00:00Z', // no milliseconds
       '2026-08-03T12:00:00.000+05:30', // local offset
@@ -106,7 +106,7 @@ describe('parsing', () => {
       '',
     ]) {
       const payload = mutableSnapshot();
-      payload['observedAt'] = instant;
+      payload['generatedAt'] = instant;
       expect(
         codeOf(() => parseControlPlaneSnapshotV1(payload)),
         instant,
@@ -187,9 +187,72 @@ describe('parsing', () => {
     expect(codeOf(() => parseControlPlaneSnapshotV1(payload))).toBe('snapshot-invalid');
   });
 
+  it('rejects a REPOSITORY_BASELINE that claims REQUEST_TIME freshness', () => {
+    // The defect this contract now makes unrepresentable. Serving a request stamps a new envelope;
+    // it re-reads nothing. A compiled-in baseline cannot become fresher by being asked for again.
+    const payload = mutableSnapshot();
+    const source = payload['source'] as Record<string, unknown>;
+    source['freshness'] = 'REQUEST_TIME';
+    expect(codeOf(() => parseControlPlaneSnapshotV1(payload))).toBe('snapshot-invalid');
+  });
+
+  it('rejects a REPOSITORY_BASELINE that claims live operational data', () => {
+    const payload = mutableSnapshot();
+    const source = payload['source'] as Record<string, unknown>;
+    source['liveOperationalData'] = true;
+    expect(codeOf(() => parseControlPlaneSnapshotV1(payload))).toBe('snapshot-invalid');
+  });
+
+  it('rejects a DEMO_FIXTURE that claims REQUEST_TIME freshness', () => {
+    const payload = mutableSnapshot();
+    const source = payload['source'] as Record<string, unknown>;
+    source['kind'] = 'DEMO_FIXTURE';
+    source['freshness'] = 'REQUEST_TIME';
+    expect(codeOf(() => parseControlPlaneSnapshotV1(payload))).toBe('snapshot-invalid');
+  });
+
+  it('rejects a LIVE_ADAPTER claiming live data it did not read at request time', () => {
+    const payload = mutableSnapshot();
+    const source = payload['source'] as Record<string, unknown>;
+    source['kind'] = 'LIVE_ADAPTER';
+    source['liveOperationalData'] = true;
+    source['freshness'] = 'BUILD_DECLARATION';
+    expect(codeOf(() => parseControlPlaneSnapshotV1(payload))).toBe('snapshot-invalid');
+  });
+
+  it('accepts the only honest LIVE_ADAPTER combination', () => {
+    // Not aspirational: this proves the invariants forbid the impossible without forbidding the
+    // shape a real adapter will need in a later phase.
+    const payload = mutableSnapshot();
+    const source = payload['source'] as Record<string, unknown>;
+    source['kind'] = 'LIVE_ADAPTER';
+    source['liveOperationalData'] = true;
+    source['freshness'] = 'REQUEST_TIME';
+    expect(codeOf(() => parseControlPlaneSnapshotV1(payload))).toBe('no-error-thrown');
+  });
+
+  it('has no source-level NOT_CONNECTED freshness — sections own connectivity', () => {
+    const payload = mutableSnapshot();
+    const source = payload['source'] as Record<string, unknown>;
+    source['freshness'] = 'NOT_CONNECTED';
+    expect(codeOf(() => parseControlPlaneSnapshotV1(payload))).toBe('snapshot-invalid');
+  });
+
   it('rejects live operational data claimed without a live adapter', () => {
     const payload = mutableSnapshot();
-    (payload['source'] as Record<string, unknown>)['liveOperationalData'] = true;
+    const source = payload['source'] as Record<string, unknown>;
+    source['kind'] = 'DEMO_FIXTURE';
+    source['liveOperationalData'] = true;
+    expect(codeOf(() => parseControlPlaneSnapshotV1(payload))).toBe('snapshot-invalid');
+  });
+
+  it('rejects a roadmap marker without a track', () => {
+    const payload = mutableSnapshot();
+    const roadmap = payload['roadmap'] as Record<string, unknown>[];
+    const first = roadmap[0];
+    if (first !== undefined) {
+      Reflect.deleteProperty(first, 'track');
+    }
     expect(codeOf(() => parseControlPlaneSnapshotV1(payload))).toBe('snapshot-invalid');
   });
 
@@ -272,7 +335,7 @@ describe('the error taxonomy', () => {
 
   it('never leaks the received value into the message', () => {
     const payload = mutableSnapshot();
-    payload['observedAt'] = 'super-secret-token-value';
+    payload['generatedAt'] = 'super-secret-token-value';
     try {
       parseControlPlaneSnapshotV1(payload);
       expect.unreachable('should have thrown');
@@ -285,7 +348,7 @@ describe('the error taxonomy', () => {
       for (const issue of contractError.issues) {
         expect(issue.message).not.toContain('super-secret-token-value');
       }
-      expect(contractError.issues.some((issue) => issue.path === 'observedAt')).toBe(true);
+      expect(contractError.issues.some((issue) => issue.path === 'generatedAt')).toBe(true);
     }
   });
 

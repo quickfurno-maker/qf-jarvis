@@ -31,16 +31,19 @@ import {
 /**
  * Per-request rendering.
  *
- * The route reports `REQUEST_TIME` freshness, so it must not be prerendered into a static asset
- * with a build-time instant baked into it — that would be the exact freshness lie the contract
- * exists to prevent.
+ * `generatedAt` must reflect when the response was produced, so the route must not be prerendered
+ * into a static asset with one instant baked into it. Note that this affects the ENVELOPE only:
+ * `source.freshness` stays `BUILD_DECLARATION` on every call, because answering a request re-reads
+ * nothing.
  */
 export const dynamic = 'force-dynamic';
 
 export function GET(request: Request): Response {
-  // The clock is read HERE, at the boundary, and injected. The builder stays pure and
-  // deterministic, which is what lets a test assert its output byte-for-byte.
-  const observedAt = new Date().toISOString();
+  // The clock is read HERE, at the boundary, and injected. It stamps `generatedAt` -- when this
+  // JSON was produced -- and NOTHING else. It does not, and must not, raise source freshness: this
+  // request re-read no Git, no governance document, no QuickFurno Core and no n8n. The builder
+  // derives `BUILD_DECLARATION` itself, and the contract rejects any other combination.
+  const generatedAt = new Date().toISOString();
 
   const url = new URL(request.url);
   if (url.search !== '') {
@@ -53,7 +56,7 @@ export function GET(request: Request): Response {
   }
 
   try {
-    const snapshot = buildControlPlaneSnapshot({ observedAt, freshness: 'REQUEST_TIME' });
+    const snapshot = buildControlPlaneSnapshot({ generatedAt });
     return new Response(JSON.stringify(snapshot), { status: 200, headers: READ_ONLY_HEADERS });
   } catch {
     // Fail closed, and say nothing. The thrown value may name fields, paths or received values;

@@ -219,12 +219,13 @@ export function mapSnapshotToReadModel(snapshot: ControlPlaneSnapshotV1): Contro
     kind: snapshot.source.kind,
     freshness: snapshot.source.freshness,
     liveOperationalData: snapshot.source.liveOperationalData,
-    observedAt: snapshot.observedAt,
+    generatedAt: snapshot.generatedAt,
   });
   const roadmap = Object.freeze(
     snapshot.roadmap.map((marker) => ({
       id: marker.id,
       label: marker.label,
+      track: marker.track,
       state: marker.state,
       detail: marker.detail,
     })),

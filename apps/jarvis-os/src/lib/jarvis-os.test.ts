@@ -255,14 +255,44 @@ describe('Aarohi and Anisha are separate agents', () => {
 
 describe('the resume marker and phase truth', () => {
   it('names QFJ-P09.02 as the next main-track slice', () => {
-    // The roadmap carries both main-track (QFJ-) and Jarvis OS (JOS-) markers, so 'next' is
-    // scoped to the main track: there must be exactly one main-track resume point, and it is
-    // QFJ-P09.02. A second one would mean the roadmap had stopped saying where work resumes.
     const next = controlPlane()
       .roadmap()
-      .filter((marker) => marker.state === 'next' && marker.label.startsWith('QFJ-'));
+      .filter((marker) => marker.track === 'QFJ' && marker.state === 'next');
     expect(next).toHaveLength(1);
     expect(next[0]?.label).toContain('QFJ-P09.02');
+  });
+
+  it('marks JOS-01B as the CURRENT slice and JOS-01C as next', () => {
+    // The defect this replaces: JOS-01B was marked `next` inside a build that IS JOS-01B, which
+    // was false the day it shipped. `current` describes the slice compiled into this build, so it
+    // stays true before and after any pull request lands -- merge state is GitHub's to track.
+    const jos = controlPlane()
+      .roadmap()
+      .filter((marker) => marker.track === 'JOS');
+
+    const current = jos.filter((marker) => marker.state === 'current');
+    expect(current).toHaveLength(1);
+    expect(current[0]?.label).toContain('JOS-01B');
+
+    const next = jos.filter((marker) => marker.state === 'next');
+    expect(next).toHaveLength(1);
+    expect(next[0]?.label).toContain('JOS-01C');
+    expect(next[0]?.label).not.toContain('JOS-01B');
+
+    expect(
+      jos
+        .filter((marker) => marker.state === 'merged')
+        .map((m) => m.label)
+        .join(' '),
+    ).toContain('JOS-01A');
+  });
+
+  it('keeps the two tracks separate, each with exactly one next', () => {
+    const roadmap = controlPlane().roadmap();
+    for (const track of ['QFJ', 'JOS'] as const) {
+      const next = roadmap.filter((marker) => marker.track === track && marker.state === 'next');
+      expect(next, track).toHaveLength(1);
+    }
   });
 
   it('records QFJ-P09.01 as merged', () => {
@@ -283,6 +313,15 @@ describe('the resume marker and phase truth', () => {
 });
 
 describe('the default read model is the repository baseline, and read-only', () => {
+  it('never promotes a compiled-in baseline to request-time freshness', () => {
+    // `generatedAt` says when this snapshot was produced. `source.freshness` says how old the
+    // FACTS are. Serving more often may move the first; it can never move the second.
+    const provenance = controlPlane().provenance();
+    expect(provenance.freshness).toBe('BUILD_DECLARATION');
+    expect(provenance.liveOperationalData).toBe(false);
+    expect(provenance.generatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+  });
+
   it('is NOT the demo fixture', () => {
     // The whole point of JOS-01B. JOS-01A shipped `kind: 'demo'` as the default operator surface;
     // a synthetic queue of waiting approvals teaches an operator to believe numbers that describe
