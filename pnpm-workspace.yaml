@@ -86,6 +86,3 @@ onlyBuiltDependencies: []
 # unblocking of an install.
 ignoredOptionalDependencies:
   - sharp
-
-allowBuilds:
-  sharp: set this to true or false
