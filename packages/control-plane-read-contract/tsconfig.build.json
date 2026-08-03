@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
+  },
+
+  // The EMITTING build, referenced by the root solution. The vitest specs under src/tests are
+  // EXCLUDED so nothing test-only reaches dist/.
+  //
+  // There are NO project references, and that is the point of this package. It describes what an
+  // operator surface may READ. A reference to contracts, to a runtime, to persistence, to a
+  // transport, to n8n or to a provider would make the wire shape depend on a backend that a future
+  // Android client cannot and must not compile. Its only dependency is zod.
+  "references": [],
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/tests/**"]
+}
