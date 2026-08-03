@@ -1,8 +1,10 @@
 # Dependencies and generated output are not ours to format.
 node_modules/
 dist/
+.next/
 coverage/
 *.tsbuildinfo
+next-env.d.ts
 
 # The lockfile is generated and owned by pnpm. Formatting it would create a
 # spurious diff on every install and could break `--frozen-lockfile`.

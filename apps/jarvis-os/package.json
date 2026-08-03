@@ -1,0 +1,24 @@
+{
+  "name": "@qf-jarvis/jarvis-os",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Jarvis OS — the premium operator control plane for QF Jarvis (JOS-01A, docs/architecture/jarvis-os.md). A POWERLESS read surface: it renders a local demo read model behind a governed control-plane boundary, and holds no business authority. QuickFurno Core remains authoritative for vendors, customers, packages, pricing, payments, consent and commercial outcomes; n8n executes; Meta delivers. This application creates no approval, sends no communication, invokes no n8n or provider, mutates no Core or Jarvis durable state, and reaches no database.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "next": "16.2.11",
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "4.3.0",
+    "@types/react": "19.2.2",
+    "@types/react-dom": "19.2.2",
+    "tailwindcss": "4.3.0"
+  }
+}

@@ -71,3 +71,21 @@ minimumReleaseAgeIgnoreMissingTime: false
 # supply-chain decision requiring review and a note in
 # docs/engineering/supported-toolchain.md — never a way to silence a message.
 onlyBuiltDependencies: []
+
+# Supply chain: optional dependencies this repository refuses to install at all.
+#
+# `sharp` is an OPTIONAL dependency of `next`, used only for image optimization by a
+# production `next start`. It is a native binary that requires a lifecycle build script,
+# which `onlyBuiltDependencies: []` above forbids — and the right answer to "this package
+# wants to run code at install time" is to not install it, never to grant the exemption.
+#
+# Listing it here REMOVES it from the tree. It does not permit a build script, and
+# `onlyBuiltDependencies` stays empty. Jarvis OS ships no optimized raster images and this
+# repository runs no production Next.js server, so nothing needs it. If image optimization
+# is ever required, that is a supply-chain decision with its own review — not a silent
+# unblocking of an install.
+ignoredOptionalDependencies:
+  - sharp
+
+allowBuilds:
+  sharp: set this to true or false
