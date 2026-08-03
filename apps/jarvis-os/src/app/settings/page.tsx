@@ -2,7 +2,7 @@ import { Notice, Panel } from '@/components/primitives/Panel';
 import { PageHeader } from '@/components/shell/PageHeader';
 import { CapabilityBadge } from '@/components/system/StatusPill';
 import { controlPlane } from '@/lib/control-plane';
-import { ENVIRONMENT_LABEL } from '@/lib/demo-data/snapshot';
+import { ENVIRONMENT_LABEL } from '@/lib/environment';
 
 /**
  * Settings (JOS-01A).

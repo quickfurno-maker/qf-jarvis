@@ -38,7 +38,9 @@ import type {
   WorkerNode,
 } from '../control-plane/types';
 
-export const ENVIRONMENT_LABEL = 'STAGING · DEMO DATA';
+import { DEMO_ENVIRONMENT_LABEL } from '../environment';
+
+export const ENVIRONMENT_LABEL = DEMO_ENVIRONMENT_LABEL;
 
 export const SYSTEM_HEALTH: SystemHealth = Object.freeze<SystemHealth>({
   environmentLabel: ENVIRONMENT_LABEL,

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { MetricStrip } from '@/components/analytics/MetricStrip';
+import type { MetricSummary, Section } from '@/lib/control-plane/types';
 import { Notice, Panel } from '@/components/primitives/Panel';
 import { PageHeader } from '@/components/shell/PageHeader';
 import { CapabilityBadge, StatusPill } from '@/components/system/StatusPill';
@@ -19,6 +20,20 @@ import type { AgentSummary } from '@/lib/control-plane/types';
  * decision, so no component here composes, summarises or broadens one. Aarohi and Anisha are
  * rendered by the same code and remain entirely separate surfaces.
  */
+/**
+ * Agent metrics come from sources that are not connected, so the baseline supplies none and the
+ * strip is omitted entirely rather than rendered as a row of dashes. This wrapper exists for the
+ * demo fixture, which does carry metrics.
+ */
+function fixtureMetrics(metrics: readonly MetricSummary[]): Section<MetricSummary> {
+  return {
+    availability: 'AVAILABLE',
+    reason: 'Supplied by the demo fixture.',
+    expectedSource: 'A governed control-plane adapter, in a later JOS phase.',
+    items: metrics,
+  };
+}
+
 export function AgentOverview({
   agent,
   children,
@@ -62,7 +77,7 @@ export function AgentOverview({
           </Notice>
         )}
 
-        <MetricStrip metrics={agent.metrics} />
+        {agent.metrics.length > 0 ? <MetricStrip section={fixtureMetrics(agent.metrics)} /> : null}
 
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <Panel title="Scope and boundary" subtitle="What this agent may and may not do">

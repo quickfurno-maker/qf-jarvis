@@ -2,6 +2,7 @@ import { Cell, DataTable, Row } from '@/components/primitives/DataTable';
 import { Notice, Panel } from '@/components/primitives/Panel';
 import { PageHeader } from '@/components/shell/PageHeader';
 import { CapabilityBadge, StatusPill } from '@/components/system/StatusPill';
+import { SectionBody, SourceBadge } from '@/components/system/Provenance';
 import { controlPlane } from '@/lib/control-plane';
 
 /**
@@ -14,7 +15,7 @@ import { controlPlane } from '@/lib/control-plane';
  * Retrieval is off, and nothing on this page mutates a namespace.
  */
 export default function KnowledgePage() {
-  const namespaces = controlPlane().knowledge();
+  const namespacesSection = controlPlane().knowledge();
 
   return (
     <>
@@ -31,26 +32,34 @@ export default function KnowledgePage() {
           mutates nothing.
         </Notice>
 
-        <Panel title="Namespaces" subtitle="One per agent, scoped to that agent's own material">
-          <DataTable
-            caption="Governed knowledge namespaces, their owning agent scope and readiness."
-            head={['Namespace', 'Scope', 'State', 'Detail']}
-          >
-            {namespaces.map((namespace) => (
-              <Row key={namespace.id}>
-                <Cell nowrap>
-                  <span className="font-mono text-[11.5px]">{namespace.label}</span>
-                </Cell>
-                <Cell muted nowrap>
-                  {namespace.owner}
-                </Cell>
-                <Cell nowrap>
-                  <StatusPill state={namespace.state} />
-                </Cell>
-                <Cell muted>{namespace.detail}</Cell>
-              </Row>
-            ))}
-          </DataTable>
+        <Panel
+          title="Namespaces"
+          subtitle="One per agent, scoped to that agent's own material"
+          action={<SourceBadge availability={namespacesSection.availability} />}
+        >
+          <SectionBody section={namespacesSection}>
+            {(namespaces) => (
+              <DataTable
+                caption="Governed knowledge namespaces, their owning agent scope and readiness."
+                head={['Namespace', 'Scope', 'State', 'Detail']}
+              >
+                {namespaces.map((namespace) => (
+                  <Row key={namespace.id}>
+                    <Cell nowrap>
+                      <span className="font-mono text-[11.5px]">{namespace.label}</span>
+                    </Cell>
+                    <Cell muted nowrap>
+                      {namespace.owner}
+                    </Cell>
+                    <Cell nowrap>
+                      <StatusPill state={namespace.state} />
+                    </Cell>
+                    <Cell muted>{namespace.detail}</Cell>
+                  </Row>
+                ))}
+              </DataTable>
+            )}
+          </SectionBody>
         </Panel>
 
         <Panel title="Retrieved content is not authority" subtitle="A standing rule">

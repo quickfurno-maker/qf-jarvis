@@ -4,6 +4,7 @@ import { AgentOverview } from '@/components/agents/AgentOverview';
 import { FunnelPreview } from '@/components/charts/Charts';
 import { Notice, Panel } from '@/components/primitives/Panel';
 import { CapabilityBadge } from '@/components/system/StatusPill';
+import { SectionBody } from '@/components/system/Provenance';
 import { controlPlane } from '@/lib/control-plane';
 
 /**
@@ -23,7 +24,7 @@ export default function AarohiAgentPage() {
   if (agent === undefined) {
     notFound();
   }
-  const funnel = controlPlane().vendorGrowthFunnel();
+  const funnelSection = controlPlane().vendorGrowthFunnel();
 
   return (
     <AgentOverview agent={agent}>
@@ -39,7 +40,9 @@ export default function AarohiAgentPage() {
           subtitle="Planned stages. Every value is empty because nothing has run."
           action={<CapabilityBadge lifecycle="PLANNED" />}
         >
-          <FunnelPreview stages={funnel} />
+          <SectionBody section={funnelSection}>
+            {(stages) => <FunnelPreview stages={stages} />}
+          </SectionBody>
         </Panel>
 
         <div className="space-y-5">

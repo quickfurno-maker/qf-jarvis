@@ -90,6 +90,9 @@ importers:
 
   apps/jarvis-os:
     dependencies:
+      '@qf-jarvis/control-plane-read-contract':
+        specifier: workspace:*
+        version: link:../../packages/control-plane-read-contract
       next:
         specifier: 16.2.11
         version: 16.2.11(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
@@ -176,6 +179,12 @@ importers:
         version: link:../recommendation-runtime
 
   packages/contracts:
+    dependencies:
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+
+  packages/control-plane-read-contract:
     dependencies:
       zod:
         specifier: 4.4.3

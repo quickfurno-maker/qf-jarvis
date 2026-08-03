@@ -4,6 +4,7 @@ import { Notice, Panel, SectionHeading } from '@/components/primitives/Panel';
 import type { Tone } from '@/components/primitives/Panel';
 import { PageHeader } from '@/components/shell/PageHeader';
 import { CapabilityBadge, Tag } from '@/components/system/StatusPill';
+import { SectionBody, SourceBadge } from '@/components/system/Provenance';
 import { controlPlane } from '@/lib/control-plane';
 import type { ApprovalQueueRow } from '@/lib/control-plane/types';
 
@@ -62,7 +63,7 @@ const STATE_LABEL: Readonly<Record<ApprovalQueueRow['state'], string>> = {
 
 export default function ApprovalsPage() {
   const plane = controlPlane();
-  const rows = plane.approvalQueue();
+  const queue = plane.approvalQueue();
 
   return (
     <>
@@ -84,70 +85,81 @@ export default function ApprovalsPage() {
           <Panel
             title="Pending queue"
             subtitle="Ordered by age. Risk and requested authority are columns, not footnotes."
+            action={<SourceBadge availability={queue.availability} />}
           >
-            <DataTable
-              caption="Pending approval requests, with risk class, requested authority, source agent, age and state."
-              head={[
-                'Request',
-                'Risk',
-                'Authority',
-                'Agent',
-                'Subject',
-                'Age',
-                'SLA',
-                'State',
-                'Actions',
-              ]}
-            >
-              {rows.map((row) => (
-                <Row key={row.id}>
-                  <Cell>
-                    <span className="block max-w-[30ch] truncate">{row.requestedAction}</span>
-                    <span className="tabular mt-0.5 block text-[10.5px] text-[var(--color-ink-faint)]">
-                      {row.id}
-                    </span>
-                  </Cell>
-                  <Cell nowrap>
-                    <Tag tone={RISK_TONE[row.risk]}>{RISK_LABEL[row.risk]}</Tag>
-                  </Cell>
-                  <Cell muted nowrap>
-                    {row.requestedAuthority}
-                  </Cell>
-                  <Cell muted nowrap>
-                    {row.sourceAgent}
-                  </Cell>
-                  <Cell muted nowrap>
-                    {row.subject}
-                  </Cell>
-                  <Cell muted nowrap>
-                    <span className="tabular">{row.age}</span>
-                  </Cell>
-                  <Cell nowrap>
-                    <Tag tone={SLA_TONE[row.slaState]}>{SLA_LABEL[row.slaState]}</Tag>
-                  </Cell>
-                  <Cell muted nowrap>
-                    {STATE_LABEL[row.state]}
-                  </Cell>
-                  <Cell nowrap>
-                    <span className="flex gap-1.5">
-                      <DisabledAction label="Approve" />
-                      <DisabledAction label="Reject" />
-                    </span>
-                  </Cell>
-                </Row>
-              ))}
-            </DataTable>
+            <SectionBody section={queue}>
+              {(rows) => (
+                <DataTable
+                  caption="Pending approval requests, with risk class, requested authority, source agent, age and state."
+                  head={[
+                    'Request',
+                    'Risk',
+                    'Authority',
+                    'Agent',
+                    'Subject',
+                    'Age',
+                    'SLA',
+                    'State',
+                    'Actions',
+                  ]}
+                >
+                  {rows.map((row) => (
+                    <Row key={row.id}>
+                      <Cell>
+                        <span className="block max-w-[30ch] truncate">{row.requestedAction}</span>
+                        <span className="tabular mt-0.5 block text-[10.5px] text-[var(--color-ink-faint)]">
+                          {row.id}
+                        </span>
+                      </Cell>
+                      <Cell nowrap>
+                        <Tag tone={RISK_TONE[row.risk]}>{RISK_LABEL[row.risk]}</Tag>
+                      </Cell>
+                      <Cell muted nowrap>
+                        {row.requestedAuthority}
+                      </Cell>
+                      <Cell muted nowrap>
+                        {row.sourceAgent}
+                      </Cell>
+                      <Cell muted nowrap>
+                        {row.subject}
+                      </Cell>
+                      <Cell muted nowrap>
+                        <span className="tabular">{row.age}</span>
+                      </Cell>
+                      <Cell nowrap>
+                        <Tag tone={SLA_TONE[row.slaState]}>{SLA_LABEL[row.slaState]}</Tag>
+                      </Cell>
+                      <Cell muted nowrap>
+                        {STATE_LABEL[row.state]}
+                      </Cell>
+                      <Cell nowrap>
+                        <span className="flex gap-1.5">
+                          <DisabledAction label="Approve" />
+                          <DisabledAction label="Reject" />
+                        </span>
+                      </Cell>
+                    </Row>
+                  ))}
+                </DataTable>
+              )}
+            </SectionBody>
           </Panel>
 
           <div className="space-y-5">
-            <Panel title="Queue mix" subtitle="Pending states and 24-hour outcomes">
-              <StackedShare slices={plane.approvalBreakdown()} />
+            <Panel
+              title="Queue mix"
+              subtitle="Pending states and outcomes"
+              action={<SourceBadge availability={plane.approvalBreakdown().availability} />}
+            >
+              <SectionBody section={plane.approvalBreakdown()} compact>
+                {(slices) => <StackedShare slices={slices} />}
+              </SectionBody>
             </Panel>
 
             <Panel title="Inspector" subtitle="Detail pane — arrives with the control-plane API">
               <SectionHeading
                 title="No request selected"
-                caption="Row selection lands in JOS-01B."
+                caption="Row selection arrives with the authenticated control-plane API."
               />
               <p className="text-[12px] leading-relaxed text-[var(--color-ink-faint)]">
                 The inspector will show the recommendation an ask was made about, the recomputed

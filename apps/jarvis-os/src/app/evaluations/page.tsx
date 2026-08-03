@@ -2,7 +2,9 @@ import { Cell, DataTable, Row } from '@/components/primitives/DataTable';
 import { Notice, Panel } from '@/components/primitives/Panel';
 import { PageHeader } from '@/components/shell/PageHeader';
 import { CapabilityBadge, StatusPill } from '@/components/system/StatusPill';
+import { SectionBody, SourceBadge } from '@/components/system/Provenance';
 import { controlPlane } from '@/lib/control-plane';
+import { isReadable } from '@/lib/control-plane/types';
 import { formatCount } from '@/lib/formatting/number';
 
 /**
@@ -13,10 +15,17 @@ import { formatCount } from '@/lib/formatting/number';
  * manufacturing confidence, which is worse than showing nothing at all.
  */
 export default function EvaluationsPage() {
-  const dimensions = controlPlane().evaluations();
-  const total = dimensions.reduce((sum, dimension) => sum + dimension.caseCount, 0);
-  const subtitle =
-    formatCount(total) + ' cases across ' + String(dimensions.length) + ' dimensions';
+  const dimensionsSection = controlPlane().evaluations();
+  // No count is computed from an unreadable source. Summing an empty list would print
+  // "0 cases across 0 dimensions", which reads as a measurement rather than as a missing one.
+  const subtitle = isReadable(dimensionsSection.availability)
+    ? formatCount(
+        dimensionsSection.items.reduce((sum, dimension) => sum + dimension.caseCount, 0),
+      ) +
+      ' cases across ' +
+      String(dimensionsSection.items.length) +
+      ' dimensions'
+    : 'Suite evidence is not readable from this surface';
 
   return (
     <>
@@ -33,24 +42,32 @@ export default function EvaluationsPage() {
           is safe to consider — not evidence that anything is approved for production.
         </Notice>
 
-        <Panel title="Dimensions" subtitle={subtitle}>
-          <DataTable
-            caption="Evaluation dimensions with case counts and readiness."
-            head={['Dimension', 'Cases', 'State', 'Detail']}
-          >
-            {dimensions.map((dimension) => (
-              <Row key={dimension.id}>
-                <Cell nowrap>{dimension.label}</Cell>
-                <Cell muted nowrap>
-                  <span className="tabular">{formatCount(dimension.caseCount)}</span>
-                </Cell>
-                <Cell nowrap>
-                  <StatusPill state={dimension.state} />
-                </Cell>
-                <Cell muted>{dimension.detail}</Cell>
-              </Row>
-            ))}
-          </DataTable>
+        <Panel
+          title="Dimensions"
+          subtitle={subtitle}
+          action={<SourceBadge availability={dimensionsSection.availability} />}
+        >
+          <SectionBody section={dimensionsSection}>
+            {(dimensions) => (
+              <DataTable
+                caption="Evaluation dimensions with case counts and readiness."
+                head={['Dimension', 'Cases', 'State', 'Detail']}
+              >
+                {dimensions.map((dimension) => (
+                  <Row key={dimension.id}>
+                    <Cell nowrap>{dimension.label}</Cell>
+                    <Cell muted nowrap>
+                      <span className="tabular">{formatCount(dimension.caseCount)}</span>
+                    </Cell>
+                    <Cell nowrap>
+                      <StatusPill state={dimension.state} />
+                    </Cell>
+                    <Cell muted>{dimension.detail}</Cell>
+                  </Row>
+                ))}
+              </DataTable>
+            )}
+          </SectionBody>
         </Panel>
 
         <Panel title="What a suite gates" subtitle="And what it does not">
