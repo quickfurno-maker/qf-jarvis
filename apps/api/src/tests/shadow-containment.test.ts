@@ -363,6 +363,11 @@ describe('(133-148) the declared budget and every prior lock', () => {
       'contracts',
       // QFJ-P08-A (ADR-0074): the conversation control command foundation. Still an EXACT set match
       // -- this records an authorised addition, it does not relax the assertion.
+      // JOS-01B (ADR-0086): the framework-neutral read-only control-plane snapshot contract, shared
+      // by Jarvis OS today and by a future Android client. Still an EXACT set match -- this records
+      // an authorised addition, it does not relax the assertion. It depends on zod alone: no Node
+      // API, no network, no persistence, no provider, and no authority field it could express.
+      'control-plane-read-contract',
       'conversation-control',
       'core-decision-adapter',
       'event-backbone',
