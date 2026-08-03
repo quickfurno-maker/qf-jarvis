@@ -230,8 +230,65 @@ export interface OwnershipRow {
 export interface RoadmapMarker {
   readonly id: string;
   readonly label: string;
-  readonly state: 'merged' | 'next' | 'planned';
+  /** The main Jarvis backend track, or the Jarvis OS product overlay. Each has its own `next`. */
+  readonly track: 'QFJ' | 'JOS';
+  /** `current` is the slice this build IS — not a merge state, which would self-invalidate. */
+  readonly state: 'merged' | 'current' | 'next' | 'planned';
   readonly detail: string;
+}
+
+/**
+ * How a section's data came to be (JOS-01B).
+ *
+ * Mirrors `SectionAvailability` on the wire contract, deliberately by value rather than by
+ * import, so a presentation component never needs the contract package to render a state.
+ */
+export type SectionAvailability =
+  'AVAILABLE' | 'STATIC_BASELINE' | 'NOT_CONNECTED' | 'PLANNED' | 'ROLLOUT_OFF';
+
+/**
+ * A section of the surface, with the provenance that makes its emptiness readable.
+ *
+ * This wrapper is the reason JOS-01B exists. In JOS-01A every getter returned a bare array, and
+ * an empty array is ambiguous in the one direction that matters: `approvalQueue() === []` reads
+ * as "nothing is waiting for you", when the truth may be "nobody has connected the queue". An
+ * operator who trusts the first reading stops checking. Pairing rows with an availability, a
+ * reason and the source that will eventually supply them makes the two impossible to confuse.
+ */
+export interface Section<T> {
+  readonly availability: SectionAvailability;
+  /** Why it reads this way, in one clause an operator can act on. */
+  readonly reason: string;
+  /** What will supply it, and in which phase. Never a hostname, never a credential. */
+  readonly expectedSource: string;
+  readonly items: readonly T[];
+}
+
+/** A series with its own availability. An unavailable series carries no points at all. */
+export interface SeriesSection extends NamedSeries {
+  readonly availability: SectionAvailability;
+  readonly reason: string;
+  readonly expectedSource: string;
+}
+
+/** Whether a section has data worth plotting, as opposed to a state worth explaining. */
+export function isReadable(availability: SectionAvailability): boolean {
+  return availability === 'AVAILABLE' || availability === 'STATIC_BASELINE';
+}
+
+/** Where this whole snapshot came from, rendered as a provenance badge on every page. */
+export interface Provenance {
+  readonly kind: 'REPOSITORY_BASELINE' | 'LIVE_ADAPTER' | 'DEMO_FIXTURE';
+  /**
+   * How fresh the underlying FACTS are — not when this snapshot was produced.
+   *
+   * A compiled-in baseline stays `BUILD_DECLARATION` however often it is served. `generatedAt`
+   * moves per response; this does not.
+   */
+  readonly freshness: 'REQUEST_TIME' | 'BUILD_DECLARATION';
+  readonly liveOperationalData: boolean;
+  /** When this snapshot was produced. Says nothing about when the facts were observed. */
+  readonly generatedAt: string;
 }
 
 /**
@@ -242,24 +299,27 @@ export interface RoadmapMarker {
  * surface acquires the ability to change anything.
  */
 export interface ControlPlaneReadModel {
-  readonly kind: 'demo' | 'api';
+  readonly kind: 'demo' | 'baseline';
+  provenance(): Provenance;
   systemHealth(): SystemHealth;
-  headlineMetrics(): readonly MetricSummary[];
-  activitySeries(): NamedSeries;
-  latencySeries(): NamedSeries;
-  agentWorkload(): readonly DistributionSlice[];
-  approvalBreakdown(): readonly DistributionSlice[];
-  vendorGrowthFunnel(): readonly FunnelStage[];
-  attention(): readonly AttentionItem[];
-  activity(): readonly ActivityEntry[];
+  headlineMetrics(): Section<MetricSummary>;
+  activitySeries(): SeriesSection;
+  latencySeries(): SeriesSection;
+  agentWorkload(): Section<DistributionSlice>;
+  approvalBreakdown(): Section<DistributionSlice>;
+  vendorGrowthFunnel(): Section<FunnelStage>;
+  attention(): Section<AttentionItem>;
+  activity(): Section<ActivityEntry>;
   agents(): readonly AgentSummary[];
   agent(id: AgentId): AgentSummary | undefined;
-  approvalQueue(): readonly ApprovalQueueRow[];
-  conversationControl(): readonly ConversationControlRow[];
-  workers(): readonly WorkerNode[];
-  models(): readonly ModelProfile[];
-  knowledge(): readonly KnowledgeNamespace[];
-  evaluations(): readonly EvaluationDimension[];
-  ownership(): readonly OwnershipRow[];
+  approvalQueue(): Section<ApprovalQueueRow>;
+  conversationControl(): Section<ConversationControlRow>;
+  workers(): Section<WorkerNode>;
+  models(): Section<ModelProfile>;
+  knowledge(): Section<KnowledgeNamespace>;
+  evaluations(): Section<EvaluationDimension>;
+  ownership(): Section<OwnershipRow>;
   roadmap(): readonly RoadmapMarker[];
+  businessAnalytics(): Section<DistributionSlice>;
+  n8nExecution(): Section<DistributionSlice>;
 }

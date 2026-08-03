@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 
 import { SideNav } from '@/components/navigation/SideNav';
 import { BrandLockup } from '@/components/shell/Brand';
-import { ENVIRONMENT_LABEL } from '@/lib/demo-data/snapshot';
+import { ENVIRONMENT_LABEL } from '@/lib/environment';
 
 /**
  * The application shell (JOS-01A).
@@ -132,7 +132,7 @@ function TopBar({ onOpenDrawer }: { readonly onOpenDrawer: () => void }) {
                 strokeLinecap="round"
               />
             </svg>
-            <span className="flex-1 truncate">Search — available in JOS-01B</span>
+            <span className="flex-1 truncate">Search — available in a later JOS phase</span>
             <kbd className="rounded border border-[var(--color-line)] px-1.5 py-[1px] text-[10px]">
               ⌘K
             </kbd>
@@ -150,8 +150,8 @@ function TopBar({ onOpenDrawer }: { readonly onOpenDrawer: () => void }) {
           <button
             type="button"
             disabled
-            aria-label="Notifications — available in JOS-01B"
-            title="Notifications — available in JOS-01B"
+            aria-label="Notifications — available in a later JOS phase"
+            title="Notifications — available in a later JOS phase"
             className="rounded-[var(--radius-control)] border border-[var(--color-line)] p-2 text-[var(--color-ink-faint)] disabled:cursor-not-allowed"
           >
             <svg

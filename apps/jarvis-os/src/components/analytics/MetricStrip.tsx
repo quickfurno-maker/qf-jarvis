@@ -1,4 +1,6 @@
-import type { MetricSummary } from '@/lib/control-plane/types';
+import { Unavailable } from '@/components/system/Provenance';
+import { isReadable } from '@/lib/control-plane/types';
+import type { MetricSummary, Section } from '@/lib/control-plane/types';
 
 /**
  * The metric strip (JOS-01A).
@@ -30,7 +32,20 @@ const WIDE_COLUMNS: Readonly<Record<number, string>> = {
   6: 'xl:grid-cols-6',
 };
 
-export function MetricStrip({ metrics }: { readonly metrics: readonly MetricSummary[] }) {
+export function MetricStrip({ section }: { readonly section: Section<MetricSummary> }) {
+  const metrics = section.items;
+  // An unreadable metric source renders its state, not a strip of dashes. A dash reads as "zero,
+  // formatted"; the state reads as "nobody has connected this".
+  if (!isReadable(section.availability) || metrics.length === 0) {
+    return (
+      <Unavailable
+        availability={section.availability}
+        reason={section.reason}
+        expectedSource={section.expectedSource}
+        compact
+      />
+    );
+  }
   const wide = WIDE_COLUMNS[Math.min(metrics.length, 6)] ?? 'xl:grid-cols-6';
   return (
     <div

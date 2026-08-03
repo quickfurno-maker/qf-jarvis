@@ -1,0 +1,282 @@
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { parseControlPlaneSnapshotV1 } from '@qf-jarvis/control-plane-read-contract';
+import { describe, expect, it } from 'vitest';
+
+import { GET } from '../../app/api/control-plane/v1/snapshot/route';
+
+import { buildControlPlaneSnapshot } from './build-snapshot';
+
+/**
+ * The read-only snapshot API (JOS-01B, ADR-0086).
+ *
+ * These assertions cover the two things that make this route safe to exist before it has
+ * authentication: it can only be READ, and it can only say true things.
+ *
+ * The route is exercised through its real exported handler with a real `Request`, not through a
+ * mock. A mock would prove that a function returns an object; this proves that the thing Next.js
+ * will actually invoke produces a response with the headers, status and body claimed here.
+ */
+
+const SRC = fileURLToPath(new URL('../../', import.meta.url));
+const ROUTE = join(SRC, 'app/api/control-plane/v1/snapshot/route.ts');
+const URL_BASE = 'http://127.0.0.1/api/control-plane/v1/snapshot';
+
+const call = async (url: string = URL_BASE): Promise<Response> =>
+  Promise.resolve(GET(new Request(url, { method: 'GET' })));
+
+function walk(dir: string): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    if (statSync(full).isDirectory()) {
+      out.push(...walk(full));
+    } else if (entry.endsWith('.ts') || entry.endsWith('.tsx')) {
+      out.push(full);
+    }
+  }
+  return out;
+}
+
+describe('the snapshot builder', () => {
+  it('is pure: the same instant in gives byte-identical output', () => {
+    const a = buildControlPlaneSnapshot({ generatedAt: '2026-08-03T12:00:00.000Z' });
+    const b = buildControlPlaneSnapshot({ generatedAt: '2026-08-03T12:00:00.000Z' });
+    expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+  });
+
+  it('uses the injected instant rather than reading a clock', () => {
+    const snapshot = buildControlPlaneSnapshot({ generatedAt: '1999-12-31T23:59:59.999Z' });
+    expect(snapshot.generatedAt).toBe('1999-12-31T23:59:59.999Z');
+  });
+
+  it('derives source freshness rather than accepting it', () => {
+    // The defect this replaces: the builder took `freshness` and the route passed REQUEST_TIME,
+    // so a compiled-in baseline claimed it had just been observed. A caller can no longer say.
+    const snapshot = buildControlPlaneSnapshot({ generatedAt: '2026-08-03T12:00:00.000Z' });
+    expect(snapshot.source.kind).toBe('REPOSITORY_BASELINE');
+    expect(snapshot.source.freshness).toBe('BUILD_DECLARATION');
+    expect(snapshot.source.liveOperationalData).toBe(false);
+  });
+
+  it('moves generatedAt without moving source freshness', () => {
+    const early = buildControlPlaneSnapshot({ generatedAt: '2020-01-01T00:00:00.000Z' });
+    const late = buildControlPlaneSnapshot({ generatedAt: '2030-01-01T00:00:00.000Z' });
+    expect(early.generatedAt).not.toBe(late.generatedAt);
+    // Ten years apart, and the facts are exactly as fresh -- which is to say, not fresh at all.
+    expect(early.source).toEqual(late.source);
+    expect(late.source.freshness).toBe('BUILD_DECLARATION');
+  });
+
+  it('validates its own output through the shared contract', () => {
+    const snapshot = buildControlPlaneSnapshot({ generatedAt: '2026-08-03T12:00:00.000Z' });
+    // Re-parsing must succeed: the server holds itself to exactly what a client will enforce.
+    expect(() => parseControlPlaneSnapshotV1(JSON.parse(JSON.stringify(snapshot)))).not.toThrow();
+    expect(Object.isFrozen(snapshot)).toBe(true);
+  });
+
+  it('never claims live operational data', () => {
+    const snapshot = buildControlPlaneSnapshot({ generatedAt: '2026-08-03T12:00:00.000Z' });
+    expect(snapshot.mode).toBe('READ_ONLY');
+    expect(snapshot.rollout.enabled).toBe(false);
+    expect(snapshot.rollout.state).toBe('ROLLOUT_OFF');
+  });
+});
+
+describe('GET /api/control-plane/v1/snapshot', () => {
+  it('answers 200 with a payload that satisfies the contract', async () => {
+    const response = await call();
+    expect(response.status).toBe(200);
+    const body: unknown = await response.json();
+    expect(() => parseControlPlaneSnapshotV1(body)).not.toThrow();
+  });
+
+  it('sets the security and caching headers, and NO CORS header', async () => {
+    const response = await call();
+    expect(response.headers.get('content-type')).toContain('application/json');
+    expect(response.headers.get('cache-control')).toContain('no-store');
+    expect(response.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(response.headers.get('x-control-plane-contract-version')).toBe('1');
+    // No wildcard, no echo, no header at all. A cross-origin page must not be able to read this.
+    expect(response.headers.get('access-control-allow-origin')).toBeNull();
+    expect(response.headers.get('access-control-allow-credentials')).toBeNull();
+  });
+
+  it('states the authority boundary and the unconnected integrations', async () => {
+    const response = await call();
+    const body = parseControlPlaneSnapshotV1(await response.json());
+
+    expect(body.authority.jarvis).toBe('RECOMMENDS_AND_OBSERVES');
+    expect(body.authority.quickfurnoCore).toBe('AUTHORIZES_AND_OWNS_BUSINESS_TRUTH');
+    expect(body.authority.n8n).toBe('EXECUTES_ONLY');
+    expect(body.authority.provider).toBe('DELIVERS_ONLY');
+
+    const byId = new Map(body.system.map((component) => [component.id, component]));
+    expect(byId.get('quickfurno-core')?.state).toBe('NOT_CONNECTED');
+    expect(byId.get('n8n')?.state).toBe('NOT_CONNECTED');
+
+    const aarohi = body.agents.find((agent) => agent.id === 'aarohi');
+    expect(aarohi?.lifecycle).toBe('PLANNED');
+
+    // Each track carries exactly one `next`, and JOS carries exactly one `current`.
+    const qfj = body.roadmap.filter((marker) => marker.track === 'QFJ');
+    const jos = body.roadmap.filter((marker) => marker.track === 'JOS');
+
+    const qfjNext = qfj.filter((marker) => marker.state === 'next');
+    expect(qfjNext).toHaveLength(1);
+    expect(qfjNext[0]?.label).toContain('QFJ-P09.02');
+    expect(
+      qfj
+        .filter((marker) => marker.state === 'merged')
+        .map((m) => m.label)
+        .join(' '),
+    ).toContain('QFJ-P09.01');
+
+    const josCurrent = jos.filter((marker) => marker.state === 'current');
+    expect(josCurrent).toHaveLength(1);
+    expect(josCurrent[0]?.label).toContain('JOS-01B');
+
+    const josNext = jos.filter((marker) => marker.state === 'next');
+    expect(josNext).toHaveLength(1);
+    expect(josNext[0]?.label).toContain('JOS-01C');
+
+    // The specific defect: JOS-01B must never be the JOS `next` marker.
+    expect(josNext[0]?.label).not.toContain('JOS-01B');
+    expect(
+      jos
+        .filter((marker) => marker.state === 'merged')
+        .map((m) => m.label)
+        .join(' '),
+    ).toContain('JOS-01A');
+  });
+
+  it('stamps the envelope at request time WITHOUT promoting source freshness', async () => {
+    // The correction, asserted end to end. Two separate requests genuinely produce two different
+    // `generatedAt` values -- and the facts underneath are compiled in, so freshness does not
+    // budge. A request re-reads no Git, no governance document, no Core and no n8n.
+    const first = parseControlPlaneSnapshotV1(await (await call()).json());
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const second = parseControlPlaneSnapshotV1(await (await call()).json());
+
+    expect(Date.parse(second.generatedAt)).toBeGreaterThanOrEqual(Date.parse(first.generatedAt));
+    for (const body of [first, second]) {
+      expect(body.source.kind).toBe('REPOSITORY_BASELINE');
+      expect(body.source.freshness).toBe('BUILD_DECLARATION');
+      expect(body.source.liveOperationalData).toBe(false);
+    }
+    // Everything except the envelope instant is identical between calls.
+    expect({ ...first, generatedAt: '' }).toEqual({ ...second, generatedAt: '' });
+  });
+
+  it('rejects any query parameter rather than ignoring it', async () => {
+    for (const suffix of ['?tenant=other', '?limit=1000', '?x=1', '?']) {
+      const response = await call(URL_BASE + suffix);
+      // `?` alone yields an empty search string, which is not a parameter.
+      const expected = suffix === '?' ? 200 : 400;
+      expect(response.status, suffix).toBe(expected);
+      if (expected === 400) {
+        const body = (await response.json()) as { readonly error?: string };
+        expect(body.error, suffix).toBe('unsupported-query-parameter');
+      }
+    }
+  });
+
+  it('carries no contact detail, credential or business record', async () => {
+    const text = JSON.stringify(await (await call()).json());
+    expect(text).not.toMatch(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
+    expect(text).not.toMatch(/\+\d{8,}/);
+    for (const forbidden of ['CONV-DEMO-', 'VENDOR-DEMO-', 'APPR-DEMO-', 'CASE-DEMO-']) {
+      expect(text, forbidden).not.toContain(forbidden);
+    }
+    // Assert on JSON KEYS. The word "authorization" appears legitimately in governance prose
+    // ("outreach requires QuickFurno Core authorization"); a credential would be a field name.
+    const keys = [...text.matchAll(/"([A-Za-z0-9_]+)":/g)].map((match) =>
+      (match[1] ?? '').toLowerCase(),
+    );
+    for (const forbidden of [
+      'password',
+      'secret',
+      'token',
+      'apikey',
+      'authorization',
+      'credential',
+    ]) {
+      expect(keys, forbidden).not.toContain(forbidden);
+    }
+  });
+
+  it('exposes no authority field anywhere in the payload', async () => {
+    const text = JSON.stringify(await (await call()).json());
+    for (const forbidden of [
+      'canExecute',
+      'canSend',
+      'isAuthorized',
+      'consentValid',
+      'approvalGranted',
+      'dispatchAllowed',
+    ]) {
+      expect(text, forbidden).not.toContain(forbidden);
+    }
+  });
+});
+
+describe('the route file itself', () => {
+  const source = (): string => readFileSync(ROUTE, 'utf8');
+
+  it('exports GET and no mutating method', () => {
+    const code = source();
+    expect(code).toMatch(/export function GET\b/);
+    for (const method of ['POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']) {
+      expect(code, method).not.toMatch(
+        new RegExp(`export\\s+(async\\s+)?function\\s+${method}\\b`),
+      );
+    }
+  });
+
+  it('sets no CORS header and defines no server action', () => {
+    const code = source();
+    expect(code).not.toContain('Access-Control-Allow-Origin');
+    expect(code).not.toContain("'use server'");
+  });
+
+  it('reaches no database, provider, n8n or Core transport', () => {
+    // The whole server directory, not just the route: the builder is the thing a future
+    // contributor would be tempted to "just add a fetch to".
+    for (const file of walk(join(SRC, 'server'))) {
+      const code = readFileSync(file, 'utf8');
+      const label = file.replace(/\\/g, '/').split('/apps/jarvis-os/')[1] ?? file;
+      expect(code, `${label}: fetch`).not.toMatch(/\bfetch\s*\(/);
+      expect(code, `${label}: url`).not.toMatch(/https?:\/\/(?!127\.0\.0\.1)/);
+      expect(code, `${label}: env`).not.toMatch(/process\s*\.\s*env/);
+      const specifiers = [...code.matchAll(/from\s+['"]([^'"]+)['"]/g)].map(
+        (match) => match[1] ?? '',
+      );
+      for (const specifier of specifiers) {
+        for (const forbidden of [
+          'pg',
+          'supabase',
+          'n8n-',
+          'whatsapp',
+          'twilio',
+          'groq',
+          'openai',
+        ]) {
+          expect(
+            specifier.toLowerCase().includes(forbidden),
+            `${label}: imports ${specifier}`,
+          ).toBe(false);
+        }
+      }
+    }
+  });
+
+  it('is the only API route in the application', () => {
+    const routes = walk(join(SRC, 'app'))
+      .map((file) => file.replace(/\\/g, '/'))
+      .filter((file) => /\/route\.tsx?$/.test(file));
+    expect(routes).toHaveLength(1);
+    expect(routes[0]).toContain('api/control-plane/v1/snapshot/route.ts');
+  });
+});

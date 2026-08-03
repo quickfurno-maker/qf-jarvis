@@ -2,6 +2,7 @@ import { Cell, DataTable, Row } from '@/components/primitives/DataTable';
 import { Notice, Panel } from '@/components/primitives/Panel';
 import { PageHeader } from '@/components/shell/PageHeader';
 import { CapabilityBadge, StatusPill, Tag } from '@/components/system/StatusPill';
+import { SectionBody, SourceBadge } from '@/components/system/Provenance';
 import { controlPlane } from '@/lib/control-plane';
 
 /**
@@ -15,7 +16,7 @@ import { controlPlane } from '@/lib/control-plane';
  * No live call is made from this page, and no credential is read anywhere in Jarvis OS.
  */
 export default function ModelsPage() {
-  const models = controlPlane().models();
+  const modelsSection = controlPlane().models();
 
   return (
     <>
@@ -33,53 +34,61 @@ export default function ModelsPage() {
           secret.
         </Notice>
 
-        <Panel title="Profiles" subtitle="Routing targets and their current posture">
-          <DataTable
-            caption="Model profiles with provider, data class, latency, circuit state and status."
-            head={[
-              'Profile',
-              'Provider',
-              'Data class',
-              'Latency p95',
-              'Circuit',
-              'State',
-              'Detail',
-            ]}
-          >
-            {models.map((model) => (
-              <Row key={model.id}>
-                <Cell nowrap>{model.label}</Cell>
-                <Cell muted nowrap>
-                  {model.provider}
-                </Cell>
-                <Cell nowrap>
-                  <Tag tone={model.dataClass === 'local-only' ? 'healthy' : 'warning'}>
-                    {model.dataClass === 'local-only' ? 'Local only' : 'External provider'}
-                  </Tag>
-                </Cell>
-                <Cell muted nowrap>
-                  <span className="tabular">{model.latencyP95}</span>
-                </Cell>
-                <Cell nowrap>
-                  <Tag
-                    tone={
-                      model.circuit === 'closed'
-                        ? 'healthy'
-                        : model.circuit === 'half-open'
-                          ? 'warning'
-                          : 'critical'
-                    }
-                  >
-                    {model.circuit}
-                  </Tag>
-                </Cell>
-                <Cell nowrap>
-                  <StatusPill state={model.state} />
-                </Cell>
-                <Cell muted>{model.detail}</Cell>
-              </Row>
-            ))}
-          </DataTable>
+        <Panel
+          title="Profiles"
+          subtitle="Routing targets and their current posture"
+          action={<SourceBadge availability={modelsSection.availability} />}
+        >
+          <SectionBody section={modelsSection}>
+            {(models) => (
+              <DataTable
+                caption="Model profiles with provider, data class, latency, circuit state and status."
+                head={[
+                  'Profile',
+                  'Provider',
+                  'Data class',
+                  'Latency p95',
+                  'Circuit',
+                  'State',
+                  'Detail',
+                ]}
+              >
+                {models.map((model) => (
+                  <Row key={model.id}>
+                    <Cell nowrap>{model.label}</Cell>
+                    <Cell muted nowrap>
+                      {model.provider}
+                    </Cell>
+                    <Cell nowrap>
+                      <Tag tone={model.dataClass === 'local-only' ? 'healthy' : 'warning'}>
+                        {model.dataClass === 'local-only' ? 'Local only' : 'External provider'}
+                      </Tag>
+                    </Cell>
+                    <Cell muted nowrap>
+                      <span className="tabular">{model.latencyP95}</span>
+                    </Cell>
+                    <Cell nowrap>
+                      <Tag
+                        tone={
+                          model.circuit === 'closed'
+                            ? 'healthy'
+                            : model.circuit === 'half-open'
+                              ? 'warning'
+                              : 'critical'
+                        }
+                      >
+                        {model.circuit}
+                      </Tag>
+                    </Cell>
+                    <Cell nowrap>
+                      <StatusPill state={model.state} />
+                    </Cell>
+                    <Cell muted>{model.detail}</Cell>
+                  </Row>
+                ))}
+              </DataTable>
+            )}
+          </SectionBody>
         </Panel>
 
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">

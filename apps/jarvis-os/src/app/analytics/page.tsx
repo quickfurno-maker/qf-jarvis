@@ -3,6 +3,7 @@ import { MetricStrip } from '@/components/analytics/MetricStrip';
 import { Notice, Panel } from '@/components/primitives/Panel';
 import { PageHeader } from '@/components/shell/PageHeader';
 import { CapabilityBadge } from '@/components/system/StatusPill';
+import { SectionBody, SeriesBody } from '@/components/system/Provenance';
 import { controlPlane } from '@/lib/control-plane';
 
 /**
@@ -30,22 +31,30 @@ export default function AnalyticsPage() {
           commercial outcomes are QuickFurno Core&rsquo;s to report, and none appears here.
         </Notice>
 
-        <MetricStrip metrics={plane.headlineMetrics()} />
+        <MetricStrip section={plane.headlineMetrics()} />
 
         <Panel title="Conversation activity" subtitle="Last 24 hours, hourly">
-          <AreaTrend series={plane.activitySeries()} />
+          <SeriesBody series={plane.activitySeries()}>
+            {(series) => <AreaTrend series={series} />}
+          </SeriesBody>
         </Panel>
 
         <Panel title="Model latency p95" subtitle="Gateway-observed across shadow traffic">
-          <AreaTrend series={plane.latencySeries()} valueSuffix=" ms" />
+          <SeriesBody series={plane.latencySeries()}>
+            {(series) => <AreaTrend series={series} valueSuffix=" ms" />}
+          </SeriesBody>
         </Panel>
 
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
           <Panel title="Agent workload" subtitle="Share of handled conversations">
-            <BarDistribution slices={plane.agentWorkload()} />
+            <SectionBody section={plane.agentWorkload()} compact>
+              {(slices) => <BarDistribution slices={slices} />}
+            </SectionBody>
           </Panel>
           <Panel title="Approval outcomes" subtitle="Queue mix and 24-hour results">
-            <StackedShare slices={plane.approvalBreakdown()} />
+            <SectionBody section={plane.approvalBreakdown()} compact>
+              {(slices) => <StackedShare slices={slices} />}
+            </SectionBody>
           </Panel>
         </div>
       </div>

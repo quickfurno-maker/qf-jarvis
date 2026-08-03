@@ -11,6 +11,7 @@
     "typecheck:tests": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@qf-jarvis/control-plane-read-contract": "workspace:*",
     "next": "16.2.11",
     "react": "19.2.0",
     "react-dom": "19.2.0"

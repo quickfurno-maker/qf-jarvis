@@ -2,6 +2,7 @@ import { Cell, DataTable, Row } from '@/components/primitives/DataTable';
 import { Notice, Panel } from '@/components/primitives/Panel';
 import { PageHeader } from '@/components/shell/PageHeader';
 import { CapabilityBadge, Tag } from '@/components/system/StatusPill';
+import { SourceBadge } from '@/components/system/Provenance';
 import { controlPlane } from '@/lib/control-plane';
 
 /**
@@ -16,7 +17,10 @@ import { controlPlane } from '@/lib/control-plane';
  * are stated as headings rather than buried in a paragraph.
  */
 export default function CoreSyncPage() {
-  const rows = controlPlane().ownership();
+  const rowsSection = controlPlane().ownership();
+  // Ownership is STATIC_BASELINE: declared by governance, not read from Core. It genuinely has
+  // rows, so it renders normally -- with a badge saying where they came from.
+  const rows = rowsSection.items;
   const core = rows.filter((row) => row.owner === 'QuickFurno Core');
   const jarvis = rows.filter((row) => row.owner === 'QF Jarvis');
 
@@ -54,6 +58,7 @@ export default function CoreSyncPage() {
           <Panel
             title="QuickFurno Core is authoritative"
             subtitle="Business truth. Jarvis reads it and never writes it."
+            action={<SourceBadge availability={rowsSection.availability} />}
           >
             <DataTable caption="Subjects QuickFurno Core owns." head={['Subject', 'Detail']}>
               {core.map((row) => (
