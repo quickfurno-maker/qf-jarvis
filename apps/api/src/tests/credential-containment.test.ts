@@ -503,6 +503,9 @@ describe('(71-77) package API and dependency locks are untouched', () => {
       // QFJ-P08 (ADR-0083): the communication authorization correlation runtime, locked from the
       // day it lands.
       'communication-authorization-runtime': 3,
+      // QFJ-P09.01 (ADR-0084): the execution intent correlation runtime, locked from the day it
+      // lands. It validates Core's intent; it issues none.
+      'execution-intent-runtime': 3,
       // QFJ-P08-A (ADR-0075): agent-runtime 45 -> 46 (the operations snapshot constructor) and
       // jarvis-runtime unchanged at 6. Both are named here so the composition phase that touched
       // them is locked centrally, not only in their own packages.

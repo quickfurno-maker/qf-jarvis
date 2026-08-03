@@ -32,6 +32,7 @@
     { "path": "./packages/approval-runtime/tsconfig.build.json" },
     { "path": "./packages/postgres-approval-queue/tsconfig.build.json" },
     { "path": "./packages/approval-core-adapter/tsconfig.build.json" },
-    { "path": "./packages/communication-authorization-runtime/tsconfig.build.json" }
+    { "path": "./packages/communication-authorization-runtime/tsconfig.build.json" },
+    { "path": "./packages/execution-intent-runtime/tsconfig.build.json" }
   ]
 }

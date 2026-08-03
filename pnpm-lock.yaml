@@ -190,6 +190,19 @@ importers:
         specifier: workspace:*
         version: link:../event-backbone
 
+  packages/execution-intent-runtime:
+    dependencies:
+      '@qf-jarvis/approval-runtime':
+        specifier: workspace:*
+        version: link:../approval-runtime
+      '@qf-jarvis/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+    devDependencies:
+      '@qf-jarvis/recommendation-runtime':
+        specifier: workspace:*
+        version: link:../recommendation-runtime
+
   packages/governed-knowledge:
     dependencies:
       zod:
