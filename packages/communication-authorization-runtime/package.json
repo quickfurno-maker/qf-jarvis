@@ -1,0 +1,26 @@
+{
+  "name": "@qf-jarvis/communication-authorization-runtime",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis communication authorization correlation runtime (QFJ-P08, ADR-0083). One pure function: given a CommunicationRequestV1, the CommunicationAuthorizationV1 QuickFurno Core returned, and optional approval evidence, prove the artifacts belong together and return a frozen OBSERVATION. It asks Core nothing, sends nothing, persists nothing, and holds no consent, opt-out, STOP, suppression or eligibility state of its own -- all of which belong to the QuickFurno Communication Core. A Core refusal is an ordinary authoritative observation: founder approval does not override an opt-out. An authorized outcome requires a re-proved, APPROVED per-action approval verdict, and the result carries no canSend, canExecute, isAuthorized, consentValid or validUntil, because Core's decision is a historical fact and not a future permission slip -- eligibility is revalidated at execution time, elsewhere. Depends on @qf-jarvis/contracts and @qf-jarvis/approval-runtime only.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/approval-runtime": "workspace:*",
+    "@qf-jarvis/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@qf-jarvis/recommendation-runtime": "workspace:*"
+  }
+}

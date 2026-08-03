@@ -357,6 +357,9 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // QFJ-P08 (ADR-0080): the approval runtime foundation -- Jarvis asks, Core decides. Still an
       // EXACT set match; it records an authorised addition, it does not relax the assertion.
       'approval-runtime',
+      // QFJ-P08 (ADR-0083): the communication authorization correlation runtime -- Core owns consent,
+      // this only proves the paperwork. Still an EXACT set match; it records an authorised addition.
+      'communication-authorization-runtime',
       'contracts',
       // QFJ-P08-A (ADR-0074): the conversation control command foundation. Still an EXACT set match
       // -- this records an authorised addition, it does not relax the assertion.
@@ -414,6 +417,9 @@ describe('(133-148) the declared budget and every prior lock', () => {
       'postgres-approval-queue': 3,
       // QFJ-P08 (ADR-0082): the Core approval submission adapter, locked from the day it lands.
       'approval-core-adapter': 3,
+      // QFJ-P08 (ADR-0083): the communication authorization correlation runtime, locked from the
+      // day it lands.
+      'communication-authorization-runtime': 3,
       // QFJ-P08-A (ADR-0075): agent-runtime 45 -> 46 (the operations snapshot constructor) and
       // jarvis-runtime unchanged at 6. Both are named here so the composition phase that touched
       // them is locked centrally, not only in their own packages.
