@@ -110,6 +110,26 @@ checking a moving target.
 There is **no fallback to a shared mutable directory.** The location check is what forbids it, and
 `deploy.sh` and `activate.sh` both run it against their own directory before touching Docker.
 
+### 1d-ii. The approved root is checked without following anything attacker-controlled
+
+The first version of the location check canonicalised the EXPECTED path by `cd`-ing through
+`<root>/<sha>` — the very directory an attacker would control. If that directory were a symlink to
+somewhere else, the actual and expected paths resolved through the same link and compared equal, so
+a package anywhere on the filesystem could present itself as the approved release. The check was
+structurally incapable of catching the thing it existed for.
+
+Now the releases root, the SHA directory and the package directory must each be a **real directory,
+not a symlink**; the expected path is built from the canonical ROOT plus the literal SHA; the actual
+path must equal it and must still sit beneath the canonical root; and the whole trusted parent chain
+must not be group- or world-writable. A writable parent is enough on its own — the directory can be
+swapped between the moment verification passes and the moment the deployment trusts it.
+
+The approved root is also **hardcoded in `rollback.sh`**, not read from the environment. An
+environment variable is invisible in the command an operator types and in the shell history
+afterwards, so one exported value could silently redirect a rollback at the worst possible moment.
+There is no override and no skip flag. The verifier still takes a root argument so tests can drive
+it against a temporary directory; production never passes anything but the constant.
+
 ### 1e. Rollback restores both halves, and does not depend on the network
 
 Re-pointing only the image tag, using the compose files beside the currently running script, yields
@@ -290,6 +310,27 @@ and without `includeSubDomains` or `preload`.
 It also requires **exactly one** CSP header. The previous version counted them and discarded the
 result with `|| true`, so an edge-injected second policy — which silently breaks every nonced
 script — passed. A count of one is now an assertion, not a note.
+
+### 7c. The external smoke runs externally, from an exact-SHA copy
+
+The Gate 2 sequence invoked `"$RELEASE/smoke.sh"` outside an `ssh`. That path exists on the VPS and
+not on the operator's workstation, so the documented command simply would not run.
+
+Running it over `ssh` instead is not an equivalent fix, and that is the substantive point. The smoke
+test checks public DNS resolution, a trusted TLS chain, edge headers and that no application port is
+reachable from outside. From inside the host, DNS may resolve differently, TLS terminates locally,
+and "no direct port" would be testing loopback. **A check that only passes when run from the machine
+being checked is not an external check.**
+
+Nor can it be the `smoke.sh` in the operator's working tree, which is whatever happens to be checked
+out. `external-smoke.sh` fetches origin, requires the SHA to be contained in `origin/main`, extracts
+**only** `deploy/jarvis-os/smoke.sh` from that commit into a temp directory outside the repository
+with line endings pinned, compares the extracted bytes against `git cat-file blob`, and runs that
+copy. An `extract` mode materialises and verifies without running, for reading it first.
+
+So a release now has two packages — the VPS one covering deploy/activate/rollback, and the external
+one covering outside-facing verification — and **both derive from the same merged SHA**, each
+verifying its own bytes against Git before being trusted.
 
 ## Rejected alternatives
 

@@ -3,6 +3,8 @@ import {
   appendFileSync,
   chmodSync,
   cpSync,
+  existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -958,5 +960,369 @@ describe('deployment configuration is bound to the release SHA', () => {
         /docker\s+(restart|stop|start|kill|rm|rmi|pull|update)\s+[^\n]*\b(traefik|n8n|qf-core-staging)\b/u,
       );
     }
+  });
+});
+
+/**
+ * The approved release root cannot be escaped.
+ *
+ * An earlier version canonicalised the EXPECTED path by `cd`-ing through `<root>/<sha>` — the very
+ * directory an attacker would control. A symlinked SHA directory therefore resolved both the actual
+ * and the expected path through the same link, they compared equal, and a package anywhere on the
+ * filesystem could present itself as the approved release.
+ *
+ * These cases need real symlinks and real mode bits, so they run on Linux — CI and the production
+ * host, the only places the check has to hold. Where the filesystem cannot model the attack, the
+ * guard's source is asserted instead of silently passing.
+ */
+describe('the approved release root cannot be escaped', () => {
+  const JOS = join(REPO_ROOT, 'deploy', 'jarvis-os');
+  const GUARD = join(JOS, 'verify-release-artifacts.sh');
+  let dir = '';
+  let work = '';
+  let root = '';
+  let release = '';
+  let sha = '';
+  let posix = false;
+
+  const posixPath = (p: string): string => p.replace(/\\/gu, '/');
+
+  const git = (cwd: string, ...args: string[]): string =>
+    execFileSync(
+      'git',
+      [
+        '-c',
+        'user.email=t@example.invalid',
+        '-c',
+        'user.name=test',
+        '-c',
+        'commit.gpgsign=false',
+        ...args,
+      ],
+      { cwd, encoding: 'utf8' },
+    ).trim();
+
+  const runBash = (args: string[], env?: NodeJS.ProcessEnv): { code: number; out: string } => {
+    try {
+      return {
+        code: 0,
+        out: execFileSync('bash', args.map(posixPath), {
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+          ...(env ? { env } : {}),
+        }),
+      };
+    } catch (error) {
+      const e = error as { status?: number; stdout?: string; stderr?: string };
+      return { code: e.status ?? 1, out: `${e.stdout ?? ''}${e.stderr ?? ''}` };
+    }
+  };
+
+  const verifyAt = (releaseDir: string, releasesRoot: string): { code: number; out: string } =>
+    runBash([GUARD, sha, releaseDir, work, releasesRoot]);
+
+  beforeAll(() => {
+    dir = mkdtempSync(join(tmpdir(), 'jos-escape-'));
+    const origin = join(dir, 'origin.git');
+    work = join(dir, 'work');
+    root = join(dir, 'releases');
+    mkdirSync(root, { recursive: true });
+
+    git(dir, 'init', '--bare', '--initial-branch=main', origin);
+    git(dir, 'init', '--initial-branch=main', work);
+    mkdirSync(join(work, 'deploy', 'jarvis-os'), { recursive: true });
+    cpSync(JOS, join(work, 'deploy', 'jarvis-os'), { recursive: true });
+    git(work, 'add', 'deploy');
+    for (const name of readdirSync(JOS).filter((n) => n.endsWith('.sh'))) {
+      git(work, 'update-index', '--chmod=+x', `deploy/jarvis-os/${name}`);
+    }
+    git(work, 'commit', '-m', 'escape fixture');
+    git(work, 'remote', 'add', 'origin', origin);
+    git(work, 'push', '-u', 'origin', 'main');
+    sha = git(work, 'rev-parse', 'HEAD');
+
+    const prepared = runBash([
+      join(work, 'deploy', 'jarvis-os', 'prepare-release.sh'),
+      sha,
+      work,
+      root,
+    ]);
+    expect(prepared.code, prepared.out).toBe(0);
+    release = prepared.out.trim();
+
+    // Real symlinks need Developer Mode or admin on Windows; `ln -s` silently copies otherwise, and
+    // chmod is ignored entirely. Detect both rather than assume.
+    try {
+      const linkProbe = join(dir, 'link-probe');
+      symlinkSync(root, linkProbe, 'dir');
+      const modeProbe = join(dir, 'mode-probe');
+      writeFileSync(modeProbe, 'x');
+      chmodSync(modeProbe, 0o664);
+      posix = lstatSync(linkProbe).isSymbolicLink() && (statSync(modeProbe).mode & 0o777) === 0o664;
+    } catch {
+      posix = false;
+    }
+  }, 120_000);
+
+  afterAll(() => {
+    if (dir) rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('accepts the normal release', () => {
+    const { code, out } = verifyAt(release, root);
+    expect(out).toContain('byte for byte');
+    expect(code).toBe(0);
+  });
+
+  it('REJECTS a symlinked SHA directory pointing outside the root', () => {
+    if (!posix) {
+      expect(read('deploy/jarvis-os/verify-release-artifacts.sh')).toContain(
+        'A release SHA directory must be a real directory',
+      );
+      return;
+    }
+    // The exact attack: a package elsewhere on the filesystem, reached through a symlinked SHA
+    // directory that sits inside an otherwise legitimate root.
+    const evil = join(dir, 'evil', 'jarvis-os');
+    mkdirSync(join(dir, 'evil'), { recursive: true });
+    cpSync(release, evil, { recursive: true });
+
+    const altRoot = join(dir, 'alt-root');
+    mkdirSync(altRoot, { recursive: true });
+    symlinkSync(join(dir, 'evil'), join(altRoot, sha), 'dir');
+
+    const { code, out } = verifyAt(join(altRoot, sha, 'jarvis-os'), altRoot);
+    expect(code).not.toBe(0);
+    expect(out).toContain('is a symlink');
+  });
+
+  it('REJECTS a symlinked releases root', () => {
+    if (!posix) {
+      expect(read('deploy/jarvis-os/verify-release-artifacts.sh')).toContain(
+        'is a symlink. It must be a real directory',
+      );
+      return;
+    }
+    const rootLink = join(dir, 'root-link');
+    symlinkSync(root, rootLink, 'dir');
+    const { code, out } = verifyAt(join(rootLink, sha, 'jarvis-os'), rootLink);
+    expect(code).not.toBe(0);
+    expect(out).toContain('is a symlink');
+  });
+
+  it('REJECTS a symlinked release directory', () => {
+    if (!posix) {
+      expect(read('deploy/jarvis-os/verify-release-artifacts.sh')).toContain(
+        'A release package must be a real directory',
+      );
+      return;
+    }
+    const altRoot = join(dir, 'alt-root-2');
+    mkdirSync(join(altRoot, sha), { recursive: true });
+    symlinkSync(release, join(altRoot, sha, 'jarvis-os'), 'dir');
+    const { code, out } = verifyAt(join(altRoot, sha, 'jarvis-os'), altRoot);
+    expect(code).not.toBe(0);
+    expect(out).toContain('is a symlink');
+  });
+
+  it('REJECTS a group- or world-writable parent chain', () => {
+    if (!posix) {
+      // A writable parent lets the whole directory be replaced between verification and the
+      // deployment that trusts it, so the chain is checked, not just the files.
+      const guard = read('deploy/jarvis-os/verify-release-artifacts.sh');
+      expect(guard).toContain('not_writable "$CANON_ROOT"');
+      expect(guard).toContain('not_writable "$SHA_DIR"');
+      expect(guard).toContain('not_writable "$RELEASE_DIR"');
+      return;
+    }
+    for (const target of [root, join(root, sha), release]) {
+      const original = statSync(target).mode & 0o777;
+      chmodSync(target, 0o777);
+      const { code, out } = verifyAt(release, root);
+      chmodSync(target, original);
+      expect(code, target).not.toBe(0);
+      expect(out, target).toContain('group- or world-writable');
+    }
+  });
+
+  it('builds the expected path from the canonical root, never through the SHA directory', () => {
+    const guard = read('deploy/jarvis-os/verify-release-artifacts.sh');
+    // The regression that made the escape possible was canonicalising `dirname <root>/<sha>/...`.
+    expect(guard).toContain('CANON_ROOT="$(cd "$RELEASES_ROOT" && pwd -P)"');
+    expect(guard).toContain('EXPECTED="${CANON_ROOT}/${SHA}/jarvis-os"');
+    expect(guard).not.toContain('dirname "$EXPECTED_ROOT"');
+    // And the result must still sit beneath the canonical root.
+    expect(guard).toContain('"$ACTUAL" == "$CANON_ROOT"/*');
+  });
+});
+
+describe('rollback authority is not environment-overridable', () => {
+  const ROLLBACK = read('deploy/jarvis-os/rollback.sh');
+
+  it('hardcodes the approved releases root', () => {
+    expect(ROLLBACK).toContain('RELEASES_ROOT="/srv/qf-jarvis/releases"');
+    // DIRECTIVES: the script explains in prose that the parameter-expansion default is exactly what
+    // was removed, and scanning that explanation would report it as the violation.
+    const code = directives(ROLLBACK);
+    expect(code).not.toContain('${RELEASES_ROOT:-');
+    expect(code).not.toContain('RELEASES_ROOT="${RELEASES_ROOT');
+    // And no skip/override flag was added in its place.
+    expect(code).not.toMatch(/--(skip|force|no-verify|allow)/u);
+  });
+
+  it('states the invariant it enforces, in the script itself', () => {
+    // Asserted at source level on purpose. A behavioural run would have to inject PATH to stub
+    // `docker`, and a spec that reads the environment violates the repository invariant holding
+    // that to exactly ONE test-only module. The property here is textual anyway: the value is a
+    // literal with no expansion, so there is nothing for an environment to change.
+    const assignments = ROLLBACK.match(/^RELEASES_ROOT=.*$/gmu) ?? [];
+    expect(assignments).toEqual(['RELEASES_ROOT="/srv/qf-jarvis/releases"']);
+    expect(directives(ROLLBACK)).toContain('"${RELEASES_ROOT}/${SHA}/jarvis-os"');
+  });
+});
+
+/**
+ * The external smoke test runs from the operator's machine, on an exact-SHA copy.
+ *
+ * The Gate 2 docs previously invoked `"$RELEASE/smoke.sh"` outside an `ssh`, but that path exists
+ * on the VPS and not on the operator's workstation. Running it over `ssh` instead is not an
+ * equivalent fix: the smoke checks public DNS, a trusted TLS chain, edge headers and that no
+ * application port is reachable, and from inside the host it would be measuring loopback.
+ */
+describe('the external exact-SHA smoke package', () => {
+  const JOS = join(REPO_ROOT, 'deploy', 'jarvis-os');
+  const SCRIPT = join(JOS, 'external-smoke.sh');
+  let dir = '';
+  let work = '';
+  let sha = '';
+
+  const posixPath = (p: string): string => p.replace(/\\/gu, '/');
+
+  const git = (cwd: string, ...args: string[]): string =>
+    execFileSync(
+      'git',
+      [
+        '-c',
+        'user.email=t@example.invalid',
+        '-c',
+        'user.name=test',
+        '-c',
+        'commit.gpgsign=false',
+        ...args,
+      ],
+      { cwd, encoding: 'utf8' },
+    ).trim();
+
+  /**
+   * Translate a path the shell printed into one Node can open.
+   *
+   * Under MSYS the script's `mktemp -d` yields `/tmp/...`, which Node resolves against the drive
+   * root as `C:\tmp\...`. On Linux -- CI and the operator's machine -- this is a no-op.
+   */
+  const toNative = (p: string): string => {
+    if (existsSync(p)) return p;
+    try {
+      return execFileSync('cygpath', ['-w', p], { encoding: 'utf8' }).trim();
+    } catch {
+      return p;
+    }
+  };
+
+  const run = (args: string[]): { code: number; out: string } => {
+    try {
+      return {
+        code: 0,
+        out: execFileSync('bash', [SCRIPT, ...args].map(posixPath), {
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+        }),
+      };
+    } catch (error) {
+      const e = error as { status?: number; stdout?: string; stderr?: string };
+      return { code: e.status ?? 1, out: `${e.stdout ?? ''}${e.stderr ?? ''}` };
+    }
+  };
+
+  beforeAll(() => {
+    dir = mkdtempSync(join(tmpdir(), 'jos-extsmoke-'));
+    const origin = join(dir, 'origin.git');
+    work = join(dir, 'work');
+
+    git(dir, 'init', '--bare', '--initial-branch=main', origin);
+    git(dir, 'init', '--initial-branch=main', work);
+    mkdirSync(join(work, 'deploy', 'jarvis-os'), { recursive: true });
+    cpSync(join(JOS, 'smoke.sh'), join(work, 'deploy', 'jarvis-os', 'smoke.sh'));
+    git(work, 'add', 'deploy');
+    git(work, 'commit', '-m', 'smoke fixture');
+    git(work, 'remote', 'add', 'origin', origin);
+    git(work, 'push', '-u', 'origin', 'main');
+    sha = git(work, 'rev-parse', 'HEAD');
+  }, 120_000);
+
+  afterAll(() => {
+    if (dir) rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('extracts smoke.sh whose bytes equal the Git blob at that commit', () => {
+    const { code, out } = run(['extract', 'jarvis.example.invalid', sha, work]);
+    expect(code, out).toBe(0);
+    const extracted = toNative(out.trim().split('\n').at(-1) ?? '');
+    expect(extracted).toContain('smoke.sh');
+
+    const blob = execFileSync(
+      'git',
+      ['-C', work, 'cat-file', 'blob', `${sha}:deploy/jarvis-os/smoke.sh`],
+      {
+        encoding: 'buffer',
+      },
+    );
+    expect(readFileSync(extracted)).toEqual(blob);
+    rmSync(extracted, { force: true });
+  });
+
+  it('takes the COMMIT, not whatever the working tree currently holds', () => {
+    // The strongest form of "tied to the exact SHA": corrupt the working copy and confirm the
+    // extraction is unaffected.
+    const tree = join(work, 'deploy', 'jarvis-os', 'smoke.sh');
+    const original = readFileSync(tree);
+    appendFileSync(tree, '\n# LOCAL EDIT THAT MUST NOT BE DEPLOYED\n');
+    try {
+      const { code, out } = run(['extract', 'jarvis.example.invalid', sha, work]);
+      expect(code, out).toBe(0);
+      const extracted = toNative(out.trim().split('\n').at(-1) ?? '');
+      const bytes = readFileSync(extracted, 'utf8');
+      expect(bytes).not.toContain('LOCAL EDIT THAT MUST NOT BE DEPLOYED');
+      rmSync(extracted, { force: true });
+    } finally {
+      writeFileSync(tree, original);
+    }
+  });
+
+  it('REJECTS a commit that is not contained in origin/main', () => {
+    git(work, 'checkout', '-b', 'feature');
+    appendFileSync(join(work, 'deploy', 'jarvis-os', 'smoke.sh'), '\n# unreviewed\n');
+    git(work, 'add', 'deploy');
+    git(work, 'commit', '-m', 'unreviewed');
+    const unmerged = git(work, 'rev-parse', 'HEAD');
+    git(work, 'checkout', 'main');
+
+    const { code, out } = run(['extract', 'jarvis.example.invalid', unmerged, work]);
+    expect(code).not.toBe(0);
+    expect(out).toContain('NOT contained in origin/main');
+  });
+
+  it('REJECTS a malformed SHA and an unknown mode', () => {
+    expect(run(['extract', 'jarvis.example.invalid', 'de3ee71', work]).code).not.toBe(0);
+    expect(run(['bogus-mode', 'jarvis.example.invalid', sha, work]).code).not.toBe(0);
+  });
+
+  it('pins line endings and verifies against the blob rather than trusting the archive', () => {
+    const src = read('deploy/jarvis-os/external-smoke.sh');
+    expect(src).toContain('core.autocrlf=false');
+    expect(src).toContain('cat-file blob');
+    expect(src).toContain('cmp -s -');
+    // One file, from that commit -- not the directory, and never the working tree.
+    expect(src).toContain("REL_PATH='deploy/jarvis-os/smoke.sh'");
+    expect(src).toContain('merge-base --is-ancestor');
   });
 });

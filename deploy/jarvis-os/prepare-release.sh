@@ -56,6 +56,9 @@ if [[ -e "$TARGET" ]]; then
 fi
 
 mkdir -p "${RELEASES_ROOT}/${SHA}"
+# The verifier requires the whole trusted parent chain to be non-group/world-writable: a writable
+# parent lets the directory be swapped after verification and before the deployment that trusts it.
+chmod go-w "${RELEASES_ROOT}/${SHA}"
 
 # Staged in a sibling directory on the SAME filesystem so the publish step is an atomic rename.
 # Extracting straight into $TARGET would leave a half-written release visible under its final name

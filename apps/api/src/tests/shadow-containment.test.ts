@@ -455,7 +455,11 @@ describe('(133-148) the declared budget and every prior lock', () => {
     // apps/api still publishes nothing from its root: the executables are bins, not an API.
     const api = (await import('../index.js')) as unknown as Record<string, unknown>;
     expect(Object.keys(api)).toHaveLength(0);
-  });
+    // Real dynamic imports of built bundles, each pulling its own module graph. Like its twin in
+    // the credential suite, this sits close enough to the 5s default that a busy machine turns it
+    // into a timeout that says nothing about the API counts it exists to lock. Given an explicit
+    // budget rather than left to lose a race with whatever runs beside it.
+  }, 30_000);
 
   it('the two executables are declared as bins and each runs nothing on import', () => {
     const manifest = JSON.parse(readFileSync(join(APP_DIR, 'package.json'), 'utf8')) as {

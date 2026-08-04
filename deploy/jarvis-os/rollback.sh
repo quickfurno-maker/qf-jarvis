@@ -35,7 +35,17 @@ SHA="${1:-}"
 STAGE="${2:-}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="${REPO_DIR:-/srv/qf-jarvis/repo}"
-RELEASES_ROOT="${RELEASES_ROOT:-/srv/qf-jarvis/releases}"
+
+# HARDCODED, deliberately not `${RELEASES_ROOT:-...}`.
+#
+# The approved root is the thing that decides which directory is allowed to define a production
+# deployment. An environment variable is invisible in the command an operator types and in the
+# shell history afterwards, so a single exported value could silently redirect a rollback at the
+# worst possible moment. There is no override and no skip flag.
+#
+# The verifier still accepts a root argument so the test fixtures can drive it against a temporary
+# directory; production simply never passes one other than this constant.
+RELEASES_ROOT="/srv/qf-jarvis/releases"
 
 usage() {
   echo "usage: rollback.sh <previous-known-good-git-sha> <private|ingress|hsts>" >&2

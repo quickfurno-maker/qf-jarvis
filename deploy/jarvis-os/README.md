@@ -47,6 +47,7 @@ host-network Traefik reaches them by container IP. Jarvis OS uses that exact pat
 | `activate.sh`                 | Gate 2 steps 2 and 4. Applies the `ingress` then `hsts` overlay, recreating **only** JOS.     |
 | `rollback.sh`                 | Gate 2. Re-points **only** the JOS project at a previous immutable tag, at an explicit stage. |
 | `smoke.sh`                    | Gate 2. External checks in `pre-hsts` and `final` modes. Fails closed.                        |
+| `external-smoke.sh`           | Gate 2. Runs `smoke.sh` from an exact-SHA copy on the **operator's own machine**.             |
 
 ### Why the container and its router are separate files
 
@@ -67,7 +68,8 @@ identity, filesystem, capabilities, secret mount and auth boundary **before** ex
 
 **The healthcheck means one thing: the Node process answers HTTP.** It does not mean the auth
 config is valid, TLS works, DNS resolves, or Core and n8n are reachable — the container cannot
-honestly assess any of those. External readiness is `smoke.sh`, in Gate 2.
+honestly assess any of those. External readiness is `external-smoke.sh`, run from outside the host
+in Gate 2.
 
 ## Gate 2 — the production secret
 
@@ -138,15 +140,37 @@ ssh qf-staging "$RELEASE/deploy.sh $SHA"
 # 5. Make it public — reviewed overlay from the same release, recreates only qf-jarvis-os
 ssh qf-staging "$RELEASE/activate.sh ingress $SHA"
 
-# 6. Verify trusted TLS externally. HSTS must still be ABSENT here.
-"$RELEASE/smoke.sh" pre-hsts jarvis.quickfurno.in
+# 6. Verify trusted TLS EXTERNALLY, from your own machine, using the same SHA's smoke.sh.
+#    Run from your local clone. It fetches origin, confirms $SHA is in origin/main, extracts only
+#    deploy/jarvis-os/smoke.sh from that commit into a temp dir outside the repo, checks its bytes
+#    against the Git blob, and runs that copy. HSTS must still be ABSENT here.
+./deploy/jarvis-os/external-smoke.sh pre-hsts jarvis.quickfurno.in "$SHA"
 
 # 7. Only now attach HSTS — reviewed overlay, recreates only qf-jarvis-os
 ssh qf-staging "$RELEASE/activate.sh hsts $SHA"
 
-# 8. Final gate. Fails closed on missing HSTS, wrong max-age, or a duplicate CSP header.
-"$RELEASE/smoke.sh" final jarvis.quickfurno.in
+# 8. Final gate, again EXTERNAL. Fails closed on missing HSTS, wrong max-age, or a duplicate CSP.
+./deploy/jarvis-os/external-smoke.sh final jarvis.quickfurno.in "$SHA"
 ```
+
+### Two packages, one SHA
+
+| Package                                                            | Where              | Covers                                       |
+| ------------------------------------------------------------------ | ------------------ | -------------------------------------------- |
+| **VPS release package** — `/srv/qf-jarvis/releases/$SHA/jarvis-os` | on the host        | `deploy` / `activate` / `rollback`           |
+| **External smoke package** — temp dir from `external-smoke.sh`     | operator's machine | DNS, trusted TLS, edge headers, closed ports |
+
+**Both derive from the same merged Git SHA**, and each verifies its own bytes against Git before it
+is trusted.
+
+The external checks cannot be run over `ssh` from the host and still mean anything: from inside the
+VPS, DNS may resolve differently, TLS terminates locally, and "no application port is reachable"
+would be testing loopback rather than the internet. A check that only passes when run from the
+machine being checked is not an external check.
+
+Nor can it be the `smoke.sh` in your working tree — that is whatever is checked out, possibly a
+different branch or with local edits. `external-smoke.sh extract <host> <sha>` materialises and
+verifies the copy without running it, if you want to read it first.
 
 There is **no shared mutable deployment directory.** The verifier refuses any package that does not
 sit at `/srv/qf-jarvis/releases/<SHA>/jarvis-os`, so a hand-edited copy cannot be deployed from —
