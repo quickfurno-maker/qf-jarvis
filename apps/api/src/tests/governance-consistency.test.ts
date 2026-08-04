@@ -182,10 +182,19 @@ describe('QFJ-P12 (ADR-0085) canonical governance consistency', () => {
       }
     });
 
-    it('records JOS-01B as the current slice and JOS-01C as next', () => {
+    it('names exactly one current JOS slice, and a different one as next', () => {
+      // Deliberately phase-AGNOSTIC. Pinning the specific slice would make this something a
+      // maintainer rewrites every phase, and a test that is always rewritten stops being a check.
+      // What must hold at EVERY phase is the shape: one current slice, one next, and they differ.
       const jarvisOs = flat(read(JARVIS_OS));
-      expect(jarvisOs).toMatch(/JOS-01B is the current implemented Jarvis OS slice/u);
-      expect(jarvisOs).toMatch(/JOS-01C[^.]*is next/u);
+
+      const current = /JOS-01([A-E]) is the current implemented Jarvis OS slice/u.exec(jarvisOs);
+      expect(current, 'a current JOS slice must be named').not.toBeNull();
+
+      const next = /JOS-01([A-E])[^.]*is next/u.exec(jarvisOs);
+      expect(next, 'a next JOS slice must be named').not.toBeNull();
+
+      expect(next?.[1], 'the next slice must differ from the current one').not.toBe(current?.[1]);
       expect(jarvisOs).toContain('Nothing is deployed');
     });
 

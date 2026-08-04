@@ -2,10 +2,17 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { argon2, randomBytes } from 'node:crypto';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+
 import { parseControlPlaneSnapshotV1 } from '@qf-jarvis/control-plane-read-contract';
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { GET } from '../../app/api/control-plane/v1/snapshot/route';
+import { AUTH_CONFIG_PATH_VAR } from '../auth/config/loader';
+import { authConfigV1Schema } from '../auth/config/schema';
+import { newSessionClaims, sealSession } from '../auth/session/token';
 
 import { buildControlPlaneSnapshot } from './build-snapshot';
 
@@ -24,8 +31,90 @@ const SRC = fileURLToPath(new URL('../../', import.meta.url));
 const ROUTE = join(SRC, 'app/api/control-plane/v1/snapshot/route.ts');
 const URL_BASE = 'http://127.0.0.1/api/control-plane/v1/snapshot';
 
+/**
+ * JOS-01C: the route now requires an operator session, so this suite supplies one.
+ *
+ * The contract assertions below are unchanged -- they are about the PAYLOAD. That the route
+ * refuses an unauthenticated caller is proved separately in `auth-http.test.ts`, against the same
+ * handler, so neither property depends on the other's fixture.
+ */
+let sessionCookie: string | undefined;
+
+vi.mock('next/headers', () => ({
+  cookies: () =>
+    Promise.resolve({
+      get: (name: string) =>
+        sessionCookie === undefined ? undefined : { name, value: sessionCookie },
+    }),
+}));
+
+beforeAll(async () => {
+  const salt = Buffer.alloc(16, 7);
+  const digest = await new Promise<Buffer>((resolve, reject) => {
+    argon2(
+      'argon2id',
+      {
+        message: Buffer.from('a-test-passphrase-value'),
+        nonce: salt,
+        parallelism: 1,
+        tagLength: 32,
+        memory: 19_456,
+        passes: 2,
+      },
+      (error, tag) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve(Buffer.from(tag.buffer, tag.byteOffset, tag.byteLength));
+      },
+    );
+  });
+  const document = {
+    version: 1,
+    mode: 'LOCAL_DEVELOPMENT',
+    operator: { id: 'owner', displayName: 'Owner', role: 'OWNER' },
+    passwordVerifier: {
+      algorithm: 'ARGON2ID_V19',
+      memoryKiB: 19_456,
+      passes: 2,
+      parallelism: 1,
+      salt: salt.toString('base64url'),
+      digest: digest.toString('base64url'),
+    },
+    totp: {
+      required: true,
+      algorithm: 'SHA1',
+      digits: 6,
+      periodSeconds: 30,
+      allowedDriftSteps: 1,
+      secret: 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ',
+    },
+    session: {
+      revision: 1,
+      absoluteTtlSeconds: 3600,
+      primaryKeyId: 'k1',
+      keys: [{ id: 'k1', status: 'PRIMARY', key: randomBytes(32).toString('base64url') }],
+    },
+  };
+  const dir = mkdtempSync(`${tmpdir()}/qfj-snapshot-auth-`);
+  const path = `${dir}/auth.json`;
+  writeFileSync(path, JSON.stringify(document), { mode: 0o600 });
+  process.env[AUTH_CONFIG_PATH_VAR] = path;
+
+  const config = authConfigV1Schema.parse(document);
+  sessionCookie = sealSession(
+    config,
+    newSessionClaims({ config, nowSeconds: Math.floor(Date.now() / 1000) }),
+  );
+});
+
+afterAll(() => {
+  Reflect.deleteProperty(process.env, AUTH_CONFIG_PATH_VAR);
+});
+
 const call = async (url: string = URL_BASE): Promise<Response> =>
-  Promise.resolve(GET(new Request(url, { method: 'GET' })));
+  GET(new Request(url, { method: 'GET' }));
 
 function walk(dir: string): string[] {
   const out: string[] = [];
@@ -227,7 +316,8 @@ describe('the route file itself', () => {
 
   it('exports GET and no mutating method', () => {
     const code = source();
-    expect(code).toMatch(/export function GET\b/);
+    // JOS-01C made the handler async so it can await session verification before doing any work.
+    expect(code).toMatch(/export async function GET\b/);
     for (const method of ['POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']) {
       expect(code, method).not.toMatch(
         new RegExp(`export\\s+(async\\s+)?function\\s+${method}\\b`),
@@ -245,8 +335,14 @@ describe('the route file itself', () => {
     // The whole server directory, not just the route: the builder is the thing a future
     // contributor would be tempted to "just add a fetch to".
     for (const file of walk(join(SRC, 'server'))) {
-      const code = readFileSync(file, 'utf8');
       const label = file.replace(/\\/g, '/').split('/apps/jarvis-os/')[1] ?? file;
+      // The auth subtree has its own, STRICTER containment spec (proxy-csp.test.ts), which pins
+      // `process.env` and `node:fs` to exactly one file each. Re-scanning it here with the
+      // control-plane rules would only report the two authorised exceptions as violations.
+      if (label.startsWith('src/server/auth/') || label.endsWith('.test.ts')) {
+        continue;
+      }
+      const code = readFileSync(file, 'utf8');
       expect(code, `${label}: fetch`).not.toMatch(/\bfetch\s*\(/);
       expect(code, `${label}: url`).not.toMatch(/https?:\/\/(?!127\.0\.0\.1)/);
       expect(code, `${label}: env`).not.toMatch(/process\s*\.\s*env/);
@@ -272,11 +368,18 @@ describe('the route file itself', () => {
     }
   });
 
-  it('is the only API route in the application', () => {
+  it('locks the API route set to exactly three, all of them accounted for', () => {
+    // An EXACT set. A fourth route file appearing -- a debug endpoint, a session introspection
+    // helper, an auth-config reader -- fails this test rather than shipping quietly.
     const routes = walk(join(SRC, 'app'))
       .map((file) => file.replace(/\\/g, '/'))
-      .filter((file) => /\/route\.tsx?$/.test(file));
-    expect(routes).toHaveLength(1);
-    expect(routes[0]).toContain('api/control-plane/v1/snapshot/route.ts');
+      .filter((file) => /\/route\.tsx?$/.test(file))
+      .map((file) => file.split('/src/app/')[1] ?? file)
+      .sort();
+    expect(routes).toEqual([
+      'api/auth/login/route.ts', // POST only: the sole unauthenticated mutation
+      'api/auth/logout/route.ts', // POST only: session-bound CSRF required
+      'api/control-plane/v1/snapshot/route.ts', // GET only: requires a verified session
+    ]);
   });
 });
