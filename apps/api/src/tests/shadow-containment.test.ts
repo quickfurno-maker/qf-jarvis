@@ -44,15 +44,20 @@ function walk(dir: string): string[] {
 }
 
 /**
- * The two containment scanners are excluded from every scan.
+ * The containment scanners are excluded from every scan.
  *
  * A containment spec must name the strings it forbids, so scanning one flags its own prohibition as the
  * violation. Excluding exactly the scanners keeps the check honest: all production source and every
  * behavioural spec is still covered.
+ *
+ * `deployment-containment` joins the list for the same reason: it asserts the production image and
+ * compose topology reference no n8n, Core, database or provider host, which it can only do by naming
+ * those strings.
  */
 const SCANNERS: readonly string[] = Object.freeze([
   'src/tests/shadow-containment.test.ts',
   'src/tests/credential-containment.test.ts',
+  'src/tests/deployment-containment.test.ts',
 ]);
 const allFiles = (): string[] =>
   walk(join(APP_DIR, 'src')).filter((f) => !SCANNERS.some((s) => normalise(f).endsWith(`/${s}`)));
