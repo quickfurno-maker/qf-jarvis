@@ -34,17 +34,19 @@ host-network Traefik reaches them by container IP. Jarvis OS uses that exact pat
 
 ## Files
 
-| File                     | Purpose                                                                                       |
-| ------------------------ | --------------------------------------------------------------------------------------------- |
-| `Dockerfile`             | Multi-stage build. Base pinned by **digest**; non-root `10001:10001`; no secret; no npm/perl. |
-| `compose.production.yml` | The **private** container. No published port, `traefik.enable=false`. Reachable by nobody.    |
-| `compose.ingress.yml`    | Additive overlay: routers, TLS, rate limits. **This is what makes it public.**                |
-| `compose.hsts.yml`       | Additive overlay: HSTS, applied only after TLS is proven.                                     |
-| `verify-merged-sha.sh`   | Fails closed unless a SHA is well-formed, exists, and is contained in `origin/main`.          |
-| `deploy.sh`              | Gate 2 step 1. Builds one exact merged SHA and starts it **privately**, then proves it.       |
-| `activate.sh`            | Gate 2 steps 2 and 4. Applies the `ingress` then `hsts` overlay, recreating **only** JOS.     |
-| `rollback.sh`            | Gate 2. Re-points **only** the JOS project at a previous immutable tag, at an explicit stage. |
-| `smoke.sh`               | Gate 2. External checks in `pre-hsts` and `final` modes. Fails closed.                        |
+| File                          | Purpose                                                                                       |
+| ----------------------------- | --------------------------------------------------------------------------------------------- |
+| `Dockerfile`                  | Multi-stage build. Base pinned by **digest**; non-root `10001:10001`; no secret; no npm/perl. |
+| `compose.production.yml`      | The **private** container. No published port, `traefik.enable=false`. Reachable by nobody.    |
+| `compose.ingress.yml`         | Additive overlay: routers, TLS, rate limits. **This is what makes it public.**                |
+| `compose.hsts.yml`            | Additive overlay: HSTS, applied only after TLS is proven.                                     |
+| `verify-merged-sha.sh`        | Fails closed unless a SHA is well-formed, exists, and is contained in `origin/main`.          |
+| `prepare-release.sh`          | Materialises the immutable release package for one SHA and prints its path.                   |
+| `verify-release-artifacts.sh` | Proves a release directory IS that commit's configuration, byte for byte.                     |
+| `deploy.sh`                   | Gate 2 step 1. Builds one exact merged SHA and starts it **privately**, then proves it.       |
+| `activate.sh`                 | Gate 2 steps 2 and 4. Applies the `ingress` then `hsts` overlay, recreating **only** JOS.     |
+| `rollback.sh`                 | Gate 2. Re-points **only** the JOS project at a previous immutable tag, at an explicit stage. |
+| `smoke.sh`                    | Gate 2. External checks in `pre-hsts` and `final` modes. Fails closed.                        |
 
 ### Why the container and its router are separate files
 
@@ -109,44 +111,75 @@ Do not change `quickfurno.in`, `www`, `staging-core` or the n8n hostname.
 
 ## Gate 2 — sequence
 
-Every step runs against the exact merged SHA. `deploy.sh` and `activate.sh` both refuse any commit
-not contained in `origin/main`, so an unmerged branch head cannot be deployed even by accident.
+**A release is one SHA across both halves: the application image and the deployment
+configuration.** Every step runs from the immutable release directory for that SHA, and every step
+re-verifies both before touching Docker.
 
 ```bash
+SHA=<exact merge commit>
+
 # 1. DNS resolves to the VPS, verified externally
 dig +short A jarvis.quickfurno.in            # expect 200.141.10.108
 
 # 2. Secret installed (above)
 
-# 3. Build and start PRIVATELY. No router exists yet.
-#    Runs the full private proof itself: revision, uid/gid, read-only rootfs, dropped caps,
-#    no-new-privileges, no published port, secret mounted read-only, internal 200/307/401,
-#    and that the container carries NO Traefik routing labels.
-ssh qf-staging '/srv/qf-jarvis/deploy/deploy.sh <exact-merged-sha>'
+# 3. Materialise the immutable release package for that commit.
+#    Extracts ONLY deploy/jarvis-os from `git archive $SHA` (tracked files only), verifies every
+#    byte against Git, and publishes by atomic rename. Prints the directory.
+ssh qf-staging "/srv/qf-jarvis/repo/deploy/jarvis-os/prepare-release.sh $SHA"
+RELEASE="/srv/qf-jarvis/releases/$SHA/jarvis-os"
 
-# 4. Make it public — reviewed overlay, recreates only qf-jarvis-os
-ssh qf-staging '/srv/qf-jarvis/deploy/activate.sh ingress <exact-merged-sha>'
+# 4. Build and start PRIVATELY. No router exists yet.
+#    Verifies the commit is in origin/main AND that this directory is that commit's configuration,
+#    then proves revision, uid/gid, read-only rootfs, dropped caps, no-new-privileges, no published
+#    port, the secret mount, internal 200/307/401, and NO Traefik routing labels.
+ssh qf-staging "$RELEASE/deploy.sh $SHA"
 
-# 5. Verify trusted TLS externally. HSTS must still be ABSENT here.
-./smoke.sh pre-hsts jarvis.quickfurno.in
+# 5. Make it public — reviewed overlay from the same release, recreates only qf-jarvis-os
+ssh qf-staging "$RELEASE/activate.sh ingress $SHA"
 
-# 6. Only now attach HSTS — reviewed overlay, recreates only qf-jarvis-os
-ssh qf-staging '/srv/qf-jarvis/deploy/activate.sh hsts <exact-merged-sha>'
+# 6. Verify trusted TLS externally. HSTS must still be ABSENT here.
+"$RELEASE/smoke.sh" pre-hsts jarvis.quickfurno.in
 
-# 7. Final gate. Fails closed on missing HSTS, wrong max-age, or a duplicate CSP header.
-./smoke.sh final jarvis.quickfurno.in
+# 7. Only now attach HSTS — reviewed overlay, recreates only qf-jarvis-os
+ssh qf-staging "$RELEASE/activate.sh hsts $SHA"
+
+# 8. Final gate. Fails closed on missing HSTS, wrong max-age, or a duplicate CSP header.
+"$RELEASE/smoke.sh" final jarvis.quickfurno.in
 ```
+
+There is **no shared mutable deployment directory.** The verifier refuses any package that does not
+sit at `/srv/qf-jarvis/releases/<SHA>/jarvis-os`, so a hand-edited copy cannot be deployed from —
+and there is no fallback path to fall back to.
 
 **HSTS is a reviewed file, not a production edit.** `compose.hsts.yml` holds
 `stsSeconds=31536000`, `stsIncludeSubdomains=false`, `stsPreload=false`, `forceSTSHeader=false`.
 It is applied last because HSTS sent before a valid certificate exists pins browsers to a hostname
 that does not yet serve HTTPS, and the pin outlives the mistake.
 
-Rollback: `./rollback.sh <previous-sha> <private|ingress|hsts>` — re-points only the JOS project.
+## Rollback restores both halves
+
+```bash
+/srv/qf-jarvis/releases/<PREVIOUS_SHA>/jarvis-os/rollback.sh <PREVIOUS_SHA> <private|ingress|hsts>
+```
+
+It uses **`PREVIOUS_SHA`'s own release package**, not the compose files beside whatever script you
+happen to run. Re-pointing only the image would combine an old known-good image with today's
+hardening, Traefik labels, HSTS values and rate limits — and if today's configuration is the fault
+being rolled back from, that "rollback" carries the fault along.
+
+It verifies the previous package byte-for-byte against Git first, and **fails closed** if the
+package is missing or altered, telling you to restore it with `prepare-release.sh`. It never
+fetches and never rebuilds: an emergency is not the moment to depend on a reachable remote, and
+`main` may itself be broken.
+
 The stage is required, not defaulted: `private` would silently drop HSTS from a host whose browsers
 have already been told to refuse plain HTTP, and the full set would silently expose a container
-that was still private. It prunes nothing; `system prune`, `image prune -a`, `volume prune` and
-`network prune` would all reach shared Traefik, n8n and Core resources.
+that was still private. After bringing the container up it verifies the revision **and** that the
+container actually landed in the stage that was named.
+
+It prunes nothing; `system prune`, `image prune -a`, `volume prune` and `network prune` would all
+reach shared Traefik, n8n and Core resources.
 
 ## Runtime image vulnerability disposition
 
@@ -165,8 +198,15 @@ The runtime never installs a package, so the toolchain was removed: npm, npx, co
 | **Fixable HIGH**     | 4      | **0** |
 
 The 4 residual findings are all in `perl-base` (`Essential: yes` — dpkg requires it) and all report
-**"Fixed version: not fixed"** upstream. Accepted: nothing in the request path invokes perl, and the
-container is non-root on a read-only root filesystem with all capabilities dropped.
+**"Fixed version: not fixed"** for this base. Precisely: **no fixed package is currently available
+in Debian bookworm for this pinned runtime base** — not that no fix exists anywhere; some of these
+CVEs are fixed on newer Debian branches, and reaching them means leaving the pinned Node version.
+
+Accepted on that basis: nothing in the request path invokes perl, and the container is non-root on a
+read-only root filesystem with all capabilities dropped.
+
+**The image is not vulnerability-free and is not claimed to be.** This scan is point-in-time and
+must be re-run immediately before Gate 2 production activation.
 
 ## What this phase does NOT change
 

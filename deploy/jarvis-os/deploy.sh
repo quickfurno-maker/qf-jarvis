@@ -31,6 +31,20 @@ BASE="$HERE/compose.production.yml"
 "$HERE/verify-merged-sha.sh" "$SHA" "$REPO_DIR"
 
 # ---------------------------------------------------------------------------------------------
+# 1b. THIS SCRIPT's own directory must be that commit's release package
+# ---------------------------------------------------------------------------------------------
+# Everything below -- the Dockerfile that gets built, the Compose file that defines the hardening,
+# the overlays that activate.sh will apply -- is read from $HERE. Verifying only the image would
+# leave the configuration unbound: a deployment could be truthfully labelled with a commit whose
+# Compose file it was not actually running.
+#
+# The check also forbids a mutable shared directory such as /srv/qf-jarvis/deploy, because the
+# package must sit at /srv/qf-jarvis/releases/<sha>/jarvis-os. There is no fallback path.
+#
+# Run prepare-release.sh <sha> first; it prints the directory to run this from.
+"$HERE/verify-release-artifacts.sh" "$SHA" "$HERE" "$REPO_DIR"
+
+# ---------------------------------------------------------------------------------------------
 # 2. The secret must already be installed correctly
 # ---------------------------------------------------------------------------------------------
 # The application refuses a group- or world-readable file, so failing here gives a clearer message
@@ -57,7 +71,7 @@ fi
 # paths -- cannot enter the build context regardless of the state of the working tree.
 BUILD_CTX="$(mktemp -d)"
 trap 'rm -rf "$BUILD_CTX"' EXIT
-git -C "$REPO_DIR" archive --format=tar "$SHA" | tar -x -C "$BUILD_CTX"
+git -c core.autocrlf=false -c core.eol=lf -C "$REPO_DIR" archive --format=tar "$SHA" | tar -x -C "$BUILD_CTX"
 
 echo "==> building qf-jarvis-os:${SHA}"
 docker build \
@@ -103,7 +117,15 @@ prove "capabilities dropped" "[ALL]" "$(docker inspect qf-jarvis-os --format '{{
 prove "capabilities added" "[]" "$(docker inspect qf-jarvis-os --format '{{.HostConfig.CapAdd}}')"
 prove "no-new-privileges" "true" \
   "$(docker inspect qf-jarvis-os --format '{{range .HostConfig.SecurityOpt}}{{if eq . "no-new-privileges:true"}}true{{end}}{{end}}')"
-prove "published ports" "map[]" "$(docker inspect qf-jarvis-os --format '{{.NetworkSettings.Ports}}')"
+# Projected to HOST PORTS, not compared against the raw map.
+#
+# The Dockerfile has `EXPOSE 3000`, so an unpublished container still reports
+# `map[3000/tcp:[]]` -- the key exists with an empty binding list. Asserting `map[]` would fail on a
+# correct deployment and pass only if EXPOSE were removed. What must be empty is the set of HOST
+# bindings, which is what this projection yields: empty here, and "31234" for a container run with
+# `-p 127.0.0.1:31234:3000`. Both were measured.
+prove "published host ports" "" \
+  "$(docker inspect qf-jarvis-os --format '{{range $p, $conf := .NetworkSettings.Ports}}{{range $conf}}{{.HostPort}} {{end}}{{end}}')"
 prove "secret mounted read-only" "true" \
   "$(docker inspect qf-jarvis-os --format '{{range .Mounts}}{{if eq .Destination "/run/secrets/qf-jarvis-os-auth.json"}}{{not .RW}}{{end}}{{end}}')"
 
@@ -135,12 +157,13 @@ cat <<EOF
 
 ==> PRIVATE deployment verified: qf-jarvis-os:${SHA}
 
+Image AND deployment configuration are both bound to ${SHA}.
 It is running and reachable by nobody: no published port, no Traefik router.
 
-Next, in order:
+Next, in order -- all from this same verified release directory:
   1. Confirm DNS:            dig +short A jarvis.quickfurno.in
-  2. Activate ingress:       ./activate.sh ingress ${SHA}
-  3. Verify TLS externally:  ./smoke.sh pre-hsts jarvis.quickfurno.in
-  4. Activate HSTS:          ./activate.sh hsts ${SHA}
-  5. Final verification:     ./smoke.sh final jarvis.quickfurno.in
+  2. Activate ingress:       ${HERE}/activate.sh ingress ${SHA}
+  3. Verify TLS externally:  ${HERE}/smoke.sh pre-hsts jarvis.quickfurno.in
+  4. Activate HSTS:          ${HERE}/activate.sh hsts ${SHA}
+  5. Final verification:     ${HERE}/smoke.sh final jarvis.quickfurno.in
 EOF

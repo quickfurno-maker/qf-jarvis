@@ -522,7 +522,11 @@ describe('(71-77) package API and dependency locks are untouched', () => {
       )) as unknown as Record<string, unknown>;
       expect(Object.keys(barrel)).toHaveLength(count);
     }
-  });
+    // Nineteen real dynamic imports of built bundles, each pulling its own module graph. This
+    // takes over four seconds on its own against the 5s default, so it was already one busy
+    // machine away from a timeout that says nothing about the API counts it exists to lock.
+    // Given an explicit budget rather than left to lose a race with whatever runs beside it.
+  }, 30_000);
 
   it('apps/api adds no package-root runtime export of its own', async () => {
     const barrel = (await import('../index.js')) as unknown as Record<string, unknown>;

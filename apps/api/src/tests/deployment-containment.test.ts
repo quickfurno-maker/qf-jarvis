@@ -1,5 +1,17 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  appendFileSync,
+  chmodSync,
+  cpSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -393,7 +405,7 @@ describe('the operational scripts', () => {
   it('builds from a tracked-only archive so untracked paths cannot enter the context', () => {
     // `git archive` emits tracked files only. Building from the working tree would expose
     // `.mcp.json` and the reconciliation reports to the Docker daemon.
-    expect(RAW.deploy).toContain('git -C "$REPO_DIR" archive');
+    expect(RAW.deploy).toMatch(/git .*-C "\$REPO_DIR" archive/u);
     expect(CODE.deploy).not.toMatch(/docker build[^\n]*\s\.\s*$/mu);
   });
 
@@ -410,6 +422,7 @@ describe('the operational scripts', () => {
       'CapDrop',
       'no-new-privileges',
       'NetworkSettings.Ports',
+      'HostPort',
       'State.Health.Status',
     ]) {
       expect(CODE.deploy, proof).toContain(proof);
@@ -578,7 +591,9 @@ describe('the merged-main commit guard', () => {
     git(work, 'add', 'b.txt');
     git(work, 'commit', '-m', 'unreviewed commit');
     unmergedSha = git(work, 'rev-parse', 'HEAD');
-  });
+    // Two real repositories, a push and several git invocations. Vitest's 10s default hook timeout
+    // is not enough on a cold filesystem cache, and a flaky release guard is worse than a slow one.
+  }, 120_000);
 
   afterAll(() => {
     if (dir) rmSync(dir, { recursive: true, force: true });
@@ -615,5 +630,333 @@ describe('the merged-main commit guard', () => {
     const { code, out } = run('0123456789012345678901234567890123456789');
     expect(code).not.toBe(0);
     expect(out).toContain('does not exist');
+  });
+});
+
+/**
+ * The immutable per-SHA release package, exercised for real.
+ *
+ * The image was already bound to a commit. The CONFIGURATION was not: Compose files, Traefik
+ * labels, HSTS values and the scripts themselves were read from whatever directory the script
+ * lived in, so a deployment could be truthfully labelled with a commit whose hardening it was not
+ * running. These tests drive `prepare-release.sh` and `verify-release-artifacts.sh` against a
+ * hermetic fixture repository and try to break the result in every way that matters.
+ */
+describe('the immutable release package', () => {
+  const JOS = join(REPO_ROOT, 'deploy', 'jarvis-os');
+  let dir = '';
+  let work = '';
+  let root = '';
+  let release = '';
+  let pristine = '';
+  let sha = '';
+
+  /**
+   * Whether the filesystem under test honours POSIX mode bits and symlinks.
+   *
+   * Windows checkouts silently ignore `chmod` and cannot create symlinks, so the permission,
+   * executable-bit and symlink cases cannot be staged there. They are asserted against the guard's
+   * source instead, and run for real on Linux — which is both CI (ubuntu-latest) and the
+   * production host, the only places the check actually has to work.
+   */
+  let posix = false;
+
+  const git = (cwd: string, ...args: string[]): string =>
+    execFileSync(
+      'git',
+      [
+        '-c',
+        'user.email=t@example.invalid',
+        '-c',
+        'user.name=test',
+        '-c',
+        'commit.gpgsign=false',
+        ...args,
+      ],
+      { cwd, encoding: 'utf8' },
+    ).trim();
+
+  /**
+   * Windows paths must reach bash in POSIX form.
+   *
+   * A backslash path survives argv intact but is then re-interpreted inside the script -- `tar -C`
+   * treats the separators as escapes. Production and CI are Linux, where this is a no-op.
+   */
+  const posixPath = (p: string): string => p.replace(/\\/gu, '/');
+
+  const runBash = (args: string[]): { code: number; out: string } => {
+    try {
+      return {
+        code: 0,
+        out: execFileSync('bash', args.map(posixPath), {
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+        }),
+      };
+    } catch (error) {
+      const e = error as { status?: number; stdout?: string; stderr?: string };
+      return { code: e.status ?? 1, out: `${e.stdout ?? ''}${e.stderr ?? ''}` };
+    }
+  };
+
+  const verify = (releaseDir: string): { code: number; out: string } =>
+    runBash([join(JOS, 'verify-release-artifacts.sh'), sha, releaseDir, work, root]);
+
+  /** Restore the package to its verified state, then apply one specific corruption. */
+  const corrupt = (mutate: () => void): { code: number; out: string } => {
+    rmSync(release, { recursive: true, force: true });
+    cpSync(pristine, release, { recursive: true });
+    mutate();
+    return verify(release);
+  };
+
+  beforeAll(() => {
+    dir = mkdtempSync(join(tmpdir(), 'jos-release-'));
+    const origin = join(dir, 'origin.git');
+    work = join(dir, 'work');
+    root = join(dir, 'releases');
+    mkdirSync(root, { recursive: true });
+
+    git(dir, 'init', '--bare', '--initial-branch=main', origin);
+    git(dir, 'init', '--initial-branch=main', work);
+    mkdirSync(join(work, 'deploy', 'jarvis-os'), { recursive: true });
+    cpSync(JOS, join(work, 'deploy', 'jarvis-os'), { recursive: true });
+
+    git(work, 'add', 'deploy');
+    for (const name of readdirSync(JOS).filter((n) => n.endsWith('.sh'))) {
+      git(work, 'update-index', '--chmod=+x', `deploy/jarvis-os/${name}`);
+    }
+    git(work, 'commit', '-m', 'release fixture');
+    git(work, 'remote', 'add', 'origin', origin);
+    git(work, 'push', '-u', 'origin', 'main');
+    sha = git(work, 'rev-parse', 'HEAD');
+
+    const prepared = runBash([
+      join(work, 'deploy', 'jarvis-os', 'prepare-release.sh'),
+      sha,
+      work,
+      root,
+    ]);
+    expect(prepared.code, prepared.out).toBe(0);
+    release = prepared.out.trim();
+
+    pristine = join(dir, 'pristine');
+    cpSync(release, pristine, { recursive: true });
+
+    const probe = join(release, 'compose.production.yml');
+    chmodSync(probe, 0o664);
+    posix = (statSync(probe).mode & 0o777) === 0o664;
+    chmodSync(probe, 0o644);
+  }, 120_000);
+
+  afterAll(() => {
+    if (dir) rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('prepares the package from tracked content of exactly that commit', () => {
+    const prepare = read('deploy/jarvis-os/prepare-release.sh');
+    // `git archive` emits tracked files only, so untracked local material -- including the
+    // protected paths -- cannot enter a release regardless of the working tree's state.
+    expect(prepare).toContain('archive --format=tar "$SHA" -- "$SUBDIR"');
+    expect(prepare).toContain("SUBDIR='deploy/jarvis-os'");
+    // Only the deployment directory: the whole repository is never copied to the host.
+    expect(prepare).toContain('--strip-components=2');
+    // Byte equality must not depend on the host's line-ending configuration.
+    expect(prepare).toContain('core.autocrlf=false');
+    // Published by atomic rename, so a half-written release is never reachable under its final name.
+    expect(prepare).toContain('mv -T "$STAGE" "$TARGET"');
+    expect(release).toBe(posixPath(join(root, sha, 'jarvis-os')));
+  });
+
+  it('accepts the package it just prepared', () => {
+    const { code, out } = verify(release);
+    expect(out).toContain('byte for byte');
+    expect(code).toBe(0);
+  });
+
+  it('REJECTS a package whose configuration was edited', () => {
+    // The whole point: an image can be genuinely built from the right commit while the Compose
+    // file beside it is stale or hand-edited.
+    const { code, out } = corrupt(() => {
+      appendFileSync(join(release, 'compose.production.yml'), '\n# tampered\n');
+    });
+    expect(code).not.toBe(0);
+    expect(out).toContain('does not match its Git blob');
+  });
+
+  it('REJECTS a missing deployment file', () => {
+    const { code, out } = corrupt(() => {
+      rmSync(join(release, 'compose.hsts.yml'));
+    });
+    expect(code).not.toBe(0);
+    expect(out).toContain('file set does not match');
+  });
+
+  it('REJECTS an unexpected extra file that could influence Compose', () => {
+    // An extra fragment matters as much as a missing one: it can change what Compose merges.
+    const { code, out } = corrupt(() => {
+      writeFileSync(join(release, 'compose.override.yml'), 'services: {}\n');
+    });
+    expect(code).not.toBe(0);
+    expect(out).toContain('file set does not match');
+  });
+
+  it('REJECTS a secret-shaped file inside the release package', () => {
+    const { code, out } = corrupt(() => {
+      writeFileSync(join(release, 'jarvis-os-auth.json'), '{}\n');
+    });
+    expect(code).not.toBe(0);
+    // Either guard is a correct refusal: the file-set check fires first, and the secret scan
+    // backstops anything that somehow matched the tree.
+    expect(out).toMatch(/file set does not match|secret-shaped/u);
+  });
+
+  it('REJECTS a package outside the approved releases root', () => {
+    // This is what forbids deploying from a mutable shared directory, which belongs to no commit
+    // and can be edited between releases.
+    const mutable = join(dir, 'mutable-deploy');
+    cpSync(pristine, mutable, { recursive: true });
+    const { code, out } = verify(mutable);
+    expect(code).not.toBe(0);
+    expect(out).toContain('Refusing to deploy from an unapproved path');
+  });
+
+  it('REJECTS a group- or world-writable artefact', () => {
+    if (!posix) {
+      // The write bit is 2, so the writable octal digits are 2, 3, 6 and 7 -- an earlier version
+      // of this guard permitted [0-5], which let 2 and 3 through.
+      expect(read('deploy/jarvis-os/verify-release-artifacts.sh')).toContain('^[0145]$');
+      return;
+    }
+    const { code, out } = corrupt(() => {
+      chmodSync(join(release, 'compose.production.yml'), 0o664);
+    });
+    expect(code).not.toBe(0);
+    expect(out).toContain('group- or world-writable');
+  });
+
+  it('REJECTS an executable bit that disagrees with Git', () => {
+    if (!posix) {
+      expect(read('deploy/jarvis-os/verify-release-artifacts.sh')).toContain(
+        'is executable in Git but not on disk',
+      );
+      return;
+    }
+    const { code, out } = corrupt(() => {
+      chmodSync(join(release, 'deploy.sh'), 0o644);
+    });
+    expect(code).not.toBe(0);
+    expect(out).toContain('executable in Git but not on disk');
+  });
+
+  it('REJECTS a symlinked deployment file', () => {
+    if (!posix) {
+      expect(read('deploy/jarvis-os/verify-release-artifacts.sh')).toContain(
+        'Release artefacts must be ordinary files',
+      );
+      return;
+    }
+    const { code, out } = corrupt(() => {
+      const target = join(release, 'compose.ingress.yml');
+      rmSync(target);
+      symlinkSync(join(pristine, 'compose.ingress.yml'), target);
+    });
+    expect(code).not.toBe(0);
+    expect(out).toMatch(/symlink|ordinary files/u);
+  });
+
+  it('refuses to overwrite a divergent existing release', () => {
+    rmSync(release, { recursive: true, force: true });
+    cpSync(pristine, release, { recursive: true });
+    appendFileSync(join(release, 'compose.ingress.yml'), '\n# drifted\n');
+
+    const { code, out } = runBash([
+      join(work, 'deploy', 'jarvis-os', 'prepare-release.sh'),
+      sha,
+      work,
+      root,
+    ]);
+    expect(code).not.toBe(0);
+    expect(out).toContain('Refusing to overwrite a divergent release');
+
+    rmSync(release, { recursive: true, force: true });
+    cpSync(pristine, release, { recursive: true });
+  });
+});
+
+describe('deployment configuration is bound to the release SHA', () => {
+  const DEPLOY = read('deploy/jarvis-os/deploy.sh');
+  const ACTIVATE = read('deploy/jarvis-os/activate.sh');
+  const ROLLBACK = read('deploy/jarvis-os/rollback.sh');
+  const ALL_SCRIPTS = readdirSync(join(REPO_ROOT, 'deploy', 'jarvis-os'))
+    .filter((n) => n.endsWith('.sh'))
+    .map((n) => read(`deploy/jarvis-os/${n}`));
+
+  it('deploy verifies BOTH the commit and its own artefacts before touching Docker', () => {
+    const artefacts = DEPLOY.indexOf('verify-release-artifacts.sh');
+    const build = DEPLOY.indexOf('docker build');
+    const up = DEPLOY.indexOf('docker compose');
+    expect(DEPLOY.indexOf('verify-merged-sha.sh')).toBeGreaterThan(-1);
+    expect(artefacts).toBeGreaterThan(-1);
+    // Ordering is the property that matters: a check after the build proves nothing.
+    expect(artefacts).toBeLessThan(build);
+    expect(artefacts).toBeLessThan(up);
+    expect(DEPLOY).toContain('"$HERE/verify-release-artifacts.sh" "$SHA" "$HERE"');
+  });
+
+  it('activate verifies the commit, its overlays, and the RUNNING revision', () => {
+    expect(ACTIVATE).toContain('"$HERE/verify-merged-sha.sh" "$SHA"');
+    expect(ACTIVATE).toContain('"$HERE/verify-release-artifacts.sh" "$SHA" "$HERE"');
+    // Overlays from one commit must never be applied to an image from another.
+    expect(ACTIVATE).toContain('RUNNING_BEFORE');
+    expect(ACTIVATE).toContain('"$RUNNING_BEFORE" == "$SHA"');
+    expect(ACTIVATE.indexOf('RUNNING_BEFORE')).toBeLessThan(ACTIVATE.indexOf('docker compose'));
+  });
+
+  it('rollback uses the PREVIOUS release package, not the running script directory', () => {
+    // Re-pointing only the image would combine an old image with today's hardening, labels and
+    // HSTS -- and if today's configuration is the fault, the rollback carries it along.
+    expect(ROLLBACK).toContain('PREV="${RELEASES_ROOT}/${SHA}/jarvis-os"');
+    for (const stage of ['compose.production.yml', 'compose.ingress.yml', 'compose.hsts.yml']) {
+      expect(ROLLBACK, stage).toContain(`"$PREV/${stage}"`);
+    }
+    // It must not fall back to its own directory for compose files.
+    expect(ROLLBACK).not.toMatch(/-f "\$HERE\/compose\./u);
+    // Integrity of the previous package is verified before it is applied.
+    expect(ROLLBACK).toContain('verify-release-artifacts.sh" "$SHA" "$PREV"');
+    // And it fails closed when that package is absent.
+    expect(ROLLBACK).toContain('no release package at');
+    // Emergency rollback must not depend on reaching a remote or on rebuilding. Read as
+    // DIRECTIVES: the script's own comments explain why it does not call the fetching guard, and
+    // scanning the prose would report that explanation as the violation.
+    const rollbackCode = directives(ROLLBACK);
+    expect(rollbackCode).not.toContain('verify-merged-sha.sh');
+    expect(rollbackCode).not.toContain('docker build');
+  });
+
+  it('verifies the stage a rollback actually landed in', () => {
+    expect(ROLLBACK).toContain('prove "traefik.enable" "false"');
+    expect(ROLLBACK).toContain('prove "HSTS max-age" "31536000"');
+  });
+
+  it('grants no authority to a mutable shared deployment directory', () => {
+    // DIRECTIVES only: the scripts explain in prose that this path is exactly what they refuse to
+    // trust, and scanning the explanation would report it as the violation. `/srv/qf-jarvis/repo`
+    // and `/srv/qf-jarvis/secrets` remain legitimate code paths; the deployment package does not.
+    for (const script of ALL_SCRIPTS) {
+      expect(directives(script)).not.toContain('/srv/qf-jarvis/deploy');
+    }
+    expect(read('deploy/jarvis-os/README.md')).not.toContain('/srv/qf-jarvis/deploy/');
+  });
+
+  it('recreates only the qf-jarvis-os project, and never a shared one', () => {
+    for (const script of ALL_SCRIPTS) {
+      for (const invocation of script.match(/docker compose[^\n]*/gu) ?? []) {
+        expect(invocation, invocation).toContain('-p qf-jarvis-os');
+      }
+      expect(script).not.toMatch(
+        /docker\s+(restart|stop|start|kill|rm|rmi|pull|update)\s+[^\n]*\b(traefik|n8n|qf-core-staging)\b/u,
+      );
+    }
   });
 });

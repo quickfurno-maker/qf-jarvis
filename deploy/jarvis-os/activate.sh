@@ -31,12 +31,29 @@ case "$STAGE" in
   *) usage ;;
 esac
 
-# The same containment guard deploy.sh uses. Activation re-resolves the image tag, so an unmerged
-# SHA must be refused here too rather than only at build time.
+# The same two guards deploy.sh uses. Activation re-resolves the image tag AND applies overlays, so
+# an unmerged SHA or a drifted overlay must be refused here too, not only at build time.
 "$HERE/verify-merged-sha.sh" "$SHA" "$REPO_DIR"
+"$HERE/verify-release-artifacts.sh" "$SHA" "$HERE" "$REPO_DIR"
 
 docker image inspect "qf-jarvis-os:${SHA}" >/dev/null 2>&1 || {
   echo "FATAL: image qf-jarvis-os:${SHA} is not present. Run deploy.sh first." >&2
+  exit 1
+}
+
+# The running container must ALREADY be this SHA.
+#
+# Staged activation adds a layer of configuration to a deployment that is already in place and
+# already proved. Allowing it to run against a different revision would let overlays from one
+# commit be applied to an image from another -- exactly the split identity this release model
+# exists to prevent -- and it would silently upgrade or downgrade the application as a side effect
+# of a step whose stated purpose is to attach a router or a header.
+#
+# Changing revisions is deploy.sh's job, and it starts from the private stage.
+RUNNING_BEFORE="$(docker inspect qf-jarvis-os --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' 2>/dev/null || echo 'not-running')"
+[[ "$RUNNING_BEFORE" == "$SHA" ]] || {
+  echo "FATAL: running revision is '$RUNNING_BEFORE', but activation was requested for $SHA." >&2
+  echo "       Run deploy.sh $SHA from that release directory first." >&2
   exit 1
 }
 

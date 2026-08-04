@@ -67,6 +67,68 @@ unmerged one — without running a deployment. No GitHub CLI and no API token: `
 against the remote the host already uses is sufficient, and adding an API dependency would widen
 the trust boundary for no gain.
 
+### 1d. A release is one SHA across the image AND the configuration
+
+The image was bound to a commit: built from `git archive <sha>`, labelled with that revision, and
+checked after start. The **configuration was not**. Compose files, Traefik labels, HSTS values and
+the scripts themselves were read from whatever directory the running script lived in.
+
+So this was possible with every check passing and reporting success: the SHA genuinely contained in
+`origin/main`, the image genuinely built from it, the running container genuinely reporting that
+revision — and `compose.production.yml` beside the script stale, hand-edited, or from another
+commit. The deployment would be truthfully labelled with a commit whose hardening, rate limits and
+HSTS it was not running. Half a release identity is not a release identity.
+
+`prepare-release.sh <sha>` materialises `/srv/qf-jarvis/releases/<sha>/jarvis-os` from
+`git archive <sha> -- deploy/jarvis-os` — tracked files only, that directory only, never the whole
+repository. It stages into a sibling directory and publishes by **atomic rename**, so a half-written
+release is never reachable under its final name, and it refuses to overwrite an existing release
+unless that release still matches the commit exactly.
+
+`verify-release-artifacts.sh` then proves a directory IS that commit's configuration:
+
+- the file set equals the commit's file set **in both directions** — an extra compose fragment
+  changes what Compose merges just as surely as a missing one changes what it doesn't;
+- every file's bytes equal the Git blob, compared with `cmp` against `git cat-file`;
+- the executable bit agrees with the tree's mode;
+- nothing is a symlink, including the package directory itself;
+- nothing is group- or world-writable;
+- no secret-shaped file is inside;
+- and the package sits at the approved `/srv/qf-jarvis/releases/<sha>/jarvis-os`.
+
+The expected file set is **derived from the commit**, not hardcoded, so a deployment file added in a
+future phase is covered automatically instead of being silently unchecked.
+
+Bytes rather than a `REVISION` marker file: a marker is written by the same process that could have
+written the wrong files, so it records intent, not content. The only way to pass is to be that
+commit's configuration.
+
+`git archive` is invoked with `core.autocrlf=false` and `core.eol=lf` pinned. Without that, the
+package's bytes depend on the host's Git line-ending configuration and the byte comparison is
+checking a moving target.
+
+There is **no fallback to a shared mutable directory.** The location check is what forbids it, and
+`deploy.sh` and `activate.sh` both run it against their own directory before touching Docker.
+
+### 1e. Rollback restores both halves, and does not depend on the network
+
+Re-pointing only the image tag, using the compose files beside the currently running script, yields
+an old known-good image combined with **today's** hardening and labels. If today's configuration is
+the fault, that rollback carries it along.
+
+`rollback.sh` therefore locates `PREVIOUS_SHA`'s own release package, verifies it against Git, and
+applies its overlays. It fails closed and names `prepare-release.sh` if that package is missing or
+altered.
+
+It deliberately does **not** re-check `origin/main` containment: `verify-merged-sha.sh` fetches, and
+a rollback that insisted on reaching the remote — or on the commit still being contained in a `main`
+that may now be broken or rewritten — would refuse to run at precisely the moment it is needed. The
+package matching its commit byte for byte is the property that matters, and such a package can only
+have been produced from reviewed code. It never rebuilds, for the same reason.
+
+It also verifies the **stage** it landed in, not just the revision: a rollback that quietly ends up
+in a different exposure state than the operator named is its own incident.
+
 ### 2. The audit found the topology already exists — so shared Traefik is not touched
 
 Read-only findings on `srv1873796` (Ubuntu 24.04.4, Docker 29.6.1, 2 vCPU / 7.8 GiB / 96 GB):
@@ -137,9 +199,20 @@ never installs anything, so npm, npx, corepack and perl are pure surface:
 
 The four residual findings (CVE-2026-13221, CVE-2026-12087 critical; CVE-2026-48959, CVE-2026-48962
 high) are all in `perl-base`, which is marked `Essential: yes` — dpkg itself depends on it — and all
-are reported **"Fixed version: not fixed"** upstream in Debian bookworm. They are accepted: nothing
-in the request path invokes perl, the container is non-root with a read-only root filesystem and no
-shell reachable from the handler, and no fix exists to apply.
+are reported **"Fixed version: not fixed"** for this base.
+
+The precise claim, and the one recorded here, is: **no fixed package is currently available in
+Debian bookworm for this pinned runtime base.** Not "no upstream fix exists" — some of these CVEs do
+have fixes on newer or different Debian branches. What is unavailable is a fix reachable without
+leaving bookworm, and leaving bookworm means leaving `node:24.18.0-bookworm-slim`, which is the
+pinned Node version this release is built and tested against.
+
+Accepted on that basis: nothing in the request path invokes perl, the container is non-root with a
+read-only root filesystem, all capabilities dropped, and no shell reachable from the handler.
+
+**This image is not vulnerability-free and is not claimed to be.** The scan is a point-in-time
+result; it must be re-run immediately before Gate 2 production activation, because the finding set
+can change without the image changing.
 
 Removing `npm` and `npx` is worth doing at zero CVEs anyway — in a container they are an
 arbitrary-package install-and-execute primitive for anyone who gets code execution.
