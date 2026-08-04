@@ -30,6 +30,8 @@ const WIDE_COLUMNS: Readonly<Record<number, string>> = {
   4: 'xl:grid-cols-4',
   5: 'xl:grid-cols-5',
   6: 'xl:grid-cols-6',
+  7: 'xl:grid-cols-7',
+  8: 'xl:grid-cols-8',
 };
 
 export function MetricStrip({ section }: { readonly section: Section<MetricSummary> }) {
@@ -46,7 +48,7 @@ export function MetricStrip({ section }: { readonly section: Section<MetricSumma
       />
     );
   }
-  const wide = WIDE_COLUMNS[Math.min(metrics.length, 6)] ?? 'xl:grid-cols-6';
+  const wide = WIDE_COLUMNS[Math.min(metrics.length, 8)] ?? 'xl:grid-cols-8';
   return (
     <div
       className={`grid grid-cols-1 gap-px overflow-hidden rounded-[var(--radius-panel)] border border-[var(--color-line)] bg-[var(--color-line)] sm:grid-cols-2 lg:grid-cols-3 ${wide}`}

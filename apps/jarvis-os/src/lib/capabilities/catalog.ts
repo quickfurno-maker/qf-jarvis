@@ -58,6 +58,7 @@ export const CAPABILITY_IDS = [
   'knowledge.rag',
   'evaluation.run',
   'worker.local-inference',
+  'operator.authentication',
 ] as const;
 
 export type CapabilityId = (typeof CAPABILITY_IDS)[number];
@@ -188,6 +189,12 @@ export const CAPABILITY_SNAPSHOT: readonly Capability[] = Object.freeze([
     label: 'Evaluation suites',
     lifecycle: 'SHADOW',
     note: 'Suites run against fixtures. No production certification is claimed.',
+  },
+  {
+    id: 'operator.authentication',
+    label: 'Operator authentication and session',
+    lifecycle: 'AVAILABLE',
+    note: 'JOS-01C merged. Grants viewing of Jarvis OS only; it confers no business authority.',
   },
   {
     id: 'worker.local-inference',

@@ -70,6 +70,8 @@ const STRIP_COLUMNS: Readonly<Record<number, string>> = {
   4: 'xl:grid-cols-4',
   5: 'xl:grid-cols-5',
   6: 'xl:grid-cols-6',
+  7: 'xl:grid-cols-7',
+  8: 'xl:grid-cols-8',
 };
 
 /** The top status strip: one cell per system component, each with state text and a reason. */
@@ -80,7 +82,7 @@ export function StatusStrip({
 }) {
   return (
     <ul
-      className={`grid grid-cols-1 gap-px overflow-hidden rounded-[var(--radius-panel)] border border-[var(--color-line)] bg-[var(--color-line)] sm:grid-cols-2 lg:grid-cols-3 ${STRIP_COLUMNS[Math.min(components.length, 6)] ?? 'xl:grid-cols-6'}`}
+      className={`grid grid-cols-1 gap-px overflow-hidden rounded-[var(--radius-panel)] border border-[var(--color-line)] bg-[var(--color-line)] sm:grid-cols-2 lg:grid-cols-3 ${STRIP_COLUMNS[Math.min(components.length, 8)] ?? 'xl:grid-cols-8'}`}
       aria-label="System status"
     >
       {components.map((component) => (
