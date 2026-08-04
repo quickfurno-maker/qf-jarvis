@@ -1,6 +1,6 @@
 # Jarvis OS — the operator control plane
 
-**Status:** **JOS-01C is the current implemented Jarvis OS slice** in this build ([ADR-0087](../decisions/ADR-0087-jos-01c-owner-authentication-and-operator-session-boundary.md), PR #91) — owner authentication, MFA and the operator session boundary. JOS-01A and JOS-01B are **merged**. **JOS-01D — isolated Docker, VPS and Traefik deployment — is next.** **Nothing is deployed.**
+**Status:** **JOS-01D is the current implemented Jarvis OS slice** in this build ([ADR-0088](../decisions/ADR-0088-jos-01d-isolated-docker-vps-traefik-deployment-boundary.md), PR #92) — the isolated Docker, VPS and Traefik deployment topology, at **Gate 1: reviewed artefacts and a read-only audit only**. JOS-01A, JOS-01B and JOS-01C are **merged**. **JOS-01E — progressive backend wiring — is next.** **Nothing is deployed from this build**, and whether a deployment is running is an operational fact this repository does not assert.
 
 > **Why this reads as "current" and not as a branch status.** An architecture document that says a
 > slice is "on a feature branch, not merged" is false the instant that branch merges, and nobody
@@ -218,7 +218,7 @@ the Execution and Governance surfaces so it cannot be lost, and a test asserts i
 ## Deployment topology
 
 **The read API exists in source and is NOT deployed.** `GET /api/control-plane/v1/snapshot` has no
-authentication; JOS-01C adds it and JOS-01D deploys only afterwards. **`apps/api` was not turned into
+authentication when JOS-01B shipped it; JOS-01C added that boundary, and JOS-01D prepares deployment. **`apps/api` was not turned into
 an HTTP server** — it still exports nothing and runs none — and server components call the pure
 snapshot builder directly rather than self-fetching, so the page and the API cannot drift.
 

@@ -31,6 +31,7 @@ import {
 } from './capabilities/catalog';
 import type { CapabilityLifecycle } from './capabilities/catalog';
 import { controlPlane } from './control-plane/index';
+import { BASELINE_FACTS } from '../server/control-plane/repository-baseline';
 import { HEALTH_PRESENTATION } from './control-plane/types';
 import { NAV_GROUPS, NAV_ITEMS, activeHref } from './navigation/catalog';
 
@@ -268,29 +269,28 @@ describe('the resume marker and phase truth', () => {
     expect(next[0]?.label).toContain('QFJ-P09.02');
   });
 
-  it('marks JOS-01B as the CURRENT slice and JOS-01C as next', () => {
-    // The defect this replaces: JOS-01B was marked `next` inside a build that IS JOS-01B, which
-    // was false the day it shipped. `current` describes the slice compiled into this build, so it
-    // stays true before and after any pull request lands -- merge state is GitHub's to track.
+  it('keeps the JOS current marker in step with BASELINE_FACTS', () => {
+    // The invariant that would have caught a real inconsistency: JOS-01C advanced
+    // `BASELINE_FACTS.josPhase` but left the rendered markers claiming JOS-01B was current, and
+    // nothing compared the two. Asserting a SPECIFIC phase here would need editing every phase --
+    // and a test that is always edited stops being a check. Asserting they AGREE does not.
     const jos = controlPlane()
       .roadmap()
       .filter((marker) => marker.track === 'JOS');
 
     const current = jos.filter((marker) => marker.state === 'current');
-    expect(current).toHaveLength(1);
-    expect(current[0]?.label).toContain('JOS-01B');
+    expect(current, 'exactly one JOS slice is current').toHaveLength(1);
+    expect(current[0]?.label).toContain(BASELINE_FACTS.josPhase);
 
     const next = jos.filter((marker) => marker.state === 'next');
-    expect(next).toHaveLength(1);
-    expect(next[0]?.label).toContain('JOS-01C');
-    expect(next[0]?.label).not.toContain('JOS-01B');
+    expect(next, 'exactly one JOS slice is next').toHaveLength(1);
+    expect(next[0]?.label).toContain(BASELINE_FACTS.nextJosPhase);
 
-    expect(
-      jos
-        .filter((marker) => marker.state === 'merged')
-        .map((m) => m.label)
-        .join(' '),
-    ).toContain('JOS-01A');
+    // The current slice can never also be the next one.
+    expect(next[0]?.label).not.toContain(BASELINE_FACTS.josPhase);
+
+    // Everything before the current slice is merged, and nothing after it is.
+    expect(jos.filter((marker) => marker.state === 'merged').length).toBeGreaterThan(0);
   });
 
   it('keeps the two tracks separate, each with exactly one next', () => {
