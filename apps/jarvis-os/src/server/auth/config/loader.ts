@@ -1,4 +1,4 @@
-import { lstatSync, openSync, readSync, closeSync } from 'node:fs';
+import { closeSync, constants, fstatSync, openSync, readSync } from 'node:fs';
 
 import { AuthFailure } from '../errors';
 
@@ -84,49 +84,50 @@ function readConfigPathFromEnvironment(): string | undefined {
 }
 
 /**
- * Open and read the file with the checks that matter, in the order that matters.
+ * Open the file, then validate the OPENED DESCRIPTOR.
  *
- * `lstat` before `open`, so a SYMLINK is rejected rather than followed. That check is worth the
- * awkwardness: a symlink at the configured path is how a compromised container turns "read my
- * config" into "read anything the process can reach", and `stat` would follow it silently.
+ * ### Why the order matters, and why the previous order was wrong
  *
- * Size is bounded BEFORE the content is parsed. An unbounded read of a path an attacker can
- * influence is a denial of service with extra steps.
+ * An earlier revision did `lstat(path)` first, checked that the path was not a symlink, and then
+ * called `open(path)`. Those are two separate resolutions of the same name, and anything with
+ * write access to the containing directory can swap the entry between them — the classic
+ * time-of-check/time-of-use race. The code claimed "a symlink cannot be followed"; the
+ * implementation only guaranteed "a symlink was not there a moment ago".
+ *
+ * The fix is to make the check and the use the same object. `O_NOFOLLOW` refuses at OPEN time if
+ * the final component is a symlink, and `fstat` then describes the descriptor we actually hold
+ * rather than whatever the name resolves to now. If the entry is replaced immediately afterwards,
+ * we keep reading the file we validated.
+ *
+ * `realpath` is deliberately NOT used as a substitute: it resolves a name to another name, which
+ * is still a name, and re-opening it is the same race again.
  */
 function readBoundedRegularFile(path: string, platform: NodeJS.Platform): string {
-  let stats;
-  try {
-    stats = lstatSync(path);
-  } catch {
-    throw new AuthFailure('config-unreadable');
-  }
-
-  if (stats.isSymbolicLink()) {
-    throw new AuthFailure('config-not-regular-file');
-  }
-  if (!stats.isFile()) {
-    throw new AuthFailure('config-not-regular-file');
-  }
-  if (stats.size > MAX_AUTH_CONFIG_BYTES) {
-    throw new AuthFailure('config-too-large');
-  }
-
-  // POSIX permission check. Windows does not model these bits meaningfully, so applying the rule
-  // there would fail every local development setup for no security gain -- production is Linux.
-  if (platform !== 'win32') {
-    const groupOrWorldReadable = (stats.mode & 0o077) !== 0;
-    if (groupOrWorldReadable) {
-      throw new AuthFailure('config-permissions-too-open');
-    }
-  }
-
   let fd: number | undefined;
   try {
-    fd = openSync(path, 'r');
+    fd = openDescriptor(path, platform);
+
+    // Everything below describes the descriptor we hold, not a path that may already have changed.
+    const stats = fstatSync(fd);
+
+    if (!stats.isFile()) {
+      throw new AuthFailure('config-not-regular-file');
+    }
+    if (stats.size > MAX_AUTH_CONFIG_BYTES) {
+      throw new AuthFailure('config-too-large');
+    }
+
+    // POSIX permission bits. Windows does not model these meaningfully, so applying the rule there
+    // would break every local development setup for no security gain -- production is Linux.
+    if (platform !== 'win32' && (stats.mode & 0o077) !== 0) {
+      throw new AuthFailure('config-permissions-too-open');
+    }
+
+    // Bounded read FROM THAT SAME DESCRIPTOR, with one byte of headroom so a file that grew
+    // between fstat and read is detected rather than silently truncated and parsed.
     const buffer = Buffer.alloc(MAX_AUTH_CONFIG_BYTES + 1);
     const bytes = readSync(fd, buffer, 0, buffer.length, 0);
     if (bytes > MAX_AUTH_CONFIG_BYTES) {
-      // The file grew between lstat and read. Refuse rather than truncate-and-parse.
       throw new AuthFailure('config-too-large');
     }
     return buffer.subarray(0, bytes).toString('utf8');
@@ -136,5 +137,37 @@ function readBoundedRegularFile(path: string, platform: NodeJS.Platform): string
     if (fd !== undefined) {
       closeSync(fd);
     }
+  }
+}
+
+/**
+ * Open with no-follow semantics where the platform provides them.
+ *
+ * On Linux — the production platform — `O_NOFOLLOW` makes the kernel refuse the open outright when
+ * the final path component is a symbolic link, which is exactly the guarantee this loader claims.
+ * The failure surfaces as `ELOOP`, translated to the same generic `config-not-regular-file` a
+ * symlink would have produced before, so nothing downstream needs to know how it was caught.
+ *
+ * Windows has no `O_NOFOLLOW`. Rather than silently offering weaker semantics under the same name,
+ * the fallback is explicit and narrow: open normally, then rely on the `fstat` checks above. This
+ * is documented as a LOCAL DEVELOPMENT accommodation — production runs on Linux, where the
+ * race-resistant path is the one taken.
+ */
+function openDescriptor(path: string, platform: NodeJS.Platform): number {
+  const noFollow = platform === 'win32' ? undefined : constants.O_NOFOLLOW;
+  const flags = noFollow === undefined ? constants.O_RDONLY : constants.O_RDONLY | noFollow;
+
+  try {
+    return openSync(path, flags);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ELOOP') {
+      // The final component was a symlink and the kernel refused to follow it.
+      throw new AuthFailure('config-not-regular-file');
+    }
+    if (code === 'EISDIR') {
+      throw new AuthFailure('config-not-regular-file');
+    }
+    throw new AuthFailure('config-unreadable');
   }
 }

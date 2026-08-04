@@ -148,11 +148,19 @@ export default function proxy(request: NextRequest): NextResponse {
 
   const authenticated = hasSessionCookie(request);
 
-  // An operator who already has a session should not be looking at the login form.
-  if (pathname === '/login' && authenticated) {
-    return decorate(NextResponse.redirect(new URL('/', request.url)));
-  }
-
+  // `/login` is ALWAYS reachable, even when a session cookie is present.
+  //
+  // An earlier revision redirected `/login` to `/` whenever a cookie existed. That produced an
+  // infinite loop for any cookie that is present but not VALID -- expired, tampered, sealed with a
+  // removed key, or carrying a stale session revision. The proxy would see the cookie and send the
+  // browser to `/`; the protected layout would verify it properly, reject it, and send the browser
+  // back to `/login`; the proxy would see the same cookie again. An operator whose session merely
+  // expired could not reach the form to sign in again.
+  //
+  // The redirect-away-from-login behaviour is not lost, it is moved to where it can be done
+  // correctly: the login page calls `getOptionalOperatorSession()` and redirects only after a full
+  // decrypt-and-verify. The proxy is not taught to validate sessions -- teaching it to would put
+  // key material and configuration reads in the pre-routing path and make it a second authority.
   if (isPublicPath(pathname)) {
     return decorate(NextResponse.next({ request: { headers: requestHeaders } }));
   }

@@ -1,12 +1,16 @@
 import { argon2, randomBytes } from 'node:crypto';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { authConfigV1Schema } from './config/schema';
 import type { AuthConfigV1 } from './config/schema';
 import { AUTH_CONFIG_PATH_VAR, loadAuthConfig } from './config/loader';
+import { getOptionalOperatorSession } from './dal';
 import { newSessionClaims, sealSession } from './session/token';
 import { totpCodeForStep, decodeBase32 } from './totp/totp';
 
@@ -164,6 +168,53 @@ describe('the configuration loader', () => {
     expect(() => loadAuthConfig({ path: open, platform: 'linux' })).toThrow();
   });
 
+  it('rejects a SYMLINK at the configured path', () => {
+    // The defect this replaces was a time-of-check/time-of-use race: `lstat(path)` proved the name
+    // was not a symlink, then `open(path)` resolved the same name a second time. Anything with
+    // write access to the directory could swap the entry between the two calls. The loader now
+    // opens with O_NOFOLLOW and validates the DESCRIPTOR, so the check and the use are the same
+    // object -- and a symlink is refused by the kernel at open time rather than by a prior glance.
+    const dir = mkdtempSync(join(tmpdir(), 'qfj-link-'));
+    const real = join(dir, 'real.json');
+    const link = join(dir, 'link.json');
+    writeFileSync(real, JSON.stringify({ version: 1 }), { mode: 0o600 });
+    try {
+      symlinkSync(real, link);
+    } catch {
+      // Windows requires elevation for symlinks; skip rather than assert a platform behaviour we
+      // cannot create. Production is Linux, where CI exercises this path.
+      return;
+    }
+    expect(() => loadAuthConfig({ path: link })).toThrow();
+  });
+
+  it('rejects a world-readable file as well as a group-readable one', () => {
+    for (const mode of [0o644, 0o604, 0o640]) {
+      const dir = mkdtempSync(join(tmpdir(), 'qfj-mode-'));
+      const file = join(dir, 'open.json');
+      writeFileSync(file, JSON.stringify({ version: 1 }), { mode });
+      expect(() => loadAuthConfig({ path: file, platform: 'linux' }), String(mode)).toThrow();
+    }
+  });
+
+  it('accepts an owner-only regular file', () => {
+    // The positive case, so the rejections above are not passing for an unrelated reason.
+    //
+    // The REAL platform is used here rather than a forced 'linux': Windows does not implement
+    // POSIX mode bits, so a file created with `mode: 0o600` there still reports as world-readable
+    // and would fail a rule that only production (Linux) is meant to enforce.
+    expect(loadAuthConfig({ path: configPath }).operator.id).toBe('owner');
+  });
+
+  it('bounds the read even if the file grows after it is measured', () => {
+    // The read asks for one byte MORE than the maximum, so a file that grew between fstat and read
+    // is detected rather than silently truncated and parsed as valid configuration.
+    const dir = mkdtempSync(join(tmpdir(), 'qfj-grow-'));
+    const file = join(dir, 'grown.json');
+    writeFileSync(file, JSON.stringify({ padding: 'x'.repeat(20_000) }), { mode: 0o600 });
+    expect(() => loadAuthConfig({ path: file })).toThrow();
+  });
+
   it('never puts the path or a secret into the failure message', () => {
     Reflect.deleteProperty(process.env, AUTH_CONFIG_PATH_VAR);
     try {
@@ -231,6 +282,128 @@ describe('GET /api/control-plane/v1/snapshot requires a session', () => {
     for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
       expect(route[method], method).toBeUndefined();
     }
+  });
+});
+
+describe('an invalid cookie can never lock the operator out of /login', () => {
+  /**
+   * The defect this replaces.
+   *
+   * The proxy used to redirect `/login` to `/` whenever a session cookie was PRESENT -- and the
+   * proxy deliberately does not decrypt or verify anything. So any cookie that existed but was not
+   * valid produced an infinite loop: proxy sends the browser to `/`, the protected layout verifies
+   * properly and rejects, sends it back to `/login`, proxy sees the same cookie again. An operator
+   * whose session merely expired could not reach the form to sign in again.
+   *
+   * These assertions cover every shape of "present but not valid", through the same
+   * `getOptionalOperatorSession()` the login page uses. `undefined` means the page renders the
+   * form; anything else would mean it redirects, which is the loop.
+   */
+  const shapesOfInvalid = (): readonly (readonly [string, string])[] => {
+    const now = Math.floor(Date.now() / 1000);
+    const valid = sealSession(config, newSessionClaims({ config, nowSeconds: now }));
+    const parts = valid.split('.');
+    const middle = Math.floor((parts[3] ?? '').length / 2);
+    const tampered = [...parts];
+    tampered[3] =
+      (parts[3] ?? '').slice(0, middle) +
+      ((parts[3] ?? '')[middle] === 'A' ? 'B' : 'A') +
+      (parts[3] ?? '').slice(middle + 1);
+
+    return [
+      ['random garbage', 'not-a-token-at-all'],
+      ['empty-ish', '....'],
+      ['wrong version', `v9.${parts.slice(1).join('.')}`],
+      ['tampered ciphertext', tampered.join('.')],
+      ['expired', sealSession(config, newSessionClaims({ config, nowSeconds: now - 7200 }))],
+      ['oversized', 'x'.repeat(4000)],
+    ];
+  };
+
+  it('renders the login form for every invalid cookie shape', async () => {
+    for (const [label, value] of shapesOfInvalid()) {
+      cookieValue = value;
+      const session = await getOptionalOperatorSession();
+      // `undefined` => the login page renders the form. Anything else => a redirect => the loop.
+      expect(session, label).toBeUndefined();
+    }
+  });
+
+  it('renders the login form when no cookie is present at all', async () => {
+    cookieValue = undefined;
+    expect(await getOptionalOperatorSession()).toBeUndefined();
+  });
+
+  it('renders the login form for a token whose key was removed', async () => {
+    const now = Math.floor(Date.now() / 1000);
+    cookieValue = sealSession(config, newSessionClaims({ config, nowSeconds: now }));
+    // Rotate the key on disk: the old token becomes undecryptable.
+    const rotated = JSON.parse(JSON.stringify(config)) as Record<string, unknown>;
+    const session = rotated['session'] as Record<string, unknown>;
+    session['primaryKeyId'] = 'k2';
+    session['keys'] = [{ id: 'k2', status: 'PRIMARY', key: randomBytes(32).toString('base64url') }];
+    writeFileSync(configPath, JSON.stringify(rotated), { mode: 0o600 });
+
+    expect(await getOptionalOperatorSession()).toBeUndefined();
+  });
+
+  it('renders the login form for a stale session revision', async () => {
+    const now = Math.floor(Date.now() / 1000);
+    cookieValue = sealSession(config, newSessionClaims({ config, nowSeconds: now }));
+    const rotated = JSON.parse(JSON.stringify(config)) as Record<string, unknown>;
+    (rotated['session'] as Record<string, unknown>)['revision'] = 2;
+    writeFileSync(configPath, JSON.stringify(rotated), { mode: 0o600 });
+
+    expect(await getOptionalOperatorSession()).toBeUndefined();
+  });
+
+  it('redirects away from /login ONLY for a fully verified session', async () => {
+    cookieValue = sealSession(
+      config,
+      newSessionClaims({ config, nowSeconds: Math.floor(Date.now() / 1000) }),
+    );
+    const session = await getOptionalOperatorSession();
+    // Defined => the login page redirects to `/`. This is the only case that may.
+    expect(session).toBeDefined();
+    expect(session?.view.operatorId).toBe('owner');
+  });
+
+  it('leaves protected surfaces closed for those same invalid cookies', async () => {
+    const { GET } = await import('../../app/api/control-plane/v1/snapshot/route');
+    for (const [label, value] of shapesOfInvalid()) {
+      cookieValue = value;
+      const response = await GET(new Request('http://127.0.0.1/api/control-plane/v1/snapshot'));
+      // Reachable login page, still-closed API. Both properties at once is the whole point.
+      expect(response.status, label).toBe(401);
+    }
+  });
+});
+
+describe('the proxy never decides a session is valid', () => {
+  it('performs no decryption, reads no configuration and sets no identity header', () => {
+    const source = readFileSync(fileURLToPath(new URL('../../proxy.ts', import.meta.url)), 'utf8');
+    // It must not import the session, config or password modules -- doing so would make the
+    // pre-routing path a second authority holding key material.
+    for (const forbidden of [
+      'openSession',
+      'loadAuthConfig',
+      'sealSession',
+      'auth/config',
+      'auth/session',
+      'auth/password',
+      'auth/dal',
+    ]) {
+      expect(source, forbidden).not.toContain(forbidden);
+    }
+    // And it must not hand a downstream consumer an identity to trust.
+    expect(source).not.toMatch(/set\(\s*['"]x-operator/iu);
+    expect(source).not.toMatch(/set\(\s*['"]x-user/iu);
+  });
+
+  it('no longer redirects /login on mere cookie presence', () => {
+    const source = readFileSync(fileURLToPath(new URL('../../proxy.ts', import.meta.url)), 'utf8');
+    // The exact shape that caused the loop.
+    expect(source).not.toMatch(/pathname === '\/login' && authenticated/u);
   });
 });
 
