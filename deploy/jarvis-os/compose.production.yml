@@ -1,0 +1,148 @@
+# Jarvis OS production topology (JOS-01D, ADR-0088).
+#
+# ### It publishes NO port
+#
+# The audited VPS runs a host-network Traefik with the Docker provider and
+# `exposedByDefault=false`. Both existing services (`qf-core-staging`, `n8n-cjls`) sit on their own
+# private bridge with no published ports, and Traefik reaches them by container IP. Jarvis OS uses
+# the identical pattern, so there is no `ports:` stanza at all and no loopback fallback is needed.
+#
+# That is the strongest available isolation: the application is unreachable from the internet
+# except through Traefik, and unreachable from other Docker projects because it shares no network
+# with them.
+#
+# ### The router comes entirely from labels on THIS container
+#
+# Because the Docker provider is already enabled and opt-in, bringing Jarvis OS up creates its
+# router and removing Jarvis OS removes it. **Shared Traefik is never restarted, recreated, pulled
+# or upgraded** — it stays on the running 3.7.10 image it already has.
+#
+# Usage (Gate 2 only):
+#   JOS_IMAGE_TAG=<exact-merged-sha> docker compose -p qf-jarvis-os -f compose.production.yml up -d
+
+name: qf-jarvis-os
+
+services:
+  jarvis-os:
+    # Immutable, SHA-tagged. There is no `latest`, no `main` and no `stable`: a mutable tag makes
+    # "which code is running" unanswerable and makes rollback a rebuild instead of a re-tag.
+    image: 'qf-jarvis-os:${JOS_IMAGE_TAG:?JOS_IMAGE_TAG must be the exact merged git SHA}'
+    container_name: qf-jarvis-os
+
+    restart: unless-stopped
+    init: true
+
+    # --- hardening -----------------------------------------------------------------------------
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # No cap_add, no privileged, no devices, no host PID/IPC, and no Docker socket. The application
+    # is a read-only web surface; every one of those would grant it reach it has no use for.
+    stop_grace_period: 30s
+
+    # `read_only: true` means the writable set is exactly what is listed here and nothing else.
+    # /tmp is the only path Node needs; Next's standalone server serves prebuilt output and writes
+    # no runtime cache under /app. If a future Next version needs one, mount that exact path and
+    # document it rather than relaxing read_only.
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+
+    # --- identity and configuration ------------------------------------------------------------
+    user: '10001:10001'
+
+    environment:
+      NODE_ENV: production
+      HOSTNAME: 0.0.0.0
+      PORT: '3000'
+      # A PATH and nothing else. No secret value is ever passed through the environment, because
+      # env vars are visible in /proc, in `docker inspect`, and in crash dumps.
+      QFJ_JOS_AUTH_CONFIG_FILE: /run/secrets/qf-jarvis-os-auth.json
+
+    volumes:
+      # The ONLY mount. Read-only, a single file, never a directory — a directory mount would let a
+      # future file appear beside it without review.
+      - type: bind
+        source: /srv/qf-jarvis/secrets/jarvis-os-auth.json
+        target: /run/secrets/qf-jarvis-os-auth.json
+        read_only: true
+
+    # --- resources -----------------------------------------------------------------------------
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1g
+          # Compose v5 normalises the top-level `pids_limit` into this block, so declaring both is
+          # a hard error. Fork-bomb containment lives here.
+          pids: 256
+        reservations:
+          memory: 256m
+
+    # --- logging -------------------------------------------------------------------------------
+    # Bounded. An unbounded json-file driver is how a 96 GB disk fills up quietly.
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '5'
+
+    networks:
+      - jarvis-os
+
+    # --- Traefik routing ------------------------------------------------------------------------
+    # Entrypoint and resolver names are the ones DISCOVERED on the host (`web`, `websecure`,
+    # `letsencrypt`), not invented. HTTP→HTTPS redirection is already global on the `web`
+    # entrypoint, so no JOS-specific redirect is added.
+    labels:
+      traefik.enable: 'true'
+      traefik.docker.network: 'qf-jarvis-os_jarvis-os'
+
+      # Main router.
+      traefik.http.routers.qf-jarvis-os.rule: 'Host(`jarvis.quickfurno.in`)'
+      traefik.http.routers.qf-jarvis-os.entrypoints: 'websecure'
+      traefik.http.routers.qf-jarvis-os.tls.certresolver: 'letsencrypt'
+      traefik.http.routers.qf-jarvis-os.middlewares: 'qf-jarvis-os-ratelimit@docker'
+      traefik.http.services.qf-jarvis-os.loadbalancer.server.port: '3000'
+
+      # Higher-priority router for the login POST, so credential stuffing meets a much tighter
+      # limiter than ordinary dashboard browsing. Priority must exceed the host-only rule's.
+      traefik.http.routers.qf-jarvis-os-login.rule: 'Host(`jarvis.quickfurno.in`) && Path(`/api/auth/login`)'
+      traefik.http.routers.qf-jarvis-os-login.entrypoints: 'websecure'
+      traefik.http.routers.qf-jarvis-os-login.tls.certresolver: 'letsencrypt'
+      traefik.http.routers.qf-jarvis-os-login.priority: '100'
+      traefik.http.routers.qf-jarvis-os-login.middlewares: 'qf-jarvis-os-login-ratelimit@docker,qf-jarvis-os-login-buffer@docker'
+      traefik.http.routers.qf-jarvis-os-login.service: 'qf-jarvis-os'
+
+      # General edge limit. Generous enough that normal dashboard use never reaches it.
+      traefik.http.middlewares.qf-jarvis-os-ratelimit.ratelimit.average: '30'
+      traefik.http.middlewares.qf-jarvis-os-ratelimit.ratelimit.burst: '60'
+
+      # Login limit: five attempts a minute. The application keeps its own process-local limiter;
+      # this is the perimeter one that survives a process restart, which the in-process one cannot.
+      traefik.http.middlewares.qf-jarvis-os-login-ratelimit.ratelimit.average: '5'
+      traefik.http.middlewares.qf-jarvis-os-login-ratelimit.ratelimit.period: '1m'
+      traefik.http.middlewares.qf-jarvis-os-login-ratelimit.ratelimit.burst: '5'
+
+      # Body cap on the LOGIN ROUTE ONLY. Buffering is deliberately not applied to the main router:
+      # it would break Next's streaming responses for every page in the application.
+      traefik.http.middlewares.qf-jarvis-os-login-buffer.buffering.maxRequestBodyBytes: '8192'
+      traefik.http.middlewares.qf-jarvis-os-login-buffer.buffering.memRequestBodyBytes: '8192'
+
+      # NOTE: no `headers.contentSecurityPolicy` middleware anywhere.
+      #
+      # Jarvis OS emits a per-request nonce CSP. A static CSP injected at the edge would either
+      # override it — breaking every script, since a static policy cannot know the nonce — or sit
+      # alongside it, and two CSP headers intersect into the strictest combination, which is the
+      # same breakage by a different route.
+      #
+      # HSTS is added in Gate 2, AFTER TLS is proven working. Sending it before a valid certificate
+      # exists can pin browsers to a hostname that does not yet serve HTTPS.
+
+networks:
+  # A dedicated bridge. It joins no existing project network: `n8n-cjls_default`,
+  # `qf-core-staging_default` and every database network stay unreachable from this container.
+  jarvis-os:
+    name: qf-jarvis-os_jarvis-os
+    driver: bridge
