@@ -522,7 +522,11 @@ describe('(71-77) package API and dependency locks are untouched', () => {
       )) as unknown as Record<string, unknown>;
       expect(Object.keys(barrel)).toHaveLength(count);
     }
-  });
+    // Nineteen real dynamic imports of built bundles, each pulling its own module graph. This
+    // takes over four seconds on its own against the 5s default, so it was already one busy
+    // machine away from a timeout that says nothing about the API counts it exists to lock.
+    // Given an explicit budget rather than left to lose a race with whatever runs beside it.
+  }, 30_000);
 
   it('apps/api adds no package-root runtime export of its own', async () => {
     const barrel = (await import('../index.js')) as unknown as Record<string, unknown>;
@@ -576,13 +580,31 @@ describe('(78, 79, 80, 81) repository invariants', () => {
     const dir = join(APP_DIR, 'src', 'tests');
     const specs = readdirSync(dir).filter((name) => name.endsWith('.ts'));
     expect(specs.length).toBeGreaterThan(0);
+    /**
+     * The ONE spec permitted to spawn a process, and only `node:child_process`.
+     *
+     * `deployment-containment.test.ts` proves the merged-main deployment guard by RUNNING it: a
+     * guard deciding whether unreviewed code can reach production is worth executing against real
+     * commits — including a real unmerged one — rather than pattern-matching its source.
+     *
+     * The exception is narrow on purpose. It buys process spawning and nothing else: the network
+     * modules below stay forbidden for this spec too, and its fixture is a throwaway git repository
+     * whose `origin` is a local bare repo, so it reaches no network even while exercising a code
+     * path that fetches. Every other spec remains fully hermetic.
+     */
+    const PROCESS_CAPABLE = 'deployment-containment.test.ts';
+
     for (const name of specs) {
       const text = readFileSync(join(dir, name), 'utf8');
       // Anchored to line starts: unanchored, `import` also matches `import.meta.url`.
       const statements = text.match(/^import[\s\S]*?from\s*['"][^'"]+['"]/gm) ?? [];
       expect(statements.length).toBeGreaterThan(0);
       for (const statement of statements) {
-        expect(statement).not.toMatch(/node:(net|http|https|dns|tls|dgram|child_process)/);
+        if (name === PROCESS_CAPABLE) {
+          expect(statement, name).not.toMatch(/node:(net|http|https|dns|tls|dgram)/);
+        } else {
+          expect(statement, name).not.toMatch(/node:(net|http|https|dns|tls|dgram|child_process)/);
+        }
         if (statement.startsWith('import type')) {
           // A TYPE import is erased: it grants a spec no capability at all, only a name for a shape
           // it must build a fake of. QFJ-P08 (ADR-0082): the operator spec names the durable queue's

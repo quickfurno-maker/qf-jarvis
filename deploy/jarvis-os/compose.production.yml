@@ -1,0 +1,115 @@
+# Jarvis OS PRIVATE application container (JOS-01D, ADR-0088).
+#
+# ### This file alone reaches nobody
+#
+# It publishes no port AND activates no Traefik router. Started on its own, the container is
+# reachable only from its own bridge network: not from the internet, not from another Docker
+# project, and not through the shared Traefik.
+#
+# That is the whole point of the split. Ingress activation is a SEPARATE reviewed artefact
+# (`compose.ingress.yml`), so Gate 2 can start the container, prove its identity, filesystem,
+# capabilities, secret mount and authentication boundary, and only then make it publicly routable.
+# With routing labels in this file the router would go live the instant the container started, and
+# every "private" proof would be happening against something already serving the internet.
+#
+# ### Layering
+#
+#   compose.production.yml                     -> private. No router.
+#   + compose.ingress.yml                      -> public router, TLS, rate limits.
+#   + compose.ingress.yml + compose.hsts.yml   -> the above plus HSTS, after TLS is proven.
+#
+# Each overlay is additive and touches ONLY the qf-jarvis-os project. Shared Traefik is never
+# restarted, recreated, pulled or upgraded; it discovers and drops the router from these labels.
+#
+# Usage (Gate 2 only) -- see deploy.sh and activate.sh, which apply these in the correct order.
+
+name: qf-jarvis-os
+
+services:
+  jarvis-os:
+    # Immutable, SHA-tagged. There is no `latest`, no `main` and no `stable`: a mutable tag makes
+    # "which code is running" unanswerable and makes rollback a rebuild instead of a re-tag.
+    image: 'qf-jarvis-os:${JOS_IMAGE_TAG:?JOS_IMAGE_TAG must be the exact merged git SHA}'
+    container_name: qf-jarvis-os
+
+    restart: unless-stopped
+    init: true
+
+    # --- hardening -----------------------------------------------------------------------------
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # No cap_add, no privileged, no devices, no host PID/IPC, and no Docker socket. The application
+    # is a read-only web surface; every one of those would grant it reach it has no use for.
+    stop_grace_period: 30s
+
+    # `read_only: true` means the writable set is exactly what is listed here and nothing else.
+    # /tmp is the only path Node needs; Next's standalone server serves prebuilt output and writes
+    # no runtime cache under /app. If a future Next version needs one, mount that exact path and
+    # document it rather than relaxing read_only.
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+
+    # --- identity and configuration ------------------------------------------------------------
+    user: '10001:10001'
+
+    environment:
+      NODE_ENV: production
+      HOSTNAME: 0.0.0.0
+      PORT: '3000'
+      # A PATH and nothing else. No secret value is ever passed through the environment, because
+      # env vars are visible in /proc, in `docker inspect`, and in crash dumps.
+      QFJ_JOS_AUTH_CONFIG_FILE: /run/secrets/qf-jarvis-os-auth.json
+
+    volumes:
+      # The ONLY mount. Read-only, a single file, never a directory — a directory mount would let a
+      # future file appear beside it without review.
+      - type: bind
+        source: /srv/qf-jarvis/secrets/jarvis-os-auth.json
+        target: /run/secrets/qf-jarvis-os-auth.json
+        read_only: true
+
+    # --- resources -----------------------------------------------------------------------------
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1g
+          # Compose v5 normalises the top-level `pids_limit` into this block, so declaring both is
+          # a hard error. Fork-bomb containment lives here.
+          pids: 256
+        reservations:
+          memory: 256m
+
+    # --- logging -------------------------------------------------------------------------------
+    # Bounded. An unbounded json-file driver is how a 96 GB disk fills up quietly.
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '5'
+
+    networks:
+      - jarvis-os
+
+    labels:
+      # EXPLICITLY false, not merely absent.
+      #
+      # The audited Traefik runs with `exposedByDefault=false`, so an unlabelled container is
+      # already ignored — but that is a property of a shared component this project does not own.
+      # Stating `false` here means the private stage stays private even if that setting is ever
+      # flipped, and it gives the containment tests something positive to assert rather than an
+      # absence they could pass by misspelling a key.
+      #
+      # `compose.ingress.yml` overrides this to `true`. There are deliberately NO router, service,
+      # middleware or TLS labels in this file.
+      traefik.enable: 'false'
+
+networks:
+  # A dedicated bridge. It joins no existing project network: `n8n-cjls_default`,
+  # `qf-core-staging_default` and every database network stay unreachable from this container.
+  jarvis-os:
+    name: qf-jarvis-os_jarvis-os
+    driver: bridge

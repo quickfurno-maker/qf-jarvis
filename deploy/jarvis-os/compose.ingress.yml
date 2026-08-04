@@ -1,0 +1,71 @@
+# Jarvis OS INGRESS overlay (JOS-01D, ADR-0088).
+#
+# Additive. Applied ON TOP of compose.production.yml, never on its own:
+#
+#   docker compose -p qf-jarvis-os -f compose.production.yml -f compose.ingress.yml up -d
+#
+# This is the file that makes Jarvis OS publicly routable, and it is deliberately the ONLY thing
+# that does. Until it is applied the container runs privately with `traefik.enable=false`, which is
+# what lets Gate 2 prove the container before exposing it.
+#
+# ### It still adds no port
+#
+# Routing arrives entirely through labels. The audited Traefik runs on the host network with the
+# Docker provider and reaches container IPs on private bridges directly — both existing services on
+# this host work that way. So there is no `ports:` stanza here either, and no loopback fallback.
+#
+# ### Shared Traefik is not modified
+#
+# Traefik picks these labels up from its existing Docker provider watch. It is never restarted,
+# recreated, pulled or upgraded — it is configured as `traefik:latest`, so any pull against that
+# project would silently upgrade ingress for every hostname on the host.
+#
+# HSTS is NOT here. It is a separate overlay applied only after trusted TLS is verified.
+
+services:
+  jarvis-os:
+    labels:
+      # Overrides the `false` in the private base.
+      traefik.enable: 'true'
+      traefik.docker.network: 'qf-jarvis-os_jarvis-os'
+
+      # Main router. Entrypoint and resolver names are the ones DISCOVERED on the host
+      # (`websecure`, `letsencrypt`), not invented. HTTP→HTTPS redirection is already global on the
+      # `web` entrypoint, so no JOS-specific redirect is added.
+      traefik.http.routers.qf-jarvis-os.rule: 'Host(`jarvis.quickfurno.in`)'
+      traefik.http.routers.qf-jarvis-os.entrypoints: 'websecure'
+      traefik.http.routers.qf-jarvis-os.tls.certresolver: 'letsencrypt'
+      traefik.http.routers.qf-jarvis-os.middlewares: 'qf-jarvis-os-ratelimit@docker'
+      traefik.http.services.qf-jarvis-os.loadbalancer.server.port: '3000'
+
+      # Higher-priority router for the login POST, so credential stuffing meets a much tighter
+      # limiter than ordinary dashboard browsing. Priority must exceed the host-only rule's.
+      traefik.http.routers.qf-jarvis-os-login.rule: 'Host(`jarvis.quickfurno.in`) && Path(`/api/auth/login`)'
+      traefik.http.routers.qf-jarvis-os-login.entrypoints: 'websecure'
+      traefik.http.routers.qf-jarvis-os-login.tls.certresolver: 'letsencrypt'
+      traefik.http.routers.qf-jarvis-os-login.priority: '100'
+      traefik.http.routers.qf-jarvis-os-login.middlewares: 'qf-jarvis-os-login-ratelimit@docker,qf-jarvis-os-login-buffer@docker'
+      traefik.http.routers.qf-jarvis-os-login.service: 'qf-jarvis-os'
+
+      # General edge limit. Generous enough that normal dashboard use never reaches it.
+      traefik.http.middlewares.qf-jarvis-os-ratelimit.ratelimit.average: '30'
+      traefik.http.middlewares.qf-jarvis-os-ratelimit.ratelimit.burst: '60'
+
+      # Login limit: five attempts a minute. The application keeps its own process-local limiter;
+      # this is the perimeter one that survives a process restart, which the in-process one cannot.
+      traefik.http.middlewares.qf-jarvis-os-login-ratelimit.ratelimit.average: '5'
+      traefik.http.middlewares.qf-jarvis-os-login-ratelimit.ratelimit.period: '1m'
+      traefik.http.middlewares.qf-jarvis-os-login-ratelimit.ratelimit.burst: '5'
+
+      # Body cap on the LOGIN ROUTE ONLY. Buffering is deliberately not applied to the main router:
+      # it would break Next's streaming responses for every page in the application.
+      traefik.http.middlewares.qf-jarvis-os-login-buffer.buffering.maxRequestBodyBytes: '8192'
+      traefik.http.middlewares.qf-jarvis-os-login-buffer.buffering.memRequestBodyBytes: '8192'
+
+      # NOTE: no `headers.contentSecurityPolicy` middleware anywhere, in this file or any other.
+      #
+      # Jarvis OS emits a per-request nonce CSP. A static CSP injected at the edge would either
+      # override it — breaking every script, since a static policy cannot know the nonce — or sit
+      # alongside it, and two CSP headers intersect into the strictest combination, which is the
+      # same breakage by a different route. `smoke.sh` fails closed if more than one CSP header is
+      # ever observed.

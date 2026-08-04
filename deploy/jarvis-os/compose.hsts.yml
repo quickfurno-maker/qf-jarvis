@@ -1,0 +1,55 @@
+# Jarvis OS HSTS overlay (JOS-01D, ADR-0088).
+#
+# Additive. Applied ON TOP of the private base AND the ingress overlay, and only after trusted TLS
+# has been verified externally:
+#
+#   docker compose -p qf-jarvis-os \
+#     -f compose.production.yml -f compose.ingress.yml -f compose.hsts.yml up -d
+#
+# ### Why HSTS is a committed artefact rather than a production edit
+#
+# The alternative — "add the middleware label by hand after merge" — makes the deployed
+# configuration differ from the reviewed configuration, which defeats deploying an exact merged
+# SHA. These values were reviewed here, in Git, before anything was deployed.
+#
+# ### Why it is a SEPARATE overlay rather than part of ingress
+#
+# HSTS tells a browser "never speak plain HTTP to this host again, for a year". Sent before a valid
+# certificate exists, it pins clients to a hostname that does not yet serve working HTTPS, and the
+# pin outlives the mistake — it cannot be recalled by fixing the server. So it is applied only
+# after `smoke.sh pre-hsts` has proved trusted TLS end to end.
+#
+# ### The values, and why each is what it is
+#
+#   stsSeconds: 31536000        one year. The conventional maximum-confidence value.
+#   stsIncludeSubdomains: false this host is one name under quickfurno.in. Including subdomains
+#                               would impose HTTPS-only on sibling names this project does not
+#                               own or audit — staging-core, the n8n host, the apex.
+#   stsPreload: false           preload submission is effectively irreversible and is a decision
+#                               about the whole domain, not about this service.
+#   forceSTSHeader: false       do not emit HSTS over plain HTTP. The header is only meaningful on
+#                               a connection that was already secure.
+
+services:
+  jarvis-os:
+    labels:
+      traefik.http.middlewares.qf-jarvis-os-hsts.headers.stsSeconds: '31536000'
+      traefik.http.middlewares.qf-jarvis-os-hsts.headers.stsIncludeSubdomains: 'false'
+      traefik.http.middlewares.qf-jarvis-os-hsts.headers.stsPreload: 'false'
+      traefik.http.middlewares.qf-jarvis-os-hsts.headers.forceSTSHeader: 'false'
+
+      # Attach to BOTH public routers.
+      #
+      # `middlewares` is one label holding an ordered list, so it cannot be appended to — each
+      # router's full chain is restated here with the HSTS middleware added. The chains must
+      # otherwise match compose.ingress.yml exactly; the containment tests assert that, because a
+      # silent divergence here would drop a rate limiter while appearing to only add HSTS.
+      #
+      # The login router is included deliberately: a response that sets a session cookie is the
+      # last one that should be reachable over plain HTTP.
+      traefik.http.routers.qf-jarvis-os.middlewares: 'qf-jarvis-os-ratelimit@docker,qf-jarvis-os-hsts@docker'
+      traefik.http.routers.qf-jarvis-os-login.middlewares: 'qf-jarvis-os-login-ratelimit@docker,qf-jarvis-os-login-buffer@docker,qf-jarvis-os-hsts@docker'
+
+      # Still no `headers.contentSecurityPolicy`. This middleware sets STS fields and nothing else:
+      # Traefik's headers middleware can also set a static CSP, and doing so here would collide
+      # with the application's per-request nonce policy.

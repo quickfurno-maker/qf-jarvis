@@ -223,16 +223,16 @@ describe('GET /api/control-plane/v1/snapshot', () => {
         .join(' '),
     ).toContain('QFJ-P09.01');
 
+    // Phase-agnostic on purpose: exactly one current JOS slice and one next, and they differ.
+    // Naming the slice here would make this a test somebody edits every phase, which is how the
+    // marker/BASELINE_FACTS drift got shipped in the first place.
     const josCurrent = jos.filter((marker) => marker.state === 'current');
     expect(josCurrent).toHaveLength(1);
-    expect(josCurrent[0]?.label).toContain('JOS-01B');
 
     const josNext = jos.filter((marker) => marker.state === 'next');
     expect(josNext).toHaveLength(1);
-    expect(josNext[0]?.label).toContain('JOS-01C');
+    expect(josNext[0]?.label).not.toBe(josCurrent[0]?.label);
 
-    // The specific defect: JOS-01B must never be the JOS `next` marker.
-    expect(josNext[0]?.label).not.toContain('JOS-01B');
     expect(
       jos
         .filter((marker) => marker.state === 'merged')

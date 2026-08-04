@@ -29,8 +29,8 @@ export const BASELINE_FACTS = Object.freeze({
   governedAgents: 4,
   mergedPhase: 'QFJ-P09.01',
   nextPhase: 'QFJ-P09.02',
-  josPhase: 'JOS-01C',
-  nextJosPhase: 'JOS-01D',
+  josPhase: 'JOS-01D',
+  nextJosPhase: 'JOS-01E',
 });
 
 const UNREACHABLE = 'No adopted read protocol exists in this repository.';
@@ -222,21 +222,35 @@ export const BASELINE_ROADMAP: readonly BaselineRoadmap[] = Object.freeze<
     detail: 'Shell, design system, capability model and the control-plane read seam.',
   },
   {
-    // `current`, not `next`. This build IS JOS-01B, so calling it next was false the day it
-    // shipped. `current` describes the software slice compiled into this build; merge state is
-    // GitHub's to track and would invalidate itself the moment a pull request landed.
     id: 'jos-01b',
     track: 'JOS',
     label: 'JOS-01B - Read-only control-plane contract and snapshot API',
-    state: 'current',
-    detail: 'This build. Present in source and not deployed; the route has no authentication.',
+    state: 'merged',
+    detail: 'Versioned read contract, pure snapshot builder and one GET route.',
   },
   {
     id: 'jos-01c',
     track: 'JOS',
-    label: 'JOS-01C - Authentication and operator session boundary',
+    label: 'JOS-01C - Owner authentication and operator session boundary',
+    state: 'merged',
+    detail: 'Argon2id passphrase plus TOTP; encrypted, short-lived operator sessions.',
+  },
+  {
+    // `current`, not `next`. This build IS JOS-01D. It carries the reviewed deployment topology --
+    // whether anything is RUNNING is an operational fact, not a repository one, so this marker
+    // never claims a live service.
+    id: 'jos-01d',
+    track: 'JOS',
+    label: 'JOS-01D - Isolated Docker, VPS and Traefik deployment',
+    state: 'current',
+    detail: 'Deployment artefacts and audit in this build. Nothing is deployed from here.',
+  },
+  {
+    id: 'jos-01e',
+    track: 'JOS',
+    label: 'JOS-01E - Progressive backend wiring',
     state: 'next',
-    detail: 'NEXT JARVIS OS SLICE. Deployment (JOS-01D) follows only after it.',
+    detail: 'NEXT JARVIS OS SLICE. Live adapters, one governed source at a time.',
   },
 ]);
 
@@ -331,7 +345,7 @@ export function baselineSections(): Sections {
           id: 'jos-phase',
           label: 'Jarvis OS phase',
           value: BASELINE_FACTS.josPhase,
-          caption: 'Owner authentication and operator sessions. Not deployed; JOS-01D deploys.',
+          caption: 'Isolated deployment topology. Nothing is deployed from this build.',
         },
       ],
     },
