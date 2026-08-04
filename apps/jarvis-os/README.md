@@ -56,15 +56,47 @@ QuickFurno Core and n8n are both `NOT_CONNECTED`. No live read protocol has been
 merged repository / governance declarations
         |
         v
-  buildControlPlaneSnapshot({ observedAt, freshness })   <- pure, validates its own output
-        |-- direct call ------> server components (BUILD_DECLARATION)
-        '-- GET /api/control-plane/v1/snapshot ---------> future clients (REQUEST_TIME)
+  buildControlPlaneSnapshot({ generatedAt })   <- pure, validates its own output
+        |-- direct call ------> server components
+        '-- GET /api/control-plane/v1/snapshot ---------> authenticated clients
 ```
+
+`generatedAt` records when the JSON envelope was produced and moves on every response.
+`source.freshness` records how fresh the underlying FACTS are and stays `BUILD_DECLARATION`:
+answering a request re-reads no Git, no governance document, no QuickFurno Core and no n8n. The
+contract REJECTS a `REPOSITORY_BASELINE` that claims `REQUEST_TIME` or live data, so request time
+can never promote a compiled-in baseline.
 
 Server components call the builder **directly**; they never fetch the route. The route exports only
 `GET`, sets `no-store` and `nosniff`, sends **no CORS header**, rejects query parameters, and returns
-a generic fail-closed body. It has no authentication and **is not deployed** — JOS-01C adds auth,
-JOS-01D deploys.
+a generic fail-closed body.
+
+## JOS-01C — owner authentication and operator sessions
+
+Every operator page and the snapshot API require a verified session. `/login` is the only public
+page; the route and the protected layout each verify independently, so the proxy is never the only
+check. **Still not deployed** — JOS-01D adds TLS, HSTS, proxy rate limits and the secret mount.
+
+Production needs an Argon2id passphrase **and** a TOTP code; there is no password-only production
+mode. Sessions are AES-256-GCM encrypted, short-lived (1 hour by default, server-enforced) and
+carried in a `__Host-` `Secure` `HttpOnly` `SameSite=Strict` cookie with no `Max-Age`.
+
+Secrets live in ONE read-only JSON file outside the repository. The only environment variable is a
+PATH:
+
+```
+pnpm --filter @qf-jarvis/jarvis-os auth:bootstrap -- --output ~/.qf-jarvis/jos-auth.json --mode LOCAL_DEVELOPMENT
+export QFJ_JOS_AUTH_CONFIG_FILE=~/.qf-jarvis/jos-auth.json
+pnpm --filter @qf-jarvis/jarvis-os dev
+```
+
+The bootstrap tool never accepts a passphrase on the command line or from the environment, refuses
+to overwrite an existing file, refuses to write inside the repository without an explicit override,
+and prints the TOTP secret exactly once.
+
+**Revocation is global, not per-session.** Increment `session.revision` or remove a key in the file
+and every outstanding session dies on the next request — no restart needed. Per-session revocation
+requires a durable session store and MUST be adopted before multi-operator or write-capable use.
 
 The wire contract lives in `@qf-jarvis/control-plane-read-contract` (zod only, no Next/React/Node),
 so a future Android client shares it verbatim. No Android files exist yet.

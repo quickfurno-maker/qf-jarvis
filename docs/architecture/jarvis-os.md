@@ -1,6 +1,6 @@
 # Jarvis OS — the operator control plane
 
-**Status:** **JOS-01B is the current implemented Jarvis OS slice** in this build ([ADR-0086](../decisions/ADR-0086-jos-01b-read-only-control-plane-contract-and-snapshot-api.md), PR #90) — the governed read-only control-plane contract and snapshot API. JOS-01A is **merged** (PR #88, `b90073cc`). **JOS-01C — authentication and the operator session boundary — is next.** **Nothing is deployed.**
+**Status:** **JOS-01C is the current implemented Jarvis OS slice** in this build ([ADR-0087](../decisions/ADR-0087-jos-01c-owner-authentication-and-operator-session-boundary.md), PR #91) — owner authentication, MFA and the operator session boundary. JOS-01A and JOS-01B are **merged**. **JOS-01D — isolated Docker, VPS and Traefik deployment — is next.** **Nothing is deployed.**
 
 > **Why this reads as "current" and not as a branch status.** An architecture document that says a
 > slice is "on a feature branch, not merged" is false the instant that branch merges, and nobody
@@ -30,10 +30,17 @@ neither is contacted from here.
 
 It creates no approval and answers none. It sends no communication and reaches no provider.
 It invokes no n8n workflow and calls no Meta API. It mutates no QuickFurno Core record and no
-Jarvis durable state. It reads no secret, reaches no database, and performs no network access
-whatsoever — a source-level test asserts the absence of `fetch`, `XMLHttpRequest`,
-`WebSocket`, any URL literal, `process.env`, browser storage, `'use server'`, and any import
-of a backend workspace package or a database, provider, n8n or Meta client.
+Jarvis durable state. It reaches no database and performs no network access whatsoever — a
+source-level test asserts the absence of `fetch`, `XMLHttpRequest`, `WebSocket`, any URL literal,
+browser storage, `'use server'`, and any import of a backend workspace package or a database,
+provider, n8n or Meta client.
+
+JOS-01C **narrowed** two of those rules rather than dropping them, and the tests enforce the narrow
+version. `process.env` is permitted in exactly two reviewed places — the auth config-path boundary
+(one variable, holding a PATH and never secret material) and the proxy's `NODE_ENV` check for
+development-only CSP relaxations — and `node:fs` in exactly one, the auth config loader. Everywhere
+else, including every page, component and control-plane module, both remain forbidden. The one
+mutation the application performs is setting or clearing its own session cookie.
 
 The permanent boundary is unchanged and is stated on the surfaces themselves:
 
@@ -70,6 +77,36 @@ the web app.
 The read model interface has **only readers**. There is no writer on it and no place to add
 one without editing that file — which is exactly the friction that should exist before a
 surface acquires the ability to change something.
+
+## Authentication and the operator session (JOS-01C)
+
+Every operator page and the snapshot API require a **verified** session. `/login` is the only
+public page, and it renders no `AppShell` — the module navigation, the agent roster and the
+boundary sections would otherwise be readable by anyone who can load the page.
+
+| Control | Production |
+| --- | --- |
+| Password hashing | Argon2id v19, 19 MiB, 2 passes, 32-byte digest, `timingSafeEqual` |
+| MFA | **Required** TOTP (RFC 6238, SHA-1, 6 digits, 30s, ±1 step) |
+| Session | AES-256-GCM, random IV per token, 1-hour server-enforced absolute expiry |
+| Cookie | `__Host-qfj-jos-session`, `Secure`, `HttpOnly`, `SameSite=Strict`, no `Max-Age` |
+| CSRF | Exact-origin check on every mutation, plus a session-bound token for sign-out |
+| Secrets | ONE read-only JSON file outside the repository; one env var holding a PATH |
+
+**Authentication is not authority.** A signed-in OWNER may view Jarvis OS. It implies no approval,
+no communication authorization, no dispatch, no consent, no payment or activation right and no Core
+mutation. The only state this phase mutates anywhere is a browser cookie.
+
+**Proxy is optimistic; the DAL is the authority.** `src/proxy.ts` mints the CSP nonce and checks
+whether a session cookie is present. The protected layout and the snapshot route each verify
+properly, close to the data. Delete the proxy and every protected surface stays closed — the tests
+prove it by calling the route handlers directly.
+
+**Known limitation, stated rather than implied.** This stateless model has no per-session
+revocation: a stolen token is valid until it expires or the configuration file is rotated.
+Revocation is global — bump `session.revision` or remove a key and every session dies at the next
+request. A durable identity/session provider MUST be adopted before multi-operator use or any
+write-capable control-plane feature.
 
 ## Capability-aware UI
 
@@ -170,7 +207,7 @@ nothing, and there is no QFJ-P13.
 | --- | --- |
 | **JOS-01A** | Premium dashboard foundation — shell, design system, capability model, demo read model. |
 | **JOS-01B** | Read-only control-plane contract and snapshot API; truthful default surface. Replaces the demo provider. |
-| **JOS-01C** | Authentication and operator session boundary. |
+| **JOS-01C** | Owner authentication, TOTP MFA and the operator session boundary. |
 | **JOS-01D** | Isolated Docker image, VPS deployment, Traefik TLS, auth-protected staging. |
 | **JOS-01E** | Progressive backend wiring, capability by capability. |
 
