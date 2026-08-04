@@ -1,8 +1,19 @@
 import type { Metadata, Viewport } from 'next';
 
-import { AppShell } from '@/components/shell/AppShell';
 import './globals.css';
 
+/**
+ * The root layout (JOS-01A; reduced to html/body in JOS-01C).
+ *
+ * It used to render `AppShell` around everything. It cannot any more: `/login` is reached by an
+ * UNAUTHENTICATED visitor, and wrapping it in the operator shell would leak the navigation — every
+ * module name, the agent roster, the boundary sections — to anyone who can load the page.
+ *
+ * So the shell moved down into `(protected)/layout.tsx`, which verifies a session before it
+ * renders anything. This file now owns only the document: language, metadata and global styles.
+ * Route groups mean the URLs are unchanged — `(protected)` and `(public)` are organisational and
+ * never appear in a path.
+ */
 export const metadata: Metadata = {
   title: 'Jarvis OS — Control Plane',
   description:
@@ -23,9 +34,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { readonly children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="antialiased">
-        <AppShell>{children}</AppShell>
-      </body>
+      <body className="antialiased">{children}</body>
     </html>
   );
 }

@@ -8,13 +8,15 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json",
+    "auth:bootstrap": "node ./scripts/auth-bootstrap.mjs"
   },
   "dependencies": {
     "@qf-jarvis/control-plane-read-contract": "workspace:*",
     "next": "16.2.11",
     "react": "19.2.0",
-    "react-dom": "19.2.0"
+    "react-dom": "19.2.0",
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.3.0",

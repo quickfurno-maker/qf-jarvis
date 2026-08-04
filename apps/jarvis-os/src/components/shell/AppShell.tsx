@@ -3,9 +3,11 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
 
+import { OperatorMenu } from '@/components/shell/OperatorMenu';
 import { SideNav } from '@/components/navigation/SideNav';
 import { BrandLockup } from '@/components/shell/Brand';
 import { ENVIRONMENT_LABEL } from '@/lib/environment';
+import type { OperatorSessionView } from '@/server/auth/dal';
 
 /**
  * The application shell (JOS-01A).
@@ -17,7 +19,21 @@ import { ENVIRONMENT_LABEL } from '@/lib/environment';
  * The top bar carries the two facts that must never require a click to discover: which
  * environment this is, and that production rollout is OFF.
  */
-export function AppShell({ children }: { readonly children: ReactNode }) {
+export function AppShell({
+  children,
+  operator,
+  csrfToken,
+}: {
+  readonly children: ReactNode;
+  readonly operator: OperatorSessionView;
+  /**
+   * Passed straight into the logout form's hidden input and nowhere else.
+   *
+   * It is NOT part of `operator`, so it cannot end up in a component that renders session details.
+   * This is the only value in the client tree that came from inside the encrypted token.
+   */
+  readonly csrfToken: string;
+}) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const pathname = usePathname();
 
@@ -84,6 +100,8 @@ export function AppShell({ children }: { readonly children: ReactNode }) {
           onOpenDrawer={() => {
             setDrawerOpen(true);
           }}
+          operator={operator}
+          csrfToken={csrfToken}
         />
         <main id="jos-main" className="min-w-0 flex-1 px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
           <div className="mx-auto w-full max-w-[1560px]">{children}</div>
@@ -93,7 +111,15 @@ export function AppShell({ children }: { readonly children: ReactNode }) {
   );
 }
 
-function TopBar({ onOpenDrawer }: { readonly onOpenDrawer: () => void }) {
+function TopBar({
+  onOpenDrawer,
+  operator,
+  csrfToken,
+}: {
+  readonly onOpenDrawer: () => void;
+  readonly operator: OperatorSessionView;
+  readonly csrfToken: string;
+}) {
   return (
     <header className="sticky top-0 z-30 border-b border-[var(--color-line)] bg-[var(--color-base-950)]/92 backdrop-blur">
       <div className="flex h-14 items-center gap-3 px-4 sm:px-6 lg:px-8">
@@ -177,17 +203,7 @@ function TopBar({ onOpenDrawer }: { readonly onOpenDrawer: () => void }) {
             </svg>
           </button>
 
-          <div className="flex items-center gap-2 rounded-[var(--radius-control)] border border-[var(--color-line)] bg-[var(--color-base-900)] py-1 pr-2.5 pl-1.5">
-            <span
-              aria-hidden="true"
-              className="grid h-6 w-6 place-items-center rounded-[5px] bg-[var(--color-accent-dim)] text-[10px] font-semibold text-[var(--color-ink)]"
-            >
-              OP
-            </span>
-            <span className="hidden text-[11.5px] text-[var(--color-ink-muted)] sm:inline">
-              Operator
-            </span>
-          </div>
+          <OperatorMenu operator={operator} csrfToken={csrfToken} />
         </div>
       </div>
     </header>

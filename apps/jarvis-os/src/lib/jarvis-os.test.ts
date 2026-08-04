@@ -47,6 +47,9 @@ const SRC = fileURLToPath(new URL('src', APP_DIR));
 const SCANNERS: readonly string[] = Object.freeze([
   'src/lib/jarvis-os.test.ts',
   'src/server/control-plane/snapshot-api.test.ts',
+  'src/server/auth/auth-crypto.test.ts',
+  'src/server/auth/auth-http.test.ts',
+  'src/server/auth/proxy-csp.test.ts',
 ]);
 
 function walk(dir: string): string[] {
@@ -180,7 +183,10 @@ describe('navigation', () => {
 
   it('has a page for every navigation entry', () => {
     for (const item of NAV_ITEMS) {
-      const relative = item.href === '/' ? 'app/page.tsx' : `app${item.href}/page.tsx`;
+      // JOS-01C moved every operator page into the `(protected)` route group. Route groups are
+      // organisational and never appear in a URL, so the hrefs are unchanged -- but the files moved.
+      const relative =
+        item.href === '/' ? 'app/(protected)/page.tsx' : `app/(protected)${item.href}/page.tsx`;
       expect(() => statSync(join(SRC, relative)), item.href).not.toThrow();
     }
   });
@@ -305,7 +311,10 @@ describe('the resume marker and phase truth', () => {
   });
 
   it('renders the resume marker on the Execution and Governance surfaces', () => {
-    for (const relative of ['app/execution/page.tsx', 'app/governance/page.tsx']) {
+    for (const relative of [
+      'app/(protected)/execution/page.tsx',
+      'app/(protected)/governance/page.tsx',
+    ]) {
       const source = readFileSync(join(SRC, relative), 'utf8');
       expect(source, relative).toContain('QFJ-P09.02');
     }
@@ -427,7 +436,14 @@ describe('no live action capability is exposed', () => {
       expect(code, `${label}: fetch`).not.toMatch(/\bfetch\s*\(/);
       expect(code, `${label}: XHR`).not.toMatch(/XMLHttpRequest|WebSocket|EventSource/);
       expect(code, `${label}: url`).not.toMatch(/https?:\/\//);
-      expect(code, `${label}: env`).not.toMatch(/process\s*\.\s*env/);
+      // JOS-01C NARROWS this rather than removing it. `process.env` is permitted in exactly two
+      // reviewed places -- the auth config-path boundary and the proxy's NODE_ENV check for
+      // development-only CSP relaxations -- and stays forbidden everywhere else, which is where a
+      // configuration read would actually be dangerous.
+      const envAllowed = label === 'src/server/auth/config/loader.ts' || label === 'src/proxy.ts';
+      if (!envAllowed) {
+        expect(code, `${label}: env`).not.toMatch(/process\s*\.\s*env/);
+      }
       expect(code, `${label}: storage`).not.toMatch(
         /localStorage|sessionStorage|indexedDB|document\.cookie/,
       );
@@ -435,6 +451,11 @@ describe('no live action capability is exposed', () => {
       expect(code, `${label}: node io`).not.toMatch(
         /from ['"]node:(net|http|https|dns|tls|child_process|dgram)['"]/,
       );
+      // `node:fs` is permitted ONLY in the auth config loader. Everything else -- every page,
+      // component and control-plane module -- still may not touch the filesystem.
+      if (label !== 'src/server/auth/config/loader.ts') {
+        expect(code, `${label}: fs`).not.toMatch(/from ['"]node:fs['"]/);
+      }
     }
   });
 
@@ -496,17 +517,32 @@ describe('no live action capability is exposed', () => {
     ]) {
       expect(source, marker).toContain(marker);
     }
-    // Every <button> that is not a pure navigation control carries `disabled`.
+    // Every <button> in the application must carry `disabled`, EXCEPT an explicit allowlist.
     //
-    // The drawer's open and close buttons are exempt: they move the operator around this
-    // surface and reach nothing. Every OTHER button in the application is an action-looking
-    // control, and each must be disabled with a reason.
-    const buttons = source.match(/<button[\s\S]{0,320}?>/g) ?? [];
-    const actionable = buttons.filter(
-      (button) => !/aria-label="(Open|Close) navigation"/.test(button),
-    );
-    for (const button of actionable) {
-      expect(button, button.slice(0, 80)).toContain('disabled');
+    // The allowlist is by FILE rather than by attribute pattern, deliberately. An attribute regex
+    // over concatenated source is fragile -- a `>` inside an `onClick={() => ...}` truncates the
+    // match -- and, worse, a pattern silently exempts any future button that happens to match it.
+    // Naming the three files that may hold an enabled control means a fourth one fails this test.
+    //
+    // JOS-01C adds exactly two enabled controls: the login submit and the sign-out submit. Both
+    // mutate browser authentication state alone (a cookie); neither approves, sends or executes
+    // anything, and neither confers any QuickFurno business authority.
+    const ENABLED_CONTROL_FILES: readonly string[] = Object.freeze([
+      'src/components/shell/AppShell.tsx', // drawer open/close: navigation only
+      'src/components/shell/OperatorMenu.tsx', // menu toggle + sign-out submit
+      'src/components/auth/LoginForm.tsx', // sign-in submit
+    ]);
+
+    for (const file of sourceFiles()) {
+      const label = file.replace(/\\/g, '/').split('/apps/jarvis-os/')[1] ?? file;
+      if (ENABLED_CONTROL_FILES.includes(label)) {
+        continue;
+      }
+      const code = readFileSync(file, 'utf8');
+      const buttons = code.match(/<button[\s\S]*?>/g) ?? [];
+      for (const button of buttons) {
+        expect(button, `${label}: ${button.slice(0, 60)}`).toContain('disabled');
+      }
     }
   });
 });

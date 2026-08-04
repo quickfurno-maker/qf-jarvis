@@ -29,8 +29,8 @@ export const BASELINE_FACTS = Object.freeze({
   governedAgents: 4,
   mergedPhase: 'QFJ-P09.01',
   nextPhase: 'QFJ-P09.02',
-  josPhase: 'JOS-01B',
-  nextJosPhase: 'JOS-01C',
+  josPhase: 'JOS-01C',
+  nextJosPhase: 'JOS-01D',
 });
 
 const UNREACHABLE = 'No adopted read protocol exists in this repository.';
@@ -78,7 +78,13 @@ export const BASELINE_SYSTEM: readonly SystemComponent[] = Object.freeze<
     id: 'jarvis-os-read-api',
     label: 'Jarvis OS read API',
     state: 'AVAILABLE',
-    detail: 'Versioned read-only snapshot contract. Present in source; not deployed.',
+    detail: 'Versioned read-only snapshot API. Requires an operator session; not deployed.',
+  },
+  {
+    id: 'operator-authentication',
+    label: 'Operator authentication',
+    state: 'AVAILABLE',
+    detail: 'Argon2id passphrase and TOTP. Grants viewing only; confers no Core authority.',
   },
   {
     id: 'quickfurno-core',
@@ -325,7 +331,7 @@ export function baselineSections(): Sections {
           id: 'jos-phase',
           label: 'Jarvis OS phase',
           value: BASELINE_FACTS.josPhase,
-          caption: 'Read-only contract and snapshot API. Not deployed; JOS-01C adds auth.',
+          caption: 'Owner authentication and operator sessions. Not deployed; JOS-01D deploys.',
         },
       ],
     },

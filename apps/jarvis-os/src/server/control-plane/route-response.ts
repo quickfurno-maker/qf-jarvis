@@ -48,6 +48,18 @@ export const FAILURE_BODY = Object.freeze({
  * how `?tenant=other` quietly becomes a supported feature that was never designed: rejecting is
  * the behaviour that stays correct when the route later grows an authenticated scope.
  */
+/**
+ * The unauthenticated body (JOS-01C).
+ *
+ * One fixed shape for every unauthenticated case. It does not distinguish "no cookie" from
+ * "expired" from "tampered", because each of those is a fact an attacker would like to have and
+ * none of them helps a legitimate operator, who simply signs in again.
+ */
+export const UNAUTHENTICATED_BODY = Object.freeze({
+  error: 'unauthenticated',
+  message: 'An authenticated operator session is required.',
+});
+
 export const UNSUPPORTED_QUERY_BODY = Object.freeze({
   error: 'unsupported-query-parameter',
   message: 'This endpoint accepts no query parameters.',
