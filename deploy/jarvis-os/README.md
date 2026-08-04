@@ -5,10 +5,10 @@ Nothing is deployed.**
 
 ## Two gates, deliberately not collapsed
 
-| Gate                                         | What happens                                                                                                                                               |
-| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **1 — this PR**                              | Artefacts written, image built and proved locally from a tracked-only context, VPS audited read-only. **No deployment, no DNS change, no Traefik change.** |
-| **2 — after this PR is reviewed and merged** | Deploy the exact merged SHA, mount the production secret, activate the router, verify TLS/HSTS/rate limits/auth, prove rollback.                           |
+| Gate                                         | What happens                                                                                                                                                                      |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **1 — this PR**                              | Artefacts written, image built and proved locally from a tracked-only context, VPS audited read-only, runtime image scanned. **No deployment, no DNS change, no Traefik change.** |
+| **2 — after this PR is reviewed and merged** | Deploy the exact merged SHA, mount the production secret, activate the router, verify TLS/HSTS/rate limits/auth, prove rollback.                                                  |
 
 The split exists so the artefacts are reviewed _before_ anything is exposed. A deployment that
 arrives with its own review is a deployment nobody reviewed.
@@ -34,13 +34,24 @@ host-network Traefik reaches them by container IP. Jarvis OS uses that exact pat
 
 ## Files
 
-| File                     | Purpose                                                                                      |
-| ------------------------ | -------------------------------------------------------------------------------------------- |
-| `Dockerfile`             | Multi-stage build. Base pinned by **digest**; non-root `10001:10001`; no secret.             |
-| `compose.production.yml` | Hardened service, **no published port**, Traefik labels, secret bind-mount.                  |
-| `deploy.sh`              | Gate 2. Builds one exact SHA from a `git archive` context and verifies the running revision. |
-| `rollback.sh`            | Gate 2. Re-points **only** the JOS project at a previous immutable tag.                      |
-| `smoke.sh`               | Gate 2. External checks: DNS, TLS, redirect, 401, headers, no direct port.                   |
+| File                     | Purpose                                                                                       |
+| ------------------------ | --------------------------------------------------------------------------------------------- |
+| `Dockerfile`             | Multi-stage build. Base pinned by **digest**; non-root `10001:10001`; no secret; no npm/perl. |
+| `compose.production.yml` | The **private** container. No published port, `traefik.enable=false`. Reachable by nobody.    |
+| `compose.ingress.yml`    | Additive overlay: routers, TLS, rate limits. **This is what makes it public.**                |
+| `compose.hsts.yml`       | Additive overlay: HSTS, applied only after TLS is proven.                                     |
+| `verify-merged-sha.sh`   | Fails closed unless a SHA is well-formed, exists, and is contained in `origin/main`.          |
+| `deploy.sh`              | Gate 2 step 1. Builds one exact merged SHA and starts it **privately**, then proves it.       |
+| `activate.sh`            | Gate 2 steps 2 and 4. Applies the `ingress` then `hsts` overlay, recreating **only** JOS.     |
+| `rollback.sh`            | Gate 2. Re-points **only** the JOS project at a previous immutable tag, at an explicit stage. |
+| `smoke.sh`               | Gate 2. External checks in `pre-hsts` and `final` modes. Fails closed.                        |
+
+### Why the container and its router are separate files
+
+The Docker provider discovers labels the instant a container starts. With router labels in the same
+file, the router would be live before the first "private" proof ran — so every check afterwards
+would be measuring something already serving the internet. Splitting them is what lets Gate 2 prove
+identity, filesystem, capabilities, secret mount and auth boundary **before** exposure.
 
 ## Security posture
 
@@ -98,31 +109,64 @@ Do not change `quickfurno.in`, `www`, `staging-core` or the n8n hostname.
 
 ## Gate 2 — sequence
 
+Every step runs against the exact merged SHA. `deploy.sh` and `activate.sh` both refuse any commit
+not contained in `origin/main`, so an unmerged branch head cannot be deployed even by accident.
+
 ```bash
 # 1. DNS resolves to the VPS, verified externally
 dig +short A jarvis.quickfurno.in            # expect 200.141.10.108
 
 # 2. Secret installed (above)
 
-# 3. Deploy the exact merged SHA
+# 3. Build and start PRIVATELY. No router exists yet.
+#    Runs the full private proof itself: revision, uid/gid, read-only rootfs, dropped caps,
+#    no-new-privileges, no published port, secret mounted read-only, internal 200/307/401,
+#    and that the container carries NO Traefik routing labels.
 ssh qf-staging '/srv/qf-jarvis/deploy/deploy.sh <exact-merged-sha>'
 
-# 4. Private proof BEFORE the router is trusted
-ssh qf-staging 'docker exec qf-jarvis-os id'          # uid=10001
-ssh qf-staging 'docker inspect qf-jarvis-os --format "{{.HostConfig.ReadonlyRootfs}} {{.HostConfig.CapDrop}}"'
+# 4. Make it public — reviewed overlay, recreates only qf-jarvis-os
+ssh qf-staging '/srv/qf-jarvis/deploy/activate.sh ingress <exact-merged-sha>'
 
-# 5. External smoke
-./smoke.sh jarvis.quickfurno.in
+# 5. Verify trusted TLS externally. HSTS must still be ABSENT here.
+./smoke.sh pre-hsts jarvis.quickfurno.in
 
-# 6. HSTS only AFTER TLS is confirmed working (add the middleware label, recreate JOS only)
+# 6. Only now attach HSTS — reviewed overlay, recreates only qf-jarvis-os
+ssh qf-staging '/srv/qf-jarvis/deploy/activate.sh hsts <exact-merged-sha>'
+
+# 7. Final gate. Fails closed on missing HSTS, wrong max-age, or a duplicate CSP header.
+./smoke.sh final jarvis.quickfurno.in
 ```
 
-**HSTS is deliberately absent until TLS is proven.** Sending it before a valid certificate exists
-pins browsers to a hostname that does not yet serve HTTPS, and the pin outlives the mistake.
+**HSTS is a reviewed file, not a production edit.** `compose.hsts.yml` holds
+`stsSeconds=31536000`, `stsIncludeSubdomains=false`, `stsPreload=false`, `forceSTSHeader=false`.
+It is applied last because HSTS sent before a valid certificate exists pins browsers to a hostname
+that does not yet serve HTTPS, and the pin outlives the mistake.
 
-Rollback: `./rollback.sh <previous-sha>` — re-points only the JOS project. It prunes nothing;
-`system prune`, `image prune -a`, `volume prune` and `network prune` would all reach shared
-Traefik, n8n and Core resources.
+Rollback: `./rollback.sh <previous-sha> <private|ingress|hsts>` — re-points only the JOS project.
+The stage is required, not defaulted: `private` would silently drop HSTS from a host whose browsers
+have already been told to refuse plain HTTP, and the full set would silently expose a container
+that was still private. It prunes nothing; `system prune`, `image prune -a`, `volume prune` and
+`network prune` would all reach shared Traefik, n8n and Core resources.
+
+## Runtime image vulnerability disposition
+
+Digest pinning gives reproducibility, not absence of vulnerabilities. Docker Scout on the first
+image found **3 CRITICAL / 6 HIGH**, every one in the base image's build toolchain and **none** in
+the application's traced `node_modules`. The pinned digest is already the current published digest
+for `node:24.18.0-bookworm-slim`, so there was no fixed base to move to.
+
+The runtime never installs a package, so the toolchain was removed: npm, npx, corepack and `perl`.
+
+|                      | Before | After |
+| -------------------- | ------ | ----- |
+| CRITICAL             | 3      | 2     |
+| HIGH                 | 6      | 2     |
+| **Fixable CRITICAL** | 1      | **0** |
+| **Fixable HIGH**     | 4      | **0** |
+
+The 4 residual findings are all in `perl-base` (`Essential: yes` — dpkg requires it) and all report
+**"Fixed version: not fixed"** upstream. Accepted: nothing in the request path invokes perl, and the
+container is non-root on a read-only root filesystem with all capabilities dropped.
 
 ## What this phase does NOT change
 

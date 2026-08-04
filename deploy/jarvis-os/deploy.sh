@@ -1,9 +1,15 @@
 #!/usr/bin/env bash
-# Jarvis OS deployment (JOS-01D, ADR-0088). GATE 2 ONLY.
+# Jarvis OS PRIVATE deployment (JOS-01D, ADR-0088). GATE 2 ONLY.
 #
-# Builds and starts the image for one exact Git SHA. Every guard here exists because the
-# alternative failure is silent: deploying a tag that moved, deploying a dirty tree, or recreating
-# a shared container that other services depend on.
+#   deploy.sh <exact-merged-git-sha>
+#
+# Builds one exact merged commit and starts it PRIVATELY, then proves it. It deliberately stops
+# before ingress: making the container publicly routable is `activate.sh ingress`, a separate
+# reviewed step that runs only after every proof below has passed.
+#
+# Every guard here exists because the alternative failure is silent -- deploying a commit that was
+# never reviewed, deploying a tag that moved, or "verifying" a container that has been serving the
+# internet since the moment it started.
 set -Eeuo pipefail
 
 SHA="${1:-}"
@@ -12,16 +18,27 @@ if [[ -z "$SHA" ]]; then
   exit 2
 fi
 
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="${REPO_DIR:-/srv/qf-jarvis/repo}"
 SECRET="/srv/qf-jarvis/secrets/jarvis-os-auth.json"
-COMPOSE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/compose.production.yml"
+BASE="$HERE/compose.production.yml"
 
-# The secret must already exist, with owner-only permissions. The application refuses a
-# group- or world-readable file, so failing here gives a clearer message than a 503 later.
-if [[ ! -f "$SECRET" ]]; then
+# ---------------------------------------------------------------------------------------------
+# 1. The commit must be reviewed code
+# ---------------------------------------------------------------------------------------------
+# Fails closed unless the SHA is well-formed, exists, and is contained in origin/main. Nothing is
+# built and nothing is started if this fails.
+"$HERE/verify-merged-sha.sh" "$SHA" "$REPO_DIR"
+
+# ---------------------------------------------------------------------------------------------
+# 2. The secret must already be installed correctly
+# ---------------------------------------------------------------------------------------------
+# The application refuses a group- or world-readable file, so failing here gives a clearer message
+# than a 503 later.
+[[ -f "$SECRET" ]] || {
   echo "FATAL: $SECRET is missing. Install it before deploying." >&2
   exit 1
-fi
+}
 MODE="$(stat -c '%a' "$SECRET")"
 OWNER="$(stat -c '%u:%g' "$SECRET")"
 if [[ "$MODE" != "400" && "$MODE" != "600" ]]; then
@@ -33,8 +50,11 @@ if [[ "$OWNER" != "10001:10001" ]]; then
   exit 1
 fi
 
-# Build from a CLEAN checkout of the exact SHA. `git archive` produces tracked files only, so
-# untracked local material -- including protected paths -- cannot enter the build context.
+# ---------------------------------------------------------------------------------------------
+# 3. Build from a clean checkout of that exact commit
+# ---------------------------------------------------------------------------------------------
+# `git archive` produces TRACKED files only, so untracked local material -- including protected
+# paths -- cannot enter the build context regardless of the state of the working tree.
 BUILD_CTX="$(mktemp -d)"
 trap 'rm -rf "$BUILD_CTX"' EXIT
 git -C "$REPO_DIR" archive --format=tar "$SHA" | tar -x -C "$BUILD_CTX"
@@ -46,13 +66,81 @@ docker build \
   --tag "qf-jarvis-os:${SHA}" \
   "$BUILD_CTX"
 
-echo "==> starting (project qf-jarvis-os only)"
-JOS_IMAGE_TAG="$SHA" docker compose -p qf-jarvis-os -f "$COMPOSE" up -d
+# ---------------------------------------------------------------------------------------------
+# 4. Start PRIVATELY -- base compose only, no ingress overlay
+# ---------------------------------------------------------------------------------------------
+echo "==> starting privately (no Traefik router; project qf-jarvis-os only)"
+JOS_IMAGE_TAG="$SHA" docker compose -p qf-jarvis-os -f "$BASE" up -d
 
-# Prove the running container is the intended revision rather than a cached older layer.
-RUNNING="$(docker inspect qf-jarvis-os --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')"
-if [[ "$RUNNING" != "$SHA" ]]; then
-  echo "FATAL: running image revision is $RUNNING, expected $SHA." >&2
+echo "==> waiting for container health"
+for _ in $(seq 1 60); do
+  STATUS="$(docker inspect qf-jarvis-os --format '{{.State.Health.Status}}' 2>/dev/null || echo unknown)"
+  [[ "$STATUS" == "healthy" ]] && break
+  sleep 2
+done
+[[ "$STATUS" == "healthy" ]] || {
+  echo "FATAL: container did not become healthy (last status: $STATUS)." >&2
+  exit 1
+}
+
+# ---------------------------------------------------------------------------------------------
+# 5. Prove it, while it is still private
+# ---------------------------------------------------------------------------------------------
+fail=0
+prove() { # name expected actual
+  if [[ "$2" == "$3" ]]; then printf '  ok    %-40s %s\n' "$1" "$3"; else
+    printf '  FAIL  %-40s expected %s, got %s\n' "$1" "$2" "$3"
+    fail=1
+  fi
+}
+
+echo "==> private proof"
+prove "image revision" "$SHA" \
+  "$(docker inspect qf-jarvis-os --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')"
+prove "uid:gid" "10001:10001" "$(docker exec qf-jarvis-os id -u):$(docker exec qf-jarvis-os id -g)"
+prove "read-only rootfs" "true" "$(docker inspect qf-jarvis-os --format '{{.HostConfig.ReadonlyRootfs}}')"
+prove "capabilities dropped" "[ALL]" "$(docker inspect qf-jarvis-os --format '{{.HostConfig.CapDrop}}')"
+prove "capabilities added" "[]" "$(docker inspect qf-jarvis-os --format '{{.HostConfig.CapAdd}}')"
+prove "no-new-privileges" "true" \
+  "$(docker inspect qf-jarvis-os --format '{{range .HostConfig.SecurityOpt}}{{if eq . "no-new-privileges:true"}}true{{end}}{{end}}')"
+prove "published ports" "map[]" "$(docker inspect qf-jarvis-os --format '{{.NetworkSettings.Ports}}')"
+prove "secret mounted read-only" "true" \
+  "$(docker inspect qf-jarvis-os --format '{{range .Mounts}}{{if eq .Destination "/run/secrets/qf-jarvis-os-auth.json"}}{{not .RW}}{{end}}{{end}}')"
+
+# Internal HTTP, from inside the container: the application is not reachable any other way yet.
+IN() { docker exec qf-jarvis-os node -e "fetch('http://127.0.0.1:3000'+process.argv[1],{redirect:'manual'}).then(r=>console.log(r.status)).catch(()=>console.log('ERR'))" "$1"; }
+prove "internal /login" "200" "$(IN /login)"
+prove "internal / (unauth)" "307" "$(IN /)"
+prove "internal snapshot (unauth)" "401" "$(IN /api/control-plane/v1/snapshot)"
+
+# ---------------------------------------------------------------------------------------------
+# 6. Prove Traefik has NOT picked it up
+# ---------------------------------------------------------------------------------------------
+# The point of the private stage. `traefik.enable` must be false and no router/service/middleware
+# label may exist on the running container -- read from the container itself, not from the file, so
+# this reflects what Traefik's Docker provider can actually see.
+echo "==> proving no public router exists yet"
+ENABLED="$(docker inspect qf-jarvis-os --format '{{ index .Config.Labels "traefik.enable" }}')"
+prove "traefik.enable" "false" "$ENABLED"
+ROUTERS="$(docker inspect qf-jarvis-os --format '{{range $k,$v := .Config.Labels}}{{$k}}
+{{end}}' | grep -c '^traefik\.http\.' || true)"
+prove "traefik routing labels" "0" "$ROUTERS"
+
+if [[ "$fail" -ne 0 ]]; then
+  echo "FATAL: private proof failed. Do NOT activate ingress." >&2
   exit 1
 fi
-echo "==> running revision confirmed: $RUNNING"
+
+cat <<EOF
+
+==> PRIVATE deployment verified: qf-jarvis-os:${SHA}
+
+It is running and reachable by nobody: no published port, no Traefik router.
+
+Next, in order:
+  1. Confirm DNS:            dig +short A jarvis.quickfurno.in
+  2. Activate ingress:       ./activate.sh ingress ${SHA}
+  3. Verify TLS externally:  ./smoke.sh pre-hsts jarvis.quickfurno.in
+  4. Activate HSTS:          ./activate.sh hsts ${SHA}
+  5. Final verification:     ./smoke.sh final jarvis.quickfurno.in
+EOF

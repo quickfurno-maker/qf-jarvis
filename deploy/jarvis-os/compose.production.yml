@@ -1,24 +1,27 @@
-# Jarvis OS production topology (JOS-01D, ADR-0088).
+# Jarvis OS PRIVATE application container (JOS-01D, ADR-0088).
 #
-# ### It publishes NO port
+# ### This file alone reaches nobody
 #
-# The audited VPS runs a host-network Traefik with the Docker provider and
-# `exposedByDefault=false`. Both existing services (`qf-core-staging`, `n8n-cjls`) sit on their own
-# private bridge with no published ports, and Traefik reaches them by container IP. Jarvis OS uses
-# the identical pattern, so there is no `ports:` stanza at all and no loopback fallback is needed.
+# It publishes no port AND activates no Traefik router. Started on its own, the container is
+# reachable only from its own bridge network: not from the internet, not from another Docker
+# project, and not through the shared Traefik.
 #
-# That is the strongest available isolation: the application is unreachable from the internet
-# except through Traefik, and unreachable from other Docker projects because it shares no network
-# with them.
+# That is the whole point of the split. Ingress activation is a SEPARATE reviewed artefact
+# (`compose.ingress.yml`), so Gate 2 can start the container, prove its identity, filesystem,
+# capabilities, secret mount and authentication boundary, and only then make it publicly routable.
+# With routing labels in this file the router would go live the instant the container started, and
+# every "private" proof would be happening against something already serving the internet.
 #
-# ### The router comes entirely from labels on THIS container
+# ### Layering
 #
-# Because the Docker provider is already enabled and opt-in, bringing Jarvis OS up creates its
-# router and removing Jarvis OS removes it. **Shared Traefik is never restarted, recreated, pulled
-# or upgraded** — it stays on the running 3.7.10 image it already has.
+#   compose.production.yml                     -> private. No router.
+#   + compose.ingress.yml                      -> public router, TLS, rate limits.
+#   + compose.ingress.yml + compose.hsts.yml   -> the above plus HSTS, after TLS is proven.
 #
-# Usage (Gate 2 only):
-#   JOS_IMAGE_TAG=<exact-merged-sha> docker compose -p qf-jarvis-os -f compose.production.yml up -d
+# Each overlay is additive and touches ONLY the qf-jarvis-os project. Shared Traefik is never
+# restarted, recreated, pulled or upgraded; it discovers and drops the router from these labels.
+#
+# Usage (Gate 2 only) -- see deploy.sh and activate.sh, which apply these in the correct order.
 
 name: qf-jarvis-os
 
@@ -91,54 +94,18 @@ services:
     networks:
       - jarvis-os
 
-    # --- Traefik routing ------------------------------------------------------------------------
-    # Entrypoint and resolver names are the ones DISCOVERED on the host (`web`, `websecure`,
-    # `letsencrypt`), not invented. HTTP→HTTPS redirection is already global on the `web`
-    # entrypoint, so no JOS-specific redirect is added.
     labels:
-      traefik.enable: 'true'
-      traefik.docker.network: 'qf-jarvis-os_jarvis-os'
-
-      # Main router.
-      traefik.http.routers.qf-jarvis-os.rule: 'Host(`jarvis.quickfurno.in`)'
-      traefik.http.routers.qf-jarvis-os.entrypoints: 'websecure'
-      traefik.http.routers.qf-jarvis-os.tls.certresolver: 'letsencrypt'
-      traefik.http.routers.qf-jarvis-os.middlewares: 'qf-jarvis-os-ratelimit@docker'
-      traefik.http.services.qf-jarvis-os.loadbalancer.server.port: '3000'
-
-      # Higher-priority router for the login POST, so credential stuffing meets a much tighter
-      # limiter than ordinary dashboard browsing. Priority must exceed the host-only rule's.
-      traefik.http.routers.qf-jarvis-os-login.rule: 'Host(`jarvis.quickfurno.in`) && Path(`/api/auth/login`)'
-      traefik.http.routers.qf-jarvis-os-login.entrypoints: 'websecure'
-      traefik.http.routers.qf-jarvis-os-login.tls.certresolver: 'letsencrypt'
-      traefik.http.routers.qf-jarvis-os-login.priority: '100'
-      traefik.http.routers.qf-jarvis-os-login.middlewares: 'qf-jarvis-os-login-ratelimit@docker,qf-jarvis-os-login-buffer@docker'
-      traefik.http.routers.qf-jarvis-os-login.service: 'qf-jarvis-os'
-
-      # General edge limit. Generous enough that normal dashboard use never reaches it.
-      traefik.http.middlewares.qf-jarvis-os-ratelimit.ratelimit.average: '30'
-      traefik.http.middlewares.qf-jarvis-os-ratelimit.ratelimit.burst: '60'
-
-      # Login limit: five attempts a minute. The application keeps its own process-local limiter;
-      # this is the perimeter one that survives a process restart, which the in-process one cannot.
-      traefik.http.middlewares.qf-jarvis-os-login-ratelimit.ratelimit.average: '5'
-      traefik.http.middlewares.qf-jarvis-os-login-ratelimit.ratelimit.period: '1m'
-      traefik.http.middlewares.qf-jarvis-os-login-ratelimit.ratelimit.burst: '5'
-
-      # Body cap on the LOGIN ROUTE ONLY. Buffering is deliberately not applied to the main router:
-      # it would break Next's streaming responses for every page in the application.
-      traefik.http.middlewares.qf-jarvis-os-login-buffer.buffering.maxRequestBodyBytes: '8192'
-      traefik.http.middlewares.qf-jarvis-os-login-buffer.buffering.memRequestBodyBytes: '8192'
-
-      # NOTE: no `headers.contentSecurityPolicy` middleware anywhere.
+      # EXPLICITLY false, not merely absent.
       #
-      # Jarvis OS emits a per-request nonce CSP. A static CSP injected at the edge would either
-      # override it — breaking every script, since a static policy cannot know the nonce — or sit
-      # alongside it, and two CSP headers intersect into the strictest combination, which is the
-      # same breakage by a different route.
+      # The audited Traefik runs with `exposedByDefault=false`, so an unlabelled container is
+      # already ignored — but that is a property of a shared component this project does not own.
+      # Stating `false` here means the private stage stays private even if that setting is ever
+      # flipped, and it gives the containment tests something positive to assert rather than an
+      # absence they could pass by misspelling a key.
       #
-      # HSTS is added in Gate 2, AFTER TLS is proven working. Sending it before a valid certificate
-      # exists can pin browsers to a hostname that does not yet serve HTTPS.
+      # `compose.ingress.yml` overrides this to `true`. There are deliberately NO router, service,
+      # middleware or TLS labels in this file.
+      traefik.enable: 'false'
 
 networks:
   # A dedicated bridge. It joins no existing project network: `n8n-cjls_default`,

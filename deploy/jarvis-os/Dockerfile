@@ -70,6 +70,31 @@ ENV NODE_ENV=production \
 RUN groupadd --gid 10001 jarvis \
  && useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin jarvis
 
+# Strip the build toolchain the runtime has no use for.
+#
+# This runs `node apps/jarvis-os/server.js`. It never installs a package, so npm, npx, corepack and
+# perl are pure surface. Two independent reasons to remove them:
+#
+# 1. Vulnerabilities. A scan of the previous image found 3 CRITICAL and 6 HIGH findings, and EVERY
+#    one was in this toolchain -- npm's bundled tar/undici/brace-expansion/ip-address, and Debian's
+#    perl -- with NONE in the application's traced node_modules. The pinned digest is already the
+#    current published digest for node:24.18.0-bookworm-slim, so there is no fixed base to move to;
+#    the packages had to go rather than be waited on.
+#
+# 2. Post-exploitation. `npm`/`npx` in a container is an arbitrary-package install-and-execute
+#    primitive. Removing them is worth doing even at zero known CVEs.
+#
+# perl has no installed reverse dependencies here (`apt-cache rdepends --installed perl` is empty).
+# The Essential `perl-base` is deliberately left alone -- dpkg itself needs it.
+RUN rm -rf /usr/local/lib/node_modules/npm \
+           /usr/local/lib/node_modules/corepack \
+           /usr/local/bin/npm \
+           /usr/local/bin/npx \
+           /usr/local/bin/corepack \
+ && apt-get purge -y perl \
+ && apt-get autoremove -y \
+ && rm -rf /var/lib/apt/lists/* /var/cache/apt/* /root/.npm /tmp/*
+
 WORKDIR /app
 
 # Next's standalone output plus the two directories it does not include.
