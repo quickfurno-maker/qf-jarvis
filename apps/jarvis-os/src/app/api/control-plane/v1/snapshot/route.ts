@@ -1,5 +1,5 @@
 import { requireApiOperatorSession } from '../../../../../server/auth/dal';
-import { buildControlPlaneSnapshot } from '../../../../../server/control-plane/build-snapshot';
+import { loadControlPlaneSnapshot } from '../../../../../server/control-plane/load-snapshot';
 import {
   FAILURE_BODY,
   READ_ONLY_HEADERS,
@@ -64,12 +64,6 @@ export async function GET(request: Request): Promise<Response> {
     });
   }
 
-  // The clock is read HERE, at the boundary, and injected. It stamps `generatedAt` -- when this
-  // JSON was produced -- and NOTHING else. It does not, and must not, raise source freshness: this
-  // request re-read no Git, no governance document, no QuickFurno Core and no n8n. The builder
-  // derives `BUILD_DECLARATION` itself, and the contract rejects any other combination.
-  const generatedAt = new Date().toISOString();
-
   const url = new URL(request.url);
   if (url.search !== '') {
     // Reject rather than ignore: see route-response.ts. An unsupported parameter is answered
@@ -81,7 +75,10 @@ export async function GET(request: Request): Promise<Response> {
   }
 
   try {
-    const snapshot = buildControlPlaneSnapshot({ generatedAt });
+    // The SAME request-scoped loader the server-rendered pages use. It reads the clock, awaits any
+    // adopted source, and hands the collected results to the pure builder -- so the page and this
+    // route are two callers of one path rather than two paths that happen to agree today.
+    const snapshot = await loadControlPlaneSnapshot();
     return new Response(JSON.stringify(snapshot), { status: 200, headers: READ_ONLY_HEADERS });
   } catch {
     // Fail closed, and say nothing. The thrown value may name fields, paths or received values;

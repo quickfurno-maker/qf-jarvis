@@ -14,8 +14,8 @@ import { formatCount } from '@/lib/formatting/number';
  * fixture suite is not a production certification. A dashboard that implied otherwise would be
  * manufacturing confidence, which is worse than showing nothing at all.
  */
-export default function EvaluationsPage() {
-  const dimensionsSection = controlPlane().evaluations();
+export default async function EvaluationsPage() {
+  const dimensionsSection = (await controlPlane()).evaluations();
   // No count is computed from an unreadable source. Summing an empty list would print
   // "0 cases across 0 dimensions", which reads as a measurement rather than as a missing one.
   const subtitle = isReadable(dimensionsSection.availability)

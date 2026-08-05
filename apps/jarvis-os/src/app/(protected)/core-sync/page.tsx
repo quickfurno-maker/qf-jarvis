@@ -16,8 +16,8 @@ import { controlPlane } from '@/lib/control-plane';
  * test, and the three standing rules — Core wins, fail closed, no direct business mutation —
  * are stated as headings rather than buried in a paragraph.
  */
-export default function CoreSyncPage() {
-  const rowsSection = controlPlane().ownership();
+export default async function CoreSyncPage() {
+  const rowsSection = (await controlPlane()).ownership();
   // Ownership is STATIC_BASELINE: declared by governance, not read from Core. It genuinely has
   // rows, so it renders normally -- with a badge saying where they came from.
   const rows = rowsSection.items;

@@ -14,8 +14,8 @@ import { controlPlane } from '@/lib/control-plane';
  *
  * Retrieval is off, and nothing on this page mutates a namespace.
  */
-export default function KnowledgePage() {
-  const namespacesSection = controlPlane().knowledge();
+export default async function KnowledgePage() {
+  const namespacesSection = (await controlPlane()).knowledge();
 
   return (
     <>

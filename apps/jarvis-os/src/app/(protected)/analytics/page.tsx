@@ -13,8 +13,8 @@ import { controlPlane } from '@/lib/control-plane';
  * right now"; this answers "what has been happening" — so the trends are full-width and the
  * action rail is deliberately absent.
  */
-export default function AnalyticsPage() {
-  const plane = controlPlane();
+export default async function AnalyticsPage() {
+  const plane = await controlPlane();
 
   return (
     <>

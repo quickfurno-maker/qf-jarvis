@@ -14,8 +14,8 @@ import { ENVIRONMENT_LABEL } from '@/lib/environment';
  * rendering, so an operator never has to guess whether a number came from a system or a
  * fixture.
  */
-export default function SettingsPage() {
-  const plane = controlPlane();
+export default async function SettingsPage() {
+  const plane = await controlPlane();
 
   return (
     <>

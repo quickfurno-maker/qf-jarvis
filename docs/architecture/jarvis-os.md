@@ -220,7 +220,7 @@ the Execution and Governance surfaces so it cannot be lost, and a test asserts i
 **The read API exists in source and is NOT deployed.** `GET /api/control-plane/v1/snapshot` has no
 authentication when JOS-01B shipped it; JOS-01C added that boundary, and JOS-01D prepares deployment. **`apps/api` was not turned into
 an HTTP server** — it still exports nothing and runs none — and server components call the pure
-snapshot builder directly rather than self-fetching, so the page and the API cannot drift.
+snapshot loader directly rather than self-fetching. JOS-01E made that a real guarantee rather than a claim: both go through one request-scoped boundary, so neither can compose its own variant and a page can no longer recite a snapshot built when the process started.
 
 The shared `@qf-jarvis/control-plane-read-contract` package is framework-neutral: zod is its only
 dependency, and it carries no Next, React, Node or browser type, no filesystem path, no cookie or

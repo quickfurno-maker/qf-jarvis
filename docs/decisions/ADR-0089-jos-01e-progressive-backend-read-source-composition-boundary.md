@@ -29,15 +29,35 @@ is a hard error, so authority cannot be silently transferred by adding an adapte
 Jarvis adapter rewrite it would let Jarvis re-describe the authority boundary it is subject to —
 the one claim this application must never be able to make about itself.
 
-### 2. `read()` is synchronous, and the impure half stays at the boundary
+### 2. One request-scoped boundary, and a pure composer behind it
 
-An adapter fetching inside the builder would make snapshot construction impure, non-deterministic
-and dependent on network timing — and the builder's whole value is that the page and the API
-provably produce the same bytes from the same inputs.
+The impure half is `loadControlPlaneSnapshot`. It reads the clock, awaits every adopted source's
+`acquire()` — which MAY be async — and hands the collected results to the pure builder, which awaits
+nothing and reads no clock. A builder that fetched would be non-deterministic and timing-dependent,
+and its whole value is that the page and the API provably produce the same bytes from the same
+inputs.
 
-So whoever serves the request performs any I/O, constructs the source around the result, and hands
-it in, exactly as `generatedAt` is already injected. A future HTTP-backed adapter is constructed
-after its `await`, not during composition. There is still no self-fetch from a server component.
+**Both callers go through that one boundary.** The server-rendered pages previously read a model
+built once at module load. With no live source that was harmless, but the moment a source can be
+adopted the API would recompose per request while every page recited whatever was true when the
+process started — and the two would drift silently at exactly the moment it began to matter. That
+singleton is gone, replaced by a request-scoped loader memoised with React's `cache`, which
+deduplicates within one render and deliberately does not persist across requests: a live observation
+must never outlive the request that produced it.
+
+There is still no self-fetch from a server component.
+
+### 2b. Ownership and section shape are both derived from the contract
+
+Sections come in two families and are not interchangeable: item sections carry `items`, while
+`conversationActivity` and `modelLatency` carry `points` plus a required `id` and `label`. The
+composer derives the family from the baseline section and carries those identity fields through, and
+the contribution type is mapped per section so a mistyped row is a compile error rather than
+something a cast launders into a runtime parse failure.
+
+An earlier draft wrote `items` for every section, which made those two sections impossible for an
+adapter to own at all: the composed section failed the strict parser and the whole route answered a
+generic 503 — the exact opposite of the claim that a governed source may own any permitted section.
 
 ### 3. Read-only, with no authority, by construction
 
@@ -69,13 +89,42 @@ The JOS-01B rule is unchanged and now load-bearing: `generatedAt` is when the JS
 `source.freshness` is when the underlying facts were observed, and a request may move the first but
 never the second.
 
-The `source` block is **derived** from what the sources actually did. Nothing observed →
+**`REQUEST_TIME` is defined precisely: read during THIS request.** The boundary records
+`requestStartedAt` before any acquisition begins and `generatedAt` after it completes, and an
+observation is admissible only if `requestStartedAt <= observedAt <= generatedAt`. `observedAt` is
+runtime-validated as a canonical UTC instant, because a field required by a type and never checked
+is decoration — and this one is the entire evidence for the claim.
+
+An observation that fails — malformed, from before the request began, or stamped after the envelope
+— is **refused, not downgraded**: that source contributes nothing, and its sections degrade to
+`NOT_CONNECTED` with no rows. Refusing is what keeps the claim honest with the V1 wire contract
+unchanged: everything present in the snapshot genuinely was read during the request, so
+`REQUEST_TIME` is true of all of it. Downgrading would instead leave stale rows on the page under a
+freshness label that no longer described them, and one fresh source could make another source's
+stale data look current.
+
+The `source` block is **derived** from what survived. Nothing admissible →
 `REPOSITORY_BASELINE` / `BUILD_DECLARATION` / `liveOperationalData: false`, which is every request in
-this release. A source genuinely reads something → `LIVE_ADAPTER` / `REQUEST_TIME` / `true`, all
+this release. At least one admissible observation → `LIVE_ADAPTER` / `REQUEST_TIME` / `true`, all
 three together, because the contract rejects any other combination.
 
 A repository baseline can never claim request-time freshness merely because it was assembled while
-answering a request.
+answering a request. **No contract-version decision was needed**: V1 requires no new field, because
+this design never has to describe a partially-fresh snapshot — inadmissible readings are excluded
+rather than relabelled.
+
+### 5b. Runtime results are data; every operator-facing word comes from the descriptor
+
+Replacing a thrown exception with fixed prose was not enough on its own. An adapter could return
+`{ status: 'UNAVAILABLE', reason: error.message }` through the ordinary, non-throwing path, and the
+composer trimmed it for length and rendered it — so a connection string, an internal hostname or a
+token could still reach a browser.
+
+A result now carries **no prose at all**. Failure is a closed reason code mapped to fixed reviewed
+text here; an unrecognised code falls back to that same fixed text rather than failing the snapshot,
+so one adapter's mistake degrades its own sections instead of taking the page down. Success carries
+only rows. Provenance and explanation live in the reviewed `ReadSourceDescriptor`, which cannot be
+influenced at run time.
 
 ### 6. No source is adopted in this release, and that is the honest outcome
 
@@ -95,7 +144,10 @@ crossing a boundary this phase may not cross:
 
 So the control plane says exactly what it said before. What JOS-01E delivers is the machinery: a
 source becomes adoptable when its canonical QFJ owner exposes a **governed read protocol**, and
-adoption is then a one-line registry change plus a review — not another builder rewrite.
+adopting it then means writing a reviewed descriptor and registering it. No builder, page or route
+has to change to accommodate one, because the request boundary already awaits `acquire()` — but it
+is a bounded reviewable change, not a one-line edit, and calling it one would understate what a
+reviewer owes it.
 
 Shipping the mechanism untested until the day something real depends on it would be worse, so
 composition is proved end to end with injected deterministic sources.

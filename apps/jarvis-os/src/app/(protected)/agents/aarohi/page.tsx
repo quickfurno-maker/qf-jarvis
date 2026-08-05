@@ -19,12 +19,12 @@ import { controlPlane } from '@/lib/control-plane';
  * concrete — an acquisition agent reaching existing-vendor relationships, or a care agent
  * acquiring an outreach channel.
  */
-export default function AarohiAgentPage() {
-  const agent = controlPlane().agent('aarohi');
+export default async function AarohiAgentPage() {
+  const agent = (await controlPlane()).agent('aarohi');
   if (agent === undefined) {
     notFound();
   }
-  const funnelSection = controlPlane().vendorGrowthFunnel();
+  const funnelSection = (await controlPlane()).vendorGrowthFunnel();
 
   return (
     <AgentOverview agent={agent}>

@@ -12,8 +12,8 @@ import { controlPlane } from '@/lib/control-plane';
  * an acquisition agent gaining access to existing-vendor relationships, or a care agent
  * gaining an outreach channel.
  */
-export default function AnishaAgentPage() {
-  const agent = controlPlane().agent('anisha');
+export default async function AnishaAgentPage() {
+  const agent = (await controlPlane()).agent('anisha');
   if (agent === undefined) {
     notFound();
   }

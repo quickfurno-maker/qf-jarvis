@@ -12,8 +12,8 @@ import {
   BASELINE_SYSTEM,
   baselineSections,
 } from './repository-baseline';
-import { composeSections } from './sources/compose';
-import { ADOPTED_READ_SOURCES, type ControlPlaneReadSource } from './sources/read-source';
+import { composeSections, type ObservationWindow } from './sources/compose';
+import type { CollectedObservation } from './sources/read-source';
 
 /**
  * The snapshot builder (JOS-01B, ADR-0086).
@@ -64,18 +64,30 @@ export interface SnapshotRequest {
    */
   readonly generatedAt: CanonicalInstant;
   /**
-   * The adopted read sources to compose over the baseline (JOS-01E, ADR-0089).
+   * When the request boundary STARTED acquiring sources, before any I/O.
    *
-   * Defaults to the adopted registry, which is EMPTY in this release, so the default output is
-   * byte-identical to JOS-01B. Injectable so composition can be proved with a deterministic source
-   * without any adapter having to be adopted first — the alternative is shipping the mechanism
-   * untested until the day something real depends on it.
+   * Together with `generatedAt` this is the governed observation window. An observation outside it
+   * is not evidence of request-time freshness and its source is refused. Defaults to `generatedAt`,
+   * which is the correct degenerate case: with no sources to acquire, the window is a point.
    */
-  readonly sources?: readonly ControlPlaneReadSource[];
+  readonly requestStartedAt?: CanonicalInstant;
+  /**
+   * Results already acquired by the request boundary (JOS-01E, ADR-0089).
+   *
+   * ALREADY ACQUIRED is the important word. The builder performs no I/O and awaits nothing, so it
+   * stays pure and deterministic; `loadControlPlaneSnapshot` does the impure half and hands the
+   * results in. Defaults to none, which is every request in this release because no source is
+   * adopted — so the default output is byte-identical to JOS-01B.
+   */
+  readonly collected?: readonly CollectedObservation[];
 }
 
 export function buildControlPlaneSnapshot(request: SnapshotRequest): ControlPlaneSnapshotV1 {
-  const composed = composeSections(baselineSections(), request.sources ?? ADOPTED_READ_SOURCES);
+  const window: ObservationWindow = {
+    requestStartedAt: request.requestStartedAt ?? request.generatedAt,
+    generatedAt: request.generatedAt,
+  };
+  const composed = composeSections(baselineSections(), request.collected ?? [], window);
 
   /**
    * Provenance is DERIVED from what the sources actually did, never asserted.
