@@ -35,10 +35,12 @@ import {
  * An unauthenticated caller gets `401` and a fixed body. It never gets a partial snapshot, a
  * reason, or a hint about whether a session existed and expired versus never existed at all.
  *
- * ### It is still not deployed
+ * ### Exposure is an operational fact, not a repository one
  *
- * JOS-01D deploys, and only after this authentication boundary is reviewed. Nothing in this phase
- * exposes the route on the VPS, through Traefik, or at any hostname.
+ * JOS-01D merged the deployment topology, so this route CAN be served behind Traefik at a real
+ * hostname. Whether it currently is remains something an operator verifies against the host --
+ * nothing in this build asserts a running service, and nothing here changes what the route returns
+ * depending on where it runs.
  */
 
 /**

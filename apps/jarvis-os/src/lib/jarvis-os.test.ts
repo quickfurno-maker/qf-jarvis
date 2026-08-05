@@ -282,23 +282,31 @@ describe('the resume marker and phase truth', () => {
     expect(current, 'exactly one JOS slice is current').toHaveLength(1);
     expect(current[0]?.label).toContain(BASELINE_FACTS.josPhase);
 
+    // JOS-01E is the LAST slice of the bounded foundation track, so the track has no `next`.
+    // Requiring one would only be satisfiable by inventing a successor phase.
     const next = jos.filter((marker) => marker.state === 'next');
-    expect(next, 'exactly one JOS slice is next').toHaveLength(1);
-    expect(next[0]?.label).toContain(BASELINE_FACTS.nextJosPhase);
-
-    // The current slice can never also be the next one.
-    expect(next[0]?.label).not.toContain(BASELINE_FACTS.josPhase);
+    expect(next, 'the JOS foundation track closes after its current slice').toHaveLength(0);
+    expect(BASELINE_FACTS.josTrackClosesAfter).toBe(BASELINE_FACTS.josPhase);
 
     // Everything before the current slice is merged, and nothing after it is.
     expect(jos.filter((marker) => marker.state === 'merged').length).toBeGreaterThan(0);
+    expect(jos.filter((marker) => marker.state === 'planned')).toHaveLength(0);
   });
 
-  it('keeps the two tracks separate, each with exactly one next', () => {
+  it('leaves the main track carrying the only next marker', () => {
+    // The tracks stay separate, but they are no longer symmetrical: the JOS track is closing and
+    // the work continues on QFJ. Asserting "one next each" would now be asserting a falsehood.
     const roadmap = controlPlane().roadmap();
-    for (const track of ['QFJ', 'JOS'] as const) {
-      const next = roadmap.filter((marker) => marker.track === track && marker.state === 'next');
-      expect(next, track).toHaveLength(1);
-    }
+    expect(
+      roadmap.filter((marker) => marker.track === 'QFJ' && marker.state === 'next'),
+    ).toHaveLength(1);
+    expect(
+      roadmap.filter((marker) => marker.track === 'JOS' && marker.state === 'next'),
+    ).toHaveLength(0);
+    // Exactly one next marker in the whole roadmap, and it is the main-track resume point.
+    const allNext = roadmap.filter((marker) => marker.state === 'next');
+    expect(allNext).toHaveLength(1);
+    expect(allNext[0]?.label).toContain(BASELINE_FACTS.nextPhase);
   });
 
   it('records QFJ-P09.01 as merged', () => {

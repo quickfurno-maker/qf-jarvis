@@ -1,6 +1,6 @@
 # Jarvis OS — the operator control plane
 
-**Status:** **JOS-01D is the current implemented Jarvis OS slice** in this build ([ADR-0088](../decisions/ADR-0088-jos-01d-isolated-docker-vps-traefik-deployment-boundary.md), PR #92) — the isolated Docker, VPS and Traefik deployment topology, at **Gate 1: reviewed artefacts and a read-only audit only**. JOS-01A, JOS-01B and JOS-01C are **merged**. **JOS-01E — progressive backend wiring — is next.** **Nothing is deployed from this build**, and whether a deployment is running is an operational fact this repository does not assert.
+**Status:** **JOS-01E is the current Jarvis OS slice** in this build ([ADR-0089](../decisions/ADR-0089-jos-01e-progressive-backend-read-source-composition-boundary.md)) — the progressive backend read-source composition boundary, and the **final slice of the bounded Jarvis OS foundation track**. JOS-01A, JOS-01B, JOS-01C and JOS-01D are **merged**. **No read source is adopted yet:** nothing in merged `main` is reachable from Jarvis OS without managed-database credentials or a protocol Core and n8n have not adopted, so the control plane still renders the repository baseline and both remain `NOT_CONNECTED`. **After this slice the JOS track closes and main Jarvis work resumes at QFJ-P09.02.** Whether a deployment is running is an operational fact this repository does not assert.
 
 > **Why this reads as "current" and not as a branch status.** An architecture document that says a
 > slice is "on a feature branch, not merged" is false the instant that branch merges, and nobody
@@ -209,7 +209,7 @@ nothing, and there is no QFJ-P13.
 | **JOS-01B** | Read-only control-plane contract and snapshot API; truthful default surface. Replaces the demo provider. |
 | **JOS-01C** | Owner authentication, TOTP MFA and the operator session boundary. |
 | **JOS-01D** | Isolated Docker image, VPS deployment, Traefik TLS, auth-protected staging. |
-| **JOS-01E** | Progressive backend wiring, capability by capability. |
+| **JOS-01E** | Progressive backend read wiring: a governed source-composition boundary, adopted one source at a time. |
 
 **After the Jarvis OS foundation track, main Jarvis backend work resumes at QFJ-P09.02** — the
 test-only authorized dispatch envelope and n8n bridge validation. That marker is rendered on

@@ -12,6 +12,8 @@ import {
   BASELINE_SYSTEM,
   baselineSections,
 } from './repository-baseline';
+import { composeSections } from './sources/compose';
+import { ADOPTED_READ_SOURCES, type ControlPlaneReadSource } from './sources/read-source';
 
 /**
  * The snapshot builder (JOS-01B, ADR-0086).
@@ -30,9 +32,19 @@ import {
  * could be a week old, answer every call with a brand-new timestamp, and still be reciting facts
  * compiled into it at build time — while the payload claimed they were request-fresh.
  *
- * Everything this builder emits is a compiled-in repository declaration, so the source block is
- * fixed here: `REPOSITORY_BASELINE`, `BUILD_DECLARATION`, `liveOperationalData: false`. A caller
- * cannot vary it, and the contract rejects the combination even if one tried.
+ * The source block is still never accepted from a caller. JOS-01E makes it DERIVED from what the
+ * adopted read sources actually did: `REPOSITORY_BASELINE` / `BUILD_DECLARATION` /
+ * `liveOperationalData: false` while nothing has been observed — which is every request in this
+ * release, because no source is adopted yet — and `LIVE_ADAPTER` / `REQUEST_TIME` / `true` only
+ * once a source genuinely reads something.
+ *
+ * ### Progressive read sources (JOS-01E, ADR-0089)
+ *
+ * Sources compose OVER the baseline; they do not replace it. Each declares the sections it may
+ * speak for, so adopting one is bounded and reviewable. A source that cannot be read degrades only
+ * its own sections to `NOT_CONNECTED` with no rows — never to an empty success, which would read as
+ * "nothing is waiting for you". This stays the ONE place a snapshot is assembled and validated: the
+ * page and the API both arrive here, and neither can compose its own variant.
  *
  * ### It validates its own output
  *
@@ -46,30 +58,46 @@ export interface SnapshotRequest {
   /**
    * When this JSON snapshot is being produced. Supplied by the boundary; no clock is read here.
    *
-   * This is the ONLY thing a caller may vary. It stamps the envelope and nothing else — see the
-   * note above about why freshness is not a parameter.
+   * It stamps the envelope and nothing else — see the note above about why freshness is not a
+   * parameter, and §"Progressive read sources" for why an observing source moves freshness and this
+   * never does.
    */
   readonly generatedAt: CanonicalInstant;
+  /**
+   * The adopted read sources to compose over the baseline (JOS-01E, ADR-0089).
+   *
+   * Defaults to the adopted registry, which is EMPTY in this release, so the default output is
+   * byte-identical to JOS-01B. Injectable so composition can be proved with a deterministic source
+   * without any adapter having to be adopted first — the alternative is shipping the mechanism
+   * untested until the day something real depends on it.
+   */
+  readonly sources?: readonly ControlPlaneReadSource[];
 }
 
 export function buildControlPlaneSnapshot(request: SnapshotRequest): ControlPlaneSnapshotV1 {
+  const composed = composeSections(baselineSections(), request.sources ?? ADOPTED_READ_SOURCES);
+
+  /**
+   * Provenance is DERIVED from what the sources actually did, never asserted.
+   *
+   * With no observation the block is exactly what JOS-01B fixed: a compiled-in baseline that a
+   * request cannot make fresher. The moment a source genuinely reads something, all three fields
+   * move together — `LIVE_ADAPTER`, `REQUEST_TIME`, `liveOperationalData: true` — because the
+   * contract rejects any other combination, and because claiming live data while sourcing none is
+   * the exact misrepresentation this snapshot exists to prevent.
+   */
+  const source = composed.observed
+    ? { kind: 'LIVE_ADAPTER', freshness: 'REQUEST_TIME', liveOperationalData: true }
+    : { kind: 'REPOSITORY_BASELINE', freshness: 'BUILD_DECLARATION', liveOperationalData: false };
+
   const draft = {
     contractVersion: '1',
     generatedAt: request.generatedAt,
     mode: 'READ_ONLY',
-    source: {
-      // Everything below is declared by merged repository and governance state and compiled into
-      // this build. No adapter reads a running system, so this is never LIVE_ADAPTER, freshness is
-      // always BUILD_DECLARATION, and liveOperationalData is never true.
-      //
-      // These three are DERIVED here rather than accepted from the caller. That is the fix for the
-      // defect this builder previously had: it took `freshness` as a parameter, so the route passed
-      // REQUEST_TIME and the payload claimed a compiled-in baseline had been freshly observed. The
-      // contract now rejects that combination, and the builder no longer offers the choice.
-      kind: 'REPOSITORY_BASELINE',
-      freshness: 'BUILD_DECLARATION',
-      liveOperationalData: false,
-    },
+    // Derived above from what the sources actually did. Still never accepted from the caller: that
+    // was the JOS-01B defect, where the route passed REQUEST_TIME and a compiled-in baseline
+    // claimed to have been freshly observed.
+    source,
     authority: {
       jarvis: 'RECOMMENDS_AND_OBSERVES',
       quickfurnoCore: 'AUTHORIZES_AND_OWNS_BUSINESS_TRUTH',
@@ -86,7 +114,7 @@ export function buildControlPlaneSnapshot(request: SnapshotRequest): ControlPlan
     })),
     agents: BASELINE_AGENTS.map((agent) => ({ ...agent, notes: [...agent.notes] })),
     roadmap: [...BASELINE_ROADMAP],
-    sections: baselineSections(),
+    sections: composed.sections,
   };
 
   // Validate before returning, always. `parse` also deep-freezes and detaches, so the module-level
