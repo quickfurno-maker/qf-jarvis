@@ -114,6 +114,20 @@ export interface UnavailableResult {
 export type ReadSourceResult = ObservedResult | UnavailableResult;
 
 /**
+ * The bounds every adopted source's acquisition timeout must satisfy.
+ *
+ * A timeout is REQUIRED rather than defaulted, and range-checked rather than trusted. The loader
+ * claims acquisition is bounded and cannot take a page down; leaving the bound implicit inside each
+ * future adapter would make that claim depend on code nobody has written yet.
+ *
+ * The floor keeps a value from being effectively zero — a source that can never finish is not a
+ * bounded source, it is a disabled one. The ceiling is what an operator will wait for a dashboard:
+ * beyond it, showing the section as unreadable is more useful than continuing to block the render.
+ */
+export const MIN_SOURCE_TIMEOUT_MS = 100;
+export const MAX_SOURCE_TIMEOUT_MS = 10_000;
+
+/**
  * A reviewed, adopted source.
  *
  * `acquire()` MAY be async: that is the whole point of the request-scoped boundary. The impure work
@@ -135,7 +149,21 @@ export interface ReadSourceDescriptor {
    * without tracing what its `acquire()` happens to return today.
    */
   readonly owns: readonly ControlPlaneSectionName[];
-  acquire: () => ReadSourceResult | Promise<ReadSourceResult>;
+  /**
+   * How long the loader will wait for this source, in milliseconds.
+   *
+   * Reviewed per source, because a local read and a remote call do not deserve the same patience.
+   * Validated against the bounds above as a descriptor-level fact, so a nonsensical value is a
+   * governance error caught before any acquisition rather than a surprise under load.
+   */
+  readonly timeoutMs: number;
+  /**
+   * Read this source. The signal aborts when the loader's bound elapses.
+   *
+   * An adapter that ignores the signal cannot hold the page: the loader stops waiting either way
+   * and records `SOURCE_TIMED_OUT`. Honouring it simply stops wasted work on the far side.
+   */
+  acquire: (signal: AbortSignal) => ReadSourceResult | Promise<ReadSourceResult>;
 }
 
 /** One acquired result, paired with the descriptor that produced it. The pure composer's input. */

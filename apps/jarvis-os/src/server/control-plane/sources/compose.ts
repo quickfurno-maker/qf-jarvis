@@ -1,6 +1,8 @@
 import type { ControlPlaneSections } from '@qf-jarvis/control-plane-read-contract';
 
 import {
+  MAX_SOURCE_TIMEOUT_MS,
+  MIN_SOURCE_TIMEOUT_MS,
   SECTIONS_CLOSED_TO_ADAPTERS,
   type CollectedObservation,
   type ControlPlaneSectionName,
@@ -172,6 +174,18 @@ export function assertOwnershipIsWellFormed(sources: readonly ReadSourceDescript
     }
     ids.add(source.id);
 
+    // A descriptor-level fact, so a nonsensical bound is caught before any acquisition rather than
+    // discovered under load.
+    if (
+      !Number.isSafeInteger(source.timeoutMs) ||
+      source.timeoutMs < MIN_SOURCE_TIMEOUT_MS ||
+      source.timeoutMs > MAX_SOURCE_TIMEOUT_MS
+    ) {
+      throw new ReadSourceCompositionError(
+        `read source ${source.id} has timeoutMs ${String(source.timeoutMs)}, outside ${String(MIN_SOURCE_TIMEOUT_MS)}-${String(MAX_SOURCE_TIMEOUT_MS)}`,
+      );
+    }
+
     for (const section of source.owns) {
       if (SECTIONS_CLOSED_TO_ADAPTERS.includes(section)) {
         throw new ReadSourceCompositionError(
@@ -245,23 +259,14 @@ export function composeSections(
       continue;
     }
 
-    const owned = new Set<ControlPlaneSectionName>(descriptor.owns);
-    // Typed with the `undefined` a `Partial` record can genuinely hold at run time. A source is
-    // ordinary TypeScript the compiler has already had its say about; composition still has to
-    // survive one handing back an explicitly-undefined key.
-    const contributions: [string, { items?: unknown[]; points?: unknown[] } | undefined][] =
-      Object.entries(result.sections);
+    // Results reach composition ALREADY NORMALISED, so every owned section is present, every key is
+    // owned, and every family array exists. There is deliberately no `?? []` fallback here: an
+    // absent array used to become `AVAILABLE` with zero rows, which is the precise lie this surface
+    // exists to prevent. A malformed result never gets this far -- it arrives as UNAVAILABLE.
+    const contributions: [string, { items?: unknown[]; points?: unknown[] }][] = Object.entries(
+      result.sections,
+    );
     for (const [name, contribution] of contributions) {
-      if (contribution === undefined) {
-        continue;
-      }
-      if (!owned.has(name as ControlPlaneSectionName)) {
-        // Structural: the source returned something it never declared it could speak for.
-        throw new ReadSourceCompositionError(
-          `read source ${descriptor.id} contributed ${name}, which it does not own`,
-        );
-      }
-
       const original = baseline[name as ControlPlaneSectionName] as object;
       const shared = {
         availability: 'AVAILABLE',
@@ -272,12 +277,16 @@ export function composeSections(
       };
 
       if (isSeriesSection(original)) {
-        const points = 'points' in contribution ? contribution.points : [];
-        sections[name] = { ...shared, id: original.id, label: original.label, points: [...points] };
+        sections[name] = {
+          ...shared,
+          id: original.id,
+          label: original.label,
+          points: [...(contribution.points ?? [])],
+        };
       } else {
-        const items = 'items' in contribution ? contribution.items : [];
-        sections[name] = { ...shared, items: [...items] };
+        sections[name] = { ...shared, items: [...(contribution.items ?? [])] };
       }
+      // Only after a shape-valid, in-window contribution has actually been applied.
       observed = true;
     }
   }

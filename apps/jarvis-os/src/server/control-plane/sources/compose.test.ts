@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { buildControlPlaneSnapshot } from '../build-snapshot';
 import { loadControlPlaneSnapshot } from '../load-snapshot';
@@ -42,18 +42,39 @@ const metric = (id: string) => ({
 
 const point = (label: string, value: number) => ({ label, value });
 
+/**
+ * A promise executor that deliberately never resolves or rejects.
+ *
+ * The exact liveness hazard the loader's timeout exists for: an adapter that simply stops
+ * responding, rather than one that fails.
+ */
+function neverSettles(): void {
+  // Intentionally empty: settling would defeat the test.
+}
+
 function descriptor(
   id: string,
   owns: readonly ControlPlaneSectionName[],
-  acquire: () => ReadSourceResult | Promise<ReadSourceResult>,
+  acquire: (signal: AbortSignal) => ReadSourceResult | Promise<ReadSourceResult>,
+  timeoutMs = 1_000,
 ): ReadSourceDescriptor {
   return {
     id,
     label: `Test source ${id}`,
     observedReason: `Read by test source ${id}.`,
     owns,
+    timeoutMs,
     acquire,
   };
+}
+
+/** A descriptor whose acquire returns a deliberately malformed runtime value. */
+function malformed(
+  id: string,
+  owns: readonly ControlPlaneSectionName[],
+  raw: unknown,
+): ReadSourceDescriptor {
+  return descriptor(id, owns, () => raw as ReadSourceResult);
 }
 
 const observed = (observedAt: string, sections: SectionContributions): ReadSourceResult => ({
@@ -103,7 +124,8 @@ describe('item sections', () => {
     const d = descriptor('items-ok', ['headlineMetrics'], () =>
       observed(OBSERVED, { headlineMetrics: { items: [metric('a'), metric('b')] } }),
     );
-    const section = build(collect(d, d.acquire() as ReadSourceResult)).sections.headlineMetrics;
+    const section = build(collect(d, d.acquire(new AbortController().signal) as ReadSourceResult))
+      .sections.headlineMetrics;
     expect(section.availability).toBe('AVAILABLE');
     expect(section.items).toHaveLength(2);
     // Prose comes from the reviewed descriptor, never from the runtime result.
@@ -116,7 +138,8 @@ describe('item sections', () => {
       status: 'UNAVAILABLE',
       reason: 'SOURCE_UNREACHABLE',
     }));
-    const section = build(collect(d, d.acquire() as ReadSourceResult)).sections.headlineMetrics;
+    const section = build(collect(d, d.acquire(new AbortController().signal) as ReadSourceResult))
+      .sections.headlineMetrics;
     expect(section.availability).toBe('NOT_CONNECTED');
     expect(section.items).toHaveLength(0);
   });
@@ -137,7 +160,7 @@ describe.each(['conversationActivity', 'modelLatency'] as const)('series section
     const d = descriptor(`series-${name}`, [name], () =>
       observed(OBSERVED, { [name]: { points } }),
     );
-    const snapshot = build(collect(d, d.acquire() as ReadSourceResult));
+    const snapshot = build(collect(d, d.acquire(new AbortController().signal) as ReadSourceResult));
     const section = snapshot.sections[name];
 
     expect(section.availability).toBe('AVAILABLE');
@@ -155,7 +178,7 @@ describe.each(['conversationActivity', 'modelLatency'] as const)('series section
       status: 'UNAVAILABLE',
       reason: 'SOURCE_TIMED_OUT',
     }));
-    const snapshot = build(collect(d, d.acquire() as ReadSourceResult));
+    const snapshot = build(collect(d, d.acquire(new AbortController().signal) as ReadSourceResult));
     const section = snapshot.sections[name];
 
     expect(section.availability).toBe('NOT_CONNECTED');
@@ -172,7 +195,7 @@ describe.each(['conversationActivity', 'modelLatency'] as const)('series section
     const baseline = baselineSections();
     const { sections } = composeSections(
       baseline,
-      collect(d, d.acquire() as ReadSourceResult),
+      collect(d, d.acquire(new AbortController().signal) as ReadSourceResult),
       WINDOW,
     );
     for (const key of Object.keys(sections) as ControlPlaneSectionName[]) {
@@ -194,7 +217,7 @@ describe('the request observation window', () => {
     const d = descriptor('clock', ['headlineMetrics'], () =>
       observed(observedAt, { headlineMetrics: { items: [metric('a')] } }),
     );
-    return build(collect(d, d.acquire() as ReadSourceResult));
+    return build(collect(d, d.acquire(new AbortController().signal) as ReadSourceResult));
   };
 
   it('accepts an observation inside the window', () => {
@@ -229,8 +252,14 @@ describe('the request observation window', () => {
       observed('2020-01-01T00:00:00.000Z', { attention: { items: [] } }),
     );
     const snapshot = build([
-      { descriptor: fresh, result: fresh.acquire() as ReadSourceResult },
-      { descriptor: stale, result: stale.acquire() as ReadSourceResult },
+      {
+        descriptor: fresh,
+        result: fresh.acquire(new AbortController().signal) as ReadSourceResult,
+      },
+      {
+        descriptor: stale,
+        result: stale.acquire(new AbortController().signal) as ReadSourceResult,
+      },
     ]);
 
     // The fresh source is honoured; the stale one contributes NOTHING and its section says so.
@@ -257,7 +286,7 @@ describe('failure never becomes a successful zero', () => {
       status: 'UNAVAILABLE',
       reason: 'SOURCE_REJECTED_REQUEST',
     }));
-    const snapshot = build(collect(d, d.acquire() as ReadSourceResult));
+    const snapshot = build(collect(d, d.acquire(new AbortController().signal) as ReadSourceResult));
 
     for (const name of ['headlineMetrics', 'attention'] as const) {
       expect(snapshot.sections[name].availability, name).toBe('NOT_CONNECTED');
@@ -296,6 +325,7 @@ describe('failure never becomes a successful zero', () => {
       label: 'Test source chatty',
       observedReason: 'Read by test source chatty.',
       owns: ['headlineMetrics'],
+      timeoutMs: 1_000,
       acquire: () =>
         ({
           status: 'UNAVAILABLE',
@@ -364,23 +394,50 @@ describe('one source cannot overreach another’s authority', () => {
     ).toThrow(ReadSourceCompositionError);
   });
 
-  it('rejects a contribution for a section the source does not own', () => {
-    const sneaky = ok('sneaky', ['headlineMetrics']);
-    expect(() =>
-      composeSections(
-        baselineSections(),
-        [
-          {
-            descriptor: sneaky,
-            result: observed(OBSERVED, {
-              headlineMetrics: { items: [metric('fine')] },
-              approvalQueue: { items: [] },
-            }),
-          },
-        ],
-        WINDOW,
-      ),
-    ).toThrow(ReadSourceCompositionError);
+  it('DEGRADES a source that contributes a section it does not own', async () => {
+    // The documented classification: a DESCRIPTOR defect is a governance error and throws, because
+    // it lives in reviewed code. A RESULT defect degrades, because it is runtime data from a
+    // separately compiled adapter -- and refusing the whole snapshot would punish every other
+    // section for one adapter's bug. Overreaching at run time is a result defect.
+    const sneaky = malformed('sneaky', ['headlineMetrics'], {
+      status: 'OBSERVED',
+      observedAt: new Date().toISOString(),
+      sections: {
+        headlineMetrics: { items: [metric('fine')] },
+        approvalQueue: { items: [] },
+      },
+    });
+    const snapshot = await loadControlPlaneSnapshot({ sources: [sneaky] });
+
+    expect(snapshot.sections.headlineMetrics.availability).toBe('NOT_CONNECTED');
+    expect(snapshot.sections.headlineMetrics.items).toHaveLength(0);
+    // The section it reached for is untouched, exactly as the baseline declared it.
+    expect(snapshot.sections.approvalQueue).toStrictEqual(baselineSections().approvalQueue);
+    expect(snapshot.source.kind).toBe('REPOSITORY_BASELINE');
+  });
+
+  it('THROWS on a descriptor whose timeout is outside the reviewed bounds', () => {
+    for (const bad of [0, -1, 50, 60_000, 1.5, Number.NaN]) {
+      expect(
+        () =>
+          composeSections(
+            baselineSections(),
+            [
+              {
+                descriptor: descriptor(
+                  'slow',
+                  ['headlineMetrics'],
+                  () => observed(OBSERVED, {}),
+                  bad,
+                ),
+                result: observed(OBSERVED, {}),
+              },
+            ],
+            WINDOW,
+          ),
+        String(bad),
+      ).toThrow(ReadSourceCompositionError);
+    }
   });
 
   it('refuses any adapter that claims a section closed to adapters', () => {
@@ -404,7 +461,7 @@ describe('the boundary a source can never cross', () => {
     const d = descriptor('live', ['headlineMetrics'], () =>
       observed(OBSERVED, { headlineMetrics: { items: [metric('a')] } }),
     );
-    return build(collect(d, d.acquire() as ReadSourceResult));
+    return build(collect(d, d.acquire(new AbortController().signal) as ReadSourceResult));
   };
 
   it('cannot switch production rollout on', () => {
@@ -451,6 +508,7 @@ describe('the boundary a source can never cross', () => {
       'label',
       'observedReason',
       'owns',
+      'timeoutMs',
     ]);
   });
 });
@@ -514,5 +572,262 @@ describe('the request-scoped path shared by pages and the API', () => {
     const snapshot = await loadControlPlaneSnapshot({ sources: [async_] });
     expect(snapshot.sections.headlineMetrics.availability).toBe('AVAILABLE');
     expect(snapshot.source.freshness).toBe('REQUEST_TIME');
+  });
+});
+
+/**
+ * A separately compiled adapter can violate its TypeScript declaration at run time.
+ *
+ * The values below are deliberately cast past the compiler, because that is exactly what a real
+ * misbehaving adapter does. Before normalisation, several of these produced the one lie the whole
+ * contract exists to prevent: `AVAILABLE` with zero rows, from a source that never supplied a
+ * reading — "we looked and there is nothing waiting for you".
+ */
+describe('malformed OBSERVED results never become an available zero', () => {
+  const now = (): string => new Date().toISOString();
+
+  const cases: readonly (readonly [string, ControlPlaneSectionName, unknown])[] = [
+    // Wrong family: a series source answering with `items`, and an item source with `points`.
+    [
+      'series source returning items',
+      'conversationActivity',
+      { status: 'OBSERVED', sections: { conversationActivity: { items: [] } } },
+    ],
+    [
+      'item source returning points',
+      'headlineMetrics',
+      { status: 'OBSERVED', sections: { headlineMetrics: { points: [] } } },
+    ],
+    // Family array entirely absent.
+    [
+      'series source missing points',
+      'modelLatency',
+      { status: 'OBSERVED', sections: { modelLatency: {} } },
+    ],
+    [
+      'item source missing items',
+      'headlineMetrics',
+      { status: 'OBSERVED', sections: { headlineMetrics: {} } },
+    ],
+    // Present but not an array.
+    [
+      'non-array items',
+      'headlineMetrics',
+      { status: 'OBSERVED', sections: { headlineMetrics: { items: 'lots' } } },
+    ],
+    [
+      'non-array points',
+      'conversationActivity',
+      { status: 'OBSERVED', sections: { conversationActivity: { points: 42 } } },
+    ],
+    // Envelope defects.
+    ['missing sections', 'headlineMetrics', { status: 'OBSERVED' }],
+    ['non-object sections', 'headlineMetrics', { status: 'OBSERVED', sections: [] }],
+    [
+      'unknown status',
+      'headlineMetrics',
+      { status: 'PROBABLY_FINE', sections: { headlineMetrics: { items: [] } } },
+    ],
+    ['no status at all', 'headlineMetrics', { sections: { headlineMetrics: { items: [] } } }],
+    ['non-object result', 'headlineMetrics', 'OBSERVED'],
+    ['null result', 'headlineMetrics', null],
+    [
+      'non-string observedAt',
+      'headlineMetrics',
+      {
+        status: 'OBSERVED',
+        observedAt: 1_754_308_800_000,
+        sections: { headlineMetrics: { items: [] } },
+      },
+    ],
+  ];
+
+  it.each(cases)('%s does not become AVAILABLE', async (_label, section, raw) => {
+    const withInstant =
+      raw !== null && typeof raw === 'object' && 'observedAt' in raw
+        ? raw
+        : { ...(raw as object), observedAt: now() };
+    const source = malformed('broken', [section], typeof raw === 'object' ? withInstant : raw);
+    const snapshot = await loadControlPlaneSnapshot({ sources: [source] });
+    const composed = snapshot.sections[section];
+
+    expect(composed.availability).toBe('NOT_CONNECTED');
+    expect('points' in composed ? composed.points : composed.items).toHaveLength(0);
+    // No observation survived, so the envelope must not claim live data.
+    expect(snapshot.source.kind).toBe('REPOSITORY_BASELINE');
+    expect(snapshot.source.liveOperationalData).toBe(false);
+  });
+
+  it('does not crash the whole snapshot on a non-array rows value', async () => {
+    const source = malformed('crashy', ['headlineMetrics'], {
+      status: 'OBSERVED',
+      observedAt: now(),
+      sections: { headlineMetrics: { items: { length: 3 } } },
+    });
+    // Resolves rather than throwing: a spread over a non-array used to be an exception that took
+    // the entire page down.
+    await expect(loadControlPlaneSnapshot({ sources: [source] })).resolves.toBeDefined();
+  });
+
+  it('degrades EVERY owned section when a source answers only some of them', async () => {
+    // Silence is not an observation. Leaving the omitted section at repository baseline would show
+    // compiled-in figures beneath a snapshot claiming to be live, with nothing saying which
+    // sections were actually read.
+    const partial = malformed('partial', ['headlineMetrics', 'attention'], {
+      status: 'OBSERVED',
+      observedAt: now(),
+      sections: { headlineMetrics: { items: [] } },
+    });
+    const snapshot = await loadControlPlaneSnapshot({ sources: [partial] });
+
+    for (const name of ['headlineMetrics', 'attention'] as const) {
+      expect(snapshot.sections[name].availability, name).toBe('NOT_CONNECTED');
+      expect(snapshot.sections[name].items, name).toHaveLength(0);
+    }
+    expect(snapshot.source.kind).toBe('REPOSITORY_BASELINE');
+  });
+
+  it('degrades ONLY the malformed source’s sections', async () => {
+    const broken = malformed('broken', ['headlineMetrics'], { status: 'OBSERVED' });
+    const good = descriptor('good', ['attention'], () => ({
+      status: 'OBSERVED',
+      observedAt: now(),
+      sections: { attention: { items: [] } },
+    }));
+    const snapshot = await loadControlPlaneSnapshot({ sources: [broken, good] });
+
+    expect(snapshot.sections.headlineMetrics.availability).toBe('NOT_CONNECTED');
+    expect(snapshot.sections.attention.availability).toBe('AVAILABLE');
+    expect(snapshot.sections.models).toStrictEqual(baselineSections().models);
+  });
+
+  it('KEEPS an explicitly supplied empty array as a legitimate observation', async () => {
+    // The case that must survive all of the above. A source that genuinely looked and found none
+    // is different from one that never answered, and only the first may render as zero.
+    const empty = descriptor('empty', ['headlineMetrics', 'conversationActivity'], () => ({
+      status: 'OBSERVED',
+      observedAt: now(),
+      sections: { headlineMetrics: { items: [] }, conversationActivity: { points: [] } },
+    }));
+    const snapshot = await loadControlPlaneSnapshot({ sources: [empty] });
+
+    expect(snapshot.sections.headlineMetrics.availability).toBe('AVAILABLE');
+    expect(snapshot.sections.headlineMetrics.items).toHaveLength(0);
+    expect(snapshot.sections.conversationActivity.availability).toBe('AVAILABLE');
+    expect(snapshot.sections.conversationActivity.points).toHaveLength(0);
+    expect(snapshot.source.freshness).toBe('REQUEST_TIME');
+  });
+});
+
+/**
+ * Acquisition is bounded by the LOADER, not by each adapter's good intentions.
+ *
+ * A rejecting source was always isolated. A source that never settles was not: `Promise.all` waited
+ * forever, blocking the page render, the API and every other source's result — while the comments
+ * claimed acquisition was bounded and the vocabulary already had `SOURCE_TIMED_OUT`.
+ */
+describe('bounded acquisition', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** Advance the fake clock until the loader's promise settles. */
+  const settle = async <T>(promise: Promise<T>): Promise<T> => {
+    const raced = promise;
+    await vi.advanceTimersByTimeAsync(11_000);
+    return raced;
+  };
+
+  it('turns a never-settling source into SOURCE_TIMED_OUT and still resolves', async () => {
+    let aborted = false;
+    const hung = descriptor(
+      'hung',
+      ['headlineMetrics'],
+      (signal) =>
+        new Promise<never>(() => {
+          signal.addEventListener('abort', () => {
+            aborted = true;
+          });
+        }),
+      200,
+    );
+
+    const snapshot = await settle(loadControlPlaneSnapshot({ sources: [hung] }));
+
+    expect(snapshot.sections.headlineMetrics.availability).toBe('NOT_CONNECTED');
+    // The reviewed prose for the timeout code, not an adapter's words.
+    expect(snapshot.sections.headlineMetrics.reason).toContain('did not answer in time');
+    // The signal really is aborted, so a cooperative adapter can stop working.
+    expect(aborted).toBe(true);
+  });
+
+  it('lets another source contribute while one times out', async () => {
+    const hung = descriptor(
+      'hung',
+      ['headlineMetrics'],
+      () => new Promise<never>(neverSettles),
+      200,
+    );
+    const quick = descriptor('quick', ['attention'], () => ({
+      status: 'OBSERVED',
+      observedAt: new Date().toISOString(),
+      sections: { attention: { items: [] } },
+    }));
+
+    const snapshot = await settle(loadControlPlaneSnapshot({ sources: [hung, quick] }));
+
+    expect(snapshot.sections.headlineMetrics.availability).toBe('NOT_CONNECTED');
+    expect(snapshot.sections.attention.availability).toBe('AVAILABLE');
+    expect(snapshot.source.freshness).toBe('REQUEST_TIME');
+  });
+
+  it('clears its timer on the success path', async () => {
+    const quick = descriptor('quick', ['headlineMetrics'], () => ({
+      status: 'OBSERVED',
+      observedAt: new Date().toISOString(),
+      sections: { headlineMetrics: { items: [] } },
+    }));
+    await settle(loadControlPlaneSnapshot({ sources: [quick] }));
+    // A leaked timer keeps the process awake and keeps a fake clock reporting finished work.
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('clears its timer on the timeout path too', async () => {
+    const hung = descriptor(
+      'hung',
+      ['headlineMetrics'],
+      () => new Promise<never>(neverSettles),
+      200,
+    );
+    await settle(loadControlPlaneSnapshot({ sources: [hung] }));
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('creates NO timer for the empty registry', async () => {
+    await loadControlPlaneSnapshot();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('survives a source that rejects LATE, after the bound elapsed', async () => {
+    // The late rejection is already handled, so it cannot surface as an unhandled rejection -- and
+    // nothing about it is read or rendered.
+    const late = descriptor(
+      'late',
+      ['headlineMetrics'],
+      () =>
+        new Promise<never>((_resolve, reject) => {
+          setTimeout(() => {
+            reject(new Error('too late at /srv/qf-jarvis/secrets'));
+          }, 5_000);
+        }),
+      200,
+    );
+    const snapshot = await settle(loadControlPlaneSnapshot({ sources: [late] }));
+
+    expect(snapshot.sections.headlineMetrics.availability).toBe('NOT_CONNECTED');
+    expect(JSON.stringify(snapshot)).not.toContain('/srv/qf-jarvis/secrets');
   });
 });

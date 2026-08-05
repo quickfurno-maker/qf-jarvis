@@ -1,12 +1,13 @@
 import type { ControlPlaneSnapshotV1 } from '@qf-jarvis/control-plane-read-contract';
 
 import { buildControlPlaneSnapshot } from './build-snapshot';
+import { baselineSections } from './repository-baseline';
 import { assertOwnershipIsWellFormed } from './sources/compose';
+import { normalizeResult } from './sources/normalize';
 import {
   ADOPTED_READ_SOURCES,
   type CollectedObservation,
   type ReadSourceDescriptor,
-  type ReadSourceResult,
 } from './sources/read-source';
 
 /**
@@ -27,12 +28,17 @@ import {
  * reciting whatever was true when the process started, and the two would drift silently. Removing it
  * now, while nothing is adopted, is the cheap moment to do it.
  *
- * ### Acquisition is bounded and cannot take the page down
+ * ### Acquisition is bounded, and the bound is enforced here
  *
- * Each source is acquired independently. One that rejects, throws, or returns something unusable
- * becomes an `UNAVAILABLE` result for ITS sections only; the rest of the snapshot is still true and
- * still worth showing. A thrown value is never inspected and never surfaced — the reason is a closed
- * code, and composition maps it to fixed reviewed prose.
+ * Each source is acquired independently under its own reviewed `timeoutMs`. One that rejects,
+ * throws, never settles, or returns something unusable becomes an `UNAVAILABLE` result for ITS
+ * sections only; the rest of the snapshot is still true and still worth showing. A thrown value is
+ * never inspected and never surfaced — the reason is a closed code, and composition maps it to fixed
+ * reviewed prose.
+ *
+ * Every acquired value is NORMALISED before it can reach composition, because a separately compiled
+ * adapter can violate its own TypeScript declaration and only a shape-valid result may become an
+ * observation.
  *
  * With the adopted registry empty this resolves immediately, performs no I/O, and produces exactly
  * the JOS-01B repository baseline.
@@ -52,17 +58,60 @@ export interface LoadSnapshotOptions {
 }
 
 /**
- * Acquire one source without letting it take the whole snapshot down.
+ * Acquire one source under a finite, reviewed bound.
  *
- * Both a rejected promise and a synchronous throw are caught. The thrown value is deliberately not
- * inspected, not logged here, and never converted into operator-facing text: an adapter's error
- * message is the most likely place for a host, a path, a query or a token to appear.
+ * ### Why a timeout, and why it lives here
+ *
+ * A rejecting source was already isolated. A source that never SETTLES was not: `Promise.all` would
+ * wait forever, blocking the page render, the API and every other source's result. The vocabulary
+ * already had `SOURCE_TIMED_OUT` and the comments already claimed acquisition was bounded — with
+ * nothing enforcing it.
+ *
+ * The bound belongs to the loader rather than to each adapter. A future adapter is exactly the code
+ * that has not been reviewed yet, and "bounded because every adapter remembers to be" is not a
+ * property the shared boundary can claim.
+ *
+ * ### What is deliberately not inspected
+ *
+ * A rejection is caught and discarded. A late rejection AFTER the timeout is caught too, so it
+ * cannot surface as an unhandled rejection — but nothing about it is read, logged or rendered: an
+ * adapter's error is the most likely place for a host, a path, a query or a token to appear.
  */
-async function acquireSafely(descriptor: ReadSourceDescriptor): Promise<ReadSourceResult> {
+async function acquireBounded(descriptor: ReadSourceDescriptor): Promise<unknown> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  const timedOut = new Promise<{ readonly outcome: 'TIMEOUT' }>((resolve) => {
+    timer = setTimeout(() => {
+      // Tell a cooperative adapter to stop working. One that ignores the signal still cannot hold
+      // the page: the race below has already stopped waiting for it.
+      controller.abort();
+      resolve({ outcome: 'TIMEOUT' });
+    }, descriptor.timeoutMs);
+  });
+
   try {
-    return await descriptor.acquire();
-  } catch {
-    return { status: 'UNAVAILABLE', reason: 'SOURCE_UNREACHABLE' };
+    const settled = await Promise.race([
+      (async () => descriptor.acquire(controller.signal))().then(
+        (value) => ({ outcome: 'SETTLED', value }) as const,
+        () => ({ outcome: 'REJECTED' }) as const,
+      ),
+      timedOut,
+    ]);
+
+    if (settled.outcome === 'TIMEOUT') {
+      return { status: 'UNAVAILABLE', reason: 'SOURCE_TIMED_OUT' };
+    }
+    if (settled.outcome === 'REJECTED') {
+      return { status: 'UNAVAILABLE', reason: 'SOURCE_UNREACHABLE' };
+    }
+    return settled.value;
+  } finally {
+    // Always, on every path. A leaked timer keeps the process awake and, in a test run, keeps the
+    // fake clock reporting work that has already finished.
+    if (timer !== undefined) {
+      clearTimeout(timer);
+    }
   }
 }
 
@@ -90,13 +139,20 @@ export async function loadControlPlaneSnapshot(
 
   const requestStartedAt = nowInstant();
 
+  // The empty registry creates no timer and performs no I/O -- every request in this release.
   const collected: readonly CollectedObservation[] =
     sources.length === 0
       ? []
       : await Promise.all(
           sources.map(async (descriptor) => ({
             descriptor,
-            result: await acquireSafely(descriptor),
+            // Normalised before it can reach composition: a separately compiled adapter can return
+            // anything at run time, and only a shape-valid result may become an observation.
+            result: normalizeResult(
+              descriptor,
+              baselineSections(),
+              await acquireBounded(descriptor),
+            ),
           })),
         );
 

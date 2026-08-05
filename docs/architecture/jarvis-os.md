@@ -208,7 +208,7 @@ nothing, and there is no QFJ-P13.
 | **JOS-01A** | Premium dashboard foundation — shell, design system, capability model, demo read model. |
 | **JOS-01B** | Read-only control-plane contract and snapshot API; truthful default surface. Replaces the demo provider. |
 | **JOS-01C** | Owner authentication, TOTP MFA and the operator session boundary. |
-| **JOS-01D** | Isolated Docker image, VPS deployment, Traefik TLS, auth-protected staging. |
+| **JOS-01D** | Isolated Docker image, immutable exact-SHA release topology, Traefik TLS, authenticated operator boundary. |
 | **JOS-01E** | Progressive backend read wiring: a governed source-composition boundary, adopted one source at a time. |
 
 **After the Jarvis OS foundation track, main Jarvis backend work resumes at QFJ-P09.02** — the
@@ -217,9 +217,11 @@ the Execution and Governance surfaces so it cannot be lost, and a test asserts i
 
 ## Deployment topology
 
-**The read API exists in source and is NOT deployed.** `GET /api/control-plane/v1/snapshot` has no
-authentication when JOS-01B shipped it; JOS-01C added that boundary, and JOS-01D prepares deployment. **`apps/api` was not turned into
-an HTTP server** — it still exports nothing and runs none — and server components call the pure
+**Whether Jarvis OS is currently running is an operational fact this repository does not assert.**
+`GET /api/control-plane/v1/snapshot` had no authentication when JOS-01B shipped it; JOS-01C added
+that boundary, and JOS-01D supplies the immutable exact-SHA deployment topology and scripts that can
+place the route behind the reviewed authenticated Traefik boundary. What is deployed, and when, is
+answered by the host — not here. **`apps/api` was not turned into an HTTP server** — it still exports nothing and runs none — and server components call the pure
 snapshot loader directly rather than self-fetching. JOS-01E made that a real guarantee rather than a claim: both go through one request-scoped boundary, so neither can compose its own variant and a page can no longer recite a snapshot built when the process started.
 
 The shared `@qf-jarvis/control-plane-read-contract` package is framework-neutral: zod is its only
@@ -227,12 +229,16 @@ dependency, and it carries no Next, React, Node or browser type, no filesystem p
 session assumption and no `process.env`. A future React Native / Expo Android client compiles it
 unchanged. **No Android files are added in this track.**
 
-**Nothing is deployed.** The VPS is untouched, no Traefik route is added, no DNS is
-changed, and no container is built. `next.config.ts` sets `output: 'standalone'` so that
-JOS-01D can build an isolated image without a configuration change landing alongside a
-deployment.
+**No slice of this track deploys anything by being merged, and JOS-01E changes no deployment
+artefact, no Traefik configuration, no DNS record and no container definition.** Shared Traefik,
+QuickFurno Core staging and n8n are not modified by it. `next.config.ts` sets `output: 'standalone'`
+so that the isolated image builds without a configuration change landing alongside a deployment.
 
-Known VPS layout, for JOS-01D's reference only:
+Deployment is a separate, governed act: a per-SHA release package is materialised from `git archive`,
+every file is verified byte-for-byte against its Git blob before Docker is touched, and the sequence
+runs private → ingress → HSTS so the container is proved before any router exists.
+
+Known VPS layout, as audited when the deployment topology was designed:
 
 | Component | Status |
 | --- | --- |
@@ -241,8 +247,8 @@ Known VPS layout, for JOS-01D's reference only:
 | `n8n-cjls` | Isolated compose project/network — **permanent** |
 | `/srv/qf-jarvis` | **Permanent** Jarvis home |
 
-JOS-01D owns the Dockerfile, the isolated `qf-jarvis` compose project, private container
-validation, `jarvis.quickfurno.in`, Traefik TLS and auth-protected staging.
+JOS-01D owns the Dockerfile, the isolated `qf-jarvis` compose project, the private-container
+proof, `jarvis.quickfurno.in`, Traefik TLS and the authenticated operator boundary.
 
 ## Toolchain
 

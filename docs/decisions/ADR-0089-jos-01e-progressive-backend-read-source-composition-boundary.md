@@ -18,10 +18,11 @@ time**. It is not "connect the backend".
 
 ### 1. A source declares what it may speak for, in data
 
-`ControlPlaneReadSource` carries an `id`, a `label`, an `owns` list of section names, and a `read()`.
+`ReadSourceDescriptor` carries an `id`, a `label`, an `observedReason`, an `owns` list of section
+names, a bounded `timeoutMs`, and an `acquire(signal)` that may be async.
 Composition applies a source's contribution to the sections it owns and to nothing else.
 
-Declaring ownership as data rather than inferring it from what `read()` happens to return means
+Declaring ownership as data rather than inferring it from what `acquire()` happens to return means
 "what can this adapter change?" is answerable by reading one line. Two sources claiming one section
 is a hard error, so authority cannot be silently transferred by adding an adapter.
 
@@ -74,10 +75,11 @@ never becomes an empty success, because "0 approvals waiting" and "nobody asked"
 the same way.
 
 Two failure classes are treated differently on purpose. An operational failure degrades its own
-sections and leaves the rest of the snapshot — still true, still worth showing. A structural failure
-(duplicate ownership, a contribution for an unowned section, a closed section) throws and abandons
-the whole snapshot: that is a governance defect, and the composition it would produce is not
-trustworthy anywhere.
+sections and leaves the rest of the snapshot — still true, still worth showing. A DESCRIPTOR-level
+governance defect (duplicate ids, duplicate ownership, a closed section, an out-of-range timeout)
+throws and abandons the whole snapshot: those live in reviewed code, so a wrong one means the adopted
+set itself is wrong. §5c states the classification in full, including why a runtime contribution for
+an unowned section degrades rather than throwing.
 
 A source that throws is treated as unavailable, never as success, and its exception never reaches an
 operator. The reason shown is fixed prose, because an adapter's error text is the most likely place
@@ -125,6 +127,52 @@ text here; an unrecognised code falls back to that same fixed text rather than f
 so one adapter's mistake degrades its own sections instead of taking the page down. Success carries
 only rows. Provenance and explanation live in the reviewed `ReadSourceDescriptor`, which cannot be
 influenced at run time.
+
+### 5c. A runtime result is normalised before it can become an observation
+
+A source is compiled separately and can return anything at run time. That was already accepted for
+an unknown `UNAVAILABLE` reason code; it has to reach `OBSERVED` results, which is where it matters.
+
+Without it a malformed adapter produced the exact lie this surface exists to prevent. A series
+source returning `{ items: [] }`, or an item source returning nothing at all, fell through to an
+empty array, was marked `AVAILABLE`, and raised the snapshot to `LIVE_ADAPTER` — "we looked and
+there is nothing waiting for you", from a source that never supplied a reading.
+
+Normalisation validates the ENVELOPE and the section FAMILY only: the status is exactly one of the
+two, `observedAt` is a string, `sections` is a plain object, every contributed key is a real section
+owned by that descriptor, **every owned section is answered explicitly**, and each carries an array
+under the right key. Row CONTENTS are not re-checked — `parseControlPlaneSnapshotV1` remains the
+single authority on values, bounds and strictness, and restating the row schemas would put a second,
+drifting copy of the contract in the application.
+
+Any violation degrades the WHOLE source to `SOURCE_RETURNED_UNUSABLE_DATA`; nothing partially valid
+survives, because the half that looked right came from the same run of the same broken adapter. An
+explicitly supplied empty array remains a legitimate observation: a source that looked and found
+none must stay distinguishable from one that never answered.
+
+**One consistent classification.** A DESCRIPTOR defect throws — duplicate ids, duplicate ownership,
+a closed section, an out-of-range timeout — because those live in reviewed code and mean the adopted
+set itself is wrong. A RESULT defect degrades, because it is runtime data from a separately compiled
+unit. A contribution for an unowned section is a result defect: it is the adapter overreaching at
+run time, and refusing the whole snapshot would punish every other section for one adapter's bug.
+
+### 5d. Acquisition is bounded by the loader, not by adapter goodwill
+
+A rejecting source was isolated. A source that never SETTLES was not: `Promise.all` waited forever,
+blocking the page render, the API and every other source's result — while the vocabulary already had
+`SOURCE_TIMED_OUT` and the comments already claimed acquisition was bounded.
+
+Every descriptor now declares a `timeoutMs`, validated as a safe integer within **100–10 000 ms** as
+a descriptor-level fact, so a nonsensical bound is a governance error caught before any acquisition
+rather than a surprise under load. It is reviewed per source because a local read and a remote call
+do not deserve the same patience. The loader owns the `AbortController` and the timer, aborts on
+expiry, records `SOURCE_TIMED_OUT`, and clears the timer on every path. An adapter that ignores the
+signal cannot hold the page — the loader has already stopped waiting. A late rejection is handled so
+it cannot surface as an unhandled rejection, and nothing about it is read or rendered.
+
+The bound belongs here rather than inside each adapter: a future adapter is precisely the code
+nobody has reviewed yet, and "bounded because every adapter remembers to be" is not a property a
+shared boundary can claim.
 
 ### 6. No source is adopted in this release, and that is the honest outcome
 
