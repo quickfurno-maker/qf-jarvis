@@ -115,7 +115,11 @@ describe('the Content-Security-Policy', () => {
 describe('security headers', () => {
   it('sets the full set on every response', () => {
     expect(SECURITY_HEADERS['X-Content-Type-Options']).toBe('nosniff');
-    expect(SECURITY_HEADERS['Referrer-Policy']).toBe('no-referrer');
+    // `same-origin`, never `no-referrer`. Firefox derives a form submission's `Origin` from the
+    // document's referrer policy, so `no-referrer` made same-origin logins arrive as
+    // `Origin: null` and be correctly refused by the CSRF check. Reverting this header would
+    // reintroduce a browser-specific authentication outage that Chromium testing cannot see.
+    expect(SECURITY_HEADERS['Referrer-Policy']).toBe('same-origin');
     expect(SECURITY_HEADERS['X-Frame-Options']).toBe('DENY');
     expect(SECURITY_HEADERS['Cross-Origin-Opener-Policy']).toBe('same-origin');
     expect(SECURITY_HEADERS['Cross-Origin-Resource-Policy']).toBe('same-origin');

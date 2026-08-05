@@ -572,6 +572,99 @@ describe('same-origin and return-path safety', () => {
     }
   });
 
+  /**
+   * The Firefox login regression (JOS-01D).
+   *
+   * Firefox derives a form submission's `Origin` from the document's referrer policy. Under
+   * `Referrer-Policy: no-referrer` it sent `Origin: null` for a genuinely same-origin login POST,
+   * this check correctly refused it, and the operator saw a generic invalid-credentials outcome.
+   *
+   * The correction was the response header, not this validator — so what is locked here is that the
+   * validator's behaviour did NOT move: the real production request shape is accepted, and every
+   * unattributable or cross-origin shape is still refused.
+   */
+  it('accepts the exact production same-origin request shape', () => {
+    expect(() => {
+      requireSameOriginMutation({
+        method: 'POST',
+        headers: headers({
+          host: 'jarvis.quickfurno.in',
+          origin: 'https://jarvis.quickfurno.in',
+          'sec-fetch-site': 'same-origin',
+        }),
+        mode: 'PRODUCTION',
+      });
+    }).not.toThrow();
+  });
+
+  it('STILL rejects Origin: null', () => {
+    // `null` is what a sandboxed iframe, a privacy-stripped cross-origin form and a
+    // referrer-policy-suppressed submission all send. It is unattributable by definition, so it
+    // can never be accepted as proof of same-origin — not even to make one browser work.
+    for (const site of ['same-origin', 'none', 'cross-site']) {
+      expect(() => {
+        requireSameOriginMutation({
+          method: 'POST',
+          headers: headers({
+            host: 'jarvis.quickfurno.in',
+            origin: 'null',
+            'sec-fetch-site': site,
+          }),
+          mode: 'PRODUCTION',
+        });
+      }, site).toThrow(AuthFailure);
+    }
+  });
+
+  it('STILL rejects a missing Origin, plain HTTP, a foreign origin and a port mismatch', () => {
+    const hostile: Record<string, string>[] = [
+      // No Origin at all.
+      { host: 'jarvis.quickfurno.in', 'sec-fetch-site': 'same-origin' },
+      // Production is HTTPS-only.
+      {
+        host: 'jarvis.quickfurno.in',
+        origin: 'http://jarvis.quickfurno.in',
+        'sec-fetch-site': 'same-origin',
+      },
+      // A different site entirely, however it labels its fetch metadata.
+      {
+        host: 'jarvis.quickfurno.in',
+        origin: 'https://evil.example',
+        'sec-fetch-site': 'same-origin',
+      },
+      {
+        host: 'jarvis.quickfurno.in',
+        origin: 'https://evil.example',
+        'sec-fetch-site': 'cross-site',
+      },
+      // Same host, different authority.
+      {
+        host: 'jarvis.quickfurno.in',
+        origin: 'https://jarvis.quickfurno.in:8443',
+        'sec-fetch-site': 'same-origin',
+      },
+      // A subdomain is not the same origin.
+      {
+        host: 'jarvis.quickfurno.in',
+        origin: 'https://evil.jarvis.quickfurno.in',
+        'sec-fetch-site': 'same-site',
+      },
+      // Sec-Fetch-Site is mandatory in production.
+      { host: 'jarvis.quickfurno.in', origin: 'https://jarvis.quickfurno.in' },
+      // Unparseable.
+      {
+        host: 'jarvis.quickfurno.in',
+        origin: 'not a url',
+        'sec-fetch-site': 'same-origin',
+      },
+    ];
+    for (const value of hostile) {
+      expect(() => {
+        requireSameOriginMutation({ method: 'POST', headers: headers(value), mode: 'PRODUCTION' });
+      }, JSON.stringify(value)).toThrow(AuthFailure);
+    }
+  });
+
   it('rejects every method except POST', () => {
     for (const method of ['GET', 'PUT', 'PATCH', 'DELETE', 'HEAD']) {
       expect(() => {

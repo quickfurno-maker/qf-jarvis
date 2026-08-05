@@ -5,6 +5,7 @@ import {
   safeReturnPath,
 } from '../../../../server/auth/origin/same-origin';
 import { verifyPassword } from '../../../../server/auth/password/argon2id';
+import { AUTH_RESPONSE_HEADERS } from '../../../../server/auth/response-headers';
 import { LoginAttemptLimiter, resolveClientKey } from '../../../../server/auth/rate-limit/limiter';
 import { sessionCookieAttributes, serializeCookie } from '../../../../server/auth/session/cookie';
 import { newSessionClaims, sealSession } from '../../../../server/auth/session/token';
@@ -116,9 +117,7 @@ export async function POST(request: Request): Promise<Response> {
         headers: {
           Location: returnTo,
           'Set-Cookie': cookie,
-          'Cache-Control': 'no-store, private',
-          'Referrer-Policy': 'no-referrer',
-          'X-Content-Type-Options': 'nosniff',
+          ...AUTH_RESPONSE_HEADERS,
         },
       }),
     );
@@ -147,9 +146,7 @@ function redirectToLogin(
     status: 303,
     headers: {
       Location: target,
-      'Cache-Control': 'no-store, private',
-      'Referrer-Policy': 'no-referrer',
-      'X-Content-Type-Options': 'nosniff',
+      ...AUTH_RESPONSE_HEADERS,
       ...extraHeaders,
     },
   });

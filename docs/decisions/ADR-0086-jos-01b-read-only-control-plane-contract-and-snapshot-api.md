@@ -128,7 +128,8 @@ architecture state, and leave merge state to GitHub.
 ### 5. `GET /api/control-plane/v1/snapshot`, and nothing else
 
 Only `GET` is exported, so the App Router answers every mutating verb with `405` — the absence is the
-enforcement. Responses carry `no-store`, `nosniff`, `Referrer-Policy: no-referrer`, a contract-version
+enforcement. Responses carry `no-store`, `nosniff`, `Referrer-Policy: same-origin` (JOS-01D changed
+this from `no-referrer`; see ADR-0087 §6b), a contract-version
 header, and **no CORS header at all**: not a wildcard, not an echo of `Origin`. Until JOS-01C adds
 authentication, the correct CORS policy is silence.
 

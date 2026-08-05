@@ -104,6 +104,32 @@ input, so no injected script can read it.
 `returnTo` is never trusted: `//evil.com`, `/\evil.com`, absolute URLs, schemes and control
 characters all resolve to `/`. An open redirect on a login form is a phishing primitive.
 
+### 6b. `Referrer-Policy: same-origin` — a JOS-01D correction
+
+The application originally sent `Referrer-Policy: no-referrer`. Firefox derives a form submission's
+`Origin` header from the document's referrer policy, so under `no-referrer` it sent `Origin: null`
+for a genuinely same-origin login POST. The check in §6 correctly refused it, and the operator saw
+the same generic invalid-credentials outcome as a wrong password.
+
+Chromium does not do this. Scripted `curl` requests, the external smoke test and every unit test
+passed throughout — the defect was only reachable through a real Firefox form submission, which is
+exactly why it survived Gate 2 automation and surfaced during the owner's manual sign-in.
+
+**The correction is the header, not the validator.** Accepting `Origin: null` would accept the value
+a sandboxed iframe and a privacy-stripped cross-origin form both send; `null` is unattributable by
+definition, so no check that honours it can be called same-origin enforcement. Every rule in §6 is
+unchanged: `Origin` still required, still parsed, still exactly host-matched, still HTTPS-only in
+production, `Sec-Fetch-Site` still mandatory, `null` still refused.
+
+`same-origin` sends the full referrer to this application and **nothing to any other origin**, so no
+operator URL leaves the deployment. Relative to `no-referrer` the only party that gains information
+is Jarvis OS, about its own navigation.
+
+The policy is now declared once, in `server/auth/response-headers.ts`, and spread by the login and
+logout routes. It previously appeared as four hand-written literals; a value that drifted between
+two redirect paths would produce an intermittent, browser-specific authentication failure, so
+consistency is made structural rather than left to review.
+
 ### 7. What this model does NOT provide
 
 **There is no per-session revocation.** A stolen token is valid until it expires or the

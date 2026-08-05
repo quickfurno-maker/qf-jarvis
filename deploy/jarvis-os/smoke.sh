@@ -123,7 +123,11 @@ fi
 
 check "x-frame-options" "1" "$(count_header 'x-frame-options')"
 printf '%s\n' "$H" | grep -qi '^x-frame-options: *DENY' && good "X-Frame-Options DENY" || bad "X-Frame-Options is not DENY"
-printf '%s\n' "$H" | grep -qi '^referrer-policy: *no-referrer' && good "Referrer-Policy no-referrer" || bad "Referrer-Policy"
+# `same-origin`, NOT `no-referrer`. Firefox derives a form submission's `Origin` from the document's
+# referrer policy, so `no-referrer` made same-origin logins arrive as `Origin: null` and be refused
+# by the CSRF check. Asserted here because the header is what keeps browser login working, and a
+# revert would otherwise only be discovered by an operator failing to sign in.
+printf '%s\n' "$H" | grep -qi '^referrer-policy: *same-origin' && good "Referrer-Policy same-origin" || bad "Referrer-Policy is not same-origin"
 printf '%s\n' "$H" | grep -qi '^x-content-type-options: *nosniff' && good "X-Content-Type-Options nosniff" || bad "X-Content-Type-Options"
 
 # --- leakage ------------------------------------------------------------------------------------

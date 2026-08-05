@@ -16,6 +16,11 @@ import { CONTROL_PLANE_READ_CONTRACT_VERSION } from '@qf-jarvis/control-plane-re
  * - `nosniff`: the body is JSON and must never be content-sniffed into something executable.
  * - `X-Control-Plane-Contract-Version`: lets a client detect a version mismatch from the headers
  *   without parsing a body it may not understand.
+ * - `Referrer-Policy: same-origin`: one policy across the whole application, matching
+ *   `SECURITY_HEADERS` in the proxy. It is inert on a JSON response — there is no browsing context
+ *   here to navigate from — but a second, stricter value would leave the codebase asserting two
+ *   different referrer policies, and the next reader would have to work out which one governs the
+ *   login form. The proxy comment records why that value is `same-origin` and not `no-referrer`.
  * - There is NO `Access-Control-Allow-Origin`. Not a wildcard, not an echo of `Origin` — none at
  *   all, so no cross-origin page can read this. JOS-01C adds authentication; until then the
  *   correct CORS policy is silence.
@@ -24,7 +29,7 @@ export const READ_ONLY_HEADERS: Readonly<Record<string, string>> = Object.freeze
   'Content-Type': 'application/json; charset=utf-8',
   'Cache-Control': 'no-store, no-cache, must-revalidate',
   'X-Content-Type-Options': 'nosniff',
-  'Referrer-Policy': 'no-referrer',
+  'Referrer-Policy': 'same-origin',
   'X-Control-Plane-Contract-Version': CONTROL_PLANE_READ_CONTRACT_VERSION,
 });
 
