@@ -1,6 +1,7 @@
 import { requireOperatorSession } from '../../../../server/auth/dal';
 import { toAuthFailure } from '../../../../server/auth/errors';
 import { requireSameOriginMutation } from '../../../../server/auth/origin/same-origin';
+import { AUTH_RESPONSE_HEADERS } from '../../../../server/auth/response-headers';
 import {
   clearedSessionCookieAttributes,
   serializeCookie,
@@ -59,12 +60,10 @@ export async function POST(request: Request): Promise<Response> {
       headers: {
         Location: '/login',
         'Set-Cookie': cookie,
-        'Cache-Control': 'no-store, private',
         // Jarvis OS owns its whole origin, so clearing the origin's storage on sign-out is safe
         // and removes any cached protected page a shared machine might otherwise show.
         'Clear-Site-Data': '"cache", "cookies", "storage"',
-        'Referrer-Policy': 'no-referrer',
-        'X-Content-Type-Options': 'nosniff',
+        ...AUTH_RESPONSE_HEADERS,
       },
     });
   } catch (error) {
@@ -80,9 +79,7 @@ function unauthenticatedRedirect(): Response {
     status: 303,
     headers: {
       Location: '/login',
-      'Cache-Control': 'no-store, private',
-      'Referrer-Policy': 'no-referrer',
-      'X-Content-Type-Options': 'nosniff',
+      ...AUTH_RESPONSE_HEADERS,
     },
   });
 }

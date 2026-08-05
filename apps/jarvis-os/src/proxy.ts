@@ -94,7 +94,24 @@ export function contentSecurityPolicy(nonce: string, isDevelopment: boolean): st
  */
 export const SECURITY_HEADERS: Readonly<Record<string, string>> = Object.freeze({
   'X-Content-Type-Options': 'nosniff',
-  'Referrer-Policy': 'no-referrer',
+  /**
+   * `same-origin`, NOT `no-referrer`.
+   *
+   * Firefox derives the `Origin` header of a form submission from the document's referrer policy.
+   * Under `no-referrer` it sends `Origin: null` even for a genuinely same-origin POST — Chromium
+   * does not, which is why this survived every automated check and only appeared when the owner
+   * signed in with Firefox. `requireSameOriginMutation` then correctly refused the login, and the
+   * operator saw a generic invalid-credentials outcome for a request that was never cross-origin.
+   *
+   * The fix is the header, not the check. Weakening the validator to tolerate `Origin: null` would
+   * accept exactly the value a sandboxed iframe or a privacy-stripped cross-origin form sends, and
+   * `null` is unattributable by definition.
+   *
+   * `same-origin` sends the full referrer to ourselves and NOTHING to any other origin, so no
+   * operator URL ever leaks off-site. Compared with `no-referrer` the only party that gains
+   * information is this application, about its own navigation.
+   */
+  'Referrer-Policy': 'same-origin',
   'X-Frame-Options': 'DENY',
   'Cross-Origin-Opener-Policy': 'same-origin',
   'Cross-Origin-Resource-Policy': 'same-origin',
