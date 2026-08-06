@@ -11,6 +11,9 @@ import {
   validCommunicationRejectedOptOut,
 } from '../fixtures/index.js';
 import {
+  COMMUNICATION_CHANNEL_LABELS,
+  COMMUNICATION_CHANNELS,
+  communicationChannelSchema,
   COMMUNICATION_REJECTION_REASONS,
   COMMUNICATION_STATE_COUNT,
   COMMUNICATION_STATE_LABELS,
@@ -190,6 +193,39 @@ describe('the recipient is a reference, never a person', () => {
 
   it('refuses a consent boolean copied from Core', () => {
     const forged = { ...cloneFixture(validCommunicationDraft), hasConsent: true };
+    expect(safeParseCommunicationStateRecord(forged).success).toBe(false);
+  });
+});
+
+describe('the delivery channel vocabulary is closed, and WEB is not a delivery channel', () => {
+  // JRW-0B (ADR-0092) added a `WEB` RUNTIME channel to `@qf-jarvis/agent-runtime` so an inbound
+  // envelope can say where a turn arrived from. This vocabulary answers a DIFFERENT question, and
+  // the two must never converge: every member here is somewhere a provider can DELIVER TO, and a
+  // browser is not one. Nobody can push an outbound message to a closed tab.
+
+  it('is exactly the four approved delivery channels', () => {
+    expect([...COMMUNICATION_CHANNELS]).toStrictEqual(['whatsapp', 'sms', 'email', 'voice']);
+    expect(Object.keys(COMMUNICATION_CHANNEL_LABELS).sort()).toStrictEqual([
+      'email',
+      'sms',
+      'voice',
+      'whatsapp',
+    ]);
+  });
+
+  it('refuses web in every casing', () => {
+    for (const forbidden of ['web', 'WEB', 'Web', 'web-chat', 'browser', 'http']) {
+      expect(communicationChannelSchema.safeParse(forbidden).success, forbidden).toBe(false);
+      expect([...COMMUNICATION_CHANNELS], forbidden).not.toContain(forbidden);
+    }
+  });
+
+  it('refuses a communication request that names web as its channel', () => {
+    // The consequence, not just the enum. A `web` member would let a governed request ask for
+    // delivery through a chain that does not exist, and would pull a web turn into the eighteen
+    // states' `provider-accepted` and `delivered` -- which could then only be asserted by inventing
+    // them.
+    const forged = { ...cloneFixture(validCommunicationDraft), channel: 'web' };
     expect(safeParseCommunicationStateRecord(forged).success).toBe(false);
   });
 });

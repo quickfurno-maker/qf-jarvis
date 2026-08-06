@@ -12,6 +12,21 @@
  *   n8n → QF Communications Runtime → WhatsApp adapter or QF Voice Runtime
  *       → external provider → recipient
  *
+ * ### Why there is no `web` here, and never will be (JRW-0B, ADR-0092)
+ *
+ * `@qf-jarvis/agent-runtime` gained a `WEB` RUNTIME channel so an inbound envelope can say where a
+ * turn arrived from. That is a different question from this one, and the two vocabularies must not
+ * converge.
+ *
+ * Every member below is somewhere a provider can DELIVER TO. A browser is not: nobody can push an
+ * outbound message to a closed tab. A `web` member here would let a `CommunicationRequestV1` request
+ * delivery through a chain that does not exist, and would pull a web turn into the eighteen-state
+ * lifecycle's `provider-accepted` and `delivered` states — states that could then only be asserted
+ * by inventing them, which is exactly the false statement about the world this architecture exists
+ * to prevent.
+ *
+ * A spec asserts the refusal rather than trusting this paragraph.
+ *
  * See docs/architecture/communication-model.md, which is authoritative.
  */
 

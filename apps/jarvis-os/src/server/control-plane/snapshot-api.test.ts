@@ -215,18 +215,18 @@ describe('GET /api/control-plane/v1/snapshot', () => {
     const jos = body.roadmap.filter((marker) => marker.track === 'JOS');
 
     expect(body.roadmap.filter((marker) => marker.state === 'next')).toHaveLength(0);
-    const qfjCurrent = qfj.filter((marker) => marker.state === 'current');
-    expect(qfjCurrent).toHaveLength(1);
-    expect(qfjCurrent[0]?.label).toContain('QFJ-P09.03');
+    expect(qfj.filter((marker) => marker.state === 'current')).toHaveLength(0);
     const qfjMerged = qfj
       .filter((marker) => marker.state === 'merged')
       .map((m) => m.label)
       .join(' ');
     expect(qfjMerged).toContain('QFJ-P09.01');
     expect(qfjMerged).toContain('QFJ-P09.02');
-    // P09.02 merged a VALIDATION boundary. n8n stays NOT_CONNECTED above, and this surface must not
-    // let a reader infer a bridge from a merge.
-    expect(qfjCurrent[0]?.detail).toContain('not merged');
+    expect(qfjMerged).toContain('QFJ-P09.03');
+    // Those slices merged a VALIDATION boundary and a storage adapter. n8n stays NOT_CONNECTED
+    // above, and this surface must not let a reader infer a bridge from a merge -- nor infer a
+    // successor phase from an empty in-flight slot.
+    expect(JSON.stringify(body.roadmap)).not.toContain('QFJ-P09.04');
 
     // Phase-agnostic on purpose: naming the slice here would make this a test somebody edits every
     // phase, which is how the marker/BASELINE_FACTS drift got shipped in the first place.
