@@ -221,8 +221,12 @@ the Execution and Governance surfaces so it cannot be lost, and a test asserts i
 `GET /api/control-plane/v1/snapshot` had no authentication when JOS-01B shipped it; JOS-01C added
 that boundary, and JOS-01D supplies the immutable exact-SHA deployment topology and scripts that can
 place the route behind the reviewed authenticated Traefik boundary. What is deployed, and when, is
-answered by the host — not here. **`apps/api` was not turned into an HTTP server** — it still exports nothing and runs none — and server components call the pure
-snapshot loader directly rather than self-fetching. JOS-01E made that a real guarantee rather than a claim: both go through one request-scoped boundary, so neither can compose its own variant and a page can no longer recite a snapshot built when the process started.
+answered by the host — not here. **`apps/api` was not turned into an HTTP server** — it still exports nothing and runs none — and
+server components call the request-scoped snapshot loader directly rather than self-fetching; that
+loader performs bounded acquisition and normalization, then hands collected observations to the pure
+snapshot builder/composer. JOS-01E made that a real guarantee rather than a claim: the page and the
+API go through one request-scoped boundary, so neither can compose its own variant and a page can no
+longer recite a snapshot built when the process started.
 
 The shared `@qf-jarvis/control-plane-read-contract` package is framework-neutral: zod is its only
 dependency, and it carries no Next, React, Node or browser type, no filesystem path, no cookie or
