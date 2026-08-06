@@ -10,6 +10,10 @@ import {
   POSTGRES_EXECUTION_REPLAY_STORE_ERROR_CODES,
   PostgresExecutionReplayStoreError,
 } from '../index.js';
+// Deliberately a deep import of an INTERNAL module, and only from a test in the same package.
+// `validateClaim` is where storage identity is decided, and the rule is worth proving without a
+// database so a regression fails in milliseconds rather than only in the integration suite.
+import { validateClaim } from '../internal/claim-input.js';
 
 /**
  * Containment for the durable execution replay store (QFJ-P09.03, ADR-0091).
@@ -446,6 +450,124 @@ describe('(I) errors are bounded and leak nothing', () => {
     for (const outcome of ['first-seen', 'exact-replay', 'conflict']) {
       expect([...POSTGRES_EXECUTION_REPLAY_STORE_ERROR_CODES], outcome).not.toContain(outcome);
     }
+  });
+});
+
+describe('storage identity: exactly one field is canonicalized', () => {
+  const UPPER = 'A1B2C3D4-1111-4000-8000-000000000001';
+  const KEY = 'qf.exec.KEY-case-0001';
+  const DIGEST = 'ab'.repeat(32);
+
+  it('canonicalizes executionIntentId to lowercase', () => {
+    // PostgreSQL's UUID column returns canonical lowercase text, so the value this adapter COMPARES
+    // must be the value the database STORES. Without this, an uppercase id inserts fine and its own
+    // byte-identical replay is then classified `conflict` instead of `exact-replay` -- a fail-closed
+    // refusal of a legitimate redelivery.
+    const validated = validateClaim({
+      executionIntentId: UPPER,
+      idempotencyKey: KEY,
+      bodyDigestHex: DIGEST,
+    });
+    expect(validated.executionIntentId).toBe(UPPER.toLowerCase());
+    expect(validated.executionIntentId).not.toBe(UPPER);
+
+    // Both cases resolve to ONE identity.
+    expect(
+      validateClaim({
+        executionIntentId: UPPER.toLowerCase(),
+        idempotencyKey: KEY,
+        bodyDigestHex: DIGEST,
+      }).executionIntentId,
+    ).toBe(validated.executionIntentId);
+  });
+
+  it('does NOT normalize the idempotency key: it is an opaque, case-sensitive token', () => {
+    // The opposite rule. Folding `KEY-1` and `key-1` together would make two distinct claims
+    // collide, which loses a legitimate dispatch rather than catching a duplicate.
+    const validated = validateClaim({
+      executionIntentId: UPPER,
+      idempotencyKey: KEY,
+      bodyDigestHex: DIGEST,
+    });
+    expect(validated.idempotencyKey).toBe(KEY);
+    expect(validated.idempotencyKey).not.toBe(KEY.toLowerCase());
+  });
+
+  it('does NOT normalize the digest: an uppercase one is REFUSED, not lowercased', () => {
+    // The digest is verifier output and is defined as lowercase hex, so an uppercase one did not
+    // come from the verifier. Lowercasing it would silently accept something never produced.
+    expect(() =>
+      validateClaim({
+        executionIntentId: UPPER,
+        idempotencyKey: KEY,
+        bodyDigestHex: DIGEST.toUpperCase(),
+      }),
+    ).toThrow(PostgresExecutionReplayStoreError);
+    expect(
+      validateClaim({ executionIntentId: UPPER, idempotencyKey: KEY, bodyDigestHex: DIGEST })
+        .bodyDigestHex,
+    ).toBe(DIGEST);
+  });
+
+  it('canonicalizes AFTER the shape check, so a malformed id is refused rather than repaired', () => {
+    for (const bad of [
+      'A1B2C3D4-1111-4000-8000-00000000000',
+      'not-a-uuid',
+      'ZZZZZZZZ-1111-4000-8000-000000000001',
+    ]) {
+      expect(() =>
+        validateClaim({ executionIntentId: bad, idempotencyKey: KEY, bodyDigestHex: DIGEST }),
+      ).toThrow(PostgresExecutionReplayStoreError);
+    }
+  });
+
+  it('a throwing getter or Proxy becomes invalid-input and leaks nothing', () => {
+    // The value a hostile object throws is the caller's, and may quote anything. It must not become
+    // a channel out of this package.
+    const hostile = {
+      get executionIntentId(): string {
+        throw new Error('replay store at /srv/secrets/store — token=abc123');
+      },
+      idempotencyKey: KEY,
+      bodyDigestHex: DIGEST,
+    };
+    let thrown: unknown;
+    try {
+      validateClaim(hostile);
+    } catch (error: unknown) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(PostgresExecutionReplayStoreError);
+    const error = thrown as PostgresExecutionReplayStoreError;
+    expect(error.code).toBe('invalid-input');
+    expect(error.message).not.toContain('abc123');
+    expect(error.message).not.toContain('/srv/secrets');
+
+    const proxy = new Proxy(
+      {},
+      {
+        get(): never {
+          throw new Error('proxy trap — host=10.0.0.1 password=hunter2');
+        },
+      },
+    );
+    expect(() => validateClaim(proxy)).toThrow(PostgresExecutionReplayStoreError);
+  });
+
+  it('reads each field exactly once, so a value cannot change after it was checked', () => {
+    let reads = 0;
+    const counting = {
+      get executionIntentId(): string {
+        reads += 1;
+        // A second read would return a DIFFERENT id, so any re-read is visible in the result.
+        return reads === 1 ? UPPER : 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+      },
+      idempotencyKey: KEY,
+      bodyDigestHex: DIGEST,
+    };
+    const validated = validateClaim(counting);
+    expect(reads).toBe(1);
+    expect(validated.executionIntentId).toBe(UPPER.toLowerCase());
   });
 });
 

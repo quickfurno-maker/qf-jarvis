@@ -61,6 +61,31 @@ The digest is the third bind and catches the quietest case: the same id and key 
 bytes**. Without it, an attacker who could replay an envelope with a mutated body would inherit the
 original's idempotency.
 
+#### 3a. UUID casing is representation; the other two fields are identity
+
+Exactly one of the three is canonicalized, and the asymmetry is the decision.
+
+- **`executionIntentId` IS lowercased, for storage comparison only.** UUID hexadecimal case is
+  representation, not identity — `A1B2…` and `a1b2…` are the same UUID — and the `UUID` column
+  agrees: it accepts either and returns canonical LOWERCASE text. The first draft accepted either
+  case and returned the input unchanged, so an uppercase id could be INSERTED and then compared
+  character by character against the lowercase form the database handed back. The **byte-identical
+  replay of that same dispatch** failed that comparison and was classified `conflict`. That is not a
+  cosmetic misnomer: `exact-replay` means "already done, suppress" while `conflict` is a fail-closed
+  refusal, so the boundary refused a legitimate identical redelivery — precisely what the guard
+  exists to recognise. Canonicalizing makes the value the adapter compares the value the database
+  stores. It happens AFTER the shape check, so a malformed id is still refused rather than repaired.
+
+- **`idempotencyKey` is NEVER normalized.** It is an opaque token chosen by the issuer, so `KEY-1`
+  and `key-1` are two different tokens. Folding them would make two distinct claims collide — a way
+  to LOSE a legitimate dispatch, not a way to catch a duplicate.
+
+- **`bodyDigestHex` is NEVER normalized.** It is verifier output, defined as lowercase hex, so an
+  uppercase digest did not come from the verifier and is REFUSED rather than lowercased.
+
+The column stays `UUID`. Changing it to `TEXT` to preserve casing would have kept a representational
+difference alive as if it were an identity, and given up the type that already canonicalizes.
+
 ### 4. The database arbitrates; the loser reconciles read-only
 
 ```
@@ -197,3 +222,8 @@ Adding a payload column, a tenant column, a retention policy, an `UPDATE` or `DE
 retry loop, a public read or release method, or any transport export each require a superseding ADR.
 So does moving the classification into a single statement: the two-statement shape is the decision,
 not an implementation detail.
+
+The same applies in both directions to §3a. Normalizing `idempotencyKey` or `bodyDigestHex`, or
+ceasing to canonicalize `executionIntentId`, each require a superseding ADR — the first two would
+silently merge two identities, and the last reintroduces the `conflict`-instead-of-`exact-replay`
+defect this correction fixed.

@@ -213,6 +213,145 @@ describe('sequential claim semantics', () => {
 });
 
 // ---------------------------------------------------------------------------
+// UUID storage identity. The correction pass.
+// ---------------------------------------------------------------------------
+
+describe('UUID hex casing is representation, not identity', () => {
+  // The defect this suite exists to prevent, stated plainly:
+  //
+  // `executionIntentId` is stored in a PostgreSQL `UUID` column, and PostgreSQL returns UUID text in
+  // canonical LOWERCASE. The adapter accepted either case and compared the value it was given
+  // against the value the database handed back, character by character. So an uppercase id could be
+  // INSERTED successfully, and the byte-identical replay of that same dispatch would then be
+  // compared 'A1B2...' against 'a1b2...', fail, and be classified `conflict`.
+  //
+  // A `conflict` is not a harmless misnomer here. `exact-replay` means "already done, suppress";
+  // `conflict` is a fail-closed refusal. The boundary would have refused a legitimate, identical
+  // redelivery -- and the guard's whole contract is that an identical redelivery is recognised.
+
+  const UPPER = 'A1B2C3D4-1111-4000-8000-000000000001';
+  const LOWER = UPPER.toLowerCase();
+
+  it('(A) an IDENTICAL uppercase-UUID replay is exact-replay, never conflict', async () => {
+    const idempotencyKey = anIdempotencyKey();
+    const bodyDigestHex = aBodyDigest('a1');
+    const claim = { executionIntentId: UPPER, idempotencyKey, bodyDigestHex };
+
+    await expect(store.claim(claim)).resolves.toBe('first-seen');
+    await expect(store.claim(claim)).resolves.toBe('exact-replay');
+    await expect(store.claim(claim)).resolves.toBe('exact-replay');
+    expect(await rowCount()).toBe(1);
+  });
+
+  it('(B) the same UUID in either case is ONE durable identity', async () => {
+    const idempotencyKey = anIdempotencyKey();
+    const bodyDigestHex = aBodyDigest('b2');
+
+    await expect(
+      store.claim({ executionIntentId: UPPER, idempotencyKey, bodyDigestHex }),
+    ).resolves.toBe('first-seen');
+    await expect(
+      store.claim({ executionIntentId: LOWER, idempotencyKey, bodyDigestHex }),
+    ).resolves.toBe('exact-replay');
+    // And in the other direction, so the rule is not an artefact of which case arrived first.
+    await expect(
+      store.claim({ executionIntentId: UPPER, idempotencyKey, bodyDigestHex }),
+    ).resolves.toBe('exact-replay');
+    expect(await rowCount()).toBe(1);
+  });
+
+  it('(B) the row is stored in canonical lowercase', async () => {
+    const claim = {
+      executionIntentId: UPPER,
+      idempotencyKey: anIdempotencyKey(),
+      bodyDigestHex: aBodyDigest('c3'),
+    };
+    await expect(store.claim(claim)).resolves.toBe('first-seen');
+    const stored = await withClient(pool, async (client) => {
+      const r = await client.query<{ execution_intent_id: string }>(
+        'SELECT execution_intent_id::text FROM qf_jarvis.execution_replay_claim',
+      );
+      return r.rows[0]?.execution_intent_id;
+    });
+    expect(stored).toBe(LOWER);
+  });
+
+  it('(C) canonicalizing the UUID does NOT weaken the digest binding', async () => {
+    const idempotencyKey = anIdempotencyKey();
+    await expect(
+      store.claim({ executionIntentId: UPPER, idempotencyKey, bodyDigestHex: aBodyDigest('d4') }),
+    ).resolves.toBe('first-seen');
+    // Same identity, different bytes. Still a contradiction, and still fails closed.
+    await expect(
+      store.claim({ executionIntentId: LOWER, idempotencyKey, bodyDigestHex: aBodyDigest('e5') }),
+    ).resolves.toBe('conflict');
+    await expect(
+      store.claim({ executionIntentId: UPPER, idempotencyKey, bodyDigestHex: aBodyDigest('e5') }),
+    ).resolves.toBe('conflict');
+    expect(await rowCount()).toBe(1);
+  });
+
+  it('(D) the idempotency key stays CASE-SENSITIVE and is never normalized', async () => {
+    // The opposite rule to the UUID, and the reason the correction canonicalizes exactly one field.
+    // An idempotency key is an opaque token chosen by the issuer: `KEY-1` and `key-1` are two
+    // different tokens, and folding them together would make two distinct claims collide -- which is
+    // a way to LOSE a legitimate dispatch, not a way to catch a duplicate.
+    const bodyDigestHex = aBodyDigest('f6');
+    const executionIntentId = anIntentId();
+    const lowerKey = 'qf.exec.key-case-0001';
+    const upperKey = 'qf.exec.KEY-case-0001';
+    expect(lowerKey.toLowerCase()).toBe(upperKey.toLowerCase());
+    expect(lowerKey).not.toBe(upperKey);
+
+    await expect(
+      store.claim({ executionIntentId, idempotencyKey: lowerKey, bodyDigestHex }),
+    ).resolves.toBe('first-seen');
+    // Same intent, a DIFFERENT key. If the key had been folded this would read `exact-replay`.
+    await expect(
+      store.claim({ executionIntentId, idempotencyKey: upperKey, bodyDigestHex }),
+    ).resolves.toBe('conflict');
+
+    // And the two keys remain distinct identities for two distinct intents.
+    await expect(
+      store.claim({ executionIntentId: anIntentId(), idempotencyKey: upperKey, bodyDigestHex }),
+    ).resolves.toBe('first-seen');
+    expect(await rowCount()).toBe(2);
+  });
+
+  it('an uppercase digest is still REFUSED rather than normalized', async () => {
+    // The third rule: the digest is verifier output and is DEFINED as lowercase hex, so an uppercase
+    // one did not come from the verifier. Lowercasing it here would silently accept something the
+    // boundary never produced.
+    await expect(
+      store.claim({
+        executionIntentId: anIntentId(),
+        idempotencyKey: anIdempotencyKey(),
+        bodyDigestHex: aBodyDigest('ab').toUpperCase(),
+      }),
+    ).rejects.toMatchObject({ code: 'invalid-input' });
+    expect(await rowCount()).toBe(0);
+  });
+
+  it('concurrent claims of ONE uuid in MIXED case still yield exactly one first-seen', async () => {
+    const idempotencyKey = anIdempotencyKey();
+    const bodyDigestHex = aBodyDigest('07');
+    const claims = Array.from({ length: CONTENTION }, (_unused, index) => ({
+      executionIntentId: index % 2 === 0 ? UPPER : LOWER,
+      idempotencyKey,
+      bodyDigestHex,
+    }));
+    const { outcomes, thrown } = await race(claims);
+
+    expect(thrown).toBe(0);
+    const counts = tally(outcomes);
+    expect(counts['first-seen']).toBe(1);
+    expect(counts['exact-replay']).toBe(CONTENTION - 1);
+    expect(counts['conflict']).toBe(0);
+    expect(await rowCount()).toBe(1);
+  }, 60_000);
+});
+
+// ---------------------------------------------------------------------------
 // 7-10. Concurrency. Real separate connections, real PostgreSQL.
 // ---------------------------------------------------------------------------
 
