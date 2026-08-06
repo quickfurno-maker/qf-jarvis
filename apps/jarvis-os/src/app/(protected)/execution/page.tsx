@@ -16,8 +16,8 @@ import { controlPlane } from '@/lib/control-plane';
  * The one line that must never be ambiguous appears twice — as a banner and as a capability
  * row: **live communication send is off, everywhere, for everyone.**
  */
-export default function ExecutionPage() {
-  const roadmap = controlPlane().roadmap();
+export default async function ExecutionPage() {
+  const roadmap = (await controlPlane()).roadmap();
   const intent = capability('execution.intent.validate');
   const bridge = capability('execution.n8n.bridge');
   const send = capability('communication.live-send');

@@ -88,9 +88,10 @@ export function contentSecurityPolicy(nonce: string, isDevelopment: boolean): st
 /**
  * Headers applied to every response.
  *
- * HSTS is deliberately ABSENT. It is only meaningful over HTTPS, this build serves plain HTTP
- * locally, and sending it now would either do nothing or — worse — read as protection that is not
- * there. JOS-01D adds it when Traefik terminates real TLS.
+ * HSTS is deliberately ABSENT from the application. It is only meaningful over HTTPS, this build
+ * serves plain HTTP locally, and sending it here would either do nothing or — worse — read as
+ * protection that is not there. JOS-01D put it where it belongs: a reviewed Traefik overlay applied
+ * only after trusted TLS is proven, so the header comes from the tier that terminates it.
  */
 export const SECURITY_HEADERS: Readonly<Record<string, string>> = Object.freeze({
   'X-Content-Type-Options': 'nosniff',

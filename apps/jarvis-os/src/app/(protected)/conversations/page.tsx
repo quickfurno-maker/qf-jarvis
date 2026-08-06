@@ -12,8 +12,8 @@ import { controlPlane } from '@/lib/control-plane';
  * conversation list is read far more often than it is acted on, and every field it carries
  * ends up in a screenshot, a log or a support ticket. Identity here is an opaque reference.
  */
-export default function ConversationsPage() {
-  const rowsSection = controlPlane().conversationControl();
+export default async function ConversationsPage() {
+  const rowsSection = (await controlPlane()).conversationControl();
 
   return (
     <>

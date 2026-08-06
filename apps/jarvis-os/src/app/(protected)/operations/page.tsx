@@ -15,8 +15,8 @@ import { isReadable } from '@/lib/control-plane/types';
  * disabled, because `conversation.control.write` is deliberately DISABLED in Jarvis OS and a
  * control that appeared to work would be the single most dangerous thing on this screen.
  */
-export default function OperationsPage() {
-  const plane = controlPlane();
+export default async function OperationsPage() {
+  const plane = await controlPlane();
   const control = plane.conversationControl();
   // A dash, not a zero. "0 conversations under human takeover" is a measurement; this surface has
   // not measured anything, and an operator reading a confident zero would stop looking.

@@ -15,8 +15,8 @@ import { controlPlane } from '@/lib/control-plane';
  *
  * No live call is made from this page, and no credential is read anywhere in Jarvis OS.
  */
-export default function ModelsPage() {
-  const modelsSection = controlPlane().models();
+export default async function ModelsPage() {
+  const modelsSection = (await controlPlane()).models();
 
   return (
     <>

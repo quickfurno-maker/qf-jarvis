@@ -182,20 +182,28 @@ describe('QFJ-P12 (ADR-0085) canonical governance consistency', () => {
       }
     });
 
-    it('names exactly one current JOS slice, and a different one as next', () => {
+    it('names exactly one current JOS slice and asserts no running deployment', () => {
       // Deliberately phase-AGNOSTIC. Pinning the specific slice would make this something a
       // maintainer rewrites every phase, and a test that is always rewritten stops being a check.
-      // What must hold at EVERY phase is the shape: one current slice, one next, and they differ.
+      //
+      // The shape changed at JOS-01E and the test had to follow the truth rather than the reverse.
+      // The JOS foundation track is BOUNDED: JOS-01E is its last slice, so there is no longer a
+      // "next" JOS slice to name, and requiring one would only be satisfiable by inventing a
+      // successor phase. What must still hold at every phase is that exactly one slice is current,
+      // that no slice is claimed as next once the track has closed, and that the document never
+      // asserts a live service.
       const jarvisOs = flat(read(JARVIS_OS));
 
-      const current = /JOS-01([A-E]) is the current implemented Jarvis OS slice/u.exec(jarvisOs);
+      const current = /JOS-01([A-E]) is the current[^.]*Jarvis OS slice/u.exec(jarvisOs);
       expect(current, 'a current JOS slice must be named').not.toBeNull();
 
       const next = /JOS-01([A-E])[^.]*is next/u.exec(jarvisOs);
-      expect(next, 'a next JOS slice must be named').not.toBeNull();
+      expect(next, 'the JOS track is closed: no slice may be named next').toBeNull();
 
-      expect(next?.[1], 'the next slice must differ from the current one').not.toBe(current?.[1]);
-      expect(jarvisOs).toContain('Nothing is deployed');
+      // Whether a deployment is RUNNING is an operational fact. The repository may say the
+      // deployment code is merged; it may never assert a live service about itself, in either
+      // direction, because it has no way to know.
+      expect(jarvisOs).toMatch(/operational fact this repository does not assert/u);
     });
 
     it('keeps QFJ-P09.02 as the main-track resume point alongside the JOS track', () => {

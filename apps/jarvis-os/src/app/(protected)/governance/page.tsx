@@ -35,8 +35,8 @@ const STATE_LABEL: Readonly<Record<RoadmapMarker['state'], string>> = {
   planned: 'Planned',
 };
 
-export default function GovernancePage() {
-  const roadmap = controlPlane().roadmap();
+export default async function GovernancePage() {
+  const roadmap = (await controlPlane()).roadmap();
 
   return (
     <>

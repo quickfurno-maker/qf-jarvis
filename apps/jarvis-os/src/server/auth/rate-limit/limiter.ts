@@ -8,9 +8,10 @@
  * documentation says so plainly rather than implying protection it cannot give — with more than
  * one instance each would keep its own counters, and a restart clears them.
  *
- * The real perimeter limit belongs at the reverse proxy, and JOS-01D must add it. Saying that here
- * matters more than the code below: a team that believes the application is rate-limited will not
- * configure Traefik, and then the actual limit is "none".
+ * The real perimeter limit belongs at the reverse proxy, and JOS-01D added it: a Traefik middleware
+ * of five login attempts per minute with an 8 KiB body cap, scoped to the login route. Saying that
+ * here matters more than the code below, because the reverse is the dangerous belief -- a team that
+ * thinks the application is rate-limited will not check that the edge still is.
  *
  * ### Bounded by construction
  *
@@ -143,8 +144,9 @@ export class LoginAttemptLimiter {
  *
  * So JOS-01C uses a single fixed key: every attempt shares one bucket. That is a blunt instrument
  * and it is the honest one for an owner-only surface with exactly one legitimate client.
- * JOS-01D may introduce a trusted-proxy resolver once the container has no public port, only
- * Traefik can reach it, and forwarding headers are sanitised at the edge.
+ * A trusted-proxy resolver remains unadopted. JOS-01D established the preconditions -- the
+ * container publishes no host port and is reachable only through Traefik -- but forwarding headers
+ * are still not sanitised at the edge, and per-client keying is worthless until they are.
  */
 export const SINGLE_OPERATOR_CLIENT_KEY = 'operator';
 

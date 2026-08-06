@@ -1,5 +1,5 @@
 import { requireApiOperatorSession } from '../../../../../server/auth/dal';
-import { buildControlPlaneSnapshot } from '../../../../../server/control-plane/build-snapshot';
+import { loadControlPlaneSnapshot } from '../../../../../server/control-plane/load-snapshot';
 import {
   FAILURE_BODY,
   READ_ONLY_HEADERS,
@@ -35,10 +35,12 @@ import {
  * An unauthenticated caller gets `401` and a fixed body. It never gets a partial snapshot, a
  * reason, or a hint about whether a session existed and expired versus never existed at all.
  *
- * ### It is still not deployed
+ * ### Exposure is an operational fact, not a repository one
  *
- * JOS-01D deploys, and only after this authentication boundary is reviewed. Nothing in this phase
- * exposes the route on the VPS, through Traefik, or at any hostname.
+ * JOS-01D merged the deployment topology, so this route CAN be served behind Traefik at a real
+ * hostname. Whether it currently is remains something an operator verifies against the host --
+ * nothing in this build asserts a running service, and nothing here changes what the route returns
+ * depending on where it runs.
  */
 
 /**
@@ -62,12 +64,6 @@ export async function GET(request: Request): Promise<Response> {
     });
   }
 
-  // The clock is read HERE, at the boundary, and injected. It stamps `generatedAt` -- when this
-  // JSON was produced -- and NOTHING else. It does not, and must not, raise source freshness: this
-  // request re-read no Git, no governance document, no QuickFurno Core and no n8n. The builder
-  // derives `BUILD_DECLARATION` itself, and the contract rejects any other combination.
-  const generatedAt = new Date().toISOString();
-
   const url = new URL(request.url);
   if (url.search !== '') {
     // Reject rather than ignore: see route-response.ts. An unsupported parameter is answered
@@ -79,7 +75,10 @@ export async function GET(request: Request): Promise<Response> {
   }
 
   try {
-    const snapshot = buildControlPlaneSnapshot({ generatedAt });
+    // The SAME request-scoped loader the server-rendered pages use. It reads the clock, awaits any
+    // adopted source, and hands the collected results to the pure builder -- so the page and this
+    // route are two callers of one path rather than two paths that happen to agree today.
+    const snapshot = await loadControlPlaneSnapshot();
     return new Response(JSON.stringify(snapshot), { status: 200, headers: READ_ONLY_HEADERS });
   } catch {
     // Fail closed, and say nothing. The thrown value may name fields, paths or received values;

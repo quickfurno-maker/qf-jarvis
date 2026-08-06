@@ -31,8 +31,8 @@ import { controlPlane } from '@/lib/control-plane';
  * sources is unconnected, so every one now says so and draws nothing. A screen that admits it is
  * mostly unconnected is worth more than a screen that looks busy and means nothing.
  */
-export default function OverviewPage() {
-  const plane = controlPlane();
+export default async function OverviewPage() {
+  const plane = await controlPlane();
   const health = plane.systemHealth();
   const attention = plane.attention();
 

@@ -132,9 +132,10 @@ describe('security headers', () => {
     }
   });
 
-  it('does NOT claim HSTS — this build serves plain HTTP and is not deployed', () => {
-    // Sending HSTS now would either do nothing or read as protection that is not there.
-    // JOS-01D adds it when Traefik terminates real TLS.
+  it('does NOT claim HSTS — the tier that terminates TLS owns that header', () => {
+    // Sending HSTS from the application would either do nothing or read as protection that is not
+    // there. JOS-01D put it in a reviewed Traefik overlay applied only after trusted TLS is proven,
+    // so it must stay absent here even though the deployment now serves real HTTPS.
     expect(Object.keys(SECURITY_HEADERS)).not.toContain('Strict-Transport-Security');
   });
 });

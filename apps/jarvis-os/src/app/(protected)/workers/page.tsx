@@ -12,8 +12,8 @@ import { controlPlane } from '@/lib/control-plane';
  * the demo snapshot, and an offline node is shown as offline rather than omitted — a fleet
  * view that hides what it cannot see is the one that gets trusted at the wrong moment.
  */
-export default function WorkersPage() {
-  const workersSection = controlPlane().workers();
+export default async function WorkersPage() {
+  const workersSection = (await controlPlane()).workers();
 
   return (
     <>

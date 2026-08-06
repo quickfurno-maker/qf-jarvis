@@ -29,8 +29,15 @@ export const BASELINE_FACTS = Object.freeze({
   governedAgents: 4,
   mergedPhase: 'QFJ-P09.01',
   nextPhase: 'QFJ-P09.02',
-  josPhase: 'JOS-01D',
-  nextJosPhase: 'JOS-01E',
+  josPhase: 'JOS-01E',
+  /**
+   * The JOS foundation track CLOSES after JOS-01E; there is deliberately no `nextJosPhase`.
+   *
+   * Naming a successor would mean inventing one. When this slice merges, the next slice of work is
+   * `nextPhase` on the main track, and the roadmap says so rather than implying Jarvis OS has more
+   * foundation phases queued.
+   */
+  josTrackClosesAfter: 'JOS-01E',
 });
 
 const UNREACHABLE = 'No adopted read protocol exists in this repository.';
@@ -236,21 +243,27 @@ export const BASELINE_ROADMAP: readonly BaselineRoadmap[] = Object.freeze<
     detail: 'Argon2id passphrase plus TOTP; encrypted, short-lived operator sessions.',
   },
   {
-    // `current`, not `next`. This build IS JOS-01D. It carries the reviewed deployment topology --
-    // whether anything is RUNNING is an operational fact, not a repository one, so this marker
-    // never claims a live service.
+    // Merged. The deployment topology, the release-provenance guards and the Firefox origin
+    // correction are all in this build.
+    //
+    // `merged` describes the CODE. Whether a deployment is currently running is an operational
+    // fact, not a repository one, so no marker here claims a live service -- that stays something
+    // an operator verifies against the host, never something this build asserts about itself.
     id: 'jos-01d',
     track: 'JOS',
     label: 'JOS-01D - Isolated Docker, VPS and Traefik deployment',
-    state: 'current',
-    detail: 'Deployment artefacts and audit in this build. Nothing is deployed from here.',
+    state: 'merged',
+    detail:
+      'Immutable per-SHA release, staged ingress and HSTS. This build claims no running service.',
   },
   {
+    // `current`, and the LAST slice of the bounded Jarvis OS foundation track.
     id: 'jos-01e',
     track: 'JOS',
-    label: 'JOS-01E - Progressive backend wiring',
-    state: 'next',
-    detail: 'NEXT JARVIS OS SLICE. Live adapters, one governed source at a time.',
+    label: 'JOS-01E - Progressive backend read wiring',
+    state: 'current',
+    detail:
+      'Governed read-source composition. No source is adopted yet: none is reachable without a protocol Core and n8n have not adopted.',
   },
 ]);
 

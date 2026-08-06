@@ -144,9 +144,9 @@ describe('capability lifecycle', () => {
     }
   });
 
-  it('states that production rollout is off', () => {
-    expect(controlPlane().systemHealth().rolloutEnabled).toBe(false);
-    const rollout = controlPlane()
+  it('states that production rollout is off', async () => {
+    expect((await controlPlane()).systemHealth().rolloutEnabled).toBe(false);
+    const rollout = (await controlPlane())
       .systemHealth()
       .components.find((component) => component.id === 'production-rollout');
     expect(rollout?.state).toBe('ROLLOUT_OFF');
@@ -220,8 +220,8 @@ describe('Aarohi and Anisha are separate agents', () => {
     expect(aarohi?.label).toContain('Vendor Growth');
   });
 
-  it('hold separate capabilities, and Aarohi has no runtime', () => {
-    const plane = controlPlane();
+  it('hold separate capabilities, and Aarohi has no runtime', async () => {
+    const plane = await controlPlane();
     const aarohi = plane.agent('aarohi');
     const anisha = plane.agent('anisha');
     expect(aarohi?.capabilityId).toBe('aarohi.vendor-growth');
@@ -232,8 +232,8 @@ describe('Aarohi and Anisha are separate agents', () => {
     expect(aarohi?.state).toBe('PLANNED');
   });
 
-  it('describe non-overlapping scopes: acquisition versus registered-vendor care', () => {
-    const plane = controlPlane();
+  it('describe non-overlapping scopes: acquisition versus registered-vendor care', async () => {
+    const plane = await controlPlane();
     const aarohi = plane.agent('aarohi');
     const anisha = plane.agent('anisha');
     expect(aarohi?.role.toLowerCase()).toContain('acquisition');
@@ -243,66 +243,72 @@ describe('Aarohi and Anisha are separate agents', () => {
     expect(anisha?.notes.join(' ')).toContain('Aarohi');
   });
 
-  it('shows no outreach activity for Aarohi anywhere in the model', () => {
+  it('shows no outreach activity for Aarohi anywhere in the model', async () => {
     // JOS-01B: the funnel is PLANNED and carries no stages at all. A list of zeroed stages was
     // the JOS-01A answer; a PLANNED source with nothing in it is the honest one, because no
     // stage has ever been measured.
-    const funnel = controlPlane().vendorGrowthFunnel();
+    const funnel = (await controlPlane()).vendorGrowthFunnel();
     expect(funnel.availability).toBe('PLANNED');
     expect(funnel.items).toHaveLength(0);
     for (const stage of funnel.items) {
       expect(stage.value, stage.id).toBe(0);
     }
     // Workload is unreadable, so it reports no Aarohi share rather than a zero share.
-    const workload = controlPlane().agentWorkload();
+    const workload = (await controlPlane()).agentWorkload();
     expect(workload.availability).toBe('NOT_CONNECTED');
     expect(workload.items).toHaveLength(0);
   });
 });
 
 describe('the resume marker and phase truth', () => {
-  it('names QFJ-P09.02 as the next main-track slice', () => {
-    const next = controlPlane()
+  it('names QFJ-P09.02 as the next main-track slice', async () => {
+    const next = (await controlPlane())
       .roadmap()
       .filter((marker) => marker.track === 'QFJ' && marker.state === 'next');
     expect(next).toHaveLength(1);
     expect(next[0]?.label).toContain('QFJ-P09.02');
   });
 
-  it('keeps the JOS current marker in step with BASELINE_FACTS', () => {
+  it('keeps the JOS current marker in step with BASELINE_FACTS', async () => {
     // The invariant that would have caught a real inconsistency: JOS-01C advanced
     // `BASELINE_FACTS.josPhase` but left the rendered markers claiming JOS-01B was current, and
     // nothing compared the two. Asserting a SPECIFIC phase here would need editing every phase --
     // and a test that is always edited stops being a check. Asserting they AGREE does not.
-    const jos = controlPlane()
-      .roadmap()
-      .filter((marker) => marker.track === 'JOS');
+    const jos = (await controlPlane()).roadmap().filter((marker) => marker.track === 'JOS');
 
     const current = jos.filter((marker) => marker.state === 'current');
     expect(current, 'exactly one JOS slice is current').toHaveLength(1);
     expect(current[0]?.label).toContain(BASELINE_FACTS.josPhase);
 
+    // JOS-01E is the LAST slice of the bounded foundation track, so the track has no `next`.
+    // Requiring one would only be satisfiable by inventing a successor phase.
     const next = jos.filter((marker) => marker.state === 'next');
-    expect(next, 'exactly one JOS slice is next').toHaveLength(1);
-    expect(next[0]?.label).toContain(BASELINE_FACTS.nextJosPhase);
-
-    // The current slice can never also be the next one.
-    expect(next[0]?.label).not.toContain(BASELINE_FACTS.josPhase);
+    expect(next, 'the JOS foundation track closes after its current slice').toHaveLength(0);
+    expect(BASELINE_FACTS.josTrackClosesAfter).toBe(BASELINE_FACTS.josPhase);
 
     // Everything before the current slice is merged, and nothing after it is.
     expect(jos.filter((marker) => marker.state === 'merged').length).toBeGreaterThan(0);
+    expect(jos.filter((marker) => marker.state === 'planned')).toHaveLength(0);
   });
 
-  it('keeps the two tracks separate, each with exactly one next', () => {
-    const roadmap = controlPlane().roadmap();
-    for (const track of ['QFJ', 'JOS'] as const) {
-      const next = roadmap.filter((marker) => marker.track === track && marker.state === 'next');
-      expect(next, track).toHaveLength(1);
-    }
+  it('leaves the main track carrying the only next marker', async () => {
+    // The tracks stay separate, but they are no longer symmetrical: the JOS track is closing and
+    // the work continues on QFJ. Asserting "one next each" would now be asserting a falsehood.
+    const roadmap = (await controlPlane()).roadmap();
+    expect(
+      roadmap.filter((marker) => marker.track === 'QFJ' && marker.state === 'next'),
+    ).toHaveLength(1);
+    expect(
+      roadmap.filter((marker) => marker.track === 'JOS' && marker.state === 'next'),
+    ).toHaveLength(0);
+    // Exactly one next marker in the whole roadmap, and it is the main-track resume point.
+    const allNext = roadmap.filter((marker) => marker.state === 'next');
+    expect(allNext).toHaveLength(1);
+    expect(allNext[0]?.label).toContain(BASELINE_FACTS.nextPhase);
   });
 
-  it('records QFJ-P09.01 as merged', () => {
-    const merged = controlPlane()
+  it('records QFJ-P09.01 as merged', async () => {
+    const merged = (await controlPlane())
       .roadmap()
       .filter((marker) => marker.state === 'merged')
       .map((marker) => marker.label)
@@ -322,27 +328,27 @@ describe('the resume marker and phase truth', () => {
 });
 
 describe('the default read model is the repository baseline, and read-only', () => {
-  it('never promotes a compiled-in baseline to request-time freshness', () => {
+  it('never promotes a compiled-in baseline to request-time freshness', async () => {
     // `generatedAt` says when this snapshot was produced. `source.freshness` says how old the
     // FACTS are. Serving more often may move the first; it can never move the second.
-    const provenance = controlPlane().provenance();
+    const provenance = (await controlPlane()).provenance();
     expect(provenance.freshness).toBe('BUILD_DECLARATION');
     expect(provenance.liveOperationalData).toBe(false);
     expect(provenance.generatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
   });
 
-  it('is NOT the demo fixture', () => {
+  it('is NOT the demo fixture', async () => {
     // The whole point of JOS-01B. JOS-01A shipped `kind: 'demo'` as the default operator surface;
     // a synthetic queue of waiting approvals teaches an operator to believe numbers that describe
     // nothing. The fixture still exists for tests and visual fixtures, and is no longer default.
-    const plane = controlPlane();
+    const plane = await controlPlane();
     expect(plane.kind).toBe('baseline');
     expect(plane.provenance().kind).toBe('REPOSITORY_BASELINE');
     expect(plane.provenance().liveOperationalData).toBe(false);
   });
 
-  it('declares no writer', () => {
-    const plane = controlPlane();
+  it('declares no writer', async () => {
+    const plane = await controlPlane();
     expect(Object.isFrozen(plane)).toBe(true);
     const surface = plane as unknown as Record<string, unknown>;
     for (const forbidden of [
@@ -363,21 +369,34 @@ describe('the default read model is the repository baseline, and read-only', () 
     }
   });
 
-  it('returns the same frozen data on repeated reads', () => {
-    const a = controlPlane().approvalQueue();
-    const b = controlPlane().approvalQueue();
+  it('returns the same frozen data on repeated reads of one request’s model', async () => {
+    // JOS-01E made this per-request rather than a process singleton, so the property asserted here
+    // had to become the honest one. WITHIN one resolved read model, repeated reads are the same
+    // frozen object — a caller still cannot mutate what another caller sees.
+    const plane = await controlPlane();
+    const a = plane.approvalQueue();
+    const b = plane.approvalQueue();
     expect(a).toBe(b);
     expect(Object.isFrozen(a)).toBe(true);
   });
 
-  it('carries no business records and no contact details at all', () => {
+  it('gives two requests deeply equal data while no source is adopted', async () => {
+    // Reference identity across requests is exactly what must NOT be assumed once a source can be
+    // adopted: a later request has to be free to observe something newer. With the registry empty
+    // the content is still identical, which is the property that matters here.
+    const first = (await controlPlane()).approvalQueue();
+    const second = (await controlPlane()).approvalQueue();
+    expect(second).toStrictEqual(first);
+  });
+
+  it('carries no business records and no contact details at all', async () => {
     const text = JSON.stringify({
-      approvals: controlPlane().approvalQueue(),
-      conversations: controlPlane().conversationControl(),
-      attention: controlPlane().attention(),
-      activity: controlPlane().activity(),
-      workers: controlPlane().workers(),
-      analytics: controlPlane().businessAnalytics(),
+      approvals: (await controlPlane()).approvalQueue(),
+      conversations: (await controlPlane()).conversationControl(),
+      attention: (await controlPlane()).attention(),
+      activity: (await controlPlane()).activity(),
+      workers: (await controlPlane()).workers(),
+      analytics: (await controlPlane()).businessAnalytics(),
     });
     // JOS-01A asserted that every business identifier carried a -DEMO- segment. The baseline
     // carries no business identifier AT ALL, which is a stronger property: there is nothing to
@@ -390,8 +409,8 @@ describe('the default read model is the repository baseline, and read-only', () 
     expect(text).not.toMatch(/\+\d{8,}/);
   });
 
-  it('reports every unconnected source as NOT_CONNECTED, never as an empty result', () => {
-    const plane = controlPlane();
+  it('reports every unconnected source as NOT_CONNECTED, never as an empty result', async () => {
+    const plane = await controlPlane();
     const unconnected = {
       approvalQueue: plane.approvalQueue(),
       conversationControl: plane.conversationControl(),
@@ -417,9 +436,9 @@ describe('the default read model is the repository baseline, and read-only', () 
     }
   });
 
-  it('reports QuickFurno Core and n8n as NOT_CONNECTED', () => {
+  it('reports QuickFurno Core and n8n as NOT_CONNECTED', async () => {
     const byId = new Map(
-      controlPlane()
+      (await controlPlane())
         .systemHealth()
         .components.map((component) => [component.id, component]),
     );

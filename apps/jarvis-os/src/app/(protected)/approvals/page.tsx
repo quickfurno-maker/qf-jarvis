@@ -61,8 +61,8 @@ const STATE_LABEL: Readonly<Record<ApprovalQueueRow['state'], string>> = {
   answered: 'Answered',
 };
 
-export default function ApprovalsPage() {
-  const plane = controlPlane();
+export default async function ApprovalsPage() {
+  const plane = await controlPlane();
   const queue = plane.approvalQueue();
 
   return (
