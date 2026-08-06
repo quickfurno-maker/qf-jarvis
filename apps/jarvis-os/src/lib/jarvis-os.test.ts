@@ -261,12 +261,24 @@ describe('Aarohi and Anisha are separate agents', () => {
 });
 
 describe('the resume marker and phase truth', () => {
-  it('names QFJ-P09.02 as the next main-track slice', async () => {
-    const next = (await controlPlane())
-      .roadmap()
-      .filter((marker) => marker.track === 'QFJ' && marker.state === 'next');
-    expect(next).toHaveLength(1);
-    expect(next[0]?.label).toContain('QFJ-P09.02');
+  it('records QFJ-P09.02 as merged and QFJ-P09.03 as the current main-track slice', async () => {
+    // The marker moved when PR #95 merged. What merged is the TEST-ONLY dispatch VALIDATION
+    // boundary -- so the label must not read as an n8n bridge, and n8n must still report
+    // NOT_CONNECTED. Replacing "not implemented" with "the bridge is live" would swap one
+    // falsehood for a worse one.
+    const roadmap = (await controlPlane()).roadmap();
+    const qfj = roadmap.filter((marker) => marker.track === 'QFJ');
+
+    const p0902 = qfj.find((marker) => marker.label.includes('QFJ-P09.02'));
+    expect(p0902?.state).toBe('merged');
+    expect(p0902?.label).not.toContain('n8n bridge');
+    expect(p0902?.detail).toContain('not implemented');
+
+    const current = qfj.filter((marker) => marker.state === 'current');
+    expect(current, 'exactly one QFJ slice is current').toHaveLength(1);
+    expect(current[0]?.label).toContain(BASELINE_FACTS.currentPhase);
+    // Under implementation is not merged, and the surface must not imply otherwise.
+    expect(current[0]?.detail).toContain('not merged');
   });
 
   it('keeps the JOS current marker in step with BASELINE_FACTS', async () => {
@@ -291,20 +303,18 @@ describe('the resume marker and phase truth', () => {
     expect(jos.filter((marker) => marker.state === 'planned')).toHaveLength(0);
   });
 
-  it('leaves the main track carrying the only next marker', async () => {
-    // The tracks stay separate, but they are no longer symmetrical: the JOS track is closing and
-    // the work continues on QFJ. Asserting "one next each" would now be asserting a falsehood.
+  it('leaves the main track carrying the only in-flight marker', async () => {
+    // The tracks stay separate and are no longer symmetrical: the JOS track is closed and the work
+    // continues on QFJ. There is no `next` marker anywhere now -- naming one would mean inventing
+    // a QFJ-P09.04 that no owner has locked.
     const roadmap = (await controlPlane()).roadmap();
-    expect(
-      roadmap.filter((marker) => marker.track === 'QFJ' && marker.state === 'next'),
-    ).toHaveLength(1);
-    expect(
-      roadmap.filter((marker) => marker.track === 'JOS' && marker.state === 'next'),
-    ).toHaveLength(0);
-    // Exactly one next marker in the whole roadmap, and it is the main-track resume point.
-    const allNext = roadmap.filter((marker) => marker.state === 'next');
-    expect(allNext).toHaveLength(1);
-    expect(allNext[0]?.label).toContain(BASELINE_FACTS.nextPhase);
+    expect(roadmap.filter((marker) => marker.state === 'next')).toHaveLength(0);
+
+    const qfjCurrent = roadmap.filter(
+      (marker) => marker.track === 'QFJ' && marker.state === 'current',
+    );
+    expect(qfjCurrent).toHaveLength(1);
+    expect(qfjCurrent[0]?.label).toContain(BASELINE_FACTS.currentPhase);
   });
 
   it('records QFJ-P09.01 as merged', async () => {
