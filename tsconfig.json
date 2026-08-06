@@ -24,6 +24,7 @@
     { "path": "./packages/jarvis-runtime/tsconfig.build.json" },
     { "path": "./packages/rag-provisioning/tsconfig.build.json" },
     { "path": "./packages/riya-agent/tsconfig.build.json" },
+    { "path": "./packages/riya-conversation-continuity/tsconfig.build.json" },
     { "path": "./packages/anisha-agent/tsconfig.build.json" },
     { "path": "./packages/prompt-registry/tsconfig.build.json" },
     { "path": "./packages/conversation-control/tsconfig.build.json" },

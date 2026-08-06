@@ -1,0 +1,23 @@
+{
+  "name": "@qf-jarvis/riya-conversation-continuity",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis Riya conversational continuity contract (RWC-P2A, ADR-0093). The minimum non-authoritative, content-minimised working state Jarvis may carry from one Riya turn to the next: a tenant+conversation key, an independent continuityRevision, the nine frozen RWC-P0B conversation phases, the five frozen field-provenance sources, the REUSED NeedDiscovery from @qf-jarvis/riya-agent, a per-field provenance map, a summaryConfirmed conversational fact, and an opaque completion-evidence reference. It is OPERATIONAL state for ONE conversation -- not ADR-0016 agent memory, not a customer profile, not a CRM record and never training data. There is no channel field, no transcript, no history, no rolling summary, no contact detail, no consent, no canSubmit, no lead, no vendor, no pricing and no business authority. It implements NO phase reducer, NO extraction and NO provenance merge -- RWC-P4 owns those. No database, migration, adapter, HTTP, model call, clock, randomness or environment read. Depends on @qf-jarvis/riya-agent and zod.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/riya-agent": "workspace:*",
+    "zod": "4.4.3"
+  }
+}

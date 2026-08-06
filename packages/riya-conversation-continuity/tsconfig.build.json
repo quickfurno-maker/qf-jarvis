@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
+  },
+
+  // The EMITTING build, referenced by the root solution. The vitest specs under src/tests are
+  // EXCLUDED so nothing test-only reaches dist/.
+  //
+  // Exactly ONE project reference: `riya-agent`, which owns `NeedDiscovery` and `DiscoveryField`.
+  // The dependency is one-way and must stay so -- `riya-agent` is the pure behaviour kernel and
+  // must never learn about the working state a composition carries between turns.
+  //
+  // There is deliberately no reference to `agent-runtime` (this contract needs an identifier
+  // grammar, not a runtime kernel), to `jarvis-runtime` (composition, and referencing it would
+  // invert the direction), to `postgres-conversation-state` or `event-backbone` (this slice adds no
+  // persistence), to `model-gateway` or `governed-knowledge`, or to any application.
+  "references": [{ "path": "../riya-agent/tsconfig.build.json" }],
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/tests/**"]
+}
