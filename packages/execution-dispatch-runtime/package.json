@@ -1,0 +1,22 @@
+{
+  "name": "@qf-jarvis/execution-dispatch-runtime",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis test-only execution dispatch boundary (QFJ-P09.02, ADR-0090). The EXECUTION-side validation an n8n adapter would run before acting on a QuickFurno Core-issued ExecutionIntentV1: authenticate the dispatch against a B4-specific Ed25519 domain and key purpose, bind the exact raw bytes through a verifier-computed digest, enforce signature freshness and intent expiry as separate checks against an INJECTED now, parse the body through the one authoritative executionIntentV1Schema, then claim replay/idempotency through an INJECTED atomic guard. This is the Core->n8n edge, not Jarvis->n8n: there is no transport, no endpoint, no URL, no webhook, no n8n client, no provider client, no credential, no database and no clock. The wire protocol is PROPOSED until Core and the execution side adopt it. The result is an OBSERVATION -- first-seen or exact-replay -- with no canExecute, canSend, isAuthorized, consentValid, retryAllowed, sent, delivered or executed, and it is never an ExecutionResultV1. Depends on @qf-jarvis/contracts and Node's crypto only.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/contracts": "workspace:*"
+  }
+}

@@ -506,6 +506,11 @@ describe('(71-77) package API and dependency locks are untouched', () => {
       // QFJ-P09.01 (ADR-0084): the execution intent correlation runtime, locked from the day it
       // lands. It validates Core's intent; it issues none.
       'execution-intent-runtime': 3,
+      // QFJ-P09.02 (ADR-0090): the test-only Core -> n8n execution dispatch boundary, locked from
+      // the day it lands. Seven root symbols: the verifier, the key registry and its two error
+      // types, the closed reason set, and the two protocol constants that make the B4 domain and
+      // key purpose distinct from event ingestion. No transport, no fake and no bridge is exported.
+      'execution-dispatch-runtime': 7,
       // JOS-01B (ADR-0086): the read-only control-plane snapshot contract, locked from the day it
       // lands. A version constant, an error-code list, one error class and one parse function --
       // the schemas are deliberately NOT exported, so every payload goes through one entry point.

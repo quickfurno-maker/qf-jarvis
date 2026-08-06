@@ -377,6 +377,9 @@ describe('(133-148) the declared budget and every prior lock', () => {
       'core-decision-adapter',
       'event-backbone',
       'event-ingestion',
+      // QFJ-P09.02 (ADR-0090): the test-only Core -> n8n execution DISPATCH boundary. A leaf with
+      // tests: nothing imports it yet, and it holds no transport.
+      'execution-dispatch-runtime',
       // QFJ-P09.01 (ADR-0084): the execution intent correlation runtime -- Core issues, n8n executes,
       // this only correlates. Still an EXACT set match; it records an authorised addition.
       'execution-intent-runtime',

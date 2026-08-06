@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
+  },
+
+  // The EMITTING build, referenced by the root solution. Everything under src/tests is EXCLUDED, so
+  // the in-memory replay fake and the test bridge fixture can never reach dist/ -- a production
+  // default replay store is exactly the thing that would turn "fail closed" into "assume first
+  // seen". Exactly ONE project reference: `contracts`, which owns executionIntentV1Schema and the
+  // timestamp helpers. There is deliberately no reference to event-ingestion (a DIFFERENT signing
+  // domain and key purpose), to approval-runtime or communication-authorization-runtime (no
+  // approval evidence crosses this boundary), to execution-intent-runtime (that is the Jarvis-side
+  // static correlation, this is the execution-side boundary), to persistence, to a transport, to
+  // n8n, to a provider, or to any application.
+  "references": [{ "path": "../../packages/contracts" }],
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/tests/**"]
+}
