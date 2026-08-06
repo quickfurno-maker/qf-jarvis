@@ -57,7 +57,10 @@ Core → Jarvis event signature would verify as a Core → n8n execution dispatc
 asserts the dispatch boundary refuses it.
 
 Verification keys carry a purpose, `quickfurno-core-to-n8n-execution-dispatch`, and a registry record
-declaring anything else is a construction error. `@qf-jarvis/event-ingestion`'s `PublicKeyRegistry`
+declaring anything else is a CONSTRUCTION error — it throws when the registry is built, so an
+operator wiring the wrong keys finds out immediately rather than at the first dispatch. There is
+deliberately no lookup-time refusal reason for a wrong purpose, because such a key never enters the
+registry and no dispatch can reach one. `@qf-jarvis/event-ingestion`'s `PublicKeyRegistry`
 is **not** reused: importing it would have silently unified two trust purposes, and the fact that it
 already works is exactly what makes that shortcut tempting.
 
@@ -76,7 +79,8 @@ bytes — the envelope's _claimed_ digest cannot be passed into the signing inpu
 compared to it in constant time. There is no JSON canonicalisation and no reserialisation, so there
 is no step where signer and verifier could disagree about whitespace or key order.
 
-The raw body is **copied on entry**, before anything reads it and before the first `await`. The
+After the size check, the raw bytes are **detached** before hashing, parsing, body cryptography or
+any `await` — step 1 reads `byteLength` only. The
 boundary awaits an injected guard partway through, so without a detached snapshot a caller could
 mutate a pooled buffer between the hash and the parse. A test mutates the caller's buffer from
 inside the guard and proves the result is unchanged.
@@ -140,6 +144,25 @@ The return value is a deeply frozen `validated-dispatch-observation` carrying th
 verifying key id, `signedAt`, the computed digest, and a disposition of `first-seen` or
 `exact-replay`.
 
+**Exact-replay suppression is enforced by the TYPE.** The result is a discriminated union, and the
+executable intent exists ONLY on the `first-seen` branch. The first draft carried `intent` on both
+successful branches and relied on the caller reading `disposition` — which left one plausible line
+able to undo the entire replay guard:
+
+```ts
+if (result.ok) {
+  execute(result.intent); // an exact replay, executed a second time
+}
+```
+
+That no longer compiles. A consumer must narrow on `disposition === 'first-seen'` before it can
+reach an intent at all, and the exact-replay branch carries only `executionIntentId` for
+correlation. It is deliberately not solved with an optional `intent?`, an `intent: undefined`, or a
+helper that hands the intent back: each keeps the property reachable and moves the check to run
+time, which is exactly what failed. An exact replay remains `ok: true` — it was authenticated,
+intact and in time — because conflating it with a refusal would lose the difference between "we
+already did this" and "something is wrong".
+
 There is no `canExecute`, `canSend`, `isAuthorized`, `consentValid`, `communicationAllowed`,
 `retryAllowed`, `sent`, `delivered`, `executed` or `success` — not because a rule forbids them, but
 because **none of them would be true**. A `first-seen` observation does not mean a provider effect
@@ -172,7 +195,10 @@ to a later, separately authorized slice.
 
 - No database, no migration. The set remains `0001`–`0009`; there is no `0010`.
 - No Core connection, no n8n connection, no Meta, WhatsApp or provider connection, no credential.
-- `apps/api` is unchanged and still exports nothing.
+- `apps/api` PRODUCTION/runtime code is unchanged and still exports nothing. Three of its
+  governance/containment specs were updated to record this package: the two package-API locks,
+  and the roadmap-status check whose wording had P09.02 as the NEXT slice rather than the
+  current one.
 - Production rollout remains **OFF**, and live send remains **OFF**.
 
 ## What this does NOT implement

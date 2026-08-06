@@ -82,7 +82,9 @@ describe('the happy path', () => {
     if (!result.ok) return;
 
     expect(result.kind).toBe('validated-dispatch-observation');
+    // Narrowing on the disposition is REQUIRED to reach the intent -- `ok` alone is not enough.
     expect(result.disposition).toBe('first-seen');
+    if (result.disposition !== 'first-seen') return;
     expect(result.intent.issuer).toBe('quickfurno-core');
     expect(result.intent.executor).toBe('n8n');
     expect(result.intent.deliverySemantics).toBe('at-most-once');
@@ -96,6 +98,7 @@ describe('the happy path', () => {
     if (!result.ok) return;
 
     expect(Object.isFrozen(result)).toBe(true);
+    if (result.disposition !== 'first-seen') return;
     expect(Object.isFrozen(result.intent)).toBe(true);
     expect(Object.isFrozen(result.intent.parameters)).toBe(true);
 
@@ -741,7 +744,7 @@ describe('mutability and TOCTOU', () => {
     });
 
     expect(result.ok, result.ok ? '' : result.reason).toBe(true);
-    if (!result.ok) return;
+    if (!result.ok || result.disposition !== 'first-seen') return;
     // The returned intent is the one that was actually verified, not the zeroed buffer.
     expect(result.intent.executionIntentId).toBe(intent.executionIntentId);
     expect(result.bodyDigestHex).toBe(digestHex(original));
@@ -774,5 +777,121 @@ describe('mutability and TOCTOU', () => {
     if (!result.ok) return;
     expect(result.keyId).toBe(signer.keyId);
     expect(result.signedAtIso).toBe(SIGNED_AT);
+  });
+});
+
+/**
+ * Exact-replay suppression is enforced by the TYPE, not by a convention (owner correction).
+ *
+ * The first version carried `intent` on both successful branches and relied on the caller reading
+ * `disposition`. That left one plausible line able to undo the whole replay guard:
+ *
+ * ```ts
+ * if (result.ok) { execute(result.intent); }
+ * ```
+ *
+ * The executable intent now exists only on the `first-seen` branch, so that line does not compile.
+ */
+describe('exact replay exposes no executable intent', () => {
+  /** One signer and one guard, so the second dispatch is a genuine replay. */
+  async function firstThenReplay() {
+    const signer = createTestSigner();
+    const guard = new InMemoryReplayGuard();
+    const registry = registryFor(signer);
+    const intent = makeIntent();
+    const rawBody = bodyOf(intent);
+    const envelope = signEnvelope(signer, rawBody, SIGNED_AT);
+    const dispatch = async () =>
+      verifyExecutionDispatch({
+        rawBody,
+        envelope,
+        now: NOW,
+        registry,
+        replayGuard: guard,
+      });
+    return { intent, first: await dispatch(), replay: await dispatch() };
+  }
+
+  it('gives the FIRST-SEEN result the parsed ExecutionIntentV1', async () => {
+    const { intent, first } = await firstThenReplay();
+    expect(first.ok).toBe(true);
+    if (!first.ok || first.disposition !== 'first-seen') {
+      throw new Error('expected a first-seen observation');
+    }
+    expect(first.intent.executionIntentId).toBe(intent.executionIntentId);
+    expect(first.intent.issuer).toBe('quickfurno-core');
+    expect(Object.isFrozen(first.intent)).toBe(true);
+  });
+
+  it('gives the EXACT-REPLAY result no `intent` property at all', async () => {
+    const { replay } = await firstThenReplay();
+    expect(replay.ok).toBe(true);
+    if (!replay.ok || replay.disposition !== 'exact-replay') {
+      throw new Error('expected an exact-replay observation');
+    }
+
+    // Not "intent is undefined" -- the property does not exist. A caller cannot reach an executable
+    // intent on this branch even by ignoring the types.
+    expect(Object.prototype.hasOwnProperty.call(replay, 'intent')).toBe(false);
+    expect(Object.keys(replay)).not.toContain('intent');
+    expect(JSON.stringify(replay)).not.toContain('"intent"');
+  });
+
+  it('keeps exact replay an authenticated OBSERVATION, not a refusal', async () => {
+    const { intent, replay } = await firstThenReplay();
+    expect(replay.ok).toBe(true);
+    if (!replay.ok || replay.disposition !== 'exact-replay') {
+      throw new Error('expected an exact-replay observation');
+    }
+    // It was authenticated, intact, in time and consistent. Conflating it with a refusal would lose
+    // the difference between "we already did this" and "something is wrong".
+    expect(replay.kind).toBe('validated-dispatch-observation');
+    expect(replay.keyId).toBe('core-exec-1');
+    expect(replay.signedAtIso).toBe(SIGNED_AT);
+    // Correlation is preserved without exposing anything executable.
+    expect(replay.executionIntentId).toBe(intent.executionIntentId);
+    expect(Object.isFrozen(replay)).toBe(true);
+  });
+
+  it('drives the test bridge to exactly one handoff across both dispatches', async () => {
+    const { first, replay } = await firstThenReplay();
+    const bridge = new TestExecutionBridge();
+    bridge.offer(first);
+    bridge.offer(replay);
+    expect(bridge.handoffs).toBe(1);
+
+    // And a refusal adds nothing.
+    bridge.offer({ ok: false, reason: 'signature-invalid' });
+    expect(bridge.handoffs).toBe(1);
+  });
+
+  it('makes the unsafe `if (result.ok) execute(result.intent)` pattern a COMPILE error', async () => {
+    const result = await run();
+
+    // COMPILE-TIME assertions, in this repository's established style: the function is never
+    // invoked, but the root typecheck type-checks test files, so tsc verifies that each
+    // suppression below marks a REAL error. If `intent` were ever put back on the shared branch
+    // they would become unused suppressions and the typecheck would FAIL.
+    //
+    // (The word is deliberately not repeated at the start of a comment line here: TypeScript would
+    // read that as another directive, and it would itself be unused.)
+    function _exactReplayCannotExposeAnIntent(): void {
+      if (result.ok) {
+        // @ts-expect-error — `intent` is not on the union of both successful branches; narrowing on
+        // `ok` alone must not reach an executable intent.
+        void result.intent;
+      }
+      if (result.ok && result.disposition === 'exact-replay') {
+        // @ts-expect-error — the exact-replay branch has no `intent` at all.
+        void result.intent;
+      }
+      if (result.ok && result.disposition === 'first-seen') {
+        // Correct narrowing: this one compiles, and is the ONLY way to reach an intent.
+        void result.intent.executionIntentId;
+      }
+    }
+
+    // Referenced so it is not unused; it is never called, so nothing runs.
+    expect(typeof _exactReplayCannotExposeAnIntent).toBe('function');
   });
 });

@@ -61,9 +61,10 @@ export interface VerifyExecutionDispatchInput {
   /**
    * The exact bytes received, as one serialized `ExecutionIntentV1`.
    *
-   * COPIED immediately on entry. The caller may own a pooled or reused buffer, and this function
-   * awaits an injected guard partway through — so without a detached copy a caller could mutate the
-   * bytes between the hash and the parse, and what was verified would not be what was returned.
+   * After the size check, the raw bytes are DETACHED before hashing, parsing, body cryptography, or
+   * any `await`. The caller may own a pooled or reused buffer, and this function awaits an injected
+   * guard partway through — so without a detached copy a caller could mutate the bytes between the
+   * hash and the parse, and what was verified would not be what was returned.
    */
   readonly rawBody: Uint8Array;
   /** The untrusted signature envelope. Fully validated; cannot make this throw. */
@@ -92,9 +93,10 @@ export async function verifyExecutionDispatch(
     return refuse('body-too-large');
   }
 
-  // 1b. DETACHED SNAPSHOT, taken before anything else reads the bytes and before the first `await`.
-  //     Everything downstream — the digest, the parse, the result — uses this copy, so a caller
-  //     mutating its own buffer mid-flight cannot change what was verified.
+  // 1b. DETACHED SNAPSHOT. Step 1 above read `byteLength` only; this is taken before anything reads
+  //     the CONTENT, and before the first `await`. Everything downstream — the digest, the parse,
+  //     the result — uses this copy, so a caller mutating its own buffer mid-flight cannot change
+  //     what was verified.
   const rawBody = Uint8Array.prototype.slice.call(input.rawBody) as Uint8Array;
 
   // 2. Caller-contract checks. These THROW: they are wiring defects, not hostile input.
@@ -236,13 +238,26 @@ export async function verifyExecutionDispatch(
   }
 
   // 17. A frozen observation. Not an authorization, not an execution result.
-  return deepFreeze({
+  //
+  // The two successful branches are built SEPARATELY and deliberately. An exact replay carries no
+  // executable intent at all, so a caller cannot act on a duplicate by reading `ok` alone -- the
+  // suppression the replay guard exists for is enforced by the type rather than by a convention.
+  const shared = {
     ok: true,
     kind: 'validated-dispatch-observation',
-    disposition: outcome,
-    intent,
     keyId: env.keyId,
     signedAtIso: new Date(signedAtMs).toISOString(),
     bodyDigestHex: computedDigest.hex,
-  } as const);
+  } as const;
+
+  if (outcome === 'exact-replay') {
+    return deepFreeze({
+      ...shared,
+      disposition: 'exact-replay',
+      // Correlation only. The intent is not exposed on this branch.
+      executionIntentId: intent.executionIntentId,
+    } as const);
+  }
+
+  return deepFreeze({ ...shared, disposition: 'first-seen', intent } as const);
 }

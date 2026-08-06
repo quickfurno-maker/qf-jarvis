@@ -19,7 +19,10 @@ export const EXECUTION_DISPATCH_REASONS = [
   'unsupported-algorithm',
   'signed-at-malformed',
   'unknown-key-id',
-  'key-wrong-purpose',
+  // There is deliberately no `key-wrong-purpose`. A key that does not declare the
+  // execution-dispatch purpose cannot enter the registry at all -- it is a CONSTRUCTION error,
+  // caught when an operator wires keys rather than on the first dispatch. A reason code for a
+  // refusal that can never happen would imply a runtime path that does not exist.
   'key-revoked',
   'key-not-yet-valid',
   'key-expired',

@@ -18,7 +18,7 @@
  *
  * ### The public surface is small on purpose
  *
- * Six runtime values and the types they need. The envelope parser, the nominal digest, the signing
+ * Seven runtime values and the types they need. The envelope parser, the nominal digest, the signing
  * input builder, the internal key record, the crypto helpers, the in-memory replay fake and the
  * test bridge fixture are all deliberately NOT exported: each of them is either an internal detail
  * whose misuse would weaken the boundary, or a test-only artefact that must never reach a caller.
@@ -62,7 +62,9 @@ export type {
 
 export type {
   DispatchDisposition,
+  ExactReplayObservation,
   ExecutionDispatchResult,
+  FirstSeenDispatchObservation,
   RefusedDispatch,
   ValidatedDispatchObservation,
 } from './contracts/result.js';

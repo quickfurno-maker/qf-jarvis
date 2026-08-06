@@ -21,8 +21,10 @@ import { EXECUTION_DISPATCH_KEY_PURPOSE } from '../protocol/limits.js';
  *
  * So this registry is separate, and every record must declare
  * `purpose: 'quickfurno-core-to-n8n-execution-dispatch'`. A record carrying any other purpose is a
- * construction error, and a key whose purpose does not match is refused at lookup with its own
- * reason code rather than silently working.
+ * CONSTRUCTION error: it throws when the registry is built, so an operator who wires the wrong keys
+ * finds out immediately rather than at the first dispatch. There is deliberately no lookup-time
+ * refusal reason for it -- a key with the wrong purpose never enters the registry, so no dispatch
+ * can ever reach one.
  *
  * ### Construction is strict; lookup is total
  *
