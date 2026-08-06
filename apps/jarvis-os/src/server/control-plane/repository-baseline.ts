@@ -28,28 +28,29 @@ import type { ControlPlaneSnapshotV1 } from '@qf-jarvis/control-plane-read-contr
 export const BASELINE_FACTS = Object.freeze({
   governedAgents: 4,
   /**
-   * The latest MERGED slice of the main Jarvis backend track.
+   * The latest MERGED slice of the QFJ execution track.
    *
-   * QFJ-P09.02 merged as PR #95 (merge commit `74b9e937`). What merged is the TEST-ONLY B4
-   * validation boundary — a verifier with no transport. It is emphatically not a Core -> n8n
-   * bridge, and the sections below still report n8n as NOT_CONNECTED for exactly that reason.
+   * QFJ-P09.03 merged as PR #96 (merge commit `6aba6795`). What merged is DURABILITY for the
+   * P09.02 replay guard — a storage adapter with no transport. Neither slice connected anything,
+   * so the sections below still report n8n as NOT_CONNECTED for exactly that reason.
    */
-  mergedPhase: 'QFJ-P09.02',
+  mergedPhase: 'QFJ-P09.03',
   /**
-   * The slice being implemented NOW on the main track. Not merged.
+   * The QFJ execution track has NO owner-locked next slice, so there is deliberately no
+   * `currentPhase` — exactly as the JOS track has no `nextJosPhase`.
    *
-   * Named `currentPhase` rather than `nextPhase` because it is no longer a plan: a field called
-   * `next` holding a slice somebody is writing this week is the same quiet kind of falsehood as a
-   * merged slice still rendered as `next`.
+   * A field holding a phase name nobody has locked would be inventing one, and inventing a
+   * QFJ-P09.04 to keep a panel populated is precisely the kind of confident falsehood this file
+   * exists to refuse. Work in flight on the separately governed Riya Web track is not a QFJ phase
+   * and is not rendered as one.
    */
-  currentPhase: 'QFJ-P09.03',
+  qfjTrackHasNoLockedSuccessor: true,
   josPhase: 'JOS-01E',
   /**
    * The JOS foundation track CLOSES after JOS-01E; there is deliberately no `nextJosPhase`.
    *
-   * Naming a successor would mean inventing one. When this slice merges, the next slice of work is
-   * `currentPhase` on the main track, and the roadmap says so rather than implying Jarvis OS has more
-   * foundation phases queued.
+   * Naming a successor would mean inventing one — the same rule `qfjTrackHasNoLockedSuccessor`
+   * above now applies to the QFJ track.
    */
   josTrackClosesAfter: 'JOS-01E',
 });
@@ -231,10 +232,10 @@ export const BASELINE_ROADMAP: readonly BaselineRoadmap[] = Object.freeze<
     id: 'qfj-p09-03',
     track: 'QFJ',
     label: 'QFJ-P09.03 - Durable execution replay / idempotency store',
-    state: 'current',
+    state: 'merged',
     detail:
-      'Under implementation, not merged. Durability for the P09.02 replay guard. ' +
-      'Transport-neutral: it connects nothing and sends nothing.',
+      'Durability for the P09.02 replay guard. Transport-neutral: it connects nothing and sends ' +
+      'nothing, and the wire protocol remains PROPOSED.',
   },
   {
     id: 'qfj-p09',
@@ -375,13 +376,15 @@ export function baselineSections(): Sections {
           id: 'merged-phase',
           label: 'Latest merged phase',
           value: BASELINE_FACTS.mergedPhase,
-          caption: 'Test-only dispatch validation. It validates; it dispatches nothing.',
+          caption: 'Durable execution replay store. It records; it connects nothing.',
         },
         {
           id: 'next-phase',
           label: 'Main Jarvis is working on',
-          value: BASELINE_FACTS.currentPhase,
-          caption: 'Durable execution replay store. Not merged; it connects nothing.',
+          // Not a phase name. The QFJ execution track has no owner-locked successor, and a panel
+          // that needed one filled in is how a QFJ-P09.04 nobody approved would get invented.
+          value: 'No locked QFJ successor',
+          caption: 'The next QFJ slice is not owner-locked. Nothing is in flight on this track.',
         },
         {
           id: 'jos-phase',
@@ -461,6 +464,13 @@ export function baselineSections(): Sections {
           at: '2026-08-06T06:55:21.000Z',
           message:
             'QFJ-P09.02 merged: test-only dispatch validation. It holds no transport and sends nothing.',
+        },
+        {
+          id: 'qfj-p09-03-merged',
+          source: 'REPOSITORY',
+          at: '2026-08-06T12:12:42.000Z',
+          message:
+            'QFJ-P09.03 merged: durable execution replay store. It connects nothing and sends nothing.',
         },
       ],
     },

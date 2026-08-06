@@ -261,11 +261,11 @@ describe('Aarohi and Anisha are separate agents', () => {
 });
 
 describe('the resume marker and phase truth', () => {
-  it('records QFJ-P09.02 as merged and QFJ-P09.03 as the current main-track slice', async () => {
-    // The marker moved when PR #95 merged. What merged is the TEST-ONLY dispatch VALIDATION
-    // boundary -- so the label must not read as an n8n bridge, and n8n must still report
-    // NOT_CONNECTED. Replacing "not implemented" with "the bridge is live" would swap one
-    // falsehood for a worse one.
+  it('records QFJ-P09.02 and QFJ-P09.03 as merged, and invents no successor', async () => {
+    // The markers moved when PR #95 and PR #96 merged. What merged is a test-only dispatch
+    // VALIDATION boundary and then DURABILITY for its replay guard -- so neither label may read as
+    // an n8n bridge, and n8n must still report NOT_CONNECTED. Replacing "not implemented" with
+    // "the bridge is live" would swap one falsehood for a worse one.
     const roadmap = (await controlPlane()).roadmap();
     const qfj = roadmap.filter((marker) => marker.track === 'QFJ');
 
@@ -274,11 +274,18 @@ describe('the resume marker and phase truth', () => {
     expect(p0902?.label).not.toContain('n8n bridge');
     expect(p0902?.detail).toContain('not implemented');
 
-    const current = qfj.filter((marker) => marker.state === 'current');
-    expect(current, 'exactly one QFJ slice is current').toHaveLength(1);
-    expect(current[0]?.label).toContain(BASELINE_FACTS.currentPhase);
-    // Under implementation is not merged, and the surface must not imply otherwise.
-    expect(current[0]?.detail).toContain('not merged');
+    const p0903 = qfj.find((marker) => marker.label.includes('QFJ-P09.03'));
+    expect(p0903?.state).toBe('merged');
+    expect(p0903?.label).toContain(BASELINE_FACTS.mergedPhase);
+    expect(p0903?.detail).not.toContain('not merged');
+    expect(p0903?.detail).toContain('connects nothing');
+
+    // The QFJ track now has NO slice in flight, and that is the truth rather than a gap to fill.
+    // A `current` marker here could only be a QFJ-P09.04 nobody has locked.
+    expect(qfj.filter((marker) => marker.state === 'current')).toHaveLength(0);
+    expect(qfj.filter((marker) => marker.state === 'next')).toHaveLength(0);
+    expect(BASELINE_FACTS.qfjTrackHasNoLockedSuccessor).toBe(true);
+    expect(JSON.stringify(roadmap)).not.toContain('QFJ-P09.04');
   });
 
   it('keeps the JOS current marker in step with BASELINE_FACTS', async () => {
@@ -303,18 +310,18 @@ describe('the resume marker and phase truth', () => {
     expect(jos.filter((marker) => marker.state === 'planned')).toHaveLength(0);
   });
 
-  it('leaves the main track carrying the only in-flight marker', async () => {
-    // The tracks stay separate and are no longer symmetrical: the JOS track is closed and the work
-    // continues on QFJ. There is no `next` marker anywhere now -- naming one would mean inventing
-    // a QFJ-P09.04 that no owner has locked.
+  it('carries exactly one in-flight marker in the whole roadmap, and it is the JOS one', async () => {
+    // The tracks stay separate and are not symmetrical. The JOS foundation track closes at its
+    // current slice; the QFJ execution track has merged everything owner-locked so far and has no
+    // successor. So the ONLY in-flight marker anywhere belongs to JOS, and there is no `next`
+    // marker at all -- inventing either would mean naming a phase nobody has locked.
     const roadmap = (await controlPlane()).roadmap();
     expect(roadmap.filter((marker) => marker.state === 'next')).toHaveLength(0);
 
-    const qfjCurrent = roadmap.filter(
-      (marker) => marker.track === 'QFJ' && marker.state === 'current',
-    );
-    expect(qfjCurrent).toHaveLength(1);
-    expect(qfjCurrent[0]?.label).toContain(BASELINE_FACTS.currentPhase);
+    const current = roadmap.filter((marker) => marker.state === 'current');
+    expect(current).toHaveLength(1);
+    expect(current[0]?.track).toBe('JOS');
+    expect(current[0]?.label).toContain(BASELINE_FACTS.josPhase);
   });
 
   it('records QFJ-P09.01 as merged', async () => {

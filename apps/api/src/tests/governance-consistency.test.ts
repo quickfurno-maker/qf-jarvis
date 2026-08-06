@@ -90,30 +90,34 @@ describe('QFJ-P12 (ADR-0085) canonical governance consistency', () => {
       }
     });
 
-    it('records QFJ-P09.02 as MERGED and QFJ-P09.03 as the CURRENT slice, with live send off', () => {
-      // The wording moves as the truth does. It said "next" while P09.02 was planned, then
-      // "CURRENT" while it was being implemented, and now that PR #95 has merged it must say
-      // MERGED -- with the exact head and merge commit, so the claim is checkable rather than
-      // merely asserted. The lock did not weaken at any step: it still refuses to let P09 read as
-      // finished, and it still refuses to let an unmerged slice read as merged.
+    it('records QFJ-P09.02 and QFJ-P09.03 as MERGED, names no successor, with live send off', () => {
+      // The wording moves as the truth does. Each slice read "next" while planned, "CURRENT" while
+      // being implemented, and "MERGED" once its PR landed -- always with the exact head and merge
+      // commit, so the claim is checkable rather than merely asserted. The lock has not weakened at
+      // any step: it still refuses to let P09 read as finished, and it still refuses to let an
+      // unmerged slice read as merged.
       const roadmap = read(ROADMAP);
-      expect(roadmap).toContain('QFJ-P09.02');
       expect(roadmap).toMatch(/QFJ-P09\.02[\s\S]{0,400}?is MERGED/u);
       expect(roadmap).toContain('584effee85378ee431c9998d3b985ae0e7924841');
       expect(roadmap).toContain('74b9e937956504917c07198bfcc058d81265d540');
-      // And it may no longer claim P09.02 is unmerged, in any of the shapes it used to.
-      expect(roadmap).not.toMatch(/QFJ-P09\.02[\s\S]{0,400}?is the CURRENT slice/u);
-      expect(roadmap).not.toMatch(/QFJ-P09\.02[\s\S]{0,200}?not yet merged/u);
+      expect(roadmap).toMatch(/QFJ-P09\.03[\s\S]{0,400}?is MERGED/u);
+      expect(roadmap).toContain('6320d0c68a54a690b48f2b947b89f9194e082e38');
+      expect(roadmap).toContain('6aba679592d9a04e074fd796711d7f999ac32cb8');
 
-      // QFJ-P09.03 is owner-locked and under implementation. It is NOT merged, and the roadmap
-      // must not imply that it is -- nor that persisting a replay claim adopted the B4 protocol.
-      expect(roadmap).toMatch(/QFJ-P09\.03[\s\S]{0,600}?is the CURRENT slice/u);
-      expect(roadmap).toMatch(/QFJ-P09\.03[\s\S]{0,600}?NOT merged/u);
-      expect(roadmap).not.toMatch(/QFJ-P09\.03[\s\S]{0,400}?is MERGED/u);
+      // Neither may still be described as unmerged, in any of the shapes they used to use.
+      expect(roadmap).not.toMatch(/QFJ-P09\.0[23][\s\S]{0,400}?is the CURRENT slice/u);
+      expect(roadmap).not.toMatch(/QFJ-P09\.0[23][\s\S]{0,300}?NOT merged/u);
+      expect(roadmap).not.toMatch(/QFJ-P09\.0[23][\s\S]{0,200}?not yet merged/u);
+
+      // And no successor was invented to fill the gap. The QFJ execution track genuinely has no
+      // owner-locked next slice; the work in flight belongs to a separately governed track, and a
+      // roadmap that named a QFJ-P09.04 here would be inventing one.
+      expect(roadmap).not.toContain('QFJ-P09.04');
+      expect(roadmap).toMatch(/No QFJ-P09 successor slice is owner-locked/u);
+
       expect(roadmap).toMatch(/wire protocol[\s\S]{0,120}?remains\s*\n?\s*PROPOSED/u);
-
       expect(roadmap).toMatch(/Live send remains OFF/u);
-      // P09 as a whole is still open; an implemented slice must never read as a completed phase.
+      // P09 as a whole is still open; a merged slice must never read as a completed phase.
       expect(roadmap).toMatch(/QFJ-P09 remains INCOMPLETE/u);
     });
   });
