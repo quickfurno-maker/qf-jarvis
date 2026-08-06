@@ -153,8 +153,9 @@ describe('migrations apply in order, idempotently, with 0001–0007 unchanged', 
       '0007_subject_activity_projection.sql',
       '0008_conversation_control_persistence.sql',
       '0009_durable_approval_queue.sql',
+      '0010_execution_replay_claim.sql',
     ]);
-    expect(rows.map((row) => row.version)).toStrictEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    expect(rows.map((row) => row.version)).toStrictEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     for (const row of rows) {
       const hex = row.checksum.toString('hex');
       if (KNOWN_CHECKSUMS[row.filename] !== undefined) {
@@ -163,7 +164,7 @@ describe('migrations apply in order, idempotently, with 0001–0007 unchanged', 
     }
   });
 
-  it('re-migrating is idempotent — still exactly nine applied migrations', async () => {
+  it('re-migrating is idempotent — still exactly ten applied migrations', async () => {
     await runMigrations(admin, defaultMigrationsDirectory());
     const count = await withClient(admin, async (client) => {
       const r = await client.query<{ n: string }>(
@@ -171,7 +172,7 @@ describe('migrations apply in order, idempotently, with 0001–0007 unchanged', 
       );
       return Number.parseInt(r.rows[0]?.n ?? '0', 10);
     });
-    expect(count).toBe(9);
+    expect(count).toBe(10);
   });
 
   it('records the EXACT reviewed 0004 and 0005 checksums in the migration history', async () => {

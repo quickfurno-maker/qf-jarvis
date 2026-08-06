@@ -405,15 +405,15 @@ describe('migration 0009 carries no authority column', () => {
     expect(sql).not.toMatch(/FOREIGN KEY \(active_approval_request_id\)/);
   });
 
-  it('is the last migration: 0001-0009 with no 0010', () => {
+  it('leaves 0009 unchanged: the set is 0001-0010, with no 0011', () => {
     const dir = fileURLToPath(
       new URL('packages/event-backbone/src/persistence/migrations/', REPO_ROOT),
     );
     const files = readdirSync(dir)
       .filter((n) => n.endsWith('.sql'))
       .sort();
-    expect(files).toHaveLength(9);
-    expect(files[8]).toBe('0009_durable_approval_queue.sql');
-    expect(files.some((n) => n.startsWith('0010'))).toBe(false);
+    expect(files).toHaveLength(10);
+    expect(files[9]).toBe('0010_execution_replay_claim.sql');
+    expect(files.some((n) => n.startsWith('0011'))).toBe(false);
   });
 });

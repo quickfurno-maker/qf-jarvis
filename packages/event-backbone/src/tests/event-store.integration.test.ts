@@ -1147,6 +1147,7 @@ describe('the runner is idempotent with 0001 through 0005 applied', () => {
       '0007_subject_activity_projection.sql',
       '0008_conversation_control_persistence.sql',
       '0009_durable_approval_queue.sql',
+      '0010_execution_replay_claim.sql',
     ]);
   });
 });
@@ -1274,6 +1275,7 @@ describe('migration 0002 — comprehensive stale-grant remediation', () => {
         '0007_subject_activity_projection.sql',
         '0008_conversation_control_persistence.sql',
         '0009_durable_approval_queue.sql',
+        '0010_execution_replay_claim.sql',
       ]);
 
       // 5. Every stale direct privilege is gone. ALL schema_migration privileges, not only SELECT.

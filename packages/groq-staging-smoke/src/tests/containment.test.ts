@@ -6,7 +6,7 @@
  * package depends only on @qf-jarvis/model-gateway and zod and exposes only the root plus `./testing`;
  * the public API surface is locked; the fixed Groq endpoint is unchanged and the gateway stays the only
  * router with no second adapter; no test performs a live request; there is no SQL, schema, or migration
- * 0010 and migrations 0001-0009 stay byte-exact; the event-backbone root API lock remains 39; RAG stays
+ * 0011 and migrations 0001-0010 stay byte-exact; the event-backbone root API lock remains 39; RAG stays
  * disabled and the Conversation Operations Center is still absent; and the protected reconciliation
  * report directory is untouched.
  */
@@ -69,6 +69,8 @@ const LOCKED_MIGRATION_HASHES: Record<string, string> = {
     'e79f1f097407f4e630ce13858545dde80ec7ba5cc155bc117b1a62aa7d2b8a10',
   '0009_durable_approval_queue.sql':
     'e834bc3cd0bc8fd30b04f4849a00d29d49b5a19d1636b912535fdbd6d86f20f6',
+  '0010_execution_replay_claim.sql':
+    '1add85e08e43dafe85f124b886790cd3495d3f54b3579ad89efe40e2849a8b05',
 };
 
 describe('containment — the harness reaches nothing it must not reach', () => {
@@ -360,7 +362,7 @@ function readPackageSource(relative: string): string {
 }
 
 describe('repository invariants that this slice must not move', () => {
-  it('(51, 50) migrations 0001-0009 are byte-exact and there is no 0010', () => {
+  it('(51, 50) migrations 0001-0010 are byte-exact and there is no 0011', () => {
     const dir = repoPath('packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
       .filter((name) => name.endsWith('.sql'))
@@ -373,7 +375,7 @@ describe('repository invariants that this slice must not move', () => {
           .digest('hex'),
       ).toBe(hash);
     }
-    expect(sql.some((name) => name.startsWith('0010'))).toBe(false);
+    expect(sql.some((name) => name.startsWith('0011'))).toBe(false);
   });
 
   it('(52) the event-backbone public-api lock remains 39', () => {
