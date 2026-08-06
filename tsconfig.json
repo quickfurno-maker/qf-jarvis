@@ -34,6 +34,7 @@
     { "path": "./packages/approval-core-adapter/tsconfig.build.json" },
     { "path": "./packages/communication-authorization-runtime/tsconfig.build.json" },
     { "path": "./packages/execution-intent-runtime/tsconfig.build.json" },
+    { "path": "./packages/execution-dispatch-runtime/tsconfig.build.json" },
     { "path": "./packages/control-plane-read-contract/tsconfig.build.json" }
   ]
 }

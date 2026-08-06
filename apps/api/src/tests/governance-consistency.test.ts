@@ -90,12 +90,15 @@ describe('QFJ-P12 (ADR-0085) canonical governance consistency', () => {
       }
     });
 
-    it('names QFJ-P09.02 as the next bounded slice, with live send off', () => {
+    it('records QFJ-P09.02 as the CURRENT bounded slice, with live send off', () => {
+      // The wording moved when P09.02 started: it is no longer "next", it is the slice being
+      // implemented. Asserting the old phrase would have meant asserting a falsehood, so the check
+      // follows the truth -- while still refusing to let P09 read as finished.
       const roadmap = read(ROADMAP);
       expect(roadmap).toContain('QFJ-P09.02');
-      expect(roadmap).toMatch(/NEXT bounded slice is QFJ-P09\.02/u);
+      expect(roadmap).toMatch(/QFJ-P09\.02[\s\S]{0,400}?is the CURRENT slice/u);
       expect(roadmap).toMatch(/Live send remains OFF/u);
-      // P09 as a whole is still open; a merged slice must never read as a completed phase.
+      // P09 as a whole is still open; an implemented slice must never read as a completed phase.
       expect(roadmap).toMatch(/QFJ-P09 remains INCOMPLETE/u);
     });
   });
@@ -206,9 +209,13 @@ describe('QFJ-P12 (ADR-0085) canonical governance consistency', () => {
       expect(jarvisOs).toMatch(/operational fact this repository does not assert/u);
     });
 
-    it('keeps QFJ-P09.02 as the main-track resume point alongside the JOS track', () => {
+    it('records the main track resuming at QFJ-P09.02 now the JOS track is closed', () => {
       const roadmap = flat(read(ROADMAP));
-      expect(roadmap).toMatch(/NEXT bounded slice is QFJ-P09.02/u);
+      // The JOS foundation track closed with JOS-01E, and the main track picked up at P09.02 --
+      // which is now being implemented rather than merely named as the next thing.
+      expect(roadmap).toMatch(/Jarvis OS foundation track is CLOSED/u);
+      expect(roadmap).toMatch(/resumed at QFJ-P09\.02/u);
+      expect(roadmap).toMatch(/QFJ-P09\.02[\s\S]{0,400}?is the CURRENT slice/u);
       expect(roadmap).toMatch(/generatedAt records when the JSON was produced/u);
     });
   });

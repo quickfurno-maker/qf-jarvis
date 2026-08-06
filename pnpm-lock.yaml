@@ -227,6 +227,12 @@ importers:
         specifier: workspace:*
         version: link:../event-backbone
 
+  packages/execution-dispatch-runtime:
+    dependencies:
+      '@qf-jarvis/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+
   packages/execution-intent-runtime:
     dependencies:
       '@qf-jarvis/approval-runtime':
