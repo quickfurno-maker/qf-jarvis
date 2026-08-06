@@ -240,13 +240,31 @@ describe('no execution authority is created', () => {
   });
 });
 
-describe('nothing consumes this package yet', () => {
-  it('is a leaf: no workspace package or application imports it', () => {
-    const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url));
-    const roots = [join(repoRoot, 'packages'), join(repoRoot, 'apps')];
-    const offenders: string[] = [];
+describe('nothing EXECUTES anything through this package', () => {
+  /**
+   * The one consumer this package has, and the only one it may have.
+   *
+   * When P09.02 landed, the guarantee was literally "nothing imports it". QFJ-P09.03 (ADR-0091)
+   * changed that fact and no other: `@qf-jarvis/postgres-execution-replay-store` implements the
+   * `ExecutionReplayGuard` this package DECLARES and deliberately shipped no default for. It is a
+   * storage adapter — no transport, no endpoint, no n8n, no provider — so it consumes the boundary's
+   * contract without giving the boundary a way to act.
+   *
+   * The guarantee is therefore restated rather than dropped, and it is not weakened: the set of
+   * importers is pinned EXACTLY, no application may import this package at all, and the one package
+   * that may is checked below to be a storage adapter rather than a dispatcher.
+   */
+  const ALLOWED_PACKAGE_IMPORTERS = ['postgres-execution-replay-store'];
 
-    for (const root of roots) {
+  it('no APPLICATION imports it, and the only package that does is the durable replay store', () => {
+    const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url));
+    const importingPackages = new Set<string>();
+    const importingApps = new Set<string>();
+
+    for (const [root, sink] of [
+      [join(repoRoot, 'packages'), importingPackages],
+      [join(repoRoot, 'apps'), importingApps],
+    ] as const) {
       for (const entry of readdirSync(root)) {
         // Skip this package itself, and never traverse build output.
         if (entry === 'execution-dispatch-runtime') continue;
@@ -259,15 +277,33 @@ describe('nothing consumes this package yet', () => {
         }
         for (const file of files) {
           if (readFileSync(file, 'utf8').includes('@qf-jarvis/execution-dispatch-runtime')) {
-            offenders.push(file);
+            sink.add(entry);
           }
         }
       }
     }
 
-    // P09.02 delivers the boundary and its proof. Wiring it to anything is a later, separately
-    // authorized slice -- and until that slice exists, "nothing imports it" is the guarantee.
-    expect(offenders).toStrictEqual([]);
+    // No application composes this boundary into anything that runs. Wiring it into a runtime is a
+    // later, separately authorized slice.
+    expect([...importingApps]).toStrictEqual([]);
+    expect([...importingPackages].sort()).toStrictEqual(ALLOWED_PACKAGE_IMPORTERS);
+  });
+
+  it('its only consumer is a storage adapter, with no transport of its own', () => {
+    const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url));
+    const manifest = JSON.parse(
+      readFileSync(
+        join(repoRoot, 'packages', 'postgres-execution-replay-store', 'package.json'),
+        'utf8',
+      ),
+    ) as { readonly dependencies?: Record<string, string> };
+
+    // If the replay store ever grew a client, this package would have acquired a path to an effect
+    // through the one importer it allows.
+    expect(Object.keys(manifest.dependencies ?? {}).sort()).toStrictEqual([
+      '@qf-jarvis/execution-dispatch-runtime',
+      'pg',
+    ]);
   });
 });
 

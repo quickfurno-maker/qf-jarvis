@@ -377,8 +377,9 @@ describe('(133-148) the declared budget and every prior lock', () => {
       'core-decision-adapter',
       'event-backbone',
       'event-ingestion',
-      // QFJ-P09.02 (ADR-0090): the test-only Core -> n8n execution DISPATCH boundary. A leaf with
-      // tests: nothing imports it yet, and it holds no transport.
+      // QFJ-P09.02 (ADR-0090): the test-only Core -> n8n execution DISPATCH boundary. It holds no
+      // transport, and no application imports it. Its ONE consumer is the durable replay store
+      // below, which implements the guard contract this package declares.
       'execution-dispatch-runtime',
       // QFJ-P09.01 (ADR-0084): the execution intent correlation runtime -- Core issues, n8n executes,
       // this only correlates. Still an EXACT set match; it records an authorised addition.
@@ -396,6 +397,11 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // QFJ-P08-B2 (ADR-0077): the durable PostgreSQL conversation-state adapter. Still an EXACT
       // set match -- this records an authorised addition, it does not relax the assertion.
       'postgres-conversation-state',
+      // QFJ-P09.03 (ADR-0091): the durable execution replay / idempotency store -- the PostgreSQL
+      // implementation of the guard P09.02 declared and deliberately left defaultless. Still an
+      // EXACT set match; it records an authorised addition, it does not relax the assertion. It is
+      // TRANSPORT-NEUTRAL: no endpoint, no n8n, no provider, no credential, no intent payload.
+      'postgres-execution-replay-store',
       // QFJ-S3-I-A (ADR-0072): the versioned prompt registry foundation. Still an EXACT set match --
       // this records an authorised addition, it does not relax the assertion.
       'prompt-registry',

@@ -209,19 +209,24 @@ describe('GET /api/control-plane/v1/snapshot', () => {
     const aarohi = body.agents.find((agent) => agent.id === 'aarohi');
     expect(aarohi?.lifecycle).toBe('PLANNED');
 
-    // Each track carries exactly one `next`, and JOS carries exactly one `current`.
+    // Each in-flight track carries exactly one `current`, and there is no `next` anywhere: the JOS
+    // track is closed and no QFJ successor to P09.03 has been owner-locked.
     const qfj = body.roadmap.filter((marker) => marker.track === 'QFJ');
     const jos = body.roadmap.filter((marker) => marker.track === 'JOS');
 
-    const qfjNext = qfj.filter((marker) => marker.state === 'next');
-    expect(qfjNext).toHaveLength(1);
-    expect(qfjNext[0]?.label).toContain('QFJ-P09.02');
-    expect(
-      qfj
-        .filter((marker) => marker.state === 'merged')
-        .map((m) => m.label)
-        .join(' '),
-    ).toContain('QFJ-P09.01');
+    expect(body.roadmap.filter((marker) => marker.state === 'next')).toHaveLength(0);
+    const qfjCurrent = qfj.filter((marker) => marker.state === 'current');
+    expect(qfjCurrent).toHaveLength(1);
+    expect(qfjCurrent[0]?.label).toContain('QFJ-P09.03');
+    const qfjMerged = qfj
+      .filter((marker) => marker.state === 'merged')
+      .map((m) => m.label)
+      .join(' ');
+    expect(qfjMerged).toContain('QFJ-P09.01');
+    expect(qfjMerged).toContain('QFJ-P09.02');
+    // P09.02 merged a VALIDATION boundary. n8n stays NOT_CONNECTED above, and this surface must not
+    // let a reader infer a bridge from a merge.
+    expect(qfjCurrent[0]?.detail).toContain('not merged');
 
     // Phase-agnostic on purpose: naming the slice here would make this a test somebody edits every
     // phase, which is how the marker/BASELINE_FACTS drift got shipped in the first place.
@@ -229,9 +234,9 @@ describe('GET /api/control-plane/v1/snapshot', () => {
     expect(josCurrent).toHaveLength(1);
 
     // The JOS foundation track is bounded and closes at its current slice, so it carries no `next`.
-    // The only `next` on the wire is the main-track resume point asserted above.
+    // Neither does QFJ: the main track is mid-slice at P09.03, and no successor has been
+    // owner-locked. Requiring a `next` here could only be satisfied by inventing one.
     expect(jos.filter((marker) => marker.state === 'next')).toHaveLength(0);
-    expect(body.roadmap.filter((marker) => marker.state === 'next')).toHaveLength(1);
 
     expect(
       jos

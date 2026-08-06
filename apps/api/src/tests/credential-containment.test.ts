@@ -511,6 +511,11 @@ describe('(71-77) package API and dependency locks are untouched', () => {
       // types, the closed reason set, and the two protocol constants that make the B4 domain and
       // key purpose distinct from event ingestion. No transport, no fake and no bridge is exported.
       'execution-dispatch-runtime': 7,
+      // QFJ-P09.03 (ADR-0091): the durable execution replay / idempotency store, locked from the
+      // day it lands. Three root symbols: the factory, the closed error-code set and the error
+      // class. The SQL, the table name, the input validator, the error classifier and the pool are
+      // all internal, and the returned object is exactly an ExecutionReplayGuard -- one method.
+      'postgres-execution-replay-store': 3,
       // JOS-01B (ADR-0086): the read-only control-plane snapshot contract, locked from the day it
       // lands. A version constant, an error-code list, one error class and one parse function --
       // the schemas are deliberately NOT exported, so every payload goes through one entry point.
@@ -540,7 +545,7 @@ describe('(71-77) package API and dependency locks are untouched', () => {
 });
 
 describe('(78, 79, 80, 81) repository invariants', () => {
-  it('(78, 79) migrations 0001-0009 are byte-identical and 0010 is absent', () => {
+  it('(78, 79) migrations 0001-0010 are byte-identical and 0011 is absent', () => {
     const LOCKED: Record<string, string> = {
       '0001_event_log.sql': 'dbca835c394dc67f015176af8ae0582faa78e0c1299593ac8970c5abf4389d6a',
       '0002_event_runtime_grants.sql':
@@ -559,6 +564,8 @@ describe('(78, 79, 80, 81) repository invariants', () => {
         'e79f1f097407f4e630ce13858545dde80ec7ba5cc155bc117b1a62aa7d2b8a10',
       '0009_durable_approval_queue.sql':
         'e834bc3cd0bc8fd30b04f4849a00d29d49b5a19d1636b912535fdbd6d86f20f6',
+      '0010_execution_replay_claim.sql':
+        '1add85e08e43dafe85f124b886790cd3495d3f54b3579ad89efe40e2849a8b05',
     };
     const dir = join(REPO_ROOT, 'packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
@@ -572,7 +579,7 @@ describe('(78, 79, 80, 81) repository invariants', () => {
           .digest('hex'),
       ).toBe(hash);
     }
-    expect(sql.some((name) => name.startsWith('0010'))).toBe(false);
+    expect(sql.some((name) => name.startsWith('0011'))).toBe(false);
   });
 
   it('(80) no source references the protected reconciliation directory', () => {

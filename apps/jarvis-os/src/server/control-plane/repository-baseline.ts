@@ -27,14 +27,28 @@ import type { ControlPlaneSnapshotV1 } from '@qf-jarvis/control-plane-read-contr
 /** Facts about the current merged state, cited so a reviewer can check each one. */
 export const BASELINE_FACTS = Object.freeze({
   governedAgents: 4,
-  mergedPhase: 'QFJ-P09.01',
-  nextPhase: 'QFJ-P09.02',
+  /**
+   * The latest MERGED slice of the main Jarvis backend track.
+   *
+   * QFJ-P09.02 merged as PR #95 (merge commit `74b9e937`). What merged is the TEST-ONLY B4
+   * validation boundary — a verifier with no transport. It is emphatically not a Core -> n8n
+   * bridge, and the sections below still report n8n as NOT_CONNECTED for exactly that reason.
+   */
+  mergedPhase: 'QFJ-P09.02',
+  /**
+   * The slice being implemented NOW on the main track. Not merged.
+   *
+   * Named `currentPhase` rather than `nextPhase` because it is no longer a plan: a field called
+   * `next` holding a slice somebody is writing this week is the same quiet kind of falsehood as a
+   * merged slice still rendered as `next`.
+   */
+  currentPhase: 'QFJ-P09.03',
   josPhase: 'JOS-01E',
   /**
    * The JOS foundation track CLOSES after JOS-01E; there is deliberately no `nextJosPhase`.
    *
    * Naming a successor would mean inventing one. When this slice merges, the next slice of work is
-   * `nextPhase` on the main track, and the roadmap says so rather than implying Jarvis OS has more
+   * `currentPhase` on the main track, and the roadmap says so rather than implying Jarvis OS has more
    * foundation phases queued.
    */
   josTrackClosesAfter: 'JOS-01E',
@@ -103,7 +117,9 @@ export const BASELINE_SYSTEM: readonly SystemComponent[] = Object.freeze<
     id: 'n8n',
     label: 'n8n execution fabric',
     state: 'NOT_CONNECTED',
-    detail: 'Executes approved intents only. Bridge is QFJ-P09.02, not implemented.',
+    detail:
+      'Executes approved intents only. QFJ-P09.02 merged the test-only dispatch VALIDATION ' +
+      'boundary; the real Core-to-n8n transport is not implemented.',
   },
   {
     id: 'model-gateway',
@@ -203,9 +219,22 @@ export const BASELINE_ROADMAP: readonly BaselineRoadmap[] = Object.freeze<
   {
     id: 'qfj-p09-02',
     track: 'QFJ',
-    label: 'QFJ-P09.02 - Authorized dispatch envelope / n8n bridge (test-only)',
-    state: 'next',
-    detail: 'MAIN JARVIS RESUME POINT after the bounded Jarvis OS foundation track.',
+    label: 'QFJ-P09.02 - Authorized dispatch envelope validation (test-only)',
+    state: 'merged',
+    // What merged is a VERIFIER. Saying "the n8n bridge merged" would replace one falsehood with
+    // its opposite: the boundary holds no transport, and nothing dispatches.
+    detail:
+      'Test-only Core-to-n8n dispatch validation. The real transport is not implemented and the ' +
+      'wire protocol remains PROPOSED.',
+  },
+  {
+    id: 'qfj-p09-03',
+    track: 'QFJ',
+    label: 'QFJ-P09.03 - Durable execution replay / idempotency store',
+    state: 'current',
+    detail:
+      'Under implementation, not merged. Durability for the P09.02 replay guard. ' +
+      'Transport-neutral: it connects nothing and sends nothing.',
   },
   {
     id: 'qfj-p09',
@@ -346,13 +375,13 @@ export function baselineSections(): Sections {
           id: 'merged-phase',
           label: 'Latest merged phase',
           value: BASELINE_FACTS.mergedPhase,
-          caption: 'Execution intent correlation. It validates; it dispatches nothing.',
+          caption: 'Test-only dispatch validation. It validates; it dispatches nothing.',
         },
         {
           id: 'next-phase',
-          label: 'Main Jarvis resumes at',
-          value: BASELINE_FACTS.nextPhase,
-          caption: 'Test-only authorized dispatch envelope and n8n bridge validation.',
+          label: 'Main Jarvis is working on',
+          value: BASELINE_FACTS.currentPhase,
+          caption: 'Durable execution replay store. Not merged; it connects nothing.',
         },
         {
           id: 'jos-phase',
@@ -380,7 +409,9 @@ export function baselineSections(): Sections {
           id: 'n8n-not-connected',
           kind: 'integration',
           title: 'n8n is not connected',
-          context: 'The execution bridge is QFJ-P09.02 and is not implemented. Nothing dispatches.',
+          context:
+            'QFJ-P09.02 merged the test-only dispatch VALIDATION boundary. The real transport is ' +
+            'not implemented and the protocol is not adopted. Nothing dispatches.',
           severity: 'warning',
         },
         {
@@ -423,6 +454,13 @@ export function baselineSections(): Sections {
           source: 'REPOSITORY',
           at: '2026-08-03T07:06:21.000Z',
           message: 'QFJ-P09.01 merged: execution intent correlation. It issues no intent.',
+        },
+        {
+          id: 'qfj-p09-02-merged',
+          source: 'REPOSITORY',
+          at: '2026-08-06T06:55:21.000Z',
+          message:
+            'QFJ-P09.02 merged: test-only dispatch validation. It holds no transport and sends nothing.',
         },
       ],
     },
@@ -493,7 +531,8 @@ export function baselineSections(): Sections {
     n8nExecution: unreadable(
       'NOT_CONNECTED',
       'n8n executes approved intents. Jarvis OS has no adopted protocol to read its state.',
-      'The QFJ-P09.02 execution bridge, which is not implemented.',
+      'The real Core-to-n8n execution transport, which is not implemented. QFJ-P09.02 merged only ' +
+        'the test-only validation boundary.',
     ),
   };
 }

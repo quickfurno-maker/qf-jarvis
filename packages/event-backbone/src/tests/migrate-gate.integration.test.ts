@@ -123,6 +123,7 @@ describe('db:migrate runs the preflight automatically', () => {
       '0007_subject_activity_projection.sql',
       '0008_conversation_control_persistence.sql',
       '0009_durable_approval_queue.sql',
+      '0010_execution_replay_claim.sql',
     ]);
     expect(await tableExists(MIGRATION_SCHEMA, 'event')).toBe(true);
   });
@@ -134,7 +135,7 @@ describe('db:migrate runs the preflight automatically', () => {
     expect(second.preflight.passed).toBe(true);
     expect(second.migration.applied).toStrictEqual([]);
     expect(second.migration.alreadyApplied.map((m) => m.version)).toStrictEqual([
-      1, 2, 3, 4, 5, 6, 7, 8, 9,
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
     ]);
   });
 
