@@ -140,9 +140,15 @@ of a legitimate dispatch that has not arrived yet. Two tests assert the guard wa
 
 ### 8. The result is an observation, not authority — and not a result
 
-The return value is a deeply frozen `validated-dispatch-observation` carrying the parsed intent, the
-verifying key id, `signedAt`, the computed digest, and a disposition of `first-seen` or
-`exact-replay`.
+The return value is a discriminated union. Both successful branches are deeply frozen
+`validated-dispatch-observation`s and both carry the same safe verification metadata — the verifying
+`keyId`, `signedAtIso`, the verifier-computed `bodyDigestHex`, and a `disposition`.
+
+They differ in exactly one way, and it is the load-bearing one. **Only the `first-seen` branch
+carries an `ExecutionIntentV1`.** The `exact-replay` branch carries `executionIntentId` for
+correlation and **no executable intent at all**, because there is nothing legitimate a caller can do
+with one on that branch and the illegitimate thing — acting on it again — is what the replay claim
+exists to prevent.
 
 **Exact-replay suppression is enforced by the TYPE.** The result is a discriminated union, and the
 executable intent exists ONLY on the `first-seen` branch. The first draft carried `intent` on both
