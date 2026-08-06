@@ -1,0 +1,27 @@
+{
+  "name": "@qf-jarvis/postgres-execution-replay-store",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis durable execution replay / idempotency store (QFJ-P09.03, ADR-0091). The PostgreSQL implementation of the ExecutionReplayGuard that QFJ-P09.02 deliberately left injected and defaultless, turning a process-lifetime promise into a durable fact that survives restart. One conditional INSERT is the arbitration write; two INDEPENDENT database uniqueness constraints -- on executionIntentId and on idempotencyKey -- decide a concurrent race, and a losing caller reconciles READ-ONLY in a new statement and snapshot. Exact replay writes nothing; any durable contradiction fails closed as conflict; database uncertainty THROWS so the dispatch boundary refuses rather than guessing. Transport-neutral: the Core->n8n wire protocol remains PROPOSED and nothing here is an endpoint, header, credential, workflow id or provider client. Stores only the three bound values -- never an ExecutionIntentV1 payload, recipient, contact detail, consent or credential. No tenant scope, no TTL or retention, no retry loop, no clock, no execution authority. Depends on @qf-jarvis/execution-dispatch-runtime (types only) and pg.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/execution-dispatch-runtime": "workspace:*",
+    "pg": "8.22.0"
+  },
+  "devDependencies": {
+    "@qf-jarvis/event-backbone": "workspace:*",
+    "@types/pg": "8.20.0"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
+  },
+
+  // The EMITTING build, referenced by the root solution. `src/tests` is EXCLUDED so nothing
+  // test-only reaches dist/ -- in particular the integration harness, which is the ONLY module in
+  // this package that reads an environment variable.
+  //
+  // Exactly ONE project reference: `execution-dispatch-runtime`, which owns the PUBLIC
+  // `ExecutionReplayGuard` contract this package implements. The import is type-only; the reference
+  // exists so a drift in that contract fails the build here rather than at a call site.
+  //
+  // `event-backbone` is deliberately NOT referenced: it is a DEV dependency supplying migration
+  // tooling to the integration harness only, so a production import of it fails the build rather
+  // than quietly creating an edge from a storage adapter to the event backbone. There is likewise
+  // no reference to a transport, to n8n, to a provider, to approval-runtime,
+  // communication-authorization-runtime or execution-intent-runtime, or to any application.
+  "references": [{ "path": "../../packages/execution-dispatch-runtime/tsconfig.build.json" }],
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/tests/**"]
+}

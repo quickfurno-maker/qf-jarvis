@@ -368,6 +368,22 @@ importers:
         specifier: 8.20.0
         version: 8.20.0
 
+  packages/postgres-execution-replay-store:
+    dependencies:
+      '@qf-jarvis/execution-dispatch-runtime':
+        specifier: workspace:*
+        version: link:../execution-dispatch-runtime
+      pg:
+        specifier: 8.22.0
+        version: 8.22.0
+    devDependencies:
+      '@qf-jarvis/event-backbone':
+        specifier: workspace:*
+        version: link:../event-backbone
+      '@types/pg':
+        specifier: 8.20.0
+        version: 8.20.0
+
   packages/prompt-registry:
     dependencies:
       zod:
