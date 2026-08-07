@@ -3,7 +3,7 @@
  *
  * Matrix items 49–65: content-free events; evaluation grants no authority; scopes distinct; the
  * Conversation Operations Center is documented-mandatory but absent; no semantic/RAG; no live call/
- * provider SDK/DB/secret/n8n dependency; the public API is locked; migrations exact with no 0011; the
+ * provider SDK/DB/secret/n8n dependency; the public API is locked; migrations exact with no 0012; the
  * event-backbone root API remains 39; and no tracked source carries a control byte.
  */
 import { createHash } from 'node:crypto';
@@ -77,6 +77,8 @@ const LOCKED_MIGRATION_HASHES: Record<string, string> = {
     'e834bc3cd0bc8fd30b04f4849a00d29d49b5a19d1636b912535fdbd6d86f20f6',
   '0010_execution_replay_claim.sql':
     '1add85e08e43dafe85f124b886790cd3495d3f54b3579ad89efe40e2849a8b05',
+  '0011_riya_conversation_continuity.sql':
+    'c02e78d7b3ab1fce22ffa87af2a94f0edaf613004e3d3605e3fc1ef25caddb5c',
 };
 
 function recorder(): { hook: EvaluationObservabilityHook; events: EvaluationEvent[] } {
@@ -300,7 +302,7 @@ describe('containment', () => {
     expect(b['buildFoundationSuite']).toBeUndefined();
   });
 
-  it('(58,59) migrations 0001–0010 are byte-exact and there is no 0011', () => {
+  it('(58,59) migrations 0001–0011 are byte-exact and there is no 0012', () => {
     const dir = repoPath('packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
       .filter((n) => n.endsWith('.sql'))
@@ -313,7 +315,7 @@ describe('containment', () => {
           .digest('hex'),
       ).toBe(hash);
     }
-    expect(sql.some((n) => n.startsWith('0011'))).toBe(false);
+    expect(sql.some((n) => n.startsWith('0012'))).toBe(false);
   });
 
   it('(60) the event-backbone public-api lock remains 39', () => {

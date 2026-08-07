@@ -611,7 +611,7 @@ describe('migration 0010 storage invariants', () => {
   });
 });
 
-describe('the migration set is exactly 0001-0010', () => {
+describe('the migration set is exactly 0001-0011', () => {
   it('adds 0010 and nothing beyond it', () => {
     const files = readdirSync(MIGRATIONS)
       .filter((name) => name.endsWith('.sql'))
@@ -627,7 +627,8 @@ describe('the migration set is exactly 0001-0010', () => {
       '0008_conversation_control_persistence.sql',
       '0009_durable_approval_queue.sql',
       '0010_execution_replay_claim.sql',
+      '0011_riya_conversation_continuity.sql',
     ]);
-    expect(files.some((name) => name.startsWith('0011'))).toBe(false);
+    expect(files.some((name) => name.startsWith('0012'))).toBe(false);
   });
 });

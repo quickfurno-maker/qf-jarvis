@@ -136,7 +136,7 @@ export async function ensureLoginRole(
 export { closeDatabasePool, withClient };
 export type { DatabaseConfig, DatabasePool };
 
-/** Drop and rebuild the schema, then apply every migration 0001–0010. */
+/** Drop and rebuild the schema, then apply every migration 0001–0011. */
 export async function resetAndMigrate(pool: DatabasePool, config: DatabaseConfig): Promise<void> {
   await withClient(pool, async (client) => {
     await client.query('DROP SCHEMA IF EXISTS qf_jarvis CASCADE');

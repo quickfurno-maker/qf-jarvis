@@ -405,15 +405,16 @@ describe('migration 0009 carries no authority column', () => {
     expect(sql).not.toMatch(/FOREIGN KEY \(active_approval_request_id\)/);
   });
 
-  it('leaves 0009 unchanged: the set is 0001-0010, with no 0011', () => {
+  it('leaves 0009 unchanged: the set is 0001-0011, with no 0012', () => {
     const dir = fileURLToPath(
       new URL('packages/event-backbone/src/persistence/migrations/', REPO_ROOT),
     );
     const files = readdirSync(dir)
       .filter((n) => n.endsWith('.sql'))
       .sort();
-    expect(files).toHaveLength(10);
+    expect(files).toHaveLength(11);
     expect(files[9]).toBe('0010_execution_replay_claim.sql');
-    expect(files.some((n) => n.startsWith('0011'))).toBe(false);
+    expect(files[10]).toBe('0011_riya_conversation_continuity.sql');
+    expect(files.some((n) => n.startsWith('0012'))).toBe(false);
   });
 });

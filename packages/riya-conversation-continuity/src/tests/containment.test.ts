@@ -365,14 +365,20 @@ describe('the contracts this slice reuses are unchanged', () => {
     expect(contracts).not.toContain("'web'");
   });
 
-  it('no APPLICATION consumes this contract, and the only package that does is the web service', () => {
+  it('no APPLICATION consumes this contract, and only the two permitted packages do', () => {
     // When P2A landed, nothing imported it. RWC-P2C (ADR-0094) changed that fact and no other: the
     // private web conversation service loads and returns this state, and returns it UNCHANGED.
+    // RWC-P2B (ADR-0095) adds the second and last: the durable store, which re-proves every state
+    // through THIS constructor on the way in and on the way out. Both are packages, neither is an
+    // application, and neither decides anything about a state's content.
     //
     // The guarantee is restated rather than dropped, and it did not weaken: the importer set is
     // pinned EXACTLY, and no APPLICATION may import the contract at all — an app importing it would
-    // mean something is composing conversational state outside the one service that may.
-    const ALLOWED_PACKAGE_IMPORTERS = ['riya-web-conversation-service'];
+    // mean something is composing conversational state outside the packages that may.
+    const ALLOWED_PACKAGE_IMPORTERS = [
+      'postgres-riya-conversation-continuity-store',
+      'riya-web-conversation-service',
+    ];
     const importingPackages = new Set<string>();
     const importingApps = new Set<string>();
 
@@ -403,7 +409,7 @@ describe('the contracts this slice reuses are unchanged', () => {
 });
 
 describe('(55-57) the migration set is untouched', () => {
-  it('is exactly 0001-0010, byte-identical, with no 0011', () => {
+  it('is exactly 0001-0011, byte-identical, with no 0012', () => {
     const LOCKED: Readonly<Record<string, string>> = {
       '0001_event_log.sql': 'dbca835c394dc67f015176af8ae0582faa78e0c1299593ac8970c5abf4389d6a',
       '0002_event_runtime_grants.sql':
@@ -424,6 +430,8 @@ describe('(55-57) the migration set is untouched', () => {
         'e834bc3cd0bc8fd30b04f4849a00d29d49b5a19d1636b912535fdbd6d86f20f6',
       '0010_execution_replay_claim.sql':
         '1add85e08e43dafe85f124b886790cd3495d3f54b3579ad89efe40e2849a8b05',
+      '0011_riya_conversation_continuity.sql':
+        'c02e78d7b3ab1fce22ffa87af2a94f0edaf613004e3d3605e3fc1ef25caddb5c',
     };
     const dir = join(REPO_ROOT, 'packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
@@ -438,7 +446,7 @@ describe('(55-57) the migration set is untouched', () => {
         name,
       ).toBe(hash);
     }
-    expect(sql.some((name) => Number.parseInt(name.slice(0, 4), 10) > 10)).toBe(false);
+    expect(sql.some((name) => Number.parseInt(name.slice(0, 4), 10) > 11)).toBe(false);
   });
 
   it('migration 0008 is not extended with continuity columns', () => {

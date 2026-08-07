@@ -307,7 +307,7 @@ describe('(50, 53-57) the repository invariants this slice must not move', () =>
     expect(codeOnly(apiIndex).trim()).toBe('export {};');
   });
 
-  it('(53) migrations are still exactly 0001-0010, byte-identical, with no 0011', () => {
+  it('(53) migrations are still exactly 0001-0011, byte-identical, with no 0012', () => {
     const LOCKED: Readonly<Record<string, string>> = {
       '0001_event_log.sql': 'dbca835c394dc67f015176af8ae0582faa78e0c1299593ac8970c5abf4389d6a',
       '0002_event_runtime_grants.sql':
@@ -328,6 +328,8 @@ describe('(50, 53-57) the repository invariants this slice must not move', () =>
         'e834bc3cd0bc8fd30b04f4849a00d29d49b5a19d1636b912535fdbd6d86f20f6',
       '0010_execution_replay_claim.sql':
         '1add85e08e43dafe85f124b886790cd3495d3f54b3579ad89efe40e2849a8b05',
+      '0011_riya_conversation_continuity.sql':
+        'c02e78d7b3ab1fce22ffa87af2a94f0edaf613004e3d3605e3fc1ef25caddb5c',
     };
     const dir = join(REPO_ROOT, 'packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
@@ -342,7 +344,7 @@ describe('(50, 53-57) the repository invariants this slice must not move', () =>
         name,
       ).toBe(hash);
     }
-    expect(sql.some((name) => Number.parseInt(name.slice(0, 4), 10) > 10)).toBe(false);
+    expect(sql.some((name) => Number.parseInt(name.slice(0, 4), 10) > 11)).toBe(false);
   });
 
   it('(54, 55) the two channel vocabularies are exactly as JRW-0B left them', () => {
@@ -395,11 +397,25 @@ describe('(50, 53-57) the repository invariants this slice must not move', () =>
     ]);
   });
 
-  it('nothing in the repository consumes this service yet', () => {
-    // P2C delivers the service and its proof. Composing it behind an ingress is a later slice, and
-    // until one exists, "nothing imports it" is the guarantee.
-    const offenders: string[] = [];
-    for (const root of ['packages', 'apps']) {
+  it('no application composes this service, and the only package importing it takes types alone', () => {
+    // P2C delivered the service and its proof, and until RWC-P2B the guarantee was simply "nothing
+    // imports it". RWC-P2B (ADR-0095) changed that fact and no other: the durable continuity store
+    // implements the `RiyaContinuityStorePort` this package OWNS, so it imports the port's types.
+    //
+    // The lock is made MORE precise rather than dropped. An adapter implementing a declared port is
+    // not a composition; an application reaching for the service IS. So:
+    //   * the importing PACKAGE set is pinned exactly to one;
+    //   * no application may import the service at all;
+    //   * and the importer must not construct it — a store that called the service would have
+    //     inverted the dependency and composed the very thing this asserts nobody has composed.
+    const ALLOWED_PACKAGE_IMPORTERS = ['postgres-riya-conversation-continuity-store'];
+    const importingPackages = new Set<string>();
+    const importingApps = new Set<string>();
+
+    for (const [root, sink] of [
+      ['packages', importingPackages],
+      ['apps', importingApps],
+    ] as const) {
       for (const entry of readdirSync(join(REPO_ROOT, root))) {
         if (entry === 'riya-web-conversation-service' || NOT_SOURCE.has(entry)) continue;
         const srcDir = join(REPO_ROOT, root, entry, 'src');
@@ -411,11 +427,29 @@ describe('(50, 53-57) the repository invariants this slice must not move', () =>
         }
         for (const file of files) {
           if (readFileSync(file, 'utf8').includes('@qf-jarvis/riya-web-conversation-service')) {
-            offenders.push(file.replace(/\\/gu, '/'));
+            sink.add(entry);
           }
         }
       }
     }
-    expect(offenders).toStrictEqual([]);
+
+    expect([...importingPackages].sort()).toStrictEqual(ALLOWED_PACKAGE_IMPORTERS);
+    expect([...importingApps]).toStrictEqual([]);
+
+    // Type-only, and specifically NOT a construction of the service.
+    const storeSrc = join(REPO_ROOT, 'packages/postgres-riya-conversation-continuity-store/src');
+    // PRODUCTION files only. The store's own specs necessarily NAME this package — they read its
+    // port and its in-memory fake to prove the two implementations answer to the same words — and
+    // scanning them would report that proof as its own violation.
+    for (const file of walk(storeSrc, false)) {
+      if (file.replace(/\\/gu, '/').includes('/src/tests/')) continue;
+      const text = readFileSync(file, 'utf8');
+      expect(text, file).not.toContain('createRiyaWebConversationService');
+      if (text.includes('@qf-jarvis/riya-web-conversation-service')) {
+        expect(text, file).toMatch(
+          /import type \{[\s\S]*?\} from '@qf-jarvis\/riya-web-conversation-service';/u,
+        );
+      }
+    }
   });
 });

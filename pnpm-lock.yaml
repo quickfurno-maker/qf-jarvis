@@ -384,6 +384,28 @@ importers:
         specifier: 8.20.0
         version: 8.20.0
 
+  packages/postgres-riya-conversation-continuity-store:
+    dependencies:
+      '@qf-jarvis/riya-conversation-continuity':
+        specifier: workspace:*
+        version: link:../riya-conversation-continuity
+      '@qf-jarvis/riya-web-conversation-service':
+        specifier: workspace:*
+        version: link:../riya-web-conversation-service
+      pg:
+        specifier: 8.22.0
+        version: 8.22.0
+    devDependencies:
+      '@qf-jarvis/event-backbone':
+        specifier: workspace:*
+        version: link:../event-backbone
+      '@qf-jarvis/riya-agent':
+        specifier: workspace:*
+        version: link:../riya-agent
+      '@types/pg':
+        specifier: 8.20.0
+        version: 8.20.0
+
   packages/prompt-registry:
     dependencies:
       zod:

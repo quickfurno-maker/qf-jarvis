@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
+  },
+
+  // The EMITTING build, referenced by the root solution. `src/tests` is EXCLUDED so nothing
+  // test-only reaches dist/ -- in particular the integration harness, which is the ONLY module in
+  // this package that reads an environment variable.
+  //
+  // Exactly TWO project references, and both are deliberate:
+  //
+  //   * `riya-conversation-continuity` owns `createRiyaConversationContinuityState`, the canonical
+  //     validator this adapter re-proves every row through. That is a RUNTIME dependency, not a
+  //     type-only one: a storage layer that merely trusted its own row shape would be a second,
+  //     weaker definition of a valid state.
+  //   * `riya-web-conversation-service` owns the PUBLIC `RiyaContinuityStorePort` this package
+  //     implements. The import is type-only; the reference exists so a drift in that port fails the
+  //     build here rather than at a future composition site.
+  //
+  // `event-backbone` is deliberately NOT referenced: it is a DEV dependency supplying migration
+  // tooling to the integration harness only, so a production import of it fails the build rather
+  // than quietly creating an edge from a storage adapter to the event backbone. There is likewise no
+  // reference to jarvis-runtime, agent-runtime, a transport, a provider, n8n, QuickFurno or any
+  // application -- this package is an adapter, and it composes nothing.
+  "references": [
+    { "path": "../../packages/riya-conversation-continuity/tsconfig.build.json" },
+    { "path": "../../packages/riya-web-conversation-service/tsconfig.build.json" }
+  ],
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/tests/**"]
+}

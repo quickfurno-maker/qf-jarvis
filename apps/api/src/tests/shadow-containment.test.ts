@@ -402,6 +402,12 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // EXACT set match; it records an authorised addition, it does not relax the assertion. It is
       // TRANSPORT-NEUTRAL: no endpoint, no n8n, no provider, no credential, no intent payload.
       'postgres-execution-replay-store',
+      // RWC-P2B (ADR-0095): the durable PostgreSQL Riya conversation-continuity store -- the
+      // implementation of the port RWC-P2C declared and deliberately left injected with no default.
+      // Still an EXACT set match; it records an authorised addition, it does not relax the
+      // assertion. It composes nothing: no HTTP, no ingress, no browser reachability, and no
+      // application imports it.
+      'postgres-riya-conversation-continuity-store',
       // QFJ-S3-I-A (ADR-0072): the versioned prompt registry foundation. Still an EXACT set match --
       // this records an authorised addition, it does not relax the assertion.
       'prompt-registry',
