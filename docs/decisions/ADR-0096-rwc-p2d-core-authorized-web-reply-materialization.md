@@ -217,6 +217,21 @@ sync file. It is computed with the repository's existing `contentDigest` over ex
 A digest computed over a body Core was not sent, or omitting one it was, is therefore structurally
 impossible rather than merely unlikely.
 
+**`citations` means the FULL citation tuple** — for every citation, all four fields of the current
+`KnowledgeCitation` contract: `knowledgeId`, `version`, `source` **and** `digest`. Order is part of
+the proposal and is not normalized away.
+
+This is deliberate rather than incidental. A first pass bound only `knowledgeId` and `version`, so two
+commands citing the same knowledge at the same version — but from a different `source`, or with a
+different content `digest` — produced an **identical** proposal digest. Core's decision about one set
+of evidence would then have validated against a command carrying another, which contradicts the claim
+that this digest binds the exact semantic proposal.
+
+The four fields are written out explicitly in `proposalDigestFor` rather than spread from the
+citation object. That is the point: this is frozen **v2** wire semantics, and a spread would let any
+field added to `KnowledgeCitation` later change what v2 means without anybody deciding to. Expanding
+the tuple must be a deliberate protocol review.
+
 The digest travels on the wire; Core must **echo** it (a responder that recomputed it from its own
 view would agree with itself no matter what it received); the response schema **requires** it; and
 `validateResponse` compares it. A mismatch is `adapter-identity-mismatch`; a missing or malformed

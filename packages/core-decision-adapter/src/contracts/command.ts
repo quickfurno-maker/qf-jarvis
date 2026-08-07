@@ -89,10 +89,11 @@ export function effectiveProposedReplyBody(request: {
 }
 
 /**
- * The deterministic digest of the exact semantic proposal, INCLUDING the effective reply body.
+ * The deterministic digest of the exact semantic proposal, INCLUDING the effective reply body and
+ * the FULL citation tuple (`knowledgeId`, `version`, `source`, `digest`) of every citation.
  *
- * Same proposal and same body → same digest. Different body under the same identity → different
- * digest, which is the whole point (see `CoreCommandIdentity.proposalDigest`).
+ * Same proposal, same body and same citations → same digest. Any of them different under the same
+ * identity → different digest, which is the whole point (see `CoreCommandIdentity.proposalDigest`).
  *
  * The protocol identity is deliberately NOT an input: it is compared separately and in full by
  * `validateResponse`, and folding it in here would make one field's change silently rewrite the
@@ -123,7 +124,20 @@ export function proposalDigestFor(request: {
     structuredIntent: request.structuredIntent,
     policyRevision: request.policyRevision,
     evaluationRef: request.evaluationRef,
-    citations: request.citations.map((c) => ({ knowledgeId: c.knowledgeId, version: c.version })),
+    // The FULL citation tuple, field by field. A reduced projection bound only `knowledgeId` and
+    // `version`, so two commands citing the same knowledge id at the same version but with a
+    // different `source` or a different content `digest` produced the SAME proposal digest -- and the
+    // claim that this digest binds the exact semantic proposal was therefore not literally true.
+    //
+    // Written out explicitly rather than as `{ ...c }`: this is the frozen v2 wire semantics, and a
+    // spread would let any field added to `KnowledgeCitation` later change what v2 means without
+    // anybody deciding to. Expanding the tuple must be a deliberate protocol review.
+    citations: request.citations.map((c) => ({
+      knowledgeId: c.knowledgeId,
+      version: c.version,
+      source: c.source,
+      digest: c.digest,
+    })),
     proposedReplyBody: effectiveProposedReplyBody(request),
   });
 }
