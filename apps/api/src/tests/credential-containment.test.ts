@@ -511,6 +511,12 @@ describe('(71-77) package API and dependency locks are untouched', () => {
       // types, the closed reason set, and the two protocol constants that make the B4 domain and
       // key purpose distinct from event ingestion. No transport, no fake and no bridge is exported.
       'execution-dispatch-runtime': 7,
+      // RWC-P2A (ADR-0093): Riya's conversational continuity contract, locked from the day it
+      // lands. Five root symbols: the two frozen vocabularies, the constructor, the closed
+      // error-code set and the error class. The schemas, the provenance precedence ranks and the
+      // discovery-field mapping are internal -- exporting the ranks would be exporting the first
+      // half of the merge RWC-P4 owns.
+      'riya-conversation-continuity': 5,
       // QFJ-P09.03 (ADR-0091): the durable execution replay / idempotency store, locked from the
       // day it lands. Three root symbols: the factory, the closed error-code set and the error
       // class. The SQL, the table name, the input validator, the error classifier and the pool are

@@ -412,6 +412,12 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // QFJ-S3-C (ADR-0067): the Riya client-sales behaviour package. Still an EXACT set match --
       // this records an authorised addition, it does not relax the assertion.
       'riya-agent',
+      // RWC-P2A (ADR-0093): Riya's conversational continuity CONTRACT -- the working state one
+      // conversation carries between turns. Still an EXACT set match; it records an authorised
+      // addition, it does not relax the assertion. It is contract-only: no database, migration,
+      // adapter, transport, web service, reducer, extraction, transcript or business authority, and
+      // it is NOT ADR-0016 agent memory.
+      'riya-conversation-continuity',
     ]);
     // JOS-01A (docs/architecture/jarvis-os.md): the Jarvis OS operator control plane. Still an
     // EXACT set match -- this records an authorised addition, it does not relax the assertion.
