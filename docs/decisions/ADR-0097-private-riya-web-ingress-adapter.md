@@ -154,15 +154,22 @@ lazy — no timer, no polling.
 
 Three rules make "never fails open" a property rather than an intention.
 
-**Retention outlives signature validity: minimum 120,000 ms.** Authentication accepts `issuedAt`
-within ±60s, so a request first received at `T` may legally carry `issuedAt = T + 60s` — and that
-signature stays fresh until roughly `T + 120s`. A claim retained for less than that would expire
-while the very signature it guards was still usable: a replay window wearing the costume of a cache
-setting. 120,000 ms is therefore both the default and the **floor**, and a shorter configured value
-is **refused at construction, never silently clamped**. A deployment that asked for 30 seconds has
-made an assumption about signature lifetime that is wrong, and substituting a different number would
-leave that assumption in place everywhere else somebody made it. The ±60s authentication window is
-unchanged.
+**Retention outlives signature validity: minimum 120,000 ms, and the boundary is INCLUSIVE.**
+Authentication accepts `|now - issuedAt| <= 60_000`, so a request first received at `T` may legally
+carry `issuedAt = T + 60_000` **exactly** — and those same bytes are still accepted at **exactly**
+`T + 120_000`. A claim retained for less than that would expire while the very signature it guards
+was still usable: a replay window wearing the costume of a cache setting. 120,000 ms is therefore
+both the default and the **floor**, and a shorter configured value is **refused at construction,
+never silently clamped**. A deployment that asked for 30 seconds has made an assumption about
+signature lifetime that is wrong, and substituting a different number would leave that assumption in
+place everywhere else somebody made it. The ±60s authentication window is unchanged.
+
+Because freshness is inclusive, liveness must be too. **A claim is live while `expiresAtMs >= nowMs`,
+and the lazy sweep deletes only `expiresAtMs < nowMs`** — so the claim stays protective _through_ its
+expiry instant and becomes expired only after that instant has passed. A strict comparison left a
+one-millisecond hole at precisely the endpoint the two windows share, which is the single instant an
+attacker replaying a maximally future-skewed signature would aim at. The constant was **not** inflated
+to hide the edge; the comparison was aligned to it.
 
 **Capacity saturation fails closed, and a live claim is never evicted.** Expired entries are swept
 lazily first. If the map is still full of _unexpired_ claims, the request is **refused** with
@@ -173,11 +180,22 @@ availability under exactly the load an attacker can manufacture, and the evicted
 become claimable again inside its own valid window. **Availability pressure never weakens replay
 protection.**
 
-**One clock sample per request, and no substituted instant.** The handler reads the injected clock
-**once** and uses that same instant for signature freshness and for the claim; two reads could
-straddle the boundary of the window they jointly define. An unusable clock fails closed before the
-policy or the service runs, and the guard itself throws on a non-finite instant rather than falling
-back to epoch zero — which would expire every entry on the next claim and admit every replay.
+**One clock sample per request, canonical, and no substituted instant.** The handler reads the
+injected clock **once** and uses that same instant for signature freshness and for the claim; two
+reads could straddle the boundary of the window they jointly define.
+
+That snapshot must satisfy the **same canonical UTC grammar** as every signed instant crossing this
+boundary — `YYYY-MM-DDTHH:mm:ss(.SSS)?Z`, 1–3 fractional digits when present — and must round-trip to
+a real calendar time. Parseability is a weaker property: `Date.parse` accepts `2026-08-07` and
+`2026-08-07T09:00:00+00:00`, and it silently _rolls over_ `2026-02-31T09:00:00Z` to March 3, so a
+misconfigured clock would not fail — it would quietly report a different instant, and every window
+measured against it would be measured against a lie. A clock held to a looser standard than the
+requests it judges is the one input nobody checked. It is **refused, never normalized**: converting an
+offset to `Z` would decide what a misconfigured deployment meant.
+
+An unusable clock fails closed with `internal-invariant` before the policy or the service runs, and
+the guard itself throws on a non-finite instant rather than falling back to epoch zero — which would
+expire every entry on the next claim and admit every replay.
 
 **Deliberate limitation.** It is a `Map`, and it gives **no cross-replica guarantee**: two ingress
 processes behind a load balancer each keep their own view, so one request could be served once by

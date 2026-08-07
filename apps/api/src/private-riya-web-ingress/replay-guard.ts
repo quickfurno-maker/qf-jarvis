@@ -15,13 +15,18 @@
  *
  * That is the whole contract, and it drives all three rules below.
  *
- * **Retention outlives signature validity.** Authentication accepts `issuedAt` within ±60s, so a
- * request first received at `T` may legally carry `issuedAt = T + 60s` — and that signature stays
- * fresh until roughly `T + 120s`. A claim retained for less than that would expire while the very
- * signature it guards was still usable, which is a replay window wearing the costume of a cache
- * setting. The minimum retention is therefore **120,000 ms**, and a shorter value is refused at
- * construction rather than silently clamped: a deployment that asked for 30 seconds should be told,
- * not quietly given something else.
+ * **Retention outlives signature validity, INCLUSIVELY.** Authentication accepts
+ * `|now - issuedAt| <= 60_000`, so a request first received at `T` may legally carry
+ * `issuedAt = T + 60_000` exactly — and that signature is still accepted at exactly `T + 120_000`.
+ * A claim retained for less than that would expire while the very signature it guards was still
+ * usable, which is a replay window wearing the costume of a cache setting. The minimum retention is
+ * therefore **120,000 ms**, and a shorter value is refused at construction rather than silently
+ * clamped: a deployment that asked for 30 seconds should be told, not quietly given something else.
+ *
+ * The BOUNDARY is inclusive to match. An entry is live while `expiresAtMs >= nowMs`, and the sweep
+ * deletes only `expiresAtMs < nowMs`. A strict comparison left a one-millisecond hole at precisely
+ * the endpoint the two windows share — the one instant an attacker replaying a maximally
+ * future-skewed signature would aim at.
  *
  * **A live claim is never evicted.** If the map is still full of unexpired entries after sweeping,
  * the request is REFUSED. Evicting the oldest live claim would trade replay protection for
@@ -122,10 +127,15 @@ export function createReplayGuard(config: ReplayGuardConfig = {}): ReplayGuard {
   // Insertion-ordered, so a sweep visits the oldest entries first.
   const entries = new Map<string, Entry>();
 
-  /** Drop everything already expired at `nowMs`. Cheap, and only ever called on a claim. */
+  /**
+   * Drop everything already expired at `nowMs`. Cheap, and only ever called on a claim.
+   *
+   * Strictly `<`, matching the inclusive liveness test below. An entry expiring exactly AT `nowMs`
+   * is still protective and must survive this sweep.
+   */
   const sweep = (nowMs: number): void => {
     for (const [key, entry] of entries) {
-      if (entry.expiresAtMs <= nowMs) {
+      if (entry.expiresAtMs < nowMs) {
         entries.delete(key);
       }
     }
@@ -150,7 +160,15 @@ export function createReplayGuard(config: ReplayGuardConfig = {}): ReplayGuard {
 
       const existing = entries.get(key);
       if (existing !== undefined) {
-        if (existing.expiresAtMs > nowMs) {
+        // INCLUSIVE, and the inclusion is load-bearing rather than tidy.
+        //
+        // Freshness accepts `|now - issuedAt| <= 60_000`, so a request first received at `T` may
+        // carry `issuedAt = T + 60_000` exactly, and that signature is still accepted at exactly
+        // `T + 120_000`. With a strict `>` the claim expired at precisely that instant and the same
+        // signed bytes were admitted a second time -- a one-millisecond hole at the exact endpoint
+        // both windows share. The claim stays protective THROUGH its expiry instant and becomes
+        // expired only after that instant has passed.
+        if (existing.expiresAtMs >= nowMs) {
           // Constant-time: whether two digests match is exactly what an attacker probing this
           // boundary would like to learn a byte at a time.
           return digestsEqual(existing.bodyDigest, args.bodyDigest)

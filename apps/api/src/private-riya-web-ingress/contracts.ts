@@ -52,8 +52,18 @@ const IDENTIFIER = z
   .max(128)
   .regex(/^[A-Za-z0-9._:-]+$/u);
 
-/** A canonical UTC instant, matching what the runtime envelope accepts. */
-const CANONICAL_INSTANT = z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/u);
+/**
+ * The canonical UTC instant grammar, matching what the runtime envelope accepts.
+ *
+ * `YYYY-MM-DDTHH:mm:ss(.SSS)?Z`, with 1–3 fractional digits when present. Exported because the
+ * handler holds every instant in this boundary to the SAME shape — including the one it reads from
+ * its own injected clock. `Date.parse` is far more permissive than this: it accepts `2026-08-07` and
+ * `2026-08-07T09:00:00+00:00`, so parseability is not the same question as canonicality, and a
+ * second copy of the pattern would be a second thing to keep in step.
+ */
+export const CANONICAL_INSTANT_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/u;
+
+const CANONICAL_INSTANT = z.string().regex(CANONICAL_INSTANT_PATTERN);
 
 /** One inbound WEB turn as a trusted QuickFurno server sends it. */
 export interface PrivateRiyaWebIngressRequestV1 {

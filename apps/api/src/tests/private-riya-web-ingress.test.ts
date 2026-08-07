@@ -721,6 +721,72 @@ describe('(34) replay', () => {
     expect(service.calls()).toBe(1);
   });
 
+  it('the EXACT +60s / +120s endpoint is still refused', async () => {
+    // The one instant both windows share, and the only place a strict comparison could fail open.
+    //
+    // Freshness is inclusive at |now - issuedAt| <= 60_000. So a request first received at T may
+    // carry issuedAt = T + 60_000 EXACTLY (accepted), and those same bytes are still accepted at
+    // exactly T + 120_000 -- where the claim expires to the millisecond. A guard whose liveness
+    // test were `expiresAtMs > nowMs` would have forgotten the claim at precisely that instant and
+    // served the replay. The +59s/+118s case above passes either way and cannot catch this.
+    const service = scriptedService();
+    let now = '2026-08-07T09:00:00.000Z';
+    const base = await listening({ service, clock: () => now });
+    const raw = JSON.stringify(requestBody({ issuedAt: '2026-08-07T09:01:00.000Z' }));
+    const headers = signed(raw);
+
+    expect((await post(base, raw, headers)).status).toBe(200);
+    expect(service.calls()).toBe(1);
+
+    now = '2026-08-07T09:02:00.000Z';
+    const replayed = await post(base, raw, headers);
+    expect(replayed.status).toBe(409);
+    expect(replayed.json['error']).toBe('replay-detected');
+    expect(service.calls()).toBe(1);
+  });
+
+  it('the claim primitive is live THROUGH its expiry instant and expired only after it', () => {
+    const guard = createReplayGuard();
+    const t = Date.parse('2026-08-07T09:00:00.000Z');
+    const claim = (nowMs: number): string =>
+      guard.claim({ caller: 'quickfurno-core', requestId: 'req.1', bodyDigest: 'ZGlnZXN0', nowMs });
+
+    expect(claim(t)).toBe('claimed');
+    expect(claim(t + 1)).toBe('replay-detected');
+    expect(claim(t + MIN_REPLAY_TTL_MS - 1)).toBe('replay-detected');
+    // Exactly at the boundary: still protective.
+    expect(claim(t + MIN_REPLAY_TTL_MS)).toBe('replay-detected');
+    // One millisecond past it: the signature can no longer be fresh, so the slot is recoverable.
+    expect(claim(t + MIN_REPLAY_TTL_MS + 1)).toBe('claimed');
+  });
+
+  it('a full guard does not sweep an entry that expires exactly now', () => {
+    // The same inclusive rule, reached through the capacity path rather than the lookup path.
+    const guard = createReplayGuard({ capacity: 1 });
+    const t = Date.parse('2026-08-07T09:00:00.000Z');
+    expect(
+      guard.claim({ caller: 'quickfurno-core', requestId: 'req.A', bodyDigest: 'a', nowMs: t }),
+    ).toBe('claimed');
+    // `req.A` expires exactly at t + TTL, so it is still live and must not be swept to make room.
+    expect(
+      guard.claim({
+        caller: 'quickfurno-core',
+        requestId: 'req.B',
+        bodyDigest: 'b',
+        nowMs: t + MIN_REPLAY_TTL_MS,
+      }),
+    ).toBe('capacity-exhausted');
+    // One millisecond later it is genuinely expired and the slot is recovered.
+    expect(
+      guard.claim({
+        caller: 'quickfurno-core',
+        requestId: 'req.B',
+        bodyDigest: 'b',
+        nowMs: t + MIN_REPLAY_TTL_MS + 1,
+      }),
+    ).toBe('claimed');
+  });
+
   it('an entry expires lazily once its signature can no longer be fresh', async () => {
     // Only AFTER the complete validity window has passed. By then the same bytes would fail
     // authentication anyway, so recovering the slot costs nothing.
@@ -812,6 +878,18 @@ describe('(34) replay', () => {
     ['not an instant', 'yesterday'],
     ['an empty string', ''],
     ['a non-string', 42 as unknown as string],
+    // PARSEABLE but not canonical. `Date.parse` accepts all of these; this boundary does not.
+    // Every other instant crossing it -- the signed `issuedAt`, the signed `receivedAt` -- is held
+    // to the strict UTC grammar, and a clock judged more loosely than the requests it judges would
+    // be the one input nobody checked.
+    ['a date with no time', '2026-08-07'],
+    ['a numeric UTC offset instead of Z', '2026-08-07T09:00:00+00:00'],
+    ['a non-zero offset', '2026-08-07T14:30:00+05:30'],
+    ['no zone designator at all', '2026-08-07T09:00:00'],
+    ['a lowercase zone designator', '2026-08-07T09:00:00z'],
+    ['more than three fractional digits', '2026-08-07T09:00:00.0000Z'],
+    ['a space instead of T', '2026-08-07 09:00:00Z'],
+    ['a canonical shape that is not a real date', '2026-02-31T09:00:00Z'],
   ])('an unusable clock (%s) fails closed before the policy and the service', async (_l, value) => {
     const service = scriptedService();
     const policy = scriptedPolicy();
@@ -822,6 +900,20 @@ describe('(34) replay', () => {
     expect(answer.json['error']).toBe('internal-invariant');
     expect(policy.calls()).toBe(0);
     expect(service.calls()).toBe(0);
+    // Refused, never normalized: nothing here decides what a misconfigured deployment meant.
+    expect(answer.text).not.toContain('2026-08-07T09:00:00Z');
+  });
+
+  it.each([
+    ['second precision', '2026-08-07T09:00:00Z'],
+    ['millisecond precision', '2026-08-07T09:00:00.000Z'],
+    ['one fractional digit', '2026-08-07T09:00:00.0Z'],
+  ])('a CANONICAL clock (%s) is accepted', async (_label, value) => {
+    const service = scriptedService();
+    const base = await listening({ service, clock: () => value });
+    const raw = JSON.stringify(requestBody({ issuedAt: '2026-08-07T09:00:00.000Z' }));
+    expect((await post(base, raw, signed(raw))).status).toBe(200);
+    expect(service.calls()).toBe(1);
   });
 
   it('the guard never substitutes an instant for an unusable clock', () => {

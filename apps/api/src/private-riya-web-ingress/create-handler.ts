@@ -40,6 +40,7 @@ import type {
 } from '@qf-jarvis/riya-web-conversation-service';
 
 import {
+  CANONICAL_INSTANT_PATTERN,
   PRIVATE_RIYA_WEB_INGRESS_AUDIENCE,
   PRIVATE_RIYA_WEB_INGRESS_CALLER,
   PRIVATE_RIYA_WEB_INGRESS_METHOD,
@@ -360,9 +361,27 @@ export function createPrivateRiyaWebIngressHandler(
         // deciding about a moment the authentication never saw. An unusable clock fails closed
         // here, before the policy or the service could run: substituting a time would be inventing
         // the one input every window in this file is measured against.
+        //
+        // The snapshot must be CANONICAL, not merely parseable. `Date.parse` accepts `2026-08-07`
+        // and `2026-08-07T09:00:00+00:00`, and every other instant crossing this boundary -- the
+        // signed `issuedAt`, the signed `receivedAt` -- is held to the strict UTC grammar. A clock
+        // held to a looser standard than the requests it judges would be the one input nobody
+        // checked. It is refused rather than normalized: converting an offset to `Z` would decide
+        // what a misconfigured deployment meant.
         const now = clock();
-        const nowMs = Date.parse(typeof now === 'string' ? now : '');
+        if (typeof now !== 'string' || !CANONICAL_INSTANT_PATTERN.test(now)) {
+          throw new PrivateRiyaWebIngressError('internal-invariant');
+        }
+        const nowMs = Date.parse(now);
         if (!Number.isFinite(nowMs)) {
+          throw new PrivateRiyaWebIngressError('internal-invariant');
+        }
+        // Canonical in SHAPE is still not necessarily a real calendar time. `Date.parse` accepts
+        // `2026-02-31T09:00:00Z` and silently ROLLS IT OVER to March 3 -- so a misconfigured clock
+        // would not fail, it would quietly report a different instant, and every window measured
+        // against it would be measured against a lie. Round-tripping the parsed value back through
+        // `toISOString` is what turns "well-formed" into "real".
+        if (new Date(nowMs).toISOString().slice(0, 19) !== now.slice(0, 19)) {
           throw new PrivateRiyaWebIngressError('internal-invariant');
         }
 
