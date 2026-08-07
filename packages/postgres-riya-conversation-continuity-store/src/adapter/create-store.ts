@@ -151,6 +151,16 @@ export function createPostgresRiyaConversationContinuityStore(
     // let a state be filed under a conversation it does not belong to.
     const parameters = toStateParameters(suppliedInput['state']);
 
+    // A continuity row is BORN at revision 0 (ADR-0095). `createInitialIfAbsent` is INITIAL
+    // persistence: a state already at revision 1, 2, ... was reached by continuity mutations that
+    // never happened durably, and admitting it would file a mid-conversation state as if it were a
+    // first turn. Every later revision is reached only through `compareAndSet`. Refused BEFORE any
+    // connection is taken -- the defect is the caller's, not the database's -- and the migration's
+    // INSERT trigger holds the same rule for any writer that bypasses this adapter.
+    if (parameters.continuityRevision !== 0) {
+      throw new PostgresRiyaContinuityStoreError('invalid-input');
+    }
+
     return withClient(async (client) => {
       // 1. The arbitration write. Autocommit: a `CREATED` is durable the moment it is returned.
       const inserted = await client.query(INSERT_INITIAL_STATE, [

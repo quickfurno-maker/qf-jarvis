@@ -483,7 +483,7 @@ describe('(12, 13) the repository invariants this slice must not move', () => {
       '0010_execution_replay_claim.sql':
         '1add85e08e43dafe85f124b886790cd3495d3f54b3579ad89efe40e2849a8b05',
       '0011_riya_conversation_continuity.sql':
-        'c649f3d45f6611cbcc06f1a4a769d40790085b4cd9074a2fb26336275b5016d0',
+        '80149f8d636aa85eaff7d98f924220107eaa3d539e5d13d5133873154926cc93',
     };
     const dir = join(REPO_ROOT, 'packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)

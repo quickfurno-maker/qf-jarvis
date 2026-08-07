@@ -227,7 +227,8 @@ describe('(2) load', () => {
 
   it('returns the canonical frozen state for a stored conversation', async () => {
     const built = store();
-    const state = summaryReadyState('tenant.a', 'conv.1', { continuityRevision: 3 });
+    // A row is born at revision 0; a richer-than-INTRO state is still legitimate at revision 0.
+    const state = summaryReadyState('tenant.a', 'conv.1', { continuityRevision: 0 });
     await built.createInitialIfAbsent({ state });
 
     const loaded = await built.load({ tenantId: 'tenant.a', conversationId: 'conv.1' });
@@ -252,17 +253,20 @@ describe('(3-7) createInitialIfAbsent', () => {
 
   it('(4) a second create reports EXISTING and returns the WINNER, not the candidate', async () => {
     const built = store();
-    const winner = summaryReadyState('tenant.a', 'conv.1', { continuityRevision: 5 });
+    // Both candidates are born at revision 0 (the only legitimate initial revision); they differ in
+    // CONTENT, so the returned state still identifies which one won. The winner is a summary-ready
+    // SUMMARY state; the loser is a bare INTRO state.
+    const winner = summaryReadyState('tenant.a', 'conv.1', { continuityRevision: 0 });
     await built.createInitialIfAbsent({ state: winner });
 
     // A DIFFERENT candidate for the same key. If the adapter returned what it was handed, this would
-    // come back at revision 0 in phase INTRO.
+    // come back in phase INTRO with an empty discovery.
     const loser = initialState('tenant.a', 'conv.1');
     const result = await built.createInitialIfAbsent({ state: loser });
 
     expect(result.disposition).toBe('EXISTING');
     expect(result.state).toStrictEqual(winner);
-    expect(result.state.continuityRevision).toBe(5);
+    expect(result.state.phase).toBe('SUMMARY');
     expect(result.state).not.toStrictEqual(loser);
     expect(await rowCount()).toBe(1);
   });
@@ -283,9 +287,11 @@ describe('(3-7) createInitialIfAbsent', () => {
 
   it('(5,6) twenty simultaneous first turns yield exactly one CREATED and one row', async () => {
     const built = store();
-    const candidates = Array.from({ length: 20 }, (_, index) =>
-      // Distinct candidates, so a returned state identifies WHICH call won.
-      initialState('tenant.race', 'conv.race', index),
+    // Every first turn proposes the SAME legitimate initial state at revision 0 -- initial persistence
+    // is born at 0, so distinct starting revisions are not available to tell callers apart. The race is
+    // real regardless: exactly one INSERT wins the primary key and the other nineteen see the winner.
+    const candidates = Array.from({ length: 20 }, () =>
+      initialState('tenant.race', 'conv.race', 0),
     );
 
     const results = await Promise.all(
@@ -313,7 +319,7 @@ describe('(3-7) createInitialIfAbsent', () => {
   it('(7) the same conversation id under two tenants stays two independent rows', async () => {
     const built = store();
     const a = initialState('tenant.a', 'conv.shared', 0);
-    const b = summaryReadyState('tenant.b', 'conv.shared', { continuityRevision: 9 });
+    const b = summaryReadyState('tenant.b', 'conv.shared', { continuityRevision: 0 });
 
     expect((await built.createInitialIfAbsent({ state: a })).disposition).toBe('CREATED');
     expect((await built.createInitialIfAbsent({ state: b })).disposition).toBe('CREATED');
@@ -337,7 +343,7 @@ describe('(8) durability', () => {
     const state = summaryReadyState('tenant.a', 'conv.durable', {
       phase: 'CONTACT',
       summaryConfirmed: true,
-      continuityRevision: 4,
+      continuityRevision: 0,
     });
     await store().createInitialIfAbsent({ state });
 
@@ -376,13 +382,18 @@ describe('(9-12) compareAndSet', () => {
 
   it('(10) a stale expected revision conflicts and mutates nothing', async () => {
     const built = store();
-    const stored = summaryReadyState('tenant.a', 'conv.1', { continuityRevision: 7 });
-    await built.createInitialIfAbsent({ state: stored });
+    // Born at 0, then advanced to 1 by a legitimate compare-and-set: the only way a row reaches a
+    // nonzero revision now.
+    await built.createInitialIfAbsent({ state: initialState('tenant.a', 'conv.1', 0) });
+    const stored = summaryReadyState('tenant.a', 'conv.1', { continuityRevision: 1 });
+    await expect(built.compareAndSet({ expectedRevision: 0, nextState: stored })).resolves.toBe(
+      'UPDATED',
+    );
 
-    // A well-formed one-step advance FROM the stale revision 6 (so the +1 rule is satisfied and the
-    // request reaches SQL), which then finds no row at revision 6 because the stored one is at 7.
-    const attempted = fullyDiscoveredState('tenant.a', 'conv.1', { continuityRevision: 7 });
-    await expect(built.compareAndSet({ expectedRevision: 6, nextState: attempted })).resolves.toBe(
+    // A well-formed one-step advance FROM the STALE revision 0 (so the +1 rule is satisfied and the
+    // request reaches SQL), which then finds no row at revision 0 because the stored one is at 1.
+    const attempted = fullyDiscoveredState('tenant.a', 'conv.1', { continuityRevision: 1 });
+    await expect(built.compareAndSet({ expectedRevision: 0, nextState: attempted })).resolves.toBe(
       'REVISION_CONFLICT',
     );
 
@@ -459,7 +470,7 @@ describe('(9-12) compareAndSet', () => {
 describe('(13-16) the canonical round trip', () => {
   it('(13,15) every field, including discovery and provenance JSON, round-trips exactly', async () => {
     const built = store();
-    const state = fullyDiscoveredState('tenant.a', 'conv.full', { continuityRevision: 2 });
+    const state = fullyDiscoveredState('tenant.a', 'conv.full', { continuityRevision: 0 });
     await built.createInitialIfAbsent({ state });
 
     const loaded = await built.load({ tenantId: 'tenant.a', conversationId: 'conv.full' });
@@ -495,7 +506,7 @@ describe('(13-16) the canonical round trip', () => {
       phase: 'COMPLETE',
       summaryConfirmed: true,
       completionEvidenceRef: 'confirmation.evidence.7',
-      continuityRevision: 9,
+      continuityRevision: 0,
     });
     await built.createInitialIfAbsent({ state: complete });
     const loaded = await built.load({ tenantId: 'tenant.a', conversationId: 'conv.complete' });
@@ -641,14 +652,15 @@ describe('(17-19) refusals', () => {
 describe('(20-24) isolation and privilege', () => {
   it('(20) no read or update crosses a tenant boundary', async () => {
     const built = store();
-    const a = summaryReadyState('tenant.a', 'conv.shared', { continuityRevision: 1 });
-    const b = summaryReadyState('tenant.b', 'conv.shared', { continuityRevision: 1 });
+    // Both rows are born at revision 0 under the same conversation id but different tenants.
+    const a = summaryReadyState('tenant.a', 'conv.shared', { continuityRevision: 0 });
+    const b = summaryReadyState('tenant.b', 'conv.shared', { continuityRevision: 0 });
     await built.createInitialIfAbsent({ state: a });
     await built.createInitialIfAbsent({ state: b });
 
-    // A compare-and-set for tenant B cannot touch tenant A's row.
-    const nextB = fullyDiscoveredState('tenant.b', 'conv.shared', { continuityRevision: 2 });
-    await expect(built.compareAndSet({ expectedRevision: 1, nextState: nextB })).resolves.toBe(
+    // A compare-and-set for tenant B (0 -> 1) cannot touch tenant A's row.
+    const nextB = fullyDiscoveredState('tenant.b', 'conv.shared', { continuityRevision: 1 });
+    await expect(built.compareAndSet({ expectedRevision: 0, nextState: nextB })).resolves.toBe(
       'UPDATED',
     );
     expect(await built.load({ tenantId: 'tenant.a', conversationId: 'conv.shared' })).toStrictEqual(
@@ -859,6 +871,42 @@ describe('(D1-D7) database-held invariants', () => {
       (await built.load({ tenantId: 'tenant.a', conversationId: 'conv.clean' }))
         ?.continuityRevision,
     ).toBe(1);
+  });
+
+  it('(D9) the INSERT trigger refuses a row born at a nonzero revision', async () => {
+    // A fully consistent envelope at revision 1 -- the column and the state_json agree, so every CHECK
+    // passes -- must still be refused: a durable row is BORN at revision 0, and revision 1 was never
+    // reached by a compare-and-set. The trigger, not a CHECK, is what enforces it.
+    await expectDirectSqlRejected(
+      `INSERT INTO ${TABLE} (tenant_id, conversation_id, continuity_revision, state_json)
+       VALUES ('tenant.a', 'conv.bornnonzero', 1, $1::jsonb)`,
+      [
+        '{"version":1,"tenantId":"tenant.a","conversationId":"conv.bornnonzero",' +
+          '"continuityRevision":1,"phase":"INTRO","discovery":{"completeness":"MORE_DISCOVERY_REQUIRED",' +
+          '"missingFields":[]},"fieldProvenance":{},"summaryConfirmed":false}',
+      ],
+    );
+    expect(await rowCount()).toBe(0);
+  });
+
+  it('(D10) a row born at revision 0 by direct SQL is accepted', async () => {
+    // The other side of D9: the SAME envelope at revision 0 inserts cleanly, so the trigger refuses
+    // only the nonzero birth, not direct SQL as such.
+    await withClient(pool, async (client) => {
+      await client.query(
+        `INSERT INTO ${TABLE} (tenant_id, conversation_id, continuity_revision, state_json)
+         VALUES ('tenant.a', 'conv.bornzero', 0, $1::jsonb)`,
+        [
+          '{"version":1,"tenantId":"tenant.a","conversationId":"conv.bornzero",' +
+            '"continuityRevision":0,"phase":"INTRO","discovery":{"completeness":"MORE_DISCOVERY_REQUIRED",' +
+            '"missingFields":[]},"fieldProvenance":{},"summaryConfirmed":false}',
+        ],
+      );
+    });
+    expect(
+      (await store().load({ tenantId: 'tenant.a', conversationId: 'conv.bornzero' }))
+        ?.continuityRevision,
+    ).toBe(0);
   });
 });
 

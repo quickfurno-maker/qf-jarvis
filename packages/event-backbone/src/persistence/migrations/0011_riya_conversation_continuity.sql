@@ -165,22 +165,37 @@ COMMENT ON TABLE qf_jarvis.riya_conversation_continuity IS
   'envelope against its key columns and are not a second decision engine.';
 
 -- ---------------------------------------------------------------------------
--- 2. Enforcement -- identity immutable, revision strictly monotonic by one
+-- 2. Enforcement -- born at revision 0, identity immutable, revision monotonic by one
 -- ---------------------------------------------------------------------------
 --
 -- These rules are in the database rather than only in the adapter because the adapter is one caller.
--- A migration, a console session or a future second writer would otherwise be able to move a revision
--- out of band, and every optimistic compare-and-set binding on that revision would silently accept --
--- or overwrite -- stale state. The CHECKs above already tie `state_json` to the columns on every write;
--- this trigger adds the two rules a CHECK cannot express, because both compare NEW against OLD.
+-- A migration, a console session or a future second writer would otherwise be able to create a row at
+-- an arbitrary revision, or move a revision out of band, and every optimistic compare-and-set binding
+-- on that revision would silently accept -- or overwrite -- stale state. The CHECKs above already tie
+-- `state_json` to the columns on every write; this trigger adds the born-at-zero rule and the two
+-- NEW-vs-OLD rules a CHECK cannot express.
+--
+-- A continuity row is BORN at revision 0. Every later persisted revision is reached ONLY through an
+-- exactly-+1 update. A first row created at revision 1, 2, ... would be a mid-conversation state that
+-- never durably reached that revision -- exactly the initial-persistence regression this guard closes.
 
 CREATE OR REPLACE FUNCTION qf_jarvis.riya_conversation_continuity_guard()
   RETURNS trigger
   LANGUAGE plpgsql
 AS $guard$
 BEGIN
-  -- INSERT is governed entirely by the CHECKs; a first row may legitimately be created at any revision
-  -- its envelope agrees with, so there is nothing to compare against here.
+  -- A row is born at revision 0. `createInitialIfAbsent` is INITIAL persistence; a nonzero starting
+  -- revision is refused here as well as in the adapter, so the invariant holds against direct SQL.
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.continuity_revision <> 0 THEN
+      RAISE EXCEPTION
+        'a new Riya continuity state must be created at revision 0'
+        USING ERRCODE = 'restrict_violation';
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  -- Anything other than INSERT or UPDATE (there is no DELETE trigger) needs no guard.
   IF TG_OP <> 'UPDATE' THEN
     RETURN NEW;
   END IF;
@@ -218,12 +233,13 @@ END
 $guard$;
 
 COMMENT ON FUNCTION qf_jarvis.riya_conversation_continuity_guard() IS
-  'BEFORE UPDATE guard: refuses an identity change, refuses advancing an exhausted revision, and '
-  'requires every update to advance continuity_revision by exactly one. Defense in depth for the '
-  'adapter compare-and-set; the envelope/column agreement is held by CHECK constraints.';
+  'BEFORE INSERT OR UPDATE guard: requires a new row to be created at revision 0, refuses an identity '
+  'change, refuses advancing an exhausted revision, and requires every update to advance '
+  'continuity_revision by exactly one. Defense in depth for the adapter create/compare-and-set; the '
+  'envelope/column agreement is held by CHECK constraints.';
 
 CREATE TRIGGER riya_conversation_continuity_guard_trigger
-  BEFORE UPDATE ON qf_jarvis.riya_conversation_continuity
+  BEFORE INSERT OR UPDATE ON qf_jarvis.riya_conversation_continuity
   FOR EACH ROW EXECUTE FUNCTION qf_jarvis.riya_conversation_continuity_guard();
 
 -- ---------------------------------------------------------------------------

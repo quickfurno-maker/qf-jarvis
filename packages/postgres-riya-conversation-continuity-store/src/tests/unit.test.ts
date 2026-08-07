@@ -171,6 +171,33 @@ describe('invalid input is refused before a connection is taken', () => {
     }
   });
 
+  it('(9a) createInitialIfAbsent rejects a fully valid state whose revision is not 0', async () => {
+    const built = store();
+    // A continuity row is BORN at revision 0 (ADR-0095). These states are otherwise perfectly valid --
+    // the contract would accept them for a compare-and-set -- but they are not INITIAL, and initial
+    // persistence is the only thing createInitialIfAbsent does. Refused BEFORE a connection is taken:
+    // the forbidden pool would surface as `store-unavailable` if one were attempted.
+    for (const revision of [1, 2, 41]) {
+      expect(
+        await codeOf(() =>
+          built.createInitialIfAbsent({
+            state: summaryReadyState('tenant.a', 'conv.1', { continuityRevision: revision }),
+          }),
+        ),
+        String(revision),
+      ).toBe('invalid-input');
+    }
+    // The revision-0 form of the SAME state is NOT refused here: it passes validation and reaches the
+    // pool (surfacing as store-unavailable against the forbidden pool).
+    expect(
+      await codeOf(() =>
+        built.createInitialIfAbsent({
+          state: summaryReadyState('tenant.a', 'conv.1', { continuityRevision: 0 }),
+        }),
+      ),
+    ).toBe('store-unavailable');
+  });
+
   it('(10) createInitialIfAbsent rejects a non-object input envelope', async () => {
     const built = store();
     for (const input of [undefined, null, 'state']) {

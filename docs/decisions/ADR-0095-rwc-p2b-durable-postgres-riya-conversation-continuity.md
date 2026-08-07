@@ -16,8 +16,10 @@ per-field columns (`version`, `phase`, `discovery`, `field_provenance`, `summary
 commit realigns the schema to a **single validated `state_json` JSONB envelope** plus the two
 first-class relational columns the database must be the authority for — the tenant+conversation key and
 the `continuity_revision` the compare-and-set binds on — and adds an explicit persistence codec and a
-storage-level update-invariant trigger. The sections below describe the corrected design; where a
-choice changed from the first implementation, it says so.
+storage-level update-invariant trigger. A second, smaller owner-correction commit then closes one
+remaining contract regression: `createInitialIfAbsent` now accepts **only** a revision-0 state, and the
+guard trigger enforces born-at-zero on INSERT (§5, §8a). The sections below describe the corrected
+design; where a choice changed from the first implementation, it says so.
 
 ## Context
 
@@ -77,6 +79,16 @@ pricing, packages, lead creation and business `canSubmit` belong to QuickFurno C
 here could express one. No channel column — WEB and WhatsApp are the same governed Riya (ADR-0092).
 
 ### 5. Create-if-absent is arbitrated by the database, in two statements
+
+**A continuity row is born at revision 0.** `createInitialIfAbsent` is INITIAL persistence, so the
+adapter refuses a state whose `continuityRevision` is not `0` **before any connection is taken** — a
+state already at revision 1, 2, … was reached by continuity mutations that never durably happened, and
+admitting it would file a mid-conversation state as if it were a first turn. Every later revision is
+reached ONLY through an exactly-`+1` `compareAndSet`. The database holds the same invariant
+independently: the guard trigger's INSERT branch (§8a) requires `continuity_revision = 0`, so a direct
+SQL insert at a nonzero revision is refused too. (This closes a regression in the first implementation,
+which validated the state structurally but accepted a nonzero initial revision, and whose trigger
+explicitly permitted an INSERT at any revision.)
 
 1. `INSERT … ON CONFLICT (tenant_id, conversation_id) DO NOTHING RETURNING …`. The primary key
    decides the race; the process never does. A returned row is `CREATED`, already committed, so the
@@ -174,15 +186,18 @@ _(Corrected from the first implementation, which lifted `phase`, `summary_confir
 as SQL CHECKs. Those rules now live only in the constructor; the SQL constrains only the envelope↔column
 agreement.)_
 
-### 8a. A storage-level update invariant, in addition to the adapter's
+### 8a. A storage-level birth-and-update invariant, in addition to the adapter's
 
-A BEFORE UPDATE trigger on the table refuses an identity change (`tenant_id`/`conversation_id`), refuses
-advancing an already-exhausted revision, and requires every update to advance `continuity_revision` by
-**exactly one**. This is defense in depth for the adapter's own compare-and-set: a migration, a console
-session or a future second writer is a caller the adapter cannot police, and the trigger makes the
-one-step-revision and immutable-identity invariants hold against direct SQL too. Integration tests
-drive direct SQL as the owning role to prove a jump, a same-revision update and an identity mutation are
-each rejected. _(New in the correction; the first implementation relied on column-scoped grants alone.)_
+A BEFORE INSERT OR UPDATE trigger on the table enforces, on INSERT, that a row is **born at revision
+0**; and on UPDATE, that the identity (`tenant_id`/`conversation_id`) is unchanged, that an
+already-exhausted revision is not advanced, and that `continuity_revision` advances by **exactly one**.
+This is defense in depth for the adapter's own create and compare-and-set: a migration, a console
+session or a future second writer is a caller the adapter cannot police, and the trigger makes
+born-at-zero, one-step-revision and immutable-identity hold against direct SQL too. Integration tests
+drive direct SQL as the owning role to prove a nonzero-revision INSERT, a jump, a same-revision update
+and an identity mutation are each rejected, and that a revision-0 INSERT is accepted. _(The update
+rules and the trigger arrived in the storage-shape correction; the born-at-zero INSERT rule is the
+final correction — the first implementation's trigger explicitly permitted an INSERT at any revision.)_
 
 ### 9. Least privilege, and no retention decision
 
@@ -227,7 +242,8 @@ columns · storing a transcript, rolling summary, channel, contact detail or any
 returning a raw row · letting database uncertainty become `undefined`, `CREATED`, `EXISTING`,
 `REVISION_CONFLICT` or `NOT_FOUND` · a create loser returning its own candidate · repairing, merging or
 retrying a revision conflict · fabricating the next revision in storage rather than validating the
-caller's one-step advance · relaxing the exactly-`+1` revision rule or removing the §8a update trigger ·
+caller's one-step advance · accepting a create at a nonzero revision or removing the born-at-zero
+INSERT rule · relaxing the exactly-`+1` revision rule or removing the §8a guard trigger ·
 restating any domain rule (phase, provenance, summary-readiness, complete-iff-evidence) as a SQL
 constraint · granting DELETE or TRUNCATE · introducing a retention or erasure policy · composing this
 adapter into an application, an endpoint or an ingress · applying 0011 to the managed database.
