@@ -1,18 +1,40 @@
 /**
  * The service request: one trusted WEB conversation turn (RWC-P2C, ADR-0094).
  *
- * ### What a caller may say, and what it may not
+ * ### What a TRUSTED PRIVATE caller may supply
  *
- * A caller supplies WHO the turn belongs to and WHAT was said. It does not supply what the turn IS.
+ * - the tenant, conversation and message identity;
+ * - the current message content;
+ * - a **server-derived** `RuntimeDataClass`.
+ *
+ * ### What no caller may supply
+ *
  * `channel`, `partyType` and `direction` are fixed by the service to `WEB`, `CLIENT` and `INBOUND`;
- * so are the actor, the model, the prompt, the tools and the `runtimeId`. None of them appears in
- * this shape, and the schema is `.strict()`, so supplying one is a refusal rather than a value that
- * is quietly ignored.
+ * so are the actor, the model, the prompt, the tools and the `runtimeId`. Authority and business
+ * state — consent, `canSubmit`, a lead, a vendor, a city or a price — have no field at all. None of
+ * them appears in this shape, and the schema is `.strict()`, so supplying one is a refusal rather
+ * than a value that is quietly ignored.
  *
  * That is the whole point of a narrow service boundary. The caller here is a QuickFurno server
  * gateway relaying a browser, and a browser that could name its own `partyType` could have Riya
- * answer it as a vendor; one that could name its own `dataClass` could route HUMAN_ONLY content to
- * a hosted model.
+ * answer it as a vendor.
+ *
+ * ### `dataClass` is NOT browser input
+ *
+ * It appears above because the authoritative runtime requires classified data — routing a turn
+ * safely is not possible without knowing whether its content may leave a hosted boundary. It is
+ * accepted here from a **trusted private caller**, and that is a different thing from being
+ * caller-*chosen*.
+ *
+ * **This service does not, and cannot, prove where a `dataClass` came from.** It has no ingress, no
+ * authentication and no notion of a browser; proving provenance is the job of the future private
+ * ingress adapter, which is precisely why that adapter is a separate, later slice.
+ *
+ * The rule that adapter must hold: **derive or assign `RuntimeDataClass` under governed server-side
+ * policy, and reject or ignore any browser attempt to choose it.** A browser-supplied classification
+ * must never be forwarded through — a visitor that could label their own content `HOSTED_ALLOWED`
+ * could route HUMAN_ONLY material to a hosted model, which is the one failure the class exists to
+ * prevent. Direct browser access to this service remains forbidden (ADR-0092, ADR-0094).
  *
  * ### `webTurnRef` is opaque
  *
@@ -49,6 +71,12 @@ export interface RiyaWebConversationTurnV1 {
   readonly receivedAt: string;
   /** Opaque reference to the web turn. Never a URL, cookie or session token. */
   readonly webTurnRef: string;
+  /**
+   * SERVER-DERIVED classification, supplied by the trusted private caller. Never browser input.
+   *
+   * A future ingress adapter must derive or assign this under governed server-side policy and must
+   * not forward a browser-supplied value. This service cannot check that; the adapter must.
+   */
   readonly dataClass: RuntimeDataClass;
   readonly subjectRef?: string;
   readonly normalizedText?: string;

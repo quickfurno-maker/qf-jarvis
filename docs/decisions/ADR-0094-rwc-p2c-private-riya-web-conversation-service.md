@@ -24,20 +24,45 @@ The ingress is deliberately absent. Service and store semantics have to be owner
 network can reach them, and an endpoint built in the same slice as the thing it exposes is an
 endpoint reviewed at the same moment as the thing it exposes.
 
-### 2. The caller says who and what, never what the turn IS
+### 2. What a trusted private caller supplies, and what no caller supplies
 
-`channel: 'WEB'`, `partyType: 'CLIENT'` and `direction: 'INBOUND'` are literals inside the service.
-So are the actor, model, prompt, tools and `runtimeId`. None appears in the request shape, and the
-schema is `.strict()`, so supplying one is a **refusal** rather than a silently dropped field.
+A **trusted private caller** supplies the tenant, conversation and message identity, the current
+message content, and a **server-derived** `RuntimeDataClass`.
+
+No caller supplies what the turn IS. `channel: 'WEB'`, `partyType: 'CLIENT'` and
+`direction: 'INBOUND'` are literals inside the service. So are the actor, model, prompt, tools and
+`runtimeId`. Authority and business state — consent, `canSubmit`, a lead, a vendor, a city, a price —
+have no field at all. None appears in the request shape, and the schema is `.strict()`, so supplying
+one is a **refusal** rather than a silently dropped field.
 
 That matters because the intended caller relays a browser. A browser that could name its own
 `partyType` could have Riya answer it as a vendor, through prompt-selection rules that are
-scope-bound by design; one that could name its own `dataClass` could route HUMAN_ONLY content to a
-hosted model.
+scope-bound by design.
 
 `webTurnRef` maps to the runtime's existing `providerMessageRef`. The mature cross-runtime field is
 **not renamed for the web** — ADR-0092 §3 already established it as opaque and provider-neutral, and
 renaming it for one surface would be a breaking change made for tidiness.
+
+### 2a. `dataClass` is accepted from a trusted caller, and is never browser input
+
+RWC-P2C accepts `dataClass` from its trusted private caller because the authoritative runtime
+requires classified data: routing a turn safely is not possible without knowing whether its content
+may leave a hosted boundary. **This does not authorize a browser to choose classification.**
+
+Any future ingress adapter must **derive or assign `RuntimeDataClass` under governed server-side
+policy** and must **not forward a browser-supplied classification field**. A visitor who could label
+their own content `HOSTED_ALLOWED` could route HUMAN_ONLY material to a hosted model, which is the
+one failure the class exists to prevent. **Direct browser access to P2C remains forbidden.**
+
+**P2C does not authenticate the provenance of `dataClass`, and cannot.** It has no ingress, no
+authentication and no notion of a browser — it accepts the classification its caller asserts. That
+proof belongs to the ingress adapter, and it is a substantial part of why the adapter remains a
+**separate, later slice** rather than something bundled into this one: a boundary that both accepts
+a classification and vouches for it would have no reviewable seam between the two.
+
+`dataClass` is deliberately not renamed, not hard-coded to a single class, and not derived by a
+classifier here. Hard-coding would make the runtime's own routing decision meaningless, and a
+classifier inside this service would be P2C inventing an authority it has not been given.
 
 ### 3. Exactly one delegation to the existing authoritative runtime
 
@@ -171,3 +196,6 @@ transcript field, streaming, a phase or provenance reducer, or any write to cont
 path each require a superseding ADR. So does calling the authoritative runtime more than once per
 turn, deep-importing another package's private module, or introducing a `replyText` field —
 returning client-facing text is a decision about what Jarvis is cleared to say, not a convenience.
+
+So does relaxing §2a: hard-coding `dataClass`, deriving it inside this service, or building an
+ingress that forwards a browser-supplied classification instead of assigning one server-side.
