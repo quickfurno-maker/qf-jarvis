@@ -489,18 +489,28 @@ describe('(50, 53-57) the repository invariants this slice must not move', () =>
     ]);
   });
 
-  it('no application composes this service, and the only package importing it takes types alone', () => {
-    // P2C delivered the service and its proof, and until RWC-P2B the guarantee was simply "nothing
-    // imports it". RWC-P2B (ADR-0095) changed that fact and no other: the durable continuity store
-    // implements the `RiyaContinuityStorePort` this package OWNS, so it imports the port's types.
+  it('exactly one package and one application may reach this service, each in one way', () => {
+    // The history of this lock is the history of the slice.
     //
-    // The lock is made MORE precise rather than dropped. An adapter implementing a declared port is
-    // not a composition; an application reaching for the service IS. So:
-    //   * the importing PACKAGE set is pinned exactly to one;
-    //   * no application may import the service at all;
-    //   * and the importer must not construct it — a store that called the service would have
-    //     inverted the dependency and composed the very thing this asserts nobody has composed.
+    // P2C delivered the service and its proof, and the guarantee was simply "nothing imports it".
+    // RWC-P2B (ADR-0095) changed that once: the durable continuity store implements the
+    // `RiyaContinuityStorePort` this package OWNS, so it imports the port's TYPES. An adapter
+    // implementing a declared port is not a composition, so the lock was narrowed rather than
+    // dropped.
+    //
+    // ADR-0097 changes it a second time, and this one IS a composition: the private Riya web
+    // ingress adapter in `apps/api` injects an already-built service and calls `handleTurn`. That
+    // is the entire purpose of that slice -- a service nothing could reach was, until now, a
+    // capability nobody could use.
+    //
+    // So the lock is narrowed again rather than deleted, and it still says something worth saying:
+    //   * the importing PACKAGE set is pinned exactly to one, and takes TYPES ONLY;
+    //   * the importing APPLICATION set is pinned exactly to one;
+    //   * that application must reach the service through the private ingress and nowhere else;
+    //   * and the store importer must still not CONSTRUCT it -- a store that called the service
+    //     would have inverted the dependency it exists to serve.
     const ALLOWED_PACKAGE_IMPORTERS = ['postgres-riya-conversation-continuity-store'];
+    const ALLOWED_APP_IMPORTERS = ['api'];
     const importingPackages = new Set<string>();
     const importingApps = new Set<string>();
 
@@ -526,7 +536,21 @@ describe('(50, 53-57) the repository invariants this slice must not move', () =>
     }
 
     expect([...importingPackages].sort()).toStrictEqual(ALLOWED_PACKAGE_IMPORTERS);
-    expect([...importingApps]).toStrictEqual([]);
+    expect([...importingApps].sort()).toStrictEqual(ALLOWED_APP_IMPORTERS);
+
+    // The application reaches it from the private ingress ONLY. If any other module in `apps/api`
+    // ever named this package, the service would have acquired a second entry point without anybody
+    // deciding it should have one.
+    const apiSrc = join(REPO_ROOT, 'apps/api/src');
+    for (const file of walk(apiSrc, false)) {
+      const normalised = file.replace(/\\/gu, '/');
+      if (!readFileSync(file, 'utf8').includes('@qf-jarvis/riya-web-conversation-service'))
+        continue;
+      expect(
+        normalised.includes('/src/private-riya-web-ingress/') || normalised.includes('/src/tests/'),
+        file,
+      ).toBe(true);
+    }
 
     // Type-only, and specifically NOT a construction of the service.
     const storeSrc = join(REPO_ROOT, 'packages/postgres-riya-conversation-continuity-store/src');

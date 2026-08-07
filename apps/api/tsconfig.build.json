@@ -30,7 +30,12 @@
     // service composes them without importing a line of either at runtime.
     { "path": "../../packages/contracts" },
     { "path": "../../packages/approval-core-adapter/tsconfig.build.json" },
-    { "path": "../../packages/postgres-approval-queue/tsconfig.build.json" }
+    { "path": "../../packages/postgres-approval-queue/tsconfig.build.json" },
+    // ADR-0097: the private Riya web ingress. Two edges, both genuinely used -- the conversation
+    // SERVICE the handler delegates to, and `agent-runtime` for the closed `RUNTIME_DATA_CLASSES`
+    // vocabulary the classification-policy output is validated against.
+    { "path": "../../packages/riya-web-conversation-service/tsconfig.build.json" },
+    { "path": "../../packages/agent-runtime/tsconfig.build.json" }
   ],
   "include": ["src/**/*.ts"],
   "exclude": ["src/tests/**"]

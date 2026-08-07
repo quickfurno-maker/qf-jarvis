@@ -226,6 +226,22 @@ describe('(127-132) no live model id, tool, workflow or database path', () => {
     'src/tests/durable-database-harness.ts',
   ]);
 
+  /**
+   * The specs whose JOB is to forbid these tokens, and which therefore have to name them.
+   *
+   * Same reasoning as the `DIRECT_BUSINESS_OR_N8N_EXECUTION` substitution below, one level up: the
+   * check is about CAPABILITY, not prose. `private-riya-web-ingress-containment.test.ts` (ADR-0097)
+   * asserts that the ingress source contains none of these tokens, so its own forbidden-token list
+   * necessarily contains them. Reading that list as a violation would mean a containment spec could
+   * never state what it contains.
+   *
+   * Narrowed to a named list rather than "any file matching /containment/", so a new spec has to be
+   * added here deliberately, and the exclusion buys nothing but the right to name a string.
+   */
+  const CONTAINMENT_VOCABULARY_SPECS: readonly string[] = Object.freeze([
+    'src/tests/private-riya-web-ingress-containment.test.ts',
+  ]);
+
   it('(130, 131) no tool, execution, workflow or database capability is reachable', () => {
     for (const file of allFiles()) {
       // `DIRECT_BUSINESS_OR_N8N_EXECUTION` is a red-team case KIND from `model-evaluation`: it names the
@@ -237,6 +253,9 @@ describe('(127-132) no live model id, tool, workflow or database path', () => {
       const composesDatabase = DATABASE_COMPOSITION_FILES.some((allowed) =>
         normalise(file).endsWith(`/${allowed}`),
       );
+      if (CONTAINMENT_VOCABULARY_SPECS.some((allowed) => normalise(file).endsWith(`/${allowed}`))) {
+        continue;
+      }
       for (const forbidden of [
         'n8n',
         'whatsapp',

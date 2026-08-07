@@ -246,10 +246,30 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
   const FORBIDDEN_MODULES =
     /from ['"]node:(net|http|https|dns|tls|dgram|child_process|readline|repl|worker_threads|cluster)['"]/;
 
+  /**
+   * The ONE production directory permitted to import `node:http`.
+   *
+   * ADR-0097's private Riya web ingress is a PROCESS boundary: speaking HTTP and verifying an
+   * Ed25519 signature are exactly what it exists to do, and pushing either into a workspace package
+   * would make a reusable library environment-dependent. The exception is narrow and stays narrow:
+   * the ingress may name `node:http` and `node:crypto`; every other production file in this app may
+   * not, and the ingress still may not `fetch`, `exec` or `spawn` -- all asserted below. It also
+   * still starts nothing: `private-riya-web-ingress-containment.test.ts` proves no `listen`, no
+   * `createServer` and no environment read anywhere in it.
+   */
+  const INGRESS_DIR = 'src/private-riya-web-ingress/';
+  const isIngress = (file: string): boolean => normalise(file).includes(INGRESS_DIR);
+
   it('production source imports no network, shell or terminal module', () => {
     for (const file of productionFiles()) {
       const code = codeOnly(readFileSync(file, 'utf8'));
-      expect(code).not.toMatch(FORBIDDEN_MODULES);
+      if (isIngress(file)) {
+        expect(code, file).not.toMatch(
+          /from ['"]node:(net|https|dns|tls|dgram|child_process|readline|repl|worker_threads|cluster)['"]/,
+        );
+      } else {
+        expect(code, file).not.toMatch(FORBIDDEN_MODULES);
+      }
       // The one live HTTP call a SHADOW run makes is issued by the gateway's Groq transport inside
       // `packages/model-gateway`. `apps/api` supplies the credential and the composition; it never
       // opens a socket itself.
@@ -372,6 +392,11 @@ describe('the staging smoke stays out of the production boundary', () => {
     // production source that composes the real gateway (ADR-0065 §6). `zod` is the schema validator
     // already pinned by nine other workspace packages — no new third-party resolution (ADR-0065 §14).
     expect(Object.keys(manifest.dependencies ?? {}).sort()).toEqual([
+      // ADR-0097 adds exactly two, both genuinely used by the private ingress: the conversation
+      // SERVICE it delegates to, and `agent-runtime` for the closed `RUNTIME_DATA_CLASSES`
+      // vocabulary its classification-policy output is validated against. No web framework, and no
+      // new third-party resolution.
+      '@qf-jarvis/agent-runtime',
       // QFJ-P08 (ADR-0082): the authenticated operator boundary. `contracts` is a real runtime edge
       // -- the service validates an identifier and two instants with the governed schemas -- while
       // `approval-core-adapter` and `postgres-approval-queue` are named as TYPES ONLY, because both
@@ -392,6 +417,7 @@ describe('the staging smoke stays out of the production boundary', () => {
       // QFJ-S3-I-B (ADR-0073): the SHADOW runner's fixed synthetic prompt is now a real
       // `PromptDefinition`, so its identity and its bytes cannot drift apart. Still an EXACT set.
       '@qf-jarvis/prompt-registry',
+      '@qf-jarvis/riya-web-conversation-service',
       'zod',
     ]);
     // QFJ-P08-B3: dev dependencies exist now, and are EXACTLY the test-only fixture packages the
@@ -619,6 +645,19 @@ describe('(78, 79, 80, 81) repository invariants', () => {
      */
     const PROCESS_CAPABLE = 'deployment-containment.test.ts';
 
+    /**
+     * The ONE spec permitted to import `node:http`, and only that.
+     *
+     * The ADR-0097 ingress spec runs the REAL handler behind a real ephemeral loopback server. A
+     * hand-rolled `IncomingMessage` double would prove the function works on the object the test
+     * built; chunked bodies, duplicated headers, byte-exact signatures, status codes and response
+     * headers are properties of HTTP, so HTTP is what they are proved against. It reaches no
+     * network: the server binds 127.0.0.1 on an ephemeral port and is closed after each case, and
+     * the only `fetch` in the file targets that loopback server. Every other network module stays
+     * forbidden for it.
+     */
+    const LOOPBACK_HTTP_CAPABLE = 'private-riya-web-ingress.test.ts';
+
     for (const name of specs) {
       const text = readFileSync(join(dir, name), 'utf8');
       // Anchored to line starts: unanchored, `import` also matches `import.meta.url`.
@@ -627,6 +666,8 @@ describe('(78, 79, 80, 81) repository invariants', () => {
       for (const statement of statements) {
         if (name === PROCESS_CAPABLE) {
           expect(statement, name).not.toMatch(/node:(net|http|https|dns|tls|dgram)/);
+        } else if (name === LOOPBACK_HTTP_CAPABLE) {
+          expect(statement, name).not.toMatch(/node:(net|https|dns|tls|dgram|child_process)/);
         } else {
           expect(statement, name).not.toMatch(/node:(net|http|https|dns|tls|dgram|child_process)/);
         }
@@ -641,7 +682,9 @@ describe('(78, 79, 80, 81) repository invariants', () => {
         }
         expect(statement).not.toMatch(/\b(pg|postgres|supabase|dockerode|groq-sdk|openai)\b/);
       }
-      expect(text).not.toMatch(/\bfetch\s*\(/);
+      if (name !== LOOPBACK_HTTP_CAPABLE) {
+        expect(text, name).not.toMatch(/\bfetch\s*\(/);
+      }
     }
   });
 });

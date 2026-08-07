@@ -38,6 +38,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@qf-jarvis/agent-runtime':
+        specifier: workspace:*
+        version: link:../../packages/agent-runtime
       '@qf-jarvis/approval-core-adapter':
         specifier: workspace:*
         version: link:../../packages/approval-core-adapter
@@ -68,6 +71,9 @@ importers:
       '@qf-jarvis/prompt-registry':
         specifier: workspace:*
         version: link:../../packages/prompt-registry
+      '@qf-jarvis/riya-web-conversation-service':
+        specifier: workspace:*
+        version: link:../../packages/riya-web-conversation-service
       zod:
         specifier: 4.4.3
         version: 4.4.3
