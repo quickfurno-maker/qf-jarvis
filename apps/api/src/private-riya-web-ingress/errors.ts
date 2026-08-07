@@ -1,7 +1,7 @@
 /**
  * The closed ingress failure vocabulary (private Riya web ingress, ADR-0097).
  *
- * Nine codes, nine fixed messages. A message is a CONSTANT chosen by the code and never built from
+ * Ten codes, ten fixed messages. A message is a CONSTANT chosen by the code and never built from
  * the request, the signature, the key ring, the downstream service or anything a person typed.
  *
  * This boundary handles a browser visitor's own words about their home, relayed by a QuickFurno
@@ -31,6 +31,16 @@ const CODE_VALUES = [
   'unsupported-media',
   /** The injected server-side classification policy refused, threw, or returned a non-class. */
   'policy-refused',
+  /**
+   * The replay guard is full of LIVE claims and cannot admit another request right now.
+   *
+   * Its own outcome rather than a replay or a conflict: those say a caller repeated itself, and this
+   * says the guard ran out of room. Reporting saturation as a replay would tell an operator the
+   * wrong thing and tell a caller to stop retrying when retrying later is exactly right. Refusing
+   * here is deliberate — the alternative is evicting a live claim, which trades replay protection
+   * for availability under precisely the load an attacker can manufacture.
+   */
+  'replay-guard-unavailable',
   /** The downstream conversation service could not answer. Fail closed; never fabricate a turn. */
   'service-unavailable',
   /** Internal evidence contradicted itself. Trusting it would be worse than refusing. */
@@ -51,6 +61,7 @@ const MESSAGES: Readonly<Record<PrivateRiyaWebIngressErrorCode, string>> = Objec
   'payload-too-large': 'The private Riya web ingress request body is too large.',
   'unsupported-media': 'The private Riya web ingress request media type is not supported.',
   'policy-refused': 'The private Riya web ingress classification policy refused the request.',
+  'replay-guard-unavailable': 'The private Riya web ingress cannot accept a request right now.',
   'service-unavailable': 'The Riya web conversation service is unavailable.',
   'internal-invariant': 'A private Riya web ingress invariant was violated.',
 });
@@ -66,6 +77,9 @@ const STATUS: Readonly<Record<PrivateRiyaWebIngressErrorCode, number>> = Object.
   // A misconfigured or failing SERVER-side policy is this deployment's defect, not the caller's.
   // Reporting it as a 4xx would invite a QuickFurno engineer to go looking at their request.
   'policy-refused': 500,
+  // Retryable-later, exactly like an unavailable downstream: the request was well-formed and
+  // authentic, and nothing about it was wrong.
+  'replay-guard-unavailable': 503,
   'service-unavailable': 503,
   'internal-invariant': 500,
 });

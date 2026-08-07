@@ -13,6 +13,8 @@
  */
 import { createServer, type Server } from 'node:http';
 import { generateKeyPairSync, sign as cryptoSign, createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 import type {
   RiyaWebConversationResultV2,
@@ -38,6 +40,11 @@ import type {
   RiyaWebIngressDataClassPolicy,
 } from '../private-riya-web-ingress/data-class-policy.js';
 import { PRIVATE_RIYA_WEB_INGRESS_ERROR_CODES } from '../private-riya-web-ingress/errors.js';
+import {
+  DEFAULT_REPLAY_TTL_MS,
+  MIN_REPLAY_TTL_MS,
+  createReplayGuard,
+} from '../private-riya-web-ingress/replay-guard.js';
 import {
   KEY_ID_HEADER,
   SIGNATURE_HEADER,
@@ -656,26 +663,230 @@ describe('(34) replay', () => {
     expect(service.calls()).toBe(3);
   });
 
-  it('an entry expires lazily, so the identifier becomes usable again', async () => {
+  // -------------------------------------------------------------------------
+  // The retention floor. A claim must outlive every signature it guards.
+  // -------------------------------------------------------------------------
+
+  it('a TTL shorter than the full signature-validity window is REFUSED at construction', () => {
+    // Not clamped. A deployment that asked for 30 seconds has made an assumption about signature
+    // lifetime that is wrong, and quietly substituting a different number leaves that assumption in
+    // place everywhere else somebody made it.
+    for (const ttlMs of [1, 1_000, 60_000, MIN_REPLAY_TTL_MS - 1]) {
+      expect(
+        () =>
+          createPrivateRiyaWebIngressHandler({
+            service: scriptedService(),
+            dataClassPolicy: scriptedPolicy(),
+            clock: () => NOW,
+            verificationKeys: [{ keyId: KEY_ID, publicKeyPem: PUBLIC_PEM }],
+            replay: { ttlMs },
+          }),
+        String(ttlMs),
+      ).toThrow();
+    }
+  });
+
+  it('a TTL of exactly the window is accepted, and is the default', () => {
+    expect(MIN_REPLAY_TTL_MS).toBe(120_000);
+    expect(DEFAULT_REPLAY_TTL_MS).toBe(MIN_REPLAY_TTL_MS);
+    expect(() =>
+      createPrivateRiyaWebIngressHandler({
+        service: scriptedService(),
+        dataClassPolicy: scriptedPolicy(),
+        clock: () => NOW,
+        verificationKeys: [{ keyId: KEY_ID, publicKeyPem: PUBLIC_PEM }],
+        replay: { ttlMs: MIN_REPLAY_TTL_MS },
+      }),
+    ).not.toThrow();
+  });
+
+  it('a FUTURE-SKEWED signature cannot be replayed at the far edge of its own validity', async () => {
+    // The case the retention floor exists for, end to end. First receipt at T; the request legally
+    // carries issuedAt = T + 59s, so its signature stays fresh until roughly T + 119s. A guard that
+    // forgot the claim before then would admit the replay while the signature still worked.
+    const service = scriptedService();
+    let now = '2026-08-07T09:00:00.000Z';
+    const base = await listening({ service, clock: () => now });
+    const raw = JSON.stringify(requestBody({ issuedAt: '2026-08-07T09:00:59.000Z' }));
+    const headers = signed(raw);
+
+    expect((await post(base, raw, headers)).status).toBe(200);
+    expect(service.calls()).toBe(1);
+
+    // Almost two minutes later the SAME bytes are still authentic -- and still refused.
+    now = '2026-08-07T09:01:58.000Z';
+    const replayed = await post(base, raw, headers);
+    expect(replayed.status).toBe(409);
+    expect(replayed.json['error']).toBe('replay-detected');
+    expect(service.calls()).toBe(1);
+  });
+
+  it('an entry expires lazily once its signature can no longer be fresh', async () => {
+    // Only AFTER the complete validity window has passed. By then the same bytes would fail
+    // authentication anyway, so recovering the slot costs nothing.
     const service = scriptedService();
     let now = NOW;
-    const base = await listening({ service, clock: () => now, replay: { ttlMs: 1 } });
-    const raw = JSON.stringify(requestBody());
-    expect((await post(base, raw, signed(raw))).status).toBe(200);
-    // Same signed bytes, a later clock. Freshness still passes; the claim has expired.
-    now = '2026-08-07T09:00:30.000Z';
-    expect((await post(base, raw, signed(raw))).status).toBe(200);
+    const base = await listening({ service, clock: () => now });
+    const first = JSON.stringify(requestBody());
+    expect((await post(base, first, signed(first))).status).toBe(200);
+
+    now = '2026-08-07T09:05:00.000Z';
+    // Re-signed for the new instant, because the original signature is long stale.
+    const later = JSON.stringify(requestBody({ issuedAt: now }));
+    expect((await post(base, later, signed(later))).status).toBe(200);
     expect(service.calls()).toBe(2);
   });
 
-  it('capacity is bounded', async () => {
+  // -------------------------------------------------------------------------
+  // Saturation fails closed, and never at the cost of a live claim.
+  // -------------------------------------------------------------------------
+
+  it('a full guard REFUSES rather than evicting a live claim', async () => {
     const service = scriptedService();
-    const base = await listening({ service, replay: { capacity: 2 } });
-    for (const requestId of ['req.1', 'req.2', 'req.3', 'req.4']) {
+    const policy = scriptedPolicy();
+    const base = await listening({ service, dataClassPolicy: policy, replay: { capacity: 2 } });
+
+    for (const requestId of ['req.A', 'req.B']) {
       const raw = JSON.stringify(requestBody({ requestId }));
       expect((await post(base, raw, signed(raw))).status, requestId).toBe(200);
     }
-    expect(service.calls()).toBe(4);
+    expect(service.calls()).toBe(2);
+
+    // Third request: the guard is full of LIVE claims.
+    const third = JSON.stringify(requestBody({ requestId: 'req.C' }));
+    const refused = await post(base, third, signed(third));
+    expect(refused.status).toBe(503);
+    expect(refused.json['error']).toBe('replay-guard-unavailable');
+    // Its own code -- never dressed up as a repeat of something the caller never sent.
+    expect(refused.json['error']).not.toBe('replay-detected');
+    expect(refused.json['error']).not.toBe('request-conflict');
+    // Nothing downstream ran for it.
+    expect(service.calls()).toBe(2);
+    expect(policy.calls()).toBe(2);
+
+    // And the decisive part: req.A was NOT evicted to make room, so replaying it is still caught.
+    const replayA = JSON.stringify(requestBody({ requestId: 'req.A' }));
+    const again = await post(base, replayA, signed(replayA));
+    expect(again.status).toBe(409);
+    expect(again.json['error']).toBe('replay-detected');
+    expect(service.calls()).toBe(2);
+  });
+
+  it('capacity recovers by lazy sweep once claims are genuinely expired', async () => {
+    const service = scriptedService();
+    let now = NOW;
+    const base = await listening({ service, clock: () => now, replay: { capacity: 2 } });
+    for (const requestId of ['req.A', 'req.B']) {
+      const raw = JSON.stringify(requestBody({ requestId }));
+      expect((await post(base, raw, signed(raw))).status, requestId).toBe(200);
+    }
+    const full = JSON.stringify(requestBody({ requestId: 'req.C' }));
+    expect((await post(base, full, signed(full))).status).toBe(503);
+
+    now = '2026-08-07T09:05:00.000Z';
+    const later = JSON.stringify(requestBody({ requestId: 'req.C', issuedAt: now }));
+    expect((await post(base, later, signed(later))).status).toBe(200);
+    expect(service.calls()).toBe(3);
+  });
+
+  // -------------------------------------------------------------------------
+  // One clock sample per request.
+  // -------------------------------------------------------------------------
+
+  it('takes exactly ONE clock sample per request', async () => {
+    // Freshness and the claim must reason about the SAME instant. Two reads could straddle the
+    // boundary of the window they jointly define.
+    let samples = 0;
+    const base = await listening({
+      clock: (): string => {
+        samples += 1;
+        return NOW;
+      },
+    });
+    const raw = JSON.stringify(requestBody());
+    expect((await post(base, raw, signed(raw))).status).toBe(200);
+    expect(samples).toBe(1);
+  });
+
+  it.each([
+    ['not an instant', 'yesterday'],
+    ['an empty string', ''],
+    ['a non-string', 42 as unknown as string],
+  ])('an unusable clock (%s) fails closed before the policy and the service', async (_l, value) => {
+    const service = scriptedService();
+    const policy = scriptedPolicy();
+    const base = await listening({ service, dataClassPolicy: policy, clock: () => value });
+    const raw = JSON.stringify(requestBody());
+    const answer = await post(base, raw, signed(raw));
+    expect(answer.status).toBe(500);
+    expect(answer.json['error']).toBe('internal-invariant');
+    expect(policy.calls()).toBe(0);
+    expect(service.calls()).toBe(0);
+  });
+
+  it('the guard never substitutes an instant for an unusable clock', () => {
+    const guard = createReplayGuard();
+    for (const nowMs of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      expect(() =>
+        guard.claim({ caller: 'quickfurno-core', requestId: 'req.1', bodyDigest: 'd', nowMs }),
+      ).toThrow();
+    }
+    // Epoch zero would expire every entry on the next claim and admit every replay.
+    expect(guard.size()).toBe(0);
+  });
+
+  // -------------------------------------------------------------------------
+  // What the guard is allowed to remember.
+  // -------------------------------------------------------------------------
+
+  it('retains no request text, reply text, continuity or JSON', () => {
+    const guard = createReplayGuard();
+    guard.claim({
+      caller: 'quickfurno-core',
+      requestId: 'req.1',
+      bodyDigest: 'ZGlnZXN0',
+      nowMs: Date.parse(NOW),
+    });
+    expect(guard.size()).toBe(1);
+    // The public surface is two functions, and neither can hand back a stored value.
+    expect(Object.keys(guard).sort()).toEqual(['claim', 'size']);
+    // And the module holds nothing that could carry content in the first place. Comments are
+    // stripped: the guard's own documentation necessarily NAMES the things it refuses to retain,
+    // and scanning that prose would report the promise as its own violation.
+    const source = readFileSync(
+      fileURLToPath(new URL('../private-riya-web-ingress/replay-guard.ts', import.meta.url)),
+      'utf8',
+    )
+      .replace(/\/\*[\s\S]*?\*\//gu, '')
+      .split('\n')
+      .filter((line) => !/^\s*\/\//u.test(line))
+      .join('\n');
+    for (const forbidden of [
+      'normalizedText',
+      'replyBody',
+      'authorizedReply',
+      'continuity',
+      'JSON.stringify',
+      'JSON.parse',
+    ]) {
+      expect({ forbidden, present: source.includes(forbidden) }).toEqual({
+        forbidden,
+        present: false,
+      });
+    }
+  });
+
+  it('schedules nothing: no timer, no interval, no polling loop', () => {
+    const source = readFileSync(
+      fileURLToPath(new URL('../private-riya-web-ingress/replay-guard.ts', import.meta.url)),
+      'utf8',
+    );
+    for (const forbidden of ['setTimeout', 'setInterval', 'setImmediate', 'unref(']) {
+      expect({ forbidden, present: source.includes(forbidden) }).toEqual({
+        forbidden,
+        present: false,
+      });
+    }
   });
 });
 
@@ -893,7 +1104,7 @@ describe('(30) construction fails closed', () => {
 // ---------------------------------------------------------------------------
 
 describe('the contract itself', () => {
-  it('exposes exactly the nine closed error codes', () => {
+  it('exposes exactly the ten closed error codes', () => {
     expect([...PRIVATE_RIYA_WEB_INGRESS_ERROR_CODES]).toEqual([
       'invalid-request',
       'authentication-failed',
@@ -902,6 +1113,9 @@ describe('the contract itself', () => {
       'payload-too-large',
       'unsupported-media',
       'policy-refused',
+      // Capacity saturation is its OWN code: a full guard and a repeated request are different
+      // facts, and an operator needs to be able to tell them apart.
+      'replay-guard-unavailable',
       'service-unavailable',
       'internal-invariant',
     ]);

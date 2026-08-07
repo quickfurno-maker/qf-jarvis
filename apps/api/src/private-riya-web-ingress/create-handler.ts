@@ -352,6 +352,20 @@ export function createPrivateRiyaWebIngressHandler(
         const rawBody = await readBoundedBody(req);
         const request = parseRequest(rawBody);
 
+        // ONE clock sample for the whole request, validated before anything reads it.
+        //
+        // Freshness and the replay claim must reason about the SAME instant. Two reads could
+        // straddle the boundary of the window they jointly define -- a signature judged fresh
+        // against one instant and a claim expired against another -- and the guard would be
+        // deciding about a moment the authentication never saw. An unusable clock fails closed
+        // here, before the policy or the service could run: substituting a time would be inventing
+        // the one input every window in this file is measured against.
+        const now = clock();
+        const nowMs = Date.parse(typeof now === 'string' ? now : '');
+        if (!Number.isFinite(nowMs)) {
+          throw new PrivateRiyaWebIngressError('internal-invariant');
+        }
+
         // 5. Authentication. Binds the routing identity AND the exact body bytes.
         verifyIngressSignature({
           keyRing,
@@ -364,7 +378,7 @@ export function createPrivateRiyaWebIngressHandler(
           requestId: request.requestId,
           issuedAt: request.issuedAt,
           rawBody,
-          now: clock(),
+          now,
         });
 
         // Restated after verification. The schema already pins both to literals; asserting again
@@ -381,13 +395,20 @@ export function createPrivateRiyaWebIngressHandler(
         }
 
         // 6. The replay claim -- AFTER verification, so an unauthenticated caller cannot burn
-        //    identifiers a real gateway intends to use.
+        //    identifiers a real gateway intends to use, and BEFORE the policy or the service, so a
+        //    refused claim costs neither a classification nor an agent turn.
+        // The SAME instant authentication just judged freshness against.
         const claim = replayGuard.claim({
           caller: request.caller,
           requestId: request.requestId,
           bodyDigest: rawBodyDigest(rawBody),
-          now: clock(),
+          nowMs,
         });
+        if (claim === 'capacity-exhausted') {
+          // Fail CLOSED. The guard is full of live claims and will not evict one to make room --
+          // and this is reported as its own code, never as a replay or a conflict.
+          throw new PrivateRiyaWebIngressError('replay-guard-unavailable');
+        }
         if (claim !== 'claimed') {
           throw new PrivateRiyaWebIngressError(claim);
         }

@@ -11,15 +11,28 @@
  * before verification would let an unauthenticated caller burn identifiers a real gateway intends to
  * use, turning a public endpoint into a denial-of-service surface.
  *
- * ### Two different failures
+ * ### It never fails open
  *
- * - the same `requestId` with the SAME body is a **replay**: the caller is resending something
- *   already served, and the honest answer is that it was;
- * - the same `requestId` with a DIFFERENT body is a **conflict**: two genuinely different requests
- *   are claiming one identity, which is a caller defect worth naming separately because retrying
- *   will not fix it.
+ * That is the whole contract, and it drives all three rules below.
  *
- * Either way the service is not called a second time.
+ * **Retention outlives signature validity.** Authentication accepts `issuedAt` within ±60s, so a
+ * request first received at `T` may legally carry `issuedAt = T + 60s` — and that signature stays
+ * fresh until roughly `T + 120s`. A claim retained for less than that would expire while the very
+ * signature it guards was still usable, which is a replay window wearing the costume of a cache
+ * setting. The minimum retention is therefore **120,000 ms**, and a shorter value is refused at
+ * construction rather than silently clamped: a deployment that asked for 30 seconds should be told,
+ * not quietly given something else.
+ *
+ * **A live claim is never evicted.** If the map is still full of unexpired entries after sweeping,
+ * the request is REFUSED. Evicting the oldest live claim would trade replay protection for
+ * availability under exactly the load an attacker can manufacture — and the evicted identifier would
+ * become claimable again inside its own valid window. Capacity saturation is reported as its own
+ * outcome, never as `replay-detected` or `request-conflict`, because a full guard and a repeated
+ * request are different facts and an operator needs to tell them apart.
+ *
+ * **Time comes from the caller, already validated.** `claim` takes `nowMs` as a number the handler
+ * has already parsed from its ONE clock snapshot. It substitutes nothing for an unusable clock: a
+ * guard that fell back to epoch zero would expire every entry immediately and admit every replay.
  *
  * ### It retains no content, ever
  *
@@ -45,22 +58,35 @@ import { digestsEqual } from './signature.js';
 export const DEFAULT_REPLAY_CAPACITY = 10_000;
 
 /**
- * The default retention window, in milliseconds.
+ * The MINIMUM — and default — retention window, in milliseconds.
  *
- * Twice the ±60s freshness window. It must comfortably COVER freshness: an entry that expired while
- * its signature was still valid would leave exactly the gap the guard exists to close.
+ * Twice the ±60s freshness window, because a future-skewed signature first seen at `T` can carry
+ * `issuedAt = T + 60s` and stay fresh until `T + 120s`. Anything shorter is a replay hole.
  */
-export const DEFAULT_REPLAY_TTL_MS = 120_000;
+export const MIN_REPLAY_TTL_MS = 120_000;
+export const DEFAULT_REPLAY_TTL_MS = MIN_REPLAY_TTL_MS;
 
-export type ReplayClaim = 'claimed' | 'replay-detected' | 'request-conflict';
+/**
+ * The claim outcomes.
+ *
+ * `capacity-exhausted` is deliberately its OWN value. Folding it into `replay-detected` would tell an
+ * operator that a caller repeated itself when in fact the guard ran out of room, and would tell a
+ * caller to stop retrying when retrying later is exactly the right response.
+ */
+export type ReplayClaim = 'claimed' | 'replay-detected' | 'request-conflict' | 'capacity-exhausted';
 
 export interface ReplayGuard {
-  /** Claim `(caller, requestId)` for `bodyDigest` at `now`. One call decides. */
+  /**
+   * Claim `(caller, requestId)` for `bodyDigest` at `nowMs`. One call decides.
+   *
+   * `nowMs` is a finite epoch-millisecond value the CALLER has already validated. Passing anything
+   * else is a programming error and throws — it is never treated as a time.
+   */
   readonly claim: (args: {
     readonly caller: string;
     readonly requestId: string;
     readonly bodyDigest: string;
-    readonly now: string;
+    readonly nowMs: number;
   }) => ReplayClaim;
   /** Live entry count, for capacity proofs. Never the entries themselves. */
   readonly size: () => number;
@@ -68,6 +94,7 @@ export interface ReplayGuard {
 
 export interface ReplayGuardConfig {
   readonly capacity?: number;
+  /** Retention in milliseconds. Must be at least {@link MIN_REPLAY_TTL_MS}. */
   readonly ttlMs?: number;
 }
 
@@ -83,11 +110,16 @@ export function createReplayGuard(config: ReplayGuardConfig = {}): ReplayGuard {
   if (!Number.isInteger(capacity) || capacity < 1 || capacity > 1_000_000) {
     throw new RangeError('replay guard capacity must be a positive bounded integer');
   }
-  if (!Number.isInteger(ttlMs) || ttlMs < 1) {
-    throw new RangeError('replay guard ttl must be a positive integer of milliseconds');
+  if (!Number.isInteger(ttlMs) || ttlMs < MIN_REPLAY_TTL_MS) {
+    // REFUSED, not clamped. A deployment that asked for a shorter window has made an assumption
+    // about signature lifetime that is wrong, and silently substituting a different number would
+    // leave that assumption in place everywhere else it was made.
+    throw new RangeError(
+      'replay guard ttl must be at least the full signature-validity window in milliseconds',
+    );
   }
 
-  // Insertion-ordered, so the oldest entry is the first one a capacity eviction reaches.
+  // Insertion-ordered, so a sweep visits the oldest entries first.
   const entries = new Map<string, Entry>();
 
   /** Drop everything already expired at `nowMs`. Cheap, and only ever called on a claim. */
@@ -105,18 +137,20 @@ export function createReplayGuard(config: ReplayGuardConfig = {}): ReplayGuard {
       readonly caller: string;
       readonly requestId: string;
       readonly bodyDigest: string;
-      readonly now: string;
+      readonly nowMs: number;
     }): ReplayClaim => {
-      const nowMs = Date.parse(args.now);
-      // An unparseable clock is not a reason to admit a request. The caller of this guard has
-      // already validated the instant it passes in; this is the belt to that braces.
-      const effectiveNow = Number.isNaN(nowMs) ? 0 : nowMs;
+      if (!Number.isFinite(args.nowMs)) {
+        // Never a substituted instant. Epoch zero would expire every entry on the next claim and
+        // turn an unusable clock into an open replay window.
+        throw new RangeError('replay guard requires a finite instant');
+      }
+      const nowMs = args.nowMs;
       // The key is the two identifiers, length-prefixed so `a|bc` and `ab|c` cannot collide.
       const key = `${String(args.caller.length)}:${args.caller}|${args.requestId}`;
 
       const existing = entries.get(key);
       if (existing !== undefined) {
-        if (existing.expiresAtMs > effectiveNow) {
+        if (existing.expiresAtMs > nowMs) {
           // Constant-time: whether two digests match is exactly what an attacker probing this
           // boundary would like to learn a byte at a time.
           return digestsEqual(existing.bodyDigest, args.bodyDigest)
@@ -127,18 +161,15 @@ export function createReplayGuard(config: ReplayGuardConfig = {}): ReplayGuard {
       }
 
       if (entries.size >= capacity) {
-        sweep(effectiveNow);
+        sweep(nowMs);
       }
       if (entries.size >= capacity) {
-        // Still full of LIVE entries: evict the oldest rather than refuse the request. Refusing
-        // would convert a burst of legitimate traffic into an outage; the eviction's only cost is
-        // that one very old identifier becomes claimable again inside its window.
-        const oldest = entries.keys().next();
-        if (!oldest.done) {
-          entries.delete(oldest.value);
-        }
+        // Still full of LIVE claims. FAIL CLOSED. Evicting the oldest would hand an attacker a way
+        // to make a specific identifier claimable again inside its own valid window simply by
+        // generating traffic, which is availability pressure buying a replay.
+        return 'capacity-exhausted';
       }
-      entries.set(key, { bodyDigest: args.bodyDigest, expiresAtMs: effectiveNow + ttlMs });
+      entries.set(key, { bodyDigest: args.bodyDigest, expiresAtMs: nowMs + ttlMs });
       return 'claimed';
     },
   });

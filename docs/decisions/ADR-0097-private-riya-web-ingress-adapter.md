@@ -139,18 +139,45 @@ extends a signature's usable life as surely as a stale one replays it. `received
 turn-received time and stays distinct: a gateway may batch, queue or re-sign, and collapsing the two
 would let transport timing rewrite conversation timing.
 
-### 10. A bounded, process-local, content-free replay guard
+### 10. A bounded, process-local, content-free replay guard that never fails open
 
 `(caller, requestId)` is claimed once per window, **after** the signature verifies — claiming earlier
-would let an unauthenticated caller burn identifiers a real gateway intends to use.
+would let an unauthenticated caller burn identifiers a real gateway intends to use — and **before**
+the policy or the service, so a refused claim costs neither a classification nor an agent turn.
 
 Same id + same body → `replay-detected`. Same id + **different** body → `request-conflict`, named
 separately because retrying will not fix it. Either way the service is not called again.
 
 An entry holds a key token, a raw-body digest and an expiry instant. It never holds `normalizedText`,
 a reply body, an `authorizedReply`, continuity, the request JSON or the response JSON. Expiry is
-lazy — no timer, no polling. Capacity is bounded (default 10,000) and TTL (default 120s) comfortably
-covers the ±60s freshness window.
+lazy — no timer, no polling.
+
+Three rules make "never fails open" a property rather than an intention.
+
+**Retention outlives signature validity: minimum 120,000 ms.** Authentication accepts `issuedAt`
+within ±60s, so a request first received at `T` may legally carry `issuedAt = T + 60s` — and that
+signature stays fresh until roughly `T + 120s`. A claim retained for less than that would expire
+while the very signature it guards was still usable: a replay window wearing the costume of a cache
+setting. 120,000 ms is therefore both the default and the **floor**, and a shorter configured value
+is **refused at construction, never silently clamped**. A deployment that asked for 30 seconds has
+made an assumption about signature lifetime that is wrong, and substituting a different number would
+leave that assumption in place everywhere else somebody made it. The ±60s authentication window is
+unchanged.
+
+**Capacity saturation fails closed, and a live claim is never evicted.** Expired entries are swept
+lazily first. If the map is still full of _unexpired_ claims, the request is **refused** with
+`replay-guard-unavailable` (503) — its own code, never reported as `replay-detected` or
+`request-conflict`, because a full guard and a repeated request are different facts and an operator
+needs to tell them apart. Evicting the oldest live claim would trade replay protection for
+availability under exactly the load an attacker can manufacture, and the evicted identifier would
+become claimable again inside its own valid window. **Availability pressure never weakens replay
+protection.**
+
+**One clock sample per request, and no substituted instant.** The handler reads the injected clock
+**once** and uses that same instant for signature freshness and for the claim; two reads could
+straddle the boundary of the window they jointly define. An unusable clock fails closed before the
+policy or the service runs, and the guard itself throws on a non-finite instant rather than falling
+back to epoch zero — which would expire every entry on the next claim and admit every replay.
 
 **Deliberate limitation.** It is a `Map`, and it gives **no cross-replica guarantee**: two ingress
 processes behind a load balancer each keep their own view, so one request could be served once by
@@ -190,7 +217,7 @@ byte for byte: no trim, rewrite, template, markdown or citation insertion.
 
 `200` served · `400` malformed/schema · `401` authentication · `404` path · `405` method · `409`
 replay/conflict · `413` too large · `415` media/encoding · `500` policy or internal invariant · `503`
-service unavailable.
+replay-guard saturation or service unavailable.
 
 There is **no `Retry-After` and no automatic retry**. A transport that transparently retried this POST
 after an ambiguous failure would risk a second agent turn for one thing a person said. A future
@@ -202,7 +229,7 @@ Every response: `Content-Type: application/json; charset=utf-8`, `Cache-Control:
 `Pragma: no-cache`, `X-Content-Type-Options: nosniff`. Never
 `Access-Control-Allow-Origin`, `Access-Control-Allow-Credentials` or `Set-Cookie`. No session state.
 
-Nine closed error codes with fixed messages. No request or response body is logged; nothing logs at
+Ten closed error codes with fixed messages. No request or response body is logged; nothing logs at
 all. No `normalizedText`, reply body, `subjectRef`, signature, key bytes, raw JSON, continuity,
 downstream stack, zod issue, crypto error, socket error or SQL ever leaves this boundary. `dataClass`
 is deliberately not logged either in this first slice.
