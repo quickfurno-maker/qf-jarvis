@@ -315,17 +315,27 @@ describe('continuity is loaded or initialized, and returned unchanged', () => {
 // ---------------------------------------------------------------------------
 
 describe('the store port semantics the fake proves', () => {
-  const seedState = (revision: number): RiyaConversationContinuityStateV1 =>
+  const seedState = (revision: number, locationRef?: string): RiyaConversationContinuityStateV1 =>
     createRiyaConversationContinuityState({
       version: 1,
       tenantId: 'tenant.a',
       conversationId: 'conv.1',
       continuityRevision: revision,
       phase: 'INTRO',
-      discovery: {
-        completeness: 'MORE_DISCOVERY_REQUIRED',
-        missingFields: [...DISCOVERY_FIELDS_FROZEN],
-      },
+      discovery:
+        locationRef === undefined
+          ? {
+              completeness: 'MORE_DISCOVERY_REQUIRED',
+              missingFields: [...DISCOVERY_FIELDS_FROZEN],
+            }
+          : {
+              locationRef,
+              completeness: 'MORE_DISCOVERY_REQUIRED',
+              missingFields: DISCOVERY_FIELDS_FROZEN.filter((field) => field !== 'location'),
+            },
+      ...(locationRef === undefined
+        ? {}
+        : { fieldProvenance: { location: 'user_stated' as const } }),
       summaryConfirmed: false,
     });
 
@@ -336,9 +346,15 @@ describe('the store port semantics the fake proves', () => {
     const first = await store.createInitialIfAbsent({ state: seedState(0) });
     expect(first.disposition).toBe('CREATED');
 
-    const second = await store.createInitialIfAbsent({ state: seedState(99) });
+    // The loser's candidate differs in CONTENT, not in revision: an initial state is born at
+    // revision 0 (RWC-P2B-R1), so a nonzero candidate would now be refused as invalid input rather
+    // than arbitrated — which would prove nothing about who won. A distinct discovery value is the
+    // honest differentiator.
+    const second = await store.createInitialIfAbsent({ state: seedState(0, 'city.mumbai') });
     expect(second.disposition).toBe('EXISTING');
     // The loser gets the WINNER's state, not the candidate it offered.
+    expect(second.state).toStrictEqual(first.state);
+    expect(second.state.discovery.locationRef).toBeUndefined();
     expect(second.state.continuityRevision).toBe(0);
   });
 

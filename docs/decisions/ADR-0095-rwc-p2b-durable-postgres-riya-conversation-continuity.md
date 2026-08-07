@@ -10,17 +10,6 @@ merge commit `9b5c0d586b5a535f57f0052f2960e5fd1e3755d6`, over base
 **Supersedes nothing.** It executes a verdict ADR-0094 already recorded:
 `P2B_SCHEMA_VERDICT = SCHEMA_REQUIRED`.
 
-**Owner correction.** A first implementation of this slice normalized the domain envelope into
-per-field columns (`version`, `phase`, `discovery`, `field_provenance`, `summary_confirmed`,
-`completion_evidence_ref`). That diverged from the owner-locked storage shape. An owner-correction
-commit realigns the schema to a **single validated `state_json` JSONB envelope** plus the two
-first-class relational columns the database must be the authority for — the tenant+conversation key and
-the `continuity_revision` the compare-and-set binds on — and adds an explicit persistence codec and a
-storage-level update-invariant trigger. A second, smaller owner-correction commit then closes one
-remaining contract regression: `createInitialIfAbsent` now accepts **only** a revision-0 state, and the
-guard trigger enforces born-at-zero on INSERT (§5, §8a). The sections below describe the corrected
-design; where a choice changed from the first implementation, it says so.
-
 ## Context
 
 RWC-P2A (ADR-0093) defined `RiyaConversationContinuityStateV1`. RWC-P2C (ADR-0094) declared
@@ -34,26 +23,13 @@ This ADR supplies the missing durability and nothing else.
 
 ## Decision
 
-### 1. Schema required, and exactly one table — a JSONB envelope with two first-class columns
+### 1. Schema required, and exactly one table
 
 Migration **0011** creates `qf_jarvis.riya_conversation_continuity`: one row per
-`(tenant_id, conversation_id)`, with columns `tenant_id`, `conversation_id`, `continuity_revision`,
-`state_json`, `created_at` and `updated_at`.
-
-The domain state is kept as **one validated JSONB envelope**, `state_json`, and is deliberately **not**
-normalized into a column per conversational field. Only the two things PostgreSQL must be the authority
-for are lifted out as first-class relational columns: the tenant+conversation **key**, and the
-`continuity_revision` the **compare-and-set predicate binds on**. Everything else — version, phase, the
-ADR-0067 discovery snapshot, per-field provenance, summary confirmation, completion evidence — lives
-inside `state_json`. This insulates the schema from conversational field growth: an eighth discovery
-field is an ADR-0067 change, not an `ALTER TABLE` here, and there is exactly one serialization of the
-domain rather than two that could drift.
-
-`created_at` and `updated_at` are `TIMESTAMPTZ` stamped by the database (`clock_timestamp()`
-defaults). They are operational metadata: neither is a business time, and neither versions the state —
-`continuity_revision` alone does. `created_at` never changes; `updated_at` moves on every accepted
-compare-and-set. (The first implementation carried no timestamps; the corrected shape adds them
-because `updated_at` is the operational signal a JSONB-envelope row cannot otherwise expose.)
+`(tenant_id, conversation_id)`, with `version`, `continuity_revision`, `phase`, `discovery`,
+`field_provenance`, `summary_confirmed` and `completion_evidence_ref`. No operational timestamps —
+the repository's durable-store convention (0008's state table) does not carry them, and adding a
+column because it might be useful is how a working-state row becomes an audit record nobody designed.
 
 ### 2. The key is `(tenantId, conversationId)`, and there is no conversation-only uniqueness
 
@@ -73,22 +49,21 @@ would make a continuity write appear to an M1–M4 control gate as a control cha
 
 Not ADR-0016 agent memory: that contract governs derived, rebuildable, `authoritative: false`
 records with non-empty `sourceEventIds`, shared **across** conversations. None of its literals appear
-here. Not a transcript: no message history, recent turns, rolling summary or context window. Not
-business truth: consent, opt-out, suppression, contact identity, city validity, vendor availability,
-pricing, packages, lead creation and business `canSubmit` belong to QuickFurno Core, and no column
-here could express one. No channel column — WEB and WhatsApp are the same governed Riya (ADR-0092).
+here. Not business truth: consent, opt-out, suppression, contact identity, city validity, vendor
+availability, pricing, packages, lead creation and business `canSubmit` belong to QuickFurno Core, and
+no column here could express one. No channel column — WEB and WhatsApp are the same governed Riya
+(ADR-0092).
+
+**Content-minimised, not content-free — and the precise claim is the honest one.** The table stores no
+transcript, raw message history, recent-turn history, rolling/conversation/memory summary, raw model
+reply or draft, contact data, or independent free-text blob. It _does_ store the P2A/ADR-0067
+structured `NeedDiscovery` snapshot, and that snapshot legitimately carries **bounded textual notes**:
+`scopeSummary` (≤500 chars), `budgetNote` and `timelineNote` (≤120 each). An earlier draft of the
+migration claimed "no free text at all"; that was untrue and contradicted its own next sentence, and
+the wording has been corrected in both the migration and the table comment. A sweeping privacy claim
+that a reader can falsify by opening the schema is worse than a narrow one they can rely on.
 
 ### 5. Create-if-absent is arbitrated by the database, in two statements
-
-**A continuity row is born at revision 0.** `createInitialIfAbsent` is INITIAL persistence, so the
-adapter refuses a state whose `continuityRevision` is not `0` **before any connection is taken** — a
-state already at revision 1, 2, … was reached by continuity mutations that never durably happened, and
-admitting it would file a mid-conversation state as if it were a first turn. Every later revision is
-reached ONLY through an exactly-`+1` `compareAndSet`. The database holds the same invariant
-independently: the guard trigger's INSERT branch (§8a) requires `continuity_revision = 0`, so a direct
-SQL insert at a nonzero revision is refused too. (This closes a regression in the first implementation,
-which validated the state structurally but accepted a nonzero initial revision, and whose trigger
-explicitly permitted an INSERT at any revision.)
 
 1. `INSERT … ON CONFLICT (tenant_id, conversation_id) DO NOTHING RETURNING …`. The primary key
    decides the race; the process never does. A returned row is `CREATED`, already committed, so the
@@ -125,17 +100,61 @@ control. Zero rows updated is then split by a separate existence read: no row �
 A conflict repairs nothing, merges nothing, chooses no provenance winner, retries nothing and does
 not touch the stored row. Deciding what a conflicting update "meant" is RWC-P4's question.
 
-**One mutation is one revision.** A compare-and-set is refused unless
-`nextState.continuityRevision === expectedRevision + 1`, checked before any SQL runs. The adapter does
-**not** fabricate the stored revision — what is written is the caller's `nextState` value — but it does
-**validate** the one-step relationship, because a next state that skips, repeats or decrements a
-revision is a caller defect (a lost step or a replay), not a legitimate continuity mutation. The
-database holds the same rule independently: the BEFORE UPDATE trigger (§8a) requires
-`continuity_revision = OLD + 1`, and the `state_revision_matches` CHECK pins the envelope revision to
-the column, so a skipped revision is impossible from any writer.
+### 6a. The revision is born at 0 and advances by exactly one — and why that was a correction
 
-_(Corrected from the first implementation, which stored an arbitrary next revision verbatim and
-asserted a "jump" was allowed. The owner correction makes the exact one-step advance the contract.)_
+The first implementation stored whatever `nextState.continuityRevision` it was handed, on the
+reasoning that the port only required the stored revision to match and the in-memory fake did no
+more. **That was wrong, and a technical review proved it against a real database:**
+
+```
+seeded at revision 5
+writer1 CAS(expected=5, next.rev=5) -> UPDATED   state = city.pune
+writer2 CAS(expected=5, next.rev=5) -> UPDATED   state = city.mumbai
+LOST UPDATE: both writers won at the same revision
+backwards CAS 5 -> 2                -> UPDATED   stored rev 2
+```
+
+A next revision equal to the expected one leaves the stored value unchanged, so a second writer still
+holding it matches the predicate and wins too — both told `UPDATED`, the first writer's state
+silently destroyed. Optimistic concurrency was not weakened; for that caller it was absent.
+
+The justification also did not survive scrutiny. RWC-P2A calls this field a **monotonic**
+compare-and-set counter, and the repository had already fixed what that phrase means: `agent-runtime`'s
+orchestration contract records that a conversation revision's "domain is fixed by the durable schema
+that owns it", 0008 implements exactly that for the sibling control counter, and the same note records
+— from a real incident — that _"a fake is not evidence about a database."_ Deferring to the fake was
+the precise reasoning the repository had already rejected.
+
+**Owner ruling, locked:** a durable row is **born at `continuityRevision = 0`**, and every successful
+replacement sets it to **exactly `expectedRevision + 1`**. Not merely greater-than: a gap would leave
+the counter an arbitrary increasing tag whose jumps nobody can account for.
+
+The adapter **verifies** this; it never fabricates a revision. A violation is **`invalid-input`,
+refused before a connection is taken** — a malformed request is a caller defect, not a concurrency
+answer, so it must never be reported as `REVISION_CONFLICT`. The CAS outcome vocabulary stays at
+exactly three.
+
+This does **not** collapse the two counters (§3). They remain different columns in different tables
+with different ownership, advanced independently and never compared. They share only the CAS counter
+semantics: initial 0, one accepted mutation = +1.
+
+### 6b. The database owns the invariant, and the storage shape it owns it over
+
+A guard function and a `BEFORE INSERT OR UPDATE` trigger hold the rule structurally: an INSERT must
+be at revision 0; an UPDATE may not change the identity, may not advance an exhausted revision, and
+must set exactly `OLD + 1`. It is **not** a reducer — it decides no phase transition, merges no
+discovery or provenance, computes nothing and never rewrites `NEW` into compliance. It exists so the
+property survives a future second adapter, a migration, or a console session, rather than resting on
+one adapter's promise. The P2C store port now states both preconditions, and its test-only in-memory
+fake enforces them, so the fake can no longer certify a caller the durable store would refuse.
+
+An alternate persistence design was published on this branch during review — commit `78ad1eb`
+("align continuity persistence envelope and db invariants"), extended by `645fc56` — which replaced
+the nine relational columns with a single `state_json` envelope plus `created_at`/`updated_at`. The
+owner **rejected** that storage model for RWC-P2B and directed a non-destructive reversal. Both
+commits remain permanently in branch history as superseded work; the accepted design is the reviewed
+nine-column schema recorded here. Nothing about the revision ruling above depends on which shape was
+chosen — it was adopted from that line and applies identically.
 
 ### 7. Canonical validation on every boundary crossing, in both directions
 
@@ -149,65 +168,32 @@ applied migration, a restore from an older dump or a hand-corrected row all arri
 like data. A row that cannot pass the contract is a **refusal** — `repository-invariant` — never a
 default, a repair, a partial result or a delete.
 
-**Why a codec, not `JSON.stringify(state)`.** A constructed `NeedDiscovery` carries
-`behaviourVersion: 1` and an explicit `undefined` for every value not discovered, and
-`NeedDiscoveryInput` is `.strict()` and declares no `behaviourVersion` — so the **output** of the P2A
-constructor is **not** a valid **input** to it. A naive `JSON.stringify(state)` persistence contract
-would therefore produce durable rows that no later read could re-validate. The adapter owns an explicit
-persistence codec (`internal/codec.ts`): `encodeContinuityState` projects a canonical state back to the
-input shape the contract accepts — dropping `behaviourVersion` and every `undefined`-valued key, while
-copying every _other_ key verbatim so an invented property is still refused by `.strict()` rather than
-laundered — and `decodeContinuityState` rebuilds a canonical state by passing the stored envelope
-through the same `createRiyaConversationContinuityState`, then cross-checks that the envelope's
-identity and revision agree with the key columns. The codec changes SHAPE (output projection → input
-projection), never CONTENT; P2A and `NeedDiscovery` are unchanged, and no rule is weakened to make
-persistence simpler. This is the corrected design: the domain lives in one `state_json` envelope, and
-the codec — not the column layout — reconciles it with the constructor's input/output asymmetry.
+One consequence discovered in implementation and worth recording: a constructed `NeedDiscovery`
+carries `behaviourVersion` and explicit `undefined`s, and `NeedDiscoveryInput` is `.strict()` — so
+the output shape is **not** a valid input to the constructor that produced it. The column therefore
+stores the **input projection**. Storing the output shape would have produced durable rows that no
+reader could ever accept.
 
-### 8. What the SQL constraints do, and everything they deliberately omit
+### 8. What the SQL constraints do, and one they deliberately omit
 
-The CHECKs validate the **envelope against its key columns** and nothing more: `state_json` is an
-object; its `version` is the number `1`; its `tenantId`, `conversationId` and `continuityRevision`
-equal the `tenant_id`, `conversation_id` and `continuity_revision` columns those values are indexed and
-compared on (the revision guarded by a grammar check before the numeric cast, so a `1.5` or `1e0` is
-refused rather than coerced). The first-class columns additionally carry the identifier grammar
-(mirroring P2A exactly, including **not** copying 0008's `latest` exclusion, which would make the
-database stricter than the contract) and the revision safe-integer bound.
+They validate evidence: identifier grammar (mirroring P2A exactly, including **not** copying 0008's
+`latest` exclusion, which would make the database stricter than the contract and render some valid
+states unstorable), `version = 1`, revision bounds, the nine phases, `jsonb_typeof = 'object'`, the
+`summaryConfirmed` phase relation, and `phase = 'COMPLETE'` **iff** completion evidence is present.
 
-Every **domain** rule is deliberately absent from SQL: the nine-phase vocabulary, the provenance/value
-pairing, the `summaryConfirmed` phase relation, the summary-readiness rule and complete-iff-evidence
-are all held by the constructor on every read and every write, never restated in SQL. Restating any of
-them means reaching into the JSON and copying a rule that would then drift from ADR-0067/ADR-0093 in the
-one place nobody reads when those change. Integration tests prove that a row violating each such rule
-inserts cleanly (the DB does not stop it) and is refused on the way **out** as `repository-invariant`.
-
-_(Corrected from the first implementation, which lifted `phase`, `summary_confirmed` and
-`completion_evidence_ref` into columns and expressed the phase, summary and complete-iff-evidence rules
-as SQL CHECKs. Those rules now live only in the constructor; the SQL constrains only the envelope↔column
-agreement.)_
-
-### 8a. A storage-level birth-and-update invariant, in addition to the adapter's
-
-A BEFORE INSERT OR UPDATE trigger on the table enforces, on INSERT, that a row is **born at revision
-0**; and on UPDATE, that the identity (`tenant_id`/`conversation_id`) is unchanged, that an
-already-exhausted revision is not advanced, and that `continuity_revision` advances by **exactly one**.
-This is defense in depth for the adapter's own create and compare-and-set: a migration, a console
-session or a future second writer is a caller the adapter cannot police, and the trigger makes
-born-at-zero, one-step-revision and immutable-identity hold against direct SQL too. Integration tests
-drive direct SQL as the owning role to prove a nonzero-revision INSERT, a jump, a same-revision update
-and an identity mutation are each rejected, and that a revision-0 INSERT is accepted. _(The update
-rules and the trigger arrived in the storage-shape correction; the born-at-zero INSERT rule is the
-final correction — the first implementation's trigger explicitly permitted an INSERT at any revision.)_
+The SUMMARY-readiness rule is deliberately **absent** from SQL. Expressing it means reaching into the
+discovery JSON and restating which four ADR-0067 fields matter — a second, independently drifting copy
+of the rule in the one place nobody reads when ADR-0067 changes. The canonical constructor enforces it
+on every read and write, and an integration test proves a row violating it cannot survive the adapter.
 
 ### 9. Least privilege, and no retention decision
 
 `REVOKE ALL` from PUBLIC and from `anon`/`authenticated`/`service_role`. The conditional
-`qf_jarvis_runtime` grant is `SELECT, INSERT` plus **column-scoped** `UPDATE` on exactly the three
-columns a compare-and-set replaces — `continuity_revision`, `state_json`, `updated_at`. `tenant_id`,
-`conversation_id` and `created_at` are outside the grant, so identity and creation time are immutable as
-a **privilege** as well as by the §8a trigger — two independent guards. **No DELETE, no TRUNCATE**, no
-deletion trigger and no retention policy: privacy and retention are not RWC-P2B's decision, and a
-package that quietly implemented one would be making it.
+`qf_jarvis_runtime` grant is `SELECT, INSERT` plus **column-scoped** `UPDATE` on the six mutable
+columns — so identity is immutable as a privilege rather than as a trigger the adapter must be
+trusted not to work around. **No DELETE, no TRUNCATE**, no deletion trigger and no retention policy:
+privacy and retention are not RWC-P2B's decision, and a package that quietly implemented one would be
+making it.
 
 ### 10. Injected pool, local/CI only, composed into nothing
 
@@ -237,13 +223,10 @@ RUI-3A has not started. Live public Riya remains OFF.
 
 ## What would require a superseding ADR
 
-Adding a conversation-only unique index · splitting the `state_json` envelope back into per-field
-columns · storing a transcript, rolling summary, channel, contact detail or any Core-authority field ·
-returning a raw row · letting database uncertainty become `undefined`, `CREATED`, `EXISTING`,
-`REVISION_CONFLICT` or `NOT_FOUND` · a create loser returning its own candidate · repairing, merging or
-retrying a revision conflict · fabricating the next revision in storage rather than validating the
-caller's one-step advance · accepting a create at a nonzero revision or removing the born-at-zero
-INSERT rule · relaxing the exactly-`+1` revision rule or removing the §8a guard trigger ·
-restating any domain rule (phase, provenance, summary-readiness, complete-iff-evidence) as a SQL
-constraint · granting DELETE or TRUNCATE · introducing a retention or erasure policy · composing this
-adapter into an application, an endpoint or an ingress · applying 0011 to the managed database.
+Adding a conversation-only unique index · storing a transcript, rolling summary, channel, contact
+detail or any Core-authority field · returning a raw row · letting database uncertainty become
+`undefined`, `CREATED`, `EXISTING`, `REVISION_CONFLICT` or `NOT_FOUND` · a create loser returning its
+own candidate · repairing, merging or retrying a revision conflict · computing the next revision in
+storage · restating the NeedDiscovery or summary-readiness rules in SQL · granting DELETE or TRUNCATE
+· introducing a retention or erasure policy · composing this adapter into an application, an endpoint
+or an ingress · applying 0011 to the managed database.

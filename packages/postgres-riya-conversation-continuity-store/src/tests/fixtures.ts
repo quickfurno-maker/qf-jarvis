@@ -13,11 +13,18 @@ import type {
   RiyaConversationPhase,
 } from '@qf-jarvis/riya-conversation-continuity';
 
-/** The state a first turn creates: nothing discovered, nothing confirmed, revision 0. */
+/**
+ * The state a first turn creates: nothing discovered, nothing confirmed, revision 0.
+ *
+ * `locationRef` exists so two candidates for the SAME key can differ in CONTENT rather than in
+ * revision. Since RWC-P2B-R1 a durable row is born at revision 0, so a nonzero candidate is refused
+ * as invalid input and could no longer be used to tell two racers apart.
+ */
 export function initialState(
   tenantId: string,
   conversationId: string,
   continuityRevision = 0,
+  locationRef?: string,
 ): RiyaConversationContinuityStateV1 {
   return createRiyaConversationContinuityState({
     version: 1,
@@ -25,10 +32,18 @@ export function initialState(
     conversationId,
     continuityRevision,
     phase: 'INTRO',
-    discovery: {
-      completeness: 'MORE_DISCOVERY_REQUIRED',
-      missingFields: [...DISCOVERY_FIELDS_FROZEN],
-    },
+    discovery:
+      locationRef === undefined
+        ? {
+            completeness: 'MORE_DISCOVERY_REQUIRED',
+            missingFields: [...DISCOVERY_FIELDS_FROZEN],
+          }
+        : {
+            locationRef,
+            completeness: 'MORE_DISCOVERY_REQUIRED',
+            missingFields: DISCOVERY_FIELDS_FROZEN.filter((field) => field !== 'location'),
+          },
+    ...(locationRef === undefined ? {} : { fieldProvenance: { location: 'user_stated' as const } }),
     summaryConfirmed: false,
   });
 }
