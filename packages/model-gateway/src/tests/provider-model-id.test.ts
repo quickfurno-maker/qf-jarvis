@@ -320,9 +320,11 @@ describe('repository invariants this repair must not move', () => {
       'e834bc3cd0bc8fd30b04f4849a00d29d49b5a19d1636b912535fdbd6d86f20f6',
     '0010_execution_replay_claim.sql':
       '1add85e08e43dafe85f124b886790cd3495d3f54b3579ad89efe40e2849a8b05',
+    '0011_riya_conversation_continuity.sql':
+      '80149f8d636aa85eaff7d98f924220107eaa3d539e5d13d5133873154926cc93',
   };
 
-  it('migrations 0001-0010 are byte-identical and 0011 is neither present nor reserved', () => {
+  it('migrations 0001-0011 are byte-identical and 0011 is neither present nor reserved', () => {
     const dir = fileURLToPath(
       new URL('packages/event-backbone/src/persistence/migrations', REPO_ROOT),
     );
@@ -337,7 +339,7 @@ describe('repository invariants this repair must not move', () => {
           .digest('hex'),
       ).toBe(hash);
     }
-    expect(sql.some((name) => name.startsWith('0011'))).toBe(false);
+    expect(sql.some((name) => name.startsWith('0012'))).toBe(false);
   });
 
   it('the event-backbone root API lock remains 39', () => {

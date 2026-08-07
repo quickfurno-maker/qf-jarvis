@@ -157,6 +157,7 @@ describe('migration 0006 applies with 0001–0005 unchanged', () => {
       '0008_conversation_control_persistence.sql',
       '0009_durable_approval_queue.sql',
       '0010_execution_replay_claim.sql',
+      '0011_riya_conversation_continuity.sql',
     ]);
     for (const row of rows) {
       const known = IMMUTABLE_CHECKSUMS[row.filename];

@@ -183,6 +183,13 @@ The QuickFurno repository is untouched and `lib/riya-ui/jarvisClient.ts` does no
 - **RWC-P2B has not started. RUI-3A has not started. RWC-P1D/P1E/P1F remain parked.** Live public
   Riya remains **OFF**.
 
+> **Superseded in part by [ADR-0095](./ADR-0095-rwc-p2b-durable-postgres-riya-conversation-continuity.md).**
+> The two bullets above were true when this decision was taken. RWC-P2B has since executed the
+> `SCHEMA_REQUIRED` verdict: migration `0011_riya_conversation_continuity.sql` exists and the durable
+> store is implemented, unmerged and composed into nothing. `0001`–`0010` remain byte-identical.
+> RUI-3A has still not started, the parked phases are still parked, and live public Riya is still
+> **OFF**.
+
 ## What this does NOT implement
 
 A public endpoint or ingress adapter · a browser session token · a QuickFurno adapter · a durable

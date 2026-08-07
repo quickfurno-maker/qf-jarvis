@@ -765,7 +765,7 @@ describe('API surface, dependencies and containment', () => {
     }
   });
 
-  it('adds exactly one migration: 0001-0010, and no 0011', () => {
+  it('adds exactly one migration: 0001-0011, and no 0012', () => {
     const dir = fileURLToPath(
       new URL('packages/event-backbone/src/persistence/migrations/', REPO_ROOT),
     );
@@ -784,6 +784,7 @@ describe('API surface, dependencies and containment', () => {
       '0008_conversation_control_persistence.sql',
       '0009_durable_approval_queue.sql',
       '0010_execution_replay_claim.sql',
+      '0011_riya_conversation_continuity.sql',
     ]);
   });
 

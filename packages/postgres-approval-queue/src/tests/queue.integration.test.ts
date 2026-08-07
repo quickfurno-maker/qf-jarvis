@@ -213,9 +213,10 @@ describe('migration 0009 and the schema it creates', () => {
     const sql = readdirSync(MIGRATIONS_DIR)
       .filter((f) => f.endsWith('.sql'))
       .sort();
-    expect(sql).toHaveLength(10);
+    expect(sql).toHaveLength(11);
     expect(sql[9]).toBe('0010_execution_replay_claim.sql');
-    expect(sql.some((n) => n.startsWith('0011'))).toBe(false);
+    expect(sql[10]).toBe('0011_riya_conversation_continuity.sql');
+    expect(sql.some((n) => n.startsWith('0012'))).toBe(false);
   });
 
   it('creates exactly the five approval tables, in qf_jarvis and nowhere else', async () => {

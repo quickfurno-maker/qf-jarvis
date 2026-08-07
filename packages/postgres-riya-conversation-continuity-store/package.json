@@ -1,0 +1,29 @@
+{
+  "name": "@qf-jarvis/postgres-riya-conversation-continuity-store",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis durable PostgreSQL Riya conversational continuity store (RWC-P2B, ADR-0095). The concrete implementation of the RiyaContinuityStorePort that RWC-P2C declared and deliberately left injected with no default: one row per (tenantId, conversationId), an atomic create-if-absent arbitrated by the primary key, and an optimistic compare-and-set. A create loser reconciles in a NEW statement and returns the committed WINNER's state, never its own equivalent candidate. Every state is re-proved through the canonical createRiyaConversationContinuityState on the way in AND on the way out, so a row that cannot pass the contract becomes a refusal rather than a repaired guess. Database uncertainty THROWS and can never become undefined, CREATED, EXISTING, REVISION_CONFLICT or NOT_FOUND. It stores no transcript, rolling summary, channel, contact detail, browser or session token, consent, canSubmit, lead, vendor, city, price or provider artifact, and it implements no phase transition, extraction or provenance merge -- RWC-P4 owns those. Nothing composes it: importing it connects nowhere, creates no pool, reads no environment and starts nothing. Depends on @qf-jarvis/riya-conversation-continuity, @qf-jarvis/riya-web-conversation-service (port types) and pg.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/riya-conversation-continuity": "workspace:*",
+    "@qf-jarvis/riya-web-conversation-service": "workspace:*",
+    "pg": "8.22.0"
+  },
+  "devDependencies": {
+    "@qf-jarvis/event-backbone": "workspace:*",
+    "@qf-jarvis/riya-agent": "workspace:*",
+    "@types/pg": "8.20.0"
+  }
+}

@@ -323,7 +323,7 @@ describe('side-effect containment', () => {
 });
 
 describe('repository invariants this slice must not move', () => {
-  it('adds no migration: the set is still 0001-0010 with no 0011', () => {
+  it('adds no migration: the set is still 0001-0011 with no 0012', () => {
     const dir = fileURLToPath(
       new URL('packages/event-backbone/src/persistence/migrations/', REPO_ROOT),
     );
@@ -341,6 +341,7 @@ describe('repository invariants this slice must not move', () => {
       '0008_conversation_control_persistence.sql',
       '0009_durable_approval_queue.sql',
       '0010_execution_replay_claim.sql',
+      '0011_riya_conversation_continuity.sql',
     ]);
   });
 
