@@ -1,6 +1,6 @@
 # ADR-0096 — RWC-P2D Core-Authorized Web Reply Materialization
 
-**Status:** Accepted — RWC-P2D. Implemented on `rwc-p2d-core-authorized-web-reply-materialization`, **not merged**, and composed into nothing.
+**Status:** Accepted — RWC-P2D. **Merged** as PR #101 — reviewed head `792a60e4dc9dc341094f9749a628df4d6cf91c43`, merge commit `adf032522c4e25791bd5a2c1a9ea026908b73d3c`. (Status corrected when the private ingress slice began; the technical decisions below are unchanged.)
 **Deciders:** Owner
 **Relates to:** [ADR-0094](./ADR-0094-rwc-p2c-private-riya-web-conversation-service.md) · [ADR-0095](./ADR-0095-rwc-p2b-durable-postgres-riya-conversation-continuity.md) · [ADR-0093](./ADR-0093-rwc-p2a-riya-conversational-continuity-contract.md) · [ADR-0092](./ADR-0092-jrw-0b-governed-web-runtime-channel.md) · [ADR-0059](./ADR-0059-qfj-m5-orchestrated-reply-composition-foundation.md) · [ADR-0056](./ADR-0056-qfj-m3-quickfurno-core-decision-adapter-foundation.md) · [ADR-0055](./ADR-0055-qfj-m2-core-decision-and-reply-orchestration.md)
 

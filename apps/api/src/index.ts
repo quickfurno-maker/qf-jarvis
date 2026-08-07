@@ -3,8 +3,19 @@
  *
  * Phase 1 (Engineering Foundation) establishes a *compileable boundary* and
  * nothing else. This module therefore contains no runtime behavior by design:
- * no HTTP server, no framework, no routes, no health check, no handlers, no
- * startup logging, and no imports.
+ * no framework, no health check, no startup logging, and no imports.
+ *
+ * The application now contains internal modules that DO speak HTTP — the private
+ * Riya web ingress adapter under `src/private-riya-web-ingress/` (ADR-0097). The
+ * boundary this file describes is unchanged, and the distinction matters: that
+ * adapter exports a `RequestListener` FACTORY. It calls no `listen`, creates no
+ * server, reads no environment, and knows no port or host. Importing this package
+ * root — or the ingress module itself — starts nothing, opens no socket, binds no
+ * listener, and exposes no public route. Whether the ingress is ever bound, and to
+ * which private interface, is a later deployment decision somebody makes, not a
+ * side effect of an import.
+ *
+ * This module still exports no runtime capability at all.
  *
  * The boundary exists now, empty, so that the module structure of the modular
  * monolith is real from the first commit rather than retrofitted onto working
