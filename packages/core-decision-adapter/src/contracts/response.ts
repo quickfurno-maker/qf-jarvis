@@ -24,6 +24,15 @@ export interface CoreCommandResponse {
   readonly proposalVersion: number;
   readonly conversationId: string;
   readonly boundRevision: number;
+  /**
+   * The digest of the exact proposal CONTENT this decision is about (RWC-P2D, ADR-0096).
+   *
+   * REQUIRED. Core must echo the digest it received, and `validate-response.ts` compares it to the
+   * command's. Without it, a response proves only which proposal IDENTITY it concerns — and identity
+   * excludes model output, so a stale or cached `ACCEPTED` for an earlier body would validate against
+   * a command carrying a different one.
+   */
+  readonly proposalDigest: string;
   readonly outcome: CoreDecisionOutcome;
   readonly reason: string;
   readonly decidedAt: string;
@@ -67,6 +76,10 @@ export const coreCommandResponseSchema = z
     proposalVersion: VERSION,
     conversationId: IDENTIFIER,
     boundRevision: REVISION,
+    // Same shape as `idempotencyKey`: lowercase hex, 8-64. A response that omits it, or supplies
+    // something that is not a digest, is `adapter-response-invalid` -- the schema is `.strict()` and
+    // this key is required, so an old-protocol responder fails closed rather than being trusted.
+    proposalDigest: z.string().regex(/^[0-9a-f]{8,64}$/),
     outcome: z.enum(CORE_DECISION_OUTCOMES),
     reason: z
       .string()

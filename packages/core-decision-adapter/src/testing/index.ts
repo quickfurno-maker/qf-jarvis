@@ -9,9 +9,11 @@ export {
   throwingCoreTransport,
   malformedCoreTransport,
   mismatchedCoreTransport,
+  replayingCoreTransport,
   syntheticState,
   scriptedStateReader,
   fixedClock,
   type RecordingStateReader,
+  type ReplayingCoreTransport,
 } from './deterministic-core-transport.js';
 export { coreRequest, syntheticCitation } from './fixtures.js';

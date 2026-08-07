@@ -25,9 +25,25 @@ export const coreDecisionProtocolSchema = z
   })
   .strict();
 
-/** The default proposed protocol identity for this foundation slice. */
+/**
+ * The default proposed protocol identity.
+ *
+ * ### v1 → v2 (RWC-P2D, ADR-0096)
+ *
+ * The strict command/response wire schema changed: a command now carries `proposalDigest`, and the
+ * response schema REQUIRES it. Continuing to advertise `version: 1` with a different wire shape would
+ * be the protocol lying about itself — a v1 responder would fail closed while still being told it was
+ * talking v1, and a future reader could not tell which shape a recorded `qfj.core.decision/1` command
+ * had.
+ *
+ * The NAME is unchanged: this is the same protocol, advanced. A second protocol name would fork the
+ * contract and give Core two things to implement.
+ *
+ * QuickFurno Core-side adoption remains future work, exactly as it was for v1. This is still a
+ * PROPOSED, provider-neutral protocol.
+ */
 export const DEFAULT_CORE_DECISION_PROTOCOL: CoreDecisionProtocol = Object.freeze({
   name: 'qfj.core.decision',
-  version: 1,
-  contractDigest: 'c0de0001',
+  version: 2,
+  contractDigest: 'c0de0002',
 });

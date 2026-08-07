@@ -28,6 +28,29 @@ export interface CoreCommandIdentity {
   readonly proposalVersion: number;
   readonly conversationId: string;
   readonly expectedRevision: number;
+  /**
+   * The deterministic digest of the exact semantic proposal Core is deciding (RWC-P2D, ADR-0096).
+   *
+   * ### Why identity alone was not enough
+   *
+   * `proposalId` is derived from `runtimeId`, `conversationId`, `messageId`, `expectedRevision`,
+   * `proposalVersion` and `proposalKind`, and `idempotencyKey` from the protocol plus that identity.
+   * **Neither includes model output.** So one logical turn could produce BODY_A, receive `ACCEPTED`,
+   * and on a retry produce BODY_B while carrying the identical proposal and idempotency identity — and
+   * a stale or cached `ACCEPTED` for BODY_A would validate perfectly against the BODY_B command.
+   *
+   * That was harmless while nothing consumed the body. RWC-P2D consumes it, and promises a caller the
+   * exact text Core authorized, so the gap became a correctness defect: BODY_B could be presented as
+   * Core-approved.
+   *
+   * The response must echo this digest, and `validateResponse` requires it to match. A decision about
+   * different content therefore fails closed instead of being mistaken for this one's.
+   *
+   * It is integrity/identity evidence, **not authentication** — it proves *which* proposal a response
+   * is about, not *who* produced the response. And it is a digest: no raw body text ever appears in an
+   * identifier.
+   */
+  readonly proposalDigest: string;
 }
 
 /** One immutable Core decision command. */
@@ -42,6 +65,67 @@ export interface CoreCommand extends CoreCommandIdentity {
   readonly citations: readonly KnowledgeCitation[];
   readonly proposedReplyBody: string | undefined;
   readonly createdAt: string;
+}
+
+/**
+ * The body Core actually receives, for a given proposal kind (ADR-0068).
+ *
+ * ONE definition, used by both the command field and `proposalDigestFor`. They must never disagree:
+ * a digest computed over a body Core was not sent — or omitting one it was — would bind the wrong
+ * thing, and the mismatch would be invisible because both halves would still be internally
+ * consistent. Deriving both from this function makes that class of drift impossible rather than
+ * merely unlikely.
+ *
+ * `REPLY` and `FOLLOW_UP` carry client-facing text. `ESCALATE_TO_HUMAN`, `REQUEST_CLARIFICATION` and
+ * `NO_ACTION` propose none, so a body arriving with one of them is dropped rather than forwarded.
+ */
+export function effectiveProposedReplyBody(request: {
+  readonly proposalKind: OrchestrationProposalKind;
+  readonly proposedReplyBody: string | undefined;
+}): string | undefined {
+  return request.proposalKind === 'REPLY' || request.proposalKind === 'FOLLOW_UP'
+    ? request.proposedReplyBody
+    : undefined;
+}
+
+/**
+ * The deterministic digest of the exact semantic proposal, INCLUDING the effective reply body.
+ *
+ * Same proposal and same body → same digest. Different body under the same identity → different
+ * digest, which is the whole point (see `CoreCommandIdentity.proposalDigest`).
+ *
+ * The protocol identity is deliberately NOT an input: it is compared separately and in full by
+ * `validateResponse`, and folding it in here would make one field's change silently rewrite the
+ * other's meaning.
+ */
+export function proposalDigestFor(request: {
+  readonly proposalId: string;
+  readonly proposalVersion: number;
+  readonly conversationId: string;
+  readonly expectedRevision: number;
+  readonly assignedActor: RuntimeActor;
+  readonly partyType: RuntimePartyType;
+  readonly proposalKind: OrchestrationProposalKind;
+  readonly structuredIntent: Readonly<Record<string, string | number | boolean>>;
+  readonly policyRevision: string;
+  readonly evaluationRef: string | undefined;
+  readonly citations: readonly KnowledgeCitation[];
+  readonly proposedReplyBody: string | undefined;
+}): string {
+  return contentDigest({
+    proposalId: request.proposalId,
+    proposalVersion: request.proposalVersion,
+    conversationId: request.conversationId,
+    expectedRevision: request.expectedRevision,
+    assignedActor: request.assignedActor,
+    partyType: request.partyType,
+    proposalKind: request.proposalKind,
+    structuredIntent: request.structuredIntent,
+    policyRevision: request.policyRevision,
+    evaluationRef: request.evaluationRef,
+    citations: request.citations.map((c) => ({ knowledgeId: c.knowledgeId, version: c.version })),
+    proposedReplyBody: effectiveProposedReplyBody(request),
+  });
 }
 
 /** The deterministic idempotency key of a command identity. Same identity → same key. */
@@ -89,6 +173,12 @@ export function buildCoreCommand(args: {
     protocol: Object.freeze({ ...protocol }),
     commandId: `${request.conversationId}-${request.proposalId}-r${String(request.expectedRevision)}`,
     idempotencyKey,
+    // The idempotency key stays IDENTITY-derived and unchanged: the same logical proposal should keep
+    // the same idempotency identity, so Core still deduplicates a genuine retry. The content binding
+    // lives here instead. If Core returns a cached decision for older content under that same key,
+    // the echoed digest differs and validation fails closed -- which is the correct outcome, and a
+    // content-derived key could not produce it without also breaking deduplication.
+    proposalDigest: proposalDigestFor(request),
     correlationId,
     proposalId: request.proposalId,
     proposalVersion: request.proposalVersion,
@@ -101,13 +191,9 @@ export function buildCoreCommand(args: {
     policyRevision: request.policyRevision,
     evaluationRef: request.evaluationRef,
     citations: Object.freeze(request.citations.map((c) => Object.freeze({ ...c }))),
-    // A reply body is included only for the kinds that actually carry client-facing text — REPLY and
-    // FOLLOW_UP (ADR-0068). ESCALATE_TO_HUMAN, REQUEST_CLARIFICATION and NO_ACTION propose no text,
-    // so a body arriving with one of them is dropped rather than forwarded to Core.
-    proposedReplyBody:
-      request.proposalKind === 'REPLY' || request.proposalKind === 'FOLLOW_UP'
-        ? request.proposedReplyBody
-        : undefined,
+    // The SAME `effectiveProposedReplyBody` the digest above bound. Sharing the definition is what
+    // makes "the digest covers exactly what Core was sent" a structural fact rather than a comment.
+    proposedReplyBody: effectiveProposedReplyBody(request),
     createdAt,
   });
 }

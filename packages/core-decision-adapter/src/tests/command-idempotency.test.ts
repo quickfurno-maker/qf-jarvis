@@ -33,10 +33,12 @@ describe('command construction', () => {
     const command = build();
     expect(Object.isFrozen(command)).toBe(true);
     expect(Object.isFrozen(command.protocol)).toBe(true);
+    // RWC-P2D (ADR-0096) advanced the protocol: the wire schema now carries `proposalDigest`, so
+    // continuing to advertise v1 would have been the protocol lying about its own shape.
     expect(command.protocol).toEqual({
       name: 'qfj.core.decision',
-      version: 1,
-      contractDigest: 'c0de0001',
+      version: 2,
+      contractDigest: 'c0de0002',
     });
     expect(command.commandId).toBe('conv.1-conv.1-msg.1-reply-r1');
     expect(command.expectedRevision).toBe(1);
@@ -100,7 +102,9 @@ describe('idempotency key determinism', () => {
   });
 
   it('changes when the protocol version changes', () => {
-    const other: CoreDecisionProtocol = { ...protocol, version: 2 };
+    // A DIFFERENT version from the current default, which RWC-P2D advanced to 2. Comparing against
+    // the live version would have compared the protocol with itself and asserted nothing.
+    const other: CoreDecisionProtocol = { ...protocol, version: 3 };
     expect(idempotencyKeyFor(base)).not.toBe(idempotencyKeyFor({ ...base, protocol: other }));
   });
 
@@ -156,13 +160,14 @@ describe('maximum-length command identity (ADR-0069)', () => {
 
     // The response schema accepts a matching response at that same maximum length.
     const parsed = coreCommandResponseSchema.safeParse({
-      protocol: { name: 'qfj.core.decision', version: 1, contractDigest: 'c0de0001' },
+      protocol: { name: 'qfj.core.decision', version: 2, contractDigest: 'c0de0002' },
       commandId: command.commandId,
       idempotencyKey: command.idempotencyKey,
       proposalId: DERIVED_PROPOSAL,
       proposalVersion: 1,
       conversationId: MAX_CONVERSATION,
       boundRevision: 1_000_000,
+      proposalDigest: command.proposalDigest,
       outcome: 'ACCEPTED',
       reason: 'core.accepted',
       decidedAt: '2026-07-25T00:00:00Z',

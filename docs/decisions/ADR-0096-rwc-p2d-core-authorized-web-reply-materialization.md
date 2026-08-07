@@ -2,7 +2,7 @@
 
 **Status:** Accepted — RWC-P2D. Implemented on `rwc-p2d-core-authorized-web-reply-materialization`, **not merged**, and composed into nothing.
 **Deciders:** Owner
-**Relates to:** [ADR-0094](./ADR-0094-rwc-p2c-private-riya-web-conversation-service.md) · [ADR-0095](./ADR-0095-rwc-p2b-durable-postgres-riya-conversation-continuity.md) · [ADR-0093](./ADR-0093-rwc-p2a-riya-conversational-continuity-contract.md) · [ADR-0092](./ADR-0092-jrw-0b-governed-web-runtime-channel.md) · [ADR-0059](./ADR-0059-qfj-m5-orchestrated-reply-composition.md) · [ADR-0056](./ADR-0056-qfj-m3-core-decision-adapter.md) · [ADR-0055](./ADR-0055-qfj-m2-core-decision-and-reply-orchestration.md)
+**Relates to:** [ADR-0094](./ADR-0094-rwc-p2c-private-riya-web-conversation-service.md) · [ADR-0095](./ADR-0095-rwc-p2b-durable-postgres-riya-conversation-continuity.md) · [ADR-0093](./ADR-0093-rwc-p2a-riya-conversational-continuity-contract.md) · [ADR-0092](./ADR-0092-jrw-0b-governed-web-runtime-channel.md) · [ADR-0059](./ADR-0059-qfj-m5-orchestrated-reply-composition-foundation.md) · [ADR-0056](./ADR-0056-qfj-m3-quickfurno-core-decision-adapter-foundation.md) · [ADR-0055](./ADR-0055-qfj-m2-core-decision-and-reply-orchestration.md)
 
 **Baseline.** RWC-P2B merged as PR #100 — reviewed head `fb2f09da9df2dfcd0c6035b15e2939ae4867353e`, merge commit `596a768fa9de53cddb3831ebfe5094bba4bbada9`. Migration `0011` SHA-256 `80149f8d636aa85eaff7d98f924220107eaa3d539e5d13d5133873154926cc93`; migrations `0001`–`0011` are the approved exact set and there is no `0012`.
 
@@ -181,6 +181,78 @@ no extraction, no provenance merge. RWC-P4 still owns evolution.
 **No migration.** The set stays exactly `0001`–`0011`, `0011`'s bytes are unchanged, there is no
 `0012`, and the managed database is not accessed. If a future requirement appears to need durable
 reply storage, that is an owner review, not a migration somebody adds here.
+
+## Correction — binding Core acceptance to the exact proposal CONTENT
+
+**Owner review found §3–§5 above necessary but not sufficient.** Materializing only after a final
+`CORE_ACCEPTED` is right; it does not prove the `ACCEPTED` was _about the body being materialized_.
+
+### The gap, from the merged code
+
+- M2's `proposalId` is derived from `runtimeId`, `conversationId`, `messageId`, `expectedRevision`,
+  `proposalVersion` and `proposalKind`. It explicitly **excludes model output**.
+- M3's `idempotencyKey` is derived from the protocol plus `proposalId`, `proposalVersion`,
+  `conversationId`, `expectedRevision`. It **excludes** `proposedReplyBody`.
+- The command _sends_ `proposedReplyBody`, but the response echoed **no digest of it**.
+- `validateResponse` compared protocol, command, idempotency, proposal, conversation and revision
+  identity only.
+
+So one logical turn could produce BODY_A, receive `ACCEPTED`, then on a retry produce BODY_B while
+carrying the **identical** proposal and idempotency identity — and a stale or cached `ACCEPTED` for
+BODY_A was indistinguishable from a fresh one for BODY_B. RWC-P2D would then have handed a caller
+BODY_B as "the exact body Core authorized". That falsifies this ADR's central promise, so it is a
+correctness blocker rather than hardening.
+
+### The correction
+
+**`proposalDigest`** is added to the **existing** M3 protocol — no second protocol, port, endpoint or
+sync file. It is computed with the repository's existing `contentDigest` over exactly:
+
+`proposalId`, `proposalVersion`, `conversationId`, `expectedRevision`, `assignedActor`, `partyType`,
+`proposalKind`, `structuredIntent`, `policyRevision`, `evaluationRef`, `citations`, and the
+**effective** `proposedReplyBody`.
+
+"Effective" is not a restatement — it is a shared function. `effectiveProposedReplyBody` defines the
+`REPLY`/`FOLLOW_UP`-only rule once, and _both_ the command field and the digest are derived from it.
+A digest computed over a body Core was not sent, or omitting one it was, is therefore structurally
+impossible rather than merely unlikely.
+
+The digest travels on the wire; Core must **echo** it (a responder that recomputed it from its own
+view would agree with itself no matter what it received); the response schema **requires** it; and
+`validateResponse` compares it. A mismatch is `adapter-identity-mismatch`; a missing or malformed
+digest is `adapter-response-invalid`. A final `ACCEPTED` survives only after that echo matches.
+
+It is **integrity evidence, not authentication**: it proves _which_ proposal a response concerns, not
+_who_ produced it. And it is a digest — no raw body text ever enters an identifier.
+
+### The idempotency key is deliberately unchanged
+
+It stays identity-derived. The same logical proposal should keep the same idempotency identity, so
+Core still deduplicates a genuine retry. If Core returns a cached decision for older content under
+that key, the echoed digest differs and M3 fails closed — which is the correct outcome, and a
+content-derived key could not produce it without simultaneously breaking deduplication.
+
+### Protocol advanced to v2
+
+The strict command/response wire schema changed, so `qfj.core.decision` advances from
+`version: 1` / `contractDigest: 'c0de0001'` to **`version: 2` / `contractDigest: 'c0de0002'`**.
+Continuing to advertise v1 with a different shape would be the protocol lying about itself. The
+**name is unchanged** — this is the same protocol advanced, not a fork. Core-side adoption remains
+future work, as it already was for v1, and the QuickFurno repository is untouched.
+
+### What proves it
+
+A merge-blocking regression runs the same logical turn twice — identical envelope, identical control
+revision — with BODY_A then BODY_B, and replays run A's `ACCEPTED` verbatim against run B. It asserts
+that the proposal id, idempotency key and expected revision really are identical (otherwise the
+replay would fail for an uninteresting reason), that the digests differ, that the outcome is not
+`CORE_ACCEPTED`, that `authorizedReply` is `undefined`, and that neither body appears anywhere. A
+companion case replays the response against the **same** body and still accepts, so the guard is a
+comparison rather than a blanket refusal.
+
+**Acceptance is still authorization, never delivery.** Nothing in this correction sends, delivers or
+persists anything, and no reply text is logged, emitted or stored. `proposalDigest` is deliberately
+**not** added to observability.
 
 ## Consequences
 

@@ -23,7 +23,16 @@ export { CORE_ADAPTER_REASONS } from './contracts/reasons.js';
 export type { CoreAdapterReason } from './contracts/reasons.js';
 
 // Command / response / state.
-export { buildCoreCommand, idempotencyKeyFor } from './contracts/command.js';
+// `proposalDigestFor` is exported for the same reason `idempotencyKeyFor` is: it is part of the wire
+// contract a Core-side implementation must reproduce exactly, and a digest nobody outside can compute
+// is a digest nobody outside can check. `effectiveProposedReplyBody` travels with it because the
+// digest is meaningless without the rule for which kinds carry a body.
+export {
+  buildCoreCommand,
+  effectiveProposedReplyBody,
+  idempotencyKeyFor,
+  proposalDigestFor,
+} from './contracts/command.js';
 export type { CoreCommand, CoreCommandIdentity } from './contracts/command.js';
 export { coreCommandResponseSchema } from './contracts/response.js';
 export type { CoreCommandResponse } from './contracts/response.js';

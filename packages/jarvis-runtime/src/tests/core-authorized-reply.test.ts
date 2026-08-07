@@ -12,7 +12,12 @@
 import { createInboundEnvelope } from '@qf-jarvis/agent-runtime';
 import type { OrchestrationProposal } from '@qf-jarvis/agent-runtime';
 import type { CoreDecisionTransport } from '@qf-jarvis/core-decision-adapter';
-import { scriptedCoreTransport } from '@qf-jarvis/core-decision-adapter/testing';
+import {
+  malformedCoreTransport,
+  mismatchedCoreTransport,
+  scriptedCoreTransport,
+  throwingCoreTransport,
+} from '@qf-jarvis/core-decision-adapter/testing';
 import type { ModelGatewayInvoker } from '@qf-jarvis/model-reply-adapter';
 import {
   rawStructuredGatewayInvoker,
@@ -478,5 +483,162 @@ describe('the materialization rule is not a public capability', () => {
     for (const forbidden of ['send', 'deliver', 'dispatch', 'publish', 'execute', 'persist']) {
       expect(Object.hasOwn(runtime, forbidden)).toBe(false);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A stale ACCEPTED cannot authorize different model text (RWC-P2D correction).
+// ---------------------------------------------------------------------------
+//
+// The defect this proves absent: `proposalId` is derived from runtimeId, conversationId, messageId,
+// expectedRevision, proposalVersion and proposalKind, and `idempotencyKey` from the protocol plus
+// that identity. NEITHER includes model output. So one logical turn can produce BODY_A, receive
+// ACCEPTED, and on a retry produce BODY_B under the identical proposal and idempotency identity --
+// and an identity-only validator cannot tell the stale ACCEPTED for BODY_A apart from a fresh one
+// for BODY_B. P2D would then have presented BODY_B as Core-authorized.
+//
+// `proposalDigest` closes it: the digest binds the effective body, Core must echo it, and
+// `validateResponse` compares it.
+
+describe('a stale ACCEPTED cannot authorize a different body', () => {
+  const BODY_A = `${SENTINEL}-BODY-A`;
+  const BODY_B = `${SENTINEL}-BODY-B`;
+
+  /** Wrap a transport so a test can read the exact command that went over the wire. */
+  function capturing(inner: CoreDecisionTransport): CoreDecisionTransport & {
+    command(): Record<string, unknown> | undefined;
+    response(): string | undefined;
+  } {
+    let sent: Record<string, unknown> | undefined;
+    let received: string | undefined;
+    return {
+      async send(serialized: string): Promise<string> {
+        sent = JSON.parse(serialized) as Record<string, unknown>;
+        received = await inner.send(serialized);
+        return received;
+      },
+      command: () => sent,
+      response: () => received,
+    };
+  }
+
+  /** One turn with a chosen body, over a chosen transport. Identity is IDENTICAL across calls. */
+  async function turnWith(
+    body: string,
+    transport: CoreDecisionTransport,
+  ): ReturnType<ReturnType<typeof createJarvisRuntime>['processInboundForCoreAuthorizedReply']> {
+    return createJarvisRuntime(
+      syntheticRuntimeConfig({
+        gatewayInvoker: scriptedGatewayInvoker(structuredReply({ replyBody: body, citations: [] })),
+        coreTransport: transport,
+      }),
+    ).processInboundForCoreAuthorizedReply(syntheticInboundEnvelope());
+  }
+
+  it('run A authorizes BODY_A; replaying run A against BODY_B fails closed', async () => {
+    // ---- Run A: honest exchange. Core sees BODY_A and accepts it.
+    const transportA = capturing(scriptedCoreTransport('ACCEPTED'));
+    const runA = await turnWith(BODY_A, transportA);
+    expect(runA.runtimeResult.outcome).toBe('CORE_ACCEPTED');
+    expect(runA.authorizedReply?.replyBody).toBe(BODY_A);
+
+    const digestA = transportA.command()?.['proposalDigest'];
+    const staleResponse = transportA.response();
+    expect(typeof digestA).toBe('string');
+    expect(typeof staleResponse).toBe('string');
+
+    // ---- Run B: SAME logical turn identity, SAME control revision, DIFFERENT model body. The
+    // transport replays run A's response verbatim -- a cached or stale Core decision.
+    const transportB = capturing({
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- asserted non-undefined above
+      send: () => Promise.resolve(staleResponse!),
+    });
+    const runB = await turnWith(BODY_B, transportB);
+
+    const commandB = transportB.command();
+    // The identity really is the same -- this is what makes the replay indistinguishable without a
+    // content digest, and what makes the test meaningful rather than a trivial mismatch.
+    expect(commandB?.['proposalId']).toBe(transportA.command()?.['proposalId']);
+    expect(commandB?.['idempotencyKey']).toBe(transportA.command()?.['idempotencyKey']);
+    expect(commandB?.['expectedRevision']).toBe(transportA.command()?.['expectedRevision']);
+    // ...and the digests differ, because only they bind the body.
+    expect(commandB?.['proposalDigest']).not.toBe(digestA);
+
+    // The decision fails closed. Not accepted, nothing materialized, nothing leaked.
+    expect(runB.runtimeResult.outcome).not.toBe('CORE_ACCEPTED');
+    expect(runB.authorizedReply).toBeUndefined();
+    expect(JSON.stringify(runB.runtimeResult)).not.toContain(BODY_B);
+    expect(JSON.stringify(runB.runtimeResult)).not.toContain(BODY_A);
+  });
+
+  it('the same body under the same identity still validates — the guard is not blanket refusal', async () => {
+    // A guard that refused everything would pass the test above for the wrong reason.
+    const transportA = capturing(scriptedCoreTransport('ACCEPTED'));
+    await turnWith(BODY_A, transportA);
+    const replayed = transportA.response();
+
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- run A always responded
+    const transportB = capturing({ send: () => Promise.resolve(replayed!) });
+    const again = await turnWith(BODY_A, transportB);
+    expect(transportB.command()?.['proposalDigest']).toBe(transportA.command()?.['proposalDigest']);
+    expect(again.runtimeResult.outcome).toBe('CORE_ACCEPTED');
+    expect(again.authorizedReply?.replyBody).toBe(BODY_A);
+  });
+
+  it('the digest is on the wire, and no raw body appears in any identifier', async () => {
+    const transport = capturing(scriptedCoreTransport('ACCEPTED'));
+    await turnWith(BODY_A, transport);
+    const command = transport.command();
+    expect(command?.['proposalDigest']).toMatch(/^[0-9a-f]{8,64}$/);
+    // The body is sent as its own field, by design -- but never smuggled into an identifier.
+    for (const key of ['proposalId', 'idempotencyKey', 'commandId', 'proposalDigest']) {
+      expect(String(command?.[key])).not.toContain(BODY_A);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Core-side failure modes never expose the draft (RWC-P2D correction §8).
+// ---------------------------------------------------------------------------
+
+describe('an unusable Core response never exposes the draft', () => {
+  it.each([
+    ['a malformed (non-JSON) Core response', malformedCoreTransport],
+    ['a well-formed response with a MISMATCHED identity', mismatchedCoreTransport],
+    ['a transport that throws', throwingCoreTransport],
+  ])('%s fails closed with no materialization', async (_label, makeTransport) => {
+    const invoker = sentinelInvoker();
+    const transport = makeTransport();
+    const { runtimeResult, authorizedReply } = await runDetailed({
+      gatewayInvoker: invoker,
+      coreTransport: transport,
+    });
+
+    // A valid sentinel draft genuinely existed BEFORE Core was consulted -- otherwise this would
+    // prove only that a turn with no body has no body.
+    expect(invoker.invoked()).toBe(1);
+
+    expect(runtimeResult.outcome).not.toBe('CORE_ACCEPTED');
+    expect(authorizedReply).toBeUndefined();
+    expect(JSON.stringify(runtimeResult)).not.toContain(SENTINEL);
+    expect(allStrings(runtimeResult).some((s) => s.includes(SENTINEL))).toBe(false);
+    // No retry: one turn, at most one Core attempt.
+    expect(transport.invoked()).toBeLessThanOrEqual(1);
+  });
+
+  it('observability and errors stay free of the sentinel on a failed Core exchange', async () => {
+    const events: JarvisRuntimeEvent[] = [];
+    const { runtimeResult, authorizedReply } = await runDetailed({
+      coreTransport: mismatchedCoreTransport(),
+      observability: {
+        onEvent: (event: JarvisRuntimeEvent): void => {
+          events.push(event);
+        },
+      },
+    });
+    expect(runtimeResult.outcome).not.toBe('CORE_ACCEPTED');
+    expect(authorizedReply).toBeUndefined();
+    expect(events.length).toBeGreaterThan(0);
+    expect(JSON.stringify(events)).not.toContain(SENTINEL);
   });
 });
