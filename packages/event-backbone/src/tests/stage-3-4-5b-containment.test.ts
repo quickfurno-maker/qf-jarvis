@@ -105,7 +105,7 @@ describe('destructive/reset operations are absent from ALL production projection
 // (QFJ-P08-B2), 0009 (QFJ-P08 durable approval queue) and now 0010 (QFJ-P09.03 durable execution
 // replay claim). This guard bounds it at 0001–0011.
 describe('migrations are bounded at 0001–0011 with no 0012', () => {
-  it('the migrations directory holds EXACTLY the ten approved SQL files', () => {
+  it('the migrations directory holds EXACTLY the eleven approved SQL files', () => {
     const files = readdirSync(MIGRATIONS_DIR)
       .filter((name) => name.endsWith('.sql'))
       .sort();
