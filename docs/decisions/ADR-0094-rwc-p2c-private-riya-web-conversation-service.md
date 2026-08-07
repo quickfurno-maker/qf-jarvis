@@ -1,6 +1,7 @@
 # ADR-0094 — RWC-P2C Private Riya Web Conversation Service
 
 **Status:** Accepted — RWC-P2C. Private application service only; no public endpoint, no database, no live extraction.
+**Superseded in part by [ADR-0096](./ADR-0096-rwc-p2d-core-authorized-web-reply-materialization.md) (RWC-P2D).** ADR-0096 moves exactly one boundary recorded below: a proposal QuickFurno Core has already AUTHORIZED may now be returned, through `RiyaWebConversationResultV2.authorizedReply`. The reasoning below is unchanged and still correct — a model DRAFT is still never exposed, and `PROCESSED` still does not mean replied, sent or delivered. `RiyaWebConversationResultV1` is retained as historical.
 **Deciders:** Owner
 **Relates to:** [ADR-0093](./ADR-0093-rwc-p2a-riya-conversational-continuity-contract.md) · [ADR-0092](./ADR-0092-jrw-0b-governed-web-runtime-channel.md) · [ADR-0068](./ADR-0068-riya-authoritative-runtime-composition.md) · [ADR-0067](./ADR-0067-riya-client-sales-behaviour-boundary.md) · [ADR-0055](./ADR-0055-qfj-m2-core-decision-and-reply-orchestration.md) · [ADR-0076](./ADR-0076-qfj-p08-b-tenant-scoped-authoritative-state.md)
 

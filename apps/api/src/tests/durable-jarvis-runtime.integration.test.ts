@@ -744,10 +744,14 @@ describe('durable control semantics through the composed runtime', () => {
       expect(
         (started2.lifecycle.runtime as unknown as Record<string, unknown>)['provision'],
       ).toBeUndefined();
-      // The runtime surface is still exactly three methods.
+      // The runtime surface is exactly four methods since RWC-P2D (ADR-0096), which added the
+      // content-bearing `processInboundForCoreAuthorizedReply` beside `processInbound`. The
+      // property this test guards is unchanged and is the reason the set is pinned rather than
+      // counted: none of the four provisions a conversation, and no `provision` method exists.
       expect(Object.keys(started2.lifecycle.runtime).sort()).toEqual([
         'applyConversationControlCommand',
         'processInbound',
+        'processInboundForCoreAuthorizedReply',
         'readConversationOperationsSnapshot',
       ]);
     } finally {

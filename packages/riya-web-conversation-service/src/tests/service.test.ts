@@ -7,8 +7,7 @@
 import { DISCOVERY_FIELDS_FROZEN } from '@qf-jarvis/riya-agent';
 import { createRiyaConversationContinuityState } from '@qf-jarvis/riya-conversation-continuity';
 import type { RiyaConversationContinuityStateV1 } from '@qf-jarvis/riya-conversation-continuity';
-import type { JarvisRuntime, JarvisRuntimeOutcome } from '@qf-jarvis/jarvis-runtime';
-import type { InboundEnvelope } from '@qf-jarvis/agent-runtime';
+import type { JarvisRuntimeOutcome } from '@qf-jarvis/jarvis-runtime';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -22,42 +21,9 @@ import {
   InMemoryContinuityStore,
   UnavailableContinuityStore,
 } from './fakes/in-memory-continuity-store.js';
+import { scriptedRuntime } from './fakes/scripted-runtime.js';
 
 const RUNTIME_ID = 'rt.web.1';
-
-/** A recording runtime. Counts invocations and captures the envelope the service built. */
-function scriptedRuntime(
-  outcome: JarvisRuntimeOutcome = 'CORE_ACCEPTED',
-  over: { readonly refusalReason?: string; readonly throws?: boolean } = {},
-): JarvisRuntime & { invoked(): number; lastEnvelope(): InboundEnvelope | undefined } {
-  let calls = 0;
-  let seen: InboundEnvelope | undefined;
-  return {
-    processInbound(envelope: InboundEnvelope) {
-      calls += 1;
-      seen = envelope;
-      if (over.throws === true) {
-        return Promise.reject(new Error('runtime at 10.0.0.1 — password=hunter2'));
-      }
-      return Promise.resolve({
-        outcome,
-        runId: envelope.runtimeId,
-        conversationId: envelope.conversationId,
-        boundRevision: 1,
-        assignedActor: 'RIYA' as const,
-        proposalId: 'prop.1',
-        modelDrafted: outcome === 'MODEL_DRAFTED' || outcome === 'CORE_ACCEPTED',
-        coreConsulted: true,
-        refusalReason: over.refusalReason as never,
-        provenance: undefined,
-      });
-    },
-    applyConversationControlCommand: () => Promise.reject(new Error('not used')),
-    readConversationOperationsSnapshot: () => Promise.reject(new Error('not used')),
-    invoked: () => calls,
-    lastEnvelope: () => seen,
-  };
-}
 
 function turnInput(over: Partial<RiyaWebConversationTurnV1> = {}): RiyaWebConversationTurnV1 {
   return {
@@ -112,7 +78,8 @@ describe('the turn a caller may take', () => {
   it('(1) accepts a valid WEB turn', async () => {
     const { svc } = service();
     const result = await svc.handleTurn(turnInput({ normalizedText: 'Hello Riya' }));
-    expect(result.version).toBe(1);
+    // Version 2 since RWC-P2D (ADR-0096): the result MAY now carry a Core-authorized body.
+    expect(result.version).toBe(2);
     expect(result.tenantId).toBe('tenant.a');
     expect(result.conversationId).toBe('conv.1');
     expect(result.messageId).toBe('msg.1');

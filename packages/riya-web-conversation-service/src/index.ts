@@ -31,10 +31,15 @@
  *
  * ### Two things a reader should know before consuming the result
  *
- * There is **no reply text**, because the authoritative runtime deliberately exposes none: a turn
- * produces a proposal stamped `PENDING_CORE_VALIDATION`, not a message anybody is cleared to send.
- * And the served disposition is `PROCESSED`, not `RESPONDED`, for the same reason — nothing
- * responded.
+ * Since RWC-P2D (ADR-0096) the result is `RiyaWebConversationResultV2` and MAY carry an
+ * `authorizedReply`: the exact body QuickFurno Core AUTHORIZED, materialized only after the final M3
+ * decision was `ACCEPTED` for a `REPLY`/`FOLLOW_UP` proposal. A model DRAFT is still never exposed —
+ * `MODEL_DRAFTED` with no Core transport, a rejection, an unavailability or a drifted revision all
+ * return no text whatsoever.
+ *
+ * And the served disposition is still `PROCESSED`, never `RESPONDED`, `SENT` or `DELIVERED` —
+ * because Core authorizing a proposal is not a browser receiving it. A future ingress must require
+ * `authorizedReply !== undefined` before returning AI text; the disposition is not that check.
  */
 
 export { createRiyaWebConversationService } from './service/create-service.js';
@@ -47,6 +52,7 @@ export { RIYA_WEB_CONVERSATION_DISPOSITIONS } from './contracts/result.js';
 export type {
   RiyaWebConversationDisposition,
   RiyaWebConversationResultV1,
+  RiyaWebConversationResultV2,
 } from './contracts/result.js';
 
 export { RIYA_WEB_CONVERSATION_ERROR_CODES, RiyaWebConversationError } from './contracts/errors.js';
