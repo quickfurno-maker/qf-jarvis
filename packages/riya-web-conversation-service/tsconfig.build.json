@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
+  },
+
+  // The EMITTING build, referenced by the root solution. `src/tests` is EXCLUDED so the in-memory
+  // store fake can never reach dist/ -- a production default store is exactly the thing that would
+  // let a deployment silently lose continuity on restart.
+  //
+  // Four project references, all one-way and all downward: the composition root it delegates to,
+  // the runtime kernel that owns the envelope, the P2A continuity contract, and the behaviour
+  // package that owns the discovery vocabulary. Nothing references back.
+  //
+  // Deliberately absent: any persistence package, `postgres-conversation-state`, `event-backbone`,
+  // a model gateway, a provider, a transport, and any application.
+  "references": [
+    { "path": "../jarvis-runtime/tsconfig.build.json" },
+    { "path": "../agent-runtime/tsconfig.build.json" },
+    { "path": "../riya-conversation-continuity/tsconfig.build.json" },
+    { "path": "../riya-agent/tsconfig.build.json" }
+  ],
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/tests/**"]
+}

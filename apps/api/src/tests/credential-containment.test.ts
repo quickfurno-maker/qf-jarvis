@@ -517,6 +517,11 @@ describe('(71-77) package API and dependency locks are untouched', () => {
       // discovery-field mapping are internal -- exporting the ranks would be exporting the first
       // half of the merge RWC-P4 owns.
       'riya-conversation-continuity': 5,
+      // RWC-P2C (ADR-0094): the private Riya web conversation service, locked from the day it
+      // lands. Four root symbols: the factory, the closed disposition set, the closed error-code
+      // set and the error class. The turn schema, the envelope builder, the outcome mapper and the
+      // in-memory store fake are all internal or test-only.
+      'riya-web-conversation-service': 4,
       // QFJ-P09.03 (ADR-0091): the durable execution replay / idempotency store, locked from the
       // day it lands. Three root symbols: the factory, the closed error-code set and the error
       // class. The SQL, the table name, the input validator, the error classifier and the pool are

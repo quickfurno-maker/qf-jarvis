@@ -423,6 +423,24 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
 
+  packages/riya-web-conversation-service:
+    dependencies:
+      '@qf-jarvis/agent-runtime':
+        specifier: workspace:*
+        version: link:../agent-runtime
+      '@qf-jarvis/jarvis-runtime':
+        specifier: workspace:*
+        version: link:../jarvis-runtime
+      '@qf-jarvis/riya-agent':
+        specifier: workspace:*
+        version: link:../riya-agent
+      '@qf-jarvis/riya-conversation-continuity':
+        specifier: workspace:*
+        version: link:../riya-conversation-continuity
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+
 packages:
 
   '@alloc/quick-lru@5.2.0':
