@@ -76,7 +76,7 @@ const LOCKED_MIGRATION_HASHES: Record<string, string> = {
   '0010_execution_replay_claim.sql':
     '1add85e08e43dafe85f124b886790cd3495d3f54b3579ad89efe40e2849a8b05',
   '0011_riya_conversation_continuity.sql':
-    'c02e78d7b3ab1fce22ffa87af2a94f0edaf613004e3d3605e3fc1ef25caddb5c',
+    'c649f3d45f6611cbcc06f1a4a769d40790085b4cd9074a2fb26336275b5016d0',
 };
 
 describe('content-free observability', () => {

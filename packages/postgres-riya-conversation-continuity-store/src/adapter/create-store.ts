@@ -156,13 +156,8 @@ export function createPostgresRiyaConversationContinuityStore(
       const inserted = await client.query(INSERT_INITIAL_STATE, [
         parameters.tenantId,
         parameters.conversationId,
-        parameters.version,
         parameters.continuityRevision,
-        parameters.phase,
-        parameters.discoveryJson,
-        parameters.fieldProvenanceJson,
-        parameters.summaryConfirmed,
-        parameters.completionEvidenceRef,
+        parameters.stateJson,
       ]);
 
       if (inserted.rows.length === 1) {
@@ -219,6 +214,16 @@ export function createPostgresRiyaConversationContinuityStore(
     const expectedRevision = validateExpectedRevision(suppliedInput['expectedRevision']);
     const parameters = toStateParameters(suppliedInput['nextState']);
 
+    // One logical continuity mutation advances the revision by EXACTLY one (ADR-0095). A next state at
+    // any other revision is a caller defect -- a skipped step, a replayed write, or a decrement -- and
+    // it is refused BEFORE any SQL runs, so it can never reach the row. The database holds the same
+    // rule independently in the BEFORE UPDATE trigger; this is the near, cheap half of that guard.
+    // `expectedRevision` is already `<= MAX_SAFE_INTEGER`; if it is exactly the ceiling, no valid
+    // `nextState` can carry `ceiling + 1`, so `toStateParameters` will have refused it first.
+    if (parameters.continuityRevision !== expectedRevision + 1) {
+      throw new PostgresRiyaContinuityStoreError('invalid-input');
+    }
+
     return withClient(async (client) => {
       // The predicate IS the concurrency control. Two callers racing with the same expected revision
       // cannot both match: the row lock and the re-evaluated predicate make one of them update zero
@@ -227,11 +232,7 @@ export function createPostgresRiyaConversationContinuityStore(
         parameters.tenantId,
         parameters.conversationId,
         parameters.continuityRevision,
-        parameters.phase,
-        parameters.discoveryJson,
-        parameters.fieldProvenanceJson,
-        parameters.summaryConfirmed,
-        parameters.completionEvidenceRef,
+        parameters.stateJson,
         expectedRevision,
       ]);
 

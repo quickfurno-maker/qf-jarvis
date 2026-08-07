@@ -12,7 +12,7 @@ import {
   PostgresRiyaContinuityStoreError,
   createPostgresRiyaConversationContinuityStore,
 } from '../index.js';
-import { fullyDiscoveredState, initialState } from './fixtures.js';
+import { fullyDiscoveredState, initialState, summaryReadyState } from './fixtures.js';
 
 /**
  * A pool that FAILS the moment anything touches it.
@@ -208,6 +208,33 @@ describe('invalid input is refused before a connection is taken', () => {
         } as never),
       ),
     ).toBe('invalid-input');
+  });
+
+  it('(12a) compareAndSet refuses a next revision that is not exactly expected + 1', async () => {
+    const built = store();
+    // A valid state and a valid expected revision, but the next revision SKIPS. The +1 rule (ADR-0095)
+    // refuses it BEFORE a connection is taken: were it allowed through, the forbidden pool would
+    // surface as `store-unavailable` instead.
+    for (const skipped of [0, 2, 5, 41]) {
+      expect(
+        await codeOf(() =>
+          built.compareAndSet({
+            expectedRevision: 0,
+            nextState: summaryReadyState('tenant.a', 'conv.1', { continuityRevision: skipped }),
+          }),
+        ),
+        String(skipped),
+      ).toBe('invalid-input');
+    }
+    // The exact one-step advance is NOT refused here: it passes validation and reaches the pool.
+    expect(
+      await codeOf(() =>
+        built.compareAndSet({
+          expectedRevision: 0,
+          nextState: summaryReadyState('tenant.a', 'conv.1', { continuityRevision: 1 }),
+        }),
+      ),
+    ).toBe('store-unavailable');
   });
 
   it('(13) a valid-looking request DOES reach the pool — proving the refusals above are real', async () => {

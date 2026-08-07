@@ -224,8 +224,11 @@ describe('what this package cannot become', () => {
     ]) {
       expect(code, forbidden).not.toContain(forbidden);
     }
-    // And it never computes a revision of its own.
-    expect(code).not.toContain('expectedRevision + 1');
+    // It VALIDATES the one-step revision relationship the port and the database both require
+    // (ADR-0095): a compare-and-set is refused unless `nextState.continuityRevision === expectedRevision
+    // + 1`. But it invents no revision of its own -- what is stored is the caller's `nextState`
+    // revision, never a value this adapter computed, so `continuityRevision + 1` never appears.
+    expect(code).toContain('expectedRevision + 1');
     expect(code).not.toContain('continuityRevision + 1');
   });
 
