@@ -1,6 +1,7 @@
 # ADR-0056 — QFJ-M3 QuickFurno Core Decision Adapter Foundation
 
 **Status:** Accepted (2026-07-25) — QFJ-M3 (a concrete `CoreDecisionPort` behind an injected transport; a PROPOSED integration contract pending Core-side adoption)
+**Amended by [ADR-0096](./ADR-0096-rwc-p2d-core-authorized-web-reply-materialization.md) (RWC-P2D correction).** The wire contract described below binds proposal IDENTITY but not proposal CONTENT: `proposalId` and `idempotencyKey` both exclude model output, so a stale `ACCEPTED` for one body validated against a command carrying another. ADR-0096 adds a required `proposalDigest` to the command, the response schema and `validateResponse`, and advances `qfj.core.decision` from v1/`c0de0001` to **v2/`c0de0002`**. The protocol name, the idempotency-key semantics and every decision below are otherwise unchanged. Core-side adoption remains pending, as it already was.
 **Deciders:** Owner
 **Phase:** QFJ-M3 / MVP Runtime — QuickFurno Core Decision Adapter Foundation (the Jarvis→Core decision boundary of [QFJ-P05 Jarvis Orchestration](../architecture/qf-jarvis-roadmap-v3.md))
 

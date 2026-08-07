@@ -26,6 +26,10 @@ export function serializeCommand(command: CoreCommand): string {
     proposalVersion: command.proposalVersion,
     conversationId: command.conversationId,
     expectedRevision: command.expectedRevision,
+    // RWC-P2D (ADR-0096). On the wire because Core must ECHO it: a digest the responder never
+    // received is a digest it could only recompute from its own view of the proposal, and a
+    // responder that recomputes always agrees with itself.
+    proposalDigest: command.proposalDigest,
     assignedActor: command.assignedActor,
     partyType: command.partyType,
     proposalKind: command.proposalKind,

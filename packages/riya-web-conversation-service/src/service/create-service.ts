@@ -6,8 +6,15 @@
  * 1. validate the turn;
  * 2. LOAD continuity, or initialize it atomically through the injected store;
  * 3. build the existing `InboundEnvelope` with `WEB`/`CLIENT`/`INBOUND` fixed;
- * 4. delegate EXACTLY ONCE to the already-composed authoritative `JarvisRuntime`;
- * 5. map the outcome to a closed disposition and return the continuity UNCHANGED.
+ * 4. delegate EXACTLY ONCE to the already-composed authoritative runtime, through its RWC-P2D
+ *    `processInboundForCoreAuthorizedReply` capability (ADR-0096) — one call, one orchestration run;
+ * 5. map the outcome to a closed disposition, cross-check any Core-authorized body against the run
+ *    that produced it, and return the continuity UNCHANGED.
+ *
+ * Since RWC-P2D the result is `RiyaWebConversationResultV2` and MAY carry the exact body QuickFurno
+ * Core authorized. It never carries a draft: `MODEL_DRAFTED` with no Core transport, a Core
+ * rejection, an unavailability and a drifted revision all return no text at all. Core acceptance is
+ * authorization, not delivery — this service still sends nothing and persists no reply.
  *
  * ### What it is not
  *
@@ -27,7 +34,12 @@
  * It is not a transport. There is no HTTP server, route, URL, cookie, CORS or browser reachability —
  * a QuickFurno server gateway is the only intended caller, and that ingress is a later slice.
  */
-import type { JarvisRuntime, JarvisRuntimeOutcome } from '@qf-jarvis/jarvis-runtime';
+import type {
+  CoreAuthorizedReplyJarvisRuntime,
+  JarvisCoreAuthorizedReplyV1,
+  JarvisRuntimeOutcome,
+  JarvisRuntimeResult,
+} from '@qf-jarvis/jarvis-runtime';
 import { DISCOVERY_FIELDS_FROZEN } from '@qf-jarvis/riya-agent';
 import { createRiyaConversationContinuityState } from '@qf-jarvis/riya-conversation-continuity';
 import type { RiyaConversationContinuityStateV1 } from '@qf-jarvis/riya-conversation-continuity';
@@ -35,7 +47,7 @@ import type { RiyaConversationContinuityStateV1 } from '@qf-jarvis/riya-conversa
 import { RiyaWebConversationError } from '../contracts/errors.js';
 import type {
   RiyaWebConversationDisposition,
-  RiyaWebConversationResultV1,
+  RiyaWebConversationResultV2,
 } from '../contracts/result.js';
 import type { RiyaContinuityStorePort } from '../contracts/store-port.js';
 import { webConversationTurnSchema } from '../contracts/turn.js';
@@ -44,8 +56,15 @@ import { buildWebInboundEnvelope } from '../internal/envelope.js';
 
 /** What a caller injects. Every collaborator is required; there is no default for any of them. */
 export interface RiyaWebConversationServiceConfig {
-  /** The ALREADY-COMPOSED authoritative runtime. This service composes nothing. */
-  readonly runtime: JarvisRuntime;
+  /**
+   * The ALREADY-COMPOSED authoritative runtime, which MUST expose the RWC-P2D content-bearing
+   * capability. This service composes nothing.
+   *
+   * The capability is required rather than optional because the service returns `authorizedReply` in
+   * its V2 result: a runtime without it could only ever produce `undefined`, and a permanently-empty
+   * field is exactly the dead branch RWC-P2C refused to add in the first place.
+   */
+  readonly runtime: CoreAuthorizedReplyJarvisRuntime;
   /** The continuity store. Required — an in-memory default would lose state on restart. */
   readonly continuityStore: RiyaContinuityStorePort;
   /** The governed runtime identifier stamped on every envelope. Configured, never caller-supplied. */
@@ -54,7 +73,46 @@ export interface RiyaWebConversationServiceConfig {
 
 /** The service. One capability. */
 export interface RiyaWebConversationService {
-  handleTurn(turn: RiyaWebConversationTurnV1): Promise<RiyaWebConversationResultV1>;
+  handleTurn(turn: RiyaWebConversationTurnV1): Promise<RiyaWebConversationResultV2>;
+}
+
+/** The M2 reply-body bound, restated. A body outside it never passed the orchestrator's schema. */
+const REPLY_BODY_MAX = 8192;
+
+/**
+ * The kinds whose text Core actually received, as plain strings.
+ *
+ * Widened to `readonly string[]` deliberately. The declared type of `proposalKind` is already
+ * `'REPLY' | 'FOLLOW_UP'`, so a `===` comparison is statically always true and the compiler is right
+ * to say so — but this is a PACKAGE BOUNDARY, and the value arrives from an injected runtime that a
+ * test double, a future adapter or a defect could make disagree with its own type. The check is
+ * about the value that showed up at runtime, not the one the type promised.
+ */
+const TEXT_CARRYING_KINDS: readonly string[] = Object.freeze(['REPLY', 'FOLLOW_UP']);
+
+/**
+ * Cross-check a materialization against the run it claims to belong to (RWC-P2D §12).
+ *
+ * The runtime already decides whether a body may exist; this is the service refusing to FORWARD one
+ * whose evidence disagrees with itself. Everything checked here should be impossible, which is the
+ * point: if it ever happens, the choice is between a refusal somebody investigates and a client
+ * receiving text attributed to a proposal that did not produce it.
+ */
+function materializationAgreesWithRun(
+  runtimeResult: JarvisRuntimeResult,
+  authorizedReply: JarvisCoreAuthorizedReplyV1,
+): boolean {
+  return (
+    runtimeResult.outcome === 'CORE_ACCEPTED' &&
+    runtimeResult.modelDrafted &&
+    runtimeResult.proposalId !== undefined &&
+    runtimeResult.boundRevision !== undefined &&
+    authorizedReply.proposalId === runtimeResult.proposalId &&
+    authorizedReply.boundRevision === runtimeResult.boundRevision &&
+    TEXT_CARRYING_KINDS.includes(authorizedReply.proposalKind) &&
+    authorizedReply.replyBody.length > 0 &&
+    authorizedReply.replyBody.length <= REPLY_BODY_MAX
+  );
 }
 
 /**
@@ -125,10 +183,20 @@ export function createRiyaWebConversationService(
   // a package boundary and a missing store would otherwise surface as a crash mid-turn — after the
   // envelope was built and possibly after the runtime ran.
   const supplied: unknown = config;
+  const runtimeCandidate = supplied as { runtime?: Record<string, unknown> } | undefined;
+  const hasRuntimeMethod = (name: string): boolean =>
+    typeof runtimeCandidate?.runtime?.[name] === 'function';
   if (
     !isRecord(supplied) ||
-    typeof (supplied['runtime'] as { processInbound?: unknown } | undefined)?.processInbound !==
-      'function' ||
+    // The MATURE runtime surface, all three methods -- not just the one this service calls. A bare
+    // `{ processInboundForCoreAuthorizedReply }` object is a content provider someone assembled, and
+    // duck-typing one as the authoritative runtime is how a gate stops being reached.
+    !hasRuntimeMethod('processInbound') ||
+    !hasRuntimeMethod('applyConversationControlCommand') ||
+    !hasRuntimeMethod('readConversationOperationsSnapshot') ||
+    // ...plus the RWC-P2D capability. Fail CLOSED at construction: discovering this mid-turn would
+    // mean a model had already run.
+    !hasRuntimeMethod('processInboundForCoreAuthorizedReply') ||
     typeof (supplied['continuityStore'] as { load?: unknown } | undefined)?.load !== 'function' ||
     typeof (supplied['continuityStore'] as { createInitialIfAbsent?: unknown } | undefined)
       ?.createInitialIfAbsent !== 'function' ||
@@ -139,13 +207,13 @@ export function createRiyaWebConversationService(
   ) {
     throw new RiyaWebConversationError('invalid-input');
   }
-  const runtime = supplied['runtime'] as JarvisRuntime;
+  const runtime = supplied['runtime'] as CoreAuthorizedReplyJarvisRuntime;
   const continuityStore = supplied['continuityStore'] as RiyaContinuityStorePort;
   const runtimeId = supplied['runtimeId'];
 
   async function handleTurn(
     input: RiyaWebConversationTurnV1,
-  ): Promise<RiyaWebConversationResultV1> {
+  ): Promise<RiyaWebConversationResultV2> {
     const parsed = webConversationTurnSchema.safeParse(input);
     if (!parsed.success) {
       // The zod issue is discarded: its path names the failing field and its message can quote the
@@ -198,27 +266,45 @@ export function createRiyaWebConversationService(
     //    path — a retry inside a boundary that has already reached a model is how one turn becomes
     //    two proposals.
     let outcome: JarvisRuntimeOutcome;
-    let refusalReason: RiyaWebConversationResultV1['reason'];
+    let refusalReason: RiyaWebConversationResultV2['reason'];
+    let authorizedReply: JarvisCoreAuthorizedReplyV1 | undefined;
     try {
-      const result = await runtime.processInbound(envelope);
-      outcome = result.outcome;
-      refusalReason = result.refusalReason;
-    } catch {
-      // The runtime's own error is not surfaced: it is a different bounded vocabulary, and wrapping
-      // it would make this service's surface open-ended.
+      // The content-bearing capability, called ONCE. Ordinary `processInbound` is NOT called in
+      // addition: that would be a second orchestration run, a second model call and a second Core
+      // decision for one inbound turn.
+      const detailed = await runtime.processInboundForCoreAuthorizedReply(envelope);
+      outcome = detailed.runtimeResult.outcome;
+      refusalReason = detailed.runtimeResult.refusalReason;
+      if (detailed.authorizedReply !== undefined) {
+        if (!materializationAgreesWithRun(detailed.runtimeResult, detailed.authorizedReply)) {
+          // Fail closed on self-contradicting evidence, using the EXISTING bounded invariant code.
+          // Nothing about the body is put in the error -- the code names the kind of fault, and the
+          // fixed message carries no identifier, no outcome and no text.
+          throw new RiyaWebConversationError('repository-invariant');
+        }
+        authorizedReply = detailed.authorizedReply;
+      }
+    } catch (error: unknown) {
+      // A refusal this service already decided is re-thrown unchanged. Only the RUNTIME's own error
+      // is collapsed: it is a different bounded vocabulary, and wrapping it would make this
+      // service's surface open-ended.
+      if (error instanceof RiyaWebConversationError) {
+        throw error;
+      }
       throw new RiyaWebConversationError('runtime-unavailable');
     }
 
     // 4. Continuity is returned exactly as it was loaded or created. RWC-P4 owns evolution, and
     //    there is deliberately no `compareAndSet` on this path.
     return Object.freeze({
-      version: 1 as const,
+      version: 2 as const,
       tenantId: turn.tenantId,
       conversationId: turn.conversationId,
       messageId: turn.messageId,
       disposition: dispositionFor(outcome),
       reason: refusalReason,
       continuity,
+      authorizedReply,
     });
   }
 

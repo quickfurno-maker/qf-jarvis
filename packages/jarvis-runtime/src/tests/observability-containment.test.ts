@@ -138,13 +138,16 @@ describe('public API lock', () => {
     }
   });
 
-  it('exposes only the three composition methods (no send/deliver/execute/persist)', () => {
-    // QFJ-P08-A (ADR-0075) adds two OPERATOR methods beside the one inbound method. Still an EXACT
-    // set match, and still nothing that sends, delivers, executes, persists or authorizes.
+  it('exposes only the four composition methods (no send/deliver/execute/persist)', () => {
+    // QFJ-P08-A (ADR-0075) adds two OPERATOR methods beside the one inbound method, and RWC-P2D
+    // (ADR-0096) adds `processInboundForCoreAuthorizedReply` beside it. Still an EXACT set match,
+    // and still nothing that sends, delivers, executes, persists or authorizes: handing a trusted
+    // in-process caller text QuickFurno Core already approved is not any of those verbs.
     const runtime = createJarvisRuntime(syntheticRuntimeConfig());
     expect(Object.keys(runtime).sort()).toEqual([
       'applyConversationControlCommand',
       'processInbound',
+      'processInboundForCoreAuthorizedReply',
       'readConversationOperationsSnapshot',
     ]);
     const surface = runtime as unknown as Record<string, unknown>;

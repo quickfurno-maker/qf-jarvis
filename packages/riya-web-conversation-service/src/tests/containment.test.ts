@@ -51,6 +51,92 @@ const productionCode = (): string =>
     .map((file) => codeOnly(readFileSync(file, 'utf8')))
     .join('\n');
 
+// ---------------------------------------------------------------------------
+// RWC-P2D (ADR-0096) — the content boundary this slice moved, and the ones it did not.
+// ---------------------------------------------------------------------------
+
+describe('RWC-P2D containment', () => {
+  it('composes nothing: no orchestrator, no agent turn, no adapter is imported', () => {
+    const code = productionCode();
+    // The service reaches the runtime through its published capability only. Importing the
+    // composition itself would make this package a second orchestrator, which is the one thing
+    // RWC-P2C's design note says it is not.
+    for (const forbidden of [
+      'composeAndProcess',
+      'composeAndProcessDetailed',
+      'runAgentTurn',
+      'createOrchestrator',
+      'createJarvisRuntime',
+      'createCoreDecisionAdapter',
+      'createModelReplyAdapter',
+      'materializeCoreAuthorizedReply',
+    ]) {
+      expect({ forbidden, present: code.includes(forbidden) }).toEqual({
+        forbidden,
+        present: false,
+      });
+    }
+    // And no deep import into another package's internals.
+    expect(code).not.toMatch(/@qf-jarvis\/[a-z-]+\/(src|dist|internal|composition|adapter)\//u);
+  });
+
+  it('the ordinary runtime result still carries no content field', () => {
+    // The whole reason P2D is a separate capability. If a body ever appears on the ordinary result,
+    // every existing whole-result log starts retaining model output at no call site anybody edited.
+    const runtimeSrc = readFileSync(
+      join(REPO_ROOT, 'packages/jarvis-runtime/src/contracts/runtime-result.ts'),
+      'utf8',
+    );
+    for (const forbidden of ['replyText', 'replyBody', 'authorizedReply', 'draft', 'promptText']) {
+      expect({ forbidden, present: codeOnly(runtimeSrc).includes(forbidden) }).toEqual({
+        forbidden,
+        present: false,
+      });
+    }
+  });
+
+  it('materialization is authorization, never delivery', () => {
+    const code = productionCode();
+    // No verb here may claim something happened that did not. `PROCESSED` stays the served
+    // disposition; there is no RESPONDED, SENT or DELIVERED anywhere in production source.
+    for (const forbidden of ['RESPONDED', 'SENT', 'DELIVERED', 'PUBLISHED', 'DISPATCHED']) {
+      expect({ forbidden, present: code.includes(forbidden) }).toEqual({
+        forbidden,
+        present: false,
+      });
+    }
+  });
+
+  it('adds no persistence: the body is transient and reaches no store or event', () => {
+    const code = productionCode();
+    // `authorizedReply` is read from the runtime result and returned. It is never written anywhere:
+    // no compareAndSet CALL, no event payload, no durable column.
+    //
+    // The call is what is forbidden, not the name: this package DECLARES `compareAndSet` on the
+    // port it owns, and RWC-P2B implements it. Scanning for the bare identifier would report the
+    // port's own contract as a violation, so the scan names the invocation instead.
+    expect(code).not.toMatch(/continuityStore\s*\.\s*compareAndSet/u);
+    expect(code).not.toMatch(/\bstore\s*\.\s*compareAndSet/u);
+    expect(code).not.toMatch(/INSERT|UPDATE\s+qf_jarvis|state_json/u);
+    expect(code).not.toMatch(/\bappend\s*\(|publish\s*\(|emitEvent\s*\(/u);
+  });
+
+  it('the migration set is untouched by this slice', () => {
+    const dir = join(REPO_ROOT, 'packages/event-backbone/src/persistence/migrations');
+    const sql = readdirSync(dir)
+      .filter((n) => n.endsWith('.sql'))
+      .sort();
+    expect(sql).toHaveLength(11);
+    expect(sql.some((n) => n.startsWith('0012'))).toBe(false);
+    // The RWC-P2B hash, unchanged: P2D needs no schema at all.
+    expect(
+      createHash('sha256')
+        .update(readFileSync(join(dir, '0011_riya_conversation_continuity.sql')))
+        .digest('hex'),
+    ).toBe('80149f8d636aa85eaff7d98f924220107eaa3d539e5d13d5133873154926cc93');
+  });
+});
+
 describe('the public surface is four runtime values', () => {
   it('exports exactly the approved runtime symbols', () => {
     expect(Object.keys(barrel).sort()).toStrictEqual([
@@ -384,8 +470,14 @@ describe('(50, 53-57) the repository invariants this slice must not move', () =>
       string,
       unknown
     >;
-    // Zero API growth. The service consumes `createJarvisRuntime`'s existing `processInbound`
-    // entry point, so no seam had to be opened.
+    // Zero VALUE-API growth, restated rather than dropped for RWC-P2D (ADR-0096).
+    //
+    // P2C could claim more than this: it opened no seam at all. P2D does open one — the runtime
+    // gained a fourth method, `processInboundForCoreAuthorizedReply`, and this package now calls
+    // it. What did NOT change is the exported value surface: the new capability is reached through
+    // the SAME `createJarvisRuntime` factory, and everything P2D added to the barrel is a TYPE,
+    // which erases at runtime. So the count below is still six, and it still means what it says:
+    // no second factory, no exported composition helper, no exported materializer.
     expect(Object.keys(runtime)).toHaveLength(6);
     expect(Object.keys(runtime).sort()).toStrictEqual([
       'JARVIS_RUNTIME_ERROR_CODES',

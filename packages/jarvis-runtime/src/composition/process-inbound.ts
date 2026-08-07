@@ -21,7 +21,9 @@ import { createModelReplyAdapter } from '@qf-jarvis/model-reply-adapter';
 import { anishaBehaviourPort } from './anisha-behaviour-adapter.js';
 import { behaviourMux } from './behaviour-mux.js';
 import { riyaBehaviourPort } from './riya-behaviour-adapter.js';
+import { materializeCoreAuthorizedReply } from './materialize-core-authorized-reply.js';
 import type { ConversationStateKey } from '../contracts/authoritative-state.js';
+import type { JarvisCoreAuthorizedReplyResult } from '../contracts/core-authorized-reply.js';
 import type { JarvisRuntimeConfig } from '../contracts/runtime-config.js';
 import type { JarvisRuntimeResult } from '../contracts/runtime-result.js';
 import type { JarvisRuntimeOutcome } from '../contracts/reasons.js';
@@ -62,11 +64,18 @@ const DEFAULT_RUNTIME_REF = 'qfj.jarvis-runtime.p08b1';
 /** The default task class, kept in one place so the orchestrator and the behaviour port agree. */
 const DEFAULT_TASK_CLASS = 'RESPONSE_GENERATION';
 
-/** Compose M1–M4 for one envelope and return the closed, frozen runtime result. */
-export async function composeAndProcess(
+/**
+ * Compose M1–M4 for one envelope ONCE and report the run twice.
+ *
+ * This is the single execution primitive behind BOTH public runtime methods. `processInbound` and
+ * `processInboundForCoreAuthorizedReply` each call it exactly once and differ only in how much of the
+ * same result they hand back — there is no path on which one of them runs the pipeline again, makes a
+ * second model call, or takes a second Core decision.
+ */
+export async function composeAndProcessDetailed(
   config: JarvisRuntimeConfig,
   envelope: InboundEnvelope,
-): Promise<JarvisRuntimeResult> {
+): Promise<JarvisCoreAuthorizedReplyResult> {
   const hook: JarvisRuntimeObservabilityHook =
     config.observability ?? NOOP_JARVIS_RUNTIME_OBSERVABILITY;
   // The canonical run identifier (ADR-0069), shared with M2/M4 rather than rebuilt here. It replaces
@@ -122,6 +131,10 @@ export async function composeAndProcess(
       refusalReason: fields.refusalReason,
       provenance: fields.provenance,
     });
+
+  /** Every non-accepting exit. There is exactly one place in this function that materializes a body. */
+  const withoutReply = (runtimeResult: JarvisRuntimeResult): JarvisCoreAuthorizedReplyResult =>
+    Object.freeze({ runtimeResult, authorizedReply: undefined });
 
   emit('jarvis-inbound-received', undefined, undefined);
 
@@ -229,7 +242,7 @@ export async function composeAndProcess(
     // — fails closed with no raw error, no retry, no second run, and no fabricated provenance.
     const res = frozen('REFUSED', { refusalReason: 'orchestration-invariant' });
     emit('jarvis-refused', res.outcome, res);
-    return res;
+    return withoutReply(res);
   }
 
   const result = turn.outcome;
@@ -238,7 +251,7 @@ export async function composeAndProcess(
   if (!result.ok) {
     const res = frozen('REFUSED', { refusalReason: result.reason, provenance });
     emit('jarvis-refused', res.outcome, res);
-    return res;
+    return withoutReply(res);
   }
 
   // A valid proposal + decision. A proposal with no reply body was produced without a model draft.
@@ -258,5 +271,27 @@ export async function composeAndProcess(
     provenance,
   });
   emit('jarvis-completed', res.outcome, res);
-  return res;
+  // The ONE materialization point, after the completed run and after the observability emit — the
+  // hook is handed `res`, which carries no body, exactly as before.
+  return Object.freeze({
+    runtimeResult: res,
+    authorizedReply: materializeCoreAuthorizedReply(
+      outcome,
+      result.proposal,
+      result.decision.boundRevision,
+    ),
+  });
+}
+
+/**
+ * Compose M1–M4 for one envelope and return ONLY the closed, content-free runtime result.
+ *
+ * The original M5 entry point, unchanged in behaviour and in result shape. It delegates to the one
+ * detailed primitive and drops the materialization — it does not re-run anything.
+ */
+export async function composeAndProcess(
+  config: JarvisRuntimeConfig,
+  envelope: InboundEnvelope,
+): Promise<JarvisRuntimeResult> {
+  return (await composeAndProcessDetailed(config, envelope)).runtimeResult;
 }

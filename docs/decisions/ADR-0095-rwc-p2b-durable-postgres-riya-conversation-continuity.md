@@ -1,7 +1,10 @@
 # ADR-0095 — RWC-P2B: durable PostgreSQL Riya conversation continuity
 
-**Status.** Accepted (repository). Implemented on `rwc-p2b-postgres-riya-conversation-continuity-store`,
-**not merged**, and composed into nothing.
+**Status.** Accepted (repository). **Merged** as PR #100 — reviewed head
+`fb2f09da9df2dfcd0c6035b15e2939ae4867353e`, merge commit
+`596a768fa9de53cddb3831ebfe5094bba4bbada9`. Composed into nothing: the store is an adapter for a
+port RWC-P2C declared, and no application constructs it. (Status corrected under RWC-P2D; the
+technical decisions below are unchanged.)
 
 **Baseline.** RWC-P2C merged as PR #99 — reviewed head `127d89f965a3dcfa3745608390618d7b86b50dfd`,
 merge commit `9b5c0d586b5a535f57f0052f2960e5fd1e3755d6`, over base

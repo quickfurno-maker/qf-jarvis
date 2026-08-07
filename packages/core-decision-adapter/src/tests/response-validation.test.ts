@@ -31,6 +31,8 @@ function response(over: Record<string, unknown> = {}): string {
     proposalVersion: command.proposalVersion,
     conversationId: command.conversationId,
     boundRevision: command.expectedRevision,
+    // RWC-P2D (ADR-0096): a conforming responder echoes the digest it was sent.
+    proposalDigest: command.proposalDigest,
     outcome: 'ACCEPTED',
     reason: 'core-decided',
     decidedAt: '2026-07-25T00:00:05Z',
@@ -71,13 +73,16 @@ describe('response validation — malformed input fails closed', () => {
 
 describe('response validation — identity mismatch fails closed', () => {
   const mismatches: Record<string, Record<string, unknown>> = {
-    protocol: { protocol: { name: 'other.core', version: 1, contractDigest: 'c0de0001' } },
+    protocol: { protocol: { name: 'other.core', version: 2, contractDigest: 'c0de0002' } },
     commandId: { commandId: 'other-command-r1' },
     idempotencyKey: { idempotencyKey: 'deadbeefdeadbeef' },
     proposalId: { proposalId: 'other.proposal' },
     proposalVersion: { proposalVersion: 2 },
     conversationId: { conversationId: 'other.conv' },
     boundRevision: { boundRevision: 2 },
+    // RWC-P2D (ADR-0096). Every OTHER field here is unchanged, so this row isolates exactly the new
+    // property: a response about different proposal CONTENT, under a perfect identity match.
+    proposalDigest: { proposalDigest: 'deadbeefdeadbeefdeadbeefdeadbeef' },
   };
 
   for (const [field, over] of Object.entries(mismatches)) {
@@ -121,6 +126,7 @@ describe('response validation — the conversation revision domain', () => {
         proposalVersion: bound.proposalVersion,
         conversationId: bound.conversationId,
         boundRevision: bound.expectedRevision,
+        proposalDigest: bound.proposalDigest,
         outcome: 'ACCEPTED',
         reason: 'core-decided',
         decidedAt: '2026-07-25T00:00:05Z',

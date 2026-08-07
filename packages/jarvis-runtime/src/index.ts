@@ -1,8 +1,9 @@
 /**
  * `@qf-jarvis/jarvis-runtime` — the QFJ-M5 Orchestrated Reply Composition Foundation (ADR-0059).
  *
- * The smallest stable composition surface: the runtime factory and its three async methods
- * (`processInbound`, plus the QFJ-P08-A operator `applyConversationControlCommand` and
+ * The smallest stable composition surface: the runtime factory and its four async methods
+ * (`processInbound` and its RWC-P2D content-bearing sibling `processInboundForCoreAuthorizedReply`,
+ * plus the QFJ-P08-A operator `applyConversationControlCommand` and
  * `readConversationOperationsSnapshot`), the ONE authoritative content-free conversation-state source
  * contract and its two OPTIONAL operator capability extensions, the injected config, the closed
  * result/outcome vocabulary, the safe error, and the content-free observability contract. It does NOT
@@ -14,7 +15,20 @@
 
 // Runtime factory.
 export { createJarvisRuntime } from './composition/create-jarvis-runtime.js';
-export type { JarvisRuntime } from './composition/create-jarvis-runtime.js';
+export type {
+  CoreAuthorizedReplyJarvisRuntime,
+  JarvisRuntime,
+} from './composition/create-jarvis-runtime.js';
+
+// The RWC-P2D Core-authorized reply materialization (ADR-0096). TYPES ONLY, and deliberately not a
+// field on `JarvisRuntimeResult`: the ordinary result stays content-free and safe to log whole, and a
+// caller that wants client-facing text must name the capability that carries it. `CORE_ACCEPTED`
+// means Core authorized the exact proposal -- never sent, delivered, rendered or persisted.
+export type {
+  CoreTextCarryingProposalKind,
+  JarvisCoreAuthorizedReplyResult,
+  JarvisCoreAuthorizedReplyV1,
+} from './contracts/core-authorized-reply.js';
 
 // The ONE authoritative conversation-state source, plus its OPTIONAL operator capabilities
 // (QFJ-P08-A, ADR-0075). Types only -- there is still exactly one `authoritativeState` config field,

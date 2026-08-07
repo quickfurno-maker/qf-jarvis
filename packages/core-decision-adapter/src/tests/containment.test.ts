@@ -120,7 +120,12 @@ describe('containment', () => {
       'coreCommandResponseSchema',
       'coreDecisionProtocolSchema',
       'createCoreDecisionAdapter',
+      // RWC-P2D (ADR-0096). Both are wire-contract functions a Core-side implementation must
+      // reproduce exactly, exported for the same reason `idempotencyKeyFor` is: a digest nobody
+      // outside can compute is a digest nobody outside can check.
+      'effectiveProposedReplyBody',
       'idempotencyKeyFor',
+      'proposalDigestFor',
       'isCanonicalInstant',
       'isRetryable',
       'isStateBlocked',

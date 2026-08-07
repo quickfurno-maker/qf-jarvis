@@ -23,8 +23,19 @@
  * counts `handoffs`, never `sent` or `delivered`, and the eighteen-state model refuses to collapse
  * `provider-accepted` into `delivered`. A field name is the first thing someone reads when deciding
  * what a system did.
+ *
+ * ### RWC-P2D (ADR-0096) moved exactly ONE of those two boundaries
+ *
+ * The reasoning above still stands and is not revised: a model DRAFT is not a message anybody is
+ * cleared to send. What P2D adds is the case that reasoning did not cover — a proposal QuickFurno
+ * Core has already AUTHORIZED under the existing M2/M3 contract. `RiyaWebConversationResultV2` may
+ * therefore carry an `authorizedReply`, and only then.
+ *
+ * The disposition vocabulary is untouched. `PROCESSED` still does not mean replied, sent or
+ * delivered, and there is still no `RESPONDED`.
  */
 import type { OrchestrationReason } from '@qf-jarvis/agent-runtime';
+import type { JarvisCoreAuthorizedReplyV1 } from '@qf-jarvis/jarvis-runtime';
 import type { RiyaConversationContinuityStateV1 } from '@qf-jarvis/riya-conversation-continuity';
 
 /**
@@ -40,7 +51,15 @@ export const RIYA_WEB_CONVERSATION_DISPOSITIONS = ['PROCESSED', 'REFUSED', 'NOT_
 
 export type RiyaWebConversationDisposition = (typeof RIYA_WEB_CONVERSATION_DISPOSITIONS)[number];
 
-/** One final, bounded result. Never a stream, never a chunk, never a partial. */
+/**
+ * One final, bounded result. Never a stream, never a chunk, never a partial.
+ *
+ * **HISTORICAL — frozen at RWC-P2C.** Superseded by {@link RiyaWebConversationResultV2}, which adds
+ * the optional Core-authorized reply (RWC-P2D, ADR-0096). V1 is kept exactly as it was rather than
+ * grown a content field, because its own documentation above is a promise that there is no reply
+ * text in it: a consumer reading a `version: 1` object is entitled to that promise holding. The
+ * service now returns V2.
+ */
 export interface RiyaWebConversationResultV1 {
   readonly version: 1;
   readonly tenantId: string;
@@ -61,4 +80,45 @@ export interface RiyaWebConversationResultV1 {
    * evolve continuity" checkable by a caller rather than only by a spec.
    */
   readonly continuity: RiyaConversationContinuityStateV1;
+}
+
+/**
+ * One final, bounded result, with the Core-authorized reply when there is one (RWC-P2D, ADR-0096).
+ *
+ * ### Why a new version rather than an added field
+ *
+ * V1's contract says, in its own text, that there is no reply text. Adding one to it would falsify a
+ * documented promise for every consumer already reading `version: 1`. A new version number is how a
+ * reader finds out that the boundary moved.
+ *
+ * ### `authorizedReply` is authorization, not delivery — and not a disposition
+ *
+ * The dispositions are unchanged: `PROCESSED`, `REFUSED`, `NOT_READY`. There is deliberately no
+ * `RESPONDED`, `SENT` or `DELIVERED`, because nothing here responds, sends or delivers. `PROCESSED`
+ * may carry an `authorizedReply` or none at all:
+ *
+ * - Core accepted a `REPLY`/`FOLLOW_UP` that has a body  → `authorizedReply` present;
+ * - `MODEL_DRAFTED` with no Core transport wired          → absent (a draft is not authorized);
+ * - Core accepted a proposal that carries no client text  → absent.
+ *
+ * A future ingress adapter must require `authorizedReply !== undefined` before returning any AI text
+ * to a browser. `disposition === 'PROCESSED'` is NOT that check.
+ */
+export interface RiyaWebConversationResultV2 {
+  readonly version: 2;
+  readonly tenantId: string;
+  readonly conversationId: string;
+  readonly messageId: string;
+  readonly disposition: RiyaWebConversationDisposition;
+  /** The runtime's own closed, content-free refusal reason, present only when it refused. */
+  readonly reason: OrchestrationReason | undefined;
+  /** The continuity state as it was LOADED or INITIALIZED, unchanged by this turn. */
+  readonly continuity: RiyaConversationContinuityStateV1;
+  /**
+   * The EXACT body QuickFurno Core authorized, or `undefined`.
+   *
+   * Present only after a final `CORE_ACCEPTED` decision for a text-carrying proposal. Never a draft,
+   * never a rewritten body, never a paraphrase, and never evidence that anything was sent.
+   */
+  readonly authorizedReply: JarvisCoreAuthorizedReplyV1 | undefined;
 }
