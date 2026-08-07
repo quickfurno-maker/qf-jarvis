@@ -54,17 +54,11 @@ export interface RiyaContinuityStorePort {
   load(key: RiyaContinuityStoreKey): Promise<RiyaConversationContinuityStateV1 | undefined>;
 
   /**
-   * Create the INITIAL state if none exists, atomically for one `(tenantId, conversationId)`.
+   * Create the initial state if none exists, atomically for one `(tenantId, conversationId)`.
    *
    * Two simultaneous first turns may compute the same candidate; only the store decides which one
    * won, and both callers must then use the state it returns. A read-then-write in the service
    * would race, and the race would produce two conversations that each believe they are the first.
-   *
-   * **Precondition: `state.continuityRevision` MUST be `0`.** This is initial persistence, and a
-   * caller that could seed an arbitrary revision would arrive at that revision without passing
-   * through the `compareAndSet` path every later revision must be reached by. Violating it is
-   * INVALID CALLER INPUT — not `CREATED`/`EXISTING` arbitration — and a store must reject it rather
-   * than arbitrate it.
    */
   createInitialIfAbsent(input: {
     readonly state: RiyaConversationContinuityStateV1;
@@ -74,24 +68,6 @@ export interface RiyaContinuityStorePort {
    * Replace the state only if the stored revision still matches. NOT called by this service.
    *
    * Declared so RWC-P2B knows the schema must support optimistic concurrency before it designs one.
-   *
-   * ### Preconditions
-   *
-   * - `expectedRevision` names the EXACT stored revision the caller observed.
-   * - `nextState` must carry the same `tenantId`/`conversationId` identity as the row being replaced.
-   * - **`nextState.continuityRevision` MUST equal `expectedRevision + 1`.** RWC-P2A declares this a
-   *   *monotonic* counter, and exactly-one is what makes the comparison load-bearing: a next
-   *   revision EQUAL to the expected one leaves the stored value unchanged, so a second writer still
-   *   holding it matches too and both are told `UPDATED` — the first writer's state silently lost. A
-   *   lower value runs the counter backwards; a higher one leaves an unaccountable gap.
-   *
-   * A violated precondition is **invalid caller input, never `REVISION_CONFLICT`**. `REVISION_CONFLICT`
-   * has one meaning only: the row exists but no longer carries `expectedRevision` — a genuine
-   * concurrency answer about durable state, not a report about a malformed request.
-   *
-   * This is a storage precondition, not a reducer: the port says nothing about what the next state
-   * may CONTAIN. RWC-P4 owns phase transition, extraction and provenance merge, and will be the
-   * production caller that constructs valid next states.
    */
   compareAndSet(input: {
     readonly expectedRevision: number;

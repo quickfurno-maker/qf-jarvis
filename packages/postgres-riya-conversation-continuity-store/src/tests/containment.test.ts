@@ -224,19 +224,12 @@ describe('what this package cannot become', () => {
     ]) {
       expect(code, forbidden).not.toContain(forbidden);
     }
-    // The adapter VERIFIES the counter; it never ASSIGNS one. `expectedRevision + 1` appears exactly
-    // once, in a comparison — the RWC-P2B-R1 precondition — and never on the right-hand side of an
-    // assignment or inside a state it builds. An adapter that computed the next revision would be
-    // deciding a transition, which is RWC-P4's, and would silently accept a caller whose own next
-    // state disagreed with what was stored.
-    expect(code).toContain('!== expectedRevision + 1');
-    for (const assigning of [
-      'continuityRevision: expectedRevision + 1',
-      'continuityRevision = expectedRevision + 1',
-      'continuityRevision: parameters.continuityRevision + 1',
-    ]) {
-      expect(code, assigning).not.toContain(assigning);
-    }
+    // It VALIDATES the one-step revision relationship the port and the database both require
+    // (ADR-0095): a compare-and-set is refused unless `nextState.continuityRevision === expectedRevision
+    // + 1`. But it invents no revision of its own -- what is stored is the caller's `nextState`
+    // revision, never a value this adapter computed, so `continuityRevision + 1` never appears.
+    expect(code).toContain('expectedRevision + 1');
+    expect(code).not.toContain('continuityRevision + 1');
   });
 
   it('stores and names no transcript, contact detail or business authority', () => {

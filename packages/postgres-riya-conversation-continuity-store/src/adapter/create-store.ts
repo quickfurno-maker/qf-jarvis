@@ -151,11 +151,12 @@ export function createPostgresRiyaConversationContinuityStore(
     // let a state be filed under a conversation it does not belong to.
     const parameters = toStateParameters(suppliedInput['state']);
 
-    // A durable continuity row is BORN at zero. `createInitialIfAbsent` is INITIAL persistence, and a
-    // caller that could seed an arbitrary revision would reach that revision without passing through
-    // the compare-and-set path every later revision must be reached by -- which is the path the
-    // counter exists to police. This is a caller defect, so it is `invalid-input` and it fails BEFORE
-    // a connection is taken; the migration's trigger holds the same rule for every other writer.
+    // A continuity row is BORN at revision 0 (ADR-0095). `createInitialIfAbsent` is INITIAL
+    // persistence: a state already at revision 1, 2, ... was reached by continuity mutations that
+    // never happened durably, and admitting it would file a mid-conversation state as if it were a
+    // first turn. Every later revision is reached only through `compareAndSet`. Refused BEFORE any
+    // connection is taken -- the defect is the caller's, not the database's -- and the migration's
+    // INSERT trigger holds the same rule for any writer that bypasses this adapter.
     if (parameters.continuityRevision !== 0) {
       throw new PostgresRiyaContinuityStoreError('invalid-input');
     }
@@ -165,13 +166,8 @@ export function createPostgresRiyaConversationContinuityStore(
       const inserted = await client.query(INSERT_INITIAL_STATE, [
         parameters.tenantId,
         parameters.conversationId,
-        parameters.version,
         parameters.continuityRevision,
-        parameters.phase,
-        parameters.discoveryJson,
-        parameters.fieldProvenanceJson,
-        parameters.summaryConfirmed,
-        parameters.completionEvidenceRef,
+        parameters.stateJson,
       ]);
 
       if (inserted.rows.length === 1) {
@@ -228,18 +224,12 @@ export function createPostgresRiyaConversationContinuityStore(
     const expectedRevision = validateExpectedRevision(suppliedInput['expectedRevision']);
     const parameters = toStateParameters(suppliedInput['nextState']);
 
-    // A conversation sitting at the ceiling has no representable next revision, so there is no legal
-    // transition to attempt and nothing to ask the database.
-    if (expectedRevision >= Number.MAX_SAFE_INTEGER) {
-      throw new PostgresRiyaContinuityStoreError('invalid-input');
-    }
-
-    // EXACTLY one. This is the rule that makes the predicate below a real compare-and-set: a next
-    // revision EQUAL to the expected one leaves the stored value unchanged, so a second writer still
-    // holding that revision would match the predicate and win too -- both told UPDATED, the first
-    // writer's state silently destroyed. A LOWER one runs the counter backwards; a HIGHER one leaves
-    // an unaccountable gap. All three are caller defects, not concurrency outcomes, so none of them
-    // may be reported as REVISION_CONFLICT -- and none of them reaches the database.
+    // One logical continuity mutation advances the revision by EXACTLY one (ADR-0095). A next state at
+    // any other revision is a caller defect -- a skipped step, a replayed write, or a decrement -- and
+    // it is refused BEFORE any SQL runs, so it can never reach the row. The database holds the same
+    // rule independently in the BEFORE UPDATE trigger; this is the near, cheap half of that guard.
+    // `expectedRevision` is already `<= MAX_SAFE_INTEGER`; if it is exactly the ceiling, no valid
+    // `nextState` can carry `ceiling + 1`, so `toStateParameters` will have refused it first.
     if (parameters.continuityRevision !== expectedRevision + 1) {
       throw new PostgresRiyaContinuityStoreError('invalid-input');
     }
@@ -252,11 +242,7 @@ export function createPostgresRiyaConversationContinuityStore(
         parameters.tenantId,
         parameters.conversationId,
         parameters.continuityRevision,
-        parameters.phase,
-        parameters.discoveryJson,
-        parameters.fieldProvenanceJson,
-        parameters.summaryConfirmed,
-        parameters.completionEvidenceRef,
+        parameters.stateJson,
         expectedRevision,
       ]);
 

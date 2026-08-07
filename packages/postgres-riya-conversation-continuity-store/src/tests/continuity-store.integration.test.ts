@@ -16,7 +16,6 @@ import { fileURLToPath } from 'node:url';
 
 import { DISCOVERY_FIELDS_FROZEN } from '@qf-jarvis/riya-agent';
 import { RIYA_CONVERSATION_PHASES } from '@qf-jarvis/riya-conversation-continuity';
-import type { RiyaConversationContinuityStateV1 } from '@qf-jarvis/riya-conversation-continuity';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import {
@@ -93,29 +92,6 @@ async function codeOf(run: () => Promise<unknown>): Promise<string> {
   return 'no-error';
 }
 
-/**
- * Bring a conversation LEGALLY to `target` — born at 0, then one exact +1 compare-and-set per step.
- *
- * Tests that need a row at a nonzero revision must reach it the way production does. Seeding one by
- * direct INSERT would be the test asserting against a state the schema forbids, which is how a
- * durable rule ends up proven only against rows that could never exist.
- */
-async function seedAtRevision(
-  built: PostgresRiyaContinuityStore,
-  make: (revision: number) => RiyaConversationContinuityStateV1,
-  target: number,
-): Promise<RiyaConversationContinuityStateV1> {
-  const created = await built.createInitialIfAbsent({ state: make(0) });
-  expect(created.disposition).toBe('CREATED');
-  for (let revision = 0; revision < target; revision += 1) {
-    const next = make(revision + 1);
-    await expect(
-      built.compareAndSet({ expectedRevision: revision, nextState: next }),
-    ).resolves.toBe('UPDATED');
-  }
-  return make(target);
-}
-
 // ---------------------------------------------------------------------------
 // 1. The migration itself
 // ---------------------------------------------------------------------------
@@ -162,37 +138,23 @@ describe('(1) migration 0011', () => {
             AND con.contype = 'c'
           ORDER BY con.conname`,
       );
+      // The owner-locked envelope design: identifier grammar and revision bounds on the first-class
+      // columns, and cross-checks that the JSONB envelope agrees with the key columns it is indexed and
+      // compared on. The domain rules (phase legality, provenance, summary readiness, complete-iff-
+      // evidence) are deliberately NOT restated in SQL -- the constructor holds them on every read.
       expect(checks.rows.map((r) => r.conname)).toStrictEqual([
-        'riya_conversation_continuity_complete_iff_evidence',
-        'riya_conversation_continuity_completion_ref_is_identifier',
         'riya_conversation_continuity_conversation_is_identifier',
-        'riya_conversation_continuity_discovery_is_object',
-        'riya_conversation_continuity_phase_known',
-        'riya_conversation_continuity_provenance_is_object',
         'riya_conversation_continuity_revision_in_safe_range',
-        'riya_conversation_continuity_summary_after',
-        'riya_conversation_continuity_summary_before',
+        'riya_conversation_continuity_state_conversation_matches',
+        'riya_conversation_continuity_state_is_object',
+        'riya_conversation_continuity_state_revision_matches',
+        'riya_conversation_continuity_state_tenant_matches',
+        'riya_conversation_continuity_state_version_is_one',
         'riya_conversation_continuity_tenant_is_identifier',
-        'riya_conversation_continuity_version_is_one',
       ]);
       for (const row of checks.rows) {
         expect(row.convalidated, row.conname).toBe(true);
       }
-    });
-  });
-
-  it("the phase CHECK holds exactly RWC-P2A's nine phases", async () => {
-    await withClient(pool, async (client) => {
-      const def = await client.query<{ def: string }>(
-        `SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint
-          WHERE conname = 'riya_conversation_continuity_phase_known'`,
-      );
-      const text = def.rows[0]?.def ?? '';
-      for (const phase of RIYA_CONVERSATION_PHASES) {
-        expect(text, phase).toContain(`'${phase}'`);
-      }
-      // Nine and only nine: count the quoted literals so a tenth cannot be added unnoticed.
-      expect(text.match(/'[A-Z_]+'::text/g)?.length).toBe(RIYA_CONVERSATION_PHASES.length);
     });
   });
 
@@ -204,16 +166,15 @@ describe('(1) migration 0011', () => {
           ORDER BY column_name`,
       );
       const names = columns.rows.map((r) => r.column_name);
+      // The owner-locked shape: the tenant+conversation key, the first-class CAS revision, the single
+      // validated JSONB envelope, and two database-stamped timestamps. Nothing else is a column.
       expect(names).toStrictEqual([
-        'completion_evidence_ref',
         'continuity_revision',
         'conversation_id',
-        'discovery',
-        'field_provenance',
-        'phase',
-        'summary_confirmed',
+        'created_at',
+        'state_json',
         'tenant_id',
-        'version',
+        'updated_at',
       ]);
       for (const forbidden of [
         'channel',
@@ -266,6 +227,7 @@ describe('(2) load', () => {
 
   it('returns the canonical frozen state for a stored conversation', async () => {
     const built = store();
+    // A row is born at revision 0; a richer-than-INTRO state is still legitimate at revision 0.
     const state = summaryReadyState('tenant.a', 'conv.1', { continuityRevision: 0 });
     await built.createInitialIfAbsent({ state });
 
@@ -291,18 +253,20 @@ describe('(3-7) createInitialIfAbsent', () => {
 
   it('(4) a second create reports EXISTING and returns the WINNER, not the candidate', async () => {
     const built = store();
-    // Both candidates are born at revision 0 (RWC-P2B-R1); they differ in CONTENT, which is what
-    // identifies whose state came back. A nonzero loser candidate would now be refused as invalid
-    // input and would prove nothing about who won.
-    const winner = initialState('tenant.a', 'conv.1', 0, 'city.pune');
+    // Both candidates are born at revision 0 (the only legitimate initial revision); they differ in
+    // CONTENT, so the returned state still identifies which one won. The winner is a summary-ready
+    // SUMMARY state; the loser is a bare INTRO state.
+    const winner = summaryReadyState('tenant.a', 'conv.1', { continuityRevision: 0 });
     await built.createInitialIfAbsent({ state: winner });
 
-    const loser = initialState('tenant.a', 'conv.1', 0, 'city.mumbai');
+    // A DIFFERENT candidate for the same key. If the adapter returned what it was handed, this would
+    // come back in phase INTRO with an empty discovery.
+    const loser = initialState('tenant.a', 'conv.1');
     const result = await built.createInitialIfAbsent({ state: loser });
 
     expect(result.disposition).toBe('EXISTING');
     expect(result.state).toStrictEqual(winner);
-    expect(result.state.discovery.locationRef).toBe('city.pune');
+    expect(result.state.phase).toBe('SUMMARY');
     expect(result.state).not.toStrictEqual(loser);
     expect(await rowCount()).toBe(1);
   });
@@ -323,10 +287,11 @@ describe('(3-7) createInitialIfAbsent', () => {
 
   it('(5,6) twenty simultaneous first turns yield exactly one CREATED and one row', async () => {
     const built = store();
-    const candidates = Array.from({ length: 20 }, (_, index) =>
-      // Distinct candidates, so a returned state identifies WHICH call won. All at revision 0 --
-      // an initial row is born there -- so the differentiator is CONTENT, not the counter.
-      initialState('tenant.race', 'conv.race', 0, `city.c${String(index)}`),
+    // Every first turn proposes the SAME legitimate initial state at revision 0 -- initial persistence
+    // is born at 0, so distinct starting revisions are not available to tell callers apart. The race is
+    // real regardless: exactly one INSERT wins the primary key and the other nineteen see the winner.
+    const candidates = Array.from({ length: 20 }, () =>
+      initialState('tenant.race', 'conv.race', 0),
     );
 
     const results = await Promise.all(
@@ -417,18 +382,18 @@ describe('(9-12) compareAndSet', () => {
 
   it('(10) a stale expected revision conflicts and mutates nothing', async () => {
     const built = store();
-    // Reached the way production reaches it: born at 0, advanced one at a time to 7.
-    const stored = await seedAtRevision(
-      built,
-      (revision) => summaryReadyState('tenant.a', 'conv.1', { continuityRevision: revision }),
-      7,
+    // Born at 0, then advanced to 1 by a legitimate compare-and-set: the only way a row reaches a
+    // nonzero revision now.
+    await built.createInitialIfAbsent({ state: initialState('tenant.a', 'conv.1', 0) });
+    const stored = summaryReadyState('tenant.a', 'conv.1', { continuityRevision: 1 });
+    await expect(built.compareAndSet({ expectedRevision: 0, nextState: stored })).resolves.toBe(
+      'UPDATED',
     );
 
-    // A WELL-FORMED request (6 -> 7 is a legal transition) from a caller whose observation is stale.
-    // That is a genuine concurrency answer, which is exactly why it must be REVISION_CONFLICT and not
-    // the invalid-input a malformed revision would earn.
-    const attempted = fullyDiscoveredState('tenant.a', 'conv.1', { continuityRevision: 7 });
-    await expect(built.compareAndSet({ expectedRevision: 6, nextState: attempted })).resolves.toBe(
+    // A well-formed one-step advance FROM the STALE revision 0 (so the +1 rule is satisfied and the
+    // request reaches SQL), which then finds no row at revision 0 because the stored one is at 1.
+    const attempted = fullyDiscoveredState('tenant.a', 'conv.1', { continuityRevision: 1 });
+    await expect(built.compareAndSet({ expectedRevision: 0, nextState: attempted })).resolves.toBe(
       'REVISION_CONFLICT',
     );
 
@@ -451,11 +416,12 @@ describe('(9-12) compareAndSet', () => {
     const built = store();
     await built.createInitialIfAbsent({ state: initialState('tenant.a', 'conv.cas', 0) });
 
-    // Every racer proposes the SAME legal next revision (0 -> 1) and differs in content. Under the
-    // exact-+1 rule that is the only well-formed request from expected 0, so this measures genuine
-    // concurrency rather than a mix of concurrency and rejected inputs.
+    // Every caller proposes a VALID one-step advance to revision 1 (the +1 rule), so all twelve reach
+    // SQL and genuinely race there. Distinct candidates so the winner is identifiable.
     const attempts = Array.from({ length: 12 }, (_, index) =>
-      initialState('tenant.a', 'conv.cas', 1, `city.r${String(index)}`),
+      index % 2 === 0
+        ? summaryReadyState('tenant.a', 'conv.cas', { continuityRevision: 1 })
+        : fullyDiscoveredState('tenant.a', 'conv.cas', { continuityRevision: 1 }),
     );
     const outcomes = await Promise.all(
       attempts.map((nextState) => built.compareAndSet({ expectedRevision: 0, nextState })),
@@ -471,105 +437,29 @@ describe('(9-12) compareAndSet', () => {
     expect(attempts.some((a) => JSON.stringify(a) === JSON.stringify(loaded))).toBe(true);
   });
 
-  it('(12a) the next revision must be exactly expected + 1, and is stored as supplied', async () => {
+  it('(12a) a compare-and-set advances the revision by exactly one, or is refused', async () => {
     const built = store();
     await built.createInitialIfAbsent({ state: initialState('tenant.a', 'conv.rev', 0) });
 
-    // The adapter VERIFIES the counter; it never fabricates it. A legal 0 -> 1 is stored verbatim.
+    // ADR-0095: one continuity mutation is one revision. A next state that JUMPS is a caller defect --
+    // a skipped step or a replay -- and it is refused as `invalid-input` BEFORE any SQL runs, so the
+    // durable row is never touched. The database holds the same rule in its BEFORE UPDATE trigger.
+    const jumped = summaryReadyState('tenant.a', 'conv.rev', { continuityRevision: 41 });
+    expect(
+      await codeOf(() => built.compareAndSet({ expectedRevision: 0, nextState: jumped })),
+    ).toBe('invalid-input');
+    expect(
+      (await built.load({ tenantId: 'tenant.a', conversationId: 'conv.rev' }))?.continuityRevision,
+    ).toBe(0);
+
+    // And the correct one-step advance is accepted and stored.
     const next = summaryReadyState('tenant.a', 'conv.rev', { continuityRevision: 1 });
     await expect(built.compareAndSet({ expectedRevision: 0, nextState: next })).resolves.toBe(
       'UPDATED',
     );
-    const loaded = await built.load({ tenantId: 'tenant.a', conversationId: 'conv.rev' });
-    expect(loaded?.continuityRevision).toBe(1);
-  });
-
-  it('(12b) equal, backward and skipped next revisions are invalid-input BEFORE the database', async () => {
-    const built = store();
-    // Advance to 5 legally, so every attempt below is against a real row at a known revision.
-    await seedAtRevision(
-      built,
-      (revision) => summaryReadyState('tenant.a', 'conv.bad', { continuityRevision: revision }),
-      5,
-    );
-
-    for (const nextRevision of [5, 2, 0, 7, 41]) {
-      expect(
-        await codeOf(() =>
-          built.compareAndSet({
-            expectedRevision: 5,
-            nextState: summaryReadyState('tenant.a', 'conv.bad', {
-              continuityRevision: nextRevision,
-            }),
-          }),
-        ),
-        `next ${String(nextRevision)}`,
-      ).toBe('invalid-input');
-    }
-
-    // None of them is a concurrency answer, and none of them touched the row.
-    const loaded = await built.load({ tenantId: 'tenant.a', conversationId: 'conv.bad' });
-    expect(loaded?.continuityRevision).toBe(5);
-  });
-
-  it('(12c) a conversation at the safe-integer ceiling has no legal transition', async () => {
-    const built = store();
     expect(
-      await codeOf(() =>
-        built.compareAndSet({
-          expectedRevision: Number.MAX_SAFE_INTEGER,
-          nextState: summaryReadyState('tenant.a', 'conv.ceiling', {
-            continuityRevision: Number.MAX_SAFE_INTEGER,
-          }),
-        }),
-      ),
-    ).toBe('invalid-input');
-  });
-
-  it('(12d) an initial state must be born at revision 0', async () => {
-    const built = store();
-    for (const revision of [1, 5, 41]) {
-      expect(
-        await codeOf(() =>
-          built.createInitialIfAbsent({
-            state: summaryReadyState('tenant.a', 'conv.born', { continuityRevision: revision }),
-          }),
-        ),
-        `revision ${String(revision)}`,
-      ).toBe('invalid-input');
-    }
-    expect(await rowCount()).toBe(0);
-  });
-
-  it('(12e) LOST-UPDATE REGRESSION: two writers at revision 5 cannot both win', async () => {
-    // The exact failure the RWC-P2B technical review proved against the first implementation, which
-    // accepted a next revision equal to the expected one: both writers were told UPDATED and the
-    // first one's state was silently destroyed.
-    const built = store();
-    await seedAtRevision(
-      built,
-      (revision) => summaryReadyState('tenant.a', 'conv.lost', { continuityRevision: revision }),
-      5,
-    );
-
-    // Both hold revision 5; both propose a WELL-FORMED 5 -> 6 with different content.
-    const a = fullyDiscoveredState('tenant.a', 'conv.lost', { continuityRevision: 6 });
-    const b = summaryReadyState('tenant.a', 'conv.lost', { continuityRevision: 6 });
-    const outcomes = await Promise.all([
-      built.compareAndSet({ expectedRevision: 5, nextState: a }),
-      built.compareAndSet({ expectedRevision: 5, nextState: b }),
-    ]);
-
-    expect(outcomes.filter((o) => o === 'UPDATED')).toHaveLength(1);
-    expect(outcomes.filter((o) => o === 'REVISION_CONFLICT')).toHaveLength(1);
-
-    const loaded = await built.load({ tenantId: 'tenant.a', conversationId: 'conv.lost' });
-    expect(loaded?.continuityRevision).toBe(6);
-    // The durable state is exactly ONE of the two candidates -- the loser did not overwrite it.
-    const winnerIsA = JSON.stringify(loaded) === JSON.stringify(a);
-    const winnerIsB = JSON.stringify(loaded) === JSON.stringify(b);
-    expect(winnerIsA !== winnerIsB).toBe(true);
-    expect(await rowCount()).toBe(1);
+      (await built.load({ tenantId: 'tenant.a', conversationId: 'conv.rev' }))?.continuityRevision,
+    ).toBe(1);
   });
 });
 
@@ -622,7 +512,10 @@ describe('(13-16) the canonical round trip', () => {
     const loaded = await built.load({ tenantId: 'tenant.a', conversationId: 'conv.complete' });
     expect(loaded?.completionEvidenceRef).toBe('confirmation.evidence.7');
 
-    // Not COMPLETE => no evidence, and the contract refuses it before SQL is reached.
+    // Not COMPLETE => no evidence, and the contract refuses it before SQL is reached. The complete-iff-
+    // evidence rule is a DOMAIN rule, held by the constructor on every write and every read -- it is
+    // deliberately NOT restated in SQL (ADR-0095 section 7), so a row that violated it would still be
+    // caught, just on the way OUT rather than at INSERT. Test (18c) proves that read-side refusal.
     expect(
       await codeOf(() =>
         built.createInitialIfAbsent({
@@ -633,17 +526,6 @@ describe('(13-16) the canonical round trip', () => {
         }),
       ),
     ).toBe('invalid-input');
-
-    // And the DATABASE holds the same rule independently: a direct insert cannot do it either.
-    await withClient(pool, async (client) => {
-      await expect(
-        client.query(
-          `INSERT INTO ${TABLE} (tenant_id, conversation_id, version, continuity_revision, phase,
-                                 discovery, field_provenance, summary_confirmed, completion_evidence_ref)
-           VALUES ('tenant.a','conv.direct',1,0,'SUMMARY','{}'::jsonb,'{}'::jsonb,false,'evidence.1')`,
-        ),
-      ).rejects.toThrow();
-    });
   });
 });
 
@@ -661,19 +543,32 @@ describe('(17-19) refusals', () => {
     expect(await rowCount()).toBe(0);
   });
 
-  it('(18) a durable row that cannot pass the contract fails repository-invariant', async () => {
-    const built = store();
-    // Written by direct SQL, bypassing the adapter — a partially applied migration, a restore or a
-    // hand-correction all arrive looking exactly like this. The database's own constraints allow it:
-    // it deliberately does NOT restate the NeedDiscovery rules.
+  // A direct-SQL insert of an envelope that satisfies every CHECK (object, version 1, and identity and
+  // revision agreeing with the columns) but that the P2A CONSTRUCTOR would refuse. That is exactly the
+  // shape a partially applied migration, an older-dump restore or a hand-correction leaves behind, and
+  // it is the corruption the read-side canonical proof exists to catch.
+  async function insertRawEnvelope(
+    conversationId: string,
+    stateJson: string,
+    revision = 0,
+  ): Promise<void> {
     await withClient(pool, async (client) => {
       await client.query(
-        `INSERT INTO ${TABLE} (tenant_id, conversation_id, version, continuity_revision, phase,
-                               discovery, field_provenance, summary_confirmed, completion_evidence_ref)
-         VALUES ('tenant.a','conv.corrupt',1,0,'INTRO',
-                 '{"completeness":"NOT_A_REAL_COMPLETENESS"}'::jsonb,'{}'::jsonb,false,NULL)`,
+        `INSERT INTO ${TABLE} (tenant_id, conversation_id, continuity_revision, state_json)
+         VALUES ('tenant.a', $1, $2, $3::jsonb)`,
+        [conversationId, revision, stateJson],
       );
     });
+  }
+
+  it('(18) a durable row that cannot pass the contract fails repository-invariant', async () => {
+    const built = store();
+    await insertRawEnvelope(
+      'conv.corrupt',
+      '{"version":1,"tenantId":"tenant.a","conversationId":"conv.corrupt","continuityRevision":0,' +
+        '"phase":"INTRO","discovery":{"completeness":"NOT_A_REAL_COMPLETENESS"},' +
+        '"fieldProvenance":{},"summaryConfirmed":false}',
+    );
 
     expect(
       await codeOf(() => built.load({ tenantId: 'tenant.a', conversationId: 'conv.corrupt' })),
@@ -685,15 +580,12 @@ describe('(17-19) refusals', () => {
 
   it('(18a) a value with no provenance is refused even though no CHECK forbids it', async () => {
     const built = store();
-    await withClient(pool, async (client) => {
-      await client.query(
-        `INSERT INTO ${TABLE} (tenant_id, conversation_id, version, continuity_revision, phase,
-                               discovery, field_provenance, summary_confirmed, completion_evidence_ref)
-         VALUES ('tenant.a','conv.unaccounted',1,0,'INTRO',
-                 '{"completeness":"MORE_DISCOVERY_REQUIRED","missingFields":[],"serviceInterestRef":"service.x"}'::jsonb,
-                 '{}'::jsonb,false,NULL)`,
-      );
-    });
+    await insertRawEnvelope(
+      'conv.unaccounted',
+      '{"version":1,"tenantId":"tenant.a","conversationId":"conv.unaccounted","continuityRevision":0,' +
+        '"phase":"INTRO","discovery":{"completeness":"MORE_DISCOVERY_REQUIRED","missingFields":[],' +
+        '"serviceInterestRef":"service.x"},"fieldProvenance":{},"summaryConfirmed":false}',
+    );
     expect(
       await codeOf(() => built.load({ tenantId: 'tenant.a', conversationId: 'conv.unaccounted' })),
     ).toBe('repository-invariant');
@@ -703,17 +595,32 @@ describe('(17-19) refusals', () => {
     const built = store();
     // The summary-readiness rule is deliberately NOT in SQL, so this row inserts cleanly and must be
     // caught by the canonical constructor on the way out.
-    await withClient(pool, async (client) => {
-      await client.query(
-        `INSERT INTO ${TABLE} (tenant_id, conversation_id, version, continuity_revision, phase,
-                               discovery, field_provenance, summary_confirmed, completion_evidence_ref)
-         VALUES ('tenant.a','conv.blanksummary',1,0,'SUMMARY',
-                 '{"completeness":"MORE_DISCOVERY_REQUIRED","missingFields":[]}'::jsonb,
-                 '{}'::jsonb,false,NULL)`,
-      );
-    });
+    await insertRawEnvelope(
+      'conv.blanksummary',
+      '{"version":1,"tenantId":"tenant.a","conversationId":"conv.blanksummary","continuityRevision":0,' +
+        '"phase":"SUMMARY","discovery":{"completeness":"MORE_DISCOVERY_REQUIRED","missingFields":[]},' +
+        '"fieldProvenance":{},"summaryConfirmed":false}',
+    );
     expect(
       await codeOf(() => built.load({ tenantId: 'tenant.a', conversationId: 'conv.blanksummary' })),
+    ).toBe('repository-invariant');
+  });
+
+  it('(18c) a COMPLETE state with no completion evidence is refused on read', async () => {
+    const built = store();
+    // complete-iff-evidence is a DOMAIN rule the constructor holds, not a SQL CHECK (ADR-0095 s7). A
+    // COMPLETE row missing its evidence inserts cleanly and is caught on the way out.
+    await insertRawEnvelope(
+      'conv.noevidence',
+      '{"version":1,"tenantId":"tenant.a","conversationId":"conv.noevidence","continuityRevision":0,' +
+        '"phase":"COMPLETE","discovery":{"serviceInterestRef":"service.x","locationRef":"city.x",' +
+        '"budgetNote":"b","timelineNote":"t","completeness":"MORE_DISCOVERY_REQUIRED",' +
+        '"missingFields":["propertyType","scope","consultationPreference"]},' +
+        '"fieldProvenance":{"serviceInterest":"user_stated","location":"user_stated",' +
+        '"budget":"user_stated","timeline":"user_stated"},"summaryConfirmed":true}',
+    );
+    expect(
+      await codeOf(() => built.load({ tenantId: 'tenant.a', conversationId: 'conv.noevidence' })),
     ).toBe('repository-invariant');
   });
 
@@ -745,12 +652,13 @@ describe('(17-19) refusals', () => {
 describe('(20-24) isolation and privilege', () => {
   it('(20) no read or update crosses a tenant boundary', async () => {
     const built = store();
+    // Both rows are born at revision 0 under the same conversation id but different tenants.
     const a = summaryReadyState('tenant.a', 'conv.shared', { continuityRevision: 0 });
     const b = summaryReadyState('tenant.b', 'conv.shared', { continuityRevision: 0 });
     await built.createInitialIfAbsent({ state: a });
     await built.createInitialIfAbsent({ state: b });
 
-    // A compare-and-set for tenant B cannot touch tenant A's row.
+    // A compare-and-set for tenant B (0 -> 1) cannot touch tenant A's row.
     const nextB = fullyDiscoveredState('tenant.b', 'conv.shared', { continuityRevision: 1 });
     await expect(built.compareAndSet({ expectedRevision: 0, nextState: nextB })).resolves.toBe(
       'UPDATED',
@@ -816,51 +724,14 @@ describe('(20-24) isolation and privilege', () => {
           ORDER BY column_name`,
         [RUNTIME_ROLE],
       );
+      // Exactly the three columns a compare-and-set replaces. The identity columns and created_at are
+      // outside the grant, so identity immutability is a privilege as well as a trigger rule.
       expect(updatable.rows.map((r) => r.column_name)).toStrictEqual([
-        'completion_evidence_ref',
         'continuity_revision',
-        'discovery',
-        'field_provenance',
-        'phase',
-        'summary_confirmed',
+        'state_json',
+        'updated_at',
       ]);
     });
-  });
-
-  it('(23a) the runtime role can actually SELECT, INSERT and run a legal CAS', async () => {
-    // The POSITIVE path, proven as the principal that will really run it. Asserting only the
-    // refusals would leave a column-scoped grant that omits a CAS column passing CI and failing in
-    // deployment -- every other test here runs as the OWNER, which bypasses grants entirely.
-    const asRole = (await import('@qf-jarvis/event-backbone')).createDatabasePool(
-      testDatabaseConfigAs(RUNTIME_ROLE, LOCAL_ONLY_PASSWORD, `${APP}-rw`),
-    );
-    try {
-      await withClient(asRole, async (client) => {
-        const who = await client.query<{ u: string }>('SELECT current_user AS u');
-        expect(who.rows[0]?.u).toBe(RUNTIME_ROLE);
-      });
-
-      const roleStore = createPostgresRiyaConversationContinuityStore({ pool: asRole });
-      const created = await roleStore.createInitialIfAbsent({
-        state: initialState('tenant.role', 'conv.role', 0),
-      });
-      expect(created.disposition).toBe('CREATED');
-
-      await expect(
-        roleStore.compareAndSet({
-          expectedRevision: 0,
-          nextState: summaryReadyState('tenant.role', 'conv.role', { continuityRevision: 1 }),
-        }),
-      ).resolves.toBe('UPDATED');
-
-      const loaded = await roleStore.load({
-        tenantId: 'tenant.role',
-        conversationId: 'conv.role',
-      });
-      expect(loaded?.continuityRevision).toBe(1);
-    } finally {
-      await closeDatabasePool(asRole);
-    }
   });
 
   it('(21a,22a) the runtime role is actually refused a DELETE and a TRUNCATE', async () => {
@@ -892,198 +763,156 @@ describe('(20-24) isolation and privilege', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 25-26. Migration governance
+// D1-D7. Database-held invariants (the trigger and the envelope CHECKs)
 // ---------------------------------------------------------------------------
+//
+// These write by DIRECT SQL as the owning role, so they exercise the DATABASE's own guards, not the
+// adapter's. A migration, a console session or a future second writer are exactly this: a caller the
+// adapter cannot police. The trigger and the CHECKs are what make the durable invariants hold anyway.
 
-// ---------------------------------------------------------------------------
-// The DATABASE holds the revision invariant, independently of the adapter
-// ---------------------------------------------------------------------------
+describe('(D1-D7) database-held invariants', () => {
+  async function seedRevisionZero(conversationId: string): Promise<void> {
+    await store().createInitialIfAbsent({ state: initialState('tenant.a', conversationId, 0) });
+  }
 
-describe('the migration 0011 revision guard', () => {
-  /** Insert a row by DIRECT SQL, bypassing the adapter entirely. */
-  async function directInsert(conversationId: string, revision: number): Promise<void> {
+  async function expectDirectSqlRejected(sql: string, values: readonly unknown[]): Promise<void> {
     await withClient(pool, async (client) => {
-      await client.query(
-        `INSERT INTO ${TABLE} (tenant_id, conversation_id, version, continuity_revision, phase,
-                               discovery, field_provenance, summary_confirmed, completion_evidence_ref)
-         VALUES ('tenant.db', $1, 1, $2, 'INTRO',
-                 '{"completeness":"MORE_DISCOVERY_REQUIRED","missingFields":["serviceInterest","location","propertyType","scope","budget","timeline","consultationPreference"]}'::jsonb,
-                 '{}'::jsonb, false, NULL)`,
-        [conversationId, revision],
-      );
+      await expect(client.query(sql, values as unknown[])).rejects.toThrow();
     });
   }
 
-  async function directUpdate(conversationId: string, revision: number): Promise<void> {
-    await withClient(pool, async (client) => {
-      await client.query(
-        `UPDATE ${TABLE} SET continuity_revision = $2 WHERE conversation_id = $1`,
-        [conversationId, revision],
-      );
-    });
-  }
-
-  it('accepts an INSERT at revision 0', async () => {
-    await expect(directInsert('c.zero', 0)).resolves.toBeUndefined();
+  it('(D1) the trigger refuses a revision that jumps by more than one', async () => {
+    await seedRevisionZero('conv.jump');
+    // Envelope kept consistent with the column (so the CHECK passes and the TRIGGER is what refuses).
+    await expectDirectSqlRejected(
+      `UPDATE ${TABLE}
+          SET continuity_revision = 2,
+              state_json = jsonb_set(state_json, '{continuityRevision}', '2'::jsonb)
+        WHERE tenant_id = 'tenant.a' AND conversation_id = $1`,
+      ['conv.jump'],
+    );
+    expect(
+      (await store().load({ tenantId: 'tenant.a', conversationId: 'conv.jump' }))
+        ?.continuityRevision,
+    ).toBe(0);
   });
 
-  it('refuses an INSERT at any nonzero revision', async () => {
-    for (const revision of [1, 2, 5, 41]) {
-      await expect(
-        directInsert(`c.nonzero${String(revision)}`, revision),
-        `revision ${String(revision)}`,
-      ).rejects.toThrow();
-    }
+  it('(D2) the trigger refuses an update that does not advance the revision', async () => {
+    await seedRevisionZero('conv.same');
+    await expectDirectSqlRejected(
+      `UPDATE ${TABLE} SET continuity_revision = 0 WHERE tenant_id = 'tenant.a' AND conversation_id = $1`,
+      ['conv.same'],
+    );
+  });
+
+  it('(D3) the trigger refuses a tenant_id mutation', async () => {
+    await seedRevisionZero('conv.idt');
+    await expectDirectSqlRejected(
+      `UPDATE ${TABLE} SET tenant_id = 'tenant.z' WHERE tenant_id = 'tenant.a' AND conversation_id = $1`,
+      ['conv.idt'],
+    );
+  });
+
+  it('(D4) the trigger refuses a conversation_id mutation', async () => {
+    await seedRevisionZero('conv.idc');
+    await expectDirectSqlRejected(
+      `UPDATE ${TABLE} SET conversation_id = 'conv.moved' WHERE tenant_id = 'tenant.a' AND conversation_id = $1`,
+      ['conv.idc'],
+    );
+  });
+
+  it('(D5) a CHECK refuses an envelope whose revision disagrees with the column', async () => {
+    await expectDirectSqlRejected(
+      `INSERT INTO ${TABLE} (tenant_id, conversation_id, continuity_revision, state_json)
+       VALUES ('tenant.a', 'conv.revmismatch', 0, $1::jsonb)`,
+      [
+        '{"version":1,"tenantId":"tenant.a","conversationId":"conv.revmismatch",' +
+          '"continuityRevision":5,"phase":"INTRO","discovery":{"completeness":"MORE_DISCOVERY_REQUIRED",' +
+          '"missingFields":[]},"fieldProvenance":{},"summaryConfirmed":false}',
+      ],
+    );
     expect(await rowCount()).toBe(0);
   });
 
-  it('accepts 0 -> 1 and 1 -> 2', async () => {
-    await directInsert('c.walk', 0);
-    await expect(directUpdate('c.walk', 1)).resolves.toBeUndefined();
-    await expect(directUpdate('c.walk', 2)).resolves.toBeUndefined();
+  it('(D6) a CHECK refuses an envelope whose tenantId disagrees with the column', async () => {
+    await expectDirectSqlRejected(
+      `INSERT INTO ${TABLE} (tenant_id, conversation_id, continuity_revision, state_json)
+       VALUES ('tenant.a', 'conv.tenmismatch', 0, $1::jsonb)`,
+      [
+        '{"version":1,"tenantId":"tenant.b","conversationId":"conv.tenmismatch",' +
+          '"continuityRevision":0,"phase":"INTRO","discovery":{"completeness":"MORE_DISCOVERY_REQUIRED",' +
+          '"missingFields":[]},"fieldProvenance":{},"summaryConfirmed":false}',
+      ],
+    );
   });
 
-  it('refuses a repeated, backward or skipped revision', async () => {
-    await directInsert('c.bad', 0);
-    await directUpdate('c.bad', 1);
-    // Same, backward, skipped -- all refused by the database, not merely by the adapter.
-    await expect(directUpdate('c.bad', 1)).rejects.toThrow();
-    await expect(directUpdate('c.bad', 0)).rejects.toThrow();
-    await expect(directUpdate('c.bad', 3)).rejects.toThrow();
-    await withClient(pool, async (client) => {
-      const r = await client.query<{ continuity_revision: string }>(
-        `SELECT continuity_revision FROM ${TABLE} WHERE conversation_id = 'c.bad'`,
-      );
-      expect(r.rows[0]?.continuity_revision).toBe('1');
-    });
+  it('(D7) a CHECK refuses an envelope whose conversationId disagrees with the column', async () => {
+    await expectDirectSqlRejected(
+      `INSERT INTO ${TABLE} (tenant_id, conversation_id, continuity_revision, state_json)
+       VALUES ('tenant.a', 'conv.convmismatch', 0, $1::jsonb)`,
+      [
+        '{"version":1,"tenantId":"tenant.a","conversationId":"conv.other",' +
+          '"continuityRevision":0,"phase":"INTRO","discovery":{"completeness":"MORE_DISCOVERY_REQUIRED",' +
+          '"missingFields":[]},"fieldProvenance":{},"summaryConfirmed":false}',
+      ],
+    );
   });
 
-  it('refuses an identity mutation', async () => {
-    await directInsert('c.identity', 0);
-    await withClient(pool, async (client) => {
-      await expect(
-        client.query(
-          `UPDATE ${TABLE} SET tenant_id = 'tenant.other', continuity_revision = 1
-            WHERE conversation_id = 'c.identity'`,
-        ),
-      ).rejects.toThrow();
-      await expect(
-        client.query(
-          `UPDATE ${TABLE} SET conversation_id = 'c.moved', continuity_revision = 1
-            WHERE conversation_id = 'c.identity'`,
-        ),
-      ).rejects.toThrow();
-    });
-  });
-
-  it('refuses to advance an exhausted revision', async () => {
-    await directInsert('c.ceiling', 0);
-    // Walk the row to the ceiling by disabling nothing: set it directly is impossible under the
-    // guard, so prove the rule at the boundary the guard itself checks.
-    await withClient(pool, async (client) => {
-      await client.query(
-        `ALTER TABLE ${TABLE} DISABLE TRIGGER riya_conversation_continuity_guard_trigger`,
-      );
-      await client.query(
-        `UPDATE ${TABLE} SET continuity_revision = 9007199254740991 WHERE conversation_id = 'c.ceiling'`,
-      );
-      await client.query(
-        `ALTER TABLE ${TABLE} ENABLE TRIGGER riya_conversation_continuity_guard_trigger`,
-      );
-    });
-    await expect(directUpdate('c.ceiling', 9007199254740992)).rejects.toThrow();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// BIGINT boundaries
-// ---------------------------------------------------------------------------
-
-describe('the revision is read back exactly', () => {
-  it('round-trips revision 0 as a JS number', async () => {
+  it('(D8) an adapter compare-and-set advances 0 -> 1 through the trigger cleanly', async () => {
+    await seedRevisionZero('conv.clean');
     const built = store();
-    await built.createInitialIfAbsent({ state: initialState('tenant.big', 'c.zero', 0) });
-    const loaded = await built.load({ tenantId: 'tenant.big', conversationId: 'c.zero' });
-    expect(loaded?.continuityRevision).toBe(0);
-    expect(typeof loaded?.continuityRevision).toBe('number');
-  });
-
-  it('round-trips MAX_SAFE_INTEGER exactly', async () => {
-    // The guard forbids reaching the ceiling by increment, so the row is placed there directly with
-    // the trigger briefly disabled. The point under test is the READ path, not the write rule.
-    await withClient(pool, async (client) => {
-      await client.query(
-        `INSERT INTO ${TABLE} (tenant_id, conversation_id, version, continuity_revision, phase,
-                               discovery, field_provenance, summary_confirmed, completion_evidence_ref)
-         VALUES ('tenant.big','c.max',1,0,'INTRO',
-                 '{"completeness":"MORE_DISCOVERY_REQUIRED","missingFields":["serviceInterest","location","propertyType","scope","budget","timeline","consultationPreference"]}'::jsonb,
-                 '{}'::jsonb,false,NULL)`,
-      );
-      await client.query(
-        `ALTER TABLE ${TABLE} DISABLE TRIGGER riya_conversation_continuity_guard_trigger`,
-      );
-      await client.query(
-        `UPDATE ${TABLE} SET continuity_revision = 9007199254740991 WHERE conversation_id = 'c.max'`,
-      );
-      await client.query(
-        `ALTER TABLE ${TABLE} ENABLE TRIGGER riya_conversation_continuity_guard_trigger`,
-      );
-    });
-    const loaded = await store().load({ tenantId: 'tenant.big', conversationId: 'c.max' });
-    expect(loaded?.continuityRevision).toBe(Number.MAX_SAFE_INTEGER);
-  });
-
-  it('refuses a corrupt revision above MAX_SAFE_INTEGER rather than rounding it', async () => {
-    // `BIGINT` holds values JS cannot represent exactly. `Number('9007199254740993')` silently yields
-    // 9007199254740992 -- a revision off by one, which is a lost update nobody can see. The CHECK is
-    // dropped and restored so the read path can be proven against a row that should never exist.
-    await withClient(pool, async (client) => {
-      await client.query(
-        `ALTER TABLE ${TABLE} DROP CONSTRAINT riya_conversation_continuity_revision_in_safe_range`,
-      );
-      await client.query(
-        `ALTER TABLE ${TABLE} DISABLE TRIGGER riya_conversation_continuity_guard_trigger`,
-      );
-      await client.query(
-        `INSERT INTO ${TABLE} (tenant_id, conversation_id, version, continuity_revision, phase,
-                               discovery, field_provenance, summary_confirmed, completion_evidence_ref)
-         VALUES ('tenant.big','c.corrupt',1,9007199254740993,'INTRO',
-                 '{"completeness":"MORE_DISCOVERY_REQUIRED","missingFields":["serviceInterest","location","propertyType","scope","budget","timeline","consultationPreference"]}'::jsonb,
-                 '{}'::jsonb,false,NULL)`,
-      );
-    });
-
+    await expect(
+      built.compareAndSet({
+        expectedRevision: 0,
+        nextState: summaryReadyState('tenant.a', 'conv.clean', { continuityRevision: 1 }),
+      }),
+    ).resolves.toBe('UPDATED');
     expect(
-      await codeOf(() => store().load({ tenantId: 'tenant.big', conversationId: 'c.corrupt' })),
-    ).toBe('repository-invariant');
+      (await built.load({ tenantId: 'tenant.a', conversationId: 'conv.clean' }))
+        ?.continuityRevision,
+    ).toBe(1);
+  });
 
+  it('(D9) the INSERT trigger refuses a row born at a nonzero revision', async () => {
+    // A fully consistent envelope at revision 1 -- the column and the state_json agree, so every CHECK
+    // passes -- must still be refused: a durable row is BORN at revision 0, and revision 1 was never
+    // reached by a compare-and-set. The trigger, not a CHECK, is what enforces it.
+    await expectDirectSqlRejected(
+      `INSERT INTO ${TABLE} (tenant_id, conversation_id, continuity_revision, state_json)
+       VALUES ('tenant.a', 'conv.bornnonzero', 1, $1::jsonb)`,
+      [
+        '{"version":1,"tenantId":"tenant.a","conversationId":"conv.bornnonzero",' +
+          '"continuityRevision":1,"phase":"INTRO","discovery":{"completeness":"MORE_DISCOVERY_REQUIRED",' +
+          '"missingFields":[]},"fieldProvenance":{},"summaryConfirmed":false}',
+      ],
+    );
+    expect(await rowCount()).toBe(0);
+  });
+
+  it('(D10) a row born at revision 0 by direct SQL is accepted', async () => {
+    // The other side of D9: the SAME envelope at revision 0 inserts cleanly, so the trigger refuses
+    // only the nonzero birth, not direct SQL as such.
     await withClient(pool, async (client) => {
-      await client.query(`DELETE FROM ${TABLE} WHERE conversation_id = 'c.corrupt'`);
       await client.query(
-        `ALTER TABLE ${TABLE} ENABLE TRIGGER riya_conversation_continuity_guard_trigger`,
-      );
-      await client.query(
-        `ALTER TABLE ${TABLE} ADD CONSTRAINT riya_conversation_continuity_revision_in_safe_range
-         CHECK (continuity_revision >= 0 AND continuity_revision <= 9007199254740991)`,
+        `INSERT INTO ${TABLE} (tenant_id, conversation_id, continuity_revision, state_json)
+         VALUES ('tenant.a', 'conv.bornzero', 0, $1::jsonb)`,
+        [
+          '{"version":1,"tenantId":"tenant.a","conversationId":"conv.bornzero",' +
+            '"continuityRevision":0,"phase":"INTRO","discovery":{"completeness":"MORE_DISCOVERY_REQUIRED",' +
+            '"missingFields":[]},"fieldProvenance":{},"summaryConfirmed":false}',
+        ],
       );
     });
-  });
-
-  it('refuses an expected revision above the safe range before the database', async () => {
-    const built = store();
-    for (const expectedRevision of [Number.MAX_SAFE_INTEGER + 1, -1, 1.5]) {
-      expect(
-        await codeOf(() =>
-          built.compareAndSet({
-            expectedRevision,
-            nextState: initialState('tenant.big', 'c.zero', 1),
-          }),
-        ),
-        String(expectedRevision),
-      ).toBe('invalid-input');
-    }
+    expect(
+      (await store().load({ tenantId: 'tenant.a', conversationId: 'conv.bornzero' }))
+        ?.continuityRevision,
+    ).toBe(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// 25-26. Migration governance
+// ---------------------------------------------------------------------------
 
 describe('(25,26) migration governance', () => {
   it('(25) the migration set is exactly 0001-0011 with no 0012', () => {

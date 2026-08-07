@@ -12,7 +12,7 @@ import {
   PostgresRiyaContinuityStoreError,
   createPostgresRiyaConversationContinuityStore,
 } from '../index.js';
-import { fullyDiscoveredState, initialState } from './fixtures.js';
+import { fullyDiscoveredState, initialState, summaryReadyState } from './fixtures.js';
 
 /**
  * A pool that FAILS the moment anything touches it.
@@ -171,6 +171,33 @@ describe('invalid input is refused before a connection is taken', () => {
     }
   });
 
+  it('(9a) createInitialIfAbsent rejects a fully valid state whose revision is not 0', async () => {
+    const built = store();
+    // A continuity row is BORN at revision 0 (ADR-0095). These states are otherwise perfectly valid --
+    // the contract would accept them for a compare-and-set -- but they are not INITIAL, and initial
+    // persistence is the only thing createInitialIfAbsent does. Refused BEFORE a connection is taken:
+    // the forbidden pool would surface as `store-unavailable` if one were attempted.
+    for (const revision of [1, 2, 41]) {
+      expect(
+        await codeOf(() =>
+          built.createInitialIfAbsent({
+            state: summaryReadyState('tenant.a', 'conv.1', { continuityRevision: revision }),
+          }),
+        ),
+        String(revision),
+      ).toBe('invalid-input');
+    }
+    // The revision-0 form of the SAME state is NOT refused here: it passes validation and reaches the
+    // pool (surfacing as store-unavailable against the forbidden pool).
+    expect(
+      await codeOf(() =>
+        built.createInitialIfAbsent({
+          state: summaryReadyState('tenant.a', 'conv.1', { continuityRevision: 0 }),
+        }),
+      ),
+    ).toBe('store-unavailable');
+  });
+
   it('(10) createInitialIfAbsent rejects a non-object input envelope', async () => {
     const built = store();
     for (const input of [undefined, null, 'state']) {
@@ -210,61 +237,31 @@ describe('invalid input is refused before a connection is taken', () => {
     ).toBe('invalid-input');
   });
 
-  it('(12a) createInitialIfAbsent refuses a nonzero initial revision before the database', async () => {
+  it('(12a) compareAndSet refuses a next revision that is not exactly expected + 1', async () => {
     const built = store();
-    // Structurally VALID states — the contract accepts any revision >= 0 — so this is the store's
-    // own precondition, not the constructor's: a durable row is born at 0 (RWC-P2B-R1), and any
-    // later revision must be reached through compareAndSet.
-    for (const revision of [1, 5, 41, Number.MAX_SAFE_INTEGER]) {
-      expect(
-        await codeOf(() =>
-          built.createInitialIfAbsent({
-            state: fullyDiscoveredState('tenant.a', 'conv.1', { continuityRevision: revision }),
-          }),
-        ),
-        `revision ${String(revision)}`,
-      ).toBe('invalid-input');
-    }
-  });
-
-  it('(12b) compareAndSet refuses equal, backward and skipped next revisions before the database', async () => {
-    const built = store();
-    // Equal is the lost-update case: it leaves the stored revision unchanged, so a second writer
-    // still holding it would match and win too. Backward runs the counter down; skipped leaves a gap.
-    for (const [expectedRevision, nextRevision] of [
-      [5, 5],
-      [5, 4],
-      [5, 0],
-      [5, 7],
-      [0, 0],
-      [0, 41],
-    ] as const) {
+    // A valid state and a valid expected revision, but the next revision SKIPS. The +1 rule (ADR-0095)
+    // refuses it BEFORE a connection is taken: were it allowed through, the forbidden pool would
+    // surface as `store-unavailable` instead.
+    for (const skipped of [0, 2, 5, 41]) {
       expect(
         await codeOf(() =>
           built.compareAndSet({
-            expectedRevision,
-            nextState: fullyDiscoveredState('tenant.a', 'conv.1', {
-              continuityRevision: nextRevision,
-            }),
+            expectedRevision: 0,
+            nextState: summaryReadyState('tenant.a', 'conv.1', { continuityRevision: skipped }),
           }),
         ),
-        `${String(expectedRevision)} -> ${String(nextRevision)}`,
+        String(skipped),
       ).toBe('invalid-input');
     }
-  });
-
-  it('(12c) compareAndSet refuses an expected revision at the safe-integer ceiling', async () => {
-    const built = store();
+    // The exact one-step advance is NOT refused here: it passes validation and reaches the pool.
     expect(
       await codeOf(() =>
         built.compareAndSet({
-          expectedRevision: Number.MAX_SAFE_INTEGER,
-          nextState: fullyDiscoveredState('tenant.a', 'conv.1', {
-            continuityRevision: Number.MAX_SAFE_INTEGER,
-          }),
+          expectedRevision: 0,
+          nextState: summaryReadyState('tenant.a', 'conv.1', { continuityRevision: 1 }),
         }),
       ),
-    ).toBe('invalid-input');
+    ).toBe('store-unavailable');
   });
 
   it('(13) a valid-looking request DOES reach the pool — proving the refusals above are real', async () => {
