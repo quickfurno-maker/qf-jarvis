@@ -132,6 +132,47 @@ unconfirmed summary describes a conversation that skipped the step it depends on
 There is **no `consentGiven` field, and no field that could hold one.** Consent is Core's, and the
 `CONSENT` phase label records only where the conversation is.
 
+### 8a. A summary cannot be shown before the conversation has learned enough
+
+`SUMMARY`, `CONTACT`, `CONSENT` and `COMPLETE` require four `NeedDiscovery` values to be present:
+
+| RWC-P0B/P1B field | `NeedDiscovery` value |
+| ----------------- | --------------------- |
+| service           | `serviceInterestRef`  |
+| city              | `locationRef`         |
+| budget            | `budgetNote`          |
+| timeline          | `timelineNote`        |
+
+The first draft of this contract accepted `SUMMARY` — and every phase after it — with an entirely
+**empty** discovery. That contradicts the claim the package makes about itself. It validates whether
+a state is one Riya could legitimately be in, and "show the client a summary of nothing and ask them
+to confirm it" is not such a state. It is also precisely the shape a lost or half-applied update
+leaves behind, which is exactly the moment a summary card would be rendered blank.
+
+Four rules bound what this check is **not**:
+
+- **Optional fields never block.** `propertyType`, `scope` and `consultationPreference` are absent
+  from the required set. Requiring them would quietly redefine "ready to summarise" and strand
+  conversations that legitimately never needed them.
+- **`completeness` is not consulted.** ADR-0067's `SUFFICIENT_FOR_CORE_REVIEW` answers a different
+  question — whether _Core_ may review a lead proposal — and borrowing it as a summary gate would
+  silently redefine it. A summary-ready state normally still reads `MORE_DISCOVERY_REQUIRED`.
+- **`locationRef` is checked STRUCTURALLY, and only for presence.** Whether it names a validated
+  city, an area, a pincode, a geocode or a catalogue entity is **RWC-P5's** question. Nothing here
+  resolves, validates, infers or looks up a location, and no `projectCity` field is introduced.
+- **Provenance strength is irrelevant.** Any of the five sources satisfies readiness; `user_confirmed`
+  is **not** required. Readiness asks whether the four values exist, not how strongly they are held —
+  requiring confirmation here would import a merge rule RWC-P4 owns, and would make it impossible to
+  render the very summary the client is meant to confirm.
+
+The required set is an **internal** constant, `SUMMARY_REQUIRED_DISCOVERY_FIELDS`, and is not a root
+export: it is a validation input, not a vocabulary a caller composes against, and two readiness
+checks disagree the moment one of them is updated. The root runtime surface remains exactly five.
+
+A missing required field reuses the existing bounded `invalid-phase-state` code. Nothing is repaired,
+inferred or defaulted, and the existing rule that every present value must carry provenance applies
+unchanged. This introduces no phase reducer, no extraction, and no `canSubmit`.
+
 ### 9. `COMPLETE` requires opaque completion evidence
 
 `phase === 'COMPLETE'` ⟺ `completionEvidenceRef` is present. RWC-P0B locked that `COMPLETE` is
@@ -232,7 +273,9 @@ creation · Web → WhatsApp linking · RAG · a provider · live Riya.
 
 Adding a channel field, a transcript, a rolling summary, a contact, consent or `canSubmit` field, a
 second requirement draft, a phase or provenance reducer, or any persistence to this package each
-require a superseding ADR. So does exporting the precedence ranks — recording an order and acting on
+require a superseding ADR. So does changing the summary-readiness set in §8a — adding an optional
+field to it, requiring `SUFFICIENT_FOR_CORE_REVIEW`, requiring a particular provenance source, or
+resolving `locationRef` against a catalogue. So does exporting the precedence ranks — recording an order and acting on
 it are different decisions, and this ADR made only the first.
 
 Whether RWC-P2B needs a durable schema is a **separate owner review**, and this slice deliberately

@@ -28,6 +28,26 @@ export const DISCOVERY_VALUE_KEY = {
 } as const satisfies Readonly<Record<DiscoveryField, keyof NeedDiscovery>>;
 
 /**
+ * The four discovery fields a conversation must have learned before a summary can be shown.
+ *
+ * RWC-P0B/P1B froze them as service, city, budget and timeline; in `NeedDiscovery` those are
+ * `serviceInterestRef`, `locationRef`, `budgetNote` and `timelineNote`.
+ *
+ * `propertyType`, `scope` and `consultationPreference` are deliberately ABSENT. They are genuinely
+ * optional, and requiring them would quietly redefine what "ready to summarise" means and strand
+ * conversations that legitimately never needed them.
+ *
+ * INTERNAL, and not a root export. It is a validation input, not a vocabulary a caller composes
+ * against — exporting it would invite a consumer to build its own readiness check beside this one.
+ */
+export const SUMMARY_REQUIRED_DISCOVERY_FIELDS: readonly DiscoveryField[] = Object.freeze([
+  'serviceInterest',
+  'location',
+  'budget',
+  'timeline',
+]);
+
+/**
  * The precedence ranks RWC-P0B froze, recorded so RWC-P4 inherits a reviewed order.
  *
  * `model_inferred < server_runtime < user_selected == user_stated < user_confirmed`

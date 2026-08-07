@@ -69,6 +69,7 @@ describe('the public surface is five values and nothing else', () => {
       'envelopeSchema',
       'PROVENANCE_PRECEDENCE_RANK',
       'DISCOVERY_VALUE_KEY',
+      'SUMMARY_REQUIRED_DISCOVERY_FIELDS',
       'PHASES_BEFORE_SUMMARY',
       'PHASES_AFTER_SUMMARY',
       'IDENTIFIER',
@@ -98,6 +99,25 @@ describe('the public surface is five values and nothing else', () => {
     ]) {
       expect(Object.keys(barrel), forbidden).not.toContain(forbidden);
     }
+  });
+
+  it('the summary-readiness set is internal, exact, and excludes the optional fields', async () => {
+    // Internal on purpose: it is a validation input, not a vocabulary a caller composes against.
+    // Exporting it would invite a consumer to build its own readiness check beside this one, and two
+    // readiness checks disagree the moment one of them is updated.
+    const internal = (await import('../internal/field-map.js')) as unknown as {
+      SUMMARY_REQUIRED_DISCOVERY_FIELDS: readonly string[];
+    };
+    expect([...internal.SUMMARY_REQUIRED_DISCOVERY_FIELDS]).toStrictEqual([
+      'serviceInterest',
+      'location',
+      'budget',
+      'timeline',
+    ]);
+    for (const optional of ['propertyType', 'scope', 'consultationPreference']) {
+      expect([...internal.SUMMARY_REQUIRED_DISCOVERY_FIELDS], optional).not.toContain(optional);
+    }
+    expect(Object.isFrozen(internal.SUMMARY_REQUIRED_DISCOVERY_FIELDS)).toBe(true);
   });
 
   it('(47) exposes no method that could act', () => {

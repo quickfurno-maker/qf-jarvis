@@ -47,7 +47,7 @@ import {
   RIYA_FIELD_PROVENANCE_SOURCES,
 } from './vocabularies.js';
 import type { RiyaConversationPhase, RiyaFieldProvenance } from './vocabularies.js';
-import { DISCOVERY_VALUE_KEY } from '../internal/field-map.js';
+import { DISCOVERY_VALUE_KEY, SUMMARY_REQUIRED_DISCOVERY_FIELDS } from '../internal/field-map.js';
 
 /**
  * The canonical runtime identifier grammar, restated.
@@ -238,6 +238,27 @@ export function createRiyaConversationContinuityState(
   }
   if (PHASES_AFTER_SUMMARY.includes(envelope.phase) && !envelope.summaryConfirmed) {
     return invalid('invalid-phase-state');
+  }
+
+  // SUMMARY READINESS. A summary is a thing shown to a client and confirmed by them, so there has
+  // to be something to show. RWC-P0B/P1B froze the four: service, city, budget, timeline.
+  //
+  // Without this, `SUMMARY` — and `CONTACT`, `CONSENT` and `COMPLETE` after it — accepted an
+  // entirely EMPTY discovery. That is not a state Riya could legitimately be in, and it is exactly
+  // the shape a lost or half-applied update leaves behind, which is precisely when a summary card
+  // would be rendered blank and asked to be confirmed.
+  //
+  // Structural only. Whether `locationRef` names a validated city, an area, a pincode or a
+  // catalogue entity is RWC-P5's question, and nothing here resolves, validates or infers it.
+  // Optional fields never block. And `completeness` is deliberately NOT consulted: ADR-0067's
+  // completeness answers whether CORE may review a lead proposal, and borrowing it as a summary
+  // gate would silently redefine it.
+  if (!PHASES_BEFORE_SUMMARY.includes(envelope.phase)) {
+    for (const field of SUMMARY_REQUIRED_DISCOVERY_FIELDS) {
+      if (typeof discovery[DISCOVERY_VALUE_KEY[field]] !== 'string') {
+        return invalid('invalid-phase-state');
+      }
+    }
   }
 
   // COMPLETE is reached only through a governed confirmation outcome (RWC-P0B), so it must carry

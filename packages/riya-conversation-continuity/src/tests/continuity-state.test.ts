@@ -157,6 +157,200 @@ describe('the vocabularies are frozen and closed', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Summary readiness. The owner correction.
+// ---------------------------------------------------------------------------
+
+/** The four RWC-P0B/P1B fields a conversation must have learned before a summary can be shown. */
+const REQUIRED_BEFORE_SUMMARY: readonly DiscoveryField[] = [
+  'serviceInterest',
+  'location',
+  'budget',
+  'timeline',
+];
+
+/** A discovery snapshot that IS summary-ready, plus provenance accounting for each value. */
+function summaryReady(over: { readonly without?: DiscoveryField } = {}): {
+  discovery: NeedDiscoveryInput;
+  fieldProvenance: RiyaContinuityFieldProvenanceMap;
+} {
+  const present = REQUIRED_BEFORE_SUMMARY.filter((field) => field !== over.without);
+  const provenance: Record<string, string> = {};
+  for (const field of present) {
+    provenance[field] = 'user_stated';
+  }
+  return {
+    discovery: discoveryWith(present),
+    fieldProvenance: provenance,
+  };
+}
+
+describe('a summary cannot be shown before the conversation has learned enough', () => {
+  // The defect this suite exists to prevent: the first version accepted SUMMARY -- and CONTACT,
+  // CONSENT and COMPLETE -- with an entirely EMPTY discovery. This package claims to validate
+  // whether a state is one Riya could legitimately be in, and "show the client a summary of nothing
+  // and ask them to confirm it" is not such a state. It is also the shape a lost or half-applied
+  // update leaves behind, which is exactly when a summary card would be rendered blank.
+  //
+  // RWC-P0B/P1B froze the four: service, city, budget, timeline. In current NeedDiscovery those are
+  // serviceInterestRef, locationRef, budgetNote and timelineNote.
+
+  it('(1) SUMMARY with all four required fields and an unconfirmed summary is accepted', () => {
+    const state = createRiyaConversationContinuityState(
+      stateInput({ phase: 'SUMMARY', summaryConfirmed: false, ...summaryReady() }),
+    );
+    expect(state.phase).toBe('SUMMARY');
+    expect(state.summaryConfirmed).toBe(false);
+  });
+
+  it('(2) SUMMARY with all four and a confirmed summary is accepted', () => {
+    const state = createRiyaConversationContinuityState(
+      stateInput({ phase: 'SUMMARY', summaryConfirmed: true, ...summaryReady() }),
+    );
+    expect(state.summaryConfirmed).toBe(true);
+  });
+
+  it('(3-6) removing any ONE required field refuses SUMMARY', () => {
+    for (const field of REQUIRED_BEFORE_SUMMARY) {
+      expectCode(
+        () =>
+          createRiyaConversationContinuityState(
+            stateInput({ phase: 'SUMMARY', ...summaryReady({ without: field }) }),
+          ),
+        'invalid-phase-state',
+        `SUMMARY without ${field}`,
+      );
+    }
+  });
+
+  it('(7, 8) CONTACT and CONSENT require all four AND a confirmed summary', () => {
+    for (const phase of ['CONTACT', 'CONSENT'] as const) {
+      expect(
+        createRiyaConversationContinuityState(
+          stateInput({ phase, summaryConfirmed: true, ...summaryReady() }),
+        ).phase,
+        phase,
+      ).toBe(phase);
+      for (const field of REQUIRED_BEFORE_SUMMARY) {
+        expectCode(
+          () =>
+            createRiyaConversationContinuityState(
+              stateInput({ phase, summaryConfirmed: true, ...summaryReady({ without: field }) }),
+            ),
+          'invalid-phase-state',
+          `${phase} without ${field}`,
+        );
+      }
+    }
+  });
+
+  it('(9, 10) COMPLETE requires all four, a confirmed summary and evidence', () => {
+    const complete = {
+      phase: 'COMPLETE' as const,
+      summaryConfirmed: true,
+      completionEvidenceRef: 'qf.confirm.outcome.0001',
+    };
+    expect(
+      createRiyaConversationContinuityState(stateInput({ ...complete, ...summaryReady() }))
+        .completionEvidenceRef,
+    ).toBe('qf.confirm.outcome.0001');
+    for (const field of REQUIRED_BEFORE_SUMMARY) {
+      expectCode(
+        () =>
+          createRiyaConversationContinuityState(
+            stateInput({ ...complete, ...summaryReady({ without: field }) }),
+          ),
+        'invalid-phase-state',
+        `COMPLETE without ${field}`,
+      );
+    }
+  });
+
+  it('(11) the OPTIONAL fields never block a summary', () => {
+    // `propertyType`, `scope` and `consultationPreference` are genuinely optional. Requiring them
+    // would quietly redefine what "ready to summarise" means, and would strand conversations that
+    // legitimately never needed them.
+    const ready = summaryReady();
+    for (const optional of ['propertyType', 'scope', 'consultationPreference'] as const) {
+      expect(ready.discovery).not.toHaveProperty(DISCOVERY_VALUE_KEY[optional]);
+    }
+    expect(
+      createRiyaConversationContinuityState(stateInput({ phase: 'SUMMARY', ...ready })).phase,
+    ).toBe('SUMMARY');
+  });
+
+  it('(12) any valid provenance source satisfies readiness — user_confirmed is NOT required', () => {
+    // Readiness is about whether the four values EXIST, not about how strongly they are held.
+    // Requiring `user_confirmed` here would silently import a merge rule RWC-P4 owns, and would
+    // make it impossible to render the summary card the client is meant to confirm.
+    for (const source of RIYA_FIELD_PROVENANCE_SOURCES) {
+      const provenance: Record<string, string> = {};
+      for (const field of REQUIRED_BEFORE_SUMMARY) {
+        provenance[field] = source;
+      }
+      expect(
+        createRiyaConversationContinuityState(
+          stateInput({
+            phase: 'SUMMARY',
+            discovery: discoveryWith(REQUIRED_BEFORE_SUMMARY),
+            fieldProvenance: provenance,
+          }),
+        ).phase,
+        source,
+      ).toBe('SUMMARY');
+    }
+  });
+
+  it('(13) an OPAQUE locationRef satisfies readiness structurally — no city validation', () => {
+    // RWC-P5 owns canonical City Context. P2A asks only whether a location was learned, never what
+    // it resolves to: no catalogue lookup, no availability check, no `projectCity`, and no geocode.
+    for (const opaque of ['city.blr', 'area.indiranagar', 'loc.560038', 'catalogue.ref.99']) {
+      const provenance: Record<string, string> = {};
+      for (const field of REQUIRED_BEFORE_SUMMARY) {
+        provenance[field] = 'user_stated';
+      }
+      const discovery = {
+        ...discoveryWith(REQUIRED_BEFORE_SUMMARY),
+        locationRef: opaque,
+      } as NeedDiscoveryInput;
+      const state = createRiyaConversationContinuityState(
+        stateInput({
+          phase: 'SUMMARY',
+          discovery,
+          fieldProvenance: provenance,
+        }),
+      );
+      expect(state.discovery.locationRef, opaque).toBe(opaque);
+    }
+  });
+
+  it('does NOT require completeness === SUFFICIENT_FOR_CORE_REVIEW', () => {
+    // ADR-0067 completeness answers a DIFFERENT question -- whether Core may review a lead proposal
+    // -- and borrowing it as a summary gate would silently redefine it. The accepted states above
+    // all carry MORE_DISCOVERY_REQUIRED.
+    const ready = summaryReady();
+    expect(ready.discovery.completeness).toBe('MORE_DISCOVERY_REQUIRED');
+    expect(
+      createRiyaConversationContinuityState(stateInput({ phase: 'SUMMARY', ...ready })).discovery
+        .completeness,
+    ).toBe('MORE_DISCOVERY_REQUIRED');
+  });
+
+  it('readiness is NOT required before SUMMARY', () => {
+    // The five earlier phases are where the four fields are still being learned. Requiring them
+    // there would make every conversation invalid until the moment it became summarisable.
+    for (const phase of [
+      'INTRO',
+      'NEED',
+      'LOCATION',
+      'PROJECT_DETAILS',
+      'BUDGET_TIMELINE',
+    ] as const) {
+      expect(createRiyaConversationContinuityState(stateInput({ phase })).phase, phase).toBe(phase);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 6-11. Valid states.
 // ---------------------------------------------------------------------------
 
@@ -175,12 +369,14 @@ describe('valid states', () => {
   });
 
   it('(7, 8) SUMMARY permits an unconfirmed and a confirmed summary', () => {
+    // Summary-ready, so the only variable under test is the confirmation flag.
     expect(
-      createRiyaConversationContinuityState(stateInput({ phase: 'SUMMARY' })).summaryConfirmed,
+      createRiyaConversationContinuityState(stateInput({ phase: 'SUMMARY', ...summaryReady() }))
+        .summaryConfirmed,
     ).toBe(false);
     expect(
       createRiyaConversationContinuityState(
-        stateInput({ phase: 'SUMMARY', summaryConfirmed: true }),
+        stateInput({ phase: 'SUMMARY', summaryConfirmed: true, ...summaryReady() }),
       ).summaryConfirmed,
     ).toBe(true);
   });
@@ -188,7 +384,9 @@ describe('valid states', () => {
   it('(9, 10) CONTACT and CONSENT require a confirmed summary', () => {
     for (const phase of ['CONTACT', 'CONSENT'] as const) {
       expect(
-        createRiyaConversationContinuityState(stateInput({ phase, summaryConfirmed: true })).phase,
+        createRiyaConversationContinuityState(
+          stateInput({ phase, summaryConfirmed: true, ...summaryReady() }),
+        ).phase,
       ).toBe(phase);
     }
   });
@@ -199,6 +397,7 @@ describe('valid states', () => {
         phase: 'COMPLETE',
         summaryConfirmed: true,
         completionEvidenceRef: 'qf.confirm.outcome.0001',
+        ...summaryReady(),
       }),
     );
     expect(state.phase).toBe('COMPLETE');
@@ -492,6 +691,7 @@ describe('phase, summary confirmation and completion evidence agree or the state
             stateInput({
               phase,
               summaryConfirmed: false,
+              ...summaryReady(),
               ...(phase === 'COMPLETE' ? { completionEvidenceRef: 'qf.confirm.1' } : {}),
             }),
           ),
@@ -502,12 +702,13 @@ describe('phase, summary confirmation and completion evidence agree or the state
   });
 
   it('(30) SUMMARY itself permits both', () => {
-    expect(createRiyaConversationContinuityState(stateInput({ phase: 'SUMMARY' })).phase).toBe(
-      'SUMMARY',
-    );
+    expect(
+      createRiyaConversationContinuityState(stateInput({ phase: 'SUMMARY', ...summaryReady() }))
+        .phase,
+    ).toBe('SUMMARY');
     expect(
       createRiyaConversationContinuityState(
-        stateInput({ phase: 'SUMMARY', summaryConfirmed: true }),
+        stateInput({ phase: 'SUMMARY', summaryConfirmed: true, ...summaryReady() }),
       ).phase,
     ).toBe('SUMMARY');
   });
@@ -520,6 +721,8 @@ describe('phase, summary confirmation and completion evidence agree or the state
             stateInput({
               phase,
               summaryConfirmed: !BEFORE.includes(phase),
+              // Summary-ready throughout, so the ONLY defect under test is the stray evidence.
+              ...summaryReady(),
               completionEvidenceRef: 'qf.confirm.1',
             }),
           ),
@@ -533,7 +736,7 @@ describe('phase, summary confirmation and completion evidence agree or the state
     expectCode(
       () =>
         createRiyaConversationContinuityState(
-          stateInput({ phase: 'COMPLETE', summaryConfirmed: true }),
+          stateInput({ phase: 'COMPLETE', summaryConfirmed: true, ...summaryReady() }),
         ),
       'invalid-phase-state',
     );
