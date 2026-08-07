@@ -418,6 +418,11 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // adapter, transport, web service, reducer, extraction, transcript or business authority, and
       // it is NOT ADR-0016 agent memory.
       'riya-conversation-continuity',
+      // RWC-P2C (ADR-0094): the PRIVATE Riya web conversation service. Still an EXACT set match; it
+      // records an authorised addition, it does not relax the assertion. It is an application
+      // service with no ingress: no HTTP server, route, public endpoint, browser reachability,
+      // database, migration, provider or live send, and nothing imports it.
+      'riya-web-conversation-service',
     ]);
     // JOS-01A (docs/architecture/jarvis-os.md): the Jarvis OS operator control plane. Still an
     // EXACT set match -- this records an authorised addition, it does not relax the assertion.

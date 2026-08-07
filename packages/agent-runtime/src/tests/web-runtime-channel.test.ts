@@ -411,12 +411,21 @@ describe('(9, 11) adding WEB added no transport and no client', () => {
     }
   });
 
-  it('no QuickFurno adapter or browser client exists anywhere in the repository', () => {
+  it('no QuickFurno adapter or BROWSER client exists anywhere in the repository', () => {
+    // When JRW-0B landed, this also forbade a `web-conversation-service` — because none was
+    // authorized and any file matching that name would have been somebody building an ingress
+    // early. RWC-P2C (ADR-0094) authorized exactly one, on the JARVIS side, and it is a private
+    // application service with no HTTP server, route or browser reachability.
+    //
+    // So the guard moves to the new truth rather than being dropped, and it did not weaken: what it
+    // forbids is a QuickFurno-side adapter or anything a BROWSER could hold. Those are still zero,
+    // and the sibling assertions below still prove no application composes the channel and that the
+    // only HTTP routes are the three operator-plane ones.
     const offenders: string[] = [];
     for (const root of ['packages', 'apps']) {
       for (const file of walk(join(REPO_ROOT, root), false)) {
         const normalised = file.replace(/\\/gu, '/');
-        if (/riya-ui|jarvisClient|quickfurno-adapter|web-conversation-service/u.test(normalised)) {
+        if (/riya-ui|jarvisClient|quickfurno-adapter/u.test(normalised)) {
           offenders.push(normalised);
         }
       }

@@ -365,11 +365,21 @@ describe('the contracts this slice reuses are unchanged', () => {
     expect(contracts).not.toContain("'web'");
   });
 
-  it('no application or package consumes this contract yet', () => {
-    // RWC-P2A delivers the contract and its proof. Composing it is RWC-P2B/P2C, and until one of
-    // those exists, "nothing imports it" is the guarantee.
-    const offenders: string[] = [];
-    for (const root of ['packages', 'apps']) {
+  it('no APPLICATION consumes this contract, and the only package that does is the web service', () => {
+    // When P2A landed, nothing imported it. RWC-P2C (ADR-0094) changed that fact and no other: the
+    // private web conversation service loads and returns this state, and returns it UNCHANGED.
+    //
+    // The guarantee is restated rather than dropped, and it did not weaken: the importer set is
+    // pinned EXACTLY, and no APPLICATION may import the contract at all — an app importing it would
+    // mean something is composing conversational state outside the one service that may.
+    const ALLOWED_PACKAGE_IMPORTERS = ['riya-web-conversation-service'];
+    const importingPackages = new Set<string>();
+    const importingApps = new Set<string>();
+
+    for (const [root, sink] of [
+      ['packages', importingPackages],
+      ['apps', importingApps],
+    ] as const) {
       for (const entry of readdirSync(join(REPO_ROOT, root))) {
         if (entry === 'riya-conversation-continuity' || NOT_SOURCE.has(entry)) continue;
         const srcDir = join(REPO_ROOT, root, entry, 'src');
@@ -381,12 +391,14 @@ describe('the contracts this slice reuses are unchanged', () => {
         }
         for (const file of files) {
           if (readFileSync(file, 'utf8').includes('@qf-jarvis/riya-conversation-continuity')) {
-            offenders.push(file.replace(/\\/gu, '/'));
+            sink.add(entry);
           }
         }
       }
     }
-    expect(offenders).toStrictEqual([]);
+
+    expect([...importingApps]).toStrictEqual([]);
+    expect([...importingPackages].sort()).toStrictEqual(ALLOWED_PACKAGE_IMPORTERS);
   });
 });
 

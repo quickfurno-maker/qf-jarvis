@@ -1,0 +1,26 @@
+{
+  "name": "@qf-jarvis/riya-web-conversation-service",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis PRIVATE Riya web conversation service (RWC-P2C, ADR-0094). One transport-neutral application service that accepts a trusted WEB turn and delegates it EXACTLY ONCE to the existing authoritative Jarvis runtime. It fixes channel=WEB, partyType=CLIENT and direction=INBOUND internally -- a caller cannot choose them, nor an actor, model, prompt, tool, authority, consent or business truth. Continuity is LOADED or initialized through an injected store port before the turn and returned UNCHANGED: RWC-P4 owns extraction, phase and provenance evolution, and this slice fabricates no ClientSalesSignals. Non-streaming: one promise in, one bounded result out. No HTTP server, route, public endpoint, browser reachability, database, migration, provider, n8n or live send. Depends on @qf-jarvis/jarvis-runtime, @qf-jarvis/agent-runtime, @qf-jarvis/riya-conversation-continuity, @qf-jarvis/riya-agent and zod.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/agent-runtime": "workspace:*",
+    "@qf-jarvis/jarvis-runtime": "workspace:*",
+    "@qf-jarvis/riya-agent": "workspace:*",
+    "@qf-jarvis/riya-conversation-continuity": "workspace:*",
+    "zod": "4.4.3"
+  }
+}
