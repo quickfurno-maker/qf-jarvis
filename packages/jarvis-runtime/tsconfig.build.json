@@ -27,6 +27,11 @@
     { "path": "../riya-conversation-continuity/tsconfig.build.json" },
     { "path": "../riya-conversation-evolution/tsconfig.build.json" },
     { "path": "../riya-model-interaction/tsconfig.build.json" },
+    // RWC-P5 (ADR-0100): the Core-owned availability READ contract, for the parser this
+    // composition re-proves its Riya-aware input against. The runtime performs NO Core read --
+    // the snapshot is supplied by the service that owns the outbound call, exactly as the
+    // continuity is supplied by the service that owns the store.
+    { "path": "../core-service-availability-read/tsconfig.build.json" },
     { "path": "../anisha-agent/tsconfig.build.json" },
     { "path": "../prompt-registry/tsconfig.build.json" },
     { "path": "../conversation-control/tsconfig.build.json" }

@@ -16,6 +16,7 @@
  * the one-call answer can be *checked*; the reducer remains the phase and provenance authority, and
  * a disagreement refuses the whole structured result rather than trusting either side.
  */
+import type { CoreServiceAvailabilitySnapshotV1 } from '@qf-jarvis/core-service-availability-read';
 import type {
   ModelReplyStructuredOutputProfile,
   ModelReplyStructuredProjection,
@@ -27,6 +28,7 @@ import {
 } from '@qf-jarvis/riya-conversation-evolution';
 import type { RiyaConversationObservationBatchV1 } from '@qf-jarvis/riya-conversation-evolution';
 
+import { isActiveCity, isActiveService, pairAvailable } from './internal/availability.js';
 import { buildRiyaUserContent } from './internal/input-projection.js';
 import {
   isModelProducibleObservation,
@@ -95,11 +97,20 @@ export function parseRiyaModelProfileDetail(value: unknown): RiyaModelProfileDet
   return Object.freeze({ version: 1 as const, observationBatch: canonical });
 }
 
-/** Build the profile for ONE turn, bound to the continuity that turn started from. */
+/**
+ * Build the profile for ONE turn, bound to the continuity that turn started from AND to the Core
+ * availability snapshot captured for that same turn (RWC-P5, ADR-0100).
+ *
+ * Both are captured ONCE. The snapshot is never re-read, and in particular is never refreshed during
+ * a compare-and-set reconciliation: the observations belong to one model turn reasoning against one
+ * authoritative context, and refreshing authority afterwards could invalidate text no second model
+ * call is allowed to replace.
+ */
 export function createRiyaConversationModelProfile(args: {
   readonly current: RiyaConversationContinuityStateV1;
+  readonly availabilitySnapshot: CoreServiceAvailabilitySnapshotV1;
 }): ModelReplyStructuredOutputProfile {
-  const { current } = args;
+  const { current, availabilitySnapshot } = args;
 
   return Object.freeze({
     structuredSchema: riyaStructuredOutputSchema,
@@ -109,7 +120,11 @@ export function createRiyaConversationModelProfile(args: {
     // the business-neutral kernel it has no business knowing about. Method parameter bivariance
     // makes the narrower shape assignable to the generic seam.
     buildUserContent(plan: { readonly normalizedText: string | undefined }): string {
-      return buildRiyaUserContent({ current, message: plan.normalizedText });
+      return buildRiyaUserContent({
+        current,
+        message: plan.normalizedText,
+        availabilitySnapshot,
+      });
     },
 
     projectStructuredResult(value: unknown): ModelReplyStructuredProjection | undefined {
@@ -138,6 +153,31 @@ export function createRiyaConversationModelProfile(args: {
         return undefined;
       }
 
+      // CORE AUTHORITY, part one: every ref the model asserts must exist in the current snapshot
+      // (RWC-P5, ADR-0100 s17). A `CLEAR` names no value and needs no check -- withdrawing a fact is
+      // not a claim about the catalogue.
+      //
+      // Whole-answer refusal, not per-observation dropping. The model already drafted its reply text
+      // against its own claim, so quietly deleting an observation would leave a reply that no longer
+      // matches what would be persisted -- and P4B forbids a second model call to fix it.
+      for (const observation of batch.observations) {
+        if (observation.operation !== 'SET' || observation.value === undefined) {
+          continue;
+        }
+        if (
+          observation.field === 'serviceInterest' &&
+          !isActiveService(availabilitySnapshot, observation.value)
+        ) {
+          return undefined;
+        }
+        if (
+          observation.field === 'location' &&
+          !isActiveCity(availabilitySnapshot, observation.value)
+        ) {
+          return undefined;
+        }
+      }
+
       // The agreement check. The reducer decides; the model's claim is compared to that decision.
       let decided;
       try {
@@ -145,6 +185,39 @@ export function createRiyaConversationModelProfile(args: {
       } catch {
         // An observation the reducer refuses outright -- an oversized note reaching the canonical
         // per-field bound, say -- invalidates the answer rather than half of it.
+        return undefined;
+      }
+
+      // CORE AUTHORITY, part two: the PROSPECTIVE final state (RWC-P5, ADR-0100 s18).
+      //
+      // Checking the batch alone is not enough, because a batch that is individually valid can still
+      // COMBINE with what the conversation already holds to produce an impossible state -- a client
+      // who already told us a service and now names a city that does not have it. So the check runs
+      // against `decided.state`, which is exactly what would be persisted.
+      //
+      // This is what keeps continuity V1 unchanged. P4A has no field for "these two are individually
+      // fine but the pair is not", and structural presence of both would make the conversation look
+      // summary-ready. Refusing the answer instead means such a state can never exist.
+      const prospective = decided.state.discovery;
+      const prospectiveService = prospective.serviceInterestRef;
+      const prospectiveLocation = prospective.locationRef;
+      if (
+        prospectiveService !== undefined &&
+        !isActiveService(availabilitySnapshot, prospectiveService)
+      ) {
+        return undefined;
+      }
+      if (
+        prospectiveLocation !== undefined &&
+        !isActiveCity(availabilitySnapshot, prospectiveLocation)
+      ) {
+        return undefined;
+      }
+      if (
+        prospectiveService !== undefined &&
+        prospectiveLocation !== undefined &&
+        !pairAvailable(availabilitySnapshot, prospectiveService, prospectiveLocation)
+      ) {
         return undefined;
       }
 

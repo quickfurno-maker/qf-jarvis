@@ -17,6 +17,7 @@
  * free of persistence: the service that owns the store owns the read.
  */
 import type { InboundEnvelope } from '@qf-jarvis/agent-runtime';
+import type { CoreServiceAvailabilitySnapshotV1 } from '@qf-jarvis/core-service-availability-read';
 import type { RiyaConversationContinuityStateV1 } from '@qf-jarvis/riya-conversation-continuity';
 import type { RiyaConversationObservationBatchV1 } from '@qf-jarvis/riya-conversation-evolution';
 
@@ -40,8 +41,20 @@ export interface JarvisRiyaConversationEvolutionResult {
   readonly observationBatch: RiyaConversationObservationBatchV1 | undefined;
 }
 
-/** What the Riya-aware method needs: one envelope and the state that turn starts from. */
+/** What the Riya-aware method needs: one envelope, the state that turn starts from, and Core's word. */
 export interface JarvisRiyaConversationEvolutionInput {
   readonly envelope: InboundEnvelope;
   readonly continuity: RiyaConversationContinuityStateV1;
+  /**
+   * The CURRENT Core-owned service availability, captured once for this turn (RWC-P5, ADR-0100).
+   *
+   * Passed in for the same reason the continuity is: the runtime performs no I/O, and the service
+   * that owns the outbound read owns it here too. Capturing it once is also what keeps a
+   * compare-and-set reconciliation honest -- there is no second snapshot to reconcile against,
+   * because the observations belong to one model turn reasoning against one authoritative context.
+   *
+   * It is re-proved through the canonical parser at this boundary. A TypeScript type is not a runtime
+   * trust boundary, and this value originated outside the repository.
+   */
+  readonly availabilitySnapshot: CoreServiceAvailabilitySnapshotV1;
 }

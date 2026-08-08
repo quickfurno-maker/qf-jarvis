@@ -1054,6 +1054,32 @@ describe('(35, 37) reply exposure', () => {
     expect(answer.text).not.toContain(SENTINEL);
   });
 
+  it('a NOT_READY from an unavailable Core authority leaks no catalogue (RWC-P5)', async () => {
+    // RWC-P5 gave `NOT_READY` a second cause: the Core-owned service availability the turn needed
+    // could not be read. The ingress needs no change for that -- it already maps the disposition and
+    // already treats the body's presence as the sole text gate -- and this is the proof, plus the
+    // proof that nothing about the catalogue or the conversation rides along with the refusal.
+    const answer = await happy({ service: scriptedService({ disposition: 'NOT_READY' }) });
+    expect(answer.status).toBe(200);
+    expect(answer.json['disposition']).toBe('NOT_READY');
+    expect(answer.json['authorizedReply']).toBeNull();
+    expect(answer.json['continuity']).toBeUndefined();
+    for (const forbidden of [
+      'continuity',
+      'coreAvailability',
+      'availability',
+      'cities',
+      'services',
+      'snapshotRef',
+      'taxonomyVersion',
+      'displayName',
+      'INTRO',
+      'MORE_DISCOVERY_REQUIRED',
+    ]) {
+      expect(answer.text, forbidden).not.toContain(forbidden);
+    }
+  });
+
   it('a contradictory service result fails closed with no body at all', async () => {
     // A reply attached to a NOT_READY disposition. Believing either half would be a guess.
     const answer = await happy({

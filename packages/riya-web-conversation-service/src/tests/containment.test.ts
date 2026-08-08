@@ -147,6 +147,73 @@ describe('RWC-P2D containment', () => {
     expect(reconciliation.match(/evolveRiyaConversation\s*\(/gu) ?? []).toHaveLength(1);
   });
 
+  it('(RWC-P5) it owns the authority READ, and still owns no transport', () => {
+    const code = productionCode();
+    // The service CALLS the injected reader -- that is the one outbound thing this slice added.
+    expect(code).toContain('availabilityReader.readCurrent');
+    // Exactly one call site. A second would be a second business read per turn, and the obvious
+    // place for it to appear is inside the compare-and-set reconciliation.
+    expect(code.match(/availabilityReader\s*\.\s*readCurrent\s*\(/gu) ?? []).toHaveLength(1);
+    // Every answer is re-proved. A service that trusted the port's declared type would be trusting a
+    // system this repository does not compile.
+    expect(code).toContain('parseCoreServiceAvailabilitySnapshotV1');
+    // But it implements NOTHING behind the port: no transport, no endpoint, no credential.
+    for (const forbidden of [
+      'fetch(',
+      'node:http',
+      'node:https',
+      'undici',
+      'axios',
+      'https://',
+      '/api/cities',
+      '/api/services',
+      'apiKey',
+      'Bearer',
+    ]) {
+      expect({ forbidden, present: code.includes(forbidden) }).toStrictEqual({
+        forbidden,
+        present: false,
+      });
+    }
+  });
+
+  it('(RWC-P5) it invents no city, no service and no fallback', () => {
+    const code = productionCode().toLowerCase();
+    for (const forbidden of [
+      'pune',
+      'mumbai',
+      'bengaluru',
+      'bangalore',
+      'delhi',
+      'hyderabad',
+      'modular',
+      'wardrobe',
+      'defaultcity',
+      'fallbackcity',
+      'assumeavailable',
+      'allowallcities',
+      'cachedsnapshot',
+    ]) {
+      expect({ forbidden, present: code.includes(forbidden) }).toStrictEqual({
+        forbidden,
+        present: false,
+      });
+    }
+  });
+
+  it('(RWC-P5) the reconciliation performs no availability read', () => {
+    // The snapshot belongs to the ONE model turn. A reread during reconciliation would be a second
+    // business read whose fresher answer could invalidate text no second model call may replace.
+    const service = codeOnly(readFileSync(join(SRC, 'service/create-service.ts'), 'utf8'));
+    const reconciliation = service.slice(
+      service.indexOf("first === 'NOT_FOUND'"),
+      service.indexOf('async function handleTurn'),
+    );
+    expect(reconciliation).not.toMatch(
+      /availabilityReader|readCurrent|parseCoreServiceAvailability/u,
+    );
+  });
+
   it('the migration set is untouched by this slice', () => {
     const dir = join(REPO_ROOT, 'packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
@@ -345,15 +412,17 @@ describe('(42-46) the service reaches nothing', () => {
     }
   });
 
-  it('depends on exactly the five workspace packages and zod', () => {
+  it('depends on exactly the six workspace packages and zod', () => {
     const manifest = JSON.parse(readFileSync(join(PKG, 'package.json'), 'utf8')) as {
       readonly dependencies?: Record<string, string>;
       readonly devDependencies?: Record<string, string>;
     };
-    // RWC-P4B adds ONE: the pure RWC-P4A reducer. Nothing else — no model client, no gateway, no
-    // HTTP library, no QuickFurno package.
+    // RWC-P4B added ONE: the pure RWC-P4A reducer. RWC-P5 adds ONE more: the Core-owned availability
+    // READ CONTRACT and its injected reader port -- a contract that reaches nothing itself. Nothing
+    // else — still no model client, no gateway, no HTTP library, no QuickFurno package.
     expect(Object.keys(manifest.dependencies ?? {}).sort()).toStrictEqual([
       '@qf-jarvis/agent-runtime',
+      '@qf-jarvis/core-service-availability-read',
       '@qf-jarvis/jarvis-runtime',
       '@qf-jarvis/riya-agent',
       '@qf-jarvis/riya-conversation-continuity',
@@ -371,6 +440,7 @@ describe('(42-46) the service reaches nothing', () => {
       'riya-agent',
       'riya-conversation-continuity',
       'riya-conversation-evolution',
+      'core-service-availability-read',
       'agent-runtime',
       'jarvis-runtime',
     ]) {

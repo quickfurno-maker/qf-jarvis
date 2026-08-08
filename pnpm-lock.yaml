@@ -214,6 +214,15 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
 
+  packages/core-service-availability-read:
+    dependencies:
+      '@qf-jarvis/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+
   packages/event-backbone:
     dependencies:
       pg:
@@ -281,6 +290,9 @@ importers:
       '@qf-jarvis/core-decision-adapter':
         specifier: workspace:*
         version: link:../core-decision-adapter
+      '@qf-jarvis/core-service-availability-read':
+        specifier: workspace:*
+        version: link:../core-service-availability-read
       '@qf-jarvis/model-reply-adapter':
         specifier: workspace:*
         version: link:../model-reply-adapter
@@ -411,6 +423,9 @@ importers:
         specifier: 8.22.0
         version: 8.22.0
     devDependencies:
+      '@qf-jarvis/core-service-availability-read':
+        specifier: workspace:*
+        version: link:../core-service-availability-read
       '@qf-jarvis/event-backbone':
         specifier: workspace:*
         version: link:../event-backbone
@@ -480,6 +495,9 @@ importers:
 
   packages/riya-model-interaction:
     dependencies:
+      '@qf-jarvis/core-service-availability-read':
+        specifier: workspace:*
+        version: link:../core-service-availability-read
       '@qf-jarvis/model-reply-adapter':
         specifier: workspace:*
         version: link:../model-reply-adapter
@@ -501,6 +519,9 @@ importers:
       '@qf-jarvis/agent-runtime':
         specifier: workspace:*
         version: link:../agent-runtime
+      '@qf-jarvis/core-service-availability-read':
+        specifier: workspace:*
+        version: link:../core-service-availability-read
       '@qf-jarvis/jarvis-runtime':
         specifier: workspace:*
         version: link:../jarvis-runtime

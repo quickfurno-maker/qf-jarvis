@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@qf-jarvis/agent-runtime": "workspace:*",
+    "@qf-jarvis/core-service-availability-read": "workspace:*",
     "@qf-jarvis/jarvis-runtime": "workspace:*",
     "@qf-jarvis/riya-agent": "workspace:*",
     "@qf-jarvis/riya-conversation-continuity": "workspace:*",

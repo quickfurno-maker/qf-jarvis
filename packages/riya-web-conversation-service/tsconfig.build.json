@@ -25,6 +25,11 @@
     // loads and persists the result through the existing compare-and-set. The reducer performs no
     // I/O, which is what makes the one bounded conflict re-merge safe to run again.
     { "path": "../riya-conversation-evolution/tsconfig.build.json" },
+    // RWC-P5 (ADR-0100): the Core-owned availability READ contract and its injected reader
+    // port. This service owns the ONE outbound authority read per turn and re-proves the answer
+    // before anything uses it. The port has no implementation anywhere in this repository -- the
+    // final QuickFurno integration handshake supplies it.
+    { "path": "../core-service-availability-read/tsconfig.build.json" },
     { "path": "../riya-agent/tsconfig.build.json" }
   ],
   "include": ["src/**/*.ts"],
