@@ -233,8 +233,6 @@ describe('strictness', () => {
     'a non-integer taxonomyVersion': minimal({ taxonomyVersion: 1.5 }),
     'a malformed snapshotRef': minimal({ snapshotRef: 'snap 1!' }),
     'an empty snapshotRef': minimal({ snapshotRef: '' }),
-    'an empty city list': minimal({ cities: [] }),
-    'an empty service list': minimal({ services: [] }),
     'an unknown availability sentinel': minimal({
       availability: [{ serviceRef: 'svc.one', cityRefs: 'EVERYWHERE' }],
     }),
@@ -313,6 +311,75 @@ describe('strictness', () => {
     expect(JSON.stringify(snapshot).length).toBeLessThanOrEqual(
       MAX_CORE_SERVICE_AVAILABILITY_SNAPSHOT_CHARS,
     );
+  });
+});
+
+describe('an EMPTY active catalogue is business truth, not a broken read', () => {
+  // The distinction this block exists for: "Core currently offers nothing" and "Core could not be
+  // read" are different facts with different consequences. The reader's failure path reports the
+  // second; the snapshot must be able to express the first, or a paused marketplace would look
+  // permanently like an outage.
+
+  it('accepts a completely empty active view', () => {
+    const snapshot = parseCoreServiceAvailabilitySnapshotV1(
+      minimal({ cities: [], services: [], availability: [] }),
+    );
+    expect(snapshot.cities).toStrictEqual([]);
+    expect(snapshot.services).toStrictEqual([]);
+    expect(snapshot.availability).toStrictEqual([]);
+    // Still a real snapshot: it says WHICH view this is.
+    expect(snapshot.snapshotRef).toBe('snap.1');
+    expect(snapshot.taxonomyVersion).toBe(3);
+  });
+
+  it('accepts active cities with no active services', () => {
+    // A region is live but nothing is being sold there yet.
+    const snapshot = parseCoreServiceAvailabilitySnapshotV1(
+      minimal({ services: [], availability: [] }),
+    );
+    expect(snapshot.cities).toHaveLength(1);
+    expect(snapshot.services).toStrictEqual([]);
+  });
+
+  it('accepts a service with no active cities, offered nowhere', () => {
+    const snapshot = parseCoreServiceAvailabilitySnapshotV1(
+      minimal({ cities: [], availability: [{ serviceRef: 'svc.one', cityRefs: [] }] }),
+    );
+    expect(snapshot.cities).toStrictEqual([]);
+    expect(snapshot.availability[0]?.cityRefs).toStrictEqual([]);
+  });
+
+  it('accepts `ALL` over an empty city set: every city of none is none', () => {
+    // `ALL` is a statement about THIS snapshot, so it degrades correctly rather than becoming a
+    // promise about cities Core never published.
+    const snapshot = parseCoreServiceAvailabilitySnapshotV1(minimal({ cities: [] }));
+    expect(snapshot.availability[0]?.cityRefs).toBe('ALL');
+  });
+
+  it('refuses availability rows when there are no services to describe', () => {
+    // The one-row-per-service rule with no services reduces to "availability must be empty", and a
+    // row about a service the snapshot does not list is meaningless either way.
+    refuses(minimal({ services: [], availability: [{ serviceRef: 'svc.one', cityRefs: 'ALL' }] }));
+  });
+
+  it('refuses an explicit city reference when there are no cities', () => {
+    refuses(
+      minimal({ cities: [], availability: [{ serviceRef: 'svc.one', cityRefs: ['city.alpha'] }] }),
+    );
+  });
+
+  it('the empty canonical output is deterministic and deeply frozen', () => {
+    const a = parseCoreServiceAvailabilitySnapshotV1(
+      minimal({ cities: [], services: [], availability: [] }),
+    );
+    const b = parseCoreServiceAvailabilitySnapshotV1(
+      minimal({ cities: [], services: [], availability: [] }),
+    );
+    expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+    expect(Object.isFrozen(a)).toBe(true);
+    expect(Object.isFrozen(a.cities)).toBe(true);
+    expect(Object.isFrozen(a.services)).toBe(true);
+    expect(Object.isFrozen(a.availability)).toBe(true);
   });
 });
 

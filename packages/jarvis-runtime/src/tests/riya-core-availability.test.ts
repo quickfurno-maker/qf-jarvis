@@ -20,6 +20,8 @@ import type { RiyaConversationContinuityStateV1 } from '@qf-jarvis/riya-conversa
 import { evolveRiyaConversation } from '@qf-jarvis/riya-conversation-evolution';
 import { describe, expect, it } from 'vitest';
 
+import { createRiyaConversationModelProfile } from '@qf-jarvis/riya-model-interaction';
+
 import { createJarvisRuntime } from '../composition/create-jarvis-runtime.js';
 import type { JarvisRuntimeConfig } from '../contracts/runtime-config.js';
 import {
@@ -364,15 +366,284 @@ describe('the snapshot reaches the one model request and nothing else', () => {
 });
 
 // ---------------------------------------------------------------------------
-// The budget question, settled with arithmetic rather than optimism.
+// The request budget: what is proved, and what is explicitly NOT.
 // ---------------------------------------------------------------------------
 
-describe('the raised Riya bound fits the UNCHANGED gateway budget', () => {
-  it('a representative maximum P5 request stays inside the existing 4096 token budget', async () => {
-    // RWC-P5 raised the RIYA user-content bound to 12288. It did NOT raise
-    // `DEFAULT_GATEWAY_REQUEST_BUDGETS.tokenBudget`, which is 4096 and shared by every agent. The
-    // gateway admits a request on `ceil(totalMessageChars / 4)`, so this is the arithmetic that has
-    // to hold — proved against the REAL request the composition built, not a hand-made one.
+/**
+ * Build a canonical snapshot deliberately close to the 6000-character contract ceiling.
+ *
+ * Deterministic: the padding grows by a fixed step until the canonical serialization lands inside the
+ * window, and the loop is bounded. Nothing random, so the fixture is the same on every machine.
+ */
+function nearCeilingSnapshot(): {
+  readonly snapshot: CoreServiceAvailabilitySnapshotV1;
+  readonly chars: number;
+  readonly serviceRef: string;
+  readonly cityRef: string;
+} {
+  for (let pad = 0; pad < 96; pad += 1) {
+    const cities = Array.from({ length: 24 }, (_unused, index) => ({
+      ref: `loc.${'c'.repeat(pad)}${String(index)}`,
+      displayName: `City Number ${String(index)}`,
+    }));
+    const services = Array.from({ length: 16 }, (_unused, index) => ({
+      ref: `svc.${'s'.repeat(pad)}${String(index)}`,
+      displayName: `Service Number ${String(index)}`,
+    }));
+    const candidate = syntheticAvailabilitySnapshot({
+      cities,
+      services,
+      availability: services.map((service) => ({
+        serviceRef: service.ref,
+        cityRefs: 'ALL' as const,
+      })),
+    });
+    const chars = JSON.stringify(candidate).length;
+    if (chars >= 5_500 && chars <= 6_000) {
+      return {
+        snapshot: candidate,
+        chars,
+        serviceRef: services[0]?.ref ?? '',
+        cityRef: cities[0]?.ref ?? '',
+      };
+    }
+  }
+  throw new Error('no near-ceiling snapshot fixture in range');
+}
+
+/** Continuity holding ALL SEVEN discovery values at their maximum permitted sizes. */
+function maximalContinuity(serviceRef: string, cityRef: string): RiyaConversationContinuityStateV1 {
+  return createRiyaConversationContinuityState({
+    version: 1,
+    tenantId: TENANT,
+    conversationId: CONVERSATION,
+    continuityRevision: 4,
+    phase: 'SUMMARY',
+    discovery: {
+      completeness: 'SUFFICIENT_FOR_CORE_REVIEW',
+      missingFields: [],
+      serviceInterestRef: serviceRef,
+      locationRef: cityRef,
+      // The remaining refs are conversational, not catalogue entries, so they are simply at their
+      // own canonical maximum of 64.
+      propertyTypeRef: `prop.${'p'.repeat(59)}`,
+      scopeSummary: 'x'.repeat(500),
+      budgetNote: 'b'.repeat(120),
+      timelineNote: 't'.repeat(120),
+      consultationPreferenceRef: `consult.${'v'.repeat(56)}`,
+    },
+    fieldProvenance: {
+      serviceInterest: 'user_stated',
+      location: 'user_stated',
+      propertyType: 'user_stated',
+      scope: 'user_stated',
+      budget: 'user_stated',
+      timeline: 'user_stated',
+      consultationPreference: 'user_stated',
+    },
+    summaryConfirmed: false,
+  });
+}
+
+/**
+ * An invoker that models the REAL gateway admission check before reaching a provider.
+ *
+ * The budget policy lives INSIDE the gateway, behind this port — `createEstimatedBudgetPolicy`
+ * refuses a request whose `ceil(totalMessageChars / 4)` exceeds its own `tokenBudget`. So the
+ * faithful place to model it is here, and `providerCalls` is what proves nothing was ever sent to a
+ * model: an over-budget request is refused at admission and never produces a response.
+ */
+function budgetEnforcingInvoker(structuredResult: unknown): ModelGatewayInvoker & {
+  admissions(): number;
+  providerCalls(): number;
+  request(): ModelRequest | undefined;
+} {
+  let admissions = 0;
+  let providerCalls = 0;
+  let seen: ModelRequest | undefined;
+  return {
+    invoke(request: ModelRequest) {
+      admissions += 1;
+      seen = request;
+      const chars = request.messages.reduce((total, message) => total + message.content.length, 0);
+      if (Math.ceil(chars / 4) > request.tokenBudget) {
+        // `token-budget-exceeded`. Not transient, and no provider is reached.
+        return Promise.resolve({ ok: false as const, transient: false });
+      }
+      providerCalls += 1;
+      const md = request.metadata;
+      const response: ModelResponse = {
+        runId: request.runId,
+        resultMode: 'STRUCTURED',
+        structuredResult,
+        provenance: {
+          runId: request.runId,
+          purpose: request.purpose,
+          providerId: String(md['providerId']),
+          modelId: String(md['modelId']),
+          modelVersion: String(md['modelVersion']),
+          promptId: request.promptId,
+          promptVersion: request.promptVersion,
+          promptDigest: request.promptDigest,
+          mode: 'ACTIVE',
+          usedFallback: false,
+          attempts: 1,
+        },
+        usage: { outputTokens: 10, inputTokens: 10, totalTokens: 20 },
+        latencyMs: 2,
+        finishStatus: 'completed',
+      };
+      return Promise.resolve({ ok: true as const, response });
+    },
+    admissions: () => admissions,
+    providerCalls: () => providerCalls,
+    request: () => seen,
+  };
+}
+
+/** The gateway's own estimator, restated. `jarvis-runtime` does not depend on `model-gateway`. */
+const estimateInputTokens = (request: ModelRequest | undefined): number =>
+  Math.ceil(
+    (request?.messages ?? []).reduce((total, message) => total + message.content.length, 0) / 4,
+  );
+
+describe('the request budget, proved precisely and claimed narrowly', () => {
+  const REQUEST_CHARACTER_BUDGET = 4096 * 4;
+  /** `prompt-registry`'s own ceiling on a system template. NOT a request-budget guarantee. */
+  const PROMPT_REGISTRY_MAX_TEMPLATE_CHARS = 16_384;
+
+  it('near-ceiling P5 DATA leaves real system-prompt headroom under the unchanged budget', () => {
+    // The claim being made, and its limits. `MAX_RIYA_USER_CONTENT_CHARS` is a Riya-local
+    // serialization ceiling -- it bounds what this agent will SEND. It is not a promise that a
+    // payload at that ceiling combines with every prompt-registry-valid system prompt inside the
+    // shared 4096-token budget, because the budget covers BOTH messages.
+    //
+    // So the honest thing to measure is the headroom that remains.
+    const { snapshot, chars, serviceRef, cityRef } = nearCeilingSnapshot();
+    expect(chars).toBeGreaterThanOrEqual(5_500);
+    expect(chars).toBeLessThanOrEqual(6_000);
+
+    const content = createRiyaConversationModelProfile({
+      current: maximalContinuity(serviceRef, cityRef),
+      availabilitySnapshot: snapshot,
+    }).buildUserContent({ normalizedText: 'm'.repeat(4096) } as never);
+
+    expect(content.length).toBeLessThanOrEqual(12_288);
+    const remainingSystemPromptChars = REQUEST_CHARACTER_BUDGET - content.length;
+    expect(remainingSystemPromptChars).toBeGreaterThan(0);
+    // And the headroom is a real working amount, not a technicality -- but it is well BELOW what the
+    // prompt registry alone would accept, which is exactly the distinction this block exists for.
+    expect(remainingSystemPromptChars).toBeLessThan(PROMPT_REGISTRY_MAX_TEMPLATE_CHARS);
+  });
+
+  it('a bounded evaluated prompt that FITS the headroom composes inside the 4096-token budget', async () => {
+    const { snapshot, serviceRef, cityRef } = nearCeilingSnapshot();
+    const current = maximalContinuity(serviceRef, cityRef);
+    const message = 'm'.repeat(4096);
+
+    const userContent = createRiyaConversationModelProfile({
+      current,
+      availabilitySnapshot: snapshot,
+    }).buildUserContent({ normalizedText: message } as never);
+    // Sized to fit, with a small margin for the composition's own framing.
+    const fitting = REQUEST_CHARACTER_BUDGET - userContent.length - 64;
+    expect(fitting).toBeGreaterThan(0);
+
+    const prompt = createPromptDefinition({
+      promptId: 'riya.conversation.evolution',
+      promptVersion: 1,
+      agentScope: 'CLIENT',
+      taskClass: RIYA_CONVERSATION_EVOLUTION_TASK_CLASS,
+      resultMode: 'STRUCTURED',
+      systemTemplate: `Synthetic RWC-P5 fixture. ${'p'.repeat(fitting - 26)}`,
+    });
+    const invoker = budgetEnforcingInvoker(riyaAnswer(current, []));
+    const result = await createJarvisRuntime(
+      syntheticRuntimeConfig({
+        promptRegistry: createPromptRegistry([prompt]),
+        riyaConversationEvolutionPromptBinding: {
+          promptFamily: prompt.promptId,
+          promptVersion: prompt.promptVersion,
+          evaluationRef: 'evref-p5-fit',
+          evaluationPromptDigest: prompt.contentDigest,
+        },
+        gatewayInvoker: invoker,
+      }),
+    ).processInboundForRiyaConversationEvolution({
+      envelope: syntheticInboundEnvelope({
+        tenantId: TENANT,
+        conversationId: CONVERSATION,
+        normalizedText: message,
+      }),
+      continuity: current,
+      availabilitySnapshot: snapshot,
+    });
+
+    expect(invoker.admissions()).toBe(1);
+    expect(invoker.providerCalls()).toBe(1);
+    expect(invoker.request()?.tokenBudget).toBe(4096);
+    expect(estimateInputTokens(invoker.request())).toBeLessThanOrEqual(4096);
+    expect(result.observationBatch).toBeDefined();
+  });
+
+  it('a prompt-registry-VALID prompt that exceeds the headroom fails CLOSED', async () => {
+    // The point of the whole block. `prompt-registry` accepts a 16384-character template; the M4
+    // request budget covers the system prompt AND the P5 projection together. So a definition can be
+    // perfectly valid and still not fit, and what must happen then is a refusal — never a truncated
+    // catalogue, a truncated prompt, or a second model call.
+    const { snapshot, serviceRef, cityRef } = nearCeilingSnapshot();
+    const current = maximalContinuity(serviceRef, cityRef);
+    const message = 'm'.repeat(4096);
+
+    const oversizedButValid = PROMPT_REGISTRY_MAX_TEMPLATE_CHARS;
+    const prompt = createPromptDefinition({
+      promptId: 'riya.conversation.evolution',
+      promptVersion: 1,
+      agentScope: 'CLIENT',
+      taskClass: RIYA_CONVERSATION_EVOLUTION_TASK_CLASS,
+      resultMode: 'STRUCTURED',
+      systemTemplate: `Synthetic RWC-P5 oversized fixture. ${'p'.repeat(oversizedButValid - 36)}`,
+    });
+    // It really is a legal definition -- this is not a malformed-prompt test.
+    expect(prompt.systemTemplate.length).toBe(PROMPT_REGISTRY_MAX_TEMPLATE_CHARS);
+
+    const invoker = budgetEnforcingInvoker(riyaAnswer(current, []));
+    const result = await createJarvisRuntime(
+      syntheticRuntimeConfig({
+        promptRegistry: createPromptRegistry([prompt]),
+        riyaConversationEvolutionPromptBinding: {
+          promptFamily: prompt.promptId,
+          promptVersion: prompt.promptVersion,
+          evaluationRef: 'evref-p5-over',
+          evaluationPromptDigest: prompt.contentDigest,
+        },
+        gatewayInvoker: invoker,
+      }),
+    ).processInboundForRiyaConversationEvolution({
+      envelope: syntheticInboundEnvelope({
+        tenantId: TENANT,
+        conversationId: CONVERSATION,
+        normalizedText: message,
+      }),
+      continuity: current,
+      availabilitySnapshot: snapshot,
+    });
+
+    // Refused at ADMISSION: no provider was ever reached, so nothing was generated, paid for or
+    // partially applied.
+    expect(estimateInputTokens(invoker.request())).toBeGreaterThan(4096);
+    expect(invoker.providerCalls()).toBe(0);
+    // One admission attempt, and no retry.
+    expect(invoker.admissions()).toBe(1);
+    // A bounded existing outcome. No new error code was invented for this.
+    expect(result.runtimeResult.outcome).toBe('REFUSED');
+    expect(result.observationBatch).toBeUndefined();
+    expect(result.authorizedReply).toBeUndefined();
+  });
+
+  it('a realistic marketplace catalogue is comfortable — but it is NOT the maximum', async () => {
+    // Retained as a realistic shape, and labelled as one. Thirty cities and twenty-five services with
+    // a tiny synthetic prompt says nothing about the ceiling; the specs above are what bound it.
     const cities = Array.from({ length: 30 }, (_unused, index) => ({
       ref: `loc.c${String(index)}`,
       displayName: `City Number ${String(index)}`,
@@ -381,7 +652,7 @@ describe('the raised Riya bound fits the UNCHANGED gateway budget', () => {
       ref: `svc.s${String(index)}`,
       displayName: `Service Number ${String(index)}`,
     }));
-    const big = syntheticAvailabilitySnapshot({
+    const realistic = syntheticAvailabilitySnapshot({
       cities,
       services,
       availability: services.map((service, index) =>
@@ -390,7 +661,7 @@ describe('the raised Riya bound fits the UNCHANGED gateway budget', () => {
           : { serviceRef: service.ref, cityRefs: 'ALL' as const },
       ),
     });
-    const loaded = createRiyaConversationContinuityState({
+    const current = createRiyaConversationContinuityState({
       version: 1,
       tenantId: TENANT,
       conversationId: CONVERSATION,
@@ -415,28 +686,19 @@ describe('the raised Riya bound fits the UNCHANGED gateway budget', () => {
       summaryConfirmed: false,
     });
 
-    const invoker = recordingInvoker(riyaAnswer(loaded, []));
+    const invoker = budgetEnforcingInvoker(riyaAnswer(current, []));
     await runtimeWith({ gatewayInvoker: invoker }).processInboundForRiyaConversationEvolution({
       envelope: syntheticInboundEnvelope({
         tenantId: TENANT,
         conversationId: CONVERSATION,
-        // The M1 inbound maximum.
         normalizedText: 'm'.repeat(4096),
       }),
-      continuity: loaded,
-      availabilitySnapshot: big,
+      continuity: current,
+      availabilitySnapshot: realistic,
     });
 
-    const request = invoker.request();
-    expect(request).toBeDefined();
-    const chars = (request?.messages ?? []).reduce(
-      (total, message) => total + message.content.length,
-      0,
-    );
-    // The gateway's own estimator, restated as the arithmetic it is. `jarvis-runtime` does not depend
-    // on `@qf-jarvis/model-gateway`, so the formula is written out rather than imported.
-    const estimatedInputTokens = Math.ceil(chars / 4);
-    expect(estimatedInputTokens).toBeLessThanOrEqual(request?.tokenBudget ?? 0);
-    expect(request?.tokenBudget).toBe(4096);
+    expect(invoker.providerCalls()).toBe(1);
+    expect(estimateInputTokens(invoker.request())).toBeLessThanOrEqual(4096);
+    expect(invoker.request()?.tokenBudget).toBe(4096);
   });
 });

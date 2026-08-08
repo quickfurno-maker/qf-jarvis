@@ -411,6 +411,49 @@ describe('the prospective final state must be a state Core allows', () => {
 });
 
 // ---------------------------------------------------------------------------
+// An empty active catalogue.
+// ---------------------------------------------------------------------------
+
+describe('an empty active catalogue is shown honestly, and constrains everything', () => {
+  /** Core is readable and currently offering nothing. That is an answer, not a failure. */
+  const EMPTY: CoreServiceAvailabilitySnapshotV1 = syntheticAvailabilitySnapshot({
+    cities: [],
+    services: [],
+    availability: [],
+  });
+
+  it('the model is shown three empty arrays, not a missing section', () => {
+    // Omitting `coreAvailability` when it is empty would be ambiguous in exactly the wrong way: the
+    // model could read absence as "no constraint" rather than "nothing is on offer".
+    const payload = JSON.parse(userContent(state(), 'hello', EMPTY)) as {
+      coreAvailability: { cities: unknown[]; services: unknown[]; availability: unknown[] };
+    };
+    expect(payload.coreAvailability.cities).toStrictEqual([]);
+    expect(payload.coreAvailability.services).toStrictEqual([]);
+    expect(payload.coreAvailability.availability).toStrictEqual([]);
+  });
+
+  it('no service ref can be asserted against an empty catalogue', () => {
+    expect(project(state(), [SET('serviceInterest', 'modular-kitchen')], EMPTY)).toBeUndefined();
+  });
+
+  it('no city ref can be asserted against an empty catalogue', () => {
+    expect(project(state(), [SET('location', 'loc.pune')], EMPTY)).toBeUndefined();
+  });
+
+  it('a reply with NO observations is still perfectly valid', () => {
+    // This is the whole point of showing the model an honest empty view: it can still answer, and the
+    // right answer is a reply that records nothing about a catalogue with nothing in it.
+    expect(project(state(), [], EMPTY)).toBeDefined();
+  });
+
+  it('a non-catalogue fact is still recordable while the catalogue is empty', () => {
+    // Core owns the catalogue, not the conversation. A budget the client stated is still a fact.
+    expect(project(state(), [SET('budget', 'around 8 lakh')], EMPTY)).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // A catalogue that changed under a live conversation.
 // ---------------------------------------------------------------------------
 

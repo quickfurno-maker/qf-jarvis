@@ -120,6 +120,31 @@ The snapshot IS the current active view. Sending deactivated entries beside acti
 packages, leads, clients, contact, consent, coordinates, pincodes or areas is needed to answer _may
 this service be discussed for this city?_
 
+### 6a. A readable EMPTY catalogue is business truth, not an outage
+
+All three arrays accept **zero** entries. "Core currently offers nothing" is a real answer — a paused
+marketplace, a tenant mid-onboarding, a region switched off — and it is **not** the same fact as
+"Core could not be read". A schema that refused an empty view would turn one into the other, and take
+a legitimately quiet marketplace offline as though the integration were broken.
+
+The reader's own failure path reports an outage. The snapshot reports a catalogue.
+
+The integrity rules are unchanged and simply degrade correctly:
+
+- no services → `availability` must be empty, which is the one-row-per-service rule with nothing left
+  to describe;
+- no cities → an explicit non-empty `cityRefs` cannot validate, because those refs are absent; `[]`
+  is valid, and `'ALL'` is valid and means _no city_, since it is only ever a statement about this
+  snapshot;
+- cities may be non-empty while services and availability are both empty.
+
+Downstream the effect is exactly right. The model is shown three empty arrays rather than a missing
+section — absence could be misread as "no constraint" — and no service or city ref can be asserted at
+all. A reply carrying no observations remains perfectly valid, and a non-catalogue fact such as a
+budget is still recordable, because Core owns the catalogue and not the conversation.
+
+No `catalogueReady` flag, no fallback, no new disposition, no continuity field.
+
 ### 7. Two output checks, and the second is the one that matters
 
 After the strict schema and the canonical P4A batch:
@@ -201,9 +226,27 @@ work-scope field and must not be misused as an area carrier. No lat/long, ever.
 message and all seven known fields were present.
 
 `DEFAULT_GATEWAY_REQUEST_BUDGETS` is **unchanged**, `tokenBudget` included. One agent needing more
-room is not a reason every agent gets it. A focused spec proves a representative maximum P5 request —
-thirty cities, twenty-five services, a populated continuity and a 4096-character message — still
-admits under the existing 4096-token budget, measured on the request the real composition built.
+room is not a reason every agent gets it.
+
+**What is proved, stated precisely.** `MAX_RIYA_USER_CONTENT_CHARS` is a Riya-local _serialization_
+ceiling: it bounds what this agent will send. It is **not** a promise that a payload at that ceiling
+combines with every prompt-registry-valid system prompt inside the shared 4096-token budget — the M4
+request budget covers **both** messages, and `prompt-registry` independently accepts a system template
+of up to 16 384 characters.
+
+So the proof is a headroom calculation rather than a claim of sufficiency. A near-ceiling P5 data
+fixture — a canonical snapshot between 5500 and 6000 characters, a continuity holding all seven
+discovery values at their maximum sizes, and a 4096-character inbound message — is measured against
+`4096 × 4` request characters, and the remaining system-prompt headroom is asserted to be positive
+and, tellingly, well **below** the 16 384 the prompt registry alone would allow.
+
+Two real compositions then pin the boundary. An evaluated prompt sized to fit the remaining headroom
+composes with one provider call and `ceil(chars / 4) ≤ 4096`. A prompt that is **entirely valid to the
+prompt registry** but exceeds that headroom is refused at gateway admission — **no provider reached**,
+no observation batch, no authorized reply, no retry, and no new error code.
+
+**Prompt-registry validity does not imply request-budget validity.** That is the contract this
+records.
 
 ### 14. Call budget, and the CAS path
 
@@ -236,6 +279,18 @@ There is **no default city and no cached fallback**. A successful read is never 
 read must not let every later outage be served from a catalogue that may since have changed. The port
 invents no TTL either — if a future adapter has real source-freshness evidence and judges its data
 stale, that adapter fails its own read.
+
+### 16. Activation prerequisite
+
+RWC-P5 activates no production prompt and no provider. **Before any future activation**, the ACTUAL
+evaluated Riya evolution prompt, together with the maximum supported production Core availability
+projection and the current Riya message and continuity context, MUST fit the configured M4 request
+token budget.
+
+No catalogue truncation. No prompt truncation. No second model call. No silent global budget widening.
+If the real prompt does not fit, deployment must make an explicit governed model-budget decision at
+that point — a decision with a real cost, and therefore one that belongs to an owner rather than to
+whoever notices the failure first.
 
 ## Consequences
 
@@ -272,6 +327,10 @@ Owner-locked. Changing any of these requires a new ADR, not an edit to this one:
 - **no aliases** in V1;
 - an unusable authority is `NOT_READY` with no default and no cached fallback;
 - continuity V1 unchanged, no validation status persisted, no migration;
-- the Riya user-content bound is **Riya-local**; the generic gateway budgets stay untouched.
+- the Riya user-content bound is **Riya-local**; the generic gateway budgets stay untouched, and no
+  P5 change may widen them;
+- a readable **empty** catalogue is served, never reported as an outage;
+- the activation prerequisite in §16 — the real prompt plus the real projection must fit the real
+  budget before anything goes live.
 
 **Next.** RWC-P6: summary confirmation and canonical submission.

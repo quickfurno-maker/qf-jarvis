@@ -306,6 +306,46 @@ describe('an unusable authority fails closed as NOT_READY', () => {
 });
 
 // ---------------------------------------------------------------------------
+// A readable EMPTY authority is not an outage.
+// ---------------------------------------------------------------------------
+
+describe('an empty active catalogue is served, not refused', () => {
+  const emptySnapshot = (): unknown =>
+    JSON.parse(
+      JSON.stringify(syntheticAvailabilitySnapshot({ cities: [], services: [], availability: [] })),
+    );
+
+  it('a valid EMPTY snapshot reaches the runtime like any other', async () => {
+    // The distinction that matters: "Core currently offers nothing" is business truth and the turn
+    // proceeds; "Core could not be read" is an outage and the turn stops. Collapsing the two would
+    // take a paused marketplace offline as though the integration were broken.
+    const reader = scriptedAvailabilityReader({ returns: emptySnapshot() });
+    const { svc, runtime } = harness({ reader });
+
+    const result = await svc.handleTurn(turnInput());
+
+    expect(reader.calls()).toBe(1);
+    expect(runtime.invoked()).toBe(1);
+    // NOT the authority-failure branch.
+    expect(result.disposition).not.toBe('NOT_READY');
+    expect(result.disposition).toBe('PROCESSED');
+  });
+
+  it('an empty catalogue turn still returns the Core-authorized body', async () => {
+    const { svc } = harness({ reader: scriptedAvailabilityReader({ returns: emptySnapshot() }) });
+    const result = await svc.handleTurn(turnInput());
+    expect(result.authorizedReply?.replyBody).toBe(SENTINEL_BODY);
+  });
+
+  it('a reader FAILURE remains NOT_READY, so the two stay distinguishable', async () => {
+    const { svc, runtime } = harness({ reader: scriptedAvailabilityReader({ rejects: true }) });
+    const result = await svc.handleTurn(turnInput());
+    expect(result.disposition).toBe('NOT_READY');
+    expect(runtime.invoked()).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // The read does not disturb P4B.
 // ---------------------------------------------------------------------------
 

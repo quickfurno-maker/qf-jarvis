@@ -29,6 +29,10 @@
  * **No inactive rows.** The snapshot IS the current active view. Sending deactivated entries beside
  * active ones would put the decision "which of these may I use?" back into the reader.
  *
+ * An EMPTY view is therefore a legitimate answer, not a broken one. A paused marketplace, a tenant
+ * mid-onboarding or a region switched off all produce zero active cities or services, and that is
+ * Core telling us something true. Only the READ failing is an outage.
+ *
  * **No vendor, price, package, lead, client, contact, consent, coordinate, pincode or area.** None of
  * those is needed to answer "may this service be discussed for this city?", and every one of them
  * would be business data crossing a boundary for no reason.
@@ -78,8 +82,9 @@ export interface CoreAvailabilityServiceV1 {
  * Where ONE service is available.
  *
  * `'ALL'` means every city in THIS snapshot — it is not a promise about cities Core has not
- * published. An explicit array is the complete set, and an EMPTY array is legal and meaningful: the
- * service exists in the catalogue but is currently offered in none of the listed cities.
+ * published, and over an empty city set it means no city at all. An explicit array is the complete
+ * set, and an EMPTY array is legal and meaningful: the service exists in the catalogue but is
+ * currently offered in none of the listed cities.
  */
 export interface CoreAvailabilityRowV1 {
   readonly serviceRef: string;
@@ -126,9 +131,14 @@ const snapshotSchema = z
       .max(MAX_SNAPSHOT_REF_LENGTH)
       .regex(/^[A-Za-z0-9._:-]+$/u),
     taxonomyVersion: taxonomyVersionSchema,
-    cities: z.array(nodeSchema).min(1).max(MAX_ROWS),
-    services: z.array(nodeSchema).min(1).max(MAX_ROWS),
-    availability: z.array(rowSchema).min(1).max(MAX_ROWS),
+    // ZERO is legal on all three. The snapshot is Core's CURRENT ACTIVE view, and "Core currently
+    // offers nothing" is business truth -- a paused marketplace, a tenant mid-onboarding, a region
+    // switched off. It is emphatically NOT the same fact as "Core could not be read", and a schema
+    // that conflated them would turn a real answer into an outage. The reader's own failure path is
+    // what reports an outage; an empty snapshot reports an empty catalogue.
+    cities: z.array(nodeSchema).max(MAX_ROWS),
+    services: z.array(nodeSchema).max(MAX_ROWS),
+    availability: z.array(rowSchema).max(MAX_ROWS),
   })
   .strict();
 
@@ -180,6 +190,10 @@ export function parseCoreServiceAvailabilitySnapshotV1(
   // EXACTLY one row per service, both ways. A missing row would leave a service whose availability
   // nobody stated, and the only safe reading of that is "unknown" -- which is not a value this
   // contract can express, so it is a refusal instead.
+  //
+  // With no services this reduces to "availability must be empty", which is the right rule and needs
+  // no special case: a row about a service the snapshot does not list is meaningless whether the
+  // service list is short or empty.
   const serviceSet = new Set(serviceRefs);
   if (rowRefs.length !== serviceRefs.length) {
     throw new CoreServiceAvailabilityReadError('invalid-snapshot');
