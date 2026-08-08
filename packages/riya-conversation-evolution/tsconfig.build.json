@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
+  },
+
+  // The EMITTING build, referenced by the root solution. The vitest specs under src/tests are
+  // EXCLUDED so nothing test-only reaches dist/.
+  //
+  // Exactly TWO project references, and the direction is one-way: `riya-agent` owns NeedDiscovery
+  // and DiscoveryField, `riya-conversation-continuity` owns the state contract this reducer
+  // evolves. Neither may ever reference back -- the behaviour kernel must not learn about carried
+  // state, and the state contract must not acquire the reducer it deliberately refused.
+  //
+  // Deliberately absent: `jarvis-runtime` (composition; referencing it would invert the direction),
+  // `riya-web-conversation-service` (a surface; these rules are channel-neutral),
+  // `agent-runtime` (must stay business-neutral), `model-gateway` / `model-reply-adapter` (P4A
+  // invokes no model), the postgres store or `event-backbone` (P4A performs no I/O), and any
+  // application.
+  "references": [
+    { "path": "../riya-agent/tsconfig.build.json" },
+    { "path": "../riya-conversation-continuity/tsconfig.build.json" }
+  ],
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/tests/**"]
+}

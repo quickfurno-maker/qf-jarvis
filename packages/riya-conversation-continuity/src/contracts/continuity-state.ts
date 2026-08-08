@@ -241,7 +241,8 @@ export function createRiyaConversationContinuityState(
   }
 
   // SUMMARY READINESS. A summary is a thing shown to a client and confirmed by them, so there has
-  // to be something to show. RWC-P0B/P1B froze the four: service, city, budget, timeline.
+  // to be something to show. Historical RWC-P0B/RWC-P1B froze the four -- service, city, budget,
+  // timeline -- and ADR-0098 restates them for current Jarvis ownership.
   //
   // Without this, `SUMMARY` — and `CONTACT`, `CONSENT` and `COMPLETE` after it — accepted an
   // entirely EMPTY discovery. That is not a state Riya could legitimately be in, and it is exactly
