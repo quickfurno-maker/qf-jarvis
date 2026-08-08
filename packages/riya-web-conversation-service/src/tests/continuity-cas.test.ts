@@ -32,7 +32,7 @@ import type {
   RiyaContinuityStorePort,
 } from '../contracts/store-port.js';
 import { InMemoryContinuityStore } from './fakes/in-memory-continuity-store.js';
-import { scriptedRuntime } from './fakes/scripted-runtime.js';
+import { SENTINEL_BODY, scriptedRuntime } from './fakes/scripted-runtime.js';
 
 const RUNTIME_ID = 'rt.web.1';
 const TENANT = 'tenant.a';
@@ -466,6 +466,141 @@ describe('I. losing twice is a refusal, not a third attempt', () => {
     for (const forbidden of [TENANT, CONVERSATION, 'modular-kitchen', 'SECRET', '9']) {
       expect(message, forbidden).not.toContain(forbidden);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// I2. A reply is bound to the snapshot the model saw (owner correction).
+// ---------------------------------------------------------------------------
+
+describe('I2. a losing first attempt withholds the reply it produced', () => {
+  /**
+   * The failure this closes is concrete, and it is a wrong ANSWER rather than a crash.
+   *
+   * Base is missing a location. The model asks which area the client is in, and Core authorizes
+   * that. A concurrent turn records the location. This turn's compare-and-set loses, reconciles
+   * successfully, and the final continuity now knows the location -- so returning the old body means
+   * asking a client for something they told us moments ago.
+   *
+   * Re-checking the question plan would not be enough: the body is free text and may restate ANY
+   * fact from the old snapshot.
+   */
+  const winnerKnowingLocation = (): RiyaConversationContinuityStateV1 =>
+    evolveRiyaConversation({
+      current: initial(),
+      batch: {
+        version: 1,
+        observations: [SET('location', 'loc.pune')],
+        skipProjectDetails: false,
+      },
+    }).state;
+
+  it('no conflict: the authorized reply is preserved exactly', async () => {
+    const { svc, store, runtime } = harness({
+      observations: [SET('serviceInterest', 'modular-kitchen')],
+    });
+    const result = await svc.handleTurn(turnInput());
+
+    expect(store.calls.compareAndSet).toBe(1);
+    expect(result.disposition).toBe('PROCESSED');
+    // Byte-identical to what the runtime materialized. Nothing about the suppression path touches
+    // the ordinary case.
+    expect(result.authorizedReply?.replyBody).toBe(SENTINEL_BODY);
+    expect(result.authorizedReply?.proposalId).toBe('prop.1');
+    expect(result.authorizedReply?.boundRevision).toBe(1);
+    expect(runtime.invoked()).toBe(1);
+  });
+
+  it('conflict then a no-op re-merge: the reply is withheld, the winner state is returned', async () => {
+    const winner = winnerKnowingLocation();
+    const { svc, store, runtime } = harness({ observations: [SET('location', 'loc.pune')] });
+    store.casScript = ['REVISION_CONFLICT'];
+    store.loadAfterCasScript = [winner];
+
+    const result = await svc.handleTurn(turnInput());
+
+    // The batch turning out to be redundant says nothing about the reply -- if anything it is the
+    // case where the winning turn most likely recorded the very fact the reply is about to ask for.
+    expect(result.authorizedReply).toBeUndefined();
+    expect(result.continuity).toStrictEqual(winner);
+    // A disposition is NOT invented for this. The V2 contract has always permitted PROCESSED with
+    // no body, and the ingress already treats the body's presence as the sole text gate.
+    expect(result.disposition).toBe('PROCESSED');
+    // And nothing was re-run to replace the withheld text.
+    expect(runtime.invoked()).toBe(1);
+    expect(runtime.coreAuthorizedInvoked()).toBe(0);
+    expect(runtime.ordinaryInvoked()).toBe(0);
+    expect(store.calls.compareAndSet).toBe(1);
+  });
+
+  it('conflict then a successful second attempt: the reply is still withheld', async () => {
+    const winner = winnerKnowingLocation();
+    const { svc, store, runtime } = harness({
+      observations: [SET('serviceInterest', 'modular-kitchen')],
+    });
+    store.casScript = ['REVISION_CONFLICT', 'UPDATED'];
+    store.loadAfterCasScript = [winner];
+
+    const result = await svc.handleTurn(turnInput());
+
+    // The observations DID persist -- a fact is a fact, and the reducer re-merged it against the
+    // winner. Only the text capability is withheld.
+    expect(result.continuity.discovery.locationRef).toBe('loc.pune');
+    expect(result.continuity.discovery.serviceInterestRef).toBe('modular-kitchen');
+    expect(result.continuity.continuityRevision).toBe(winner.continuityRevision + 1);
+    expect(result.authorizedReply).toBeUndefined();
+    expect(result.disposition).toBe('PROCESSED');
+    expect(runtime.invoked()).toBe(1);
+    expect(runtime.coreAuthorizedInvoked()).toBe(0);
+    expect(runtime.ordinaryInvoked()).toBe(0);
+    expect(store.calls.compareAndSet).toBe(2);
+    expect(store.calls.load).toBe(2);
+  });
+
+  it('a Core REJECTION plus a conflict: still no reply, and the state still reconciles', async () => {
+    const winner = winnerKnowingLocation();
+    const { svc, store, runtime } = harness({
+      outcome: 'CORE_REJECTED',
+      observations: [SET('serviceInterest', 'modular-kitchen')],
+    });
+    store.casScript = ['REVISION_CONFLICT', 'UPDATED'];
+    store.loadAfterCasScript = [winner];
+
+    const result = await svc.handleTurn(turnInput());
+
+    // There was never a body to withhold here, and the reconciliation is unaffected by that.
+    expect(result.authorizedReply).toBeUndefined();
+    expect(result.disposition).toBe('REFUSED');
+    expect(result.continuity.discovery.serviceInterestRef).toBe('modular-kitchen');
+    expect(result.continuity.discovery.locationRef).toBe('loc.pune');
+    expect(runtime.invoked()).toBe(1);
+  });
+
+  it('no batch at all: a reply is never withheld, because no CAS could have lost', async () => {
+    // The suppression is bound to a LOST compare-and-set, not to the existence of a conflict
+    // somewhere in the world. A turn that wrote nothing has nothing to lose.
+    const { svc, store } = harness();
+    const result = await svc.handleTurn(turnInput());
+    expect(store.calls.compareAndSet).toBe(0);
+    expect(result.authorizedReply?.replyBody).toBe(SENTINEL_BODY);
+  });
+
+  it('a no-op batch: the reply survives, because the first attempt never happened', async () => {
+    const base = evolveRiyaConversation({
+      current: initial(),
+      batch: {
+        version: 1,
+        observations: [SET('serviceInterest', 'modular-kitchen')],
+        skipProjectDetails: false,
+      },
+    }).state;
+    const { svc, store } = harness({
+      seed: base,
+      observations: [SET('serviceInterest', 'modular-kitchen')],
+    });
+    const result = await svc.handleTurn(turnInput());
+    expect(store.calls.compareAndSet).toBe(0);
+    expect(result.authorizedReply?.replyBody).toBe(SENTINEL_BODY);
   });
 });
 

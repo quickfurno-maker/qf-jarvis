@@ -21,12 +21,15 @@ import { describe, expect, it } from 'vitest';
 
 import {
   createRiyaConversationModelProfile,
-  MAX_RIYA_REPLY_BODY_CHARS,
-  MAX_RIYA_USER_CONTENT_CHARS,
   parseRiyaModelProfileDetail,
   RIYA_CONVERSATION_EVOLUTION_TASK_CLASS,
 } from '../index.js';
 import type { RiyaModelProfileDetailV1 } from '../index.js';
+// The bounds are package INTERNALS, not public capabilities: a caller composes with the profile, it
+// does not read the policy the profile enforces. A package-local spec imports them relatively, which
+// is exactly the case the reduced root surface was reduced for.
+import { MAX_RIYA_USER_CONTENT_CHARS } from '../internal/input-projection.js';
+import { MAX_RIYA_REPLY_BODY_CHARS } from '../internal/output-schema.js';
 
 const TENANT = 'tenant.a';
 const CONVERSATION = 'conv.1';
@@ -651,6 +654,131 @@ describe('the detail that crosses back through the generic seam', () => {
     ]) {
       expect(parseRiyaModelProfileDetail(forged)).toBeUndefined();
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// REPLY-ONLY (owner correction)
+// ---------------------------------------------------------------------------
+
+describe('the Riya answer is REPLY-only', () => {
+  const current = state();
+  const project = (value: unknown): unknown => profileFor(current).projectStructuredResult(value);
+
+  it('accepts a REPLY with a body', () => {
+    const projected = project(answerFor(current, [SET('location', 'loc.pune')]));
+    expect(projected).toBeDefined();
+    expect((projected as { reply: { kind: string } }).reply.kind).toBe('REPLY');
+  });
+
+  for (const kind of ['ESCALATE_TO_HUMAN', 'REQUEST_CLARIFICATION', 'NO_ACTION']) {
+    it(`refuses ${kind}`, () => {
+      // M4 builds a ModelReplyDraft only for REPLY, so M2 would refuse these as draft-invalid after
+      // a paid inference. And escalation / no-action / clarification AS DISPOSITIONS are policy,
+      // owned by Riya's behaviour boundary -- the model drafts text, it does not choose the action.
+      const answer = answerFor(current, [SET('location', 'loc.pune')]) as {
+        reply: Record<string, unknown>;
+      };
+      const { replyBody: _dropped, ...withoutBody } = answer.reply;
+      expect(project({ ...answer, reply: { ...withoutBody, kind } })).toBeUndefined();
+      // And with a body too, in case a model tried to smuggle text under a non-reply kind.
+      expect(project({ ...answer, reply: { ...answer.reply, kind } })).toBeUndefined();
+    });
+  }
+
+  it('refuses a REPLY with no body at all', () => {
+    const answer = answerFor(current, [SET('location', 'loc.pune')]) as {
+      reply: Record<string, unknown>;
+    };
+    const { replyBody: _dropped, ...withoutBody } = answer.reply;
+    expect(project({ ...answer, reply: withoutBody })).toBeUndefined();
+  });
+
+  it('a refused kind yields no projection at all, so no observations survive it', () => {
+    const answer = answerFor(current, [SET('location', 'loc.pune')]) as {
+      reply: Record<string, unknown>;
+    };
+    const refused = project({ ...answer, reply: { ...answer.reply, kind: 'NO_ACTION' } });
+    // Not "a projection with an empty detail" -- nothing at all. The whole answer is rejected, so
+    // the batch it carried never becomes a detail and never reaches the runtime.
+    expect(refused).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THE STRICT DETAIL GUARD (owner correction)
+// ---------------------------------------------------------------------------
+
+describe('the detail parser is as strict as the schema that produced the detail', () => {
+  const current = state();
+  const validDetail = (): unknown =>
+    (
+      profileFor(current).projectStructuredResult(
+        answerFor(current, [SET('location', 'loc.pune')]),
+      ) as { detail: unknown }
+    ).detail;
+
+  const batchOf = (observations: readonly Record<string, unknown>[]): unknown => ({
+    version: 1,
+    observationBatch: { version: 1, observations, skipProjectDetails: false },
+  });
+
+  it('accepts a genuine detail and returns it frozen', () => {
+    const parsed = parseRiyaModelProfileDetail(validDetail());
+    expect(parsed).toBeDefined();
+    expect(Object.isFrozen(parsed)).toBe(true);
+    expect(Object.keys(parsed as object).sort()).toStrictEqual(['observationBatch', 'version']);
+  });
+
+  it('refuses an EXTRA own key beside version and observationBatch', () => {
+    // An extra key means this did not come from `projectStructuredResult`, and whatever it carries
+    // has passed nothing.
+    expect(
+      parseRiyaModelProfileDetail({
+        ...(validDetail() as object),
+        replyBody: 'smuggled text',
+      }),
+    ).toBeUndefined();
+  });
+
+  for (const provenance of ['user_confirmed', 'user_selected', 'server_runtime']) {
+    it(`refuses a forged ${provenance} observation, which RWC-P4A alone would accept`, () => {
+      // P4A accepts five origins because many producers may exist. This parser guards a MODEL
+      // producer, and a forged `user_confirmed` would otherwise outrank a fact a person agreed to.
+      expect(
+        parseRiyaModelProfileDetail(batchOf([SET('location', 'loc.pune', provenance)])),
+      ).toBeUndefined();
+    });
+  }
+
+  it('refuses a model_inferred CLEAR: an inference may not withdraw a fact', () => {
+    expect(
+      parseRiyaModelProfileDetail(
+        batchOf([{ field: 'budget', operation: 'CLEAR', provenance: 'model_inferred' }]),
+      ),
+    ).toBeUndefined();
+  });
+
+  it('accepts a user_stated CLEAR', () => {
+    expect(
+      parseRiyaModelProfileDetail(
+        batchOf([{ field: 'budget', operation: 'CLEAR', provenance: 'user_stated' }]),
+      ),
+    ).toBeDefined();
+  });
+
+  it('still refuses a duplicated field, through P4A own constructor', () => {
+    expect(
+      parseRiyaModelProfileDetail(
+        batchOf([SET('location', 'loc.pune'), SET('location', 'loc.mumbai')]),
+      ),
+    ).toBeUndefined();
+  });
+
+  it('a model_inferred SET is accepted: the vocabulary is two origins, not one', () => {
+    expect(
+      parseRiyaModelProfileDetail(batchOf([SET('scope', 'full refit', 'model_inferred')])),
+    ).toBeDefined();
   });
 });
 

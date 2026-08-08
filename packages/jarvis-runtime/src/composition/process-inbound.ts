@@ -164,12 +164,24 @@ export async function composeAndProcessInternal(
    */
   let capturedProfileDetail: unknown;
 
-  /** Every non-accepting exit. There is exactly one place in this function that materializes a body. */
+  /**
+   * Every non-accepting exit. There is exactly one place in this function that materializes a body,
+   * and exactly one that releases a captured profile detail — this is neither.
+   *
+   * The detail is deliberately DROPPED here, not forwarded. M4 releases it only after its own gates,
+   * but M4 returns before M2's final double gate runs: the authoritative state can change in that
+   * window, and the orchestration can then refuse for a stale revision, a takeover, a pause or a
+   * cancellation. Forwarding the detail from a refused run would let observations extracted during
+   * that window survive a gate the run itself did not pass — and the service would persist them.
+   *
+   * Independence from the CORE decision (ADR-0099 §12) is a different thing and is unaffected: a
+   * Core rejection still arrives on a SUCCESSFUL orchestration, which returns below.
+   */
   const withoutReply = (runtimeResult: JarvisRuntimeResult): InternalRunResult =>
     Object.freeze({
       runtimeResult,
       authorizedReply: undefined,
-      profileDetail: capturedProfileDetail,
+      profileDetail: undefined,
     });
 
   emit('jarvis-inbound-received', undefined, undefined);

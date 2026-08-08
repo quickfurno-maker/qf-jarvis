@@ -73,6 +73,34 @@ A pre-gateway state block, a gateway refusal, a provenance mismatch, an invalid 
 citation mismatch and a post-gateway state block all carry no detail. Detail beside a refusal would
 be material extracted from an answer the adapter had already decided not to trust.
 
+### 3a. And only when the ORCHESTRATION also succeeded
+
+M4's gates are M4's. They run before M2's final double gate, and the authoritative state can change
+in that window — a revision drifts, an operator takes over, a conversation is cancelled — after which
+the orchestration refuses.
+
+So `jarvis-runtime` applies a second rule on top of M4's: **a captured profile detail leaves the
+runtime only when the orchestration result is `ok: true`.** Every refused path, including a thrown
+turn, reports no observations at all.
+
+This is not in tension with §12. A Core rejection arrives on a _successful_ orchestration; a state
+gate firing after the model returned means the run itself was refused, and observations extracted
+inside that window must not outlive it.
+
+### 3b. Riya's answer is REPLY-only
+
+The generic seam keeps all four `StructuredReply` kinds. The **Riya** schema accepts one:
+`kind: 'REPLY'` with a required body.
+
+Two reasons, pointing the same way. Mechanically, M4 builds a `ModelReplyDraft` only for `REPLY`;
+for the other three, `draft` is `undefined` and M2 refuses the candidate as draft-invalid — so
+offering them would advertise three answers the authoritative Riya path structurally cannot carry,
+each one a guaranteed refusal after a paid inference. And by authority: escalating to a human,
+declining to act and requesting clarification _as dispositions_ are policy, owned by Riya's behaviour
+boundary and M2. P4B's model drafts text and reports observations; it does not select the action. A
+clarifying question is still expressible — it is a `REPLY` whose body asks one, which is what the
+question plan is for.
+
 ### 4. Riya's model vocabulary lives in its own leaf package
 
 `@qf-jarvis/riya-model-interaction` holds the Riya-specific half and invokes nothing. It depends on
@@ -124,6 +152,14 @@ RWC-P4A accepts five origins because many producers may exist. A **model** produ
 | `user_confirmed` | **no**                | RWC-P6's structured confirmation; a model minting it would upgrade its own interpretation into confirmation authority |
 
 A `CLEAR` must additionally be `user_stated`: an inference may not withdraw a fact.
+
+`parseRiyaModelProfileDetail` enforces **the same rule**, from the same predicate. It is the guard a
+composition uses instead of casting the generic seam's `unknown`, so it must be at least as strict as
+the schema that produced the value: it requires exactly the two own keys `version` and
+`observationBatch`, re-proves the batch through RWC-P4A's canonical constructor, and then re-applies
+the producer vocabulary. Without that last step a forged detail carrying a P4A-valid `user_confirmed`
+would pass a guard the model itself could never have got past — and would then outrank a fact a
+person actually agreed to. RWC-P4A itself is **not** narrowed; this is a producer rule.
 
 ### 7. The claimed question plan is checked, never trusted
 
@@ -218,6 +254,27 @@ converge.
 A no-op skips the write entirely: spending a durable write to store what is already stored would
 also bump a revision whose entire meaning is "this conversation changed".
 
+### 13a. An authorized reply is bound to the snapshot the model saw
+
+If the **first** compare-and-set returns `REVISION_CONFLICT`, the Core-authorized body produced from
+the old base continuity is **withheld** — whether the reconciliation then writes or turns out to be a
+no-op.
+
+The failure this closes is concrete. Base is missing a location; the model asks which area the client
+is in; Core authorizes that; a concurrent turn records the location; this turn's compare-and-set
+loses; reconciliation succeeds and the final continuity now knows the location — and the turn returns
+a reply asking for it.
+
+Re-checking the question plan would not be enough. The body is free text and may restate any fact
+from the old snapshot, so the only sound rule is that a reply belongs to the state it was written
+against.
+
+The observations still persist: a fact is a fact, and the reducer re-merged it against the winner.
+Only the text capability is withheld, and **nothing is re-run to replace it** — no second model call,
+no second Core decision, no generated stand-in, no third attempt, and no new disposition or wire
+field. The V2 result has always permitted `PROCESSED` with no `authorizedReply`, and the private
+ingress already treats the body's presence as the sole text gate.
+
 ### 14. `continuity-conflict` earns its place
 
 RWC-P2C explicitly refused this error code because the service never called `compareAndSet`, and a
@@ -278,6 +335,10 @@ The following are owner-locked. Changing any of them requires a new ADR, not an 
 - persistence order — model and runtime before CAS — and the independence of persistence from the
   Core outcome once a batch is validated;
 - **at most two** compare-and-set attempts with exactly one reload, and no third;
+- withholding the authorized reply after ANY first-attempt `REVISION_CONFLICT`, and never
+  regenerating one;
+- a profile detail leaving `jarvis-runtime` only on an `ok: true` orchestration;
+- the Riya model answer being **`REPLY`-only**, while the generic seam keeps all four kinds;
 - `JarvisRuntimeResult` remaining the ten content-free keys.
 
 **Next.** RWC-P5: location authority and service-area resolution.

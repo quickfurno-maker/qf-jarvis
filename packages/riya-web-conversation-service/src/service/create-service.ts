@@ -10,7 +10,9 @@
  *    `processInboundForRiyaConversationEvolution` capability (ADR-0099) — one call, one
  *    orchestration run, and therefore ONE model call that produces the reply and the observations
  *    together;
- * 5. evolve the loaded continuity by those observations and persist it through compare-and-set;
+ * 5. evolve the loaded continuity by those observations and persist it through compare-and-set —
+ *    withholding the authorized body if that compare-and-set lost a race, because a reply is bound
+ *    to the continuity snapshot the model saw;
  * 6. map the outcome to a closed disposition, cross-check any Core-authorized body against the run
  *    that produced it, and return the FINAL authoritative continuity.
  *
@@ -199,6 +201,19 @@ function initialContinuity(
   });
 }
 
+/**
+ * What one persistence attempt reports back.
+ *
+ * `reconciledAfterConflict` is true from the moment the FIRST compare-and-set returns
+ * `REVISION_CONFLICT`, whether the reconciliation then wrote or found nothing left to write. The
+ * question it answers is not "did we persist?" but "did the conversation move underneath the reply
+ * this turn already produced?", and a lost first attempt answers that on its own.
+ */
+interface PersistedEvolution {
+  readonly state: RiyaConversationContinuityStateV1;
+  readonly reconciledAfterConflict: boolean;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -250,11 +265,15 @@ export function createRiyaWebConversationService(
    * attempt a second model call, runtime call, Core decision or re-extraction. The reducer is pure,
    * so re-merging the SAME captured batch against a newer state is a re-computation, not a second
    * observation — that purity is the whole reason one bounded reconciliation is safe.
+   *
+   * It reports `reconciledAfterConflict` because the CALLER needs it: the reply this turn produced
+   * was written against `base`, and if `base` lost its compare-and-set then the conversation moved
+   * underneath that reply. Observations can be re-merged; a sentence cannot.
    */
   async function persistEvolution(
     base: RiyaConversationContinuityStateV1,
     batch: RiyaConversationObservationBatchV1,
-  ): Promise<RiyaConversationContinuityStateV1> {
+  ): Promise<PersistedEvolution> {
     let evolved;
     try {
       evolved = evolveRiyaConversation({ current: base, batch });
@@ -268,7 +287,7 @@ export function createRiyaWebConversationService(
       // Nothing moved — the turn re-stated what was already known. No compare-and-set at all:
       // spending a durable write to store what is already stored would also bump a revision whose
       // entire meaning is "this conversation changed".
-      return base;
+      return { state: base, reconciledAfterConflict: false };
     }
 
     let first: RiyaContinuityCasOutcome;
@@ -281,7 +300,9 @@ export function createRiyaWebConversationService(
       throw new RiyaWebConversationError('continuity-unavailable');
     }
     if (first === 'UPDATED') {
-      return evolved.state;
+      // The state the reply was written against is still the state this turn extended. Nothing moved
+      // underneath it, so the reply remains valid.
+      return { state: evolved.state, reconciledAfterConflict: false };
     }
     if (first === 'NOT_FOUND') {
       // A row this same turn already loaded has gone. Creating a fresh one would restart a
@@ -320,7 +341,11 @@ export function createRiyaWebConversationService(
     if (!remerged.changed) {
       // Whoever won said the same thing, or something that outranks it. There is nothing left to
       // write, and the winner's state is the authoritative one.
-      return latest;
+      //
+      // Still `reconciledAfterConflict: true`. The batch turning out to be redundant says nothing
+      // about the REPLY: the winning turn may have recorded a fact this turn's reply is about to ask
+      // for, and the merge being a no-op is exactly the case where that is most likely.
+      return { state: latest, reconciledAfterConflict: true };
     }
 
     let second: RiyaContinuityCasOutcome;
@@ -333,7 +358,7 @@ export function createRiyaWebConversationService(
       throw new RiyaWebConversationError('continuity-unavailable');
     }
     if (second === 'UPDATED') {
-      return remerged.state;
+      return { state: remerged.state, reconciledAfterConflict: true };
     }
     if (second === 'NOT_FOUND') {
       throw new RiyaWebConversationError('repository-invariant');
@@ -440,7 +465,28 @@ export function createRiyaWebConversationService(
     //    structured model answer passed the adapter's own gates — which is exactly what the presence
     //    of a canonical batch means.
     if (observationBatch !== undefined) {
-      continuity = await persistEvolution(continuity, observationBatch);
+      const persisted = await persistEvolution(continuity, observationBatch);
+      continuity = persisted.state;
+      if (persisted.reconciledAfterConflict) {
+        // 4a. WITHHOLD the Core-authorized body (RWC-P4B owner correction; ADR-0099 §13a).
+        //
+        // The reply was drafted from, and authorized against, the continuity snapshot this turn
+        // loaded — and that snapshot lost its compare-and-set, so another writer changed the
+        // conversation while this turn was in flight. The reply can therefore be about a
+        // conversation that no longer exists: it might ask which area the client is in, moments
+        // after they told a concurrent turn exactly that.
+        //
+        // Re-checking the question plan would not be enough. The body is free text and may restate
+        // ANY fact from the old snapshot, so the only safe reading is that a reply is bound to the
+        // snapshot the model saw.
+        //
+        // The observations still persist — a fact is a fact, and the reducer re-merged it against
+        // the winner. Only the TEXT capability is withheld, and nothing is re-run to replace it:
+        // no second model call, no second Core decision, no generated stand-in. The V2 contract has
+        // always permitted PROCESSED with no `authorizedReply`, and the private ingress already
+        // treats the body's PRESENCE as the sole text gate.
+        authorizedReply = undefined;
+      }
     }
 
     // 5. The FINAL authoritative continuity — evolved and persisted when this turn observed

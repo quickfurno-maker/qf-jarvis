@@ -28,7 +28,10 @@ import {
 import type { RiyaConversationObservationBatchV1 } from '@qf-jarvis/riya-conversation-evolution';
 
 import { buildRiyaUserContent } from './internal/input-projection.js';
-import { riyaStructuredOutputSchema } from './internal/output-schema.js';
+import {
+  isModelProducibleObservation,
+  riyaStructuredOutputSchema,
+} from './internal/output-schema.js';
 
 /**
  * What the profile hands back through the generic M4 `profileDetail`.
@@ -45,14 +48,32 @@ export interface RiyaModelProfileDetailV1 {
 /**
  * Parse a generic `unknown` profile detail into the Riya shape, or `undefined`.
  *
- * Provided so a composition never blindly casts. The generic seam types the detail as `unknown`
- * precisely because M4 must not know what it is; the package that produced it owns the guard.
+ * This is the guard a composition uses INSTEAD of blindly casting the generic seam's `unknown`, so
+ * it has to be as strict as the schema that produced the value. A guard weaker than the thing it
+ * guards is not a guard: a detail arriving by any other route would slip past a rule the model
+ * itself could never have broken.
+ *
+ * Three checks, in order:
+ *
+ * 1. **Exactly** the two own keys `version` and `observationBatch`. An extra key means this did not
+ *    come from `projectStructuredResult`, and whatever else it carries has passed nothing.
+ * 2. Re-proof through RWC-P4A's own canonical constructor — a duplicate field, an out-of-bounds
+ *    value or an unknown key refuses the whole batch, exactly as it would for the reducer.
+ * 3. The MODEL-PRODUCER rule, shared with the output schema. P4A legitimately accepts five origins
+ *    because many producers may exist; a forged `user_confirmed` would otherwise arrive here
+ *    perfectly valid and then outrank a fact a person actually agreed to.
+ *
+ * Nothing about a rejected value is returned, thrown or otherwise surfaced.
  */
 export function parseRiyaModelProfileDetail(value: unknown): RiyaModelProfileDetailV1 | undefined {
-  if (typeof value !== 'object' || value === null) {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return undefined;
   }
-  const candidate = value as { version?: unknown; observationBatch?: unknown };
+  const keys = Object.keys(value).sort();
+  if (keys.length !== 2 || keys[0] !== 'observationBatch' || keys[1] !== 'version') {
+    return undefined;
+  }
+  const candidate = value as { readonly version?: unknown; readonly observationBatch?: unknown };
   if (candidate.version !== 1) {
     return undefined;
   }
@@ -62,12 +83,15 @@ export function parseRiyaModelProfileDetail(value: unknown): RiyaModelProfileDet
   }
   let canonical: RiyaConversationObservationBatchV1;
   try {
-    // Re-proved rather than trusted. A detail that reached here through anything other than this
-    // package's own projection must still be a batch the reducer would accept.
     canonical = createRiyaConversationObservationBatch(batch as RiyaConversationObservationBatchV1);
   } catch {
     return undefined;
   }
+  if (!canonical.observations.every((observation) => isModelProducibleObservation(observation))) {
+    return undefined;
+  }
+  // A FRESH frozen detail around the CANONICAL batch — never the caller's object, which may be a
+  // live reference somebody else still holds.
   return Object.freeze({ version: 1 as const, observationBatch: canonical });
 }
 
@@ -149,8 +173,10 @@ export function createRiyaConversationModelProfile(args: {
         // Projected verbatim. The M4 adapter re-proves it against the real `structuredReplySchema`,
         // so this profile cannot widen what counts as a reply.
         reply: Object.freeze({
+          // `REPLY` and a body, both required by the Riya schema: this path produces the one kind
+          // the authoritative Riya pipeline can actually carry as a draft.
           kind: answer.reply.kind,
-          ...(answer.reply.replyBody === undefined ? {} : { replyBody: answer.reply.replyBody }),
+          replyBody: answer.reply.replyBody,
           ...(answer.reply.reasonCode === undefined ? {} : { reasonCode: answer.reply.reasonCode }),
           citations: Object.freeze(answer.reply.citations.map((c) => Object.freeze({ ...c }))),
         }),

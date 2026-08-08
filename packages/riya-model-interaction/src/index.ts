@@ -33,6 +33,18 @@
  *
  * No gateway invoker, provider, database, HTTP, Core adapter, transcript, evidence quote, raw model
  * result, contact detail, consent, `canSubmit`, lead, vendor, package, price or payment.
+ *
+ * ### The public surface is THREE runtime values
+ *
+ * The task class a composition must bind, the profile factory it hands to M4, and the guard it uses
+ * instead of casting M4's generic `unknown` detail. That is everything a composition can do with
+ * this package.
+ *
+ * The bounds (`MAX_RIYA_USER_CONTENT_CHARS`, `MAX_RIYA_REPLY_BODY_CHARS`) and the producer
+ * vocabulary (`RIYA_MODEL_PROVENANCES`) are deliberately INTERNAL. They are policy this package
+ * enforces, not capabilities a caller invokes: nothing in production reads them, and exporting them
+ * for the convenience of tests would put three more values under change control for no consumer.
+ * Package-local specs import them relatively, which is what they are for.
  */
 
 export { RIYA_CONVERSATION_EVOLUTION_TASK_CLASS } from './contracts/task-class.js';
@@ -40,6 +52,3 @@ export type { RiyaConversationEvolutionTaskClass } from './contracts/task-class.
 
 export { createRiyaConversationModelProfile, parseRiyaModelProfileDetail } from './profile.js';
 export type { RiyaModelProfileDetailV1 } from './profile.js';
-
-export { MAX_RIYA_USER_CONTENT_CHARS } from './internal/input-projection.js';
-export { MAX_RIYA_REPLY_BODY_CHARS, RIYA_MODEL_PROVENANCES } from './internal/output-schema.js';

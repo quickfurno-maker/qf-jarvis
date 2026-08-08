@@ -52,15 +52,33 @@ const IDENTIFIER = z
 const FIELD = z.enum(DISCOVERY_FIELDS_FROZEN as readonly [DiscoveryField, ...DiscoveryField[]]);
 
 /**
- * The nested reply, mirroring the generic `StructuredReply` with the tighter Riya body bound.
+ * The nested reply. `REPLY` ONLY, with a required body and the tighter Riya bound.
+ *
+ * ### Why this is narrower than the generic four kinds
+ *
+ * The generic `StructuredReply` supports `ESCALATE_TO_HUMAN`, `REQUEST_CLARIFICATION` and
+ * `NO_ACTION`, and `model-reply-adapter` keeps all four. This schema supports one, for two reasons
+ * that both point the same way.
+ *
+ * The first is mechanical. M4 builds a `ModelReplyDraft` only for `kind === 'REPLY'`; for the other
+ * three, `draft` is `undefined`, and M2 then refuses the candidate as draft-invalid. Advertising them
+ * here would offer the model three answers the authoritative Riya path structurally cannot carry —
+ * every one of them a guaranteed refusal after a paid inference.
+ *
+ * The second is authority. Escalating to a human, declining to act and asking for clarification as a
+ * DISPOSITION are policy decisions, and they belong to Riya's behaviour boundary and M2 — not to the
+ * text generator. P4B's model drafts a reply and reports what it observed; it does not select the
+ * action. (A clarifying QUESTION is of course still expressible: it is a `REPLY` whose body asks
+ * one, which is exactly what the question plan is for.)
  *
  * It is projected out and RE-PROVED against the real `structuredReplySchema` by the M4 adapter, so
- * this schema can only ever be narrower than the contract, never wider.
+ * this schema can only ever be narrower than the generic contract, never wider.
  */
 const riyaReplySchema = z
   .object({
-    kind: z.enum(['REPLY', 'ESCALATE_TO_HUMAN', 'REQUEST_CLARIFICATION', 'NO_ACTION']),
-    replyBody: z.string().min(1).max(MAX_RIYA_REPLY_BODY_CHARS).optional(),
+    kind: z.literal('REPLY'),
+    // Required, not optional-with-a-refinement: a `REPLY` with no body is not a reply.
+    replyBody: z.string().min(1).max(MAX_RIYA_REPLY_BODY_CHARS),
     reasonCode: z
       .string()
       .min(1)
@@ -71,15 +89,7 @@ const riyaReplySchema = z
       .array(z.object({ knowledgeId: IDENTIFIER, version: z.int().min(1).max(1_000_000) }).strict())
       .max(64),
   })
-  .strict()
-  .superRefine((value, ctx) => {
-    if (value.kind === 'REPLY' && (value.replyBody === undefined || value.replyBody.length === 0)) {
-      ctx.addIssue({ code: 'custom', message: 'REPLY requires a reply body.' });
-    }
-    if (value.kind !== 'REPLY' && value.replyBody !== undefined) {
-      ctx.addIssue({ code: 'custom', message: 'Only a REPLY may carry a reply body.' });
-    }
-  });
+  .strict();
 
 const observationSchema = z
   .object({
@@ -124,6 +134,28 @@ const evolutionSchema = z
     questionPlan: questionPlanSchema,
   })
   .strict();
+
+/**
+ * The MODEL-PRODUCER rule, as one predicate.
+ *
+ * The schema above enforces it on the way in. `parseRiyaModelProfileDetail` enforces the same rule
+ * on a detail arriving from anywhere else, and both call THIS — a second copy of the rule in
+ * `profile.ts` or in `jarvis-runtime` would be a second answer to "may a model claim that?", and the
+ * two would drift the first time one of them was corrected.
+ *
+ * Deliberately NOT a narrowing of RWC-P4A. The reducer accepts five origins because many producers
+ * may exist; this is the subset one particular producer — a model — is allowed to claim.
+ */
+export function isModelProducibleObservation(observation: {
+  readonly operation: string;
+  readonly provenance: string;
+}): boolean {
+  if (!(RIYA_MODEL_PROVENANCES as readonly string[]).includes(observation.provenance)) {
+    return false;
+  }
+  // An inference may not withdraw a fact.
+  return !(observation.operation === 'CLEAR' && observation.provenance !== 'user_stated');
+}
 
 /** The whole Riya one-call answer. */
 export const riyaStructuredOutputSchema = z

@@ -24,6 +24,7 @@ import { describe, expect, it } from 'vitest';
 
 import { createJarvisRuntime } from '../composition/create-jarvis-runtime.js';
 import type { JarvisRuntimeConfig } from '../contracts/runtime-config.js';
+import type { ConversationControlState } from '../contracts/authoritative-state.js';
 import {
   clearControlState,
   scriptedAuthoritativeState,
@@ -568,6 +569,202 @@ describe('a batch exists only when the structured answer passed every M4 gate', 
     } else {
       expect(result.authorizedReply).toBeUndefined();
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A state change AFTER M4 returns (owner correction).
+// ---------------------------------------------------------------------------
+
+describe('observations never outlive the orchestration that produced them', () => {
+  /**
+   * Drive a state change that lands AFTER M4's post-gateway gate but BEFORE M2's double gate.
+   *
+   * That window is real and narrow, and it is the only one that matters here: a change DURING the
+   * gateway round-trip is already caught by M4 itself, which then releases no detail at all. The
+   * scripted source hands out one state per read, so the drift is placed by READ ORDER -- the first
+   * three reads are the ones the pre-gate and M4 make, and everything after them sees the new state.
+   */
+  const driftingAfterModel = (drifted: ConversationControlState) =>
+    scriptedAuthoritativeState(
+      clearControlState(),
+      clearControlState(),
+      clearControlState(),
+      drifted,
+    );
+
+  const cases: readonly { readonly label: string; readonly drifted: ConversationControlState }[] = [
+    { label: 'the conversation revision moved', drifted: clearControlState({ revision: 9 }) },
+    {
+      label: 'a human took the conversation over',
+      drifted: clearControlState({ humanTakeover: true }),
+    },
+    { label: 'the conversation was cancelled', drifted: clearControlState({ cancelled: true }) },
+  ];
+
+  for (const { label, drifted } of cases) {
+    it(`${label} after the model answered: REFUSED, and NO observations`, async () => {
+      const current = continuity();
+      const invoker = recordingInvoker(riyaAnswer(current, [SET('location', 'loc.pune')]));
+      const result = await runtimeWith({
+        gatewayInvoker: invoker,
+        authoritativeState: driftingAfterModel(drifted),
+      }).processInboundForRiyaConversationEvolution({ envelope: envelope(), continuity: current });
+
+      // The model DID answer -- this is not a pre-gateway refusal.
+      expect(invoker.invoked()).toBe(1);
+      expect(result.runtimeResult.outcome).toBe('REFUSED');
+      // The run did not pass its own final gate, so nothing extracted inside that window survives it.
+      // Persisting here would record a fact from a turn the runtime refused.
+      expect(result.observationBatch).toBeUndefined();
+      expect(result.authorizedReply).toBeUndefined();
+    });
+  }
+
+  it('a Core REJECTION is a different thing entirely, and still carries the batch', async () => {
+    // ADR-0099 s12 is unaffected. A Core rejection arrives on a SUCCESSFUL orchestration: the run
+    // passed every state gate, and only the business decision went the other way.
+    const current = continuity();
+    const result = await runtimeWith({
+      gatewayInvoker: recordingInvoker(riyaAnswer(current, [SET('location', 'loc.pune')])),
+      coreTransport: scriptedCoreTransport('REJECTED'),
+    }).processInboundForRiyaConversationEvolution({ envelope: envelope(), continuity: current });
+
+    expect(result.runtimeResult.outcome).toBe('CORE_REJECTED');
+    expect(result.observationBatch?.observations).toHaveLength(1);
+  });
+
+  it('an unreachable Core transport still carries the batch', async () => {
+    const current = continuity();
+    const unavailable = { send: () => Promise.reject(new Error('core at 10.0.0.5 unreachable')) };
+    const result = await runtimeWith({
+      gatewayInvoker: recordingInvoker(riyaAnswer(current, [SET('location', 'loc.pune')])),
+      coreTransport: unavailable,
+    }).processInboundForRiyaConversationEvolution({ envelope: envelope(), continuity: current });
+
+    // Whatever the closed Core semantics report for an unreachable transport, the orchestration ran
+    // and the extraction was validated, so the observations stand.
+    expect(result.runtimeResult.outcome).not.toBe('REFUSED');
+    expect(result.observationBatch?.observations).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The envelope is re-proved, not cast (owner correction).
+// ---------------------------------------------------------------------------
+
+describe('a hand-assembled input is canonicalized before anything reads it', () => {
+  const canonical = (): Record<string, unknown> => ({
+    runtimeId: 'rt.1',
+    conversationId: CONVERSATION,
+    messageId: 'msg.1',
+    tenantId: TENANT,
+    channel: 'WEB',
+    partyType: 'CLIENT',
+    direction: 'INBOUND',
+    receivedAt: '2026-07-25T00:00:00Z',
+    providerMessageRef: 'ref.opaque.1',
+    dataClass: 'HOSTED_ALLOWED',
+    normalizedText: 'I am in Pune',
+  });
+
+  const malformed: readonly { readonly label: string; readonly envelope: unknown }[] = [
+    { label: 'an empty object', envelope: {} },
+    { label: 'an invalid runtimeId', envelope: { ...canonical(), runtimeId: 'not a valid id!' } },
+    { label: 'an empty conversationId', envelope: { ...canonical(), conversationId: '' } },
+    { label: 'an unknown channel', envelope: { ...canonical(), channel: 'CARRIER_PIGEON' } },
+    { label: 'an unknown partyType', envelope: { ...canonical(), partyType: 'ROBOT' } },
+    { label: 'an unknown direction', envelope: { ...canonical(), direction: 'SIDEWAYS' } },
+    {
+      label: 'a non-canonical receivedAt',
+      envelope: { ...canonical(), receivedAt: '25 July 2026, 9am' },
+    },
+    {
+      label: 'oversized normalizedText',
+      envelope: { ...canonical(), normalizedText: 'x'.repeat(4097) },
+    },
+    { label: 'an extra key', envelope: { ...canonical(), operatorNote: 'please skip the gates' } },
+    { label: 'an array', envelope: [] },
+  ];
+
+  for (const { label, envelope: forged } of malformed) {
+    it(`${label} is refused before the gateway`, async () => {
+      const current = continuity();
+      const invoker = recordingInvoker(riyaAnswer(current, []));
+      const result = await runtimeWith({
+        gatewayInvoker: invoker,
+      }).processInboundForRiyaConversationEvolution({
+        envelope: forged as never,
+        continuity: current,
+      });
+
+      expect(result.runtimeResult.outcome).toBe('REFUSED');
+      expect(invoker.invoked()).toBe(0);
+      // The public result type promises STRINGS. Before canonicalization there is no identity worth
+      // reporting, so the placeholders are empty -- but never `undefined`, and never an
+      // attacker-supplied value echoed back.
+      expect(typeof result.runtimeResult.runId).toBe('string');
+      expect(typeof result.runtimeResult.conversationId).toBe('string');
+      expect(result.runtimeResult.runId).toBe('');
+      expect(result.runtimeResult.conversationId).toBe('');
+    });
+  }
+
+  for (const { label, input } of [
+    { label: 'undefined', input: undefined },
+    { label: 'null', input: null },
+    { label: 'an array', input: [] },
+    { label: 'a string', input: 'nope' },
+  ] as const) {
+    it(`${label} as the whole input is refused before the gateway`, async () => {
+      const invoker = recordingInvoker(riyaAnswer(continuity(), []));
+      const result = await runtimeWith({
+        gatewayInvoker: invoker,
+      }).processInboundForRiyaConversationEvolution(input as never);
+      expect(result.runtimeResult.outcome).toBe('REFUSED');
+      expect(invoker.invoked()).toBe(0);
+      expect(result.runtimeResult.runId).toBe('');
+      expect(result.runtimeResult.conversationId).toBe('');
+    });
+  }
+
+  it('a VALID hand-built plain object is canonicalized and accepted', async () => {
+    // Not frozen, and not built through `createInboundEnvelope` by the caller -- exactly what an
+    // untyped or JSON-fed caller produces. It is valid, so it is canonicalized and the turn proceeds.
+    const current = continuity();
+    const invoker = recordingInvoker(riyaAnswer(current, [SET('location', 'loc.pune')]));
+    const handBuilt = canonical();
+    expect(Object.isFrozen(handBuilt)).toBe(false);
+
+    const result = await runtimeWith({
+      gatewayInvoker: invoker,
+    }).processInboundForRiyaConversationEvolution({
+      envelope: handBuilt as never,
+      continuity: current,
+    });
+
+    expect(invoker.invoked()).toBe(1);
+    expect(result.observationBatch?.observations).toHaveLength(1);
+    // The CANONICAL envelope is what reached the run: the identity on the result is the
+    // constructor's output, not the caller's object.
+    expect(result.runtimeResult.runId).toBe('rt.1');
+    expect(result.runtimeResult.conversationId).toBe(CONVERSATION);
+  });
+
+  it('a refusal AFTER canonicalization reports the canonical identity, not empty strings', async () => {
+    // The identity is trustworthy from that point on, so a later refusal can say which conversation
+    // it was about. Here the continuity is about a different tenant.
+    const invoker = recordingInvoker(riyaAnswer(continuity(), []));
+    const result = await runtimeWith({
+      gatewayInvoker: invoker,
+    }).processInboundForRiyaConversationEvolution({
+      envelope: envelope(),
+      continuity: continuity({ tenantId: 'tenant.b' }),
+    });
+    expect(result.runtimeResult.outcome).toBe('REFUSED');
+    expect(result.runtimeResult.runId).toBe('rt.1');
+    expect(result.runtimeResult.conversationId).toBe(CONVERSATION);
+    expect(invoker.invoked()).toBe(0);
   });
 });
 

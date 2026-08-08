@@ -240,28 +240,26 @@ describe('it stays a leaf', () => {
     expect(code).not.toMatch(/@qf-jarvis\/[a-z-]+\/(src|dist|internal)\//u);
   });
 
-  it('exposes exactly the six values it means to', () => {
-    // The schemas, the field map and the input projection are internal. Exporting the output schema
-    // would invite a second producer to satisfy it without ever reaching the agreement check.
-    //
-    // `RIYA_MODEL_PROVENANCES` IS public, and deliberately: the narrowed model vocabulary is one of
-    // this package's headline rules, and a composition that wants to assert it should be able to
-    // read the same list the schema enforces rather than restate it.
+  it('exposes exactly the three runtime values a composition can use', () => {
+    // The task class to bind, the profile to hand M4, and the guard to use instead of casting M4's
+    // generic `unknown` detail. Nothing else: the schemas, the field map, the input projection, the
+    // two bounds and the producer vocabulary are all POLICY this package enforces rather than
+    // capabilities a caller invokes, and exporting them for the convenience of tests would put three
+    // more values under change control with no production consumer.
     expect(Object.keys(barrel).sort()).toStrictEqual([
-      'MAX_RIYA_REPLY_BODY_CHARS',
-      'MAX_RIYA_USER_CONTENT_CHARS',
       'RIYA_CONVERSATION_EVOLUTION_TASK_CLASS',
-      'RIYA_MODEL_PROVENANCES',
       'createRiyaConversationModelProfile',
       'parseRiyaModelProfileDetail',
     ]);
-    // And it is exactly the two a MODEL may claim -- never the five the reducer accepts.
-    expect([...(barrel.RIYA_MODEL_PROVENANCES as readonly string[])]).toStrictEqual([
-      'user_stated',
-      'model_inferred',
-    ]);
     const b = barrel as Record<string, unknown>;
-    for (const internal of ['riyaStructuredOutputSchema', 'buildRiyaUserContent']) {
+    for (const internal of [
+      'riyaStructuredOutputSchema',
+      'buildRiyaUserContent',
+      'isModelProducibleObservation',
+      'RIYA_MODEL_PROVENANCES',
+      'MAX_RIYA_USER_CONTENT_CHARS',
+      'MAX_RIYA_REPLY_BODY_CHARS',
+    ]) {
       expect(b[internal], internal).toBeUndefined();
     }
   });

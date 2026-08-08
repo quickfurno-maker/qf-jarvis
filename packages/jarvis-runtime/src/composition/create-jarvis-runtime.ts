@@ -28,7 +28,8 @@
  * proof of identity — a future operator API must authenticate and authorize before calling in.
  * QuickFurno Core remains the only business authority; model output is a draft only.
  */
-import type { InboundEnvelope } from '@qf-jarvis/agent-runtime';
+import { createInboundEnvelope } from '@qf-jarvis/agent-runtime';
+import type { InboundEnvelope, InboundEnvelopeInput } from '@qf-jarvis/agent-runtime';
 import { createRiyaConversationModelProfile } from '@qf-jarvis/riya-model-interaction';
 import {
   RIYA_CONVERSATION_EVOLUTION_TASK_CLASS,
@@ -183,12 +184,36 @@ export function createJarvisRuntime(
       if (
         typeof envelopeValue !== 'object' ||
         envelopeValue === null ||
+        Array.isArray(envelopeValue) ||
         typeof continuityValue !== 'object' ||
         continuityValue === null
       ) {
         return refused();
       }
-      const envelope = envelopeValue as InboundEnvelope;
+
+      /**
+       * Re-prove the ENVELOPE through its own canonical constructor, exactly as the continuity is
+       * re-proved below.
+       *
+       * The other two inbound methods receive an envelope a caller already built through this same
+       * constructor. This one is reached with a hand-assembled input object, so "it is a non-null
+       * object" is not enough: `{ envelope: {} }` would otherwise be cast to `InboundEnvelope`, and
+       * every field read off it — including the `runId` and `conversationId` this method's own
+       * refusal reports as strings — would be `undefined` at runtime.
+       *
+       * `createInboundEnvelope`'s schema is `.strict()`, so an extra key, a malformed identifier, an
+       * unknown channel/party/direction, a non-canonical instant and oversized text are all refused
+       * HERE, before the gateway. The schema is not restated and no regex is copied.
+       */
+      let envelope: InboundEnvelope;
+      try {
+        envelope = createInboundEnvelope(envelopeValue as InboundEnvelopeInput);
+      } catch {
+        // Nothing from the malformed value is echoed back. Until canonicalization succeeds there is
+        // no identity worth reporting, so the refusal carries the content-free empty placeholders —
+        // which are still STRINGS, as the public result type promises.
+        return refused();
+      }
       const continuity = continuityValue as RiyaConversationContinuityStateV1;
 
       // Re-prove the continuity through its OWN canonical constructor. A hand-assembled state, or a
