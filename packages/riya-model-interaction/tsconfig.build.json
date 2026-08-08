@@ -19,6 +19,10 @@
   // application.
   "references": [
     { "path": "../model-reply-adapter/tsconfig.build.json" },
+    // RWC-P5 (ADR-0100): the Core-owned availability READ contract. A type-and-parser
+    // dependency only -- that package reaches nothing, and this one still invokes nothing. It is
+    // what lets the profile refuse a ref Core does not list without Jarvis holding a catalogue.
+    { "path": "../core-service-availability-read/tsconfig.build.json" },
     { "path": "../riya-agent/tsconfig.build.json" },
     { "path": "../riya-conversation-continuity/tsconfig.build.json" },
     { "path": "../riya-conversation-evolution/tsconfig.build.json" }

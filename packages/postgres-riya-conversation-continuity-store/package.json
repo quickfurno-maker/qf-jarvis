@@ -22,6 +22,7 @@
     "pg": "8.22.0"
   },
   "devDependencies": {
+    "@qf-jarvis/core-service-availability-read": "workspace:*",
     "@qf-jarvis/event-backbone": "workspace:*",
     "@qf-jarvis/jarvis-runtime": "workspace:*",
     "@qf-jarvis/riya-agent": "workspace:*",

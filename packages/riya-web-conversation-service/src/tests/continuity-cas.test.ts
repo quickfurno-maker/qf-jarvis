@@ -21,6 +21,7 @@ import type { RiyaConversationContinuityStateV1 } from '@qf-jarvis/riya-conversa
 import { evolveRiyaConversation } from '@qf-jarvis/riya-conversation-evolution';
 import type { RiyaDiscoveryObservationV1 } from '@qf-jarvis/riya-conversation-evolution';
 import type { JarvisRuntimeOutcome } from '@qf-jarvis/jarvis-runtime';
+import { scriptedAvailabilityReader } from '@qf-jarvis/core-service-availability-read/testing';
 import { describe, expect, it } from 'vitest';
 
 import { createRiyaWebConversationService, RiyaWebConversationError } from '../index.js';
@@ -186,6 +187,9 @@ function harness(
     svc: createRiyaWebConversationService({
       runtime,
       continuityStore: store,
+      // RWC-P5: the authority reader is REQUIRED. A deterministic synthetic snapshot keeps
+      // every pre-P5 spec meaning exactly what it meant before.
+      availabilityReader: scriptedAvailabilityReader(),
       runtimeId: RUNTIME_ID,
     }),
   };
@@ -819,6 +823,9 @@ describe('M. exactly one runtime call per turn', () => {
       createRiyaWebConversationService({
         runtime: stripped as never,
         continuityStore: new ScriptedContinuityStore(),
+        // RWC-P5: the authority reader is REQUIRED. A deterministic synthetic snapshot keeps
+        // every pre-P5 spec meaning exactly what it meant before.
+        availabilityReader: scriptedAvailabilityReader(),
         runtimeId: RUNTIME_ID,
       }),
     ).toThrow(RiyaWebConversationError);

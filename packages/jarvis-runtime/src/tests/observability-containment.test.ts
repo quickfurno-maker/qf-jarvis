@@ -219,6 +219,10 @@ describe('public API lock', () => {
       // QFJ-P08-A (ADR-0075): the pure control reducer behind the operator surface. EXACT set match.
       '@qf-jarvis/conversation-control',
       '@qf-jarvis/core-decision-adapter',
+      // RWC-P5 (ADR-0100): the Core-owned availability READ CONTRACT, for the parser this root
+      // re-proves its Riya-aware input against. A contract dependency only -- the composition
+      // performs NO Core read, and that package reaches nothing itself. EXACT set match.
+      '@qf-jarvis/core-service-availability-read',
       '@qf-jarvis/model-reply-adapter',
       // QFJ-S3-I-B (ADR-0073): the injected prompt registry. Still an EXACT set match.
       '@qf-jarvis/prompt-registry',

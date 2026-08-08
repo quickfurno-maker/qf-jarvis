@@ -394,6 +394,14 @@ describe('(133-148) the declared budget and every prior lock', () => {
       'control-plane-read-contract',
       'conversation-control',
       'core-decision-adapter',
+      // RWC-P5 (ADR-0100): the Core-owned service availability READ contract -- which cities
+      // QuickFurno Core operates in, which services it sells, and which service is available in
+      // which city, as an explicit PAIR property. Still an EXACT set match; it records an authorised
+      // addition, it does not relax the assertion. It is a CONTRACT with no implementation: no HTTP,
+      // fetch, URL, credential, environment read, database, cache, clock or model, and no live
+      // QuickFurno adapter -- the final integration handshake supplies that. It knows nothing about
+      // Riya, holds no city or service literal, and has no default or fallback of any kind.
+      'core-service-availability-read',
       'event-backbone',
       'event-ingestion',
       // QFJ-P09.02 (ADR-0090): the test-only Core -> n8n execution DISPATCH boundary. It holds no
@@ -469,6 +477,57 @@ describe('(133-148) the declared budget and every prior lock', () => {
     // It is a POWERLESS read surface: it reaches no database, no provider, no n8n and no Core,
     // and its own suite scans its source to prove it.
     expect(dirs('apps')).toEqual(['api', 'jarvis-os', 'worker']);
+  });
+
+  it('(RWC-P5) no production source anywhere invents a city or a service', () => {
+    // The rule that makes the whole slice mean something. QuickFurno Core owns the catalogue, so a
+    // place name or a service name appearing in production source is Jarvis starting to own a fact
+    // that is not its own -- and the first thing such a constant becomes is a fallback.
+    //
+    // Fixtures and specs are excluded: a spec must name a synthetic city to have anything to test.
+    const offenders: string[] = [];
+    for (const root of ['packages', 'apps']) {
+      const base = join(REPO_ROOT, root);
+      for (const entry of readdirSync(base)) {
+        const src = join(base, entry, 'src');
+        let files: string[];
+        try {
+          files = walk(src);
+        } catch {
+          continue;
+        }
+        for (const file of files) {
+          const normalised = normalise(file);
+          if (
+            normalised.includes('/tests/') ||
+            normalised.includes('/testing/') ||
+            normalised.includes('/fixtures') ||
+            normalised.includes('/testing.ts')
+          ) {
+            continue;
+          }
+          // Comments stripped, as every scanner in this file does. A doc comment that says a
+          // taxonomy label looks like "Pune" is documentation, not a constant Jarvis relies on --
+          // and forcing the contracts package to stop illustrating its own primitives would make the
+          // rule cost more than it buys. What is forbidden is a NAME IN CODE.
+          const text = codeOnly(readFileSync(file, 'utf8')).toLowerCase();
+          for (const forbidden of [
+            'pune',
+            'mumbai',
+            'bengaluru',
+            'nashik',
+            'defaultcity',
+            'fallbackcity',
+            'assumeavailable',
+          ]) {
+            if (text.includes(forbidden)) {
+              offenders.push(`${normalised}: ${forbidden}`);
+            }
+          }
+        }
+      }
+    }
+    expect(offenders).toStrictEqual([]);
   });
 
   it('(141-148) every prior package-root runtime API lock still holds', async () => {

@@ -30,6 +30,8 @@
  */
 import { createInboundEnvelope } from '@qf-jarvis/agent-runtime';
 import type { InboundEnvelope, InboundEnvelopeInput } from '@qf-jarvis/agent-runtime';
+import { parseCoreServiceAvailabilitySnapshotV1 } from '@qf-jarvis/core-service-availability-read';
+import type { CoreServiceAvailabilitySnapshotV1 } from '@qf-jarvis/core-service-availability-read';
 import { createRiyaConversationModelProfile } from '@qf-jarvis/riya-model-interaction';
 import {
   RIYA_CONVERSATION_EVOLUTION_TASK_CLASS,
@@ -113,9 +115,10 @@ export interface RiyaConversationEvolutionJarvisRuntime extends CoreAuthorizedRe
    * Process one inbound Riya turn and additionally return the observations the SAME model call
    * produced.
    *
-   * Fails closed before the gateway on a non-canonical continuity, a tenant/conversation mismatch
-   * against the envelope, a phase RWC-P4A does not own, or a missing/unevaluated dedicated
-   * evolution prompt binding. Nothing is sent, persisted or authorized here.
+   * Fails closed before the gateway on a non-canonical envelope, a non-canonical continuity, a
+   * non-canonical Core availability snapshot, a tenant/conversation mismatch against the envelope, a
+   * phase RWC-P4A does not own, or a missing/unevaluated dedicated evolution prompt binding. Nothing
+   * is read from Core, sent, persisted or authorized here.
    */
   processInboundForRiyaConversationEvolution(
     input: JarvisRiyaConversationEvolutionInput,
@@ -178,6 +181,7 @@ export function createJarvisRuntime(
       const candidate = supplied as {
         readonly envelope?: unknown;
         readonly continuity?: unknown;
+        readonly availabilitySnapshot?: unknown;
       };
       const envelopeValue = candidate.envelope;
       const continuityValue = candidate.continuity;
@@ -215,6 +219,26 @@ export function createJarvisRuntime(
         return refused();
       }
       const continuity = continuityValue as RiyaConversationContinuityStateV1;
+
+      /**
+       * Re-prove the Core AVAILABILITY SNAPSHOT, exactly as the envelope and the continuity are.
+       *
+       * This value crossed a boundary from a system this repository does not compile, through a port
+       * with no implementation here. Its declared type is a claim about a shape, not evidence of one,
+       * and the whole point of the slice is that Riya may only name refs Core actually listed --
+       * which is worth nothing if the list itself was never proved.
+       *
+       * The parser owns duplicate refusal, reference integrity, canonical ordering, the size bound
+       * and the freeze. Nothing is restated here.
+       */
+      let availabilitySnapshot: CoreServiceAvailabilitySnapshotV1;
+      try {
+        availabilitySnapshot = parseCoreServiceAvailabilitySnapshotV1(
+          candidate.availabilitySnapshot,
+        );
+      } catch {
+        return refused(envelope.runtimeId, envelope.conversationId);
+      }
 
       // Re-prove the continuity through its OWN canonical constructor. A hand-assembled state, or a
       // half-applied row a store returned, must not become the context one model call reasons from.
@@ -289,7 +313,7 @@ export function createJarvisRuntime(
       }
 
       const run = await composeAndProcessInternal(config, envelope, {
-        profile: createRiyaConversationModelProfile({ current }),
+        profile: createRiyaConversationModelProfile({ current, availabilitySnapshot }),
         promptBinding: binding,
         taskClass: RIYA_CONVERSATION_EVOLUTION_TASK_CLASS,
       });

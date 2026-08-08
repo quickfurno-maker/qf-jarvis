@@ -17,6 +17,8 @@ import { createPromptDefinition, createPromptRegistry } from '@qf-jarvis/prompt-
 import type { ModelGatewayInvocation, ModelGatewayInvoker } from '@qf-jarvis/model-reply-adapter';
 import { scriptedCoreTransport } from '@qf-jarvis/core-decision-adapter/testing';
 import { RIYA_CONVERSATION_EVOLUTION_TASK_CLASS } from '@qf-jarvis/riya-model-interaction';
+import { syntheticAvailabilitySnapshot } from '@qf-jarvis/core-service-availability-read/testing';
+import type { CoreServiceAvailabilitySnapshotV1 } from '@qf-jarvis/core-service-availability-read';
 import { createRiyaConversationContinuityState } from '@qf-jarvis/riya-conversation-continuity';
 import type { RiyaConversationContinuityStateV1 } from '@qf-jarvis/riya-conversation-continuity';
 import { evolveRiyaConversation } from '@qf-jarvis/riya-conversation-evolution';
@@ -46,6 +48,28 @@ type ModelResponse = Extract<ModelGatewayInvocation, { readonly ok: true }>['res
 
 const TENANT = 'tenant.a';
 const CONVERSATION = 'conv.1';
+
+/**
+ * The Core authority this suite reasons against (RWC-P5).
+ *
+ * Supplied by the caller, never read by the runtime: the service that owns the outbound call owns
+ * the read, exactly as the service that owns the store owns the continuity. Every ref these specs
+ * emit exists here, because a ref Core does not list is refused before it can mean anything.
+ */
+const SNAPSHOT: CoreServiceAvailabilitySnapshotV1 = syntheticAvailabilitySnapshot({
+  cities: [
+    { ref: 'loc.pune', displayName: 'Pune' },
+    { ref: 'loc.mumbai', displayName: 'Mumbai' },
+  ],
+  services: [
+    { ref: 'modular-kitchen', displayName: 'Modular Kitchen' },
+    { ref: 'wardrobe', displayName: 'Wardrobe' },
+  ],
+  availability: [
+    { serviceRef: 'modular-kitchen', cityRefs: 'ALL' },
+    { serviceRef: 'wardrobe', cityRefs: ['loc.pune'] },
+  ],
+});
 
 /**
  * The DEDICATED evolution prompt: same CLIENT scope, different task class.
@@ -281,6 +305,7 @@ describe('it fails closed before the gateway, as a REFUSED run', () => {
       await runtime.processInboundForRiyaConversationEvolution({
         envelope: envelope(),
         continuity: forged,
+        availabilitySnapshot: SNAPSHOT,
       }),
     );
     expect(invoker.invoked()).toBe(0);
@@ -292,6 +317,7 @@ describe('it fails closed before the gateway, as a REFUSED run', () => {
       await runtimeWith({ gatewayInvoker: invoker }).processInboundForRiyaConversationEvolution({
         envelope: envelope(),
         continuity: continuity({ tenantId: 'tenant.b' }),
+        availabilitySnapshot: SNAPSHOT,
       }),
     );
     expect(invoker.invoked()).toBe(0);
@@ -303,6 +329,7 @@ describe('it fails closed before the gateway, as a REFUSED run', () => {
       await runtimeWith({ gatewayInvoker: invoker }).processInboundForRiyaConversationEvolution({
         envelope: envelope(),
         continuity: continuity({ conversationId: 'conv.other' }),
+        availabilitySnapshot: SNAPSHOT,
       }),
     );
     expect(invoker.invoked()).toBe(0);
@@ -340,6 +367,7 @@ describe('it fails closed before the gateway, as a REFUSED run', () => {
         await runtimeWith({ gatewayInvoker: invoker }).processInboundForRiyaConversationEvolution({
           envelope: envelope(),
           continuity: beyond,
+          availabilitySnapshot: SNAPSHOT,
         }),
       );
       expect(invoker.invoked()).toBe(0);
@@ -358,6 +386,7 @@ describe('it fails closed before the gateway, as a REFUSED run', () => {
       await runtime.processInboundForRiyaConversationEvolution({
         envelope: envelope(),
         continuity: continuity(),
+        availabilitySnapshot: SNAPSHOT,
       }),
     );
     // There is deliberately NO fallback to the ordinary CLIENT reply prompt, even though it is
@@ -381,6 +410,7 @@ describe('it fails closed before the gateway, as a REFUSED run', () => {
         }).processInboundForRiyaConversationEvolution({
           envelope: envelope(),
           continuity: continuity(),
+          availabilitySnapshot: SNAPSHOT,
         }),
       );
       expect(invoker.invoked()).toBe(0);
@@ -401,6 +431,7 @@ describe('one call, one model invocation, one Core decision', () => {
     await runtimeWith({ gatewayInvoker: invoker }).processInboundForRiyaConversationEvolution({
       envelope: envelope(),
       continuity: current,
+      availabilitySnapshot: SNAPSHOT,
     });
     expect(invoker.request()?.promptId).toBe('riya.conversation.evolution');
     expect(invoker.request()?.promptDigest).toBe(EVOLUTION_PROMPT.contentDigest);
@@ -417,6 +448,7 @@ describe('one call, one model invocation, one Core decision', () => {
     await runtimeWith({ gatewayInvoker: invoker }).processInboundForRiyaConversationEvolution({
       envelope: envelope(),
       continuity: current,
+      availabilitySnapshot: SNAPSHOT,
     });
     const messages = invoker.request()?.messages ?? [];
     expect(messages).toHaveLength(2);
@@ -440,7 +472,11 @@ describe('one call, one model invocation, one Core decision', () => {
     await runtimeWith({
       gatewayInvoker: invoker,
       coreTransport: core,
-    }).processInboundForRiyaConversationEvolution({ envelope: envelope(), continuity: current });
+    }).processInboundForRiyaConversationEvolution({
+      envelope: envelope(),
+      continuity: current,
+      availabilitySnapshot: SNAPSHOT,
+    });
     // The whole design collapses if this is ever 2: a separate extraction call would double the
     // cost, double the latency, and could disagree with the reply about the same sentence.
     expect(invoker.invoked()).toBe(1);
@@ -454,7 +490,11 @@ describe('one call, one model invocation, one Core decision', () => {
     );
     const result = await runtimeWith({
       gatewayInvoker: invoker,
-    }).processInboundForRiyaConversationEvolution({ envelope: envelope(), continuity: current });
+    }).processInboundForRiyaConversationEvolution({
+      envelope: envelope(),
+      continuity: current,
+      availabilitySnapshot: SNAPSHOT,
+    });
 
     expect(Object.keys(result).sort()).toStrictEqual([
       'authorizedReply',
@@ -497,7 +537,11 @@ describe('a batch exists only when the structured answer passed every M4 gate', 
     const { gatewayInvoker: _none, ...withoutInvoker } = base;
     const result = await createJarvisRuntime(
       withoutInvoker,
-    ).processInboundForRiyaConversationEvolution({ envelope: envelope(), continuity: current });
+    ).processInboundForRiyaConversationEvolution({
+      envelope: envelope(),
+      continuity: current,
+      availabilitySnapshot: SNAPSHOT,
+    });
     expect(result.observationBatch).toBeUndefined();
     expect(result.runtimeResult.modelDrafted).toBe(false);
   });
@@ -506,7 +550,11 @@ describe('a batch exists only when the structured answer passed every M4 gate', 
     const current = continuity();
     const result = await runtimeWith({
       gatewayInvoker: recordingInvoker({ nope: true }),
-    }).processInboundForRiyaConversationEvolution({ envelope: envelope(), continuity: current });
+    }).processInboundForRiyaConversationEvolution({
+      envelope: envelope(),
+      continuity: current,
+      availabilitySnapshot: SNAPSHOT,
+    });
     expect(result.observationBatch).toBeUndefined();
   });
 
@@ -524,7 +572,11 @@ describe('a batch exists only when the structured answer passed every M4 gate', 
     };
     const result = await runtimeWith({
       gatewayInvoker: recordingInvoker(wrong),
-    }).processInboundForRiyaConversationEvolution({ envelope: envelope(), continuity: current });
+    }).processInboundForRiyaConversationEvolution({
+      envelope: envelope(),
+      continuity: current,
+      availabilitySnapshot: SNAPSHOT,
+    });
     // A disagreement refuses the WHOLE answer rather than keeping the half it liked.
     expect(result.observationBatch).toBeUndefined();
   });
@@ -540,7 +592,11 @@ describe('a batch exists only when the structured answer passed every M4 gate', 
     };
     const result = await runtimeWith({
       gatewayInvoker: recordingInvoker(forgedCitation),
-    }).processInboundForRiyaConversationEvolution({ envelope: envelope(), continuity: current });
+    }).processInboundForRiyaConversationEvolution({
+      envelope: envelope(),
+      continuity: current,
+      availabilitySnapshot: SNAPSHOT,
+    });
     expect(result.observationBatch).toBeUndefined();
   });
 
@@ -549,7 +605,11 @@ describe('a batch exists only when the structured answer passed every M4 gate', 
     const result = await runtimeWith({
       gatewayInvoker: recordingInvoker(riyaAnswer(current, [SET('location', 'loc.pune')])),
       coreTransport: scriptedCoreTransport('REJECTED'),
-    }).processInboundForRiyaConversationEvolution({ envelope: envelope(), continuity: current });
+    }).processInboundForRiyaConversationEvolution({
+      envelope: envelope(),
+      continuity: current,
+      availabilitySnapshot: SNAPSHOT,
+    });
 
     expect(result.runtimeResult.outcome).toBe('CORE_REJECTED');
     // Core declining to send a reply does not unsay the sentence the client typed.
@@ -562,7 +622,11 @@ describe('a batch exists only when the structured answer passed every M4 gate', 
     const current = continuity();
     const result = await runtimeWith({
       gatewayInvoker: recordingInvoker(riyaAnswer(current, [SET('location', 'loc.pune')])),
-    }).processInboundForRiyaConversationEvolution({ envelope: envelope(), continuity: current });
+    }).processInboundForRiyaConversationEvolution({
+      envelope: envelope(),
+      continuity: current,
+      availabilitySnapshot: SNAPSHOT,
+    });
     if (result.runtimeResult.outcome === 'CORE_ACCEPTED') {
       expect(result.authorizedReply?.proposalId).toBe(result.runtimeResult.proposalId);
       expect(result.authorizedReply?.boundRevision).toBe(result.runtimeResult.boundRevision);
@@ -609,7 +673,11 @@ describe('observations never outlive the orchestration that produced them', () =
       const result = await runtimeWith({
         gatewayInvoker: invoker,
         authoritativeState: driftingAfterModel(drifted),
-      }).processInboundForRiyaConversationEvolution({ envelope: envelope(), continuity: current });
+      }).processInboundForRiyaConversationEvolution({
+        envelope: envelope(),
+        continuity: current,
+        availabilitySnapshot: SNAPSHOT,
+      });
 
       // The model DID answer -- this is not a pre-gateway refusal.
       expect(invoker.invoked()).toBe(1);
@@ -628,7 +696,11 @@ describe('observations never outlive the orchestration that produced them', () =
     const result = await runtimeWith({
       gatewayInvoker: recordingInvoker(riyaAnswer(current, [SET('location', 'loc.pune')])),
       coreTransport: scriptedCoreTransport('REJECTED'),
-    }).processInboundForRiyaConversationEvolution({ envelope: envelope(), continuity: current });
+    }).processInboundForRiyaConversationEvolution({
+      envelope: envelope(),
+      continuity: current,
+      availabilitySnapshot: SNAPSHOT,
+    });
 
     expect(result.runtimeResult.outcome).toBe('CORE_REJECTED');
     expect(result.observationBatch?.observations).toHaveLength(1);
@@ -640,7 +712,11 @@ describe('observations never outlive the orchestration that produced them', () =
     const result = await runtimeWith({
       gatewayInvoker: recordingInvoker(riyaAnswer(current, [SET('location', 'loc.pune')])),
       coreTransport: unavailable,
-    }).processInboundForRiyaConversationEvolution({ envelope: envelope(), continuity: current });
+    }).processInboundForRiyaConversationEvolution({
+      envelope: envelope(),
+      continuity: current,
+      availabilitySnapshot: SNAPSHOT,
+    });
 
     // Whatever the closed Core semantics report for an unreachable transport, the orchestration ran
     // and the extraction was validated, so the observations stand.
@@ -696,6 +772,7 @@ describe('a hand-assembled input is canonicalized before anything reads it', () 
       }).processInboundForRiyaConversationEvolution({
         envelope: forged as never,
         continuity: current,
+        availabilitySnapshot: SNAPSHOT,
       });
 
       expect(result.runtimeResult.outcome).toBe('REFUSED');
@@ -741,6 +818,7 @@ describe('a hand-assembled input is canonicalized before anything reads it', () 
     }).processInboundForRiyaConversationEvolution({
       envelope: handBuilt as never,
       continuity: current,
+      availabilitySnapshot: SNAPSHOT,
     });
 
     expect(invoker.invoked()).toBe(1);
@@ -760,6 +838,7 @@ describe('a hand-assembled input is canonicalized before anything reads it', () 
     }).processInboundForRiyaConversationEvolution({
       envelope: envelope(),
       continuity: continuity({ tenantId: 'tenant.b' }),
+      availabilitySnapshot: SNAPSHOT,
     });
     expect(result.runtimeResult.outcome).toBe('REFUSED');
     expect(result.runtimeResult.runId).toBe('rt.1');
@@ -797,6 +876,7 @@ describe('two concurrent runs cannot see one another observations', () => {
           normalizedText: 'kitchen please',
         }),
         continuity: a,
+        availabilitySnapshot: SNAPSHOT,
       }),
       runtimeB.processInboundForRiyaConversationEvolution({
         envelope: syntheticInboundEnvelope({
@@ -805,6 +885,7 @@ describe('two concurrent runs cannot see one another observations', () => {
           normalizedText: 'I am in Pune',
         }),
         continuity: b,
+        availabilitySnapshot: SNAPSHOT,
       }),
     ]);
 
@@ -831,10 +912,12 @@ describe('two concurrent runs cannot see one another observations', () => {
     const first = await runtime.processInboundForRiyaConversationEvolution({
       envelope: envelope(),
       continuity: a,
+      availabilitySnapshot: SNAPSHOT,
     });
     const second = await runtime.processInboundForRiyaConversationEvolution({
       envelope: envelope(),
       continuity: a,
+      availabilitySnapshot: SNAPSHOT,
     });
     expect(first.observationBatch?.observations).toHaveLength(1);
     expect(second.observationBatch?.observations).toHaveLength(0);

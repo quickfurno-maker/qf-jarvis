@@ -14,6 +14,8 @@
  *    answer can be checked against what the reducer independently decides; a disagreement refuses the
  *    whole answer rather than trusting either side.
  */
+import { syntheticAvailabilitySnapshot } from '@qf-jarvis/core-service-availability-read/testing';
+import type { CoreServiceAvailabilitySnapshotV1 } from '@qf-jarvis/core-service-availability-read';
 import { createRiyaConversationContinuityState } from '@qf-jarvis/riya-conversation-continuity';
 import type { RiyaConversationContinuityStateV1 } from '@qf-jarvis/riya-conversation-continuity';
 import { evolveRiyaConversation } from '@qf-jarvis/riya-conversation-evolution';
@@ -33,6 +35,30 @@ import { MAX_RIYA_REPLY_BODY_CHARS } from '../internal/output-schema.js';
 
 const TENANT = 'tenant.a';
 const CONVERSATION = 'conv.1';
+
+/**
+ * The Core authority every spec in this file reasons against (RWC-P5).
+ *
+ * Two services and two cities, with ONE deliberately restricted pair: `modular-kitchen` is sold
+ * everywhere, `wardrobe` only in `loc.pune`. That single restriction is what makes
+ * `wardrobe` + `loc.mumbai` the canonical unavailable pair, and it is why the refs used throughout
+ * this file are the ones below rather than arbitrary strings — every ref a spec emits must exist in
+ * Core's snapshot, which is the whole point of the slice.
+ */
+const SNAPSHOT: CoreServiceAvailabilitySnapshotV1 = syntheticAvailabilitySnapshot({
+  cities: [
+    { ref: 'loc.pune', displayName: 'Pune' },
+    { ref: 'loc.mumbai', displayName: 'Mumbai' },
+  ],
+  services: [
+    { ref: 'modular-kitchen', displayName: 'Modular Kitchen' },
+    { ref: 'wardrobe', displayName: 'Wardrobe' },
+  ],
+  availability: [
+    { serviceRef: 'modular-kitchen', cityRefs: 'ALL' },
+    { serviceRef: 'wardrobe', cityRefs: ['loc.pune'] },
+  ],
+});
 
 function state(
   over: Partial<Parameters<typeof createRiyaConversationContinuityState>[0]> = {},
@@ -72,8 +98,10 @@ function after(
   }).state;
 }
 
-const profileFor = (current: RiyaConversationContinuityStateV1) =>
-  createRiyaConversationModelProfile({ current });
+const profileFor = (
+  current: RiyaConversationContinuityStateV1,
+  availabilitySnapshot: CoreServiceAvailabilitySnapshotV1 = SNAPSHOT,
+) => createRiyaConversationModelProfile({ current, availabilitySnapshot });
 
 const userContent = (
   current: RiyaConversationContinuityStateV1,
@@ -358,7 +386,10 @@ describe('what the model is allowed to say', () => {
     const known = after([{ field: 'budget', value: 'around 8 lakh' }]);
     const base = answerFor(known, []) as { evolution: Record<string, unknown> };
     expect(
-      createRiyaConversationModelProfile({ current: known }).projectStructuredResult({
+      createRiyaConversationModelProfile({
+        current: known,
+        availabilitySnapshot: SNAPSHOT,
+      }).projectStructuredResult({
         ...base,
         evolution: {
           ...base.evolution,
@@ -373,7 +404,10 @@ describe('what the model is allowed to say', () => {
     const observations = [{ field: 'budget', operation: 'CLEAR', provenance: 'user_stated' }];
     const answer = answerFor(known, observations);
     expect(
-      createRiyaConversationModelProfile({ current: known }).projectStructuredResult(answer),
+      createRiyaConversationModelProfile({
+        current: known,
+        availabilitySnapshot: SNAPSHOT,
+      }).projectStructuredResult(answer),
     ).toBeDefined();
   });
 
@@ -471,7 +505,10 @@ describe('the reducer decides; the model only claims', () => {
     // `['budget','timeline']` and `['timeline','budget']` are different questions to ask, and
     // accepting either would make the plan advisory rather than checkable.
     expect(
-      createRiyaConversationModelProfile({ current: known }).projectStructuredResult(swapped),
+      createRiyaConversationModelProfile({
+        current: known,
+        availabilitySnapshot: SNAPSHOT,
+      }).projectStructuredResult(swapped),
     ).toBeUndefined();
   });
 
@@ -519,7 +556,10 @@ describe('the reducer decides; the model only claims', () => {
     };
     // An explicit decline changes what comes next; silence does not.
     expect(asked.evolution.questionPlan.phase).not.toBe(skipped.evolution.questionPlan.phase);
-    const p = createRiyaConversationModelProfile({ current: known });
+    const p = createRiyaConversationModelProfile({
+      current: known,
+      availabilitySnapshot: SNAPSHOT,
+    });
     expect(p.projectStructuredResult(asked)).toBeDefined();
     expect(p.projectStructuredResult(skipped)).toBeDefined();
   });
@@ -561,7 +601,10 @@ describe('the reducer decides; the model only claims', () => {
       },
     };
     expect(
-      createRiyaConversationModelProfile({ current: beyond }).projectStructuredResult(answer),
+      createRiyaConversationModelProfile({
+        current: beyond,
+        availabilitySnapshot: SNAPSHOT,
+      }).projectStructuredResult(answer),
     ).toBeUndefined();
   });
 });

@@ -5,6 +5,8 @@
  *
  * 1. validate the turn;
  * 2. LOAD continuity, or initialize it atomically through the injected store;
+ * 2a. read the CURRENT Core-owned service availability ONCE, and re-prove it. Without it the turn
+ *     stops here: a model that cannot see which services Core sells where would invent an answer;
  * 3. build the existing `InboundEnvelope` with `WEB`/`CLIENT`/`INBOUND` fixed;
  * 4. delegate EXACTLY ONCE to the already-composed authoritative runtime, through its RWC-P4B
  *    `processInboundForRiyaConversationEvolution` capability (ADR-0099) — one call, one
@@ -39,7 +41,9 @@
  * no one supplied, in order to reach a code path this slice has no authority over.
  *
  * It is not a transport. There is no HTTP server, route, URL, cookie, CORS or browser reachability —
- * a QuickFurno server gateway is the only intended caller, and that ingress is a later slice.
+ * a QuickFurno server gateway is the only intended caller, and that ingress is a later slice. The
+ * Core availability read is an INJECTED PORT with no implementation in this repository either: this
+ * service calls it, and the final integration handshake supplies the adapter behind it.
  */
 import type {
   JarvisCoreAuthorizedReplyV1,
@@ -50,6 +54,11 @@ import type {
 import type { DiscoveryField } from '@qf-jarvis/riya-agent';
 import { createRiyaConversationContinuityState } from '@qf-jarvis/riya-conversation-continuity';
 import type { RiyaConversationContinuityStateV1 } from '@qf-jarvis/riya-conversation-continuity';
+import { parseCoreServiceAvailabilitySnapshotV1 } from '@qf-jarvis/core-service-availability-read';
+import type {
+  CoreServiceAvailabilityReader,
+  CoreServiceAvailabilitySnapshotV1,
+} from '@qf-jarvis/core-service-availability-read';
 import { evolveRiyaConversation } from '@qf-jarvis/riya-conversation-evolution';
 import type { RiyaConversationObservationBatchV1 } from '@qf-jarvis/riya-conversation-evolution';
 
@@ -77,6 +86,16 @@ export interface RiyaWebConversationServiceConfig {
   readonly runtime: RiyaConversationEvolutionJarvisRuntime;
   /** The continuity store. Required — an in-memory default would lose state on restart. */
   readonly continuityStore: RiyaContinuityStorePort;
+  /**
+   * The Core-owned service availability reader (RWC-P5, ADR-0100). REQUIRED, and injected.
+   *
+   * There is deliberately no default, and the reason is sharper than for the store. A missing store
+   * loses conversations; a missing availability reader would have to mean something, and the only
+   * shape a default could take is "everything is available everywhere" — which would pass every test
+   * in this repository and let Riya promise services in cities the business does not serve. Absent
+   * authority must fail closed, never open.
+   */
+  readonly availabilityReader: CoreServiceAvailabilityReader;
   /** The governed runtime identifier stamped on every envelope. Configured, never caller-supplied. */
   readonly runtimeId: string;
 }
@@ -249,6 +268,10 @@ export function createRiyaWebConversationService(
       ?.createInitialIfAbsent !== 'function' ||
     typeof (supplied['continuityStore'] as { compareAndSet?: unknown } | undefined)
       ?.compareAndSet !== 'function' ||
+    // The RWC-P5 authority reader. Also closed at construction: discovering this mid-turn would mean
+    // a conversation had already been loaded and a client was already waiting.
+    typeof (supplied['availabilityReader'] as { readCurrent?: unknown } | undefined)
+      ?.readCurrent !== 'function' ||
     typeof supplied['runtimeId'] !== 'string' ||
     supplied['runtimeId'].length === 0
   ) {
@@ -256,6 +279,7 @@ export function createRiyaWebConversationService(
   }
   const runtime = supplied['runtime'] as RiyaConversationEvolutionJarvisRuntime;
   const continuityStore = supplied['continuityStore'] as RiyaContinuityStorePort;
+  const availabilityReader = supplied['availabilityReader'] as CoreServiceAvailabilityReader;
   const runtimeId = supplied['runtimeId'];
 
   /**
@@ -417,10 +441,48 @@ export function createRiyaWebConversationService(
       throw new RiyaWebConversationError('repository-invariant');
     }
 
-    // 2. The envelope, with the three values fixed by this service.
+    // 2. The CURRENT Core-owned availability, read EXACTLY ONCE and re-proved (RWC-P5, ADR-0100).
+    //
+    //    After continuity, because a turn that could not establish its own conversation must not
+    //    reach Core either — and before the envelope, because there is no point building one for a
+    //    turn that cannot run.
+    //
+    //    Read on EVERY discovery turn, unconditionally. The alternative is inspecting the client's
+    //    prose first to guess whether city or service authority will be needed, and that guess is a
+    //    second natural-language path with no model behind it — wrong exactly when a client corrects
+    //    their city in a sentence nobody predicted.
+    let availabilitySnapshot: CoreServiceAvailabilitySnapshotV1;
+    try {
+      const raw: unknown = await availabilityReader.readCurrent({ tenantId: turn.tenantId });
+      availabilitySnapshot = parseCoreServiceAvailabilitySnapshotV1(raw);
+    } catch {
+      // FAIL CLOSED, and specifically fail closed as NOT_READY rather than as a refusal.
+      //
+      // Authority this turn needs is temporarily unavailable. That is not a business decision about
+      // the client, so it must not read as one — and it is not an inconsistency in our own records,
+      // so it is not `repository-invariant` either. `NOT_READY` already means exactly this: not
+      // servable now, possibly servable later.
+      //
+      // Nothing from the reader's error escapes: it may name a host, a token or a Core payload.
+      //
+      // No runtime call, no model call, no Core decision, no compare-and-set. There is no default
+      // city, no cached fallback and no "assume available" — an outage must never become a promise.
+      return Object.freeze({
+        version: 2 as const,
+        tenantId: turn.tenantId,
+        conversationId: turn.conversationId,
+        messageId: turn.messageId,
+        disposition: 'NOT_READY' as const,
+        reason: undefined,
+        continuity,
+        authorizedReply: undefined,
+      });
+    }
+
+    // 3. The envelope, with the three values fixed by this service.
     const envelope = buildWebInboundEnvelope(turn, runtimeId);
 
-    // 3. EXACTLY ONE delegation to the authoritative runtime. No retry, no second call, no fallback
+    // 4. EXACTLY ONE delegation to the authoritative runtime. No retry, no second call, no fallback
     //    path — a retry inside a boundary that has already reached a model is how one turn becomes
     //    two proposals.
     let outcome: JarvisRuntimeOutcome;
@@ -435,6 +497,10 @@ export function createRiyaWebConversationService(
       const detailed = await runtime.processInboundForRiyaConversationEvolution({
         envelope,
         continuity,
+        // The SAME snapshot object read above. It is captured once for the turn and is never
+        // re-read — in particular not during a compare-and-set reconciliation, where a fresher
+        // authority could invalidate text that no second model call is permitted to replace.
+        availabilitySnapshot,
       });
       outcome = detailed.runtimeResult.outcome;
       refusalReason = detailed.runtimeResult.refusalReason;
@@ -458,7 +524,7 @@ export function createRiyaWebConversationService(
       throw new RiyaWebConversationError('runtime-unavailable');
     }
 
-    // 4. Evolve and persist, from the observations that ONE model call produced.
+    // 5. Evolve and persist, from the observations that ONE model call produced.
     //
     //    Deliberately independent of what Core decided: a client said what they said, and Core
     //    declining to send a reply does not unsay it. What gates persistence is whether the
@@ -468,7 +534,7 @@ export function createRiyaWebConversationService(
       const persisted = await persistEvolution(continuity, observationBatch);
       continuity = persisted.state;
       if (persisted.reconciledAfterConflict) {
-        // 4a. WITHHOLD the Core-authorized body (RWC-P4B owner correction; ADR-0099 §13a).
+        // 5a. WITHHOLD the Core-authorized body (RWC-P4B owner correction; ADR-0099 §13a).
         //
         // The reply was drafted from, and authorized against, the continuity snapshot this turn
         // loaded — and that snapshot lost its compare-and-set, so another writer changed the
@@ -489,7 +555,7 @@ export function createRiyaWebConversationService(
       }
     }
 
-    // 5. The FINAL authoritative continuity — evolved and persisted when this turn observed
+    // 6. The FINAL authoritative continuity — evolved and persisted when this turn observed
     //    something, and the state as loaded when it did not.
     return Object.freeze({
       version: 2 as const,

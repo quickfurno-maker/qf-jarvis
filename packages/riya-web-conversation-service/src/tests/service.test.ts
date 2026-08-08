@@ -8,6 +8,7 @@ import { DISCOVERY_FIELDS_FROZEN } from '@qf-jarvis/riya-agent';
 import { createRiyaConversationContinuityState } from '@qf-jarvis/riya-conversation-continuity';
 import type { RiyaConversationContinuityStateV1 } from '@qf-jarvis/riya-conversation-continuity';
 import type { JarvisRuntimeOutcome } from '@qf-jarvis/jarvis-runtime';
+import { scriptedAvailabilityReader } from '@qf-jarvis/core-service-availability-read/testing';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -61,6 +62,9 @@ function service<
     svc: createRiyaWebConversationService({
       runtime,
       continuityStore: store,
+      // RWC-P5: the authority reader is REQUIRED. A deterministic synthetic snapshot keeps
+      // every pre-P5 spec meaning exactly what it meant before.
+      availabilityReader: scriptedAvailabilityReader(),
       runtimeId: RUNTIME_ID,
     }),
   };
@@ -401,6 +405,9 @@ describe('the store port semantics the fake proves', () => {
     const svc = createRiyaWebConversationService({
       runtime,
       continuityStore: mismatched,
+      // RWC-P5: the authority reader is REQUIRED. A deterministic synthetic snapshot keeps
+      // every pre-P5 spec meaning exactly what it meant before.
+      availabilityReader: scriptedAvailabilityReader(),
       runtimeId: RUNTIME_ID,
     });
     await expectCode(() => svc.handleTurn(turnInput()), 'repository-invariant');

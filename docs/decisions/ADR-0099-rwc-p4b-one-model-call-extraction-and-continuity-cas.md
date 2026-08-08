@@ -341,4 +341,7 @@ The following are owner-locked. Changing any of them requires a new ADR, not an 
 - the Riya model answer being **`REPLY`-only**, while the generic seam keeps all four kinds;
 - `JarvisRuntimeResult` remaining the ten content-free keys.
 
-**Next.** RWC-P5: location authority and service-area resolution.
+**Next.** RWC-P5 — [ADR-0100](./ADR-0100-rwc-p5-core-service-availability-context.md) — composes a
+Core-owned service availability snapshot into the same one model call, so only refs QuickFurno Core
+lists may be emitted and no unavailable service/city pair can reach P4A. It changes nothing here:
+still one gateway invocation, still one bounded CAS reconciliation with no reread.

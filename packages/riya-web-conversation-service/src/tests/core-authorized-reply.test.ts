@@ -19,6 +19,7 @@ import {
 import { SENTINEL_BODY, scriptedRuntime } from './fakes/scripted-runtime.js';
 import type { ScriptedRuntime, ScriptedRuntimeOptions } from './fakes/scripted-runtime.js';
 import type { JarvisCoreAuthorizedReplyV1, JarvisRuntimeOutcome } from '@qf-jarvis/jarvis-runtime';
+import { scriptedAvailabilityReader } from '@qf-jarvis/core-service-availability-read/testing';
 
 const RUNTIME_ID = 'rt.web.1';
 
@@ -53,6 +54,9 @@ function service(
     svc: createRiyaWebConversationService({
       runtime,
       continuityStore: store,
+      // RWC-P5: the authority reader is REQUIRED. A deterministic synthetic snapshot keeps
+      // every pre-P5 spec meaning exactly what it meant before.
+      availabilityReader: scriptedAvailabilityReader(),
       runtimeId: RUNTIME_ID,
     }),
   };
@@ -207,6 +211,9 @@ describe('(B6) the runtime capability is required, and checked before anything r
       createRiyaWebConversationService({
         runtime: withoutCapability as never,
         continuityStore: new InMemoryContinuityStore(),
+        // RWC-P5: the authority reader is REQUIRED. A deterministic synthetic snapshot keeps
+        // every pre-P5 spec meaning exactly what it meant before.
+        availabilityReader: scriptedAvailabilityReader(),
         runtimeId: RUNTIME_ID,
       }),
     ).toThrow(RiyaWebConversationError);
@@ -221,6 +228,9 @@ describe('(B6) the runtime capability is required, and checked before anything r
           processInboundForCoreAuthorizedReply: () => Promise.reject(new Error('never')),
         } as never,
         continuityStore: new InMemoryContinuityStore(),
+        // RWC-P5: the authority reader is REQUIRED. A deterministic synthetic snapshot keeps
+        // every pre-P5 spec meaning exactly what it meant before.
+        availabilityReader: scriptedAvailabilityReader(),
         runtimeId: RUNTIME_ID,
       }),
     ).toThrow(RiyaWebConversationError);
@@ -238,6 +248,9 @@ describe('(B6) the runtime capability is required, and checked before anything r
       createRiyaWebConversationService({
         runtime: partial as never,
         continuityStore: new InMemoryContinuityStore(),
+        // RWC-P5: the authority reader is REQUIRED. A deterministic synthetic snapshot keeps
+        // every pre-P5 spec meaning exactly what it meant before.
+        availabilityReader: scriptedAvailabilityReader(),
         runtimeId: RUNTIME_ID,
       }),
     ).toThrow(RiyaWebConversationError);

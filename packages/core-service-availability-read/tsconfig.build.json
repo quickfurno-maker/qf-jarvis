@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
+  },
+
+  // The EMITTING build, referenced by the root solution. `src/tests` is EXCLUDED so no spec reaches
+  // dist/; `src/testing` is deliberately INCLUDED, because the deterministic fake is a shipped
+  // subpath export rather than a test file.
+  //
+  // Exactly ONE project reference. `@qf-jarvis/contracts` owns the Core reference grammar, the
+  // taxonomy label rules and the taxonomy version -- restating any of them here would be a second
+  // definition of Core's own vocabulary, and the two would drift.
+  //
+  // Deliberately absent: every Riya package (this contract knows nothing about a conversation),
+  // `agent-runtime`, `jarvis-runtime`, `model-gateway`, `model-reply-adapter`, `event-backbone`, any
+  // postgres adapter and any application. This is a leaf, and the references are what keep it one.
+  "references": [{ "path": "../contracts/tsconfig.json" }],
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/tests/**"]
+}
