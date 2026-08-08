@@ -443,6 +443,13 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // adapter, transport, web service, reducer, extraction, transcript or business authority, and
       // it is NOT ADR-0016 agent memory.
       'riya-conversation-continuity',
+      // RWC-P4A (ADR-0098): the PURE, channel-neutral conversation evolution semantics -- the phase
+      // reducer, the provenance merge and the next-question plan that RWC-P2A's contract package
+      // deliberately refused to contain. Still an EXACT set match; it records an authorised
+      // addition, it does not relax the assertion. It is pure: no model, no prompt, no clock, no
+      // randomness, no I/O, no database, no compare-and-set, no HTTP and no business authority, and
+      // it depends only on `riya-agent` and `riya-conversation-continuity`.
+      'riya-conversation-evolution',
       // RWC-P2C (ADR-0094): the PRIVATE Riya web conversation service. Still an EXACT set match; it
       // records an authorised addition, it does not relax the assertion. It is an application
       // service with no ingress: no HTTP server, route, public endpoint, browser reachability,

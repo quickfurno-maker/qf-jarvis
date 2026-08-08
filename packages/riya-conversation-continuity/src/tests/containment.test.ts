@@ -365,18 +365,24 @@ describe('the contracts this slice reuses are unchanged', () => {
     expect(contracts).not.toContain("'web'");
   });
 
-  it('no APPLICATION consumes this contract, and only the two permitted packages do', () => {
+  it('no APPLICATION consumes this contract, and only the three permitted packages do', () => {
     // When P2A landed, nothing imported it. RWC-P2C (ADR-0094) changed that fact and no other: the
     // private web conversation service loads and returns this state, and returns it UNCHANGED.
-    // RWC-P2B (ADR-0095) adds the second and last: the durable store, which re-proves every state
-    // through THIS constructor on the way in and on the way out. Both are packages, neither is an
-    // application, and neither decides anything about a state's content.
+    // RWC-P2B (ADR-0095) added the second: the durable store, which re-proves every state through
+    // THIS constructor on the way in and on the way out.
+    //
+    // RWC-P4A (ADR-0098) adds the third, and it is the one this package always expected. Its own
+    // note says it implements no phase reducer, no extraction and no provenance merge because
+    // RWC-P4 owns them; `riya-conversation-evolution` is that owner. It consumes the contract and
+    // produces states through this same constructor -- the reducer lives THERE precisely so that
+    // this package can stay a contract.
     //
     // The guarantee is restated rather than dropped, and it did not weaken: the importer set is
     // pinned EXACTLY, and no APPLICATION may import the contract at all — an app importing it would
     // mean something is composing conversational state outside the packages that may.
     const ALLOWED_PACKAGE_IMPORTERS = [
       'postgres-riya-conversation-continuity-store',
+      'riya-conversation-evolution',
       'riya-web-conversation-service',
     ];
     const importingPackages = new Set<string>();

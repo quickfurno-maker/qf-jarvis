@@ -1,0 +1,24 @@
+{
+  "name": "@qf-jarvis/riya-conversation-evolution",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis Riya conversation evolution semantics (RWC-P4A, ADR-0098). The PURE, channel-neutral domain logic that takes one RiyaConversationContinuityStateV1 plus a strict bounded batch of already-produced field observations and returns a deterministic evolved state and the next question plan. It owns the provenance merge (origin-ranked, equal-rank-later-wins, user_confirmed never overwritten from below, user-origin-only CLEAR), the NeedDiscovery rebuild through the canonical createNeedDiscovery, the INTRO..SUMMARY phase reducer, and the exactly-one continuityRevision increment per changed batch. It is ONE Riya: nothing here is web- or WhatsApp-specific and there is no channel field. It does NOT parse natural language, invoke a model, read a clock, use randomness, touch a database, perform a compare-and-set, call QuickFurno Core, or reach CONTACT/CONSENT/COMPLETE -- RWC-P4B owns live extraction and persistence composition, and RWC-P6 owns summary confirmation onward. No transcript, history, evidence quote, contact detail, consent, canSubmit, lead, vendor, package, price or business authority. Depends on @qf-jarvis/riya-agent, @qf-jarvis/riya-conversation-continuity and zod.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/riya-agent": "workspace:*",
+    "@qf-jarvis/riya-conversation-continuity": "workspace:*",
+    "zod": "4.4.3"
+  }
+}

@@ -30,7 +30,8 @@ export const DISCOVERY_VALUE_KEY = {
 /**
  * The four discovery fields a conversation must have learned before a summary can be shown.
  *
- * RWC-P0B/P1B froze them as service, city, budget and timeline; in `NeedDiscovery` those are
+ * Historical RWC-P0B/RWC-P1B froze them as service, city, budget and timeline (restated for
+ * current Jarvis ownership by ADR-0098); in `NeedDiscovery` those are
  * `serviceInterestRef`, `locationRef`, `budgetNote` and `timelineNote`.
  *
  * `propertyType`, `scope` and `consultationPreference` are deliberately ABSENT. They are genuinely

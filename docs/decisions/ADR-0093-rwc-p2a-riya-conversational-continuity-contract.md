@@ -65,6 +65,13 @@ Migration `0008` is **not** extended, and no continuity column is added to
 
 ### 4. Exactly the nine RWC-P0B phases
 
+> **Provenance note (added by [ADR-0098](./ADR-0098-rwc-p4a-riya-conversation-evolution-semantics.md)).**
+> References to RWC-P0B and RWC-P1B in this ADR name **historical** decisions — the RWC-P0B
+> conversation contract and the QuickFurno RWC-P1B contract kernel — neither of which is an artifact
+> in current `qf-jarvis` main. They are cited as provenance for vocabulary that WAS carried into
+> tracked source here. Every normative rule the reducer depends on is restated for current Jarvis
+> ownership by ADR-0098; nothing in this repository's correctness depends on those artifacts.
+
 `INTRO` · `NEED` · `LOCATION` · `PROJECT_DETAILS` · `BUDGET_TIMELINE` · `SUMMARY` · `CONTACT` ·
 `CONSENT` · `COMPLETE`
 
@@ -136,12 +143,12 @@ There is **no `consentGiven` field, and no field that could hold one.** Consent 
 
 `SUMMARY`, `CONTACT`, `CONSENT` and `COMPLETE` require four `NeedDiscovery` values to be present:
 
-| RWC-P0B/P1B field | `NeedDiscovery` value |
-| ----------------- | --------------------- |
-| service           | `serviceInterestRef`  |
-| city              | `locationRef`         |
-| budget            | `budgetNote`          |
-| timeline          | `timelineNote`        |
+| Historical RWC-P0B / RWC-P1B field | `NeedDiscovery` value |
+| ---------------------------------- | --------------------- |
+| service                            | `serviceInterestRef`  |
+| city                               | `locationRef`         |
+| budget                             | `budgetNote`          |
+| timeline                           | `timelineNote`        |
 
 The first draft of this contract accepted `SUMMARY` — and every phase after it — with an entirely
 **empty** discovery. That contradicts the claim the package makes about itself. It validates whether
@@ -175,7 +182,7 @@ unchanged. This introduces no phase reducer, no extraction, and no `canSubmit`.
 
 ### 9. `COMPLETE` requires opaque completion evidence
 
-`phase === 'COMPLETE'` ⟺ `completionEvidenceRef` is present. RWC-P0B locked that `COMPLETE` is
+`phase === 'COMPLETE'` ⟺ `completionEvidenceRef` is present. Historical RWC-P0B locked that `COMPLETE` is
 reached only through a governed confirmation outcome and that no ordinary phase path submits; this
 slice has no phase reducer, so the invariant is enforced on the state rather than on a transition.
 
