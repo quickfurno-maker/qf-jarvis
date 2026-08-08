@@ -377,12 +377,20 @@ describe('the contracts this slice reuses are unchanged', () => {
     // produces states through this same constructor -- the reducer lives THERE precisely so that
     // this package can stay a contract.
     //
+    // RWC-P4B (ADR-0099) adds the last two, and both are consequences of the reducer finally being
+    // composed. `riya-model-interaction` projects a state into the ONE model call and checks the
+    // answer against it; `jarvis-runtime` re-proves the state a caller hands its Riya-aware
+    // capability, because a hand-assembled one must not become the context a model reasons from.
+    // Neither stores anything, and neither implements a rule — they read the contract.
+    //
     // The guarantee is restated rather than dropped, and it did not weaken: the importer set is
     // pinned EXACTLY, and no APPLICATION may import the contract at all — an app importing it would
     // mean something is composing conversational state outside the packages that may.
     const ALLOWED_PACKAGE_IMPORTERS = [
+      'jarvis-runtime',
       'postgres-riya-conversation-continuity-store',
       'riya-conversation-evolution',
+      'riya-model-interaction',
       'riya-web-conversation-service',
     ];
     const importingPackages = new Set<string>();

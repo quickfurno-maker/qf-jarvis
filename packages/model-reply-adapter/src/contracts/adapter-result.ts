@@ -38,4 +38,16 @@ export interface ModelReplyAdapterResult {
   readonly provenance: SafeReplyProvenance | undefined;
   readonly outputTokens: number | undefined;
   readonly latencyMs: number | undefined;
+  /**
+   * Whatever a configured structured-output profile validated out of the SAME answer (ADR-0099).
+   *
+   * OPTIONAL, and the key is ABSENT rather than `undefined` when no profile is configured — the
+   * default result shape is unchanged, which existing exact-shape assertions depend on.
+   *
+   * It is surfaced only on a fully accepted result: after provenance, strict structured validation,
+   * citation authorization and BOTH state gates. A profile detail returned beside a refusal would be
+   * material extracted from an answer the adapter had already decided not to trust. It is never
+   * logged or emitted.
+   */
+  readonly profileDetail?: unknown;
 }

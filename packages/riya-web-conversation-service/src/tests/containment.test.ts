@@ -107,18 +107,44 @@ describe('RWC-P2D containment', () => {
     }
   });
 
-  it('adds no persistence: the body is transient and reaches no store or event', () => {
+  it('the authorized body is transient: it reaches no store, event or column', () => {
     const code = productionCode();
-    // `authorizedReply` is read from the runtime result and returned. It is never written anywhere:
-    // no compareAndSet CALL, no event payload, no durable column.
+    // RESTATED, not dropped (RWC-P4B). RWC-P2D forbade `compareAndSet` outright because nothing on
+    // this path wrote anything. P4B authorizes exactly ONE thing to be written — the evolved
+    // continuity — so the lock narrows to what is still forbidden rather than disappearing: the
+    // REPLY BODY must still reach no store, no event and no column.
     //
-    // The call is what is forbidden, not the name: this package DECLARES `compareAndSet` on the
-    // port it owns, and RWC-P2B implements it. Scanning for the bare identifier would report the
-    // port's own contract as a violation, so the scan names the invocation instead.
-    expect(code).not.toMatch(/continuityStore\s*\.\s*compareAndSet/u);
-    expect(code).not.toMatch(/\bstore\s*\.\s*compareAndSet/u);
+    // The body is `authorizedReply.replyBody`. The scan below proves no `compareAndSet` argument
+    // mentions it, and the surrounding suites prove the persisted value is the reducer's output.
+    expect(code).not.toMatch(/compareAndSet\s*\(\s*\{[^}]*replyBody/u);
+    expect(code).not.toMatch(/nextState\s*:\s*[^,}]*authorizedReply/u);
     expect(code).not.toMatch(/INSERT|UPDATE\s+qf_jarvis|state_json/u);
     expect(code).not.toMatch(/\bappend\s*\(|publish\s*\(|emitEvent\s*\(/u);
+  });
+
+  it('persistence is bounded: at most two compare-and-set calls, and no retry loop', () => {
+    const code = productionCode();
+    // Exactly two invocation sites, and no more. A third would be a third attempt; a loop would be
+    // an unbounded one, holding a client's turn open while other writers keep moving the state.
+    const attempts = code.match(/continuityStore\s*\.\s*compareAndSet\s*\(/gu) ?? [];
+    expect(attempts).toHaveLength(2);
+    // No looping construct anywhere in production source. The reconciliation is straight-line by
+    // construction, which is what makes "at most two" readable off the page rather than reasoned
+    // about.
+    expect(code).not.toMatch(/\bwhile\s*\(|\bfor\s*\(|\bdo\s*\{/u);
+    // And nothing expensive runs a second time inside the reconciliation: everything after the first
+    // conflict is one reload, one PURE re-merge and one final attempt. Scoped to the service file,
+    // because `store-port.ts` names the outcome in its own frozen list.
+    const service = codeOnly(readFileSync(join(SRC, 'service/create-service.ts'), 'utf8'));
+    const reconciliation = service.slice(
+      service.indexOf("first === 'NOT_FOUND'"),
+      service.indexOf('async function handleTurn'),
+    );
+    expect(reconciliation).not.toMatch(/processInbound/u);
+    expect(reconciliation).not.toMatch(/buildWebInboundEnvelope|materializationAgreesWithRun/u);
+    // Exactly ONE reload in the reconciliation, and exactly one re-merge.
+    expect(reconciliation.match(/continuityStore\s*\.\s*load\s*\(/gu) ?? []).toHaveLength(1);
+    expect(reconciliation.match(/evolveRiyaConversation\s*\(/gu) ?? []).toHaveLength(1);
   });
 
   it('the migration set is untouched by this slice', () => {
@@ -319,16 +345,19 @@ describe('(42-46) the service reaches nothing', () => {
     }
   });
 
-  it('depends on exactly the four workspace packages and zod', () => {
+  it('depends on exactly the five workspace packages and zod', () => {
     const manifest = JSON.parse(readFileSync(join(PKG, 'package.json'), 'utf8')) as {
       readonly dependencies?: Record<string, string>;
       readonly devDependencies?: Record<string, string>;
     };
+    // RWC-P4B adds ONE: the pure RWC-P4A reducer. Nothing else — no model client, no gateway, no
+    // HTTP library, no QuickFurno package.
     expect(Object.keys(manifest.dependencies ?? {}).sort()).toStrictEqual([
       '@qf-jarvis/agent-runtime',
       '@qf-jarvis/jarvis-runtime',
       '@qf-jarvis/riya-agent',
       '@qf-jarvis/riya-conversation-continuity',
+      '@qf-jarvis/riya-conversation-evolution',
       'zod',
     ]);
     expect(Object.keys(manifest.devDependencies ?? {})).toStrictEqual([]);
@@ -341,6 +370,7 @@ describe('(42-46) the service reaches nothing', () => {
     for (const pkg of [
       'riya-agent',
       'riya-conversation-continuity',
+      'riya-conversation-evolution',
       'agent-runtime',
       'jarvis-runtime',
     ]) {

@@ -26,6 +26,7 @@
     { "path": "./packages/riya-agent/tsconfig.build.json" },
     { "path": "./packages/riya-conversation-continuity/tsconfig.build.json" },
     { "path": "./packages/riya-conversation-evolution/tsconfig.build.json" },
+    { "path": "./packages/riya-model-interaction/tsconfig.build.json" },
     { "path": "./packages/riya-web-conversation-service/tsconfig.build.json" },
     { "path": "./packages/postgres-riya-conversation-continuity-store/tsconfig.build.json" },
     { "path": "./packages/anisha-agent/tsconfig.build.json" },

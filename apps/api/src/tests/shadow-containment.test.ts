@@ -450,6 +450,14 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // randomness, no I/O, no database, no compare-and-set, no HTTP and no business authority, and
       // it depends only on `riya-agent` and `riya-conversation-continuity`.
       'riya-conversation-evolution',
+      // RWC-P4B (ADR-0099): the Riya half of the ONE structured model call -- the content-minimised
+      // continuity projection sent as the single user message, the strict reply+observations schema,
+      // the narrowed model provenance vocabulary, and the check that the model's claimed question
+      // plan matches what the RWC-P4A reducer decides. Still an EXACT set match; it records an
+      // authorised addition, it does not relax the assertion. It INVOKES NOTHING: no gateway invoker,
+      // provider, database, HTTP, Core adapter, clock, randomness, transcript or raw model result --
+      // it is a profile handed to the generic M4 adapter, which is what keeps one turn to one call.
+      'riya-model-interaction',
       // RWC-P2C (ADR-0094): the PRIVATE Riya web conversation service. Still an EXACT set match; it
       // records an authorised addition, it does not relax the assertion. It is an application
       // service with no ingress: no HTTP server, route, public endpoint, browser reachability,

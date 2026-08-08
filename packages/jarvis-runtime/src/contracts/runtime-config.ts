@@ -9,7 +9,11 @@
  */
 import type { KnowledgePort, ModelReleaseRef, RuntimePolicy } from '@qf-jarvis/agent-runtime';
 import type { CoreDecisionProtocol, CoreDecisionTransport } from '@qf-jarvis/core-decision-adapter';
-import type { ModelGatewayInvoker, ModelReplyPromptBindings } from '@qf-jarvis/model-reply-adapter';
+import type {
+  ModelGatewayInvoker,
+  ModelReplyPromptBinding,
+  ModelReplyPromptBindings,
+} from '@qf-jarvis/model-reply-adapter';
 import type { PromptRegistry } from '@qf-jarvis/prompt-registry';
 
 import type { AuthoritativeConversationStatePort } from './authoritative-state.js';
@@ -66,6 +70,18 @@ export interface JarvisRuntimeConfig {
    * CLIENT and a VENDOR binding. When present, every legacy prompt/evaluation field must be absent.
    */
   readonly promptBindings?: ModelReplyPromptBindings;
+  /**
+   * The DEDICATED prompt binding for the Riya conversation-evolution capability (ADR-0099).
+   *
+   * Separate from the legacy `promptFamily`/`promptVersion` and from `promptBindings.CLIENT`, and
+   * there is NO fallback to either. The RWC-P4B structured answer has different semantics from a
+   * reply-only one, so silently reusing a prompt that was written, evaluated and approved to produce
+   * a reply alone would mean running an un-reviewed instruction under a reviewed digest.
+   *
+   * It must carry BOTH `evaluationRef` and `evaluationPromptDigest`: without an evaluated prompt
+   * there is no Riya-aware model call at all.
+   */
+  readonly riyaConversationEvolutionPromptBinding?: ModelReplyPromptBinding;
   readonly capabilityProfileRef: string;
   readonly evaluationRef?: string;
   /**

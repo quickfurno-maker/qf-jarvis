@@ -23,7 +23,9 @@
   },
   "devDependencies": {
     "@qf-jarvis/event-backbone": "workspace:*",
+    "@qf-jarvis/jarvis-runtime": "workspace:*",
     "@qf-jarvis/riya-agent": "workspace:*",
+    "@qf-jarvis/riya-conversation-evolution": "workspace:*",
     "@types/pg": "8.20.0"
   }
 }

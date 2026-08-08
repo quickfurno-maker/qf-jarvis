@@ -21,6 +21,12 @@
     { "path": "../core-decision-adapter/tsconfig.build.json" },
     { "path": "../model-reply-adapter/tsconfig.build.json" },
     { "path": "../riya-agent/tsconfig.build.json" },
+    // RWC-P4B (ADR-0099): the Riya-aware inbound capability. The continuity contract and the
+    // pure RWC-P4A reducer are named as TYPES for the capability result; `riya-model-interaction`
+    // supplies the structured-output profile handed to the one M4 adapter.
+    { "path": "../riya-conversation-continuity/tsconfig.build.json" },
+    { "path": "../riya-conversation-evolution/tsconfig.build.json" },
+    { "path": "../riya-model-interaction/tsconfig.build.json" },
     { "path": "../anisha-agent/tsconfig.build.json" },
     { "path": "../prompt-registry/tsconfig.build.json" },
     { "path": "../conversation-control/tsconfig.build.json" }

@@ -1029,11 +1029,21 @@ describe('(35, 37) reply exposure', () => {
   });
 
   it('PROCESSED with NO authorized reply returns null and no text', async () => {
+    // This combination stopped being hypothetical in RWC-P4B (ADR-0099 §13a): a turn whose
+    // compare-and-set loses a race reconciles its observations but WITHHOLDS the reply it drafted
+    // against the old snapshot. The ingress needs no change for that, and this is the proof —
+    // the body's PRESENCE has always been the sole text gate here, so an absent one is simply null.
     const answer = await happy({ service: scriptedService({ withReply: false }) });
     expect(answer.status).toBe(200);
     expect(answer.json['disposition']).toBe('PROCESSED');
     expect(answer.json['authorizedReply']).toBeNull();
     expect(answer.text).not.toContain(SENTINEL);
+    // And still no continuity on the wire. A withheld reply must not become a reason to send the
+    // conversational state instead.
+    expect(answer.json['continuity']).toBeUndefined();
+    for (const forbidden of ['continuity', 'INTRO', 'MORE_DISCOVERY_REQUIRED', 'observation']) {
+      expect(answer.text, forbidden).not.toContain(forbidden);
+    }
   });
 
   it.each(['REFUSED', 'NOT_READY'] as const)('%s returns null and no text', async (disposition) => {

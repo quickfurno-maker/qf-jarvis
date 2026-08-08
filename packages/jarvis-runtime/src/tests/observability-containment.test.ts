@@ -138,16 +138,20 @@ describe('public API lock', () => {
     }
   });
 
-  it('exposes only the four composition methods (no send/deliver/execute/persist)', () => {
+  it('exposes only the five composition methods (no send/deliver/execute/persist)', () => {
     // QFJ-P08-A (ADR-0075) adds two OPERATOR methods beside the one inbound method, and RWC-P2D
     // (ADR-0096) adds `processInboundForCoreAuthorizedReply` beside it. Still an EXACT set match,
     // and still nothing that sends, delivers, executes, persists or authorizes: handing a trusted
     // in-process caller text QuickFurno Core already approved is not any of those verbs.
     const runtime = createJarvisRuntime(syntheticRuntimeConfig());
+    // RWC-P4B (ADR-0099) adds the Riya-aware sibling, whose ONE model call also produces this
+    // turn's bounded discovery observations. Still an EXACT set match, and still nothing that
+    // sends or executes: producing observations for a caller to persist is neither.
     expect(Object.keys(runtime).sort()).toEqual([
       'applyConversationControlCommand',
       'processInbound',
       'processInboundForCoreAuthorizedReply',
+      'processInboundForRiyaConversationEvolution',
       'readConversationOperationsSnapshot',
     ]);
     const surface = runtime as unknown as Record<string, unknown>;
@@ -219,6 +223,13 @@ describe('public API lock', () => {
       // QFJ-S3-I-B (ADR-0073): the injected prompt registry. Still an EXACT set match.
       '@qf-jarvis/prompt-registry',
       '@qf-jarvis/riya-agent',
+      // RWC-P4B (ADR-0099): the Riya-aware inbound capability. The continuity contract and the pure
+      // RWC-P4A reducer arrive as TYPES for the capability result; `riya-model-interaction` supplies
+      // the structured-output profile handed to the ONE M4 adapter. Still an EXACT set match, and
+      // the direction stays one-way -- none of the three knows about this composition root.
+      '@qf-jarvis/riya-conversation-continuity',
+      '@qf-jarvis/riya-conversation-evolution',
+      '@qf-jarvis/riya-model-interaction',
     ]);
     expect(Object.keys(manifest.exports).sort()).toEqual(['.', './testing']);
   });
