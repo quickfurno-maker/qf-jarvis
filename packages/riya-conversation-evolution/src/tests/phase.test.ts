@@ -156,7 +156,7 @@ describe('(F) PROJECT_DETAILS', () => {
     expect(result.state.phase).toBe('SUMMARY');
   });
 
-  it('is never re-entered once the conversation has passed it', () => {
+  it('is not re-entered while the conversation keeps moving FORWARD', () => {
     const result = evolveRiyaConversation({
       current: stateWith({
         phase: 'BUDGET_TIMELINE',
@@ -165,6 +165,33 @@ describe('(F) PROJECT_DETAILS', () => {
       batch: batch([]),
     });
     expect(result.state.phase).toBe('BUDGET_TIMELINE');
+  });
+
+  it('MAY be offered again after a correction regressed the phase and the gap was refilled', () => {
+    // The honest bound. Continuity V1 persists no "opportunity consumed" bit, and this slice
+    // deliberately does not add one -- so the guarantee is one opportunity per uninterrupted FORWARD
+    // progression, not one per conversation. Asking once more after the client rewrote their own
+    // requirements is a better trade than widening the persisted state to remember a question.
+    const atBudget = stateWith({
+      phase: 'BUDGET_TIMELINE',
+      fields: { serviceInterest: 'user_stated', location: 'user_selected' },
+    });
+
+    // The client withdraws their location. The phase regresses.
+    const regressed = evolveRiyaConversation({
+      current: atBudget,
+      batch: batch([clear('location', 'user_stated')]),
+    });
+    expect(regressed.state.phase).toBe('LOCATION');
+    expect(valueOf(regressed.state, 'location')).toBeUndefined();
+
+    // They give a new one. The detour is available again -- and that is the accepted behaviour.
+    const refilled = evolveRiyaConversation({
+      current: regressed.state,
+      batch: batch([set('location', 'user_selected', 'b')]),
+    });
+    expect(refilled.state.phase).toBe('PROJECT_DETAILS');
+    expect(refilled.questionPlan.questionFields).toEqual(['propertyType']);
   });
 
   it('asks scope once propertyType is known', () => {
@@ -484,5 +511,118 @@ describe('(I) revision', () => {
     expect(result.state.phase).toBe('BUDGET_TIMELINE');
     expect(result.state.discovery.completeness).toBe('MORE_DISCOVERY_REQUIRED');
     expect(result.state.discovery.missingFields).toEqual(['budget']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// (J) A prior summary confirmation is invalidated by an accepted VALUE change.
+// ---------------------------------------------------------------------------
+
+describe('(J) summary confirmation', () => {
+  /** A confirmed summary: all four required fields known, and the client agreed to them. */
+  const confirmed = () =>
+    stateWith({
+      phase: 'SUMMARY',
+      revision: 4,
+      summaryConfirmed: true,
+      fields: {
+        serviceInterest: 'user_stated',
+        location: 'user_selected',
+        budget: 'user_stated',
+        timeline: 'user_stated',
+        propertyType: 'user_selected',
+      },
+    });
+
+  it('an accepted REQUIRED-field correction invalidates it', () => {
+    // The client confirmed the OLD summary. A changed budget means the thing they agreed to no
+    // longer exists, and carrying the flag forward would let a later phase act on an agreement to
+    // something that was since edited.
+    const current = confirmed();
+    const result = evolveRiyaConversation({
+      current,
+      batch: batch([set('budget', 'user_stated', 'b')]),
+    });
+    expect(valueOf(result.state, 'budget')).toBe(synthetic('budget', 'b'));
+    expect(result.state.phase).toBe('SUMMARY');
+    expect(result.state.summaryConfirmed).toBe(false);
+    expect(result.state.continuityRevision).toBe(current.continuityRevision + 1);
+  });
+
+  it('an accepted OPTIONAL-field change invalidates it too', () => {
+    // The optional rows are on the summary card as well. Changing one changes what was reviewed.
+    const result = evolveRiyaConversation({
+      current: confirmed(),
+      batch: batch([set('propertyType', 'user_selected', 'b')]),
+    });
+    expect(result.state.summaryConfirmed).toBe(false);
+    expect(result.state.phase).toBe('SUMMARY');
+  });
+
+  it('an accepted CLEAR of a required field invalidates it, and regresses the phase', () => {
+    const result = evolveRiyaConversation({
+      current: confirmed(),
+      batch: batch([clear('budget', 'user_stated')]),
+    });
+    expect(valueOf(result.state, 'budget')).toBeUndefined();
+    expect(result.state.phase).toBe('BUDGET_TIMELINE');
+    expect(result.state.summaryConfirmed).toBe(false);
+    expect(result.state.discovery.completeness).toBe('MORE_DISCOVERY_REQUIRED');
+  });
+
+  it('a REJECTED lower-provenance update preserves it, and bumps nothing', () => {
+    const current = stateWith({
+      phase: 'SUMMARY',
+      revision: 4,
+      summaryConfirmed: true,
+      fields: {
+        serviceInterest: 'user_stated',
+        location: 'user_selected',
+        budget: 'user_confirmed',
+        timeline: 'user_stated',
+      },
+    });
+    const result = evolveRiyaConversation({
+      current,
+      batch: batch([set('budget', 'model_inferred', 'b')]),
+    });
+    expect(result.state.summaryConfirmed).toBe(true);
+    expect(result.changed).toBe(false);
+    expect(result.state.continuityRevision).toBe(current.continuityRevision);
+  });
+
+  it('SAME-value provenance strengthening preserves it, and still bumps once', () => {
+    // Nothing the client read changed -- only how strongly we hold it. Throwing their confirmation
+    // away for that would make every restatement re-open a settled summary.
+    const current = confirmed();
+    const result = evolveRiyaConversation({
+      current,
+      batch: batch([set('budget', 'user_confirmed', 'a')]),
+    });
+    expect(result.state.fieldProvenance.budget).toBe('user_confirmed');
+    expect(result.state.summaryConfirmed).toBe(true);
+    expect(result.changed).toBe(true);
+    expect(result.state.continuityRevision).toBe(current.continuityRevision + 1);
+  });
+
+  it('a SAME-value no-op preserves it and changes nothing at all', () => {
+    const current = confirmed();
+    const result = evolveRiyaConversation({
+      current,
+      batch: batch([set('budget', 'user_stated', 'a')]),
+    });
+    expect(result.state.summaryConfirmed).toBe(true);
+    expect(result.changed).toBe(false);
+    expect(result.state.continuityRevision).toBe(current.continuityRevision);
+  });
+
+  it('never creates a confirmation: false can only stay false', () => {
+    // RWC-P6 owns confirming a summary. Reaching SUMMARY is not agreeing with one.
+    const result = evolveRiyaConversation({
+      current: stateWith(),
+      batch: batch(ALL_FOUR),
+    });
+    expect(result.state.phase).toBe('SUMMARY');
+    expect(result.state.summaryConfirmed).toBe(false);
   });
 });

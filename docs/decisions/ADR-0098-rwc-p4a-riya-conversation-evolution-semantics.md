@@ -81,6 +81,15 @@ retaining fragments is how a system acquires a transcript nobody decided to keep
 `skipProjectDetails` means the client **explicitly** declined optional detail collection. It is never
 inferred from silence.
 
+**The exported reducer re-proves the batch it is handed.** A TypeScript interface is not a runtime
+trust boundary: `evolveRiyaConversation` is exported, so an untyped or JSON-fed caller can pass a
+forged object that never met the constructor. It is therefore canonicalized through the REAL
+`createRiyaConversationObservationBatch` before anything reads it, and everything downstream uses the
+canonical result. The duplicate-field case is why this matters most — the constructor's contract is
+that a duplicate refuses the ENTIRE batch, and merging a forged batch one observation at a time would
+instead silently pick a winner. The schema is not duplicated inside the reducer, and a malformed
+input becomes `invalid-observation-batch` rather than a raw `TypeError`.
+
 ### 5. Provenance records the ORIGIN of the fact, not the mechanism that read it
 
 ```
@@ -148,6 +157,28 @@ Summary-required: `serviceInterest`, `location`, `budget`, `timeline`. Optional:
 `consultationPreference` is opportunistic: stored if supplied, never a primary question, never
 blocking. This is ADR-0067 discovery completeness and never becomes QuickFurno's business `canSubmit`.
 
+### 7a. A prior summary confirmation is invalidated by an accepted value change
+
+RWC-P4A **never creates** a confirmation — `false` can never become `true` here, and RWC-P6 remains
+the only owner of confirming a summary. Reaching `SUMMARY` is not agreeing with one.
+
+But it **must invalidate** one. A confirmation is about the exact facts the client reviewed, so an
+accepted change to any discovery VALUE means the summary they agreed to no longer exists. Carrying
+the flag forward would let a later phase act on an agreement to something that was since edited.
+
+| what happened                                                    | `summaryConfirmed` |
+| ---------------------------------------------------------------- | ------------------ |
+| accepted `SET` with a **different** value (required or optional) | **false**          |
+| accepted `CLEAR` of an existing value                            | **false**          |
+| provenance strengthening on an **identical** value               | preserved          |
+| same-value no-op                                                 | preserved          |
+| rejected lower-provenance update                                 | preserved          |
+| phase or completeness normalization with no value change         | preserved          |
+
+The merge reports this as an internal `valueChanged`, deliberately narrower than `changed` and
+deliberately not exported: strengthening a provenance changes nothing the client read, and throwing
+their confirmation away for it would make every restatement re-open a settled summary.
+
 ### 8. Phases: the ceiling is SUMMARY
 
 The nine frozen phases are unchanged. RWC-P4A may produce only `INTRO` … `SUMMARY`. It **never**
@@ -173,11 +204,19 @@ something she already has.
 **Out-of-order answers are kept.** A later field supplied before the current primary is stored, and the
 conversation returns to the earliest unresolved required phase and asks only that.
 
-**`PROJECT_DETAILS` is optional and gets ONE opportunity.** It never blocks the summary. It is exited
-when a property type or scope is supplied, when `skipProjectDetails` is explicit, or when the same turn
-supplies budget or timeline (the client has already moved downstream). Otherwise it **stays** — silence
-and a side question are not a skip, which is what keeps the detour resilient without persisting a
-pending-question field.
+**`PROJECT_DETAILS` is optional and gets ONE opportunity per uninterrupted FORWARD progression.** It
+never blocks the summary. It is exited when a property type or scope is supplied, when
+`skipProjectDetails` is explicit, or when the same turn supplies budget or timeline (the client has
+already moved downstream). Otherwise it **stays** — silence and a side question are not a skip, which
+is what keeps the detour resilient without persisting a pending-question field.
+
+"Per forward progression" is the honest bound, and it is bounded by what continuity V1 can express.
+There is no persisted "opportunity consumed" bit and this slice deliberately does not add one, so
+while the conversation stays at or beyond `BUDGET_TIMELINE` the detour is not re-entered — but if an
+explicit user-origin correction clears a prerequisite and the phase regresses to `NEED`/`LOCATION`,
+re-establishing it may offer the detour again. That is the right trade: the alternative is widening
+persisted state to remember a question, and asking once more after the client rewrote their own
+requirements is not the failure worth paying for.
 
 ### 9. One question per turn, with one permitted pair
 
@@ -272,7 +311,8 @@ identity linking (**RWC-P8**). No QuickFurno repository change and no handshake.
 
 The provenance ranking and its four merge rules (§5), the user-origin `CLEAR` restriction, the
 `SUMMARY` ceiling (§8), the one-opportunity `PROJECT_DETAILS` rule, the single budget+timeline pairing
-(§9) and the exactly-one-increment revision rule (§10) are owner-locked. Weakening any of them —
+(§9), the confirmation-invalidation rule (§7a) and the exactly-one-increment revision rule (§10) are
+owner-locked. Weakening any of them —
 letting a lower provenance overwrite, admitting a third question field, reaching `CONTACT`, or bumping
 a revision for a no-op — requires a new ADR, not an edit to this one.
 

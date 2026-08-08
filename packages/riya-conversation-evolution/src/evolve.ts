@@ -27,6 +27,7 @@ import { createRiyaConversationContinuityState } from '@qf-jarvis/riya-conversat
 import type { RiyaConversationContinuityStateV1 } from '@qf-jarvis/riya-conversation-continuity';
 
 import { RiyaConversationEvolutionError } from './contracts/errors.js';
+import { createRiyaConversationObservationBatch } from './contracts/observation.js';
 import type { RiyaConversationObservationBatchV1 } from './contracts/observation.js';
 import { DISCOVERY_VALUE_KEY, SUMMARY_REQUIRED_FIELDS } from './internal/field-map.js';
 import { mergeObservations } from './internal/merge.js';
@@ -98,6 +99,24 @@ export function evolveRiyaConversation(input: {
   }
   const { current, batch } = input;
 
+  // Re-prove the BATCH through its own canonical constructor before anything reads it.
+  //
+  // A TypeScript interface is not a runtime trust boundary. This function is exported, so an
+  // untyped or JSON-fed caller can hand it a forged object that never went through
+  // `createRiyaConversationObservationBatch` -- with an unknown provenance, an extra key, a
+  // non-boolean `skipProjectDetails`, or, worst, two observations for the SAME field. The
+  // constructor's contract is that a duplicate refuses the ENTIRE batch; merging a forged one
+  // observation at a time would instead silently pick a winner, which is exactly the rule nobody
+  // wrote down. Everything below uses the CANONICAL batch, never the argument.
+  let canonicalBatch: RiyaConversationObservationBatchV1;
+  try {
+    canonicalBatch = createRiyaConversationObservationBatch(batch);
+  } catch {
+    // Rethrown as this package's own bounded code rather than passed through: the constructor
+    // already discards the zod issue, and re-wrapping keeps one vocabulary at this boundary.
+    throw new RiyaConversationEvolutionError('invalid-observation-batch');
+  }
+
   // Re-prove the state through its OWN canonical constructor before reasoning about it. A caller
   // that hand-assembled a state, or a store that returned a half-applied row, must not be able to
   // put this reducer to work on something the contract would refuse.
@@ -152,13 +171,13 @@ export function evolveRiyaConversation(input: {
     throw new RiyaConversationEvolutionError('phase-out-of-scope');
   }
 
-  const merged = mergeObservations(canonical.discovery, canonical.fieldProvenance, batch);
+  const merged = mergeObservations(canonical.discovery, canonical.fieldProvenance, canonicalBatch);
 
   const phase = nextPhase({
     currentPhase: canonical.phase,
     values: merged.values,
     changed: merged.changed,
-    skipProjectDetails: batch.skipProjectDetails,
+    skipProjectDetails: canonicalBatch.skipProjectDetails,
     appliedFields: merged.appliedFields,
   });
   const questionPlan = questionPlanFor(phase, merged.values);
@@ -172,7 +191,12 @@ export function evolveRiyaConversation(input: {
     completeness !== canonical.discovery.completeness ||
     missingFields.length !== canonical.discovery.missingFields.length ||
     missingFields.some((field, index) => canonical.discovery.missingFields[index] !== field);
-  const changed = merged.changed || phase !== canonical.phase || discoveryChanged;
+  // Invalidating a confirmation is a state change in its own right. It cannot happen without
+  // `merged.changed` today -- a value only moves when something applied -- but stating it keeps the
+  // two independent, so a later merge rule cannot silently produce an unrecorded flag flip.
+  const confirmationInvalidated = merged.valueChanged && canonical.summaryConfirmed;
+  const changed =
+    merged.changed || phase !== canonical.phase || discoveryChanged || confirmationInvalidated;
 
   if (!changed) {
     // Nothing moved. Return the CANONICAL original, revision untouched, so a caller can compare by
@@ -219,9 +243,17 @@ export function evolveRiyaConversation(input: {
       phase,
       discovery: discoveryInput,
       fieldProvenance: merged.provenance,
-      // RWC-P4A never sets `summaryConfirmed`: being shown a summary and agreeing with it is a
-      // separate act, and RWC-P6 owns it. Reaching SUMMARY is not confirming one.
-      summaryConfirmed: canonical.summaryConfirmed,
+      // RWC-P4A never CREATES a confirmation -- being shown a summary and agreeing with it is a
+      // separate act, and RWC-P6 owns it. Reaching SUMMARY is not confirming one, so `false` can
+      // never become `true` here.
+      //
+      // But it must INVALIDATE one. A confirmation is about the exact facts the client reviewed, so
+      // an accepted change to any discovery VALUE means the summary they agreed to no longer
+      // exists, and carrying the flag forward would let a later phase act on an agreement to
+      // something that was since edited. Strengthening a provenance on an identical value, a
+      // same-value no-op, a rejected update and a phase-only normalization all leave what they read
+      // intact, and preserve it.
+      summaryConfirmed: merged.valueChanged ? false : canonical.summaryConfirmed,
       ...(canonical.completionEvidenceRef === undefined
         ? {}
         : { completionEvidenceRef: canonical.completionEvidenceRef }),

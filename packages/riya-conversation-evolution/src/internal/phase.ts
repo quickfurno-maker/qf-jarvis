@@ -95,7 +95,15 @@ export function nextPhase(args: {
   }
 
   // Service and location are known; budget and/or timeline are not. The optional PROJECT_DETAILS
-  // detour gets exactly ONE opportunity, and never blocks the summary.
+  // detour gets ONE opportunity per uninterrupted FORWARD progression, and never blocks the summary.
+  //
+  // "Per forward progression" is the honest bound, and it is bounded by what continuity V1 can
+  // express: there is no persisted "opportunity consumed" bit, and this slice deliberately does not
+  // add one. So while the conversation stays at or beyond BUDGET_TIMELINE the detour is not
+  // re-entered -- but if an explicit user-origin correction clears a prerequisite and the phase
+  // regresses to NEED/LOCATION, re-establishing it may offer the detour again. That is the right
+  // trade: the alternative is widening the persisted state to remember a question, and asking once
+  // more after the client rewrote their own requirements is not the failure worth paying for.
   const suppliedDownstream = appliedFields.includes('budget') || appliedFields.includes('timeline');
   const detailsAnswered = has(values, 'propertyType') || has(values, 'scope');
 
@@ -109,7 +117,7 @@ export function nextPhase(args: {
   }
 
   // Not currently in PROJECT_DETAILS. Enter it only if the conversation has not already passed it
-  // and nothing this turn makes the detour pointless.
+  // IN THIS forward progression, and nothing this turn makes the detour pointless.
   const alreadyPast = currentPhase === 'BUDGET_TIMELINE' || currentPhase === 'SUMMARY';
   if (alreadyPast || detailsAnswered || skipProjectDetails || suppliedDownstream) {
     return 'BUDGET_TIMELINE';

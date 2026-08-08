@@ -47,6 +47,17 @@ export interface MergeOutcome {
   }[];
   /** True when at least one field's value or provenance actually moved. */
   readonly changed: boolean;
+  /**
+   * True when at least one field's VALUE moved — a different value stored, or a value cleared.
+   *
+   * Narrower than `changed` on purpose, and the distinction is load-bearing: it is what invalidates
+   * a prior summary confirmation. A client confirmed the exact facts they were shown, so a changed
+   * budget means the thing they agreed to no longer exists. Strengthening a provenance on an
+   * IDENTICAL value changes nothing they read, so it must not throw their confirmation away.
+   *
+   * INTERNAL. Not reachable from the package root.
+   */
+  readonly valueChanged: boolean;
 }
 
 /** Read the current value of one discovery field out of a validated `NeedDiscovery`. */
@@ -83,6 +94,7 @@ export function mergeObservations(
   const applied: DiscoveryField[] = [];
   const rejected: { field: DiscoveryField; reason: RiyaObservationRejectionReason }[] = [];
   let changed = false;
+  let valueChanged = false;
 
   for (const observation of batch.observations) {
     const field = observation.field;
@@ -111,6 +123,8 @@ export function mergeObservations(
       provenance.delete(field);
       applied.push(field);
       changed = true;
+      // A withdrawn value is a changed value: the summary the client agreed to said something here.
+      valueChanged = true;
       continue;
     }
 
@@ -140,6 +154,7 @@ export function mergeObservations(
     provenance.set(field, observation.provenance);
     applied.push(field);
     changed = true;
+    valueChanged = true;
   }
 
   return {
@@ -148,5 +163,6 @@ export function mergeObservations(
     appliedFields: Object.freeze([...applied]),
     rejectedFields: Object.freeze(rejected.map((entry) => Object.freeze({ ...entry }))),
     changed,
+    valueChanged,
   };
 }
