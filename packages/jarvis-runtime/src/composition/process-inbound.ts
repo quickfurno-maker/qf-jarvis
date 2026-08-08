@@ -17,6 +17,10 @@ import type {
 import { createOrchestrator, runAgentTurn } from '@qf-jarvis/agent-runtime';
 import { createCoreDecisionAdapter } from '@qf-jarvis/core-decision-adapter';
 import { createModelReplyAdapter } from '@qf-jarvis/model-reply-adapter';
+import type {
+  ModelReplyPromptBinding,
+  ModelReplyStructuredOutputProfile,
+} from '@qf-jarvis/model-reply-adapter';
 
 import { anishaBehaviourPort } from './anisha-behaviour-adapter.js';
 import { behaviourMux } from './behaviour-mux.js';
@@ -65,6 +69,27 @@ const DEFAULT_RUNTIME_REF = 'qfj.jarvis-runtime.p08b1';
 const DEFAULT_TASK_CLASS = 'RESPONSE_GENERATION';
 
 /**
+ * The Riya-aware options for ONE internal run (RWC-P4B, ADR-0099).
+ *
+ * Internal. Supplied only by the Riya-aware public capability, so the ordinary inbound paths keep
+ * exactly the prompt, schema and result they always had.
+ */
+export interface RiyaEvolutionRunOptions {
+  readonly profile: ModelReplyStructuredOutputProfile;
+  /** The DEDICATED evolution binding. Never the ordinary CLIENT reply prompt. */
+  readonly promptBinding: ModelReplyPromptBinding;
+  readonly taskClass: string;
+}
+
+/** One internal run's full output. The public methods project subsets of this. */
+export interface InternalRunResult {
+  readonly runtimeResult: JarvisRuntimeResult;
+  readonly authorizedReply: JarvisCoreAuthorizedReplyResult['authorizedReply'];
+  /** Whatever the Riya profile validated out of the SAME model call, or `undefined`. */
+  readonly profileDetail: unknown;
+}
+
+/**
  * Compose M1–M4 for one envelope ONCE and report the run twice.
  *
  * This is the single execution primitive behind BOTH public runtime methods. `processInbound` and
@@ -72,10 +97,11 @@ const DEFAULT_TASK_CLASS = 'RESPONSE_GENERATION';
  * same result they hand back — there is no path on which one of them runs the pipeline again, makes a
  * second model call, or takes a second Core decision.
  */
-export async function composeAndProcessDetailed(
+export async function composeAndProcessInternal(
   config: JarvisRuntimeConfig,
   envelope: InboundEnvelope,
-): Promise<JarvisCoreAuthorizedReplyResult> {
+  riya?: RiyaEvolutionRunOptions,
+): Promise<InternalRunResult> {
   const hook: JarvisRuntimeObservabilityHook =
     config.observability ?? NOOP_JARVIS_RUNTIME_OBSERVABILITY;
   // The canonical run identifier (ADR-0069), shared with M2/M4 rather than rebuilt here. It replaces
@@ -132,9 +158,19 @@ export async function composeAndProcessDetailed(
       provenance: fields.provenance,
     });
 
+  /**
+   * Captured from the ONE model call, by the wrapper below. Function-scoped on purpose: a
+   * module-level capture would let two concurrent runtime calls see one another observations.
+   */
+  let capturedProfileDetail: unknown;
+
   /** Every non-accepting exit. There is exactly one place in this function that materializes a body. */
-  const withoutReply = (runtimeResult: JarvisRuntimeResult): JarvisCoreAuthorizedReplyResult =>
-    Object.freeze({ runtimeResult, authorizedReply: undefined });
+  const withoutReply = (runtimeResult: JarvisRuntimeResult): InternalRunResult =>
+    Object.freeze({
+      runtimeResult,
+      authorizedReply: undefined,
+      profileDetail: capturedProfileDetail,
+    });
 
   emit('jarvis-inbound-received', undefined, undefined);
 
@@ -145,23 +181,53 @@ export async function composeAndProcessDetailed(
   const privacyGate = privacyGateFor(source, stateKey);
 
   // M4 model reply adapter (existing gateway stays the only routing authority).
-  const modelReplyPort = createModelReplyAdapter({
-    release: config.release,
-    ...(config.promptFamily === undefined ? {} : { promptFamily: config.promptFamily }),
-    ...(config.promptVersion === undefined ? {} : { promptVersion: config.promptVersion }),
-    ...(config.promptBindings === undefined ? {} : { promptBindings: config.promptBindings }),
-    capabilityProfileRef: config.capabilityProfileRef,
-    ...(config.evaluationRef === undefined ? {} : { evaluationRef: config.evaluationRef }),
-    // Passed straight through: jarvis-runtime never resolves a prompt itself. Resolution belongs to
-    // M4, after its own first state gate (ADR-0073).
-    ...(config.promptRegistry === undefined ? {} : { promptRegistry: config.promptRegistry }),
-    ...(config.evaluationPromptDigest === undefined
-      ? {}
-      : { evaluationPromptDigest: config.evaluationPromptDigest }),
-    stateReader: replyStateReader,
-    clock: config.clock,
-    ...(config.gatewayInvoker === undefined ? {} : { invoker: config.gatewayInvoker }),
-  });
+  const modelReplyAdapter =
+    riya === undefined
+      ? createModelReplyAdapter({
+          release: config.release,
+          ...(config.promptFamily === undefined ? {} : { promptFamily: config.promptFamily }),
+          ...(config.promptVersion === undefined ? {} : { promptVersion: config.promptVersion }),
+          ...(config.promptBindings === undefined ? {} : { promptBindings: config.promptBindings }),
+          capabilityProfileRef: config.capabilityProfileRef,
+          ...(config.evaluationRef === undefined ? {} : { evaluationRef: config.evaluationRef }),
+          // Passed straight through: jarvis-runtime never resolves a prompt itself. Resolution
+          // belongs to M4, after its own first state gate (ADR-0073).
+          ...(config.promptRegistry === undefined ? {} : { promptRegistry: config.promptRegistry }),
+          ...(config.evaluationPromptDigest === undefined
+            ? {}
+            : { evaluationPromptDigest: config.evaluationPromptDigest }),
+          stateReader: replyStateReader,
+          clock: config.clock,
+          ...(config.gatewayInvoker === undefined ? {} : { invoker: config.gatewayInvoker }),
+        })
+      : // The Riya-aware adapter. It binds the DEDICATED evolution prompt for CLIENT and nothing
+        // else -- no legacy prompt fields, and deliberately no other scope, so a missing evolution
+        // binding cannot silently borrow the ordinary reply prompt or another agent prompt.
+        createModelReplyAdapter({
+          release: config.release,
+          promptBindings: { CLIENT: riya.promptBinding },
+          capabilityProfileRef: config.capabilityProfileRef,
+          ...(config.promptRegistry === undefined ? {} : { promptRegistry: config.promptRegistry }),
+          stateReader: replyStateReader,
+          clock: config.clock,
+          structuredOutputProfile: riya.profile,
+          ...(config.gatewayInvoker === undefined ? {} : { invoker: config.gatewayInvoker }),
+        });
+
+  // The capturing wrapper. `draftReply` delegates to `draftReplyDetailed` ONCE and returns only the
+  // M2 draft, so the orchestrator sees exactly what it always saw. Calling both would invoke the
+  // gateway twice, which is the one thing this whole design exists to prevent.
+  const modelReplyPort =
+    riya === undefined
+      ? modelReplyAdapter
+      : {
+          ...modelReplyAdapter,
+          async draftReply(plan: Parameters<typeof modelReplyAdapter.draftReply>[0]) {
+            const detailed = await modelReplyAdapter.draftReplyDetailed(plan);
+            capturedProfileDetail = detailed.profileDetail;
+            return detailed.draft;
+          },
+        };
 
   // M3 Core decision adapter — only when a transport is wired; otherwise the decision is deferred.
   const coreDecisionPort = coreConsulted
@@ -178,7 +244,9 @@ export async function composeAndProcessDetailed(
   // when its own input port is injected, and a deterministic mux selects exactly one of them per turn
   // from the actor/party pair the merged router decided. With neither configured the mux is absent
   // and the orchestrator uses its legacy eligible/`REPLY` default, unchanged.
-  const taskClass = config.taskClass ?? DEFAULT_TASK_CLASS;
+  // The Riya-aware run uses its DEDICATED task class, so the prompt registry resolves the
+  // evaluated evolution definition rather than a reply-only one that happens to share the scope.
+  const taskClass = riya?.taskClass ?? config.taskClass ?? DEFAULT_TASK_CLASS;
   const behaviourPort = behaviourMux({
     ...(config.behaviourInput === undefined
       ? {}
@@ -280,6 +348,24 @@ export async function composeAndProcessDetailed(
       result.proposal,
       result.decision.boundRevision,
     ),
+    profileDetail: capturedProfileDetail,
+  });
+}
+
+/**
+ * The ordinary detailed run. Projects the internal result to the P2D contract exactly.
+ *
+ * No Riya options are passed, so the prompt, schema, user message and result shape are the ones this
+ * path always had -- and no profile detail can exist to project.
+ */
+export async function composeAndProcessDetailed(
+  config: JarvisRuntimeConfig,
+  envelope: InboundEnvelope,
+): Promise<JarvisCoreAuthorizedReplyResult> {
+  const run = await composeAndProcessInternal(config, envelope);
+  return Object.freeze({
+    runtimeResult: run.runtimeResult,
+    authorizedReply: run.authorizedReply,
   });
 }
 

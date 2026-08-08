@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
+  },
+
+  // The EMITTING build. Specs under src/tests are EXCLUDED so nothing test-only reaches dist/.
+  //
+  // Four references, all one-way. `model-reply-adapter` supplies the GENERIC profile seam this
+  // package fills; the three Riya packages supply the discovery contract, the state contract and
+  // the pure reducer this package must agree with. None may reference back.
+  //
+  // Deliberately absent: `model-gateway` (this package invokes nothing), `jarvis-runtime`
+  // (composition; referencing it would invert the direction), `riya-web-conversation-service` (a
+  // surface -- this contract is channel-neutral), the postgres store, `event-backbone`, and any
+  // application.
+  "references": [
+    { "path": "../model-reply-adapter/tsconfig.build.json" },
+    { "path": "../riya-agent/tsconfig.build.json" },
+    { "path": "../riya-conversation-continuity/tsconfig.build.json" },
+    { "path": "../riya-conversation-evolution/tsconfig.build.json" }
+  ],
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/tests/**"]
+}

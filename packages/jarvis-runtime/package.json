@@ -27,6 +27,9 @@
     "@qf-jarvis/core-decision-adapter": "workspace:*",
     "@qf-jarvis/model-reply-adapter": "workspace:*",
     "@qf-jarvis/prompt-registry": "workspace:*",
-    "@qf-jarvis/riya-agent": "workspace:*"
+    "@qf-jarvis/riya-agent": "workspace:*",
+    "@qf-jarvis/riya-conversation-continuity": "workspace:*",
+    "@qf-jarvis/riya-conversation-evolution": "workspace:*",
+    "@qf-jarvis/riya-model-interaction": "workspace:*"
   }
 }

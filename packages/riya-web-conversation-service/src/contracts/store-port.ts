@@ -4,16 +4,19 @@
  * An INTERFACE, and deliberately no implementation. RWC-P2B decides whether a durable schema is
  * needed and what it looks like; this port is the evidence that decision will be made against.
  *
- * ### Why three methods, when a turn only uses two
+ * ### Why three methods
  *
- * `load` and `createInitialIfAbsent` are what a turn needs. `compareAndSet` is declared and
- * **never called by this service**, because RWC-P4 owns continuity evolution.
+ * `load` and `createInitialIfAbsent` open a turn. `compareAndSet` closes it.
  *
- * It is declared anyway, and that is the point of the slice. RWC-P2A created `continuityRevision`
- * as its own counter; if the port omitted the operation that counter exists for, P2B would design a
- * schema without knowing it needed optimistic concurrency, and would discover it after the table
- * existed. Declaring it now makes three durable requirements visible before any schema is written:
- * a tenant-scoped key, an atomic create-if-absent, and a compare-and-set.
+ * RWC-P2C declared `compareAndSet` without calling it, and that was the point of the slice: RWC-P2A
+ * created `continuityRevision` as its own counter, and if the port had omitted the operation that
+ * counter exists for, P2B would have designed a schema without knowing it needed optimistic
+ * concurrency and discovered it after the table existed. Declaring it made three durable
+ * requirements visible before any schema was written: a tenant-scoped key, an atomic
+ * create-if-absent, and a compare-and-set.
+ *
+ * Since RWC-P4B (ADR-0099) the service DOES call it. A turn evolves the continuity it loaded and
+ * persists the result, with at most one bounded reconciliation on a revision conflict.
  *
  * ### There is no default implementation, and there must not be
  *
@@ -65,9 +68,11 @@ export interface RiyaContinuityStorePort {
   }): Promise<RiyaContinuityCreateResult>;
 
   /**
-   * Replace the state only if the stored revision still matches. NOT called by this service.
+   * Replace the state only if the stored revision still matches.
    *
-   * Declared so RWC-P2B knows the schema must support optimistic concurrency before it designs one.
+   * The three outcomes are genuinely different and an implementation must not conflate them: a
+   * conflict is a race worth reconciling once, and a `NOT_FOUND` on a row this turn already loaded
+   * is a record contradicting itself.
    */
   compareAndSet(input: {
     readonly expectedRevision: number;

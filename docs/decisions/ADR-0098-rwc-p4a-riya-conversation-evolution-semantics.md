@@ -1,6 +1,6 @@
 # ADR-0098 — RWC-P4A Riya Conversation Evolution Semantics
 
-**Status:** Accepted — RWC-P4A. Implemented on `rwc-p4a-riya-conversation-evolution`, **not merged**, and composed into nothing.
+**Status:** Accepted — RWC-P4A. **Merged** as PR #103 — merge commit `09fa82c41be16d951fe2f1f15e07ca9c02644810`. Composed into nothing at the time of merge; RWC-P4B ([ADR-0099](./ADR-0099-rwc-p4b-one-model-call-extraction-and-continuity-cas.md)) is what composes it. (Status corrected when RWC-P4B began; the technical decisions below are unchanged.)
 **Deciders:** Owner
 **Relates to:** [ADR-0097](./ADR-0097-private-riya-web-ingress-adapter.md) · [ADR-0096](./ADR-0096-rwc-p2d-core-authorized-web-reply-materialization.md) · [ADR-0095](./ADR-0095-rwc-p2b-durable-postgres-riya-conversation-continuity.md) · [ADR-0094](./ADR-0094-rwc-p2c-private-riya-web-conversation-service.md) · [ADR-0093](./ADR-0093-rwc-p2a-riya-conversational-continuity-contract.md) · [ADR-0092](./ADR-0092-jrw-0b-governed-web-runtime-channel.md) · [ADR-0068](./ADR-0068-riya-authoritative-runtime-composition.md) · [ADR-0067](./ADR-0067-riya-client-sales-behaviour-boundary.md)
 

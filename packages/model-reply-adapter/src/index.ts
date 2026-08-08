@@ -16,6 +16,14 @@ export { ModelReplyAdapterError, MODEL_REPLY_ADAPTER_ERROR_CODES } from './contr
 export type { ModelReplyAdapterErrorCode } from './contracts/errors.js';
 
 // Structured reply contract.
+// The OPTIONAL structured-output profile seam (ADR-0099). TYPES ONLY, and deliberately generic:
+// nothing here names an agent, a domain vocabulary or a business concept. It exists so a richer
+// single inference stays ONE inference rather than becoming two calls.
+export type {
+  ModelReplyStructuredOutputProfile,
+  ModelReplyStructuredProjection,
+} from './contracts/structured-output-profile.js';
+
 export { STRUCTURED_REPLY_KINDS, structuredReplySchema } from './contracts/reply-schema.js';
 export type {
   StructuredReply,

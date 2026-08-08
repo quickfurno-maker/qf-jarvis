@@ -18,7 +18,15 @@ export { createJarvisRuntime } from './composition/create-jarvis-runtime.js';
 export type {
   CoreAuthorizedReplyJarvisRuntime,
   JarvisRuntime,
+  RiyaConversationEvolutionJarvisRuntime,
 } from './composition/create-jarvis-runtime.js';
+
+// The RWC-P4B Riya-aware capability (ADR-0099). TYPES ONLY: the exported VALUE surface is unchanged,
+// and the ordinary content-free `JarvisRuntimeResult` is untouched.
+export type {
+  JarvisRiyaConversationEvolutionInput,
+  JarvisRiyaConversationEvolutionResult,
+} from './contracts/riya-conversation-evolution.js';
 
 // The RWC-P2D Core-authorized reply materialization (ADR-0096). TYPES ONLY, and deliberately not a
 // field on `JarvisRuntimeResult`: the ordinary result stays content-free and safe to log whole, and a

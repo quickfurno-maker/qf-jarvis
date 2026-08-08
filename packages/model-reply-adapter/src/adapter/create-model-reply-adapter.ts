@@ -18,6 +18,7 @@ import type {
 } from '@qf-jarvis/agent-runtime';
 
 import type { ModelReplyAdapterResult, SafeReplyProvenance } from '../contracts/adapter-result.js';
+import type { ModelReplyStructuredOutputProfile } from '../contracts/structured-output-profile.js';
 import type { ModelReplyAdapterReason } from '../contracts/reasons.js';
 import type { ReplyStateReader } from '../contracts/state.js';
 import type { StructuredReply, StructuredReplyKind } from '../contracts/reply-schema.js';
@@ -36,7 +37,10 @@ import {
   type GatewayRequestBudgets,
 } from './build-gateway-request.js';
 import { provenanceMatches } from './validate-provenance.js';
-import { validateStructuredResult } from './validate-gateway-result.js';
+import {
+  validateProfileStructuredResult,
+  validateStructuredResult,
+} from './validate-gateway-result.js';
 import { citationsAuthorized } from './validate-citations.js';
 import { resolveAuthoritativePrompt } from './resolve-prompt.js';
 import { postGatewayBlockReason, stateBlockReason } from './state-gates.js';
@@ -80,6 +84,14 @@ export interface ModelReplyAdapterConfig {
   readonly evaluationRef?: string;
   /** Per-scope bindings. When present, every legacy prompt/evaluation field must be absent. */
   readonly promptBindings?: ModelReplyPromptBindings;
+  /**
+   * An OPTIONAL structured-output profile (ADR-0099).
+   *
+   * Absent by default, and absence is the untouched path: same schema, same user message, same
+   * validation, same result keys. Present, it may replace only the structured schema and the user
+   * content, and its validated detail is surfaced on a fully accepted result.
+   */
+  readonly structuredOutputProfile?: ModelReplyStructuredOutputProfile;
   /**
    * The injected immutable prompt registry (ADR-0073). Optional so a runtime that never drafts a
    * reply can still be constructed; a model-backed draft without it fails closed at
@@ -224,6 +236,7 @@ export function createModelReplyAdapter(config: ModelReplyAdapterConfig): ModelR
       provenance: SafeReplyProvenance | undefined,
       outputTokens: number | undefined,
       latencyMs: number | undefined,
+      profileDetail?: unknown,
     ): ModelReplyAdapterResult =>
       Object.freeze({
         ok,
@@ -235,6 +248,9 @@ export function createModelReplyAdapter(config: ModelReplyAdapterConfig): ModelR
         provenance,
         outputTokens,
         latencyMs,
+        // ABSENT, not `undefined`, when no profile produced anything: the default result shape is
+        // unchanged, which existing exact-own-key assertions depend on.
+        ...(profileDetail === undefined ? {} : { profileDetail }),
       });
 
     const refuse = (
@@ -313,7 +329,15 @@ export function createModelReplyAdapter(config: ModelReplyAdapterConfig): ModelR
     // Build the exact gateway request from that one definition.
     let request;
     try {
-      request = buildGatewayRequest({ plan, prompt, requestedAt: config.clock(), budgets });
+      request = buildGatewayRequest({
+        plan,
+        prompt,
+        requestedAt: config.clock(),
+        budgets,
+        ...(config.structuredOutputProfile === undefined
+          ? {}
+          : { profile: config.structuredOutputProfile }),
+      });
     } catch {
       return refuse('model-plan-invalid', false);
     }
@@ -351,12 +375,19 @@ export function createModelReplyAdapter(config: ModelReplyAdapterConfig): ModelR
     if (!provenanceMatches(response, plan, request)) {
       return refuse('model-provenance-mismatch', true);
     }
-    // Strict structured output.
-    const structured = validateStructuredResult(response);
+    // Strict structured output. With a profile the answer is projected to a reply and RE-PROVED
+    // against the base schema; without one this is byte-for-byte the path it always was.
+    const structured =
+      config.structuredOutputProfile === undefined
+        ? validateStructuredResult(response)
+        : validateProfileStructuredResult(response, config.structuredOutputProfile);
     if (!structured.ok) {
       return refuse('model-structured-output-invalid', true);
     }
     const reply = structured.reply;
+    // Held until the very end. Every gate below can still refuse, and detail beside a refusal would
+    // be material extracted from an answer the adapter had already decided not to trust.
+    const profileDetail = structured.detail;
     // Exact citation authorization (no silent drop).
     if (!citationsAuthorized(reply, plan)) {
       return refuse('model-citation-mismatch', true);
@@ -411,6 +442,7 @@ export function createModelReplyAdapter(config: ModelReplyAdapterConfig): ModelR
       provenance,
       outputTokens,
       response.latencyMs,
+      profileDetail,
     );
   }
 

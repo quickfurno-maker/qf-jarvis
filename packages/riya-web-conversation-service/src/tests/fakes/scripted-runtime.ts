@@ -1,22 +1,30 @@
 /**
- * A deterministic stand-in for the composed Jarvis runtime (RWC-P2C; RWC-P2D, ADR-0096).
+ * A deterministic stand-in for the composed Jarvis runtime (RWC-P2C; RWC-P2D, ADR-0096;
+ * RWC-P4B, ADR-0099).
  *
  * Test support only, excluded from the emitting build. It composes nothing and decides nothing: it
  * answers with whatever a spec scripted, and records how it was reached.
  *
- * The two inbound methods are counted SEPARATELY on purpose. The service must call the
- * content-bearing capability exactly once and must never call ordinary `processInbound` in addition
- * — a single shared counter could not tell "one call" from "one of each", which is precisely the
- * regression (two orchestration runs, two model calls, two Core decisions for one turn) the count
- * exists to catch.
+ * The THREE inbound methods are counted SEPARATELY on purpose. The service must call the Riya-aware
+ * capability exactly once and must never call either of the other two in addition — a single shared
+ * counter could not tell "one call" from "one of each", which is precisely the regression (two
+ * orchestration runs, two model calls, two Core decisions and two independent extractions of one
+ * sentence) the counts exist to catch.
  */
 import type { InboundEnvelope } from '@qf-jarvis/agent-runtime';
 import type {
-  CoreAuthorizedReplyJarvisRuntime,
   JarvisCoreAuthorizedReplyV1,
+  JarvisRiyaConversationEvolutionInput,
   JarvisRuntimeOutcome,
   JarvisRuntimeResult,
+  RiyaConversationEvolutionJarvisRuntime,
 } from '@qf-jarvis/jarvis-runtime';
+import { createRiyaConversationObservationBatch } from '@qf-jarvis/riya-conversation-evolution';
+import type {
+  RiyaConversationObservationBatchV1,
+  RiyaDiscoveryObservationV1,
+} from '@qf-jarvis/riya-conversation-evolution';
+import type { RiyaConversationContinuityStateV1 } from '@qf-jarvis/riya-conversation-continuity';
 
 /** The sentinel body. Unique enough that finding it anywhere is proof, not coincidence. */
 export const SENTINEL_BODY = 'SENTINEL-P2D-9f3a7c1e-authorized-client-text';
@@ -29,13 +37,26 @@ export interface ScriptedRuntimeOptions {
   readonly authorizedReply?: JarvisCoreAuthorizedReplyV1;
   /** Force `undefined` even on CORE_ACCEPTED (a no-body or non-text-carrying proposal). */
   readonly suppressReply?: boolean;
+  /**
+   * What this run observed. Absent means the run produced NO batch — no model ran, or the structured
+   * answer failed an M4 gate. Present means the model answered and passed every gate, which is
+   * deliberately independent of what Core then decided.
+   */
+  readonly observations?: readonly RiyaDiscoveryObservationV1[];
+  readonly skipProjectDetails?: boolean;
 }
 
-/** The recording runtime, exposing BOTH inbound methods plus the mature operator surface. */
-export type ScriptedRuntime = CoreAuthorizedReplyJarvisRuntime & {
+/** The recording runtime, exposing ALL THREE inbound methods plus the mature operator surface. */
+export type ScriptedRuntime = RiyaConversationEvolutionJarvisRuntime & {
+  /** How many times the RWC-P4B capability — the one the service calls — was invoked. */
   invoked(): number;
+  /** How many times the RWC-P2D capability was invoked. A turn must leave this at zero. */
+  coreAuthorizedInvoked(): number;
+  /** How many times ordinary `processInbound` was invoked. A turn must leave this at zero. */
   ordinaryInvoked(): number;
   lastEnvelope(): InboundEnvelope | undefined;
+  /** The continuity the service handed in — proof it passes the state it LOADED, not a fresh one. */
+  lastContinuity(): RiyaConversationContinuityStateV1 | undefined;
 };
 
 export function scriptedRuntime(
@@ -43,8 +64,10 @@ export function scriptedRuntime(
   over: ScriptedRuntimeOptions = {},
 ): ScriptedRuntime {
   let calls = 0;
+  let coreAuthorizedCalls = 0;
   let ordinaryCalls = 0;
   let seen: InboundEnvelope | undefined;
+  let seenContinuity: RiyaConversationContinuityStateV1 | undefined;
 
   const runtimeResultFor = (envelope: InboundEnvelope): JarvisRuntimeResult => ({
     outcome,
@@ -76,6 +99,18 @@ export function scriptedRuntime(
     };
   };
 
+  /** Built through the REAL constructor, so a spec can never hand the service a forged batch. */
+  const batch = (): RiyaConversationObservationBatchV1 | undefined => {
+    if (over.observations === undefined) {
+      return undefined;
+    }
+    return createRiyaConversationObservationBatch({
+      version: 1,
+      observations: over.observations,
+      skipProjectDetails: over.skipProjectDetails ?? false,
+    });
+  };
+
   return {
     processInbound(envelope: InboundEnvelope) {
       ordinaryCalls += 1;
@@ -86,7 +121,7 @@ export function scriptedRuntime(
       return Promise.resolve(runtimeResultFor(envelope));
     },
     processInboundForCoreAuthorizedReply(envelope: InboundEnvelope) {
-      calls += 1;
+      coreAuthorizedCalls += 1;
       seen = envelope;
       if (over.throws === true) {
         return Promise.reject(new Error('runtime at 10.0.0.1 — password=hunter2'));
@@ -96,10 +131,25 @@ export function scriptedRuntime(
         authorizedReply: materialization(),
       });
     },
+    processInboundForRiyaConversationEvolution(input: JarvisRiyaConversationEvolutionInput) {
+      calls += 1;
+      seen = input.envelope;
+      seenContinuity = input.continuity;
+      if (over.throws === true) {
+        return Promise.reject(new Error('runtime at 10.0.0.1 — password=hunter2'));
+      }
+      return Promise.resolve({
+        runtimeResult: runtimeResultFor(input.envelope),
+        authorizedReply: materialization(),
+        observationBatch: batch(),
+      });
+    },
     applyConversationControlCommand: () => Promise.reject(new Error('not used')),
     readConversationOperationsSnapshot: () => Promise.reject(new Error('not used')),
     invoked: () => calls,
+    coreAuthorizedInvoked: () => coreAuthorizedCalls,
     ordinaryInvoked: () => ordinaryCalls,
     lastEnvelope: () => seen,
+    lastContinuity: () => seenContinuity,
   };
 }

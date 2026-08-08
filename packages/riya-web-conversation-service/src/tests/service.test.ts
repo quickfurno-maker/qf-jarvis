@@ -193,9 +193,18 @@ describe('continuity is loaded or initialized, and returned unchanged', () => {
     expect(c.summaryConfirmed).toBe(false);
     expect(c.completionEvidenceRef).toBeUndefined();
     expect(c.fieldProvenance).toStrictEqual({});
-    expect([...c.discovery.missingFields].sort()).toStrictEqual(
-      [...DISCOVERY_FIELDS_FROZEN].sort(),
-    );
+    // RWC-P4B §20: the FOUR summary-blocking fields, in the reducer's own order — not all seven.
+    // `propertyType`, `scope` and `consultationPreference` are optional and never block a summary,
+    // so listing them would make every conversation look permanently unfinished.
+    expect([...c.discovery.missingFields]).toStrictEqual([
+      'serviceInterest',
+      'location',
+      'budget',
+      'timeline',
+    ]);
+    expect(c.discovery.missingFields).not.toContain('propertyType');
+    expect(c.discovery.missingFields).not.toContain('scope');
+    expect(c.discovery.missingFields).not.toContain('consultationPreference');
     expect(c.discovery.completeness).toBe('MORE_DISCOVERY_REQUIRED');
     // Built through the REAL P2A constructor: `behaviourVersion` is stamped by it and by nothing
     // here, so a hand-assembled bypass state would not carry it.
@@ -514,16 +523,19 @@ describe('the authoritative runtime is reused exactly once', () => {
 });
 
 describe('errors are bounded and content-free', () => {
-  it('exposes exactly four codes, frozen, with no unreachable conflict code', () => {
+  it('exposes exactly five codes, frozen, and the fifth is now reachable', () => {
     expect([...RIYA_WEB_CONVERSATION_ERROR_CODES]).toStrictEqual([
       'invalid-input',
       'continuity-unavailable',
       'runtime-unavailable',
       'repository-invariant',
+      'continuity-conflict',
     ]);
     expect(Object.isFrozen(RIYA_WEB_CONVERSATION_ERROR_CODES)).toBe(true);
-    // The service never calls compareAndSet, so a revision conflict is unreachable from a turn.
-    expect([...RIYA_WEB_CONVERSATION_ERROR_CODES]).not.toContain('continuity-conflict');
+    // RWC-P2C refused this code because a revision conflict was unreachable from a turn. RWC-P4B
+    // makes it reachable — the service now persists — so the code is added rather than the rule
+    // relaxed, and the CAS suite proves the exact path that produces it.
+    expect([...RIYA_WEB_CONVERSATION_ERROR_CODES]).toContain('continuity-conflict');
   });
 
   it('never quotes a client message', async () => {

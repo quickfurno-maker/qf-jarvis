@@ -1,0 +1,26 @@
+{
+  "name": "@qf-jarvis/riya-model-interaction",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis Riya model-interaction contract (RWC-P4B, ADR-0099). The Riya-specific half of the ONE structured model call: the content-minimised current-continuity projection sent as the single user message, the strict reply+observations output schema, the provenance restriction that a MODEL producer may emit only user_stated or model_inferred (and only user_stated for a CLEAR), canonical RWC-P4A observation-batch construction, and the deterministic agreement check that the model's claimed question plan matches what the P4A reducer decides. It invokes no model itself: it is a profile handed to the generic M4 adapter, so one inference produces both the reply draft material and the observations. It is ONE Riya -- nothing here is web- or WhatsApp-specific. No gateway invoker, provider, database, HTTP, Core adapter, transcript, evidence quote, contact detail, consent, canSubmit, lead, vendor, package, price or business authority. Depends on @qf-jarvis/riya-agent, @qf-jarvis/riya-conversation-continuity, @qf-jarvis/riya-conversation-evolution, @qf-jarvis/model-reply-adapter and zod.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/model-reply-adapter": "workspace:*",
+    "@qf-jarvis/riya-agent": "workspace:*",
+    "@qf-jarvis/riya-conversation-continuity": "workspace:*",
+    "@qf-jarvis/riya-conversation-evolution": "workspace:*",
+    "zod": "4.4.3"
+  }
+}

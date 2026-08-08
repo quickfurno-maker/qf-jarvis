@@ -752,6 +752,8 @@ describe('durable control semantics through the composed runtime', () => {
         'applyConversationControlCommand',
         'processInbound',
         'processInboundForCoreAuthorizedReply',
+        // RWC-P4B (ADR-0099).
+        'processInboundForRiyaConversationEvolution',
         'readConversationOperationsSnapshot',
       ]);
     } finally {

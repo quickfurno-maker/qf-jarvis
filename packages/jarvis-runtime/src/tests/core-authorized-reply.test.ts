@@ -471,12 +471,13 @@ describe('the materialization rule is not a public capability', () => {
     ]);
   });
 
-  it('the runtime exposes exactly the four expected methods', () => {
+  it('the runtime exposes exactly the five expected methods', () => {
     const runtime = createJarvisRuntime(syntheticRuntimeConfig());
     expect(Object.keys(runtime).sort()).toEqual([
       'applyConversationControlCommand',
       'processInbound',
       'processInboundForCoreAuthorizedReply',
+      'processInboundForRiyaConversationEvolution',
       'readConversationOperationsSnapshot',
     ]);
     // No send/deliver/execute crept in alongside the content-bearing method.

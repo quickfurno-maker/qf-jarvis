@@ -107,6 +107,52 @@ describe('containment', () => {
     }
   });
 
+  it('(ADR-0099) the structured-output profile seam names no agent, domain or state concept', () => {
+    // The profile exists so ONE caller can ask for a richer single answer. It must not teach this
+    // package what that caller's answer means: a seam that knew about Riya would make every other
+    // agent's adapter carry Riya's vocabulary, and would put a conversation's semantics inside
+    // infrastructure that has no business holding them.
+    //
+    // Prose is scanned too, deliberately, and this is the exception to the usual codeOnly rule: the
+    // seam's own documentation must not explain itself in one agent's terms either.
+    //
+    // No DOMAIN vocabulary anywhere in production source.
+    for (const file of productionFiles()) {
+      const text = readFileSync(file, 'utf8').toLowerCase();
+      for (const forbidden of [
+        'continuity',
+        'discovery',
+        'observation',
+        'summaryconfirmed',
+        'questionplan',
+        'web-conversation',
+        'quickfurno',
+        'riya-model-interaction',
+      ]) {
+        expect({ file, forbidden, present: text.includes(forbidden) }).toStrictEqual({
+          file,
+          forbidden,
+          present: false,
+        });
+      }
+    }
+
+    // And no AGENT NAME in the seam contract itself. The rest of the package legitimately maps the
+    // M2 `assignedActor` enum -- `RIYA`, `ANISHA` -- onto a gateway scope, and always has; that is a
+    // routing fact, not a semantic one. This one file is the seam's whole vocabulary, so it is the
+    // file where an agent's name would actually mean the seam had learned about that agent.
+    const seam = readFileSync(
+      fileURLToPath(new URL('src/contracts/structured-output-profile.ts', PKG_DIR)),
+      'utf8',
+    ).toLowerCase();
+    for (const forbidden of ['riya', 'anisha', 'jarvis-runtime', 'client']) {
+      expect({ forbidden, present: seam.includes(forbidden) }).toStrictEqual({
+        forbidden,
+        present: false,
+      });
+    }
+  });
+
   it('(81) depends only on agent-runtime + model-gateway + prompt-registry + zod, exposes root + ./testing', () => {
     expect(Object.keys(manifest.dependencies ?? {}).sort()).toEqual([
       '@qf-jarvis/agent-runtime',

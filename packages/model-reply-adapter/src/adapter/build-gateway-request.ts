@@ -24,6 +24,7 @@ import {
 
 import { ModelReplyAdapterError } from '../contracts/errors.js';
 import { structuredReplySchema } from '../contracts/reply-schema.js';
+import type { ModelReplyStructuredOutputProfile } from '../contracts/structured-output-profile.js';
 import { contentDigest, isCanonicalInstant } from '../contracts/digest.js';
 
 /** The bounded per-request budgets/timeout the adapter passes through to the gateway. */
@@ -68,8 +69,15 @@ export function buildGatewayRequest(args: {
   readonly prompt: PromptDefinition;
   readonly requestedAt: string;
   readonly budgets: GatewayRequestBudgets;
+  /**
+   * The optional structured-output profile (ADR-0099).
+   *
+   * When absent, every byte of this request is what it always was. When present it may replace ONLY
+   * the user-message content and the structured schema.
+   */
+  readonly profile?: ModelReplyStructuredOutputProfile;
 }): ModelRequest {
-  const { plan, prompt, requestedAt, budgets } = args;
+  const { plan, prompt, requestedAt, budgets, profile } = args;
   if (!isCanonicalInstant(requestedAt)) {
     throw new ModelReplyAdapterError('invalid-request');
   }
@@ -130,6 +138,15 @@ export function buildGatewayRequest(args: {
     metadata['evaluationRef'] = plan.evaluationRef;
   }
 
+  let userContent = '';
+  if (profile !== undefined) {
+    try {
+      userContent = profile.buildUserContent(plan);
+    } catch {
+      throw new ModelReplyAdapterError('invalid-request');
+    }
+  }
+
   const candidate = {
     runId: plan.runId,
     purpose: 'agent.reply',
@@ -139,7 +156,9 @@ export function buildGatewayRequest(args: {
       // The system message IS the resolved definition's bytes -- no prefix, no suffix, no appended
       // policy, no interpolation. The user message stays separate, as it always has.
       { role: 'system', content: prompt.systemTemplate },
-      { role: 'user', content: plan.normalizedText ?? '' },
+      // A profile may supply the user content; with none, this is exactly what it always was. A
+      // profile that throws while building becomes an invalid request rather than a half-built one.
+      { role: 'user', content: profile === undefined ? (plan.normalizedText ?? '') : userContent },
     ],
     requiredCapabilities: {
       structuredOutput: true,
@@ -148,7 +167,7 @@ export function buildGatewayRequest(args: {
       minContextTokens: budgets.minContextTokens,
     },
     resultMode: 'STRUCTURED',
-    structuredSchema: structuredReplySchema,
+    structuredSchema: profile === undefined ? structuredReplySchema : profile.structuredSchema,
     maxResultChars: budgets.maxResultChars,
     promptId: prompt.promptId,
     promptVersion,

@@ -21,6 +21,10 @@
     { "path": "../jarvis-runtime/tsconfig.build.json" },
     { "path": "../agent-runtime/tsconfig.build.json" },
     { "path": "../riya-conversation-continuity/tsconfig.build.json" },
+    // RWC-P4B (ADR-0099): the PURE RWC-P4A reducer. This service now evolves the continuity it
+    // loads and persists the result through the existing compare-and-set. The reducer performs no
+    // I/O, which is what makes the one bounded conflict re-merge safe to run again.
+    { "path": "../riya-conversation-evolution/tsconfig.build.json" },
     { "path": "../riya-agent/tsconfig.build.json" }
   ],
   "include": ["src/**/*.ts"],

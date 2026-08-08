@@ -290,6 +290,15 @@ importers:
       '@qf-jarvis/riya-agent':
         specifier: workspace:*
         version: link:../riya-agent
+      '@qf-jarvis/riya-conversation-continuity':
+        specifier: workspace:*
+        version: link:../riya-conversation-continuity
+      '@qf-jarvis/riya-conversation-evolution':
+        specifier: workspace:*
+        version: link:../riya-conversation-evolution
+      '@qf-jarvis/riya-model-interaction':
+        specifier: workspace:*
+        version: link:../riya-model-interaction
 
   packages/model-evaluation:
     dependencies:
@@ -405,9 +414,15 @@ importers:
       '@qf-jarvis/event-backbone':
         specifier: workspace:*
         version: link:../event-backbone
+      '@qf-jarvis/jarvis-runtime':
+        specifier: workspace:*
+        version: link:../jarvis-runtime
       '@qf-jarvis/riya-agent':
         specifier: workspace:*
         version: link:../riya-agent
+      '@qf-jarvis/riya-conversation-evolution':
+        specifier: workspace:*
+        version: link:../riya-conversation-evolution
       '@types/pg':
         specifier: 8.20.0
         version: 8.20.0
@@ -463,6 +478,24 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
 
+  packages/riya-model-interaction:
+    dependencies:
+      '@qf-jarvis/model-reply-adapter':
+        specifier: workspace:*
+        version: link:../model-reply-adapter
+      '@qf-jarvis/riya-agent':
+        specifier: workspace:*
+        version: link:../riya-agent
+      '@qf-jarvis/riya-conversation-continuity':
+        specifier: workspace:*
+        version: link:../riya-conversation-continuity
+      '@qf-jarvis/riya-conversation-evolution':
+        specifier: workspace:*
+        version: link:../riya-conversation-evolution
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+
   packages/riya-web-conversation-service:
     dependencies:
       '@qf-jarvis/agent-runtime':
@@ -477,6 +510,9 @@ importers:
       '@qf-jarvis/riya-conversation-continuity':
         specifier: workspace:*
         version: link:../riya-conversation-continuity
+      '@qf-jarvis/riya-conversation-evolution':
+        specifier: workspace:*
+        version: link:../riya-conversation-evolution
       zod:
         specifier: 4.4.3
         version: 4.4.3

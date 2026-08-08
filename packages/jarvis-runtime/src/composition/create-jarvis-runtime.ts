@@ -2,13 +2,16 @@
  * The M5 Jarvis runtime composition root (QFJ-M5, ADR-0059 §A, §B, §G; QFJ-P08-A, ADR-0075).
  *
  * `createJarvisRuntime(config)` validates the mandatory injected dependencies (fail closed at
- * construction), then returns a frozen runtime with exactly four programmatic methods:
+ * construction), then returns a frozen runtime with exactly five programmatic methods:
  *
  * - `processInbound` — the ONE pre-transport inbound composition entry point, composing M1–M4 for one
  *   envelope behind the ONE authoritative state source. Its behaviour is unchanged by ADR-0075;
  * - `processInboundForCoreAuthorizedReply` — the RWC-P2D content-bearing sibling (ADR-0096). The SAME
  *   single composition, reported with the Core-authorized body attached. Separate because
  *   `processInbound`'s result is deliberately content-free and callers may log it whole;
+ * - `processInboundForRiyaConversationEvolution` — the RWC-P4B Riya-aware sibling (ADR-0099). The
+ *   SAME single composition, whose ONE model call also produces this turn's bounded discovery
+ *   observations. Separate for the same reason as above, and it persists nothing;
  * - `applyConversationControlCommand` — the operator control entry point (ADR-0074 semantics, applied
  *   by the authoritative source itself);
  * - `readConversationOperationsSnapshot` — the operator query entry point.
@@ -26,12 +29,23 @@
  * QuickFurno Core remains the only business authority; model output is a draft only.
  */
 import type { InboundEnvelope } from '@qf-jarvis/agent-runtime';
+import { createRiyaConversationModelProfile } from '@qf-jarvis/riya-model-interaction';
+import {
+  RIYA_CONVERSATION_EVOLUTION_TASK_CLASS,
+  parseRiyaModelProfileDetail,
+} from '@qf-jarvis/riya-model-interaction';
+import { createRiyaConversationContinuityState } from '@qf-jarvis/riya-conversation-continuity';
+import type { RiyaConversationContinuityStateV1 } from '@qf-jarvis/riya-conversation-continuity';
 
 import type { JarvisCoreAuthorizedReplyResult } from '../contracts/core-authorized-reply.js';
 import type { JarvisRuntimeConfig } from '../contracts/runtime-config.js';
 import type { JarvisRuntimeResult } from '../contracts/runtime-result.js';
 import { assertMandatoryDependencies } from './validate-composition.js';
-import { composeAndProcessDetailed } from './process-inbound.js';
+import { composeAndProcessDetailed, composeAndProcessInternal } from './process-inbound.js';
+import type {
+  JarvisRiyaConversationEvolutionInput,
+  JarvisRiyaConversationEvolutionResult,
+} from '../contracts/riya-conversation-evolution.js';
 import {
   applyControlCommandThroughSource,
   type JarvisConversationControlInput,
@@ -83,8 +97,34 @@ export interface CoreAuthorizedReplyJarvisRuntime extends JarvisRuntime {
   ): Promise<JarvisCoreAuthorizedReplyResult>;
 }
 
+/**
+ * The runtime plus the Riya conversation-evolution capability (RWC-P4B, ADR-0099).
+ *
+ * A fifth concrete method, additive in exactly the way RWC-P2D's fourth was. It extends the
+ * Core-authorized-reply runtime, so every consumer typed against `JarvisRuntime` or
+ * `CoreAuthorizedReplyJarvisRuntime` keeps working untouched and there is still one factory.
+ *
+ * ONE call performs ONE orchestration: one model-gateway invocation, at most one Core decision. It
+ * does not call either older method internally — that would be a second run.
+ */
+export interface RiyaConversationEvolutionJarvisRuntime extends CoreAuthorizedReplyJarvisRuntime {
+  /**
+   * Process one inbound Riya turn and additionally return the observations the SAME model call
+   * produced.
+   *
+   * Fails closed before the gateway on a non-canonical continuity, a tenant/conversation mismatch
+   * against the envelope, a phase RWC-P4A does not own, or a missing/unevaluated dedicated
+   * evolution prompt binding. Nothing is sent, persisted or authorized here.
+   */
+  processInboundForRiyaConversationEvolution(
+    input: JarvisRiyaConversationEvolutionInput,
+  ): Promise<JarvisRiyaConversationEvolutionResult>;
+}
+
 /** Build a frozen Jarvis runtime from injected collaborators. Missing mandatory deps fail closed. */
-export function createJarvisRuntime(config: JarvisRuntimeConfig): CoreAuthorizedReplyJarvisRuntime {
+export function createJarvisRuntime(
+  config: JarvisRuntimeConfig,
+): RiyaConversationEvolutionJarvisRuntime {
   assertMandatoryDependencies(config);
   return Object.freeze({
     async processInbound(envelope: InboundEnvelope): Promise<JarvisRuntimeResult> {
@@ -97,6 +137,146 @@ export function createJarvisRuntime(config: JarvisRuntimeConfig): CoreAuthorized
     ): Promise<JarvisCoreAuthorizedReplyResult> {
       // The SAME primitive, called once. `processInbound` is never invoked in addition.
       return composeAndProcessDetailed(config, envelope);
+    },
+    async processInboundForRiyaConversationEvolution(
+      input: JarvisRiyaConversationEvolutionInput,
+    ): Promise<JarvisRiyaConversationEvolutionResult> {
+      /**
+       * Fail CLOSED as a refused run, not as a thrown error.
+       *
+       * This package's taxonomy says the only error it throws is a construction-time wiring error;
+       * every runtime path normalizes to a fail-closed `JarvisRuntimeResult`. A new method that
+       * threw would make one inbound path behave unlike the other two, and a caller that already
+       * handles a REFUSED result would suddenly need a try/catch for the same class of problem.
+       */
+      const refused = (runId = '', conversationId = ''): JarvisRiyaConversationEvolutionResult =>
+        Object.freeze({
+          runtimeResult: Object.freeze({
+            outcome: 'REFUSED' as const,
+            runId,
+            conversationId,
+            boundRevision: undefined,
+            assignedActor: undefined,
+            proposalId: undefined,
+            modelDrafted: false,
+            coreConsulted: config.coreTransport !== undefined,
+            refusalReason: 'orchestration-invariant' as const,
+            provenance: undefined,
+          }),
+          authorizedReply: undefined,
+          observationBatch: undefined,
+        });
+
+      // Typed `unknown` at the boundary. The declared parameter promises an envelope and a state,
+      // but this is a package boundary: an untyped caller, or one that built the input from JSON,
+      // can hand over anything -- including an array, which `typeof` reports as an object.
+      const supplied: unknown = input;
+      if (typeof supplied !== 'object' || supplied === null || Array.isArray(supplied)) {
+        return refused();
+      }
+      const candidate = supplied as {
+        readonly envelope?: unknown;
+        readonly continuity?: unknown;
+      };
+      const envelopeValue = candidate.envelope;
+      const continuityValue = candidate.continuity;
+      if (
+        typeof envelopeValue !== 'object' ||
+        envelopeValue === null ||
+        typeof continuityValue !== 'object' ||
+        continuityValue === null
+      ) {
+        return refused();
+      }
+      const envelope = envelopeValue as InboundEnvelope;
+      const continuity = continuityValue as RiyaConversationContinuityStateV1;
+
+      // Re-prove the continuity through its OWN canonical constructor. A hand-assembled state, or a
+      // half-applied row a store returned, must not become the context one model call reasons from.
+      let current;
+      try {
+        current = createRiyaConversationContinuityState({
+          version: 1,
+          tenantId: continuity.tenantId,
+          conversationId: continuity.conversationId,
+          continuityRevision: continuity.continuityRevision,
+          phase: continuity.phase,
+          discovery: {
+            ...(continuity.discovery.serviceInterestRef === undefined
+              ? {}
+              : { serviceInterestRef: continuity.discovery.serviceInterestRef }),
+            ...(continuity.discovery.locationRef === undefined
+              ? {}
+              : { locationRef: continuity.discovery.locationRef }),
+            ...(continuity.discovery.propertyTypeRef === undefined
+              ? {}
+              : { propertyTypeRef: continuity.discovery.propertyTypeRef }),
+            ...(continuity.discovery.scopeSummary === undefined
+              ? {}
+              : { scopeSummary: continuity.discovery.scopeSummary }),
+            ...(continuity.discovery.budgetNote === undefined
+              ? {}
+              : { budgetNote: continuity.discovery.budgetNote }),
+            ...(continuity.discovery.timelineNote === undefined
+              ? {}
+              : { timelineNote: continuity.discovery.timelineNote }),
+            ...(continuity.discovery.consultationPreferenceRef === undefined
+              ? {}
+              : { consultationPreferenceRef: continuity.discovery.consultationPreferenceRef }),
+            completeness: continuity.discovery.completeness,
+            ...(continuity.discovery.missingFields.length === 0
+              ? {}
+              : { missingFields: [...continuity.discovery.missingFields] }),
+          },
+          fieldProvenance: continuity.fieldProvenance,
+          summaryConfirmed: continuity.summaryConfirmed,
+          ...(continuity.completionEvidenceRef === undefined
+            ? {}
+            : { completionEvidenceRef: continuity.completionEvidenceRef }),
+        });
+      } catch {
+        return refused(envelope.runtimeId, envelope.conversationId);
+      }
+
+      // The state and the envelope must be about the SAME conversation. A mismatch is a wiring
+      // error, not two conversations to serve, and it is never normalized.
+      if (
+        current.tenantId !== envelope.tenantId ||
+        current.conversationId !== envelope.conversationId
+      ) {
+        return refused(envelope.runtimeId, envelope.conversationId);
+      }
+      // RWC-P4A owns INTRO..SUMMARY. CONTACT/CONSENT/COMPLETE are RWC-P6's, and a model call about
+      // one of them would be this slice reasoning past its ceiling.
+      if (
+        current.phase === 'CONTACT' ||
+        current.phase === 'CONSENT' ||
+        current.phase === 'COMPLETE'
+      ) {
+        return refused(envelope.runtimeId, envelope.conversationId);
+      }
+
+      // No evaluated evolution prompt, no Riya-aware model call. No fallback to the ordinary CLIENT
+      // reply prompt, and none to any other scope.
+      const binding = config.riyaConversationEvolutionPromptBinding;
+      if (binding?.evaluationRef === undefined || binding.evaluationPromptDigest === undefined) {
+        return refused(envelope.runtimeId, envelope.conversationId);
+      }
+
+      const run = await composeAndProcessInternal(config, envelope, {
+        profile: createRiyaConversationModelProfile({ current }),
+        promptBinding: binding,
+        taskClass: RIYA_CONVERSATION_EVOLUTION_TASK_CLASS,
+      });
+
+      // The generic seam types the detail as `unknown` on purpose; the package that produced it owns
+      // the guard, so nothing is blindly cast here.
+      const detail = parseRiyaModelProfileDetail(run.profileDetail);
+      return Object.freeze({
+        runtimeResult: run.runtimeResult,
+        authorizedReply: run.authorizedReply,
+        observationBatch: detail?.observationBatch,
+      });
     },
     applyConversationControlCommand(
       input: JarvisConversationControlInput,
