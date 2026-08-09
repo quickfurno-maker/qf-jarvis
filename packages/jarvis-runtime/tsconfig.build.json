@@ -32,6 +32,10 @@
     // the snapshot is supplied by the service that owns the outbound call, exactly as the
     // continuity is supplied by the service that owns the store.
     { "path": "../core-service-availability-read/tsconfig.build.json" },
+    // RWC-P7 (ADR-0103): the QFJ-P04.03 governed knowledge system -- the ONE approved knowledge
+    // authority. Deterministic, exact, bounded and citation-required; it reaches nothing itself and
+    // brings no retrieval engine, no index and no embedding with it.
+    { "path": "../governed-knowledge/tsconfig.build.json" },
     { "path": "../anisha-agent/tsconfig.build.json" },
     { "path": "../prompt-registry/tsconfig.build.json" },
     { "path": "../conversation-control/tsconfig.build.json" }

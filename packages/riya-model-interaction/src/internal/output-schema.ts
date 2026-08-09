@@ -166,3 +166,21 @@ export const riyaStructuredOutputSchema = z
   .strict();
 
 export type RiyaStructuredOutput = z.infer<typeof riyaStructuredOutputSchema>;
+
+/**
+ * The POST-SUMMARY grounded answer (RWC-P7, ADR-0103 §16).
+ *
+ * A reply, and structurally nothing else. `.strict()` with a single key, so this schema cannot
+ * express an observation, an evolution, a question plan, a provenance, a phase, a contact or consent
+ * claim, a completion reference or a business action — and a model that tried to send one is refused
+ * rather than trimmed.
+ *
+ * That absence is the whole design of the post-summary text turn. Past `SUMMARY` the conversation is
+ * governed by RWC-P6's structured actions, which make ZERO model calls; a client typing "yes" into a
+ * chat box must be able to receive an answer without any possibility of that answer moving a phase,
+ * confirming a summary or submitting an intake. The narrowest way to guarantee that is a schema with
+ * nowhere to put it.
+ */
+export const riyaGroundedReplyOutputSchema = z.object({ reply: riyaReplySchema }).strict();
+
+export type RiyaGroundedReplyOutput = z.infer<typeof riyaGroundedReplyOutputSchema>;

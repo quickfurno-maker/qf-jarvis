@@ -1,6 +1,10 @@
 # ADR-0102 — RWC-P6B: structured actions, compare-and-set, and the idempotent Core submission
 
-- **Status:** Accepted — RWC-P6B implementation on branch, NOT MERGED
+- **Status:** Accepted — **RWC-P6B merged** as PR #107, merge commit
+  `28fec33e5111a8e3d5b0cbe090335d3e43a4d17f`, reviewed head
+  `1530049ba5a9021a1f519f2d63b7989633a25d11`. **RWC-P7 is current**
+  ([ADR-0103](./ADR-0103-rwc-p7-grounded-qa-with-governed-exact-knowledge.md)), and changes none of
+  the decisions below.
 - **Date:** 2026-08-09
 - **Supersedes:** nothing
 - **Depends on:** ADR-0101 (RWC-P6 semantics and contracts), ADR-0100 (RWC-P5 Core availability),

@@ -50,5 +50,25 @@
 export { RIYA_CONVERSATION_EVOLUTION_TASK_CLASS } from './contracts/task-class.js';
 export type { RiyaConversationEvolutionTaskClass } from './contracts/task-class.js';
 
+export {
+  RIYA_GROUNDED_CONVERSATION_EVOLUTION_TASK_CLASS,
+  RIYA_GROUNDED_REPLY_TASK_CLASS,
+} from './contracts/task-class.js';
+export type {
+  RiyaGroundedConversationEvolutionTaskClass,
+  RiyaGroundedReplyTaskClass,
+} from './contracts/task-class.js';
+
 export { createRiyaConversationModelProfile, parseRiyaModelProfileDetail } from './profile.js';
+export { createRiyaGroundedReplyModelProfile } from './profile.js';
 export type { RiyaModelProfileDetailV1 } from './profile.js';
+
+// TYPES only. The grounded context is BUILT by the RWC-P7 per-run bridge in `jarvis-runtime`, from a
+// real governed retrieval; exporting a constructor here would let any caller hand this package a
+// hand-assembled "governed" record that never passed QFJ-P04.03's lifecycle, permission, freshness or
+// privacy rules. The bounds, the shape schema and the plan cross-check stay internal for the same
+// reason.
+export type {
+  RiyaGroundedKnowledgeContextV1,
+  RiyaGroundedKnowledgeItemV1,
+} from './internal/grounded-context.js';

@@ -10,6 +10,10 @@
 import type { KnowledgePort, ModelReleaseRef, RuntimePolicy } from '@qf-jarvis/agent-runtime';
 import type { CoreDecisionProtocol, CoreDecisionTransport } from '@qf-jarvis/core-decision-adapter';
 import type {
+  GovernedKnowledgeRegistry,
+  KnowledgeObservabilityHook,
+} from '@qf-jarvis/governed-knowledge';
+import type {
   ModelGatewayInvoker,
   ModelReplyPromptBinding,
   ModelReplyPromptBindings,
@@ -82,6 +86,33 @@ export interface JarvisRuntimeConfig {
    * there is no Riya-aware model call at all.
    */
   readonly riyaConversationEvolutionPromptBinding?: ModelReplyPromptBinding;
+
+  /**
+   * The RWC-P7 grounded prompt bindings (ADR-0103 §10).
+   *
+   * Separate again, and for the sharpest version of the same reason. A grounded turn puts governed
+   * knowledge records inside the user message, and a prompt evaluated BEFORE grounded content existed
+   * has never been assessed against the one question that matters here: what should Riya do when a
+   * record in its own input contains an instruction? Falling back to it would answer that by omission.
+   *
+   * Each must carry BOTH `evaluationRef` and `evaluationPromptDigest`. There is no fallback to
+   * `riyaConversationEvolutionPromptBinding`, and none to the ordinary CLIENT reply prompt.
+   */
+  readonly riyaGroundedConversationEvolutionPromptBinding?: ModelReplyPromptBinding;
+  readonly riyaGroundedReplyPromptBinding?: ModelReplyPromptBinding;
+
+  /**
+   * The RWC-P7 grounded knowledge configuration (ADR-0103 §4).
+   *
+   * OPTIONAL. Absent means the pre-P7 behaviour exactly: no retrieval, no grounded prompt, and
+   * INTRO..SUMMARY served by the unchanged RWC-P4B path.
+   *
+   * Present means every model-eligible Riya turn performs ONE exact governed retrieval over the
+   * CONFIGURED topics, after M2's privacy gate and before the same one model call. The registry is
+   * injected — there is no global one, and nothing here loads knowledge from a file, an environment
+   * variable, an HTTP endpoint or a database.
+   */
+  readonly riyaGroundedKnowledge?: RiyaGroundedKnowledgeConfig;
   readonly capabilityProfileRef: string;
   readonly evaluationRef?: string;
   /**
@@ -128,4 +159,31 @@ export interface JarvisRuntimeConfig {
   readonly provenanceRefs?: JarvisProvenanceRefs;
 
   readonly observability?: JarvisRuntimeObservabilityHook;
+}
+
+/**
+ * What a deployment injects to let Riya answer from governed knowledge (RWC-P7, ADR-0103 §4).
+ *
+ * ### Exact topics, configured once, never derived
+ *
+ * `topics` is a deployment decision — the business chooses which approved subjects Riya may ground
+ * against. It is NOT derived from the client's message, not ranked, not embedded and not searched.
+ * QFJ-P04.05 keeps semantic and vector RAG DISABLED, and a topic list computed from prose would be
+ * free-text retrieval wearing an exact retrieval's clothes.
+ *
+ * The order is the caller's and is preserved: it is the order records reach the model, and the order
+ * the plan's citations are cross-checked against.
+ *
+ * ### Injected, never discovered
+ *
+ * The registry is handed in. There is no global registry, no default, and no loading from a file, an
+ * environment variable, an HTTP endpoint or a database anywhere in this package.
+ */
+export interface RiyaGroundedKnowledgeConfig {
+  /** The immutable QFJ-P04.03 registry. The one knowledge authority; nothing else is consulted. */
+  readonly registry: GovernedKnowledgeRegistry;
+  /** 1..8 exact topics, unique, in caller order. No wildcard, no pattern, no query. */
+  readonly topics: readonly string[];
+  /** Optional governed-knowledge observability. Retrieval events stay inside that package's hook. */
+  readonly observability?: KnowledgeObservabilityHook;
 }

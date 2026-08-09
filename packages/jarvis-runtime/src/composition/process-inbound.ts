@@ -13,6 +13,7 @@ import type {
   AgentTurnResult,
   CoreDecisionOutcome,
   InboundEnvelope,
+  KnowledgePort,
 } from '@qf-jarvis/agent-runtime';
 import { createOrchestrator, runAgentTurn } from '@qf-jarvis/agent-runtime';
 import { createCoreDecisionAdapter } from '@qf-jarvis/core-decision-adapter';
@@ -79,6 +80,18 @@ export interface RiyaEvolutionRunOptions {
   /** The DEDICATED evolution binding. Never the ordinary CLIENT reply prompt. */
   readonly promptBinding: ModelReplyPromptBinding;
   readonly taskClass: string;
+  /**
+   * The RWC-P7 PER-RUN governed knowledge port, and the exact topics it expects (ADR-0103 §6).
+   *
+   * Supplied only by a grounded Riya run. When absent the orchestrator receives `config.knowledgePort`
+   * and `config.knowledgeTopics` exactly as it always has, so the ordinary inbound paths and an
+   * ungrounded Riya deployment are untouched.
+   *
+   * A per-RUN override rather than a config one, because the port captures this turn's content: a
+   * shared instance would let two concurrent conversations ground each other.
+   */
+  readonly knowledgePort?: KnowledgePort;
+  readonly knowledgeTopics?: readonly string[];
 }
 
 /** One internal run's full output. The public methods project subsets of this. */
@@ -282,9 +295,21 @@ export async function composeAndProcessInternal(
     modelReplyPort,
     ...(coreDecisionPort === undefined ? {} : { coreDecisionPort }),
     privacyGate,
-    ...(config.knowledgePort === undefined ? {} : { knowledgePort: config.knowledgePort }),
+    // The RWC-P7 per-run bridge WINS when a grounded Riya run supplied one; otherwise the
+    // deployment-level port, exactly as before. Never both: one turn has one knowledge source, and a
+    // fallback between them would mean a grounded turn whose retrieval failed could still be
+    // answered from somewhere else.
+    ...(riya?.knowledgePort !== undefined
+      ? { knowledgePort: riya.knowledgePort }
+      : config.knowledgePort === undefined
+        ? {}
+        : { knowledgePort: config.knowledgePort }),
     taskClass,
-    ...(config.knowledgeTopics === undefined ? {} : { knowledgeTopics: config.knowledgeTopics }),
+    ...(riya?.knowledgeTopics !== undefined
+      ? { knowledgeTopics: riya.knowledgeTopics }
+      : config.knowledgeTopics === undefined
+        ? {}
+        : { knowledgeTopics: config.knowledgeTopics }),
     ...(config.requireEvaluationRef === undefined
       ? {}
       : { requireEvaluationRef: config.requireEvaluationRef }),

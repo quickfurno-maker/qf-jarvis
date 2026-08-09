@@ -28,27 +28,32 @@
  * proof of identity — a future operator API must authenticate and authorize before calling in.
  * QuickFurno Core remains the only business authority; model output is a draft only.
  */
-import { createInboundEnvelope } from '@qf-jarvis/agent-runtime';
-import type { InboundEnvelope, InboundEnvelopeInput } from '@qf-jarvis/agent-runtime';
-import { parseCoreServiceAvailabilitySnapshotV1 } from '@qf-jarvis/core-service-availability-read';
-import type { CoreServiceAvailabilitySnapshotV1 } from '@qf-jarvis/core-service-availability-read';
-import { createRiyaConversationModelProfile } from '@qf-jarvis/riya-model-interaction';
+import type { InboundEnvelope } from '@qf-jarvis/agent-runtime';
+import {
+  createRiyaConversationModelProfile,
+  createRiyaGroundedReplyModelProfile,
+} from '@qf-jarvis/riya-model-interaction';
 import {
   RIYA_CONVERSATION_EVOLUTION_TASK_CLASS,
+  RIYA_GROUNDED_CONVERSATION_EVOLUTION_TASK_CLASS,
+  RIYA_GROUNDED_REPLY_TASK_CLASS,
   parseRiyaModelProfileDetail,
 } from '@qf-jarvis/riya-model-interaction';
-import { createRiyaConversationContinuityState } from '@qf-jarvis/riya-conversation-continuity';
-import type { RiyaConversationContinuityStateV1 } from '@qf-jarvis/riya-conversation-continuity';
-
 import type { JarvisCoreAuthorizedReplyResult } from '../contracts/core-authorized-reply.js';
 import type { JarvisRuntimeConfig } from '../contracts/runtime-config.js';
 import type { JarvisRuntimeResult } from '../contracts/runtime-result.js';
 import { assertMandatoryDependencies } from './validate-composition.js';
 import { composeAndProcessDetailed, composeAndProcessInternal } from './process-inbound.js';
+import { provenRiyaRunInput } from './riya-run-input.js';
 import type {
   JarvisRiyaConversationEvolutionInput,
   JarvisRiyaConversationEvolutionResult,
 } from '../contracts/riya-conversation-evolution.js';
+import type {
+  JarvisRiyaGroundedReplyInput,
+  JarvisRiyaGroundedReplyResult,
+} from '../contracts/riya-grounded-reply.js';
+import { createRiyaGroundedKnowledgeBridge } from './riya-grounded-knowledge.js';
 import {
   applyControlCommandThroughSource,
   type JarvisConversationControlInput,
@@ -123,6 +128,52 @@ export interface RiyaConversationEvolutionJarvisRuntime extends CoreAuthorizedRe
   processInboundForRiyaConversationEvolution(
     input: JarvisRiyaConversationEvolutionInput,
   ): Promise<JarvisRiyaConversationEvolutionResult>;
+
+  /**
+   * Answer ONE post-summary Riya text turn from governed knowledge (RWC-P7, ADR-0103).
+   *
+   * A sixth concrete method, additive exactly as the fourth and fifth were. It owns `CONTACT`,
+   * `CONSENT` and `COMPLETE` and refuses every earlier phase; the RWC-P4B method keeps
+   * `INTRO`..`SUMMARY` and its refusal of these three is unchanged.
+   *
+   * One model call, one governed retrieval, and NO state change of any kind: no observations, no
+   * phase move, no `summaryConfirmed`, no consent, no completion evidence. A client typing "yes"
+   * cannot become an RWC-P6 structured action, because the schema this method uses has nowhere to
+   * express one.
+   *
+   * Fails closed before the gateway on a non-canonical envelope, continuity or availability
+   * snapshot, a tenant/conversation mismatch, an `INTRO`..`SUMMARY` phase, absent grounded knowledge
+   * configuration, or a missing/unevaluated grounded reply binding.
+   */
+  processInboundForRiyaGroundedReply(
+    input: JarvisRiyaGroundedReplyInput,
+  ): Promise<JarvisRiyaGroundedReplyResult>;
+}
+
+/**
+ * The shared fail-closed runtime result for both Riya-aware methods.
+ *
+ * Content-free by construction: no identifier from a rejected input, no reason from a lower package,
+ * no raw error. Extracted with RWC-P7 so the two methods cannot drift into reporting a refusal
+ * differently for the same class of problem.
+ */
+function refusedRuntimeResult(
+  config: JarvisRuntimeConfig,
+  runId: string,
+  conversationId: string,
+): JarvisRuntimeResult {
+  return Object.freeze({
+    outcome: 'REFUSED' as const,
+    runId,
+    conversationId,
+    boundRevision: undefined,
+    assignedActor: undefined,
+    proposalId: undefined,
+    modelDrafted: false,
+    coreConsulted: config.coreTransport !== undefined,
+    refusalReason: 'orchestration-invariant' as const,
+    provenance: undefined,
+  });
 }
 
 /** Build a frozen Jarvis runtime from injected collaborators. Missing mandatory deps fail closed. */
@@ -149,154 +200,26 @@ export function createJarvisRuntime(
        * Fail CLOSED as a refused run, not as a thrown error.
        *
        * This package's taxonomy says the only error it throws is a construction-time wiring error;
-       * every runtime path normalizes to a fail-closed `JarvisRuntimeResult`. A new method that
-       * threw would make one inbound path behave unlike the other two, and a caller that already
-       * handles a REFUSED result would suddenly need a try/catch for the same class of problem.
+       * every runtime path normalizes to a fail-closed `JarvisRuntimeResult`. A method that threw
+       * would make one inbound path behave unlike the others, and a caller that already handles a
+       * REFUSED result would suddenly need a try/catch for the same class of problem.
        */
       const refused = (runId = '', conversationId = ''): JarvisRiyaConversationEvolutionResult =>
         Object.freeze({
-          runtimeResult: Object.freeze({
-            outcome: 'REFUSED' as const,
-            runId,
-            conversationId,
-            boundRevision: undefined,
-            assignedActor: undefined,
-            proposalId: undefined,
-            modelDrafted: false,
-            coreConsulted: config.coreTransport !== undefined,
-            refusalReason: 'orchestration-invariant' as const,
-            provenance: undefined,
-          }),
+          runtimeResult: refusedRuntimeResult(config, runId, conversationId),
           authorizedReply: undefined,
           observationBatch: undefined,
         });
 
-      // Typed `unknown` at the boundary. The declared parameter promises an envelope and a state,
-      // but this is a package boundary: an untyped caller, or one that built the input from JSON,
-      // can hand over anything -- including an array, which `typeof` reports as an object.
-      const supplied: unknown = input;
-      if (typeof supplied !== 'object' || supplied === null || Array.isArray(supplied)) {
-        return refused();
+      const proven = provenRiyaRunInput(input);
+      if (!proven.ok) {
+        return refused(proven.runId, proven.conversationId);
       }
-      const candidate = supplied as {
-        readonly envelope?: unknown;
-        readonly continuity?: unknown;
-        readonly availabilitySnapshot?: unknown;
-      };
-      const envelopeValue = candidate.envelope;
-      const continuityValue = candidate.continuity;
-      if (
-        typeof envelopeValue !== 'object' ||
-        envelopeValue === null ||
-        Array.isArray(envelopeValue) ||
-        typeof continuityValue !== 'object' ||
-        continuityValue === null
-      ) {
-        return refused();
-      }
+      const { envelope, current, availabilitySnapshot } = proven;
 
-      /**
-       * Re-prove the ENVELOPE through its own canonical constructor, exactly as the continuity is
-       * re-proved below.
-       *
-       * The other two inbound methods receive an envelope a caller already built through this same
-       * constructor. This one is reached with a hand-assembled input object, so "it is a non-null
-       * object" is not enough: `{ envelope: {} }` would otherwise be cast to `InboundEnvelope`, and
-       * every field read off it — including the `runId` and `conversationId` this method's own
-       * refusal reports as strings — would be `undefined` at runtime.
-       *
-       * `createInboundEnvelope`'s schema is `.strict()`, so an extra key, a malformed identifier, an
-       * unknown channel/party/direction, a non-canonical instant and oversized text are all refused
-       * HERE, before the gateway. The schema is not restated and no regex is copied.
-       */
-      let envelope: InboundEnvelope;
-      try {
-        envelope = createInboundEnvelope(envelopeValue as InboundEnvelopeInput);
-      } catch {
-        // Nothing from the malformed value is echoed back. Until canonicalization succeeds there is
-        // no identity worth reporting, so the refusal carries the content-free empty placeholders —
-        // which are still STRINGS, as the public result type promises.
-        return refused();
-      }
-      const continuity = continuityValue as RiyaConversationContinuityStateV1;
-
-      /**
-       * Re-prove the Core AVAILABILITY SNAPSHOT, exactly as the envelope and the continuity are.
-       *
-       * This value crossed a boundary from a system this repository does not compile, through a port
-       * with no implementation here. Its declared type is a claim about a shape, not evidence of one,
-       * and the whole point of the slice is that Riya may only name refs Core actually listed --
-       * which is worth nothing if the list itself was never proved.
-       *
-       * The parser owns duplicate refusal, reference integrity, canonical ordering, the size bound
-       * and the freeze. Nothing is restated here.
-       */
-      let availabilitySnapshot: CoreServiceAvailabilitySnapshotV1;
-      try {
-        availabilitySnapshot = parseCoreServiceAvailabilitySnapshotV1(
-          candidate.availabilitySnapshot,
-        );
-      } catch {
-        return refused(envelope.runtimeId, envelope.conversationId);
-      }
-
-      // Re-prove the continuity through its OWN canonical constructor. A hand-assembled state, or a
-      // half-applied row a store returned, must not become the context one model call reasons from.
-      let current;
-      try {
-        current = createRiyaConversationContinuityState({
-          version: 1,
-          tenantId: continuity.tenantId,
-          conversationId: continuity.conversationId,
-          continuityRevision: continuity.continuityRevision,
-          phase: continuity.phase,
-          discovery: {
-            ...(continuity.discovery.serviceInterestRef === undefined
-              ? {}
-              : { serviceInterestRef: continuity.discovery.serviceInterestRef }),
-            ...(continuity.discovery.locationRef === undefined
-              ? {}
-              : { locationRef: continuity.discovery.locationRef }),
-            ...(continuity.discovery.propertyTypeRef === undefined
-              ? {}
-              : { propertyTypeRef: continuity.discovery.propertyTypeRef }),
-            ...(continuity.discovery.scopeSummary === undefined
-              ? {}
-              : { scopeSummary: continuity.discovery.scopeSummary }),
-            ...(continuity.discovery.budgetNote === undefined
-              ? {}
-              : { budgetNote: continuity.discovery.budgetNote }),
-            ...(continuity.discovery.timelineNote === undefined
-              ? {}
-              : { timelineNote: continuity.discovery.timelineNote }),
-            ...(continuity.discovery.consultationPreferenceRef === undefined
-              ? {}
-              : { consultationPreferenceRef: continuity.discovery.consultationPreferenceRef }),
-            completeness: continuity.discovery.completeness,
-            ...(continuity.discovery.missingFields.length === 0
-              ? {}
-              : { missingFields: [...continuity.discovery.missingFields] }),
-          },
-          fieldProvenance: continuity.fieldProvenance,
-          summaryConfirmed: continuity.summaryConfirmed,
-          ...(continuity.completionEvidenceRef === undefined
-            ? {}
-            : { completionEvidenceRef: continuity.completionEvidenceRef }),
-        });
-      } catch {
-        return refused(envelope.runtimeId, envelope.conversationId);
-      }
-
-      // The state and the envelope must be about the SAME conversation. A mismatch is a wiring
-      // error, not two conversations to serve, and it is never normalized.
-      if (
-        current.tenantId !== envelope.tenantId ||
-        current.conversationId !== envelope.conversationId
-      ) {
-        return refused(envelope.runtimeId, envelope.conversationId);
-      }
       // RWC-P4A owns INTRO..SUMMARY. CONTACT/CONSENT/COMPLETE are RWC-P6's, and a model call about
-      // one of them would be this slice reasoning past its ceiling.
+      // one of them would be this slice reasoning past its ceiling. RWC-P7 does NOT widen this: the
+      // post-summary text turn is a separate method with a reply-only schema.
       if (
         current.phase === 'CONTACT' ||
         current.phase === 'CONSENT' ||
@@ -305,17 +228,51 @@ export function createJarvisRuntime(
         return refused(envelope.runtimeId, envelope.conversationId);
       }
 
-      // No evaluated evolution prompt, no Riya-aware model call. No fallback to the ordinary CLIENT
-      // reply prompt, and none to any other scope.
-      const binding = config.riyaConversationEvolutionPromptBinding;
+      // GROUNDED or not, decided by CONFIGURATION alone -- never by the client's message.
+      const grounded = config.riyaGroundedKnowledge;
+
+      // No evaluated prompt, no Riya-aware model call. No fallback in EITHER direction: an ungrounded
+      // deployment may not borrow the grounded prompt, and a grounded one may not fall back to the
+      // ungrounded prompt that was evaluated before knowledge records existed.
+      const binding =
+        grounded === undefined
+          ? config.riyaConversationEvolutionPromptBinding
+          : config.riyaGroundedConversationEvolutionPromptBinding;
       if (binding?.evaluationRef === undefined || binding.evaluationPromptDigest === undefined) {
         return refused(envelope.runtimeId, envelope.conversationId);
       }
 
+      // ONE bridge for THIS run. A module-level or config-level port would let two concurrent
+      // conversations capture into the same slot.
+      const bridge =
+        grounded === undefined
+          ? undefined
+          : createRiyaGroundedKnowledgeBridge({
+              envelope,
+              registry: grounded.registry,
+              topics: grounded.topics,
+              ...(grounded.observability === undefined
+                ? {}
+                : { observability: grounded.observability }),
+            });
+
       const run = await composeAndProcessInternal(config, envelope, {
-        profile: createRiyaConversationModelProfile({ current, availabilitySnapshot }),
+        profile: createRiyaConversationModelProfile({
+          current,
+          availabilitySnapshot,
+          // A READER, not a value. M2 calls the knowledge port before M4 builds the request, so the
+          // capture does not exist yet at this line -- and passing a snapshot of `undefined` would
+          // silently produce an ungrounded turn on a grounded deployment.
+          ...(bridge === undefined ? {} : { groundedKnowledgeSource: () => bridge.readCaptured() }),
+        }),
         promptBinding: binding,
-        taskClass: RIYA_CONVERSATION_EVOLUTION_TASK_CLASS,
+        taskClass:
+          grounded === undefined
+            ? RIYA_CONVERSATION_EVOLUTION_TASK_CLASS
+            : RIYA_GROUNDED_CONVERSATION_EVOLUTION_TASK_CLASS,
+        ...(bridge === undefined || grounded === undefined
+          ? {}
+          : { knowledgePort: bridge.knowledgePort, knowledgeTopics: grounded.topics }),
       });
 
       // The generic seam types the detail as `unknown` on purpose; the package that produced it owns
@@ -325,6 +282,70 @@ export function createJarvisRuntime(
         runtimeResult: run.runtimeResult,
         authorizedReply: run.authorizedReply,
         observationBatch: detail?.observationBatch,
+      });
+    },
+    async processInboundForRiyaGroundedReply(
+      input: JarvisRiyaGroundedReplyInput,
+    ): Promise<JarvisRiyaGroundedReplyResult> {
+      const refused = (runId = '', conversationId = ''): JarvisRiyaGroundedReplyResult =>
+        Object.freeze({
+          runtimeResult: refusedRuntimeResult(config, runId, conversationId),
+          authorizedReply: undefined,
+        });
+
+      const proven = provenRiyaRunInput(input);
+      if (!proven.ok) {
+        return refused(proven.runId, proven.conversationId);
+      }
+      const { envelope, current, availabilitySnapshot } = proven;
+
+      // The MIRROR of the P4B ceiling. This method owns CONTACT/CONSENT/COMPLETE and nothing else:
+      // an INTRO..SUMMARY turn served here would skip the observation extraction the discovery
+      // phases exist for, and the conversation would stop learning while still appearing to work.
+      if (
+        current.phase !== 'CONTACT' &&
+        current.phase !== 'CONSENT' &&
+        current.phase !== 'COMPLETE'
+      ) {
+        return refused(envelope.runtimeId, envelope.conversationId);
+      }
+
+      // Grounded configuration is REQUIRED here, unlike the pre-summary path. Past SUMMARY there is
+      // no discovery left to do, so a text turn with nothing to ground against has nothing to say
+      // that this repository is willing to source from a model's general knowledge.
+      const grounded = config.riyaGroundedKnowledge;
+      if (grounded === undefined) {
+        return refused(envelope.runtimeId, envelope.conversationId);
+      }
+      const binding = config.riyaGroundedReplyPromptBinding;
+      if (binding?.evaluationRef === undefined || binding.evaluationPromptDigest === undefined) {
+        return refused(envelope.runtimeId, envelope.conversationId);
+      }
+
+      const bridge = createRiyaGroundedKnowledgeBridge({
+        envelope,
+        registry: grounded.registry,
+        topics: grounded.topics,
+        ...(grounded.observability === undefined ? {} : { observability: grounded.observability }),
+      });
+
+      const run = await composeAndProcessInternal(config, envelope, {
+        profile: createRiyaGroundedReplyModelProfile({
+          current,
+          availabilitySnapshot,
+          groundedKnowledgeSource: () => bridge.readCaptured(),
+        }),
+        promptBinding: binding,
+        taskClass: RIYA_GROUNDED_REPLY_TASK_CLASS,
+        knowledgePort: bridge.knowledgePort,
+        knowledgeTopics: grounded.topics,
+      });
+
+      // No observation batch, no detail, no continuity change. The reply-only schema has nowhere to
+      // put one, and this method has nothing to write with.
+      return Object.freeze({
+        runtimeResult: run.runtimeResult,
+        authorizedReply: run.authorizedReply,
       });
     },
     applyConversationControlCommand(

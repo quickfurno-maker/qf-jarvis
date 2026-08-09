@@ -754,6 +754,9 @@ describe('durable control semantics through the composed runtime', () => {
         'processInboundForCoreAuthorizedReply',
         // RWC-P4B (ADR-0099).
         'processInboundForRiyaConversationEvolution',
+        // RWC-P7 (ADR-0103): a SIXTH method, additive as the fourth and fifth were, still reached
+        // through the ONE factory. It sends, delivers, executes and persists nothing.
+        'processInboundForRiyaGroundedReply',
         'readConversationOperationsSnapshot',
       ]);
     } finally {

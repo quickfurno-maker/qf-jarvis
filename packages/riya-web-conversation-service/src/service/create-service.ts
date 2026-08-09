@@ -109,6 +109,21 @@ export interface RiyaWebConversationService {
 const REPLY_BODY_MAX = 8192;
 
 /**
+ * The three phases a TEXT turn may not change (RWC-P7, ADR-0103).
+ *
+ * Past `SUMMARY` the conversation is governed by RWC-P6's structured actions, which make zero model
+ * calls. A client may still ask a business question and deserves a grounded answer — but that answer
+ * must be structurally incapable of moving a phase, confirming a summary, recording consent or
+ * submitting an intake. So the turn is routed to a capability whose schema has nowhere to express
+ * any of it, and the branch below is the only place that decision is made.
+ *
+ * Widened to `readonly string[]` deliberately. `phase` is already the closed nine-value union, so the
+ * compiler would treat this comparison as exhaustive — but the value arrives from a durable store,
+ * and the check is about the phase that showed up at runtime, not the one the type promised.
+ */
+const POST_SUMMARY_PHASES: readonly string[] = Object.freeze(['CONTACT', 'CONSENT', 'COMPLETE']);
+
+/**
  * The kinds whose text Core actually received, as plain strings.
  *
  * Widened to `readonly string[]` deliberately. The declared type of `proposalKind` is already
@@ -263,6 +278,11 @@ export function createRiyaWebConversationService(
     // runtime without it could never produce observations, so continuity would silently stop
     // evolving while every turn still returned PROCESSED.
     !hasRuntimeMethod('processInboundForRiyaConversationEvolution') ||
+    // ...plus the RWC-P7 post-summary capability (ADR-0103). Closed at construction for the same
+    // reason as the others: a runtime without it would serve INTRO..SUMMARY normally and then start
+    // failing every turn the moment a client confirmed their summary -- a defect that only surfaces
+    // once a real conversation is most of the way through.
+    !hasRuntimeMethod('processInboundForRiyaGroundedReply') ||
     typeof (supplied['continuityStore'] as { load?: unknown } | undefined)?.load !== 'function' ||
     typeof (supplied['continuityStore'] as { createInitialIfAbsent?: unknown } | undefined)
       ?.createInitialIfAbsent !== 'function' ||
@@ -490,21 +510,45 @@ export function createRiyaWebConversationService(
     let authorizedReply: JarvisCoreAuthorizedReplyV1 | undefined;
     let observationBatch: RiyaConversationObservationBatchV1 | undefined;
     try {
-      // The Riya-aware capability, called ONCE. Neither `processInbound` nor
-      // `processInboundForCoreAuthorizedReply` is called in addition: that would be a second
-      // orchestration run, a second model call and a second Core decision for one inbound turn —
-      // and two independent extractions of one sentence, which could disagree.
-      const detailed = await runtime.processInboundForRiyaConversationEvolution({
-        envelope,
-        continuity,
-        // The SAME snapshot object read above. It is captured once for the turn and is never
-        // re-read — in particular not during a compare-and-set reconciliation, where a fresher
-        // authority could invalidate text that no second model call is permitted to replace.
-        availabilitySnapshot,
-      });
+      // EXACTLY ONE Riya-aware capability, chosen by the loaded PHASE (RWC-P7, ADR-0103).
+      //
+      // Never both, and never one after the other refuses. Discovery phases go to the RWC-P4B
+      // evolution capability, which extracts observations; post-summary phases go to the RWC-P7
+      // reply-only capability, which cannot. Retrying with the other after a refusal would be a
+      // second orchestration run, a second model call and a second Core decision for one turn — and
+      // it would let a turn refused as a state change be re-served as a conversation.
+      //
+      // Neither `processInbound` nor `processInboundForCoreAuthorizedReply` is called in addition:
+      // that would be two independent extractions of one sentence, which could disagree.
+      //
+      // The SAME snapshot object read above goes to whichever is selected. It is captured once for
+      // the turn and is never re-read — in particular not during a compare-and-set reconciliation,
+      // where a fresher authority could invalidate text no second model call is permitted to
+      // replace.
+      let detailed: {
+        readonly runtimeResult: JarvisRuntimeResult;
+        readonly authorizedReply: JarvisCoreAuthorizedReplyV1 | undefined;
+      };
+      if (POST_SUMMARY_PHASES.includes(continuity.phase)) {
+        detailed = await runtime.processInboundForRiyaGroundedReply({
+          envelope,
+          continuity,
+          availabilitySnapshot,
+        });
+        // `observationBatch` is deliberately left `undefined`. The grounded reply result has no such
+        // field at all, so a post-summary turn cannot produce one — and therefore cannot reach the
+        // evolution and compare-and-set below.
+      } else {
+        const evolved = await runtime.processInboundForRiyaConversationEvolution({
+          envelope,
+          continuity,
+          availabilitySnapshot,
+        });
+        observationBatch = evolved.observationBatch;
+        detailed = evolved;
+      }
       outcome = detailed.runtimeResult.outcome;
       refusalReason = detailed.runtimeResult.refusalReason;
-      observationBatch = detailed.observationBatch;
       if (detailed.authorizedReply !== undefined) {
         if (!materializationAgreesWithRun(detailed.runtimeResult, detailed.authorizedReply)) {
           // Fail closed on self-contradicting evidence, using the EXISTING bounded invariant code.

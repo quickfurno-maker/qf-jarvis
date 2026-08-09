@@ -138,7 +138,7 @@ describe('public API lock', () => {
     }
   });
 
-  it('exposes only the five composition methods (no send/deliver/execute/persist)', () => {
+  it('exposes only the six composition methods (no send/deliver/execute/persist)', () => {
     // QFJ-P08-A (ADR-0075) adds two OPERATOR methods beside the one inbound method, and RWC-P2D
     // (ADR-0096) adds `processInboundForCoreAuthorizedReply` beside it. Still an EXACT set match,
     // and still nothing that sends, delivers, executes, persists or authorizes: handing a trusted
@@ -152,6 +152,10 @@ describe('public API lock', () => {
       'processInbound',
       'processInboundForCoreAuthorizedReply',
       'processInboundForRiyaConversationEvolution',
+      // RWC-P7 (ADR-0103): the post-summary grounded reply capability. A SIXTH method, additive in
+      // exactly the way the fourth and fifth were, and still reached through the ONE factory. It
+      // sends nothing, delivers nothing, executes nothing and persists nothing.
+      'processInboundForRiyaGroundedReply',
       'readConversationOperationsSnapshot',
     ]);
     const surface = runtime as unknown as Record<string, unknown>;
@@ -208,7 +212,7 @@ describe('public API lock', () => {
     }
   });
 
-  it('depends only on the three lower packages + the two behaviour agents, exposes root + ./testing', () => {
+  it('depends only on the lower packages + the two behaviour agents, exposes root + ./testing', () => {
     // QFJ-S3-C-B (ADR-0068) added @qf-jarvis/riya-agent; QFJ-S3-D-B (ADR-0071) adds
     // @qf-jarvis/anisha-agent. The composition root is the ONE layer allowed to know both the generic
     // pipeline and a business agent, and each behaviour package depends only on agent-runtime, so the
@@ -223,6 +227,10 @@ describe('public API lock', () => {
       // re-proves its Riya-aware input against. A contract dependency only -- the composition
       // performs NO Core read, and that package reaches nothing itself. EXACT set match.
       '@qf-jarvis/core-service-availability-read',
+      // RWC-P7 (ADR-0103): the QFJ-P04.03 governed knowledge system -- the ONE approved
+      // knowledge authority. A contract and a registry; it reaches nothing itself and brings no
+      // retrieval engine, no index and no embedding with it.
+      '@qf-jarvis/governed-knowledge',
       '@qf-jarvis/model-reply-adapter',
       // QFJ-S3-I-B (ADR-0073): the injected prompt registry. Still an EXACT set match.
       '@qf-jarvis/prompt-registry',

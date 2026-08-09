@@ -471,13 +471,17 @@ describe('the materialization rule is not a public capability', () => {
     ]);
   });
 
-  it('the runtime exposes exactly the five expected methods', () => {
+  it('the runtime exposes exactly the six expected methods', () => {
     const runtime = createJarvisRuntime(syntheticRuntimeConfig());
     expect(Object.keys(runtime).sort()).toEqual([
       'applyConversationControlCommand',
       'processInbound',
       'processInboundForCoreAuthorizedReply',
       'processInboundForRiyaConversationEvolution',
+      // RWC-P7 (ADR-0103): the post-summary grounded reply capability. A SIXTH method, additive in
+      // exactly the way the fourth and fifth were, and still reached through the ONE factory. It
+      // sends nothing, delivers nothing, executes nothing and persists nothing.
+      'processInboundForRiyaGroundedReply',
       'readConversationOperationsSnapshot',
     ]);
     // No send/deliver/execute crept in alongside the content-bearing method.

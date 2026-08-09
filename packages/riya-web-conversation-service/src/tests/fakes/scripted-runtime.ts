@@ -15,6 +15,7 @@ import type { InboundEnvelope } from '@qf-jarvis/agent-runtime';
 import type {
   JarvisCoreAuthorizedReplyV1,
   JarvisRiyaConversationEvolutionInput,
+  JarvisRiyaGroundedReplyInput,
   JarvisRuntimeOutcome,
   JarvisRuntimeResult,
   RiyaConversationEvolutionJarvisRuntime,
@@ -50,6 +51,8 @@ export interface ScriptedRuntimeOptions {
 export type ScriptedRuntime = RiyaConversationEvolutionJarvisRuntime & {
   /** How many times the RWC-P4B capability — the one the service calls — was invoked. */
   invoked(): number;
+  /** How many times the RWC-P7 post-summary capability ran. Separate, so both can be counted. */
+  groundedInvoked(): number;
   /** How many times the RWC-P2D capability was invoked. A turn must leave this at zero. */
   coreAuthorizedInvoked(): number;
   /** How many times ordinary `processInbound` was invoked. A turn must leave this at zero. */
@@ -64,6 +67,7 @@ export function scriptedRuntime(
   over: ScriptedRuntimeOptions = {},
 ): ScriptedRuntime {
   let calls = 0;
+  let groundedCalls = 0;
   let coreAuthorizedCalls = 0;
   let ordinaryCalls = 0;
   let seen: InboundEnvelope | undefined;
@@ -144,9 +148,29 @@ export function scriptedRuntime(
         observationBatch: batch(),
       });
     },
+    /**
+     * The RWC-P7 post-summary capability (ADR-0103).
+     *
+     * Counted SEPARATELY from the evolution capability on purpose: the routing specs assert that a
+     * turn reaches exactly one of the two, and a shared counter would let "called both" pass.
+     * It returns NO observation batch, because the real method's result type has no such field.
+     */
+    processInboundForRiyaGroundedReply(input: JarvisRiyaGroundedReplyInput) {
+      groundedCalls += 1;
+      seen = input.envelope;
+      seenContinuity = input.continuity;
+      if (over.throws === true) {
+        return Promise.reject(new Error('runtime at 10.0.0.1 — password=hunter2'));
+      }
+      return Promise.resolve({
+        runtimeResult: runtimeResultFor(input.envelope),
+        authorizedReply: materialization(),
+      });
+    },
     applyConversationControlCommand: () => Promise.reject(new Error('not used')),
     readConversationOperationsSnapshot: () => Promise.reject(new Error('not used')),
     invoked: () => calls,
+    groundedInvoked: () => groundedCalls,
     coreAuthorizedInvoked: () => coreAuthorizedCalls,
     ordinaryInvoked: () => ordinaryCalls,
     lastEnvelope: () => seen,
