@@ -30,6 +30,13 @@
     // before anything uses it. The port has no implementation anywhere in this repository -- the
     // final QuickFurno integration handshake supplies it.
     { "path": "../core-service-availability-read/tsconfig.build.json" },
+    // RWC-P6B (ADR-0102): the PURE post-summary semantics and the POWERLESS Core intake boundary.
+    // The structured-action capability composes both; it re-implements neither. The Core intake port
+    // still has no implementation anywhere in this repository, and `contracts` supplies the ONE
+    // idempotency-key grammar the derived submission key is re-proved against.
+    { "path": "../riya-conversation-completion/tsconfig.build.json" },
+    { "path": "../core-riya-intake/tsconfig.build.json" },
+    { "path": "../contracts/tsconfig.json" },
     { "path": "../riya-agent/tsconfig.build.json" }
   ],
   "include": ["src/**/*.ts"],

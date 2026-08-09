@@ -547,7 +547,13 @@ describe('(71-77) package API and dependency locks are untouched', () => {
       // lands. Four root symbols: the factory, the closed disposition set, the closed error-code
       // set and the error class. The turn schema, the envelope builder, the outcome mapper and the
       // in-memory store fake are all internal or test-only.
-      'riya-web-conversation-service': 4,
+      //
+      // RWC-P6B (ADR-0102): 4 -> 7. A SECOND capability lives in the same package now -- the
+      // structured-action service -- and it adds exactly three: its factory and its two closed
+      // vocabularies. The four action schemas, the deterministic idempotency-key helper and the
+      // discovery projection stay internal, and the first of those matters most: a caller able to
+      // derive a submission key could submit under one the service never checked.
+      'riya-web-conversation-service': 7,
       // QFJ-P09.03 (ADR-0091): the durable execution replay / idempotency store, locked from the
       // day it lands. Three root symbols: the factory, the closed error-code set and the error
       // class. The SQL, the table name, the input validator, the error classifier and the pool are

@@ -51,6 +51,20 @@ const productionCode = (): string =>
     .map((file) => codeOnly(readFileSync(file, 'utf8')))
     .join('\n');
 
+/**
+ * The TEXT-TURN capability only (RWC-P6B restatement).
+ *
+ * Several locks below count call SITES — one availability read per turn, at most two compare-and-sets.
+ * RWC-P6B added a second, independent capability to this package with its own bounds, so a
+ * package-wide count would now be the sum of two unrelated budgets and would mean nothing about
+ * either. The counts are therefore scoped to the file they were always about, and the structured
+ * capability's own equivalents live in `structured-containment.test.ts`.
+ *
+ * Nothing is relaxed: every count is the same number it was, about the same code.
+ */
+const textTurnCode = (): string =>
+  codeOnly(readFileSync(join(SRC, 'service/create-service.ts'), 'utf8'));
+
 // ---------------------------------------------------------------------------
 // RWC-P2D (ADR-0096) — the content boundary this slice moved, and the ones it did not.
 // ---------------------------------------------------------------------------
@@ -99,12 +113,21 @@ describe('RWC-P2D containment', () => {
     const code = productionCode();
     // No verb here may claim something happened that did not. `PROCESSED` stays the served
     // disposition; there is no RESPONDED, SENT or DELIVERED anywhere in production source.
+    //
+    // RESTATED as WHOLE WORDS for RWC-P6B, not relaxed. The Riya phase vocabulary frozen by RWC-P2A
+    // contains `CONSENT`, and a bare substring scan reads the last four letters of that as a delivery
+    // claim. Word boundaries keep the lock saying what it always meant -- no verb asserting a message
+    // reached anybody -- while letting a conversational phase be named.
     for (const forbidden of ['RESPONDED', 'SENT', 'DELIVERED', 'PUBLISHED', 'DISPATCHED']) {
-      expect({ forbidden, present: code.includes(forbidden) }).toEqual({
+      expect({
         forbidden,
-        present: false,
-      });
+        present: new RegExp(`\\b${forbidden}\\b`, 'u').test(code),
+      }).toEqual({ forbidden, present: false });
     }
+    // And the phase really is the only reason the substring appears at all.
+    expect(code.match(/SENT/gu) ?? []).toStrictEqual(
+      (code.match(/CONSENT/gu) ?? []).map(() => 'SENT'),
+    );
   });
 
   it('the authorized body is transient: it reaches no store, event or column', () => {
@@ -123,15 +146,16 @@ describe('RWC-P2D containment', () => {
   });
 
   it('persistence is bounded: at most two compare-and-set calls, and no retry loop', () => {
-    const code = productionCode();
+    const code = textTurnCode();
     // Exactly two invocation sites, and no more. A third would be a third attempt; a loop would be
     // an unbounded one, holding a client's turn open while other writers keep moving the state.
     const attempts = code.match(/continuityStore\s*\.\s*compareAndSet\s*\(/gu) ?? [];
     expect(attempts).toHaveLength(2);
-    // No looping construct anywhere in production source. The reconciliation is straight-line by
-    // construction, which is what makes "at most two" readable off the page rather than reasoned
-    // about.
-    expect(code).not.toMatch(/\bwhile\s*\(|\bfor\s*\(|\bdo\s*\{/u);
+    // No looping construct anywhere in production source -- still PACKAGE-WIDE, because this one is
+    // not a budget that splits per capability. The reconciliations are straight-line by construction,
+    // which is what makes every "at most N" in this package readable off the page rather than
+    // reasoned about.
+    expect(productionCode()).not.toMatch(/\bwhile\s*\(|\bfor\s*\(|\bdo\s*\{/u);
     // And nothing expensive runs a second time inside the reconciliation: everything after the first
     // conflict is one reload, one PURE re-merge and one final attempt. Scoped to the service file,
     // because `store-port.ts` names the outcome in its own frozen list.
@@ -151,9 +175,13 @@ describe('RWC-P2D containment', () => {
     const code = productionCode();
     // The service CALLS the injected reader -- that is the one outbound thing this slice added.
     expect(code).toContain('availabilityReader.readCurrent');
-    // Exactly one call site. A second would be a second business read per turn, and the obvious
-    // place for it to appear is inside the compare-and-set reconciliation.
-    expect(code.match(/availabilityReader\s*\.\s*readCurrent\s*\(/gu) ?? []).toHaveLength(1);
+    // Exactly one call site PER TURN, scoped to the text-turn file. A second would be a second
+    // business read for one turn, and the obvious place for it to appear is inside the
+    // compare-and-set reconciliation. RWC-P6B's structured actions have their own one-per-action
+    // bound, asserted in their own containment spec.
+    expect(textTurnCode().match(/availabilityReader\s*\.\s*readCurrent\s*\(/gu) ?? []).toHaveLength(
+      1,
+    );
     // Every answer is re-proved. A service that trusted the port's declared type would be trusting a
     // system this repository does not compile.
     expect(code).toContain('parseCoreServiceAvailabilitySnapshotV1');
@@ -230,12 +258,19 @@ describe('RWC-P2D containment', () => {
   });
 });
 
-describe('the public surface is four runtime values', () => {
+describe('the public surface is seven runtime values', () => {
   it('exports exactly the approved runtime symbols', () => {
+    // Four for the text turn, three for RWC-P6B's structured capability: its factory and its two
+    // closed vocabularies. The action SCHEMAS, the deterministic key helper and the discovery
+    // projection are all internal -- a caller able to derive a key could submit under one this
+    // service never checked.
     expect(Object.keys(barrel).sort()).toStrictEqual([
+      'RIYA_STRUCTURED_ACTION_DISPOSITIONS',
+      'RIYA_STRUCTURED_ACTION_REASON_CODES',
       'RIYA_WEB_CONVERSATION_DISPOSITIONS',
       'RIYA_WEB_CONVERSATION_ERROR_CODES',
       'RiyaWebConversationError',
+      'createRiyaStructuredActionService',
       'createRiyaWebConversationService',
     ]);
   });
@@ -253,6 +288,9 @@ describe('the public surface is four runtime values', () => {
       'handler',
       'route',
       'createServer',
+      'riyaIntakeIdempotencyKey',
+      'riyaSummaryEditActionSchema',
+      'needDiscoveryInputOf',
     ]) {
       expect(Object.keys(barrel), forbidden).not.toContain(forbidden);
     }
@@ -320,8 +358,6 @@ describe('(42-46) the service reaches nothing', () => {
       'router.get',
       'NextRequest',
       'NextResponse',
-      'Request',
-      'Response',
       'http://',
       'https://',
       'cors',
@@ -330,6 +366,21 @@ describe('(42-46) the service reaches nothing', () => {
       'setHeader',
     ]) {
       expect(code.toLowerCase(), forbidden).not.toContain(forbidden.toLowerCase());
+    }
+    // `Request` and `Response` were substring-banned to catch the Fetch and Next.js types. RESTATED
+    // as the CONSTRUCTS rather than the letters, because RWC-P6B names a Core intake submission
+    // REQUEST -- a domain object with no transport anywhere near it. What must stay absent is an HTTP
+    // request or response being built, thrown or typed here.
+    for (const forbidden of [
+      /\bnew\s+Request\s*\(/u,
+      /\bnew\s+Response\s*\(/u,
+      /\bResponse\s*\.\s*json\s*\(/u,
+      /:\s*Request\b/u,
+      /:\s*Response\b/u,
+      /\bRequestInit\b/u,
+      /\bResponseInit\b/u,
+    ]) {
+      expect(code, forbidden.source).not.toMatch(forbidden);
     }
   });
 
@@ -412,19 +463,25 @@ describe('(42-46) the service reaches nothing', () => {
     }
   });
 
-  it('depends on exactly the six workspace packages and zod', () => {
+  it('depends on exactly the nine workspace packages and zod', () => {
     const manifest = JSON.parse(readFileSync(join(PKG, 'package.json'), 'utf8')) as {
       readonly dependencies?: Record<string, string>;
       readonly devDependencies?: Record<string, string>;
     };
     // RWC-P4B added ONE: the pure RWC-P4A reducer. RWC-P5 adds ONE more: the Core-owned availability
-    // READ CONTRACT and its injected reader port -- a contract that reaches nothing itself. Nothing
-    // else — still no model client, no gateway, no HTTP library, no QuickFurno package.
+    // READ CONTRACT and its injected reader port -- a contract that reaches nothing itself. RWC-P6B
+    // adds THREE, and each is a contract rather than a capability: the PURE post-summary semantics,
+    // the POWERLESS Core intake boundary whose port has no implementation anywhere in this
+    // repository, and `contracts` for the ONE idempotency-key grammar. Nothing else — still no model
+    // client, no gateway, no HTTP library, no QuickFurno package, and still no adapter of any kind.
     expect(Object.keys(manifest.dependencies ?? {}).sort()).toStrictEqual([
       '@qf-jarvis/agent-runtime',
+      '@qf-jarvis/contracts',
+      '@qf-jarvis/core-riya-intake',
       '@qf-jarvis/core-service-availability-read',
       '@qf-jarvis/jarvis-runtime',
       '@qf-jarvis/riya-agent',
+      '@qf-jarvis/riya-conversation-completion',
       '@qf-jarvis/riya-conversation-continuity',
       '@qf-jarvis/riya-conversation-evolution',
       'zod',
@@ -438,6 +495,9 @@ describe('(42-46) the service reaches nothing', () => {
     // those specs would report the lock as the violation it exists to prevent.
     for (const pkg of [
       'riya-agent',
+      'contracts',
+      'core-riya-intake',
+      'riya-conversation-completion',
       'riya-conversation-continuity',
       'riya-conversation-evolution',
       'core-service-availability-read',

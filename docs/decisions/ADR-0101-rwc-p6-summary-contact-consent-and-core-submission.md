@@ -1,6 +1,6 @@
 # ADR-0101 — RWC-P6 Summary Confirmation, Contact, Consent and Core Submission
 
-**Status:** Accepted — RWC-P6 architecture. **P6A** implemented on `rwc-p6a-completion-and-core-intake-contracts`, **not merged**. P6B not started.
+**Status:** Accepted — RWC-P6 architecture. **P6A merged** as PR #106 — merge commit `42fb5d6b3e0ea26edd2995f82bdc462165a1825b`, reviewed head `0a4dbaa3dd8dcbed30016926a5614df03ebb6abf`. **P6B is current**, composed by [ADR-0102](./ADR-0102-rwc-p6b-structured-actions-and-idempotent-core-submission.md).
 **Deciders:** Owner
 **Relates to:** [ADR-0100](./ADR-0100-rwc-p5-core-service-availability-context.md) · [ADR-0099](./ADR-0099-rwc-p4b-one-model-call-extraction-and-continuity-cas.md) · [ADR-0098](./ADR-0098-rwc-p4a-riya-conversation-evolution-semantics.md) · [ADR-0097](./ADR-0097-private-riya-web-ingress-adapter.md) · [ADR-0096](./ADR-0096-rwc-p2d-core-authorized-web-reply-materialization.md) · [ADR-0095](./ADR-0095-rwc-p2b-durable-postgres-riya-conversation-continuity.md) · [ADR-0094](./ADR-0094-rwc-p2c-private-riya-web-conversation-service.md) · [ADR-0093](./ADR-0093-rwc-p2a-riya-conversational-continuity-contract.md) · [ADR-0092](./ADR-0092-jrw-0b-governed-web-runtime-channel.md) · [ADR-0067](./ADR-0067-riya-client-sales-behaviour-boundary.md)
 
@@ -315,4 +315,5 @@ Owner-locked. Changing any of these requires a new ADR, not an edit to this one:
 - the private ingress stays unchanged and off; no migration.
 
 **Next.** RWC-P6B: the structured-action service capability, CAS, and the idempotent Core submission
-composition.
+composition — now specified by [ADR-0102](./ADR-0102-rwc-p6b-structured-actions-and-idempotent-core-submission.md),
+which composes the rules above and redefines none of them.

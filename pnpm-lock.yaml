@@ -549,6 +549,12 @@ importers:
       '@qf-jarvis/agent-runtime':
         specifier: workspace:*
         version: link:../agent-runtime
+      '@qf-jarvis/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@qf-jarvis/core-riya-intake':
+        specifier: workspace:*
+        version: link:../core-riya-intake
       '@qf-jarvis/core-service-availability-read':
         specifier: workspace:*
         version: link:../core-service-availability-read
@@ -558,6 +564,9 @@ importers:
       '@qf-jarvis/riya-agent':
         specifier: workspace:*
         version: link:../riya-agent
+      '@qf-jarvis/riya-conversation-completion':
+        specifier: workspace:*
+        version: link:../riya-conversation-completion
       '@qf-jarvis/riya-conversation-continuity':
         specifier: workspace:*
         version: link:../riya-conversation-continuity
