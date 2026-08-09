@@ -29,11 +29,85 @@ import {
 import type { RiyaConversationObservationBatchV1 } from '@qf-jarvis/riya-conversation-evolution';
 
 import { isActiveCity, isActiveService, pairAvailable } from './internal/availability.js';
+import {
+  everyCitationIsGrounded,
+  groundedContextAgreesWithPlan,
+} from './internal/grounded-context.js';
+import type { RiyaGroundedKnowledgeContextV1 } from './internal/grounded-context.js';
 import { buildRiyaUserContent } from './internal/input-projection.js';
 import {
   isModelProducibleObservation,
+  riyaGroundedReplyOutputSchema,
   riyaStructuredOutputSchema,
 } from './internal/output-schema.js';
+
+/**
+ * How a grounded profile reads this turn's governed knowledge (RWC-P7, ADR-0103 §6).
+ *
+ * A READER rather than a value, and that is load-bearing. M2 calls the knowledge port and THEN M4
+ * builds the request, so at the moment a composition constructs this profile the retrieval has not
+ * happened yet. Passing a snapshot taken at construction would always read `undefined`, and a
+ * grounded deployment would silently serve ungrounded turns that still looked entirely correct.
+ *
+ * The reader is the per-RUN bridge's capture. It is never a module-level slot.
+ */
+type RiyaGroundedKnowledgeSource = () => RiyaGroundedKnowledgeContextV1 | undefined;
+
+/**
+ * What `buildUserContent` needs off the generic M2 plan, and nothing more.
+ *
+ * Typed STRUCTURALLY rather than as the kernel plan type, so this package keeps no dependency on
+ * `agent-runtime` — the business-neutral kernel it has no business knowing about. Method parameter
+ * bivariance makes the narrower shape assignable to the generic seam.
+ *
+ * `citations` joins `normalizedText` for RWC-P7: they are the citations M2 authorized from the ONE
+ * governed retrieval, and the grounded profiles cross-check the captured content against them before
+ * a single byte reaches the gateway.
+ */
+interface RiyaModelPlanView {
+  readonly normalizedText: string | undefined;
+  readonly citations: readonly { readonly knowledgeId: string; readonly version: number }[];
+}
+
+/**
+ * The grounded-citation rule shared by both profiles (RWC-P7, ADR-0103 §12).
+ *
+ * When records WERE supplied, a factual grounded answer must cite at least one of them, and every
+ * citation must name a record the model actually read. When none were supplied there is nothing to
+ * cite and the requirement does not apply.
+ *
+ * A subset is fine — an answer need not cite everything it was shown. What is refused is the whole
+ * structured answer, never a quiet drop: silently removing a fabricated citation would leave a reply
+ * body still asserting the thing that citation was supposed to support.
+ */
+function groundedCitationsAcceptable(
+  grounded: RiyaGroundedKnowledgeContextV1 | undefined,
+  cited: readonly { readonly knowledgeId: string; readonly version: number }[],
+): boolean {
+  if (grounded === undefined) {
+    return true;
+  }
+  return cited.length > 0 && everyCitationIsGrounded(grounded, cited);
+}
+
+/**
+ * Refuse before the gateway unless the captured content and the plan's citations are the same
+ * retrieval (ADR-0103 §13).
+ *
+ * Thrown rather than returned: `buildUserContent` throwing is the adapter's own documented way to
+ * fail closed before a request is built, and there is no half-grounded turn worth sending.
+ */
+function assertGroundingMatchesPlan(
+  grounded: RiyaGroundedKnowledgeContextV1 | undefined,
+  plan: RiyaModelPlanView,
+): void {
+  if (grounded === undefined) {
+    return;
+  }
+  if (!groundedContextAgreesWithPlan(grounded, plan.citations)) {
+    throw new Error('riya-grounded-plan-mismatch');
+  }
+}
 
 /**
  * What the profile hands back through the generic M4 `profileDetail`.
@@ -109,21 +183,28 @@ export function parseRiyaModelProfileDetail(value: unknown): RiyaModelProfileDet
 export function createRiyaConversationModelProfile(args: {
   readonly current: RiyaConversationContinuityStateV1;
   readonly availabilitySnapshot: CoreServiceAvailabilitySnapshotV1;
+  /**
+   * The RWC-P7 grounded knowledge reader, or absent.
+   *
+   * ADDITIVE. With it absent this profile behaves exactly as RWC-P4B left it, down to the serialized
+   * user bytes — P7 does not duplicate P4B, it extends the same one call.
+   */
+  readonly groundedKnowledgeSource?: RiyaGroundedKnowledgeSource;
 }): ModelReplyStructuredOutputProfile {
   const { current, availabilitySnapshot } = args;
+  const readGrounded = args.groundedKnowledgeSource;
 
   return Object.freeze({
     structuredSchema: riyaStructuredOutputSchema,
 
-    // The parameter is typed STRUCTURALLY rather than as `ReplyPlan`. This profile needs exactly one
-    // field of it, and importing the plan would give this package a dependency on `agent-runtime` --
-    // the business-neutral kernel it has no business knowing about. Method parameter bivariance
-    // makes the narrower shape assignable to the generic seam.
-    buildUserContent(plan: { readonly normalizedText: string | undefined }): string {
+    buildUserContent(plan: RiyaModelPlanView): string {
+      const grounded = readGrounded?.();
+      assertGroundingMatchesPlan(grounded, plan);
       return buildRiyaUserContent({
         current,
         message: plan.normalizedText,
         availabilitySnapshot,
+        ...(grounded === undefined ? {} : { groundedKnowledge: grounded }),
       });
     },
 
@@ -133,6 +214,12 @@ export function createRiyaConversationModelProfile(args: {
         return undefined;
       }
       const answer = parsed.data;
+
+      // GROUNDED CITATIONS, before anything else is judged (RWC-P7). If records were shown, the
+      // answer must cite at least one of them and may cite nothing it did not read.
+      if (!groundedCitationsAcceptable(readGrounded?.(), answer.reply.citations)) {
+        return undefined;
+      }
 
       // The CANONICAL batch, built through RWC-P4A's own constructor. A duplicate field, an
       // out-of-bounds value or anything else it refuses takes the whole model answer with it --
@@ -254,6 +341,70 @@ export function createRiyaConversationModelProfile(args: {
           citations: Object.freeze(answer.reply.citations.map((c) => Object.freeze({ ...c }))),
         }),
         detail,
+      };
+    },
+  });
+}
+
+/**
+ * The POST-SUMMARY grounded reply profile (RWC-P7, ADR-0103 §16).
+ *
+ * ### Why a second profile rather than a flag on the first
+ *
+ * Past `SUMMARY` the conversation belongs to RWC-P6, whose structured actions make ZERO model calls.
+ * A client may still ask "how long does installation take?" and deserves an answer — but that answer
+ * must be incapable of moving anything. A flag on the evolution profile would leave the observation
+ * machinery present and one condition away from running; a separate profile whose schema has no
+ * `evolution` key cannot express a state change at all.
+ *
+ * So: reply only, `profileDetail` absent, and no path from a sentence to a phase.
+ *
+ * The Core availability snapshot is still projected. A post-summary client asking "do you work in
+ * Beta?" must be answered from CURRENT Core authority, not from whatever a governed document said
+ * when it was approved — RWC-P5 outranks a snapshot for that question, and P7 does not restate the
+ * rule, it keeps the input.
+ */
+export function createRiyaGroundedReplyModelProfile(args: {
+  readonly current: RiyaConversationContinuityStateV1;
+  readonly availabilitySnapshot: CoreServiceAvailabilitySnapshotV1;
+  readonly groundedKnowledgeSource?: RiyaGroundedKnowledgeSource;
+}): ModelReplyStructuredOutputProfile {
+  const { current, availabilitySnapshot } = args;
+  const readGrounded = args.groundedKnowledgeSource;
+
+  return Object.freeze({
+    structuredSchema: riyaGroundedReplyOutputSchema,
+
+    buildUserContent(plan: RiyaModelPlanView): string {
+      const grounded = readGrounded?.();
+      assertGroundingMatchesPlan(grounded, plan);
+      return buildRiyaUserContent({
+        current,
+        message: plan.normalizedText,
+        availabilitySnapshot,
+        ...(grounded === undefined ? {} : { groundedKnowledge: grounded }),
+      });
+    },
+
+    projectStructuredResult(value: unknown): ModelReplyStructuredProjection | undefined {
+      const parsed = riyaGroundedReplyOutputSchema.safeParse(value);
+      if (!parsed.success) {
+        return undefined;
+      }
+      const answer = parsed.data;
+      if (!groundedCitationsAcceptable(readGrounded?.(), answer.reply.citations)) {
+        return undefined;
+      }
+      // NO detail. There is no observation batch, no continuity change and nothing for a composition
+      // to persist -- returning an empty one would invite a caller to write a revision for a turn
+      // that changed nothing.
+      return {
+        reply: Object.freeze({
+          kind: answer.reply.kind,
+          replyBody: answer.reply.replyBody,
+          ...(answer.reply.reasonCode === undefined ? {} : { reasonCode: answer.reply.reasonCode }),
+          citations: Object.freeze(answer.reply.citations.map((c) => Object.freeze({ ...c }))),
+        }),
       };
     },
   });

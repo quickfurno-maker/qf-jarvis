@@ -103,6 +103,10 @@ function scriptedRuntime(observations: readonly RiyaDiscoveryObservationV1[]): {
   const runtime = {
     processInbound: () => Promise.reject(new Error('not used')),
     processInboundForCoreAuthorizedReply: () => Promise.reject(new Error('not used')),
+    // RWC-P7 (ADR-0103): the service now requires this capability at construction, and these specs
+    // are all PRE-summary. Rejecting is the honest stub -- a turn reaching it would mean the phase
+    // routing sent a discovery turn to the post-summary path, and the spec should fail loudly.
+    processInboundForRiyaGroundedReply: () => Promise.reject(new Error('not used')),
     processInboundForRiyaConversationEvolution(
       input: JarvisRiyaConversationEvolutionInput,
     ): Promise<JarvisRiyaConversationEvolutionResult> {

@@ -26,6 +26,7 @@
     "@qf-jarvis/conversation-control": "workspace:*",
     "@qf-jarvis/core-decision-adapter": "workspace:*",
     "@qf-jarvis/core-service-availability-read": "workspace:*",
+    "@qf-jarvis/governed-knowledge": "workspace:*",
     "@qf-jarvis/model-reply-adapter": "workspace:*",
     "@qf-jarvis/prompt-registry": "workspace:*",
     "@qf-jarvis/riya-agent": "workspace:*",

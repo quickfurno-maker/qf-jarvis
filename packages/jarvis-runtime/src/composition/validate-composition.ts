@@ -21,10 +21,73 @@ export function assertMandatoryDependencies(config: JarvisRuntimeConfig): void {
     c.release === undefined ||
     !promptIdentityConfigured(c) ||
     typeof c.capabilityProfileRef !== 'string' ||
-    c.capabilityProfileRef.length === 0;
+    c.capabilityProfileRef.length === 0 ||
+    !groundedKnowledgeConfigured(c);
   if (missing) {
     throw new JarvisRuntimeError('invalid-config');
   }
+}
+
+/**
+ * The RWC-P7 grounded wiring is either ABSENT or COMPLETE (ADR-0103 §4, §10).
+ *
+ * Absent is a valid, unchanged deployment: no retrieval, no grounded prompt, INTRO..SUMMARY served by
+ * the RWC-P4B path exactly as before.
+ *
+ * Present means a deployer has decided Riya may answer from governed knowledge, and a half-wired
+ * version of that decision is the dangerous one. A registry with no evaluated grounded prompts would
+ * refuse every turn at runtime, which looks like an outage; a topic list containing a duplicate would
+ * silently retrieve one record twice and cross-check against a citation list that no longer lines up.
+ * Both are deployment mistakes rather than business outcomes, so they fail at CONSTRUCTION — before a
+ * single client is waiting on the answer.
+ */
+function groundedKnowledgeConfigured(c: Partial<JarvisRuntimeConfig>): boolean {
+  const grounded = c.riyaGroundedKnowledge;
+  if (grounded === undefined) {
+    return true;
+  }
+  if (typeof grounded !== 'object' || Array.isArray(grounded)) {
+    return false;
+  }
+  // A real registry, not a shape that happens to have the right name. The lookup capability is what
+  // retrieval actually uses, so it is what construction checks for.
+  const registry: unknown = grounded.registry;
+  if (
+    typeof registry !== 'object' ||
+    registry === null ||
+    typeof (registry as { readonly listByTopic?: unknown }).listByTopic !== 'function'
+  ) {
+    return false;
+  }
+  const topics = grounded.topics;
+  if (
+    !Array.isArray(topics) ||
+    topics.length < 1 ||
+    topics.length > MAX_GROUNDED_TOPICS ||
+    !topics.every((topic) => typeof topic === 'string' && topic.length > 0) ||
+    new Set(topics).size !== topics.length
+  ) {
+    return false;
+  }
+  // BOTH grounded bindings, BOTH evaluated. A grounded deployment serves pre-summary and
+  // post-summary turns from the same configuration, and there is no fallback for either.
+  return (
+    evaluatedBinding(c.riyaGroundedConversationEvolutionPromptBinding) &&
+    evaluatedBinding(c.riyaGroundedReplyPromptBinding)
+  );
+}
+
+/** The RWC-P7 topic ceiling. Retrieval is exact, so one topic resolves to at most one record. */
+const MAX_GROUNDED_TOPICS = 8;
+
+function evaluatedBinding(binding: JarvisRuntimeConfig['riyaGroundedReplyPromptBinding']): boolean {
+  return (
+    binding !== undefined &&
+    typeof binding.evaluationRef === 'string' &&
+    binding.evaluationRef.length > 0 &&
+    typeof binding.evaluationPromptDigest === 'string' &&
+    binding.evaluationPromptDigest.length > 0
+  );
 }
 
 /**

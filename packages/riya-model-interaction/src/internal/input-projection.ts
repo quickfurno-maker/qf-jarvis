@@ -33,6 +33,8 @@ import type { DiscoveryField, NeedDiscovery } from '@qf-jarvis/riya-agent';
 import type { RiyaConversationContinuityStateV1 } from '@qf-jarvis/riya-conversation-continuity';
 
 import { projectCoreAvailability } from './availability.js';
+import { provenGroundedContext } from './grounded-context.js';
+import type { RiyaGroundedKnowledgeContextV1 } from './grounded-context.js';
 
 /** Which `NeedDiscovery` value a `DiscoveryField` names. Restated; the canonical set is closed. */
 const VALUE_KEY = {
@@ -66,6 +68,14 @@ export function buildRiyaUserContent(args: {
   readonly current: RiyaConversationContinuityStateV1;
   readonly message: string | undefined;
   readonly availabilitySnapshot: CoreServiceAvailabilitySnapshotV1;
+  /**
+   * Governed knowledge for a grounded turn (RWC-P7), or absent.
+   *
+   * When absent the serialized payload is BYTE-IDENTICAL to the pre-P7 shape. That is deliberate and
+   * asserted: an ungrounded deployment must not have its evaluated prompt silently fed a differently
+   * shaped message because a feature it does not use exists.
+   */
+  readonly groundedKnowledge?: RiyaGroundedKnowledgeContextV1;
 }): string {
   const { current, message, availabilitySnapshot } = args;
 
@@ -94,6 +104,17 @@ export function buildRiyaUserContent(args: {
     // a catalogue entry as something the client said -- or a client's words as a catalogue fact.
     coreAvailability: projectCoreAvailability(availabilitySnapshot),
     message: message ?? '',
+    // ONE additive sibling, and only when a grounded turn actually retrieved something (RWC-P7,
+    // ADR-0103 s8). Structurally separate from `coreAvailability` for the same reason that is separate
+    // from `known`: P5 is what the business currently sells and where, and it OUTRANKS a governed
+    // snapshot for current availability. Folding them together would invite the model to answer a
+    // live question from a document.
+    //
+    // Re-proved on the way in, so a context carrying a permission, an owner or a subject reference is
+    // a refusal rather than a field that happens not to be read today.
+    ...(args.groundedKnowledge === undefined
+      ? {}
+      : { groundedKnowledge: provenGroundedContext(args.groundedKnowledge) }),
   };
 
   const serialized = JSON.stringify(payload);

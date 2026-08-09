@@ -244,7 +244,7 @@ describe('it stays a leaf', () => {
     expect(code).not.toMatch(/@qf-jarvis\/[a-z-]+\/(src|dist|internal)\//u);
   });
 
-  it('exposes exactly the three runtime values a composition can use', () => {
+  it('exposes exactly the six runtime values a composition can use', () => {
     // The task class to bind, the profile to hand M4, and the guard to use instead of casting M4's
     // generic `unknown` detail. Nothing else: the schemas, the field map, the input projection, the
     // two bounds and the producer vocabulary are all POLICY this package enforces rather than
@@ -252,7 +252,15 @@ describe('it stays a leaf', () => {
     // more values under change control with no production consumer.
     expect(Object.keys(barrel).sort()).toStrictEqual([
       'RIYA_CONVERSATION_EVOLUTION_TASK_CLASS',
+      // RWC-P7 (ADR-0103): 3 -> 6. Two dedicated GROUNDED prompt/orchestration identities and the
+      // post-summary reply-only profile factory. The grounded context types are TYPE-only; the
+      // context is built by the per-run bridge from a real governed retrieval, and a constructor
+      // here would let any caller hand this package a hand-assembled "governed" record that never
+      // passed QFJ-P04.03's lifecycle, permission, freshness or privacy rules.
+      'RIYA_GROUNDED_CONVERSATION_EVOLUTION_TASK_CLASS',
+      'RIYA_GROUNDED_REPLY_TASK_CLASS',
       'createRiyaConversationModelProfile',
+      'createRiyaGroundedReplyModelProfile',
       'parseRiyaModelProfileDetail',
     ]);
     const b = barrel as Record<string, unknown>;
