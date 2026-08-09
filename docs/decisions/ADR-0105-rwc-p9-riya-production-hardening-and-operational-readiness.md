@@ -107,6 +107,24 @@ structurally identical, and a spec runs the whole matrix twice to prove it.
 An asynchronous hook would be worse than useless: awaited, it puts a metrics sink on the critical
 path of a client's answer; fired and forgotten, its rejection surfaces somewhere unrelated.
 
+**Terminal events describe the FINAL surfaced outcome** (owner correction on PR #110). `text-turn-completed`
+and `text-turn-failed` are emitted by the admission wrapper, after the whole claimed-turn pipeline —
+including RWC-P8's lease cleanup — has settled. They are never emitted from inside it.
+
+The reason is a real ordering defect the correction removes. RWC-P8 deliberately lets lease cleanup
+_replace_ an outcome: a safe pre-start `NOT_READY` whose `releaseUnstarted` cannot be proved becomes
+`turn-coordinator-unavailable`, because a conversation that may still be locked is the higher-order
+fact. Observing before that point recorded a completion the caller never received, and recorded
+`continuity-unavailable` for a turn the caller was told was `turn-coordinator-unavailable`. Both are
+false operational evidence, and the second is the worse kind: operations and the caller disagreeing
+about the same turn.
+
+Intermediate proved facts — `text-turn-coordinator-outcome` and `text-turn-processing-started` — stay
+where they are. They are not outcomes, and nothing downstream can revise them.
+
+Exactly one terminal event per admitted turn that settles. `text-turn-overloaded` is separate: a
+refused turn never entered the pipeline, so it produces no terminal event of its own.
+
 ### 12. Content-free, and that is the strongest lock in this slice
 
 No event may carry `tenantId`, `conversationId`, `messageId`, `subjectRef`, `channelTurnRef`,
@@ -182,5 +200,7 @@ Owner-locked. Changing any of these requires a new ADR:
   authority, and no `Promise.race` deadline wraps the turn;
 - observability is synchronous, injected, best-effort and content-free, and can never change an
   outcome;
+- terminal service events are emitted OUTSIDE the claimed-turn pipeline and describe the final
+  surfaced outcome after correctness-critical lease cleanup, exactly once per settled turn;
 - no identifier, message, reply or digest enters an event;
 - no automatic retry, no reply cache, no new migration, and no deployment.

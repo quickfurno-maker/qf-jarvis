@@ -583,3 +583,304 @@ describe('a hook that throws on every event changes nothing', () => {
     ]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// 5. Terminal events describe the FINAL surfaced outcome (owner correction, PR #110).
+// ---------------------------------------------------------------------------
+
+/**
+ * RWC-P8 deliberately lets lease cleanup REPLACE an outcome.
+ *
+ * A safe pre-start result -- a `NOT_READY`, or a thrown `continuity-unavailable` -- is not final
+ * until the conversation lease has been PROVED released. If `releaseUnstarted` fails, the surfaced
+ * answer becomes `turn-coordinator-unavailable`, because a conversation that may still be locked is
+ * the higher-order fact: a `NOT_READY` returned there would invite an immediate retry that BUSY
+ * would then refuse, for a reason nothing in the response explains.
+ *
+ * Observing the terminal outcome inside the claimed-turn pipeline therefore recorded a PROVISIONAL
+ * one. Two concrete lies came out of it: a `text-turn-completed` for a turn whose caller received an
+ * error, and a `text-turn-failed / continuity-unavailable` for a turn whose caller was told
+ * `turn-coordinator-unavailable`. The second is the worse kind -- operations and the caller
+ * disagreeing about the same turn, during the phase whose entire purpose is operational readiness.
+ *
+ * The terminal observations now live in the admission wrapper, outside that cleanup.
+ */
+function wired(
+  over: {
+    readonly coordinatorOptions?: ScriptedTurnCoordinatorOptions;
+    readonly storeThrows?: boolean;
+    readonly availabilityRejects?: boolean;
+    readonly runtimeThrows?: boolean;
+    readonly completeRejects?: boolean;
+  } = {},
+) {
+  const coordinator = scriptedTurnCoordinator(over.coordinatorOptions ?? {});
+  const runtime = scriptedRuntime('CORE_ACCEPTED', {
+    ...(over.runtimeThrows === true ? { throws: true } : {}),
+  });
+  const events: RiyaConversationOperationalEvent[] = [];
+  /** One shared ordering log: lease operations and events interleaved as they actually happened. */
+  const sequence: string[] = [];
+
+  const svc = createRiyaWebConversationService({
+    maxConcurrentTextTurns: 8,
+    runtime,
+    continuityStore:
+      over.storeThrows === true ? new UnavailableContinuityStore() : new InMemoryContinuityStore(),
+    availabilityReader: scriptedAvailabilityReader(
+      over.availabilityRejects === true ? { rejects: true } : {},
+    ),
+    turnCoordinator: coordinator,
+    runtimeId: 'rt.1',
+    observability: {
+      record: (event) => {
+        events.push(event);
+        // Sampled AT EMISSION. Asserting counters after the turn settles would prove nothing about
+        // ORDER -- the whole defect was an event emitted at the right count but the wrong moment.
+        sequence.push(
+          `${event.type}|releases=${String(coordinator.releases())}|completes=${String(
+            coordinator.completes(),
+          )}`,
+        );
+      },
+    },
+  });
+
+  return {
+    svc,
+    coordinator,
+    runtime,
+    events: () => events,
+    types: () => events.map((event) => event.type),
+    sequence: () => sequence,
+    terminals: () =>
+      events.filter(
+        (event) => event.type === 'text-turn-completed' || event.type === 'text-turn-failed',
+      ),
+  };
+}
+
+describe('a terminal event reports what the CALLER received, not what was provisionally decided', () => {
+  it('NOT_READY whose release cannot be proved: one failure, and NO completion', async () => {
+    // THE primary correction proof. Before the fix this recorded `text-turn-completed / NOT_READY`
+    // for a turn whose caller got `turn-coordinator-unavailable`.
+    const h = wired({
+      availabilityRejects: true,
+      coordinatorOptions: { releaseRejects: true },
+    });
+
+    expect(await settle(() => h.svc.handleChannelTurn(TURN))).toBe('turn-coordinator-unavailable');
+
+    expect(h.types()).toStrictEqual([
+      'text-turn-admitted',
+      'text-turn-coordinator-outcome',
+      'text-turn-failed',
+    ]);
+    expect(h.events().filter((event) => event.type === 'text-turn-completed')).toStrictEqual([]);
+    expect(h.terminals()).toHaveLength(1);
+    expect(h.terminals()[0]?.errorCode).toBe('turn-coordinator-unavailable');
+    // Nothing ran and nothing was claimed, which is why the message stays retryable.
+    expect(h.runtime.invoked()).toBe(0);
+    expect(h.coordinator.starts()).toBe(0);
+  });
+
+  it('a preflight error whose release fails reports the REPLACEMENT code, not the original', async () => {
+    const h = wired({ storeThrows: true, coordinatorOptions: { releaseRejects: true } });
+
+    expect(await settle(() => h.svc.handleChannelTurn(TURN))).toBe('turn-coordinator-unavailable');
+
+    expect(h.terminals()).toHaveLength(1);
+    expect(h.terminals()[0]?.errorCode).toBe('turn-coordinator-unavailable');
+    // The store DID fail, and that condition really existed -- but it is not the outcome the caller
+    // received, so it must not be the outcome operations sees. A dashboard pointing at continuity
+    // during a coordinator incident sends an operator to the wrong system.
+    expect(
+      h.events().some((event) => event.errorCode === 'continuity-unavailable'),
+      'no terminal event may carry the provisional reason',
+    ).toBe(false);
+    expect(JSON.stringify(h.events())).not.toContain('continuity-unavailable');
+  });
+
+  it('a clean NOT_READY is observed only AFTER the lease is proved released', async () => {
+    // Order, not count. `releaseUnstarted` is what makes this result final, so the event has to come
+    // after it -- and the shared sequence log shows the release had already happened.
+    const h = wired({ availabilityRejects: true });
+
+    expect(await settle(() => h.svc.handleChannelTurn(TURN))).toBe('NOT_READY');
+
+    expect(h.types()).toStrictEqual([
+      'text-turn-admitted',
+      'text-turn-coordinator-outcome',
+      'text-turn-completed',
+    ]);
+    expect(h.sequence()).toStrictEqual([
+      'text-turn-admitted|releases=0|completes=0',
+      'text-turn-coordinator-outcome|releases=0|completes=0',
+      // The release is already recorded when the completion is observed.
+      'text-turn-completed|releases=1|completes=0',
+    ]);
+    expect(h.coordinator.releases()).toBe(1);
+  });
+
+  it('a processed turn is observed only AFTER the claim is proved COMPLETED', async () => {
+    // The RWC-P8 complete-before-body rule, restated in telemetry: an operator must never see a
+    // completion the ledger does not have.
+    const h = wired();
+
+    expect(await settle(() => h.svc.handleChannelTurn(TURN))).toBe('PROCESSED');
+
+    expect(h.sequence().at(-1)).toBe('text-turn-completed|releases=0|completes=1');
+    expect(h.coordinator.claimState('tenant.a', 'conv.1', 'msg.1')).toBe('COMPLETED');
+  });
+
+  it('processing-started stays where it was: an intermediate fact, not an outcome', async () => {
+    // It is not revisable by cleanup -- the claim is on disk -- so it is correct at the moment the
+    // write is proved, and moving it would make it a weaker signal, not a stronger one.
+    const h = wired();
+    await settle(() => h.svc.handleChannelTurn(TURN));
+    expect(h.types()).toStrictEqual([
+      'text-turn-admitted',
+      'text-turn-coordinator-outcome',
+      'text-turn-processing-started',
+      'text-turn-completed',
+    ]);
+
+    // And an ambiguous start still produces NO started event and exactly one terminal failure.
+    const ambiguous = wired({ coordinatorOptions: { startRejects: true } });
+    expect(await settle(() => ambiguous.svc.handleChannelTurn(TURN))).toBe('turn-indeterminate');
+    expect(ambiguous.types()).toStrictEqual([
+      'text-turn-admitted',
+      'text-turn-coordinator-outcome',
+      'text-turn-failed',
+    ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 6. Exactly one terminal event per settled turn.
+// ---------------------------------------------------------------------------
+
+describe('every admitted turn that settles produces EXACTLY ONE terminal event', () => {
+  const scenarios = [
+    ['a processed turn', {}, 'PROCESSED'],
+    ['a safe NOT_READY', { availabilityRejects: true }, 'NOT_READY'],
+    ['a busy conversation', { hold: true }, 'turn-in-flight'],
+    ['a replayed message', { replay: true }, 'turn-replayed'],
+    ['a conflicting identity', { conflict: true }, 'turn-conflict'],
+    ['an indeterminate claim', { indeterminate: true }, 'turn-indeterminate'],
+    [
+      'an unavailable coordinator',
+      { coordinatorOptions: { beginRejects: true } },
+      'turn-coordinator-unavailable',
+    ],
+    ['an unavailable store', { storeThrows: true }, 'continuity-unavailable'],
+    ['an ambiguous start', { coordinatorOptions: { startRejects: true } }, 'turn-indeterminate'],
+    ['a runtime failure', { runtimeThrows: true }, 'runtime-unavailable'],
+    [
+      'an ambiguous finalization',
+      { coordinatorOptions: { completeRejects: true } },
+      'turn-indeterminate',
+    ],
+    [
+      'a safe result whose release fails',
+      { availabilityRejects: true, coordinatorOptions: { releaseRejects: true } },
+      'turn-coordinator-unavailable',
+    ],
+  ] as const;
+
+  it.each(scenarios)('%s', async (_name, options, expected) => {
+    const h = wired({
+      ...('coordinatorOptions' in options
+        ? { coordinatorOptions: options.coordinatorOptions }
+        : {}),
+      ...('storeThrows' in options ? { storeThrows: options.storeThrows } : {}),
+      ...('availabilityRejects' in options
+        ? { availabilityRejects: options.availabilityRejects }
+        : {}),
+      ...('runtimeThrows' in options ? { runtimeThrows: options.runtimeThrows } : {}),
+    });
+
+    if ('hold' in options) {
+      h.coordinator.holdConversation('tenant.a', 'conv.1');
+    }
+    if ('replay' in options || 'conflict' in options || 'indeterminate' in options) {
+      // Reach the terminal state under test, then clear the events so the assertion is about the
+      // ONE turn that follows rather than about the setup turn.
+      if ('indeterminate' in options) {
+        const broken = wired({ runtimeThrows: true });
+        await settle(() => broken.svc.handleChannelTurn(TURN));
+        expect(await settle(() => broken.svc.handleChannelTurn(TURN))).toBe(expected);
+        expect(
+          broken.terminals().filter((event) => event.type === 'text-turn-failed'),
+        ).toHaveLength(2);
+        return;
+      }
+      await settle(() => h.svc.handleChannelTurn(TURN));
+    }
+
+    const before = h.terminals().length;
+    const outcome = await settle(() =>
+      h.svc.handleChannelTurn('conflict' in options ? { ...TURN, messageId: 'msg.9' } : TURN),
+    );
+    expect(outcome).toBe(expected);
+
+    const produced = h.terminals().slice(before);
+    expect(produced, 'exactly one terminal event').toHaveLength(1);
+    // And it is the RIGHT kind: a returned result is a completion, a thrown one is a failure.
+    const isResult = expected === 'PROCESSED' || expected === 'NOT_READY';
+    expect(produced[0]?.type).toBe(isResult ? 'text-turn-completed' : 'text-turn-failed');
+    if (!isResult) {
+      expect(produced[0]?.errorCode).toBe(expected);
+    } else {
+      expect(produced[0]?.disposition).toBe(expected);
+    }
+  });
+
+  it('an overload produces its own event and NO terminal event', async () => {
+    // A refused turn never entered the pipeline, so it has no outcome to report. Emitting a
+    // `text-turn-failed` alongside would double-count capacity refusals as service failures.
+    const runtime = gatedRuntime();
+    const events: RiyaConversationOperationalEvent[] = [];
+    const svc = createRiyaWebConversationService({
+      maxConcurrentTextTurns: 1,
+      runtime,
+      continuityStore: new InMemoryContinuityStore(),
+      availabilityReader: scriptedAvailabilityReader(),
+      turnCoordinator: scriptedTurnCoordinator(),
+      runtimeId: 'rt.1',
+      observability: {
+        record: (event) => {
+          events.push(event);
+        },
+      },
+    });
+
+    const held = svc.handleChannelTurn(TURN);
+    await runtime.awaitArrivals(1);
+    expect(await settle(() => svc.handleChannelTurn({ ...TURN, conversationId: 'conv.2' }))).toBe(
+      'turn-overloaded',
+    );
+
+    expect(events.filter((event) => event.type === 'text-turn-overloaded')).toHaveLength(1);
+    expect(
+      events.some((event) => event.errorCode === 'turn-overloaded'),
+      'overload is never also a terminal failure',
+    ).toBe(false);
+
+    runtime.releaseAll();
+    await held;
+    // The ADMITTED turn still produces exactly one terminal event of its own.
+    expect(
+      events.filter(
+        (event) => event.type === 'text-turn-completed' || event.type === 'text-turn-failed',
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('an invalid turn produces no events at all', async () => {
+    // Rejected before admission, so it is neither admitted, refused, nor settled.
+    const h = wired();
+    expect(await settle(() => h.svc.handleChannelTurn({} as never))).toBe('invalid-input');
+    expect(h.events()).toStrictEqual([]);
+  });
+});

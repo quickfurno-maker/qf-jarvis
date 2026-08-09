@@ -47,9 +47,22 @@ const EVENT_TYPE_VALUES = [
   'text-turn-coordinator-outcome',
   /** The durable claim is written. From here the message is potentially spent. */
   'text-turn-processing-started',
-  /** A normal bounded result is being returned. */
+  /**
+   * A normal bounded result is being returned — the FINAL one.
+   *
+   * Emitted only once every correctness-critical lease finalization and cleanup required for that
+   * result has succeeded. A safe pre-start result whose conversation cannot be PROVED released is
+   * replaced by `turn-coordinator-unavailable`, so observing before that point would record a
+   * completion the caller never received.
+   */
   'text-turn-completed',
-  /** A bounded service failure. The CODE only, never the error. */
+  /**
+   * A bounded service failure. The CODE only, never the error.
+   *
+   * Also the FINAL one: a pre-start failure whose lease cleanup then fails is surfaced to the caller
+   * as `turn-coordinator-unavailable`, and this event carries that code rather than the provisional
+   * reason. Operations and the caller must not be able to disagree about why a turn ended.
+   */
   'text-turn-failed',
 ] as const;
 

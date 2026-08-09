@@ -547,11 +547,44 @@ export function createRiyaWebConversationService(
     });
 
     try {
-      return await admittedChannelTurn(turn);
+      try {
+        const settled = await admittedChannelTurn(turn);
+        // THE FINAL OUTCOME, observed HERE and nowhere inside (RWC-P9 owner correction, ADR-0105).
+        //
+        // `admittedChannelTurn` owns the RWC-P8 lease cleanup, and its own `finally` can REPLACE what
+        // it was about to return: a safe pre-start result whose `releaseUnstarted` cannot be proved
+        // becomes `turn-coordinator-unavailable`, because a conversation that may still be locked is
+        // the higher-order fact. Observing inside would therefore record a completion the caller
+        // never received -- a dashboard showing a turn that finished while the client got an error.
+        //
+        // By the time this line runs, every correctness-critical lease operation for this result has
+        // already succeeded. That is what makes the event a fact rather than a provisional one.
+        observe({
+          type: 'text-turn-completed',
+          channel: turn.channel,
+          phase: settled.continuity.phase,
+          disposition: settled.disposition,
+        });
+        return settled;
+      } catch (error: unknown) {
+        // The FINAL surfaced error, after any cleanup-failure replacement -- so operations and the
+        // caller cannot disagree about why a turn ended. The BOUNDED code only: a raw error carries a
+        // host, a table, a parameter or a client's own words, and a telemetry sink is the last place
+        // any of those should surface.
+        observe({
+          type: 'text-turn-failed',
+          channel: turn.channel,
+          ...(error instanceof RiyaWebConversationError ? { errorCode: error.code } : {}),
+        });
+        throw error;
+      }
     } finally {
       // EVERY path. Success, refusal, replay, conflict, overload downstream, a thrown store, a
       // spent claim -- a token that leaked would permanently shrink this replica's capacity, and it
       // would do so silently until the process was restarted.
+      //
+      // Deliberately OUTSIDE the observation above: this slot is process-local capacity, not part of
+      // the outcome. Returning it cannot change what the caller was told.
       release();
     }
   }
@@ -584,11 +617,9 @@ export function createRiyaWebConversationService(
     } catch {
       // Fail CLOSED. An unavailable coordinator is exactly when a duplicate would slip through, so
       // uncertainty must never become permission. Nothing from the coordinator's error escapes.
-      observe({
-        type: 'text-turn-failed',
-        channel: turn.channel,
-        errorCode: 'turn-coordinator-unavailable',
-      });
+      //
+      // No terminal observation here: this function normalizes, the ADMISSION WRAPPER observes. One
+      // terminal event per turn, recorded where the outcome is final.
       throw new RiyaWebConversationError('turn-coordinator-unavailable');
     }
     observe({
@@ -611,7 +642,9 @@ export function createRiyaWebConversationService(
             : begun.outcome === 'CONFLICT'
               ? ('turn-conflict' as const)
               : ('turn-indeterminate' as const);
-      observe({ type: 'text-turn-failed', channel: turn.channel, errorCode });
+      // The classification above is already observed as `text-turn-coordinator-outcome`. The single
+      // terminal `text-turn-failed` is recorded by the admission wrapper, so a refused turn produces
+      // one classification and one terminal event -- never two of the latter.
       throw new RiyaWebConversationError(errorCode);
     }
     const lease: RiyaTurnLease = begun.lease;
@@ -645,21 +678,15 @@ export function createRiyaWebConversationService(
           progress.finalizeAttempted = true;
         },
       );
-      observe({
-        type: 'text-turn-completed',
-        channel: turn.channel,
-        phase: settled.continuity.phase,
-        disposition: settled.disposition,
-      });
+      // NOT observed here. This result is still PROVISIONAL: the `finally` below may fail to prove
+      // the conversation released and replace it with `turn-coordinator-unavailable`. The admission
+      // wrapper observes the outcome the caller actually receives.
       return settled;
     } catch (error: unknown) {
-      // The BOUNDED code only. A raw error carries a host, a table, a parameter or a client's own
-      // words, and a telemetry sink is the last place any of those should surface.
-      observe({
-        type: 'text-turn-failed',
-        channel: turn.channel,
-        ...(error instanceof RiyaWebConversationError ? { errorCode: error.code } : {}),
-      });
+      // Likewise provisional. A pre-start failure whose `releaseUnstarted` then fails is surfaced as
+      // `turn-coordinator-unavailable`, and telemetry recording the original reason here would tell
+      // operations a different story from the one the caller was told.
+      //
       // NEVER ATTEMPTED. No durable claim can exist, so the message stays retryable -- exactly right
       // for a failure before any model, Core call or write. The `finally` below releases the lease.
       if (!progress.startAttempted) {
