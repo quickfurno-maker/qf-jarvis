@@ -74,6 +74,10 @@ function build(phase: RiyaConversationPhase) {
   const runtime = scriptedRuntime('CORE_ACCEPTED');
   const availabilityReader = scriptedAvailabilityReader();
   const service = createRiyaWebConversationService({
+    // RWC-P9 (ADR-0105): capacity is REQUIRED configuration, with no default. A generous
+    // cap here keeps these suites about what they were about; the admission behaviour has
+    // its own specs.
+    maxConcurrentTextTurns: 64,
     // RWC-P8 (ADR-0104): the coordinator is REQUIRED. A fresh one per construction, because a
     // shared instance would let one spec's claims decide another spec's outcome.
     turnCoordinator: scriptedTurnCoordinator(),
@@ -193,6 +197,10 @@ describe('the pre-summary path is unchanged', () => {
     const store = new InMemoryContinuityStore();
     store.seed(continuityAt('CONTACT'));
     const s2 = createRiyaWebConversationService({
+      // RWC-P9 (ADR-0105): capacity is REQUIRED configuration, with no default. A generous
+      // cap here keeps these suites about what they were about; the admission behaviour has
+      // its own specs.
+      maxConcurrentTextTurns: 64,
       // RWC-P8 (ADR-0104): the coordinator is REQUIRED. A fresh one per construction, because a
       // shared instance would let one spec's claims decide another spec's outcome.
       turnCoordinator: scriptedTurnCoordinator(),
@@ -215,6 +223,10 @@ describe('the pre-summary path is unchanged', () => {
     ) as never;
     expect(() =>
       createRiyaWebConversationService({
+        // RWC-P9 (ADR-0105): capacity is REQUIRED configuration, with no default. A generous
+        // cap here keeps these suites about what they were about; the admission behaviour has
+        // its own specs.
+        maxConcurrentTextTurns: 64,
         // RWC-P8 (ADR-0104): the coordinator is REQUIRED. A fresh one per construction, because a
         // shared instance would let one spec's claims decide another spec's outcome.
         turnCoordinator: scriptedTurnCoordinator(),

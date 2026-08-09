@@ -118,6 +118,20 @@ export type {
   RiyaSummaryEditActionV1,
 } from './contracts/structured-actions.js';
 
+// RWC-P9 (ADR-0105): content-free operational observability. TWO runtime values -- the closed event
+// vocabulary and the no-op default. `maxConcurrentTextTurns` is CONFIG only, and the admission gate,
+// its counter and its release token stay internal: a caller able to reach the gate could hand this
+// process capacity it does not have.
+export {
+  NOOP_RIYA_CONVERSATION_OPERATIONAL_OBSERVABILITY,
+  RIYA_CONVERSATION_OPERATIONAL_EVENT_TYPES,
+} from './contracts/operational-observability.js';
+export type {
+  RiyaConversationOperationalEvent,
+  RiyaConversationOperationalEventType,
+  RiyaConversationOperationalObservabilityHook,
+} from './contracts/operational-observability.js';
+
 export type { RiyaWebConversationTurnV1 } from './contracts/turn.js';
 export type {
   RiyaContinuityCasOutcome,

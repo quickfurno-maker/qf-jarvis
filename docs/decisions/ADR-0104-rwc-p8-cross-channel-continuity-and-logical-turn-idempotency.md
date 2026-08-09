@@ -1,6 +1,10 @@
 # ADR-0104 — RWC-P8: cross-channel continuity and durable logical-turn idempotency
 
-- **Status:** Accepted — RWC-P8 implementation on branch, NOT MERGED
+- **Status:** Accepted — **RWC-P8 merged** as PR #109, merge commit
+  `aac81a20500306e205b3c43c354e4b7e86c8fc4c`, reviewed head
+  `f906ef3b307a042218fc1c3a462e5ecd9f03f40a`. **RWC-P9 is current**
+  ([ADR-0105](./ADR-0105-rwc-p9-riya-production-hardening-and-operational-readiness.md)), and
+  changes none of the decisions below.
 - **Date:** 2026-08-09
 - **Depends on:** ADR-0092 (governed web runtime channel), ADR-0093/0095 (continuity contract and its
   durable store), ADR-0094 (the private conversation service), ADR-0097 (private ingress and its

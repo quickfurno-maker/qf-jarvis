@@ -64,6 +64,17 @@ const RIYA_WEB_CONVERSATION_ERROR_CODE_VALUES = [
   'turn-indeterminate',
   /** The durable coordinator could not answer. Fail closed; never assume a turn may run. */
   'turn-coordinator-unavailable',
+  /**
+   * This process is already serving as many text turns as it was configured to (RWC-P9, ADR-0105).
+   *
+   * Capacity protection, not a decision about the message. Nothing downstream ran -- no coordinator,
+   * no database session, no availability read, no model, no Core -- and no durable claim exists, so
+   * the same logical message may be presented again.
+   *
+   * There is no service queue behind this and no suggested retry time in the message: a wait the
+   * service cannot honour is worse than an immediate, honest refusal.
+   */
+  'turn-overloaded',
 ] as const;
 
 export type RiyaWebConversationErrorCode = (typeof RIYA_WEB_CONVERSATION_ERROR_CODE_VALUES)[number];
@@ -87,6 +98,9 @@ const MESSAGES: Readonly<Record<RiyaWebConversationErrorCode, string>> = Object.
   'turn-conflict': 'A Riya conversation turn identity conflicts with a recorded turn.',
   'turn-indeterminate': 'A Riya conversation turn outcome is undetermined.',
   'turn-coordinator-unavailable': 'The Riya conversation turn coordinator is unavailable.',
+  // Deliberately carries no count, no ceiling and no retry hint. A capacity number is an
+  // operational fact for a metric, not something to hand a client through an error string.
+  'turn-overloaded': 'The Riya conversation service is at capacity.',
 });
 
 /** A bounded service error. The code is the contract; the message is fixed per code. */

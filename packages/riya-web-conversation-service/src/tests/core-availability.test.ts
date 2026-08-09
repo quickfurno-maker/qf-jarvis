@@ -72,6 +72,10 @@ function harness(
     reader,
     store,
     svc: createRiyaWebConversationService({
+      // RWC-P9 (ADR-0105): capacity is REQUIRED configuration, with no default. A generous
+      // cap here keeps these suites about what they were about; the admission behaviour has
+      // its own specs.
+      maxConcurrentTextTurns: 64,
       // RWC-P8 (ADR-0104): the coordinator is REQUIRED. A fresh one per construction, because a
       // shared instance would let one spec's claims decide another spec's outcome.
       turnCoordinator: scriptedTurnCoordinator(),
@@ -91,6 +95,10 @@ describe('the authority reader is required, and there is no default', () => {
   it('a config with no reader is refused at construction', () => {
     expect(() =>
       createRiyaWebConversationService({
+        // RWC-P9 (ADR-0105): capacity is REQUIRED configuration, with no default. A generous
+        // cap here keeps these suites about what they were about; the admission behaviour has
+        // its own specs.
+        maxConcurrentTextTurns: 64,
         // RWC-P8 (ADR-0104): the coordinator is REQUIRED. A fresh one per construction, because a
         // shared instance would let one spec's claims decide another spec's outcome.
         turnCoordinator: scriptedTurnCoordinator(),
@@ -106,6 +114,10 @@ describe('the authority reader is required, and there is no default', () => {
     // had already been loaded and a client was already waiting.
     expect(() =>
       createRiyaWebConversationService({
+        // RWC-P9 (ADR-0105): capacity is REQUIRED configuration, with no default. A generous
+        // cap here keeps these suites about what they were about; the admission behaviour has
+        // its own specs.
+        maxConcurrentTextTurns: 64,
         // RWC-P8 (ADR-0104): the coordinator is REQUIRED. A fresh one per construction, because a
         // shared instance would let one spec's claims decide another spec's outcome.
         turnCoordinator: scriptedTurnCoordinator(),
@@ -121,6 +133,10 @@ describe('the authority reader is required, and there is no default', () => {
     let thrown: unknown;
     try {
       createRiyaWebConversationService({
+        // RWC-P9 (ADR-0105): capacity is REQUIRED configuration, with no default. A generous
+        // cap here keeps these suites about what they were about; the admission behaviour has
+        // its own specs.
+        maxConcurrentTextTurns: 64,
         // RWC-P8 (ADR-0104): the coordinator is REQUIRED. A fresh one per construction, because a
         // shared instance would let one spec's claims decide another spec's outcome.
         turnCoordinator: scriptedTurnCoordinator(),
@@ -448,6 +464,10 @@ describe('P4B is unchanged by the authority read', () => {
       },
     };
     const svc = createRiyaWebConversationService({
+      // RWC-P9 (ADR-0105): capacity is REQUIRED configuration, with no default. A generous
+      // cap here keeps these suites about what they were about; the admission behaviour has
+      // its own specs.
+      maxConcurrentTextTurns: 64,
       // RWC-P8 (ADR-0104): the coordinator is REQUIRED. A fresh one per construction, because a
       // shared instance would let one spec's claims decide another spec's outcome.
       turnCoordinator: scriptedTurnCoordinator(),

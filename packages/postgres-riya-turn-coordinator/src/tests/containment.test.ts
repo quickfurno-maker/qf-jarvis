@@ -243,9 +243,15 @@ describe('it reaches nothing and composes nothing', () => {
     expect(productionCode()).not.toContain('event-backbone');
   });
 
-  it('exposes exactly three runtime values, and no SQL, table or lock internal', () => {
+  it('exposes exactly six runtime values, and no SQL, table or lock internal', () => {
+    // RWC-P9 (ADR-0105): 3 -> 6. Three OBSERVABILITY values -- the closed event vocabulary, the
+    // closed discard-reason vocabulary and the no-op default. The SQL, the digests, the lock key,
+    // the table and the session release helper all remain internal.
     expect(Object.keys(barrel).sort()).toStrictEqual([
+      'NOOP_POSTGRES_RIYA_TURN_COORDINATOR_OBSERVABILITY',
+      'POSTGRES_RIYA_TURN_COORDINATOR_DISCARD_REASONS',
       'POSTGRES_RIYA_TURN_COORDINATOR_ERROR_CODES',
+      'POSTGRES_RIYA_TURN_COORDINATOR_EVENT_TYPES',
       'PostgresRiyaTurnCoordinatorError',
       'createPostgresRiyaTurnCoordinator',
     ]);
