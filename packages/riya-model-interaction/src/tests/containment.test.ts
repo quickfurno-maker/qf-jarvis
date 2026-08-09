@@ -210,12 +210,16 @@ describe('it holds no content it has no business holding', () => {
 });
 
 describe('it stays a leaf', () => {
-  it('depends on exactly four workspace packages and zod', () => {
+  it('depends on exactly five workspace packages and zod', () => {
     const manifest = JSON.parse(readFileSync(join(PKG, 'package.json'), 'utf8')) as {
       readonly dependencies?: Record<string, string>;
       readonly devDependencies?: Record<string, string>;
     };
+    // RWC-P5 adds ONE: the Core-owned availability READ CONTRACT. It is a type-and-parser dependency
+    // on a package that reaches nothing itself, which is exactly why this one can refuse a ref Core
+    // does not list without ever holding a catalogue of its own.
     expect(Object.keys(manifest.dependencies ?? {}).sort()).toStrictEqual([
+      '@qf-jarvis/core-service-availability-read',
       '@qf-jarvis/model-reply-adapter',
       '@qf-jarvis/riya-agent',
       '@qf-jarvis/riya-conversation-continuity',

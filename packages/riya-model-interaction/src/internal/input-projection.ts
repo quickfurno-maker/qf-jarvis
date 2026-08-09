@@ -27,9 +27,12 @@
  * verbatim and whose digest is matched. Instructions smuggled into dynamic user content would be an
  * un-evaluated prompt that no gate ever reviewed.
  */
+import type { CoreServiceAvailabilitySnapshotV1 } from '@qf-jarvis/core-service-availability-read';
 import { DISCOVERY_FIELDS_FROZEN } from '@qf-jarvis/riya-agent';
 import type { DiscoveryField, NeedDiscovery } from '@qf-jarvis/riya-agent';
 import type { RiyaConversationContinuityStateV1 } from '@qf-jarvis/riya-conversation-continuity';
+
+import { projectCoreAvailability } from './availability.js';
 
 /** Which `NeedDiscovery` value a `DiscoveryField` names. Restated; the canonical set is closed. */
 const VALUE_KEY = {
@@ -46,16 +49,25 @@ const VALUE_KEY = {
  * The hard bound on the serialized user payload.
  *
  * Separate from — and larger than — the 4096-character inbound message bound, because the payload
- * carries the message PLUS the bounded known-field projection. The inbound bound is unchanged.
+ * carries the message PLUS the bounded known-field projection PLUS the bounded Core availability
+ * context. The inbound bound is unchanged.
+ *
+ * RWC-P5 raised this from 8192 to 12288. The authoritative availability context is itself bounded at
+ * 6000 serialized characters by its own contract, and 8192 left roughly 2700 characters of headroom
+ * once a maximum-length message and all seven known fields were present -- not enough. This is a
+ * RIYA-LOCAL constant: the generic model-gateway request limits and
+ * `DEFAULT_GATEWAY_REQUEST_BUDGETS` are deliberately untouched, because one agent needing more room
+ * is not a reason every agent should get it.
  */
-export const MAX_RIYA_USER_CONTENT_CHARS = 8192;
+export const MAX_RIYA_USER_CONTENT_CHARS = 12_288;
 
 /** Build the ONE user message. Deterministic: the same inputs give byte-identical output. */
 export function buildRiyaUserContent(args: {
   readonly current: RiyaConversationContinuityStateV1;
   readonly message: string | undefined;
+  readonly availabilitySnapshot: CoreServiceAvailabilitySnapshotV1;
 }): string {
-  const { current, message } = args;
+  const { current, message, availabilitySnapshot } = args;
 
   // Iterated in the frozen canonical order rather than over `Object.keys`, so the serialization is
   // stable regardless of how the state object happened to be built.
@@ -76,6 +88,11 @@ export function buildRiyaUserContent(args: {
     phase: current.phase,
     known,
     summaryConfirmed: current.summaryConfirmed,
+    // The CURRENT Core-owned business authority, kept structurally separate from `known` (RWC-P5,
+    // ADR-0100 s15). `known` is what this conversation believes; `coreAvailability` is what the
+    // business currently sells and where. Folding one into the other would invite the model to treat
+    // a catalogue entry as something the client said -- or a client's words as a catalogue fact.
+    coreAvailability: projectCoreAvailability(availabilitySnapshot),
     message: message ?? '',
   };
 

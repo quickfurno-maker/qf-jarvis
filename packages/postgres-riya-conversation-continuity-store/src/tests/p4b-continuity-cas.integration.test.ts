@@ -26,6 +26,7 @@ import type {
 import { createRiyaConversationObservationBatch } from '@qf-jarvis/riya-conversation-evolution';
 import type { RiyaDiscoveryObservationV1 } from '@qf-jarvis/riya-conversation-evolution';
 import { createRiyaWebConversationService } from '@qf-jarvis/riya-web-conversation-service';
+import { scriptedAvailabilityReader } from '@qf-jarvis/core-service-availability-read/testing';
 import type {
   RiyaWebConversationService,
   RiyaWebConversationTurnV1,
@@ -151,6 +152,9 @@ function service(
     svc: createRiyaWebConversationService({
       runtime: scripted.runtime,
       continuityStore: store(activePool),
+      // RWC-P5: the authority reader is REQUIRED. A deterministic synthetic snapshot keeps
+      // every pre-P5 spec meaning exactly what it meant before.
+      availabilityReader: scriptedAvailabilityReader(),
       runtimeId: RUNTIME_ID,
     }),
     invoked: scripted.invoked,
@@ -387,6 +391,9 @@ describe('a real race on one conversation', () => {
     const svc = createRiyaWebConversationService({
       runtime: scripted.runtime,
       continuityStore: staleFirstStore,
+      // RWC-P5: the authority reader is REQUIRED. A deterministic synthetic snapshot keeps
+      // every pre-P5 spec meaning exactly what it meant before.
+      availabilityReader: scriptedAvailabilityReader(),
       runtimeId: RUNTIME_ID,
     });
 
@@ -431,6 +438,9 @@ describe('a real race on one conversation', () => {
     const svc = createRiyaWebConversationService({
       runtime: scripted.runtime,
       continuityStore: alwaysStaleStore,
+      // RWC-P5: the authority reader is REQUIRED. A deterministic synthetic snapshot keeps
+      // every pre-P5 spec meaning exactly what it meant before.
+      availabilityReader: scriptedAvailabilityReader(),
       runtimeId: RUNTIME_ID,
     });
 

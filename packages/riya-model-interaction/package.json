@@ -17,6 +17,7 @@
     "typecheck:tests": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@qf-jarvis/core-service-availability-read": "workspace:*",
     "@qf-jarvis/model-reply-adapter": "workspace:*",
     "@qf-jarvis/riya-agent": "workspace:*",
     "@qf-jarvis/riya-conversation-continuity": "workspace:*",
