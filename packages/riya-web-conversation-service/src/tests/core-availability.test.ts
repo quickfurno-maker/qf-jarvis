@@ -29,6 +29,7 @@ import {
   UnavailableContinuityStore,
 } from './fakes/in-memory-continuity-store.js';
 import { SENTINEL_BODY, scriptedRuntime } from './fakes/scripted-runtime.js';
+import { scriptedTurnCoordinator } from './fakes/scripted-turn-coordinator.js';
 
 const RUNTIME_ID = 'rt.web.1';
 const TENANT = 'tenant.a';
@@ -41,7 +42,9 @@ function turnInput(over: Partial<RiyaWebConversationTurnV1> = {}): RiyaWebConver
     conversationId: CONVERSATION,
     messageId: 'msg.1',
     receivedAt: '2026-08-07T09:00:00Z',
-    webTurnRef: 'web.turn.opaque.ref',
+    // RWC-P8 (ADR-0104): a new logical message brings a NEW source reference. Derived from the
+    // message id so a fixture cannot accidentally model the caller defect the ledger refuses.
+    webTurnRef: `web.turn.${over.messageId ?? 'msg.1'}`,
     dataClass: 'HOSTED_ALLOWED',
     normalizedText: 'I want a modular kitchen in Pune',
     ...over,
@@ -69,6 +72,9 @@ function harness(
     reader,
     store,
     svc: createRiyaWebConversationService({
+      // RWC-P8 (ADR-0104): the coordinator is REQUIRED. A fresh one per construction, because a
+      // shared instance would let one spec's claims decide another spec's outcome.
+      turnCoordinator: scriptedTurnCoordinator(),
       runtime,
       continuityStore: store,
       availabilityReader: reader,
@@ -85,6 +91,9 @@ describe('the authority reader is required, and there is no default', () => {
   it('a config with no reader is refused at construction', () => {
     expect(() =>
       createRiyaWebConversationService({
+        // RWC-P8 (ADR-0104): the coordinator is REQUIRED. A fresh one per construction, because a
+        // shared instance would let one spec's claims decide another spec's outcome.
+        turnCoordinator: scriptedTurnCoordinator(),
         runtime: scriptedRuntime(),
         continuityStore: new InMemoryContinuityStore(),
         runtimeId: RUNTIME_ID,
@@ -97,6 +106,9 @@ describe('the authority reader is required, and there is no default', () => {
     // had already been loaded and a client was already waiting.
     expect(() =>
       createRiyaWebConversationService({
+        // RWC-P8 (ADR-0104): the coordinator is REQUIRED. A fresh one per construction, because a
+        // shared instance would let one spec's claims decide another spec's outcome.
+        turnCoordinator: scriptedTurnCoordinator(),
         runtime: scriptedRuntime(),
         continuityStore: new InMemoryContinuityStore(),
         availabilityReader: { readCurrent: 'not a function' },
@@ -109,6 +121,9 @@ describe('the authority reader is required, and there is no default', () => {
     let thrown: unknown;
     try {
       createRiyaWebConversationService({
+        // RWC-P8 (ADR-0104): the coordinator is REQUIRED. A fresh one per construction, because a
+        // shared instance would let one spec's claims decide another spec's outcome.
+        turnCoordinator: scriptedTurnCoordinator(),
         runtime: scriptedRuntime(),
         continuityStore: new InMemoryContinuityStore(),
         runtimeId: RUNTIME_ID,
@@ -433,6 +448,9 @@ describe('P4B is unchanged by the authority read', () => {
       },
     };
     const svc = createRiyaWebConversationService({
+      // RWC-P8 (ADR-0104): the coordinator is REQUIRED. A fresh one per construction, because a
+      // shared instance would let one spec's claims decide another spec's outcome.
+      turnCoordinator: scriptedTurnCoordinator(),
       runtime,
       continuityStore: conflicting,
       availabilityReader: reader,

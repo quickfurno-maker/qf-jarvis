@@ -32,6 +32,38 @@ const RIYA_WEB_CONVERSATION_ERROR_CODE_VALUES = [
    * conversation nobody is watching converge.
    */
   'continuity-conflict',
+  /**
+   * Another TEXT turn for this conversation is already in flight (RWC-P8, ADR-0104).
+   *
+   * Not a decision about this message and not a defect: one conversation runs one text turn at a
+   * time, across replicas, and a caller may present this one again once the other finishes.
+   */
+  'turn-in-flight',
+  /**
+   * This exact logical message already completed. It is spent.
+   *
+   * No cached reply is returned with it. The ledger stores no model output, and inventing one here
+   * would make a replay indistinguishable from a fresh answer to the client receiving it.
+   */
+  'turn-replayed',
+  /**
+   * A message id or a source reference is being reused with different immutable identity.
+   *
+   * Same message, a later `receivedAt`; same message, a changed data class or subject; the same source
+   * reference under a new message id. Each is a DIFFERENT turn wearing an existing claim's key, and
+   * accepting either reading would be guessing on the caller's behalf.
+   */
+  'turn-conflict',
+  /**
+   * A previous claim of this message reached the runtime and its outcome is unknown.
+   *
+   * Deliberately terminal for this message. A turn that got that far may have produced a model call, a
+   * Core decision or a durable write before it vanished, and automatically re-running it is the one
+   * thing that could double a real enquiry.
+   */
+  'turn-indeterminate',
+  /** The durable coordinator could not answer. Fail closed; never assume a turn may run. */
+  'turn-coordinator-unavailable',
 ] as const;
 
 export type RiyaWebConversationErrorCode = (typeof RIYA_WEB_CONVERSATION_ERROR_CODE_VALUES)[number];
@@ -48,6 +80,13 @@ const MESSAGES: Readonly<Record<RiyaWebConversationErrorCode, string>> = Object.
   // "change", not "update": the containment scan forbids the SQL keyword `UPDATE ` in production
   // source, and an English sentence must not be the thing that makes a database lock unenforceable.
   'continuity-conflict': 'A Riya conversation continuity change could not be reconciled.',
+  // Fixed and content-free, like every message above. None names the conversation, the message, the
+  // channel, the caller or anything a client wrote.
+  'turn-in-flight': 'A Riya conversation turn is already in progress.',
+  'turn-replayed': 'A Riya conversation turn was already processed.',
+  'turn-conflict': 'A Riya conversation turn identity conflicts with a recorded turn.',
+  'turn-indeterminate': 'A Riya conversation turn outcome is undetermined.',
+  'turn-coordinator-unavailable': 'The Riya conversation turn coordinator is unavailable.',
 });
 
 /** A bounded service error. The code is the contract; the message is fixed per code. */

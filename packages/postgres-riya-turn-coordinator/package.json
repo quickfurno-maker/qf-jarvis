@@ -1,0 +1,27 @@
+{
+  "name": "@qf-jarvis/postgres-riya-turn-coordinator",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis durable PostgreSQL Riya turn coordinator (RWC-P8, ADR-0104). The concrete implementation of the RiyaTurnCoordinatorPort that RWC-P8 declared and deliberately left injected with no default. Two jobs: serialize TEXT turns so one canonical conversation runs one at a time across every replica, and record which logical inbound messages have been claimed so a spent message can never trigger a second Riya turn. It sits BELOW the private ingress transport replay guard rather than replacing it -- that guard protects one signed request in its freshness window and is process-local, while a trusted caller may re-sign the SAME logical message under a fresh requestId. Serialization is a PostgreSQL SESSION advisory lock held on ONE dedicated PoolClient for the life of a turn; there is NO transaction open across the model call, and a session whose unlock is not provably clean is destroyed rather than returned to the pool. A claim found PROCESSING by a later lock holder is marked INDETERMINATE and never re-run. It stores NO message text and no digest of message text, no reply, no raw channelTurnRef, no subjectRef, no phone, email or name, no provider artifact, no requestId, no signature and no Core decision -- only opaque canonical identifiers, the channel, two non-content SHA-256 digests, a lifecycle state and database-stamped timestamps. It has no DELETE privilege and no retention sweeper. Nothing composes it: importing it connects nowhere, creates no pool, reads no environment and starts nothing. Depends on @qf-jarvis/riya-web-conversation-service (port types) and pg.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/riya-web-conversation-service": "workspace:*",
+    "pg": "8.22.0"
+  },
+  "devDependencies": {
+    "@qf-jarvis/event-backbone": "workspace:*",
+    "@types/pg": "8.20.0"
+  }
+}

@@ -26,6 +26,7 @@ import type {
 import { createRiyaConversationObservationBatch } from '@qf-jarvis/riya-conversation-evolution';
 import type { RiyaDiscoveryObservationV1 } from '@qf-jarvis/riya-conversation-evolution';
 import { createRiyaWebConversationService } from '@qf-jarvis/riya-web-conversation-service';
+import type { RiyaTurnCoordinatorPort } from '@qf-jarvis/riya-web-conversation-service';
 import { scriptedAvailabilityReader } from '@qf-jarvis/core-service-availability-read/testing';
 import type {
   RiyaWebConversationService,
@@ -95,6 +96,33 @@ const SET = (field: string, value: string): RiyaDiscoveryObservationV1 =>
  * what reaches the DATABASE once a turn has validly observed something. It counts its calls anyway,
  * so a spec can still prove the reconciliation never ran the turn again.
  */
+/**
+ * A permissive in-memory turn coordinator. TEST-ONLY, and ONLY for this suite.
+ *
+ * These specs are about the DURABLE CONTINUITY STORE -- compare-and-set, reconciliation, revision
+ * arithmetic against a real database. RWC-P8's coordinator is a different durable concern with its
+ * own package and its own integration suite; standing one up here would make every assertion depend
+ * on two schemas instead of one.
+ *
+ * Permissive is safe precisely because it is confined to `src/tests/**`, which is excluded from the
+ * emitting build. A permissive coordinator in production would answer ACQUIRED to everything.
+ */
+function permissiveTurnCoordinator(): RiyaTurnCoordinatorPort {
+  const noop = (): Promise<void> => Promise.resolve();
+  return {
+    begin: () =>
+      Promise.resolve({
+        outcome: 'ACQUIRED' as const,
+        lease: {
+          startProcessing: noop,
+          complete: noop,
+          indeterminate: noop,
+          releaseUnstarted: noop,
+        },
+      }),
+  };
+}
+
 function scriptedRuntime(observations: readonly RiyaDiscoveryObservationV1[]): {
   readonly runtime: RiyaConversationEvolutionJarvisRuntime;
   readonly invoked: () => number;
@@ -154,6 +182,7 @@ function service(
   const scripted = scriptedRuntime(observations);
   return {
     svc: createRiyaWebConversationService({
+      turnCoordinator: permissiveTurnCoordinator(),
       runtime: scripted.runtime,
       continuityStore: store(activePool),
       // RWC-P5: the authority reader is REQUIRED. A deterministic synthetic snapshot keeps
@@ -393,6 +422,7 @@ describe('a real race on one conversation', () => {
     };
     const scripted = scriptedRuntime([SET('budget', 'Around 8 lakh.')]);
     const svc = createRiyaWebConversationService({
+      turnCoordinator: permissiveTurnCoordinator(),
       runtime: scripted.runtime,
       continuityStore: staleFirstStore,
       // RWC-P5: the authority reader is REQUIRED. A deterministic synthetic snapshot keeps
@@ -440,6 +470,7 @@ describe('a real race on one conversation', () => {
     };
     const scripted = scriptedRuntime([SET('budget', 'Around 8 lakh.')]);
     const svc = createRiyaWebConversationService({
+      turnCoordinator: permissiveTurnCoordinator(),
       runtime: scripted.runtime,
       continuityStore: alwaysStaleStore,
       // RWC-P5: the authority reader is REQUIRED. A deterministic synthetic snapshot keeps
@@ -468,12 +499,16 @@ describe('a real race on one conversation', () => {
 // ---------------------------------------------------------------------------
 
 describe('this slice needed no schema', () => {
-  it('the migration set is still exactly 0001-0011, with 0011 byte-exact', () => {
+  it('the migration set is still exactly 0001-0012, with 0011 byte-exact', () => {
     const files = readdirSync(MIGRATIONS_DIR)
       .filter((name) => name.endsWith('.sql'))
       .sort();
-    expect(files).toHaveLength(11);
-    expect(files.some((name) => name.startsWith('0012'))).toBe(false);
+    // RWC-P8 (ADR-0104): 0012 is the ONE owner-authorized addition, repository and LOCAL/CI only.
+    expect(files).toHaveLength(12);
+    // RWC-P8 (ADR-0104) RESTATED, not relaxed: 0012 is the ONE owner-authorized addition -- durable
+    // logical-turn idempotency, repository and LOCAL/CI only. The bound moves to 0013, so the
+    // lock still says what it always said: no unauthorized migration exists.
+    expect(files.some((name) => name.startsWith('0013'))).toBe(false);
     expect(
       createHash('sha256')
         .update(readFileSync(join(MIGRATIONS_DIR, '0011_riya_conversation_continuity.sql')))

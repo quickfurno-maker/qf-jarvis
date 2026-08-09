@@ -125,6 +125,8 @@ describe('db:migrate runs the preflight automatically', () => {
       '0009_durable_approval_queue.sql',
       '0010_execution_replay_claim.sql',
       '0011_riya_conversation_continuity.sql',
+      // RWC-P8 (ADR-0104): the ONE authorized addition, repository and LOCAL/CI only.
+      '0012_riya_logical_turn_idempotency.sql',
     ]);
     expect(await tableExists(MIGRATION_SCHEMA, 'event')).toBe(true);
   });
@@ -137,6 +139,8 @@ describe('db:migrate runs the preflight automatically', () => {
     expect(second.migration.applied).toStrictEqual([]);
     expect(second.migration.alreadyApplied.map((m) => m.version)).toStrictEqual([
       1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+      // RWC-P8 (ADR-0104): the ONE owner-authorized addition.
+      12,
     ]);
   });
 

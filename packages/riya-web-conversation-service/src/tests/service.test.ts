@@ -23,6 +23,7 @@ import {
   UnavailableContinuityStore,
 } from './fakes/in-memory-continuity-store.js';
 import { scriptedRuntime } from './fakes/scripted-runtime.js';
+import { scriptedTurnCoordinator } from './fakes/scripted-turn-coordinator.js';
 
 const RUNTIME_ID = 'rt.web.1';
 
@@ -33,7 +34,9 @@ function turnInput(over: Partial<RiyaWebConversationTurnV1> = {}): RiyaWebConver
     conversationId: 'conv.1',
     messageId: 'msg.1',
     receivedAt: '2026-08-07T09:00:00Z',
-    webTurnRef: 'web.turn.opaque.ref',
+    // RWC-P8 (ADR-0104): a new logical message brings a NEW source reference. Derived from the
+    // message id so a fixture cannot accidentally model the caller defect the ledger refuses.
+    webTurnRef: `web.turn.${over.messageId ?? 'msg.1'}`,
     dataClass: 'HOSTED_ALLOWED',
     ...over,
   };
@@ -60,6 +63,9 @@ function service<
     runtime,
     store,
     svc: createRiyaWebConversationService({
+      // RWC-P8 (ADR-0104): the coordinator is REQUIRED. A fresh one per construction, because a
+      // shared instance would let one spec's claims decide another spec's outcome.
+      turnCoordinator: scriptedTurnCoordinator(),
       runtime,
       continuityStore: store,
       // RWC-P5: the authority reader is REQUIRED. A deterministic synthetic snapshot keeps
@@ -175,7 +181,7 @@ describe('the turn a caller may take', () => {
     expect(envelope?.partyType).toBe('CLIENT');
     expect(envelope?.direction).toBe('INBOUND');
     // The mature runtime field is reused, not renamed for the web.
-    expect(envelope?.providerMessageRef).toBe('web.turn.opaque.ref');
+    expect(envelope?.providerMessageRef).toBe('web.turn.msg.1');
     // `runtimeId` is configured, never caller-supplied.
     expect(envelope?.runtimeId).toBe(RUNTIME_ID);
     expect(envelope?.subjectRef).toBe('subject.42');
@@ -246,17 +252,20 @@ describe('continuity is loaded or initialized, and returned unchanged', () => {
     expect(store.size).toBe(2);
   });
 
-  it('(18, 19) two simultaneous first turns yield ONE authoritative state', async () => {
+  it('(18, 19) three first turns yield ONE authoritative state', async () => {
     const store = new InMemoryContinuityStore();
     const { svc } = service({ store });
-    const results = await Promise.all([
-      svc.handleTurn(turnInput({ messageId: 'msg.1' })),
-      svc.handleTurn(turnInput({ messageId: 'msg.2' })),
-      svc.handleTurn(turnInput({ messageId: 'msg.3' })),
-    ]);
+    // RESTATED for RWC-P8 (ADR-0104), not weakened. These turns were SIMULTANEOUS; the durable
+    // coordinator now serializes text turns per conversation, so two of three would correctly be
+    // told the conversation is busy and this suite would be asserting the coordinator rather than
+    // the store. The property being proved here is unchanged -- three first turns produce ONE row,
+    // and every caller receives the state the STORE returned rather than its own candidate -- and
+    // the concurrency behaviour has its own specs in the RWC-P8 suite.
+    const first = await svc.handleTurn(turnInput({ messageId: 'msg.1' }));
+    const second = await svc.handleTurn(turnInput({ messageId: 'msg.2' }));
+    const third = await svc.handleTurn(turnInput({ messageId: 'msg.3' }));
     // One row, and every caller received the state the STORE returned -- not its own candidate.
     expect(store.size).toBe(1);
-    const [first, second, third] = results;
     expect(second.continuity).toStrictEqual(first.continuity);
     expect(third.continuity).toStrictEqual(first.continuity);
   });
@@ -403,6 +412,9 @@ describe('the store port semantics the fake proves', () => {
     };
     const runtime = scriptedRuntime();
     const svc = createRiyaWebConversationService({
+      // RWC-P8 (ADR-0104): the coordinator is REQUIRED. A fresh one per construction, because a
+      // shared instance would let one spec's claims decide another spec's outcome.
+      turnCoordinator: scriptedTurnCoordinator(),
       runtime,
       continuityStore: mismatched,
       // RWC-P5: the authority reader is REQUIRED. A deterministic synthetic snapshot keeps
@@ -447,7 +459,9 @@ describe('the authoritative runtime is reused exactly once', () => {
     // It holds ONE collaborator that can process a turn, and it is injected. There is no
     // `createOrchestrator`, no policy, no ports, no model and no Core adapter anywhere in it.
     const { svc } = service();
-    expect(Object.keys(svc)).toStrictEqual(['handleTurn']);
+    // RWC-P8 (ADR-0104): 1 -> 2. `handleChannelTurn` is the SAME processor reached without the WEB
+    // wrapper, from the SAME factory. Still no orchestrator, no send, no execute and no persist.
+    expect(Object.keys(svc).sort()).toStrictEqual(['handleChannelTurn', 'handleTurn']);
     expect(Object.isFrozen(svc)).toBe(true);
   });
 
@@ -530,13 +544,20 @@ describe('the authoritative runtime is reused exactly once', () => {
 });
 
 describe('errors are bounded and content-free', () => {
-  it('exposes exactly five codes, frozen, and the fifth is now reachable', () => {
+  it('exposes exactly ten codes, frozen, and every one is reachable', () => {
+    // RWC-P8 (ADR-0104): 5 -> 10, and every addition is a DURABLE TURN outcome the service could not
+    // previously express. The original five are unchanged, in order, and keep their exact meanings.
     expect([...RIYA_WEB_CONVERSATION_ERROR_CODES]).toStrictEqual([
       'invalid-input',
       'continuity-unavailable',
       'runtime-unavailable',
       'repository-invariant',
       'continuity-conflict',
+      'turn-in-flight',
+      'turn-replayed',
+      'turn-conflict',
+      'turn-indeterminate',
+      'turn-coordinator-unavailable',
     ]);
     expect(Object.isFrozen(RIYA_WEB_CONVERSATION_ERROR_CODES)).toBe(true);
     // RWC-P2C refused this code because a revision conflict was unreachable from a turn. RWC-P4B

@@ -162,10 +162,12 @@ describe('RWC-P2D containment', () => {
     const service = codeOnly(readFileSync(join(SRC, 'service/create-service.ts'), 'utf8'));
     const reconciliation = service.slice(
       service.indexOf("first === 'NOT_FOUND'"),
-      service.indexOf('async function handleTurn'),
+      service.indexOf('async function handleChannelTurn'),
     );
     expect(reconciliation).not.toMatch(/processInbound/u);
-    expect(reconciliation).not.toMatch(/buildWebInboundEnvelope|materializationAgreesWithRun/u);
+    expect(reconciliation).not.toMatch(
+      /buildRiyaClientInboundEnvelope|materializationAgreesWithRun/u,
+    );
     // Exactly ONE reload in the reconciliation, and exactly one re-merge.
     expect(reconciliation.match(/continuityStore\s*\.\s*load\s*\(/gu) ?? []).toHaveLength(1);
     expect(reconciliation.match(/evolveRiyaConversation\s*\(/gu) ?? []).toHaveLength(1);
@@ -235,7 +237,7 @@ describe('RWC-P2D containment', () => {
     const service = codeOnly(readFileSync(join(SRC, 'service/create-service.ts'), 'utf8'));
     const reconciliation = service.slice(
       service.indexOf("first === 'NOT_FOUND'"),
-      service.indexOf('async function handleTurn'),
+      service.indexOf('async function handleChannelTurn'),
     );
     expect(reconciliation).not.toMatch(
       /availabilityReader|readCurrent|parseCoreServiceAvailability/u,
@@ -247,8 +249,11 @@ describe('RWC-P2D containment', () => {
     const sql = readdirSync(dir)
       .filter((n) => n.endsWith('.sql'))
       .sort();
-    expect(sql).toHaveLength(11);
-    expect(sql.some((n) => n.startsWith('0012'))).toBe(false);
+    expect(sql).toHaveLength(12);
+    // RWC-P8 (ADR-0104) RESTATED, not relaxed: 0012 is the ONE owner-authorized addition -- durable
+    // logical-turn idempotency, repository and LOCAL/CI only. The bound moves to 0013, so the
+    // lock still says what it always said: no unauthorized migration exists.
+    expect(sql.some((n) => n.startsWith('0013'))).toBe(false);
     // The RWC-P2B hash, unchanged: P2D needs no schema at all.
     expect(
       createHash('sha256')
@@ -258,15 +263,22 @@ describe('RWC-P2D containment', () => {
   });
 });
 
-describe('the public surface is seven runtime values', () => {
+describe('the public surface is nine runtime values', () => {
   it('exports exactly the approved runtime symbols', () => {
-    // Four for the text turn, three for RWC-P6B's structured capability: its factory and its two
-    // closed vocabularies. The action SCHEMAS, the deterministic key helper and the discovery
+    // Four for the text turn, three for RWC-P6B's structured capability, and TWO for RWC-P8's
+    // channel-neutral surface. The action SCHEMAS, the deterministic key helper and the discovery
     // projection are all internal -- a caller able to derive a key could submit under one this
     // service never checked.
+    //
+    // RWC-P8 (ADR-0104): 7 -> 9, and both additions are closed VOCABULARIES. The channel turn schema
+    // stays internal for the reason the web turn schema does -- a caller able to compose it would
+    // build a half-validated turn -- and the coordinator port is a TYPE with no implementation in
+    // this package at all. `createRiyaWebConversationService` is still the ONE factory.
     expect(Object.keys(barrel).sort()).toStrictEqual([
+      'RIYA_CONVERSATION_CHANNELS',
       'RIYA_STRUCTURED_ACTION_DISPOSITIONS',
       'RIYA_STRUCTURED_ACTION_REASON_CODES',
+      'RIYA_TURN_BEGIN_OUTCOMES',
       'RIYA_WEB_CONVERSATION_DISPOSITIONS',
       'RIYA_WEB_CONVERSATION_ERROR_CODES',
       'RiyaWebConversationError',
@@ -278,7 +290,8 @@ describe('the public surface is seven runtime values', () => {
   it('exports no schema, fake, envelope builder, mapper, handler or key helper', () => {
     for (const forbidden of [
       'webConversationTurnSchema',
-      'buildWebInboundEnvelope',
+      'buildRiyaClientInboundEnvelope',
+      'riyaConversationTurnSchema',
       'InMemoryContinuityStore',
       'UnavailableContinuityStore',
       'dispositionFor',
@@ -417,7 +430,6 @@ describe('(42-46) the service reaches nothing', () => {
     const code = productionCode();
     for (const forbidden of [
       'n8n',
-      'whatsapp',
       'twilio',
       'graph.facebook',
       'webhook',
@@ -429,6 +441,24 @@ describe('(42-46) the service reaches nothing', () => {
       'Bearer',
     ]) {
       expect(code.toLowerCase(), forbidden).not.toContain(forbidden.toLowerCase());
+    }
+    // `whatsapp` was substring-banned to catch a WhatsApp CLIENT. RESTATED as the constructs for
+    // RWC-P8 (ADR-0104), because `WHATSAPP` is now a legitimate CHANNEL literal in a channel-neutral
+    // turn contract -- the same governed Riya, reached from a second surface. What must stay absent
+    // is anything that could TALK to WhatsApp: a client, a token, a phone number, a template, a
+    // media handler or a send.
+    for (const forbidden of [
+      /whatsappClient/iu,
+      /metaClient/iu,
+      /phoneNumberId/iu,
+      /accessToken/iu,
+      /waba/iu,
+      /templateName/iu,
+      /mediaId/iu,
+      /sendMessage/iu,
+      /deliverMessage/iu,
+    ]) {
+      expect(code, forbidden.source).not.toMatch(forbidden);
     }
   });
 
@@ -553,7 +583,7 @@ describe('(50, 53-57) the repository invariants this slice must not move', () =>
     expect(codeOnly(apiIndex).trim()).toBe('export {};');
   });
 
-  it('(53) migrations are still exactly 0001-0011, byte-identical, with no 0012', () => {
+  it('(53) migrations are still exactly 0001-0012, byte-identical, with no 0013', () => {
     const LOCKED: Readonly<Record<string, string>> = {
       '0001_event_log.sql': 'dbca835c394dc67f015176af8ae0582faa78e0c1299593ac8970c5abf4389d6a',
       '0002_event_runtime_grants.sql':
@@ -576,6 +606,11 @@ describe('(50, 53-57) the repository invariants this slice must not move', () =>
         '1add85e08e43dafe85f124b886790cd3495d3f54b3579ad89efe40e2849a8b05',
       '0011_riya_conversation_continuity.sql':
         '80149f8d636aa85eaff7d98f924220107eaa3d539e5d13d5133873154926cc93',
+      // RWC-P8 (ADR-0104): the ONE authorized addition. Durable logical-turn idempotency, sitting
+      // BELOW the ingress transport replay guard rather than replacing it. Repository and
+      // LOCAL/CI only; nothing is applied to a managed database.
+      '0012_riya_logical_turn_idempotency.sql':
+        '5d1b7fe68401a664cea3116ff0900499a1f20d659d4935c586b4ac0f923aaf3e',
     };
     const dir = join(REPO_ROOT, 'packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
@@ -590,7 +625,8 @@ describe('(50, 53-57) the repository invariants this slice must not move', () =>
         name,
       ).toBe(hash);
     }
-    expect(sql.some((name) => Number.parseInt(name.slice(0, 4), 10) > 11)).toBe(false);
+    // RWC-P8 (ADR-0104) RESTATED, not relaxed: 0012 is the ONE owner-authorized addition.
+    expect(sql.some((name) => Number.parseInt(name.slice(0, 4), 10) > 12)).toBe(false);
   });
 
   it('(54, 55) the two channel vocabularies are exactly as JRW-0B left them', () => {
@@ -669,7 +705,14 @@ describe('(50, 53-57) the repository invariants this slice must not move', () =>
     //   * that application must reach the service through the private ingress and nowhere else;
     //   * and the store importer must still not CONSTRUCT it -- a store that called the service
     //     would have inverted the dependency it exists to serve.
-    const ALLOWED_PACKAGE_IMPORTERS = ['postgres-riya-conversation-continuity-store'];
+    // RWC-P8 (ADR-0104) narrows it a third time rather than dropping it. The durable turn
+    // coordinator implements the `RiyaTurnCoordinatorPort` this package OWNS, so it imports the
+    // port's TYPES -- an adapter implementing a declared port is not a composition, exactly as the
+    // continuity store was not. Both remain TYPE-ONLY and neither may CONSTRUCT the service.
+    const ALLOWED_PACKAGE_IMPORTERS = [
+      'postgres-riya-conversation-continuity-store',
+      'postgres-riya-turn-coordinator',
+    ];
     const ALLOWED_APP_IMPORTERS = ['api'];
     const importingPackages = new Set<string>();
     const importingApps = new Set<string>();
@@ -713,6 +756,14 @@ describe('(50, 53-57) the repository invariants this slice must not move', () =>
     }
 
     // Type-only, and specifically NOT a construction of the service.
+    for (const importer of ALLOWED_PACKAGE_IMPORTERS) {
+      const importerSrc = join(REPO_ROOT, 'packages', importer, 'src');
+      for (const file of walk(importerSrc, false)) {
+        if (file.replaceAll('\\', '/').includes('/src/tests/')) continue;
+        const text = readFileSync(file, 'utf8');
+        expect(text, file).not.toContain('createRiyaWebConversationService');
+      }
+    }
     const storeSrc = join(REPO_ROOT, 'packages/postgres-riya-conversation-continuity-store/src');
     // PRODUCTION files only. The store's own specs necessarily NAME this package — they read its
     // port and its in-memory fake to prove the two implementations answer to the same words — and

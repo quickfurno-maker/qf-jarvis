@@ -443,6 +443,10 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // assertion. It composes nothing: no HTTP, no ingress, no browser reachability, and no
       // application imports it.
       'postgres-riya-conversation-continuity-store',
+      // RWC-P8 (ADR-0104): the durable Riya turn coordinator -- one in-flight text turn per
+      // canonical conversation across replicas, and a logical message that cannot run twice. Still
+      // an EXACT set match; it records an authorised addition, it does not relax the assertion.
+      'postgres-riya-turn-coordinator',
       // QFJ-S3-I-A (ADR-0072): the versioned prompt registry foundation. Still an EXACT set match --
       // this records an authorised addition, it does not relax the assertion.
       'prompt-registry',

@@ -414,6 +414,8 @@ describe('the managed provider’s roles are revoked — and re-revoked on every
       '0009_durable_approval_queue.sql',
       '0010_execution_replay_claim.sql',
       '0011_riya_conversation_continuity.sql',
+      // RWC-P8 (ADR-0104): the ONE authorized addition, repository and LOCAL/CI only.
+      '0012_riya_logical_turn_idempotency.sql',
     ]);
     expect(await tableExists('event')).toBe(true);
   });

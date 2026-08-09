@@ -782,7 +782,7 @@ describe('(29-35) package, repository, and hygiene invariants', () => {
     ).toContain('toHaveLength(39)');
   });
 
-  it('(32, 33) migrations 0001-0011 are byte-identical and 0012 is absent', () => {
+  it('(32, 33) migrations 0001-0012 are byte-identical and 0013 is absent', () => {
     const LOCKED: Record<string, string> = {
       '0001_event_log.sql': 'dbca835c394dc67f015176af8ae0582faa78e0c1299593ac8970c5abf4389d6a',
       '0002_event_runtime_grants.sql':
@@ -805,6 +805,11 @@ describe('(29-35) package, repository, and hygiene invariants', () => {
         '1add85e08e43dafe85f124b886790cd3495d3f54b3579ad89efe40e2849a8b05',
       '0011_riya_conversation_continuity.sql':
         '80149f8d636aa85eaff7d98f924220107eaa3d539e5d13d5133873154926cc93',
+      // RWC-P8 (ADR-0104): the ONE authorized addition. Durable logical-turn idempotency, sitting
+      // BELOW the ingress transport replay guard rather than replacing it. Repository and
+      // LOCAL/CI only; nothing is applied to a managed database.
+      '0012_riya_logical_turn_idempotency.sql':
+        '5d1b7fe68401a664cea3116ff0900499a1f20d659d4935c586b4ac0f923aaf3e',
     };
     const dir = join(REPO_ROOT, 'packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
@@ -818,7 +823,10 @@ describe('(29-35) package, repository, and hygiene invariants', () => {
           .digest('hex'),
       ).toBe(hash);
     }
-    expect(sql.some((name) => name.startsWith('0012'))).toBe(false);
+    // RWC-P8 (ADR-0104) RESTATED, not relaxed: 0012 is the ONE owner-authorized addition -- durable
+    // logical-turn idempotency, repository and LOCAL/CI only. The bound moves to 0013, so the
+    // lock still says what it always said: no unauthorized migration exists.
+    expect(sql.some((name) => name.startsWith('0013'))).toBe(false);
   });
 
   it('(34) no S1D-B source references the protected reconciliation directory', () => {

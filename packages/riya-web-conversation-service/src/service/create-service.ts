@@ -70,7 +70,11 @@ import type {
 import type { RiyaContinuityCasOutcome, RiyaContinuityStorePort } from '../contracts/store-port.js';
 import { webConversationTurnSchema } from '../contracts/turn.js';
 import type { RiyaWebConversationTurnV1 } from '../contracts/turn.js';
-import { buildWebInboundEnvelope } from '../internal/envelope.js';
+import { buildRiyaClientInboundEnvelope } from '../internal/envelope.js';
+import { riyaConversationTurnSchema } from '../contracts/channel-turn.js';
+import type { RiyaConversationTurnV1 } from '../contracts/channel-turn.js';
+import type { RiyaConversationResultV1 } from '../contracts/channel-result.js';
+import type { RiyaTurnCoordinatorPort, RiyaTurnLease } from '../contracts/turn-coordinator-port.js';
 
 /** What a caller injects. Every collaborator is required; there is no default for any of them. */
 export interface RiyaWebConversationServiceConfig {
@@ -98,11 +102,36 @@ export interface RiyaWebConversationServiceConfig {
   readonly availabilityReader: CoreServiceAvailabilityReader;
   /** The governed runtime identifier stamped on every envelope. Configured, never caller-supplied. */
   readonly runtimeId: string;
+  /**
+   * The DURABLE turn coordinator (RWC-P8, ADR-0104). REQUIRED, and injected.
+   *
+   * There is deliberately no default and no in-memory production fallback. A permissive default would
+   * answer `ACQUIRED` to everything, pass every test in this repository, and silently remove duplicate
+   * protection in exactly the deployment that most needs it -- a multi-replica one, where a retried
+   * message arrives at a process that has never seen it.
+   *
+   * It is not the ingress replay guard and does not replace it. That guard protects one signed
+   * transport request in its freshness window and is process-local; this protects one LOGICAL message
+   * across replicas and across fresh request identifiers. Both layers stay.
+   */
+  readonly turnCoordinator: RiyaTurnCoordinatorPort;
 }
 
-/** The service. One capability. */
+/** The service, as every existing caller knows it. Unchanged. */
 export interface RiyaWebConversationService {
   handleTurn(turn: RiyaWebConversationTurnV1): Promise<RiyaWebConversationResultV2>;
+}
+
+/**
+ * The same service, plus the channel-neutral capability (RWC-P8, ADR-0104).
+ *
+ * Additive, and reached through the SAME factory -- there is no second constructor and no second
+ * processor. `handleTurn` is now a thin wrapper that fixes `channel: 'WEB'` and maps `webTurnRef` to
+ * `channelTurnRef`; both surfaces then run one identical path, because WEB and WHATSAPP are two
+ * surfaces of one Riya rather than two Riyas.
+ */
+export interface RiyaConversationService extends RiyaWebConversationService {
+  handleChannelTurn(turn: RiyaConversationTurnV1): Promise<RiyaConversationResultV1>;
 }
 
 /** The M2 reply-body bound, restated. A body outside it never passed the orchestrator's schema. */
@@ -255,7 +284,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 /** Build the private web conversation service. Synchronous, and it opens nothing. */
 export function createRiyaWebConversationService(
   config: RiyaWebConversationServiceConfig,
-): RiyaWebConversationService {
+): RiyaConversationService {
   // Typed `unknown` at the check: the declared parameter promises three collaborators, but this is
   // a package boundary and a missing store would otherwise surface as a crash mid-turn — after the
   // envelope was built and possibly after the runtime ran.
@@ -293,7 +322,11 @@ export function createRiyaWebConversationService(
     typeof (supplied['availabilityReader'] as { readCurrent?: unknown } | undefined)
       ?.readCurrent !== 'function' ||
     typeof supplied['runtimeId'] !== 'string' ||
-    supplied['runtimeId'].length === 0
+    supplied['runtimeId'].length === 0 ||
+    // The RWC-P8 durable coordinator. Also closed at construction: discovering this mid-turn would
+    // mean a conversation had already been loaded, and a deployment missing it would be running with
+    // no duplicate protection at all while looking entirely healthy.
+    typeof (supplied['turnCoordinator'] as { begin?: unknown } | undefined)?.begin !== 'function'
   ) {
     throw new RiyaWebConversationError('invalid-input');
   }
@@ -301,6 +334,7 @@ export function createRiyaWebConversationService(
   const continuityStore = supplied['continuityStore'] as RiyaContinuityStorePort;
   const availabilityReader = supplied['availabilityReader'] as CoreServiceAvailabilityReader;
   const runtimeId = supplied['runtimeId'];
+  const turnCoordinator = supplied['turnCoordinator'] as RiyaTurnCoordinatorPort;
 
   /**
    * Evolve one loaded continuity by one batch and persist it (RWC-P4B §22–§23, ADR-0099).
@@ -413,17 +447,143 @@ export function createRiyaWebConversationService(
     throw new RiyaWebConversationError('continuity-conflict');
   }
 
-  async function handleTurn(
-    input: RiyaWebConversationTurnV1,
-  ): Promise<RiyaWebConversationResultV2> {
-    const parsed = webConversationTurnSchema.safeParse(input);
+  /**
+   * The ONE internal processor, for every channel (RWC-P8, ADR-0104).
+   *
+   * Order matters and is fixed: claim the conversation, then establish continuity, then read
+   * authority, then write the durable claim, then run. Everything before `startProcessing` is safely
+   * retryable because nothing durable and nothing external has happened; everything after it is
+   * potentially spent and is never re-run automatically.
+   */
+  async function handleChannelTurn(
+    input: RiyaConversationTurnV1,
+  ): Promise<RiyaConversationResultV1> {
+    const parsed = riyaConversationTurnSchema.safeParse(input);
     if (!parsed.success) {
       // The zod issue is discarded: its path names the failing field and its message can quote the
       // value, and the value here is a person's own words.
       throw new RiyaWebConversationError('invalid-input');
     }
-    const turn = parsed.data as RiyaWebConversationTurnV1;
+    const turn = parsed.data as RiyaConversationTurnV1;
 
+    // 0. CLAIM THE CONVERSATION, before anything else (RWC-P8).
+    //
+    //    Before continuity, before authority, before the runtime. A turn that cannot claim its
+    //    conversation must not read a store, call Core or reach a model -- and a duplicate must cost
+    //    exactly one coordinator round trip, not a whole pipeline that is then thrown away.
+    //
+    //    NOTE what is NOT passed: `normalizedText` is deliberately absent. The coordinator decides
+    //    whether a turn may run; a client's words do not help it decide, and a durable ledger is not
+    //    a message archive.
+    let begun;
+    try {
+      begun = await turnCoordinator.begin({
+        tenantId: turn.tenantId,
+        conversationId: turn.conversationId,
+        messageId: turn.messageId,
+        channel: turn.channel,
+        channelTurnRef: turn.channelTurnRef,
+        receivedAt: turn.receivedAt,
+        dataClass: turn.dataClass,
+        ...(turn.subjectRef === undefined ? {} : { subjectRef: turn.subjectRef }),
+      });
+    } catch {
+      // Fail CLOSED. An unavailable coordinator is exactly when a duplicate would slip through, so
+      // uncertainty must never become permission. Nothing from the coordinator's error escapes.
+      throw new RiyaWebConversationError('turn-coordinator-unavailable');
+    }
+
+    if (begun.outcome !== 'ACQUIRED') {
+      // ZERO downstream work on every one of these. No continuity read, no availability read, no
+      // envelope, no runtime, no model, no Core, no compare-and-set.
+      //
+      // And no cached reply on a replay: the ledger stores no model output, and fabricating one would
+      // make a replay indistinguishable from a fresh answer to the client receiving it.
+      throw new RiyaWebConversationError(
+        begun.outcome === 'BUSY'
+          ? 'turn-in-flight'
+          : begun.outcome === 'REPLAYED'
+            ? 'turn-replayed'
+            : begun.outcome === 'CONFLICT'
+              ? 'turn-conflict'
+              : 'turn-indeterminate',
+      );
+    }
+    const lease: RiyaTurnLease = begun.lease;
+
+    // Every path from here either starts processing or releases the lease unstarted. A lease that
+    // leaked would hold the conversation until its database session ended.
+    // Mutated by callbacks handed to `runClaimedTurn`, so the flow analysis cannot see the writes.
+    // The explicit widening keeps the guards below meaningful rather than statically dead.
+    const progress = { started: false, finalizeAttempted: false };
+
+    try {
+      return await runClaimedTurn(
+        turn,
+        lease,
+        () => {
+          progress.started = true;
+        },
+        () => {
+          progress.finalizeAttempted = true;
+        },
+      );
+    } catch (error: unknown) {
+      // A turn that never started leaves NO durable claim. The message stays retryable, which is
+      // exactly right for a failure that happened before any model, Core call or write. The
+      // `finally` below performs the release, for this path and for the availability NOT_READY
+      // return alike.
+      if (!progress.started) {
+        throw error;
+      }
+
+      // It DID start. Mark the claim indeterminate ONCE -- unless finalization was already attempted,
+      // in which case the row is either COMPLETED or still PROCESSING and a second guarded write
+      // would be a second attempt at a decision this turn has already made or lost.
+      if (!progress.finalizeAttempted) {
+        try {
+          await lease.indeterminate();
+        } catch {
+          // Even the indeterminate write is uncertain now. That is survivable: the row is still
+          // PROCESSING, and the NEXT claim of this message finds it and marks it indeterminate
+          // itself. What must not happen -- a retry, a loop, a second runtime call -- does not.
+        }
+      }
+      // The caller keeps the ORIGINAL bounded reason. A `continuity-conflict` is still a conflict and
+      // a `repository-invariant` is still an inconsistency -- rewriting every post-start failure into
+      // `turn-indeterminate` would tell a caller less than this service actually knows, and would
+      // silently change the error contract RWC-P4B and RWC-P5 callers already handle.
+      //
+      // What the LEDGER records is a different question, and it is answered above: the claim is
+      // marked indeterminate, so this message never runs again whatever the caller was told.
+      throw error;
+    } finally {
+      // EVERY unstarted exit releases the lease -- the availability NOT_READY return as much as a
+      // thrown store failure. A lease that leaked would hold the conversation until its database
+      // session ended, and the client's next turn would see BUSY for a turn that already gave up.
+      if (!progress.started) {
+        try {
+          await lease.releaseUnstarted();
+        } catch {
+          // Nothing to add. No claim exists, and the coordinator's own session cleanup is what
+          // actually frees the conversation.
+        }
+      }
+    }
+  }
+
+  /**
+   * Everything a turn does once it OWNS its conversation.
+   *
+   * Split out so the lease bookkeeping above reads as one thing and this reads as the turn it always
+   * was: continuity, authority, envelope, one runtime call, one persistence, one result.
+   */
+  async function runClaimedTurn(
+    turn: RiyaConversationTurnV1,
+    lease: RiyaTurnLease,
+    markStarted: () => void,
+    markFinalizeAttempted: () => void,
+  ): Promise<RiyaConversationResultV1> {
     // 1. Continuity BEFORE the runtime. A turn that could not establish its own continuity must not
     //    reach a model: it would produce a proposal about a conversation nobody can account for.
     let continuity: RiyaConversationContinuityStateV1;
@@ -487,8 +647,11 @@ export function createRiyaWebConversationService(
       //
       // No runtime call, no model call, no Core decision, no compare-and-set. There is no default
       // city, no cached fallback and no "assume available" — an outage must never become a promise.
+      //
+      //     And this is a SAFE PRE-START failure: no durable claim was written, so the caller may
+      //     present the same logical message again once Core's catalogue answers (RWC-P8).
       return Object.freeze({
-        version: 2 as const,
+        version: 1 as const,
         tenantId: turn.tenantId,
         conversationId: turn.conversationId,
         messageId: turn.messageId,
@@ -499,8 +662,28 @@ export function createRiyaWebConversationService(
       });
     }
 
-    // 3. The envelope, with the three values fixed by this service.
-    const envelope = buildWebInboundEnvelope(turn, runtimeId);
+    // 3. The envelope, with `partyType` and `direction` fixed by this service and the channel the
+    //    caller's. There is no per-channel branch here or anywhere downstream.
+    const envelope = buildRiyaClientInboundEnvelope(turn, runtimeId);
+
+    // 3a. WRITE THE DURABLE CLAIM, immediately before the runtime (RWC-P8, ADR-0104).
+    //
+    //     Not at `begin`, and the gap is the point. Everything above -- an unavailable store, a
+    //     conversation that answered about another conversation, an unprovable availability snapshot,
+    //     a malformed envelope -- happens before any model, Core call or write, so the message must
+    //     stay retryable. A ledger row written earlier would mark a message spent that never ran.
+    //
+    //     After this line the message is potentially spent, and nothing re-runs it automatically.
+    try {
+      await lease.startProcessing();
+      markStarted();
+    } catch {
+      // The insert did not clearly succeed. NO runtime call: a claim whose durability is unknown must
+      // not be followed by work that could be attributed to it. No model ran, so both readings --
+      // committed and not committed -- are safe, and a later attempt is decided by durable evidence
+      // rather than by a guess made here.
+      throw new RiyaWebConversationError('turn-indeterminate');
+    }
 
     // 4. EXACTLY ONE delegation to the authoritative runtime. No retry, no second call, no fallback
     //    path — a retry inside a boundary that has already reached a model is how one turn becomes
@@ -599,10 +782,28 @@ export function createRiyaWebConversationService(
       }
     }
 
-    // 6. The FINAL authoritative continuity — evolved and persisted when this turn observed
+    // 6. FINALIZE THE CLAIM, before the result leaves this function (RWC-P8, ADR-0104).
+    //
+    //    Before, not after. If the finalization were written after the caller already held the body,
+    //    a lost write would leave the ledger saying PROCESSING while a client had the reply -- and a
+    //    retry of that message would be classified as recoverable rather than spent.
+    markFinalizeAttempted();
+    try {
+      await lease.complete();
+    } catch {
+      // The turn ran, but we cannot prove the ledger recorded it. WITHHOLD the result and the body:
+      // returning them would hand a client an answer for a message whose durable state is unknown.
+      //
+      // No second attempt, no second model call, no second Core decision. If the write did commit, a
+      // retry replays; if it did not, the next claim of this message finds PROCESSING and marks it
+      // indeterminate. Both are safe; guessing between them is not.
+      throw new RiyaWebConversationError('turn-indeterminate');
+    }
+
+    // 7. The FINAL authoritative continuity — evolved and persisted when this turn observed
     //    something, and the state as loaded when it did not.
     return Object.freeze({
-      version: 2 as const,
+      version: 1 as const,
       tenantId: turn.tenantId,
       conversationId: turn.conversationId,
       messageId: turn.messageId,
@@ -613,5 +814,44 @@ export function createRiyaWebConversationService(
     });
   }
 
-  return Object.freeze({ handleTurn });
+  /**
+   * The EXISTING web capability, unchanged for every caller (RWC-P8, ADR-0104).
+   *
+   * A thin wrapper, deliberately: `RiyaWebConversationTurnV1` keeps its exact shape and its
+   * `webTurnRef`, the private wire gains no `channel` field, and `RiyaWebConversationResultV2` keeps
+   * its exact shape and its `version: 2`. Everything between is the one channel-neutral processor.
+   */
+  async function handleTurn(
+    input: RiyaWebConversationTurnV1,
+  ): Promise<RiyaWebConversationResultV2> {
+    const parsed = webConversationTurnSchema.safeParse(input);
+    if (!parsed.success) {
+      throw new RiyaWebConversationError('invalid-input');
+    }
+    const web = parsed.data as RiyaWebConversationTurnV1;
+    const result = await handleChannelTurn({
+      version: 1,
+      channel: 'WEB',
+      tenantId: web.tenantId,
+      conversationId: web.conversationId,
+      messageId: web.messageId,
+      receivedAt: web.receivedAt,
+      channelTurnRef: web.webTurnRef,
+      dataClass: web.dataClass,
+      ...(web.subjectRef === undefined ? {} : { subjectRef: web.subjectRef }),
+      ...(web.normalizedText === undefined ? {} : { normalizedText: web.normalizedText }),
+    });
+    return Object.freeze({
+      version: 2 as const,
+      tenantId: result.tenantId,
+      conversationId: result.conversationId,
+      messageId: result.messageId,
+      disposition: result.disposition,
+      reason: result.reason,
+      continuity: result.continuity,
+      authorizedReply: result.authorizedReply,
+    });
+  }
+
+  return Object.freeze({ handleTurn, handleChannelTurn });
 }
