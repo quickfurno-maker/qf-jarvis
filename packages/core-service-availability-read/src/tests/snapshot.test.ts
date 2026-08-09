@@ -314,6 +314,105 @@ describe('strictness', () => {
   });
 });
 
+describe('catalogue refs must be storable by the frozen Riya continuity contract', () => {
+  // The incompatibility this closes. Core's generic `entityIdSchema` allows 128 characters, and that
+  // is right for Core's wider contract system. But a ref from this snapshot does not stop here: the
+  // model emits it, RWC-P4A merges it, and `evolveRiyaConversation` rebuilds the discovery through
+  // the real `createNeedDiscovery`, whose `REFERENCE` is capped at 64.
+  //
+  // Without the cap, this boundary would accept a 65-to-128-character ref, show it to the model as a
+  // legitimate choice, confirm the model "emitted a ref present in the snapshot" -- and then be
+  // unable to persist it. The contract would be asserting an identifier the frozen continuity
+  // contract says can never exist.
+  //
+  // No truncation, no hashing, no alias, no remapping: every one of those would invent an identifier
+  // Core never published. A longer ref is a contract incompatibility, refused before the model.
+
+  const ref = (prefix: string, length: number): string =>
+    `${prefix}.${'x'.repeat(length - prefix.length - 1)}`;
+
+  it('a 64-character city ref is accepted', () => {
+    const cityRef = ref('city', 64);
+    expect(cityRef).toHaveLength(64);
+    const snapshot = parseCoreServiceAvailabilitySnapshotV1(
+      minimal({
+        cities: [{ ref: cityRef, displayName: 'Alpha' }],
+        availability: [{ serviceRef: 'svc.one', cityRefs: [cityRef] }],
+      }),
+    );
+    expect(snapshot.cities[0]?.ref).toHaveLength(64);
+  });
+
+  it('a 64-character service ref is accepted', () => {
+    const serviceRef = ref('svc', 64);
+    expect(serviceRef).toHaveLength(64);
+    const snapshot = parseCoreServiceAvailabilitySnapshotV1(
+      minimal({
+        services: [{ ref: serviceRef, displayName: 'Service One' }],
+        availability: [{ serviceRef, cityRefs: 'ALL' }],
+      }),
+    );
+    expect(snapshot.services[0]?.ref).toHaveLength(64);
+  });
+
+  it('a 65-character city ref is refused', () => {
+    const cityRef = ref('city', 65);
+    expect(cityRef).toHaveLength(65);
+    refuses(
+      minimal({
+        cities: [{ ref: cityRef, displayName: 'Alpha' }],
+        availability: [{ serviceRef: 'svc.one', cityRefs: [cityRef] }],
+      }),
+    );
+  });
+
+  it('a 65-character service ref is refused', () => {
+    const serviceRef = ref('svc', 65);
+    refuses(
+      minimal({
+        services: [{ ref: serviceRef, displayName: 'Service One' }],
+        availability: [{ serviceRef, cityRefs: 'ALL' }],
+      }),
+    );
+  });
+
+  it('a 65-character availability serviceRef is refused', () => {
+    // Refused on its own terms, not merely because it fails the reference-integrity check.
+    refuses(minimal({ availability: [{ serviceRef: ref('svc', 65), cityRefs: 'ALL' }] }));
+  });
+
+  it('a 65-character explicit availability cityRef is refused', () => {
+    refuses(minimal({ availability: [{ serviceRef: 'svc.one', cityRefs: [ref('city', 65)] }] }));
+  });
+
+  it('a 128-character ref -- valid to Core generic entityIdSchema -- is refused by THIS contract', () => {
+    // The whole point stated as one case: legal for Core, unusable by Riya, therefore refused here.
+    const cityRef = ref('city', 128);
+    expect(cityRef).toHaveLength(128);
+    refuses(
+      minimal({
+        cities: [{ ref: cityRef, displayName: 'Alpha' }],
+        availability: [{ serviceRef: 'svc.one', cityRefs: [cityRef] }],
+      }),
+    );
+  });
+
+  it('the refusal still carries nothing about the ref it refused', () => {
+    let message = '';
+    try {
+      parseCoreServiceAvailabilitySnapshotV1(
+        minimal({ cities: [{ ref: `city.oversized-${'z'.repeat(60)}`, displayName: 'Alpha' }] }),
+      );
+    } catch (error: unknown) {
+      message = (error as Error).message;
+    }
+    expect(message.length).toBeGreaterThan(0);
+    for (const forbidden of ['oversized', 'zzz', '64', '128', 'length']) {
+      expect(message.toLowerCase(), forbidden).not.toContain(forbidden.toLowerCase());
+    }
+  });
+});
+
 describe('an EMPTY active catalogue is business truth, not a broken read', () => {
   // The distinction this block exists for: "Core currently offers nothing" and "Core could not be
   // read" are different facts with different consequences. The reader's failure path reports the

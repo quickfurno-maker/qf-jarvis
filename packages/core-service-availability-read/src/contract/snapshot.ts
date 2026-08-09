@@ -36,6 +36,13 @@
  * **No vendor, price, package, lead, client, contact, consent, coordinate, pincode or area.** None of
  * those is needed to answer "may this service be discussed for this city?", and every one of them
  * would be business data crossing a boundary for no reason.
+ *
+ * ### Catalogue refs are capped at 64, not Core's generic 128
+ *
+ * See `MAX_CATALOGUE_REF_CHARS`. A ref this contract accepts must be one its consumer can actually
+ * store, or the boundary would validate an identifier that can never be persisted. The identifiers in
+ * this file stay agent-neutral — a contract named after one consumer is a contract only that consumer
+ * can use — and the provenance of the number is explained where it is defined.
  */
 import { entityIdSchema, taxonomyLabelSchema, taxonomyVersionSchema } from '@qf-jarvis/contracts';
 import { z } from 'zod';
@@ -53,6 +60,43 @@ const MAX_ROWS = 64;
 
 /** Core's own identifier for THIS snapshot. Opaque evidence, never parsed for meaning by Jarvis. */
 const MAX_SNAPSHOT_REF_LENGTH = 128;
+
+/**
+ * The DOWNSTREAM-COMPATIBILITY cap on a catalogue reference.
+ *
+ * Core's generic `entityIdSchema` allows up to 128 characters, and that is correct for Core's wider
+ * contract system. But a city or service ref from this snapshot does not stop here: the model emits
+ * it, RWC-P4A merges it, and `evolveRiyaConversation` rebuilds the discovery through the REAL
+ * `createNeedDiscovery`, whose `REFERENCE` is capped at **64**.
+ *
+ * So a 65-to-128-character Core ref would be accepted here, shown to the model as a legitimate
+ * choice, and validated as "present in the snapshot" — and then be impossible to persist. That is an
+ * internally inconsistent contract: this boundary would be asserting a ref the frozen continuity
+ * contract says can never exist.
+ *
+ * The identifier is deliberately neutral even though the number came from one consumer: the rule
+ * this file enforces is "a ref this contract will vouch for", and today's binding constraint happens
+ * to be Riya's. A second consumer with a tighter bound would lower it, not fork the contract.
+ *
+ * This is NOT Jarvis narrowing Core's business truth. It is Jarvis refusing to claim a compatibility
+ * it does not have. There is deliberately no truncation, no hashing, no alias generation and no
+ * Jarvis-side remapping — every one of those would silently invent an identifier Core never
+ * published. A longer ref is a contract incompatibility, and the honest response is to refuse the
+ * snapshot before the model ever sees it.
+ *
+ * The future QuickFurno handshake must publish P5-compatible canonical refs. If the business ever
+ * genuinely needs longer Riya catalogue refs, widening `NeedDiscovery` is a governed decision about
+ * P4 semantics and durable state — not a quiet change here.
+ */
+const MAX_CATALOGUE_REF_CHARS = 64;
+
+/**
+ * Core's OWN grammar, with the compatibility length cap on top.
+ *
+ * The regex is not restated: it is Core's, and a second copy would drift. Only the length is
+ * narrowed, and only because a downstream frozen contract requires it.
+ */
+const catalogueRefSchema = entityIdSchema.max(MAX_CATALOGUE_REF_CHARS);
 
 /**
  * The hard serialized bound, applied AFTER canonicalization.
@@ -108,7 +152,7 @@ const nodeSchema = z
     // Core's OWN reference grammar, imported rather than restated: a second definition of "what a
     // Core id looks like" is a second thing to keep in step, and the two would disagree first at the
     // boundary where it matters least and hurts most.
-    ref: entityIdSchema,
+    ref: catalogueRefSchema,
     // Also Core's own. It already refuses contact details, coordinates, URLs, map links and
     // credentials, which is precisely what a label crossing into a model request must not carry.
     displayName: taxonomyLabelSchema,
@@ -117,8 +161,8 @@ const nodeSchema = z
 
 const rowSchema = z
   .object({
-    serviceRef: entityIdSchema,
-    cityRefs: z.union([z.literal('ALL'), z.array(entityIdSchema).max(MAX_ROWS)]),
+    serviceRef: catalogueRefSchema,
+    cityRefs: z.union([z.literal('ALL'), z.array(catalogueRefSchema).max(MAX_ROWS)]),
   })
   .strict();
 

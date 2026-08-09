@@ -370,45 +370,58 @@ describe('the snapshot reaches the one model request and nothing else', () => {
 // ---------------------------------------------------------------------------
 
 /**
- * Build a canonical snapshot deliberately close to the 6000-character contract ceiling.
+ * The TRUE-maximum P5 data fixture: near the snapshot ceiling AND at the ref ceiling.
  *
- * Deterministic: the padding grows by a fixed step until the canonical serialization lands inside the
- * window, and the loop is bounded. Nothing random, so the fixture is the same on every machine.
+ * The earlier version searched for the first padding whose canonical JSON landed in the window, and
+ * that match arrived while the selected index-0 refs were still SHORT of Riya's 64-character
+ * `NeedDiscovery` limit. So it proved a large snapshot beside ordinary refs, not a maximal request.
+ *
+ * Fixed constants instead of a search, because two things must hold at once and a search proved only
+ * the first:
+ *
+ * - `PAD` = 58 makes a two-digit-index ref exactly `4 + 58 + 2 = 64` — the Riya maximum — while every
+ *   single-digit-index ref is 63, so the whole catalogue stays P5-valid;
+ * - index 10 is therefore the entry whose ref is exactly 64, and it is what the continuity holds.
+ *
+ * Deterministic and asserted, not assumed: the specs below pin the resulting sizes exactly, so a
+ * change to the serialization shows up as a failure rather than as a quietly weaker proof.
  */
+const NEAR_CEILING_PAD = 58;
+const NEAR_CEILING_MAX_REF_INDEX = 10;
+
 function nearCeilingSnapshot(): {
   readonly snapshot: CoreServiceAvailabilitySnapshotV1;
   readonly chars: number;
   readonly serviceRef: string;
   readonly cityRef: string;
+  readonly longestRef: number;
 } {
-  for (let pad = 0; pad < 96; pad += 1) {
-    const cities = Array.from({ length: 24 }, (_unused, index) => ({
-      ref: `loc.${'c'.repeat(pad)}${String(index)}`,
-      displayName: `City Number ${String(index)}`,
-    }));
-    const services = Array.from({ length: 16 }, (_unused, index) => ({
-      ref: `svc.${'s'.repeat(pad)}${String(index)}`,
-      displayName: `Service Number ${String(index)}`,
-    }));
-    const candidate = syntheticAvailabilitySnapshot({
-      cities,
-      services,
-      availability: services.map((service) => ({
-        serviceRef: service.ref,
-        cityRefs: 'ALL' as const,
-      })),
-    });
-    const chars = JSON.stringify(candidate).length;
-    if (chars >= 5_500 && chars <= 6_000) {
-      return {
-        snapshot: candidate,
-        chars,
-        serviceRef: services[0]?.ref ?? '',
-        cityRef: cities[0]?.ref ?? '',
-      };
-    }
-  }
-  throw new Error('no near-ceiling snapshot fixture in range');
+  const cities = Array.from({ length: 24 }, (_unused, index) => ({
+    ref: `loc.${'c'.repeat(NEAR_CEILING_PAD)}${String(index)}`,
+    displayName: `City Number ${String(index)}`,
+  }));
+  const services = Array.from({ length: 16 }, (_unused, index) => ({
+    ref: `svc.${'s'.repeat(NEAR_CEILING_PAD)}${String(index)}`,
+    displayName: `Service Number ${String(index)}`,
+  }));
+  const snapshot = syntheticAvailabilitySnapshot({
+    cities,
+    services,
+    availability: services.map((service) => ({
+      serviceRef: service.ref,
+      cityRefs: 'ALL' as const,
+    })),
+  });
+  return {
+    snapshot,
+    chars: JSON.stringify(snapshot).length,
+    serviceRef: services[NEAR_CEILING_MAX_REF_INDEX]?.ref ?? '',
+    cityRef: cities[NEAR_CEILING_MAX_REF_INDEX]?.ref ?? '',
+    longestRef: Math.max(
+      ...cities.map((city) => city.ref.length),
+      ...services.map((service) => service.ref.length),
+    ),
+  };
 }
 
 /** Continuity holding ALL SEVEN discovery values at their maximum permitted sizes. */
@@ -424,8 +437,9 @@ function maximalContinuity(serviceRef: string, cityRef: string): RiyaConversatio
       missingFields: [],
       serviceInterestRef: serviceRef,
       locationRef: cityRef,
-      // The remaining refs are conversational, not catalogue entries, so they are simply at their
-      // own canonical maximum of 64.
+      // The remaining refs are conversational, not catalogue entries, so Core availability has no
+      // opinion on them -- but they are still at their own canonical `NeedDiscovery` maximum of 64,
+      // because the point of this fixture is the largest request the contracts permit.
       propertyTypeRef: `prop.${'p'.repeat(59)}`,
       scopeSummary: 'x'.repeat(500),
       budgetNote: 'b'.repeat(120),
@@ -512,6 +526,33 @@ describe('the request budget, proved precisely and claimed narrowly', () => {
   /** `prompt-registry`'s own ceiling on a system template. NOT a request-budget guarantee. */
   const PROMPT_REGISTRY_MAX_TEMPLATE_CHARS = 16_384;
 
+  it('the fixture really is maximal: every field at its contractual ceiling', () => {
+    // Proved rather than asserted in prose. A "maximum" fixture that is quietly sub-maximal proves
+    // less than it claims, which is how a budget headroom gets believed and then turns out not to
+    // exist.
+    const { chars, serviceRef, cityRef, longestRef } = nearCeilingSnapshot();
+
+    // Every catalogue ref is P5-valid, and the selected pair sits exactly on the Riya limit.
+    expect(longestRef).toBe(64);
+    expect(cityRef.length).toBe(64);
+    expect(serviceRef.length).toBe(64);
+
+    // The snapshot is near its own ceiling.
+    expect(chars).toBeGreaterThanOrEqual(5_500);
+    expect(chars).toBeLessThanOrEqual(6_000);
+    expect(chars).toBe(5_929);
+
+    // And every remaining discovery field is at ITS maximum.
+    const current = maximalContinuity(serviceRef, cityRef);
+    expect(current.discovery.serviceInterestRef).toHaveLength(64);
+    expect(current.discovery.locationRef).toHaveLength(64);
+    expect(current.discovery.propertyTypeRef).toHaveLength(64);
+    expect(current.discovery.consultationPreferenceRef).toHaveLength(64);
+    expect(current.discovery.scopeSummary).toHaveLength(500);
+    expect(current.discovery.budgetNote).toHaveLength(120);
+    expect(current.discovery.timelineNote).toHaveLength(120);
+  });
+
   it('near-ceiling P5 DATA leaves real system-prompt headroom under the unchanged budget', () => {
     // The claim being made, and its limits. `MAX_RIYA_USER_CONTENT_CHARS` is a Riya-local
     // serialization ceiling -- it bounds what this agent will SEND. It is not a promise that a
@@ -519,14 +560,14 @@ describe('the request budget, proved precisely and claimed narrowly', () => {
     // shared 4096-token budget, because the budget covers BOTH messages.
     //
     // So the honest thing to measure is the headroom that remains.
-    const { snapshot, chars, serviceRef, cityRef } = nearCeilingSnapshot();
-    expect(chars).toBeGreaterThanOrEqual(5_500);
-    expect(chars).toBeLessThanOrEqual(6_000);
+    const { snapshot, serviceRef, cityRef } = nearCeilingSnapshot();
+    const message = 'm'.repeat(4096);
+    expect(message).toHaveLength(4096);
 
     const content = createRiyaConversationModelProfile({
       current: maximalContinuity(serviceRef, cityRef),
       availabilitySnapshot: snapshot,
-    }).buildUserContent({ normalizedText: 'm'.repeat(4096) } as never);
+    }).buildUserContent({ normalizedText: message } as never);
 
     expect(content.length).toBeLessThanOrEqual(12_288);
     const remainingSystemPromptChars = REQUEST_CHARACTER_BUDGET - content.length;
@@ -534,6 +575,12 @@ describe('the request budget, proved precisely and claimed narrowly', () => {
     // And the headroom is a real working amount, not a technicality -- but it is well BELOW what the
     // prompt registry alone would accept, which is exactly the distinction this block exists for.
     expect(remainingSystemPromptChars).toBeLessThan(PROMPT_REGISTRY_MAX_TEMPLATE_CHARS);
+
+    // The exact current numbers, pinned. If a serialization detail moves them, that is a review
+    // question rather than something to discover during an activation.
+    expect(content.length).toBe(11_432);
+    expect(REQUEST_CHARACTER_BUDGET).toBe(16_384);
+    expect(remainingSystemPromptChars).toBe(4_952);
   });
 
   it('a bounded evaluated prompt that FITS the headroom composes inside the 4096-token budget', async () => {

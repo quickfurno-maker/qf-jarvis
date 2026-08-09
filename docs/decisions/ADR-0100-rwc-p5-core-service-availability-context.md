@@ -100,6 +100,41 @@ requires no such rule.
 Output is canonically ordered by ref and deeply frozen, so the same catalogue produces byte-identical
 model context every time.
 
+### 4a. Catalogue refs are capped at 64, not Core's generic 128
+
+Core's `entityIdSchema` allows **128** characters, and that is correct for Core's wider contract
+system. RWC-P5 V1 accepts only **64**.
+
+The reason is a hard downstream fact, not a preference. A city or service ref from this snapshot does
+not stop at the boundary: the model emits it, RWC-P4A merges it, and `evolveRiyaConversation` rebuilds
+the discovery through the real `createNeedDiscovery`, whose `REFERENCE` is capped at 64 and has been
+since ADR-0067. Without the cap, this contract would accept a 65-to-128-character ref, show it to the
+model as a legitimate choice, confirm that the model "emitted a ref present in the snapshot" — and
+then be unable to persist it. The boundary would be asserting an identifier the frozen continuity
+contract says can never exist.
+
+The cap applies to **every** catalogue-reference position: `cities[].ref`, `services[].ref`,
+`availability[].serviceRef` and each entry of `availability[].cityRefs`. Core's own grammar is reused
+unchanged — only the length is narrowed, and the regex is not restated.
+
+**No truncation. No hashing. No alias generation. No Jarvis-side remapping.** Every one of those would
+silently invent an identifier Core never published, and a conversation would then hold a ref that
+matches nothing in the catalogue it came from. A longer ref is a **contract incompatibility**, and the
+honest response is to refuse the whole snapshot before the model sees it — which surfaces as
+`NOT_READY`, using no new code.
+
+This is not Jarvis narrowing Core's business truth; it is Jarvis refusing to claim a compatibility it
+does not have. The future QuickFurno handshake must publish P5-compatible canonical refs. If the
+business ever genuinely needs longer Riya catalogue refs, widening `NeedDiscovery` is a **separate
+governed decision** about P4 semantics and durable state — not a quiet change here.
+
+The identifiers in the contract source stay agent-neutral (`MAX_CATALOGUE_REF_CHARS`), because a
+contract named after one consumer is a contract only that consumer can use. The provenance of the
+number is recorded where it is defined, and here.
+
+`snapshotRef` keeps its own 128 bound, and `taxonomyVersion`, the display-name contract and the
+6000-character snapshot ceiling are unchanged: none of them ever reaches `NeedDiscovery`.
+
 ### 5. NO aliases in V1
 
 Core publishes an id, a display name, a state and a version — and **no governed alias collection**.
@@ -234,16 +269,35 @@ combines with every prompt-registry-valid system prompt inside the shared 4096-t
 request budget covers **both** messages, and `prompt-registry` independently accepts a system template
 of up to 16 384 characters.
 
-So the proof is a headroom calculation rather than a claim of sufficiency. A near-ceiling P5 data
-fixture — a canonical snapshot between 5500 and 6000 characters, a continuity holding all seven
-discovery values at their maximum sizes, and a 4096-character inbound message — is measured against
-`4096 × 4` request characters, and the remaining system-prompt headroom is asserted to be positive
-and, tellingly, well **below** the 16 384 the prompt registry alone would allow.
+So the proof is a headroom calculation rather than a claim of sufficiency, and the fixture it runs on
+is genuinely maximal rather than merely large. Deterministic constants — 58 characters of ref padding,
+24 cities, 16 services — put every catalogue ref at or just under the 64 cap while the selected
+index-10 city and service refs are **exactly 64**, and the continuity holds all seven discovery values
+at their own ceilings (`propertyTypeRef` and `consultationPreferenceRef` at 64, `scopeSummary` at 500,
+both notes at 120) with a 4096-character inbound message.
+
+The current exact values are pinned as regression locks:
+
+| quantity                              | value            |
+| ------------------------------------- | ---------------- |
+| canonical snapshot                    | **5929** chars   |
+| Riya user content                     | **11 432** chars |
+| request character budget (`4096 × 4`) | **16 384** chars |
+| remaining system-prompt headroom      | **4952** chars   |
+
+The headroom is positive, and — tellingly — well **below** the 16 384 the prompt registry alone would
+allow.
 
 Two real compositions then pin the boundary. An evaluated prompt sized to fit the remaining headroom
 composes with one provider call and `ceil(chars / 4) ≤ 4096`. A prompt that is **entirely valid to the
 prompt registry** but exceeds that headroom is refused at gateway admission — **no provider reached**,
 no observation batch, no authorized reply, no retry, and no new error code.
+
+The invariant at this layer is stated deliberately: `ModelGatewayInvoker` is the seam _over_ the
+governed gateway, and budget admission happens inside the gateway before provider health, selection
+and invocation. So the correct measurements are **at most one gateway-seam admission attempt** and
+**zero provider calls** on an over-budget refusal. There is no pre-invoker budget check in M4, and P5
+adds none.
 
 **Prompt-registry validity does not imply request-budget validity.** That is the contract this
 records.
@@ -330,6 +384,9 @@ Owner-locked. Changing any of these requires a new ADR, not an edit to this one:
 - the Riya user-content bound is **Riya-local**; the generic gateway budgets stay untouched, and no
   P5 change may widen them;
 - a readable **empty** catalogue is served, never reported as an outage;
+- catalogue refs are capped at **64** for downstream compatibility, with no truncation, hashing,
+  alias generation or remapping — widening it means widening `NeedDiscovery`, which is a separate
+  governed decision;
 - the activation prerequisite in §16 — the real prompt plus the real projection must fit the real
   budget before anything goes live.
 

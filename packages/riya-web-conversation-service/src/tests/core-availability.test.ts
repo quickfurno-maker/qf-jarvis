@@ -264,6 +264,42 @@ describe('an unusable authority fails closed as NOT_READY', () => {
     });
   }
 
+  it('a snapshot carrying a ref longer than continuity can store is NOT_READY', async () => {
+    // Core's generic entity ids allow 128 characters; the frozen Riya `NeedDiscovery` reference
+    // allows 64. A snapshot containing a 65-plus ref is therefore a CONTRACT INCOMPATIBILITY, not a
+    // catalogue Jarvis may partially use -- and it is caught here, before the model can be shown a
+    // choice that could never be persisted. Nothing is truncated, hashed, aliased or remapped.
+    const oversizedRef = `city.${'z'.repeat(60)}`;
+    expect(oversizedRef).toHaveLength(65);
+    const reader = scriptedAvailabilityReader({
+      returns: {
+        version: 1,
+        snapshotRef: 'snap.incompatible',
+        taxonomyVersion: 7,
+        cities: [{ ref: oversizedRef, displayName: 'A City' }],
+        services: [{ ref: 'svc.one', displayName: 'A Service' }],
+        availability: [{ serviceRef: 'svc.one', cityRefs: [oversizedRef] }],
+      },
+    });
+    const store = new InMemoryContinuityStore();
+    const { svc, runtime } = harness({ reader, store });
+
+    const result = await svc.handleTurn(turnInput());
+
+    expect(result.disposition).toBe('NOT_READY');
+    expect(result.authorizedReply).toBeUndefined();
+    expect(reader.calls()).toBe(1);
+    expect(runtime.invoked()).toBe(0);
+    expect(runtime.coreAuthorizedInvoked()).toBe(0);
+    expect(runtime.ordinaryInvoked()).toBe(0);
+    expect(store.calls.compareAndSet).toBe(0);
+    // No catalogue detail on the wire.
+    const serialized = JSON.stringify(result);
+    for (const forbidden of [oversizedRef, 'svc.one', 'snap.incompatible', 'A City', 'A Service']) {
+      expect(serialized, forbidden).not.toContain(forbidden);
+    }
+  });
+
   it('leaks nothing from the reader failure', async () => {
     const { svc } = harness({ reader: scriptedAvailabilityReader({ rejects: true }) });
     const result = await svc.handleTurn(turnInput());

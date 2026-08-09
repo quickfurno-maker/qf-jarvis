@@ -411,6 +411,50 @@ describe('the prospective final state must be a state Core allows', () => {
 });
 
 // ---------------------------------------------------------------------------
+// A catalogue ref at the frozen Riya maximum.
+// ---------------------------------------------------------------------------
+
+describe('a 64-character catalogue ref survives the whole path', () => {
+  // The compatibility bound the P5 contract now enforces is 64, because that is what the frozen
+  // `NeedDiscovery` REFERENCE can store. This proves the bound is not merely a refusal rule but a
+  // genuinely usable one: a ref exactly AT the limit is emitted by the model, accepted here, and
+  // persisted by the real P4A reducer.
+  const MAX_SERVICE = `svc.${'s'.repeat(60)}`;
+  const MAX_CITY = `loc.${'c'.repeat(60)}`;
+
+  const MAX_SNAPSHOT: CoreServiceAvailabilitySnapshotV1 = syntheticAvailabilitySnapshot({
+    cities: [{ ref: MAX_CITY, displayName: 'A City' }],
+    services: [{ ref: MAX_SERVICE, displayName: 'A Service' }],
+    availability: [{ serviceRef: MAX_SERVICE, cityRefs: 'ALL' }],
+  });
+
+  it('the fixture really is at the limit', () => {
+    expect(MAX_SERVICE).toHaveLength(64);
+    expect(MAX_CITY).toHaveLength(64);
+  });
+
+  it('the pair is emitted, validated and EVOLVED into continuity', () => {
+    const projected = project(
+      state(),
+      [SET('serviceInterest', MAX_SERVICE), SET('location', MAX_CITY)],
+      MAX_SNAPSHOT,
+    );
+    expect(projected).toBeDefined();
+
+    // And it really does persist: the same canonical batch through the real reducer produces a state
+    // holding both 64-character refs. Without this, the contract would be validating something
+    // `createNeedDiscovery` refuses.
+    const batch = (projected as { detail: { observationBatch: never } }).detail.observationBatch;
+    const evolved = evolveRiyaConversation({ current: state(), batch });
+    expect(evolved.changed).toBe(true);
+    expect(evolved.state.discovery.serviceInterestRef).toBe(MAX_SERVICE);
+    expect(evolved.state.discovery.locationRef).toBe(MAX_CITY);
+    expect(evolved.state.discovery.serviceInterestRef).toHaveLength(64);
+    expect(evolved.state.discovery.locationRef).toHaveLength(64);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // An empty active catalogue.
 // ---------------------------------------------------------------------------
 
