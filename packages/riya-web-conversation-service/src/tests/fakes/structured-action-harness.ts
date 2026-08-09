@@ -46,6 +46,12 @@ export function continuityAt(
     readonly locationRef?: string;
     readonly budgetNote?: string;
     readonly timelineNote?: string;
+    // The three OPTIONAL discovery slots. Absent from the default fixture on purpose -- a summary
+    // needs only the four required values -- and overridable so the idempotency specs can prove each
+    // one independently changes the derived key.
+    readonly propertyTypeRef?: string;
+    readonly scopeSummary?: string;
+    readonly consultationPreferenceRef?: string;
     readonly completeness?:
       'MORE_DISCOVERY_REQUIRED' | 'SUFFICIENT_FOR_CORE_REVIEW' | 'HUMAN_REVIEW_REQUIRED';
     readonly completionEvidenceRef?: string;
@@ -65,13 +71,30 @@ export function continuityAt(
       locationRef: over.locationRef ?? 'city.alpha',
       budgetNote: over.budgetNote ?? 'around 8 lakh',
       timelineNote: over.timelineNote ?? 'next month',
+      // Omitted rather than passed as `undefined`: under `exactOptionalPropertyTypes` an own key
+      // holding `undefined` is a different object from one where the field is absent, and absence is
+      // what the default fixture is asserting about these three.
+      ...(over.propertyTypeRef === undefined ? {} : { propertyTypeRef: over.propertyTypeRef }),
+      ...(over.scopeSummary === undefined ? {} : { scopeSummary: over.scopeSummary }),
+      ...(over.consultationPreferenceRef === undefined
+        ? {}
+        : { consultationPreferenceRef: over.consultationPreferenceRef }),
       completeness: over.completeness ?? 'SUFFICIENT_FOR_CORE_REVIEW',
     },
+    // Derived from what is actually PRESENT, not hard-coded: RWC-P2A refuses a state whose
+    // provenance and discovery disagree, so an optional slot supplied above must bring its own
+    // provenance with it. Hard-coding four entries would make every optional-slot fixture fail on an
+    // invariant that has nothing to do with what it is testing.
     fieldProvenance: {
       serviceInterest: 'user_stated',
       location: 'user_stated',
       budget: 'user_stated',
       timeline: 'user_stated',
+      ...(over.propertyTypeRef === undefined ? {} : { propertyType: 'user_stated' as const }),
+      ...(over.scopeSummary === undefined ? {} : { scope: 'user_stated' as const }),
+      ...(over.consultationPreferenceRef === undefined
+        ? {}
+        : { consultationPreference: 'user_stated' as const }),
     },
     summaryConfirmed: confirmed,
     ...(over.completionEvidenceRef === undefined

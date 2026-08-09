@@ -122,7 +122,11 @@ describe('the idempotency key binds the business intake and nothing else', () =>
     ).toBe(KEY);
   });
 
-  it('every identity or business VALUE change derives a different key', () => {
+  it('every identity and EVERY discovery slot changes the key, independently', () => {
+    // All three identity fields and all SEVEN discovery slots, each proved on its own. The optional
+    // three matter most: the base fixture omits them, so if a refactor ever dropped one from the
+    // preimage, a table that only exercised the four required values would stay green while two
+    // materially different enquiries started hashing to the same key.
     const changed: Record<string, Parameters<typeof riyaIntakeIdempotencyKey>[0]> = {
       tenant: { ...base, tenantId: 'tenant.z' },
       conversation: { ...base, conversationId: 'conv.999' },
@@ -132,6 +136,14 @@ describe('the idempotency key binds the business intake and nothing else', () =>
         discovery: continuityAt('CONSENT', { serviceInterestRef: 'svc.two' }).discovery,
       },
       city: { ...base, discovery: continuityAt('CONSENT', { locationRef: 'city.beta' }).discovery },
+      propertyType: {
+        ...base,
+        discovery: continuityAt('CONSENT', { propertyTypeRef: 'property.villa' }).discovery,
+      },
+      scope: {
+        ...base,
+        discovery: continuityAt('CONSENT', { scopeSummary: 'kitchen and two wardrobes' }).discovery,
+      },
       budget: {
         ...base,
         discovery: continuityAt('CONSENT', { budgetNote: 'around 12 lakh' }).discovery,
@@ -140,6 +152,11 @@ describe('the idempotency key binds the business intake and nothing else', () =>
         ...base,
         discovery: continuityAt('CONSENT', { timelineNote: 'next year' }).discovery,
       },
+      consultationPreference: {
+        ...base,
+        discovery: continuityAt('CONSENT', { consultationPreferenceRef: 'consult.video' })
+          .discovery,
+      },
     };
     const keys = new Set<string>([KEY]);
     Object.entries(changed).forEach(([label, input]) => {
@@ -147,8 +164,28 @@ describe('the idempotency key binds the business intake and nothing else', () =>
       expect(derived, label).not.toBe(KEY);
       keys.add(derived);
     });
-    // All distinct: a collision between two of these would silently merge two enquiries.
-    expect(keys.size).toBe(Object.keys(changed).length + 1);
+    expect(Object.keys(changed)).toHaveLength(10);
+    // All distinct: a collision between any two of these would silently merge two enquiries.
+    expect(keys.size).toBe(11);
+  });
+
+  it('populating an OPTIONAL slot that was absent changes the key', () => {
+    // The explicit null-versus-value proof. `JSON.stringify` renders an absent optional as `null` in
+    // the preimage array, so "not stated" and "stated as something" are genuinely different inputs --
+    // and a client who adds their property type is describing a different project than one who did
+    // not mention it.
+    for (const populated of [
+      continuityAt('CONSENT', { propertyTypeRef: 'property.villa' }).discovery,
+      continuityAt('CONSENT', { scopeSummary: 'kitchen and two wardrobes' }).discovery,
+      continuityAt('CONSENT', { consultationPreferenceRef: 'consult.video' }).discovery,
+    ]) {
+      // The base fixture genuinely omits all three, which is what makes this an absent-to-present
+      // comparison rather than a value-to-value one.
+      expect(base.discovery.propertyTypeRef).toBeUndefined();
+      expect(base.discovery.scopeSummary).toBeUndefined();
+      expect(base.discovery.consultationPreferenceRef).toBeUndefined();
+      expect(riyaIntakeIdempotencyKey({ ...base, discovery: populated })).not.toBe(KEY);
+    }
   });
 
   it('a moved revision, a new action reference and a fresher snapshot do NOT change it', () => {
