@@ -511,16 +511,28 @@ export function createRiyaWebConversationService(
     }
     const lease: RiyaTurnLease = begun.lease;
 
-    // Every path from here either starts processing or releases the lease unstarted. A lease that
-    // leaked would hold the conversation until its database session ended.
-    // Mutated by callbacks handed to `runClaimedTurn`, so the flow analysis cannot see the writes.
-    // The explicit widening keeps the guards below meaningful rather than statically dead.
-    const progress = { started: false, finalizeAttempted: false };
+    /**
+     * Where this turn got to, tracked as THREE facts rather than two.
+     *
+     * `startAttempted` and `started` are deliberately separate. `releaseUnstarted` is legal only
+     * BEFORE processing was attempted, and a turn whose `startProcessing` THREW has attempted it --
+     * the insert may have committed and the caller simply never learned so. Deriving "unstarted"
+     * from "did not succeed" would send `releaseUnstarted` after an ambiguous start, which is an
+     * invalid lease sequence and, worse, one whose only current defence is that a particular adapter
+     * happens to refuse it. An application contract must not lean on that.
+     *
+     * Mutated through callbacks handed to `runClaimedTurn`, so the flow analysis cannot see the
+     * writes -- an object keeps the guards below meaningful rather than statically dead.
+     */
+    const progress = { startAttempted: false, started: false, finalizeAttempted: false };
 
     try {
       return await runClaimedTurn(
         turn,
         lease,
+        () => {
+          progress.startAttempted = true;
+        },
         () => {
           progress.started = true;
         },
@@ -529,17 +541,24 @@ export function createRiyaWebConversationService(
         },
       );
     } catch (error: unknown) {
-      // A turn that never started leaves NO durable claim. The message stays retryable, which is
-      // exactly right for a failure that happened before any model, Core call or write. The
-      // `finally` below performs the release, for this path and for the availability NOT_READY
-      // return alike.
+      // NEVER ATTEMPTED. No durable claim can exist, so the message stays retryable -- exactly right
+      // for a failure before any model, Core call or write. The `finally` below releases the lease.
+      if (!progress.startAttempted) {
+        throw error;
+      }
+
+      // ATTEMPTED BUT NOT PROVED STARTED. The claim may or may not be on disk, and this turn is not
+      // entitled to say which. No `releaseUnstarted` -- that would claim nothing was written -- and
+      // no `indeterminate` either, because finalizing a claim that may not exist is a guess in the
+      // other direction. The row, if there is one, is left PROCESSING for the next caller to
+      // reconcile, and no runtime call was made.
       if (!progress.started) {
         throw error;
       }
 
-      // It DID start. Mark the claim indeterminate ONCE -- unless finalization was already attempted,
-      // in which case the row is either COMPLETED or still PROCESSING and a second guarded write
-      // would be a second attempt at a decision this turn has already made or lost.
+      // STARTED. Mark the claim indeterminate ONCE -- unless finalization was already attempted, in
+      // which case the row is either COMPLETED or still PROCESSING and a second guarded write would
+      // be a second attempt at a decision this turn has already made or lost.
       if (!progress.finalizeAttempted) {
         try {
           await lease.indeterminate();
@@ -558,15 +577,26 @@ export function createRiyaWebConversationService(
       // marked indeterminate, so this message never runs again whatever the caller was told.
       throw error;
     } finally {
-      // EVERY unstarted exit releases the lease -- the availability NOT_READY return as much as a
-      // thrown store failure. A lease that leaked would hold the conversation until its database
-      // session ended, and the client's next turn would see BUSY for a turn that already gave up.
-      if (!progress.started) {
+      // EVERY genuinely UNATTEMPTED exit releases the lease -- the availability NOT_READY return as
+      // much as a thrown store failure. A lease that leaked would hold the conversation until its
+      // database session ended, and the client's next turn would see BUSY for a turn that gave up.
+      //
+      // Keyed on `startAttempted`, not on `started`: after an ambiguous start there is nothing to
+      // release UNSTARTED, and saying so would be a false claim about what is on disk.
+      if (!progress.startAttempted) {
         try {
           await lease.releaseUnstarted();
         } catch {
-          // Nothing to add. No claim exists, and the coordinator's own session cleanup is what
-          // actually frees the conversation.
+          // The conversation could not be PROVED released. No model has run and nothing durable was
+          // written, so the honest answer is that the coordinator did not answer -- not a normal
+          // result delivered while a conversation may still be locked against its own next turn.
+          //
+          // This deliberately replaces the preflight outcome. "We could not release the lease" is the
+          // higher-order fact: a NOT_READY returned here would invite an immediate retry that BUSY
+          // would then refuse, for a reason nothing in the response explains.
+          //
+          // eslint-disable-next-line no-unsafe-finally -- the cleanup failure IS the outcome here
+          throw new RiyaWebConversationError('turn-coordinator-unavailable');
         }
       }
     }
@@ -581,6 +611,7 @@ export function createRiyaWebConversationService(
   async function runClaimedTurn(
     turn: RiyaConversationTurnV1,
     lease: RiyaTurnLease,
+    markStartAttempted: () => void,
     markStarted: () => void,
     markFinalizeAttempted: () => void,
   ): Promise<RiyaConversationResultV1> {
@@ -674,6 +705,10 @@ export function createRiyaWebConversationService(
     //     stay retryable. A ledger row written earlier would mark a message spent that never ran.
     //
     //     After this line the message is potentially spent, and nothing re-runs it automatically.
+    //     `markStartAttempted` fires BEFORE the call, not after it. From this line onward the claim
+    //     may exist whatever the call reports, and `releaseUnstarted` -- which asserts that nothing
+    //     was written -- must never run again.
+    markStartAttempted();
     try {
       await lease.startProcessing();
       markStarted();

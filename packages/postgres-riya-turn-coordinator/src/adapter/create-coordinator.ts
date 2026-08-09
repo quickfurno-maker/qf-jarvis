@@ -145,6 +145,26 @@ export function createPostgresRiyaTurnCoordinator(
     }
   };
 
+  /**
+   * Require that a durable write moved EXACTLY ONE row.
+   *
+   * A resolved `pg` query is not evidence that anything changed. `FINALIZE_CLAIM` is guarded by
+   * `WHERE claim_state = 'PROCESSING'`, so it reports success while affecting zero rows whenever the
+   * claim is not where this lease believes it is -- already terminal, already gone, or never written.
+   *
+   * That is the one failure this adapter must never pass upward. `complete()` resolving on zero rows
+   * would let the service return a Riya result and a Core-authorized body for a turn whose claim was
+   * never proved to reach `COMPLETED`, which is exactly the false evidence ADR-0104 orders the
+   * finalization-before-return rule to prevent.
+   *
+   * More than one row would be worse still: the primary key makes it impossible, so seeing it means
+   * the statement is not the statement this adapter thinks it is running.
+   *
+   * `rowCount` is typed `number | null` by the driver, and `null` is treated as a failure rather than
+   * as "probably fine" -- an unknown count is not a proof.
+   */
+  const affectedExactlyOne = (rowCount: number | null): boolean => rowCount === 1;
+
   async function begin(rawInput: RiyaTurnCoordinatorBeginInput): Promise<RiyaTurnBeginResult> {
     const input = provenInput(rawInput);
     const sourceDigest = sourceTurnDigest({
@@ -254,8 +274,9 @@ export function createPostgresRiyaTurnCoordinator(
       }
       // PROCESSING, and WE hold the conversation lock -- so whoever wrote it does not. It is gone,
       // and we cannot know how far it got. Mark it once and never run this message again.
+      let marked;
       try {
-        await client.query(FINALIZE_CLAIM, [
+        marked = await client.query(FINALIZE_CLAIM, [
           input.tenantId,
           input.conversationId,
           input.messageId,
@@ -264,6 +285,17 @@ export function createPostgresRiyaTurnCoordinator(
       } catch (error: unknown) {
         await releaseLock();
         throw classifyDatabaseError(error);
+      }
+      if (!affectedExactlyOne(marked.rowCount)) {
+        // The row this transaction just READ as PROCESSING did not move. Something else is writing
+        // this claim, or the guarded predicate no longer describes it -- and either way reporting
+        // INDETERMINATE would assert a durable fact nobody observed.
+        //
+        // No second update and no re-read. Guessing between "it became terminal a moment ago" and
+        // "this statement is not doing what it appears to" is exactly the guess that would let a
+        // spent message look recoverable, or a live one look spent.
+        await releaseLock();
+        throw new PostgresRiyaTurnCoordinatorError('repository-invariant');
       }
       await releaseLock();
       return Object.freeze({ outcome: 'INDETERMINATE' as const });
@@ -277,8 +309,9 @@ export function createPostgresRiyaTurnCoordinator(
         throw new PostgresRiyaTurnCoordinatorError('invalid-input');
       }
       state = 'DONE';
+      let finalized;
       try {
-        await client.query(FINALIZE_CLAIM, [
+        finalized = await client.query(FINALIZE_CLAIM, [
           input.tenantId,
           input.conversationId,
           input.messageId,
@@ -288,6 +321,16 @@ export function createPostgresRiyaTurnCoordinator(
         await releaseLock();
         throw classifyDatabaseError(error);
       }
+      if (!affectedExactlyOne(finalized.rowCount)) {
+        // The claim was NOT proved to reach its terminal state. For `COMPLETED` this is the most
+        // consequential refusal in the package: reporting success here would let the service hand a
+        // client a reply for a turn the ledger still records as in flight.
+        //
+        // No retry. The row is left exactly as the database has it, and the next claim of this
+        // message decides from durable evidence rather than from a guess made here.
+        await releaseLock();
+        throw new PostgresRiyaTurnCoordinatorError('repository-invariant');
+      }
       await releaseLock();
     };
 
@@ -296,8 +339,9 @@ export function createPostgresRiyaTurnCoordinator(
         if (state !== 'UNSTARTED') {
           throw new PostgresRiyaTurnCoordinatorError('invalid-input');
         }
+        let inserted;
         try {
-          await client.query(INSERT_PROCESSING_CLAIM, [
+          inserted = await client.query(INSERT_PROCESSING_CLAIM, [
             input.tenantId,
             input.conversationId,
             input.messageId,
@@ -306,11 +350,19 @@ export function createPostgresRiyaTurnCoordinator(
             identityDigest,
           ]);
         } catch (error: unknown) {
-          // The insert did not clearly succeed. The lease stays UNSTARTED so nothing can finalize a
+          // The insert did not clearly succeed. The lease goes to DONE so nothing can finalize a
           // claim that may not exist, and the caller is told -- it will not call the runtime.
           await releaseLock();
           state = 'DONE';
           throw classifyDatabaseError(error);
+        }
+        if (!affectedExactlyOne(inserted.rowCount)) {
+          // An INSERT with no `ON CONFLICT` that created no row is not a claim. Permitting the
+          // runtime here would run a real model turn attributed to a claim that does not exist, and
+          // the message would still look unspent to the next caller.
+          await releaseLock();
+          state = 'DONE';
+          throw new PostgresRiyaTurnCoordinatorError('repository-invariant');
         }
         state = 'STARTED';
       },
