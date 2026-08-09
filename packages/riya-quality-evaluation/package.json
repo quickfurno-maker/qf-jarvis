@@ -1,0 +1,29 @@
+{
+  "name": "@qf-jarvis/riya-quality-evaluation",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis Riya quality, evaluation and sales-optimization layer (RWC-P10, ADR-0106). A Riya-SPECIFIC leaf evaluator that sits ABOVE the generic @qf-jarvis/model-evaluation safety authority and never replaces it: a quality candidate binding may only be derived from an existing ACTIVE/SHADOW/CANARY ApprovalEvidence, so quality cannot exist without generic safety evidence and can never compensate for its absence. It measures OBJECTIVE conversation correctness (language mode, reply length, question discipline, expected/forbidden canonical discovery observations, asked-field discipline, required citation, allowed continuity phase) against a versioned multilingual synthetic golden corpus, and SUBJECTIVE sales quality from exactly two independent HUMAN reviewer annotations -- never from a model. It invokes NO model: no gateway, no provider, no Groq/OpenAI/Anthropic/local inference, no HTTP, no LLM-as-judge, no model voting, no scoring or evaluator prompt, no embeddings/vector/RAG. It reads no production conversation, uses no real QuickFurno package, price, lead or contact data, and retains no raw user or reply text. Thresholds are per-dimension basis points with NO global average, so one improved sales dimension can never hide another regression; candidate comparison is Pareto/no-regression over identical fixtures, thresholds, capability, knowledge and policy. Quality evidence is synthetic with productionApproval=false, activates nothing, promotes nothing, changes no prompt, no runtime binding and no model selection. No database, no migration, no deployment. Depends on @qf-jarvis/model-evaluation, @qf-jarvis/riya-conversation-continuity, @qf-jarvis/riya-conversation-evolution and zod.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "default": "./dist/testing/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/model-evaluation": "workspace:*",
+    "@qf-jarvis/riya-conversation-continuity": "workspace:*",
+    "@qf-jarvis/riya-conversation-evolution": "workspace:*",
+    "zod": "4.4.3"
+  }
+}

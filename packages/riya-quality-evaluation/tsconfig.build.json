@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
+  },
+
+  // The EMITTING build, referenced by the root solution. The vitest specs under src/tests are
+  // EXCLUDED so nothing test-only reaches dist/; the synthetic golden corpus under src/testing IS
+  // emitted, because it is the published `./testing` subpath and the raw synthetic conversation
+  // text lives there and nowhere else.
+  //
+  // Exactly THREE project references, all one-way. `model-evaluation` owns generic safety evidence,
+  // release/prompt identity and the content digest, and this package may never reimplement any of
+  // them. `riya-conversation-evolution` owns the canonical observation batch a quality observation
+  // carries, and `riya-conversation-continuity` owns the phase vocabulary. None may reference back.
+  //
+  // Deliberately absent, and each for its own reason: `model-gateway` and `model-reply-adapter`
+  // (P10 invokes no model at all), `jarvis-runtime` and `riya-web-conversation-service`
+  // (composition and a surface -- referencing either would invert the direction and let an
+  // evaluator reach the thing it evaluates), `prompt-registry` (P10 never reads or edits prompt
+  // bytes; the prompt digest arrives inside safety evidence), `governed-knowledge` (a citation here
+  // is an id/version pair, not a lookup), and anything Postgres or `event-backbone` (P10 performs
+  // no I/O and authorizes no migration).
+  "references": [
+    { "path": "../model-evaluation/tsconfig.build.json" },
+    { "path": "../riya-conversation-continuity/tsconfig.build.json" },
+    { "path": "../riya-conversation-evolution/tsconfig.build.json" }
+  ],
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/tests/**"]
+}

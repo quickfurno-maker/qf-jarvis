@@ -394,12 +394,22 @@ describe('the contracts this slice reuses are unchanged', () => {
     //
     // The guarantee is restated rather than dropped, and it did not weaken: the importer set is
     // pinned EXACTLY, and no APPLICATION may import the contract at all.
+    //
+    // RWC-P10 (ADR-0106) adds the seventh, and it is the only one that neither stores a state nor
+    // produces one. `riya-quality-evaluation` reads the PHASE VOCABULARY so a quality fixture can say
+    // which continuity phases a correct answer may leave the conversation in. It deliberately does
+    // not recompute a transition: an evaluator holding its own copy of the reducer would, the day the
+    // two disagreed, report a model failure for a reducer change.
+    //
+    // The guarantee is restated rather than dropped, and it did not weaken: the importer set is
+    // pinned EXACTLY, and no APPLICATION may import the contract at all.
     const ALLOWED_PACKAGE_IMPORTERS = [
       'jarvis-runtime',
       'postgres-riya-conversation-continuity-store',
       'riya-conversation-completion',
       'riya-conversation-evolution',
       'riya-model-interaction',
+      'riya-quality-evaluation',
       'riya-web-conversation-service',
     ];
     const importingPackages = new Set<string>();
