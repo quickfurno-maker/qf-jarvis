@@ -289,7 +289,15 @@ describe('it stays a leaf with a small surface', () => {
       'zod',
     ]);
     expect(Object.keys(manifest.devDependencies ?? {})).toStrictEqual([]);
-    expect(Object.keys(manifest.exports ?? {}).sort()).toStrictEqual(['.', './testing']);
+    // RWC-P6 (ADR-0101) adds `./policy`: the three agent-neutral read predicates, moved here from
+    // `riya-model-interaction` so a structured summary edit and the one model call apply the SAME
+    // pair rule. A subpath rather than a root export -- the root is the READ CONTRACT, and its four
+    // runtime values are locked; a predicate is not a contract.
+    expect(Object.keys(manifest.exports ?? {}).sort()).toStrictEqual([
+      '.',
+      './policy',
+      './testing',
+    ]);
   });
 
   it('deep-imports no other package private module', () => {

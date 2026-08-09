@@ -4,11 +4,15 @@
   "private": true,
   "type": "module",
   "sideEffects": false,
-  "description": "QF Jarvis Core-owned service availability READ contract (RWC-P5, ADR-0100). The strict, versioned, bounded, content-minimised snapshot of which cities QuickFurno Core operates in, which customer-facing services it sells, and which service is available in which city -- plus the injected reader PORT that supplies it. Availability is an explicit PAIR property: an active city plus an active service never implies the pair. It is a READ contract with no create, update or deactivate, and it holds NO implementation: no HTTP, fetch, URL, API key, environment read, database, cache, clock, randomness, n8n, provider or model, and no live QuickFurno adapter -- the final integration handshake supplies that later. It knows nothing about Riya: no phase, continuity, conversation or observation. No aliases or synonyms in V1 (Core publishes no governed alias collection), no inactive rows, and no vendor, price, package, lead, client, contact, consent, coordinate, pincode or area. Depends on @qf-jarvis/contracts for Core's own reference/label/taxonomy-version primitives, and zod.",
+  "description": "QF Jarvis Core-owned service availability READ contract (RWC-P5, ADR-0100). The strict, versioned, bounded, content-minimised snapshot of which cities QuickFurno Core operates in, which customer-facing services it sells, and which service is available in which city -- plus the injected reader PORT that supplies it. Availability is an explicit PAIR property: an active city plus an active service never implies the pair. It is a READ contract with no create, update or deactivate, and it holds NO implementation: no HTTP, fetch, URL, API key, environment read, database, cache, clock, randomness, n8n, provider or model, and no live QuickFurno adapter -- the final integration handshake supplies that later. It knows nothing about Riya: no phase, continuity, conversation or observation. No aliases or synonyms in V1 (Core publishes no governed alias collection), no inactive rows, and no vendor, price, package, lead, client, contact, consent, coordinate, pincode or area. A ./policy subpath exposes the three agent-neutral read predicates -- service active, city active, service-city pair available -- so every consumer applies ONE copy of the pair rule rather than growing a second that diverges the day one is corrected. Depends on @qf-jarvis/contracts for Core's own reference/label/taxonomy-version primitives, and zod.",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./policy": {
+      "types": "./dist/policy/index.d.ts",
+      "default": "./dist/policy/index.js"
     },
     "./testing": {
       "types": "./dist/testing/index.d.ts",

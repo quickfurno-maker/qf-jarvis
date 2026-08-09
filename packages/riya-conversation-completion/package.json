@@ -1,0 +1,27 @@
+{
+  "name": "@qf-jarvis/riya-conversation-completion",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis Riya post-summary conversation semantics (RWC-P6, ADR-0101). The PURE, channel-neutral transitions RWC-P4A deliberately stopped short of: a structured summary edit, a structured summary confirmation, and the two governed advances CONTACT->CONSENT and CONSENT->COMPLETE. It is the ONLY producer of user_confirmed and the only way summaryConfirmed becomes true -- P4A can set it false and never true, P4B forbids the model from claiming that provenance, and P5 refuses to upgrade a validated ref to it, because user_confirmed means the client was shown a value and agreed it is right and only a structured surface that showed it can say so. RWC-P4A remains the ONLY discovery merge: every edit and confirmation builds a canonical P4A observation batch and calls the real reducer. RWC-P5 Core availability is mandatory for service/location edits and for confirmation, applied through the shared /policy predicates so one copy of the pair rule exists. Contact and consent stay Core-owned: opaque evidence is consumed as an inert value and the contact reference is discarded rather than persisted, and there is no phone, email, name, consent wording or consent boolean anywhere. COMPLETE is reachable only carrying Core-issued submission evidence. No model, prompt, clock, randomness, database, compare-and-set, HTTP, environment read or Core call -- RWC-P6B owns the composition. Depends on @qf-jarvis/riya-agent, @qf-jarvis/riya-conversation-continuity, @qf-jarvis/riya-conversation-evolution, @qf-jarvis/core-service-availability-read and zod.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/core-service-availability-read": "workspace:*",
+    "@qf-jarvis/riya-agent": "workspace:*",
+    "@qf-jarvis/riya-conversation-continuity": "workspace:*",
+    "@qf-jarvis/riya-conversation-evolution": "workspace:*",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {}
+}
