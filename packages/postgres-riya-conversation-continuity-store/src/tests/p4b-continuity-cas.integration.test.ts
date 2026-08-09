@@ -182,6 +182,10 @@ function service(
   const scripted = scriptedRuntime(observations);
   return {
     svc: createRiyaWebConversationService({
+      // RWC-P9 (ADR-0105): capacity is REQUIRED configuration, with no default. A generous
+      // cap here keeps these suites about what they were about; the admission behaviour has
+      // its own specs.
+      maxConcurrentTextTurns: 64,
       turnCoordinator: permissiveTurnCoordinator(),
       runtime: scripted.runtime,
       continuityStore: store(activePool),
@@ -422,6 +426,10 @@ describe('a real race on one conversation', () => {
     };
     const scripted = scriptedRuntime([SET('budget', 'Around 8 lakh.')]);
     const svc = createRiyaWebConversationService({
+      // RWC-P9 (ADR-0105): capacity is REQUIRED configuration, with no default. A generous
+      // cap here keeps these suites about what they were about; the admission behaviour has
+      // its own specs.
+      maxConcurrentTextTurns: 64,
       turnCoordinator: permissiveTurnCoordinator(),
       runtime: scripted.runtime,
       continuityStore: staleFirstStore,
@@ -470,6 +478,10 @@ describe('a real race on one conversation', () => {
     };
     const scripted = scriptedRuntime([SET('budget', 'Around 8 lakh.')]);
     const svc = createRiyaWebConversationService({
+      // RWC-P9 (ADR-0105): capacity is REQUIRED configuration, with no default. A generous
+      // cap here keeps these suites about what they were about; the admission behaviour has
+      // its own specs.
+      maxConcurrentTextTurns: 64,
       turnCoordinator: permissiveTurnCoordinator(),
       runtime: scripted.runtime,
       continuityStore: alwaysStaleStore,

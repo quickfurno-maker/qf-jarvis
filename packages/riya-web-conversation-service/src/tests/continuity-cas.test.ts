@@ -188,6 +188,10 @@ function harness(
     runtime,
     store,
     svc: createRiyaWebConversationService({
+      // RWC-P9 (ADR-0105): capacity is REQUIRED configuration, with no default. A generous
+      // cap here keeps these suites about what they were about; the admission behaviour has
+      // its own specs.
+      maxConcurrentTextTurns: 64,
       // RWC-P8 (ADR-0104): the coordinator is REQUIRED. A fresh one per construction, because a
       // shared instance would let one spec's claims decide another spec's outcome.
       turnCoordinator: scriptedTurnCoordinator(),
@@ -827,6 +831,10 @@ describe('M. exactly one runtime call per turn', () => {
 
     expect(() =>
       createRiyaWebConversationService({
+        // RWC-P9 (ADR-0105): capacity is REQUIRED configuration, with no default. A generous
+        // cap here keeps these suites about what they were about; the admission behaviour has
+        // its own specs.
+        maxConcurrentTextTurns: 64,
         // RWC-P8 (ADR-0104): the coordinator is REQUIRED. A fresh one per construction, because a
         // shared instance would let one spec's claims decide another spec's outcome.
         turnCoordinator: scriptedTurnCoordinator(),

@@ -75,6 +75,15 @@ import { riyaConversationTurnSchema } from '../contracts/channel-turn.js';
 import type { RiyaConversationTurnV1 } from '../contracts/channel-turn.js';
 import type { RiyaConversationResultV1 } from '../contracts/channel-result.js';
 import type { RiyaTurnCoordinatorPort, RiyaTurnLease } from '../contracts/turn-coordinator-port.js';
+import { NOOP_RIYA_CONVERSATION_OPERATIONAL_OBSERVABILITY } from '../contracts/operational-observability.js';
+import type {
+  RiyaConversationOperationalEvent,
+  RiyaConversationOperationalObservabilityHook,
+} from '../contracts/operational-observability.js';
+import {
+  createTextTurnAdmission,
+  isValidTextTurnCapacity,
+} from '../internal/text-turn-admission.js';
 
 /** What a caller injects. Every collaborator is required; there is no default for any of them. */
 export interface RiyaWebConversationServiceConfig {
@@ -115,6 +124,26 @@ export interface RiyaWebConversationServiceConfig {
    * across replicas and across fresh request identifiers. Both layers stay.
    */
   readonly turnCoordinator: RiyaTurnCoordinatorPort;
+  /**
+   * How many TEXT turns this PROCESS may serve at once (RWC-P9, ADR-0105). REQUIRED, 1..1024.
+   *
+   * There is no default, and that is deliberate. RWC-P8 gives every admitted turn a dedicated
+   * PostgreSQL session for its whole life, so this number and the coordinator's pool capacity are the
+   * same decision made twice -- and a default would let a deployment make it by accident. A guess
+   * that is too high exhausts the pool before the model gateway's own concurrency gate is ever
+   * reached; one that is too low sheds load nobody asked it to shed. The deployer knows their pool.
+   *
+   * It is NOT idempotency and NOT per-conversation serialization: RWC-P8 owns both, durably and
+   * across replicas. This bounds one process's appetite, and nothing more.
+   */
+  readonly maxConcurrentTextTurns: number;
+  /**
+   * OPTIONAL content-free operational observability (RWC-P9, ADR-0105).
+   *
+   * Optional where the coordinator is required, because this one cannot make anything unsafe: it
+   * observes, it decides nothing, and its absence means silence rather than a missing guard.
+   */
+  readonly observability?: RiyaConversationOperationalObservabilityHook;
 }
 
 /** The service, as every existing caller knows it. Unchanged. */
@@ -326,7 +355,11 @@ export function createRiyaWebConversationService(
     // The RWC-P8 durable coordinator. Also closed at construction: discovering this mid-turn would
     // mean a conversation had already been loaded, and a deployment missing it would be running with
     // no duplicate protection at all while looking entirely healthy.
-    typeof (supplied['turnCoordinator'] as { begin?: unknown } | undefined)?.begin !== 'function'
+    typeof (supplied['turnCoordinator'] as { begin?: unknown } | undefined)?.begin !== 'function' ||
+    // RWC-P9 capacity. Closed at construction because a deployment without it would either admit an
+    // unbounded number of turns or need a default nobody chose -- and the number has to be chosen
+    // against a real pool, which only the deployer can see.
+    !isValidTextTurnCapacity(supplied['maxConcurrentTextTurns'])
   ) {
     throw new RiyaWebConversationError('invalid-input');
   }
@@ -335,6 +368,25 @@ export function createRiyaWebConversationService(
   const availabilityReader = supplied['availabilityReader'] as CoreServiceAvailabilityReader;
   const runtimeId = supplied['runtimeId'];
   const turnCoordinator = supplied['turnCoordinator'] as RiyaTurnCoordinatorPort;
+  const admission = createTextTurnAdmission(supplied['maxConcurrentTextTurns']);
+  const observability =
+    (supplied['observability'] as RiyaConversationOperationalObservabilityHook | undefined) ??
+    NOOP_RIYA_CONVERSATION_OPERATIONAL_OBSERVABILITY;
+
+  /**
+   * Emit one observation, and never let it matter.
+   *
+   * Frozen on the way out so a sink cannot mutate an event another sink will read, and wrapped so a
+   * throwing hook cannot change a single thing about the turn. A metrics failure is not a
+   * conversation failure, and a client waiting for an answer must never learn that a counter broke.
+   */
+  const observe = (event: RiyaConversationOperationalEvent): void => {
+    try {
+      observability.record(Object.freeze({ ...event }));
+    } catch {
+      // Ignored, always. Observability is not an authority.
+    }
+  };
 
   /**
    * Evolve one loaded continuity by one batch and persist it (RWC-P4B §22–§23, ADR-0099).
@@ -466,6 +518,81 @@ export function createRiyaWebConversationService(
     }
     const turn = parsed.data as RiyaConversationTurnV1;
 
+    // -1. PROCESS CAPACITY, before literally everything else (RWC-P9, ADR-0105).
+    //
+    //     Before the coordinator, and therefore before a PostgreSQL session is acquired, before
+    //     continuity is read, before Core availability is read, before an envelope exists and long
+    //     before a model. RWC-P8 gives every admitted turn a DEDICATED session for its whole life, so
+    //     an unbounded burst across different conversations would exhaust the pool while the model
+    //     gateway's own concurrency gate sat untouched behind it.
+    //
+    //     Fail fast. There is no queue, no timer and no retry-after: a wait this service cannot
+    //     honour is worse than an immediate refusal, and nothing durable has happened, so the same
+    //     logical message may simply be presented again.
+    const release = admission.tryAcquire();
+    if (release === undefined) {
+      observe({
+        type: 'text-turn-overloaded',
+        channel: turn.channel,
+        activeTurns: admission.active(),
+        maxConcurrentTurns: admission.max(),
+      });
+      throw new RiyaWebConversationError('turn-overloaded');
+    }
+    observe({
+      type: 'text-turn-admitted',
+      channel: turn.channel,
+      activeTurns: admission.active(),
+      maxConcurrentTurns: admission.max(),
+    });
+
+    try {
+      try {
+        const settled = await admittedChannelTurn(turn);
+        // THE FINAL OUTCOME, observed HERE and nowhere inside (RWC-P9 owner correction, ADR-0105).
+        //
+        // `admittedChannelTurn` owns the RWC-P8 lease cleanup, and its own `finally` can REPLACE what
+        // it was about to return: a safe pre-start result whose `releaseUnstarted` cannot be proved
+        // becomes `turn-coordinator-unavailable`, because a conversation that may still be locked is
+        // the higher-order fact. Observing inside would therefore record a completion the caller
+        // never received -- a dashboard showing a turn that finished while the client got an error.
+        //
+        // By the time this line runs, every correctness-critical lease operation for this result has
+        // already succeeded. That is what makes the event a fact rather than a provisional one.
+        observe({
+          type: 'text-turn-completed',
+          channel: turn.channel,
+          phase: settled.continuity.phase,
+          disposition: settled.disposition,
+        });
+        return settled;
+      } catch (error: unknown) {
+        // The FINAL surfaced error, after any cleanup-failure replacement -- so operations and the
+        // caller cannot disagree about why a turn ended. The BOUNDED code only: a raw error carries a
+        // host, a table, a parameter or a client's own words, and a telemetry sink is the last place
+        // any of those should surface.
+        observe({
+          type: 'text-turn-failed',
+          channel: turn.channel,
+          ...(error instanceof RiyaWebConversationError ? { errorCode: error.code } : {}),
+        });
+        throw error;
+      }
+    } finally {
+      // EVERY path. Success, refusal, replay, conflict, overload downstream, a thrown store, a
+      // spent claim -- a token that leaked would permanently shrink this replica's capacity, and it
+      // would do so silently until the process was restarted.
+      //
+      // Deliberately OUTSIDE the observation above: this slot is process-local capacity, not part of
+      // the outcome. Returning it cannot change what the caller was told.
+      release();
+    }
+  }
+
+  /** One text turn that HOLDS a capacity slot. The RWC-P8 pipeline, unchanged. */
+  async function admittedChannelTurn(
+    turn: RiyaConversationTurnV1,
+  ): Promise<RiyaConversationResultV1> {
     // 0. CLAIM THE CONVERSATION, before anything else (RWC-P8).
     //
     //    Before continuity, before authority, before the runtime. A turn that cannot claim its
@@ -490,8 +617,16 @@ export function createRiyaWebConversationService(
     } catch {
       // Fail CLOSED. An unavailable coordinator is exactly when a duplicate would slip through, so
       // uncertainty must never become permission. Nothing from the coordinator's error escapes.
+      //
+      // No terminal observation here: this function normalizes, the ADMISSION WRAPPER observes. One
+      // terminal event per turn, recorded where the outcome is final.
       throw new RiyaWebConversationError('turn-coordinator-unavailable');
     }
+    observe({
+      type: 'text-turn-coordinator-outcome',
+      channel: turn.channel,
+      beginOutcome: begun.outcome,
+    });
 
     if (begun.outcome !== 'ACQUIRED') {
       // ZERO downstream work on every one of these. No continuity read, no availability read, no
@@ -499,15 +634,18 @@ export function createRiyaWebConversationService(
       //
       // And no cached reply on a replay: the ledger stores no model output, and fabricating one would
       // make a replay indistinguishable from a fresh answer to the client receiving it.
-      throw new RiyaWebConversationError(
+      const errorCode =
         begun.outcome === 'BUSY'
-          ? 'turn-in-flight'
+          ? ('turn-in-flight' as const)
           : begun.outcome === 'REPLAYED'
-            ? 'turn-replayed'
+            ? ('turn-replayed' as const)
             : begun.outcome === 'CONFLICT'
-              ? 'turn-conflict'
-              : 'turn-indeterminate',
-      );
+              ? ('turn-conflict' as const)
+              : ('turn-indeterminate' as const);
+      // The classification above is already observed as `text-turn-coordinator-outcome`. The single
+      // terminal `text-turn-failed` is recorded by the admission wrapper, so a refused turn produces
+      // one classification and one terminal event -- never two of the latter.
+      throw new RiyaWebConversationError(errorCode);
     }
     const lease: RiyaTurnLease = begun.lease;
 
@@ -527,7 +665,7 @@ export function createRiyaWebConversationService(
     const progress = { startAttempted: false, started: false, finalizeAttempted: false };
 
     try {
-      return await runClaimedTurn(
+      const settled = await runClaimedTurn(
         turn,
         lease,
         () => {
@@ -540,7 +678,15 @@ export function createRiyaWebConversationService(
           progress.finalizeAttempted = true;
         },
       );
+      // NOT observed here. This result is still PROVISIONAL: the `finally` below may fail to prove
+      // the conversation released and replace it with `turn-coordinator-unavailable`. The admission
+      // wrapper observes the outcome the caller actually receives.
+      return settled;
     } catch (error: unknown) {
+      // Likewise provisional. A pre-start failure whose `releaseUnstarted` then fails is surfaced as
+      // `turn-coordinator-unavailable`, and telemetry recording the original reason here would tell
+      // operations a different story from the one the caller was told.
+      //
       // NEVER ATTEMPTED. No durable claim can exist, so the message stays retryable -- exactly right
       // for a failure before any model, Core call or write. The `finally` below releases the lease.
       if (!progress.startAttempted) {
@@ -712,6 +858,13 @@ export function createRiyaWebConversationService(
     try {
       await lease.startProcessing();
       markStarted();
+      // ONLY here. Before this line the claim may not exist; after it the message is potentially
+      // spent, and an operator counting these is counting turns that can never be re-run.
+      observe({
+        type: 'text-turn-processing-started',
+        channel: turn.channel,
+        phase: continuity.phase,
+      });
     } catch {
       // The insert did not clearly succeed. NO runtime call: a claim whose durability is unknown must
       // not be followed by work that could be attributed to it. No model ran, so both readings --

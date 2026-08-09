@@ -55,6 +55,10 @@ function service(
     runtime,
     store,
     svc: createRiyaWebConversationService({
+      // RWC-P9 (ADR-0105): capacity is REQUIRED configuration, with no default. A generous
+      // cap here keeps these suites about what they were about; the admission behaviour has
+      // its own specs.
+      maxConcurrentTextTurns: 64,
       // RWC-P8 (ADR-0104): the coordinator is REQUIRED. A fresh one per construction, because a
       // shared instance would let one spec's claims decide another spec's outcome.
       turnCoordinator: scriptedTurnCoordinator(),
@@ -215,6 +219,10 @@ describe('(B6) the runtime capability is required, and checked before anything r
     delete withoutCapability['processInboundForCoreAuthorizedReply'];
     expect(() =>
       createRiyaWebConversationService({
+        // RWC-P9 (ADR-0105): capacity is REQUIRED configuration, with no default. A generous
+        // cap here keeps these suites about what they were about; the admission behaviour has
+        // its own specs.
+        maxConcurrentTextTurns: 64,
         // RWC-P8 (ADR-0104): the coordinator is REQUIRED. A fresh one per construction, because a
         // shared instance would let one spec's claims decide another spec's outcome.
         turnCoordinator: scriptedTurnCoordinator(),
@@ -233,6 +241,10 @@ describe('(B6) the runtime capability is required, and checked before anything r
     // something that reaches no state gate at all and still be handed a client-facing string.
     expect(() =>
       createRiyaWebConversationService({
+        // RWC-P9 (ADR-0105): capacity is REQUIRED configuration, with no default. A generous
+        // cap here keeps these suites about what they were about; the admission behaviour has
+        // its own specs.
+        maxConcurrentTextTurns: 64,
         // RWC-P8 (ADR-0104): the coordinator is REQUIRED. A fresh one per construction, because a
         // shared instance would let one spec's claims decide another spec's outcome.
         turnCoordinator: scriptedTurnCoordinator(),
@@ -258,6 +270,10 @@ describe('(B6) the runtime capability is required, and checked before anything r
     );
     expect(() =>
       createRiyaWebConversationService({
+        // RWC-P9 (ADR-0105): capacity is REQUIRED configuration, with no default. A generous
+        // cap here keeps these suites about what they were about; the admission behaviour has
+        // its own specs.
+        maxConcurrentTextTurns: 64,
         // RWC-P8 (ADR-0104): the coordinator is REQUIRED. A fresh one per construction, because a
         // shared instance would let one spec's claims decide another spec's outcome.
         turnCoordinator: scriptedTurnCoordinator(),

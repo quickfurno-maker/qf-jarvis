@@ -41,6 +41,12 @@ import type {
 } from '@qf-jarvis/riya-web-conversation-service';
 
 import { classifyDatabaseError, PostgresRiyaTurnCoordinatorError } from '../contracts/errors.js';
+import { NOOP_POSTGRES_RIYA_TURN_COORDINATOR_OBSERVABILITY } from '../contracts/observability.js';
+import type {
+  PostgresRiyaTurnCoordinatorDiscardReason,
+  PostgresRiyaTurnCoordinatorEvent,
+  PostgresRiyaTurnCoordinatorObservabilityHook,
+} from '../contracts/observability.js';
 import { conversationLockKey, sourceTurnDigest, turnIdentityDigest } from '../internal/identity.js';
 import {
   FINALIZE_CLAIM,
@@ -54,6 +60,15 @@ import {
 export interface PostgresRiyaTurnCoordinatorConfig {
   /** An injected `pg` Pool. Its lifecycle belongs to the caller; this package never creates one. */
   readonly pool: Pool;
+  /**
+   * OPTIONAL content-free observability (RWC-P9, ADR-0105).
+   *
+   * Optional because it decides nothing: absent means silence, not a missing guard. Every event is a
+   * closed enum -- no identifier, no digest, no lock key, no SQL, no host and no raw error -- and a
+   * hook that throws cannot change a classification, a durable write or whether a session is
+   * destroyed.
+   */
+  readonly observability?: PostgresRiyaTurnCoordinatorObservabilityHook;
 }
 
 const IDENTIFIER = /^[A-Za-z0-9._:-]{1,128}$/u;
@@ -121,6 +136,16 @@ export function createPostgresRiyaTurnCoordinator(
     throw new PostgresRiyaTurnCoordinatorError('invalid-input');
   }
   const pool = config.pool;
+  const observability = config.observability ?? NOOP_POSTGRES_RIYA_TURN_COORDINATOR_OBSERVABILITY;
+
+  /** Emit one observation, and never let it matter. A metrics failure is not a coordination failure. */
+  const observe = (event: PostgresRiyaTurnCoordinatorEvent): void => {
+    try {
+      observability.record(Object.freeze({ ...event }));
+    } catch {
+      // Ignored, always. In particular this must never prevent the session cleanup below.
+    }
+  };
 
   /**
    * Give a session back, or destroy it.
@@ -132,7 +157,14 @@ export function createPostgresRiyaTurnCoordinator(
    *
    * Destroying a connection costs one reconnect. Leaking a lock costs a conversation.
    */
-  const releaseSession = (client: PoolClient, healthy: boolean): void => {
+  const releaseSession = (
+    client: PoolClient,
+    healthy: boolean,
+    reason?: PostgresRiyaTurnCoordinatorDiscardReason,
+  ): void => {
+    if (!healthy && reason !== undefined) {
+      observe({ type: 'session-discarded', discardReason: reason });
+    }
     try {
       if (healthy) {
         client.release();
@@ -190,19 +222,28 @@ export function createPostgresRiyaTurnCoordinator(
     try {
       client = await pool.connect();
     } catch (error: unknown) {
-      throw classifyDatabaseError(error);
+      const classified = classifyDatabaseError(error);
+      observe({ type: 'coordinator-failed', errorCode: classified.code });
+      throw classified;
     }
 
     /** Unlock, then hand the session back — destroying it if the unlock is not provably clean. */
     const releaseLock = async (): Promise<void> => {
       let released: boolean;
+      let reason: PostgresRiyaTurnCoordinatorDiscardReason = 'UNLOCK_FALSE';
       try {
         const result = await client.query<{ released: boolean }>(UNLOCK, [lockKey.toString()]);
         released = result.rows[0]?.released === true;
+        if (!released) {
+          // A missing or non-true row are different stories to an operator: one says the lock was
+          // not held, the other says the answer did not parse.
+          reason = result.rows.length === 0 ? 'UNLOCK_MALFORMED' : 'UNLOCK_FALSE';
+        }
       } catch {
         released = false;
+        reason = 'UNLOCK_ERROR';
       }
-      releaseSession(client, released);
+      releaseSession(client, released, released ? undefined : reason);
     };
 
     let acquired: boolean;
@@ -212,15 +253,19 @@ export function createPostgresRiyaTurnCoordinator(
     } catch (error: unknown) {
       // The lock statement itself failed. Nothing is held, so the session goes back destroyed only if
       // we cannot be sure -- and we cannot be sure, because the failure may have been mid-statement.
-      releaseSession(client, false);
-      throw classifyDatabaseError(error);
+      releaseSession(client, false, 'LOCK_QUERY_UNCERTAIN');
+      const classified = classifyDatabaseError(error);
+      observe({ type: 'coordinator-failed', errorCode: classified.code });
+      throw classified;
     }
 
     if (!acquired) {
       // Another turn owns this conversation. No ledger read, no insert, no continuity, no model.
+      observe({ type: 'lock-busy', channel: input.channel });
       releaseSession(client, true);
       return Object.freeze({ outcome: 'BUSY' as const });
     }
+    observe({ type: 'lock-acquired', channel: input.channel });
 
     // ---- classification, under the lock -----------------------------------------------------
     let rows: readonly CandidateRow[];
@@ -234,12 +279,15 @@ export function createPostgresRiyaTurnCoordinator(
       rows = found.rows;
     } catch (error: unknown) {
       await releaseLock();
-      throw classifyDatabaseError(error);
+      const classified = classifyDatabaseError(error);
+      observe({ type: 'coordinator-failed', errorCode: classified.code });
+      throw classified;
     }
 
     if (rows.length > 2) {
       // At most two rows can legitimately match: one on the message id, one on the source digest.
       await releaseLock();
+      observe({ type: 'coordinator-failed', errorCode: 'repository-invariant' });
       throw new PostgresRiyaTurnCoordinatorError('repository-invariant');
     }
 
@@ -249,6 +297,7 @@ export function createPostgresRiyaTurnCoordinator(
     // A source reference already claimed under a DIFFERENT message id. This is what a redelivery
     // given a fresh message id looks like, and treating it as new would run the same turn twice.
     if (bySource !== undefined && bySource.message_id !== input.messageId) {
+      observe({ type: 'claim-conflict', channel: input.channel });
       await releaseLock();
       return Object.freeze({ outcome: 'CONFLICT' as const });
     }
@@ -261,14 +310,21 @@ export function createPostgresRiyaTurnCoordinator(
         byMessage.turn_identity_digest !== identityDigest ||
         byMessage.channel !== input.channel
       ) {
+        observe({ type: 'claim-conflict', channel: input.channel });
         await releaseLock();
         return Object.freeze({ outcome: 'CONFLICT' as const });
       }
       if (byMessage.claim_state === 'COMPLETED') {
+        observe({ type: 'claim-replayed', channel: input.channel, claimState: 'COMPLETED' });
         await releaseLock();
         return Object.freeze({ outcome: 'REPLAYED' as const });
       }
       if (byMessage.claim_state === 'INDETERMINATE') {
+        observe({
+          type: 'claim-indeterminate',
+          channel: input.channel,
+          claimState: 'INDETERMINATE',
+        });
         await releaseLock();
         return Object.freeze({ outcome: 'INDETERMINATE' as const });
       }
@@ -284,7 +340,9 @@ export function createPostgresRiyaTurnCoordinator(
         ]);
       } catch (error: unknown) {
         await releaseLock();
-        throw classifyDatabaseError(error);
+        const classified = classifyDatabaseError(error);
+        observe({ type: 'coordinator-failed', errorCode: classified.code });
+        throw classified;
       }
       if (!affectedExactlyOne(marked.rowCount)) {
         // The row this transaction just READ as PROCESSING did not move. Something else is writing
@@ -295,8 +353,12 @@ export function createPostgresRiyaTurnCoordinator(
         // "this statement is not doing what it appears to" is exactly the guess that would let a
         // spent message look recoverable, or a live one look spent.
         await releaseLock();
+        // NOT `claim-indeterminate`. The transition was not proved, so reporting it would tell an
+        // operator a message is spent when the ledger has not said so.
+        observe({ type: 'coordinator-failed', errorCode: 'repository-invariant' });
         throw new PostgresRiyaTurnCoordinatorError('repository-invariant');
       }
+      observe({ type: 'claim-indeterminate', channel: input.channel, claimState: 'INDETERMINATE' });
       await releaseLock();
       return Object.freeze({ outcome: 'INDETERMINATE' as const });
     }
@@ -319,7 +381,9 @@ export function createPostgresRiyaTurnCoordinator(
         ]);
       } catch (error: unknown) {
         await releaseLock();
-        throw classifyDatabaseError(error);
+        const classified = classifyDatabaseError(error);
+        observe({ type: 'coordinator-failed', errorCode: classified.code });
+        throw classified;
       }
       if (!affectedExactlyOne(finalized.rowCount)) {
         // The claim was NOT proved to reach its terminal state. For `COMPLETED` this is the most
@@ -329,8 +393,16 @@ export function createPostgresRiyaTurnCoordinator(
         // No retry. The row is left exactly as the database has it, and the next claim of this
         // message decides from durable evidence rather than from a guess made here.
         await releaseLock();
+        // NOT `claim-completed`. A completion event on a zero-row update is the false evidence the
+        // row-count proof exists to refuse; emitting it would put that lie in a dashboard.
+        observe({ type: 'coordinator-failed', errorCode: 'repository-invariant' });
         throw new PostgresRiyaTurnCoordinatorError('repository-invariant');
       }
+      observe(
+        claimState === 'COMPLETED'
+          ? { type: 'claim-completed', channel: input.channel, claimState: 'COMPLETED' }
+          : { type: 'claim-indeterminate', channel: input.channel, claimState: 'INDETERMINATE' },
+      );
       await releaseLock();
     };
 
@@ -354,7 +426,9 @@ export function createPostgresRiyaTurnCoordinator(
           // claim that may not exist, and the caller is told -- it will not call the runtime.
           await releaseLock();
           state = 'DONE';
-          throw classifyDatabaseError(error);
+          const classified = classifyDatabaseError(error);
+          observe({ type: 'coordinator-failed', errorCode: classified.code });
+          throw classified;
         }
         if (!affectedExactlyOne(inserted.rowCount)) {
           // An INSERT with no `ON CONFLICT` that created no row is not a claim. Permitting the
@@ -362,9 +436,15 @@ export function createPostgresRiyaTurnCoordinator(
           // the message would still look unspent to the next caller.
           await releaseLock();
           state = 'DONE';
+          observe({ type: 'coordinator-failed', errorCode: 'repository-invariant' });
           throw new PostgresRiyaTurnCoordinatorError('repository-invariant');
         }
         state = 'STARTED';
+        observe({
+          type: 'claim-processing-started',
+          channel: input.channel,
+          claimState: 'PROCESSING',
+        });
       },
       complete(): Promise<void> {
         return finalize('COMPLETED');

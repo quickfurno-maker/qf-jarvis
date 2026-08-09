@@ -263,7 +263,7 @@ describe('RWC-P2D containment', () => {
   });
 });
 
-describe('the public surface is nine runtime values', () => {
+describe('the public surface is eleven runtime values', () => {
   it('exports exactly the approved runtime symbols', () => {
     // Four for the text turn, three for RWC-P6B's structured capability, and TWO for RWC-P8's
     // channel-neutral surface. The action SCHEMAS, the deterministic key helper and the discovery
@@ -274,8 +274,15 @@ describe('the public surface is nine runtime values', () => {
     // stays internal for the reason the web turn schema does -- a caller able to compose it would
     // build a half-validated turn -- and the coordinator port is a TYPE with no implementation in
     // this package at all. `createRiyaWebConversationService` is still the ONE factory.
+    //
+    // RWC-P9 (ADR-0105): 9 -> 11, and both additions are OBSERVABILITY. The closed operational event
+    // vocabulary and its no-op default. `maxConcurrentTextTurns` is CONFIG, not an export, and the
+    // admission gate, its counter and its release token stay internal -- a caller able to reach the
+    // gate could hand this process capacity it does not have.
     expect(Object.keys(barrel).sort()).toStrictEqual([
+      'NOOP_RIYA_CONVERSATION_OPERATIONAL_OBSERVABILITY',
       'RIYA_CONVERSATION_CHANNELS',
+      'RIYA_CONVERSATION_OPERATIONAL_EVENT_TYPES',
       'RIYA_STRUCTURED_ACTION_DISPOSITIONS',
       'RIYA_STRUCTURED_ACTION_REASON_CODES',
       'RIYA_TURN_BEGIN_OUTCOMES',
@@ -304,6 +311,8 @@ describe('the public surface is nine runtime values', () => {
       'riyaIntakeIdempotencyKey',
       'riyaSummaryEditActionSchema',
       'needDiscoveryInputOf',
+      'createTextTurnAdmission',
+      'isValidTextTurnCapacity',
     ]) {
       expect(Object.keys(barrel), forbidden).not.toContain(forbidden);
     }

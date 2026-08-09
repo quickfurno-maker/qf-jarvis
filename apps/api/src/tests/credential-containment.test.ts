@@ -559,7 +559,13 @@ describe('(71-77) package API and dependency locks are untouched', () => {
       // schema, the channel result and the coordinator port are TYPES; the port has no
       // implementation in this package at all, and `createRiyaWebConversationService` remains the
       // ONE factory. `handleTurn` and `RiyaWebConversationResultV2` are unchanged.
-      'riya-web-conversation-service': 9,
+      //
+      // RWC-P9 (ADR-0105): 9 -> 11, and both additions are OBSERVABILITY -- the closed operational
+      // event vocabulary and its no-op default. The admission gate itself is deliberately NOT here:
+      // `maxConcurrentTextTurns` is configuration, and the gate, its counter and its release token
+      // stay internal, because a caller able to reach the gate could hand this process capacity it
+      // does not have.
+      'riya-web-conversation-service': 11,
       // QFJ-P09.03 (ADR-0091): the durable execution replay / idempotency store, locked from the
       // day it lands. Three root symbols: the factory, the closed error-code set and the error
       // class. The SQL, the table name, the input validator, the error classifier and the pool are

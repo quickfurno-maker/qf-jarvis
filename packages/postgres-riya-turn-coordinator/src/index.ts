@@ -35,3 +35,18 @@ export {
   PostgresRiyaTurnCoordinatorError,
 } from './contracts/errors.js';
 export type { PostgresRiyaTurnCoordinatorErrorCode } from './contracts/errors.js';
+
+// RWC-P9 (ADR-0105): content-free operational observability. TWO runtime values -- the closed event
+// vocabulary and the no-op default. The SQL, the digests, the lock key, the table and the session
+// release helper all stay internal, exactly as before.
+export {
+  NOOP_POSTGRES_RIYA_TURN_COORDINATOR_OBSERVABILITY,
+  POSTGRES_RIYA_TURN_COORDINATOR_DISCARD_REASONS,
+  POSTGRES_RIYA_TURN_COORDINATOR_EVENT_TYPES,
+} from './contracts/observability.js';
+export type {
+  PostgresRiyaTurnCoordinatorDiscardReason,
+  PostgresRiyaTurnCoordinatorEvent,
+  PostgresRiyaTurnCoordinatorEventType,
+  PostgresRiyaTurnCoordinatorObservabilityHook,
+} from './contracts/observability.js';

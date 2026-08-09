@@ -63,6 +63,10 @@ function service<
     runtime,
     store,
     svc: createRiyaWebConversationService({
+      // RWC-P9 (ADR-0105): capacity is REQUIRED configuration, with no default. A generous
+      // cap here keeps these suites about what they were about; the admission behaviour has
+      // its own specs.
+      maxConcurrentTextTurns: 64,
       // RWC-P8 (ADR-0104): the coordinator is REQUIRED. A fresh one per construction, because a
       // shared instance would let one spec's claims decide another spec's outcome.
       turnCoordinator: scriptedTurnCoordinator(),
@@ -412,6 +416,10 @@ describe('the store port semantics the fake proves', () => {
     };
     const runtime = scriptedRuntime();
     const svc = createRiyaWebConversationService({
+      // RWC-P9 (ADR-0105): capacity is REQUIRED configuration, with no default. A generous
+      // cap here keeps these suites about what they were about; the admission behaviour has
+      // its own specs.
+      maxConcurrentTextTurns: 64,
       // RWC-P8 (ADR-0104): the coordinator is REQUIRED. A fresh one per construction, because a
       // shared instance would let one spec's claims decide another spec's outcome.
       turnCoordinator: scriptedTurnCoordinator(),
@@ -544,7 +552,7 @@ describe('the authoritative runtime is reused exactly once', () => {
 });
 
 describe('errors are bounded and content-free', () => {
-  it('exposes exactly ten codes, frozen, and every one is reachable', () => {
+  it('exposes exactly eleven codes, frozen, and every one is reachable', () => {
     // RWC-P8 (ADR-0104): 5 -> 10, and every addition is a DURABLE TURN outcome the service could not
     // previously express. The original five are unchanged, in order, and keep their exact meanings.
     expect([...RIYA_WEB_CONVERSATION_ERROR_CODES]).toStrictEqual([
@@ -558,6 +566,9 @@ describe('errors are bounded and content-free', () => {
       'turn-conflict',
       'turn-indeterminate',
       'turn-coordinator-unavailable',
+      // RWC-P9 (ADR-0105): capacity protection, not a decision about the message. Nothing downstream
+      // ran and no durable claim exists, so the same message may be presented again.
+      'turn-overloaded',
     ]);
     expect(Object.isFrozen(RIYA_WEB_CONVERSATION_ERROR_CODES)).toBe(true);
     // RWC-P2C refused this code because a revision conflict was unreachable from a turn. RWC-P4B

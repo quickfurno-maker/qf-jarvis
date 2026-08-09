@@ -57,6 +57,10 @@ function harness(
     ...(over.runtimeThrows === true ? { throws: true } : {}),
   });
   const svc = createRiyaWebConversationService({
+    // RWC-P9 (ADR-0105): capacity is REQUIRED configuration, with no default. A generous
+    // cap here keeps these suites about what they were about; the admission behaviour has
+    // its own specs.
+    maxConcurrentTextTurns: 64,
     runtime,
     continuityStore: store,
     availabilityReader: scriptedAvailabilityReader(
@@ -181,6 +185,10 @@ describe('a start that was ATTEMPTED but not proved performs NO second lease ope
     // second operation: the sequence is the application's contract, not the adapter's defence.
     const seen: string[] = [];
     const svc = createRiyaWebConversationService({
+      // RWC-P9 (ADR-0105): capacity is REQUIRED configuration, with no default. A generous
+      // cap here keeps these suites about what they were about; the admission behaviour has
+      // its own specs.
+      maxConcurrentTextTurns: 64,
       runtime: scriptedRuntime('CORE_ACCEPTED'),
       continuityStore: new InMemoryContinuityStore(),
       availabilityReader: scriptedAvailabilityReader(),

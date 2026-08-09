@@ -40,6 +40,10 @@ function harness(
   });
   const reader = scriptedAvailabilityReader();
   const svc = createRiyaWebConversationService({
+    // RWC-P9 (ADR-0105): capacity is REQUIRED configuration, with no default. A generous
+    // cap here keeps these suites about what they were about; the admission behaviour has
+    // its own specs.
+    maxConcurrentTextTurns: 64,
     runtime,
     continuityStore: store,
     availabilityReader: reader,
@@ -329,6 +333,10 @@ describe('a claim is written immediately before the runtime, and never earlier',
     const coordinator = scriptedTurnCoordinator();
     const runtime = scriptedRuntime('CORE_ACCEPTED');
     const svc = createRiyaWebConversationService({
+      // RWC-P9 (ADR-0105): capacity is REQUIRED configuration, with no default. A generous
+      // cap here keeps these suites about what they were about; the admission behaviour has
+      // its own specs.
+      maxConcurrentTextTurns: 64,
       runtime,
       continuityStore: store,
       availabilityReader: scriptedAvailabilityReader({ rejects: true }),
@@ -346,6 +354,10 @@ describe('a claim is written immediately before the runtime, and never earlier',
     const retried = harness({ store });
     void retried;
     const again = await createRiyaWebConversationService({
+      // RWC-P9 (ADR-0105): capacity is REQUIRED configuration, with no default. A generous
+      // cap here keeps these suites about what they were about; the admission behaviour has
+      // its own specs.
+      maxConcurrentTextTurns: 64,
       runtime,
       continuityStore: store,
       availabilityReader: scriptedAvailabilityReader(),
@@ -382,6 +394,10 @@ describe('a claim is written immediately before the runtime, and never earlier',
     const store = new InMemoryContinuityStore();
     const coordinator = scriptedTurnCoordinator();
     const svc = createRiyaWebConversationService({
+      // RWC-P9 (ADR-0105): capacity is REQUIRED configuration, with no default. A generous
+      // cap here keeps these suites about what they were about; the admission behaviour has
+      // its own specs.
+      maxConcurrentTextTurns: 64,
       runtime: scriptedRuntime('CORE_ACCEPTED', { throws: true }),
       continuityStore: store,
       availabilityReader: scriptedAvailabilityReader(),
