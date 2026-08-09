@@ -1,5 +1,11 @@
 # ADR-0097 — Private Riya Web Ingress Adapter
 
+> **RWC-P8 factual note (ADR-0104).** The `(caller, requestId)` replay guard described here is
+> unchanged and remains defence in depth. It protects ONE signed transport request inside its
+> freshness window and is process-local; a trusted caller may re-sign the same LOGICAL message
+> under a fresh `requestId`. RWC-P8 adds a durable logical-turn layer beneath it. The ingress
+> production code is untouched and remains **NOT DEPLOYED / NOT LIVE**.
+
 **Status:** Accepted. Implemented on `rwc-private-riya-web-ingress-adapter`, **not merged**, and **not deployed** — nothing binds it to a port.
 **Deciders:** Owner
 **Relates to:** [ADR-0096](./ADR-0096-rwc-p2d-core-authorized-web-reply-materialization.md) · [ADR-0094](./ADR-0094-rwc-p2c-private-riya-web-conversation-service.md) · [ADR-0092](./ADR-0092-jrw-0b-governed-web-runtime-channel.md) · [ADR-0056](./ADR-0056-qfj-m3-quickfurno-core-decision-adapter-foundation.md) · [ADR-0025](./ADR-0025-quickfurno-compatibility-boundary-and-core-adapter-baseline.md) · [ADR-0001](./ADR-0001-source-of-truth-boundary.md)

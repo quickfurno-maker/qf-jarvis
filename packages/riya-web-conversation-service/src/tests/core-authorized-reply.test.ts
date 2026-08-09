@@ -20,6 +20,7 @@ import { SENTINEL_BODY, scriptedRuntime } from './fakes/scripted-runtime.js';
 import type { ScriptedRuntime, ScriptedRuntimeOptions } from './fakes/scripted-runtime.js';
 import type { JarvisCoreAuthorizedReplyV1, JarvisRuntimeOutcome } from '@qf-jarvis/jarvis-runtime';
 import { scriptedAvailabilityReader } from '@qf-jarvis/core-service-availability-read/testing';
+import { scriptedTurnCoordinator } from './fakes/scripted-turn-coordinator.js';
 
 const RUNTIME_ID = 'rt.web.1';
 
@@ -30,7 +31,9 @@ function turnInput(over: Partial<RiyaWebConversationTurnV1> = {}): RiyaWebConver
     conversationId: 'conv.1',
     messageId: 'msg.1',
     receivedAt: '2026-08-07T09:00:00Z',
-    webTurnRef: 'web.turn.opaque.ref',
+    // RWC-P8 (ADR-0104): a new logical message brings a NEW source reference. Derived from the
+    // message id so a fixture cannot accidentally model the caller defect the ledger refuses.
+    webTurnRef: `web.turn.${over.messageId ?? 'msg.1'}`,
     dataClass: 'HOSTED_ALLOWED',
     ...over,
   };
@@ -52,6 +55,9 @@ function service(
     runtime,
     store,
     svc: createRiyaWebConversationService({
+      // RWC-P8 (ADR-0104): the coordinator is REQUIRED. A fresh one per construction, because a
+      // shared instance would let one spec's claims decide another spec's outcome.
+      turnCoordinator: scriptedTurnCoordinator(),
       runtime,
       continuityStore: store,
       // RWC-P5: the authority reader is REQUIRED. A deterministic synthetic snapshot keeps
@@ -209,6 +215,9 @@ describe('(B6) the runtime capability is required, and checked before anything r
     delete withoutCapability['processInboundForCoreAuthorizedReply'];
     expect(() =>
       createRiyaWebConversationService({
+        // RWC-P8 (ADR-0104): the coordinator is REQUIRED. A fresh one per construction, because a
+        // shared instance would let one spec's claims decide another spec's outcome.
+        turnCoordinator: scriptedTurnCoordinator(),
         runtime: withoutCapability as never,
         continuityStore: new InMemoryContinuityStore(),
         // RWC-P5: the authority reader is REQUIRED. A deterministic synthetic snapshot keeps
@@ -224,6 +233,9 @@ describe('(B6) the runtime capability is required, and checked before anything r
     // something that reaches no state gate at all and still be handed a client-facing string.
     expect(() =>
       createRiyaWebConversationService({
+        // RWC-P8 (ADR-0104): the coordinator is REQUIRED. A fresh one per construction, because a
+        // shared instance would let one spec's claims decide another spec's outcome.
+        turnCoordinator: scriptedTurnCoordinator(),
         runtime: {
           processInboundForCoreAuthorizedReply: () => Promise.reject(new Error('never')),
         } as never,
@@ -246,6 +258,9 @@ describe('(B6) the runtime capability is required, and checked before anything r
     );
     expect(() =>
       createRiyaWebConversationService({
+        // RWC-P8 (ADR-0104): the coordinator is REQUIRED. A fresh one per construction, because a
+        // shared instance would let one spec's claims decide another spec's outcome.
+        turnCoordinator: scriptedTurnCoordinator(),
         runtime: partial as never,
         continuityStore: new InMemoryContinuityStore(),
         // RWC-P5: the authority reader is REQUIRED. A deterministic synthetic snapshot keeps

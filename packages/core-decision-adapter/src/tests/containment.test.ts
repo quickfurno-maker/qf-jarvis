@@ -5,7 +5,7 @@
  * event-backbone package import in production source (the M2 agent-runtime is the ONLY workspace
  * dependency); the package depends solely on agent-runtime + zod and exposes only the root and
  * `./testing`; the public API surface is locked; migrations 0001–0011 are byte-exact and there is no
- * 0012; the event-backbone public-api lock remains 39; production source holds no NUL/control byte;
+ * 0013; the event-backbone public-api lock remains 39; production source holds no NUL/control byte;
  * the test fakes never leak into the root barrel.
  */
 import { createHash } from 'node:crypto';
@@ -68,6 +68,11 @@ const LOCKED_MIGRATION_HASHES: Record<string, string> = {
     '1add85e08e43dafe85f124b886790cd3495d3f54b3579ad89efe40e2849a8b05',
   '0011_riya_conversation_continuity.sql':
     '80149f8d636aa85eaff7d98f924220107eaa3d539e5d13d5133873154926cc93',
+  // RWC-P8 (ADR-0104): the ONE authorized addition. Durable logical-turn idempotency, sitting
+  // BELOW the ingress transport replay guard rather than replacing it. Repository and
+  // LOCAL/CI only; nothing is applied to a managed database.
+  '0012_riya_logical_turn_idempotency.sql':
+    '5d1b7fe68401a664cea3116ff0900499a1f20d659d4935c586b4ac0f923aaf3e',
 };
 
 describe('containment', () => {
@@ -145,7 +150,7 @@ describe('containment', () => {
     }
   });
 
-  it('(migrations) 0001–0011 are byte-exact and there is no 0012', () => {
+  it('(migrations) 0001–0012 are byte-exact and there is no 0013', () => {
     const dir = repoPath('packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
       .filter((n) => n.endsWith('.sql'))
@@ -158,7 +163,10 @@ describe('containment', () => {
           .digest('hex'),
       ).toBe(hash);
     }
-    expect(sql.some((n) => n.startsWith('0012'))).toBe(false);
+    // RWC-P8 (ADR-0104) RESTATED, not relaxed: 0012 is the ONE owner-authorized addition -- durable
+    // logical-turn idempotency, repository and LOCAL/CI only. The bound moves to 0013, so the
+    // lock still says what it always said: no unauthorized migration exists.
+    expect(sql.some((n) => n.startsWith('0013'))).toBe(false);
   });
 
   it('(event-backbone) the public-api lock remains 39', () => {

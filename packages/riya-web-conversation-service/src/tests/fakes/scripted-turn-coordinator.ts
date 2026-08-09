@@ -1,0 +1,209 @@
+/**
+ * A deterministic in-memory turn coordinator. TEST-ONLY.
+ *
+ * `src/tests/**` is excluded from `tsconfig.build.json`, so this cannot reach `dist/`. That exclusion
+ * matters more here than for most fakes: a permissive in-memory coordinator shipped as a production
+ * default would answer `ACQUIRED` to everything, pass every test in this repository, and silently
+ * remove duplicate protection in exactly the deployment that most needs it.
+ *
+ * It mirrors the durable semantics closely enough for the service specs to be about the SERVICE:
+ * one in-flight turn per conversation, a claim written only at `startProcessing`, terminal claims
+ * that never re-open, and a `PROCESSING` claim found by a later begin becoming `INDETERMINATE`.
+ */
+import type {
+  RiyaTurnBeginResult,
+  RiyaTurnCoordinatorBeginInput,
+  RiyaTurnCoordinatorPort,
+  RiyaTurnLease,
+} from '../../contracts/turn-coordinator-port.js';
+
+type ClaimState = 'PROCESSING' | 'COMPLETED' | 'INDETERMINATE';
+
+interface Claim {
+  readonly messageId: string;
+  readonly channel: string;
+  readonly sourceKey: string;
+  readonly identityKey: string;
+  state: ClaimState;
+}
+
+/** What a spec may script. */
+export interface ScriptedTurnCoordinatorOptions {
+  /** Reject every `begin`, to drive the fail-closed unavailable path. */
+  readonly beginRejects?: boolean;
+  /** Reject `startProcessing`, to drive the ambiguous-claim path. */
+  readonly startRejects?: boolean;
+  /** Reject `complete`, to drive the withheld-body path. */
+  readonly completeRejects?: boolean;
+  /** Reject `releaseUnstarted`, to drive the unprovable-cleanup path. */
+  readonly releaseRejects?: boolean;
+}
+
+export type ScriptedTurnCoordinator = RiyaTurnCoordinatorPort & {
+  begins(): number;
+  starts(): number;
+  completes(): number;
+  indeterminates(): number;
+  releases(): number;
+  /** Every `begin` input, so a spec can assert what the coordinator was — and was not — told. */
+  seenBeginInputs(): readonly RiyaTurnCoordinatorBeginInput[];
+  /** The recorded claims for one conversation, for crash and replay specs. */
+  claimState(tenantId: string, conversationId: string, messageId: string): ClaimState | undefined;
+  /** Hold the conversation as though another replica were mid-turn. */
+  holdConversation(tenantId: string, conversationId: string): void;
+};
+
+const conversationKey = (tenantId: string, conversationId: string): string =>
+  `${tenantId} ${conversationId}`;
+
+export function scriptedTurnCoordinator(
+  over: ScriptedTurnCoordinatorOptions = {},
+): ScriptedTurnCoordinator {
+  const claims = new Map<string, Claim[]>();
+  const held = new Set<string>();
+  let begins = 0;
+  let starts = 0;
+  let completes = 0;
+  let indeterminates = 0;
+  let releases = 0;
+  const seen: RiyaTurnCoordinatorBeginInput[] = [];
+
+  return {
+    begin(input: RiyaTurnCoordinatorBeginInput): Promise<RiyaTurnBeginResult> {
+      begins += 1;
+      seen.push(input);
+      if (over.beginRejects === true) {
+        // A realistic failure carries exactly the kind of detail that must never escape.
+        return Promise.reject(new Error('coordinator at 10.0.0.5 — password=hunter2'));
+      }
+      const key = conversationKey(input.tenantId, input.conversationId);
+      if (held.has(key)) {
+        return Promise.resolve(Object.freeze({ outcome: 'BUSY' as const }));
+      }
+      const rows = claims.get(key) ?? [];
+      // The digests the durable coordinator derives, modelled as plain composite keys: the shapes are
+      // what the service depends on, and hashing them here would only make a failure harder to read.
+      const sourceKey = `${input.channel} ${input.channelTurnRef}`;
+      const identityKey = [
+        input.channel,
+        input.tenantId,
+        input.conversationId,
+        input.messageId,
+        input.receivedAt,
+        sourceKey,
+        input.dataClass,
+        input.subjectRef ?? null,
+      ].join(' ');
+
+      const bySource = rows.find((row) => row.sourceKey === sourceKey);
+      if (bySource !== undefined && bySource.messageId !== input.messageId) {
+        return Promise.resolve(Object.freeze({ outcome: 'CONFLICT' as const }));
+      }
+      const byMessage = rows.find((row) => row.messageId === input.messageId);
+      if (byMessage !== undefined) {
+        if (
+          byMessage.sourceKey !== sourceKey ||
+          byMessage.identityKey !== identityKey ||
+          byMessage.channel !== input.channel
+        ) {
+          return Promise.resolve(Object.freeze({ outcome: 'CONFLICT' as const }));
+        }
+        if (byMessage.state === 'COMPLETED') {
+          return Promise.resolve(Object.freeze({ outcome: 'REPLAYED' as const }));
+        }
+        if (byMessage.state === 'INDETERMINATE') {
+          return Promise.resolve(Object.freeze({ outcome: 'INDETERMINATE' as const }));
+        }
+        // PROCESSING while WE hold the conversation: the previous processor is gone and we cannot
+        // know how far it got.
+        byMessage.state = 'INDETERMINATE';
+        return Promise.resolve(Object.freeze({ outcome: 'INDETERMINATE' as const }));
+      }
+
+      held.add(key);
+      let state: 'UNSTARTED' | 'STARTED' | 'DONE' = 'UNSTARTED';
+      const finalize = (next: ClaimState): Promise<void> => {
+        if (state !== 'STARTED') {
+          return Promise.reject(new Error('lease misuse'));
+        }
+        state = 'DONE';
+        const row = (claims.get(key) ?? []).find((one) => one.messageId === input.messageId);
+        if (row?.state === 'PROCESSING') {
+          row.state = next;
+        }
+        held.delete(key);
+        return Promise.resolve();
+      };
+
+      const lease: RiyaTurnLease = {
+        startProcessing(): Promise<void> {
+          if (state !== 'UNSTARTED') {
+            return Promise.reject(new Error('lease misuse'));
+          }
+          starts += 1;
+          if (over.startRejects === true) {
+            state = 'DONE';
+            held.delete(key);
+            return Promise.reject(new Error('claim insert ambiguous'));
+          }
+          const rowsNow = claims.get(key) ?? [];
+          rowsNow.push({
+            messageId: input.messageId,
+            channel: input.channel,
+            sourceKey,
+            identityKey,
+            state: 'PROCESSING',
+          });
+          claims.set(key, rowsNow);
+          state = 'STARTED';
+          return Promise.resolve();
+        },
+        complete(): Promise<void> {
+          completes += 1;
+          if (over.completeRejects === true) {
+            // The row stays PROCESSING, exactly as a lost durable write would leave it. The next
+            // begin will find it and mark it indeterminate.
+            state = 'DONE';
+            held.delete(key);
+            return Promise.reject(new Error('finalize ambiguous'));
+          }
+          return finalize('COMPLETED');
+        },
+        indeterminate(): Promise<void> {
+          indeterminates += 1;
+          return finalize('INDETERMINATE');
+        },
+        releaseUnstarted(): Promise<void> {
+          if (state !== 'UNSTARTED') {
+            return Promise.reject(new Error('lease misuse'));
+          }
+          releases += 1;
+          if (over.releaseRejects === true) {
+            // The conversation could not be PROVED released. The hold is deliberately NOT cleared:
+            // that is what makes the failure observable rather than cosmetic, and it is exactly the
+            // state that would make the client's next turn see BUSY for a turn that already gave up.
+            return Promise.reject(new Error('coordinator at 10.0.0.5 — password=hunter2'));
+          }
+          state = 'DONE';
+          held.delete(key);
+          // No claim row is written and none is updated: the message stays retryable.
+          return Promise.resolve();
+        },
+      };
+      return Promise.resolve(Object.freeze({ outcome: 'ACQUIRED' as const, lease }));
+    },
+    begins: () => begins,
+    starts: () => starts,
+    completes: () => completes,
+    indeterminates: () => indeterminates,
+    releases: () => releases,
+    seenBeginInputs: () => seen,
+    claimState: (tenantId, conversationId, messageId) =>
+      (claims.get(conversationKey(tenantId, conversationId)) ?? []).find(
+        (row) => row.messageId === messageId,
+      )?.state,
+    holdConversation: (tenantId, conversationId) => {
+      held.add(conversationKey(tenantId, conversationId));
+    },
+  };
+}

@@ -553,7 +553,13 @@ describe('(71-77) package API and dependency locks are untouched', () => {
       // vocabularies. The four action schemas, the deterministic idempotency-key helper and the
       // discovery projection stay internal, and the first of those matters most: a caller able to
       // derive a submission key could submit under one the service never checked.
-      'riya-web-conversation-service': 7,
+      //
+      // RWC-P8 (ADR-0104): 7 -> 9. The channel-neutral surface adds exactly two runtime values --
+      // the closed channel vocabulary and the closed begin-outcome vocabulary. The channel turn
+      // schema, the channel result and the coordinator port are TYPES; the port has no
+      // implementation in this package at all, and `createRiyaWebConversationService` remains the
+      // ONE factory. `handleTurn` and `RiyaWebConversationResultV2` are unchanged.
+      'riya-web-conversation-service': 9,
       // QFJ-P09.03 (ADR-0091): the durable execution replay / idempotency store, locked from the
       // day it lands. Three root symbols: the factory, the closed error-code set and the error
       // class. The SQL, the table name, the input validator, the error classifier and the pool are
@@ -588,7 +594,7 @@ describe('(71-77) package API and dependency locks are untouched', () => {
 });
 
 describe('(78, 79, 80, 81) repository invariants', () => {
-  it('(78, 79) migrations 0001-0011 are byte-identical and 0012 is absent', () => {
+  it('(78, 79) migrations 0001-0012 are byte-identical and 0013 is absent', () => {
     const LOCKED: Record<string, string> = {
       '0001_event_log.sql': 'dbca835c394dc67f015176af8ae0582faa78e0c1299593ac8970c5abf4389d6a',
       '0002_event_runtime_grants.sql':
@@ -611,6 +617,11 @@ describe('(78, 79, 80, 81) repository invariants', () => {
         '1add85e08e43dafe85f124b886790cd3495d3f54b3579ad89efe40e2849a8b05',
       '0011_riya_conversation_continuity.sql':
         '80149f8d636aa85eaff7d98f924220107eaa3d539e5d13d5133873154926cc93',
+      // RWC-P8 (ADR-0104): the ONE authorized addition. Durable logical-turn idempotency, sitting
+      // BELOW the ingress transport replay guard rather than replacing it. Repository and
+      // LOCAL/CI only; nothing is applied to a managed database.
+      '0012_riya_logical_turn_idempotency.sql':
+        '5d1b7fe68401a664cea3116ff0900499a1f20d659d4935c586b4ac0f923aaf3e',
     };
     const dir = join(REPO_ROOT, 'packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
@@ -624,7 +635,10 @@ describe('(78, 79, 80, 81) repository invariants', () => {
           .digest('hex'),
       ).toBe(hash);
     }
-    expect(sql.some((name) => name.startsWith('0012'))).toBe(false);
+    // RWC-P8 (ADR-0104) RESTATED, not relaxed: 0012 is the ONE owner-authorized addition -- durable
+    // logical-turn idempotency, repository and LOCAL/CI only. The bound moves to 0013, so the
+    // lock still says what it always said: no unauthorized migration exists.
+    expect(sql.some((name) => name.startsWith('0013'))).toBe(false);
   });
 
   it('(80) no source references the protected reconciliation directory', () => {

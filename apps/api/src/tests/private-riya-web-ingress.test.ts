@@ -16,6 +16,7 @@ import { generateKeyPairSync, sign as cryptoSign, createHash } from 'node:crypto
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
+import { RiyaWebConversationError } from '@qf-jarvis/riya-web-conversation-service';
 import type {
   RiyaWebConversationResultV2,
   RiyaWebConversationService,
@@ -651,6 +652,64 @@ describe('(34) replay', () => {
     expect(answer.status).toBe(409);
     expect(answer.json['error']).toBe('request-conflict');
     expect(service.calls()).toBe(1);
+  });
+
+  it('(RWC-P8) a FRESH requestId carrying the SAME logical message is stopped BELOW the transport', async () => {
+    // The layering that ADR-0104 exists for. The transport guard is keyed on `(caller, requestId)`
+    // and is process-local, so re-signing the same logical message under a NEW requestId correctly
+    // passes it -- there is nothing wrong with the request. What stops the second agent turn is the
+    // durable logical-turn coordinator underneath, which the service consults before anything else.
+    //
+    // The DURABLE enforcement itself is proved against a real database in the coordinator's own
+    // integration suite. What is proved here is the layering: the ingress permits, the application
+    // refuses, and the refusal reaches the client content-free.
+    let spent = false;
+    const service: RiyaWebConversationService & { calls(): number } = {
+      handleTurn(turn: RiyaWebConversationTurnV1): Promise<RiyaWebConversationResultV2> {
+        if (spent) {
+          // Exactly what the real service throws once its coordinator reports a completed claim.
+          return Promise.reject(new RiyaWebConversationError('turn-replayed'));
+        }
+        spent = true;
+        return Promise.resolve(
+          Object.freeze({
+            version: 2 as const,
+            tenantId: turn.tenantId,
+            conversationId: turn.conversationId,
+            messageId: turn.messageId,
+            disposition: 'PROCESSED' as const,
+            reason: undefined,
+            continuity: {
+              version: 1,
+              tenantId: turn.tenantId,
+              conversationId: turn.conversationId,
+              continuityRevision: 0,
+              phase: 'INTRO',
+              summaryConfirmed: false,
+              discovery: { behaviourVersion: 1, completeness: 'MORE_DISCOVERY_REQUIRED' },
+            } as never,
+            authorizedReply: undefined,
+          }),
+        );
+      },
+      calls: () => (spent ? 1 : 0),
+    };
+    const base = await listening({ service });
+
+    const first = JSON.stringify(requestBody({ requestId: 'req.first' }));
+    expect((await post(base, first, signed(first))).status).toBe(200);
+
+    // Same tenant, conversation, message, webTurnRef and receivedAt -- a genuinely fresh SIGNED
+    // request, which the transport layer has no reason to refuse.
+    const second = JSON.stringify(requestBody({ requestId: 'req.second' }));
+    const answer = await post(base, second, signed(second));
+    expect(answer.status).not.toBe(409);
+    expect(answer.status).toBe(503);
+    // Content-free, exactly as every other service failure is mapped. No claim state, no ledger, no
+    // digest and no hint about the conversation.
+    expect(answer.text).not.toContain(SENTINEL);
+    expect(answer.text).not.toContain('replay');
+    expect(answer.text).not.toContain('claim');
   });
 
   it('a different requestId succeeds', async () => {

@@ -461,7 +461,7 @@ describe('(12, 13) the repository invariants this slice must not move', () => {
     expect(Object.keys(barrel)).toContain('RUNTIME_CHANNELS');
   });
 
-  it('migrations are still exactly 0001-0011, byte-identical, with no 0012', () => {
+  it('migrations are still exactly 0001-0012, byte-identical, with no 0013', () => {
     const LOCKED: Readonly<Record<string, string>> = {
       '0001_event_log.sql': 'dbca835c394dc67f015176af8ae0582faa78e0c1299593ac8970c5abf4389d6a',
       '0002_event_runtime_grants.sql':
@@ -484,6 +484,11 @@ describe('(12, 13) the repository invariants this slice must not move', () => {
         '1add85e08e43dafe85f124b886790cd3495d3f54b3579ad89efe40e2849a8b05',
       '0011_riya_conversation_continuity.sql':
         '80149f8d636aa85eaff7d98f924220107eaa3d539e5d13d5133873154926cc93',
+      // RWC-P8 (ADR-0104): the ONE authorized addition. Durable logical-turn idempotency, sitting
+      // BELOW the ingress transport replay guard rather than replacing it. Repository and
+      // LOCAL/CI only; nothing is applied to a managed database.
+      '0012_riya_logical_turn_idempotency.sql':
+        '5d1b7fe68401a664cea3116ff0900499a1f20d659d4935c586b4ac0f923aaf3e',
     };
     const dir = join(REPO_ROOT, 'packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
@@ -498,7 +503,8 @@ describe('(12, 13) the repository invariants this slice must not move', () => {
         name,
       ).toBe(hash);
     }
-    expect(sql.some((name) => Number.parseInt(name.slice(0, 4), 10) > 11)).toBe(false);
+    // RWC-P8 (ADR-0104) RESTATED, not relaxed: 0012 is the ONE owner-authorized addition.
+    expect(sql.some((name) => Number.parseInt(name.slice(0, 4), 10) > 12)).toBe(false);
   });
 
   it('no memory, transcript or session store was introduced', () => {

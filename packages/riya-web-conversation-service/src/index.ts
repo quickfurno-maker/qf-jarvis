@@ -59,9 +59,26 @@
 
 export { createRiyaWebConversationService } from './service/create-service.js';
 export type {
+  RiyaConversationService,
   RiyaWebConversationService,
   RiyaWebConversationServiceConfig,
 } from './service/create-service.js';
+
+// RWC-P8 (ADR-0104): the channel-neutral surface. ONE closed channel vocabulary as a runtime value;
+// everything else is a TYPE. The turn schema stays internal for the same reason the web turn schema
+// does -- a caller able to compose it would build a half-validated turn -- and the coordinator port
+// has no implementation in this package at all.
+export { RIYA_CONVERSATION_CHANNELS } from './contracts/channel-turn.js';
+export type { RiyaConversationChannel, RiyaConversationTurnV1 } from './contracts/channel-turn.js';
+export type { RiyaConversationResultV1 } from './contracts/channel-result.js';
+export { RIYA_TURN_BEGIN_OUTCOMES } from './contracts/turn-coordinator-port.js';
+export type {
+  RiyaTurnBeginOutcome,
+  RiyaTurnBeginResult,
+  RiyaTurnCoordinatorBeginInput,
+  RiyaTurnCoordinatorPort,
+  RiyaTurnLease,
+} from './contracts/turn-coordinator-port.js';
 
 export { RIYA_WEB_CONVERSATION_DISPOSITIONS } from './contracts/result.js';
 export type {

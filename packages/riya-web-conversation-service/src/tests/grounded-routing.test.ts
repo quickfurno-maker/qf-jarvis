@@ -18,6 +18,7 @@ import { describe, expect, it } from 'vitest';
 import { createRiyaWebConversationService } from '../service/create-service.js';
 import { InMemoryContinuityStore } from './fakes/in-memory-continuity-store.js';
 import { scriptedRuntime } from './fakes/scripted-runtime.js';
+import { scriptedTurnCoordinator } from './fakes/scripted-turn-coordinator.js';
 
 const PRE_SUMMARY: readonly RiyaConversationPhase[] = [
   'INTRO',
@@ -73,6 +74,9 @@ function build(phase: RiyaConversationPhase) {
   const runtime = scriptedRuntime('CORE_ACCEPTED');
   const availabilityReader = scriptedAvailabilityReader();
   const service = createRiyaWebConversationService({
+    // RWC-P8 (ADR-0104): the coordinator is REQUIRED. A fresh one per construction, because a
+    // shared instance would let one spec's claims decide another spec's outcome.
+    turnCoordinator: scriptedTurnCoordinator(),
     runtime,
     continuityStore,
     availabilityReader,
@@ -189,6 +193,9 @@ describe('the pre-summary path is unchanged', () => {
     const store = new InMemoryContinuityStore();
     store.seed(continuityAt('CONTACT'));
     const s2 = createRiyaWebConversationService({
+      // RWC-P8 (ADR-0104): the coordinator is REQUIRED. A fresh one per construction, because a
+      // shared instance would let one spec's claims decide another spec's outcome.
+      turnCoordinator: scriptedTurnCoordinator(),
       runtime: throwing,
       continuityStore: store,
       availabilityReader: scriptedAvailabilityReader(),
@@ -208,6 +215,9 @@ describe('the pre-summary path is unchanged', () => {
     ) as never;
     expect(() =>
       createRiyaWebConversationService({
+        // RWC-P8 (ADR-0104): the coordinator is REQUIRED. A fresh one per construction, because a
+        // shared instance would let one spec's claims decide another spec's outcome.
+        turnCoordinator: scriptedTurnCoordinator(),
         runtime: partialRuntime,
         continuityStore: new InMemoryContinuityStore(),
         availabilityReader: scriptedAvailabilityReader(),

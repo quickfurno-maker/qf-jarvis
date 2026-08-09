@@ -1,6 +1,10 @@
 # ADR-0103 — RWC-P7: grounded Q&A with governed EXACT knowledge
 
-- **Status:** Accepted — RWC-P7 implementation on branch, NOT MERGED
+- **Status:** Accepted — **RWC-P7 merged** as PR #108, merge commit
+  `0a24b9530e6dbf119f58ec2cf502162440c9de66`, reviewed head
+  `9fd7270dca25540657d06f673d6e1c618d76d686`. **RWC-P8 is current**
+  ([ADR-0104](./ADR-0104-rwc-p8-cross-channel-continuity-and-logical-turn-idempotency.md)), and
+  changes none of the decisions below.
 - **Date:** 2026-08-09
 - **Depends on:** ADR-0051 (QFJ-P04.03 governed knowledge), ADR-0053 (QFJ-P04.05 no-op RAG
   provisioning), ADR-0099 (RWC-P4B one model call), ADR-0100 (RWC-P5 Core availability), ADR-0101 /
