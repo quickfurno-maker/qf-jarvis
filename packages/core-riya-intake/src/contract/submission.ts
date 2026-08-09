@@ -39,7 +39,14 @@
  * or a nonce. A retry of the same business intake must derive the same key even though an irrelevant
  * conversational revision moved; a materially changed discovery is a different submission and must
  * derive a different one.
+ *
+ * Its GRAMMAR is not this package's to define. `@qf-jarvis/contracts` owns `idempotencyKeySchema` and
+ * every governed artifact in the repository already keys off it; idempotency is a system safety
+ * contract, and here the thing it protects is a real person receiving one enquiry rather than two. A
+ * local restatement would agree with the original on the day it was written and diverge on the day one
+ * of them was corrected — and a compatibility spec can only prove today's agreement, never tomorrow's.
  */
+import { idempotencyKeySchema } from '@qf-jarvis/contracts';
 import { createNeedDiscovery } from '@qf-jarvis/riya-agent';
 import type { NeedDiscovery } from '@qf-jarvis/riya-agent';
 import { z } from 'zod';
@@ -71,19 +78,6 @@ const SUBMISSION_REQUIRED_VALUE_KEYS = [
   'budgetNote',
   'timelineNote',
 ] as const;
-
-/**
- * The existing repository idempotency-key grammar, restated as a bound rather than imported.
- *
- * `@qf-jarvis/contracts` owns `idempotencyKeySchema`, and the preferred RWC-P6B form
- * `riya-intake.<64 lowercase hex>` satisfies it. It is restated here only so this contract does not
- * take a dependency for one string bound; a spec proves the two agree.
- */
-const IDEMPOTENCY_KEY = z
-  .string()
-  .min(16)
-  .max(128)
-  .regex(/^[A-Za-z0-9._:-]+$/u);
 
 /** One canonical, powerless intake submission. */
 export interface CoreRiyaIntakeSubmissionRequestV1 {
@@ -118,7 +112,7 @@ const requestSchema = z
     // to disagree about what a valid snapshot is.
     discovery: z.looseObject({}),
     summaryConfirmed: z.literal(true),
-    idempotencyKey: IDEMPOTENCY_KEY,
+    idempotencyKey: idempotencyKeySchema,
   })
   .strict();
 
@@ -205,7 +199,7 @@ export interface CoreRiyaIntakeSubmissionResultV1 {
 const resultSchema = z
   .object({
     contractVersion: z.literal(CORE_RIYA_INTAKE_CONTRACT_VERSION),
-    idempotencyKey: IDEMPOTENCY_KEY,
+    idempotencyKey: idempotencyKeySchema,
     outcome: z.enum(CORE_RIYA_INTAKE_OUTCOMES),
     completionEvidenceRef: coreRiyaIntakeEvidenceRefSchema.optional(),
     reasonCode: coreRiyaIntakeReasonCodeSchema.optional(),
@@ -263,20 +257,38 @@ export function parseCoreRiyaIntakeSubmissionResultV1(
  * two enquiries — so the only safe recovery is to ask Core what it already recorded.
  *
  * A lookup authorizes nothing. It reports.
+ *
+ * ### Every lookup echoes the key it answers — including `NOT_FOUND`
+ *
+ * A bare `NOT_FOUND` cannot say WHICH key was not found, and that is the one thing the recovery path
+ * needs to know. Ask for key A, let a buggy adapter or a stale cache answer `NOT_FOUND` for key B, and
+ * the artifact carries nothing to catch it with: the composition concludes A was never submitted and
+ * submits it again. The mechanism that exists to prevent a duplicate enquiry has produced one.
+ *
+ * So the key is REQUIRED on both statuses, and on `FOUND` the nested result's key must equal it
+ * exactly. Two identifiers that must agree, checked here rather than left to each caller to remember —
+ * because the caller who forgets is the one recovering from an outage at the worst moment.
+ *
+ * The parser proves internal agreement. It cannot know what the caller ASKED for, so RWC-P6B carries
+ * the other half: `lookup.idempotencyKey` must equal the key it queried, and a mismatch fails closed
+ * without submitting, without retrying under another key, and without being read as `NOT_FOUND`.
  */
 export const CORE_RIYA_INTAKE_LOOKUP_STATUSES = ['NOT_FOUND', 'FOUND'] as const;
 export type CoreRiyaIntakeLookupStatus = (typeof CORE_RIYA_INTAKE_LOOKUP_STATUSES)[number];
 
 export interface CoreRiyaIntakeSubmissionLookupV1 {
   readonly contractVersion: 1;
+  /** The key this answer is ABOUT. Required on every status; an unattributed answer is unusable. */
+  readonly idempotencyKey: string;
   readonly status: CoreRiyaIntakeLookupStatus;
-  /** Present exactly when `status` is `FOUND`. */
+  /** Present exactly when `status` is `FOUND`, and keyed identically. */
   readonly result?: CoreRiyaIntakeSubmissionResultV1;
 }
 
 const lookupSchema = z
   .object({
     contractVersion: z.literal(CORE_RIYA_INTAKE_CONTRACT_VERSION),
+    idempotencyKey: idempotencyKeySchema,
     status: z.enum(CORE_RIYA_INTAKE_LOOKUP_STATUSES),
     result: z.unknown().optional(),
   })
@@ -297,6 +309,7 @@ export function parseCoreRiyaIntakeSubmissionLookupV1(
     }
     return Object.freeze({
       contractVersion: CORE_RIYA_INTAKE_CONTRACT_VERSION,
+      idempotencyKey: data.idempotencyKey,
       status: 'NOT_FOUND',
     });
   }
@@ -312,8 +325,15 @@ export function parseCoreRiyaIntakeSubmissionLookupV1(
   } catch {
     throw new CoreRiyaIntakeError('invalid-lookup-result');
   }
+  // A wrapper saying "here is the answer for key A" around a result that answers key B is not a
+  // formatting slip: it is two different submissions being conflated, and the completion evidence
+  // inside it belongs to somebody else's enquiry.
+  if (result.idempotencyKey !== data.idempotencyKey) {
+    throw new CoreRiyaIntakeError('invalid-lookup-result');
+  }
   return Object.freeze({
     contractVersion: CORE_RIYA_INTAKE_CONTRACT_VERSION,
+    idempotencyKey: data.idempotencyKey,
     status: 'FOUND' as const,
     result,
   });

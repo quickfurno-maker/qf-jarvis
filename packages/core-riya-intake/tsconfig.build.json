@@ -10,16 +10,25 @@
   // The EMITTING build, referenced by the root solution. `src/tests` is EXCLUDED; `src/testing` is
   // deliberately INCLUDED, because the deterministic fake is a shipped subpath export.
   //
-  // Exactly ONE project reference. `riya-agent` owns `createNeedDiscovery`, the canonical validator a
-  // submission request re-proves its discovery through -- a RUNTIME dependency, not a type-only one,
-  // because a request that merely trusted its own shape would be a second, weaker definition of a
-  // valid discovery snapshot.
+  // Exactly TWO project references, both RUNTIME.
+  //
+  // `riya-agent` owns `createNeedDiscovery`, the canonical validator a submission request re-proves its
+  // discovery through -- not type-only, because a request that merely trusted its own shape would be a
+  // second, weaker definition of a valid discovery snapshot.
+  //
+  // `contracts` owns `idempotencyKeySchema`. Idempotency is a SYSTEM safety contract, not a local
+  // convenience validation: a duplicate submission is a second enquiry against a real person's project.
+  // A restated copy would agree on the day it was written and diverge on the day one was corrected, so
+  // this package imports the one authority rather than pinning a compatibility test against a clone.
   //
   // Deliberately absent: `riya-conversation-continuity` (a submission carries a discovery, not a
   // conversation), `riya-conversation-evolution`, `riya-model-interaction`, `jarvis-runtime`, the web
   // service, `agent-runtime`, `model-gateway`, `event-backbone`, any postgres adapter and any
   // application. This is a leaf, and the references are what keep it one.
-  "references": [{ "path": "../riya-agent/tsconfig.build.json" }],
+  "references": [
+    { "path": "../contracts/tsconfig.json" },
+    { "path": "../riya-agent/tsconfig.build.json" }
+  ],
   "include": ["src/**/*.ts"],
   "exclude": ["src/tests/**"]
 }

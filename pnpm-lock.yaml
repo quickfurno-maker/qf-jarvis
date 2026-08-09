@@ -216,16 +216,15 @@ importers:
 
   packages/core-riya-intake:
     dependencies:
+      '@qf-jarvis/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       '@qf-jarvis/riya-agent':
         specifier: workspace:*
         version: link:../riya-agent
       zod:
         specifier: 4.4.3
         version: 4.4.3
-    devDependencies:
-      '@qf-jarvis/contracts':
-        specifier: workspace:*
-        version: link:../contracts
 
   packages/core-service-availability-read:
     dependencies:

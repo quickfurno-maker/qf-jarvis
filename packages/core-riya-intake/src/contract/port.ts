@@ -43,7 +43,13 @@ export interface CoreRiyaIntakeLookupInput {
 
 /** The injected Core boundary. Every method may perform I/O, so every method is async. */
 export interface CoreRiyaIntakePort {
-  /** Read the CURRENT Core-owned contact and consent state for one subject. */
+  /**
+   * Read the CURRENT Core-owned contact and consent state for one tenant, conversation and subject.
+   *
+   * All three, because consent is intake-scoped: the same subject may hold `GRANTED` on one
+   * conversation and `DECLINED` on another, and a subject-only read cannot tell them apart. The answer
+   * echoes the scope back, and RWC-P6B must prove it matches before using anything in it.
+   */
   readCurrent(input: CoreRiyaIntakeReadInput): Promise<unknown>;
 
   /**

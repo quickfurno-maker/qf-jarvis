@@ -185,21 +185,37 @@ describe('it decides nothing, and holds nothing personal', () => {
 });
 
 describe('it stays a leaf with a small surface', () => {
-  it('depends on exactly @qf-jarvis/riya-agent and zod', () => {
+  it('depends on exactly @qf-jarvis/contracts, @qf-jarvis/riya-agent and zod', () => {
     const manifest = JSON.parse(readFileSync(join(PKG, 'package.json'), 'utf8')) as {
       readonly dependencies?: Record<string, string>;
       readonly devDependencies?: Record<string, string>;
       readonly exports?: Record<string, unknown>;
     };
+    // `@qf-jarvis/contracts` is a PRODUCTION dependency, and deliberately so. Idempotency is a system
+    // safety contract rather than a local convenience validation -- what it protects here is a real
+    // person receiving one enquiry instead of two -- so this package imports the one authority. A
+    // restated grammar plus a compatibility spec can only ever prove today's agreement.
     expect(Object.keys(manifest.dependencies ?? {}).sort()).toStrictEqual([
+      '@qf-jarvis/contracts',
       '@qf-jarvis/riya-agent',
       'zod',
     ]);
-    // `@qf-jarvis/contracts` is a DEV dependency only: one spec proves the preferred idempotency-key
-    // form satisfies the shared schema, and taking a production dependency for one string bound would
-    // be an edge this contract does not need.
-    expect(Object.keys(manifest.devDependencies ?? {})).toStrictEqual(['@qf-jarvis/contracts']);
+    expect(Object.keys(manifest.devDependencies ?? {})).toStrictEqual([]);
     expect(Object.keys(manifest.exports ?? {}).sort()).toStrictEqual(['.', './testing']);
+  });
+
+  it('restates no idempotency grammar of its own', () => {
+    const code = shippedCode();
+    // Every mention of an idempotency key in production is either the field, its type or the ONE
+    // imported schema. A local `z.string().min(16)` would be a second authority the day it appeared
+    // and a divergent one the day either copy was corrected.
+    expect(code).toContain("import { idempotencyKeySchema } from '@qf-jarvis/contracts'");
+    expect(code).not.toMatch(/min\(\s*16\s*\)/u);
+    expect(code).not.toMatch(/MIN_IDEMPOTENCY_KEY_LENGTH\s*=/u);
+    expect(code).not.toMatch(/MAX_IDEMPOTENCY_KEY_LENGTH\s*=/u);
+    // The one place a key schema may be named is where it is imported from `contracts`.
+    const declarations = code.match(/^\s*(const|let|export const)\s+\w*[Ii]dempotency\w*\s*=/gmu);
+    expect(declarations).toBeNull();
   });
 
   it('deep-imports no other package private module', () => {

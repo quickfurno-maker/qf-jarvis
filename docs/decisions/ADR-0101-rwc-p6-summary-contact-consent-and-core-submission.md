@@ -194,13 +194,16 @@ Concurrency, per action:
   or immediate conflict is safer.
 - **Summary confirm** — bound to the EXACT displayed revision. On stale revision or CAS conflict,
   **fail closed**: do not confirm a newer summary the client never saw, and never remerge onto one.
-- **Contact** — read Core state; `READY` plus evidence advances; one CAS.
-- **Submission** — read Core state; contact must be `READY` and consent `GRANTED`; `DECLINED` or
+- **Contact** — read Core state; verify its identity triple (§17.3); `READY` plus evidence advances;
+  one CAS.
+- **Submission** — read Core state; verify its identity triple (§17.3); contact must be `READY` and
+  consent `GRANTED`; `DECLINED` or
   `OPTED_OUT` stops it; P5 availability revalidated; derive the key; **look up any prior result before
-  any recovery**; submit once only when none exists; **never resubmit on transport uncertainty**;
-  after an accepted result, CAS the pure `COMPLETE` transition, and on conflict never call submit
-  again — reconcile the same accepted result only while the canonical submission identity still
-  matches, otherwise fail closed. At most one reload, no loops.
+  any recovery** and check the returned key against the one queried (§17.6); submit once only when
+  none exists; **never resubmit on transport uncertainty**; check a direct result's key against the
+  request (§17.7); after an accepted result, CAS the pure `COMPLETE` transition, and on conflict never
+  call submit again — reconcile the same accepted result only while the canonical submission identity
+  still matches, otherwise fail closed. At most one reload, no loops.
 
 ### 15. The private ingress does not change, and stays off
 
@@ -211,6 +214,61 @@ maps UI actions into the internal capability later. The ingress remains **NOT DE
 
 `phase`, `summaryConfirmed` and `completionEvidenceRef` already express everything P6 needs, and the
 deliberate absence of contact, consent and lead fields is the design rather than a gap. **No `0012`.**
+
+### 17. An answer from Core must prove it is an answer to THIS question
+
+Added by the PR #106 owner correction. Nothing above is withdrawn; these three rules close the ways a
+well-formed Core answer could still be the wrong one.
+
+**17.1 — the current intake state is scoped by tenant AND conversation AND subject.** The read input
+is `{ tenantId, conversationId, subjectRef }` and the state echoes all three.
+
+**17.2 — `conversationId` is mandatory, because `DECLINED` is intake-specific.** §8 makes declining
+one intake different from opting out altogether; that is only coherent if consent is keyed to an
+intake. The same subject may hold `GRANTED` on one conversation and `DECLINED` on another, and a
+subject-only read cannot tell those apart — it would return one and let the composition act on it as
+the answer to the other. Contact may be subject-level inside Core; the composed state is still
+attributed to one conversation, and the port is **not** split to reflect that.
+
+**17.3 — RWC-P6B exact-matches the state's identity before using it.** All three of
+
+```
+state.tenantId       === action.tenantId
+state.conversationId === action.conversationId
+state.subjectRef     === action.subjectRef
+```
+
+must hold before `READY`, `GRANTED`, `DECLINED`, `OPTED_OUT`, any `evidenceRef` or `intakeStateRef`
+may be read. Any mismatch **fails closed**: no phase advance, no submission, and **no second Core call
+to go looking for a better state**. `stateRef` is opaque and is not this proof — Jarvis never parses
+identity out of it.
+
+**17.4 — every lookup result echoes its `idempotencyKey`, including `NOT_FOUND`.** A bare `NOT_FOUND`
+cannot say which key was not found. Ask for A, let a stale cache or a buggy adapter answer `NOT_FOUND`
+for B, and the artifact carries nothing to catch it with: the composition concludes A was never
+submitted and submits it again — the mechanism that exists to prevent a duplicate enquiry has produced
+one.
+
+**17.5 — on `FOUND`, `lookup.idempotencyKey === lookup.result.idempotencyKey`.** Enforced by the
+parser, not left to each caller. A wrapper naming one submission around a result answering another is
+two submissions being conflated, and the completion evidence inside belongs to somebody else.
+
+**17.6 — RWC-P6B additionally requires `lookup.idempotencyKey === the key it queried`.** The parser
+proves internal agreement; it cannot know what was asked. On mismatch: **fail closed** — do not
+submit, do not retry under another key, and do **not** read it as `NOT_FOUND`.
+
+**17.7 — after a direct submit, `result.idempotencyKey === request.idempotencyKey`** must hold
+**before** an `ACCEPTED` result's completion evidence is usable.
+
+**17.8 — any identity or key mismatch fails closed** and can never cause a submit, a phase advance or
+`COMPLETE`.
+
+**17.9 — `@qf-jarvis/contracts` `idempotencyKeySchema` is the single runtime authority.** Used for the
+request key, the result key and the lookup key alike; no local restatement anywhere. §13 already
+placed idempotency enforcement in Core, and its grammar belongs in the same one place: a duplicate
+would agree on the day it was written and diverge on the day one copy was corrected, and a
+compatibility spec can only prove today's agreement. `@qf-jarvis/contracts` is therefore a **production**
+dependency of `core-riya-intake`, imported at its public root and never deep-imported.
 
 ## Consequences
 
@@ -248,6 +306,11 @@ Owner-locked. Changing any of these requires a new ADR, not an edit to this one:
 - `ClientConfirmationV1` and `CommunicationAuthorizationV1` are **not** reused;
 - the submission request carries **no authority**, and Core owns idempotency;
 - **no automatic resubmission** after an ambiguous transport outcome;
+- the Core intake state is scoped by **tenant, conversation and subject**, and P6B exact-matches all
+  three before using it;
+- every lookup result — `NOT_FOUND` included — is **attributed to its idempotency key**, and every key
+  cross-check failure **fails closed**;
+- `idempotencyKeySchema` in `@qf-jarvis/contracts` is the **only** idempotency grammar;
 - structured actions use **zero** model calls;
 - the private ingress stays unchanged and off; no migration.
 

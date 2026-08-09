@@ -12,19 +12,29 @@ import type { CoreRiyaIntakeReadInput, CoreRiyaIntakeStateV1 } from '../contract
 import type { CoreRiyaIntakeLookupInput, CoreRiyaIntakePort } from '../contract/port.js';
 import type { CoreRiyaIntakeSubmissionRequestV1 } from '../contract/submission.js';
 
-/** A synthetic intake state. Defaults to the fully-ready case; override either side for a spec. */
+/**
+ * A synthetic intake state. Defaults to the fully-ready case; override any part for a spec.
+ *
+ * All three identity fields are overridable, and deliberately so: the two cases worth writing a spec
+ * about are one subject across two conversations with different consent, and a state whose scope does
+ * not match the action that asked for it.
+ */
 export function syntheticIntakeState(
   over: {
-    readonly stateRef?: string;
+    readonly tenantId?: string;
+    readonly conversationId?: string;
     readonly subjectRef?: string;
+    readonly stateRef?: string;
     readonly contact?: { readonly state: string; readonly evidenceRef?: string };
     readonly consent?: { readonly state: string; readonly evidenceRef?: string };
   } = {},
 ): CoreRiyaIntakeStateV1 {
   return parseCoreRiyaIntakeStateV1({
     version: 1,
-    stateRef: over.stateRef ?? 'core.intake.state.synthetic.1',
+    tenantId: over.tenantId ?? 'tenant.synthetic',
+    conversationId: over.conversationId ?? 'conv.synthetic.1',
     subjectRef: over.subjectRef ?? 'subject.synthetic.1',
+    stateRef: over.stateRef ?? 'core.intake.state.synthetic.1',
     contact: over.contact ?? { state: 'READY', evidenceRef: 'core.contact.synthetic.1' },
     consent: over.consent ?? { state: 'GRANTED', evidenceRef: 'core.consent.synthetic.1' },
   });
@@ -70,7 +80,18 @@ export function scriptedCoreRiyaIntakePort(
       if (over.readRejects === true) {
         return Promise.reject(failure());
       }
-      return Promise.resolve(over.readReturns ?? syntheticIntakeState());
+      // The DEFAULT answer echoes the scope it was asked about, because that is what a correct Core
+      // does. A fake that answered with a fixed scope would make every well-behaved composition fail
+      // its identity check, and the mismatch case -- the one worth a spec -- is reachable through
+      // `readReturns` where it is deliberate and visible.
+      return Promise.resolve(
+        over.readReturns ??
+          syntheticIntakeState({
+            tenantId: input.tenantId,
+            conversationId: input.conversationId,
+            subjectRef: input.subjectRef,
+          }),
+      );
     },
     lookupSubmission(input: CoreRiyaIntakeLookupInput): Promise<unknown> {
       lookups += 1;
@@ -78,7 +99,15 @@ export function scriptedCoreRiyaIntakePort(
       if (over.lookupRejects === true) {
         return Promise.reject(failure());
       }
-      return Promise.resolve(over.lookupReturns ?? { contractVersion: 1, status: 'NOT_FOUND' });
+      // Likewise keyed: a `NOT_FOUND` that did not name the key it answers is the exact artifact the
+      // contract now refuses, so the fake must not be able to produce one by default.
+      return Promise.resolve(
+        over.lookupReturns ?? {
+          contractVersion: 1,
+          idempotencyKey: input.idempotencyKey,
+          status: 'NOT_FOUND',
+        },
+      );
     },
     submit(request: CoreRiyaIntakeSubmissionRequestV1): Promise<unknown> {
       submits += 1;

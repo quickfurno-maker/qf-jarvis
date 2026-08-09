@@ -30,6 +30,29 @@
  * or — far worse — under-apply an opt-out. `OPTED_OUT` is the stronger Core-owned stop, and the one
  * that must never be ignored.
  *
+ * ### Scope: tenant AND conversation AND subject
+ *
+ * That distinction is exactly why a subject is not enough to key this state on. `DECLINED` means the
+ * client declined THIS intake, so the same person can hold `GRANTED` on one conversation and
+ * `DECLINED` on another, and a subject-keyed read cannot tell those apart — it would return one of
+ * them and the composition would act on it as though it were the answer to the other.
+ *
+ * Contact may well be subject-level inside Core. The composed state is still attributed to one
+ * conversation, because consent is intake-scoped and splitting the two into separate reads would
+ * invent a boundary Core does not have.
+ *
+ * ### The state echoes its own identity, and that is not redundancy
+ *
+ * A future adapter — a cache keyed one field short, a batch endpoint, a retry that reuses a
+ * connection — can return a perfectly well-formed state for the wrong tenant, conversation or subject.
+ * Every field in it would parse. So the answer carries the question: RWC-P6B compares all three
+ * against the structured action before it may read `READY`, `GRANTED`, `DECLINED`, `OPTED_OUT`, an
+ * evidence reference or the state reference, and any mismatch fails closed with no advance, no
+ * submission and no second call to go hunting for a better state.
+ *
+ * `stateRef` is not that proof. It is opaque, Core mints it, and Jarvis must never parse identity out
+ * of it.
+ *
  * ### What is not here
  *
  * No phone, email or name. No consent wording, no policy text, no captured-at prose, no channel
@@ -66,13 +89,17 @@ export interface CoreRiyaIntakeConsentV1 {
   readonly evidenceRef?: string;
 }
 
-/** The current Core-owned view. Deeply frozen. */
+/** The current Core-owned view, for ONE tenant, conversation and subject. Deeply frozen. */
 export interface CoreRiyaIntakeStateV1 {
   readonly version: 1;
-  /** Core's identifier for THIS view. Binding evidence for a later submission, never permission. */
-  readonly stateRef: string;
+  /** Echoed scope. All three, so the answer can be proved to belong to the question. */
+  readonly tenantId: string;
+  /** Consent is intake-scoped, so a conversation is part of this state's identity, not context. */
+  readonly conversationId: string;
   /** The opaque Core customer reference this state is about. Never a contact detail. */
   readonly subjectRef: string;
+  /** Core's identifier for THIS view. Binding evidence for a later submission, never permission. */
+  readonly stateRef: string;
   readonly contact: CoreRiyaIntakeContactV1;
   readonly consent: CoreRiyaIntakeConsentV1;
 }
@@ -112,8 +139,10 @@ const consentSchema = z
 const stateSchema = z
   .object({
     version: z.literal(1),
-    stateRef: coreRiyaIntakeStateRefSchema,
+    tenantId: coreRiyaIntakeIdentifierSchema,
+    conversationId: coreRiyaIntakeIdentifierSchema,
     subjectRef: coreRiyaIntakeIdentifierSchema,
+    stateRef: coreRiyaIntakeStateRefSchema,
     contact: contactSchema,
     consent: consentSchema,
   })
@@ -133,8 +162,10 @@ export function parseCoreRiyaIntakeStateV1(value: unknown): CoreRiyaIntakeStateV
   const data = parsed.data;
   return Object.freeze({
     version: 1 as const,
-    stateRef: data.stateRef,
+    tenantId: data.tenantId,
+    conversationId: data.conversationId,
     subjectRef: data.subjectRef,
+    stateRef: data.stateRef,
     // Rebuilt rather than passed through: the caller's nested objects stay the caller's, and an
     // absent evidence reference is an ABSENT KEY rather than one holding `undefined`.
     contact: Object.freeze({
@@ -148,8 +179,15 @@ export function parseCoreRiyaIntakeStateV1(value: unknown): CoreRiyaIntakeStateV
   });
 }
 
-/** What a reader is asked for. Tenant and subject only. */
+/**
+ * What a reader is asked for: the full scope, never a subset.
+ *
+ * `conversationId` is mandatory rather than optional because consent is intake-scoped. An optional
+ * conversation would make the subject-wide read the easy default, and the easy default is the one that
+ * silently returns another conversation's `GRANTED`.
+ */
 export interface CoreRiyaIntakeReadInput {
   readonly tenantId: string;
+  readonly conversationId: string;
   readonly subjectRef: string;
 }
