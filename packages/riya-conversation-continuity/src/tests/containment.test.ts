@@ -386,9 +386,18 @@ describe('the contracts this slice reuses are unchanged', () => {
     // The guarantee is restated rather than dropped, and it did not weaken: the importer set is
     // pinned EXACTLY, and no APPLICATION may import the contract at all — an app importing it would
     // mean something is composing conversational state outside the packages that may.
+    // RWC-P6A (ADR-0101) adds the sixth, and it is the one this contract's own phase vocabulary
+    // anticipated: `riya-conversation-completion` owns the transitions past SUMMARY that this package
+    // deliberately left as bare labels. It consumes the contract and produces states through this
+    // same constructor -- the transitions live THERE precisely so that this package can stay a
+    // contract.
+    //
+    // The guarantee is restated rather than dropped, and it did not weaken: the importer set is
+    // pinned EXACTLY, and no APPLICATION may import the contract at all.
     const ALLOWED_PACKAGE_IMPORTERS = [
       'jarvis-runtime',
       'postgres-riya-conversation-continuity-store',
+      'riya-conversation-completion',
       'riya-conversation-evolution',
       'riya-model-interaction',
       'riya-web-conversation-service',

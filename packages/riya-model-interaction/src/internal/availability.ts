@@ -1,61 +1,37 @@
 /**
- * Reading the Core availability snapshot (RWC-P5, ADR-0100 §17–§18).
+ * The MODEL-FACING projection of the Core availability snapshot (RWC-P5, ADR-0100).
  *
- * Four pure predicates and one projection. Nothing here decides anything about a conversation — it
- * answers only "does Core currently list this?" and "does Core currently allow this pair?".
+ * The three read predicates that used to live here now live beside the contract that defines the
+ * snapshot, at `@qf-jarvis/core-service-availability-read/policy`, and are re-exported below so this
+ * package's own call sites read unchanged.
  *
- * ### The pair rule, stated once
+ * They moved because RWC-P6 (ADR-0101) needs exactly the same rule for a STRUCTURED summary edit or
+ * confirmation, which reaches Core authority without a model. Two copies of "may this service be
+ * offered in this city?" would not diverge on the day they were written; they would diverge on the
+ * day one of them was corrected.
  *
- * An active city plus an active service does NOT imply the pair. Every service carries exactly one
- * availability row, and that row is the only thing that answers the question:
- *
- * - `'ALL'` — every city in THIS snapshot;
- * - an explicit array — exactly those cities;
- * - an empty array — none of them, which is legal and means the service is catalogued but currently
- *   offered nowhere listed.
- *
- * A service with no row cannot reach this file: the snapshot parser requires exactly one row per
- * service. If one ever did, `pairAvailable` answers `false` — the safe direction, because the
- * alternative is Riya offering something nobody sells.
+ * What stays here is the one genuinely model-specific thing: how that snapshot is rendered into the
+ * single user message.
  */
 import type { CoreServiceAvailabilitySnapshotV1 } from '@qf-jarvis/core-service-availability-read';
 
-/** Is this exactly an active service ref in the current snapshot? */
-export function isActiveService(snapshot: CoreServiceAvailabilitySnapshotV1, ref: string): boolean {
-  return snapshot.services.some((service) => service.ref === ref);
-}
-
-/** Is this exactly an active city ref in the current snapshot? */
-export function isActiveCity(snapshot: CoreServiceAvailabilitySnapshotV1, ref: string): boolean {
-  return snapshot.cities.some((city) => city.ref === ref);
-}
-
 /**
- * May this service be offered in this city, according to Core?
+ * The shared Core read predicates, re-exported under this package's historical names.
  *
- * Both refs must be active in their own right first — a pair built from a ref Core does not list is
- * not "unavailable", it is unanswerable, and both come out the same way here: `false`.
+ * Aliased rather than renamed at every call site: the names are accurate here, and a rename would
+ * turn a semantics-preserving extraction into a diff nobody could scan.
  */
-export function pairAvailable(
-  snapshot: CoreServiceAvailabilitySnapshotV1,
-  serviceRef: string,
-  cityRef: string,
-): boolean {
-  if (!isActiveService(snapshot, serviceRef) || !isActiveCity(snapshot, cityRef)) {
-    return false;
-  }
-  const row = snapshot.availability.find((entry) => entry.serviceRef === serviceRef);
-  if (row === undefined) {
-    return false;
-  }
-  return row.cityRefs === 'ALL' ? true : row.cityRefs.includes(cityRef);
-}
+export {
+  isCoreCityActive as isActiveCity,
+  isCoreServiceActive as isActiveService,
+  isCoreServiceCityPairAvailable as pairAvailable,
+} from '@qf-jarvis/core-service-availability-read/policy';
 
 /**
  * The model-facing projection of the snapshot.
  *
- * `snapshotRef` and `taxonomyVersion` are deliberately DROPPED. They are contract evidence — which
- * view this is, and which taxonomy generation the refs belong to — and the model reasons about
+ * `snapshotRef` and `taxonomyVersion` are deliberately DROPPED. They are contract evidence -- which
+ * view this is, and which taxonomy generation the refs belong to -- and the model reasons about
  * neither. Sending them would put two more identifiers in a request for no benefit, and every
  * identifier sent is one that can come back in an answer.
  *

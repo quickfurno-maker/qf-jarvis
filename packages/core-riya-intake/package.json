@@ -1,0 +1,30 @@
+{
+  "name": "@qf-jarvis/core-riya-intake",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis Core-owned Riya intake boundary (RWC-P6, ADR-0101). The strict, versioned, bounded, POWERLESS contract and injected port for the three post-summary questions QuickFurno Core owns: has contact been captured, what did the client decide about consent, and may this confirmed enquiry become a business intake. It carries a current intake state (contact MISSING/READY, consent MISSING/GRANTED/DECLINED/OPTED_OUT, each non-missing state proved by an opaque Core evidence reference), a canonical submission request whose producingSystem is the literal qf-jarvis and which contains no outcome, canSubmit, consent claim or lead reference, a four-outcome result whose ACCEPTED case alone carries the dedicated P6 completion evidence, and an idempotency-keyed lookup so an indeterminate submission is recovered by asking Core rather than by resubmitting. It reuses neither ClientConfirmationV1 (assignment-domain evidence) nor CommunicationAuthorizationV1 (outbound-communication eligibility). It holds NO implementation: no HTTP, fetch, URL, API key, environment read, database, cache, clock, randomness, n8n, provider or model, and no live QuickFurno adapter -- the final integration handshake supplies that. It knows nothing about a conversation: no phase, continuity, observation or reducer. No raw phone, email, name, consent wording, transcript, model output, price, package or payment. Depends on @qf-jarvis/riya-agent for the canonical NeedDiscovery constructor, and zod.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "default": "./dist/testing/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/riya-agent": "workspace:*",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@qf-jarvis/contracts": "workspace:*"
+  }
+}

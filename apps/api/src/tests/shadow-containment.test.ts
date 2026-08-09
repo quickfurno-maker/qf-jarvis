@@ -401,6 +401,14 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // fetch, URL, credential, environment read, database, cache, clock or model, and no live
       // QuickFurno adapter -- the final integration handshake supplies that. It knows nothing about
       // Riya, holds no city or service literal, and has no default or fallback of any kind.
+      // RWC-P6A (ADR-0101): the Core-owned boundary for Riya's post-summary intake -- contact
+      // readiness, consent state, and a powerless canonical submission whose ACCEPTED result is the
+      // only source of a completion evidence reference. Still an EXACT set match; it records an
+      // authorised addition, it does not relax the assertion. It is a CONTRACT with no
+      // implementation: no HTTP, credential, environment read, database, clock, model or live
+      // QuickFurno adapter, and no grantConsent, captureContact or canSubmit anywhere. It reuses
+      // neither ClientConfirmationV1 nor CommunicationAuthorizationV1.
+      'core-riya-intake',
       'core-service-availability-read',
       'event-backbone',
       'event-ingestion',
@@ -445,6 +453,13 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // QFJ-S3-C (ADR-0067): the Riya client-sales behaviour package. Still an EXACT set match --
       // this records an authorised addition, it does not relax the assertion.
       'riya-agent',
+      // RWC-P6A (ADR-0101): the PURE post-summary transitions RWC-P4A stopped short of -- structured
+      // summary edit and confirmation, and the two governed advances CONTACT->CONSENT and
+      // CONSENT->COMPLETE. Still an EXACT set match; it records an authorised addition, it does not
+      // relax the assertion. It is the ONLY producer of user_confirmed, it delegates every discovery
+      // decision to the real P4A reducer, and it is pure: no model, clock, randomness, I/O,
+      // compare-and-set or Core call, which is what lets RWC-P6B re-run it during a reconciliation.
+      'riya-conversation-completion',
       // RWC-P2A (ADR-0093): Riya's conversational continuity CONTRACT -- the working state one
       // conversation carries between turns. Still an EXACT set match; it records an authorised
       // addition, it does not relax the assertion. It is contract-only: no database, migration,

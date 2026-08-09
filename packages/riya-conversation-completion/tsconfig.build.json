@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
+  },
+
+  // The EMITTING build, referenced by the root solution. `src/tests` is EXCLUDED so nothing test-only
+  // reaches dist/.
+  //
+  // Exactly FOUR project references, and the direction is one-way:
+  //
+  //   * `riya-agent` owns `NeedDiscovery` and `DiscoveryField`;
+  //   * `riya-conversation-continuity` owns the state this package advances;
+  //   * `riya-conversation-evolution` owns the ONLY discovery merge -- every edit and confirmation
+  //     delegates to it, because a second reducer would be a second set of rules for one conversation;
+  //   * `core-service-availability-read` owns the Core authority a structured service/location edit
+  //     must satisfy, consumed through its `/policy` subpath so there is one copy of the pair rule.
+  //
+  // Deliberately absent: `core-riya-intake` (this reducer consumes evidence as a VALUE and must not
+  // acquire the ability to fetch one), `jarvis-runtime` and the web service (composition; referencing
+  // either would invert the direction), `agent-runtime`, `model-reply-adapter` / `model-gateway` (no
+  // model runs here), any postgres adapter or `event-backbone` (no I/O), and any application.
+  "references": [
+    { "path": "../riya-agent/tsconfig.build.json" },
+    { "path": "../riya-conversation-continuity/tsconfig.build.json" },
+    { "path": "../riya-conversation-evolution/tsconfig.build.json" },
+    { "path": "../core-service-availability-read/tsconfig.build.json" }
+  ],
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/tests/**"]
+}

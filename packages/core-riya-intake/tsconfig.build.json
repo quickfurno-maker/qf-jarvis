@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
+  },
+
+  // The EMITTING build, referenced by the root solution. `src/tests` is EXCLUDED; `src/testing` is
+  // deliberately INCLUDED, because the deterministic fake is a shipped subpath export.
+  //
+  // Exactly ONE project reference. `riya-agent` owns `createNeedDiscovery`, the canonical validator a
+  // submission request re-proves its discovery through -- a RUNTIME dependency, not a type-only one,
+  // because a request that merely trusted its own shape would be a second, weaker definition of a
+  // valid discovery snapshot.
+  //
+  // Deliberately absent: `riya-conversation-continuity` (a submission carries a discovery, not a
+  // conversation), `riya-conversation-evolution`, `riya-model-interaction`, `jarvis-runtime`, the web
+  // service, `agent-runtime`, `model-gateway`, `event-backbone`, any postgres adapter and any
+  // application. This is a leaf, and the references are what keep it one.
+  "references": [{ "path": "../riya-agent/tsconfig.build.json" }],
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/tests/**"]
+}

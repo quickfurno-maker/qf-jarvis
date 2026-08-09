@@ -42,6 +42,8 @@
     { "path": "./packages/execution-dispatch-runtime/tsconfig.build.json" },
     { "path": "./packages/postgres-execution-replay-store/tsconfig.build.json" },
     { "path": "./packages/control-plane-read-contract/tsconfig.build.json" },
-    { "path": "./packages/core-service-availability-read/tsconfig.build.json" }
+    { "path": "./packages/core-service-availability-read/tsconfig.build.json" },
+    { "path": "./packages/core-riya-intake/tsconfig.build.json" },
+    { "path": "./packages/riya-conversation-completion/tsconfig.build.json" }
   ]
 }

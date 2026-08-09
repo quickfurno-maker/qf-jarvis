@@ -214,6 +214,19 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
 
+  packages/core-riya-intake:
+    dependencies:
+      '@qf-jarvis/riya-agent':
+        specifier: workspace:*
+        version: link:../riya-agent
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@qf-jarvis/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+
   packages/core-service-availability-read:
     dependencies:
       '@qf-jarvis/contracts':
@@ -468,6 +481,24 @@ importers:
       '@qf-jarvis/agent-runtime':
         specifier: workspace:*
         version: link:../agent-runtime
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+
+  packages/riya-conversation-completion:
+    dependencies:
+      '@qf-jarvis/core-service-availability-read':
+        specifier: workspace:*
+        version: link:../core-service-availability-read
+      '@qf-jarvis/riya-agent':
+        specifier: workspace:*
+        version: link:../riya-agent
+      '@qf-jarvis/riya-conversation-continuity':
+        specifier: workspace:*
+        version: link:../riya-conversation-continuity
+      '@qf-jarvis/riya-conversation-evolution':
+        specifier: workspace:*
+        version: link:../riya-conversation-evolution
       zod:
         specifier: 4.4.3
         version: 4.4.3
