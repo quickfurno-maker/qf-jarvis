@@ -1,12 +1,14 @@
 /**
  * HGV1-A — Gold corpus matrix, provenance, progress and repetition metrics (ADR-0108).
  *
- * ### The provenance spec is the important one
+ * ### The provenance spec is the important one, and it has a stated limit
  *
- * A `TEACHER_GENERATED_SYNTHETIC` trajectory does not count toward Human Gold, and nothing — not a
- * review, not an approval, not a helper — changes that. Provenance is a statement about who wrote the
- * words. A human clicking accept did not write them, and a dataset whose provenance field can be
- * talked into being wrong is a dataset nobody can reason about later.
+ * A trajectory DECLARING `TEACHER_GENERATED_SYNTHETIC` does not count toward Human Gold, and nothing —
+ * not a review, not an approval, not a helper — changes that. That is what these specs prove.
+ *
+ * What they do not prove, because no deterministic validator can, is that a trajectory declaring human
+ * authorship was actually typed by a human. Classification is enforced; authorship is process-attested
+ * (ADR-0108 §1). There is no AI-authorship detector here.
  *
  * The corpus is exercised on a small synthetic analogue rather than the real 360, which does not
  * exist yet and is not generated here.
@@ -19,7 +21,11 @@ import { RiyaDatasetError } from '../contracts/errors.js';
 import { createRiyaDatasetReleasePolicy } from '../contracts/release-policy.js';
 import { createRiyaIntelligenceTrajectory } from '../contracts/trajectory.js';
 import type { RiyaIntelligenceTrajectoryV1 } from '../contracts/trajectory.js';
-import { createRiyaDatasetAssistantTurn, createRiyaDatasetUserTurn } from '../contracts/turns.js';
+import {
+  createRiyaDatasetAssistantTurn,
+  createRiyaDatasetAuthoritativeContextTurn,
+  createRiyaDatasetUserTurn,
+} from '../contracts/turns.js';
 import type { RiyaDatasetTurnV1 } from '../contracts/turns.js';
 import { createProtectedTextIndex } from '../internal/leakage.js';
 import { createRiyaGoldV1Assignment } from '../gold-v1/contracts/assignment.js';
@@ -33,8 +39,10 @@ import {
   RIYA_GOLD_V1_COVERAGE_POLICY,
   RIYA_GOLD_V1_PROTECTED_CORPUS_REF,
 } from '../gold-v1/policy/gold-policy.js';
+import { riyaGoldV1WaveAssignments } from '../gold-v1/plan/generate-plan.js';
 import { riyaGoldRepetitionMetrics } from '../gold-v1/service/repetition.js';
 import { validateRiyaGoldV1Corpus } from '../gold-v1/service/validate-corpus.js';
+import { validateRiyaGoldV1ProgressBoard } from '../gold-v1/service/validate-progress.js';
 import { acceptedReviews } from '../testing/fixtures.js';
 
 const PROTECTED_INDEX = createProtectedTextIndex(
@@ -188,6 +196,48 @@ function goldTurns(
   ]);
 }
 
+/** One supplied business fact, and whether the assistant goes on to cite it. */
+interface AuthorityShape {
+  readonly supply: readonly { readonly factRef: string; readonly factClass: string }[];
+  readonly cite: readonly string[];
+}
+
+/**
+ * Splice an authoritative context turn, and its citation, into the opening exchange.
+ *
+ * `u1 → CONTEXT → a1(cites) → …`. Context may precede its use and the first thing SAID is still the
+ * customer, so the trajectory contract is satisfied and the Gold authority checks have something real
+ * to read.
+ */
+function withAuthority(
+  turns: readonly RiyaDatasetTurnV1[],
+  authority: AuthorityShape,
+): readonly RiyaDatasetTurnV1[] {
+  const [first, , ...rest] = turns;
+  const context = createRiyaDatasetAuthoritativeContextTurn({
+    type: 'AUTHORITATIVE_CONTEXT',
+    turnRef: 'ctx1',
+    authority: 'CORE_RUNTIME_SYNTHETIC',
+    facts: authority.supply.map((fact) => ({
+      factRef: fact.factRef,
+      value: `a synthetic ${fact.factClass.toLowerCase()} value for service.alpha`,
+      factClass: fact.factClass as never,
+    })),
+  });
+  const citing = createRiyaDatasetAssistantTurn({
+    type: 'ASSISTANT',
+    turnRef: 'a1',
+    text: 'Let me go by what we have on file for that, rather than guessing at it.',
+    annotation: {
+      decision: authority.cite.length > 0 ? 'USE_CORE_TRUTH' : 'ASK_DISCOVERY',
+      askedDiscoveryFields: [],
+      supportedFactRefs: authority.cite,
+      responseObjective: authority.cite.length > 0 ? 'ADDRESS_OBJECTION' : 'DISCOVER',
+    },
+  });
+  return Object.freeze([must(first, 'the opening user turn'), context, citing, ...rest]);
+}
+
 /** A Gold-shaped trajectory fulfilling one slot. Human-authored by declaration, as Gold requires. */
 function goldTrajectory(
   assignment: RiyaGoldV1AssignmentV1,
@@ -198,9 +248,18 @@ function goldTrajectory(
     readonly persona?: RiyaGoldV1AssignmentV1['persona'];
     readonly split?: RiyaGoldV1AssignmentV1['split'];
     readonly languageMode?: RiyaGoldV1AssignmentV1['languageMode'];
+    readonly difficulty?: RiyaGoldV1AssignmentV1['difficulty'];
+    readonly startPhase?: RiyaGoldV1AssignmentV1['startPhase'];
+    readonly secondaryInteractionKinds?: RiyaGoldV1AssignmentV1['requiredSecondaryKinds'];
+    readonly authority?: AuthorityShape;
   } = {},
 ): RiyaIntelligenceTrajectoryV1 {
   const kind = overrides.sourceKind ?? 'HUMAN_AUTHORED_SYNTHETIC';
+  const base = goldTurns(
+    assignment.ordinalWithinPair,
+    overrides.userText ?? 'We just got the flat and want work done in city.alpha.',
+    overrides.replyText ?? 'Congratulations on the handover. What are you hoping to start with?',
+  );
   return createRiyaIntelligenceTrajectory({
     version: 1,
     trajectoryId: assignment.assignmentId,
@@ -209,9 +268,9 @@ function goldTrajectory(
     split: overrides.split ?? assignment.split,
     languageMode: overrides.languageMode ?? assignment.languageMode,
     primaryInteractionKind: assignment.primaryInteractionKind,
-    secondaryInteractionKinds: [],
+    secondaryInteractionKinds: overrides.secondaryInteractionKinds ?? [],
     persona: overrides.persona ?? assignment.persona,
-    difficulty: assignment.difficulty,
+    difficulty: overrides.difficulty ?? assignment.difficulty,
     riskClass: assignment.riskClass,
     source: {
       kind,
@@ -220,16 +279,12 @@ function goldTrajectory(
       ...(kind === 'TEACHER_GENERATED_SYNTHETIC' ? { teacherRef: 'teacher.t01' } : {}),
     },
     initialState: {
-      phase: assignment.startPhase,
+      phase: overrides.startPhase ?? assignment.startPhase,
       discovery: {},
       fieldProvenance: {},
       summaryConfirmed: false,
     },
-    turns: goldTurns(
-      assignment.ordinalWithinPair,
-      overrides.userText ?? 'We just got the flat and want work done in city.alpha.',
-      overrides.replyText ?? 'Congratulations on the handover. What are you hoping to start with?',
-    ),
+    turns: overrides.authority === undefined ? base : withAuthority(base, overrides.authority),
     review: acceptedReviews(1, { refs: ['reviewer.r01'] }),
   });
 }
@@ -351,6 +406,8 @@ describe('a Gold corpus must match the plan it was written against', () => {
     ['a wrong split', { split: 'VALIDATION' as const }, 'SPLIT_MISMATCH'],
     ['a wrong language', { languageMode: 'HINDI' as const }, 'LANGUAGE_MISMATCH'],
     ['a wrong persona', { persona: 'FRUSTRATED' as const }, 'PERSONA_MISMATCH'],
+    ['a wrong difficulty', { difficulty: 'EDGE' as const }, 'DIFFICULTY_MISMATCH'],
+    ['a wrong starting phase', { startPhase: 'BUDGET_TIMELINE' as const }, 'START_PHASE_MISMATCH'],
   ])('%s fails the matrix', (_name, override, reason) => {
     const corpus = [
       goldTrajectory(must(TINY_ASSIGNMENTS[0], 'assignment 0'), {
@@ -460,7 +517,163 @@ describe('a Gold corpus must match the plan it was written against', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 3. Repetition metrics.
+// 3. Slot fidelity: secondary kinds and required business-fact classes.
+// ---------------------------------------------------------------------------
+
+describe('a Gold conversation must do what its slot asked for', () => {
+  /** Slot 01, with extra requirements bolted on. Slot 02 stays the plain control. */
+  const demanding = (extra: {
+    readonly requiredSecondaryKinds?: RiyaGoldV1AssignmentV1['requiredSecondaryKinds'];
+    readonly requiredAuthorityFactClasses?: RiyaGoldV1AssignmentV1['requiredAuthorityFactClasses'];
+  }): readonly RiyaGoldV1AssignmentV1[] => [
+    createRiyaGoldV1Assignment({
+      ...must(TINY_ASSIGNMENTS[0], 'assignment 0'),
+      ...extra,
+    }),
+    must(TINY_ASSIGNMENTS[1], 'assignment 1'),
+  ];
+
+  const reportFor = (
+    first: RiyaIntelligenceTrajectoryV1,
+    assignments: readonly RiyaGoldV1AssignmentV1[],
+  ) =>
+    validateRiyaGoldV1Corpus(
+      [first, must(tinyCorpus()[1], 'trajectory 1')],
+      assignments,
+      releaseOptions(),
+    );
+
+  const slotOne = () => must(TINY_ASSIGNMENTS[0], 'assignment 0');
+  const opening = 'We just got the flat and want the kitchen done in city.alpha.';
+
+  it('a required secondary interaction that never happens is refused', () => {
+    const report = reportFor(
+      goldTrajectory(slotOne(), { userText: opening }),
+      demanding({ requiredSecondaryKinds: ['CORRECTION'] }),
+    );
+    expect(report.findings.some((one) => one.reason === 'REQUIRED_SECONDARY_KIND_MISSING')).toBe(
+      true,
+    );
+    expect(report.goldEligible).toBe(false);
+  });
+
+  it('the same slot passes once the secondary interaction is there', () => {
+    const report = reportFor(
+      goldTrajectory(slotOne(), { userText: opening, secondaryInteractionKinds: ['CORRECTION'] }),
+      demanding({ requiredSecondaryKinds: ['CORRECTION'] }),
+    );
+    expect(report.findings).toStrictEqual([]);
+    expect(report.goldEligible).toBe(true);
+  });
+
+  it('an EXTRA secondary interaction the plan did not ask for is fine', () => {
+    // A subset check, not an equality check. An author who produced a natural grounding moment on the
+    // way to the required correction has enriched the example, not violated it.
+    const report = reportFor(
+      goldTrajectory(slotOne(), {
+        userText: opening,
+        secondaryInteractionKinds: ['CORRECTION', 'GROUNDING_QA'],
+      }),
+      demanding({ requiredSecondaryKinds: ['CORRECTION'] }),
+    );
+    expect(report.findings).toStrictEqual([]);
+    expect(report.goldEligible).toBe(true);
+  });
+
+  it('a required authority class that was never supplied is refused', () => {
+    const report = reportFor(
+      goldTrajectory(slotOne(), { userText: opening }),
+      demanding({ requiredAuthorityFactClasses: ['PRICE'] }),
+    );
+    expect(report.findings.some((one) => one.reason === 'REQUIRED_AUTHORITY_CLASS_MISSING')).toBe(
+      true,
+    );
+    expect(report.goldEligible).toBe(false);
+  });
+
+  it('a required authority class supplied and never cited is refused', () => {
+    // The quieter failure. The price arrives, the assistant writes around it, and the conversation
+    // teaches the model to avoid the number rather than to use it.
+    const report = reportFor(
+      goldTrajectory(slotOne(), {
+        userText: opening,
+        authority: { supply: [{ factRef: 'fact.price.alpha', factClass: 'PRICE' }], cite: [] },
+      }),
+      demanding({ requiredAuthorityFactClasses: ['PRICE'] }),
+    );
+    expect(report.findings.some((one) => one.reason === 'REQUIRED_AUTHORITY_CLASS_UNUSED')).toBe(
+      true,
+    );
+    expect(report.findings.some((one) => one.reason === 'REQUIRED_AUTHORITY_CLASS_MISSING')).toBe(
+      false,
+    );
+    expect(report.goldEligible).toBe(false);
+  });
+
+  it('a required authority class supplied and cited passes', () => {
+    const report = reportFor(
+      goldTrajectory(slotOne(), {
+        userText: opening,
+        authority: {
+          supply: [{ factRef: 'fact.price.alpha', factClass: 'PRICE' }],
+          cite: ['fact.price.alpha'],
+        },
+      }),
+      demanding({ requiredAuthorityFactClasses: ['PRICE'] }),
+    );
+    expect(report.findings).toStrictEqual([]);
+    expect(report.goldEligible).toBe(true);
+  });
+
+  it('two required classes, only one cited: the other is named in the finding', () => {
+    const report = reportFor(
+      goldTrajectory(slotOne(), {
+        userText: opening,
+        authority: {
+          supply: [
+            { factRef: 'fact.price.alpha', factClass: 'PRICE' },
+            { factRef: 'fact.package.alpha', factClass: 'PACKAGE' },
+          ],
+          cite: ['fact.price.alpha'],
+        },
+      }),
+      demanding({ requiredAuthorityFactClasses: ['PRICE', 'PACKAGE'] }),
+    );
+    const unused = report.findings.filter(
+      (one) => one.reason === 'REQUIRED_AUTHORITY_CLASS_UNUSED',
+    );
+    expect(unused).toHaveLength(1);
+    expect(unused[0]?.locationRef).toBe('gold.v1.w1.en.discovery.01/PACKAGE');
+    expect(report.goldEligible).toBe(false);
+  });
+
+  it('two required classes, both cited, passes', () => {
+    const report = reportFor(
+      goldTrajectory(slotOne(), {
+        userText: opening,
+        authority: {
+          supply: [
+            { factRef: 'fact.price.alpha', factClass: 'PRICE' },
+            { factRef: 'fact.package.alpha', factClass: 'PACKAGE' },
+          ],
+          cite: ['fact.price.alpha', 'fact.package.alpha'],
+        },
+      }),
+      demanding({ requiredAuthorityFactClasses: ['PRICE', 'PACKAGE'] }),
+    );
+    expect(report.findings).toStrictEqual([]);
+    expect(report.goldEligible).toBe(true);
+  });
+
+  it('the plain analogue is unaffected by any of this', () => {
+    const report = validateRiyaGoldV1Corpus(tinyCorpus(), TINY_ASSIGNMENTS, releaseOptions());
+    expect(report.findings).toStrictEqual([]);
+    expect(report.goldEligible).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 4. Repetition metrics.
 // ---------------------------------------------------------------------------
 
 describe('formula degeneration is measured, and reported rather than guessed at', () => {
@@ -528,7 +741,7 @@ describe('formula degeneration is measured, and reported rather than guessed at'
 });
 
 // ---------------------------------------------------------------------------
-// 4. Progress.
+// 5. Progress records.
 // ---------------------------------------------------------------------------
 
 describe('the progress board is workflow metadata and nothing else', () => {
@@ -615,5 +828,201 @@ describe('the progress board is workflow metadata and nothing else', () => {
         }),
       ),
     ).toBe('invalid-gold-progress');
+  });
+
+  it('refuses a revision that contradicts the status', () => {
+    // Not started, but at revision three; or drafted, and still at zero. Neither needs the plan to
+    // be recognised as nonsense, so the record refuses it itself.
+    expect(
+      codeOf(() =>
+        createRiyaGoldV1Progress({
+          version: 1,
+          assignmentId: 'gold.v1.w1.en.discovery.01',
+          status: 'NOT_STARTED',
+          reviewCount: 0,
+          lastRevision: 3,
+        }),
+      ),
+    ).toBe('invalid-gold-progress');
+    expect(
+      codeOf(() =>
+        createRiyaGoldV1Progress({
+          version: 1,
+          assignmentId: 'gold.v1.w1.en.discovery.01',
+          status: 'DRAFTING',
+          trajectoryId: 'gold.v1.w1.en.discovery.01',
+          reviewCount: 0,
+          lastRevision: 0,
+        }),
+      ),
+    ).toBe('invalid-gold-progress');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 6. The progress board, against the plan it tracks.
+// ---------------------------------------------------------------------------
+
+describe('a high-risk slot cannot be called accepted on one review', () => {
+  /** Slot 01 standard, slot 02 high-risk. Two slots is enough to separate the two review rules. */
+  const BOARD_ASSIGNMENTS: readonly RiyaGoldV1AssignmentV1[] = Object.freeze([
+    must(TINY_ASSIGNMENTS[0], 'assignment 0'),
+    createRiyaGoldV1Assignment({
+      ...must(TINY_ASSIGNMENTS[1], 'assignment 1'),
+      riskClass: 'HIGH_RISK',
+    }),
+  ]);
+
+  const STANDARD = 'gold.v1.w1.en.discovery.01';
+  const HIGH_RISK = 'gold.v1.w1.en.discovery.02';
+
+  const row = (
+    assignmentId: string,
+    status: 'NOT_STARTED' | 'DRAFTING' | 'READY_FOR_REVIEW' | 'ACCEPTED' | 'REJECTED',
+    reviewCount = 0,
+    trajectoryId = assignmentId,
+  ) =>
+    createRiyaGoldV1Progress({
+      version: 1,
+      assignmentId,
+      status,
+      ...(status === 'NOT_STARTED' ? {} : { trajectoryId }),
+      ...(status === 'NOT_STARTED' ? {} : { authorRef: 'author.a01' }),
+      reviewCount,
+      lastRevision: status === 'NOT_STARTED' ? 0 : 1,
+    });
+
+  it('a standard slot accepted on one review is valid', () => {
+    const report = validateRiyaGoldV1ProgressBoard(
+      [row(STANDARD, 'ACCEPTED', 1), row(HIGH_RISK, 'NOT_STARTED')],
+      BOARD_ASSIGNMENTS,
+    );
+    expect(report.findings).toStrictEqual([]);
+    expect(report.valid).toBe(true);
+    expect(report.summary.accepted).toBe(1);
+  });
+
+  it('a high-risk slot with one review, still in review, is valid and QUEUED', () => {
+    const report = validateRiyaGoldV1ProgressBoard(
+      [row(STANDARD, 'NOT_STARTED'), row(HIGH_RISK, 'READY_FOR_REVIEW', 1)],
+      BOARD_ASSIGNMENTS,
+    );
+    expect(report.findings).toStrictEqual([]);
+    // Derived from the plan, not from a set the caller had to remember to pass.
+    expect(report.summary.highRiskAwaitingSecondReview).toBe(1);
+    expect(report.summary.accepted).toBe(0);
+  });
+
+  it('a high-risk slot ACCEPTED on one review is REFUSED', () => {
+    // The whole point of the correction. This row is internally consistent, passes the record
+    // constructor, leaves the awaiting-second-review queue, and would otherwise be counted as done.
+    const report = validateRiyaGoldV1ProgressBoard(
+      [row(STANDARD, 'NOT_STARTED'), row(HIGH_RISK, 'ACCEPTED', 1)],
+      BOARD_ASSIGNMENTS,
+    );
+    expect(report.findings.some((one) => one.reason === 'ACCEPTED_WITHOUT_REQUIRED_REVIEWS')).toBe(
+      true,
+    );
+    expect(report.valid).toBe(false);
+    // And it is NOT counted: a refused row cannot inflate the headline number.
+    expect(report.summary.accepted).toBe(0);
+    expect(report.validRecords).toBe(1);
+  });
+
+  it('a high-risk slot accepted on two reviews is valid', () => {
+    const report = validateRiyaGoldV1ProgressBoard(
+      [row(STANDARD, 'ACCEPTED', 1), row(HIGH_RISK, 'ACCEPTED', 2)],
+      BOARD_ASSIGNMENTS,
+    );
+    expect(report.findings).toStrictEqual([]);
+    expect(report.summary.accepted).toBe(2);
+    expect(report.summary.highRiskAwaitingSecondReview).toBe(0);
+  });
+
+  it('a row for an assignment that does not exist is refused', () => {
+    const report = validateRiyaGoldV1ProgressBoard(
+      [row('gold.v1.w3.hi.comparison.01', 'ACCEPTED', 1)],
+      BOARD_ASSIGNMENTS,
+    );
+    expect(report.findings.some((one) => one.reason === 'PROGRESS_WITHOUT_ASSIGNMENT')).toBe(true);
+    expect(report.summary.accepted).toBe(0);
+  });
+
+  it('two rows for one slot are refused', () => {
+    // Two answers to "is this done", and the board would report whichever it iterated last.
+    const report = validateRiyaGoldV1ProgressBoard(
+      [row(STANDARD, 'ACCEPTED', 1), row(STANDARD, 'DRAFTING', 0)],
+      BOARD_ASSIGNMENTS,
+    );
+    expect(report.findings.some((one) => one.reason === 'DUPLICATE_PROGRESS_RECORD')).toBe(true);
+    expect(report.validRecords).toBe(1);
+  });
+
+  it('a row pointing at some other trajectory is refused', () => {
+    const report = validateRiyaGoldV1ProgressBoard(
+      [row(STANDARD, 'ACCEPTED', 1, 'gold.v1.w1.en.discovery.02')],
+      BOARD_ASSIGNMENTS,
+    );
+    expect(report.findings.some((one) => one.reason === 'PROGRESS_TRAJECTORY_MISMATCH')).toBe(true);
+    expect(report.summary.accepted).toBe(0);
+  });
+
+  it('the report carries no content and no reviewer identity', () => {
+    const report = validateRiyaGoldV1ProgressBoard(
+      [row(STANDARD, 'ACCEPTED', 1), row(HIGH_RISK, 'ACCEPTED', 1)],
+      BOARD_ASSIGNMENTS,
+    );
+    const serialized = JSON.stringify(report);
+    for (const leaked of ['kitchen', 'wardrobe', 'reviewer', 'Congratulations']) {
+      expect(serialized.toLowerCase(), leaked).not.toContain(leaked.toLowerCase());
+    }
+    // Findings name a slot and a reason. That is the whole vocabulary.
+    for (const finding of report.findings) {
+      expect(Object.keys(finding).sort()).toStrictEqual(['locationRef', 'reason']);
+    }
+  });
+
+  it('the plan-blind summary is the one that can be fooled — and says so', () => {
+    // Documents the boundary rather than asserting the old behaviour was fine. Called directly with
+    // no high-risk set, the summary counts the bad row; the board validator is why that is safe.
+    const naive = summarizeRiyaGoldV1Progress([row(HIGH_RISK, 'ACCEPTED', 1)]);
+    expect(naive.accepted).toBe(1);
+    const governed = validateRiyaGoldV1ProgressBoard(
+      [row(HIGH_RISK, 'ACCEPTED', 1)],
+      BOARD_ASSIGNMENTS,
+    );
+    expect(governed.summary.accepted).toBe(0);
+    expect(governed.valid).toBe(false);
+  });
+
+  it('accepts a full, real Wave-1 board with every high-risk slot twice-reviewed', () => {
+    const wave1 = riyaGoldV1WaveAssignments(1);
+    const board = wave1.map((assignment) =>
+      row(assignment.assignmentId, 'ACCEPTED', assignment.riskClass === 'HIGH_RISK' ? 2 : 1),
+    );
+    const report = validateRiyaGoldV1ProgressBoard(board, wave1);
+    expect(report.findings).toStrictEqual([]);
+    expect(report.summary.accepted).toBe(72);
+    expect(report.summary.highRiskAwaitingSecondReview).toBe(0);
+  });
+
+  it('and refuses that same board the moment one high-risk slot drops a review', () => {
+    const wave1 = riyaGoldV1WaveAssignments(1);
+    const slipped = must(
+      wave1.find((one) => one.riskClass === 'HIGH_RISK'),
+      'a high-risk Wave-1 slot',
+    ).assignmentId;
+    const board = wave1.map((assignment) =>
+      row(
+        assignment.assignmentId,
+        'ACCEPTED',
+        assignment.riskClass === 'HIGH_RISK' && assignment.assignmentId !== slipped ? 2 : 1,
+      ),
+    );
+    const report = validateRiyaGoldV1ProgressBoard(board, wave1);
+    expect(report.findings).toStrictEqual([
+      { reason: 'ACCEPTED_WITHOUT_REQUIRED_REVIEWS', locationRef: slipped },
+    ]);
+    expect(report.summary.accepted).toBe(71);
   });
 });

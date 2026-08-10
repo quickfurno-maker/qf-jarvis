@@ -40,9 +40,35 @@ human-authored — provenance is a statement about who produced the words, not a
 them. Model-assisted expansion has its own provenance (`TEACHER_GENERATED_SYNTHETIC`), its own
 governance, and its own later slice.
 
-The Gold corpus validator enforces this rather than documenting it: any trajectory whose source kind
-is not `HUMAN_AUTHORED_SYNTHETIC` produces a `NOT_HUMAN_AUTHORED` finding, and two accepted reviews
-do not change that.
+The Gold corpus validator applies the rule to what the artifact **declares**: any trajectory whose
+source kind is not `HUMAN_AUTHORED_SYNTHETIC` produces a `NOT_HUMAN_AUTHORED` finding, and two
+accepted reviews do not change that.
+
+#### The trust boundary, stated exactly
+
+**Human-authorship classification is enforced; physical authorship is process-attested, not
+cryptographically inferred.**
+
+What the code does:
+
+- `source.kind` and `source.sourceRef` record the **declared** provenance, and they are bound into the
+  trajectory artifact alongside the dialogue — the same SHA-256 identity covers all of it, so a
+  provenance claim cannot be edited apart from the words it describes.
+- Gold validation refuses declared teacher content outright.
+- Review never reclassifies teacher content, at any review count.
+
+What the code cannot do, and does not claim to:
+
+- It cannot tell a human-written sentence from a model-written one. No deterministic text validator
+  can, and **there is no AI-authorship detector here** — adding one would mean invoking a model to
+  police a corpus built specifically to avoid that.
+- A caller who deliberately declares AI-written dialogue as `HUMAN_AUTHORED_SYNTHETIC` commits a
+  governance violation that the prose validator will not detect.
+
+What makes the claim trustworthy is therefore process, not mathematics: a controlled authoring
+workflow, provenance bound to the artifact, Git history naming who committed what, and independent
+review by somebody other than the author. That is **auditability**, and it is the right standard for
+this dataset. It is not proof, and this ADR does not pretend otherwise.
 
 ### 2. HGV1-A ships ZERO Gold dialogue
 
@@ -169,11 +195,39 @@ is not a valid dataset is not a valid Gold corpus, and `goldEligible` requires b
 The matrix is what HGV1-A adds. A dataset can pass every generic gate and still be the wrong corpus —
 300 discovery examples and 60 of everything else would sail through RID-F1 and be useless.
 
-### 15. The matrix is checked slot by slot
+### 15. EVERY field the assignment fixes is checked, slot by slot
 
-Split, language, primary kind, persona, risk class and provenance must each match the assignment, and
-each mismatch is its own finding. A single aggregate "does not match" would tell an author to re-read
-their brief; six named findings tell them which field to fix.
+Split, language, primary kind, persona, risk class, **difficulty**, **starting phase**, provenance and
+depth must each match the assignment, and each mismatch is its own finding. A single aggregate "does
+not match" would tell an author to re-read their brief; a named finding tells them which field to fix.
+
+An assignment field nobody validates is a field the corpus is free to drift on — and it drifts in one
+direction, toward the easier conversation. An EDGE slot quietly rewritten as STANDARD, or a
+mid-conversation `BUDGET_TIMELINE` opening rewritten as a fresh `INTRO`, satisfies the total, the
+languages and the kinds while dropping exactly what the slot existed to teach.
+
+Two further checks are structural rather than scalar:
+
+- **Required secondary kinds** are a SUBSET check. An assignment naming `CORRECTION` as secondary
+  says the conversation must contain a correction; an author who also produced a natural
+  `GROUNDING_QA` moment has enriched the example, not violated it. Missing one is
+  `REQUIRED_SECONDARY_KIND_MISSING`.
+- **Required authority fact classes** are checked in two halves, because the two failures are
+  different. `REQUIRED_AUTHORITY_CLASS_MISSING` means the authoritative context never supplied a fact
+  of that class. `REQUIRED_AUTHORITY_CLASS_UNUSED` means it supplied one and no assistant turn ever
+  cited it — a conversation about price where the price arrives and nobody mentions it is not the
+  conversation the slot asked for, and it is exactly what an author produces when they write around a
+  fact they found awkward.
+
+These read the resolved trajectory structure. RID-F1 already proves citation order and authority
+consistency, so nothing here re-derives that, and nothing here infers meaning from prose.
+
+**Forbidden patterns stay human-reviewed.** `forbiddenPatterns` is on the assignment as an
+instruction to the author and a focus for the reviewer. Where a deterministic scanner already owns a
+pattern — privacy, secrets, hidden reasoning fields, multiple discovery questions in a turn — that
+scanner enforces it. The rest (false urgency, canned openers, guilt) are judgement calls, and
+pretending to enforce them with a keyword list would produce a check that misses the real cases and
+fails the innocent ones, while telling reviewers they no longer need to look.
 
 ### 16. Formula degeneration is MEASURED, and reported rather than gated
 
@@ -213,7 +267,7 @@ standard slot, two distinct accepted reviews for a high-risk one, and never from
 it. The progress board reports `highRiskAwaitingSecondReview` because that is the number that stalls
 a wave.
 
-### 20. The progress board is workflow metadata and carries NO content
+### 20. The progress board is workflow metadata, carries NO content, and is validated AGAINST THE PLAN
 
 Assignment id, status, trajectory reference, author reference, review count, last revision. No
 dialogue, no reviewer name, no free-text note.
@@ -221,6 +275,27 @@ dialogue, no reviewer name, no free-text note.
 A progress record with a notes field becomes a place where conversation content lives outside the
 corpus, unvalidated and ungated, and where a reviewer's opinion of a colleague is stored in Git
 forever.
+
+#### A record cannot police the review rule by itself
+
+A record knows its status and its review count. It does not know its assignment's RISK CLASS — and
+the requirement in §19 depends entirely on that. So `HIGH_RISK` slot, `ACCEPTED`, `reviewCount: 1` is
+internally consistent and globally wrong, and wrong in the direction that hides itself: the slot
+leaves the awaiting-second-review queue and joins the accepted count, so a wave looks finished while a
+high-risk conversation has been read by one person.
+
+`validateRiyaGoldV1ProgressBoard(records, assignments)` is therefore the authority. It holds the plan
+and proves: the assignment exists; no slot has two rows; a drafted row's trajectory reference equals
+its assignment id; a `STANDARD` acceptance carries at least one review; a `HIGH_RISK` acceptance
+carries at least two. A row that fails any of these is **excluded from the summary** — counting it
+anyway would mean the headline number reports work the same report has just refused.
+
+Teaching the record constructor to infer risk from an id was the alternative and it is worse: two
+sources of truth for the plan, and the wrong one is the one that is easy to reach. What a single
+record _can_ contradict, it still checks itself — a `NOT_STARTED` slot is at revision zero, and a
+drafted one is at one or more.
+
+The corpus review gate remains the artifact authority. The board tracks work; it does not certify it.
 
 ### 21. The Gold slice is a SEPARATE subpath, and no runtime may import it
 
@@ -253,7 +328,11 @@ Release evidence never starts a training run. That remains a separate, separatel
 
 - The shape of the corpus is a checkable table before anyone writes a sentence, so a distribution
   defect costs an afternoon rather than two hundred conversations.
-- "Human Gold" is a property the validator enforces, not a label the pipeline trusts.
+- Declared provenance is enforced rather than trusted, and the limit of that enforcement is written
+  down instead of implied.
+- A finished conversation must fulfil every field of its slot, so the corpus cannot drift toward the
+  easier version of the plan while every count still looks right.
+- A wave cannot report itself finished while a high-risk slot has been read by one person.
 - Authors receive unambiguous, validated assignments instead of a rubric and a target number.
 - The corpus cannot silently degenerate into one voice, because degeneration is measured.
 - The first 72 conversations are allowed to change the plan for the remaining 288.
@@ -264,6 +343,12 @@ Release evidence never starts a training run. That remains a separate, separatel
 Owner-locked. Changing any of these requires a new ADR:
 
 - human-authored means a human wrote the words, and no approval reclassifies AI-written dialogue;
+- classification is enforced and physical authorship is process-attested — no AI-authorship detector,
+  and no claim of cryptographic proof of who typed a sentence;
+- every assignment field is validated against the finished trajectory, including difficulty, starting
+  phase, required secondary kinds and required authority-fact classes (supplied AND cited);
+- forbidden patterns without an existing deterministic owner stay human-reviewed rather than
+  pretend-enforced;
 - the Gold slice ships no dialogue of its own;
 - 360 as 5 waves × 3 languages × 12 kinds × 2, with waves balanced rather than sequential;
 - waves 1–4 TRAIN, wave 5 VALIDATION, no populated holdout in V1;
@@ -275,7 +360,8 @@ Owner-locked. Changing any of these requires a new ADR:
 - repetition metrics are reported, and the V1 threshold is set by Wave-1 calibration;
 - Wave-1 calibration gates waves 2–5, and may change the plan but not the rules;
 - review is risk-based, content-free and never by the author;
-- the progress board carries no content and no reviewer name;
+- the progress board carries no content and no reviewer name, and is validated against the plan, so a
+  high-risk slot cannot be accepted on one review or counted after being refused;
 - the Gold authoring system is an offline subpath no runtime may import;
 - no model, provider, judge, embedding, tokenizer, training framework, migration or deployment;
 - release evidence stays `syntheticOnly` with `trainingApproval: false`.

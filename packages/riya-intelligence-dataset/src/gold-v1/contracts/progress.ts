@@ -63,6 +63,12 @@ export function createRiyaGoldV1Progress(input: RiyaGoldV1ProgressInput): RiyaGo
   if (parsed.data.status === 'ACCEPTED' && parsed.data.reviewCount === 0) {
     throw new RiyaDatasetError('invalid-gold-progress');
   }
+  // Revision and status must agree. A slot nobody has started is at revision zero, and a slot that
+  // has been drafted is at one or more. These need no knowledge of the plan, so they belong here
+  // rather than at the board boundary -- what a single record can contradict, a single record checks.
+  if ((parsed.data.status === 'NOT_STARTED') !== (parsed.data.lastRevision === 0)) {
+    throw new RiyaDatasetError('invalid-gold-progress');
+  }
   return Object.freeze({
     version: 1 as const,
     assignmentId: parsed.data.assignmentId,
@@ -105,6 +111,11 @@ function partsOf(assignmentId: string): {
  *
  * `highRiskAwaitingSecondReview` is the number worth watching during a wave: high-risk slots stall
  * there, and a board that only reported "accepted" would make the queue invisible until the end.
+ *
+ * **This function is plan-blind.** It counts what the records say, and a record can say something the
+ * plan forbids — a high-risk slot marked accepted on one review is representable here and would be
+ * counted as accepted. `validateRiyaGoldV1ProgressBoard` is the authority: it holds the assignments,
+ * refuses rows the plan contradicts, and summarizes only what survived.
  */
 export function summarizeRiyaGoldV1Progress(
   records: readonly RiyaGoldV1ProgressV1[],

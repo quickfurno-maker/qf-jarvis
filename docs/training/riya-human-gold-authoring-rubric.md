@@ -9,6 +9,11 @@ You have been assigned a slot. This is how to write it.
 > composed by a language model, the trajectory is not Human Gold, and labelling it so makes every
 > later claim about this dataset false. There is a legitimate path for model-assisted content
 > (`TEACHER_GENERATED_SYNTHETIC`, separately governed, later). This is not it.
+>
+> Nothing in the tooling can catch you breaking this. The validator refuses content that _declares_ a
+> teacher source; it cannot tell a human sentence from a generated one, and no AI-authorship detector
+> exists here or will. Classification is enforced; authorship is process-attested. The rule holds
+> because you hold it.
 
 ---
 
@@ -43,8 +48,13 @@ Your brief gives you:
 And the assignment itself fixes: language, primary interaction kind, persona, difficulty, risk class,
 starting phase, and a target depth in assistant turns.
 
-**Everything in the assignment is binding.** The validator checks language, kind, persona, risk and
-split against the plan, and it will not accept a conversation that quietly became a different one.
+**Everything in the assignment is binding.** The validator checks split, language, kind, persona,
+risk, difficulty and starting phase against the plan; it requires every named secondary interaction to
+actually occur; and it requires every named authority fact class to be both supplied in context _and_
+cited by the assistant. It will not accept a conversation that quietly became a different one.
+
+That last one catches the quiet version of the mistake. Supplying the price and then writing around it
+— never quite mentioning the number — passes a naive reading and teaches the model to avoid the fact.
 
 Depth may drift by **one turn** from the target if the conversation genuinely needs it. Beyond one, it
 is reported and a reviewer decides.

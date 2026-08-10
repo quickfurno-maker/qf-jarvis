@@ -102,5 +102,10 @@ export {
   RIYA_GOLD_REQUIRED_SOURCE_KIND,
 } from './service/validate-corpus.js';
 export type { RiyaGoldCorpusReport } from './service/validate-corpus.js';
+export {
+  validateRiyaGoldV1ProgressBoard,
+  RIYA_GOLD_REQUIRED_ACCEPTED_REVIEWS,
+} from './service/validate-progress.js';
+export type { RiyaGoldProgressBoardReport } from './service/validate-progress.js';
 export { riyaGoldRepetitionMetrics, assistantTurnCountOf } from './service/repetition.js';
 export type { RiyaGoldRepetitionMetrics, RiyaGoldRepeatedPhrase } from './service/repetition.js';

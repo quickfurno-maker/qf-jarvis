@@ -131,8 +131,11 @@ becomes unfixable. The gate exists to make the expensive mistake cheap.
 
 - [ ] 72 accepted trajectories, fulfilling exactly the 72 Wave-1 assignments — none missing, none
       extra, none duplicated.
-- [ ] Every one `HUMAN_AUTHORED_SYNTHETIC`, and every one actually written by a person.
-- [ ] Zero Gold matrix findings — split, language, kind, persona, risk and depth all as assigned.
+- [ ] Every one declared `HUMAN_AUTHORED_SYNTHETIC` — and every one **actually** written by a person,
+      which is a process attestation the tooling cannot make for you.
+- [ ] Zero Gold matrix findings — split, language, kind, persona, risk, difficulty, starting phase and
+      depth all as assigned; required secondary kinds present; required authority classes supplied and
+      cited.
 - [ ] The full RID-F1 gate clean: zero protected-exam leakage (exact or near), zero unresolved
       cross-split quarantine, zero privacy findings, zero unsupported business facts, zero lineage
       violations.
@@ -169,6 +172,9 @@ The progress board carries assignment id, status, trajectory reference, author r
 and last revision — and no content, no reviewer name, no notes. Its summary is deterministic: counts
 by status, wave, language and interaction, plus `highRiskAwaitingSecondReview`, which is the number
 that actually tells you whether a wave is stuck.
+
+The board is validated against the plan, so a high-risk slot cannot be marked accepted on a single
+review, and a refused row is excluded from the accepted count rather than quietly inflating it.
 
 ---
 
