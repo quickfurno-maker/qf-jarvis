@@ -32,6 +32,7 @@
  * paraphrase of the same sentence rather than the same topic. Texts shorter than five tokens produce
  * no 5-grams at all and are decided by the run test alone.
  */
+import { RiyaDatasetError } from '../contracts/errors.js';
 import {
   jaccard,
   longestCommonRun,
@@ -39,6 +40,7 @@ import {
   normalizeForComparison,
   tokenize,
 } from './normalization.js';
+import { sha256OfCanonical } from './sha256.js';
 
 /** A contiguous verbatim run this long or longer is a near collision. */
 export const P10_NEAR_MATCH_MIN_COMMON_RUN_TOKENS = 8;
@@ -64,6 +66,20 @@ interface IndexedEntry {
 }
 
 export interface ProtectedTextIndex {
+  /**
+   * How many protected entries this index actually holds, and a SHA-256 over their canonical
+   * content (owner correction on PR #112).
+   *
+   * These exist so a RELEASE POLICY can PIN the exam corpus a dataset was validated against. Without
+   * them the firewall was optional in practice: an empty index matches nothing, produces no finding,
+   * and yields `eligible: true` — a clean-looking release that never ran the check at all.
+   *
+   * The digest is over `[protectedRef, normalizedText]` pairs, sorted, so the same corpus supplied in
+   * a different order is the same identity. No protected TEXT is recoverable from it, and none of it
+   * reaches a report or evidence.
+   */
+  readonly entryCount: number;
+  readonly indexSha256: string;
   /** Every protected identifier, so an id collision can be refused. */
   readonly protectedRefs: ReadonlySet<string>;
   /** The namespace prefixes those identifiers occupy, derived rather than hard-coded. */
@@ -89,19 +105,42 @@ function namespaceOf(ref: string): string {
   return segments.length >= 2 ? `${segments[0] ?? ''}.${segments[1] ?? ''}` : ref;
 }
 
-/** Build the deterministic protected index. Empty input is legal and matches nothing. */
+/**
+ * Build the deterministic protected index.
+ *
+ * An EMPTY index is legal to construct and matches nothing — but a release policy that expects a
+ * non-zero entry count will refuse it, which is how "the firewall actually ran" became checkable
+ * rather than assumed.
+ *
+ * A repeated `protectedRef` carrying DIFFERENT text is refused outright: the pair is the index's
+ * identity, and silently keeping the first would make two different corpora hash the same.
+ */
 export function createProtectedTextIndex(
   entries: readonly ProtectedTextEntry[],
 ): ProtectedTextIndex {
   const protectedRefs = new Set<string>();
   const protectedNamespaces = new Set<string>();
   const byNormalized = new Map<string, string>();
+  const byRef = new Map<string, string>();
   const indexed: IndexedEntry[] = [];
 
   for (const entry of entries) {
+    if (typeof entry.protectedRef !== 'string' || entry.protectedRef.length === 0) {
+      throw new RiyaDatasetError('invalid-protected-index');
+    }
+    const normalized = normalizeForComparison(entry.text);
+    const existing = byRef.get(entry.protectedRef);
+    if (existing !== undefined) {
+      if (existing !== normalized) {
+        throw new RiyaDatasetError('invalid-protected-index');
+      }
+      // An exact repeat is harmless and contributes nothing new.
+      continue;
+    }
+    byRef.set(entry.protectedRef, normalized);
+
     protectedRefs.add(entry.protectedRef);
     protectedNamespaces.add(namespaceOf(entry.protectedRef));
-    const normalized = normalizeForComparison(entry.text);
     if (normalized.length === 0) {
       continue;
     }
@@ -117,7 +156,14 @@ export function createProtectedTextIndex(
     });
   }
 
+  // Sorted before hashing, so supply order cannot change a corpus's identity.
+  const identity = [...byRef.entries()]
+    .map(([ref, normalized]) => [ref, normalized])
+    .sort((a, b) => ((a[0] ?? '') < (b[0] ?? '') ? -1 : (a[0] ?? '') > (b[0] ?? '') ? 1 : 0));
+
   return Object.freeze({
+    entryCount: byRef.size,
+    indexSha256: sha256OfCanonical(identity),
     protectedRefs,
     protectedNamespaces,
     byNormalized,

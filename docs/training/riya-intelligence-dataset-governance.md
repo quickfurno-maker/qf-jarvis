@@ -174,6 +174,38 @@ recompute its digest.
 
 ---
 
+## 7a. What a release is bound to
+
+A validation run is a **dry run** unless it is given a release policy. Dry runs are useful and are
+never eligible.
+
+A `RiyaDatasetReleasePolicyV1` carries:
+
+| Field                        | Why                                                                                                                                       |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `policyId` / `policyVersion` | Which bar this release cleared.                                                                                                           |
+| `coveragePolicy`             | The exact coverage minima validation applied — bound, not passed alongside.                                                               |
+| `protectedCorpusRef`         | An opaque name for the exam corpus. Never its content.                                                                                    |
+| `protectedIndexSha256`       | Its digest. Validation refuses to bind if the index it was handed differs.                                                                |
+| `protectedEntryCount`        | How many entries it must hold. Zero is refused: a policy expecting no exam corpus is a policy disabling the firewall, and that is an ADR. |
+
+This is why: an absent protected index used to be substituted with an empty one, which matches
+nothing, produces no finding and yields an eligible report. A release that looks clean precisely
+because the check never ran.
+
+The report then carries what actually gated it — both policy identities, the coverage policy's
+digest, the protected corpus ref, its digest and its entry count — plus two of its own:
+
+- **`validatedDatasetSha256`** — over the sorted identity of every validated trajectory. The manifest
+  recomputes the same value from its records, so a report and a manifest are provably the same
+  corpus. Pairing them on record COUNT let two different datasets of the same size pair cleanly.
+- **`reportSha256`** — over every other report field, so an edited verdict or a deleted finding is
+  detectable.
+
+Release evidence verifies both digests, requires eligibility, recomputes the dataset digest from the
+manifest, and **copies** the policy identity from the report. There is no way to name a policy the
+validation did not apply.
+
 ## 8. Release
 
 A dataset is `eligible` only when every one of these is empty: duplicate ids, lineage-split
@@ -189,6 +221,23 @@ reviewed. Whether to spend a training run on it is a human decision with inputs 
 see.
 
 ---
+
+## 8a. Authority consistency for business facts
+
+Beyond "the cited fact existed earlier":
+
+- `USE_CORE_TRUTH` needs at least one citation, and every cited fact must come from a
+  `CORE_RUNTIME_SYNTHETIC` context.
+- `USE_GOVERNED_KNOWLEDGE` needs at least one, all from `GOVERNED_KNOWLEDGE_SYNTHETIC`.
+- Any other decision may cite **nothing**. An annotation that cites a fact while claiming it did
+  something else does not describe what it did.
+- A reply that makes a high-confidence volatile claim — an explicit company price, a warranty term, a
+  service-availability statement, a refund or cancellation commitment, a current-status assertion —
+  must cite a fact of the matching class, whatever its decision.
+
+The claim scanner reads assistant text only and is deliberately narrow. `PACKAGE`, `PROCESS` and
+`OTHER_BUSINESS_FACT` are not detected: their language is not separable from ordinary conversation,
+and a gate that fired on "budgets in that range vary" would be switched off within a month.
 
 ## 9. What is not authorized yet
 

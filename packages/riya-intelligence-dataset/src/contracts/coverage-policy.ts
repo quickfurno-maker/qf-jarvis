@@ -48,6 +48,8 @@ export interface RiyaDatasetCoveragePolicyV1 {
 }
 
 export interface RiyaDatasetCoveragePolicyInput {
+  /** Present when re-proving an already-canonical policy. Absent when authoring a new one. */
+  readonly version?: 1;
   readonly policyId: string;
   readonly policyVersion: number;
   readonly minimumTotalTrajectories?: number;
@@ -62,6 +64,10 @@ const COUNT = z.int().min(0).max(1_000_000);
 
 const policySchema = z
   .object({
+    // Accepted so a CANONICAL policy round-trips through this constructor unchanged. The release
+    // policy re-proves its nested coverage policy, and a re-proof that refused its own output would
+    // make every bound validation impossible (owner correction on PR #112).
+    version: z.literal(1).optional(),
     policyId: z
       .string()
       .min(1)

@@ -299,6 +299,7 @@ describe('the root surface is vocabularies, factories and services', () => {
       'createRiyaDatasetAuthoritativeContextTurn',
       'createRiyaDatasetCoveragePolicy',
       'createRiyaDatasetReleaseEvidence',
+      'createRiyaDatasetReleasePolicy',
       'createRiyaDatasetUserTurn',
       'createRiyaIntelligenceDatasetManifest',
       'createRiyaIntelligenceTrajectory',
@@ -308,6 +309,7 @@ describe('the root surface is vocabularies, factories and services', () => {
       'deriveRiyaSftSamplesForDataset',
       'parseRiyaTrajectoryJsonlLine',
       'riyaDatasetManifestIntegrityHolds',
+      'riyaDatasetReportIntegrityHolds',
       'serializeRiyaTrajectoryJsonlLine',
       'validateRiyaIntelligenceDataset',
     ]);
@@ -359,7 +361,10 @@ describe('the root surface is vocabularies, factories and services', () => {
       'discoveryTurns',
       'emptyTrainingState',
       'partialTrainingState',
+      'releasableOptions',
+      'releasePolicyFor',
       'supportedPriceTurns',
+      'syntheticProtectedIndex',
       'syntheticTrajectory',
     ]);
   });

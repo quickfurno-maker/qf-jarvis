@@ -21,11 +21,20 @@
  */
 import { z } from 'zod';
 
+import { detectVolatileClaimClasses } from '../internal/business-fact-scan.js';
 import { RiyaDatasetError } from './errors.js';
 import { createRiyaTrainingReview } from './review.js';
 import type { RiyaTrainingReviewV1 } from './review.js';
+import { createRiyaTrainingState } from './training-state.js';
 import type { RiyaTrainingStateV1 } from './training-state.js';
+import {
+  createRiyaDatasetAssistantTurn,
+  createRiyaDatasetAuthoritativeContextTurn,
+  createRiyaDatasetUserTurn,
+} from './turns.js';
 import type { RiyaDatasetTurnV1 } from './turns.js';
+import { RIYA_DATASET_FACT_BEARING_DECISIONS } from './vocabularies.js';
+import type { RiyaDatasetContextAuthority, RiyaDatasetFactClass } from './vocabularies.js';
 import {
   RIYA_DATASET_DIFFICULTIES,
   RIYA_DATASET_INTERACTION_KINDS,
@@ -120,8 +129,34 @@ const trajectorySchema = z
   })
   .strict();
 
-const isTurn = (value: unknown): value is RiyaDatasetTurnV1 =>
-  value !== null && typeof value === 'object' && 'type' in value;
+/**
+ * Re-prove ONE raw turn through the constructor that owns its shape.
+ *
+ * The first implementation checked only that a turn was an object with a `type` and then returned the
+ * caller's object untouched. That made the JSONL promise false: a parsed record was validated at the
+ * trajectory level and trusted at the turn level, so an assistant annotation carrying a
+ * chain-of-thought field, a context turn with a duplicate fact, or a user turn with empty text all
+ * survived a round trip.
+ *
+ * The FULL raw value is dispatched here, so each owner's `.strict()` schema sees everything, and only
+ * what the constructor returns is kept.
+ */
+function reproveTurn(value: unknown): RiyaDatasetTurnV1 {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new RiyaDatasetError('invalid-turn');
+  }
+  const kind = (value as { type?: unknown }).type;
+  switch (kind) {
+    case 'USER':
+      return createRiyaDatasetUserTurn(value as never);
+    case 'AUTHORITATIVE_CONTEXT':
+      return createRiyaDatasetAuthoritativeContextTurn(value as never);
+    case 'ASSISTANT':
+      return createRiyaDatasetAssistantTurn(value as never);
+    default:
+      throw new RiyaDatasetError('invalid-turn');
+  }
+}
 
 /**
  * Validate and freeze a trajectory. Throws `invalid-trajectory`.
@@ -159,10 +194,14 @@ export function createRiyaIntelligenceTrajectory(
     throw new RiyaDatasetError('invalid-trajectory');
   }
 
-  const turns = input.turns;
-  if (!turns.every(isTurn)) {
-    throw new RiyaDatasetError('invalid-trajectory');
-  }
+  // DEEP re-proof of the nested state. The outer schema accepts it as unknown on purpose -- the
+  // state contract is the authority on its own shape, and restating it here would be a second copy
+  // to keep in step with the first.
+  const initialState = createRiyaTrainingState(input.initialState);
+
+  // DEEP re-proof of every turn, through the constructor that owns it. Only the canonical results
+  // are used for the ordering and fact checks below, and only they are returned.
+  const turns: readonly RiyaDatasetTurnV1[] = input.turns.map((turn) => reproveTurn(turn));
 
   const turnRefs = turns.map((turn) => turn.turnRef);
   if (new Set(turnRefs).size !== turnRefs.length) {
@@ -188,24 +227,67 @@ export function createRiyaIntelligenceTrajectory(
   }
 
   // Context precedes use. Walking forward and collecting facts as they appear means a citation can
-  // only ever resolve to something already supplied.
-  const availableFacts = new Set<string>();
+  // only ever resolve to something already supplied -- and the map carries the AUTHORITY and the
+  // CLASS, not just the ref, because both are needed below.
+  const availableFacts = new Map<
+    string,
+    { readonly authority: RiyaDatasetContextAuthority; readonly factClass: RiyaDatasetFactClass }
+  >();
   for (const turn of turns) {
     if (turn.type === 'AUTHORITATIVE_CONTEXT') {
       for (const fact of turn.facts) {
         if (availableFacts.has(fact.factRef)) {
           throw new RiyaDatasetError('invalid-trajectory');
         }
-        availableFacts.add(fact.factRef);
+        availableFacts.set(fact.factRef, {
+          authority: turn.authority,
+          factClass: fact.factClass,
+        });
       }
       continue;
     }
-    if (turn.type === 'ASSISTANT') {
-      for (const ref of turn.annotation.supportedFactRefs) {
-        if (!availableFacts.has(ref)) {
-          // A fact cited before it exists, or one that never exists at all.
-          throw new RiyaDatasetError('unsupported-business-fact');
-        }
+    if (turn.type !== 'ASSISTANT') {
+      continue;
+    }
+
+    const supported = turn.annotation.supportedFactRefs.map((ref) => {
+      const fact = availableFacts.get(ref);
+      if (fact === undefined) {
+        // A fact cited before it exists, or one that never exists at all.
+        throw new RiyaDatasetError('unsupported-business-fact');
+      }
+      return fact;
+    });
+
+    const decision = turn.annotation.decision;
+
+    // A decision that NAMES an authority must actually rest on one, and on THAT one. Proving only
+    // that a cited ref existed left the commonest failure representable: `USE_CORE_TRUTH` with an
+    // empty citation list -- a turn claiming Core said something while citing nothing.
+    if (RIYA_DATASET_FACT_BEARING_DECISIONS.has(decision)) {
+      if (supported.length === 0) {
+        throw new RiyaDatasetError('unsupported-business-fact');
+      }
+      const requiredAuthority: RiyaDatasetContextAuthority =
+        decision === 'USE_CORE_TRUTH' ? 'CORE_RUNTIME_SYNTHETIC' : 'GOVERNED_KNOWLEDGE_SYNTHETIC';
+      if (supported.some((fact) => fact.authority !== requiredAuthority)) {
+        // Governed knowledge and Core are different authorities with different update paths and
+        // different consequences for being wrong. A corpus that blurred them would teach the model
+        // that they are interchangeable.
+        throw new RiyaDatasetError('unsupported-business-fact');
+      }
+    } else if (supported.length > 0) {
+      // Any other decision citing a fact is an annotation that does not describe what it did. If a
+      // future decision genuinely needs citations, that is an ADR, not a loosened check.
+      throw new RiyaDatasetError('unsupported-business-fact');
+    }
+
+    // And the reply itself must not assert a volatile business fact it never cited. Narrow, and only
+    // for shapes that are unambiguous -- see `internal/business-fact-scan.ts`.
+    const claimed = detectVolatileClaimClasses(turn.text);
+    for (const factClass of claimed) {
+      if (!supported.some((fact) => fact.factClass === factClass)) {
+        throw new RiyaDatasetError('unsupported-business-fact');
       }
     }
   }
@@ -239,7 +321,7 @@ export function createRiyaIntelligenceTrajectory(
         ? {}
         : { teacherRef: parsed.data.source.teacherRef }),
     }),
-    initialState: input.initialState,
+    initialState,
     turns: Object.freeze([...turns]),
     // Sorted by ref, so a trajectory's bytes do not depend on which reviewer submitted first.
     review: Object.freeze(

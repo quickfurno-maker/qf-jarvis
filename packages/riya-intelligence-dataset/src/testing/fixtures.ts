@@ -23,6 +23,11 @@ import { createRiyaTrainingState } from '../contracts/training-state.js';
 import type { RiyaTrainingStateV1 } from '../contracts/training-state.js';
 import { createRiyaIntelligenceTrajectory } from '../contracts/trajectory.js';
 import type { RiyaIntelligenceTrajectoryV1 } from '../contracts/trajectory.js';
+import { createRiyaDatasetCoveragePolicy } from '../contracts/coverage-policy.js';
+import { createRiyaDatasetReleasePolicy } from '../contracts/release-policy.js';
+import type { RiyaDatasetReleasePolicyV1 } from '../contracts/release-policy.js';
+import { createProtectedTextIndex } from '../internal/leakage.js';
+import type { ProtectedTextEntry, ProtectedTextIndex } from '../internal/leakage.js';
 import {
   RIYA_DATASET_BASELINE_REVIEW_DIMENSIONS,
   RIYA_DATASET_OBJECTION_REVIEW_DIMENSIONS,
@@ -197,4 +202,55 @@ export function syntheticTrajectory(
     turns: options.turns ?? discoveryTurns(),
     review: options.review ?? acceptedReviews(risk === 'HIGH_RISK' ? 2 : 1),
   });
+}
+
+/**
+ * A release policy PINNED to whatever protected corpus a spec supplies.
+ *
+ * Built from the index rather than hand-written, because the whole point of the binding is that the
+ * policy names the corpus that was actually used -- a spec that typed the digest by hand would be
+ * asserting its own arithmetic rather than the gate.
+ */
+export function releasePolicyFor(
+  protectedIndex: ProtectedTextIndex,
+  options: { readonly minimumTotalTrajectories?: number } = {},
+): RiyaDatasetReleasePolicyV1 {
+  return createRiyaDatasetReleasePolicy({
+    policyId: 'riya-dataset-release-v1',
+    policyVersion: 1,
+    coveragePolicy: createRiyaDatasetCoveragePolicy({
+      policyId: 'riya-dataset-coverage-v1',
+      policyVersion: 1,
+      ...(options.minimumTotalTrajectories === undefined
+        ? {}
+        : { minimumTotalTrajectories: options.minimumTotalTrajectories }),
+    }),
+    protectedCorpusRef: 'protected.corpus.synthetic',
+    protectedIndexSha256: protectedIndex.indexSha256,
+    protectedEntryCount: protectedIndex.entryCount,
+  });
+}
+
+/** A tiny synthetic protected corpus, so a spec can bind without touching the real exam. */
+export function syntheticProtectedIndex(
+  entries: readonly ProtectedTextEntry[] = [
+    {
+      protectedRef: 'protected.alpha.en.one.01',
+      text: 'A protected synthetic evaluation sentence.',
+    },
+    {
+      protectedRef: 'protected.alpha.en.two.01',
+      text: 'A second protected synthetic evaluation sentence.',
+    },
+  ],
+): ProtectedTextIndex {
+  return createProtectedTextIndex(entries);
+}
+
+/** The bound options a releasable validation needs. */
+export function releasableOptions(protectedIndex: ProtectedTextIndex = syntheticProtectedIndex()): {
+  readonly protectedIndex: ProtectedTextIndex;
+  readonly releasePolicy: RiyaDatasetReleasePolicyV1;
+} {
+  return { protectedIndex, releasePolicy: releasePolicyFor(protectedIndex) };
 }

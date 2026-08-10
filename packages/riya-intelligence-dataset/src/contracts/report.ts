@@ -33,8 +33,34 @@ export interface RiyaDatasetFindingLocation {
   readonly counterpartRef?: string;
 }
 
+/** Why a release attestation could not be bound. A closed reason, never content. */
+export type RiyaDatasetReleaseBindingFailure =
+  | 'RELEASE_POLICY_MISSING'
+  | 'PROTECTED_INDEX_MISSING'
+  | 'PROTECTED_INDEX_COUNT_MISMATCH'
+  | 'PROTECTED_INDEX_DIGEST_MISMATCH';
+
 export interface RiyaDatasetReleaseReportV1 {
   readonly version: 1;
+  /**
+   * What this report is bound to (owner correction on PR #112).
+   *
+   * Absent when validation ran without a release policy — which is legal for a dry run and never
+   * eligible for release. Present, these say WHICH policy, WHICH coverage bar and WHICH protected
+   * exam corpus actually gated this dataset, so evidence can copy them rather than accept a caller's
+   * word for it.
+   */
+  readonly releasePolicyId?: string;
+  readonly releasePolicyVersion?: number;
+  readonly coveragePolicyId?: string;
+  readonly coveragePolicyVersion?: number;
+  readonly coveragePolicySha256?: string;
+  readonly protectedCorpusRef?: string;
+  readonly protectedIndexSha256?: string;
+  readonly protectedEntryCount?: number;
+  readonly releaseBindingFailures: readonly RiyaDatasetReleaseBindingFailure[];
+  /** SHA-256 over the identity of every validated trajectory. The pairing proof. */
+  readonly validatedDatasetSha256: string;
   readonly totalTrajectories: number;
   readonly totalAssistantTurns: number;
   readonly countsBySplit: Readonly<Record<RiyaDatasetSplit, number>>;
@@ -66,17 +92,24 @@ export interface RiyaDatasetReleaseReportV1 {
   }[];
   /** True only when every blocking list is empty AND no quarantine is unresolved. */
   readonly eligible: boolean;
+  /** SHA-256 over every field above. Commits to the whole report except itself. */
+  readonly reportSha256: string;
 }
 
 export interface RiyaDatasetReleaseEvidenceV1 {
   readonly version: 1;
-  /** A stable opaque reference derived from the manifest digest. Not a training authorization. */
+  /** A stable opaque reference derived from the bound digests. Not a training authorization. */
   readonly datasetRef: string;
   readonly datasetId: string;
   readonly datasetVersion: number;
   readonly manifestSha256: string;
+  /** The content binding. Recomputed from the manifest and compared to the report before issuing. */
+  readonly validatedDatasetSha256: string;
+  readonly reportSha256: string;
+  /** COPIED from the validated report. A caller cannot name a policy validation did not apply. */
   readonly releasePolicyId: string;
   readonly releasePolicyVersion: number;
+  readonly protectedIndexSha256: string;
   readonly createdAt: string;
   readonly syntheticOnly: true;
   /** Always `false`. Clearing dataset gates never starts a run. */

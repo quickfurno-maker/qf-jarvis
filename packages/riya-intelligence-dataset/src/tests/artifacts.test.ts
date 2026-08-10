@@ -17,6 +17,7 @@ import {
 } from '../internal/trajectory-digest.js';
 import { RiyaDatasetError } from '../contracts/errors.js';
 import { createRiyaDatasetCoveragePolicy } from '../contracts/coverage-policy.js';
+import { createRiyaDatasetReleasePolicy } from '../contracts/release-policy.js';
 import { riyaDatasetManifestIntegrityHolds } from '../contracts/manifest.js';
 import { buildRiyaIntelligenceDatasetManifest } from '../service/create-manifest.js';
 import { createRiyaDatasetReleaseEvidence } from '../service/create-release-evidence.js';
@@ -29,8 +30,11 @@ import { validateRiyaIntelligenceDataset } from '../service/validate-dataset.js'
 import {
   acceptedReviews,
   discoveryTurns,
+  releasableOptions,
+  releasePolicyFor,
   SYNTHETIC_DATASET_INSTANT,
   supportedPriceTurns,
+  syntheticProtectedIndex,
   syntheticTrajectory,
 } from '../testing/fixtures.js';
 
@@ -194,7 +198,7 @@ describe('release evidence records that gates passed, and authorizes nothing', (
   const eligible = () => {
     const trajectories = [syntheticTrajectory()];
     return {
-      report: validateRiyaIntelligenceDataset(trajectories),
+      report: validateRiyaIntelligenceDataset(trajectories, releasableOptions()),
       manifest: manifestOf(trajectories),
     };
   };
@@ -206,8 +210,6 @@ describe('release evidence records that gates passed, and authorizes nothing', (
     const first = createRiyaDatasetReleaseEvidence({
       report,
       manifest,
-      releasePolicyId: 'riya-dataset-release-v1',
-      releasePolicyVersion: 1,
     });
     expect(first.ok).toBe(true);
     if (!first.ok) {
@@ -223,8 +225,6 @@ describe('release evidence records that gates passed, and authorizes nothing', (
     const repeat = createRiyaDatasetReleaseEvidence({
       report: second.report,
       manifest: second.manifest,
-      releasePolicyId: 'riya-dataset-release-v1',
-      releasePolicyVersion: 1,
     });
     if (!repeat.ok) {
       throw new Error('expected evidence');
@@ -235,10 +235,8 @@ describe('release evidence records that gates passed, and authorizes nothing', (
   it('an INELIGIBLE report produces no evidence', () => {
     const trajectories = [syntheticTrajectory({ review: [] })];
     const attempt = createRiyaDatasetReleaseEvidence({
-      report: validateRiyaIntelligenceDataset(trajectories),
+      report: validateRiyaIntelligenceDataset(trajectories, releasableOptions()),
       manifest: manifestOf(trajectories),
-      releasePolicyId: 'riya-dataset-release-v1',
-      releasePolicyVersion: 1,
     });
     expect(attempt).toStrictEqual({ ok: false, code: 'dataset-not-eligible' });
   });
@@ -248,14 +246,11 @@ describe('release evidence records that gates passed, and authorizes nothing', (
     const attempt = createRiyaDatasetReleaseEvidence({
       report,
       manifest: { ...manifest, datasetVersion: 99 },
-      releasePolicyId: 'riya-dataset-release-v1',
-      releasePolicyVersion: 1,
     });
     expect(attempt).toStrictEqual({ ok: false, code: 'manifest-digest-invalid' });
   });
 
   it('a report paired with a manifest of a different size is refused', () => {
-    // The easiest way to launder a failing dataset: keep the eligible report, swap the manifest.
     const { report } = eligible();
     const bigger = manifestOf([
       syntheticTrajectory(),
@@ -265,18 +260,14 @@ describe('release evidence records that gates passed, and authorizes nothing', (
         turns: discoveryTurns({ userText: 'Wardrobes for a rented place in city.beta please.' }),
       }),
     ]);
-    expect(
-      createRiyaDatasetReleaseEvidence({
-        report,
-        manifest: bigger,
-        releasePolicyId: 'riya-dataset-release-v1',
-        releasePolicyVersion: 1,
-      }),
-    ).toStrictEqual({ ok: false, code: 'dataset-not-eligible' });
+    expect(createRiyaDatasetReleaseEvidence({ report, manifest: bigger })).toStrictEqual({
+      ok: false,
+      code: 'release-binding-invalid',
+    });
   });
 
   it('the report is counts and locations only', () => {
-    const report = validateRiyaIntelligenceDataset([syntheticTrajectory()]);
+    const report = validateRiyaIntelligenceDataset([syntheticTrajectory()], releasableOptions());
     expect(report.totalTrajectories).toBe(1);
     expect(report.totalAssistantTurns).toBe(1);
     expect(report.countsByLanguage).toStrictEqual({ ENGLISH: 1 });
@@ -292,15 +283,24 @@ describe('release evidence records that gates passed, and authorizes nothing', (
 // ---------------------------------------------------------------------------
 
 describe('coverage minima are policy data, never hard-coded', () => {
-  it('reports a shortfall against a supplied policy', () => {
-    const policy = createRiyaDatasetCoveragePolicy({
+  it('reports a shortfall against the BOUND coverage policy', () => {
+    const protectedIndex = syntheticProtectedIndex();
+    const releasePolicy = createRiyaDatasetReleasePolicy({
       policyId: 'riya-gold-v1',
       policyVersion: 1,
-      minimumTotalTrajectories: 3,
-      minimumByLanguage: { ENGLISH: 1, HINDI: 1, HINGLISH: 1 },
+      coveragePolicy: createRiyaDatasetCoveragePolicy({
+        policyId: 'riya-gold-coverage-v1',
+        policyVersion: 1,
+        minimumTotalTrajectories: 3,
+        minimumByLanguage: { ENGLISH: 1, HINDI: 1, HINGLISH: 1 },
+      }),
+      protectedCorpusRef: 'protected.corpus.synthetic',
+      protectedIndexSha256: protectedIndex.indexSha256,
+      protectedEntryCount: protectedIndex.entryCount,
     });
     const report = validateRiyaIntelligenceDataset([syntheticTrajectory()], {
-      coveragePolicy: policy,
+      protectedIndex,
+      releasePolicy,
     });
     expect(report.coverageShortfalls.map((one) => one.key).sort()).toStrictEqual([
       'HINDI',
@@ -311,12 +311,24 @@ describe('coverage minima are policy data, never hard-coded', () => {
   });
 
   it('an absent minimum is deliberately ungated', () => {
-    const policy = createRiyaDatasetCoveragePolicy({ policyId: 'p', policyVersion: 1 });
-    const report = validateRiyaIntelligenceDataset([syntheticTrajectory()], {
-      coveragePolicy: policy,
-    });
+    const report = validateRiyaIntelligenceDataset([syntheticTrajectory()], releasableOptions());
     expect(report.coverageShortfalls).toStrictEqual([]);
     expect(report.eligible).toBe(true);
+  });
+
+  it('the report names the coverage policy by id, version AND digest', () => {
+    // A policy edited in place without a version bump must stop attesting old releases.
+    const report = validateRiyaIntelligenceDataset([syntheticTrajectory()], releasableOptions());
+    expect(report.coveragePolicyId).toBe('riya-dataset-coverage-v1');
+    expect(report.coveragePolicyVersion).toBe(1);
+    expect(report.coveragePolicySha256).toMatch(SHA256_HEX);
+
+    const stricter = releasePolicyFor(syntheticProtectedIndex(), { minimumTotalTrajectories: 1 });
+    const other = validateRiyaIntelligenceDataset([syntheticTrajectory()], {
+      protectedIndex: syntheticProtectedIndex(),
+      releasePolicy: stricter,
+    });
+    expect(other.coveragePolicySha256).not.toBe(report.coveragePolicySha256);
   });
 
   it('refuses an unknown key rather than ignoring it', () => {
@@ -381,7 +393,9 @@ describe('JSONL is one canonical line per trajectory', () => {
           }),
         ),
       ),
-    ).toBe('invalid-trajectory');
+      // `invalid-turn`, not `invalid-trajectory`: the nested value now reaches the constructor
+      // that OWNS it, so the code says which layer refused (owner correction on PR #112).
+    ).toBe('invalid-turn');
   });
 
   it('refuses an empty line, malformed JSON, an array and a second object', () => {

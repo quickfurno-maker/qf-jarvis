@@ -15,5 +15,8 @@ export {
   discoveryTurns,
   supportedPriceTurns,
   syntheticTrajectory,
+  releasePolicyFor,
+  syntheticProtectedIndex,
+  releasableOptions,
 } from './fixtures.js';
 export type { SyntheticTrajectoryOptions } from './fixtures.js';

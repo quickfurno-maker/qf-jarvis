@@ -24,13 +24,20 @@ import {
 import { collidesWithProtectedIdentity, matchProtectedText } from '../internal/leakage.js';
 import type { ProtectedTextIndex } from '../internal/leakage.js';
 import { scanLocated } from '../internal/privacy-scan.js';
-import { trajectoryConversationFingerprint } from '../internal/trajectory-digest.js';
-import type { RiyaDatasetCoveragePolicyV1 } from '../contracts/coverage-policy.js';
 import { createProtectedTextIndex } from '../internal/leakage.js';
+import { coveragePolicySha256 } from '../contracts/release-policy.js';
+import type { RiyaDatasetReleasePolicyV1 } from '../contracts/release-policy.js';
 import type {
   RiyaDatasetFindingLocation,
+  RiyaDatasetReleaseBindingFailure,
   RiyaDatasetReleaseReportV1,
 } from '../contracts/report.js';
+import { reportSha256, validatedDatasetSha256 } from '../internal/report-integrity.js';
+import {
+  trajectoryArtifactSha256,
+  trajectoryConversationFingerprint,
+} from '../internal/trajectory-digest.js';
+import { createRiyaIntelligenceTrajectory } from '../contracts/trajectory.js';
 import type { RiyaIntelligenceTrajectoryV1 } from '../contracts/trajectory.js';
 import {
   RIYA_DATASET_BASELINE_REVIEW_DIMENSIONS,
@@ -58,9 +65,20 @@ export const CROSS_SPLIT_NEAR_MIN_JACCARD = 0.8;
 const CROSS_SPLIT_NGRAM_SIZE = 5;
 
 export interface ValidateRiyaDatasetOptions {
-  /** Protected RWC-P10 content, supplied by the caller. Absent means the firewall matches nothing. */
+  /**
+   * The protected RWC-P10 corpus, supplied by the caller.
+   *
+   * Still optional as an ARGUMENT — a dry run without one is useful — but an absent or mismatched
+   * index can no longer produce an eligible report. The release policy pins which corpus, how many
+   * entries and which digest, and a failure to bind is recorded and blocks (owner correction on
+   * PR #112).
+   */
   readonly protectedIndex?: ProtectedTextIndex;
-  readonly coveragePolicy?: RiyaDatasetCoveragePolicyV1;
+  /**
+   * The release policy this validation is gated under. Carries the coverage policy and the pinned
+   * protected-corpus identity. Absent means the run is a dry run and can never be eligible.
+   */
+  readonly releasePolicy?: RiyaDatasetReleasePolicyV1;
 }
 
 const tally = <Key extends string>(
@@ -93,10 +111,36 @@ function requiredReviewDimensions(
 
 /** Validate a whole dataset and produce a content-free release report. */
 export function validateRiyaIntelligenceDataset(
-  trajectories: readonly RiyaIntelligenceTrajectoryV1[],
+  supplied: readonly RiyaIntelligenceTrajectoryV1[],
   options: ValidateRiyaDatasetOptions = {},
 ): RiyaDatasetReleaseReportV1 {
+  // DEEP re-proof at the boundary (owner correction on PR #112). A caller can reach this function
+  // with objects that never went through the trajectory constructor -- parsed from somewhere,
+  // hand-assembled, or edited after construction -- and gating them would otherwise mean gating
+  // whatever they claimed to be.
+  const trajectories = supplied.map((trajectory) =>
+    createRiyaIntelligenceTrajectory(trajectory as never),
+  );
   const protectedIndex = options.protectedIndex ?? createProtectedTextIndex([]);
+  const releasePolicy = options.releasePolicy;
+
+  // ---- release binding -----------------------------------------------------------------------
+  const releaseBindingFailures: RiyaDatasetReleaseBindingFailure[] = [];
+  if (releasePolicy === undefined) {
+    releaseBindingFailures.push('RELEASE_POLICY_MISSING');
+  } else {
+    if (options.protectedIndex === undefined) {
+      // An empty substitute index matches nothing and yields a clean report. That is the shape of a
+      // release whose exam firewall never ran.
+      releaseBindingFailures.push('PROTECTED_INDEX_MISSING');
+    }
+    if (protectedIndex.entryCount !== releasePolicy.protectedEntryCount) {
+      releaseBindingFailures.push('PROTECTED_INDEX_COUNT_MISMATCH');
+    }
+    if (protectedIndex.indexSha256 !== releasePolicy.protectedIndexSha256) {
+      releaseBindingFailures.push('PROTECTED_INDEX_DIGEST_MISMATCH');
+    }
+  }
 
   const duplicateTrajectoryIds: RiyaDatasetFindingLocation[] = [];
   const lineageSplitViolations: RiyaDatasetFindingLocation[] = [];
@@ -289,7 +333,7 @@ export function validateRiyaIntelligenceDataset(
     observed: number;
     required: number;
   }[] = [];
-  const policy = options.coveragePolicy;
+  const policy = releasePolicy?.coveragePolicy;
   if (policy !== undefined) {
     const check = (
       dimension: string,
@@ -330,6 +374,9 @@ export function validateRiyaIntelligenceDataset(
 
   const eligible =
     trajectories.length > 0 &&
+    // The release binding first: an unbound report describes a validation whose gates may not have
+    // run at all, and no amount of clean findings makes that releasable.
+    releaseBindingFailures.length === 0 &&
     duplicateTrajectoryIds.length === 0 &&
     lineageSplitViolations.length === 0 &&
     exactCrossSplitDuplicates.length === 0 &&
@@ -343,8 +390,34 @@ export function validateRiyaIntelligenceDataset(
     insufficientReview.length === 0 &&
     coverageShortfalls.length === 0;
 
-  return Object.freeze({
+  const body = {
     version: 1 as const,
+    ...(releasePolicy === undefined
+      ? {}
+      : {
+          releasePolicyId: releasePolicy.policyId,
+          releasePolicyVersion: releasePolicy.policyVersion,
+          coveragePolicyId: releasePolicy.coveragePolicy.policyId,
+          coveragePolicyVersion: releasePolicy.coveragePolicy.policyVersion,
+          // The DIGEST too, so a policy edited in place without a version bump stops attesting.
+          coveragePolicySha256: coveragePolicySha256(releasePolicy.coveragePolicy),
+          protectedCorpusRef: releasePolicy.protectedCorpusRef,
+          protectedIndexSha256: releasePolicy.protectedIndexSha256,
+          protectedEntryCount: releasePolicy.protectedEntryCount,
+        }),
+    releaseBindingFailures: Object.freeze([...releaseBindingFailures].sort()),
+    // Computed from the CANONICAL validated trajectories, and recomputable from a manifest's
+    // records. This is what makes a report and a manifest provably the same corpus.
+    validatedDatasetSha256: validatedDatasetSha256(
+      trajectories.map((trajectory) => ({
+        trajectoryId: trajectory.trajectoryId,
+        trajectoryRevision: trajectory.trajectoryRevision,
+        lineageRootRef: trajectory.lineageRootRef,
+        split: trajectory.split,
+        artifactSha256: trajectoryArtifactSha256(trajectory),
+        normalizedFingerprint: trajectoryConversationFingerprint(trajectory),
+      })),
+    ),
     totalTrajectories: trajectories.length,
     totalAssistantTurns: trajectories.reduce(
       (total, one) => total + one.turns.filter((turn) => turn.type === 'ASSISTANT').length,
@@ -370,5 +443,7 @@ export function validateRiyaIntelligenceDataset(
     unsupportedBusinessFacts: Object.freeze(unsupportedBusinessFacts),
     coverageShortfalls: Object.freeze(coverageShortfalls),
     eligible,
-  });
+  };
+
+  return Object.freeze({ ...body, reportSha256: reportSha256(body) });
 }

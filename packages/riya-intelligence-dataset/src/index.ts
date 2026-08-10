@@ -114,12 +114,17 @@ export type {
   RiyaDatasetSourceV1,
 } from './contracts/trajectory.js';
 
-// Coverage policy.
+// Coverage and release policy.
 export { createRiyaDatasetCoveragePolicy } from './contracts/coverage-policy.js';
 export type {
   RiyaDatasetCoveragePolicyV1,
   RiyaDatasetCoveragePolicyInput,
 } from './contracts/coverage-policy.js';
+export { createRiyaDatasetReleasePolicy } from './contracts/release-policy.js';
+export type {
+  RiyaDatasetReleasePolicyV1,
+  RiyaDatasetReleasePolicyInput,
+} from './contracts/release-policy.js';
 
 // Manifest.
 export {
@@ -142,7 +147,9 @@ export type {
   RiyaDatasetReleaseReportV1,
   RiyaDatasetReleaseEvidenceV1,
   RiyaDatasetFindingLocation,
+  RiyaDatasetReleaseBindingFailure,
 } from './contracts/report.js';
+export { riyaDatasetReportIntegrityHolds } from './internal/report-integrity.js';
 export { validateRiyaIntelligenceDataset } from './service/validate-dataset.js';
 export type { ValidateRiyaDatasetOptions } from './service/validate-dataset.js';
 export { createRiyaDatasetReleaseEvidence } from './service/create-release-evidence.js';

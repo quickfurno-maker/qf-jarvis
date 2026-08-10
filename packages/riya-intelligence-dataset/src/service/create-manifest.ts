@@ -9,6 +9,7 @@ import {
   createRiyaIntelligenceDatasetManifest,
   type RiyaIntelligenceDatasetManifestV1,
 } from '../contracts/manifest.js';
+import { createRiyaIntelligenceTrajectory } from '../contracts/trajectory.js';
 import type { RiyaIntelligenceTrajectoryV1 } from '../contracts/trajectory.js';
 import {
   trajectoryArtifactSha256,
@@ -31,13 +32,20 @@ export interface BuildRiyaDatasetManifestInput {
 export function buildRiyaIntelligenceDatasetManifest(
   input: BuildRiyaDatasetManifestInput,
 ): RiyaIntelligenceDatasetManifestV1 {
+  // DEEP re-proof before hashing (owner correction on PR #112). A digest computed over an object
+  // that never passed the trajectory constructor is a precise identity for something invalid, which
+  // is worse than no identity at all -- it makes the invalid record citable.
+  const trajectories = input.trajectories.map((trajectory) =>
+    createRiyaIntelligenceTrajectory(trajectory as never),
+  );
+
   return createRiyaIntelligenceDatasetManifest({
     datasetId: input.datasetId,
     datasetVersion: input.datasetVersion,
     schemaVersion: RIYA_DATASET_SCHEMA_VERSION,
     policyVersion: input.policyVersion,
     createdAt: input.createdAt,
-    records: input.trajectories.map((trajectory) => ({
+    records: trajectories.map((trajectory) => ({
       trajectoryId: trajectory.trajectoryId,
       trajectoryRevision: trajectory.trajectoryRevision,
       lineageRootRef: trajectory.lineageRootRef,

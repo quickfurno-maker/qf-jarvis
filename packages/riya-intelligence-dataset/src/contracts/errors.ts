@@ -15,6 +15,8 @@ export const RIYA_DATASET_ERROR_CODES = [
   'invalid-turn',
   'invalid-review',
   'invalid-manifest',
+  'invalid-protected-index',
+  'invalid-release-policy',
   'manifest-digest-invalid',
   'duplicate-trajectory',
   'lineage-split-violation',
@@ -26,6 +28,7 @@ export const RIYA_DATASET_ERROR_CODES = [
   'unsupported-business-fact',
   'insufficient-review',
   'coverage-failure',
+  'release-binding-invalid',
   'dataset-not-eligible',
   'invalid-jsonl',
 ] as const;
@@ -36,6 +39,8 @@ const RIYA_DATASET_ERROR_MESSAGES: Readonly<Record<RiyaDatasetErrorCode, string>
   'invalid-turn': 'A Riya intelligence trajectory turn is invalid.',
   'invalid-review': 'A Riya training review is invalid.',
   'invalid-manifest': 'A Riya intelligence dataset manifest is invalid.',
+  'invalid-protected-index': 'A protected evaluation text index is invalid.',
+  'invalid-release-policy': 'A Riya intelligence dataset release policy is invalid.',
   'manifest-digest-invalid': 'The Riya intelligence dataset manifest digest does not validate.',
   'duplicate-trajectory': 'A duplicate trajectory id was supplied.',
   'lineage-split-violation': 'A lineage root appears in more than one dataset split.',
@@ -48,6 +53,8 @@ const RIYA_DATASET_ERROR_MESSAGES: Readonly<Record<RiyaDatasetErrorCode, string>
     'An assistant turn asserts a business fact with no earlier authoritative support.',
   'insufficient-review': 'A trajectory does not carry the reviews its risk class requires.',
   'coverage-failure': 'The dataset does not meet its coverage policy.',
+  'release-binding-invalid':
+    'The release attestation is not bound to the dataset, policy or protected corpus it claims.',
   'dataset-not-eligible': 'Release evidence is blocked because the dataset is not eligible.',
   'invalid-jsonl': 'A Riya intelligence trajectory JSONL line is invalid.',
 });

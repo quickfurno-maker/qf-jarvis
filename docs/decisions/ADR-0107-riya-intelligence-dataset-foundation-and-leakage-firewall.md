@@ -176,6 +176,54 @@ be unrecoverable.
 It is **not a signature**. It proves nothing about who produced an artifact, and anyone who can edit a
 dataset can recompute its digest.
 
+### 18a. Every nested value is re-proved, and every attestation is content-bound
+
+Owner correction on PR #112. Three holes, each of which let an unchecked thing reach a place that
+reads as a verdict.
+
+**The trajectory constructor now deep-re-proves.** It accepted `initialState` and `turns` as unknown,
+checked only that each turn was an object with a `type`, and returned the caller's objects — so the
+JSONL promise that parsing re-proves a record was false at the turn level. The full raw state now
+goes through `createRiyaTrainingState` and every full raw turn is dispatched to the constructor that
+owns it, with only canonical results kept. `validateRiyaIntelligenceDataset` and the manifest builder
+re-prove at their own boundaries, because a digest over an unvalidated record is a precise identity
+for something invalid — which is worse than no identity, since it makes the invalid record citable.
+
+**The exam firewall and the coverage policy are no longer skippable.** Omitting the protected index
+substituted an empty one, which matches nothing, produces no finding and yields `eligible: true`. A
+versioned `RiyaDatasetReleasePolicyV1` now carries the coverage policy and PINS the protected corpus
+by `protectedEntryCount` and `protectedIndexSha256`; validation records a bounded binding failure and
+refuses eligibility when the index it was handed does not match. The index digest is over sorted
+`[protectedRef, normalizedText]` pairs, so supply order cannot change a corpus's identity and a
+conflicting duplicate ref is refused. The generic package still pins no `72` and no fixture
+identifier — the Gold V1 release policy will, as data.
+
+**Release evidence binds by CONTENT, not by count.** Pairing on `records.length ===
+totalTrajectories` meant two different corpora of the same size paired cleanly. The report now
+carries `validatedDatasetSha256` — over the sorted identity of every validated trajectory — and
+`reportSha256` over everything else; evidence recomputes the dataset digest from the manifest's own
+records and requires it to match, and takes the policy identity from the report rather than from a
+caller. Counting remains a cheap extra check, never the binding.
+
+### 18b. A decision that names an authority must rest on it
+
+The first rule proved that every cited fact existed earlier. It did not prove that a turn ASSERTING a
+business fact cited anything, so `USE_CORE_TRUTH` with an empty citation list was representable — a
+turn claiming Core said something while citing nothing.
+
+Now `USE_CORE_TRUTH` and `USE_GOVERNED_KNOWLEDGE` each require at least one citation, and every cited
+fact must come from the authority the decision names. Governed knowledge and Core have different
+update paths and different consequences for being wrong; a corpus that blurred them would teach the
+model they are interchangeable. A decision that names no authority may cite nothing.
+
+A narrow deterministic scanner also flags high-confidence volatile claims in ASSISTANT text — an
+explicit company price, a warranty term, a service-availability statement, a refund or cancellation
+commitment, a current-status assertion — and requires a cited fact of the matching class. It reads no
+USER text, so a customer's competitor quote or stated budget needs no authority. `PACKAGE`, `PROCESS`
+and `OTHER_BUSINESS_FACT` are deliberately not detected: their language is not separable from
+ordinary conversation without semantics this package refuses to guess at, and a plausible-looking
+gate is worse than an honest gap. Findings are closed classes; no text is echoed.
+
 ### 19. No database, no migration, no deployment
 
 Migrations stay `0001`–`0012`. No managed database, no live WhatsApp, no provider, no n8n, no
@@ -223,4 +271,11 @@ Owner-locked. Changing any of these requires a new ADR:
 - privacy findings never echo the matched text;
 - SHA-256 is content identity, not authorship;
 - release evidence is `syntheticOnly` with `trainingApproval: false`, and nothing auto-trains;
-- no runtime import, no migration, no deployment, no QuickFurno access.
+- no runtime import, no migration, no deployment, no QuickFurno access;
+- every nested state and turn is re-proved through its owning constructor, at the trajectory
+  constructor and at every service boundary;
+- a releasable validation must be bound to a versioned release policy that pins the protected corpus
+  by count and digest, and release evidence binds a report and a manifest by content rather than by
+  count, copying the policy identity from the report;
+- a decision naming an authority must cite at least one fact from that authority, and a
+  high-confidence volatile claim must cite a fact of the matching class.

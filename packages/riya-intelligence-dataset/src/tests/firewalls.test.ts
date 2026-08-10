@@ -28,6 +28,7 @@ import { deriveRiyaSftSamples } from '../service/derive-sft-samples.js';
 import {
   acceptedReviews,
   discoveryTurns,
+  releasableOptions,
   supportedPriceTurns,
   syntheticTrajectory,
 } from '../testing/fixtures.js';
@@ -273,38 +274,44 @@ describe('a variant cannot cross the split its family is scored in', () => {
   it('a near duplicate in the SAME split is allowed and REPORTED', () => {
     // A family of variants living together is the intended shape. It still belongs in the dedupe
     // stats, so nobody discovers the redundancy after training.
-    const report = validateRiyaIntelligenceDataset([
-      syntheticTrajectory({
-        trajectoryId: 'a.1',
-        lineageRootRef: 'fam.a',
-        turns: discoveryTurns(),
-      }),
-      syntheticTrajectory({
-        trajectoryId: 'a.2',
-        lineageRootRef: 'fam.a',
-        turns: discoveryTurns({
-          userText: 'We just got a new flat and want the kitchen done in city.alpha, roughly.',
+    const report = validateRiyaIntelligenceDataset(
+      [
+        syntheticTrajectory({
+          trajectoryId: 'a.1',
+          lineageRootRef: 'fam.a',
+          turns: discoveryTurns(),
         }),
-      }),
-    ]);
+        syntheticTrajectory({
+          trajectoryId: 'a.2',
+          lineageRootRef: 'fam.a',
+          turns: discoveryTurns({
+            userText: 'We just got a new flat and want the kitchen done in city.alpha, roughly.',
+          }),
+        }),
+      ],
+      releasableOptions(),
+    );
     expect(report.nearCrossSplitDuplicates).toHaveLength(0);
     expect(report.sameSplitNearDuplicates).toHaveLength(1);
     expect(report.eligible).toBe(true);
   });
 
   it('two unrelated conversations with the same intent are allowed', () => {
-    const report = validateRiyaIntelligenceDataset([
-      syntheticTrajectory({ trajectoryId: 'a.1', lineageRootRef: 'fam.a' }),
-      syntheticTrajectory({
-        trajectoryId: 'b.1',
-        lineageRootRef: 'fam.b',
-        split: 'VALIDATION',
-        turns: discoveryTurns({
-          userText: 'Looking at wardrobes for a rented place in city.beta before we move.',
-          replyText: 'Understood. Roughly what budget did you have in mind?',
+    const report = validateRiyaIntelligenceDataset(
+      [
+        syntheticTrajectory({ trajectoryId: 'a.1', lineageRootRef: 'fam.a' }),
+        syntheticTrajectory({
+          trajectoryId: 'b.1',
+          lineageRootRef: 'fam.b',
+          split: 'VALIDATION',
+          turns: discoveryTurns({
+            userText: 'Looking at wardrobes for a rented place in city.beta before we move.',
+            replyText: 'Understood. Roughly what budget did you have in mind?',
+          }),
         }),
-      }),
-    ]);
+      ],
+      releasableOptions(),
+    );
     expect(report.exactCrossSplitDuplicates).toHaveLength(0);
     expect(report.nearCrossSplitDuplicates).toHaveLength(0);
     expect(report.eligible).toBe(true);
@@ -327,48 +334,54 @@ describe('volatile business truth must come from an earlier authoritative contex
   it("a customer's own quote is allowed, and is NOT Core truth", () => {
     // "I got a 7 lakh quote" is something the customer said. It needs no authority, and treating it
     // as one would let a competitor's number become a fact Riya asserts.
-    const report = validateRiyaIntelligenceDataset([
-      syntheticTrajectory({
-        trajectoryId: 'quote.1',
-        lineageRootRef: 'fam.quote',
-        primaryInteractionKind: 'OBJECTION_PRICE',
-        riskClass: 'HIGH_RISK',
-        turns: [
-          createRiyaDatasetUserTurn({
-            type: 'USER',
-            turnRef: 'q1',
-            text: 'I got a 7 lakh quote from another company for the same work.',
-          }),
-          createRiyaDatasetAssistantTurn({
-            type: 'ASSISTANT',
-            turnRef: 'q2',
-            text: 'That is worth comparing properly. What is included in their scope?',
-            annotation: {
-              decision: 'ANSWER_DIRECT',
-              askedDiscoveryFields: ['scope'],
-              supportedFactRefs: [],
-              responseObjective: 'ADDRESS_OBJECTION',
-            },
-          }),
-        ],
-        review: acceptedReviews(2, { objection: true }),
-      }),
-    ]);
+    const report = validateRiyaIntelligenceDataset(
+      [
+        syntheticTrajectory({
+          trajectoryId: 'quote.1',
+          lineageRootRef: 'fam.quote',
+          primaryInteractionKind: 'OBJECTION_PRICE',
+          riskClass: 'HIGH_RISK',
+          turns: [
+            createRiyaDatasetUserTurn({
+              type: 'USER',
+              turnRef: 'q1',
+              text: 'I got a 7 lakh quote from another company for the same work.',
+            }),
+            createRiyaDatasetAssistantTurn({
+              type: 'ASSISTANT',
+              turnRef: 'q2',
+              text: 'That is worth comparing properly. What is included in their scope?',
+              annotation: {
+                decision: 'ANSWER_DIRECT',
+                askedDiscoveryFields: ['scope'],
+                supportedFactRefs: [],
+                responseObjective: 'ADDRESS_OBJECTION',
+              },
+            }),
+          ],
+          review: acceptedReviews(2, { objection: true }),
+        }),
+      ],
+      releasableOptions(),
+    );
     expect(report.unsupportedBusinessFacts).toHaveLength(0);
     expect(report.eligible).toBe(true);
   });
 
   it('an assistant price backed by an EARLIER Core fact is allowed', () => {
-    const report = validateRiyaIntelligenceDataset([
-      syntheticTrajectory({
-        trajectoryId: 'price.1',
-        lineageRootRef: 'fam.price',
-        primaryInteractionKind: 'OBJECTION_PRICE',
-        riskClass: 'HIGH_RISK',
-        turns: supportedPriceTurns(),
-        review: acceptedReviews(2, { objection: true }),
-      }),
-    ]);
+    const report = validateRiyaIntelligenceDataset(
+      [
+        syntheticTrajectory({
+          trajectoryId: 'price.1',
+          lineageRootRef: 'fam.price',
+          primaryInteractionKind: 'OBJECTION_PRICE',
+          riskClass: 'HIGH_RISK',
+          turns: supportedPriceTurns(),
+          review: acceptedReviews(2, { objection: true }),
+        }),
+      ],
+      releasableOptions(),
+    );
     expect(report.unsupportedBusinessFacts).toHaveLength(0);
     expect(report.eligible).toBe(true);
   });
@@ -494,9 +507,12 @@ describe('personal data and secrets cannot enter the corpus', () => {
             turnRef: 'a1',
             text: 'I can connect you with a consultant.',
             annotation: {
+              // A handoff cites nothing: only USE_CORE_TRUTH and USE_GOVERNED_KNOWLEDGE may, and a
+              // decision that does not name an authority must not claim one (owner correction on
+              // PR #112).
               decision: 'HANDOFF_HUMAN',
               askedDiscoveryFields: [],
-              supportedFactRefs: ['f.contact'],
+              supportedFactRefs: [],
               responseObjective: 'HANDOFF',
             },
           }),
