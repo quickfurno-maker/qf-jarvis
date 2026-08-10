@@ -79,6 +79,17 @@ export {
 } from './plan/generate-plan.js';
 export { RIYA_GOLD_V1_WAVE_1_BRIEFS } from './plan/wave-1-briefs.js';
 
+// The Wave-1 authoring order (HGV1-B). Operational, content-free, and not a planning authority.
+export {
+  RIYA_GOLD_WAVE_1_BATCHES,
+  RIYA_GOLD_WAVE_1_BATCH_SIZE,
+  RIYA_GOLD_WAVE_1_ANCHOR_BATCH,
+  riyaGoldWave1BatchAssignments,
+  riyaGoldWave1Schedule,
+  riyaGoldWave1BatchOf,
+} from './plan/wave-1-batches.js';
+export type { RiyaGoldWave1Batch } from './plan/wave-1-batches.js';
+
 // Policies.
 export {
   RIYA_GOLD_V1_COVERAGE_POLICY,
