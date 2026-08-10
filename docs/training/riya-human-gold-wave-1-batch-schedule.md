@@ -15,29 +15,48 @@
 
 Every batch carries all twelve primary interaction kinds exactly once, and four of each language.
 
-| Batch | Slots | English | Hindi | Hinglish | Ordinal | Difficulty present   | High-risk |
-| ----- | ----- | ------- | ----- | -------- | ------- | -------------------- | --------- |
-| **1** | 12    | 4       | 4     | 4        | `01`    | BASIC, STANDARD      | 2         |
-| 2     | 12    | 4       | 4     | 4        | `01`    | BASIC, STANDARD      | 2         |
-| 3     | 12    | 4       | 4     | 4        | `01`    | BASIC, STANDARD      | 2         |
-| 4     | 12    | 4       | 4     | 4        | `02`    | STANDARD, HARD, EDGE | 6         |
-| 5     | 12    | 4       | 4     | 4        | `02`    | STANDARD, HARD, EDGE | 6         |
-| 6     | 12    | 4       | 4     | 4        | `02`    | STANDARD, HARD, EDGE | 6         |
+| Batch | Slots | English | Hindi | Hinglish | Ordinals         | Difficulty present                  | High-risk |
+| ----- | ----- | ------- | ----- | -------- | ---------------- | ----------------------------------- | --------- |
+| **1** | 12    | 4       | 4     | 4        | 6× `01`, 6× `02` | BASIC 3, STANDARD 3, HARD 4, EDGE 2 | 3         |
+| 2     | 12    | 4       | 4     | 4        | mixed            | includes HARD / EDGE                | —         |
+| 3     | 12    | 4       | 4     | 4        | mixed            | includes HARD / EDGE                | —         |
+| 4     | 12    | 4       | 4     | 4        | mixed            | includes HARD / EDGE                | —         |
+| 5     | 12    | 4       | 4     | 4        | mixed            | includes HARD / EDGE                | —         |
+| 6     | 12    | 4       | 4     | 4        | mixed            | includes HARD / EDGE                | —         |
 
 **Batch 1 is the calibration anchor.** It is written, reviewed and read end to end before batches 2–6
 begin. Batches 2–6 may then be authored in parallel by different people.
 
+## The anchor batch, exactly
+
+```
+ 1. gold.v1.w1.en.discovery.01              7. gold.v1.w1.en.grounding-qa.01
+ 2. gold.v1.w1.hi.correction.02             8. gold.v1.w1.hi.out-of-scope.02
+ 3. gold.v1.w1.hinglish.objection-price.01  9. gold.v1.w1.hinglish.human-request.01
+ 4. gold.v1.w1.en.objection-trust.02       10. gold.v1.w1.en.post-summary-qa.02
+ 5. gold.v1.w1.hi.objection-timeline.01    11. gold.v1.w1.hi.complete-qa.01
+ 6. gold.v1.w1.hinglish.comparison.02      12. gold.v1.w1.hinglish.next-step.02
+```
+
+Pinned as a literal list in the batch spec, so a change to the rotation that silently reshapes the
+anchor fails rather than quietly handing authors a different twelve.
+
 ## The rotation
 
-`language = (kindIndex + batchIndex) mod 3`, over the canonical interaction-kind order.
+```
+language = (kindIndex + batchIndex) mod 3       // 0 ENGLISH, 1 HINDI, 2 HINGLISH
+ordinal  = 1 + ((kindIndex + batchIndex) mod 2)
+```
 
 For a fixed kind, six batches walk the three languages twice — so each language/kind pair lands in
-exactly two batches, three apart. The earlier takes ordinal `01`, the later `02`. Across the six, all
+exactly two batches, three apart. Adding three flips the parity, so those two occurrences take
+opposite ordinals automatically: every pair gets exactly one `01` and one `02`, and across the six all
 72 official Wave-1 assignments appear exactly once.
 
 Proved in `gold-v1-wave-1-batches.test.ts`: six batches, twelve each, twelve kinds each, 4/4/4
-languages each, every official assignment exactly once, the pair spacing, determinism, and that the
-assignments come back from the frozen plan field-for-field unchanged.
+languages each, every official assignment exactly once, `{1, 2}` ordinals per pair, the three-batch
+spacing, determinism, the exact anchor id list, its 3/3/4/2 difficulty mix and its 9/3 risk split, and
+that the assignments come back from the frozen plan field-for-field unchanged.
 
 ## Why batches at all
 
@@ -52,29 +71,19 @@ is where the problems live. The anchor is a miniature of the wave, not a corner 
 
 ---
 
-## Known limitation of the anchor — worth an owner decision
+## Why the ordinal alternates by kind, not by batch
 
-Batches 1–3 are every slot's **first** take and batches 4–6 every slot's second. HGV1-A makes
-difficulty a property of the ordinal — slot shape `01` is the gentler take of a cell, `02` the harder
-one — so the two rules meeting produce the split in the table above:
+The first version of this schedule gave batches 1–3 every `01` and batches 4–6 every `02`. HGV1-A
+makes difficulty a property of the ordinal — shape `01` is the gentler take of a cell, `02` the harder
+one — so the two rules meeting produced a calibration anchor containing `BASIC` and `STANDARD` only.
+The first `HARD` or `EDGE` conversation would not have been written until batch 4.
 
-- **Batches 1–3 contain no `HARD` and no `EDGE` slot at all.**
-- The first `HARD` or `EDGE` conversation is written in **batch 4**, after sixty others.
-- The anchor carries 2 high-risk slots; batches 4–6 carry 6 each.
+An anchor exists to surface systemic problems, and it cannot surface a problem in work nobody has done
+yet. Alternating on `(kind + batch)` parity instead mixes both takes into every batch. Batch 1 now
+carries 3 BASIC, 3 STANDARD, 4 HARD and 2 EDGE, every batch carries at least one HARD or EDGE slot,
+and every property above still holds.
 
-The anchor still calibrates voice, one-question discipline, language authenticity, annotation honesty
-and the two-reviewer loop. What it cannot surface is a systemic problem specific to hard or edge
-scenarios — which is a real gap in a batch whose whole purpose is to surface systemic problems.
-
-Two options, both keeping every property proved above:
-
-1. **Keep it.** Accept that hard-scenario calibration happens at batch 4 and plan a second checkpoint
-   there.
-2. **Alternate the ordinal by kind index** rather than by batch index — `ordinal = 1 + ((kindIndex +
-batchIndex) div 3 + kindIndex) mod 2` or similar — mixing `01` and `02` slots into every batch, so
-   the anchor sees the full difficulty range.
-
-This is the owner's call. The schedule as shipped implements the specified allocation unchanged.
+The 72 official assignments were not touched to achieve this. Only the order changed.
 
 ---
 

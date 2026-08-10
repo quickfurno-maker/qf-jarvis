@@ -324,6 +324,34 @@ evidence with `syntheticOnly: true` and `trainingApproval: false`.
 
 Release evidence never starts a training run. That remains a separate, separately governed decision.
 
+## Post-acceptance corrections
+
+Recorded here rather than by rewriting the decisions above. Same convention ADR-0107 used when HGV1-A
+superseded part of it.
+
+### 2026-08-10 — `OUT_OF_SCOPE` ordinal 2 now requires `PROCESS` authority
+
+Found during the HGV1-B pre-authoring audit. The slot required `GROUNDING_QA` as a secondary
+interaction while requiring no authority fact class — and in the reused P10 taxonomy a grounded
+question is one answered from governed knowledge **with a citation**. The assignment was therefore
+under-specified: it demanded that an author ground an answer in something the plan never supplied.
+
+`requiredAuthorityFactClasses` changed from `[]` to `['PROCESS']` on that slot shape. `PROCESS` rather
+than `SERVICE_AVAILABILITY` or `POLICY` because it is governed and factual, it exercises the intended
+shape — decline the out-of-scope half, answer the valid half from authority — and it commits to no
+price, availability or policy term, so `STANDARD` risk stays coherent instead of the slot quietly
+becoming a second high-risk availability case.
+
+Because the slot shape is shared, this affects **exactly 15** assignments: 5 waves × 3 languages ×
+ordinal 2. Nothing else moved — no assignment id, no split, persona, difficulty, risk class, start
+phase, depth, matrix size or coverage floor. Verified: 195 assignments now require authority, against
+180 before, and `OUT_OF_SCOPE.2` is the only new family.
+
+Three Wave-1 briefs were separately reworded, with **no** assignment change, because their prose
+instructed authority use their assignment did not declare: `hinglish.comparison.01`,
+`hi.post-summary-qa.01` and `hinglish.objection-timeline.01` stay authority-free by design — their
+paired `02` slots already own the grounded version of each behaviour, and Gold wants both.
+
 ## Consequences
 
 - The shape of the corpus is a checkable table before anyone writes a sentence, so a distribution

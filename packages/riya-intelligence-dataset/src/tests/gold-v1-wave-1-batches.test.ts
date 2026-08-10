@@ -2,12 +2,11 @@
  * HGV1-B — the six-micro-batch Wave-1 authoring schedule.
  *
  * The schedule is operational, so the thing worth proving is that it is operational and nothing more:
- * it partitions the frozen 72 exactly, it hands back the identical assignment objects, and it changes
- * no plan.
+ * it partitions the frozen 72 exactly, it hands the assignments back unedited, and it changes no plan.
  *
- * The anchor-batch properties get their own specs because the anchor is load-bearing. Twelve
- * conversations decide whether the other sixty get written, and an anchor that was accidentally
- * twelve English discovery cases would answer a question nobody asked.
+ * The anchor batch gets its own block because it is load-bearing. Twelve conversations decide whether
+ * the other sixty get written, so an anchor that under-samples the hard cases answers a question
+ * nobody asked — which is exactly what the first schedule did, and why the ordinal now alternates.
  */
 import { describe, expect, it } from 'vitest';
 
@@ -80,7 +79,7 @@ describe('the Wave-1 schedule partitions the frozen 72 and invents nothing', () 
     }
   });
 
-  it('spreads each language/kind pair across two batches, ordinal 01 first', () => {
+  it('places each language/kind pair in two batches, three apart, one 01 and one 02', () => {
     for (const languageMode of RIYA_DATASET_LANGUAGE_MODES) {
       for (const kind of RIYA_DATASET_INTERACTION_KINDS) {
         const placements = SCHEDULE.flatMap((batch, index) =>
@@ -92,9 +91,12 @@ describe('the Wave-1 schedule partitions the frozen 72 and invents nothing', () 
         );
         expect(placements, `${languageMode}/${kind}`).toHaveLength(2);
         const [first, second] = placements;
-        expect(first?.ordinal).toBe(1);
-        expect(second?.ordinal).toBe(2);
-        // Three batches apart: the pair is never written back to back by the same hand.
+        // Both takes exist exactly once. Which one comes first is now a property of the kind's
+        // parity rather than of the batch, which is what mixes difficulty into every batch.
+        expect(
+          [first?.ordinal, second?.ordinal].sort(),
+          `${languageMode}/${kind} ordinals`,
+        ).toStrictEqual([1, 2]);
         expect((second?.batch ?? 0) - (first?.batch ?? 0)).toBe(3);
       }
     }
@@ -114,17 +116,52 @@ describe('the Wave-1 schedule partitions the frozen 72 and invents nothing', () 
   });
 });
 
-describe('the anchor batch is a miniature of the wave, not a corner of it', () => {
+describe('the anchor batch samples the hard work too', () => {
   const ANCHOR = riyaGoldWave1BatchAssignments(RIYA_GOLD_WAVE_1_ANCHOR_BATCH);
 
-  it('is batch 1, and every slot in it is a first take', () => {
+  it('is exactly the twelve slots the owner fixed', () => {
     expect(RIYA_GOLD_WAVE_1_ANCHOR_BATCH).toBe(1);
-    for (const assignment of ANCHOR) {
-      expect(assignment.ordinalWithinPair, assignment.assignmentId).toBe(1);
-    }
+    expect(ANCHOR.map((one) => one.assignmentId)).toStrictEqual([
+      'gold.v1.w1.en.discovery.01',
+      'gold.v1.w1.hi.correction.02',
+      'gold.v1.w1.hinglish.objection-price.01',
+      'gold.v1.w1.en.objection-trust.02',
+      'gold.v1.w1.hi.objection-timeline.01',
+      'gold.v1.w1.hinglish.comparison.02',
+      'gold.v1.w1.en.grounding-qa.01',
+      'gold.v1.w1.hi.out-of-scope.02',
+      'gold.v1.w1.hinglish.human-request.01',
+      'gold.v1.w1.en.post-summary-qa.02',
+      'gold.v1.w1.hi.complete-qa.01',
+      'gold.v1.w1.hinglish.next-step.02',
+    ]);
   });
 
-  it('carries a real spread of language, persona, start phase and depth', () => {
+  it('carries the intended calibration difficulty mix: 3 BASIC, 3 STANDARD, 4 HARD, 2 EDGE', () => {
+    // The whole reason the ordinal alternates. Under the previous schedule this batch was 4 BASIC and
+    // 8 STANDARD, and the first HARD conversation was written in batch 4 — too late for an anchor.
+    expect(tally(ANCHOR.map((one) => one.difficulty))).toStrictEqual({
+      BASIC: 3,
+      STANDARD: 3,
+      HARD: 4,
+      EDGE: 2,
+    });
+  });
+
+  it('carries 9 STANDARD-risk and 3 HIGH_RISK slots', () => {
+    expect(tally(ANCHOR.map((one) => one.riskClass))).toStrictEqual({
+      STANDARD: 9,
+      HIGH_RISK: 3,
+    });
+  });
+
+  it('mixes both takes rather than being all first drafts', () => {
+    const ordinals = tally(ANCHOR.map((one) => String(one.ordinalWithinPair)));
+    expect(ordinals['1']).toBe(6);
+    expect(ordinals['2']).toBe(6);
+  });
+
+  it('spreads language, persona, start phase and depth', () => {
     expect(new Set(ANCHOR.map((one) => one.languageMode)).size).toBe(3);
     expect(new Set(ANCHOR.map((one) => one.persona)).size).toBeGreaterThanOrEqual(4);
     expect(new Set(ANCHOR.map((one) => one.startPhase)).size).toBeGreaterThanOrEqual(4);
@@ -133,43 +170,22 @@ describe('the anchor batch is a miniature of the wave, not a corner of it', () =
     expect(Math.max(...depths)).toBeGreaterThanOrEqual(8);
   });
 
-  it('exercises the two-reviewer path and the business-fact path', () => {
-    expect(ANCHOR.filter((one) => one.riskClass === 'HIGH_RISK').length).toBeGreaterThanOrEqual(2);
-    expect(ANCHOR.some((one) => one.riskClass === 'STANDARD')).toBe(true);
+  it('exercises the two-reviewer path, secondary interactions and business-fact authority', () => {
+    expect(ANCHOR.filter((one) => one.riskClass === 'HIGH_RISK').length).toBe(3);
+    expect(ANCHOR.some((one) => one.requiredSecondaryKinds.length > 0)).toBe(true);
     expect(ANCHOR.some((one) => one.requiredAuthorityFactClasses.length > 0)).toBe(true);
   });
 
-  it('KNOWN LIMITATION: batches 1–3 carry no HARD and no EDGE slot', () => {
-    // Not a defect in the schedule — a consequence of the two rules meeting. HGV1-A makes difficulty
-    // a property of the ORDINAL (slot shape 1 is the gentler take, shape 2 the harder one), and the
-    // HGV1-B allocation gives batches 1–3 every ordinal 01 and batches 4–6 every ordinal 02.
-    //
-    // So the calibration anchor sees BASIC and STANDARD only, and the first HARD or EDGE conversation
-    // is written in batch 4 — after sixty others. If Wave 1 has a systemic problem specific to hard
-    // scenarios, this anchor cannot surface it, which is worth knowing before relying on it.
-    //
-    // This spec exists so the limitation is visible rather than discovered. Changing it is an owner
-    // decision: alternating the ordinal by kind index would mix difficulty into every batch and keeps
-    // every property proved above.
-    for (const batch of [1, 2, 3] as const) {
+  it('every batch now carries at least one HARD or EDGE slot', () => {
+    // Not just the anchor. Whoever picks up batch 3 gets hard work too.
+    for (const batch of RIYA_GOLD_WAVE_1_BATCHES) {
       const difficulties = new Set(
         riyaGoldWave1BatchAssignments(batch).map((one) => one.difficulty),
       );
-      expect([...difficulties].sort(), `batch ${String(batch)}`).toStrictEqual([
-        'BASIC',
-        'STANDARD',
-      ]);
-    }
-    for (const batch of [4, 5, 6] as const) {
-      const difficulties = new Set(
-        riyaGoldWave1BatchAssignments(batch).map((one) => one.difficulty),
+      expect(difficulties.has('HARD') || difficulties.has('EDGE'), `batch ${String(batch)}`).toBe(
+        true,
       );
-      expect(difficulties.has('HARD'), `batch ${String(batch)}`).toBe(true);
-      expect(difficulties.has('EDGE'), `batch ${String(batch)}`).toBe(true);
     }
-    // Across the whole wave the plan's own floors still hold; it is the ORDER that is uneven.
-    const waveDifficulties = new Set(WAVE_1.map((one) => one.difficulty));
-    expect(waveDifficulties.size).toBe(4);
   });
 });
 

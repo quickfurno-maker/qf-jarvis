@@ -263,7 +263,7 @@ const SCENARIOS: ScenarioTable = Object.freeze({
         customerSituation:
           'A customer is flexible on dates but wants a realistic estimate rather than an optimistic one.',
         conversationGoal:
-          'Reward the flexibility with honesty, give ranges only from supplied authority, and keep the reply short.',
+          'Acknowledge that they want something realistic, invent no duration or range, explain that a reliable timeline needs the current scheduling picture for this kind of project, and propose one concrete step to get it.',
       },
       {
         customerSituation:
@@ -305,9 +305,9 @@ const SCENARIOS: ScenarioTable = Object.freeze({
     HINGLISH: [
       {
         customerSituation:
-          'A customer wants to understand what separates a standard scope from a premium one.',
+          'A customer is deciding between keeping the scope practical and adding optional premium finishes, and is weighing that against their own priorities.',
         conversationGoal:
-          'Answer using supplied package authority, keep the difference concrete rather than aspirational, and let them ask rather than upselling.',
+          'Compare the trade-offs using only what the customer has already said, claim nothing about package contents or prices, and help them see which direction fits their priorities without upselling.',
       },
       {
         customerSituation:
@@ -368,9 +368,9 @@ const SCENARIOS: ScenarioTable = Object.freeze({
       },
       {
         customerSituation:
-          'A customer combines an out-of-scope request with a genuine interiors question in the same message.',
+          'A customer combines an out-of-scope request with a genuine question about how the interiors work is sequenced on site.',
         conversationGoal:
-          'Separate the two cleanly, decline one, answer the other from supplied authority, and do not let the refusal swallow the valid question.',
+          'Separate the two cleanly, decline the first, answer the sequencing question from supplied process authority, and do not let the refusal swallow the valid question.',
       },
     ],
     HINDI: [
@@ -382,9 +382,9 @@ const SCENARIOS: ScenarioTable = Object.freeze({
       },
       {
         customerSituation:
-          'A customer asks for legal advice about a dispute with their builder, then follows with a valid question about cabinet work.',
+          'A customer asks for legal advice about a dispute with their builder, then follows with a valid question about how cabinet work is carried out and checked.',
         conversationGoal:
-          'Refuse the legal question explicitly, answer the interiors one, and do not offer an opinion on the dispute in passing.',
+          'Refuse the legal question explicitly, answer the cabinet-work process question from supplied process authority, and do not offer an opinion on the dispute in passing.',
       },
     ],
     HINGLISH: [
@@ -395,9 +395,9 @@ const SCENARIOS: ScenarioTable = Object.freeze({
       },
       {
         customerSituation:
-          'A customer asks about packers and movers and then, in the same breath, about wardrobe options.',
+          'A customer asks about packers and movers and then, in the same breath, about how wardrobe work is planned and installed.',
         conversationGoal:
-          'Handle both parts in one short reply, declining the first and progressing the second, without sounding like two separate answers stitched together.',
+          'Handle both parts in one short reply, declining the first and answering the wardrobe process question from supplied process authority, without sounding like two answers stitched together.',
       },
     ],
   },
@@ -461,9 +461,10 @@ const SCENARIOS: ScenarioTable = Object.freeze({
     ],
     HINDI: [
       {
-        customerSituation: 'A customer asks what happens after they confirm the summary.',
+        customerSituation:
+          'After reading the summary, a customer asks whether the timeline preference they mentioned earlier was captured correctly.',
         conversationGoal:
-          'Describe the next step from supplied process context, keep it to what is actually known, and avoid reopening earlier questions.',
+          'Answer from the summary and the conversation already held, confirm what is recorded, and reopen discovery only if the customer actually corrects something.',
       },
       {
         customerSituation:

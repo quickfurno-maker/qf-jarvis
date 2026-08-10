@@ -22,10 +22,26 @@
  *
  * ### The rotation
  *
- * `language = (kindIndex + batchIndex) mod 3`. For a fixed kind, six batches walk the three languages
- * twice, so each language/kind pair lands in exactly two batches; the earlier one takes ordinal `01`
- * and the later `02`. Across the six, all 72 official assignments appear exactly once. That is proved
- * rather than asserted — see the Wave-1 batch spec.
+ * ```
+ * language = (kindIndex + batchIndex) mod 3      // 0 ENGLISH, 1 HINDI, 2 HINGLISH
+ * ordinal  = 1 + ((kindIndex + batchIndex) mod 2)
+ * ```
+ *
+ * For a fixed kind, six batches walk the three languages twice, so each language/kind pair lands in
+ * exactly two batches — three apart. Adding three flips the parity, so those two occurrences receive
+ * opposite ordinals automatically: every pair gets exactly one `01` and one `02`, and all 72 official
+ * assignments appear exactly once. Proved rather than asserted, in the Wave-1 batch spec.
+ *
+ * ### Why the ordinal alternates by KIND rather than by batch
+ *
+ * The first schedule gave batches 1–3 every `01` and batches 4–6 every `02`. HGV1-A makes difficulty a
+ * property of the ordinal — shape `01` is the gentler take of a cell, `02` the harder one — so the
+ * calibration anchor contained `BASIC` and `STANDARD` only, and the first `HARD` or `EDGE` slot was
+ * not written until batch 4. An anchor exists to surface systemic problems, and it cannot surface a
+ * problem in work nobody has done yet.
+ *
+ * Alternating on `(kind + batch)` parity instead mixes both takes into every batch, so batch 1 carries
+ * 3 BASIC, 3 STANDARD, 4 HARD and 2 EDGE. Every property above still holds.
  *
  * Content-free. No dialogue, no brief prose, no P10 anything.
  */
@@ -73,8 +89,9 @@ export function riyaGoldWave1BatchAssignments(
   return Object.freeze(
     RIYA_DATASET_INTERACTION_KINDS.map((kind, kindIndex) => {
       const languageMode = languageFor(kindIndex, batchIndex);
-      // The pair's two batches are `b` and `b + 3`; whichever comes first takes ordinal 1.
-      const ordinal = batchIndex < RIYA_DATASET_LANGUAGE_MODES.length ? 1 : 2;
+      // A pair's two batches are three apart, and adding three flips this parity — so the pair gets
+      // one ordinal 01 and one 02 without anything having to track which came first.
+      const ordinal = 1 + ((kindIndex + batchIndex) % 2);
       const assignment = wave1.find(
         (one) =>
           one.primaryInteractionKind === kind &&

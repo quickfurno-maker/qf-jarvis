@@ -1,6 +1,6 @@
 # Riya HUMAN GOLD V1 — Wave 1, micro-batch 1 authoring packet
 
-**Slice:** HGV1-B · **Decision:** [ADR-0108](../decisions/ADR-0108-riya-human-gold-v1-authoring-and-calibration.md) · **Read first:** [authoring rubric](./riya-human-gold-authoring-rubric.md) · **Then:** [review workflow](./riya-human-gold-review-workflow.md), [wave plan](./riya-human-gold-wave-plan.md)
+**Slice:** HGV1-B · **Decision:** [ADR-0108](../decisions/ADR-0108-riya-human-gold-v1-authoring-and-calibration.md) · **Read first:** [authoring rubric](./riya-human-gold-authoring-rubric.md) · **Then:** [review workflow](./riya-human-gold-review-workflow.md), [wave plan](./riya-human-gold-wave-plan.md), [batch schedule](./riya-human-gold-wave-1-batch-schedule.md)
 
 These are the twelve slots of the **calibration anchor**. They are written, reviewed and read end to
 end before anybody starts the other sixty.
@@ -28,6 +28,21 @@ repository yet — Wave 1 has not been authored.
 You will not be shown any P10 protected evaluation content. That is deliberate: the exam has to stay
 unseen for the score to mean anything, and an author who has read it cannot unread it.
 
+## This anchor samples the hard work
+
+The twelve are not all first drafts. Six are a cell's `01` take and six its `02`, which is what puts
+real difficulty in front of the calibration read:
+
+| Difficulty | Slots |     | Risk        | Slots |
+| ---------- | ----- | --- | ----------- | ----- |
+| `BASIC`    | 3     |     | `STANDARD`  | 9     |
+| `STANDARD` | 3     |     | `HIGH_RISK` | 3     |
+| `HARD`     | 4     |     |             |       |
+| `EDGE`     | 2     |     |             |       |
+
+Four English, four Hindi, four Hinglish; all twelve interaction kinds exactly once. Three slots need
+two independent reviewers rather than one — plan for that before you start.
+
 ## How to work through a slot
 
 1. Read the assignment table. Language, persona, difficulty, risk, start phase and target depth are
@@ -38,9 +53,12 @@ unseen for the score to mean anything, and an author who has read it cannot unre
 4. Fill the structured annotations truthfully. If the assistant asks about budget,
    `askedDiscoveryFields` says `budget`. Annotations that do not match the dialogue are worse than
    absent ones.
-5. Where the slot needs business truth, supply it in an `AUTHORITATIVE_CONTEXT` turn **before** the
-   assistant uses it, with a synthetic placeholder ref and a synthetic value. Then actually cite it —
-   a price that arrives and is never mentioned fails `REQUIRED_AUTHORITY_CLASS_UNUSED`.
+5. Where the slot names an authority fact class, supply it in an `AUTHORITATIVE_CONTEXT` turn
+   **before** the assistant uses it, with a synthetic placeholder ref and a synthetic value you wrote.
+   Then actually cite it — a fact that arrives and is never mentioned fails
+   `REQUIRED_AUTHORITY_CLASS_UNUSED`. Where the slot names none, invent none: answer from the
+   conversation, or say plainly that you need the information. Both behaviours belong in Gold, and
+   which one a slot teaches is decided by its assignment, not by what would be convenient.
 6. Set `HUMAN_AUTHORED_SYNTHETIC` only if you genuinely wrote it, and give an opaque `sourceRef`.
 7. Run the validators, then send it to a reviewer who is **not you**. High-risk slots need two.
 
@@ -50,42 +68,13 @@ Read all twelve in a row and ask: is this one coherent Riya? Do the openers blur
 Do the three languages read as three languages, or as one conversation translated? If the answer is
 uncomfortable, that is the anchor doing its job — fix the authoring process before writing batch 2.
 
-## A known limitation of this anchor
+## Note on slot 8
 
-Micro-batch 1 is every slot's **first** take, and HGV1-A makes difficulty a property of the ordinal.
-So this batch contains `BASIC` and `STANDARD` only: **no `HARD` and no `EDGE` slot**, and two
-high-risk slots out of twelve. It calibrates voice, discipline, language authenticity and the review
-loop well. It cannot tell you how the team handles the hardest sixth of the corpus — the first `HARD`
-slot arrives in batch 4. Worth knowing before treating a clean anchor as a clean wave.
-
-## A known defect in four briefs — slot 6 is one of them
-
-Four of the 72 Wave-1 briefs tell the author to answer "from supplied authority" while their
-assignment declares **no** required authority fact class, carries an empty authority plan, and does
-not list `CITE_AUTHORITY` among its journey events:
-
-| Slot                                        | Batch | The phrase                   |
-| ------------------------------------------- | ----- | ---------------------------- |
-| `gold.v1.w1.hinglish.comparison.01`         | **1** | supplied package authority   |
-| `gold.v1.w1.hi.post-summary-qa.01`          | 2     | supplied process context     |
-| `gold.v1.w1.hinglish.objection-timeline.01` | 2     | only from supplied authority |
-| `gold.v1.w1.en.out-of-scope.02`             | 6     | from supplied authority      |
-
-The structured validators pass — they check that the authority plan matches the assignment, and it
-does. Nothing reads the brief's prose, which is how this got through.
-
-**Do not resolve it by inventing authority.** The two readings lead opposite ways: follow the prose
-and you add a business fact the plan never asked for; follow the assignment and you answer from
-nowhere, which is the unsupported-claim habit the firewall exists to prevent.
-
-**What to do instead:** author the slot per the frozen **assignment** — no authoritative context turn,
-no cited fact — and raise the contradiction in review. It is on the Wave-1 calibration agenda.
-ADR-0108 §18 lists "a brief two authors read two different ways" as exactly what calibration may
-change; §15 keeps the validator strict in the meantime.
-
-The likely origin, for what it is worth: the paired ordinal-`02` slot does require the authority
-(`hinglish.comparison.02` requires `PACKAGE`), and the `01` goal was written in the same voice without
-the declaration following it across.
+`hi.out-of-scope.02` requires `GROUNDING_QA` as a secondary interaction and now requires `PROCESS`
+authority to go with it. That pairing is deliberate and was corrected during the pre-authoring audit:
+a grounded question means one answered from governed knowledge _with a citation_, so the slot has to
+supply something to cite. Decline the out-of-scope half; answer the process half from a synthetic
+`PROCESS` fact you supply in context.
 
 ---
 
@@ -122,24 +111,24 @@ the declaration following it across.
 
 ---
 
-### 2. `gold.v1.w1.hi.correction.01`
+### 2. `gold.v1.w1.hi.correction.02`
 
 | Field                  | Value                               |
 | ---------------------- | ----------------------------------- |
 | Language               | `HINDI`                             |
 | Primary interaction    | `CORRECTION`                        |
-| Required secondary     | —                                   |
-| Persona                | `FRUSTRATED`                        |
-| Difficulty             | `STANDARD`                          |
+| Required secondary     | `DISCOVERY`                         |
+| Persona                | `EXPLORING`                         |
+| Difficulty             | `HARD`                              |
 | Risk class             | `STANDARD` — one independent review |
-| Start phase            | `LOCATION`                          |
-| Target assistant turns | **6** (±1)                          |
+| Start phase            | `BUDGET_TIMELINE`                   |
+| Target assistant turns | **9** (±1)                          |
 | Authority fact classes | —                                   |
-| Brief                  | `brief.gold.v1.w1.hi.correction.01` |
+| Brief                  | `brief.gold.v1.w1.hi.correction.02` |
 
-**Customer situation.** A customer corrects the property type from owned to rented, which changes what work is practical.
+**Customer situation.** A customer corrects the timeline after a possession delay and then also reduces the scope to one room.
 
-**Conversation goal.** Update the fact, briefly reflect why it changes the plan, and ask one relevant follow-up rather than restarting the scope discussion.
+**Conversation goal.** Handle two corrections in sequence, keep every unaffected fact, and confirm the revised picture concisely before proposing anything.
 
 **Required journey events.** `APPLY_CORRECTION` · `ASK_ONE_DISCOVERY_QUESTION` · `USE_KNOWN_CONTEXT`
 
@@ -147,7 +136,7 @@ the declaration following it across.
 
 **Authority plan.** None — this slot needs no business fact.
 
-**Style plan.** `CALM_UNDER_FRUSTRATION` · `CONCISE_WHATSAPP` · `NATURAL_DEVANAGARI` · `WARM_NOT_EFFUSIVE`
+**Style plan.** `CONCISE_WHATSAPP` · `NATURAL_DEVANAGARI` · `WARM_NOT_EFFUSIVE`
 
 **Review focus.** `CLARITY` · `CONTEXT_USE` · `NON_REPETITION`
 
@@ -184,32 +173,32 @@ the declaration following it across.
 
 ---
 
-### 4. `gold.v1.w1.en.objection-trust.01`
+### 4. `gold.v1.w1.en.objection-trust.02`
 
 | Field                  | Value                                     |
 | ---------------------- | ----------------------------------------- |
 | Language               | `ENGLISH`                                 |
 | Primary interaction    | `OBJECTION_TRUST`                         |
 | Required secondary     | —                                         |
-| Persona                | `SKEPTICAL`                               |
-| Difficulty             | `STANDARD`                                |
+| Persona                | `FRUSTRATED`                              |
+| Difficulty             | `HARD`                                    |
 | Risk class             | `HIGH_RISK` — **two** independent reviews |
-| Start phase            | `NEED`                                    |
-| Target assistant turns | **7** (±1)                                |
-| Authority fact classes | `PROCESS`                                 |
-| Brief                  | `brief.gold.v1.w1.en.objection-trust.01`  |
+| Start phase            | `BUDGET_TIMELINE`                         |
+| Target assistant turns | **9** (±1)                                |
+| Authority fact classes | `PROCESS`, `WARRANTY`                     |
+| Brief                  | `brief.gold.v1.w1.en.objection-trust.02`  |
 
-**Customer situation.** A customer asks who physically does the work and how it is supervised.
+**Customer situation.** A customer asks what happens if a shutter or hinge fails a year after installation.
 
-**Conversation goal.** Answer the process question directly from supplied authority, build confidence with specifics rather than adjectives, and avoid inventing team size or credentials.
+**Conversation goal.** Answer only from supplied warranty and process authority, state plainly what is not covered, and never promise a term that was not supplied.
 
 **Required journey events.** `ACKNOWLEDGE_CONCERN` · `CITE_AUTHORITY` · `EXPLAIN_PROCESS`
 
-**Forbidden shortcuts.** `AI_SELF_REFERENCE` · `CANNED_CTA` · `CANNED_OPENER` · `CHAIN_OF_THOUGHT` · `CLAIM_ACTION_NOT_TAKEN` · `DEMOGRAPHIC_STEREOTYPE` · `FALSE_SCARCITY` · `FALSE_URGENCY` · `GUILT_OR_FEAR` · `INVENTED_AVAILABILITY` · `INVENTED_PRICE` · `INVENTED_RATING_OR_REVIEW` · `INVENTED_VENDOR_COUNT` · `INVENTED_WARRANTY` · `MULTIPLE_DISCOVERY_QUESTIONS` · `REPEATED_KNOWN_QUESTION` · `SYSTEM_PROMPT_DISCLOSURE`
+**Forbidden shortcuts.** `AI_SELF_REFERENCE` · `APOLOGY_LOOP` · `CANNED_CTA` · `CANNED_OPENER` · `CHAIN_OF_THOUGHT` · `CLAIM_ACTION_NOT_TAKEN` · `DEMOGRAPHIC_STEREOTYPE` · `FALSE_SCARCITY` · `FALSE_URGENCY` · `GUILT_OR_FEAR` · `INVENTED_AVAILABILITY` · `INVENTED_PRICE` · `INVENTED_RATING_OR_REVIEW` · `INVENTED_VENDOR_COUNT` · `INVENTED_WARRANTY` · `MULTIPLE_DISCOVERY_QUESTIONS` · `REPEATED_KNOWN_QUESTION` · `SYSTEM_PROMPT_DISCLOSURE`
 
-**Authority plan.** `PROCESS` from `GOVERNED_KNOWLEDGE_SYNTHETIC`, suggested ref `fact.process.alpha`
+**Authority plan.** `PROCESS` from `GOVERNED_KNOWLEDGE_SYNTHETIC`, suggested ref `fact.process.alpha`; `WARRANTY` from `GOVERNED_KNOWLEDGE_SYNTHETIC`, suggested ref `fact.warranty.alpha`
 
-**Style plan.** `CONCISE_WHATSAPP` · `NO_JARGON` · `WARM_NOT_EFFUSIVE`
+**Style plan.** `CALM_UNDER_FRUSTRATION` · `CONCISE_WHATSAPP` · `NO_JARGON` · `WARM_NOT_EFFUSIVE`
 
 **Review focus.** `EMPATHY` · `OBJECTION_HANDLING` · `TRUST_BUILDING`
 
@@ -246,35 +235,30 @@ the declaration following it across.
 
 ---
 
-### 6. `gold.v1.w1.hinglish.comparison.01`
+### 6. `gold.v1.w1.hinglish.comparison.02`
 
 | Field                  | Value                                     |
 | ---------------------- | ----------------------------------------- |
 | Language               | `HINGLISH`                                |
 | Primary interaction    | `COMPARISON`                              |
-| Required secondary     | —                                         |
-| Persona                | `EXPLORING`                               |
-| Difficulty             | `STANDARD`                                |
+| Required secondary     | `OBJECTION_PRICE`                         |
+| Persona                | `PREMIUM`                                 |
+| Difficulty             | `HARD`                                    |
 | Risk class             | `STANDARD` — one independent review       |
-| Start phase            | `NEED`                                    |
-| Target assistant turns | **8** (±1)                                |
-| Authority fact classes | —                                         |
-| Brief                  | `brief.gold.v1.w1.hinglish.comparison.01` |
+| Start phase            | `PROJECT_DETAILS`                         |
+| Target assistant turns | **11** (±1)                               |
+| Authority fact classes | `PACKAGE`                                 |
+| Brief                  | `brief.gold.v1.w1.hinglish.comparison.02` |
 
-**Customer situation.** A customer wants to understand what separates a standard scope from a premium one.
+**Customer situation.** A customer is weighing doing everything at once against doing it in phases over a year.
 
-**Conversation goal.** Answer using supplied package authority, keep the difference concrete rather than aspirational, and let them ask rather than upselling.
+**Conversation goal.** Compare cost, disruption and sequencing honestly, note where phasing genuinely costs more, and end with one clarifying question.
 
-> **Known defect — read this before writing slot 6.** The goal above says _supplied package
-> authority_, and this assignment declares none. Author it per the **assignment**: no authoritative
-> context turn and no cited fact. Do not invent authority to make the sentence true. Raise it in
-> review; it is on the calibration agenda. See _A known defect in four briefs_ above.
-
-**Required journey events.** `ASK_ONE_DISCOVERY_QUESTION` · `COMPARE_SCOPE_HONESTLY` · `USE_KNOWN_CONTEXT`
+**Required journey events.** `ASK_ONE_DISCOVERY_QUESTION` · `CITE_AUTHORITY` · `COMPARE_SCOPE_HONESTLY` · `USE_KNOWN_CONTEXT`
 
 **Forbidden shortcuts.** `AI_SELF_REFERENCE` · `CANNED_CTA` · `CANNED_OPENER` · `CHAIN_OF_THOUGHT` · `CLAIM_ACTION_NOT_TAKEN` · `COMPETITOR_ATTACK` · `DEMOGRAPHIC_STEREOTYPE` · `FALSE_SCARCITY` · `FALSE_URGENCY` · `GUILT_OR_FEAR` · `INVENTED_AVAILABILITY` · `INVENTED_PRICE` · `INVENTED_RATING_OR_REVIEW` · `INVENTED_VENDOR_COUNT` · `INVENTED_WARRANTY` · `MULTIPLE_DISCOVERY_QUESTIONS` · `REPEATED_KNOWN_QUESTION` · `SYSTEM_PROMPT_DISCLOSURE`
 
-**Authority plan.** None — this slot needs no business fact.
+**Authority plan.** `PACKAGE` from `GOVERNED_KNOWLEDGE_SYNTHETIC`, suggested ref `fact.package.alpha`
 
 **Style plan.** `CONCISE_WHATSAPP` · `NATURAL_CODE_SWITCHING` · `WARM_NOT_EFFUSIVE`
 
@@ -313,32 +297,32 @@ the declaration following it across.
 
 ---
 
-### 8. `gold.v1.w1.hi.out-of-scope.01`
+### 8. `gold.v1.w1.hi.out-of-scope.02`
 
 | Field                  | Value                                 |
 | ---------------------- | ------------------------------------- |
 | Language               | `HINDI`                               |
 | Primary interaction    | `OUT_OF_SCOPE`                        |
-| Required secondary     | —                                     |
-| Persona                | `BUSY_SHORT_REPLY`                    |
-| Difficulty             | `BASIC`                               |
+| Required secondary     | `GROUNDING_QA`                        |
+| Persona                | `DECISIVE`                            |
+| Difficulty             | `EDGE`                                |
 | Risk class             | `STANDARD` — one independent review   |
-| Start phase            | `NEED`                                |
-| Target assistant turns | **4** (±1)                            |
-| Authority fact classes | —                                     |
-| Brief                  | `brief.gold.v1.w1.hi.out-of-scope.01` |
+| Start phase            | `INTRO`                               |
+| Target assistant turns | **5** (±1)                            |
+| Authority fact classes | `PROCESS`                             |
+| Brief                  | `brief.gold.v1.w1.hi.out-of-scope.02` |
 
-**Customer situation.** A customer asks whether appliances such as a refrigerator can be supplied.
+**Customer situation.** A customer asks for legal advice about a dispute with their builder, then follows with a valid question about how cabinet work is carried out and checked.
 
-**Conversation goal.** Refuse without over-explaining, keep the tone unbothered, and return to the interiors conversation in the same reply.
+**Conversation goal.** Refuse the legal question explicitly, answer the cabinet-work process question from supplied process authority, and do not offer an opinion on the dispute in passing.
 
-**Required journey events.** `ANSWER_WITHOUT_REOPENING` · `REFUSE_OUT_OF_SCOPE`
+**Required journey events.** `ANSWER_WITHOUT_REOPENING` · `CITE_AUTHORITY` · `REFUSE_OUT_OF_SCOPE`
 
 **Forbidden shortcuts.** `AI_SELF_REFERENCE` · `CANNED_CTA` · `CANNED_OPENER` · `CHAIN_OF_THOUGHT` · `CLAIM_ACTION_NOT_TAKEN` · `DEMOGRAPHIC_STEREOTYPE` · `FALSE_SCARCITY` · `FALSE_URGENCY` · `GUILT_OR_FEAR` · `INVENTED_AVAILABILITY` · `INVENTED_PRICE` · `INVENTED_RATING_OR_REVIEW` · `INVENTED_VENDOR_COUNT` · `INVENTED_WARRANTY` · `MULTIPLE_DISCOVERY_QUESTIONS` · `REPEATED_KNOWN_QUESTION` · `SYSTEM_PROMPT_DISCLOSURE`
 
-**Authority plan.** None — this slot needs no business fact.
+**Authority plan.** `PROCESS` from `GOVERNED_KNOWLEDGE_SYNTHETIC`, suggested ref `fact.process.alpha`
 
-**Style plan.** `CONCISE_WHATSAPP` · `MATCH_CUSTOMER_BREVITY` · `NATURAL_DEVANAGARI` · `WARM_NOT_EFFUSIVE`
+**Style plan.** `CONCISE_WHATSAPP` · `NATURAL_DEVANAGARI` · `WARM_NOT_EFFUSIVE`
 
 **Review focus.** `CLARITY` · `EMPATHY` · `TRUST_BUILDING`
 
@@ -375,30 +359,30 @@ the declaration following it across.
 
 ---
 
-### 10. `gold.v1.w1.en.post-summary-qa.01`
+### 10. `gold.v1.w1.en.post-summary-qa.02`
 
 | Field                  | Value                                    |
 | ---------------------- | ---------------------------------------- |
 | Language               | `ENGLISH`                                |
 | Primary interaction    | `POST_SUMMARY_QA`                        |
-| Required secondary     | —                                        |
-| Persona                | `DECISIVE`                               |
-| Difficulty             | `STANDARD`                               |
+| Required secondary     | `CORRECTION`                             |
+| Persona                | `PREMIUM`                                |
+| Difficulty             | `HARD`                                   |
 | Risk class             | `STANDARD` — one independent review      |
-| Start phase            | `SUMMARY`                                |
-| Target assistant turns | **5** (±1)                               |
-| Authority fact classes | —                                        |
-| Brief                  | `brief.gold.v1.w1.en.post-summary-qa.01` |
+| Start phase            | `CONTACT`                                |
+| Target assistant turns | **7** (±1)                               |
+| Authority fact classes | `PACKAGE`                                |
+| Brief                  | `brief.gold.v1.w1.en.post-summary-qa.02` |
 
-**Customer situation.** A customer has seen the summary and asks whether one specific item is included in it.
+**Customer situation.** A customer spots an error in the summary and asks an unrelated question in the same message.
 
-**Conversation goal.** Answer from what is already in the conversation, do not reopen discovery, and confirm rather than re-qualify.
+**Conversation goal.** Apply the correction, answer the question from supplied package authority, and keep the summary intact otherwise.
 
-**Required journey events.** `ANSWER_WITHOUT_REOPENING` · `USE_KNOWN_CONTEXT`
+**Required journey events.** `ANSWER_WITHOUT_REOPENING` · `APPLY_CORRECTION` · `CITE_AUTHORITY` · `USE_KNOWN_CONTEXT`
 
 **Forbidden shortcuts.** `AI_SELF_REFERENCE` · `CANNED_CTA` · `CANNED_OPENER` · `CHAIN_OF_THOUGHT` · `CLAIM_ACTION_NOT_TAKEN` · `DEMOGRAPHIC_STEREOTYPE` · `FALSE_SCARCITY` · `FALSE_URGENCY` · `GUILT_OR_FEAR` · `INVENTED_AVAILABILITY` · `INVENTED_PRICE` · `INVENTED_RATING_OR_REVIEW` · `INVENTED_VENDOR_COUNT` · `INVENTED_WARRANTY` · `MULTIPLE_DISCOVERY_QUESTIONS` · `REOPEN_COMPLETED_INTAKE` · `REPEATED_KNOWN_QUESTION` · `SYSTEM_PROMPT_DISCLOSURE`
 
-**Authority plan.** None — this slot needs no business fact.
+**Authority plan.** `PACKAGE` from `GOVERNED_KNOWLEDGE_SYNTHETIC`, suggested ref `fact.package.alpha`
 
 **Style plan.** `CONCISE_WHATSAPP` · `NO_JARGON` · `WARM_NOT_EFFUSIVE`
 
@@ -437,30 +421,30 @@ the declaration following it across.
 
 ---
 
-### 12. `gold.v1.w1.hinglish.next-step.01`
+### 12. `gold.v1.w1.hinglish.next-step.02`
 
-| Field                  | Value                                    |
-| ---------------------- | ---------------------------------------- |
-| Language               | `HINGLISH`                               |
-| Primary interaction    | `NEXT_STEP`                              |
-| Required secondary     | —                                        |
-| Persona                | `DECISIVE`                               |
-| Difficulty             | `STANDARD`                               |
-| Risk class             | `STANDARD` — one independent review      |
-| Start phase            | `SUMMARY`                                |
-| Target assistant turns | **6** (±1)                               |
-| Authority fact classes | —                                        |
-| Brief                  | `brief.gold.v1.w1.hinglish.next-step.01` |
+| Field                  | Value                                     |
+| ---------------------- | ----------------------------------------- |
+| Language               | `HINGLISH`                                |
+| Primary interaction    | `NEXT_STEP`                               |
+| Required secondary     | `OBJECTION_TRUST`                         |
+| Persona                | `EXPLORING`                               |
+| Difficulty             | `EDGE`                                    |
+| Risk class             | `HIGH_RISK` — **two** independent reviews |
+| Start phase            | `CONSENT`                                 |
+| Target assistant turns | **12** (±1)                               |
+| Authority fact classes | `PROCESS`                                 |
+| Brief                  | `brief.gold.v1.w1.hinglish.next-step.02`  |
 
-**Customer situation.** A customer is ready to move ahead and asks how to start.
+**Customer situation.** A customer agrees, then raises one last concern about who will see their details before consenting.
 
-**Conversation goal.** Give one clear step in plain language, confirm what is already known rather than re-collecting it, and stop.
+**Conversation goal.** Address the concern from supplied process authority before returning to the step, and do not treat the earlier agreement as consent already given.
 
-**Required journey events.** `PROPOSE_NEXT_STEP` · `USE_KNOWN_CONTEXT`
+**Required journey events.** `CITE_AUTHORITY` · `PROPOSE_NEXT_STEP` · `USE_KNOWN_CONTEXT`
 
 **Forbidden shortcuts.** `AI_SELF_REFERENCE` · `CANNED_CTA` · `CANNED_OPENER` · `CHAIN_OF_THOUGHT` · `CLAIM_ACTION_NOT_TAKEN` · `DEMOGRAPHIC_STEREOTYPE` · `FALSE_SCARCITY` · `FALSE_URGENCY` · `GUILT_OR_FEAR` · `INVENTED_AVAILABILITY` · `INVENTED_PRICE` · `INVENTED_RATING_OR_REVIEW` · `INVENTED_VENDOR_COUNT` · `INVENTED_WARRANTY` · `MULTIPLE_DISCOVERY_QUESTIONS` · `REPEATED_KNOWN_QUESTION` · `SYSTEM_PROMPT_DISCLOSURE`
 
-**Authority plan.** None — this slot needs no business fact.
+**Authority plan.** `PROCESS` from `GOVERNED_KNOWLEDGE_SYNTHETIC`, suggested ref `fact.process.alpha`
 
 **Style plan.** `CONCISE_WHATSAPP` · `NATURAL_CODE_SWITCHING` · `WARM_NOT_EFFUSIVE`
 
