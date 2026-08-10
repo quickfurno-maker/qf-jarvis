@@ -326,7 +326,12 @@ describe('no runtime, service or application reaches this package', () => {
           continue;
         }
         for (const file of files) {
-          if (readFileSync(file, 'utf8').includes('@qf-jarvis/riya-quality-evaluation')) {
+          // Comments stripped first, the same way this file's own production scans read source.
+          // `@qf-jarvis/riya-model-benchmark` (RMB-A) names this package in its header to state which
+          // of the three evidence authorities owns QUALITY — documentation that makes the separation
+          // legible, and precisely not an import. A scanner that could not tell the difference would
+          // push people to write vaguer comments to appease it.
+          if (codeOnly(readFileSync(file, 'utf8')).includes('@qf-jarvis/riya-quality-evaluation')) {
             if (isApp) {
               importingApps.push(file);
             } else {

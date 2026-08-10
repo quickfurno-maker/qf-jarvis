@@ -280,7 +280,13 @@ describe('no runtime, service or application can reach the dataset factory', () 
           continue;
         }
         for (const file of files) {
-          if (readFileSync(file, 'utf8').includes('@qf-jarvis/riya-intelligence-dataset')) {
+          // Comments stripped first, the same way every other scan in this file reads source.
+          // `@qf-jarvis/riya-model-benchmark` documents why it uses cryptographic SHA-256 and cites
+          // this package as the precedent; a doc comment is not an import, and a scanner that could
+          // not tell the difference would push people to write vaguer comments to appease it.
+          if (
+            codeOnly(readFileSync(file, 'utf8')).includes('@qf-jarvis/riya-intelligence-dataset')
+          ) {
             importers.push(file);
           }
         }

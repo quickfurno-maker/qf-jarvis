@@ -123,6 +123,35 @@ function rejectWildcard(value: string): void {
   }
 }
 
+/**
+ * Validate and freeze a release identity ON ITS OWN. Throws `EvaluationError('invalid-binding')`.
+ *
+ * Extracted so a package that needs to name a release WITHOUT running an evaluation can reuse this
+ * exact grammar rather than restate it. `@qf-jarvis/riya-model-benchmark` is the first such caller:
+ * operational benchmark evidence is about a release, but it owns no suite, no fixture manifest, no
+ * evaluator and no prompt family, so `createEvaluationBinding` is the wrong shape for it and copying
+ * the six fields into a second schema would create an identity that could drift from this one.
+ *
+ * `createEvaluationBinding` validates through the SAME schema and the SAME wildcard rule below, so
+ * there is one release grammar in the repository and callers cannot disagree about it.
+ */
+export function createProviderReleaseRef(input: ProviderReleaseRef): ProviderReleaseRef {
+  const parsed = releaseSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new EvaluationError('invalid-binding');
+  }
+  const release = parsed.data;
+  for (const token of [
+    release.releaseId,
+    release.providerId,
+    release.modelId,
+    release.modelVersion,
+  ]) {
+    rejectWildcard(token);
+  }
+  return Object.freeze({ ...release });
+}
+
 /** Validate and freeze an evaluation binding. Throws `EvaluationError('invalid-binding')`. */
 export function createEvaluationBinding(input: EvaluationBindingInput): EvaluationBinding {
   const parsed = bindingSchema.safeParse(input);

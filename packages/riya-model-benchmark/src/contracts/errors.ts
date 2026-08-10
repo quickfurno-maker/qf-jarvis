@@ -1,0 +1,41 @@
+/**
+ * The closed error vocabulary of operational benchmark evidence (RMB-A).
+ *
+ * Closed codes, never free text. A caller branching on a message string is a caller that breaks when
+ * somebody improves the wording, and an error you cannot branch on is a log line rather than a
+ * contract.
+ *
+ * Nothing here carries a measured value, an identifier or any content. A benchmark failure says WHAT
+ * was wrong and WHERE, never what the number was — the same discipline the dataset and evaluation
+ * packages already keep, for the same reason: an error path is the easiest place for content to leak
+ * out of a system that was careful everywhere else.
+ */
+
+export const RIYA_BENCHMARK_ERROR_CODES = [
+  'SUBJECT_INVALID',
+  'ENVIRONMENT_INVALID',
+  'WORKLOAD_INVALID',
+  'OBSERVATION_INVALID',
+  'REQUEST_COUNT_MISMATCH',
+  'PERCENTILE_ORDER_INVALID',
+  'TOKEN_MEASUREMENT_INVALID',
+  'MANIFEST_DUPLICATE_CASE',
+  'MANIFEST_CASE_MISSING',
+  'MANIFEST_CASE_UNEXPECTED',
+  'DIGEST_INVALID',
+  'EVIDENCE_TAMPERED',
+  'COMPARISON_NOT_PARITY',
+] as const;
+
+export type RiyaBenchmarkErrorCode = (typeof RIYA_BENCHMARK_ERROR_CODES)[number];
+
+/** The one error type this package throws. Carries a closed code and nothing measured. */
+export class RiyaBenchmarkError extends Error {
+  public readonly code: RiyaBenchmarkErrorCode;
+
+  public constructor(code: RiyaBenchmarkErrorCode) {
+    super(code);
+    this.name = 'RiyaBenchmarkError';
+    this.code = code;
+  }
+}

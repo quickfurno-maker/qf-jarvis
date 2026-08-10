@@ -200,14 +200,18 @@ describe('(43, 44, 45) sibling package API locks are undisturbed', () => {
     ).toContain('toHaveLength(24)');
   });
 
-  it('(44) model-evaluation remains 33', () => {
+  it('(44) model-evaluation remains 34', () => {
     const containment = readRepo('packages/model-evaluation/src/tests/containment.test.ts');
     const block = /const EXPECTED = \[([\s\S]*?)\];/.exec(containment);
     const symbols = (block?.[1] ?? '')
       .split('\n')
       .map((line) => line.trim())
       .filter((line) => line.startsWith("'"));
-    expect(symbols).toHaveLength(33);
+    // RMB-A: 33 -> 34 records ONE authorised addition, `createProviderReleaseRef` -- the release
+    // grammar made independently constructible so the operational-benchmark package can NAME a
+    // release without a second copy of the six fields. Still an EXACT count; it records an
+    // authorised addition, it does not relax the assertion.
+    expect(symbols).toHaveLength(34);
   });
 
   it('(45) event-backbone remains 39', () => {

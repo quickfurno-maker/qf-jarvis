@@ -44,7 +44,12 @@ export { EvaluationError, EVALUATION_ERROR_CODES } from './contracts/errors.js';
 export type { EvaluationErrorCode } from './contracts/errors.js';
 
 // Binding.
-export { createEvaluationBinding, releaseKey, bindingsMatch } from './contracts/binding.js';
+export {
+  createEvaluationBinding,
+  createProviderReleaseRef,
+  releaseKey,
+  bindingsMatch,
+} from './contracts/binding.js';
 export type {
   EvaluationBinding,
   EvaluationBindingInput,

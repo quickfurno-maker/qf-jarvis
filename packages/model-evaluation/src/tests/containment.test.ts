@@ -293,6 +293,9 @@ describe('containment', () => {
       'createEvaluationBinding',
       'createEvaluationScenario',
       'createEvaluationSuite',
+      // RMB-A: the release grammar, independently constructible so an operational-benchmark package
+      // can NAME a release without owning a suite, and without a second copy of these six fields.
+      'createProviderReleaseRef',
       'createSuiteThresholds',
       'dataClassRank',
       'evaluateSuite',
