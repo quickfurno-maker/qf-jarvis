@@ -1,6 +1,8 @@
 # ADR-0107 — RID-F1: Riya intelligence dataset foundation and leakage firewall
 
-- **Status:** Accepted — RID-F1 implementation on branch, NOT MERGED
+- **Status:** Accepted — RID-F1 merged as PR #112. Reviewed head `41abcf2`, merge commit
+  `66d83756ffbcc247a4a56c5a177da11ac6c45872`. Extended by
+  [ADR-0108](./ADR-0108-riya-human-gold-v1-authoring-and-calibration.md) (HGV1-A, current).
 - **Date:** 2026-08-10
 - **Depends on:** ADR-0098/0099 (RWC-P4A/P4B), ADR-0103 (RWC-P7), ADR-0104 (RWC-P8),
   ADR-0105 (RWC-P9), ADR-0106 (RWC-P10 quality evaluation), ADR-0052 (the generic evaluation
@@ -246,6 +248,16 @@ supposed to make the choice.
 Provisional target 360 multi-turn trajectories — 3 languages × 12 interaction kinds × 10 each, four to
 twelve assistant turns. **Not generated in this PR**, and no `360` appears in production source: that
 belongs to the Gold V1 release policy, authored as data.
+
+> **Superseded in detail by [ADR-0108](./ADR-0108-riya-human-gold-v1-authoring-and-calibration.md).**
+> HGV1-A is that slice. It keeps the 360 total, the twelve kinds, the three languages and the 4–12
+> depth band, and it restates the arrangement as **5 balanced waves × 3 languages × 12 kinds × 2**
+> rather than 3 × 12 × 10 — the same 360, generated as a checkable table. Splits are 288 `TRAIN`
+> (waves 1–4) / 72 `VALIDATION` (wave 5) / **0 `HOLDOUT`**, replacing the ~70/15/15 sketch in the
+> coverage plan: a corpus committed to Git has no honest holdout, so V1 populates none rather than
+> pretending. `360` is now authored as data in the Gold coverage policy exactly as this section
+> required, and the "no Gold target in production source" lock is restated in the containment spec as
+> "no Gold target OUTSIDE the Gold slice".
 
 ## Consequences
 

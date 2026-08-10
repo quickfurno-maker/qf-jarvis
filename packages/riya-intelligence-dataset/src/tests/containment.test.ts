@@ -23,6 +23,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import * as barrel from '../index.js';
+import * as goldBarrel from '../gold-v1/index.js';
 import * as testingBarrel from '../testing/index.js';
 
 const SRC = fileURLToPath(new URL('../', import.meta.url));
@@ -53,8 +54,30 @@ const codeOnly = (text: string): string =>
     .filter((line) => !/^\s*\/\//u.test(line))
     .join('\n');
 
-const productionFiles = (): readonly { readonly file: string; readonly code: string }[] =>
-  walk(SRC, true).map((file) => ({ file, code: codeOnly(readFileSync(file, 'utf8')) }));
+const relativeOf = (file: string): string => file.replaceAll('\\', '/').split('/src/')[1] ?? file;
+
+const productionFiles = (): readonly {
+  readonly file: string;
+  readonly relative: string;
+  readonly code: string;
+}[] =>
+  walk(SRC, true).map((file) => ({
+    file,
+    relative: relativeOf(file),
+    code: codeOnly(readFileSync(file, 'utf8')),
+  }));
+
+/**
+ * The TWO files allowed to contain a forbidden name, because their job is to reject it.
+ *
+ * A firewall that rejects governed production names has to know them, and a brief validator that
+ * refuses an authoring instruction naming a model provider has to know those too. The exemption is
+ * narrow — these exact paths — and each is separately proved below to carry the names only inside a
+ * named reject list, never in an example, a default or a fixture.
+ */
+const PRIVACY_SCANNER = 'internal/privacy-scan.ts';
+const BRIEF_SCANNER = 'gold-v1/service/validate-plan.ts';
+const SCANNERS = new Set([PRIVACY_SCANNER, BRIEF_SCANNER]);
 
 // ---------------------------------------------------------------------------
 // 1. No model, no training, no I/O.
@@ -62,7 +85,10 @@ const productionFiles = (): readonly { readonly file: string; readonly code: str
 
 describe('RID-F1 invokes nothing and trains nothing', () => {
   it('names no model, provider, gateway or inference client', () => {
-    for (const { file, code } of productionFiles()) {
+    // The provider names are the scanners' business; the IMPORT paths are nobody's, so those stay
+    // enforced everywhere including inside the scanners.
+    const PROVIDER_NAMES = new Set(['groq', 'Groq', 'openai', 'OpenAI', 'anthropic', 'Anthropic']);
+    for (const { file, relative, code } of productionFiles()) {
       for (const forbidden of [
         'model-gateway',
         'model-reply-adapter',
@@ -83,6 +109,7 @@ describe('RID-F1 invokes nothing and trains nothing', () => {
         'huggingface',
         'transformers',
       ]) {
+        if (SCANNERS.has(relative) && PROVIDER_NAMES.has(forbidden)) continue;
         expect(code, `${file} must not name ${forbidden}`).not.toContain(forbidden);
       }
     }
@@ -182,33 +209,41 @@ describe('RID-F1 invokes nothing and trains nothing', () => {
   });
 
   it('contains no QuickFurno data, contact detail or production URL', () => {
-    // ONE exemption, and it is the scanner itself: a firewall that rejects governed production names
-    // has to know them. Every other file is held to the plain rule.
-    const SCANNER = 'internal/privacy-scan.ts';
-    for (const { file, code } of productionFiles()) {
-      const relative = file.replaceAll('\\', '/').split('/src/')[1] ?? file;
-      const forbidden =
-        relative === SCANNER
-          ? ['https://', 'http://', '@gmail', '@example.com']
-          : ['quickfurno', 'onedecore', 'https://', 'http://', '@gmail', '@example.com'];
+    // Two exemptions, both scanners, and neither is exempt from the URL and contact rules. Every
+    // other file is held to the plain rule.
+    for (const { file, relative, code } of productionFiles()) {
+      const forbidden = SCANNERS.has(relative)
+        ? ['https://', 'http://', '@gmail', '@example.com']
+        : ['quickfurno', 'onedecore', 'https://', 'http://', '@gmail', '@example.com'];
       for (const token of forbidden) {
         expect(code.toLowerCase(), `${file} must not name ${token}`).not.toContain(token);
       }
     }
   });
 
-  it('the scanner names a production string ONLY as a detection pattern', () => {
-    // The exemption above is only safe if the names appear in the reject list and nowhere else --
+  it.each([
+    [PRIVACY_SCANNER, 'PRODUCTION_NAMES'],
+    [BRIEF_SCANNER, 'FORBIDDEN_NAMES'],
+  ])('%s names a production string ONLY inside %s', (path, list) => {
+    // The exemptions above are only safe if the names appear in the reject list and nowhere else --
     // not in an example, a default value or a fixture.
-    const scanner = productionFiles().find(({ file }) =>
-      file.replaceAll('\\', '/').endsWith('internal/privacy-scan.ts'),
-    );
-    expect(scanner).toBeDefined();
-    const lines = (scanner?.code ?? '')
-      .split('\n')
-      .filter((line) => /quickfurno|onedecore/iu.test(line));
-    expect(lines).toHaveLength(1);
-    expect(lines[0]).toContain('PRODUCTION_NAMES');
+    const scanner = productionFiles().find(({ relative }) => relative === path);
+    expect(scanner, path).toBeDefined();
+    const code = scanner?.code ?? '';
+
+    // The declaration's exact span: from the list's name to the parenthesis that closes it.
+    const start = code.indexOf(list);
+    expect(start, `${path} declares ${list}`).toBeGreaterThanOrEqual(0);
+    const end = code.indexOf(']);', start);
+    expect(end, `${path} closes ${list}`).toBeGreaterThan(start);
+
+    // Every occurrence, anywhere in the file, falls inside that span.
+    const occurrences = [...code.matchAll(/quickfurno|onedecore/giu)].map((match) => match.index);
+    expect(occurrences.length, `${path} lists the production names`).toBeGreaterThan(0);
+    for (const at of occurrences) {
+      expect(at, `${path}: occurrence at ${String(at)} is outside ${list}`).toBeGreaterThan(start);
+      expect(at, `${path}: occurrence at ${String(at)} is outside ${list}`).toBeLessThan(end);
+    }
   });
 
   it('depends on exactly four packages', () => {
@@ -354,6 +389,75 @@ describe('the root surface is vocabularies, factories and services', () => {
     expect(serialized).not.toContain('city.alpha');
   });
 
+  it('the Gold V1 authoring system is a SEPARATE subpath, off the root', () => {
+    // Nothing on a production import path can reach the plan, the briefs or the Gold policies, and
+    // the root surface is unchanged by HGV1-A.
+    for (const key of Object.keys(barrel)) {
+      expect(key.toUpperCase(), key).not.toContain('GOLD');
+    }
+    const manifest = JSON.parse(readFileSync(join(PKG, 'package.json'), 'utf8')) as {
+      exports?: Record<string, unknown>;
+    };
+    expect(Object.keys(manifest.exports ?? {}).sort()).toStrictEqual([
+      '.',
+      './gold-v1',
+      './testing',
+    ]);
+  });
+
+  it('the Gold subpath ships the authoring system and NO Gold conversation', () => {
+    // HGV1-A builds the system; humans author Wave 1 in the next content PR. The strongest way to
+    // say "there is no Gold dialogue here" is to show the exported surface has nowhere to put one.
+    const exported = Object.keys(goldBarrel);
+    expect(exported).toContain('generateRiyaGoldV1Plan');
+    expect(exported).toContain('RIYA_GOLD_V1_WAVE_1_BRIEFS');
+    for (const key of exported) {
+      const upper = key.toUpperCase();
+      expect(upper, key).not.toContain('TRAJECTOR');
+      expect(upper, key).not.toContain('CORPUS_V1');
+      expect(upper, key).not.toContain('CONVERSATION');
+      expect(upper, key).not.toContain('TRANSCRIPT');
+    }
+    // And no exported value is or contains an annotated turn.
+    const serialized = JSON.stringify(Object.entries(goldBarrel));
+    for (const shape of ['"type":"USER"', '"type":"ASSISTANT"', 'annotation', 'turnRef']) {
+      expect(serialized, shape).not.toContain(shape);
+    }
+  });
+
+  it('the Gold slice quotes no P10 identifier and no protected text', () => {
+    // The exam corpus is loaded at verification time and its identity DERIVED. A fixture id written
+    // into production source would put the exam in the shipped bundle, which is the exact failure the
+    // leakage firewall exists to catch.
+    for (const { file, relative, code } of productionFiles()) {
+      if (!relative.startsWith('gold-v1/')) continue;
+      expect(code, file).not.toContain('riya.p10.');
+      expect(code, file).not.toContain('RIYA_QUALITY_GOLDEN_FIXTURES');
+      expect(code, file).not.toContain('syntheticUserText');
+      expect(code, file).not.toContain('/testing');
+    }
+    // Neither does the Gold barrel at runtime.
+    const serialized = JSON.stringify(Object.entries(goldBarrel));
+    expect(serialized).not.toContain('riya.p10.');
+  });
+
+  it('the briefs carry no dialogue, and the plan carries no text a model could learn', () => {
+    // A brief is instructions ABOUT a conversation. Every field is prose or a code, never a reply --
+    // so the prose fields carry no quotation mark and no speaker prefix, and there is no field a turn
+    // would fit in.
+    for (const brief of goldBarrel.RIYA_GOLD_V1_WAVE_1_BRIEFS) {
+      for (const prose of [brief.customerSituation, brief.conversationGoal]) {
+        expect(prose, brief.briefRef).not.toMatch(/["“”]/u);
+        expect(prose, brief.briefRef).not.toMatch(
+          /(?:^|\s)(?:user|customer|assistant|riya|bot|agent)\s*:/iu,
+        );
+      }
+      for (const absent of ['turns', 'exampleReply', 'text', 'transcript']) {
+        expect(Object.keys(brief), `${brief.briefRef}/${absent}`).not.toContain(absent);
+      }
+    }
+  });
+
   it('the testing subpath owns the fixtures, and nothing else', () => {
     expect(Object.keys(testingBarrel).sort()).toStrictEqual([
       'SYNTHETIC_DATASET_INSTANT',
@@ -369,14 +473,31 @@ describe('the root surface is vocabularies, factories and services', () => {
     ]);
   });
 
-  it('hard-codes no Gold V1 target and no base model', () => {
-    // 360 belongs to the Gold V1 release POLICY, authored as data by a later slice. And the base
-    // model is chosen by a benchmark that has not run: naming one here would pre-empt it.
-    for (const { file, code } of productionFiles()) {
-      expect(code, `${file} must not hard-code the Gold target`).not.toMatch(/\b360\b/u);
+  it('hard-codes the Gold V1 target in the Gold slice ONLY, and no base model anywhere', () => {
+    // ADR-0107 said 360 belongs to the Gold V1 coverage POLICY, authored as data by a later slice.
+    // HGV1-A is that slice, so the lock is RESTATED rather than dropped: the generic factory still
+    // knows nothing about Gold's size, and the two Gold files that carry the target are named here.
+    //
+    // The base model is chosen by a benchmark that has not run, so naming one is still forbidden
+    // everywhere -- except in the brief scanner's reject list, whose whole job is to refuse an
+    // authoring instruction that names one.
+    const TARGET_HOLDERS = new Set([
+      'gold-v1/contracts/vocabularies.ts',
+      'gold-v1/policy/gold-policy.ts',
+    ]);
+    for (const { file, relative, code } of productionFiles()) {
+      if (!TARGET_HOLDERS.has(relative)) {
+        expect(code, `${file} must not hard-code the Gold target`).not.toMatch(/\b360\b/u);
+      }
       for (const model of ['qwen', 'llama', 'mistral', 'phi-3', 'gemma', 'deepseek']) {
+        if (relative === BRIEF_SCANNER) continue;
         expect(code.toLowerCase(), `${file} must not name ${model}`).not.toContain(model);
       }
+    }
+    // And the generic RID-F1 factory still carries no Gold number at all.
+    for (const { file, relative, code } of productionFiles()) {
+      if (relative.startsWith('gold-v1/')) continue;
+      expect(code, `${file} must not name a Gold wave total`).not.toMatch(/\b(?:360|288|72)\b/u);
     }
   });
 });
