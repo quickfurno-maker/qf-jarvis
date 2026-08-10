@@ -3,14 +3,14 @@
  *
  * ### Why not `contentDigest` from the evaluation package
  *
- * That helper is a 32-hex FNV-1a — dependency-free by design, because `@qf-jarvis/model-evaluation`
- * imports no node module at all. This package has no such constraint, and benchmark evidence has a
+ * That helper is a 32-hex FNV-1a — dependency-free by design, because the generic model-evaluation
+ * package imports no node module at all. This package has no such constraint, and benchmark evidence has a
  * longer life than a suite result: it gets copied between machines, quoted in a decision months
  * later, and compared against a run nobody remembers. A 32-bit-derived hash is not the right identity
  * for that, and quietly reusing it would be downgrading the guarantee to save an import.
  *
- * So this is real SHA-256 over canonical JSON, via `node:crypto` — the same choice
- * `@qf-jarvis/riya-intelligence-dataset` made, for the same reason.
+ * So this is real SHA-256 over canonical JSON, via `node:crypto` — the same choice the RID-F1
+ * dataset package made, for the same reason.
  *
  * It is an INTEGRITY identity, not a signature. It proves an artifact has not drifted since it was
  * stamped. It proves nothing about who produced it, and this package never claims otherwise.

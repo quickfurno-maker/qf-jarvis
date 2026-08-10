@@ -9,9 +9,20 @@
  * forever.
  *
  * The fields below are the ones that make two runs comparable: architecture family, accelerator
- * family and count, memory, runtime engine and its config digest. None of them names a machine, and
- * there is no field a hostname would fit in. `.strict()` does the rest — an extra key is a refusal,
- * not a passthrough.
+ * family and count, memory, runtime engine and its config digest. There is no DEDICATED field for a
+ * hostname, a username, a path, a serial, a MAC, an IP or a credential, and `.strict()` does the rest
+ * — an extra key is a refusal, not a passthrough.
+ *
+ * ### The honest limit of that
+ *
+ * `acceleratorRef`, `runtimeEngineId` and `runtimeEngineVersion` are opaque identifier-shaped fields,
+ * and a determined caller could put something meaningful into one. The grammar keeps out URLs, paths
+ * and email addresses; it cannot keep out a machine name that happens to look like an identifier.
+ *
+ * So the guarantee is precise: no dedicated identity field, no arbitrary extra keys, and non-
+ * identifying opaque refs by authoring and harness governance. Closing the remaining gap in code would
+ * mean a closed hardware registry, which this slice deliberately does not build — and claiming the
+ * stronger guarantee without one would be the kind of overstatement this package exists to avoid.
  *
  * ### Hosted opacity is honest, not incomplete
  *

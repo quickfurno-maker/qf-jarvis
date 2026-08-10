@@ -60,19 +60,32 @@ describe('the subject names a release, and reuses the repo grammar to do it', ()
     expect(codeOf(() => syntheticSubject({ releaseId: 'latest' }))).toBe('SUBJECT_INVALID');
   });
 
-  it('INHERITED GAP: a SEGMENT-level `latest` is not refused, and that is deliberate here', () => {
-    // `@qf-jarvis/model-evaluation` rejects a token that IS `latest`, not one that ends in
-    // `/latest`, so `vendor.alpha/latest` reaches an evaluation binding today. This package inherits
-    // that behaviour rather than tightening it.
-    //
-    // Diverging would be worse than the gap: the same release would be acceptable to safety evidence
-    // and refused by benchmark evidence, and the two artifacts could no longer be read together —
-    // which is the entire reason the grammar is shared. One grammar means one grammar, including its
-    // limits. Closing it belongs to the package that owns the rule.
-    //
-    // This spec exists so the gap is recorded rather than discovered, and so it fails loudly if the
-    // evaluation package tightens the rule and this comment goes stale.
-    expect(codeOf(() => syntheticSubject({ modelId: 'vendor.alpha/latest' }))).toBe('no-error');
+  it('a SEGMENT-level `latest` is refused too, at every position', () => {
+    // Closed at its owner. The generic evaluation package used to compare the WHOLE token against
+    // `latest`, so a namespaced `vendor/latest` -- well-formed under the slash-segment grammar, and a
+    // moving target -- reached an evaluation binding. It now splits on `/` and refuses any complete
+    // segment, so benchmark evidence and safety evidence inherit one rule rather than two.
+    for (const modelId of [
+      'vendor.alpha/latest',
+      'vendor.alpha/LATEST',
+      'latest/model-alpha',
+      'vendor.alpha/latest/model-alpha',
+    ]) {
+      expect(
+        codeOf(() => syntheticSubject({ modelId })),
+        modelId,
+      ).toBe('SUBJECT_INVALID');
+    }
+  });
+
+  it('a segment merely CONTAINING the substring is still fine', () => {
+    // Governance, not grammar. `latest-model` is an ordinary name that happens to include six
+    // letters, and refusing it would be a syntax rule wearing a policy's clothes.
+    for (const modelId of ['latest-model', 'vendor.alpha/model-latest-v2', 'model.latest2'])
+      expect(
+        codeOf(() => syntheticSubject({ modelId })),
+        modelId,
+      ).toBe('no-error');
   });
 
   it('refuses an unknown key', () => {
@@ -158,7 +171,13 @@ describe('the environment compares machines without identifying one', () => {
     }
   });
 
-  it('there is NO FIELD a hostname, user, path or credential could go in', () => {
+  it('there is NO DEDICATED identity or credential field', () => {
+    // Stated precisely. The structural guarantee is that no field EXISTS for a hostname, a username,
+    // a device path, a serial, an IP or a key, and `.strict()` refuses an extra one. It is NOT that
+    // an identifying value is impossible: `acceleratorRef`, `runtimeEngineId` and
+    // `runtimeEngineVersion` are opaque identifier-shaped fields, and a determined caller could put
+    // something meaningful in one. Keeping those non-identifying is authoring and harness governance,
+    // and closing it in code would mean a hardware registry this slice deliberately does not build.
     for (const leak of [
       { hostname: 'build-box-04' },
       { username: 'kesh' },

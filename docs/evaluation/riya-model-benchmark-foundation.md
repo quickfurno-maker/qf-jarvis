@@ -61,9 +61,16 @@ read together — "this release cleared safety AND runs at this latency" — and
 own idea of what names a release would eventually disagree by a character, at which point neither
 statement can be joined to the other.
 
-**Environment** — enough to compare, never enough to identify. Architecture family, accelerator family
-and count, memory, runtime engine and config digest. There is no field a hostname, username, path,
-serial, MAC, IP or credential fits in, and `.strict()` refuses the attempt.
+**Environment** — enough to compare, without a dedicated field for anything identifying. Architecture
+family, accelerator family and count, memory, runtime engine and config digest. There is no field for
+a hostname, username, path, serial, MAC, IP or credential, and `.strict()` refuses an extra one.
+
+The honest limit: `acceleratorRef`, `runtimeEngineId` and `runtimeEngineVersion` are opaque
+identifier-shaped fields, and a determined caller could put something meaningful in one. The grammar
+keeps out URLs, paths and email addresses; it cannot keep out a machine name that looks like an
+identifier. Keeping those non-identifying is authoring and harness governance. Closing the gap in code
+would need a closed hardware registry, which this slice does not build — and claiming the stronger
+guarantee without one would be the overstatement this package exists to avoid.
 
 `HOSTED_OPAQUE` claims no hardware at all, and is forbidden from doing so. An invented accelerator
 count is worse than an absent one: absent is a known unknown, invented is a number somebody will later
@@ -104,14 +111,52 @@ When parity breaks the comparison returns the **named axes**, not a delta with a
 comparison across different concurrencies is two unrelated numbers subtracted, and reporting it with a
 footnote means somebody eventually quotes it without one.
 
-### Pareto relation
+### There is no summary, and a Pareto relation was removed to keep it that way
 
-`A_DOMINATES` / `B_DOMINATES` / `TRADEOFF` / `EQUIVALENT` / `NOT_COMPARABLE`.
+An earlier draft returned `A_DOMINATES` / `TRADEOFF` / `EQUIVALENT`. It is gone.
 
-**Dominance is not rollout approval.** A configuration can dominate every latency axis and fail
-generic safety outright, or fail P10, or be dominated on a cost axis this package does not model.
-`TRADEOFF` is the normal answer — a smaller model is usually faster and usually worse, which is the
-entire reason this workstream exists.
+Dominance needs every axis present on both sides, and memory is optional. An unmeasured axis silently
+drops out of the relation, so `EQUIVALENT` could mean "equal on the axes we happened to share" — a
+stronger claim than the data supports, phrased as a finding about two configurations when it is
+really a finding about what the harness recorded.
+
+What comes back is per-case, per-axis, side-by-side deltas over the axes **both** sides measured. An
+axis absent from the deltas was not compared. Reading the table is the owner's job, and it should not
+be automated away.
+
+### Both inputs are verified before anything is read
+
+Not integrity-checked — **verified**: every member deeply reconstructed, homogeneity and manifest
+re-established, both digests recomputed. Only the reconstructions are used.
+
+A comparison that reads an untrusted object is the most dangerous function in a package like this: its
+output looks exactly like a real answer, and it is the thing somebody pastes into a decision. An
+invalid input therefore produces no comparison object at all.
+
+## Verification, not hash comparison
+
+`sha256OfCanonical` is unkeyed. Anyone who can edit an artifact can recompute the digest over the
+edit, so a self-consistent hash proves only that the body and the digest were written by the same
+hand — **hash self-consistency is not schema validity**.
+
+So `verifyRiyaBenchmarkEvidence` and `verifyRiyaBenchmarkResultSet` reconstruct: full canonical
+surface required, unknown keys refused, every nested object rebuilt through its own constructor,
+cross-field invariants re-proved, digests recomputed from the reconstruction. An attacker who
+recomputes the digest over a structurally impossible artifact still fails, because the artifact never
+survives reconstruction.
+
+Neither verifier restamps. A stored artifact without a digest is refused rather than signed, because
+stamping it would turn a verifier into a laundering step.
+
+## A result set is one configuration
+
+Every case in a set must agree on the entire canonical subject and the entire canonical environment —
+`RESULT_SET_SUBJECT_MISMATCH` and `RESULT_SET_ENVIRONMENT_MISMATCH`. Without that, a set could hold one
+case measured on one model and another on a different one, with identical workload parity, and the
+aggregate would describe a machine that does not exist.
+
+Equality is by SHA-256 over the canonical form rather than a field-by-field comparison, which stops
+covering a field the moment somebody adds one.
 
 ## Cost is deliberately absent
 

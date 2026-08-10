@@ -1,6 +1,16 @@
 /**
  * Comparing two benchmark result sets (RMB-A).
  *
+ * ### Both inputs are VERIFIED before anything is read
+ *
+ * Not integrity-checked — verified: deeply re-proved, homogeneity and manifest re-established, digests
+ * recomputed. Only the reconstructions are used afterward.
+ *
+ * A comparison that reads `a.results` straight off an untrusted object is the most dangerous function
+ * in a package like this. Its output looks exactly like a real answer, and it is the thing somebody
+ * pastes into a decision. A statement about evidence that was never valid is worse than no statement,
+ * so an invalid input produces no comparison object at all — it throws.
+ *
  * ### Parity first, and parity is not negotiable
  *
  * Two sets are comparable only when they measured the same thing: same suite, same harness, same
@@ -10,27 +20,25 @@
  * They may differ in exactly the things a benchmark exists to vary — model, release, provider,
  * execution class, environment, runtime engine, quantization.
  *
- * When parity breaks, this returns the named axes rather than a delta. A latency comparison across
+ * When parity breaks this returns the named axes rather than a delta. A latency comparison across
  * different concurrencies is not a slightly-less-reliable comparison; it is two unrelated numbers
  * subtracted, and reporting it with a caveat means somebody eventually quotes it without one.
  *
- * ### What this deliberately does not return
+ * ### There is no summary, and that is the design
  *
- * No winner. No recommendation. No approval. No overall score, weighted or otherwise. Not because a
- * score is hard, but because it would be wrong: latency, memory, reliability and cost have no shared
- * unit, and a weighting that combines them is a business judgement wearing a number's clothes.
+ * No winner, no rank, no recommendation, no approval, no score — and, deliberately, no Pareto relation
+ * either. A dominance verdict requires every axis to be present on both sides, and memory is optional;
+ * an unmeasured axis silently drops out of the relation, so "equivalent" could mean "equal on the axes
+ * we happened to share". That reads as a stronger claim than the data supports.
  *
- * `RIYA_BENCHMARK_PARETO_RELATIONS` is offered as the one honest summary — A is better on every axis,
- * or B is, or it is a trade-off. **Dominance is not rollout approval.** A dominating configuration can
- * still fail generic safety, fail P10 Riya quality, or be dominated on a cost axis this package does
- * not model.
+ * What comes back is per-case, per-axis, side-by-side deltas over the axes BOTH sides measured. An
+ * axis absent from the deltas was not compared. Reading the table is the owner's job, and it is a job
+ * that should not be automated away.
  */
 import type { RiyaBenchmarkEvidenceV1 } from '../contracts/evidence.js';
+import { verifyRiyaBenchmarkResultSet } from './result-set.js';
 import type { RiyaBenchmarkResultSetV1 } from './result-set.js';
-import type {
-  RiyaBenchmarkParetoRelation,
-  RiyaBenchmarkParityMismatch,
-} from '../contracts/vocabularies.js';
+import type { RiyaBenchmarkParityMismatch } from '../contracts/vocabularies.js';
 
 /** One axis, one case, both sides. Deltas are `b - a`, so negative means B is lower. */
 export interface RiyaBenchmarkAxisDelta {
@@ -45,17 +53,18 @@ export interface RiyaBenchmarkComparison {
   readonly comparable: boolean;
   /** Named axes on which parity failed. Empty iff `comparable`. */
   readonly parityMismatches: readonly RiyaBenchmarkParityMismatch[];
-  readonly deltas: readonly RiyaBenchmarkAxisDelta[];
   /**
-   * A Pareto relation over the reported operational axes, or `NOT_COMPARABLE`.
+   * Per-case, per-axis side-by-side values over the axes BOTH sides measured.
    *
-   * NOT a verdict, NOT a recommendation, NOT rollout approval. See the file header.
+   * An axis missing from this list was NOT compared — one side did not report it. That is not a tie
+   * and not a zero, and there is deliberately no summary field that would smooth it over.
    */
-  readonly paretoRelation: RiyaBenchmarkParetoRelation;
+  readonly deltas: readonly RiyaBenchmarkAxisDelta[];
 }
 
-/** The axes compared, and the direction that counts as better. All of these are lower-is-better. */
-const LOWER_IS_BETTER = [
+/** The axes compared. Every one is read from both sides or from neither. */
+const COMPARED_AXES = [
+  'successfulRequests',
   'timeToFirstTokenMicrosP50',
   'timeToFirstTokenMicrosP95',
   'endToEndLatencyMicrosP50',
@@ -66,10 +75,7 @@ const LOWER_IS_BETTER = [
   'peakHostMemoryBytes',
 ] as const;
 
-/** Higher-is-better axes, kept separate so the dominance test cannot confuse the directions. */
-const HIGHER_IS_BETTER = ['successfulRequests'] as const;
-
-/** Every parity condition, as a predicate over the two workloads that must agree. */
+/** Every parity condition, as a comparison of the two workloads that must agree. */
 function parityMismatchesOf(
   a: RiyaBenchmarkEvidenceV1,
   b: RiyaBenchmarkEvidenceV1,
@@ -108,38 +114,41 @@ function axisValue(evidence: RiyaBenchmarkEvidenceV1, axis: string): number | un
 }
 
 /**
- * Compare two result sets under strict parity.
+ * Compare two result sets under strict parity, after verifying both.
  *
- * Throws nothing on a parity failure — it returns `comparable: false` with the named axes, because a
- * mismatch is an answer rather than an error. `COMPARISON_NOT_PARITY` is thrown only when the inputs
- * are structurally unusable, which is a different problem.
+ * Throws `RESULT_SET_INVALID`, `EVIDENCE_TAMPERED`, `DIGEST_INVALID` or another closed code if either
+ * input fails verification — no comparison object, no parity result, no deltas.
+ *
+ * A parity MISMATCH is not an error: it returns `comparable: false` with the named axes, because "these
+ * two were not measured the same way" is an answer.
  */
-export function compareRiyaBenchmarkResultSets(
-  a: RiyaBenchmarkResultSetV1,
-  b: RiyaBenchmarkResultSetV1,
-): RiyaBenchmarkComparison {
+export function compareRiyaBenchmarkResultSets(a: unknown, b: unknown): RiyaBenchmarkComparison {
+  // Verified first, and only the reconstructions are used below.
+  const left: RiyaBenchmarkResultSetV1 = verifyRiyaBenchmarkResultSet(a);
+  const right: RiyaBenchmarkResultSetV1 = verifyRiyaBenchmarkResultSet(b);
+
   const mismatches = new Set<RiyaBenchmarkParityMismatch>();
 
   // The case SETS must match before anything is paired. Comparing the overlap of two different suites
   // silently drops the cases one side found hard.
-  const aCases = [...a.caseIds].sort().join('|');
-  const bCases = [...b.caseIds].sort().join('|');
-  if (aCases !== bCases) {
+  const leftCases = [...left.caseIds].sort().join('|');
+  const rightCases = [...right.caseIds].sort().join('|');
+  if (leftCases !== rightCases) {
     mismatches.add('WORKLOAD_CASE_SET_MISMATCH');
   }
 
-  const byCaseB = new Map(b.results.map((one) => [one.workload.workloadCaseId, one]));
+  const rightByCase = new Map(right.results.map((one) => [one.workload.workloadCaseId, one]));
   const pairs: (readonly [RiyaBenchmarkEvidenceV1, RiyaBenchmarkEvidenceV1])[] = [];
-  for (const left of a.results) {
-    const right = byCaseB.get(left.workload.workloadCaseId);
-    if (right === undefined) {
+  for (const evidence of left.results) {
+    const counterpart = rightByCase.get(evidence.workload.workloadCaseId);
+    if (counterpart === undefined) {
       mismatches.add('WORKLOAD_CASE_SET_MISMATCH');
       continue;
     }
-    for (const mismatch of parityMismatchesOf(left, right)) {
+    for (const mismatch of parityMismatchesOf(evidence, counterpart)) {
       mismatches.add(mismatch);
     }
-    pairs.push([left, right]);
+    pairs.push([evidence, counterpart]);
   }
 
   const parityMismatches = Object.freeze([...mismatches].sort());
@@ -148,58 +157,35 @@ export function compareRiyaBenchmarkResultSets(
       comparable: false,
       parityMismatches,
       deltas: Object.freeze([]),
-      paretoRelation: 'NOT_COMPARABLE' as const,
     });
   }
 
   const deltas: RiyaBenchmarkAxisDelta[] = [];
-  let aBetter = false;
-  let bBetter = false;
-
-  for (const [left, right] of pairs) {
-    for (const axis of [...LOWER_IS_BETTER, ...HIGHER_IS_BETTER]) {
-      const x = axisValue(left, axis);
-      const y = axisValue(right, axis);
-      // An axis only one side reported is not a delta. Treating a missing memory reading as zero
-      // would make the side that did not measure look better.
-      if (x === undefined || y === undefined) {
+  for (const [x, y] of pairs) {
+    for (const axis of COMPARED_AXES) {
+      const valueA = axisValue(x, axis);
+      const valueB = axisValue(y, axis);
+      // An axis only one side reported is not a delta. Treating a missing memory reading as zero would
+      // make the side that did not measure look better, and there is no summary field here that could
+      // absorb the difference honestly.
+      if (valueA === undefined || valueB === undefined) {
         continue;
       }
       deltas.push(
         Object.freeze({
-          workloadCaseId: left.workload.workloadCaseId,
+          workloadCaseId: x.workload.workloadCaseId,
           axis,
-          a: x,
-          b: y,
-          delta: y - x,
+          a: valueA,
+          b: valueB,
+          delta: valueB - valueA,
         }),
       );
-      if (x === y) {
-        continue;
-      }
-      const lowerIsBetter = (LOWER_IS_BETTER as readonly string[]).includes(axis);
-      const leftWins = lowerIsBetter ? x < y : x > y;
-      if (leftWins) {
-        aBetter = true;
-      } else {
-        bBetter = true;
-      }
     }
   }
-
-  const paretoRelation: RiyaBenchmarkParetoRelation =
-    aBetter && bBetter
-      ? 'TRADEOFF'
-      : aBetter
-        ? 'A_DOMINATES'
-        : bBetter
-          ? 'B_DOMINATES'
-          : 'EQUIVALENT';
 
   return Object.freeze({
     comparable: true,
     parityMismatches: Object.freeze([]),
     deltas: Object.freeze(deltas),
-    paretoRelation,
   });
 }

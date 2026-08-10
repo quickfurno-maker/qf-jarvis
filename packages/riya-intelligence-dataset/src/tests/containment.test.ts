@@ -280,13 +280,12 @@ describe('no runtime, service or application can reach the dataset factory', () 
           continue;
         }
         for (const file of files) {
-          // Comments stripped first, the same way every other scan in this file reads source.
-          // `@qf-jarvis/riya-model-benchmark` documents why it uses cryptographic SHA-256 and cites
-          // this package as the precedent; a doc comment is not an import, and a scanner that could
-          // not tell the difference would push people to write vaguer comments to appease it.
-          if (
-            codeOnly(readFileSync(file, 'utf8')).includes('@qf-jarvis/riya-intelligence-dataset')
-          ) {
+          // RAW source, deliberately. `codeOnly` strips block comments with a regex, and a regex is
+          // not a TypeScript lexer -- a comment token inside a string literal would hide an import
+          // from it. That trade is fine for a broad "does this file NAME X?" scan and wrong at an
+          // import firewall, where a false negative is the expensive direction. Production comments
+          // are worded to avoid the exact specifier instead.
+          if (readFileSync(file, 'utf8').includes('@qf-jarvis/riya-intelligence-dataset')) {
             importers.push(file);
           }
         }

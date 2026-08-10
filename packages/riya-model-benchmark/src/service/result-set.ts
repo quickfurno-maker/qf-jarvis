@@ -1,5 +1,5 @@
 /**
- * A benchmark RESULT SET: the whole suite for one subject, and its manifest (RMB-A).
+ * A benchmark RESULT SET: one configuration, measured across cases (RMB-A).
  *
  * ### The manifest is what makes a comparison honest
  *
@@ -11,11 +11,31 @@
  * So a set names the cases it was supposed to contain, and refuses anything else. Missing, duplicated
  * and unexpected are three separate codes because they are three different mistakes: a case that
  * failed to run, a case counted twice, and a case that came from somewhere else.
+ *
+ * ### One subject, one environment
+ *
+ * "The whole suite for one configuration" has to be enforced, not just documented. Without it, a set
+ * could hold `case.alpha` measured on one model and `case.beta` measured on another — identical
+ * workload parity, so the parity check passes — and the aggregate would describe a machine that does
+ * not exist. Every case must therefore agree on the entire canonical subject and the entire canonical
+ * environment. What varies per case is the case id, the instant and the numbers, because those are
+ * what a case IS.
+ *
+ * Equality is by SHA-256 over the canonical form rather than a hand-written field comparison: a
+ * field-by-field check silently stops covering a field the moment somebody adds one.
+ *
+ * ### Verification is deep, never a hash comparison
+ *
+ * `sha256OfCanonical` is unkeyed, so anyone who can edit an artifact can recompute its digest. A set
+ * therefore re-proves every member through `verifyRiyaBenchmarkEvidence` before it will believe any of
+ * them, and `verifyRiyaBenchmarkResultSet` does the same for a stored set. A digest that agrees with a
+ * body proves the two were written together; it proves nothing about whether the body is a valid
+ * measurement.
  */
 import { z } from 'zod';
 
 import { RiyaBenchmarkError } from '../contracts/errors.js';
-import { riyaBenchmarkEvidenceIntegrityHolds } from '../contracts/evidence.js';
+import { verifyRiyaBenchmarkEvidence } from '../contracts/evidence.js';
 import type { RiyaBenchmarkEvidenceV1 } from '../contracts/evidence.js';
 import { workloadParityKey } from '../contracts/workload.js';
 import { RIYA_BENCHMARK_MAX_CASES } from '../contracts/vocabularies.js';
@@ -41,40 +61,53 @@ export interface RiyaBenchmarkResultSetInput {
 const inputSchema = z
   .object({
     version: z.literal(1),
-    // Each artifact is re-verified below by its own integrity check; this bounds the collection.
+    // Each member is deeply re-proved below; this bounds the collection.
     results: z.array(z.unknown()).max(RIYA_BENCHMARK_MAX_CASES),
     expectedCaseIds: z.array(z.string().min(1).max(128)).min(1).max(RIYA_BENCHMARK_MAX_CASES),
   })
   .strict();
 
-/**
- * Build a result set, refusing any set that does not match its expected cases exactly.
- *
- * Throws `MANIFEST_DUPLICATE_CASE`, `MANIFEST_CASE_MISSING`, `MANIFEST_CASE_UNEXPECTED`,
- * `EVIDENCE_TAMPERED` or `COMPARISON_NOT_PARITY`.
- */
-export function createRiyaBenchmarkResultSet(
-  input: RiyaBenchmarkResultSetInput,
-): RiyaBenchmarkResultSetV1 {
-  // Shape first, through zod like every other contract here — `Array.isArray` on an already-typed
-  // field widens it to `any[]` and quietly disables the type checking further down.
-  const parsed = inputSchema.safeParse(input);
-  if (!parsed.success) {
-    throw new RiyaBenchmarkError('OBSERVATION_INVALID');
-  }
+const storedSchema = z
+  .object({
+    version: z.literal(1),
+    results: z.array(z.unknown()).min(1).max(RIYA_BENCHMARK_MAX_CASES),
+    caseIds: z.array(z.string().min(1).max(128)).min(1).max(RIYA_BENCHMARK_MAX_CASES),
+    manifestDigest: z.string().regex(SHA256_HEX),
+    resultSetDigest: z.string().regex(SHA256_HEX),
+  })
+  .strict();
 
-  const expected = [...input.expectedCaseIds].sort();
+const manifestDigestOf = (caseIds: readonly string[]): string =>
+  sha256OfCanonical({ version: 1, caseIds });
+
+const resultSetDigestOf = (
+  manifestDigest: string,
+  results: readonly RiyaBenchmarkEvidenceV1[],
+): string =>
+  sha256OfCanonical({
+    version: 1,
+    manifestDigest,
+    // Digests, not bodies. The set's identity is the identity of what it contains, in order.
+    evidenceDigests: results.map((one) => one.evidenceDigest),
+  });
+
+/**
+ * The checks a group of verified results must pass to be ONE set.
+ *
+ * Shared by construction and by stored verification, so the two can never disagree about what a valid
+ * set is.
+ */
+function proveSetInvariants(
+  results: readonly RiyaBenchmarkEvidenceV1[],
+  expectedCaseIds: readonly string[],
+): void {
+  const expected = [...expectedCaseIds].sort();
   if (new Set(expected).size !== expected.length) {
     throw new RiyaBenchmarkError('MANIFEST_DUPLICATE_CASE');
   }
 
   const seen = new Set<string>();
-  for (const evidence of input.results) {
-    // Every artifact re-checked. A set built from stored evidence is only as trustworthy as the
-    // weakest artifact in it, and "it was valid when we wrote it" is not a property of a file.
-    if (!riyaBenchmarkEvidenceIntegrityHolds(evidence)) {
-      throw new RiyaBenchmarkError('EVIDENCE_TAMPERED');
-    }
+  for (const evidence of results) {
     const caseId = evidence.workload.workloadCaseId;
     if (seen.has(caseId)) {
       throw new RiyaBenchmarkError('MANIFEST_DUPLICATE_CASE');
@@ -90,46 +123,106 @@ export function createRiyaBenchmarkResultSet(
     }
   }
 
-  // Every case in a set must have been measured the same way. A set mixing concurrencies is not one
-  // measurement of a configuration, and its aggregate would be meaningless.
-  const parityKeys = new Set(input.results.map((one) => workloadParityKey(one.workload)));
-  if (parityKeys.size > 1) {
-    throw new RiyaBenchmarkError('COMPARISON_NOT_PARITY');
+  // One configuration. Canonical-digest equality rather than field-by-field, so a field added to the
+  // subject or the environment later is covered without anybody remembering to extend this.
+  if (new Set(results.map((one) => sha256OfCanonical(one.subject))).size > 1) {
+    throw new RiyaBenchmarkError('RESULT_SET_SUBJECT_MISMATCH');
+  }
+  if (new Set(results.map((one) => sha256OfCanonical(one.environment))).size > 1) {
+    throw new RiyaBenchmarkError('RESULT_SET_ENVIRONMENT_MISMATCH');
   }
 
-  const results = Object.freeze(
-    [...input.results].sort((a, b) =>
-      a.workload.workloadCaseId < b.workload.workloadCaseId ? -1 : 1,
-    ),
+  // And one measurement method. A set mixing concurrencies is not one measurement of a configuration,
+  // and its aggregate would be meaningless.
+  if (new Set(results.map((one) => workloadParityKey(one.workload))).size > 1) {
+    throw new RiyaBenchmarkError('COMPARISON_NOT_PARITY');
+  }
+}
+
+const byCaseId = (
+  results: readonly RiyaBenchmarkEvidenceV1[],
+): readonly RiyaBenchmarkEvidenceV1[] =>
+  Object.freeze(
+    [...results].sort((a, b) => (a.workload.workloadCaseId < b.workload.workloadCaseId ? -1 : 1)),
   );
-  const caseIds = Object.freeze(expected);
-  const manifestDigest = sha256OfCanonical({ version: 1, caseIds });
-  const resultSetDigest = sha256OfCanonical({
-    version: 1,
-    manifestDigest,
-    // Digests, not bodies. The set's identity is the identity of what it contains.
-    evidenceDigests: results.map((one) => one.evidenceDigest),
-  });
+
+/**
+ * Build a result set from evidence, refusing anything that is not one whole configuration.
+ *
+ * Every member is deeply re-proved on the way in. Throws `MANIFEST_DUPLICATE_CASE`,
+ * `MANIFEST_CASE_MISSING`, `MANIFEST_CASE_UNEXPECTED`, `RESULT_SET_SUBJECT_MISMATCH`,
+ * `RESULT_SET_ENVIRONMENT_MISMATCH`, `COMPARISON_NOT_PARITY` or a nested contract's own code.
+ */
+export function createRiyaBenchmarkResultSet(
+  input: RiyaBenchmarkResultSetInput,
+): RiyaBenchmarkResultSetV1 {
+  const parsed = inputSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new RiyaBenchmarkError('RESULT_SET_INVALID');
+  }
+
+  // DEEP, not a digest comparison. A set is only as trustworthy as its weakest member, and "it was
+  // valid when we wrote it" is not a property of a file.
+  const results = byCaseId(parsed.data.results.map((one) => verifyRiyaBenchmarkEvidence(one)));
+  proveSetInvariants(results, input.expectedCaseIds);
+
+  const caseIds = Object.freeze([...input.expectedCaseIds].sort());
+  const manifestDigest = manifestDigestOf(caseIds);
+  const resultSetDigest = resultSetDigestOf(manifestDigest, results);
 
   return Object.freeze({ version: 1 as const, results, caseIds, manifestDigest, resultSetDigest });
 }
 
-/** True iff a result set still hashes to the digests it carries. Total, never throws. */
-export function riyaBenchmarkResultSetIntegrityHolds(set: RiyaBenchmarkResultSetV1): boolean {
-  if (!SHA256_HEX.test(set.manifestDigest) || !SHA256_HEX.test(set.resultSetDigest)) {
+/**
+ * Verify a STORED or otherwise untrusted result set, and return the canonical reconstruction.
+ *
+ * Full canonical surface required, unknown keys refused, every member deeply re-proved, ordering
+ * re-derived, `caseIds` required to equal the cases actually present, homogeneity and parity proved,
+ * and both digests recomputed from the reconstruction and compared.
+ *
+ * It never restamps. A stored set whose digests do not match what its contents imply is refused, not
+ * quietly re-signed — silently correcting an artifact is how a forged one becomes a trusted one.
+ */
+export function verifyRiyaBenchmarkResultSet(candidate: unknown): RiyaBenchmarkResultSetV1 {
+  const parsed = storedSchema.safeParse(candidate);
+  if (!parsed.success) {
+    throw new RiyaBenchmarkError('RESULT_SET_INVALID');
+  }
+
+  const results = byCaseId(parsed.data.results.map((one) => verifyRiyaBenchmarkEvidence(one)));
+
+  // The manifest must describe what is actually here — not a superset it once described.
+  const actual = [...results.map((one) => one.workload.workloadCaseId)].sort();
+  const claimed = [...parsed.data.caseIds].sort();
+  if (actual.length !== claimed.length || actual.some((id, index) => id !== claimed[index])) {
+    throw new RiyaBenchmarkError('MANIFEST_CASE_MISSING');
+  }
+  proveSetInvariants(results, claimed);
+
+  const caseIds = Object.freeze(claimed);
+  const manifestDigest = manifestDigestOf(caseIds);
+  if (manifestDigest !== parsed.data.manifestDigest) {
+    throw new RiyaBenchmarkError('DIGEST_INVALID');
+  }
+  const resultSetDigest = resultSetDigestOf(manifestDigest, results);
+  if (resultSetDigest !== parsed.data.resultSetDigest) {
+    throw new RiyaBenchmarkError('DIGEST_INVALID');
+  }
+
+  return Object.freeze({ version: 1 as const, results, caseIds, manifestDigest, resultSetDigest });
+}
+
+/**
+ * True iff `candidate` is a fully valid canonical result set.
+ *
+ * TOTAL: accepts anything, catches everything, returns a boolean. This is the deep check — the same
+ * one `verifyRiyaBenchmarkResultSet` performs — not a digest comparison.
+ */
+export function riyaBenchmarkResultSetIntegrityHolds(candidate: unknown): boolean {
+  try {
+    verifyRiyaBenchmarkResultSet(candidate);
+    return true;
+  } catch {
     return false;
   }
-  const manifestDigest = sha256OfCanonical({ version: 1, caseIds: set.caseIds });
-  if (manifestDigest !== set.manifestDigest) {
-    return false;
-  }
-  const resultSetDigest = sha256OfCanonical({
-    version: 1,
-    manifestDigest,
-    evidenceDigests: set.results.map((one) => one.evidenceDigest),
-  });
-  return (
-    resultSetDigest === set.resultSetDigest &&
-    set.results.every((one) => riyaBenchmarkEvidenceIntegrityHolds(one))
-  );
 }

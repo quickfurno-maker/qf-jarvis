@@ -272,10 +272,12 @@ describe('RMB-A is the operational authority and nothing else', () => {
           continue;
         }
         for (const file of files) {
-          // Comments stripped first. `model-evaluation`'s release constructor documents WHY it was
-          // extracted and names this package while doing so; a doc comment is not an import, and a
-          // scanner that could not tell the difference would push people to write vaguer comments.
-          if (codeOnly(readFileSync(file, 'utf8')).includes('@qf-jarvis/riya-model-benchmark')) {
+          // RAW source, deliberately. `codeOnly` strips block comments with a regex, and a regex is
+          // not a TypeScript lexer -- a comment token inside a string literal would hide an import
+          // from it. That trade is fine for a broad "does this file NAME X?" scan and wrong at an
+          // import firewall, where a false negative is the expensive direction. Production comments
+          // are worded to avoid the exact specifier instead.
+          if (readFileSync(file, 'utf8').includes('@qf-jarvis/riya-model-benchmark')) {
             importers.push(file);
           }
         }
@@ -363,7 +365,6 @@ describe('the public surface is small, closed and free of verdicts', () => {
       'RIYA_BENCHMARK_MAX_MICROS',
       'RIYA_BENCHMARK_MAX_REQUESTS',
       'RIYA_BENCHMARK_MAX_TOKENS',
-      'RIYA_BENCHMARK_PARETO_RELATIONS',
       'RIYA_BENCHMARK_PARITY_MISMATCHES',
       'RiyaBenchmarkError',
       'approximateDecodeTokensPerSecondP50',
@@ -380,6 +381,8 @@ describe('the public surface is small, closed and free of verdicts', () => {
       'riyaBenchmarkEvidenceIntegrityHolds',
       'riyaBenchmarkResultSetIntegrityHolds',
       'successRateBasisPoints',
+      'verifyRiyaBenchmarkEvidence',
+      'verifyRiyaBenchmarkResultSet',
       'workloadParityKey',
     ]);
   });
@@ -402,6 +405,34 @@ describe('the public surface is small, closed and free of verdicts', () => {
         'THRESHOLD',
       ]) {
         expect(upper, `${key} must not contain ${forbidden}`).not.toContain(forbidden);
+      }
+    }
+  });
+
+  it('exports NO relation, dominance or Pareto vocabulary - it was removed, not hidden', () => {
+    // A dominance verdict needs every axis on both sides, and memory is optional; an unmeasured axis
+    // silently dropped out of the relation, so "equivalent" could mean "equal on the axes we happened
+    // to share". Comparison returns named parity mismatches and deltas, and nothing that summarises.
+    for (const gone of [
+      'RIYA_BENCHMARK_PARETO_RELATIONS',
+      'RiyaBenchmarkParetoRelation',
+      'paretoRelation',
+    ]) {
+      expect(Object.keys(barrel), gone).not.toContain(gone);
+    }
+    // And the identifiers are absent from source, not merely unexported. Prose explaining the removal
+    // is fine; a declaration is not, so these are the exact identifier spellings.
+    for (const { file, code } of productionFiles()) {
+      for (const forbidden of [
+        'PARETO_RELATIONS',
+        'ParetoRelation',
+        'paretoRelation',
+        'A_DOMINATES',
+        'B_DOMINATES',
+        'TRADEOFF',
+        'NOT_COMPARABLE',
+      ]) {
+        expect(code, `${file} must not declare ${forbidden}`).not.toContain(forbidden);
       }
     }
   });
@@ -440,7 +471,7 @@ describe('the public surface is small, closed and free of verdicts', () => {
   });
 
   it('every error code is closed, and the class carries no measured value', () => {
-    expect(barrel.RIYA_BENCHMARK_ERROR_CODES).toHaveLength(13);
+    expect(barrel.RIYA_BENCHMARK_ERROR_CODES).toHaveLength(16);
     const error = new barrel.RiyaBenchmarkError('DIGEST_INVALID');
     expect(error.code).toBe('DIGEST_INVALID');
     expect(error.message).toBe('DIGEST_INVALID');

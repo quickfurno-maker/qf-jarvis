@@ -115,11 +115,32 @@ const bindingSchema = z
   })
   .strict();
 
-/** Reject any wildcard/`latest` identity token anywhere in the binding. */
+/**
+ * Reject any wildcard/`latest` identity token anywhere in the binding.
+ *
+ * ### Segment-aware, because a model id may be namespaced
+ *
+ * `modelId` uses the slash-SEGMENT grammar, so `vendor/latest` is a well-formed catalogue id — and a
+ * moving target, which is exactly what this rule exists to keep out of evidence. Checking the whole
+ * string for `latest` missed it, so the check splits on `/` and refuses if ANY complete segment is
+ * `latest`, case-insensitively.
+ *
+ * A segment that merely CONTAINS the substring is fine: `latest-model` and `model-latest-v2` are
+ * ordinary names that happen to include six letters, and refusing them would be a grammar rule
+ * masquerading as governance.
+ *
+ * This is governance, not grammar. `PROVIDER_MODEL_ID_PATTERN` still answers "is this a well-formed
+ * provider catalogue id?"; this answers "is this an exact governed release identity?", and evidence is
+ * entitled to be stricter than the gateway's syntax.
+ */
 function rejectWildcard(value: string): void {
-  const lowered = value.toLowerCase();
-  if (lowered === 'latest' || value.includes('*')) {
+  if (value.includes('*')) {
     throw new EvaluationError('invalid-binding');
+  }
+  for (const segment of value.split('/')) {
+    if (segment.toLowerCase() === 'latest') {
+      throw new EvaluationError('invalid-binding');
+    }
   }
 }
 
@@ -127,7 +148,8 @@ function rejectWildcard(value: string): void {
  * Validate and freeze a release identity ON ITS OWN. Throws `EvaluationError('invalid-binding')`.
  *
  * Extracted so a package that needs to name a release WITHOUT running an evaluation can reuse this
- * exact grammar rather than restate it. `@qf-jarvis/riya-model-benchmark` is the first such caller:
+ * exact grammar rather than restate it. The RMB-A operational-benchmark package is the first such
+ * caller:
  * operational benchmark evidence is about a release, but it owns no suite, no fixture manifest, no
  * evaluator and no prompt family, so `createEvaluationBinding` is the wrong shape for it and copying
  * the six fields into a second schema would create an identity that could drift from this one.

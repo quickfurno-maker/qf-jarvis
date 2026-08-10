@@ -3,9 +3,9 @@
  *
  * Small on purpose. Every axis here is something a measurement harness can state as a fact; nothing
  * here is a judgement. There is no quality dimension, no severity, no verdict and no approval — those
- * belong to `@qf-jarvis/model-evaluation` (safety) and `@qf-jarvis/riya-quality-evaluation` (Riya
- * sales quality), and a benchmark package that grew its own would be inviting somebody to read a
- * latency number as permission to ship.
+ * belong to the generic model-evaluation package (safety) and the Riya quality evaluator (P10 sales
+ * quality), and a benchmark package that grew its own would be inviting somebody to read a latency
+ * number as permission to ship.
  */
 
 /**
@@ -73,24 +73,16 @@ export const RIYA_BENCHMARK_PARITY_MISMATCHES = [
 export type RiyaBenchmarkParityMismatch = (typeof RIYA_BENCHMARK_PARITY_MISMATCHES)[number];
 
 /**
- * The Pareto relation between two comparable runs. **Not a verdict.**
+ * There is deliberately NO relation/verdict vocabulary here.
  *
- * `A_DOMINATES` means A is at least as good on every reported operational axis and strictly better on
- * one. It does not mean A is the better model, that A is fast enough, that A is safe, or that A may
- * be deployed — a model can dominate every latency axis and fail P10 outright.
+ * A Pareto relation (`A_DOMINATES` / `TRADEOFF` / `EQUIVALENT` / …) was drafted and removed. Dominance
+ * needs every axis present on both sides, and memory is optional — an unmeasured axis silently drops
+ * out of the relation, so "equivalent" could quietly mean "equal on the axes we happened to share".
+ * That reads as a stronger claim than the data supports, and a summary that overstates is worse than
+ * no summary.
  *
- * `TRADEOFF` is the normal and expected answer. A smaller model is usually faster and usually worse,
- * which is the entire reason this workstream exists, and collapsing that into a single number is the
- * mistake the whole design refuses to make.
+ * Comparison returns named parity mismatches and side-by-side deltas. Reading them is the owner's job.
  */
-export const RIYA_BENCHMARK_PARETO_RELATIONS = [
-  'A_DOMINATES',
-  'B_DOMINATES',
-  'TRADEOFF',
-  'EQUIVALENT',
-  'NOT_COMPARABLE',
-] as const;
-export type RiyaBenchmarkParetoRelation = (typeof RIYA_BENCHMARK_PARETO_RELATIONS)[number];
 
 /** Upper bounds, so a malformed harness cannot smuggle an absurd integer into evidence. */
 export const RIYA_BENCHMARK_MAX_REQUESTS = 1_000_000;

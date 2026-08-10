@@ -14,6 +14,7 @@ import {
   createRiyaBenchmarkEvidence,
   isCanonicalBenchmarkInstant,
   riyaBenchmarkEvidenceIntegrityHolds,
+  verifyRiyaBenchmarkEvidence,
 } from '../contracts/evidence.js';
 import { canonicalJson, sha256OfCanonical } from '../internal/digest.js';
 import {
@@ -26,6 +27,7 @@ import { compareRiyaBenchmarkResultSets } from '../service/compare.js';
 import {
   createRiyaBenchmarkResultSet,
   riyaBenchmarkResultSetIntegrityHolds,
+  verifyRiyaBenchmarkResultSet,
 } from '../service/result-set.js';
 import {
   SYNTHETIC_BENCHMARK_INSTANT,
@@ -45,6 +47,34 @@ const codeOf = (run: () => unknown): string => {
   }
   return 'no-error';
 };
+
+/**
+ * Build a result set an ATTACKER would build: swap one member, then recompute every digest so the
+ * artifact is perfectly self-consistent.
+ *
+ * This is the adversary that a hash-only check cannot see. `sha256OfCanonical` is unkeyed, so anyone
+ * who can edit a body can re-stamp it — which is exactly why verification reconstructs rather than
+ * compares.
+ */
+function forgeResultSet(
+  set: ReturnType<typeof createRiyaBenchmarkResultSet>,
+  replacement: Record<string, unknown>,
+): Record<string, unknown> {
+  const results = [replacement, ...set.results.slice(1)];
+  const evidenceDigests = results.map((one) => {
+    const { evidenceDigest: _old, ...body } = one as Record<string, unknown>;
+    return sha256OfCanonical(body);
+  });
+  const stamped = results.map((one, index) => ({ ...one, evidenceDigest: evidenceDigests[index] }));
+  const manifestDigest = sha256OfCanonical({ version: 1, caseIds: set.caseIds });
+  return {
+    version: 1,
+    results: stamped,
+    caseIds: set.caseIds,
+    manifestDigest,
+    resultSetDigest: sha256OfCanonical({ version: 1, manifestDigest, evidenceDigests }),
+  };
+}
 
 // ---------------------------------------------------------------------------
 // 23–32. Evidence.
@@ -203,9 +233,25 @@ describe('evidence binds the whole artifact and authorizes nothing', () => {
       '2026-01-01T00:00:00+05:30',
       'not-a-time',
       '2026-13-01T00:00:00Z',
+      // The ones a shape check plus Date.parse would WRONGLY accept: JavaScript normalizes these to
+      // the following month and reports a finite number, so the artifact would carry a createdAt
+      // nobody wrote, silently shifted.
+      '2026-02-30T00:00:00Z',
+      '2026-04-31T00:00:00Z',
+      '2026-02-29T00:00:00Z',
+      '2026-00-10T00:00:00Z',
+      '2026-01-00T00:00:00Z',
+      '2026-01-32T00:00:00Z',
+      '2026-01-01T24:00:00Z',
+      '2026-01-01T00:60:00Z',
+      '2026-01-01T00:00:60Z',
     ]) {
       expect(isCanonicalBenchmarkInstant(bad), bad).toBe(false);
     }
+    // A real leap day is accepted; 2024 and 2000 are leap years, 1900 and 2026 are not.
+    expect(isCanonicalBenchmarkInstant('2024-02-29T12:00:00Z')).toBe(true);
+    expect(isCanonicalBenchmarkInstant('2000-02-29T00:00:00.000Z')).toBe(true);
+    expect(isCanonicalBenchmarkInstant('1900-02-29T00:00:00Z')).toBe(false);
     // Same inputs, same digest — twice, with no clock involved.
     expect(syntheticEvidence().evidenceDigest).toBe(syntheticEvidence().evidenceDigest);
   });
@@ -332,11 +378,18 @@ describe('a result set is the whole suite, or it is refused', () => {
     expect(set.manifestDigest).not.toBe(set.resultSetDigest);
     expect(fullSet().resultSetDigest).toBe(set.resultSetDigest);
     expect(riyaBenchmarkResultSetIntegrityHolds(set)).toBe(true);
-    // A swapped result breaks the set digest even though each artifact is individually valid.
+
+    // Order is RE-DERIVED, not trusted, so a set serialised in a different order is the same set and
+    // verifies to the same canonical form. Two spellings of one artifact are one artifact.
+    const reversed = { ...set, results: [...set.results].reverse() };
+    expect(riyaBenchmarkResultSetIntegrityHolds(reversed)).toBe(true);
+    expect(verifyRiyaBenchmarkResultSet(reversed)).toStrictEqual(set);
+
+    // Substituting a DIFFERENT member does break it, which is the property that matters.
     expect(
       riyaBenchmarkResultSetIntegrityHolds({
         ...set,
-        results: [...set.results].reverse(),
+        results: [set.results[0], set.results[0], set.results[2]],
       }),
     ).toBe(false);
   });
@@ -430,13 +483,18 @@ describe('two runs are compared only under exact parity, and never ranked', () =
       expectedCaseIds: caseIds,
     });
 
-  it('identical parity compares, and reports EQUIVALENT for identical numbers', () => {
+  it('identical parity compares, and every delta is zero', () => {
     const comparison = compareRiyaBenchmarkResultSets(setOf(), setOf());
     expect(comparison.comparable).toBe(true);
     expect(comparison.parityMismatches).toStrictEqual([]);
-    expect(comparison.paretoRelation).toBe('EQUIVALENT');
     expect(comparison.deltas.length).toBeGreaterThan(0);
     expect(comparison.deltas.every((one) => one.delta === 0)).toBe(true);
+    // Zero deltas, and NO field that turns them into a verdict.
+    expect(Object.keys(comparison).sort()).toStrictEqual([
+      'comparable',
+      'deltas',
+      'parityMismatches',
+    ]);
   });
 
   it('the RELEASE may differ — that is the point of the exercise', () => {
@@ -477,7 +535,6 @@ describe('two runs are compared only under exact parity, and never ranked', () =
     expect(comparison.parityMismatches).toContain(expected);
     // No deltas at all — a mismatched comparison reports nothing subtractable.
     expect(comparison.deltas).toStrictEqual([]);
-    expect(comparison.paretoRelation).toBe('NOT_COMPARABLE');
   });
 
   it('a different case set is not comparable', () => {
@@ -493,9 +550,9 @@ describe('two runs are compared only under exact parity, and never ranked', () =
     expect(comparison.parityMismatches).toContain('WORKLOAD_CASE_SET_MISMATCH');
   });
 
-  it('reports a genuine trade-off as a TRADE-OFF, not a winner', () => {
+  it('a genuine trade-off is REPORTED AS NUMBERS, with no summary of it', () => {
     // B is faster and uses more memory. This is the normal answer, and the whole reason there is no
-    // single number here.
+    // single number here — including no Pareto relation, which was drafted and removed.
     const comparison = compareRiyaBenchmarkResultSets(
       setOf(),
       setOf({
@@ -507,10 +564,13 @@ describe('two runs are compared only under exact parity, and never ranked', () =
       }),
     );
     expect(comparison.comparable).toBe(true);
-    expect(comparison.paretoRelation).toBe('TRADEOFF');
+    const latency = comparison.deltas.filter((one) => one.axis === 'endToEndLatencyMicrosP50');
+    const memory = comparison.deltas.filter((one) => one.axis === 'peakHostMemoryBytes');
+    expect(latency.every((one) => one.delta < 0)).toBe(true);
+    expect(memory.every((one) => one.delta > 0)).toBe(true);
   });
 
-  it('reports dominance when one side really is better on every reported axis', () => {
+  it('one-sided superiority is ALSO just numbers — no dominance verdict', () => {
     const comparison = compareRiyaBenchmarkResultSets(
       setOf(),
       setOf({
@@ -526,17 +586,24 @@ describe('two runs are compared only under exact parity, and never ranked', () =
         }),
       }),
     );
-    expect(comparison.paretoRelation).toBe('B_DOMINATES');
+    expect(comparison.comparable).toBe(true);
+    expect(comparison.deltas.every((one) => one.delta <= 0)).toBe(true);
+    expect(Object.keys(comparison)).not.toContain('paretoRelation');
   });
 
-  it('returns NO winner, NO recommendation, NO approval and NO score', () => {
+  it('the PARETO field is gone, and nothing replaced it', () => {
+    // Dominance needs every axis on both sides. Memory is optional, so an unmeasured axis dropped out
+    // of the relation and "equivalent" could mean "equal on the axes we happened to share" — a
+    // stronger claim than the data supports.
     const comparison = compareRiyaBenchmarkResultSets(setOf(), setOf({ modelId: 'model.beta' }));
     expect(Object.keys(comparison).sort()).toStrictEqual([
       'comparable',
       'deltas',
-      'paretoRelation',
       'parityMismatches',
     ]);
+    for (const gone of ['paretoRelation', 'relation', 'summary', 'outcome', 'result']) {
+      expect(Object.keys(comparison), gone).not.toContain(gone);
+    }
     const serialized = JSON.stringify(comparison).toUpperCase();
     for (const forbidden of [
       'WINNER',
@@ -555,12 +622,283 @@ describe('two runs are compared only under exact parity, and never ranked', () =
     }
   });
 
-  it('an axis only one side measured is skipped, not counted as a zero', () => {
+  it('an axis only one side measured is OMITTED, and no summary calls them equal', () => {
     // Treating an absent memory reading as zero would make the side that did not measure look better.
+    // Calling them EQUIVALENT would be worse: it reads as a finding about the two configurations when
+    // it is a finding about what the harness recorded. Absence from the deltas IS the statement.
     const withoutMemory = setOf({ observation: MEASURED_NO_MEMORY });
     const comparison = compareRiyaBenchmarkResultSets(setOf(), withoutMemory);
     expect(comparison.comparable).toBe(true);
     expect(comparison.deltas.some((one) => one.axis === 'peakHostMemoryBytes')).toBe(false);
-    expect(comparison.paretoRelation).toBe('EQUIVALENT');
+    expect(comparison.deltas.some((one) => one.axis === 'peakAcceleratorMemoryBytes')).toBe(false);
+    // The shared axes are still compared.
+    expect(comparison.deltas.some((one) => one.axis === 'endToEndLatencyMicrosP50')).toBe(true);
+    expect(Object.keys(comparison)).not.toContain('paretoRelation');
+  });
+
+  it('BOTH inputs are deep-verified before any delta exists', () => {
+    // The merge-blocking one. A comparison that reads an untrusted object produces output that looks
+    // exactly like a real answer, and it is the thing somebody pastes into a decision.
+    const valid = setOf();
+    const tampered = {
+      ...valid,
+      results: [
+        { ...valid.results[0], observation: syntheticObservation({ endToEndLatencyMicrosP50: 1 }) },
+        valid.results[1],
+      ],
+    };
+    expect(codeOf(() => compareRiyaBenchmarkResultSets(tampered, setOf()))).toBe(
+      'EVIDENCE_TAMPERED',
+    );
+    expect(codeOf(() => compareRiyaBenchmarkResultSets(setOf(), tampered))).toBe(
+      'EVIDENCE_TAMPERED',
+    );
+  });
+
+  it('a recomputed digest does not buy a comparison', () => {
+    // The attacker recomputes every digest over an artifact whose nested observation is structurally
+    // impossible. Hash self-consistency is not schema validity.
+    const valid = setOf();
+    const forged = forgeResultSet(valid, {
+      ...valid.results[0],
+      observation: { ...syntheticObservation(), failedRequests: 7 },
+    });
+    expect(codeOf(() => compareRiyaBenchmarkResultSets(forged, setOf()))).toBe(
+      'REQUEST_COUNT_MISMATCH',
+    );
+  });
+
+  it('a recomputed set digest does not legalize a mixed-subject set', () => {
+    const valid = setOf();
+    const forged = forgeResultSet(valid, {
+      ...valid.results[0],
+      subject: syntheticSubject({ modelId: 'model.beta' }),
+    });
+    expect(codeOf(() => compareRiyaBenchmarkResultSets(forged, setOf()))).toBe(
+      'RESULT_SET_SUBJECT_MISMATCH',
+    );
+  });
+
+  it('unknown keys are refused before a comparison exists', () => {
+    const valid = setOf();
+    expect(codeOf(() => compareRiyaBenchmarkResultSets({ ...valid, note: 'x' }, setOf()))).toBe(
+      'RESULT_SET_INVALID',
+    );
+    expect(codeOf(() => compareRiyaBenchmarkResultSets(null, setOf()))).toBe('RESULT_SET_INVALID');
+    expect(codeOf(() => compareRiyaBenchmarkResultSets(setOf(), 'nonsense'))).toBe(
+      'RESULT_SET_INVALID',
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Deep verification at the trust boundary (owner correction).
+// ---------------------------------------------------------------------------
+
+describe('a stored artifact is RECONSTRUCTED, never just hash-checked', () => {
+  it('a canonical artifact verifies and comes back identical', () => {
+    const evidence = syntheticEvidence();
+    expect(verifyRiyaBenchmarkEvidence(evidence)).toStrictEqual(evidence);
+    expect(riyaBenchmarkEvidenceIntegrityHolds(evidence)).toBe(true);
+  });
+
+  it('a stored artifact WITHOUT a digest is refused, not stamped', () => {
+    // Stamping it here would turn a verifier into a laundering step: an unstamped body walks in and a
+    // trusted artifact walks out.
+    const { evidenceDigest: _absent, ...unstamped } = syntheticEvidence();
+    expect(codeOf(() => verifyRiyaBenchmarkEvidence(unstamped))).toBe('DIGEST_INVALID');
+    expect(codeOf(() => verifyRiyaBenchmarkEvidence({ ...unstamped, evidenceDigest: 'abc' }))).toBe(
+      'DIGEST_INVALID',
+    );
+  });
+
+  const UNKNOWN_KEY_CASES: readonly (readonly [
+    string,
+    (evidence: Record<string, unknown>) => Record<string, unknown>,
+  ])[] = [
+    ['outer', (e) => ({ ...e, note: 'x' })],
+    ['subject', (e) => ({ ...e, subject: { ...syntheticSubject(), q: 1 } })],
+    [
+      'environment',
+      (e) => ({ ...e, environment: { ...syntheticHostedEnvironment(), hostname: 'box' } }),
+    ],
+    ['workload', (e) => ({ ...e, workload: { ...syntheticWorkload(), prompt: 'hi' } })],
+    ['observation', (e) => ({ ...e, observation: { ...syntheticObservation(), extra: 1 } })],
+  ];
+
+  it.each(UNKNOWN_KEY_CASES)('an unknown %s key is refused', (_where, mutate) => {
+    const forged = mutate(syntheticEvidence() as unknown as Record<string, unknown>);
+    const { evidenceDigest: _old, ...body } = forged;
+    // Re-stamped, so only the SCHEMA can catch it.
+    expect(
+      codeOf(() =>
+        verifyRiyaBenchmarkEvidence({ ...forged, evidenceDigest: sha256OfCanonical(body) }),
+      ),
+    ).not.toBe('no-error');
+  });
+
+  it('THE ONE THAT MATTERS: a recomputed digest cannot legalize a broken artifact', () => {
+    // A hash-only gate accepts this. successful + failed !== attempted is a harness that dropped
+    // requests on the floor, and its latency describes a population nobody can name.
+    const base = syntheticEvidence();
+    const broken = { ...base, observation: { ...syntheticObservation(), failedRequests: 9 } };
+    const { evidenceDigest: _old, ...body } = broken;
+    const selfConsistent = { ...broken, evidenceDigest: sha256OfCanonical(body) };
+
+    // Self-consistent by hash...
+    const { evidenceDigest: stamped, ...rest } = selfConsistent;
+    expect(sha256OfCanonical(rest)).toBe(stamped);
+    // ...and still refused, because reconstruction is the gate.
+    expect(codeOf(() => verifyRiyaBenchmarkEvidence(selfConsistent))).toBe(
+      'REQUEST_COUNT_MISMATCH',
+    );
+    expect(riyaBenchmarkEvidenceIntegrityHolds(selfConsistent)).toBe(false);
+  });
+
+  it('the boolean helper is TOTAL - anything in, a boolean out', () => {
+    for (const junk of [null, undefined, 0, '', 'text', [], {}, { version: 1 }]) {
+      expect(() => riyaBenchmarkEvidenceIntegrityHolds(junk)).not.toThrow();
+      expect(riyaBenchmarkEvidenceIntegrityHolds(junk)).toBe(false);
+    }
+  });
+});
+
+describe('a result set is ONE configuration, proved not assumed', () => {
+  const caseIds = ['case.alpha', 'case.beta'];
+  const build = (results: readonly unknown[]) =>
+    createRiyaBenchmarkResultSet({
+      version: 1,
+      results: results as never,
+      expectedCaseIds: caseIds,
+    });
+  const evidenceFor = (
+    workloadCaseId: string,
+    options: Parameters<typeof syntheticEvidence>[0] = {},
+  ) => syntheticEvidence({ workload: syntheticWorkload({ workloadCaseId }), ...options });
+
+  it('a homogeneous set is accepted', () => {
+    const set = build([evidenceFor('case.alpha'), evidenceFor('case.beta')]);
+    expect(set.results).toHaveLength(2);
+    expect(riyaBenchmarkResultSetIntegrityHolds(set)).toBe(true);
+    expect(verifyRiyaBenchmarkResultSet(set)).toStrictEqual(set);
+  });
+
+  it('two cases measured on DIFFERENT MODELS is not one set', () => {
+    // Identical workload parity, so the parity check passes - and the aggregate would describe a
+    // machine that does not exist.
+    expect(
+      codeOf(() =>
+        build([
+          evidenceFor('case.alpha'),
+          evidenceFor('case.beta', { subject: syntheticSubject({ modelId: 'model.beta' }) }),
+        ]),
+      ),
+    ).toBe('RESULT_SET_SUBJECT_MISMATCH');
+  });
+
+  it('two cases measured against a DIFFERENT PROMPT is not one set', () => {
+    expect(
+      codeOf(() =>
+        build([
+          evidenceFor('case.alpha'),
+          evidenceFor('case.beta', {
+            subject: syntheticSubject({ promptDigest: syntheticDigest('fade') }),
+          }),
+        ]),
+      ),
+    ).toBe('RESULT_SET_SUBJECT_MISMATCH');
+  });
+
+  it('two cases measured on DIFFERENT HARDWARE is not one set', () => {
+    expect(
+      codeOf(() =>
+        build([
+          evidenceFor('case.alpha'),
+          evidenceFor('case.beta', { environment: syntheticHostedEnvironment() }),
+        ]),
+      ),
+    ).toBe('RESULT_SET_ENVIRONMENT_MISMATCH');
+  });
+
+  it('workload parity within the set is still required', () => {
+    expect(
+      codeOf(() =>
+        build([
+          evidenceFor('case.alpha'),
+          syntheticEvidence({
+            workload: syntheticWorkload({ workloadCaseId: 'case.beta', concurrency: 8 }),
+          }),
+        ]),
+      ),
+    ).toBe('COMPARISON_NOT_PARITY');
+  });
+
+  it('stored verification re-proves the manifest against what is ACTUALLY there', () => {
+    const set = build([evidenceFor('case.alpha'), evidenceFor('case.beta')]);
+    expect(
+      codeOf(() =>
+        verifyRiyaBenchmarkResultSet({
+          ...set,
+          caseIds: ['case.alpha', 'case.beta', 'case.gamma'],
+        }),
+      ),
+    ).toBe('MANIFEST_CASE_MISSING');
+  });
+
+  it('stored verification re-proves BOTH digests and never restamps', () => {
+    const set = build([evidenceFor('case.alpha'), evidenceFor('case.beta')]);
+    expect(
+      codeOf(() =>
+        verifyRiyaBenchmarkResultSet({ ...set, manifestDigest: syntheticDigest('dede') }),
+      ),
+    ).toBe('DIGEST_INVALID');
+    expect(
+      codeOf(() =>
+        verifyRiyaBenchmarkResultSet({ ...set, resultSetDigest: syntheticDigest('dede') }),
+      ),
+    ).toBe('DIGEST_INVALID');
+  });
+
+  it('an unknown set key is refused', () => {
+    const set = build([evidenceFor('case.alpha'), evidenceFor('case.beta')]);
+    expect(codeOf(() => verifyRiyaBenchmarkResultSet({ ...set, note: 'x' }))).toBe(
+      'RESULT_SET_INVALID',
+    );
+  });
+
+  it('a fully re-stamped set cannot legalize a mixed subject or environment', () => {
+    const set = build([evidenceFor('case.alpha'), evidenceFor('case.beta')]);
+    expect(
+      codeOf(() =>
+        verifyRiyaBenchmarkResultSet(
+          forgeResultSet(set, {
+            ...set.results[0],
+            subject: syntheticSubject({ modelId: 'model.beta' }),
+          }),
+        ),
+      ),
+    ).toBe('RESULT_SET_SUBJECT_MISMATCH');
+    expect(
+      codeOf(() =>
+        verifyRiyaBenchmarkResultSet(
+          forgeResultSet(set, { ...set.results[0], environment: syntheticHostedEnvironment() }),
+        ),
+      ),
+    ).toBe('RESULT_SET_ENVIRONMENT_MISMATCH');
+  });
+
+  it('the set boolean helper is TOTAL', () => {
+    for (const junk of [null, undefined, 0, '', 'text', [], {}, { version: 1, results: [] }]) {
+      expect(() => riyaBenchmarkResultSetIntegrityHolds(junk)).not.toThrow();
+      expect(riyaBenchmarkResultSetIntegrityHolds(junk)).toBe(false);
+    }
+  });
+
+  it('canonical ordering is re-derived, not trusted', () => {
+    const set = build([evidenceFor('case.beta'), evidenceFor('case.alpha')]);
+    expect(set.results.map((one) => one.workload.workloadCaseId)).toStrictEqual([
+      'case.alpha',
+      'case.beta',
+    ]);
   });
 });

@@ -3,8 +3,7 @@
  *
  * ### One of three evidence authorities, and the narrowest
  *
- * `@qf-jarvis/model-evaluation` owns generic SAFETY. `@qf-jarvis/riya-quality-evaluation` owns Riya
- * sales QUALITY. This package owns only what a stopwatch and a memory counter can say: latency,
+ * The generic model-evaluation package owns SAFETY. The Riya quality evaluator owns sales QUALITY. This package owns only what a stopwatch and a memory counter can say: latency,
  * decode speed, request success, memory, reproducibility.
  *
  * They are kept apart because the failure mode of merging them is a single number. Once latency,
@@ -42,7 +41,6 @@ export {
   RIYA_BENCHMARK_ARCHITECTURE_FAMILIES,
   RIYA_BENCHMARK_ACCELERATOR_FAMILIES,
   RIYA_BENCHMARK_PARITY_MISMATCHES,
-  RIYA_BENCHMARK_PARETO_RELATIONS,
   RIYA_BENCHMARK_MAX_REQUESTS,
   RIYA_BENCHMARK_MAX_TOKENS,
   RIYA_BENCHMARK_MAX_MICROS,
@@ -55,7 +53,6 @@ export type {
   RiyaBenchmarkArchitectureFamily,
   RiyaBenchmarkAcceleratorFamily,
   RiyaBenchmarkParityMismatch,
-  RiyaBenchmarkParetoRelation,
 } from './contracts/vocabularies.js';
 
 // Subject — release identity REUSED from the evaluation package, never redefined.
@@ -83,6 +80,7 @@ export type {
 // Evidence.
 export {
   createRiyaBenchmarkEvidence,
+  verifyRiyaBenchmarkEvidence,
   riyaBenchmarkEvidenceIntegrityHolds,
   isCanonicalBenchmarkInstant,
 } from './contracts/evidence.js';
@@ -91,6 +89,7 @@ export type { RiyaBenchmarkEvidenceV1, RiyaBenchmarkEvidenceInput } from './cont
 // Result set and manifest.
 export {
   createRiyaBenchmarkResultSet,
+  verifyRiyaBenchmarkResultSet,
   riyaBenchmarkResultSetIntegrityHolds,
 } from './service/result-set.js';
 export type {
@@ -106,6 +105,6 @@ export {
   meanOutputTokensPerSuccess,
 } from './service/derived.js';
 
-// Comparison. Parity or nothing, and no verdict either way.
+// Comparison. Verifies both inputs, then parity or nothing — and no summary either way.
 export { compareRiyaBenchmarkResultSets } from './service/compare.js';
 export type { RiyaBenchmarkComparison, RiyaBenchmarkAxisDelta } from './service/compare.js';

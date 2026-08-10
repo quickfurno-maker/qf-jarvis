@@ -22,6 +22,12 @@ export const RIYA_BENCHMARK_ERROR_CODES = [
   'MANIFEST_DUPLICATE_CASE',
   'MANIFEST_CASE_MISSING',
   'MANIFEST_CASE_UNEXPECTED',
+  // A result set is one configuration measured across cases. Two cases measured on different
+  // releases, or on different hardware, is a stitched artifact rather than a benchmark — and it is
+  // its own mistake, distinct from a workload-parity break, so it gets its own code.
+  'RESULT_SET_SUBJECT_MISMATCH',
+  'RESULT_SET_ENVIRONMENT_MISMATCH',
+  'RESULT_SET_INVALID',
   'DIGEST_INVALID',
   'EVIDENCE_TAMPERED',
   'COMPARISON_NOT_PARITY',
