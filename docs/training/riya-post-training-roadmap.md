@@ -28,8 +28,15 @@ SHA-256 identity, derived SFT samples. **Trains nothing.**
 
 ### 2. HUMAN GOLD V1
 
-360 human-authored synthetic multi-turn trajectories, 3 × 12 × 10. Reviewed to risk class. See the
-[coverage plan](./riya-gold-v1-coverage-plan.md).
+360 human-authored synthetic multi-turn trajectories, as **5 balanced waves × 3 languages × 12 kinds ×
+2** — 288 `TRAIN`, 72 `VALIDATION`, no populated holdout. Reviewed to risk class, and **Wave 1 gates
+waves 2–5**.
+
+The authoring system ships in HGV1-A; the conversations are written by people afterwards, and a model
+may not write them. See the [wave plan](./riya-human-gold-wave-plan.md), the [authoring
+rubric](./riya-human-gold-authoring-rubric.md), the [review
+workflow](./riya-human-gold-review-workflow.md) and the [coverage
+plan](./riya-gold-v1-coverage-plan.md).
 
 ### 3. Controlled synthetic expansion
 

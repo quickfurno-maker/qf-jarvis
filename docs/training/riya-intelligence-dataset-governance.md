@@ -54,6 +54,10 @@ are never Riya's primary intelligence.
 
 **The RWC-P10 golden corpus is none of these.** It is the exam. See §4.
 
+`HOLDOUT` is supported here and **not populated by Human Gold V1**: a corpus committed to Git has no
+honest unlooked-at split, so V1 declines to claim one. See
+[ADR-0108](../decisions/ADR-0108-riya-human-gold-v1-authoring-and-calibration.md) §5.
+
 ### Lineage
 
 Every trajectory has a `lineageRootRef` naming the family it belongs to. A human original and all of

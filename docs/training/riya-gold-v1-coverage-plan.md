@@ -1,10 +1,16 @@
 # Riya HUMAN GOLD V1 — coverage plan
 
-**Slice:** RID-F1 (plan only) · **Decision:** [ADR-0107](../decisions/ADR-0107-riya-intelligence-dataset-foundation-and-leakage-firewall.md) · **Companions:** [governance](./riya-intelligence-dataset-governance.md), [roadmap](./riya-post-training-roadmap.md)
+**Slice:** RID-F1 (plan) · HGV1-A (authored as data) · **Decisions:** [ADR-0107](../decisions/ADR-0107-riya-intelligence-dataset-foundation-and-leakage-firewall.md), [ADR-0108](../decisions/ADR-0108-riya-human-gold-v1-authoring-and-calibration.md) · **Companions:** [wave plan](./riya-human-gold-wave-plan.md), [authoring rubric](./riya-human-gold-authoring-rubric.md), [review workflow](./riya-human-gold-review-workflow.md), [governance](./riya-intelligence-dataset-governance.md), [roadmap](./riya-post-training-roadmap.md)
 
-**Nothing in this plan is generated in RID-F1.** This is the target the next slice authors against.
-The `360` below appears nowhere in production source: it belongs to the Gold V1 release policy, which
-is authored as data.
+**No Gold conversation exists yet.** This is the target authors write against. The `360` is now
+authored as data in the Gold V1 coverage policy, exactly as ADR-0107 §22 required, and it appears in
+production source only inside the offline Gold slice.
+
+> **HGV1-A restates the arrangement.** The same 360, generated as a checkable table of assignments:
+> **5 balanced waves × 3 languages × 12 kinds × 2 per cell** rather than 3 × 12 × 10, and splits of
+> **288 `TRAIN` / 72 `VALIDATION` / 0 `HOLDOUT`** rather than the ~70/15/15 sketch below. The
+> [wave plan](./riya-human-gold-wave-plan.md) is the operative document; this page keeps the
+> reasoning about what the corpus should contain.
 
 ---
 
@@ -14,7 +20,7 @@ is authored as data.
 | -------------------------------- | ---------------------------- |
 | Language modes                   | 3 — English, Hindi, Hinglish |
 | Primary interaction kinds        | 12                           |
-| Trajectories per language × kind | 10                           |
+| Trajectories per language × kind | 10 — as 5 waves × 2          |
 | **Total**                        | **360**                      |
 
 Typical depth: **4–12 assistant turns**, so 360 trajectories yield roughly 2,000–4,000 assistant
@@ -39,9 +45,10 @@ turns is where those decisions actually appear.
 
 ## Per-language, per-kind allocation
 
-Each of the twelve kinds gets ten trajectories in **each** language. Symmetry is deliberate: a thinner
-Hindi or Hinglish set is how a system ends up measurably good in English and quietly bad everywhere
-else, and it happens by drift rather than by decision.
+Each of the twelve kinds gets ten trajectories in **each** language — delivered as two per wave, so
+each wave is a complete cross-section rather than a slice of the matrix. Symmetry is deliberate: a
+thinner Hindi or Hinglish set is how a system ends up measurably good in English and quietly bad
+everywhere else, and it happens by drift rather than by decision.
 
 Hinglish is authored as Hinglish — Latin script with Hindi structure, the way people actually type —
 not as English with a few Hindi words dropped in.
@@ -54,7 +61,9 @@ Within each block of ten, vary:
 - **starting state** — some from an empty `INTRO`/`NEED`, some mid-conversation with facts already
   known and their provenance set.
 
-Suggested per-block shape: 2 `BASIC`, 4 `STANDARD`, 3 `HARD`, 1 `EDGE`.
+Suggested per-block shape: 2 `BASIC`, 4 `STANDARD`, 3 `HARD`, 1 `EDGE`. The generated plan realises
+this as floors rather than quotas — see the [wave plan](./riya-human-gold-wave-plan.md#diversity-floors)
+for the exact numbers, and for why forcing exact counts would produce customers who do not exist.
 
 ---
 
@@ -101,26 +110,34 @@ The validator reports all of these in one pass, so fix them in one pass.
 
 ## Split allocation
 
-Assign by **lineage**, before authoring variants. A reasonable Gold V1 starting point:
+Assign by **lineage**, before authoring variants. HGV1-A fixes the allocation by wave:
 
-| Split        | Share | Purpose                         |
-| ------------ | ----- | ------------------------------- |
-| `TRAIN`      | ~70%  | learning                        |
-| `VALIDATION` | ~15%  | tuning and candidate comparison |
-| `HOLDOUT`    | ~15%  | one final unlooked-at check     |
+| Split        | Count | Waves | Purpose                         |
+| ------------ | ----- | ----- | ------------------------------- |
+| `TRAIN`      | 288   | 1–4   | learning                        |
+| `VALIDATION` | 72    | 5     | tuning and candidate comparison |
+| `HOLDOUT`    | 0     | —     | deferred, deliberately          |
 
-Keep the holdout balanced across languages and kinds, or it measures whatever happens to be in it.
-And do not read it.
+The ~15% holdout sketched in the RID-F1 version of this page is **not** populated in V1. A corpus
+committed to Git is visible to everyone authoring against the repository, so calling part of it hidden
+would be a comforting label on something untrue. A genuinely sealed holdout needs a separately
+governed restricted store; the foundation still supports `HOLDOUT` generically, and Gold V1 does not
+pretend.
+
+Because wave 5 is the validation split, no wave-5 scenario may be a variant of a wave-1–4 lineage.
 
 ---
 
 ## Definition of done for Gold V1
 
-- 360 trajectories, 24 blocks of ten... in the 3 × 12 arrangement above;
-- every trajectory passes the deterministic gates;
+- 360 trajectories fulfilling the 360 generated assignments, every one human-authored;
+- every trajectory passes the deterministic gates, and the Gold matrix is clean;
 - every trajectory reviewed to its risk class, by somebody other than its author;
 - zero protected-exam leakage and zero unresolved quarantine;
+- the repetition report within the threshold set by Wave-1 calibration;
 - a sealed manifest and release evidence with `trainingApproval: false`;
 - the coverage policy for Gold V1 authored as data, naming these minima explicitly.
 
-Then, and only then, the roadmap's next step.
+Wave 1 gates the rest: see [the calibration
+gate](./riya-human-gold-wave-plan.md#the-calibration-gate). Then, and only then, the roadmap's next
+step.
