@@ -1,6 +1,8 @@
 # ADR-0105 — RWC-P9: Riya production hardening and operational readiness
 
-- **Status:** Accepted — RWC-P9 implementation on branch, NOT MERGED
+- **Status:** Accepted — MERGED as PR #110. Reviewed head
+  `a0fd7fefa2ff77851f196c7baae481825334f3c0`; merge commit
+  `192e4a9ec90fcb77f4866357fd7a681acb40cb93`. **RWC-P10 (ADR-0106) is the current slice.**
 - **Date:** 2026-08-09
 - **Depends on:** ADR-0104 (RWC-P8 cross-channel continuity and logical-turn idempotency),
   ADR-0103 (RWC-P7), ADR-0101/0102 (RWC-P6), ADR-0100 (RWC-P5), ADR-0099 (RWC-P4B),

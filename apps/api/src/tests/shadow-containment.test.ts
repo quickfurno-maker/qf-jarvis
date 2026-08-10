@@ -485,6 +485,17 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // provider, database, HTTP, Core adapter, clock, randomness, transcript or raw model result --
       // it is a profile handed to the generic M4 adapter, which is what keeps one turn to one call.
       'riya-model-interaction',
+      // RWC-P10 (ADR-0106): the Riya-SPECIFIC quality, evaluation and sales-optimization layer,
+      // sitting ABOVE the generic @qf-jarvis/model-evaluation safety authority rather than
+      // replacing it -- a quality candidate binding can only be DERIVED from an existing
+      // ACTIVE/SHADOW/CANARY ApprovalEvidence, so quality cannot exist without safety evidence.
+      // Still an EXACT set match; it records an authorised addition, it does not relax the
+      // assertion. It INVOKES NOTHING: no gateway, provider, local inference, HTTP, LLM-as-judge,
+      // scoring prompt, embeddings, database, migration, clock or randomness. Subjective sales
+      // quality comes from exactly two independent HUMAN reviews, thresholds are per-dimension
+      // basis points with no global average, and its evidence is synthetic with
+      // productionApproval=false and no rollout bridge -- it activates nothing.
+      'riya-quality-evaluation',
       // RWC-P2C (ADR-0094): the PRIVATE Riya web conversation service. Still an EXACT set match; it
       // records an authorised addition, it does not relax the assertion. It is an application
       // service with no ingress: no HTTP server, route, public endpoint, browser reachability,
