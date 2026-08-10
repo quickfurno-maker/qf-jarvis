@@ -319,6 +319,107 @@ describe('an observation is a measurement, never a transcript', () => {
     ).toBe('invalid-observation');
   });
 
+  it('a NESTED review carrying free text is REFUSED, not stripped', () => {
+    // Owner correction on PR #111. The observation constructor used to rebuild each review from its
+    // known fields before validating, so a `comment` or an `email` was silently dropped instead of
+    // refused -- which meant the strictest lock in the package was unenforced at exactly the place a
+    // real review tool would attach one. The FULL nested object now goes through `.strict()`.
+    for (const extra of [
+      { comment: 'felt pushy about the eight lakh figure' },
+      { reviewerName: 'a real person' },
+      { name: 'a real person' },
+      { email: 'someone@example.com' },
+      { confidence: 0.8 },
+      { explanation: 'the closing line assumed the sale' },
+      { notes: 'see the thread' },
+    ]) {
+      expect(
+        codeOf(() =>
+          createRiyaQualityObservation({
+            ...OBSERVATION_BASE,
+            humanReviews: [
+              { version: 1, reviewRef: 'a', satisfiedDimensions: ['CLARITY'], ...extra },
+              { version: 1, reviewRef: 'b', satisfiedDimensions: ['CLARITY'] },
+            ] as never,
+          }),
+        ),
+        JSON.stringify(extra),
+      ).toBe('invalid-observation');
+    }
+  });
+
+  it('an observation built from a review with free text retains none of it', () => {
+    // Belt and braces: the refusal above is the contract, and this proves nothing leaked on the way
+    // to it. A rejected construction must not have copied the text anywhere first.
+    let captured = 'no-error';
+    try {
+      createRiyaQualityObservation({
+        ...OBSERVATION_BASE,
+        humanReviews: [
+          {
+            version: 1,
+            reviewRef: 'a',
+            satisfiedDimensions: ['CLARITY'],
+            comment: 'SENTINEL-REVIEW-TEXT-4f2a',
+          },
+          { version: 1, reviewRef: 'b', satisfiedDimensions: ['CLARITY'] },
+        ] as never,
+      });
+    } catch (error: unknown) {
+      captured = error instanceof Error ? error.message : 'other';
+    }
+    expect(captured).toBe('A Riya quality observation is invalid.');
+    expect(captured).not.toContain('SENTINEL-REVIEW-TEXT-4f2a');
+  });
+
+  it('an extra TOP-LEVEL batch field is refused by the canonical constructor', () => {
+    // Likewise the batch: rebuilding only `observations` and `skipProjectDetails` stripped anything
+    // else, so a fixture could carry a field P4A would have rejected and the suite would measure a
+    // shape the runtime cannot produce. The whole value now goes through.
+    for (const extra of [
+      { rawText: 'we want a modular kitchen' },
+      { confidence: 0.9 },
+      { messageId: 'msg.1' },
+      { channel: 'WEB' },
+      { version: 2 },
+    ]) {
+      expect(
+        codeOf(() =>
+          createRiyaQualityObservation({
+            ...OBSERVATION_BASE,
+            observationBatch: {
+              version: 1,
+              observations: [],
+              skipProjectDetails: false,
+              ...extra,
+            } as never,
+          }),
+        ),
+        JSON.stringify(extra),
+      ).toBe('invalid-observation');
+    }
+  });
+
+  it('a well-formed batch and two clean reviews still pass', () => {
+    // The strictness must not have become a blanket refusal.
+    const observation = createRiyaQualityObservation({
+      ...OBSERVATION_BASE,
+      observationBatch: {
+        version: 1,
+        observations: [
+          { field: 'budget', operation: 'SET', value: 'budget.mid', provenance: 'user_stated' },
+        ],
+        skipProjectDetails: true,
+      },
+      humanReviews: [
+        { version: 1, reviewRef: 'a', satisfiedDimensions: ['CLARITY'] },
+        { version: 1, reviewRef: 'b', satisfiedDimensions: ['CLARITY'] },
+      ],
+    });
+    expect(observation.observationBatch.skipProjectDetails).toBe(true);
+    expect(observation.humanReviews).toHaveLength(2);
+  });
+
   it('sorts reviews, asked fields and citations so a digest does not depend on submission order', () => {
     const one = createRiyaQualityObservation({
       ...OBSERVATION_BASE,

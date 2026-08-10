@@ -153,25 +153,141 @@ describe('release and prompt identity are COPIED from the safety evidence', () =
     expect(binding.policyContractRevision).toBe('policy.rev.4');
     expect(binding.safetyEvaluationRef).toBe(evidence.evaluationRef);
 
-    // A caller passing these directly is refused by `.strict()` — there is no override path, so a
-    // quality run cannot claim a prompt digest safety never covered.
-    expect(
-      codeOf(() =>
-        createRiyaQualityCandidateBinding({
-          ...BASE,
-          safetyEvidence: evidence,
-          promptDigest: '0'.repeat(64),
-          release: { releaseId: 'forged' },
-        } as never),
-      ),
-    ).toBe('no-error');
-    const ignored = createRiyaQualityCandidateBinding({
-      ...BASE,
-      safetyEvidence: evidence,
-      promptDigest: '0'.repeat(64),
-    } as never);
-    // Even when an extra key is present it is IGNORED, not honoured: the evidence still decides.
-    expect(ignored.promptDigest).toBe('f'.repeat(64));
+    // There is no override PATH, and now no override SHAPE either: a direct `promptDigest` or
+    // `release` key is refused rather than ignored. The value was always correct -- the evidence
+    // decided -- but a caller who believed they had overridden a release would have been wrong and
+    // would never have been told.
+    for (const extra of [
+      { promptDigest: '0'.repeat(64) },
+      { promptVersion: 99 },
+      { promptFamily: 'forged.family' },
+      { release: { releaseId: 'forged' } },
+      { providerId: 'forged.provider' },
+      { modelId: 'forged/model' },
+      { capabilityProfileRef: 'forged.capability' },
+      { safetyEvaluationRef: 'forged.ref' },
+    ]) {
+      expect(
+        codeOf(() =>
+          createRiyaQualityCandidateBinding({
+            ...BASE,
+            safetyEvidence: evidence,
+            ...extra,
+          }),
+        ),
+        JSON.stringify(extra),
+      ).toBe('invalid-candidate-binding');
+    }
+  });
+
+  it('the artifact is RECONSTRUCTED, so a malformed nested binding cannot be copied', () => {
+    // The blocker this closes. A shallow check let `binding: {}` through and the nested release,
+    // prompt and capability identity were copied straight out of it -- so the one thing the binding
+    // exists to guarantee rested on the caller not lying.
+    const genuine = createSyntheticSafetyEvidence();
+
+    for (const broken of [
+      { ...genuine, binding: {} },
+      { ...genuine, binding: { ...genuine.binding, release: {} } },
+      // A release missing its execution class: structurally close, and unusable.
+      {
+        ...genuine,
+        binding: {
+          ...genuine.binding,
+          release: { ...genuine.binding.release, executionClass: undefined },
+        },
+      },
+      // A prompt digest that is not a 64-hex SHA-256.
+      { ...genuine, binding: { ...genuine.binding, promptDigest: 'not-a-digest' } },
+      { ...genuine, binding: { ...genuine.binding, promptDigest: 'a'.repeat(63) } },
+      // A wildcard identity, which the generic constructor refuses by design.
+      { ...genuine, binding: { ...genuine.binding, capabilityProfileRef: 'latest' } },
+      // An extra nested key, which `.strict()` refuses.
+      { ...genuine, binding: { ...genuine.binding, extra: true } },
+    ]) {
+      expect(
+        codeOf(() =>
+          createRiyaQualityCandidateBinding({ ...BASE, safetyEvidence: broken as never }),
+        ),
+      ).toBe('safety-evidence-not-canonical');
+    }
+  });
+
+  it('refuses a malformed digest or instant', () => {
+    const genuine = createSyntheticSafetyEvidence();
+    for (const broken of [
+      { ...genuine, suiteResultDigest: 'not-hex' },
+      { ...genuine, suiteResultDigest: genuine.suiteResultDigest.toUpperCase() },
+      { ...genuine, suiteResultDigest: genuine.suiteResultDigest.slice(0, 16) },
+      { ...genuine, caseSetDigest: 'not-hex' },
+      { ...genuine, createdAt: '2026-01-01' },
+      { ...genuine, createdAt: '2026-01-01T00:00:00+05:30' },
+      { ...genuine, createdAt: '2026-13-45T00:00:00Z' },
+    ]) {
+      expect(
+        codeOf(() => createRiyaQualityCandidateBinding({ ...BASE, safetyEvidence: broken })),
+      ).toBe('safety-evidence-not-canonical');
+    }
+  });
+
+  it('refuses an evaluationRef that does not match its own content', () => {
+    // The check that catches a binding swapped underneath a reference somebody kept -- exactly the
+    // drift where a candidate is quality-measured against a release safety never covered.
+    const alpha = createSyntheticSafetyEvidence();
+    const beta = createSyntheticSafetyEvidence({ releaseId: 'release.beta' });
+    expect(alpha.evaluationRef).not.toBe(beta.evaluationRef);
+
+    for (const broken of [
+      { ...alpha, evaluationRef: beta.evaluationRef },
+      // Beta's binding under alpha's reference.
+      { ...alpha, binding: beta.binding },
+      { ...alpha, evaluationRef: 'evref-00000000000000000000000000000000' },
+      { ...alpha, suiteResultDigest: beta.suiteResultDigest },
+    ]) {
+      expect(
+        codeOf(() => createRiyaQualityCandidateBinding({ ...BASE, safetyEvidence: broken })),
+      ).toBe('safety-evidence-not-canonical');
+    }
+  });
+
+  it('refuses an artifact whose key set is not exactly an ApprovalEvidence', () => {
+    const genuine = createSyntheticSafetyEvidence();
+    const { caseSetDigest: _dropped, ...missing } = genuine;
+    for (const broken of [
+      missing,
+      { ...genuine, extraField: 'attached meaning the contract does not have' },
+      [genuine],
+      'not an object',
+      42,
+    ]) {
+      expect(
+        codeOf(() =>
+          createRiyaQualityCandidateBinding({ ...BASE, safetyEvidence: broken as never }),
+        ),
+      ).toBe('safety-evidence-required');
+    }
+  });
+
+  it('the fixture itself came from the REAL generic evaluator', () => {
+    // Not hand-assembled. If it were, the deep re-proof would be validating against a fixture rather
+    // than against what `@qf-jarvis/model-evaluation` actually issues, and the two would diverge the
+    // day that package changed its evidence shape.
+    const genuine = createSyntheticSafetyEvidence();
+    expect(genuine.evaluationRef).toMatch(/^evref-[0-9a-f]{32}$/u);
+    expect(genuine.suiteResultDigest).toMatch(/^[0-9a-f]{32}$/u);
+    expect(genuine.caseSetDigest).toMatch(/^[0-9a-f]{32}$/u);
+    expect(genuine.synthetic).toBe(true);
+    expect(genuine.productionApproval).toBe(false);
+    expect(Object.keys(genuine).sort()).toStrictEqual([
+      'binding',
+      'caseSetDigest',
+      'createdAt',
+      'evaluationRef',
+      'productionApproval',
+      'suiteResultDigest',
+      'synthetic',
+      'target',
+    ]);
   });
 
   it('stamps its own evaluator identity', () => {

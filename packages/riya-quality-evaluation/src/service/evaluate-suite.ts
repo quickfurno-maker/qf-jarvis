@@ -6,9 +6,8 @@
  * non-determinism a caller can introduce is the ORDER they hand things in, and the suite constructor
  * has already removed that.
  */
-import { contentDigest } from '@qf-jarvis/model-evaluation';
-
 import { evaluateRiyaQualityCase } from '../internal/evaluate-case.js';
+import { riyaQualityCaseSetDigest, riyaQualityResultDigest } from '../internal/result-integrity.js';
 import { observationKey } from '../contracts/observation.js';
 import type { RiyaQualityObservationV1 } from '../contracts/observation.js';
 import { riyaQualityScenarioKey } from '../contracts/scenario.js';
@@ -24,19 +23,6 @@ import {
   RIYA_QUALITY_INCONCLUSIVE_CODES,
 } from '../contracts/vocabularies.js';
 import type { RiyaQualityCaseOutcome, RiyaQualityDimension } from '../contracts/vocabularies.js';
-
-/** The canonical case-set digest preimage. Codes and counts only — never a value or a reply. */
-function caseSetDigestOf(caseResults: readonly RiyaQualityCaseResultV1[]): string {
-  return contentDigest(
-    caseResults.map((one) => [
-      one.scenarioId,
-      one.scenarioVersion,
-      one.outcome,
-      [...one.objectiveFailures],
-      [...one.failedQualityDimensions],
-    ]),
-  );
-}
 
 /**
  * Evaluate a suite against the supplied observations.
@@ -154,10 +140,13 @@ export function evaluateRiyaQualitySuite(
     }
   }
 
-  const caseSetDigest = caseSetDigestOf(caseResults);
+  const caseSetDigest = riyaQualityCaseSetDigest(caseResults);
   const qualityEligible = breaches.length === 0;
 
-  const resultDigest = contentDigest({
+  // ONE preimage, shared with the evidence gate and the comparator (owner correction on PR #111).
+  // A second copy here would drift, and the day it did, an artifact would verify against a formula
+  // nobody was checking.
+  const resultDigest = riyaQualityResultDigest({
     binding: suite.binding,
     caseSetDigest,
     countsByOutcome: counts,
@@ -183,9 +172,4 @@ export function evaluateRiyaQualitySuite(
     caseSetDigest,
     resultDigest,
   });
-}
-
-/** Recompute the case-set digest, so a caller can detect a tampered result. */
-export function recomputeRiyaQualityCaseSetDigest(result: RiyaQualitySuiteResultV1): string {
-  return caseSetDigestOf(result.caseResults);
 }

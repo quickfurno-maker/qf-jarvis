@@ -41,11 +41,10 @@ import type {
 } from '@qf-jarvis/model-evaluation';
 import { z } from 'zod';
 
+import { proveGenericSafetyEvidence } from '../internal/safety-evidence.js';
 import { RiyaQualityEvaluationError } from './errors.js';
 
-/** The safety targets a quality candidate binding may rest on. */
-export const RIYA_QUALITY_ELIGIBLE_SAFETY_TARGETS: readonly EvaluationApprovalTarget[] =
-  Object.freeze(['ACTIVE_MODEL_RELEASE', 'SHADOW_ELIGIBILITY', 'CANARY_ELIGIBILITY']);
+export { RIYA_QUALITY_ELIGIBLE_SAFETY_TARGETS } from '../internal/safety-evidence.js';
 
 /** The exact release identity a quality run was measured against. Copied, never supplied. */
 export interface RiyaQualityReleaseRef {
@@ -105,8 +104,21 @@ const IDENTIFIER = z
 const VERSION = z.int().min(1).max(1_000_000);
 const CANONICAL_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
 
+/**
+ * The WHOLE input, parsed strictly.
+ *
+ * The first version projected the known fields out and parsed the projection, so a caller passing
+ * `promptDigest`, `release` or `modelId` alongside the evidence had those keys silently dropped. The
+ * value was still correct -- the evidence decided -- but a caller who believed they had overridden a
+ * release would have been wrong and would never have been told. A refusal is the only honest answer:
+ * the safety evidence is the ONLY release and prompt identity source, and offering something that
+ * looks like an override is worse than offering none.
+ */
 const inputSchema = z
   .object({
+    // Proved separately and in full by `proveGenericSafetyEvidence`. Present here only so the strict
+    // key set is complete.
+    safetyEvidence: z.unknown(),
     qualitySuiteId: IDENTIFIER,
     qualitySuiteVersion: VERSION,
     fixtureManifestId: IDENTIFIER,
@@ -126,47 +138,21 @@ const rejectWildcard = (value: string): void => {
 /**
  * Derive a quality candidate binding from generic safety evidence.
  *
- * Throws `safety-evidence-required` when the evidence is structurally unusable,
- * `safety-evidence-target-not-eligible` for a target that carries no behavioural claim,
+ * Throws `safety-evidence-required` when the artifact is structurally unusable,
+ * `safety-evidence-not-canonical` when its nested binding, digests, instant or self-reference do not
+ * reconstruct, `safety-evidence-target-not-eligible` for a target that carries no behavioural claim,
  * `safety-evidence-not-synthetic` for anything production-approving, and
- * `invalid-candidate-binding` for a malformed suite/fixture/threshold identity.
+ * `invalid-candidate-binding` for a malformed or over-specified suite/fixture/threshold input.
  */
 export function createRiyaQualityCandidateBinding(
   input: RiyaQualityCandidateBindingInput,
 ): RiyaQualityCandidateBindingV1 {
-  // Read as `unknown` on purpose. The declared parameter type says this is an ApprovalEvidence, but
-  // the value crosses a package boundary from a caller the compiler cannot police, and `typeof null`
-  // is `'object'` -- so a raw property read here would throw a TypeError instead of a bounded code.
-  const evidence = input.safetyEvidence as unknown as Partial<ApprovalEvidence> | null | undefined;
-  if (
-    evidence === undefined ||
-    evidence === null ||
-    typeof evidence !== 'object' ||
-    typeof evidence.evaluationRef !== 'string' ||
-    evidence.evaluationRef.length === 0 ||
-    typeof evidence.binding !== 'object'
-  ) {
-    throw new RiyaQualityEvaluationError('safety-evidence-required');
-  }
-  if (
-    evidence.target === undefined ||
-    !RIYA_QUALITY_ELIGIBLE_SAFETY_TARGETS.includes(evidence.target)
-  ) {
-    throw new RiyaQualityEvaluationError('safety-evidence-target-not-eligible');
-  }
-  if (evidence.synthetic !== true || evidence.productionApproval !== false) {
-    throw new RiyaQualityEvaluationError('safety-evidence-not-synthetic');
-  }
+  // The WHOLE artifact is re-proved, and the binding it returns is RECONSTRUCTED through the generic
+  // package's own constructor -- so what is copied below is never the caller's nested object.
+  const proven = proveGenericSafetyEvidence(input.safetyEvidence);
 
-  const parsed = inputSchema.safeParse({
-    qualitySuiteId: input.qualitySuiteId,
-    qualitySuiteVersion: input.qualitySuiteVersion,
-    fixtureManifestId: input.fixtureManifestId,
-    fixtureManifestVersion: input.fixtureManifestVersion,
-    thresholdsId: input.thresholdsId,
-    thresholdsVersion: input.thresholdsVersion,
-    createdAt: input.createdAt,
-  });
+  // The whole input, not a projection: an extra `promptDigest` or `release` key is a refusal.
+  const parsed = inputSchema.safeParse(input);
   if (!parsed.success) {
     throw new RiyaQualityEvaluationError('invalid-candidate-binding');
   }
@@ -178,7 +164,7 @@ export function createRiyaQualityCandidateBinding(
     rejectWildcard(token);
   }
 
-  const safety = evidence.binding;
+  const safety = proven.canonicalBinding;
   return Object.freeze({
     version: 1 as const,
     qualitySuiteId: parsed.data.qualitySuiteId,
@@ -196,8 +182,8 @@ export function createRiyaQualityCandidateBinding(
     capabilityProfileRef: safety.capabilityProfileRef,
     knowledgeRevision: safety.knowledgeRevision,
     policyContractRevision: safety.policyContractRevision,
-    safetyEvaluationRef: evidence.evaluationRef,
-    safetyTarget: evidence.target,
+    safetyEvaluationRef: proven.evaluationRef,
+    safetyTarget: proven.target,
     createdAt: parsed.data.createdAt,
   });
 }

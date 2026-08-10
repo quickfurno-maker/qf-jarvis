@@ -6,31 +6,41 @@
  * A candidate is preferred only if NO dimension is lower than the baseline, and at least one improves
  * by the policy minimum. A one basis point regression in any single dimension is enough to withhold
  * preference — not because one basis point matters on its own, but because the alternative is a
- * tolerance, and a tolerance is where "slightly pushier, much clearer" gets approved.
+ * tolerance, and a tolerance is where the bad trade lives.
  *
  * That trade is the specific thing this function exists to refuse. A prompt tuned for momentum will
  * almost always improve `SALES_MOMENTUM` and `CTA_QUALITY` while quietly costing `EMPATHY` or
  * `TRUST_BUILDING`, and any scheme that adds the numbers up will approve it. This one returns TIE and
  * makes a human look at what moved.
  *
- * ### Comparable means the same question was asked
+ * ### It refuses to rank an unproved artifact (owner correction on PR #111)
  *
- * Same suite, same fixtures, same thresholds, same evaluator, same capability, knowledge and policy.
- * Provider, model, release and prompt MAY differ — those are what a comparison is for. Anything else
- * differing means the two runs answered different questions, and the honest answer is
- * `NOT_COMPARABLE` rather than a verdict nobody should act on.
+ * Both inputs have their case-set digest and their FULL result digest recomputed before anything else
+ * happens. The first version compared whatever it was handed, so a hand-assembled object claiming
+ * perfect rates could be returned as `CANDIDATE_PREFERRED` — a verdict about a measurement that never
+ * took place, in the exact shape somebody would quote in a rollout discussion.
+ *
+ * A comparison is an assertion about two runs. Making it about two artifacts nobody verified would
+ * make the whole comparator decorative.
+ *
+ * ### Every valid comparison is content-bound
+ *
+ * The result carries both candidate references and a deterministic `comparisonDigest` over the
+ * policy, the refs, the parity identity and every verdict field. Two runs of the same comparison
+ * produce the same digest; changing anything that mattered changes it. It is an identity, not a
+ * signature, and it authorizes nothing.
  */
+import { contentDigest } from '@qf-jarvis/model-evaluation';
 import { z } from 'zod';
 
 import { riyaQualityParityKey } from '../contracts/binding.js';
 import { RiyaQualityEvaluationError } from '../contracts/errors.js';
 import type {
   RiyaQualityComparisonResultV1,
-  RiyaQualityDimensionDelta,
   RiyaQualitySuiteResultV1,
 } from '../contracts/results.js';
-import { RIYA_QUALITY_DIMENSIONS } from '../contracts/vocabularies.js';
-import type { RiyaQualityDimension } from '../contracts/vocabularies.js';
+import { compareRiyaQualityRates } from '../internal/compare-rates.js';
+import { riyaQualityResultIntegrityHolds } from '../internal/result-integrity.js';
 
 export interface RiyaQualityComparisonPolicyV1 {
   readonly version: 1;
@@ -88,53 +98,113 @@ export const RIYA_QUALITY_CANONICAL_COMPARISON_POLICY_V1: RiyaQualityComparisonP
     minimumImprovementBps: 250,
   });
 
-const notComparable = (
+/** A stable, content-bound reference to one evaluated candidate. */
+const candidateRefOf = (result: RiyaQualitySuiteResultV1): string => `rqr.${result.resultDigest}`;
+
+/**
+ * Build the frozen comparison result, with its refs and its digest.
+ *
+ * The digest commits to the policy, both refs, the parity identity and every verdict field — so two
+ * comparisons that agree on all of those are the same comparison, and one that differs anywhere a
+ * reader could act on is a different one.
+ */
+function comparisonResult(
   policy: RiyaQualityComparisonPolicyV1,
   baseline: RiyaQualitySuiteResultV1,
   candidate: RiyaQualitySuiteResultV1,
-): RiyaQualityComparisonResultV1 =>
-  Object.freeze({
-    version: 1 as const,
-    outcome: 'NOT_COMPARABLE' as const,
+  verdict: Omit<
+    RiyaQualityComparisonResultV1,
+    | 'version'
+    | 'policyId'
+    | 'policyVersion'
+    | 'baselineCandidateRef'
+    | 'candidateRef'
+    | 'comparisonDigest'
+  >,
+): RiyaQualityComparisonResultV1 {
+  const baselineCandidateRef = candidateRefOf(baseline);
+  const candidateRef = candidateRefOf(candidate);
+  const comparisonDigest = contentDigest({
     policyId: policy.policyId,
     policyVersion: policy.policyVersion,
-    // Deliberately empty. Publishing deltas between incomparable runs would invite somebody to read
-    // them anyway, and the numbers would be meaningless.
-    dimensionDeltas: Object.freeze([]),
-    regressedDimensions: Object.freeze([]),
-    materiallyImprovedDimensions: Object.freeze([]),
-    baselineEligible: baseline.qualityEligible,
-    candidateEligible: candidate.qualityEligible,
+    minimumImprovementBps: policy.minimumImprovementBps,
+    baselineCandidateRef,
+    candidateRef,
+    // The parity identity of BOTH sides. A `NOT_COMPARABLE` verdict is about exactly this
+    // disagreement, so a digest that omitted it could not distinguish two different mismatches.
+    baselineParityKey: riyaQualityParityKey(baseline.binding),
+    candidateParityKey: riyaQualityParityKey(candidate.binding),
+    outcome: verdict.outcome,
+    dimensionDeltas: verdict.dimensionDeltas,
+    regressedDimensions: verdict.regressedDimensions,
+    materiallyImprovedDimensions: verdict.materiallyImprovedDimensions,
+    baselineEligible: verdict.baselineEligible,
+    candidateEligible: verdict.candidateEligible,
   });
+
+  return Object.freeze({
+    version: 1 as const,
+    outcome: verdict.outcome,
+    policyId: policy.policyId,
+    policyVersion: policy.policyVersion,
+    baselineCandidateRef,
+    candidateRef,
+    comparisonDigest,
+    dimensionDeltas: verdict.dimensionDeltas,
+    regressedDimensions: verdict.regressedDimensions,
+    materiallyImprovedDimensions: verdict.materiallyImprovedDimensions,
+    baselineEligible: verdict.baselineEligible,
+    candidateEligible: verdict.candidateEligible,
+  });
+}
 
 /**
  * Compare two quality results under a policy.
  *
- * Deltas are computed only over dimensions BOTH results measured. A dimension one side never
- * exercised has no comparable rate, and treating an absent rate as zero would manufacture a
- * catastrophic regression out of a coverage difference.
+ * Throws `quality-digest-invalid` if EITHER input fails its integrity re-proof. No comparison result
+ * is returned in that case: an unproved artifact is not ranked, not partially ranked, and not
+ * reported as `NOT_COMPARABLE` — the last would look like a verdict about two real runs.
  */
 export function compareRiyaQualityCandidates(
   baseline: RiyaQualitySuiteResultV1,
   candidate: RiyaQualitySuiteResultV1,
   policy: RiyaQualityComparisonPolicyV1,
 ): RiyaQualityComparisonResultV1 {
-  if (riyaQualityParityKey(baseline.binding) !== riyaQualityParityKey(candidate.binding)) {
-    return notComparable(policy, baseline, candidate);
+  if (!riyaQualityResultIntegrityHolds(baseline) || !riyaQualityResultIntegrityHolds(candidate)) {
+    throw new RiyaQualityEvaluationError('quality-digest-invalid');
   }
+
+  const comparable =
+    riyaQualityParityKey(baseline.binding) === riyaQualityParityKey(candidate.binding);
+
+  if (!comparable) {
+    return comparisonResult(policy, baseline, candidate, {
+      outcome: 'NOT_COMPARABLE',
+      // Deliberately empty. Publishing deltas between incomparable runs would invite somebody to
+      // read them anyway, and the numbers would be meaningless.
+      dimensionDeltas: Object.freeze([]),
+      regressedDimensions: Object.freeze([]),
+      materiallyImprovedDimensions: Object.freeze([]),
+      baselineEligible: baseline.qualityEligible,
+      candidateEligible: candidate.qualityEligible,
+    });
+  }
+
+  const rates = compareRiyaQualityRates(
+    baseline.dimensionPassRateBps,
+    candidate.dimensionPassRateBps,
+    policy.minimumImprovementBps,
+  );
 
   // One eligible and one not is decided by eligibility alone. A suite that breached a threshold has
   // already failed a gate somebody set deliberately, and no amount of per-dimension movement should
   // be able to argue past it.
   if (baseline.qualityEligible !== candidate.qualityEligible) {
-    return Object.freeze({
-      version: 1 as const,
+    return comparisonResult(policy, baseline, candidate, {
       outcome: candidate.qualityEligible
         ? ('CANDIDATE_PREFERRED' as const)
         : ('BASELINE_PREFERRED' as const),
-      policyId: policy.policyId,
-      policyVersion: policy.policyVersion,
-      dimensionDeltas: Object.freeze(deltasOf(baseline, candidate)),
+      dimensionDeltas: rates.deltas,
       regressedDimensions: Object.freeze([]),
       materiallyImprovedDimensions: Object.freeze([]),
       baselineEligible: baseline.qualityEligible,
@@ -145,71 +215,33 @@ export function compareRiyaQualityCandidates(
   // Neither eligible: there is no preference to express. Ranking two failing candidates would invite
   // shipping the less bad one.
   if (!baseline.qualityEligible) {
-    return notComparable(policy, baseline, candidate);
+    return comparisonResult(policy, baseline, candidate, {
+      outcome: 'NOT_COMPARABLE',
+      dimensionDeltas: Object.freeze([]),
+      regressedDimensions: Object.freeze([]),
+      materiallyImprovedDimensions: Object.freeze([]),
+      baselineEligible: false,
+      candidateEligible: false,
+    });
   }
 
-  const deltas = deltasOf(baseline, candidate);
-  const candidateRegressed: RiyaQualityDimension[] = [];
-  const baselineRegressed: RiyaQualityDimension[] = [];
-  const candidateImproved: RiyaQualityDimension[] = [];
-  const baselineImproved: RiyaQualityDimension[] = [];
+  const candidatePreferred =
+    rates.candidateRegressed.length === 0 && rates.candidateImproved.length > 0;
+  const baselinePreferred =
+    rates.baselineRegressed.length === 0 && rates.baselineImproved.length > 0;
 
-  for (const delta of deltas) {
-    if (delta.deltaBps < 0) {
-      candidateRegressed.push(delta.dimension);
-    }
-    if (delta.deltaBps > 0) {
-      baselineRegressed.push(delta.dimension);
-    }
-    if (delta.deltaBps >= policy.minimumImprovementBps) {
-      candidateImproved.push(delta.dimension);
-    }
-    if (-delta.deltaBps >= policy.minimumImprovementBps) {
-      baselineImproved.push(delta.dimension);
-    }
-  }
-
-  const candidatePreferred = candidateRegressed.length === 0 && candidateImproved.length > 0;
-  const baselinePreferred = baselineRegressed.length === 0 && baselineImproved.length > 0;
-
-  const outcome = candidatePreferred
-    ? ('CANDIDATE_PREFERRED' as const)
-    : baselinePreferred
-      ? ('BASELINE_PREFERRED' as const)
-      : ('TIE' as const);
-
-  return Object.freeze({
-    version: 1 as const,
-    outcome,
-    policyId: policy.policyId,
-    policyVersion: policy.policyVersion,
-    dimensionDeltas: Object.freeze(deltas),
-    regressedDimensions: Object.freeze([...candidateRegressed].sort()),
-    materiallyImprovedDimensions: Object.freeze([...candidateImproved].sort()),
-    baselineEligible: baseline.qualityEligible,
-    candidateEligible: candidate.qualityEligible,
+  return comparisonResult(policy, baseline, candidate, {
+    outcome: candidatePreferred
+      ? ('CANDIDATE_PREFERRED' as const)
+      : baselinePreferred
+        ? ('BASELINE_PREFERRED' as const)
+        : ('TIE' as const),
+    dimensionDeltas: rates.deltas,
+    regressedDimensions: rates.candidateRegressed,
+    // The improvement is still REPORTED even when preference is withheld: a human deciding whether
+    // to accept a trade needs to see both sides of it.
+    materiallyImprovedDimensions: rates.candidateImproved,
+    baselineEligible: true,
+    candidateEligible: true,
   });
-}
-
-function deltasOf(
-  baseline: RiyaQualitySuiteResultV1,
-  candidate: RiyaQualitySuiteResultV1,
-): RiyaQualityDimensionDelta[] {
-  const deltas: RiyaQualityDimensionDelta[] = [];
-  for (const dimension of RIYA_QUALITY_DIMENSIONS) {
-    const baselineBps = baseline.dimensionPassRateBps[dimension];
-    const candidateBps = candidate.dimensionPassRateBps[dimension];
-    if (baselineBps === undefined || candidateBps === undefined) {
-      continue;
-    }
-    deltas.push(
-      Object.freeze({
-        dimension,
-        baselineBps,
-        candidateBps,
-        deltaBps: candidateBps - baselineBps,
-      }),
-    );
-  }
-  return deltas;
 }

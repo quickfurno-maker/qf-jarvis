@@ -21,6 +21,7 @@ export const RIYA_QUALITY_ERROR_CODES = [
   'duplicate-scenario',
   'safety-evidence-required',
   'safety-evidence-target-not-eligible',
+  'safety-evidence-not-canonical',
   'safety-evidence-not-synthetic',
   'quality-not-eligible',
   'quality-digest-invalid',
@@ -39,6 +40,8 @@ const RIYA_QUALITY_ERROR_MESSAGES: Readonly<Record<RiyaQualityErrorCode, string>
   'safety-evidence-required': 'Riya quality requires generic safety approval evidence.',
   'safety-evidence-target-not-eligible':
     'The supplied safety evidence target does not support quality evaluation.',
+  'safety-evidence-not-canonical':
+    'The supplied safety evidence did not reconstruct through the generic evaluation contracts.',
   'safety-evidence-not-synthetic':
     'Riya quality may only be derived from synthetic, non-production-approving safety evidence.',
   'quality-not-eligible': 'Riya quality evidence is blocked because the suite is not eligible.',

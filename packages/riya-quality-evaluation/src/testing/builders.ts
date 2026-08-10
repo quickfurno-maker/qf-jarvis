@@ -5,15 +5,30 @@
  * suite without inventing thirty identities by hand. Everything is synthetic and everything is
  * derived: there is no clock, no randomness, no key, no token and no real reviewer identity.
  *
- * `createSyntheticSafetyEvidence` deserves a note. It constructs an `ApprovalEvidence` shaped exactly
- * as `@qf-jarvis/model-evaluation` produces one, marked `synthetic: true` /
- * `productionApproval: false`. It is a FIXTURE, not a shortcut around the safety gate: a real
- * candidate binding must be derived from evidence that package actually issued, and this one exists
- * only so the derivation itself can be tested. It lives on this subpath for the same reason the
- * corpus does — nothing on a production import path can reach it.
+ * `createSyntheticSafetyEvidence` deserves a note, and it changed with the owner correction on PR
+ * #111. It no longer FABRICATES an `ApprovalEvidence`: it runs the generic package's own flow —
+ * `createSyntheticBinding` → `buildFoundationSuite` → `safeObservations` → `evaluateSuite` →
+ * `createApprovalEvidence` — and returns whatever that issued.
+ *
+ * The distinction matters. A hand-assembled artifact would pass a shallow check and quietly diverge
+ * the day the generic package changed its evidence shape or its `evaluationRef` derivation, and the
+ * P10 re-proof would then be validating against a fixture rather than against reality. Deriving it
+ * means the deep re-proof is tested with evidence that package actually issues.
+ *
+ * Negative fixtures intentionally CLONE that genuine evidence and tamper with one field, which is
+ * the honest way to test a refusal.
+ *
+ * Nothing in `@qf-jarvis/model-evaluation` is modified. This subpath consumes its published testing
+ * surface, and it lives here for the same reason the corpus does — nothing on a production import
+ * path can reach it.
  */
-import { createEvaluationBinding } from '@qf-jarvis/model-evaluation';
+import { createApprovalEvidence, evaluateSuite } from '@qf-jarvis/model-evaluation';
 import type { ApprovalEvidence, EvaluationApprovalTarget } from '@qf-jarvis/model-evaluation';
+import {
+  buildFoundationSuite,
+  createSyntheticBinding,
+  safeObservations,
+} from '@qf-jarvis/model-evaluation/testing';
 
 import { createRiyaQualityCandidateBinding } from '../contracts/binding.js';
 import type { RiyaQualityCandidateBindingV1 } from '../contracts/binding.js';
@@ -53,44 +68,80 @@ export interface SyntheticSafetyEvidenceOptions {
   readonly productionApproval?: boolean;
 }
 
-/** A synthetic generic-safety `ApprovalEvidence`, shaped exactly as model-evaluation emits one. */
+/**
+ * A GENUINE synthetic generic-safety `ApprovalEvidence`, produced by the real evaluator.
+ *
+ * Memoized by the exact option set: the whole flow is deterministic, and a comparison spec builds
+ * dozens of candidates. Two calls with the same options are the same artifact.
+ */
+const EVIDENCE_CACHE = new Map<string, ApprovalEvidence>();
+
 export function createSyntheticSafetyEvidence(
   options: SyntheticSafetyEvidenceOptions = {},
 ): ApprovalEvidence {
-  const binding = createEvaluationBinding({
-    evaluationSuiteId: 'synthetic-safety-suite',
-    evaluationSuiteVersion: 1,
-    fixtureManifestId: 'synthetic-safety-fixtures',
-    fixtureManifestVersion: 1,
-    evaluatorImplId: 'synthetic-evaluator',
-    evaluatorImplVersion: 1,
-    release: {
-      releaseId: options.releaseId ?? 'release.alpha',
-      providerId: 'provider.alpha',
-      modelId: options.modelId ?? 'vendor.alpha/model-alpha',
-      modelVersion: '1',
-      configDigest: 'abcdef01',
-      executionClass: 'HOSTED',
-    },
-    promptFamily: options.promptFamily ?? 'riya.conversation',
-    promptVersion: options.promptVersion ?? 1,
-    promptDigest: options.promptDigest ?? 'a'.repeat(64),
-    capabilityProfileRef: options.capabilityProfileRef ?? 'capability.riya.alpha',
-    knowledgeRevision: options.knowledgeRevision ?? 'knowledge.rev.1',
-    policyContractRevision: options.policyContractRevision ?? 'policy.rev.1',
-    createdAt: SYNTHETIC_INSTANT,
-  });
+  const target = options.target ?? 'SHADOW_ELIGIBILITY';
+  const cacheKey = JSON.stringify([
+    target,
+    options.releaseId ?? null,
+    options.modelId ?? null,
+    options.promptFamily ?? null,
+    options.promptVersion ?? null,
+    options.promptDigest ?? null,
+    options.capabilityProfileRef ?? null,
+    options.knowledgeRevision ?? null,
+    options.policyContractRevision ?? null,
+  ]);
 
-  return Object.freeze({
-    evaluationRef: 'synthetic.safety.ref.1',
-    target: options.target ?? 'SHADOW_ELIGIBILITY',
-    binding,
-    suiteResultDigest: 'b'.repeat(32),
-    caseSetDigest: 'c'.repeat(32),
-    createdAt: SYNTHETIC_INSTANT,
-    synthetic: options.synthetic ?? true,
-    productionApproval: options.productionApproval ?? false,
-  });
+  let genuine = EVIDENCE_CACHE.get(cacheKey);
+  if (genuine === undefined) {
+    const binding = createSyntheticBinding({
+      release: {
+        releaseId: options.releaseId ?? 'release.alpha',
+        providerId: 'provider.alpha',
+        modelId: options.modelId ?? 'vendor.alpha/model-alpha',
+        modelVersion: '1',
+        configDigest: 'abcdef01',
+        executionClass: 'HOSTED',
+      },
+      ...(options.promptFamily === undefined ? {} : { promptFamily: options.promptFamily }),
+      ...(options.promptVersion === undefined ? {} : { promptVersion: options.promptVersion }),
+      ...(options.promptDigest === undefined ? {} : { promptDigest: options.promptDigest }),
+      ...(options.capabilityProfileRef === undefined
+        ? {}
+        : { capabilityProfileRef: options.capabilityProfileRef }),
+      ...(options.knowledgeRevision === undefined
+        ? {}
+        : { knowledgeRevision: options.knowledgeRevision }),
+      ...(options.policyContractRevision === undefined
+        ? {}
+        : { policyContractRevision: options.policyContractRevision }),
+      createdAt: SYNTHETIC_INSTANT,
+    });
+
+    // THE REAL FLOW. Suite, safe observations, evaluation, evidence gate.
+    const suite = buildFoundationSuite(binding);
+    const created = createApprovalEvidence(evaluateSuite(suite, safeObservations(suite)), target);
+    if (!created.ok) {
+      // A fixture that cannot pass the generic gate is a broken fixture, and continuing with a
+      // hand-made substitute is exactly what this change removed.
+      throw new Error(`synthetic safety evidence was refused: ${created.code}`);
+    }
+    genuine = created.evidence;
+    EVIDENCE_CACHE.set(cacheKey, genuine);
+  }
+
+  // The two NEGATIVE knobs tamper with genuine evidence rather than fabricating an artifact, so a
+  // refusal spec proves the gate rejects a real object with one field flipped.
+  if (options.synthetic !== undefined || options.productionApproval !== undefined) {
+    return Object.freeze({
+      ...genuine,
+      ...(options.synthetic === undefined ? {} : { synthetic: options.synthetic }),
+      ...(options.productionApproval === undefined
+        ? {}
+        : { productionApproval: options.productionApproval }),
+    });
+  }
+  return genuine;
 }
 
 /** A quality candidate binding over the golden corpus, derived from synthetic safety evidence. */

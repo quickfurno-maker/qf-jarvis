@@ -167,6 +167,50 @@ and no promotion path: `@qf-jarvis/model-evaluation` has one because generic saf
 rollout ladder consumes, and sales quality must never become an activation signal. A Riya that is
 measurably warmer is not thereby authorized to serve anybody.
 
+### 16a. Every artifact is re-proved before it is used or ranked
+
+Owner correction on PR #111. Three narrow holes, each of which let an unverified artifact reach a
+place that reads as a verdict.
+
+**Generic safety evidence is re-proved in full.** The whole artifact must have exactly an
+`ApprovalEvidence`'s own keys; the nested binding is RECONSTRUCTED through
+`createEvaluationBinding` — the generic package's own constructor, so its strict schema, identifier
+grammar and wildcard refusal all apply — and the reconstructed value is what quality identity is
+copied from. Digests must be lowercase hex of the exact width `contentDigest` emits, `createdAt`
+must be a canonical UTC instant, and `evaluationRef` must equal
+`evref-${contentDigest({target, release: releaseKey(binding.release), suiteResultDigest})}`, its own
+content's reference. Previously a shallow surface check passed and `binding: {}` was copied straight
+through.
+
+**The candidate binding input is exact.** A direct `promptDigest`, `release` or `modelId` key is
+refused rather than ignored. The value was always correct — the evidence decided — but a caller who
+believed they had overridden a release would have been wrong and never told.
+
+**The quality result digest covers the whole result.** One shared preimage — binding, case-set
+digest, outcome counts, objective failure count, all three per-dimension tables, threshold breaches
+and `qualityEligible` — used by the evaluator that produces it and by every consumer that checks it.
+The evidence gate previously verified only the case set, so a result with lifted rates, erased
+breaches and a flipped eligibility flag produced evidence.
+
+**The comparator refuses to rank an unproved artifact.** Both inputs are re-proved before anything
+else; either failing throws `quality-digest-invalid` and no comparison result exists. A verdict about
+a measurement that never took place is worse than no verdict.
+
+**Every valid comparison is content-bound.** `baselineCandidateRef`, `candidateRef` and a
+deterministic `comparisonDigest` over the policy, both refs, both parity identities and every verdict
+field — including on a `NOT_COMPARABLE` result, which is still a real statement about two real runs.
+
+**Nested re-proofs are strict.** The full human review and the full observation batch are passed to
+their owning constructors, so `.strict()` sees unknown keys instead of them being stripped. A review
+carrying a `comment`, `name`, `email`, `confidence` or `explanation` is refused.
+
+**What this is not.** Canonical structure and self-consistency validation, not a cryptographic trust
+root. `contentDigest` is a non-cryptographic FNV-1a identity hash; there is no signature, no key and
+no evidence registry, and somebody who can run this code can compute a consistent reference for
+evidence they invented. It reliably catches truncation, partial deserialization, single-field edits
+and stale bindings — and claiming more would be the overstatement this package refuses everywhere
+else.
+
 ### 17. Sales optimization has a boundary
 
 It means understanding the need, answering the concern, building appropriate trust, keeping momentum
@@ -243,5 +287,8 @@ Owner-locked. Changing any of these requires a new ADR:
 - Pareto/no-regression comparison over identical fixtures, thresholds, capability, knowledge and
   policy;
 - quality evidence is synthetic, non-production-approving, and bridges to no rollout;
+- safety evidence is re-proved in full and its nested binding reconstructed through the generic
+  constructor; the result digest covers the whole result; the comparator ranks nothing it cannot
+  verify; and every valid comparison carries both candidate refs and a comparison digest;
 - golden V1 is immutable, and a failing case is never deleted;
 - no runtime, prompt, binding, migration, deployment or QuickFurno change.

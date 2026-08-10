@@ -240,7 +240,11 @@ describe('the root surface is a vocabulary, factories and three services', () =>
       'riyaQualityScenarioKey',
       'observationKey',
       'reviewSatisfies',
-      'recomputeRiyaQualityCaseSetDigest',
+      'proveGenericSafetyEvidence',
+      'riyaQualityCaseSetDigest',
+      'riyaQualityResultDigest',
+      'riyaQualityResultIntegrityHolds',
+      'compareRiyaQualityRates',
     ]) {
       expect(Object.keys(barrel), forbidden).not.toContain(forbidden);
     }

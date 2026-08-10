@@ -91,6 +91,21 @@ export interface RiyaQualityComparisonResultV1 {
   readonly outcome: RiyaQualityComparisonOutcome;
   readonly policyId: string;
   readonly policyVersion: number;
+  /**
+   * Content-bound references to the two results, derived from their verified result digests.
+   *
+   * A comparison that named its inputs only by description could be quoted next to a different pair
+   * of runs and nobody could tell. These make the verdict traceable to the exact artifacts it was
+   * computed from -- both of which had their digests re-proved before this result existed.
+   */
+  readonly baselineCandidateRef: string;
+  readonly candidateRef: string;
+  /**
+   * A deterministic digest over the policy, both refs, both parity identities and every verdict
+   * field. Same comparison, same digest. An identity, not a signature: it authorizes nothing and
+   * proves no authorship.
+   */
+  readonly comparisonDigest: string;
   /** Sorted by dimension. Empty when the two results were not comparable. */
   readonly dimensionDeltas: readonly RiyaQualityDimensionDelta[];
   /** Dimensions where the candidate is strictly worse, at any magnitude. */

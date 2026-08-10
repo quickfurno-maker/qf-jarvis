@@ -140,27 +140,34 @@ export function createRiyaQualityObservation(
     throw new RiyaQualityEvaluationError('invalid-observation');
   }
 
-  // THE re-proof. A batch that the runtime's own constructor would refuse must not be measurable.
+  // THE re-proof, and the WHOLE value goes through (owner correction on PR #111).
+  //
+  // Rebuilding only the known top-level fields first meant an extra key on the batch was silently
+  // dropped instead of refused -- so a fixture could carry a field the canonical constructor would
+  // have rejected, and the suite would measure a shape the runtime cannot produce. Passing the value
+  // itself lets P4A's own `.strict()` schema see everything, which is the point of re-proving at all.
   let batch: RiyaConversationObservationBatchV1;
   try {
-    batch = createRiyaConversationObservationBatch({
-      version: 1,
-      observations: input.observationBatch.observations,
-      skipProjectDetails: input.observationBatch.skipProjectDetails,
-    });
+    batch = createRiyaConversationObservationBatch(input.observationBatch);
   } catch {
     // The canonical error is deliberately not re-thrown: it belongs to another package's vocabulary,
     // and a caller of this one should see this one's closed codes.
     throw new RiyaQualityEvaluationError('invalid-observation');
   }
 
-  const reviews = input.humanReviews.map((review) =>
-    createRiyaQualityHumanReview({
-      version: 1,
-      reviewRef: review.reviewRef,
-      satisfiedDimensions: review.satisfiedDimensions,
-    }),
-  );
+  // Likewise the FULL nested review object, not a reconstruction of its known fields. Rebuilding
+  // stripped a `comment`, a `name` or an `email` instead of refusing it -- and those are exactly the
+  // fields the human-review contract exists to keep out, so silently dropping one would have meant
+  // the strictest lock in the package was unenforced wherever it mattered most.
+  let reviews: readonly RiyaQualityHumanReviewV1[];
+  try {
+    reviews = input.humanReviews.map((review) => createRiyaQualityHumanReview(review));
+  } catch {
+    // Normalized to THIS constructor's code, exactly as the batch failure above is. A caller of
+    // `createRiyaQualityObservation` should see this contract's closed vocabulary, and the review
+    // factory's own error is discarded rather than re-thrown so nothing it saw can travel with it.
+    throw new RiyaQualityEvaluationError('invalid-observation');
+  }
   const refs = reviews.map((review) => review.reviewRef);
   if (new Set(refs).size !== refs.length) {
     throw new RiyaQualityEvaluationError('invalid-observation');

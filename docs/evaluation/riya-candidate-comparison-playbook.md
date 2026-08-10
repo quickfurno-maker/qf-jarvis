@@ -91,6 +91,27 @@ bps, so a smaller threshold would let one reviewer changing their mind read as a
 
 ---
 
+## 3a. What a comparison result names
+
+Every valid comparison carries three content-bound fields:
+
+| Field                  | What it is                                                                           |
+| ---------------------- | ------------------------------------------------------------------------------------ |
+| `baselineCandidateRef` | `rqr.` + the baseline's verified result digest.                                      |
+| `candidateRef`         | `rqr.` + the candidate's verified result digest.                                     |
+| `comparisonDigest`     | A digest over the policy, both refs, both parity identities and every verdict field. |
+
+Quote all three when you quote a verdict. A comparison that named its inputs only by description
+could be repeated next to a different pair of runs and nobody could tell; these make it traceable to
+the exact artifacts it was computed from.
+
+Both inputs have their case-set digest and full result digest recomputed before the comparison runs.
+If either fails, the comparator throws and **no result is returned** — not even `NOT_COMPARABLE`,
+which would read as a verdict about two real runs. An unproved artifact is not ranked.
+
+This is an identity, not a signature. It detects editing, truncation and a swapped artifact; it does
+not prove authorship and it authorizes nothing.
+
 ## 4. Quality, latency and cost are not one number
 
 This package measures quality only. Latency, token cost, throughput and reliability are real and

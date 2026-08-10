@@ -346,8 +346,11 @@ describe('preference requires improvement AND the absence of any regression', ()
   it('publishes no average, no total and no weight', () => {
     const comparison = compareRiyaQualityCandidates(resultWith({}), resultWith({}), POLICY);
     expect(Object.keys(comparison).sort()).toStrictEqual([
+      'baselineCandidateRef',
       'baselineEligible',
       'candidateEligible',
+      'candidateRef',
+      'comparisonDigest',
       'dimensionDeltas',
       'materiallyImprovedDimensions',
       'outcome',
@@ -368,76 +371,5 @@ describe('preference requires improvement AND the absence of any regression', ()
     for (const forbidden of ['rollout', 'promote', 'activate', 'productionapproval', 'deploy']) {
       expect(serialized).not.toContain(forbidden);
     }
-  });
-});
-
-// ---------------------------------------------------------------------------
-// 4. The literal one-basis-point rule.
-// ---------------------------------------------------------------------------
-
-/**
- * A rate difference of exactly ONE basis point cannot be produced by a real suite: pass rates are
- * `floor(pass * 10000 / applicable)`, so the smallest step a corpus can express is `10000 / N`, and
- * `N` is capped at 1000 cases. Reaching 1 bp would need ten thousand cases judged by two people each.
- *
- * The rule is still exactly "any negative delta blocks", so it is proved against the comparator
- * directly, with two hand-built results. These are inputs to a pure function, not evidence — nothing
- * here is digested, stored or attested, and the evidence gate would refuse them on sight.
- */
-function resultLiteral(
-  rates: Partial<Record<RiyaQualityDimension, number>>,
-  binding = createSyntheticQualityBinding(),
-): RiyaQualitySuiteResultV1 {
-  return Object.freeze({
-    version: 1 as const,
-    binding,
-    caseResults: Object.freeze([]),
-    countsByOutcome: Object.freeze({ PASS: 1, FAIL: 0, INCONCLUSIVE: 0 }),
-    objectiveFailureCount: 0,
-    dimensionApplicableCounts: Object.freeze(
-      Object.fromEntries(Object.keys(rates).map((key) => [key, 10_000])),
-    ),
-    dimensionPassCounts: Object.freeze(
-      Object.fromEntries(Object.entries(rates).map(([key, value]) => [key, value])),
-    ),
-    dimensionPassRateBps: Object.freeze({ ...rates }),
-    thresholdBreaches: Object.freeze([]),
-    qualityEligible: true,
-    caseSetDigest: 'digest-not-used-by-comparison',
-    resultDigest: 'digest-not-used-by-comparison',
-  });
-}
-
-describe('a ONE basis point regression is enough to withhold preference', () => {
-  it('+500 bps CTA_QUALITY with a 1 bp CONTEXT_USE regression is a TIE', () => {
-    const baseline = resultLiteral({ CONTEXT_USE: 9900, CTA_QUALITY: 9000, CLARITY: 9500 });
-    const candidate = resultLiteral({ CONTEXT_USE: 9899, CTA_QUALITY: 9500, CLARITY: 9500 });
-
-    const comparison = compareRiyaQualityCandidates(baseline, candidate, POLICY);
-    expect(comparison.outcome).toBe('TIE');
-    expect(comparison.regressedDimensions).toStrictEqual(['CONTEXT_USE']);
-    expect(comparison.materiallyImprovedDimensions).toStrictEqual(['CTA_QUALITY']);
-    expect(
-      comparison.dimensionDeltas.find((delta) => delta.dimension === 'CONTEXT_USE')?.deltaBps,
-    ).toBe(-1);
-  });
-
-  it('removing that single basis point makes the same candidate preferred', () => {
-    // Proof that the 1 bp was the ONLY thing blocking it, rather than something else in the fixture.
-    const baseline = resultLiteral({ CONTEXT_USE: 9900, CTA_QUALITY: 9000, CLARITY: 9500 });
-    const candidate = resultLiteral({ CONTEXT_USE: 9900, CTA_QUALITY: 9500, CLARITY: 9500 });
-    expect(compareRiyaQualityCandidates(baseline, candidate, POLICY).outcome).toBe(
-      'CANDIDATE_PREFERRED',
-    );
-  });
-
-  it('a dimension only ONE side measured is skipped, not read as a collapse', () => {
-    // Treating an absent rate as zero would manufacture a 9500 bp regression out of a coverage
-    // difference, and the verdict would be about the corpus rather than the candidate.
-    const baseline = resultLiteral({ CLARITY: 9500, EMPATHY: 9500 });
-    const candidate = resultLiteral({ CLARITY: 9900 });
-    const comparison = compareRiyaQualityCandidates(baseline, candidate, POLICY);
-    expect(comparison.dimensionDeltas.map((delta) => delta.dimension)).toStrictEqual(['CLARITY']);
-    expect(comparison.outcome).toBe('CANDIDATE_PREFERRED');
   });
 });

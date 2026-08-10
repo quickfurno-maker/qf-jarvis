@@ -19,7 +19,7 @@ import { contentDigest } from '@qf-jarvis/model-evaluation';
 
 import type { RiyaQualityErrorCode } from '../contracts/errors.js';
 import type { RiyaQualityEvidenceV1, RiyaQualitySuiteResultV1 } from '../contracts/results.js';
-import { recomputeRiyaQualityCaseSetDigest } from './evaluate-suite.js';
+import { riyaQualityResultIntegrityHolds } from '../internal/result-integrity.js';
 
 export interface CreateRiyaQualityEvidenceOptions {
   /** Overrides the timestamp stamped into the evidence. Canonical UTC instant. */
@@ -36,16 +36,23 @@ const CANONICAL_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
 /**
  * Attempt to create quality evidence. Fails CLOSED with a code.
  *
- * Two gates, in order. The digest must validate — a result whose case list was edited after
- * evaluation is not evidence of anything, and checking it here is what makes the artifact worth
- * storing. Then the suite must be eligible: evidence for a run that breached a threshold would be a
- * record of a failure wearing the shape of an approval.
+ * Two gates, in order.
+ *
+ * **Integrity first.** BOTH the case-set digest and the FULL result digest are recomputed (owner
+ * correction on PR #111). The first version checked only the case set, so a result whose
+ * per-dimension rates, threshold breaches or `qualityEligible` flag had been edited — with its case
+ * list untouched — passed, and the edited `resultDigest` was then copied into the evidence and into
+ * `qualityRef` as though it had been verified. `qualityEligible` is the field a rollout conversation
+ * actually reads, which makes it the one worth editing and the one that most needed covering.
+ *
+ * **Then eligibility.** Evidence for a run that breached a threshold would be a record of a failure
+ * wearing the shape of an approval.
  */
 export function createRiyaQualityEvidence(
   result: RiyaQualitySuiteResultV1,
   options?: CreateRiyaQualityEvidenceOptions,
 ): RiyaQualityEvidenceResult {
-  if (recomputeRiyaQualityCaseSetDigest(result) !== result.caseSetDigest) {
+  if (!riyaQualityResultIntegrityHolds(result)) {
     return { ok: false, code: 'quality-digest-invalid' };
   }
   if (!result.qualityEligible) {
