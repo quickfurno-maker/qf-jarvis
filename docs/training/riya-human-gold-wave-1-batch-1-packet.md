@@ -58,6 +58,35 @@ high-risk slots out of twelve. It calibrates voice, discipline, language authent
 loop well. It cannot tell you how the team handles the hardest sixth of the corpus — the first `HARD`
 slot arrives in batch 4. Worth knowing before treating a clean anchor as a clean wave.
 
+## A known defect in four briefs — slot 6 is one of them
+
+Four of the 72 Wave-1 briefs tell the author to answer "from supplied authority" while their
+assignment declares **no** required authority fact class, carries an empty authority plan, and does
+not list `CITE_AUTHORITY` among its journey events:
+
+| Slot                                        | Batch | The phrase                   |
+| ------------------------------------------- | ----- | ---------------------------- |
+| `gold.v1.w1.hinglish.comparison.01`         | **1** | supplied package authority   |
+| `gold.v1.w1.hi.post-summary-qa.01`          | 2     | supplied process context     |
+| `gold.v1.w1.hinglish.objection-timeline.01` | 2     | only from supplied authority |
+| `gold.v1.w1.en.out-of-scope.02`             | 6     | from supplied authority      |
+
+The structured validators pass — they check that the authority plan matches the assignment, and it
+does. Nothing reads the brief's prose, which is how this got through.
+
+**Do not resolve it by inventing authority.** The two readings lead opposite ways: follow the prose
+and you add a business fact the plan never asked for; follow the assignment and you answer from
+nowhere, which is the unsupported-claim habit the firewall exists to prevent.
+
+**What to do instead:** author the slot per the frozen **assignment** — no authoritative context turn,
+no cited fact — and raise the contradiction in review. It is on the Wave-1 calibration agenda.
+ADR-0108 §18 lists "a brief two authors read two different ways" as exactly what calibration may
+change; §15 keeps the validator strict in the meantime.
+
+The likely origin, for what it is worth: the paired ordinal-`02` slot does require the authority
+(`hinglish.comparison.02` requires `PACKAGE`), and the `01` goal was written in the same voice without
+the declaration following it across.
+
 ---
 
 ## The twelve slots
@@ -235,6 +264,11 @@ slot arrives in batch 4. Worth knowing before treating a clean anchor as a clean
 **Customer situation.** A customer wants to understand what separates a standard scope from a premium one.
 
 **Conversation goal.** Answer using supplied package authority, keep the difference concrete rather than aspirational, and let them ask rather than upselling.
+
+> **Known defect — read this before writing slot 6.** The goal above says _supplied package
+> authority_, and this assignment declares none. Author it per the **assignment**: no authoritative
+> context turn and no cited fact. Do not invent authority to make the sentence true. Raise it in
+> review; it is on the calibration agenda. See _A known defect in four briefs_ above.
 
 **Required journey events.** `ASK_ONE_DISCOVERY_QUESTION` · `COMPARE_SCOPE_HONESTLY` · `USE_KNOWN_CONTEXT`
 
