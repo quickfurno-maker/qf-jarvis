@@ -588,7 +588,7 @@ describe('(133-148) the declared budget and every prior lock', () => {
 
   it('(141-148) every prior package-root runtime API lock still holds', async () => {
     const expected: Readonly<Record<string, number>> = {
-      'model-evaluation': 34,
+      'model-evaluation': 35,
       'model-gateway': 71,
       'model-gateway-composition': 2,
       'groq-staging-smoke': 24,

@@ -1,5 +1,5 @@
 /**
- * The measurement ENVIRONMENT: enough to compare, never enough to identify (RMB-A).
+ * The measurement ENVIRONMENT: enough to compare, with no dedicated identifying field (RMB-A).
  *
  * ### Why this contract is mostly a list of refusals
  *
@@ -121,6 +121,18 @@ export function createRiyaBenchmarkEnvironment(
   } else {
     // A local run that cannot say what it ran on is not a local run worth comparing.
     if (e.architectureFamily === undefined || e.acceleratorFamily === undefined) {
+      throw new RiyaBenchmarkError('ENVIRONMENT_INVALID');
+    }
+    // And the ENGINE is not optional locally. Local throughput is determined as much by the engine,
+    // its version and its runtime configuration as by the silicon -- the same model on the same GPU
+    // under two engine configs is two different measurements. A local artifact that omits them
+    // records a number nobody can reproduce or compare, which is the one thing a benchmark must not
+    // be. Hosted runs may omit them because nobody outside the provider knows.
+    if (
+      e.runtimeEngineId === undefined ||
+      e.runtimeEngineVersion === undefined ||
+      e.runtimeConfigDigest === undefined
+    ) {
       throw new RiyaBenchmarkError('ENVIRONMENT_INVALID');
     }
     // Accelerator count and family have to agree. "NONE, four of them" is a harness bug, and it is

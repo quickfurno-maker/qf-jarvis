@@ -299,6 +299,8 @@ describe('containment', () => {
       'createSuiteThresholds',
       'dataClassRank',
       'evaluateSuite',
+      // RMB-A: the exactness predicate, shared so "exact identity" has one definition.
+      'isExactGovernedIdentity',
       'releaseKey',
       'scenarioKey',
       'severityRank',

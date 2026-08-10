@@ -56,6 +56,13 @@ literals. There is no way to construct one that says otherwise.
 `@qf-jarvis/model-evaluation` and validated by that package's own constructor. Plus prompt family,
 version and **digest**, capability profile, knowledge revision, policy contract revision.
 
+Every one of those refs must be **exact**: no `latest`, at any `/` segment, case-insensitively. Release
+exactness came with the release constructor; the rest needed the same rule, because
+`promptFamily: 'latest'` names a prompt that changes under the evidence — the identical failure, one
+field along. The predicate (`isExactGovernedIdentity`) is imported from the evaluation package rather
+than restated, so "exact" has one definition across safety and benchmark evidence. A ref merely
+_containing_ the substring, like `policy-latest-v2`, is fine.
+
 One release grammar in the repository, not two. Benchmark evidence and safety evidence exist to be
 read together — "this release cleared safety AND runs at this latency" — and two packages with their
 own idea of what names a release would eventually disagree by a character, at which point neither
@@ -75,6 +82,11 @@ guarantee without one would be the overstatement this package exists to avoid.
 `HOSTED_OPAQUE` claims no hardware at all, and is forbidden from doing so. An invented accelerator
 count is worse than an absent one: absent is a known unknown, invented is a number somebody will later
 compare against.
+
+`LOCAL_EXPLICIT` must name its runtime engine, version **and** config digest. Local throughput is
+determined as much by the engine and its configuration as by the silicon — the same model on the same
+GPU under two engine configs is two different measurements — so a local artifact that omits them
+records a number nobody can reproduce.
 
 **Workload** — counts and digests. Suite, harness, case id, prompt profile **digest**, input tokens,
 output cap, concurrency, batch size, warmup and measured counts, streaming, sampling config digest,
@@ -148,15 +160,57 @@ survives reconstruction.
 Neither verifier restamps. A stored artifact without a digest is refused rather than signed, because
 stamping it would turn a verifier into a laundering step.
 
-## A result set is one configuration
+## A result set is one configuration, many workload cases
 
-Every case in a set must agree on the entire canonical subject and the entire canonical environment —
-`RESULT_SET_SUBJECT_MISMATCH` and `RESULT_SET_ENVIRONMENT_MISMATCH`. Without that, a set could hold one
-case measured on one model and another on a different one, with identical workload parity, and the
-aggregate would describe a machine that does not exist.
+A set is **one** subject, **one** environment, **one** suite, **one** harness and **one** measurement
+policy — measured across as many differently-shaped cases as the suite defines.
 
-Equality is by SHA-256 over the canonical form rather than a field-by-field comparison, which stops
-covering a field the moment somebody adds one.
+| Uniform across the set                                                 | Free to vary per case                           |
+| ---------------------------------------------------------------------- | ----------------------------------------------- |
+| entire subject (release, prompt digest, capability, knowledge, policy) | `workloadCaseId`                                |
+| entire environment                                                     | prompt profile digest, input tokens, output cap |
+| `benchmarkSuiteId` / version                                           | concurrency, batch size                         |
+| `benchmarkImplementationId` / version                                  | warmup and measured counts                      |
+| `measurementPolicyRef`                                                 | streaming, sampling config                      |
+
+Homogeneity on subject and environment is what makes the set a claim about something real: without it,
+one case could be measured on one model and another on a different one, and the aggregate would
+describe a machine that does not exist. `RESULT_SET_SUBJECT_MISMATCH` /
+`RESULT_SET_ENVIRONMENT_MISMATCH`, by SHA-256 over the canonical form rather than a field list that
+stops covering a field the moment somebody adds one.
+
+Case **shape** is meant to vary, and an earlier version got this wrong: it required full workload
+parity inside a set, which made `short/c1`, `long/c1`, `short/c8` and `short/c32` illegal together. The
+objective is maximum useful throughput under **rising** concurrency, and that is unmeasurable by a set
+that may hold only one concurrency.
+
+What must not vary is who measured and by what rules — `RESULT_SET_SUITE_MISMATCH`,
+`RESULT_SET_IMPLEMENTATION_MISMATCH`, `RESULT_SET_MEASUREMENT_POLICY_MISMATCH`. Two harnesses can agree
+on every number and still disagree about what a p95 is.
+
+### Two levels
+
+- **Intra-set:** diverse cases, one harness.
+- **Inter-set:** pair by `workloadCaseId`, then require exact workload parity for that pair. A's
+  `short/c8` against B's `short/c8`, never against B's `short/c16`.
+
+## Ordering is not semantic
+
+`resultSetDigest` is computed over the canonically sorted evidence order, and stored verification
+re-derives that order rather than trusting the serialised one. So two files differing only in array
+order are the same set and verify identically — reordering is not tampering. Replacing, duplicating or
+removing a member is, and each is refused.
+
+## Stored artifacts must carry their whole surface
+
+`createRiyaBenchmarkEvidence` lets a caller omit `syntheticWorkload`, `productionApproval` and the
+digest when building something new. `verifyRiyaBenchmarkEvidence` does not: all three are required,
+with the literals exact.
+
+The distinction matters. The constructor asks "can I build this?"; the verifier asks "was this already
+built, correctly, by somebody else?" — and the second may not fill in a blank. A stored artifact
+missing `productionApproval` would otherwise come back with `false` supplied by the verifier rather
+than by whoever wrote the file.
 
 ## Cost is deliberately absent
 

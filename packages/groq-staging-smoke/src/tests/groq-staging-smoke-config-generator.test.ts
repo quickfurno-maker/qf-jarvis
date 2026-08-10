@@ -484,7 +484,7 @@ describe('(19, 20, 21, 22, 23, 24) repository invariants and evidence hygiene', 
       '5d1b7fe68401a664cea3116ff0900499a1f20d659d4935c586b4ac0f923aaf3e',
   };
 
-  it('(19) the model-evaluation package-root API lock remains 34', () => {
+  it('(19) the model-evaluation package-root API lock remains 35', () => {
     // This package must NOT depend on @qf-jarvis/model-evaluation, so the lock is read from its
     // authoritative key-for-key list rather than loaded — proving the count without a dependency.
     const containment = readFileSync(
@@ -501,7 +501,7 @@ describe('(19, 20, 21, 22, 23, 24) repository invariants and evidence hygiene', 
     // grammar made independently constructible so the operational-benchmark package can NAME a
     // release without a second copy of the six fields. Still an EXACT count; it records an
     // authorised addition, it does not relax the assertion.
-    expect(symbols).toHaveLength(34);
+    expect(symbols).toHaveLength(35);
     expect(containment).toContain('expect(Object.keys(barrel).sort()).toEqual(EXPECTED)');
   });
 

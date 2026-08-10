@@ -12,17 +12,24 @@
  * and unexpected are three separate codes because they are three different mistakes: a case that
  * failed to run, a case counted twice, and a case that came from somewhere else.
  *
- * ### One subject, one environment
+ * ### One configuration, MANY workload cases
  *
- * "The whole suite for one configuration" has to be enforced, not just documented. Without it, a set
- * could hold `case.alpha` measured on one model and `case.beta` measured on another — identical
- * workload parity, so the parity check passes — and the aggregate would describe a machine that does
- * not exist. Every case must therefore agree on the entire canonical subject and the entire canonical
- * environment. What varies per case is the case id, the instant and the numbers, because those are
- * what a case IS.
+ * A set is one subject, one environment, one suite, one harness and one measurement policy — measured
+ * across as many differently-shaped cases as the suite defines.
  *
- * Equality is by SHA-256 over the canonical form rather than a hand-written field comparison: a
- * field-by-field check silently stops covering a field the moment somebody adds one.
+ * Homogeneity on subject and environment is what makes the set a claim about something real: without
+ * it, `case.alpha` could be measured on one model and `case.beta` on another, and the aggregate would
+ * describe a machine that does not exist. Equality there is by SHA-256 over the canonical form rather
+ * than a field list, which stops covering a field the moment somebody adds one.
+ *
+ * Case SHAPE, though, is meant to vary. An earlier version required full workload parity inside a set,
+ * which made `short/c1`, `long/c1`, `short/c8` and `short/c32` illegal together — and the owner goal
+ * is maximum useful throughput under RISING concurrency, which cannot be measured by a set that may
+ * hold only one concurrency. Prompt size, output cap, concurrency, batch, request counts, streaming
+ * and sampling config are therefore free to differ per case.
+ *
+ * Full workload parity is still required, but INTER-SET and per matched case: A's `short/c8` against
+ * B's `short/c8`. That check lives in the comparison layer, where it belongs.
  *
  * ### Verification is deep, never a hash comparison
  *
@@ -37,7 +44,6 @@ import { z } from 'zod';
 import { RiyaBenchmarkError } from '../contracts/errors.js';
 import { verifyRiyaBenchmarkEvidence } from '../contracts/evidence.js';
 import type { RiyaBenchmarkEvidenceV1 } from '../contracts/evidence.js';
-import { workloadParityKey } from '../contracts/workload.js';
 import { RIYA_BENCHMARK_MAX_CASES } from '../contracts/vocabularies.js';
 import { SHA256_HEX, sha256OfCanonical } from '../internal/digest.js';
 
@@ -132,10 +138,33 @@ function proveSetInvariants(
     throw new RiyaBenchmarkError('RESULT_SET_ENVIRONMENT_MISMATCH');
   }
 
-  // And one measurement method. A set mixing concurrencies is not one measurement of a configuration,
-  // and its aggregate would be meaningless.
-  if (new Set(results.map((one) => workloadParityKey(one.workload))).size > 1) {
-    throw new RiyaBenchmarkError('COMPARISON_NOT_PARITY');
+  // One harness, one set of measurement rules -- and that is ALL that must be uniform about the
+  // workloads. Requiring full workload parity here was wrong: it made `short/c1`, `long/c1`,
+  // `short/c8` and `short/c32` illegal in one set, which is exactly the sweep the owner goal needs.
+  // Throughput under RISING concurrency is unmeasurable if a set may hold only one concurrency.
+  //
+  // Each axis is checked separately so a mixed-suite set and a mixed-policy set are different
+  // answers to whoever has to fix one.
+  const suites = new Set(
+    results.map(
+      (one) => `${one.workload.benchmarkSuiteId}|${String(one.workload.benchmarkSuiteVersion)}`,
+    ),
+  );
+  if (suites.size > 1) {
+    throw new RiyaBenchmarkError('RESULT_SET_SUITE_MISMATCH');
+  }
+  const implementations = new Set(
+    results.map(
+      (one) =>
+        `${one.workload.benchmarkImplementationId}|${String(one.workload.benchmarkImplementationVersion)}`,
+    ),
+  );
+  if (implementations.size > 1) {
+    throw new RiyaBenchmarkError('RESULT_SET_IMPLEMENTATION_MISMATCH');
+  }
+  if (new Set(results.map((one) => one.workload.measurementPolicyRef)).size > 1) {
+    // Two harnesses can agree on every number and still disagree about what a p95 IS.
+    throw new RiyaBenchmarkError('RESULT_SET_MEASUREMENT_POLICY_MISMATCH');
   }
 }
 

@@ -116,7 +116,7 @@ const bindingSchema = z
   .strict();
 
 /**
- * Reject any wildcard/`latest` identity token anywhere in the binding.
+ * True iff `value` is an EXACT governed identity — no wildcard, no `latest` segment.
  *
  * ### Segment-aware, because a model id may be namespaced
  *
@@ -130,17 +130,23 @@ const bindingSchema = z
  * masquerading as governance.
  *
  * This is governance, not grammar. `PROVIDER_MODEL_ID_PATTERN` still answers "is this a well-formed
- * provider catalogue id?"; this answers "is this an exact governed release identity?", and evidence is
+ * provider catalogue id?"; this answers "is this an exact governed identity?", and evidence is
  * entitled to be stricter than the gateway's syntax.
+ *
+ * EXPORTED so the operational-benchmark package applies the same rule to the prompt, capability,
+ * knowledge and policy refs it owns. A second copy would be a second rule the day one of them changed.
  */
-function rejectWildcard(value: string): void {
+export function isExactGovernedIdentity(value: string): boolean {
   if (value.includes('*')) {
-    throw new EvaluationError('invalid-binding');
+    return false;
   }
-  for (const segment of value.split('/')) {
-    if (segment.toLowerCase() === 'latest') {
-      throw new EvaluationError('invalid-binding');
-    }
+  return value.split('/').every((segment) => segment.toLowerCase() !== 'latest');
+}
+
+/** The throwing form used throughout this file. Same rule, one implementation. */
+function rejectWildcard(value: string): void {
+  if (!isExactGovernedIdentity(value)) {
+    throw new EvaluationError('invalid-binding');
   }
 }
 
@@ -192,6 +198,12 @@ export function createEvaluationBinding(input: EvaluationBindingInput): Evaluati
     b.promptFamily,
     b.capabilityProfileRef,
     b.policyContractRevision,
+    // The OPTIONAL identities were omitted from this list, which meant a binding could name
+    // `knowledgeRevision: 'latest'` -- a moving target attesting to a knowledge base that changes
+    // under the evidence. Optional does not mean ungoverned; an identity that is present must be
+    // exact.
+    ...(b.knowledgeRevision === undefined ? [] : [b.knowledgeRevision]),
+    ...(b.redTeamSuiteId === undefined ? [] : [b.redTeamSuiteId]),
   ]) {
     rejectWildcard(token);
   }

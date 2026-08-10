@@ -22,8 +22,14 @@
  * ### It carries no content
  *
  * A prompt reaches this package as a digest and a token count. There is no field a customer message,
- * an assistant reply, a system prompt, a Human Gold trajectory or a P10 fixture body would fit in —
- * and no hostname, username, path, serial, MAC, IP or credential either.
+ * an assistant reply, a system prompt, a Human Gold trajectory or a P10 fixture body would fit in.
+ *
+ * For machine identity the guarantee is precise rather than absolute: no DEDICATED field for a
+ * hostname, username, path, serial, MAC, IP or credential, and a strict schema that refuses an extra
+ * key. `acceleratorRef` and the runtime engine fields are opaque identifier-shaped refs, so keeping
+ * them non-identifying is authoring and harness governance. Closing that in code would need a hardware
+ * registry this slice does not build, and claiming it without one would be the overstatement this
+ * package exists to avoid.
  *
  * ### It authorizes nothing
  *
@@ -67,7 +73,11 @@ export type {
 } from './contracts/environment.js';
 
 // Workload.
-export { createRiyaBenchmarkWorkload, workloadParityKey } from './contracts/workload.js';
+export {
+  createRiyaBenchmarkWorkload,
+  workloadParityKey,
+  workloadSuiteKey,
+} from './contracts/workload.js';
 export type { RiyaBenchmarkWorkloadV1, RiyaBenchmarkWorkloadInput } from './contracts/workload.js';
 
 // Observation.

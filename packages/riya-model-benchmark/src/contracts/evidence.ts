@@ -132,6 +132,27 @@ const evidenceSchema = z
   })
   .strict();
 
+/**
+ * What a STORED artifact must carry. Every field present, both literals correct, digest required.
+ *
+ * Separate from `evidenceSchema` because the two answer different questions. The constructor asks
+ * "can I build this?"; this asks "was this already built, correctly, by somebody else?" — and the
+ * second may not fill in a blank.
+ */
+const storedSchema = z
+  .object({
+    version: z.literal(1),
+    subject: z.unknown(),
+    environment: z.unknown(),
+    workload: z.unknown(),
+    observation: z.unknown(),
+    createdAt: z.string().refine(isCanonicalBenchmarkInstant),
+    syntheticWorkload: z.literal(true),
+    productionApproval: z.literal(false),
+    evidenceDigest: z.string().regex(SHA256_HEX),
+  })
+  .strict();
+
 /** The exact body the digest covers. Everything meaningful, nothing derived. */
 function digestBody(
   evidence: Omit<RiyaBenchmarkEvidenceV1, 'evidenceDigest'>,
@@ -217,16 +238,18 @@ export function createRiyaBenchmarkEvidence(
  * The SHA-256 remains tamper/self-consistency evidence. It is not a signature and not a trust root.
  */
 export function verifyRiyaBenchmarkEvidence(candidate: unknown): RiyaBenchmarkEvidenceV1 {
-  if (candidate === null || typeof candidate !== 'object' || Array.isArray(candidate)) {
-    throw new RiyaBenchmarkError('EVIDENCE_TAMPERED');
-  }
-  const digest = (candidate as { evidenceDigest?: unknown }).evidenceDigest;
-  if (typeof digest !== 'string' || !SHA256_HEX.test(digest)) {
+  // The FULL canonical surface, required. The constructor lets a caller omit the two literals and the
+  // digest when building something new, which is reasonable ergonomics — and would be laundering
+  // here: a stored artifact missing `productionApproval` would come back with `false` supplied by the
+  // verifier rather than by whoever wrote the file. A verifier must never manufacture a field it is
+  // supposed to be checking.
+  const parsed = storedSchema.safeParse(candidate);
+  if (!parsed.success) {
     throw new RiyaBenchmarkError('DIGEST_INVALID');
   }
-  // `createRiyaBenchmarkEvidence` already owns the strict schema, the deep re-proof, the invariant and
-  // the digest comparison. Routing through it is what keeps ONE validation grammar in this package
-  // rather than a verifier that slowly drifts from the constructor.
+  // Then `createRiyaBenchmarkEvidence` owns the deep re-proof, the invariant and the digest
+  // comparison — ONE validation grammar, rather than a verifier that slowly drifts from the
+  // constructor.
   return createRiyaBenchmarkEvidence(candidate as RiyaBenchmarkEvidenceInput);
 }
 

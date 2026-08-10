@@ -214,7 +214,12 @@ describe('RMB-A is the operational authority and nothing else', () => {
   it('imports ONLY release identity from the evaluation package', () => {
     // Everything else there is safety, and a benchmark package that could reach an evaluator would
     // eventually be asked to merge the two into one number.
-    const ALLOWED = new Set(['createProviderReleaseRef', 'ProviderReleaseRef']);
+    const ALLOWED = new Set([
+      'createProviderReleaseRef',
+      'ProviderReleaseRef',
+      // The exactness predicate. Identity governance, not evaluation capability.
+      'isExactGovernedIdentity',
+    ]);
     for (const { file, code } of productionFiles()) {
       const imports = [...code.matchAll(/import[^;]*from '@qf-jarvis\/model-evaluation'/gu)];
       for (const match of imports) {
@@ -384,6 +389,7 @@ describe('the public surface is small, closed and free of verdicts', () => {
       'verifyRiyaBenchmarkEvidence',
       'verifyRiyaBenchmarkResultSet',
       'workloadParityKey',
+      'workloadSuiteKey',
     ]);
   });
 
@@ -471,7 +477,7 @@ describe('the public surface is small, closed and free of verdicts', () => {
   });
 
   it('every error code is closed, and the class carries no measured value', () => {
-    expect(barrel.RIYA_BENCHMARK_ERROR_CODES).toHaveLength(16);
+    expect(barrel.RIYA_BENCHMARK_ERROR_CODES).toHaveLength(19);
     const error = new barrel.RiyaBenchmarkError('DIGEST_INVALID');
     expect(error.code).toBe('DIGEST_INVALID');
     expect(error.message).toBe('DIGEST_INVALID');

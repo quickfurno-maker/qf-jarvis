@@ -47,6 +47,7 @@ export type { EvaluationErrorCode } from './contracts/errors.js';
 export {
   createEvaluationBinding,
   createProviderReleaseRef,
+  isExactGovernedIdentity,
   releaseKey,
   bindingsMatch,
 } from './contracts/binding.js';

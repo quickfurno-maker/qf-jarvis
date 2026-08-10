@@ -100,10 +100,31 @@ export function createRiyaBenchmarkWorkload(
 }
 
 /**
+ * What every case in ONE result set must share: the harness and the rules it measured by.
+ *
+ * Deliberately NOT the case shape. A benchmark suite exists to vary prompt size, output cap,
+ * concurrency and batch — `short/c1`, `long/c1`, `short/c8`, `short/c32` are four cases of one suite,
+ * and the owner goal is throughput under RISING concurrency, which is unmeasurable if a set may hold
+ * only one concurrency. What must not vary is who measured and how.
+ */
+export function workloadSuiteKey(workload: RiyaBenchmarkWorkloadV1): string {
+  return [
+    workload.benchmarkSuiteId,
+    String(workload.benchmarkSuiteVersion),
+    workload.benchmarkImplementationId,
+    String(workload.benchmarkImplementationVersion),
+    workload.measurementPolicyRef,
+  ].join('|');
+}
+
+/**
  * The exact tuple that must match for two runs to be measuring the same thing.
  *
- * Excludes `workloadCaseId` on purpose: parity is per case, and the comparison layer pairs cases by
- * id before checking that everything else about them agrees.
+ * This is an INTER-SET check, applied per matched `workloadCaseId`: A's `short/c8` against B's
+ * `short/c8`. It is deliberately not an intra-set requirement — see `workloadSuiteKey`.
+ *
+ * Excludes `workloadCaseId` on purpose: the comparison layer pairs cases by id first, then asks
+ * whether everything else about the pair agrees.
  */
 export function workloadParityKey(workload: RiyaBenchmarkWorkloadV1): string {
   return [

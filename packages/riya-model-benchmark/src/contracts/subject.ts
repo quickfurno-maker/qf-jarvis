@@ -19,7 +19,7 @@
  * what the system around the model does. All of them are named by DIGEST or REVISION here, never by
  * content — a benchmark artifact must be safe to commit, and prompt text is not.
  */
-import { createProviderReleaseRef } from '@qf-jarvis/model-evaluation';
+import { createProviderReleaseRef, isExactGovernedIdentity } from '@qf-jarvis/model-evaluation';
 import type { ProviderReleaseRef } from '@qf-jarvis/model-evaluation';
 import { z } from 'zod';
 
@@ -86,6 +86,22 @@ export function createRiyaBenchmarkSubject(
     throw new RiyaBenchmarkError('SUBJECT_INVALID');
   }
   const s = parsed.data;
+
+  // Release exactness came free with the release constructor. The refs this contract owns needed the
+  // same rule: `promptFamily: 'latest'` names a prompt that changes under the evidence, which is the
+  // identical failure the release rule prevents, one field along. The predicate is IMPORTED rather
+  // than restated, so there is one definition of "exact" across safety and benchmark evidence.
+  for (const ref of [
+    s.promptFamily,
+    s.capabilityProfileRef,
+    s.policyContractRevision,
+    ...(s.knowledgeRevision === undefined ? [] : [s.knowledgeRevision]),
+  ]) {
+    if (!isExactGovernedIdentity(ref)) {
+      throw new RiyaBenchmarkError('SUBJECT_INVALID');
+    }
+  }
+
   return Object.freeze({
     version: 1 as const,
     release,

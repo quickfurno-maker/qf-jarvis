@@ -337,7 +337,60 @@ describe('a result set is the whole suite, or it is refused', () => {
     ).toBe('MANIFEST_CASE_UNEXPECTED');
   });
 
-  it('refuses a set whose cases were measured differently from one another', () => {
+  it('ACCEPTS a set whose cases have different shapes — that is what a suite is', () => {
+    // An earlier version required full workload parity inside a set, which made a concurrency sweep
+    // illegal. The owner goal is throughput under RISING concurrency, and a set that may hold only one
+    // concurrency cannot express it.
+    const set = createRiyaBenchmarkResultSet({
+      version: 1,
+      results: [
+        evidenceFor('case.alpha'),
+        syntheticEvidence({
+          workload: syntheticWorkload({ workloadCaseId: 'case.beta', concurrency: 8 }),
+        }),
+        syntheticEvidence({
+          workload: syntheticWorkload({
+            workloadCaseId: 'case.gamma',
+            concurrency: 32,
+            inputTokenCount: 2_048,
+            maximumOutputTokens: 512,
+            batchSize: 4,
+            streaming: false,
+            promptProfileDigest: syntheticDigest('abcd'),
+            samplingConfigDigest: syntheticDigest('bcde'),
+          }),
+        }),
+      ],
+      expectedCaseIds: caseIds,
+    });
+    expect(set.results).toHaveLength(3);
+    expect(new Set(set.results.map((one) => one.workload.concurrency))).toStrictEqual(
+      new Set([1, 8, 32]),
+    );
+    expect(riyaBenchmarkResultSetIntegrityHolds(set)).toBe(true);
+  });
+
+  it.each([
+    ['suite', { benchmarkSuiteId: 'suite.beta' }, 'RESULT_SET_SUITE_MISMATCH'],
+    ['suite version', { benchmarkSuiteVersion: 2 }, 'RESULT_SET_SUITE_MISMATCH'],
+    [
+      'harness',
+      { benchmarkImplementationId: 'harness.beta' },
+      'RESULT_SET_IMPLEMENTATION_MISMATCH',
+    ],
+    [
+      'harness version',
+      { benchmarkImplementationVersion: 3 },
+      'RESULT_SET_IMPLEMENTATION_MISMATCH',
+    ],
+    [
+      'measurement policy',
+      { measurementPolicyRef: 'policy.measure.v2' },
+      'RESULT_SET_MEASUREMENT_POLICY_MISMATCH',
+    ],
+  ])('but a different %s within one set is refused', (_name, override, expected) => {
+    // Who measured, and by what rules, must be uniform. Two harnesses can agree on every number and
+    // still disagree about what a p95 IS.
     expect(
       codeOf(() =>
         createRiyaBenchmarkResultSet({
@@ -346,13 +399,13 @@ describe('a result set is the whole suite, or it is refused', () => {
             evidenceFor('case.alpha'),
             evidenceFor('case.beta'),
             syntheticEvidence({
-              workload: syntheticWorkload({ workloadCaseId: 'case.gamma', concurrency: 8 }),
+              workload: syntheticWorkload({ workloadCaseId: 'case.gamma', ...override }),
             }),
           ],
           expectedCaseIds: caseIds,
         }),
       ),
-    ).toBe('COMPARISON_NOT_PARITY');
+    ).toBe(expected);
   });
 
   it('refuses a set containing a tampered artifact', () => {
@@ -820,17 +873,29 @@ describe('a result set is ONE configuration, proved not assumed', () => {
     ).toBe('RESULT_SET_ENVIRONMENT_MISMATCH');
   });
 
-  it('workload parity within the set is still required', () => {
+  it('case SHAPE may vary; suite, harness and measurement policy may not', () => {
+    // Parity is an INTER-SET property, checked per matched case in the comparison layer.
+    expect(
+      build([
+        evidenceFor('case.alpha'),
+        syntheticEvidence({
+          workload: syntheticWorkload({ workloadCaseId: 'case.beta', concurrency: 8 }),
+        }),
+      ]).results,
+    ).toHaveLength(2);
     expect(
       codeOf(() =>
         build([
           evidenceFor('case.alpha'),
           syntheticEvidence({
-            workload: syntheticWorkload({ workloadCaseId: 'case.beta', concurrency: 8 }),
+            workload: syntheticWorkload({
+              workloadCaseId: 'case.beta',
+              measurementPolicyRef: 'policy.measure.v2',
+            }),
           }),
         ]),
       ),
-    ).toBe('COMPARISON_NOT_PARITY');
+    ).toBe('RESULT_SET_MEASUREMENT_POLICY_MISMATCH');
   });
 
   it('stored verification re-proves the manifest against what is ACTUALLY there', () => {

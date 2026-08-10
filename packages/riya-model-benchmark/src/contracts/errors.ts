@@ -27,6 +27,12 @@ export const RIYA_BENCHMARK_ERROR_CODES = [
   // its own mistake, distinct from a workload-parity break, so it gets its own code.
   'RESULT_SET_SUBJECT_MISMATCH',
   'RESULT_SET_ENVIRONMENT_MISMATCH',
+  // A suite may vary its workload cases -- that is what a suite IS -- but not the harness that ran
+  // them or the rules it measured by. Three axes, three codes, because a set that mixed suites and a
+  // set that mixed measurement policies are different problems for whoever has to fix one.
+  'RESULT_SET_SUITE_MISMATCH',
+  'RESULT_SET_IMPLEMENTATION_MISMATCH',
+  'RESULT_SET_MEASUREMENT_POLICY_MISMATCH',
   'RESULT_SET_INVALID',
   'DIGEST_INVALID',
   'EVIDENCE_TAMPERED',
