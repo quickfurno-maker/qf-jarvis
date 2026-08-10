@@ -59,9 +59,21 @@ version and **digest**, capability profile, knowledge revision, policy contract 
 Every one of those refs must be **exact**: no `latest`, at any `/` segment, case-insensitively. Release
 exactness came with the release constructor; the rest needed the same rule, because
 `promptFamily: 'latest'` names a prompt that changes under the evidence — the identical failure, one
-field along. The predicate (`isExactGovernedIdentity`) is imported from the evaluation package rather
-than restated, so "exact" has one definition across safety and benchmark evidence. A ref merely
-_containing_ the substring, like `policy-latest-v2`, is fine.
+field along.
+
+The same rule covers every **durable** ref in the artifact, not just the subject:
+`benchmarkSuiteId`, `benchmarkImplementationId`, `workloadCaseId`, `measurementPolicyRef`, and — when
+supplied — `acceleratorRef`, `runtimeEngineId` and `runtimeEngineVersion`. Benchmark evidence gets
+quoted months later against runs nobody remembers, and `measurementPolicyRef: 'latest'` describes
+rules that have since changed, which is invisible in the number it accompanies.
+
+Not applied to versions, digests, enums or `createdAt`: a numeric version cannot be an alias, and a
+SHA-256 already names exact content.
+
+The predicate (`isExactGovernedIdentity`) is imported from the evaluation package rather than
+restated — through a single internal re-export, so this package's import boundary stays one line wide
+— and "exact" therefore has one definition across safety and benchmark evidence. A ref merely
+_containing_ the substring, like `policy-latest-v2` or `engine.latest2`, is fine.
 
 One release grammar in the repository, not two. Benchmark evidence and safety evidence exist to be
 read together — "this release cleared safety AND runs at this latency" — and two packages with their

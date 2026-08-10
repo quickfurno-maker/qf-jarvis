@@ -22,6 +22,7 @@
 import { z } from 'zod';
 
 import { RiyaBenchmarkError } from './errors.js';
+import { isExactGovernedIdentity } from '../internal/exact-identity.js';
 import {
   RIYA_BENCHMARK_MAX_CONCURRENCY,
   RIYA_BENCHMARK_MAX_REQUESTS,
@@ -95,6 +96,23 @@ export function createRiyaBenchmarkWorkload(
   const parsed = workloadSchema.safeParse(input);
   if (!parsed.success) {
     throw new RiyaBenchmarkError('WORKLOAD_INVALID');
+  }
+  // The four DURABLE refs must be exact, for the same reason the release must be. A workload naming
+  // `measurementPolicyRef: 'latest'` describes rules that have since changed, and the number it
+  // accompanies then means something nobody can recover. Same predicate as the release and the subject
+  // refs -- one definition of "exact" in the repository, imported rather than restated.
+  //
+  // Versions and digests are deliberately NOT run through it: a numeric version cannot be an alias,
+  // and a SHA-256 already names exact content.
+  for (const ref of [
+    parsed.data.benchmarkSuiteId,
+    parsed.data.benchmarkImplementationId,
+    parsed.data.workloadCaseId,
+    parsed.data.measurementPolicyRef,
+  ]) {
+    if (!isExactGovernedIdentity(ref)) {
+      throw new RiyaBenchmarkError('WORKLOAD_INVALID');
+    }
   }
   return Object.freeze({ ...parsed.data, version: 1 as const });
 }

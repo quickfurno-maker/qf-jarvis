@@ -34,6 +34,7 @@
 import { z } from 'zod';
 
 import { RiyaBenchmarkError } from './errors.js';
+import { isExactGovernedIdentity } from '../internal/exact-identity.js';
 import {
   RIYA_BENCHMARK_ACCELERATOR_FAMILIES,
   RIYA_BENCHMARK_ARCHITECTURE_FAMILIES,
@@ -111,6 +112,15 @@ export function createRiyaBenchmarkEnvironment(
     throw new RiyaBenchmarkError('ENVIRONMENT_INVALID');
   }
   const e = parsed.data;
+
+  // Exact when present, in BOTH kinds. A hosted run may not know its engine; if it names one, the
+  // name has to mean the same thing next quarter. `engine.latest2` and `engine-latest-v2` stay legal
+  // -- this is governance about aliases, not a ban on six letters.
+  for (const ref of [e.acceleratorRef, e.runtimeEngineId, e.runtimeEngineVersion]) {
+    if (ref !== undefined && !isExactGovernedIdentity(ref)) {
+      throw new RiyaBenchmarkError('ENVIRONMENT_INVALID');
+    }
+  }
 
   if (e.kind === 'HOSTED_OPAQUE') {
     for (const field of HARDWARE_FIELDS) {

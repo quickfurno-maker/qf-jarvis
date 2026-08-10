@@ -19,11 +19,12 @@
  * what the system around the model does. All of them are named by DIGEST or REVISION here, never by
  * content — a benchmark artifact must be safe to commit, and prompt text is not.
  */
-import { createProviderReleaseRef, isExactGovernedIdentity } from '@qf-jarvis/model-evaluation';
+import { createProviderReleaseRef } from '@qf-jarvis/model-evaluation';
 import type { ProviderReleaseRef } from '@qf-jarvis/model-evaluation';
 import { z } from 'zod';
 
 import { RiyaBenchmarkError } from './errors.js';
+import { isExactGovernedIdentity } from '../internal/exact-identity.js';
 
 export interface RiyaBenchmarkSubjectV1 {
   readonly version: 1;

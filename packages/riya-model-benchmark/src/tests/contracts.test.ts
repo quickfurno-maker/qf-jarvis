@@ -13,6 +13,7 @@ import { RiyaBenchmarkError } from '../contracts/errors.js';
 import { createRiyaBenchmarkObservation } from '../contracts/observation.js';
 import { createRiyaBenchmarkSubject } from '../contracts/subject.js';
 import { createRiyaBenchmarkWorkload, workloadParityKey } from '../contracts/workload.js';
+import { isExactGovernedIdentity } from '../internal/exact-identity.js';
 import {
   syntheticDigest,
   syntheticHostedEnvironment,
@@ -452,5 +453,147 @@ describe('an observation must be internally honest', () => {
   it('re-proving a canonical observation is idempotent', () => {
     const once = syntheticObservation();
     expect(createRiyaBenchmarkObservation(once)).toStrictEqual(once);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Exact identity on the DURABLE refs (final identity-closure correction).
+// ---------------------------------------------------------------------------
+
+describe('a moving alias cannot reach durable benchmark evidence', () => {
+  const ALIASES = ['latest', 'LATEST', 'Latest'];
+  const WILDCARDS = ['sui*te', '*', 'harness.*'];
+  // Six letters in a name is not an alias. Refusing these would be a grammar rule wearing a policy's
+  // clothes, and it would reject perfectly ordinary versioned identifiers.
+  const LEGITIMATE = ['suite.latest2', 'policy-latest-v2', 'latest-model', 'harness.latest.v2'];
+
+  it.each([
+    ['benchmarkSuiteId'],
+    ['benchmarkImplementationId'],
+    ['workloadCaseId'],
+    ['measurementPolicyRef'],
+  ])('a workload %s of `latest` is refused', (field) => {
+    for (const alias of ALIASES) {
+      expect(
+        codeOf(() => createRiyaBenchmarkWorkload({ ...syntheticWorkload(), [field]: alias })),
+        `${field}=${alias}`,
+      ).toBe('WORKLOAD_INVALID');
+    }
+    for (const wildcard of WILDCARDS) {
+      expect(
+        codeOf(() => createRiyaBenchmarkWorkload({ ...syntheticWorkload(), [field]: wildcard })),
+        `${field}=${wildcard}`,
+      ).toBe('WORKLOAD_INVALID');
+    }
+    // ...and an ordinary name containing the substring still works.
+    for (const legitimate of LEGITIMATE) {
+      expect(
+        codeOf(() => createRiyaBenchmarkWorkload({ ...syntheticWorkload(), [field]: legitimate })),
+        `${field}=${legitimate}`,
+      ).toBe('no-error');
+    }
+  });
+
+  it('versions and digests are NOT run through the identity rule', () => {
+    // A numeric version cannot be an alias, and a SHA-256 already names exact content. Applying the
+    // rule to them would be cargo cult.
+    expect(
+      createRiyaBenchmarkWorkload({ ...syntheticWorkload(), benchmarkSuiteVersion: 7 })
+        .benchmarkSuiteVersion,
+    ).toBe(7);
+    expect(
+      createRiyaBenchmarkWorkload({
+        ...syntheticWorkload(),
+        promptProfileDigest: syntheticDigest('abcd'),
+      }).promptProfileDigest,
+    ).toMatch(/^[0-9a-f]{64}$/u);
+  });
+
+  it.each([['acceleratorRef'], ['runtimeEngineId'], ['runtimeEngineVersion']])(
+    'a LOCAL environment %s of `latest` is refused',
+    (field) => {
+      for (const alias of ALIASES) {
+        expect(
+          codeOf(() =>
+            createRiyaBenchmarkEnvironment({ ...syntheticLocalEnvironment(), [field]: alias }),
+          ),
+          `${field}=${alias}`,
+        ).toBe('ENVIRONMENT_INVALID');
+      }
+      for (const legitimate of ['engine.latest2', 'engine-latest-v2', 'accelerator.latest2']) {
+        expect(
+          codeOf(() =>
+            createRiyaBenchmarkEnvironment({ ...syntheticLocalEnvironment(), [field]: legitimate }),
+          ),
+          `${field}=${legitimate}`,
+        ).toBe('no-error');
+      }
+    },
+  );
+
+  it('a HOSTED environment that NAMES an engine must name it exactly', () => {
+    // It may stay silent; it may not be vague.
+    for (const field of ['runtimeEngineId', 'runtimeEngineVersion']) {
+      expect(
+        codeOf(() =>
+          createRiyaBenchmarkEnvironment({ ...syntheticHostedEnvironment(), [field]: 'latest' }),
+        ),
+        field,
+      ).toBe('ENVIRONMENT_INVALID');
+    }
+  });
+
+  it('the local three-field runtime requirement is unchanged', () => {
+    for (const field of ['runtimeEngineId', 'runtimeEngineVersion', 'runtimeConfigDigest']) {
+      const { [field]: _dropped, ...without } = syntheticLocalEnvironment() as unknown as Record<
+        string,
+        unknown
+      >;
+      expect(
+        codeOf(() => createRiyaBenchmarkEnvironment(without as never)),
+        `missing ${field}`,
+      ).toBe('ENVIRONMENT_INVALID');
+    }
+  });
+
+  it('hosted opacity is unchanged - omitting every runtime field is still fine', () => {
+    const hosted = createRiyaBenchmarkEnvironment({ version: 1, kind: 'HOSTED_OPAQUE' });
+    expect(hosted.runtimeEngineId).toBeUndefined();
+    expect(hosted.runtimeEngineVersion).toBeUndefined();
+    expect(hosted.runtimeConfigDigest).toBeUndefined();
+  });
+
+  it('the rule is the SHARED one, not a local copy', () => {
+    // Release, subject, workload and environment must all agree about what "exact" means. If any of
+    // them had its own implementation, this is where they would diverge.
+    expect(isExactGovernedIdentity('latest')).toBe(false);
+    expect(isExactGovernedIdentity('vendor/latest')).toBe(false);
+    expect(isExactGovernedIdentity('latest-model')).toBe(true);
+
+    for (const alias of ['latest', 'vendor.alpha/latest']) {
+      expect(
+        codeOf(() => syntheticSubject({ modelId: alias })),
+        `release ${alias}`,
+      ).toBe('SUBJECT_INVALID');
+      expect(
+        codeOf(() => createRiyaBenchmarkSubject({ ...syntheticSubject(), promptFamily: alias })),
+        `promptFamily ${alias}`,
+      ).toBe('SUBJECT_INVALID');
+      expect(
+        codeOf(() =>
+          createRiyaBenchmarkWorkload({ ...syntheticWorkload(), measurementPolicyRef: alias }),
+        ),
+        `policy ${alias}`,
+      ).toBe('WORKLOAD_INVALID');
+      expect(
+        codeOf(() =>
+          createRiyaBenchmarkEnvironment({
+            ...syntheticLocalEnvironment(),
+            runtimeEngineId: alias,
+          }),
+        ),
+        `engine ${alias}`,
+      ).toBe('ENVIRONMENT_INVALID');
+    }
   });
 });
