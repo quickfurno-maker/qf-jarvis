@@ -505,7 +505,7 @@ describe('(71-77) package API and dependency locks are untouched', () => {
 
   it('(73-77) every package-root runtime API count is unchanged', async () => {
     const expected: Readonly<Record<string, number>> = {
-      'model-evaluation': 33,
+      'model-evaluation': 35,
       'model-gateway': 71,
       'model-gateway-composition': 2,
       'groq-staging-smoke': 24,

@@ -1,0 +1,599 @@
+/**
+ * RMB-A — subject, environment, workload and observation contracts.
+ *
+ * The observation specs are the ones that matter most. A benchmark harness that breaks does not
+ * usually produce obviously wrong numbers; it produces plausible ones over a population nobody can
+ * name, and the worst case — a run where everything failed — produces the FASTEST numbers anybody has
+ * seen. Those are the failures these specs are built around.
+ */
+import { describe, expect, it } from 'vitest';
+
+import { createRiyaBenchmarkEnvironment } from '../contracts/environment.js';
+import { RiyaBenchmarkError } from '../contracts/errors.js';
+import { createRiyaBenchmarkObservation } from '../contracts/observation.js';
+import { createRiyaBenchmarkSubject } from '../contracts/subject.js';
+import { createRiyaBenchmarkWorkload, workloadParityKey } from '../contracts/workload.js';
+import { isExactGovernedIdentity } from '../internal/exact-identity.js';
+import {
+  syntheticDigest,
+  syntheticHostedEnvironment,
+  syntheticLocalEnvironment,
+  syntheticObservation,
+  syntheticSubject,
+  syntheticWorkload,
+} from '../testing/fixtures.js';
+
+const codeOf = (run: () => unknown): string => {
+  try {
+    run();
+  } catch (error: unknown) {
+    return error instanceof RiyaBenchmarkError ? error.code : 'not-a-benchmark-error';
+  }
+  return 'no-error';
+};
+
+// ---------------------------------------------------------------------------
+// 1–5. Subject.
+// ---------------------------------------------------------------------------
+
+describe('the subject names a release, and reuses the repo grammar to do it', () => {
+  it('accepts a well-formed subject and freezes it', () => {
+    const subject = syntheticSubject();
+    expect(subject.version).toBe(1);
+    expect(subject.release.modelId).toBe('model.alpha');
+    expect(Object.isFrozen(subject)).toBe(true);
+    expect(Object.isFrozen(subject.release)).toBe(true);
+  });
+
+  it('re-proves the release through the EVALUATION package, not a local copy', () => {
+    // A namespaced catalogue id is legal because the evaluation grammar says so. If this package had
+    // its own schema, this is exactly where the two would drift.
+    const namespaced = syntheticSubject({ modelId: 'vendor.alpha/model-alpha-7b' });
+    expect(namespaced.release.modelId).toBe('vendor.alpha/model-alpha-7b');
+
+    // And the wildcard rule comes across with it, exactly as the evaluation package defines it.
+    for (const modelId of ['latest', 'LATEST', 'model.*']) {
+      expect(
+        codeOf(() => syntheticSubject({ modelId })),
+        modelId,
+      ).toBe('SUBJECT_INVALID');
+    }
+    expect(codeOf(() => syntheticSubject({ releaseId: 'latest' }))).toBe('SUBJECT_INVALID');
+  });
+
+  it('a SEGMENT-level `latest` is refused too, at every position', () => {
+    // Closed at its owner. The generic evaluation package used to compare the WHOLE token against
+    // `latest`, so a namespaced `vendor/latest` -- well-formed under the slash-segment grammar, and a
+    // moving target -- reached an evaluation binding. It now splits on `/` and refuses any complete
+    // segment, so benchmark evidence and safety evidence inherit one rule rather than two.
+    for (const modelId of [
+      'vendor.alpha/latest',
+      'vendor.alpha/LATEST',
+      'latest/model-alpha',
+      'vendor.alpha/latest/model-alpha',
+    ]) {
+      expect(
+        codeOf(() => syntheticSubject({ modelId })),
+        modelId,
+      ).toBe('SUBJECT_INVALID');
+    }
+  });
+
+  it('a segment merely CONTAINING the substring is still fine', () => {
+    // Governance, not grammar. `latest-model` is an ordinary name that happens to include six
+    // letters, and refusing it would be a syntax rule wearing a policy's clothes.
+    for (const modelId of ['latest-model', 'vendor.alpha/model-latest-v2', 'model.latest2'])
+      expect(
+        codeOf(() => syntheticSubject({ modelId })),
+        modelId,
+      ).toBe('no-error');
+  });
+
+  it('refuses an unknown key', () => {
+    expect(
+      codeOf(() =>
+        createRiyaBenchmarkSubject({
+          ...syntheticSubject(),
+          quantization: 'q4',
+        } as never),
+      ),
+    ).toBe('SUBJECT_INVALID');
+  });
+
+  it('refuses a short digest — the repo does not accept a weaker identity here', () => {
+    expect(
+      codeOf(() =>
+        createRiyaBenchmarkSubject({
+          ...syntheticSubject(),
+          promptDigest: 'abc123',
+        }),
+      ),
+    ).toBe('SUBJECT_INVALID');
+    expect(
+      codeOf(() =>
+        createRiyaBenchmarkSubject({
+          ...syntheticSubject(),
+          promptDigest: syntheticDigest('abcd').toUpperCase(),
+        }),
+      ),
+    ).toBe('SUBJECT_INVALID');
+  });
+
+  it('re-proving a canonical subject is idempotent', () => {
+    const once = syntheticSubject();
+    expect(createRiyaBenchmarkSubject(once)).toStrictEqual(once);
+  });
+
+  it('a different prompt digest is a different subject', () => {
+    const a = syntheticSubject();
+    const b = syntheticSubject({ promptDigest: syntheticDigest('fee1') });
+    expect(a.promptDigest).not.toBe(b.promptDigest);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 6–10. Environment.
+// ---------------------------------------------------------------------------
+
+describe('the environment compares machines without identifying one', () => {
+  it('accepts a local profile', () => {
+    const environment = syntheticLocalEnvironment();
+    expect(environment.kind).toBe('LOCAL_EXPLICIT');
+    expect(environment.acceleratorCount).toBe(1);
+    expect(Object.isFrozen(environment)).toBe(true);
+  });
+
+  it('accepts a hosted profile that claims no hardware', () => {
+    const environment = syntheticHostedEnvironment();
+    expect(environment.kind).toBe('HOSTED_OPAQUE');
+    expect(environment.architectureFamily).toBeUndefined();
+    expect(environment.acceleratorCount).toBeUndefined();
+    expect(environment.hostMemoryBytes).toBeUndefined();
+  });
+
+  it('a HOSTED profile may NOT invent hardware', () => {
+    // An invented accelerator count is worse than an absent one: absent is a known unknown.
+    for (const extra of [
+      { architectureFamily: 'X86_64' as const },
+      { acceleratorFamily: 'DISCRETE_GPU' as const },
+      { acceleratorCount: 8 },
+      { hostMemoryBytes: 68_719_476_736 },
+    ]) {
+      expect(
+        codeOf(() =>
+          createRiyaBenchmarkEnvironment({
+            version: 1,
+            kind: 'HOSTED_OPAQUE',
+            ...extra,
+          }),
+        ),
+        JSON.stringify(extra),
+      ).toBe('ENVIRONMENT_INVALID');
+    }
+  });
+
+  it('there is NO DEDICATED identity or credential field', () => {
+    // Stated precisely. The structural guarantee is that no field EXISTS for a hostname, a username,
+    // a device path, a serial, an IP or a key, and `.strict()` refuses an extra one. It is NOT that
+    // an identifying value is impossible: `acceleratorRef`, `runtimeEngineId` and
+    // `runtimeEngineVersion` are opaque identifier-shaped fields, and a determined caller could put
+    // something meaningful in one. Keeping those non-identifying is authoring and harness governance,
+    // and closing it in code would mean a hardware registry this slice deliberately does not build.
+    for (const leak of [
+      { hostname: 'build-box-04' },
+      { username: 'kesh' },
+      { devicePath: '/dev/nvidia0' },
+      { serialNumber: 'GPU-1234' },
+      { ipAddress: '10.0.0.4' },
+      { apiKey: 'sk-test' },
+      { instanceId: 'i-0abc' },
+    ]) {
+      expect(
+        codeOf(() => createRiyaBenchmarkEnvironment({ ...syntheticLocalEnvironment(), ...leak })),
+        JSON.stringify(leak),
+      ).toBe('ENVIRONMENT_INVALID');
+    }
+  });
+
+  it('accelerator family and count must agree', () => {
+    // "NONE, four of them" is a harness bug that survives review because each field looks fine alone.
+    expect(
+      codeOf(() =>
+        createRiyaBenchmarkEnvironment({
+          version: 1,
+          kind: 'LOCAL_EXPLICIT',
+          architectureFamily: 'X86_64',
+          acceleratorFamily: 'NONE',
+          acceleratorCount: 4,
+        }),
+      ),
+    ).toBe('ENVIRONMENT_INVALID');
+    expect(
+      codeOf(() =>
+        createRiyaBenchmarkEnvironment({
+          version: 1,
+          kind: 'LOCAL_EXPLICIT',
+          architectureFamily: 'X86_64',
+          acceleratorFamily: 'DISCRETE_GPU',
+          acceleratorCount: 0,
+        }),
+      ),
+    ).toBe('ENVIRONMENT_INVALID');
+    // Per-device memory with no device.
+    expect(
+      codeOf(() =>
+        createRiyaBenchmarkEnvironment({
+          version: 1,
+          kind: 'LOCAL_EXPLICIT',
+          architectureFamily: 'X86_64',
+          acceleratorFamily: 'CPU_ONLY',
+          acceleratorMemoryBytesPerDevice: 1_073_741_824,
+        }),
+      ),
+    ).toBe('ENVIRONMENT_INVALID');
+  });
+
+  it('a local profile must say what it ran on', () => {
+    expect(
+      codeOf(() => createRiyaBenchmarkEnvironment({ version: 1, kind: 'LOCAL_EXPLICIT' })),
+    ).toBe('ENVIRONMENT_INVALID');
+  });
+
+  it('re-proving a canonical environment is idempotent, both kinds', () => {
+    const local = syntheticLocalEnvironment();
+    const hosted = syntheticHostedEnvironment();
+    expect(createRiyaBenchmarkEnvironment(local)).toStrictEqual(local);
+    expect(createRiyaBenchmarkEnvironment(hosted)).toStrictEqual(hosted);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 11–16. Workload.
+// ---------------------------------------------------------------------------
+
+describe('the workload carries counts and digests, and no text at all', () => {
+  it('accepts a well-formed workload', () => {
+    const workload = syntheticWorkload();
+    expect(workload.concurrency).toBe(1);
+    expect(Object.isFrozen(workload)).toBe(true);
+  });
+
+  it('there is NO FIELD a prompt, message or transcript could go in', () => {
+    for (const leak of [
+      { prompt: 'What is the price of a modular kitchen?' },
+      { systemPrompt: 'You are Riya.' },
+      { messages: [{ role: 'user', content: 'hi' }] },
+      { transcript: 'user: hi' },
+      { sampleText: 'hello' },
+    ]) {
+      expect(
+        codeOf(() => createRiyaBenchmarkWorkload({ ...syntheticWorkload(), ...leak })),
+        JSON.stringify(leak).slice(0, 30),
+      ).toBe('WORKLOAD_INVALID');
+    }
+    // And the only prompt-shaped field is a digest.
+    expect(syntheticWorkload().promptProfileDigest).toMatch(/^[0-9a-f]{64}$/u);
+  });
+
+  it('refuses non-positive, fractional and absurd counts', () => {
+    for (const bad of [
+      { inputTokenCount: 0 },
+      { measuredRequestCount: 0 },
+      { concurrency: 0 },
+      { batchSize: 0 },
+      { maximumOutputTokens: 0 },
+      { concurrency: 1.5 },
+      { warmupRequestCount: -1 },
+      { concurrency: 100_000 },
+    ]) {
+      expect(
+        codeOf(() => createRiyaBenchmarkWorkload({ ...syntheticWorkload(), ...bad })),
+        JSON.stringify(bad),
+      ).toBe('WORKLOAD_INVALID');
+    }
+    // Zero warmups is legitimate: cold start is a real thing to measure.
+    expect(
+      createRiyaBenchmarkWorkload({ ...syntheticWorkload(), warmupRequestCount: 0 }),
+    ).toBeDefined();
+  });
+
+  it('the parity key is deterministic and excludes the case id', () => {
+    const a = syntheticWorkload({ workloadCaseId: 'case.alpha' });
+    const b = syntheticWorkload({ workloadCaseId: 'case.beta' });
+    expect(workloadParityKey(a)).toBe(workloadParityKey(b));
+    expect(workloadParityKey(a)).toBe(workloadParityKey(syntheticWorkload()));
+  });
+
+  it('concurrency changes the parity identity', () => {
+    expect(workloadParityKey(syntheticWorkload({ concurrency: 4 }))).not.toBe(
+      workloadParityKey(syntheticWorkload()),
+    );
+  });
+
+  it('the prompt profile digest changes the parity identity', () => {
+    expect(
+      workloadParityKey(syntheticWorkload({ promptProfileDigest: syntheticDigest('bead') })),
+    ).not.toBe(workloadParityKey(syntheticWorkload()));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 17–22. Observation.
+// ---------------------------------------------------------------------------
+
+describe('an observation must be internally honest', () => {
+  it('accepts a healthy run', () => {
+    const observation = syntheticObservation();
+    expect(observation.successfulRequests).toBe(20);
+    expect(Object.isFrozen(observation)).toBe(true);
+  });
+
+  it('requests must balance', () => {
+    expect(
+      codeOf(() =>
+        createRiyaBenchmarkObservation({ ...syntheticObservation(), failedRequests: 3 }),
+      ),
+    ).toBe('REQUEST_COUNT_MISMATCH');
+    // And the honest version of that run is accepted.
+    expect(
+      createRiyaBenchmarkObservation({
+        ...syntheticObservation(),
+        successfulRequests: 17,
+        failedRequests: 3,
+      }).failedRequests,
+    ).toBe(3);
+  });
+
+  it('a p95 below its p50 is swapped fields, not a fast tail', () => {
+    expect(
+      codeOf(() =>
+        createRiyaBenchmarkObservation({
+          ...syntheticObservation(),
+          endToEndLatencyMicrosP50: 2_000_000,
+        }),
+      ),
+    ).toBe('PERCENTILE_ORDER_INVALID');
+  });
+
+  it('a percentile pair must be whole', () => {
+    const { timeToFirstTokenMicrosP95: _dropped, ...half } = syntheticObservation();
+    expect(codeOf(() => createRiyaBenchmarkObservation(half))).toBe('PERCENTILE_ORDER_INVALID');
+  });
+
+  it('THE IMPORTANT ONE: a run where nothing succeeded cannot claim latency', () => {
+    // Total failure produces the most flattering numbers a harness can emit — instant
+    // time-to-first-token, because there were no tokens. Read out of context later, it looks like
+    // the fastest configuration anyone tried.
+    expect(
+      codeOf(() =>
+        createRiyaBenchmarkObservation({
+          ...syntheticObservation(),
+          successfulRequests: 0,
+          failedRequests: 20,
+          outputTokensTotal: 0,
+        }),
+      ),
+    ).toBe('PERCENTILE_ORDER_INVALID');
+  });
+
+  it('a total-failure run IS representable — with no latency and no tokens', () => {
+    // Refusing to record the failure would be its own dishonesty.
+    const observation = createRiyaBenchmarkObservation({
+      version: 1,
+      attemptedRequests: 20,
+      successfulRequests: 0,
+      failedRequests: 20,
+      inputTokensTotal: 10_240,
+      outputTokensTotal: 0,
+    });
+    expect(observation.successfulRequests).toBe(0);
+    expect(observation.endToEndLatencyMicrosP50).toBeUndefined();
+    expect(observation.decodeMicrosPerOutputTokenP50).toBeUndefined();
+  });
+
+  it('tokens and decode speed must tell the same story', () => {
+    const {
+      decodeMicrosPerOutputTokenP50: _a,
+      decodeMicrosPerOutputTokenP95: _b,
+      ...noDecode
+    } = syntheticObservation();
+    expect(codeOf(() => createRiyaBenchmarkObservation(noDecode))).toBe(
+      'TOKEN_MEASUREMENT_INVALID',
+    );
+    expect(
+      codeOf(() =>
+        createRiyaBenchmarkObservation({ ...syntheticObservation(), outputTokensTotal: 0 }),
+      ),
+    ).toBe('TOKEN_MEASUREMENT_INVALID');
+    expect(
+      codeOf(() =>
+        createRiyaBenchmarkObservation({ ...syntheticObservation(), inputTokensTotal: 0 }),
+      ),
+    ).toBe('TOKEN_MEASUREMENT_INVALID');
+    expect(
+      codeOf(() =>
+        createRiyaBenchmarkObservation({
+          version: 1,
+          attemptedRequests: 5,
+          successfulRequests: 0,
+          failedRequests: 5,
+          inputTokensTotal: 100,
+          outputTokensTotal: 40,
+        }),
+      ),
+    ).toBe('TOKEN_MEASUREMENT_INVALID');
+  });
+
+  it('refuses fractional, negative and non-finite evidence values', () => {
+    for (const bad of [
+      { endToEndLatencyMicrosP50: 900_000.5 },
+      { successfulRequests: -1 },
+      { outputTokensTotal: Number.NaN },
+      { endToEndLatencyMicrosP95: Number.POSITIVE_INFINITY },
+      { peakHostMemoryBytes: 0 },
+    ]) {
+      expect(
+        codeOf(() => createRiyaBenchmarkObservation({ ...syntheticObservation(), ...bad })),
+        JSON.stringify(bad),
+      ).toBe('OBSERVATION_INVALID');
+    }
+  });
+
+  it('memory is optional, and valid when present', () => {
+    const {
+      peakAcceleratorMemoryBytes: _a,
+      peakHostMemoryBytes: _b,
+      ...noMemory
+    } = syntheticObservation();
+    const observation = createRiyaBenchmarkObservation(noMemory);
+    expect(observation.peakAcceleratorMemoryBytes).toBeUndefined();
+    expect(syntheticObservation().peakHostMemoryBytes).toBe(4_294_967_296);
+  });
+
+  it('re-proving a canonical observation is idempotent', () => {
+    const once = syntheticObservation();
+    expect(createRiyaBenchmarkObservation(once)).toStrictEqual(once);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Exact identity on the DURABLE refs (final identity-closure correction).
+// ---------------------------------------------------------------------------
+
+describe('a moving alias cannot reach durable benchmark evidence', () => {
+  const ALIASES = ['latest', 'LATEST', 'Latest'];
+  const WILDCARDS = ['sui*te', '*', 'harness.*'];
+  // Six letters in a name is not an alias. Refusing these would be a grammar rule wearing a policy's
+  // clothes, and it would reject perfectly ordinary versioned identifiers.
+  const LEGITIMATE = ['suite.latest2', 'policy-latest-v2', 'latest-model', 'harness.latest.v2'];
+
+  it.each([
+    ['benchmarkSuiteId'],
+    ['benchmarkImplementationId'],
+    ['workloadCaseId'],
+    ['measurementPolicyRef'],
+  ])('a workload %s of `latest` is refused', (field) => {
+    for (const alias of ALIASES) {
+      expect(
+        codeOf(() => createRiyaBenchmarkWorkload({ ...syntheticWorkload(), [field]: alias })),
+        `${field}=${alias}`,
+      ).toBe('WORKLOAD_INVALID');
+    }
+    for (const wildcard of WILDCARDS) {
+      expect(
+        codeOf(() => createRiyaBenchmarkWorkload({ ...syntheticWorkload(), [field]: wildcard })),
+        `${field}=${wildcard}`,
+      ).toBe('WORKLOAD_INVALID');
+    }
+    // ...and an ordinary name containing the substring still works.
+    for (const legitimate of LEGITIMATE) {
+      expect(
+        codeOf(() => createRiyaBenchmarkWorkload({ ...syntheticWorkload(), [field]: legitimate })),
+        `${field}=${legitimate}`,
+      ).toBe('no-error');
+    }
+  });
+
+  it('versions and digests are NOT run through the identity rule', () => {
+    // A numeric version cannot be an alias, and a SHA-256 already names exact content. Applying the
+    // rule to them would be cargo cult.
+    expect(
+      createRiyaBenchmarkWorkload({ ...syntheticWorkload(), benchmarkSuiteVersion: 7 })
+        .benchmarkSuiteVersion,
+    ).toBe(7);
+    expect(
+      createRiyaBenchmarkWorkload({
+        ...syntheticWorkload(),
+        promptProfileDigest: syntheticDigest('abcd'),
+      }).promptProfileDigest,
+    ).toMatch(/^[0-9a-f]{64}$/u);
+  });
+
+  it.each([['acceleratorRef'], ['runtimeEngineId'], ['runtimeEngineVersion']])(
+    'a LOCAL environment %s of `latest` is refused',
+    (field) => {
+      for (const alias of ALIASES) {
+        expect(
+          codeOf(() =>
+            createRiyaBenchmarkEnvironment({ ...syntheticLocalEnvironment(), [field]: alias }),
+          ),
+          `${field}=${alias}`,
+        ).toBe('ENVIRONMENT_INVALID');
+      }
+      for (const legitimate of ['engine.latest2', 'engine-latest-v2', 'accelerator.latest2']) {
+        expect(
+          codeOf(() =>
+            createRiyaBenchmarkEnvironment({ ...syntheticLocalEnvironment(), [field]: legitimate }),
+          ),
+          `${field}=${legitimate}`,
+        ).toBe('no-error');
+      }
+    },
+  );
+
+  it('a HOSTED environment that NAMES an engine must name it exactly', () => {
+    // It may stay silent; it may not be vague.
+    for (const field of ['runtimeEngineId', 'runtimeEngineVersion']) {
+      expect(
+        codeOf(() =>
+          createRiyaBenchmarkEnvironment({ ...syntheticHostedEnvironment(), [field]: 'latest' }),
+        ),
+        field,
+      ).toBe('ENVIRONMENT_INVALID');
+    }
+  });
+
+  it('the local three-field runtime requirement is unchanged', () => {
+    for (const field of ['runtimeEngineId', 'runtimeEngineVersion', 'runtimeConfigDigest']) {
+      const { [field]: _dropped, ...without } = syntheticLocalEnvironment() as unknown as Record<
+        string,
+        unknown
+      >;
+      expect(
+        codeOf(() => createRiyaBenchmarkEnvironment(without as never)),
+        `missing ${field}`,
+      ).toBe('ENVIRONMENT_INVALID');
+    }
+  });
+
+  it('hosted opacity is unchanged - omitting every runtime field is still fine', () => {
+    const hosted = createRiyaBenchmarkEnvironment({ version: 1, kind: 'HOSTED_OPAQUE' });
+    expect(hosted.runtimeEngineId).toBeUndefined();
+    expect(hosted.runtimeEngineVersion).toBeUndefined();
+    expect(hosted.runtimeConfigDigest).toBeUndefined();
+  });
+
+  it('the rule is the SHARED one, not a local copy', () => {
+    // Release, subject, workload and environment must all agree about what "exact" means. If any of
+    // them had its own implementation, this is where they would diverge.
+    expect(isExactGovernedIdentity('latest')).toBe(false);
+    expect(isExactGovernedIdentity('vendor/latest')).toBe(false);
+    expect(isExactGovernedIdentity('latest-model')).toBe(true);
+
+    for (const alias of ['latest', 'vendor.alpha/latest']) {
+      expect(
+        codeOf(() => syntheticSubject({ modelId: alias })),
+        `release ${alias}`,
+      ).toBe('SUBJECT_INVALID');
+      expect(
+        codeOf(() => createRiyaBenchmarkSubject({ ...syntheticSubject(), promptFamily: alias })),
+        `promptFamily ${alias}`,
+      ).toBe('SUBJECT_INVALID');
+      expect(
+        codeOf(() =>
+          createRiyaBenchmarkWorkload({ ...syntheticWorkload(), measurementPolicyRef: alias }),
+        ),
+        `policy ${alias}`,
+      ).toBe('WORKLOAD_INVALID');
+      expect(
+        codeOf(() =>
+          createRiyaBenchmarkEnvironment({
+            ...syntheticLocalEnvironment(),
+            runtimeEngineId: alias,
+          }),
+        ),
+        `engine ${alias}`,
+      ).toBe('ENVIRONMENT_INVALID');
+    }
+  });
+});

@@ -38,6 +38,10 @@ rubric](./riya-human-gold-authoring-rubric.md), the [review
 workflow](./riya-human-gold-review-workflow.md) and the [coverage
 plan](./riya-gold-v1-coverage-plan.md).
 
+> **Status: DEFERRED at the pre-authoring checkpoint.** The schedule, the batch-1 packet and every
+> gate are ready; zero dialogue has been written, because a model may not write it and no human author
+> has yet. Deferred, not cancelled. Step 4 below is independent of it and is the current work.
+
 ### 3. Controlled synthetic expansion
 
 Gold → teacher-generated variants → deterministic validation → leakage and dedupe → **human review** →
@@ -51,6 +55,12 @@ Run several candidate base models against generic safety evaluation and P10 qual
 where the base model is chosen — **the smallest one that clears both with adequate margin**. Nothing
 before this point names a model, deliberately: a dataset built around one would pre-empt the
 measurement that is supposed to make the choice.
+
+Operational evidence — latency, decode speed, request success, memory — is a THIRD input here, kept
+separate from safety and quality rather than blended into a score. RMB-A builds the contracts for it:
+see the [benchmark foundation](../evaluation/riya-model-benchmark-foundation.md) and the
+[selection protocol](../evaluation/riya-model-selection-protocol.md). Safety and quality are gates;
+efficiency decides only among candidates that already cleared them.
 
 ### 5. SFT candidate — LoRA/QLoRA first
 

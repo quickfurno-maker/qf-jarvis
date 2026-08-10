@@ -557,6 +557,15 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
 
+  packages/riya-model-benchmark:
+    dependencies:
+      '@qf-jarvis/model-evaluation':
+        specifier: workspace:*
+        version: link:../model-evaluation
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+
   packages/riya-model-interaction:
     dependencies:
       '@qf-jarvis/core-service-availability-read':

@@ -489,6 +489,20 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // always syntheticOnly with trainingApproval=false. Its ONE Node capability is
       // node:crypto, used solely for SHA-256 artifact identity.
       'riya-intelligence-dataset',
+      // RMB-A: the OFFLINE, provider-neutral operational model-benchmark foundation -- the THIRD and
+      // narrowest evidence authority, beside generic safety (`model-evaluation`) and Riya sales
+      // quality (`riya-quality-evaluation`). Still an EXACT set match; it records an authorised
+      // addition, it does not relax the assertion. It MEASURES NOTHING and INVOKES NOTHING: numbers
+      // arrive pre-supplied from a harness that ran elsewhere, and there is no HTTP, provider SDK,
+      // gateway, inference engine, model download, child_process, environment lookup, filesystem
+      // discovery, database, embedding or training framework. It carries no customer message,
+      // assistant reply, system prompt, Gold trajectory or P10 fixture body -- a prompt reaches it
+      // as a digest -- and no hostname, username, path, serial, MAC, IP or credential. Release
+      // identity is REUSED from `model-evaluation` rather than forked. Every artifact is
+      // syntheticWorkload with productionApproval=false, comparison demands exact measurement parity,
+      // and there is no composite score, winner, recommendation or rollout approval anywhere in the
+      // surface: speed is not quality, quality is not safety, and none of the three ships anything.
+      'riya-model-benchmark',
       // RWC-P4B (ADR-0099): the Riya half of the ONE structured model call -- the content-minimised
       // continuity projection sent as the single user message, the strict reply+observations schema,
       // the narrowed model provenance vocabulary, and the check that the model's claimed question
@@ -574,7 +588,7 @@ describe('(133-148) the declared budget and every prior lock', () => {
 
   it('(141-148) every prior package-root runtime API lock still holds', async () => {
     const expected: Readonly<Record<string, number>> = {
-      'model-evaluation': 33,
+      'model-evaluation': 35,
       'model-gateway': 71,
       'model-gateway-composition': 2,
       'groq-staging-smoke': 24,

@@ -326,6 +326,11 @@ describe('no runtime, service or application reaches this package', () => {
           continue;
         }
         for (const file of files) {
+          // RAW source, deliberately. `codeOnly` strips block comments with a regex, and a regex is
+          // not a TypeScript lexer -- a comment token inside a string literal would hide an import
+          // from it. That trade is fine for a broad "does this file NAME X?" scan and wrong at an
+          // import firewall, where a false negative is the expensive direction. Production comments
+          // are worded to avoid the exact specifier instead.
           if (readFileSync(file, 'utf8').includes('@qf-jarvis/riya-quality-evaluation')) {
             if (isApp) {
               importingApps.push(file);

@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
+  },
+
+  // The EMITTING build, referenced by the root solution. The vitest specs under src/tests are
+  // EXCLUDED so nothing test-only reaches dist/; the tiny synthetic fixtures under src/testing ARE
+  // emitted, because they are the published `./testing` subpath.
+  //
+  // Exactly ONE project reference, and it is an identity reference rather than a capability one.
+  // `model-evaluation` owns the provider release grammar and the canonical-instant helper this
+  // package REUSES rather than forks -- a second release identity beside it would let benchmark
+  // evidence and safety evidence disagree about which model they describe, which is the one thing
+  // that would make both useless. RMB-A imports the identity and nothing else from it: a containment
+  // spec proves no evaluator, suite, threshold, evidence gate or rollout bridge is reachable, because
+  // operational speed is not safety and this package must never look like it can say otherwise.
+  //
+  // Deliberately absent: `model-gateway` and `model-gateway-composition` (this package invokes no
+  // model -- it receives measurements somebody else took), `riya-quality-evaluation` and
+  // `riya-intelligence-dataset` (quality is P10's authority and Human Gold is a separate, deferred
+  // workstream this must not depend on), `prompt-registry` and `governed-knowledge` (a prompt reaches
+  // this package only as a DIGEST, never as text), every runtime, and anything Postgres or
+  // `event-backbone` (no I/O, no migration).
+  "references": [{ "path": "../model-evaluation/tsconfig.build.json" }],
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/tests/**"]
+}

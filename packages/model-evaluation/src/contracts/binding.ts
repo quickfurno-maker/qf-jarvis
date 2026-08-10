@@ -115,12 +115,69 @@ const bindingSchema = z
   })
   .strict();
 
-/** Reject any wildcard/`latest` identity token anywhere in the binding. */
+/**
+ * True iff `value` is an EXACT governed identity — no wildcard, no `latest` segment.
+ *
+ * ### Segment-aware, because a model id may be namespaced
+ *
+ * `modelId` uses the slash-SEGMENT grammar, so `vendor/latest` is a well-formed catalogue id — and a
+ * moving target, which is exactly what this rule exists to keep out of evidence. Checking the whole
+ * string for `latest` missed it, so the check splits on `/` and refuses if ANY complete segment is
+ * `latest`, case-insensitively.
+ *
+ * A segment that merely CONTAINS the substring is fine: `latest-model` and `model-latest-v2` are
+ * ordinary names that happen to include six letters, and refusing them would be a grammar rule
+ * masquerading as governance.
+ *
+ * This is governance, not grammar. `PROVIDER_MODEL_ID_PATTERN` still answers "is this a well-formed
+ * provider catalogue id?"; this answers "is this an exact governed identity?", and evidence is
+ * entitled to be stricter than the gateway's syntax.
+ *
+ * EXPORTED so the operational-benchmark package applies the same rule to the prompt, capability,
+ * knowledge and policy refs it owns. A second copy would be a second rule the day one of them changed.
+ */
+export function isExactGovernedIdentity(value: string): boolean {
+  if (value.includes('*')) {
+    return false;
+  }
+  return value.split('/').every((segment) => segment.toLowerCase() !== 'latest');
+}
+
+/** The throwing form used throughout this file. Same rule, one implementation. */
 function rejectWildcard(value: string): void {
-  const lowered = value.toLowerCase();
-  if (lowered === 'latest' || value.includes('*')) {
+  if (!isExactGovernedIdentity(value)) {
     throw new EvaluationError('invalid-binding');
   }
+}
+
+/**
+ * Validate and freeze a release identity ON ITS OWN. Throws `EvaluationError('invalid-binding')`.
+ *
+ * Extracted so a package that needs to name a release WITHOUT running an evaluation can reuse this
+ * exact grammar rather than restate it. The RMB-A operational-benchmark package is the first such
+ * caller:
+ * operational benchmark evidence is about a release, but it owns no suite, no fixture manifest, no
+ * evaluator and no prompt family, so `createEvaluationBinding` is the wrong shape for it and copying
+ * the six fields into a second schema would create an identity that could drift from this one.
+ *
+ * `createEvaluationBinding` validates through the SAME schema and the SAME wildcard rule below, so
+ * there is one release grammar in the repository and callers cannot disagree about it.
+ */
+export function createProviderReleaseRef(input: ProviderReleaseRef): ProviderReleaseRef {
+  const parsed = releaseSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new EvaluationError('invalid-binding');
+  }
+  const release = parsed.data;
+  for (const token of [
+    release.releaseId,
+    release.providerId,
+    release.modelId,
+    release.modelVersion,
+  ]) {
+    rejectWildcard(token);
+  }
+  return Object.freeze({ ...release });
 }
 
 /** Validate and freeze an evaluation binding. Throws `EvaluationError('invalid-binding')`. */
@@ -141,6 +198,12 @@ export function createEvaluationBinding(input: EvaluationBindingInput): Evaluati
     b.promptFamily,
     b.capabilityProfileRef,
     b.policyContractRevision,
+    // The OPTIONAL identities were omitted from this list, which meant a binding could name
+    // `knowledgeRevision: 'latest'` -- a moving target attesting to a knowledge base that changes
+    // under the evidence. Optional does not mean ungoverned; an identity that is present must be
+    // exact.
+    ...(b.knowledgeRevision === undefined ? [] : [b.knowledgeRevision]),
+    ...(b.redTeamSuiteId === undefined ? [] : [b.redTeamSuiteId]),
   ]) {
     rejectWildcard(token);
   }

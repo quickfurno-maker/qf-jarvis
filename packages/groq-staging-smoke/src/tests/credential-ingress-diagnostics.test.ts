@@ -526,7 +526,7 @@ describe('(22-27) package, repository, and hygiene invariants', () => {
     }
   });
 
-  it('(23) the model-evaluation package-root API lock remains 33', () => {
+  it('(23) the model-evaluation package-root API lock remains 35', () => {
     const containment = readFileSync(
       join(REPO_ROOT, 'packages/model-evaluation/src/tests/containment.test.ts'),
       'utf8',
@@ -536,7 +536,11 @@ describe('(22-27) package, repository, and hygiene invariants', () => {
       .split('\n')
       .map((line) => line.trim())
       .filter((line) => line.startsWith("'"));
-    expect(symbols).toHaveLength(33);
+    // RMB-A: 33 -> 34 records ONE authorised addition, `createProviderReleaseRef` -- the release
+    // grammar made independently constructible so the operational-benchmark package can NAME a
+    // release without a second copy of the six fields. Still an EXACT count; it records an
+    // authorised addition, it does not relax the assertion.
+    expect(symbols).toHaveLength(35);
   });
 
   it('(24) the event-backbone package-root API lock remains 39', () => {

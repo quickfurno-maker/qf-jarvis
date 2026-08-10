@@ -338,9 +338,16 @@ describe('public API and repository invariants', () => {
     ]) {
       expect(surface[name]).toBeUndefined();
     }
-    // The authoritative key-for-key lock lives in containment.test.ts and is untouched by this
-    // repair; this is the count guard that would catch an accidental re-export from here.
-    expect(Object.keys(barrel)).toHaveLength(33);
+    // The authoritative key-for-key lock lives in containment.test.ts; this is the count guard that
+    // would catch an accidental re-export from here. RESTATED, not relaxed: 33 → 34 records one
+    // authorised addition, `createProviderReleaseRef` (RMB-A), which exposes the release CONSTRUCTOR
+    // so a benchmark package can name a release without a second copy of the six fields. The four
+    // grammar internals above stay unexported, which is what this lock is actually about.
+    // RMB-A: 34 -> 35 records one further authorised addition, `isExactGovernedIdentity` -- the
+    // wildcard/`latest` governance predicate, exported so the benchmark package applies the SAME
+    // rule to the prompt/capability/knowledge/policy refs it owns instead of copying it. Still an
+    // EXACT count; it records an authorised addition, it does not relax the assertion.
+    expect(Object.keys(barrel)).toHaveLength(35);
   });
 
   it('(9) the model-gateway canonical export surface is still intact', () => {

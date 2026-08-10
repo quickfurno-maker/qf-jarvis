@@ -1,0 +1,27 @@
+{
+  "name": "@qf-jarvis/riya-model-benchmark",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis Riya operational model-benchmark foundation (RMB-A). Provider-neutral, OFFLINE, EVIDENCE-ONLY contracts for future model benchmarking: it receives PRE-SUPPLIED normalized measurements and turns them into strict, content-bound, tamper-evident evidence. It measures nothing itself and invokes nothing -- no HTTP, provider SDK, model gateway, local inference engine, model download, llama.cpp/MLX/vLLM/Ollama/TensorRT, child_process, environment lookup, filesystem discovery, database, embeddings or training framework. It is one of THREE separate evidence authorities and deliberately the narrowest: @qf-jarvis/model-evaluation remains the generic SAFETY authority and @qf-jarvis/riya-quality-evaluation remains the Riya sales-QUALITY authority, while this package owns only operational facts -- latency, decode speed, request success, memory and reproducibility. Release identity is REUSED from model-evaluation rather than forked, so there is one release grammar in the repository. Evidence is syntheticWorkload with productionApproval=false, comparison requires exact measurement parity and returns explicit mismatch codes, and there is no composite score, no winner, no recommendation and no rollout approval anywhere in the surface -- speed is not quality, quality is not safety, and none of the three is permission to ship. Carries no customer message, assistant reply, system prompt, Gold trajectory or P10 fixture body; no hostname, username, local path, serial, MAC, IP or credential. Depends on @qf-jarvis/model-evaluation and zod.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "default": "./dist/testing/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/model-evaluation": "workspace:*",
+    "zod": "4.4.3"
+  }
+}
