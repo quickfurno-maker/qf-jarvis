@@ -46,6 +46,7 @@
     { "path": "./packages/core-service-availability-read/tsconfig.build.json" },
     { "path": "./packages/core-riya-intake/tsconfig.build.json" },
     { "path": "./packages/riya-conversation-completion/tsconfig.build.json" },
-    { "path": "./packages/riya-quality-evaluation/tsconfig.build.json" }
+    { "path": "./packages/riya-quality-evaluation/tsconfig.build.json" },
+    { "path": "./packages/riya-intelligence-dataset/tsconfig.build.json" }
   ]
 }

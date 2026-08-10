@@ -403,11 +403,22 @@ describe('the contracts this slice reuses are unchanged', () => {
     //
     // The guarantee is restated rather than dropped, and it did not weaken: the importer set is
     // pinned EXACTLY, and no APPLICATION may import the contract at all.
+    //
+    // RID-F1 (ADR-0107) adds the eighth, and like the seventh it neither stores a state nor produces
+    // one. `riya-intelligence-dataset` reads the PHASE and PROVENANCE vocabularies so a training
+    // example can say where a conversation had reached and how strongly each fact was known.
+    // Provenance in particular is why: a corpus that omitted it would teach a model to read its own
+    // guesses back to people as though they had said them, which is the exact failure this contract
+    // was built to prevent.
+    //
+    // The guarantee is restated rather than dropped, and it did not weaken: the importer set is
+    // pinned EXACTLY, and no APPLICATION may import the contract at all.
     const ALLOWED_PACKAGE_IMPORTERS = [
       'jarvis-runtime',
       'postgres-riya-conversation-continuity-store',
       'riya-conversation-completion',
       'riya-conversation-evolution',
+      'riya-intelligence-dataset',
       'riya-model-interaction',
       'riya-quality-evaluation',
       'riya-web-conversation-service',
