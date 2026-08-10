@@ -1,6 +1,8 @@
 # ADR-0106 — RWC-P10: Riya quality, evaluation and sales optimization
 
-- **Status:** Accepted — RWC-P10 implementation on branch, NOT MERGED
+- **Status:** Accepted — MERGED as PR #111. Reviewed head
+  `75cc361d2fdce8b75f58caf1e29af7a78f6ba185`; merge commit
+  `6e6af0e177bcc18ea72c5a4ea7ef5f2f3b582ed7`. **RID-F1 (ADR-0107) is the current slice.**
 - **Date:** 2026-08-09
 - **Depends on:** ADR-0052 (the evaluation and red-team foundation), ADR-0073 (prompt content
   digests), ADR-0098/0099 (RWC-P4A/P4B), ADR-0100 (RWC-P5), ADR-0101/0102 (RWC-P6),

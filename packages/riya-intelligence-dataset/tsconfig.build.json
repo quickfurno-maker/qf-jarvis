@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
+  },
+
+  // The EMITTING build, referenced by the root solution. The vitest specs under src/tests are
+  // EXCLUDED so nothing test-only reaches dist/; the tiny synthetic fixtures under src/testing ARE
+  // emitted, because they are the published `./testing` subpath.
+  //
+  // Exactly THREE project references, all one-way. `riya-quality-evaluation` owns the language,
+  // interaction, dimension and discovery-field vocabularies this dataset reuses rather than forking
+  // -- a second sales taxonomy beside P10's would make dataset coverage and evaluation coverage
+  // incomparable. `riya-conversation-evolution` owns the canonical observation batch an assistant
+  // annotation is re-proved against, and `riya-conversation-continuity` owns the phase and
+  // provenance vocabularies.
+  //
+  // Deliberately absent, each for its own reason: `jarvis-runtime`, `agent-runtime`,
+  // `riya-model-interaction`, `riya-web-conversation-service` and `model-gateway` (this is OFFLINE
+  // authoring infrastructure -- a runtime that could reach it would be a runtime that could reach
+  // training data), `model-evaluation` (P10 already mediates everything needed from it, and this
+  // package's SHA-256 is deliberately NOT its non-cryptographic contentDigest), `prompt-registry`
+  // and `governed-knowledge` (authoritative context here is SIMULATED, never a lookup), and anything
+  // Postgres or `event-backbone` (no I/O, no migration).
+  "references": [
+    { "path": "../riya-conversation-continuity/tsconfig.build.json" },
+    { "path": "../riya-conversation-evolution/tsconfig.build.json" },
+    { "path": "../riya-quality-evaluation/tsconfig.build.json" }
+  ],
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/tests/**"]
+}

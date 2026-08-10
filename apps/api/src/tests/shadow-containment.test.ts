@@ -477,6 +477,18 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // randomness, no I/O, no database, no compare-and-set, no HTTP and no business authority, and
       // it depends only on `riya-agent` and `riya-conversation-continuity`.
       'riya-conversation-evolution',
+      // RID-F1 (ADR-0107): the OFFLINE Riya intelligence dataset factory -- the canonical
+      // multi-turn training trajectory, lineage-isolated splits, the protected RWC-P10
+      // exam-leakage firewall, deterministic privacy/secret gates, the volatile-business-fact
+      // rule, risk-based review, SHA-256 dataset identity and DERIVED model-neutral SFT rows.
+      // Still an EXACT set match; it records an authorised addition, it does not relax the
+      // assertion. It TRAINS NOTHING and INVOKES NOTHING: no model, provider, gateway, HTTP,
+      // LLM-as-judge, embedding, tokenizer, PyTorch/PEFT/LoRA/TRL, checkpoint or training loop,
+      // no database, migration or deployment, and no runtime may import it. Sources are
+      // synthetic only -- a live conversation is not representable -- and release evidence is
+      // always syntheticOnly with trainingApproval=false. Its ONE Node capability is
+      // node:crypto, used solely for SHA-256 artifact identity.
+      'riya-intelligence-dataset',
       // RWC-P4B (ADR-0099): the Riya half of the ONE structured model call -- the content-minimised
       // continuity projection sent as the single user message, the strict reply+observations schema,
       // the narrowed model provenance vocabulary, and the check that the model's claimed question

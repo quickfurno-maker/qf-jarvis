@@ -1,0 +1,29 @@
+{
+  "name": "@qf-jarvis/riya-intelligence-dataset",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis Riya intelligence dataset foundation and leakage firewall (RID-F1, ADR-0107). The OFFLINE dataset factory for Riya post-training: the canonical multi-turn TRAJECTORY is the source of truth, and model-specific training rows are DERIVED from it rather than authored. It trains nothing and invokes nothing -- no model, provider, gateway, local inference, HTTP, LLM-as-judge, embeddings, vector store, tokenizer, PyTorch, PEFT/LoRA/QLoRA/TRL, checkpoint or training loop, and no dataset item can auto-start a run. Splits are TRAIN/VALIDATION/HOLDOUT and are isolated by LINEAGE, so every synthetic variant of an example stays with its root; the protected RWC-P10 golden corpus is exam data and is NOT a split, with exact-copy rejection and deterministic near-copy quarantine that uses token overlap rather than any model. Sources are synthetic only -- live chat, CRM and WhatsApp exports are not representable -- and deterministic privacy/secret gates reject email, phone, API key, bearer/service-role token, private key, UPI-like handle, URL and governed production-domain strings without ever echoing the matched text. Volatile business truth stays OUT of weights: an assistant turn asserting a price, availability, policy or warranty must cite a fact supplied by an EARLIER synthetic authoritative context. Reviews are risk-based and content-free. Dataset artifacts carry cryptographic SHA-256 content identity via node:crypto -- integrity, not authorship -- and release evidence is always syntheticOnly with trainingApproval=false. No database, no migration, no deployment, no QuickFurno data. Depends on @qf-jarvis/riya-conversation-continuity, @qf-jarvis/riya-conversation-evolution, @qf-jarvis/riya-quality-evaluation and zod.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "default": "./dist/testing/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/riya-conversation-continuity": "workspace:*",
+    "@qf-jarvis/riya-conversation-evolution": "workspace:*",
+    "@qf-jarvis/riya-quality-evaluation": "workspace:*",
+    "zod": "4.4.3"
+  }
+}

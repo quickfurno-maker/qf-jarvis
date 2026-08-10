@@ -296,30 +296,48 @@ describe('the root surface is a vocabulary, factories and three services', () =>
 // ---------------------------------------------------------------------------
 
 describe('no runtime, service or application reaches this package', () => {
-  it('is imported by nothing outside itself', () => {
-    // P10 changes no runtime behaviour, so nothing that runs a conversation may name it. A single
-    // import from `jarvis-runtime` or the web service would make an evaluator part of the thing it
+  it('is imported by nothing that runs a conversation', () => {
+    // P10 changes no runtime behaviour, so nothing that SERVES a turn may name it. A single import
+    // from `jarvis-runtime` or the web service would make an evaluator part of the thing it
     // evaluates.
-    const roots = [join(REPO_ROOT, 'packages'), join(REPO_ROOT, 'apps')];
-    const importers: string[] = [];
-    for (const root of roots) {
+    //
+    // RID-F1 (ADR-0107) adds the first and only permitted importer, and it is the opposite of a
+    // runtime: `riya-intelligence-dataset` is OFFLINE authoring infrastructure that reuses P10's
+    // language, interaction, dimension and discovery-field vocabularies rather than forking them.
+    // A second sales taxonomy beside P10's would make dataset coverage and evaluation coverage
+    // incomparable -- you could not say "the corpus covers what the exam measures" -- and the two
+    // would drift the first time either was extended.
+    //
+    // The set is pinned EXACTLY and no APPLICATION may import the contract at all.
+    const ALLOWED_PACKAGE_IMPORTERS = ['riya-intelligence-dataset'];
+    const importingPackages = new Set<string>();
+    const importingApps: string[] = [];
+
+    for (const [root, isApp] of [
+      [join(REPO_ROOT, 'packages'), false],
+      [join(REPO_ROOT, 'apps'), true],
+    ] as const) {
       for (const entry of readdirSync(root)) {
         if (entry === 'riya-quality-evaluation') continue;
-        const src = join(root, entry, 'src');
         let files: string[];
         try {
-          files = walk(src, false);
+          files = walk(join(root, entry, 'src'), false);
         } catch {
           continue;
         }
         for (const file of files) {
           if (readFileSync(file, 'utf8').includes('@qf-jarvis/riya-quality-evaluation')) {
-            importers.push(file);
+            if (isApp) {
+              importingApps.push(file);
+            } else {
+              importingPackages.add(entry);
+            }
           }
         }
       }
     }
-    expect(importers).toStrictEqual([]);
+    expect(importingApps).toStrictEqual([]);
+    expect([...importingPackages].sort()).toStrictEqual(ALLOWED_PACKAGE_IMPORTERS);
   });
 
   it('adds no migration', () => {
