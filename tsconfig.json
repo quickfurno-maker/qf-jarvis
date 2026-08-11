@@ -48,6 +48,7 @@
     { "path": "./packages/riya-conversation-completion/tsconfig.build.json" },
     { "path": "./packages/riya-quality-evaluation/tsconfig.build.json" },
     { "path": "./packages/riya-intelligence-dataset/tsconfig.build.json" },
-    { "path": "./packages/riya-model-benchmark/tsconfig.build.json" }
+    { "path": "./packages/riya-model-benchmark/tsconfig.build.json" },
+    { "path": "./packages/riya-model-benchmark-harness/tsconfig.build.json" }
   ]
 }

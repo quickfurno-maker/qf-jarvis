@@ -110,6 +110,8 @@ export type {
 // Derived DISPLAY metrics. Not evidence, not scores.
 export {
   successRateBasisPoints,
+  successfulRequestsPerSecondMilli,
+  aggregateOutputTokensPerSecond,
   approximateDecodeTokensPerSecondP50,
   approximateDecodeTokensPerSecondP95,
   meanOutputTokensPerSuccess,

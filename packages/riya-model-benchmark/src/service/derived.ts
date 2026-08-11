@@ -50,6 +50,44 @@ export function approximateDecodeTokensPerSecondP95(
   return Math.floor(MICROS_PER_SECOND / micros);
 }
 
+/**
+ * Successful replies per second, in MILLI-replies so the integer keeps three decimals.
+ *
+ * `2_500` means 2.5 replies/sec. Integer arithmetic because a float would make two machines disagree
+ * about a digest-adjacent number, and this is the figure the whole workstream is pointed at.
+ *
+ * `undefined` when the observation predates `measuredWindowMicros`. Deliberately not approximated from
+ * `concurrency / p50` — that estimate is wrong the moment a target batches, queues or has a tail, and
+ * it would be indistinguishable from a real measurement in a report.
+ */
+export function successfulRequestsPerSecondMilli(
+  observation: RiyaBenchmarkObservationV1,
+): number | undefined {
+  const window = observation.measuredWindowMicros;
+  if (window === undefined) {
+    return undefined;
+  }
+  // Safe at the bounds: 1e6 requests x 1e6 x 1e3 = 1e15, under Number.MAX_SAFE_INTEGER (~9.0e15).
+  return Math.floor((observation.successfulRequests * MICROS_PER_SECOND * 1_000) / window);
+}
+
+/**
+ * Aggregate output tokens per second across the measured window.
+ *
+ * `undefined` when the window is absent or nothing was produced — a run that decoded nothing has no
+ * throughput, and reporting zero would sit in a table beside runs that actually ran.
+ */
+export function aggregateOutputTokensPerSecond(
+  observation: RiyaBenchmarkObservationV1,
+): number | undefined {
+  const window = observation.measuredWindowMicros;
+  if (window === undefined || observation.outputTokensTotal === 0) {
+    return undefined;
+  }
+  // Safe at the bounds: 1e9 tokens x 1e6 = 1e15, under Number.MAX_SAFE_INTEGER.
+  return Math.floor((observation.outputTokensTotal * MICROS_PER_SECOND) / window);
+}
+
 /** Mean output tokens per successful request, rounded down. `undefined` when nothing succeeded. */
 export function meanOutputTokensPerSuccess(
   observation: RiyaBenchmarkObservationV1,
