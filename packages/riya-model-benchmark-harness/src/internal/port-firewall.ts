@@ -24,6 +24,22 @@
  * object looks empty to both. `Reflect.ownKeys` does not, so the own-key gate below runs first and
  * treats a symbol or a hidden property as exactly what it is: an unknown key.
  *
+ * ### Zod never sees a foreign object
+ *
+ * An exact key set is not enough either, because a LEGITIMATE key can be an accessor. `safeParse` is a
+ * validation API, not an exception sandbox: it reads the properties it is asked about, so a getter on
+ * `outcome` would run foreign code during parsing and its throw would escape as itself — and parsing
+ * deliberately sits outside `callForeign`, where nothing would replace it.
+ *
+ * So every data DTO is SNAPSHOTTED first: own keys reflected, accessors refused without being invoked,
+ * data values copied into a fresh plain object, and only that object handed to a schema.
+ *
+ * ### Even the reflection is foreign
+ *
+ * `Reflect.ownKeys` and `Object.getOwnPropertyDescriptor` run proxy traps, and a trap can throw. Both
+ * are therefore performed through the same normalizing helper as any other foreign call. Looking at an
+ * untrusted object is itself an operation that can fail, and it fails closed.
+ *
  * ### A foreign `RiyaHarnessError` is not a harness error
  *
  * The error class is exported, so foreign code can construct one, pick whichever closed code suits it,
@@ -55,22 +71,9 @@ import type {
   RiyaBenchmarkTargetDescriptor,
 } from '../contracts/ports.js';
 
-/**
- * True when `value` is an object whose EVERY own key — enumerable or not, string or symbol — is in
- * `allowed`.
- *
- * Absence is not checked here; the schemas below decide what must be present.
- */
-function ownKeysWithin(value: unknown, allowed: readonly string[]): boolean {
-  if (typeof value !== 'object' || value === null) {
-    return false;
-  }
-  for (const key of Reflect.ownKeys(value)) {
-    if (typeof key !== 'string' || !allowed.includes(key)) {
-      return false;
-    }
-  }
-  return true;
+/** Own keys of a foreign object, with a hostile `ownKeys` proxy trap normalized rather than raised. */
+function safeOwnKeys(value: object, code: RiyaHarnessErrorCode): readonly (string | symbol)[] {
+  return callForeignSync(() => Reflect.ownKeys(value), code);
 }
 
 /**
@@ -80,14 +83,22 @@ function ownKeysWithin(value: unknown, allowed: readonly string[]): boolean {
  * runs foreign code outside every normalization boundary this package has — free to throw a prompt, or
  * to do something less polite. A descriptor lookup reports the accessor instead of invoking it.
  *
- * Returns `undefined` for a non-object, an absent key, or an accessor. Nothing here decides whether the
- * value is acceptable; it only makes looking safe.
+ * The lookup itself can be a proxy trap, and a trap can throw; that is swallowed here rather than
+ * normalized, because this function's callers ask "is there something safe to use" and the honest
+ * answer for an object that will not even be inspected is no.
+ *
+ * Returns `undefined` for a non-object, an absent key, an accessor, or a hostile trap.
  */
 export function ownDataProperty(value: unknown, key: string): unknown {
   if (typeof value !== 'object' || value === null) {
     return undefined;
   }
-  const descriptor = Object.getOwnPropertyDescriptor(value, key);
+  let descriptor: PropertyDescriptor | undefined;
+  try {
+    descriptor = Object.getOwnPropertyDescriptor(value, key);
+  } catch {
+    return undefined;
+  }
   if (descriptor === undefined || descriptor.get !== undefined || descriptor.set !== undefined) {
     return undefined;
   }
@@ -100,9 +111,53 @@ function assertOwnKeysWithin(
   allowed: readonly string[],
   code: RiyaHarnessErrorCode,
 ): void {
-  if (!ownKeysWithin(value, allowed)) {
+  if (typeof value !== 'object' || value === null) {
     throw new RiyaHarnessError(code);
   }
+  for (const key of safeOwnKeys(value, code)) {
+    if (typeof key !== 'string' || !allowed.includes(key)) {
+      throw new RiyaHarnessError(code);
+    }
+  }
+}
+
+/**
+ * A fresh plain object holding the foreign value's own DATA properties, and nothing else.
+ *
+ * This is what a schema gets to see. The foreign object is reflected over, never read from: an
+ * accessor on an allowed key is refused WITHOUT being invoked, which is the whole point — `outcome`
+ * being a legitimate key says nothing about whether reading it runs somebody's code.
+ *
+ * PRESENCE IS PRESERVED. Only keys the object actually has are copied, because absence carries
+ * meaning: a `FAILURE` result legitimately has no `outputTokens`, an unmeasured probe legitimately
+ * reports no bytes, and manufacturing those keys as `undefined` would change which union arm matched
+ * and which optional fields a rebuilt artifact carries.
+ */
+function snapshotOwnDataObject(
+  value: unknown,
+  allowed: readonly string[],
+  code: RiyaHarnessErrorCode,
+): Record<string, unknown> {
+  if (typeof value !== 'object' || value === null) {
+    throw new RiyaHarnessError(code);
+  }
+  const snapshot: Record<string, unknown> = {};
+  for (const key of safeOwnKeys(value, code)) {
+    if (typeof key !== 'string' || !allowed.includes(key)) {
+      throw new RiyaHarnessError(code);
+    }
+    const descriptor = callForeignSync(() => Object.getOwnPropertyDescriptor(value, key), code);
+    if (descriptor === undefined) {
+      // `ownKeys` claimed a key the descriptor lookup denies. An object that cannot describe itself
+      // consistently is not one to take numbers from.
+      throw new RiyaHarnessError(code);
+    }
+    if (descriptor.get !== undefined || descriptor.set !== undefined) {
+      throw new RiyaHarnessError(code);
+    }
+    snapshot[key] = descriptor.value;
+  }
+  return snapshot;
 }
 
 const DESCRIPTOR_KEYS = ['subject', 'environment'] as const;
@@ -174,12 +229,12 @@ const memorySchema = z
  * the constructors that follow are what decide whether it is a subject and an environment.
  */
 export function parseTargetDescriptor(value: unknown): RiyaBenchmarkTargetDescriptor {
-  assertOwnKeysWithin(value, DESCRIPTOR_KEYS, 'TARGET_PROTOCOL_INVALID');
-  const parsed = descriptorSchema.safeParse(value);
+  const snapshot = snapshotOwnDataObject(value, DESCRIPTOR_KEYS, 'TARGET_PROTOCOL_INVALID');
+  const parsed = descriptorSchema.safeParse(snapshot);
   if (!parsed.success) {
     throw new RiyaHarnessError('TARGET_PROTOCOL_INVALID');
   }
-  if (!Object.hasOwn(parsed.data, 'subject') || !Object.hasOwn(parsed.data, 'environment')) {
+  if (!Object.hasOwn(snapshot, 'subject') || !Object.hasOwn(snapshot, 'environment')) {
     throw new RiyaHarnessError('TARGET_PROTOCOL_INVALID');
   }
   return parsed.data as RiyaBenchmarkTargetDescriptor;
@@ -187,8 +242,9 @@ export function parseTargetDescriptor(value: unknown): RiyaBenchmarkTargetDescri
 
 /** A prepared case, rebuilt. Anything extra — a prompt, a message list — is refused. */
 export function parsePreparedCase(value: unknown): RiyaBenchmarkPreparedCase {
-  assertOwnKeysWithin(value, PREPARED_KEYS, 'TARGET_PROTOCOL_INVALID');
-  const parsed = preparedSchema.safeParse(value);
+  const parsed = preparedSchema.safeParse(
+    snapshotOwnDataObject(value, PREPARED_KEYS, 'TARGET_PROTOCOL_INVALID'),
+  );
   if (!parsed.success) {
     throw new RiyaHarnessError('TARGET_PROTOCOL_INVALID');
   }
@@ -204,8 +260,9 @@ export function parsePreparedCase(value: unknown): RiyaBenchmarkPreparedCase {
 
 /** A terminal result, rebuilt. No raw output survives this. */
 export function parseInvocationResult(value: unknown): RiyaBenchmarkInvocationResult {
-  assertOwnKeysWithin(value, INVOCATION_RESULT_KEYS, 'TARGET_PROTOCOL_INVALID');
-  const parsed = invocationResultSchema.safeParse(value);
+  const parsed = invocationResultSchema.safeParse(
+    snapshotOwnDataObject(value, INVOCATION_RESULT_KEYS, 'TARGET_PROTOCOL_INVALID'),
+  );
   if (!parsed.success) {
     throw new RiyaHarnessError('TARGET_PROTOCOL_INVALID');
   }
@@ -226,8 +283,9 @@ export function parseInvocationResult(value: unknown): RiyaBenchmarkInvocationRe
 
 /** A memory reading, rebuilt. A machine name, a serial or a device path has nowhere to sit. */
 export function parseMemoryReading(value: unknown): RiyaBenchmarkMemoryReading {
-  assertOwnKeysWithin(value, MEMORY_READING_KEYS, 'MEMORY_MEASUREMENT_INVALID');
-  const parsed = memorySchema.safeParse(value);
+  const parsed = memorySchema.safeParse(
+    snapshotOwnDataObject(value, MEMORY_READING_KEYS, 'MEMORY_MEASUREMENT_INVALID'),
+  );
   if (!parsed.success) {
     throw new RiyaHarnessError('MEMORY_MEASUREMENT_INVALID');
   }

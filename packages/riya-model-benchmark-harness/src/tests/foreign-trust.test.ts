@@ -31,7 +31,15 @@ import type {
   RiyaBenchmarkSuiteCaseV1,
   RiyaBenchmarkSuitePlanV1,
 } from '../contracts/suite-plan.js';
-import { callForeign, callForeignSync, parseMemoryCasePort } from '../internal/port-firewall.js';
+import {
+  callForeign,
+  callForeignSync,
+  parseInvocationResult,
+  parseMemoryCasePort,
+  parseMemoryReading,
+  parsePreparedCase,
+  parseTargetDescriptor,
+} from '../internal/port-firewall.js';
 import { runRiyaBenchmarkSuite } from '../service/run-suite.js';
 import type { RunRiyaBenchmarkSuiteOptions } from '../service/run-suite.js';
 import {
@@ -735,5 +743,236 @@ describe('a case that was OPENED is closed, even if its handle cannot be proved'
     expect(probe.finishedCaseIds).toStrictEqual(['case.alpha']);
     expect(probe.abortedCaseIds).toStrictEqual([]);
     expect(probe.openCases).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A legitimate key can still be an accessor, and reflection can still be hostile.
+// ---------------------------------------------------------------------------
+
+interface GetterProbe {
+  fired: boolean;
+}
+
+/** Give `base` an own enumerable ACCESSOR on an otherwise legitimate key. */
+function withThrowingGetter<T extends object>(base: T, key: string, probe: GetterProbe): T {
+  Object.defineProperty(base, key, {
+    get: (): never => {
+      probe.fired = true;
+      throw new Error(`getter for ${key} fired :: ${SECRET}`);
+    },
+    enumerable: true,
+    configurable: true,
+  });
+  return base;
+}
+
+/** A proxy whose `ownKeys` trap refuses to be reflected over. */
+function hostileOwnKeys(): object {
+  return new Proxy(
+    {},
+    {
+      ownKeys: (): never => {
+        throw new Error(`ownKeys trap :: ${SECRET}`);
+      },
+    },
+  );
+}
+
+/** A proxy that names allowed keys and then refuses to describe them. */
+function hostileDescriptor(keys: readonly string[]): object {
+  return new Proxy(
+    {},
+    {
+      ownKeys: (): string[] => [...keys],
+      getOwnPropertyDescriptor: (): never => {
+        throw new Error(`getOwnPropertyDescriptor trap :: ${SECRET}`);
+      },
+    },
+  );
+}
+
+const VALID_PREPARED = {
+  workloadCaseId: 'case.alpha',
+  promptProfileDigest: syntheticDigest('face'),
+  inputTokenCount: 512,
+  maximumOutputTokens: 256,
+  samplingConfigDigest: syntheticDigest('dad'),
+  streaming: true,
+};
+
+describe('a schema never sees a foreign object', () => {
+  it('A DESCRIPTOR GETTER ON A LEGITIMATE KEY NEVER RUNS', async () => {
+    const probe: GetterProbe = { fired: false };
+    const descriptorRaw = withThrowingGetter({ subject: syntheticSubject() }, 'environment', probe);
+    const { run } = attempt({ target: { descriptorRaw } });
+    expectCleanHarnessError(await errorOf(run), 'TARGET_PROTOCOL_INVALID');
+    expect(probe.fired).toBe(false);
+  });
+
+  it('a prepared-case getter on a legitimate key never runs', async () => {
+    const probe: GetterProbe = { fired: false };
+    const preparedRaw = withThrowingGetter({ ...VALID_PREPARED }, 'inputTokenCount', probe);
+    const { run } = attempt({ target: { preparedRaw } });
+    expectCleanHarnessError(await errorOf(run), 'TARGET_PROTOCOL_INVALID');
+    expect(probe.fired).toBe(false);
+  });
+
+  it('AN `outcome` GETTER NEVER RUNS — the discriminant proves Zod got the snapshot', async () => {
+    // The union discriminant is the property a parser MUST read. If anything still handed the
+    // original object to the schema, this getter would fire and throw a prompt out of `safeParse`.
+    const probe: GetterProbe = { fired: false };
+    const rawResult = withThrowingGetter({ inputTokens: 512, outputTokens: 8 }, 'outcome', probe);
+    const { run } = attempt({
+      target: {
+        script: [
+          { firstOutputAfterMicros: 100, completeAfterMicros: 400, outcome: 'SUCCESS', rawResult },
+        ],
+      },
+    });
+    expectCleanHarnessError(await errorOf(run), 'TARGET_PROTOCOL_INVALID');
+    expect(probe.fired).toBe(false);
+  });
+
+  it('a memory-reading getter on a legitimate key never runs', async () => {
+    const probe: GetterProbe = { fired: false };
+    const readingRaw = withThrowingGetter({}, 'peakHostMemoryBytes', probe);
+    const clock = new ManualClock();
+    const { run } = attempt({ clock, memoryProbe: new FakeMemoryProbe(clock, { readingRaw }) });
+    expectCleanHarnessError(await errorOf(run), 'MEMORY_MEASUREMENT_INVALID');
+    expect(probe.fired).toBe(false);
+  });
+
+  it.each([
+    ['the descriptor parser', (): unknown => parseTargetDescriptor(hostileOwnKeys())],
+    ['the prepared parser', (): unknown => parsePreparedCase(hostileOwnKeys())],
+    ['the result parser', (): unknown => parseInvocationResult(hostileOwnKeys())],
+  ])('a hostile ownKeys trap does not escape %s', (_name, call) => {
+    let caught: unknown;
+    try {
+      call();
+    } catch (error: unknown) {
+      caught = error;
+    }
+    expectCleanHarnessError(caught, 'TARGET_PROTOCOL_INVALID');
+  });
+
+  it('a hostile ownKeys trap does not escape the memory parser', () => {
+    let caught: unknown;
+    try {
+      parseMemoryReading(hostileOwnKeys());
+    } catch (error: unknown) {
+      caught = error;
+    }
+    expectCleanHarnessError(caught, 'MEMORY_MEASUREMENT_INVALID');
+  });
+
+  it('A HOSTILE getOwnPropertyDescriptor TRAP DOES NOT ESCAPE EITHER', async () => {
+    // Looking at an untrusted object is itself an operation that can fail. It fails closed.
+    const { run } = attempt({ target: { descriptorRaw: hostileDescriptor(['subject']) } });
+    expectCleanHarnessError(await errorOf(run), 'TARGET_PROTOCOL_INVALID');
+
+    let caught: unknown;
+    try {
+      parseInvocationResult(hostileDescriptor(['outcome', 'inputTokens', 'outputTokens']));
+    } catch (error: unknown) {
+      caught = error;
+    }
+    expectCleanHarnessError(caught, 'TARGET_PROTOCOL_INVALID');
+  });
+
+  it('a memory reading behind a hostile descriptor trap is refused cleanly', async () => {
+    const clock = new ManualClock();
+    const { run } = attempt({
+      clock,
+      memoryProbe: new FakeMemoryProbe(clock, {
+        readingRaw: hostileDescriptor(['peakHostMemoryBytes']),
+      }),
+    });
+    expectCleanHarnessError(await errorOf(run), 'MEMORY_MEASUREMENT_INVALID');
+  });
+
+  it('an unproved HANDLE behind a hostile descriptor trap leaks nothing', async () => {
+    // Nothing safely discoverable means no cleanup is attempted — recovery does not invent a
+    // capability it could not inspect, and the validation failure stays authoritative.
+    const clock = new ManualClock();
+    const { target, run } = attempt({
+      clock,
+      memoryProbe: forgedProbe({
+        beginMeasuredCase: () => Promise.resolve(hostileDescriptor(['finish', 'abort'])),
+      }),
+    });
+    expectCleanHarnessError(await errorOf(run), 'MEMORY_MEASUREMENT_INVALID');
+    expect(target.invokedOrdinals).toStrictEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The snapshot copies what is there, and nothing that is not.
+// ---------------------------------------------------------------------------
+
+describe('presence and absence both survive the snapshot', () => {
+  it('a FAILURE with no token count stays a bare failure', () => {
+    const result = parseInvocationResult({ outcome: 'FAILURE' });
+    expect(result).toStrictEqual({ outcome: 'FAILURE' });
+    // Not `{ outcome: 'FAILURE', inputTokens: undefined }` — an optional field that materialized as
+    // undefined would reach an RMB-A constructor and change what the artifact claims.
+    expect(Object.hasOwn(result, 'inputTokens')).toBe(false);
+  });
+
+  it('a FAILURE that reports its input keeps it', () => {
+    expect(parseInvocationResult({ outcome: 'FAILURE', inputTokens: 512 })).toStrictEqual({
+      outcome: 'FAILURE',
+      inputTokens: 512,
+    });
+  });
+
+  it('a SUCCESS keeps both counts', () => {
+    expect(
+      parseInvocationResult({ outcome: 'SUCCESS', inputTokens: 512, outputTokens: 8 }),
+    ).toStrictEqual({ outcome: 'SUCCESS', inputTokens: 512, outputTokens: 8 });
+  });
+
+  it('an empty memory reading stays empty', () => {
+    const reading = parseMemoryReading({});
+    expect(reading).toStrictEqual({});
+    expect(Object.hasOwn(reading, 'peakHostMemoryBytes')).toBe(false);
+    expect(Object.hasOwn(reading, 'peakAcceleratorMemoryBytes')).toBe(false);
+  });
+
+  it('a one-sided memory reading keeps only the side it has', () => {
+    expect(parseMemoryReading({ peakHostMemoryBytes: 4_096 })).toStrictEqual({
+      peakHostMemoryBytes: 4_096,
+    });
+  });
+
+  it('a prepared case survives the snapshot unchanged', () => {
+    expect(parsePreparedCase({ ...VALID_PREPARED })).toStrictEqual(VALID_PREPARED);
+  });
+
+  it('and a whole run still produces the same evidence', async () => {
+    const clock = new ManualClock();
+    const probe = new FakeMemoryProbe(clock, {});
+    const target = new FakeTarget(clock, {
+      memoryObserver: probe,
+      memoryBytesByInvocation: [9_000_000_000, 3_000_000_000, 3_500_000_000],
+    });
+    const set = await runRiyaBenchmarkSuite({
+      plan: PLAN([CASE({ warmupRequestCount: 1, measuredRequestCount: 2 })]),
+      target,
+      clock,
+      createdAt: SYNTHETIC_HARNESS_INSTANT,
+      memoryProbe: probe,
+    });
+    const observation = set.results[0]?.observation;
+    expect(observation?.successfulRequests).toBe(2);
+    expect(observation?.failedRequests).toBe(0);
+    expect(observation?.inputTokensTotal).toBe(1_024);
+    expect(observation?.outputTokensTotal).toBe(16);
+    expect(observation?.measuredWindowMicros).toBe(1_000);
+    expect(observation?.peakHostMemoryBytes).toBe(3_500_000_000);
+    expect(set.results[0]?.subject.release.modelId).toBe('model.alpha');
+    expect(set.results[0]?.syntheticWorkload).toBe(true);
+    expect(set.results[0]?.productionApproval).toBe(false);
   });
 });
