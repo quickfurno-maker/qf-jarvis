@@ -78,6 +78,7 @@ import type { RiyaBenchmarkSuiteIdentity } from '../internal/identity-lock.js';
 import {
   callForeign,
   callForeignSync,
+  ownDataProperty,
   parseInvocationResult,
   parseMemoryCasePort,
   parsePreparedCase,
@@ -458,6 +459,42 @@ async function assertIdentityUnchanged(
   }
 }
 
+/**
+ * Best-effort close of a case whose HANDLE could not be proved.
+ *
+ * `beginMeasuredCase` having resolved means the probe already opened something — a device context, a
+ * counter, a file — and the harness owns closing it from that moment. If the handle it handed back
+ * then fails validation, rejecting without trying would leave that resource open for the life of the
+ * process, which is precisely the leak the lifecycle exists to prevent.
+ *
+ * Nothing about the handle has been proved at this point, so the recovery is deliberately timid:
+ * `abort` is discovered by DESCRIPTOR rather than read, because reading it could run an accessor and
+ * that would make the recovery path a new hole of exactly the kind it is cleaning up after. No
+ * prototype method is accepted; an unproved handle earns no inherited capability.
+ */
+async function abortUnprovenMemoryCase(rawCase: unknown): Promise<void> {
+  const abort = ownDataProperty(rawCase, 'abort');
+  if (typeof abort !== 'function') {
+    // Nothing safe to call. The probe's own resource is its problem now; there is no honest way for
+    // the harness to reach it, and inventing one would mean executing whatever this object offers.
+    return;
+  }
+  const abortCall = abort as (this: unknown) => unknown;
+  try {
+    const completion = await callForeign(
+      () => abortCall.call(rawCase),
+      'MEMORY_MEASUREMENT_INVALID',
+    );
+    if (completion !== undefined) {
+      // Cleanup that resolves with data is data. Refused rather than left incidentally unused.
+      throw new RiyaHarnessError('MEMORY_MEASUREMENT_INVALID');
+    }
+  } catch {
+    // Swallowed, both ways: the handle-validation failure is the authoritative one, and a complaint
+    // about the cleanup on top of it would send whoever reads the error to the wrong place.
+  }
+}
+
 /** Release an open memory case. A cleanup failure never replaces the failure that caused it. */
 async function abortMemoryCase(memoryCase: RiyaBenchmarkMemoryCasePort): Promise<void> {
   try {
@@ -576,7 +613,16 @@ export async function runRiyaBenchmarkSuite(
         // A HANDLE is the one port value that gets stored rather than read, so it is the one an
         // adapter could hang a transcript off and never be looked at. Rebuilt immediately, into an
         // object the harness owns, keeping only the two capabilities it needs.
-        openMemoryCase = parseMemoryCasePort(rawCase);
+        //
+        // The case is already OPEN by now, so a handle that fails to prove itself still has to be
+        // closed. This is outside the try below because that one guards the measured phase, and the
+        // failure here happens before there is a measured phase to guard.
+        try {
+          openMemoryCase = parseMemoryCasePort(rawCase);
+        } catch (error: unknown) {
+          await abortUnprovenMemoryCase(rawCase);
+          throw error;
+        }
       }
 
       try {

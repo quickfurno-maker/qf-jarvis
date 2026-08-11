@@ -533,3 +533,207 @@ describe('a well-behaved target and probe are unaffected', () => {
     expect(set.results[0]?.productionApproval).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// An opened case is closed, even when its handle turns out to be unusable.
+// ---------------------------------------------------------------------------
+
+/** A promise the spec opens by hand. No timers here either. */
+function gate(): { readonly opened: Promise<void>; readonly open: () => void } {
+  let resolveOpened: () => void = () => undefined;
+  const opened = new Promise<void>((resolve) => {
+    resolveOpened = resolve;
+  });
+  return {
+    opened,
+    open: (): void => {
+      resolveOpened();
+    },
+  };
+}
+
+/** Let pending microtasks run, so "still pending" means pending and not merely unscheduled. */
+const settleMicrotasks = async (): Promise<void> => {
+  for (let index = 0; index < 16; index += 1) {
+    await Promise.resolve();
+  }
+};
+
+interface CleanupRecord {
+  abortCalls: number;
+  openCases: number;
+  abortCompleted: boolean;
+}
+
+describe('a case that was OPENED is closed, even if its handle cannot be proved', () => {
+  it('BEST-EFFORT ABORTS A MALFORMED HANDLE, AND WAITS FOR IT', async () => {
+    // `beginMeasuredCase` resolved, so the probe has already opened something. Rejecting on the
+    // malformed handle without trying to close it would strand that resource for the life of the
+    // process — the exact leak the begin/finish lifecycle exists to prevent.
+    const record: CleanupRecord = { abortCalls: 0, openCases: 0, abortCompleted: false };
+    const entered = gate();
+    const release = gate();
+    const clock = new ManualClock();
+    const target = new FakeTarget(clock);
+
+    const run = runRiyaBenchmarkSuite({
+      plan: PLAN([CASE({ warmupRequestCount: 1, measuredRequestCount: 2 })]),
+      target,
+      clock,
+      createdAt: SYNTHETIC_HARNESS_INSTANT,
+      memoryProbe: forgedProbe({
+        beginMeasuredCase: () => {
+          record.openCases += 1;
+          return Promise.resolve({
+            finish: () => Promise.resolve({}),
+            abort: async (): Promise<void> => {
+              record.abortCalls += 1;
+              entered.open();
+              await release.opened;
+              record.openCases -= 1;
+              record.abortCompleted = true;
+            },
+            transcript: SECRET,
+          });
+        },
+      }),
+    });
+    void run.catch(() => undefined);
+    const settled = run.then(
+      () => 'RESOLVED',
+      () => 'REJECTED',
+    );
+
+    // Raced rather than awaited, so a harness that skipped the cleanup fails an assertion here
+    // instead of hanging on a gate nothing will ever open.
+    expect(await Promise.race([entered.opened.then(() => 'ENTERED'), settled])).toBe('ENTERED');
+    await settleMicrotasks();
+    // The cleanup is outstanding, and the suite has not returned.
+    expect(record.abortCompleted).toBe(false);
+    expect(await Promise.race([settled, Promise.resolve('PENDING')])).toBe('PENDING');
+
+    release.open();
+    expectCleanHarnessError(await errorOf(() => run), 'MEMORY_MEASUREMENT_INVALID');
+    expect(record.abortCalls).toBe(1);
+    expect(record.abortCompleted).toBe(true);
+    expect(record.openCases).toBe(0);
+    // Warmup ran; the measured phase never opened.
+    expect(target.invokedOrdinals).toStrictEqual([0]);
+  });
+
+  it.each([
+    [
+      'a rejecting abort',
+      (): unknown => Promise.reject(taintedHarnessError('TARGET_CASE_MISMATCH')),
+    ],
+    [
+      'a throwing abort',
+      (): unknown => {
+        throw new TypeError(`teardown exploded :: ${SECRET}`);
+      },
+    ],
+    ['an abort that resolves data', (): unknown => Promise.resolve({ freedBytes: 4_096, SECRET })],
+  ])('%s does not replace the handle-validation failure', async (_name, abort) => {
+    const clock = new ManualClock();
+    const { run } = attempt({
+      clock,
+      memoryProbe: forgedProbe({
+        beginMeasuredCase: () =>
+          Promise.resolve({ finish: () => Promise.resolve({}), abort, transcript: SECRET }),
+      }),
+    });
+    expectCleanHarnessError(await errorOf(run), 'MEMORY_MEASUREMENT_INVALID');
+  });
+
+  it('RECOVERY DOES NOT FIRE AN ABORT GETTER — it looks by descriptor', async () => {
+    // Reading `handle.abort` would run foreign code outside every normalization boundary. That would
+    // make the cleanup path a new hole of exactly the kind it exists to clean up after.
+    let getterFired = false;
+    const handle: Record<string, unknown> = {
+      finish: () => Promise.resolve({}),
+      transcript: SECRET,
+    };
+    Object.defineProperty(handle, 'abort', {
+      get: (): never => {
+        getterFired = true;
+        throw new Error(`abort getter fired :: ${SECRET}`);
+      },
+      enumerable: true,
+      configurable: true,
+    });
+
+    const clock = new ManualClock();
+    const { target, run } = attempt({
+      clock,
+      memoryProbe: forgedProbe({ beginMeasuredCase: () => Promise.resolve(handle) }),
+    });
+    expectCleanHarnessError(await errorOf(run), 'MEMORY_MEASUREMENT_INVALID');
+    expect(getterFired).toBe(false);
+    expect(target.invokedOrdinals).toStrictEqual([]);
+  });
+
+  it('and VALIDATION does not fire one either', async () => {
+    // The same hazard one step earlier: a handle with no extra key reaches the property reads inside
+    // the parser, so those are descriptor lookups too.
+    let getterFired = false;
+    const handle: Record<string, unknown> = { abort: () => Promise.resolve(undefined) };
+    Object.defineProperty(handle, 'finish', {
+      get: (): never => {
+        getterFired = true;
+        throw new Error(`finish getter fired :: ${SECRET}`);
+      },
+      enumerable: true,
+      configurable: true,
+    });
+
+    expect(() => parseMemoryCasePort(handle)).toThrow(RiyaHarnessError);
+    expect(getterFired).toBe(false);
+
+    const clock = new ManualClock();
+    const { run } = attempt({
+      clock,
+      memoryProbe: forgedProbe({ beginMeasuredCase: () => Promise.resolve(handle) }),
+    });
+    expectCleanHarnessError(await errorOf(run), 'MEMORY_MEASUREMENT_INVALID');
+    expect(getterFired).toBe(false);
+  });
+
+  it('an inherited abort is not a capability an unproved handle has earned', async () => {
+    // Conservative on purpose: the governed handle contract is exact OWN shape, so recovery accepts
+    // nothing from a prototype either.
+    let inheritedCalls = 0;
+    const prototype = {
+      abort: (): Promise<void> => {
+        inheritedCalls += 1;
+        return Promise.resolve();
+      },
+    };
+    const handle = Object.create(prototype) as Record<string, unknown>;
+    handle['finish'] = (): Promise<unknown> => Promise.resolve({});
+    handle['transcript'] = SECRET;
+
+    const clock = new ManualClock();
+    const { run } = attempt({
+      clock,
+      memoryProbe: forgedProbe({ beginMeasuredCase: () => Promise.resolve(handle) }),
+    });
+    expectCleanHarnessError(await errorOf(run), 'MEMORY_MEASUREMENT_INVALID');
+    expect(inheritedCalls).toBe(0);
+  });
+
+  it('a well-formed handle is never sent through the recovery path', async () => {
+    const clock = new ManualClock();
+    const probe = new FakeMemoryProbe(clock, {});
+    const set = await runRiyaBenchmarkSuite({
+      plan: PLAN(),
+      target: new FakeTarget(clock),
+      clock,
+      createdAt: SYNTHETIC_HARNESS_INSTANT,
+      memoryProbe: probe,
+    });
+    expect(set.results).toHaveLength(1);
+    expect(probe.finishedCaseIds).toStrictEqual(['case.alpha']);
+    expect(probe.abortedCaseIds).toStrictEqual([]);
+    expect(probe.openCases).toBe(0);
+  });
+});

@@ -73,6 +73,27 @@ function ownKeysWithin(value: unknown, allowed: readonly string[]): boolean {
   return true;
 }
 
+/**
+ * Read an own DATA property of a foreign object without running any of its code.
+ *
+ * `handle.abort` looks like a read. On an untrusted object it can be an accessor, and evaluating it
+ * runs foreign code outside every normalization boundary this package has — free to throw a prompt, or
+ * to do something less polite. A descriptor lookup reports the accessor instead of invoking it.
+ *
+ * Returns `undefined` for a non-object, an absent key, or an accessor. Nothing here decides whether the
+ * value is acceptable; it only makes looking safe.
+ */
+export function ownDataProperty(value: unknown, key: string): unknown {
+  if (typeof value !== 'object' || value === null) {
+    return undefined;
+  }
+  const descriptor = Object.getOwnPropertyDescriptor(value, key);
+  if (descriptor === undefined || descriptor.get !== undefined || descriptor.set !== undefined) {
+    return undefined;
+  }
+  return descriptor.value;
+}
+
 /** Refuse anything carrying an own key outside `allowed`, before its schema is consulted. */
 function assertOwnKeysWithin(
   value: unknown,
@@ -220,11 +241,8 @@ export function parseMemoryReading(value: unknown): RiyaBenchmarkMemoryReading {
   });
 }
 
-/** The two capabilities a memory-case handle may expose, and the only ones the wrapper keeps. */
-interface ForeignMemoryCase {
-  readonly finish: () => unknown;
-  readonly abort: () => unknown;
-}
+/** A foreign lifecycle call, captured once and invoked with the handle as its receiver. */
+type ForeignLifecycleCall = (this: unknown) => unknown;
 
 /**
  * A memory-case HANDLE, rebuilt.
@@ -239,24 +257,28 @@ interface ForeignMemoryCase {
  */
 export function parseMemoryCasePort(value: unknown): RiyaBenchmarkMemoryCasePort {
   assertOwnKeysWithin(value, MEMORY_CASE_KEYS, 'MEMORY_MEASUREMENT_INVALID');
-  if (typeof value !== 'object' || value === null) {
+  // Descriptor reads, not property reads: an accessor here would be foreign code executing during
+  // VALIDATION, which is the one moment nothing is guarding.
+  const finish = ownDataProperty(value, 'finish');
+  const abort = ownDataProperty(value, 'abort');
+  if (typeof finish !== 'function' || typeof abort !== 'function') {
     throw new RiyaHarnessError('MEMORY_MEASUREMENT_INVALID');
   }
-  const record = value as Record<string, unknown>;
-  if (typeof record['finish'] !== 'function' || typeof record['abort'] !== 'function') {
-    throw new RiyaHarnessError('MEMORY_MEASUREMENT_INVALID');
-  }
-  // Kept only as a receiver for the two calls below; it never leaves this closure.
-  const handle = value as ForeignMemoryCase;
+  // Captured once, so the pair that was proved is the pair that gets called.
+  const finishCall = finish as ForeignLifecycleCall;
+  const abortCall = abort as ForeignLifecycleCall;
 
   return Object.freeze({
     finish: async (): Promise<RiyaBenchmarkMemoryReading> => {
       // Parsed AFTER the foreign boundary returns, never inside it.
-      const raw = await callForeign(() => handle.finish(), 'MEMORY_MEASUREMENT_INVALID');
+      const raw = await callForeign(() => finishCall.call(value), 'MEMORY_MEASUREMENT_INVALID');
       return parseMemoryReading(raw);
     },
     abort: async (): Promise<void> => {
-      const completion = await callForeign(() => handle.abort(), 'MEMORY_MEASUREMENT_INVALID');
+      const completion = await callForeign(
+        () => abortCall.call(value),
+        'MEMORY_MEASUREMENT_INVALID',
+      );
       if (completion !== undefined) {
         throw new RiyaHarnessError('MEMORY_MEASUREMENT_INVALID');
       }
