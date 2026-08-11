@@ -308,8 +308,18 @@ describe('no runtime, service or application reaches this package', () => {
     // incomparable -- you could not say "the corpus covers what the exam measures" -- and the two
     // would drift the first time either was extended.
     //
+    // MVP-P2A.1 adds the second, and it is the one this package always needed to exist. P10 judges
+    // observations that arrive from somewhere else, and until now nothing could produce them from a
+    // real candidate -- so the exam had never been sat. `riya-candidate-evaluation-runner` is that
+    // step: it runs the governed corpus through an injected port, builds observations through THIS
+    // package's own constructors, and hands them back. The direction is one way and stays that way;
+    // an evaluator that could reach a provider is one that eventually will.
+    //
     // The set is pinned EXACTLY and no APPLICATION may import the contract at all.
-    const ALLOWED_PACKAGE_IMPORTERS = ['riya-intelligence-dataset'];
+    const ALLOWED_PACKAGE_IMPORTERS = [
+      'riya-candidate-evaluation-runner',
+      'riya-intelligence-dataset',
+    ];
     const importingPackages = new Set<string>();
     const importingApps: string[] = [];
 

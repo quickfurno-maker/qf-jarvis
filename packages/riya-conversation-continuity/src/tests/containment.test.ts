@@ -413,9 +413,18 @@ describe('the contracts this slice reuses are unchanged', () => {
     //
     // The guarantee is restated rather than dropped, and it did not weaken: the importer set is
     // pinned EXACTLY, and no APPLICATION may import the contract at all.
+    //
+    // MVP-P2A.1 adds the ninth, and it is the second that neither stores a state nor produces one.
+    // `riya-candidate-evaluation-runner` reads the PHASE vocabulary so a captured candidate turn can
+    // say which phase the conversation was left in, which is the value P10 then judges. It is offline
+    // evaluation infrastructure behind an injected port: it serves no turn, and no runtime imports it.
+    //
+    // The guarantee is restated rather than dropped, and it did not weaken: the importer set is
+    // pinned EXACTLY, and no APPLICATION may import the contract at all.
     const ALLOWED_PACKAGE_IMPORTERS = [
       'jarvis-runtime',
       'postgres-riya-conversation-continuity-store',
+      'riya-candidate-evaluation-runner',
       'riya-conversation-completion',
       'riya-conversation-evolution',
       'riya-intelligence-dataset',

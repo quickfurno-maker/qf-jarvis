@@ -457,6 +457,11 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // QFJ-S3-C (ADR-0067): the Riya client-sales behaviour package. Still an EXACT set match --
       // this records an authorised addition, it does not relax the assertion.
       'riya-agent',
+      // MVP-P2A.1: the OFFLINE candidate evaluation bridge -- the missing step between a real
+      // model candidate and the two evaluation authorities. Still an EXACT set match; it records
+      // an authorised addition, it does not relax the assertion. It holds no provider, no
+      // credential and no network, and no runtime, service or app imports it.
+      'riya-candidate-evaluation-runner',
       // RWC-P6A (ADR-0101): the PURE post-summary transitions RWC-P4A stopped short of -- structured
       // summary edit and confirmation, and the two governed advances CONTACT->CONSENT and
       // CONSENT->COMPLETE. Still an EXACT set match; it records an authorised addition, it does not

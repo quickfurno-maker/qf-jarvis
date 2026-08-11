@@ -1,0 +1,29 @@
+{
+  "name": "@qf-jarvis/riya-candidate-evaluation-runner",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis OFFLINE candidate evaluation BRIDGE (MVP-P2A.1). The missing execution step between a real model candidate and the two evaluation authorities: it schedules synthetic cases through an injected provider-neutral candidate port, turns what a run observably did into @qf-jarvis/model-evaluation CandidateObservations and @qf-jarvis/riya-quality-evaluation observations, and hands them over. It owns one synthetic adversarial case per mandatory red-team kind, a fail-closed observation extractor that blocks evidence rather than defaulting an unprovable fact to safe, a P10 candidate capture over the unchanged 72-fixture golden corpus, a BLINDED human-review bundle that carries no provider/model/size/price/speed field, an external-path-only bundle writer, and review ingest that enforces two DISTINCT human reviewers. It contains no provider SDK, no HTTP, no credential, no retry, no endpoint and no price table; every candidate it has run against is a deterministic fake. No production runtime imports it. It evaluates nothing itself, computes no composite score and authorizes no rollout.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "default": "./dist/testing/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/model-evaluation": "workspace:*",
+    "@qf-jarvis/riya-conversation-continuity": "workspace:*",
+    "@qf-jarvis/riya-conversation-evolution": "workspace:*",
+    "@qf-jarvis/riya-quality-evaluation": "workspace:*"
+  }
+}

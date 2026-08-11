@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
+  },
+
+  // The EMITTING build. The vitest specs under src/tests are EXCLUDED so nothing test-only reaches
+  // dist/; the fakes under src/testing ARE emitted, because they are the published `./testing`
+  // subpath and the only candidates this package is ever run against.
+  //
+  // The references are the two evaluation AUTHORITIES plus the two Riya contract packages whose types
+  // the P10 observation is built from. The direction is one way on purpose: the bridge depends on the
+  // authorities, and an authority that could reach a provider is one that eventually will.
+  //
+  // Deliberately absent: `model-gateway` and every provider — this package holds no transport, no
+  // credential and no endpoint, and the live adapter is a later slice behind its ports. Also absent:
+  // every runtime and app, `riya-intelligence-dataset` (Human Gold is a separate workstream),
+  // `riya-model-benchmark*` (operational evidence comes after both gates), and anything Postgres.
+  "references": [
+    { "path": "../model-evaluation/tsconfig.build.json" },
+    { "path": "../riya-conversation-continuity/tsconfig.build.json" },
+    { "path": "../riya-conversation-evolution/tsconfig.build.json" },
+    { "path": "../riya-quality-evaluation/tsconfig.build.json" }
+  ],
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/tests/**"]
+}
