@@ -77,8 +77,9 @@ import { suiteIdentityLockKey } from '../internal/identity-lock.js';
 import type { RiyaBenchmarkSuiteIdentity } from '../internal/identity-lock.js';
 import {
   callForeign,
+  callForeignSync,
   parseInvocationResult,
-  parseMemoryReading,
+  parseMemoryCasePort,
   parsePreparedCase,
   parseTargetDescriptor,
 } from '../internal/port-firewall.js';
@@ -101,7 +102,10 @@ class MonotonicReader {
   public constructor(private readonly clock: RiyaBenchmarkMonotonicClockPort) {}
 
   public read(): number {
-    const now = this.clock.nowMicros();
+    // The clock is a PORT, so a throw from it is foreign and is replaced rather than propagated. A
+    // raw provider exception escaping here would break the one-closed-error-type promise at the most
+    // basic call the harness makes.
+    const now = callForeignSync(() => this.clock.nowMicros(), 'CLOCK_INVALID');
     if (!Number.isSafeInteger(now) || now < 0) {
       throw new RiyaHarnessError('CLOCK_INVALID');
     }
@@ -186,7 +190,12 @@ interface PhaseContext {
   readonly cancellation: SuiteCancellation;
 }
 
-/** A thrown value, reduced to this package's closed vocabulary. */
+/**
+ * A thrown value, reduced to this package's closed vocabulary.
+ *
+ * Applied only to throws from HARNESS-owned code, where the `instanceof` is a totality net rather than
+ * an authenticity claim. Foreign throws never reach here unreplaced.
+ */
 function asHarnessError(error: unknown): RiyaHarnessError {
   return error instanceof RiyaHarnessError
     ? error
@@ -206,23 +215,41 @@ async function executeRequest(
   let firstOutputMicros: number | undefined;
   let firstOutputCalls = 0;
 
+  /**
+   * A clock failure raised INSIDE the first-output callback.
+   *
+   * The callback is harness code, but foreign code decides when to run it, and an adapter that saw it
+   * throw could swallow the exception or reject with something of its own. Either way the boundary
+   * would report `TARGET_PROTOCOL_INVALID` and a broken clock would be recorded as a broken target. So
+   * the failure is captured rather than thrown at the adapter, and it outranks whatever happens next.
+   */
+  let callbackFailure: RiyaHarnessError | undefined;
+
   const start = clock.read();
-  let result;
+  let raw: unknown;
   try {
-    result = parseInvocationResult(
-      await context.target.invoke({
-        requestOrdinal,
-        requestTimeoutMicros: context.requestTimeoutMicros,
-        signal: cancellation.signal,
-        onFirstOutput: () => {
-          firstOutputCalls += 1;
-          firstOutputMicros ??= clock.read();
-        },
-      }),
-    );
-  } catch (error: unknown) {
-    if (error instanceof RiyaHarnessError) {
-      throw error;
+    // ONLY the foreign call is inside this boundary. Parsing the result here would put an internal
+    // refusal in the same `catch` as a foreign throw, and there would be no way left to tell them
+    // apart now that a foreign `RiyaHarnessError` is not evidence of anything.
+    raw = await context.target.invoke({
+      requestOrdinal,
+      requestTimeoutMicros: context.requestTimeoutMicros,
+      signal: cancellation.signal,
+      onFirstOutput: () => {
+        firstOutputCalls += 1;
+        if (firstOutputMicros !== undefined) {
+          return;
+        }
+        try {
+          firstOutputMicros = clock.read();
+        } catch (error: unknown) {
+          callbackFailure ??= asHarnessError(error);
+        }
+      },
+    });
+  } catch {
+    if (callbackFailure !== undefined) {
+      throw callbackFailure;
     }
     // A target that throws BECAUSE it was cancelled has not broken any protocol — it did exactly what
     // the port asks. Calling that a protocol violation would let a clean cancellation masquerade as a
@@ -231,9 +258,14 @@ async function executeRequest(
       throw new RiyaHarnessError('SUITE_ABORTED');
     }
     // Otherwise: a thrown error says nothing about what the model did, so it is not recorded as a
-    // failed request either.
+    // failed request either. The foreign value itself is discarded, whatever class it claimed.
     throw new RiyaHarnessError('TARGET_PROTOCOL_INVALID');
   }
+  if (callbackFailure !== undefined) {
+    throw callbackFailure;
+  }
+
+  const result = parseInvocationResult(raw);
   const completion = clock.read();
 
   if (firstOutputCalls > 1) {
@@ -537,10 +569,14 @@ export async function runRiyaBenchmarkSuite(
       const probe = options.memoryProbe;
       let openMemoryCase: RiyaBenchmarkMemoryCasePort | undefined;
       if (probe !== undefined) {
-        openMemoryCase = await callForeign(
+        const rawCase = await callForeign(
           () => probe.beginMeasuredCase({ workloadCaseId: workload.workloadCaseId }),
           'MEMORY_MEASUREMENT_INVALID',
         );
+        // A HANDLE is the one port value that gets stored rather than read, so it is the one an
+        // adapter could hang a transcript off and never be looked at. Rebuilt immediately, into an
+        // object the harness owns, keeping only the two capabilities it needs.
+        openMemoryCase = parseMemoryCasePort(rawCase);
       }
 
       try {
@@ -559,10 +595,8 @@ export async function runRiyaBenchmarkSuite(
 
         let memory: RiyaBenchmarkMemoryReading = {};
         if (openMemoryCase !== undefined) {
-          const closing = openMemoryCase;
-          memory = parseMemoryReading(
-            await callForeign(() => closing.finish(), 'MEMORY_MEASUREMENT_INVALID'),
-          );
+          // The wrapper normalizes the foreign throw and rebuilds the reading; nothing raw arrives.
+          memory = await openMemoryCase.finish();
           openMemoryCase = undefined;
         }
 

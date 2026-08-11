@@ -52,13 +52,44 @@ export const SYNTHETIC_HARNESS_INSTANT = '2026-01-01T00:00:00Z';
 
 /** A clock the test drives by hand. Monotonic unless a spec deliberately rewinds it. */
 export class ManualClock implements RiyaBenchmarkMonotonicClockPort {
+  /** How many times the HARNESS has read this clock. Fakes use `peek` and do not count. */
+  public reads = 0;
+
   private current: number;
+  private readonly failures = new Map<number, Error>();
 
   public constructor(start = 1_000) {
     this.current = start;
   }
 
-  public nowMicros = (): number => this.current;
+  public nowMicros = (): number => {
+    this.reads += 1;
+    const failure = this.failures.get(this.reads);
+    if (failure !== undefined) {
+      throw failure;
+    }
+    return this.current;
+  };
+
+  /**
+   * Read without counting, for a fake target scheduling its own virtual timeline.
+   *
+   * A fake looking at the clock is not the harness measuring, and letting it move `reads` would make
+   * the specs that target the Nth harness read depend on how a script happens to be written.
+   */
+  public peek(): number {
+    return this.current;
+  }
+
+  /**
+   * Make the Nth harness read throw `error`.
+   *
+   * For the specs that prove a foreign clock exception is replaced rather than propagated — including
+   * the one where the throw lands inside the harness's own first-output callback.
+   */
+  public failAtRead(readIndex: number, error: Error): void {
+    this.failures.set(readIndex, error);
+  }
 
   public advance(micros: number): void {
     this.current += micros;
@@ -141,6 +172,8 @@ export interface FakeRequestScript {
   readonly wrongInputTokens?: number;
   readonly overLimitOutputTokens?: number;
   readonly throwInstead?: boolean;
+  /** Throw this exact value. For the specs that prove a foreign `RiyaHarnessError` is not trusted. */
+  readonly throwValue?: Error;
   /**
    * Return this exact value instead of a well-formed result.
    *
@@ -160,6 +193,13 @@ export interface FakeRequestScript {
    * to finish first" — both leave zero in flight by the time an assertion runs.
    */
   readonly holdOnCancel?: boolean;
+  /**
+   * Throw this value AFTER the first-output callback has been invoked.
+   *
+   * Models an adapter that saw something go wrong mid-stream and rejected. The point of the spec is
+   * that a harness-owned clock failure inside the callback still outranks it.
+   */
+  readonly throwAfterFirstOutput?: Error;
   /** Bytes this request reports to a memory observer while it runs. */
   readonly peakHostMemoryBytes?: number;
 }
@@ -186,9 +226,13 @@ export interface FakeTargetOptions {
   /** Return this exact value from `prepareCase`, well-formed or not. */
   readonly preparedRaw?: unknown;
   readonly prepareThrows?: boolean;
+  /** Throw this exact value from `prepareCase`. */
+  readonly prepareThrowValue?: Error;
   /** Return this exact value from `descriptor()`, well-formed or not. */
   readonly descriptorRaw?: unknown;
   readonly descriptorThrows?: boolean;
+  /** Throw this exact value from `descriptor()`. */
+  readonly descriptorThrowValue?: Error;
   /** After this many descriptor reads, start reporting the drifted identity below. */
   readonly driftAfterDescriptorCalls?: number;
   readonly driftSubject?: RiyaBenchmarkSubjectV1;
@@ -245,6 +289,9 @@ export class FakeTarget implements RiyaBenchmarkTargetPort {
 
   public descriptor = (): RiyaBenchmarkTargetDescriptor => {
     this.descriptorCalls += 1;
+    if (this.options.descriptorThrowValue !== undefined) {
+      throw this.options.descriptorThrowValue;
+    }
     if (this.options.descriptorThrows === true) {
       throw new Error('descriptor exploded');
     }
@@ -269,6 +316,9 @@ export class FakeTarget implements RiyaBenchmarkTargetPort {
   public prepareCase = (workload: RiyaBenchmarkWorkloadV1): Promise<RiyaBenchmarkPreparedCase> => {
     this.prepareCalls += 1;
     this.currentCaseId = workload.workloadCaseId;
+    if (this.options.prepareThrowValue !== undefined) {
+      return Promise.reject(this.options.prepareThrowValue);
+    }
     if (this.options.prepareThrows === true) {
       return Promise.reject(new Error('prepare exploded'));
     }
@@ -314,17 +364,20 @@ export class FakeTarget implements RiyaBenchmarkTargetPort {
           if (script.onCancel === 'FAILURE') {
             return { outcome: 'FAILURE' };
           }
-          throw new Error('cancelled by the caller');
+          throw script.throwValue ?? new Error('cancelled by the caller');
         }
       }
 
+      if (script.throwValue !== undefined) {
+        throw script.throwValue;
+      }
       if (script.throwInstead === true) {
         throw new Error('fake target failure');
       }
 
       // Absolute scheduling from THIS request's own start, so concurrent requests overlap in virtual
       // time instead of queueing behind each other on the shared clock.
-      const startedAt = this.clock.nowMicros();
+      const startedAt = this.clock.peek();
       const firstOutputAt = startedAt + script.firstOutputAfterMicros;
       const completesAt = firstOutputAt + script.completeAfterMicros;
 
@@ -344,6 +397,9 @@ export class FakeTarget implements RiyaBenchmarkTargetPort {
         if (script.doubleFirstOutput === true) {
           invocation.onFirstOutput();
         }
+      }
+      if (script.throwAfterFirstOutput !== undefined) {
+        throw script.throwAfterFirstOutput;
       }
       this.clock.advanceTo(completesAt);
 
@@ -448,6 +504,9 @@ export interface FakeMemoryProbeOptions {
   readonly readingRaw?: unknown;
   readonly throwOnBegin?: boolean;
   readonly throwOnFinish?: boolean;
+  /** Throw these exact values, for the foreign-error-is-not-trusted specs. */
+  readonly beginThrowValue?: Error;
+  readonly finishThrowValue?: Error;
   /** Hold `abort` until the spec releases it, to prove the harness awaits cleanup. */
   readonly holdAbort?: boolean;
   /** Called at the moment a measured case opens, so a spec can snapshot what has run so far. */
@@ -487,6 +546,9 @@ export class FakeMemoryProbe implements RiyaBenchmarkMemoryProbePort, FakeMemory
   public beginMeasuredCase = (context: {
     readonly workloadCaseId: string;
   }): Promise<RiyaBenchmarkMemoryCasePort> => {
+    if (this.options.beginThrowValue !== undefined) {
+      return Promise.reject(this.options.beginThrowValue);
+    }
     if (this.options.throwOnBegin === true) {
       return Promise.reject(new Error('probe setup exploded'));
     }
@@ -515,6 +577,9 @@ export class FakeMemoryProbe implements RiyaBenchmarkMemoryProbePort, FakeMemory
         this.openCases -= 1;
         this.finishedCaseIds.push(workloadCaseId);
         this.clock.advance(this.options.finishAdvanceMicros ?? 0);
+        if (this.options.finishThrowValue !== undefined) {
+          throw this.options.finishThrowValue;
+        }
         if (this.options.throwOnFinish === true) {
           throw new Error('probe read exploded');
         }

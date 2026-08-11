@@ -17,11 +17,24 @@
  * So every value arriving from a port is parsed strictly and REBUILT here. An unknown key is a refusal,
  * not a passthrough, which is what makes the shape claim true rather than aspirational.
  *
- * ### Failures are normalized, content-free
+ * ### Exact means EVERY own key
  *
- * A foreign adapter's exception may carry a prompt, a URL or a credential in its message. None of it
- * may reach a `RiyaHarnessError`, so a foreign throw becomes a closed code and nothing else — the
- * original is deliberately not chained, because `cause` would carry it just as far.
+ * `.strict()` compares enumerable string keys, which is the set a `{...spread}` or a `JSON.stringify`
+ * would show. An adapter can define `transcript` as non-enumerable, or key it by a symbol, and that
+ * object looks empty to both. `Reflect.ownKeys` does not, so the own-key gate below runs first and
+ * treats a symbol or a hidden property as exactly what it is: an unknown key.
+ *
+ * ### A foreign `RiyaHarnessError` is not a harness error
+ *
+ * The error class is exported, so foreign code can construct one, pick whichever closed code suits it,
+ * and hang a prompt off `message` or an endpoint off `cause`. `instanceof` would say yes to all of it.
+ * Trust here comes from WHERE a throw arose, never from what class the thrower claims — so anything
+ * raised by foreign code is REPLACED with a freshly constructed, content-free error for that boundary,
+ * including when it is already a `RiyaHarnessError`.
+ *
+ * The consequence for callers: internal parsing must sit OUTSIDE the foreign call, because there is no
+ * longer any way to tell an internal failure apart from a foreign one once both are inside the same
+ * `catch`. Every function here is shaped that way, and so are its call sites.
  *
  * ### It does not restate RMB-A
  *
@@ -36,10 +49,53 @@ import { RiyaHarnessError } from '../contracts/errors.js';
 import type { RiyaHarnessErrorCode } from '../contracts/errors.js';
 import type {
   RiyaBenchmarkInvocationResult,
+  RiyaBenchmarkMemoryCasePort,
   RiyaBenchmarkMemoryReading,
   RiyaBenchmarkPreparedCase,
   RiyaBenchmarkTargetDescriptor,
 } from '../contracts/ports.js';
+
+/**
+ * True when `value` is an object whose EVERY own key — enumerable or not, string or symbol — is in
+ * `allowed`.
+ *
+ * Absence is not checked here; the schemas below decide what must be present.
+ */
+function ownKeysWithin(value: unknown, allowed: readonly string[]): boolean {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  for (const key of Reflect.ownKeys(value)) {
+    if (typeof key !== 'string' || !allowed.includes(key)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** Refuse anything carrying an own key outside `allowed`, before its schema is consulted. */
+function assertOwnKeysWithin(
+  value: unknown,
+  allowed: readonly string[],
+  code: RiyaHarnessErrorCode,
+): void {
+  if (!ownKeysWithin(value, allowed)) {
+    throw new RiyaHarnessError(code);
+  }
+}
+
+const DESCRIPTOR_KEYS = ['subject', 'environment'] as const;
+const PREPARED_KEYS = [
+  'workloadCaseId',
+  'promptProfileDigest',
+  'inputTokenCount',
+  'maximumOutputTokens',
+  'samplingConfigDigest',
+  'streaming',
+] as const;
+const INVOCATION_RESULT_KEYS = ['outcome', 'inputTokens', 'outputTokens'] as const;
+const MEMORY_READING_KEYS = ['peakAcceleratorMemoryBytes', 'peakHostMemoryBytes'] as const;
+const MEMORY_CASE_KEYS = ['finish', 'abort'] as const;
 
 /**
  * The outer descriptor surface: exactly two keys, both present.
@@ -97,6 +153,7 @@ const memorySchema = z
  * the constructors that follow are what decide whether it is a subject and an environment.
  */
 export function parseTargetDescriptor(value: unknown): RiyaBenchmarkTargetDescriptor {
+  assertOwnKeysWithin(value, DESCRIPTOR_KEYS, 'TARGET_PROTOCOL_INVALID');
   const parsed = descriptorSchema.safeParse(value);
   if (!parsed.success) {
     throw new RiyaHarnessError('TARGET_PROTOCOL_INVALID');
@@ -109,6 +166,7 @@ export function parseTargetDescriptor(value: unknown): RiyaBenchmarkTargetDescri
 
 /** A prepared case, rebuilt. Anything extra — a prompt, a message list — is refused. */
 export function parsePreparedCase(value: unknown): RiyaBenchmarkPreparedCase {
+  assertOwnKeysWithin(value, PREPARED_KEYS, 'TARGET_PROTOCOL_INVALID');
   const parsed = preparedSchema.safeParse(value);
   if (!parsed.success) {
     throw new RiyaHarnessError('TARGET_PROTOCOL_INVALID');
@@ -125,6 +183,7 @@ export function parsePreparedCase(value: unknown): RiyaBenchmarkPreparedCase {
 
 /** A terminal result, rebuilt. No raw output survives this. */
 export function parseInvocationResult(value: unknown): RiyaBenchmarkInvocationResult {
+  assertOwnKeysWithin(value, INVOCATION_RESULT_KEYS, 'TARGET_PROTOCOL_INVALID');
   const parsed = invocationResultSchema.safeParse(value);
   if (!parsed.success) {
     throw new RiyaHarnessError('TARGET_PROTOCOL_INVALID');
@@ -146,6 +205,7 @@ export function parseInvocationResult(value: unknown): RiyaBenchmarkInvocationRe
 
 /** A memory reading, rebuilt. A machine name, a serial or a device path has nowhere to sit. */
 export function parseMemoryReading(value: unknown): RiyaBenchmarkMemoryReading {
+  assertOwnKeysWithin(value, MEMORY_READING_KEYS, 'MEMORY_MEASUREMENT_INVALID');
   const parsed = memorySchema.safeParse(value);
   if (!parsed.success) {
     throw new RiyaHarnessError('MEMORY_MEASUREMENT_INVALID');
@@ -160,11 +220,57 @@ export function parseMemoryReading(value: unknown): RiyaBenchmarkMemoryReading {
   });
 }
 
+/** The two capabilities a memory-case handle may expose, and the only ones the wrapper keeps. */
+interface ForeignMemoryCase {
+  readonly finish: () => unknown;
+  readonly abort: () => unknown;
+}
+
 /**
- * Await a foreign call, normalizing ANY rejection to one closed code.
+ * A memory-case HANDLE, rebuilt.
  *
- * A harness error passing through is re-thrown unchanged — it is ours and already content-free. Every
- * other rejection is REPLACED, never wrapped.
+ * The other parsers rebuild data; this one rebuilds a capability, and it is the surface that was
+ * easiest to overlook — a handle is stored rather than read, so an adapter could hang a transcript off
+ * it and nothing would ever look. What the harness keeps is a frozen object of its own with exactly
+ * two methods, so the foreign object survives only as a closed-over receiver.
+ *
+ * `finish` rebuilds its reading; `abort` proves its completion is void, because cleanup that resolves
+ * with data is data crossing the boundary through the one call nobody inspects.
+ */
+export function parseMemoryCasePort(value: unknown): RiyaBenchmarkMemoryCasePort {
+  assertOwnKeysWithin(value, MEMORY_CASE_KEYS, 'MEMORY_MEASUREMENT_INVALID');
+  if (typeof value !== 'object' || value === null) {
+    throw new RiyaHarnessError('MEMORY_MEASUREMENT_INVALID');
+  }
+  const record = value as Record<string, unknown>;
+  if (typeof record['finish'] !== 'function' || typeof record['abort'] !== 'function') {
+    throw new RiyaHarnessError('MEMORY_MEASUREMENT_INVALID');
+  }
+  // Kept only as a receiver for the two calls below; it never leaves this closure.
+  const handle = value as ForeignMemoryCase;
+
+  return Object.freeze({
+    finish: async (): Promise<RiyaBenchmarkMemoryReading> => {
+      // Parsed AFTER the foreign boundary returns, never inside it.
+      const raw = await callForeign(() => handle.finish(), 'MEMORY_MEASUREMENT_INVALID');
+      return parseMemoryReading(raw);
+    },
+    abort: async (): Promise<void> => {
+      const completion = await callForeign(() => handle.abort(), 'MEMORY_MEASUREMENT_INVALID');
+      if (completion !== undefined) {
+        throw new RiyaHarnessError('MEMORY_MEASUREMENT_INVALID');
+      }
+    },
+  });
+}
+
+/**
+ * Await a foreign call, replacing ANY rejection with one closed code.
+ *
+ * Replaced, never wrapped and never re-thrown — not even when the foreign value is already a
+ * `RiyaHarnessError`. The class is exported, so an adapter can construct one, choose a misleading code
+ * and carry a prompt in `message` or a credential in `cause`; `instanceof` cannot tell that apart from
+ * ours and is therefore not evidence of anything.
  */
 export async function callForeign<T>(
   operation: () => Promise<T> | T,
@@ -172,10 +278,16 @@ export async function callForeign<T>(
 ): Promise<T> {
   try {
     return await operation();
-  } catch (error: unknown) {
-    if (error instanceof RiyaHarnessError) {
-      throw error;
-    }
+  } catch {
+    throw new RiyaHarnessError(code);
+  }
+}
+
+/** The synchronous twin, for the clock — the one port the harness reads without awaiting. */
+export function callForeignSync<T>(operation: () => T, code: RiyaHarnessErrorCode): T {
+  try {
+    return operation();
+  } catch {
     throw new RiyaHarnessError(code);
   }
 }

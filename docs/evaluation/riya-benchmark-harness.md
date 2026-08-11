@@ -52,12 +52,38 @@ somebody who never read this page, can return:
 Reading the counts and ignoring `text` would make the claim "content cannot cross this boundary by
 shape" false: the content crossed, it was merely unused, and something downstream eventually logs the
 object. So every value coming back from a port — descriptor, prepared case, terminal result, memory
-reading — is **parsed strictly and rebuilt**. An unknown key is a refusal.
+reading, **and the memory-case handle itself** — is **parsed strictly and rebuilt**. An unknown key is
+a refusal.
 
-Foreign exceptions are replaced rather than wrapped. An adapter message is where a prompt, an endpoint
-or a credential lives, and `cause` would carry it just as far. What surfaces is one of the harness
-closed codes and nothing else — no `ZodError`, no `TypeError`, no RMB-A error, at any failure this
-boundary is designed to have.
+The handle matters because it is the one port value that gets _stored_ rather than read. An adapter
+could hang a transcript off it and nothing would ever look. What the harness keeps is a frozen object
+of its own with exactly two methods, so the foreign object survives only as a closed-over receiver; its
+`finish` rebuilds the reading, and its `abort` proves the completion is void, because cleanup that
+resolves with data is data crossing through the one call nobody inspects.
+
+**Exact means every own key.** `.strict()` compares enumerable string keys — the set a spread or a
+`JSON.stringify` would show. A property defined as non-enumerable, or keyed by a symbol, is invisible to
+both. `Reflect.ownKeys` is not, so an own-key gate runs before every schema and treats those as exactly
+what they are.
+
+## A foreign `RiyaHarnessError` is not a harness error
+
+Foreign exceptions are replaced rather than wrapped, and that includes exceptions that already _are_
+`RiyaHarnessError`. The class is exported, so an adapter can construct one, pick whichever closed code
+suits it, and hang a prompt off `message` or a credential off `cause` — and `instanceof` says yes to all
+of it. **Trust comes from where a throw arose, never from what class the thrower claims.**
+
+The consequence runs through the whole runner: internal parsing sits _outside_ every foreign call,
+because once both are inside the same `catch` there is no longer any way to tell them apart. The raw
+result of `invoke()` is obtained first and parsed after; the clock is called through the same helper, so
+a throwing clock is `CLOCK_INVALID` rather than a raw exception.
+
+One exception is deliberate. `onFirstOutput` is harness code that foreign code _runs_, so a clock
+failure inside it is recorded and outranks whatever the adapter does next — otherwise an adapter that
+noticed the exception and rejected could turn a broken clock into a broken target.
+
+What surfaces is one of the harness closed codes and nothing else — no `ZodError`, no `TypeError`, no
+RMB-A error, no foreign message, at any failure this boundary is designed to have.
 
 ## The plan is re-proved here too
 
@@ -129,8 +155,8 @@ ambient timer to give up with, so an adapter that ignores the signal makes the h
 making it return while requests continue against a model. That is the deliberate direction — a
 returned result with live load behind it is the one outcome worse than a wait.
 
-An open memory case is aborted and awaited on the same path, and a failure in that cleanup never
-replaces the failure that triggered it.
+An open memory case is aborted and awaited on the same path, and a failure in that cleanup — including
+the wrapper refusing a non-void completion — never replaces the failure that triggered it.
 
 ## Suite plans
 
