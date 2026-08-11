@@ -316,7 +316,7 @@ describe('the public surface is small and free of verdicts', () => {
   });
 
   it('every error code is closed, and the class carries no measured value', () => {
-    expect(barrel.RIYA_HARNESS_ERROR_CODES).toHaveLength(12);
+    expect(barrel.RIYA_HARNESS_ERROR_CODES).toHaveLength(14);
     const error = new barrel.RiyaHarnessError('CLOCK_INVALID');
     expect(error.code).toBe('CLOCK_INVALID');
     expect(error.message).toBe('CLOCK_INVALID');

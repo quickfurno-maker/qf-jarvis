@@ -49,6 +49,8 @@ export type {
   RiyaBenchmarkInvocationSuccess,
   RiyaBenchmarkInvocationFailure,
   RiyaBenchmarkMemoryProbePort,
+  RiyaBenchmarkMemoryCasePort,
+  RiyaBenchmarkMemoryReading,
 } from './contracts/ports.js';
 
 // The suite plan, and the three identities this harness stamps rather than accepts.

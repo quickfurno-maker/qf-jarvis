@@ -12,4 +12,9 @@ export {
   FakeMemoryProbe,
   fakeHostedTarget,
 } from './fakes.js';
-export type { FakeRequestScript, FakeTargetOptions } from './fakes.js';
+export type {
+  FakeRequestScript,
+  FakeTargetOptions,
+  FakeMemoryObserver,
+  FakeMemoryProbeOptions,
+} from './fakes.js';

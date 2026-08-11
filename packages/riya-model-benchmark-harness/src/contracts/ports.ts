@@ -14,6 +14,13 @@
  * A target hands back digests and token counts. There is no field a prompt, a customer message or a
  * reply fits in, in either direction. The adapter that eventually materializes a prompt owns that text
  * and never passes it here — which is what keeps benchmark artifacts safe to commit.
+ *
+ * ### These interfaces are a contract, not a defence
+ *
+ * A shape declared here is erased at run time, so a foreign adapter can return anything at all. Every
+ * value crossing back from a port is therefore parsed strictly and rebuilt before the harness looks at
+ * it: an unknown key is refused, not ignored. The declarations below say what a CONFORMING adapter
+ * must do; the runtime firewall says what the harness will accept.
  */
 import type {
   RiyaBenchmarkEnvironmentV1,
@@ -59,8 +66,32 @@ export interface RiyaBenchmarkPreparedCase {
 export interface RiyaBenchmarkInvocation {
   /** 0-based within the phase. Deterministic, so a fake target can vary behaviour by ordinal. */
   readonly requestOrdinal: number;
+  /**
+   * The per-request deadline, in microseconds, measured from this invocation's admission.
+   *
+   * **The ADAPTER enforces it.** RMB-B core holds no ambient timer by design — it never reads a wall
+   * clock and never schedules one — so there is nobody else who can. An adapter that cannot honour the
+   * exact requested deadline is not a conforming RMB-B target, because two runs that abandoned a slow
+   * request at different points produced different failure counts and different tails from the same
+   * model, and the artifacts would still compare as equal.
+   *
+   * Expiry is DATA: return an ordinary `FAILURE`. It is not a protocol error, it does not abort the
+   * suite, and the harness never retries it. The value here always equals the workload's
+   * `requestTimeoutMicros` exactly.
+   *
+   * This is separate from `signal`, which cancels the whole suite rather than one request.
+   */
   readonly requestTimeoutMicros: number;
-  /** Aborted when the suite is aborted. A target must stop promptly. */
+  /**
+   * Aborted when the suite is cancelled — by the caller, or by a protocol failure elsewhere in the
+   * phase.
+   *
+   * A conforming target MUST settle promptly once this is aborted: stop work, stop emitting, and
+   * resolve or reject. The harness waits for every in-flight invocation to settle before it returns,
+   * so an adapter that ignores the signal makes the harness HANG rather than making it return while
+   * benchmark work continues in the background. That is the deliberate failure direction — a returned
+   * result with a live request still running against a model is the one outcome worse than a wait.
+   */
   readonly signal: AbortSignal;
   /**
    * Call EXACTLY once, at the moment the first output token is available.
@@ -97,24 +128,62 @@ export type RiyaBenchmarkInvocationResult =
  * RMB-B ships no real implementation and benchmarks no real model.
  */
 export interface RiyaBenchmarkTargetPort {
-  /** The exact subject and environment this evidence will be stamped with. */
+  /**
+   * The exact subject and environment this evidence will be stamped with.
+   *
+   * Read more than once, and required to answer identically every time: the harness locks the first
+   * answer and re-proves it around every case. A target whose identity changes mid-suite would have
+   * every artifact stamped with the identity it started as.
+   */
   descriptor: () => RiyaBenchmarkTargetDescriptor;
   /** Confirm what has been prepared for a case. Called once per case, before warmup. */
   prepareCase: (workload: RiyaBenchmarkWorkloadV1) => Promise<RiyaBenchmarkPreparedCase>;
-  /** Execute one logical request exactly once. The harness never retries. */
+  /** Execute one logical request exactly once. The harness never asks twice. */
   invoke: (invocation: RiyaBenchmarkInvocation) => Promise<RiyaBenchmarkInvocationResult>;
 }
 
+/** Peak bytes for one case. Integers, above zero, within the RMB-A bounds, and nothing else. */
+export interface RiyaBenchmarkMemoryReading {
+  readonly peakAcceleratorMemoryBytes?: number;
+  readonly peakHostMemoryBytes?: number;
+}
+
 /**
- * Optional peak-memory readings for one case.
+ * Optional peak-memory readings, scoped to ONE measured phase.
  *
  * Optional because most environments cannot supply them honestly, and a fabricated zero would sit in a
- * comparison table beside real readings. Absent means not measured.
+ * comparison table beside real readings. Absent means not measured. A hosted adapter, which cannot see
+ * the machine at all, should simply omit the probe.
  */
 export interface RiyaBenchmarkMemoryProbePort {
-  /** Called once per case, after the measured window closes. */
-  readCaseMemory: () => Promise<{
-    readonly peakAcceleratorMemoryBytes?: number;
-    readonly peakHostMemoryBytes?: number;
-  }>;
+  /**
+   * Open a measurement window for one case: AFTER its warmup, BEFORE its measured window starts.
+   *
+   * The begin/finish pair is what makes "peak memory" answerable. A probe that could only be READ at
+   * the end would report a peak that might have come from warmup, from the previous case, or from
+   * whatever else the process did — and a per-case column in a comparison table would be quietly
+   * wrong. Setup time here is outside `measuredWindowMicros`, so an expensive reset does not inflate
+   * the throughput denominator.
+   */
+  beginMeasuredCase: (context: {
+    readonly workloadCaseId: string;
+  }) => Promise<RiyaBenchmarkMemoryCasePort>;
+}
+
+/** One open measurement window. Exactly one of `finish` or `abort` is called, and awaited. */
+export interface RiyaBenchmarkMemoryCasePort {
+  /**
+   * Close the window and report the peak observed BETWEEN begin and here — nothing earlier.
+   *
+   * Called once, after the measured window has closed, and only for a measured phase that completed.
+   */
+  finish: () => Promise<RiyaBenchmarkMemoryReading>;
+  /**
+   * Discard the window: the measured phase failed or the suite was cancelled.
+   *
+   * Awaited, so a probe holding a device handle has released it before the harness returns. A failure
+   * thrown here is swallowed — cleanup must never replace the protocol error that caused it, because
+   * the original is the one that explains what went wrong.
+   */
+  abort: () => Promise<void>;
 }

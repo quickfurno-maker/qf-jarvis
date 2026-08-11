@@ -20,6 +20,10 @@ export const RIYA_HARNESS_ERROR_CODES = [
   'TARGET_SUBJECT_INVALID',
   'TARGET_ENVIRONMENT_INVALID',
   'TARGET_CASE_MISMATCH',
+  // A target that reports one release at suite start and another after a case would have every
+  // artifact stamped with the first. Evidence about a subject that changed underneath it is worse
+  // than no evidence, because it looks exactly like evidence.
+  'TARGET_IDENTITY_CHANGED',
   'CLOCK_INVALID',
   'CLOCK_MOVED_BACKWARD',
   'TARGET_PROTOCOL_INVALID',
@@ -27,6 +31,10 @@ export const RIYA_HARNESS_ERROR_CODES = [
   'OUTPUT_TOKEN_LIMIT_EXCEEDED',
   'SUITE_ABORTED',
   'MEMORY_MEASUREMENT_INVALID',
+  // RMB-A refusing to build an artifact the harness assembled. Precise input failures are caught
+  // earlier with their own codes; this is the backstop that keeps the public boundary to ONE error
+  // type, so a caller never has to catch a RiyaBenchmarkError from a harness call.
+  'EVIDENCE_CONSTRUCTION_INVALID',
 ] as const;
 
 export type RiyaHarnessErrorCode = (typeof RIYA_HARNESS_ERROR_CODES)[number];

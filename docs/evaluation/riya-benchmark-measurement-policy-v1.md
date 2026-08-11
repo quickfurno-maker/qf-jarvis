@@ -29,6 +29,10 @@ Anything else from a target — an error result, a timeout, a refusal — is a *
 `failedRequests`, contributes no latency sample, and credits no output tokens, _even if the target
 emitted some before failing_. A partial reply is not a reply.
 
+A result the harness cannot parse is neither: an extra key, a missing count or an unknown outcome is a
+protocol failure that invalidates the suite. Reading the fields it recognizes and ignoring the rest
+would let a raw reply cross a boundary this workstream says content cannot cross.
+
 A failure may report its exact input usage; if it does, it must be exact.
 
 An input-token count that disagrees with the plan **aborts the suite**. It is never averaged and never
@@ -60,8 +64,15 @@ micros/token = floor(decodeWindow / max(outputTokens − 1, 1))
 Divided by `outputTokens − 1` because time-to-first-token already accounts for the first token. Dividing
 by the full count would understate decode cost on short replies, and Riya's replies are short.
 
-A one-token success has no decode interval; the clamp keeps the arithmetic total and attributes the
-whole post-first-token window, which for one token is approximately zero.
+A one-token success has **no genuine inter-token interval** — there is no second token, so there is
+nothing to measure between. The denominator of 1 is a clamp that keeps the observation contract total,
+not a sample: it attributes the whole post-first-token window to a token that was already accounted for
+by TTFT, which for one token is approximately zero. Read a decode figure from a one-token-heavy
+distribution as arithmetic, not as decode speed.
+
+This wording is a clarification of the V1 formula, not a change to it. The formula, and therefore
+`measurementPolicyRef`, are unchanged — moving the ref for a documentation edit would strand every
+artifact already written under it.
 
 ## Percentiles
 
@@ -90,8 +101,10 @@ windowEnd   = immediately after the final measured terminal result
 measuredWindowMicros = windowEnd − windowStart
 ```
 
+Read from the injected **monotonic** clock, so the span means elapsed duration and nothing else.
+
 Includes target execution and the target's own queueing after admission. Excludes preparation, warmup,
-and evidence construction.
+memory-probe setup and teardown, and evidence construction.
 
 Present even when everything failed — the window is how long the failures took.
 
@@ -105,6 +118,28 @@ aggregateOutputTokensPerSecond   = floor(outputTokensTotal   × 1e6       / wind
 Both integer, both safe at the contract bounds (1e15 < 2^53). Never approximated from
 `concurrency / p50 latency`: that estimate is wrong under batching, queueing and tails, and it would
 read as a measurement.
+
+## The request deadline
+
+`requestTimeoutMicros` is measured from the moment a request is admitted, and **the target adapter
+enforces it**. The harness holds no timer at all — it never reads a wall clock and never schedules one
+— so there is nobody else who could.
+
+Expiry is a plain `FAILURE`: it lands in the success rate, contributes no latency sample, and is never
+attempted a second time. An adapter that cannot honour the exact requested deadline is not a conforming
+target, because two runs that gave up at different points produce different failure counts and
+different tails from the same model while their artifacts still compare as equal.
+
+The suite cancellation signal is a separate thing: it ends the whole run and produces no evidence.
+
+## Peak memory
+
+Optional, and scoped to one measured phase. The probe is opened after that case's warmup and closed
+after its window, so a reported peak can only have come from between those two points — not from
+warmup, not from a previous case. Probe setup and teardown sit outside `measuredWindowMicros`.
+
+Absent means not measured. A hosted adapter, which cannot see the machine, omits the probe rather than
+reporting a zero that would sit in a table beside real readings.
 
 ## Tokens
 

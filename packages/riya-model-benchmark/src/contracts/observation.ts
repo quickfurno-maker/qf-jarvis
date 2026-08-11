@@ -51,7 +51,11 @@ export interface RiyaBenchmarkObservationV1 {
   readonly peakAcceleratorMemoryBytes?: number;
   readonly peakHostMemoryBytes?: number;
   /**
-   * Wall-clock span of the MEASURED phase, warmup excluded.
+   * Monotonic elapsed span of the MEASURED phase, warmup excluded.
+   *
+   * Elapsed, not wall-clock: a producing harness reads a monotonic source, so the number means
+   * duration and nothing else. A wall clock can step sideways mid-run, and the correction would land
+   * in a throughput denominator as a speed-up.
    *
    * Without it, aggregate throughput cannot be computed — only guessed at, usually as
    * `concurrency / p50 latency`, which is wrong the moment a target batches, queues or has a tail.

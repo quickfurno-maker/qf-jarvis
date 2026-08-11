@@ -81,10 +81,12 @@ interface RunOptions {
   readonly script?: readonly FakeRequestScript[];
   readonly memoryProbe?: RunRiyaBenchmarkSuiteOptions['memoryProbe'];
   readonly signal?: AbortSignal;
+  /** Supplied when a spec must build a probe against the same clock the target advances. */
+  readonly clock?: ManualClock;
 }
 
 async function run(options: RunOptions = {}) {
-  const clock = new ManualClock();
+  const clock = options.clock ?? new ManualClock();
   const target = new FakeTarget(
     clock,
     options.script === undefined ? {} : { script: options.script },
@@ -465,20 +467,26 @@ describe('memory is optional, and never invented', () => {
   });
 
   it('records a valid reading', async () => {
+    const clock = new ManualClock();
     const { set } = await run({
-      memoryProbe: new FakeMemoryProbe({ peakHostMemoryBytes: 4_294_967_296 }),
+      clock,
+      memoryProbe: new FakeMemoryProbe(clock, {
+        readingRaw: { peakHostMemoryBytes: 4_294_967_296 },
+      }),
     });
     expect(set.results[0]?.observation.peakHostMemoryBytes).toBe(4_294_967_296);
     expect(set.results[0]?.observation.peakAcceleratorMemoryBytes).toBeUndefined();
   });
 
   it('refuses an implausible reading rather than recording it', async () => {
-    expect(
-      await codeOf(() => run({ memoryProbe: new FakeMemoryProbe({ peakHostMemoryBytes: 0 }) })),
-    ).toBe('MEMORY_MEASUREMENT_INVALID');
-    expect(
-      await codeOf(() => run({ memoryProbe: new FakeMemoryProbe({ peakHostMemoryBytes: 1.5 }) })),
-    ).toBe('MEMORY_MEASUREMENT_INVALID');
+    const readings = [{ peakHostMemoryBytes: 0 }, { peakHostMemoryBytes: 1.5 }];
+    for (const readingRaw of readings) {
+      const clock = new ManualClock();
+      expect(
+        await codeOf(() => run({ clock, memoryProbe: new FakeMemoryProbe(clock, { readingRaw }) })),
+        JSON.stringify(readingRaw),
+      ).toBe('MEMORY_MEASUREMENT_INVALID');
+    }
   });
 });
 
