@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 
 import { RiyaBenchmarkError } from '../contracts/errors.js';
 import { createRiyaBenchmarkObservation } from '../contracts/observation.js';
+import { createRiyaBenchmarkWorkload, workloadParityKey } from '../contracts/workload.js';
 import type { RiyaBenchmarkObservationV1 } from '../contracts/observation.js';
 import {
   createRiyaBenchmarkEvidence,
@@ -18,6 +19,8 @@ import {
 } from '../contracts/evidence.js';
 import { canonicalJson, sha256OfCanonical } from '../internal/digest.js';
 import {
+  aggregateOutputTokensPerSecond,
+  successfulRequestsPerSecondMilli,
   approximateDecodeTokensPerSecondP50,
   approximateDecodeTokensPerSecondP95,
   meanOutputTokensPerSuccess,
@@ -965,5 +968,210 @@ describe('a result set is ONE configuration, proved not assumed', () => {
       'case.alpha',
       'case.beta',
     ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// RMB-B additive fields: request timeout and measured window.
+// ---------------------------------------------------------------------------
+
+describe('the two additive V1 fields extend evidence without breaking it', () => {
+  it('LEGACY artifacts stay valid, and their digests do not move', () => {
+    // The compatibility property that makes this additive rather than a version bump. An artifact
+    // written before either field existed must verify unchanged, and hash to what it always did --
+    // otherwise every stored benchmark would silently become "tampered".
+    const legacyWorkload = syntheticWorkload();
+    expect(legacyWorkload.requestTimeoutMicros).toBeUndefined();
+    const legacyObservation = syntheticObservation();
+    expect(legacyObservation.measuredWindowMicros).toBeUndefined();
+
+    const legacy = syntheticEvidence();
+    expect(riyaBenchmarkEvidenceIntegrityHolds(legacy)).toBe(true);
+    expect(verifyRiyaBenchmarkEvidence(legacy)).toStrictEqual(legacy);
+    // An explicitly-undefined field is the same artifact as an absent one.
+    expect(sha256OfCanonical({ a: 1 })).toBe(
+      sha256OfCanonical({ a: 1, requestTimeoutMicros: undefined }),
+    );
+  });
+
+  it('accepts a valid timeout and refuses an invalid one', () => {
+    expect(
+      createRiyaBenchmarkWorkload({ ...syntheticWorkload(), requestTimeoutMicros: 30_000_000 })
+        .requestTimeoutMicros,
+    ).toBe(30_000_000);
+    for (const bad of [0, -1, 1.5, 86_400_000_001]) {
+      expect(
+        codeOf(() =>
+          createRiyaBenchmarkWorkload({ ...syntheticWorkload(), requestTimeoutMicros: bad }),
+        ),
+        String(bad),
+      ).toBe('WORKLOAD_INVALID');
+    }
+  });
+
+  it('the timeout is part of measurement parity', () => {
+    // A run that abandons a slow request at two seconds and one that waits thirty produce different
+    // failure counts and different tails from the same target.
+    const withTimeout = syntheticWorkload({ requestTimeoutMicros: 30_000_000 });
+    expect(workloadParityKey(withTimeout)).not.toBe(workloadParityKey(syntheticWorkload()));
+    expect(workloadParityKey(syntheticWorkload())).toBe(workloadParityKey(syntheticWorkload()));
+  });
+
+  it('accepts a valid measured window and refuses an invalid one', () => {
+    expect(
+      createRiyaBenchmarkObservation({ ...syntheticObservation(), measuredWindowMicros: 2_000 })
+        .measuredWindowMicros,
+    ).toBe(2_000);
+    for (const bad of [0, -1, 1.5]) {
+      expect(
+        codeOf(() =>
+          createRiyaBenchmarkObservation({ ...syntheticObservation(), measuredWindowMicros: bad }),
+        ),
+        String(bad),
+      ).toBe('OBSERVATION_INVALID');
+    }
+  });
+
+  it('a window is legal even when every request failed', () => {
+    // The window is how long the failures took. Refusing it would hide that they took any time.
+    const allFailed = createRiyaBenchmarkObservation({
+      version: 1,
+      attemptedRequests: 4,
+      successfulRequests: 0,
+      failedRequests: 4,
+      inputTokensTotal: 2_048,
+      outputTokensTotal: 0,
+      measuredWindowMicros: 400,
+    });
+    expect(allFailed.measuredWindowMicros).toBe(400);
+  });
+
+  it('both fields are covered by the evidence digest', () => {
+    const base = syntheticEvidence();
+    const withTimeout = createRiyaBenchmarkEvidence({
+      version: 1,
+      subject: base.subject,
+      environment: base.environment,
+      workload: syntheticWorkload({ requestTimeoutMicros: 30_000_000 }),
+      observation: base.observation,
+      createdAt: base.createdAt,
+    });
+    const withWindow = createRiyaBenchmarkEvidence({
+      version: 1,
+      subject: base.subject,
+      environment: base.environment,
+      workload: base.workload,
+      observation: syntheticObservation({ measuredWindowMicros: 2_000 }),
+      createdAt: base.createdAt,
+    });
+    expect(
+      new Set([base.evidenceDigest, withTimeout.evidenceDigest, withWindow.evidenceDigest]).size,
+    ).toBe(3);
+  });
+
+  it('replies-per-second and tokens-per-second are exact', () => {
+    // 20 successes in 2_000 micros = 10_000 replies/sec -> 10_000_000 milli.
+    const observation = syntheticObservation({ measuredWindowMicros: 2_000 });
+    expect(successfulRequestsPerSecondMilli(observation)).toBe(10_000_000);
+    // 4_096 tokens in 2_000 micros = 2_048_000 tokens/sec.
+    expect(aggregateOutputTokensPerSecond(observation)).toBe(2_048_000);
+  });
+
+  it('both helpers are undefined without a window, and never estimated', () => {
+    // Deliberately NOT approximated from concurrency / p50 -- that estimate is wrong under batching,
+    // queueing and tails, and would be indistinguishable from a measurement in a report.
+    const legacy = syntheticObservation();
+    expect(successfulRequestsPerSecondMilli(legacy)).toBeUndefined();
+    expect(aggregateOutputTokensPerSecond(legacy)).toBeUndefined();
+  });
+
+  it('tokens-per-second is undefined when nothing was produced', () => {
+    const noOutput = createRiyaBenchmarkObservation({
+      version: 1,
+      attemptedRequests: 2,
+      successfulRequests: 0,
+      failedRequests: 2,
+      inputTokensTotal: 1_024,
+      outputTokensTotal: 0,
+      measuredWindowMicros: 500,
+    });
+    expect(aggregateOutputTokensPerSecond(noOutput)).toBeUndefined();
+    // Zero replies per second is a real answer, though.
+    expect(successfulRequestsPerSecondMilli(noOutput)).toBe(0);
+  });
+
+  it('the arithmetic stays a SAFE INTEGER at the contract bounds', () => {
+    // 1e6 requests x 1e6 x 1e3 = 1e15, and 1e9 tokens x 1e6 = 1e15. Both under ~9.0e15.
+    expect(1_000_000 * 1_000_000 * 1_000).toBeLessThan(Number.MAX_SAFE_INTEGER);
+    expect(1_000_000_000 * 1_000_000).toBeLessThan(Number.MAX_SAFE_INTEGER);
+    const extreme = createRiyaBenchmarkObservation({
+      version: 1,
+      attemptedRequests: 1_000_000,
+      successfulRequests: 1_000_000,
+      failedRequests: 0,
+      inputTokensTotal: 1_000_000_000,
+      outputTokensTotal: 1_000_000_000,
+      timeToFirstTokenMicrosP50: 1,
+      timeToFirstTokenMicrosP95: 2,
+      endToEndLatencyMicrosP50: 3,
+      endToEndLatencyMicrosP95: 4,
+      decodeMicrosPerOutputTokenP50: 1,
+      decodeMicrosPerOutputTokenP95: 2,
+      measuredWindowMicros: 1,
+    });
+    expect(Number.isSafeInteger(successfulRequestsPerSecondMilli(extreme) ?? 0)).toBe(true);
+    expect(Number.isSafeInteger(aggregateOutputTokensPerSecond(extreme) ?? 0)).toBe(true);
+  });
+
+  it('a timeout mismatch is a NAMED parity failure', () => {
+    const caseIds = ['case.alpha'];
+    const setOf = (requestTimeoutMicros?: number) =>
+      createRiyaBenchmarkResultSet({
+        version: 1,
+        results: [
+          syntheticEvidence({
+            workload: syntheticWorkload(
+              requestTimeoutMicros === undefined
+                ? { workloadCaseId: 'case.alpha' }
+                : { workloadCaseId: 'case.alpha', requestTimeoutMicros },
+            ),
+          }),
+        ],
+        expectedCaseIds: caseIds,
+      });
+    const comparison = compareRiyaBenchmarkResultSets(setOf(30_000_000), setOf(2_000_000));
+    expect(comparison.comparable).toBe(false);
+    expect(comparison.parityMismatches).toContain('REQUEST_TIMEOUT_MISMATCH');
+    expect(comparison.deltas).toStrictEqual([]);
+  });
+
+  it('the window is a compared AXIS, and its absence is NOT a parity failure', () => {
+    const caseIds = ['case.alpha'];
+    const setOf = (measuredWindowMicros?: number) =>
+      createRiyaBenchmarkResultSet({
+        version: 1,
+        results: [
+          syntheticEvidence({
+            workload: syntheticWorkload({ workloadCaseId: 'case.alpha' }),
+            observation: syntheticObservation(
+              measuredWindowMicros === undefined ? {} : { measuredWindowMicros },
+            ),
+          }),
+        ],
+        expectedCaseIds: caseIds,
+      });
+
+    // Both report it: a real delta.
+    const compared = compareRiyaBenchmarkResultSets(setOf(2_000), setOf(1_000));
+    expect(compared.comparable).toBe(true);
+    const windowDelta = compared.deltas.find((one) => one.axis === 'measuredWindowMicros');
+    expect(windowDelta?.delta).toBe(-1_000);
+
+    // One side is legacy: still comparable, the axis is simply absent. Refusing here would strand
+    // every artifact written before the harness existed.
+    const mixed = compareRiyaBenchmarkResultSets(setOf(2_000), setOf());
+    expect(mixed.comparable).toBe(true);
+    expect(mixed.parityMismatches).toStrictEqual([]);
+    expect(mixed.deltas.some((one) => one.axis === 'measuredWindowMicros')).toBe(false);
   });
 });

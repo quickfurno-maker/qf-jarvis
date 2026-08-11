@@ -50,6 +50,18 @@ export interface RiyaBenchmarkObservationV1 {
   readonly decodeMicrosPerOutputTokenP95?: number;
   readonly peakAcceleratorMemoryBytes?: number;
   readonly peakHostMemoryBytes?: number;
+  /**
+   * Wall-clock span of the MEASURED phase, warmup excluded.
+   *
+   * Without it, aggregate throughput cannot be computed — only guessed at, usually as
+   * `concurrency / p50 latency`, which is wrong the moment a target batches, queues or has a tail.
+   * That approximation reads as a measurement and is not one.
+   *
+   * Present even when every request failed: the window is how long the failures took.
+   *
+   * OPTIONAL in V1 for backwards compatibility. The RMB-B harness always supplies it.
+   */
+  readonly measuredWindowMicros?: number;
 }
 
 export type RiyaBenchmarkObservationInput = RiyaBenchmarkObservationV1;
@@ -75,6 +87,7 @@ const observationSchema = z
     decodeMicrosPerOutputTokenP95: MICROS.optional(),
     peakAcceleratorMemoryBytes: BYTES.optional(),
     peakHostMemoryBytes: BYTES.optional(),
+    measuredWindowMicros: z.int().min(1).max(RIYA_BENCHMARK_MAX_MICROS).optional(),
   })
   .strict();
 
@@ -168,5 +181,8 @@ export function createRiyaBenchmarkObservation(
       ? {}
       : { peakAcceleratorMemoryBytes: o.peakAcceleratorMemoryBytes }),
     ...(o.peakHostMemoryBytes === undefined ? {} : { peakHostMemoryBytes: o.peakHostMemoryBytes }),
+    ...(o.measuredWindowMicros === undefined
+      ? {}
+      : { measuredWindowMicros: o.measuredWindowMicros }),
   });
 }

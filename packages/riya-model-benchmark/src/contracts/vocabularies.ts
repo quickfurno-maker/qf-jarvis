@@ -67,6 +67,9 @@ export const RIYA_BENCHMARK_PARITY_MISMATCHES = [
   'WARMUP_COUNT_MISMATCH',
   'MEASURED_COUNT_MISMATCH',
   'STREAMING_MISMATCH',
+  // Two runs that abandon a slow request at different deadlines produce different failure counts and
+  // different tails from the same target. That is a policy difference, not a model difference.
+  'REQUEST_TIMEOUT_MISMATCH',
   'SAMPLING_CONFIG_MISMATCH',
   'MEASUREMENT_POLICY_MISMATCH',
 ] as const;

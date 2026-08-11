@@ -25,6 +25,7 @@ import { RiyaBenchmarkError } from './errors.js';
 import { isExactGovernedIdentity } from '../internal/exact-identity.js';
 import {
   RIYA_BENCHMARK_MAX_CONCURRENCY,
+  RIYA_BENCHMARK_MAX_MICROS,
   RIYA_BENCHMARK_MAX_REQUESTS,
   RIYA_BENCHMARK_MAX_TOKENS,
 } from './vocabularies.js';
@@ -46,6 +47,17 @@ export interface RiyaBenchmarkWorkloadV1 {
   readonly warmupRequestCount: number;
   readonly measuredRequestCount: number;
   readonly streaming: boolean;
+  /**
+   * How long a single request was allowed before the harness gave up on it.
+   *
+   * Measurement parity, not a detail. A run that abandons a slow request at two seconds and one that
+   * waits thirty produce different failure counts and different tail latencies from the same target,
+   * so comparing them is comparing two policies rather than two models.
+   *
+   * OPTIONAL in V1 for backwards compatibility: evidence written before this field existed stays
+   * valid, and an absent field changes no digest. The RMB-B harness always supplies it.
+   */
+  readonly requestTimeoutMicros?: number;
   /** A digest of the sampling/decoding configuration. Never the configuration itself. */
   readonly samplingConfigDigest: string;
   /**
@@ -84,6 +96,7 @@ const workloadSchema = z
     warmupRequestCount: z.int().min(0).max(RIYA_BENCHMARK_MAX_REQUESTS),
     measuredRequestCount: z.int().min(1).max(RIYA_BENCHMARK_MAX_REQUESTS),
     streaming: z.boolean(),
+    requestTimeoutMicros: z.int().min(1).max(RIYA_BENCHMARK_MAX_MICROS).optional(),
     samplingConfigDigest: z.string().regex(/^[0-9a-f]{64}$/u),
     measurementPolicyRef: IDENTIFIER,
   })
@@ -114,7 +127,14 @@ export function createRiyaBenchmarkWorkload(
       throw new RiyaBenchmarkError('WORKLOAD_INVALID');
     }
   }
-  return Object.freeze({ ...parsed.data, version: 1 as const });
+  // Built key by key: under `exactOptionalPropertyTypes` an explicitly-undefined optional is a
+  // different type from an absent one, and the digest treats them as the same artifact.
+  const { requestTimeoutMicros, ...rest } = parsed.data;
+  return Object.freeze({
+    ...rest,
+    version: 1 as const,
+    ...(requestTimeoutMicros === undefined ? {} : { requestTimeoutMicros }),
+  });
 }
 
 /**
@@ -158,6 +178,8 @@ export function workloadParityKey(workload: RiyaBenchmarkWorkloadV1): string {
     String(workload.warmupRequestCount),
     String(workload.measuredRequestCount),
     String(workload.streaming),
+    // Absent is its own value here, and two legacy workloads that both omit it still match.
+    String(workload.requestTimeoutMicros),
     workload.samplingConfigDigest,
     workload.measurementPolicyRef,
   ].join('|');

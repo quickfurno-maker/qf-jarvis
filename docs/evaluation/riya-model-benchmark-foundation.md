@@ -242,10 +242,33 @@ produced it.
 No dependency on Human Gold. The HGV1 corpus is a separate, deferred workstream, and this slice does
 not wait on it or import from it.
 
+## The harness exists — RMB-B
+
+`@qf-jarvis/riya-model-benchmark-harness` is the scheduler that produces these numbers: warmup excluded,
+at most `concurrency` in flight, no retry, nearest-rank percentiles over successes only, and a measured
+window. See the [harness](./riya-benchmark-harness.md) and the
+[measurement policy](./riya-benchmark-measurement-policy-v1.md).
+
+It runs only against an injected target port, and every target it has been run against is a fake. **No
+real model has been benchmarked**, and the production model gateway is untouched.
+
+### Two additive V1 fields
+
+`workload.requestTimeoutMicros` and `observation.measuredWindowMicros` are **optional** here, so
+evidence written before they existed stays valid and its digest does not move — an absent field is
+dropped from the canonical form, so a legacy artifact hashes to exactly what it always did.
+
+Harness-generated evidence always carries both. The timeout is measurement parity
+(`REQUEST_TIMEOUT_MISMATCH`); the window is a compared axis whose _absence_ is deliberately not a parity
+mismatch, so legacy artifacts are not stranded.
+
+Aggregate throughput — `successfulRequestsPerSecondMilli`, `aggregateOutputTokensPerSecond` — divides by
+that window. It is never approximated from `concurrency / p50 latency`, which is wrong under batching,
+queueing and tails and would be indistinguishable from a real measurement in a report.
+
 ## What is not built yet
 
-No harness. No adapter that turns a real run into an observation. No suite of workload cases. No
-measurement of any model.
+No adapter that turns a REAL run into an observation. No memory probe implementation. No candidate
+workload matrix. No measurement of any model, and no model chosen.
 
-Those need a decision about what to measure and on what, which is the owner's and comes after these
-contracts exist to receive it.
+Those need decisions that are the owner's, and they come after the machinery exists to receive them.

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
+  },
+
+  // The EMITTING build, referenced by the root solution. The vitest specs under src/tests are
+  // EXCLUDED so nothing test-only reaches dist/; the fakes under src/testing ARE emitted, because
+  // they are the published `./testing` subpath and the only targets this package is ever run against
+  // in CI.
+  //
+  // Exactly ONE project reference. `riya-model-benchmark` owns the evidence contracts, the digests,
+  // the manifest and the comparison; this package measures and hands the numbers over. It constructs
+  // no artifact of its own and duplicates no digest logic, which is what keeps one evidence authority.
+  //
+  // Deliberately absent: `model-gateway` and `model-gateway-composition` -- the serving waist must not
+  // grow benchmark instrumentation, so a real provider or local-engine adapter is a LATER slice behind
+  // this package's target port, not a modification of the gateway. Also absent: every runtime,
+  // `riya-quality-evaluation` and `riya-intelligence-dataset` (quality is P10's and Human Gold is
+  // deferred), `prompt-registry` and `governed-knowledge` (a prompt reaches this package as a DIGEST),
+  // and anything Postgres or `event-backbone`.
+  "references": [{ "path": "../riya-model-benchmark/tsconfig.build.json" }],
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/tests/**"]
+}

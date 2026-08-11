@@ -56,11 +56,16 @@ where the base model is chosen — **the smallest one that clears both with adeq
 before this point names a model, deliberately: a dataset built around one would pre-empt the
 measurement that is supposed to make the choice.
 
-Operational evidence — latency, decode speed, request success, memory — is a THIRD input here, kept
-separate from safety and quality rather than blended into a score. RMB-A builds the contracts for it:
-see the [benchmark foundation](../evaluation/riya-model-benchmark-foundation.md) and the
-[selection protocol](../evaluation/riya-model-selection-protocol.md). Safety and quality are gates;
-efficiency decides only among candidates that already cleared them.
+Operational evidence — latency, decode speed, request success, memory, throughput — is a THIRD input
+here, kept separate from safety and quality rather than blended into a score. RMB-A builds the
+contracts and RMB-B the harness that produces the numbers: see the
+[benchmark foundation](../evaluation/riya-model-benchmark-foundation.md), the
+[harness](../evaluation/riya-benchmark-harness.md), the
+[measurement policy](../evaluation/riya-benchmark-measurement-policy-v1.md) and the
+[selection protocol](../evaluation/riya-model-selection-protocol.md).
+
+Safety and quality are gates; efficiency decides only among candidates that already cleared them. No
+real model has been benchmarked and none has been chosen.
 
 ### 5. SFT candidate — LoRA/QLoRA first
 

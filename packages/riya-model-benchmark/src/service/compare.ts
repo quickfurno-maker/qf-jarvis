@@ -73,6 +73,10 @@ const COMPARED_AXES = [
   'decodeMicrosPerOutputTokenP95',
   'peakAcceleratorMemoryBytes',
   'peakHostMemoryBytes',
+  // A raw axis, compared when BOTH sides report it. Its ABSENCE is not a parity mismatch -- legacy
+  // RMB-A evidence predates the field, and refusing to compare against it would strand every artifact
+  // written before the harness existed.
+  'measuredWindowMicros',
 ] as const;
 
 /** Every parity condition, as a comparison of the two workloads that must agree. */
@@ -99,6 +103,7 @@ function parityMismatchesOf(
   if (x.warmupRequestCount !== y.warmupRequestCount) found.push('WARMUP_COUNT_MISMATCH');
   if (x.measuredRequestCount !== y.measuredRequestCount) found.push('MEASURED_COUNT_MISMATCH');
   if (x.streaming !== y.streaming) found.push('STREAMING_MISMATCH');
+  if (x.requestTimeoutMicros !== y.requestTimeoutMicros) found.push('REQUEST_TIMEOUT_MISMATCH');
   if (x.samplingConfigDigest !== y.samplingConfigDigest) found.push('SAMPLING_CONFIG_MISMATCH');
   if (x.measurementPolicyRef !== y.measurementPolicyRef) found.push('MEASUREMENT_POLICY_MISMATCH');
   return found;

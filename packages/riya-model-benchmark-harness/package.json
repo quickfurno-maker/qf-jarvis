@@ -1,0 +1,27 @@
+{
+  "name": "@qf-jarvis/riya-model-benchmark-harness",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis Riya operational benchmark HARNESS (RMB-B). The deterministic scheduler that turns a measured run into @qf-jarvis/riya-model-benchmark evidence: content-free suite plans with real concurrency sweeps, a warmup phase excluded from every number, an at-most-N-in-flight measured phase with no retry and no sleep, nearest-rank percentiles over successful requests only, and a measured window that makes aggregate throughput a measurement rather than an estimate. It executes ONLY against an injected target port and a monotonic clock port -- there is no provider SDK, no model gateway invocation, no local inference engine, no model download, no HTTP, no child_process, no environment lookup, no filesystem discovery, no database and no training framework, and every test in this package runs against deterministic FAKE targets. It benchmarks no real model and selects none. Prompts reach it only as digests and token counts, so no customer message, Riya reply, system prompt, Human Gold trajectory or P10 fixture body can enter. Evidence, digests, manifests and comparison remain the authority of @qf-jarvis/riya-model-benchmark; this package constructs nothing of its own. A harness or protocol failure invalidates the WHOLE suite rather than emitting a partial result set. Depends on @qf-jarvis/riya-model-benchmark and zod.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "default": "./dist/testing/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/riya-model-benchmark": "workspace:*",
+    "zod": "4.4.3"
+  }
+}

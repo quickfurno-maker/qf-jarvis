@@ -503,6 +503,21 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // and there is no composite score, winner, recommendation or rollout approval anywhere in the
       // surface: speed is not quality, quality is not safety, and none of the three ships anything.
       'riya-model-benchmark',
+      // RMB-B: the OFFLINE operational benchmark HARNESS -- the deterministic scheduler that produces
+      // the numbers RMB-A turns into evidence. Still an EXACT set match; it records an authorised
+      // addition, it does not relax the assertion. It BENCHMARKS NOTHING REAL: execution happens only
+      // through an injected target port, every target it has run against is a fake, and there is no
+      // provider SDK, model-gateway invocation, local inference engine, model download, HTTP,
+      // child_process, environment lookup, filesystem discovery, database or training framework. It
+      // reads NO ambient clock -- every instant comes through a monotonic port and `createdAt` is
+      // injected -- and it sleeps, waits and retries nowhere, because a retrying benchmark measures a
+      // retry policy. Prompts reach it as digests and token counts, so no customer message, Riya
+      // reply, Human Gold trajectory or P10 fixture body can enter. It reimplements no digest,
+      // manifest or comparison: RMB-A remains the one evidence authority. A protocol, identity or
+      // clock failure invalidates the WHOLE suite rather than emitting a partial result set, and the
+      // production model gateway is untouched -- a real adapter belongs behind the target port in a
+      // later slice, not as benchmark instrumentation on the path that serves customers.
+      'riya-model-benchmark-harness',
       // RWC-P4B (ADR-0099): the Riya half of the ONE structured model call -- the content-minimised
       // continuity projection sent as the single user message, the strict reply+observations schema,
       // the narrowed model provenance vocabulary, and the check that the model's claimed question
