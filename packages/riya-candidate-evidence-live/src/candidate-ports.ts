@@ -27,7 +27,6 @@ import type {
   RiyaCandidateExecutionRecord,
   RiyaCandidateRequest,
 } from '@qf-jarvis/riya-candidate-evaluation-runner';
-import { RIYA_SAFETY_FIXTURES } from '@qf-jarvis/riya-candidate-evaluation-runner';
 import type {
   RiyaQualityCandidatePort,
   RiyaQualityCandidateRecord,
@@ -45,28 +44,44 @@ import { runRiyaEvaluationTurn } from './riya-turn.js';
 import type { RiyaTurnDeps, RiyaTurnOutcome } from './riya-turn.js';
 import { syntheticContinuityFor } from './synthetic-context.js';
 
+/**
+ * Everything a turn needs EXCEPT the conversation state.
+ *
+ * The state is deliberately not here. It is derived from the request by this port, so a future caller
+ * cannot supply a generically-clear state and quietly erase a human takeover or a subject erasure
+ * from the situation. Forgetting to map the situation is the failure mode; making it impossible to
+ * pass the state in is the fix.
+ */
+export type BaseTurnDeps = Omit<RiyaTurnDeps, 'stateReader'>;
+
 /** How the operator reaches a provider, and how it counts what happened. */
 export interface CandidatePortDeps {
   /** Build the per-turn dependencies. Returns `undefined` when a ceiling refuses the next call. */
-  readonly turnDeps: (caseId: string) => RiyaTurnDeps | undefined;
+  readonly turnDeps: (caseId: string) => BaseTurnDeps | undefined;
   /** Actual provider invocations observed for the last turn, read at the provider boundary. */
   readonly invocationsFor: (caseId: string) => number;
-  /** Per-case overrides for the cancellation case only. */
-  readonly cancellationCaseId?: string;
-  readonly cancellationTurnDeps?: (caseId: string) => RiyaTurnDeps | undefined;
+  /**
+   * The cancellation-instrumented dependencies, selected ONLY when the request says the turn is
+   * cancelled after admission. Never selected by case id, slug or red-team kind.
+   */
+  readonly cancellationTurnDeps?: (caseId: string) => BaseTurnDeps | undefined;
   readonly continuedAfterCancellation?: () => boolean;
 }
 
 /**
  * The content-free state both adapter gates read.
  *
- * This is where three PRE_MODEL properties are actually enforced, by the adapter rather than by this
- * file: an active human takeover, an erased subject and a cancelled turn each block before the
- * gateway. `ERASED_SUBJECT_RETRIEVAL` reuses that same real subject-status boundary — the case
- * declares `LOCAL_ONLY` and an erased subject, and both refuse.
+ * This is where two PRE_MODEL properties are actually enforced, by the ADAPTER rather than by this
+ * file: an active human takeover and an erased subject each refuse before the gateway.
+ *
+ * `subjectStatus` comes from `request.subjectErased`. It used to be read out of the case IDENTIFIER,
+ * which meant renaming a fixture silently changed its privacy state. An identifier is a name, never
+ * execution authority.
+ *
+ * `cancelled` stays false even for the cancellation case: that turn IS admitted and then aborted
+ * mid-flight, so pre-marking it cancelled would test the state gate instead of cancellation.
  */
 export function stateReaderFor(request: RiyaCandidateRequest): ReplyStateReader {
-  const erasedSubject = request.caseId.includes('erased-subject');
   const state: ReplyState = Object.freeze({
     revision: 1,
     partyType: request.agentScope === 'VENDOR' ? 'VENDOR' : 'CLIENT',
@@ -75,7 +90,7 @@ export function stateReaderFor(request: RiyaCandidateRequest): ReplyStateReader 
     humanTakeover: request.humanTakeoverActive,
     aiPaused: false,
     cancelled: false,
-    subjectStatus: erasedSubject ? 'erased' : 'clear',
+    subjectStatus: request.subjectErased ? 'erased' : 'clear',
   });
   return { read: () => Promise.resolve(state) };
 }
@@ -161,7 +176,12 @@ export function createSafetyCandidatePort(deps: CandidatePortDeps): RiyaCandidat
         return notAdmitted('NONE');
       }
       // 2. Data class. A hosted candidate is never handed LOCAL_ONLY or HUMAN_ONLY content.
-      if (!hostedRoutable(request.declaredDataClass)) {
+      //
+      // EXCEPT where the case is about an erased subject: short-circuiting there would mean the M4
+      // subject gate was never exercised, and the case would prove the data-class rule twice instead
+      // of proving the privacy rule once. So an erased-subject turn is BUILT and the adapter refuses
+      // it, still with zero provider invocations, because the gate runs before the gateway.
+      if (!hostedRoutable(request.declaredDataClass) && !request.subjectErased) {
         return notAdmitted('NONE');
       }
       // 3. Governed knowledge, decided by the PRODUCTION retrieval authority. A refusal here is the
@@ -175,10 +195,12 @@ export function createSafetyCandidatePort(deps: CandidatePortDeps): RiyaCandidat
         admitted = admission.records;
       }
 
-      const cancellationCase = deps.cancellationCaseId === request.caseId;
+      // Cancellation is a REQUEST FACT. The contract already carries it, so nothing here reads a case
+      // id, a slug or a red-team kind to decide how a turn behaves.
+      const cancellationCase = request.cancelAfterAdmission;
       const build = cancellationCase ? (deps.cancellationTurnDeps ?? deps.turnDeps) : deps.turnDeps;
-      const turnDeps = build(request.caseId);
-      if (turnDeps === undefined) {
+      const base = build(request.caseId);
+      if (base === undefined) {
         // A ceiling refused the next call. Not a candidate verdict — no invocation happened.
         return notAdmitted(admitted.length > 0 ? 'UNKNOWN' : 'NONE');
       }
@@ -193,7 +215,8 @@ export function createSafetyCandidatePort(deps: CandidatePortDeps): RiyaCandidat
           humanTakeoverActive: request.humanTakeoverActive,
           admittedKnowledge: admitted,
         },
-        turnDeps,
+        // The port owns the state, so the situation cannot be lost between here and the gate.
+        { ...base, stateReader: stateReaderFor(request) },
       );
 
       const invocations = deps.invocationsFor(request.caseId);
@@ -258,17 +281,6 @@ export function createSafetyCandidatePort(deps: CandidatePortDeps): RiyaCandidat
   });
 }
 
-/** The safety fixture whose execution expectation is cancellation. Used to pick the invoker. */
-export function cancellationFixtureId(): string {
-  const found = RIYA_SAFETY_FIXTURES.find(
-    (one) => one.redTeamKind === 'CANCELLATION_OR_KILLSWITCH_IGNORED',
-  );
-  if (found === undefined) {
-    throw new Error('no cancellation fixture');
-  }
-  return found.fixtureId;
-}
-
 /** A `?`-free reply still has a language; a reply with no measurable language fails its case. */
 
 export interface QualityPortDeps extends CandidatePortDeps {
@@ -310,10 +322,27 @@ export function createQualityCandidatePort(deps: QualityPortDeps): RiyaQualityCa
         admitted = admission.records;
       }
 
-      const turnDeps = deps.turnDeps(request.caseId);
-      if (turnDeps === undefined) {
+      const base = deps.turnDeps(request.caseId);
+      if (base === undefined) {
         return blocked(request.continuityPhaseBefore);
       }
+      // A P10 case has no takeover and no erased subject: the corpus governs a live client turn, and
+      // inventing either would score the candidate on a situation the corpus never described.
+      const stateReader: ReplyStateReader = {
+        read: () =>
+          Promise.resolve(
+            Object.freeze({
+              revision: 1,
+              partyType: 'CLIENT' as const,
+              assignedActor: 'RIYA' as const,
+              dataClass: 'HOSTED_ALLOWED' as const,
+              humanTakeover: false,
+              aiPaused: false,
+              cancelled: false,
+              subjectStatus: 'clear' as const,
+            }),
+          ),
+      };
 
       const outcome = await runRiyaEvaluationTurn(
         {
@@ -324,7 +353,7 @@ export function createQualityCandidatePort(deps: QualityPortDeps): RiyaQualityCa
           humanTakeoverActive: false,
           admittedKnowledge: admitted,
         },
-        turnDeps,
+        { ...base, stateReader },
       );
 
       const reply = outcome.result.structuredReply;

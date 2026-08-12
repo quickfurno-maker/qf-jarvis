@@ -46,7 +46,11 @@ import {
   RIYA_CLIENT_SALES_PROMPT_VERSION,
 } from '@qf-jarvis/riya-prompts';
 
-import { CANDIDATE_POLICY_REVISION, CANDIDATE_RELEASE } from './candidate-release.js';
+import {
+  CANDIDATE_CAPABILITY_PROFILE_REF,
+  CANDIDATE_POLICY_REVISION,
+  CANDIDATE_RELEASE,
+} from './candidate-release.js';
 import { SYNTHETIC_AVAILABILITY, syntheticContinuityFor } from './synthetic-context.js';
 
 /** The phases at or past `SUMMARY`, where the reply-only identity serves and no phase may move. */
@@ -177,7 +181,9 @@ export async function runRiyaEvaluationTurn(
 
   const adapter = createModelReplyAdapter({
     release,
-    capabilityProfileRef: CANDIDATE_RELEASE.releaseId,
+    // The GOVERNED capability profile, not the release id. Both are strings and both typecheck; only
+    // one names the reviewed statement about what this model can actually do.
+    capabilityProfileRef: CANDIDATE_CAPABILITY_PROFILE_REF,
     // Per-scope bindings, CLIENT only. Riya has no VENDOR or COORDINATION prompt and inventing one
     // to make a case runnable would widen the agent rather than measure it.
     //

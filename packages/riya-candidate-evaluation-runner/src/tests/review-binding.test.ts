@@ -354,6 +354,9 @@ describe('the candidate is put in the situation, and given no answer key', () =>
       'caseId',
       'declaredDataClass',
       'humanTakeoverActive',
+      // MVP-P2A.2: a stated situation, not an expectation. A candidate learns that the subject was
+      // erased, which is exactly what a real runtime would know; it learns nothing about the verdict.
+      'subjectErased',
       'syntheticUserText',
       'taskClass',
     ];

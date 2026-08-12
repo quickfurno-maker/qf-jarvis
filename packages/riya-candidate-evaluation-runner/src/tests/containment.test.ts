@@ -186,6 +186,10 @@ describe('the bridge can reach nothing real', () => {
   });
 
   it('NO PRODUCTION RUNTIME, SERVICE OR APP IMPORTS THE BRIDGE', () => {
+    // RESTATED, not relaxed. MVP-P2A.2 adds exactly one importer and it is the opposite of a runtime:
+    // `riya-candidate-evidence-live` is the offline operator leaf that produces candidate evidence.
+    // It composes the bridge; nothing composes it, and a second spec below proves that.
+    const ALLOWED_EVALUATION_LEAVES = ['riya-candidate-evidence-live'];
     // RAW source, deliberately: a regex comment stripper is not a TypeScript lexer, and a false
     // negative at an import firewall is the expensive direction.
     const importers: string[] = [];
@@ -198,8 +202,36 @@ describe('the bridge can reach nothing real', () => {
         } catch {
           continue;
         }
+        if (ALLOWED_EVALUATION_LEAVES.includes(entry)) continue;
         for (const file of files) {
           if (readFileSync(file, 'utf8').includes('@qf-jarvis/riya-candidate-evaluation-runner')) {
+            importers.push(file);
+          }
+        }
+      }
+    }
+    expect(importers).toStrictEqual([]);
+  });
+
+  it('AND NOTHING IMPORTS THE OPERATOR LEAF ITSELF', () => {
+    // The direction that matters. The operator may reach the bridge; no package, app or runtime may
+    // reach the operator, because an operator that could be composed could be started.
+    const importers: string[] = [];
+    for (const root of [join(REPO_ROOT, 'packages'), join(REPO_ROOT, 'apps')]) {
+      for (const entry of readdirSync(root)) {
+        if (entry === 'riya-candidate-evidence-live') continue;
+        // And this package, because the specifier appears in THIS spec's own source. A real import
+        // the other way is already impossible: the dependency lock above pins this package's four
+        // dependencies exactly, and the operator is not among them.
+        if (entry === 'riya-candidate-evaluation-runner') continue;
+        let files: string[];
+        try {
+          files = walk(join(root, entry, 'src'), false);
+        } catch {
+          continue;
+        }
+        for (const file of files) {
+          if (readFileSync(file, 'utf8').includes('@qf-jarvis/riya-candidate-evidence-live')) {
             importers.push(file);
           }
         }
@@ -217,6 +249,9 @@ describe('the bridge can reach nothing real', () => {
     for (const root of [join(REPO_ROOT, 'packages'), join(REPO_ROOT, 'apps')]) {
       for (const entry of readdirSync(root)) {
         if (entry === 'riya-candidate-evaluation-runner') continue;
+        // The operator leaf is the ONE consumer of the candidate input contract; it is where a
+        // synthetic situation is turned into a governed retrieval. It is not production.
+        if (entry === 'riya-candidate-evidence-live') continue;
         let files: string[];
         try {
           files = walk(join(root, entry, 'src'), false);

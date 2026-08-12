@@ -19,6 +19,14 @@
  * the ledger is the thing most likely to be printed, so it is the thing that must be safest to print.
  */
 
+import {
+  CANDIDATE_MAX_COMPLETION_TOKENS,
+  CANDIDATE_MAX_INPUT_TOKENS,
+  CANDIDATE_PRICE_PER_M_CACHED_INPUT_USD,
+  CANDIDATE_PRICE_PER_M_INPUT_USD,
+  CANDIDATE_PRICE_PER_M_OUTPUT_USD,
+} from './candidate-release.js';
+
 /** The exact arithmetic of one complete successful run. */
 export const SMOKE_REQUESTS = 1;
 export const SAFETY_MODEL_REQUIRED_REQUESTS = 10;
@@ -29,7 +37,18 @@ export const MAX_PROVIDER_REQUESTS = SMOKE_REQUESTS + SAFETY_MODEL_REQUIRED_REQU
 export const MAX_ESTIMATED_COST_USD = 5;
 
 /** Why the ledger refused the next call. Closed and content-free. */
-export const LEDGER_REFUSALS = ['request-limit-reached', 'cost-limit-reached'] as const;
+export const LEDGER_REFUSALS = [
+  'request-limit-reached',
+  'cost-limit-reached',
+  /**
+   * A provider reported more tokens than the model can physically process.
+   *
+   * That is not an overspend, it is a broken premise: the reservation bound is derived from the
+   * declared maxima, so a figure above them means the bound never guaranteed anything. The run stops
+   * rather than continuing to reserve against arithmetic that has been shown to be wrong.
+   */
+  'usage-bound-violated',
+] as const;
 export type LedgerRefusal = (typeof LEDGER_REFUSALS)[number];
 
 /** Which phase a request belongs to. Used for reporting only; every phase shares one ceiling. */
@@ -49,6 +68,8 @@ export interface LedgerSnapshot {
   /** True when any request had to be priced from a bound rather than from reported usage. */
   readonly costIsEstimated: boolean;
   readonly estimatedCostUsd: number;
+  /** True once a provider reported usage above the declared hard maxima. Closes the run. */
+  readonly usageBoundViolated: boolean;
 }
 
 export type LedgerReservation =
@@ -74,6 +95,15 @@ export interface RequestLedgerConfig {
    */
   readonly fallbackInputTokens: number;
   readonly fallbackOutputTokens: number;
+  /**
+   * The declared provider maxima. Reported usage above either is a closed invariant violation.
+   *
+   * These are what make the reservation a GUARANTEE rather than an estimate: no single request can
+   * cost more than these two figures priced at the current rates, so 83 reservations have a real
+   * upper bound that can be checked against the ceiling before anything is spent.
+   */
+  readonly hardMaxInputTokens: number;
+  readonly hardMaxOutputTokens: number;
 }
 
 export interface RequestLedger {
@@ -97,6 +127,7 @@ export function createRequestLedger(config: RequestLedgerConfig): RequestLedger 
   let cachedInputTokens = 0;
   let outputTokens = 0;
   let estimated = false;
+  let usageBoundViolated = false;
 
   const total = (): number => counts.smoke + counts.safety + counts.p10;
 
@@ -107,15 +138,22 @@ export function createRequestLedger(config: RequestLedgerConfig): RequestLedger 
 
   return Object.freeze({
     reserve(phase: LedgerPhase): LedgerReservation {
+      // A broken bound closes the run before anything else is considered. Continuing would mean
+      // reserving against a guarantee that has already been disproved.
+      if (usageBoundViolated) {
+        return { ok: false, refusal: 'usage-bound-violated' };
+      }
       if (total() + 1 > config.maxRequests) {
         return { ok: false, refusal: 'request-limit-reached' };
       }
       // Priced against what the NEXT call could cost at the conservative bound, so the ceiling cannot
       // be crossed by the request that discovers it.
+      // Priced at the HARD MAXIMA, not at a typical request. The question a ceiling has to answer is
+      // "could the next call breach it", and only the worst case answers that.
       const projected =
         currentCost() +
-        cost(config.fallbackInputTokens, config.pricePerMillionInputUsd) +
-        cost(config.fallbackOutputTokens, config.pricePerMillionOutputUsd);
+        cost(config.hardMaxInputTokens, config.pricePerMillionInputUsd) +
+        cost(config.hardMaxOutputTokens, config.pricePerMillionOutputUsd);
       if (projected > config.maxCostUsd) {
         return { ok: false, refusal: 'cost-limit-reached' };
       }
@@ -124,6 +162,14 @@ export function createRequestLedger(config: RequestLedgerConfig): RequestLedger 
     },
 
     settle(usage: ProviderUsageFacts | undefined, succeeded: boolean): void {
+      // Checked before the figures are accumulated: a report above the declared maxima is not a
+      // larger measurement, it is evidence the declaration is wrong.
+      if (
+        (usage?.inputTokens ?? 0) > config.hardMaxInputTokens ||
+        (usage?.outputTokens ?? 0) > config.hardMaxOutputTokens
+      ) {
+        usageBoundViolated = true;
+      }
       if (succeeded) {
         successes += 1;
       } else {
@@ -161,7 +207,31 @@ export function createRequestLedger(config: RequestLedgerConfig): RequestLedger 
         outputTokens,
         costIsEstimated: estimated,
         estimatedCostUsd: currentCost(),
+        usageBoundViolated,
       });
     },
+  });
+}
+
+/**
+ * The operator's ledger configuration.
+ *
+ * The reservation bound is the model's OWN declared maxima, so a reserved request cannot cost more
+ * than it claims to. At the current published rates that is about $0.0295 per request and about
+ * $2.45 across all 83 — comfortably inside the $5 ceiling, and a spec asserts the arithmetic rather
+ * than trusting this comment. If either price rose enough to break it, the spec fails and preflight
+ * refuses before a credential is ever read.
+ */
+export function createOperatorLedger(): RequestLedger {
+  return createRequestLedger({
+    maxRequests: MAX_PROVIDER_REQUESTS,
+    maxCostUsd: MAX_ESTIMATED_COST_USD,
+    pricePerMillionInputUsd: CANDIDATE_PRICE_PER_M_INPUT_USD,
+    pricePerMillionCachedInputUsd: CANDIDATE_PRICE_PER_M_CACHED_INPUT_USD,
+    pricePerMillionOutputUsd: CANDIDATE_PRICE_PER_M_OUTPUT_USD,
+    fallbackInputTokens: CANDIDATE_MAX_INPUT_TOKENS,
+    fallbackOutputTokens: CANDIDATE_MAX_COMPLETION_TOKENS,
+    hardMaxInputTokens: CANDIDATE_MAX_INPUT_TOKENS,
+    hardMaxOutputTokens: CANDIDATE_MAX_COMPLETION_TOKENS,
   });
 }
