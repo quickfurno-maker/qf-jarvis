@@ -13,6 +13,25 @@
  * M4 boundary; only a malformed request is an error. Silent substitution is the failure this design
  * exists to prevent: executing a prompt other than the one identified is exactly the drift the Part 0
  * audit found.
+ *
+ * ### One version, one body — bound to one or more exact task classes (MVP-P2A.2-P)
+ *
+ * S3-I-A made `(promptId, promptVersion)` a global identity for exactly ONE definition, because at the
+ * time a version implied a definition. The first real multi-task production prompt set showed that is
+ * one rule doing two jobs.
+ *
+ * The job worth keeping is: a reviewed version can never silently mean different text. The job that
+ * was accidental is: a version may be bound to only one task class. Riya's serving path resolves three
+ * exact CLIENT task classes with no fallback between them, and the same reviewed behavioural bytes are
+ * correct for all three — so under the old rule the same reviewed prompt could not be registered for
+ * the paths it governs.
+ *
+ * The invariant is therefore NARROWED rather than relaxed. A family/version may carry several TASK-
+ * CLASS VARIANTS only when every one of them is the same reviewed prompt: identical bytes, identical
+ * digest, identical scope, identical result mode, and a distinct task class. Different bytes, a
+ * different scope or a different result mode under one version stays a refusal, which is the property
+ * the original rule existed for. And resolution is unchanged in strictness: a variant is never a
+ * fallback for another.
  */
 import { z } from 'zod';
 
@@ -129,17 +148,21 @@ function canonicalized(supplied: unknown): PromptDefinition {
 /**
  * Build a frozen registry from materialized definitions.
  *
- * `(promptId, promptVersion)` is a GLOBAL identity: two definitions sharing it are rejected even when
- * their content is byte-identical, and regardless of scope, task class or result mode. A version
- * identifies one exact definition, or it identifies nothing — allowing the same version to mean
- * different things in different scopes would put the drift back one level down.
+ * `(promptId, promptVersion)` identifies ONE EXACT BYTE BODY. It may be bound to more than one task
+ * class, and only then: every variant sharing a family/version must have identical bytes, an identical
+ * digest, the same scope and the same result mode, with a distinct task class each. Anything else
+ * under one version — different text, a different scope, a different result mode, or the same task
+ * class twice — is `duplicate-definition`, exactly as before.
+ *
+ * That keeps the property the rule was written for. A reviewer approves a version by reading its
+ * bytes, and no variant of that version can ever be different bytes.
  *
  * An empty registry is allowed. A registry with no definitions is a perfectly coherent
  * not-yet-activated foundation, and S3-I-A deliberately registers no production prompt; refusing it
  * would force this phase to invent the very content it is not authorized to add.
  *
- * Order is canonical — `promptId` ascending, then `promptVersion` ascending — never caller order, so
- * two callers listing the same definitions differently get the same registry.
+ * Order is canonical — `promptId`, then `promptVersion`, then `taskClass`, all ascending — never
+ * caller order, so two callers listing the same definitions differently get the same registry.
  */
 export function createPromptRegistry(definitions: readonly PromptDefinition[]): PromptRegistry {
   if (!Array.isArray(definitions)) {
@@ -148,23 +171,48 @@ export function createPromptRegistry(definitions: readonly PromptDefinition[]): 
 
   const canonical = definitions.map((definition) => canonicalized(definition));
 
-  const seen = new Set<string>();
+  // The family/version each variant must agree with. The FIRST canonical definition for a family
+  // version sets it; every later one is compared against it rather than against its neighbour, so a
+  // chain of pairwise-compatible definitions cannot drift across the set.
+  const bodyByIdentity = new Map<string, PromptDefinition>();
+  const seenVariants = new Set<string>();
   for (const definition of canonical) {
     const identity = `${definition.promptId}@${String(definition.promptVersion)}`;
-    if (seen.has(identity)) {
+    const variant = `${identity}#${definition.taskClass}`;
+    if (seenVariants.has(variant)) {
       throw new PromptRegistryError('duplicate-definition');
     }
-    seen.add(identity);
+    seenVariants.add(variant);
+
+    const established = bodyByIdentity.get(identity);
+    if (established === undefined) {
+      bodyByIdentity.set(identity, definition);
+      continue;
+    }
+    // A second definition for a version the reviewer already approved. It is the SAME prompt bound to
+    // another task, or it is a different prompt wearing an approved version number.
+    if (
+      established.systemTemplate !== definition.systemTemplate ||
+      established.contentDigest !== definition.contentDigest ||
+      established.agentScope !== definition.agentScope ||
+      established.resultMode !== definition.resultMode
+    ) {
+      throw new PromptRegistryError('duplicate-definition');
+    }
   }
 
   const ordered = Object.freeze(
-    [...canonical].sort((a, b) =>
-      a.promptId === b.promptId
-        ? a.promptVersion - b.promptVersion
-        : a.promptId < b.promptId
-          ? -1
-          : 1,
-    ),
+    [...canonical].sort((a, b) => {
+      if (a.promptId !== b.promptId) {
+        return a.promptId < b.promptId ? -1 : 1;
+      }
+      if (a.promptVersion !== b.promptVersion) {
+        return a.promptVersion - b.promptVersion;
+      }
+      // The tiebreaker that makes a multi-variant family deterministic. Without it, two callers
+      // listing the same three variants in different orders would get different registries.
+      return a.taskClass < b.taskClass ? -1 : a.taskClass > b.taskClass ? 1 : 0;
+    }),
   );
 
   return Object.freeze({
@@ -179,24 +227,17 @@ export function createPromptRegistry(definitions: readonly PromptDefinition[]): 
         throw new PromptRegistryError('invalid-resolution');
       }
       const wanted = parsed.data;
-      const found = ordered.find(
+      // Matched on the WHOLE request in one pass. Finding by id/version first and then checking the
+      // rest was equivalent while a version had one definition; with task-class variants it would
+      // pick a sibling and then reject it, so a request for a task that IS registered could miss.
+      return ordered.find(
         (definition) =>
           definition.promptId === wanted.promptId &&
-          definition.promptVersion === wanted.promptVersion,
+          definition.promptVersion === wanted.promptVersion &&
+          definition.agentScope === wanted.agentScope &&
+          definition.taskClass === wanted.taskClass &&
+          definition.resultMode === wanted.resultMode,
       );
-      if (found === undefined) {
-        return undefined;
-      }
-      // The identity exists, but a definition that does not match the requested scope, task or result
-      // mode is NOT a near miss to be returned with a warning — it is a different prompt.
-      if (
-        found.agentScope !== wanted.agentScope ||
-        found.taskClass !== wanted.taskClass ||
-        found.resultMode !== wanted.resultMode
-      ) {
-        return undefined;
-      }
-      return found;
     },
   });
 }

@@ -416,16 +416,27 @@ describe('(E) supplied materialized definitions are revalidated, not trusted', (
 // F. Duplicates.
 // ---------------------------------------------------------------------------
 
-describe('(F) (promptId, promptVersion) is a global identity', () => {
+describe('(F) one family/version is ONE byte body, bound to one or more exact task classes', () => {
   const duplicates: readonly {
     readonly name: string;
     readonly second: Partial<PromptDefinitionInput>;
   }[] = [
-    { name: 'identical content', second: {} },
+    { name: 'the identical definition twice', second: {} },
     { name: 'different content', second: { systemTemplate: 'Synthetic different body.' } },
     { name: 'different scope', second: { agentScope: 'VENDOR' } },
-    { name: 'different task class', second: { taskClass: 'OTHER_TASK' } },
     { name: 'different result mode', second: { resultMode: 'TEXT' } },
+    {
+      name: 'different content under a different task class',
+      second: { taskClass: 'OTHER_TASK', systemTemplate: 'Synthetic different body.' },
+    },
+    {
+      name: 'different scope under a different task class',
+      second: { taskClass: 'OTHER_TASK', agentScope: 'VENDOR' },
+    },
+    {
+      name: 'different result mode under a different task class',
+      second: { taskClass: 'OTHER_TASK', resultMode: 'TEXT' },
+    },
   ];
 
   for (const scenario of duplicates) {
@@ -439,6 +450,94 @@ describe('(F) (promptId, promptVersion) is a global identity', () => {
       }
     });
   }
+
+  it('ACCEPTS TASK-CLASS VARIANTS THAT ARE THE SAME REVIEWED BYTES', () => {
+    // The narrowing (MVP-P2A.2-P). A reviewed version may be bound to several exact task classes
+    // when every variant is the same prompt — which is the real shape of an agent whose serving path
+    // resolves more than one task class with no fallback between them.
+    const registry = createPromptRegistry([
+      definition(),
+      definition({ taskClass: 'OTHER_TASK' }),
+      definition({ taskClass: 'THIRD_TASK' }),
+    ]);
+    expect(registry.definitions).toHaveLength(3);
+    const digests = new Set(registry.definitions.map((one) => one.contentDigest));
+    const bodies = new Set(registry.definitions.map((one) => one.systemTemplate));
+    expect(digests.size).toBe(1);
+    expect(bodies.size).toBe(1);
+  });
+
+  it('a third variant repeating an existing task class is still rejected', () => {
+    try {
+      createPromptRegistry([
+        definition(),
+        definition({ taskClass: 'OTHER_TASK' }),
+        definition({ taskClass: 'OTHER_TASK' }),
+      ]);
+      throw new Error('expected a duplicate rejection');
+    } catch (error) {
+      expect((error as PromptRegistryError).code).toBe('duplicate-definition');
+    }
+  });
+
+  it('compares every variant against the FIRST body, not against its neighbour', () => {
+    // Otherwise a chain of pairwise-compatible definitions could drift across the set.
+    try {
+      createPromptRegistry([
+        definition(),
+        definition({ taskClass: 'OTHER_TASK' }),
+        definition({ taskClass: 'THIRD_TASK', systemTemplate: 'Synthetic different body.' }),
+      ]);
+      throw new Error('expected a duplicate rejection');
+    } catch (error) {
+      expect((error as PromptRegistryError).code).toBe('duplicate-definition');
+    }
+  });
+
+  it('RESOLVES THE EXACT VARIANT, AND RETURNS NO SIBLING', () => {
+    const registry = createPromptRegistry([
+      definition(),
+      definition({ taskClass: 'OTHER_TASK' }),
+      definition({ taskClass: 'THIRD_TASK' }),
+    ]);
+    const base = definition();
+    for (const taskClass of [base.taskClass, 'OTHER_TASK', 'THIRD_TASK']) {
+      const resolved = registry.resolve({
+        promptId: base.promptId,
+        promptVersion: base.promptVersion,
+        agentScope: base.agentScope,
+        taskClass,
+        resultMode: base.resultMode,
+      });
+      expect(resolved?.taskClass, taskClass).toBe(taskClass);
+    }
+    // A task class that is not registered is a miss, never the first sibling.
+    expect(
+      registry.resolve({
+        promptId: base.promptId,
+        promptVersion: base.promptVersion,
+        agentScope: base.agentScope,
+        taskClass: 'UNREGISTERED_TASK',
+        resultMode: base.resultMode,
+      }),
+    ).toBeUndefined();
+  });
+
+  it('orders variants deterministically regardless of caller order', () => {
+    const forward = createPromptRegistry([
+      definition(),
+      definition({ taskClass: 'OTHER_TASK' }),
+      definition({ taskClass: 'THIRD_TASK' }),
+    ]);
+    const backward = createPromptRegistry([
+      definition({ taskClass: 'THIRD_TASK' }),
+      definition({ taskClass: 'OTHER_TASK' }),
+      definition(),
+    ]);
+    expect(backward.definitions.map((one) => one.taskClass)).toStrictEqual(
+      forward.definitions.map((one) => one.taskClass),
+    );
+  });
 
   it('allows the same id at a different version, and the same version under a different id', () => {
     expect(createPromptRegistry([definition(), definition({ promptVersion: 2 })])).toBeDefined();
