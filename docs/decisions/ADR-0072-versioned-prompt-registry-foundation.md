@@ -233,7 +233,41 @@ no n8n · no memory · no send, execute or persist.
 
 ## Change-control rule
 
-The digest is computed here and never supplied. `(promptId, promptVersion)` stays a global identity.
+The digest is computed here and never supplied. `(promptId, promptVersion)` identifies ONE EXACT BYTE
+BODY — see the amendment below for the one way a version may carry more than one definition.
 Resolution stays exact — adding a fallback, a `latest`, a nearest-version rule or a cross-scope
 substitution requires an ADR amendment. The registry stays immutable after construction, `systemTemplate`
 stays literal, and prompt definition never becomes approval, evaluation, rollout or business authority.
+
+## Amendment — identical-byte task-class variants (MVP-P2A.2-P, owner-approved)
+
+S3-I-A wrote `(promptId, promptVersion)` as a global identity for exactly ONE definition. At the time a
+version implied a definition, so one rule was doing two jobs. The first real multi-task production
+prompt set separated them.
+
+The job worth keeping: **a reviewed version can never silently mean different text.** The job that was
+accidental: a version may be bound to only one task class.
+
+Riya's serving path resolves three exact `CLIENT` prompt identities —
+`RIYA_CONVERSATION_EVOLUTION`, `RIYA_GROUNDED_CONVERSATION_EVOLUTION` and `RIYA_GROUNDED_REPLY` — with
+no fallback between them (ADR-0099, ADR-0103). The same reviewed behavioural bytes are correct for all
+three, because what differs is what the RUNTIME supplies: whether governed knowledge is in the turn,
+and which strict schema the gateway enforces. Under the original rule the reviewed prompt could not be
+registered for the paths it governs.
+
+There is also a cross-contract reason the bytes must be shared rather than merely allowed to be. A
+generic `EvaluationBinding` (ADR-0052) carries one `promptFamily`, one `promptVersion` and one
+`promptDigest`. A suite spanning three different bodies could not say truthfully which prompt it
+evaluated, and nominating one digest as representative would be a fabricated identity.
+
+**The narrowed invariant.** A prompt family/version identifies one exact byte body. It may be bound to
+multiple exact task classes only when every variant has the same bytes, the same digest, the same
+scope and the same result mode, with a distinct task class each. Different text, a different scope, a
+different result mode, or a repeated task class under one version remains `duplicate-definition`.
+
+**Resolution is unchanged in strictness.** A variant is never a fallback for another: the resolver
+matches the whole request — id, version, scope, task class and result mode — in one pass, and a task
+class that is not registered is a miss. Canonical ordering gains `taskClass` as a tiebreaker after id
+and version, so a multi-variant family is deterministic regardless of caller order.
+
+The registry remains content-free: this amendment adds a general invariant, not a prompt.

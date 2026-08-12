@@ -1,0 +1,23 @@
+{
+  "name": "@qf-jarvis/riya-prompts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis governed Riya prompt definitions (MVP-P2A.2-P). The CONTENT boundary @qf-jarvis/prompt-registry deliberately does not have: the registry binds an identity to exact bytes and ships no content, and this holds the bytes. Owns the Riya CLIENT sales system prompt v1, bound to the RIYA_CONVERSATION_EVOLUTION task class with STRUCTURED result mode, whose content digest is computed by the real createPromptDefinition and never supplied by a caller. ONE canonical copy of the bytes exists and nothing else in the repository may hold them. A definition is not approval, evaluation, rollout or selection. No model, no provider, no gateway, no network, no database, no environment, no credential, no activation state, no lifecycle API, and no volatile business data -- no price, package, city, service, vendor or promotion, because those belong to the governed turn context. Depends on @qf-jarvis/prompt-registry for the constructor and @qf-jarvis/riya-model-interaction for the exact governed task class.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/prompt-registry": "workspace:*",
+    "@qf-jarvis/riya-model-interaction": "workspace:*"
+  }
+}

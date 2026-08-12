@@ -531,6 +531,13 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // provider, database, HTTP, Core adapter, clock, randomness, transcript or raw model result --
       // it is a profile handed to the generic M4 adapter, which is what keeps one turn to one call.
       'riya-model-interaction',
+      // MVP-P2A.2-P: the governed Riya prompt definitions -- the CONTENT boundary
+      // `prompt-registry` deliberately does not have, so the mechanism can stay content-free
+      // while one canonical copy of the prompt bytes is importable by both a production
+      // composition and the candidate evidence operator. Still an EXACT set match; it records an
+      // authorised addition, it does not relax the assertion. It defines prompts and reaches
+      // nothing: no model, no provider, no gateway, no network, no database, no activation.
+      'riya-prompts',
       // RWC-P10 (ADR-0106): the Riya-SPECIFIC quality, evaluation and sales-optimization layer,
       // sitting ABOVE the generic @qf-jarvis/model-evaluation safety authority rather than
       // replacing it -- a quality candidate binding can only be DERIVED from an existing
