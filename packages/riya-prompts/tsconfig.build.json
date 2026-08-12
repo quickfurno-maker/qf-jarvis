@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
+  },
+
+  // The EMITTING build. Specs under src/tests are excluded so nothing test-only reaches dist/.
+  //
+  // Two references, and both are the minimum. `prompt-registry` owns the constructor that computes
+  // the digest, so the identity is bound by the same code the reply adapter verifies against.
+  // `riya-model-interaction` owns the exact governed task-class identifier; writing the string here
+  // instead would be a second copy of a value whose whole purpose is that the registry refuses a
+  // mismatch.
+  //
+  // Deliberately absent: `model-gateway` and every provider, `jarvis-runtime`, every app, every
+  // evaluation package, and anything Postgres. A prompt definition reaches none of them.
+  "references": [
+    { "path": "../prompt-registry/tsconfig.build.json" },
+    { "path": "../riya-model-interaction/tsconfig.build.json" }
+  ],
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/tests/**"]
+}
