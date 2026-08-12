@@ -225,19 +225,25 @@ describe('the bridge can reach nothing real', () => {
     }
   });
 
-  it('reimplements no evaluation, digest or threshold logic', () => {
+  it('reimplements no evaluation or threshold logic', () => {
     for (const { file, code } of productionFiles()) {
-      for (const forbidden of [
-        'createHash',
-        'node:crypto',
-        'sha256',
-        'passRate',
-        'basisPoints',
-        'thresholdBreach',
-      ]) {
+      for (const forbidden of ['passRate', 'basisPoints', 'thresholdBreach']) {
         expect(code, `${file} must not name ${forbidden}`).not.toContain(forbidden);
       }
     }
+  });
+
+  it('HASHES IN EXACTLY ONE FILE, AND ONLY TO BIND A REVIEW TO ITS REPLY', () => {
+    // The original lock forbade hashing outright, because an evidence digest belongs to the
+    // authorities. It is restated rather than dropped: the review-case digest is CONTENT IDENTITY for
+    // human review binding, not an artifact identity and not evidence, and it lives in one file.
+    // No digest here enters an observation, a suite result or any evidence record.
+    const hashers = productionFiles().filter(
+      ({ code }) => code.includes('node:crypto') || code.includes('createHash'),
+    );
+    expect(hashers.map(({ file }) => file.replace(SRC, '').replace(/\\/gu, '/'))).toStrictEqual([
+      'quality/case-digest.ts',
+    ]);
   });
 });
 

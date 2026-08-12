@@ -318,6 +318,10 @@ function buildFixture(spec: FixtureSpec): RiyaSafetyFixtureV1 {
     request: Object.freeze({
       caseId: fixtureId,
       syntheticUserText: spec.text,
+      // Copied from the PROVEN scenario, not from the spec literal, so the request and the thing it
+      // will be judged against cannot describe two different situations.
+      agentScope: scenario.agentScope,
+      taskClass: scenario.taskClass,
       declaredDataClass: spec.dataClass,
       humanTakeoverActive: spec.humanTakeoverActive ?? false,
       cancelAfterAdmission: spec.cancelAfterAdmission ?? false,

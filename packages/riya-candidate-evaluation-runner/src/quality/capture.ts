@@ -31,10 +31,34 @@ import type {
 import { RIYA_QUALITY_GOLDEN_FIXTURES } from '@qf-jarvis/riya-quality-evaluation/testing';
 import type { RiyaQualityGoldenFixture } from '@qf-jarvis/riya-quality-evaluation/testing';
 
-/** What the bridge sends. Exactly the synthetic client turn — no hint about the expected answer. */
+/**
+ * What the bridge sends: the synthetic client turn and the conversation state it arrives in.
+ *
+ * ### Why the phase has to travel
+ *
+ * P10 measures CONTEXTUAL sales behaviour. A governed case whose conversation has already reached
+ * `SUMMARY` or `COMPLETE` is asking a different question than the same sentence at `NEED` — the right
+ * answer to "what about the price?" after a summary is not the right answer during discovery. A
+ * candidate evaluated as a fresh `NEED` turn would be scored against a scenario it was never placed in.
+ *
+ * ### What is deliberately absent
+ *
+ * No `passingShape`, no expected observations, no forbidden fields, no allowed asked-fields, no reply
+ * or question ceiling, no required dimensions, no required citation, no allowed phases after. Those
+ * are the marking scheme. The candidate gets the situation.
+ *
+ * ### The honest limit of V1
+ *
+ * The governed corpus encodes a starting phase and one synthetic client turn — it does not carry prior
+ * conversation history. So P10 V1 is a single-turn exam WITH phase context, and this request says
+ * exactly that much. Inventing history here to make it feel richer would mean evaluating against a
+ * conversation the corpus never governed.
+ */
 export interface RiyaQualityCandidateRequest {
   readonly caseId: string;
   readonly syntheticUserText: string;
+  /** The governed continuity phase the conversation is in BEFORE this turn. */
+  readonly continuityPhaseBefore: RiyaConversationPhase;
 }
 
 /**
@@ -133,6 +157,7 @@ export async function captureRiyaQualityCandidates(options: {
     const record = await options.port.execute({
       caseId: fixture.fixtureId,
       syntheticUserText: fixture.syntheticUserText,
+      continuityPhaseBefore: fixture.scenario.phase,
     });
 
     if (record.caseId !== fixture.fixtureId) {

@@ -13,8 +13,16 @@
  * content artifact ends up somewhere nobody remembers, and "somewhere nobody remembers" is where it
  * stays until it is copied into a ticket.
  */
-import { mkdtempSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import {
+  lstatSync,
+  mkdtempSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 
 import { RiyaCandidateRunnerError } from '../contracts/errors.js';
 import type { RiyaQualityReviewBundle } from './review-bundle.js';
@@ -26,12 +34,32 @@ export interface RiyaReviewBundleWriteReceipt {
   readonly requiredReviewsPerCase: number;
 }
 
-/** Refuse a path at or below `repoRoot`. A content artifact does not belong in version control. */
+/**
+ * Refuse a destination at or below `repoRoot`, by REAL location rather than by spelling.
+ *
+ * A lexical comparison answers "does this path look external", and an external-looking directory can
+ * be a symlink or a junction that resolves straight back into the repository. This file holds every
+ * synthetic client turn and every candidate reply, so the question that matters is where the bytes
+ * actually land.
+ *
+ * Only the PARENT is resolved, and it must already exist. Nothing is created to find out.
+ */
 function assertOutsideRepository(outputPath: string, repoRoot: string): void {
-  const relation = relative(resolve(repoRoot), outputPath);
-  const insideRepo = relation === '' || (!relation.startsWith('..') && !isAbsolute(relation));
-  if (insideRepo) {
+  const realRepoRoot = realpathSync(resolve(repoRoot));
+  let realParent: string;
+  try {
+    realParent = realpathSync(dirname(outputPath));
+  } catch {
+    // A parent that cannot be resolved is a parent that does not exist, which is refused anyway.
     throw new RiyaCandidateRunnerError('OUTPUT_PATH_REFUSED');
+  }
+  const realTarget = join(realParent, basename(outputPath));
+  for (const candidate of [outputPath, realTarget]) {
+    const relation = relative(realRepoRoot, candidate);
+    const insideRepo = relation === '' || (!relation.startsWith('..') && !isAbsolute(relation));
+    if (insideRepo) {
+      throw new RiyaCandidateRunnerError('OUTPUT_PATH_REFUSED');
+    }
   }
 }
 
@@ -62,14 +90,20 @@ export function writeRiyaQualityReviewBundle(options: {
   if (!isAbsolute(options.outputPath)) {
     throw new RiyaCandidateRunnerError('OUTPUT_PATH_REFUSED');
   }
-  assertOutsideRepository(outputPath, options.repoRoot);
-  if (options.overwrite !== true && exists(outputPath)) {
-    throw new RiyaCandidateRunnerError('OUTPUT_PATH_REFUSED');
-  }
-
   const directory = dirname(outputPath);
   if (!exists(directory)) {
     throw new RiyaCandidateRunnerError('OUTPUT_PATH_REFUSED');
+  }
+  assertOutsideRepository(outputPath, options.repoRoot);
+  if (exists(outputPath)) {
+    if (options.overwrite !== true) {
+      throw new RiyaCandidateRunnerError('OUTPUT_PATH_REFUSED');
+    }
+    // Overwriting a LINK writes through it, wherever it points. Replacing a regular file is the only
+    // overwrite this grants.
+    if (!lstatSync(outputPath).isFile()) {
+      throw new RiyaCandidateRunnerError('OUTPUT_PATH_REFUSED');
+    }
   }
 
   const staging = mkdtempSync(join(directory, '.riya-review-'));

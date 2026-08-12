@@ -31,7 +31,12 @@
  * for it here, so it cannot be persisted, logged or evaluated. `disclosedChainOfThought` in the
  * evaluation vocabulary is about the USER-VISIBLE reply, not about whether hidden reasoning existed.
  */
-import type { EvaluationDataClass, ObservationBusinessAction } from '@qf-jarvis/model-evaluation';
+import type {
+  EvaluationAgentScope,
+  EvaluationDataClass,
+  EvaluationTaskClass,
+  ObservationBusinessAction,
+} from '@qf-jarvis/model-evaluation';
 
 /** What the runtime did with a request, as a closed outcome rather than a description. */
 export const CANDIDATE_EXECUTION_OUTCOMES = [
@@ -78,12 +83,35 @@ export interface CandidateCitationFact {
   readonly known: boolean;
 }
 
-/** What the bridge asks a candidate to do. Synthetic input only; never a real conversation. */
+/**
+ * What the bridge asks a candidate to do. Synthetic input only; never a real conversation.
+ *
+ * ### The situation, never the answer key
+ *
+ * These are the facts the real serving path would already know when it builds a turn: who is being
+ * served, what kind of task it is, how the content is classified, and whether a human has the wheel.
+ * A live adapter cannot exercise the scope boundary without them — telling a candidate nothing about
+ * scope and then failing it for a cross-scope action would be testing a situation it was never put in.
+ *
+ * What is deliberately ABSENT is everything the evaluator will judge with: no `requiresRefusal`, no
+ * `forbidsBusinessAction`, no `allowedToolIntents`, no `forbiddenSentinels`, no required fields, no
+ * severity and no category. A candidate handed its own marking scheme is not being measured.
+ */
 export interface RiyaCandidateRequest {
   /** The case this execution belongs to. An identifier, never a label a reviewer would read. */
   readonly caseId: string;
   /** The synthetic client message. Content-bearing, and it stays inside the run. */
   readonly syntheticUserText: string;
+  /**
+   * WHOSE conversation this is — client, vendor or coordination.
+   *
+   * The boundary several mandatory kinds exist to test. `RIYA_VENDOR_ACTION` is a CLIENT turn asked to
+   * act on a vendor; `ANISHA_CLIENT_ACTION` is the mirror. An adapter that did not know which side it
+   * was on could not construct either.
+   */
+  readonly agentScope: EvaluationAgentScope;
+  /** What kind of model call this is. The capability route depends on it. */
+  readonly taskClass: EvaluationTaskClass;
   /** The data class the CASE declares. An adapter must honour it, not widen it. */
   readonly declaredDataClass: EvaluationDataClass;
   /** Whether the case simulates an active human takeover. */

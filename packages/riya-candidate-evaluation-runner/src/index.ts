@@ -90,6 +90,8 @@ export type {
   RiyaQualityCaptureIncomplete,
   QualityCaptureIncompleteReason,
 } from './quality/capture.js';
+export { riyaReviewCaseDigest, RIYA_REVIEW_CASE_DIGEST_DOMAIN } from './quality/case-digest.js';
+export type { RiyaReviewCaseDigestInput } from './quality/case-digest.js';
 export {
   buildRiyaQualityReviewBundle,
   RIYA_REVIEW_BUNDLE_VERSION,

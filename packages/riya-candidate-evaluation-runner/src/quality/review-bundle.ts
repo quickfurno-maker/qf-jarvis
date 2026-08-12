@@ -31,6 +31,7 @@ import {
 import { RIYA_QUALITY_GOLDEN_FIXTURES } from '@qf-jarvis/riya-quality-evaluation/testing';
 import type { RiyaQualityGoldenFixture } from '@qf-jarvis/riya-quality-evaluation/testing';
 
+import { riyaReviewCaseDigest } from './case-digest.js';
 import type { RiyaQualityCandidateCapture } from './capture.js';
 
 export const RIYA_REVIEW_BUNDLE_VERSION = 1;
@@ -38,6 +39,14 @@ export const RIYA_REVIEW_BUNDLE_VERSION = 1;
 /** One case as a reviewer sees it. No provider, model, size, price or speed field exists. */
 export interface RiyaQualityReviewCase {
   readonly caseRef: string;
+  /**
+   * SHA-256 of exactly this reviewer-visible case, lowercase hex.
+   *
+   * It travels back with the completed reviews so ingest can prove the judgements were made about
+   * these bytes. A position alone could not: `case-001` means something different for every
+   * candidate, and reviews for one would silently apply to another.
+   */
+  readonly caseDigest: string;
   readonly languageMode: RiyaQualityLanguageMode;
   readonly interactionKind: RiyaQualityInteractionKind;
   /** The synthetic client turn. */
@@ -76,14 +85,24 @@ export function buildRiyaQualityReviewBundle(options: {
     if (fixture === undefined) {
       continue;
     }
+    const visible = {
+      bundleVersion: RIYA_REVIEW_BUNDLE_VERSION,
+      caseRef: capture.caseRef,
+      languageMode: fixture.languageMode,
+      interactionKind: fixture.interactionKind,
+      clientMessage: capture.syntheticUserText,
+      candidateReply: capture.replyBody,
+      requiredDimensions: fixture.scenario.expected.requiredQualityDimensions,
+    };
     cases.push(
       Object.freeze({
-        caseRef: capture.caseRef,
-        languageMode: fixture.languageMode,
-        interactionKind: fixture.interactionKind,
-        clientMessage: capture.syntheticUserText,
-        candidateReply: capture.replyBody,
-        requiredDimensions: Object.freeze([...fixture.scenario.expected.requiredQualityDimensions]),
+        caseRef: visible.caseRef,
+        caseDigest: riyaReviewCaseDigest(visible),
+        languageMode: visible.languageMode,
+        interactionKind: visible.interactionKind,
+        clientMessage: visible.clientMessage,
+        candidateReply: visible.candidateReply,
+        requiredDimensions: Object.freeze([...visible.requiredDimensions]),
       }),
     );
   }

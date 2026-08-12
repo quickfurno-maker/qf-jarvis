@@ -62,6 +62,40 @@ cannot report a flattering figure. Subjective dimensions are not inferred at all
 dimension field. A reply whose language mode the adapter cannot identify **fails its case** rather than
 being recorded as the mode the fixture hoped for.
 
+The candidate is put in the **situation**, never handed the answer key. A P10 request carries the
+governed `continuityPhaseBefore` alongside the client turn, because "what about the price?" after a
+summary is a different question than during discovery, and a candidate evaluated as a fresh `NEED` turn
+would be scored against a scenario it was never placed in. A safety request carries `agentScope` and
+`taskClass`, because several mandatory kinds exist precisely to test the scope boundary. Nothing the
+evaluator judges with travels — no expectations, no passing shape, no dimensions, no sentinels.
+
+P10 V1 is a **single-turn exam with phase context**. The governed corpus encodes a starting phase and
+one client turn and no prior history, so that is what the request carries. Inventing history here would
+mean evaluating against a conversation the corpus never governed.
+
+### A review names the reply it was made about
+
+A case reference alone is a position, and `case-001` is a different reply for every candidate. Two
+humans could read Candidate A's `case-001`, mark it good, and have those valid records submitted later
+beside Candidate B's captures — certifying a model on judgements about a different one.
+
+So each reviewer-visible case carries a **`caseDigest`**: SHA-256, lowercase hex, over a fixed
+canonical object —
+
+```
+{ domain: "qfj.riya.p10.review-case.v1", bundleVersion, caseRef, languageMode,
+  interactionKind, clientMessage, candidateReply, requiredDimensions (sorted) }
+```
+
+— `JSON.stringify`d as UTF-8. It travels back with the completed reviews, and ingest re-derives the
+expected value from the CURRENT capture and the CURRENT governed fixture before counting a single
+review. A mismatch is `case-digest-mismatch` and the case is refused.
+
+This is **content identity only**. It proves the reviewed bytes and the ingested bytes are the same. It
+proves nothing about who reviewed, whether they were independent, or whether the bundle is authentic —
+there is no key, no signature and no HMAC, because one would imply a guarantee this cannot make. No
+provider, model, price or speed value is an input, so the digest cannot unblind anyone who reads it.
+
 ### The review bundle is blinded
 
 The reviewer sees the client turn, the candidate reply, the language and interaction kind, the required
@@ -88,6 +122,12 @@ The bundle is the one content-bearing artifact in this workstream: 72 client tur
 is written only to an explicit operator-supplied absolute path outside the repository, never overwrites
 without being told twice, is replaced atomically, and prints only the path and the counts. No default
 path, no environment discovery, no temp fallback.
+
+"Outside the repository" is judged by **real location**, not spelling: the parent directory and the
+repository root are both resolved through `realpathSync` before the comparison, because an
+external-looking directory can be a symlink or junction that lands every byte back in version control.
+An overwrite target that is not a regular file is refused, since writing through a link writes wherever
+it points.
 
 ## What it does not do
 

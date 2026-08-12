@@ -136,11 +136,19 @@ function twoReviews(): readonly RiyaQualityHumanReviewInput[] {
   }));
 }
 
+/**
+ * Completed review envelopes, each carrying the digest of the case a reviewer was actually shown.
+ * This is what an honest review tool returns.
+ */
 function reviewsFor(
   captures: readonly RiyaQualityCandidateCapture[],
   reviews: readonly RiyaQualityHumanReviewInput[] = twoReviews(),
 ): readonly RiyaQualityCaseReviews[] {
-  return captures.map((capture) => ({ caseRef: capture.caseRef, reviews }));
+  return buildRiyaQualityReviewBundle({ captures }).cases.map((reviewCase) => ({
+    caseRef: reviewCase.caseRef,
+    caseDigest: reviewCase.caseDigest,
+    reviews,
+  }));
 }
 
 async function captureAll(): Promise<readonly RiyaQualityCandidateCapture[]> {
@@ -235,13 +243,31 @@ describe('P10 capture consumes the governed corpus unchanged', () => {
 describe('the review bundle is blinded, and the writer stays out of the repository', () => {
   it('REVEALS NO PROVIDER, MODEL, SIZE, COST OR SPEED', async () => {
     const bundle = buildRiyaQualityReviewBundle({ captures: await captureAll() });
-    // Two separate claims. First: no candidate IDENTITY token anywhere, including inside the reply
-    // itself, because a model that names itself would unblind the reviewer just as effectively.
-    const serialized = JSON.stringify(bundle).toLowerCase();
+    // Three separate claims. First: no candidate IDENTITY token in anything a reviewer READS,
+    // including the reply itself, because a model that names itself unblinds them just as
+    // effectively. Scanned over the human-readable fields rather than the whole document, because a
+    // 64-character hex digest contains arbitrary substrings and matching one would be noise.
+    const readable = bundle.cases
+      .map((one) =>
+        [
+          one.caseRef,
+          one.languageMode,
+          one.interactionKind,
+          one.clientMessage,
+          one.candidateReply,
+          ...one.requiredDimensions,
+        ].join(' '),
+      )
+      .join(' ')
+      .toLowerCase();
     for (const forbidden of ['groq', 'gpt-oss', 'openai', 'anthropic', 'llama', '20b', '120b']) {
-      expect(serialized, `bundle must not name ${forbidden}`).not.toContain(forbidden);
+      expect(readable, `bundle must not name ${forbidden}`).not.toContain(forbidden);
     }
-    // Second: no FIELD that could carry provider, cost or speed exists at all. Scanned over keys
+    // Second: the digest is opaque hex and therefore carries nothing legible at all.
+    for (const one of bundle.cases) {
+      expect(one.caseDigest).toMatch(/^[0-9a-f]{64}$/u);
+    }
+    // Third: no FIELD that could carry provider, cost or speed exists at all. Scanned over keys
     // rather than values, because "price" is an ordinary word a client message may legitimately use
     // and a synthetic objection case does.
     const keys = new Set<string>();
@@ -275,12 +301,14 @@ describe('the review bundle is blinded, and the writer stays out of the reposito
     for (const reviewCase of bundle.cases) {
       expect(Object.keys(reviewCase).sort()).toStrictEqual([
         'candidateReply',
+        'caseDigest',
         'caseRef',
         'clientMessage',
         'interactionKind',
         'languageMode',
         'requiredDimensions',
       ]);
+      expect(reviewCase.caseDigest).toMatch(/^[0-9a-f]{64}$/u);
     }
   });
 
@@ -409,7 +437,10 @@ describe('two independent humans, and the rule is not negotiable', () => {
     const captures = await captureAll();
     const ingested = ingestRiyaQualityReviews({
       captures,
-      caseReviews: [...reviewsFor(captures), { caseRef: 'case-999', reviews: twoReviews() }],
+      caseReviews: [
+        ...reviewsFor(captures),
+        { caseRef: 'case-999', caseDigest: 'f'.repeat(64), reviews: twoReviews() },
+      ],
     });
     expect(ingested.ok).toBe(false);
     expect(ingested.ok ? [] : ingested.rejections.map((one) => one.reason)).toContain(
