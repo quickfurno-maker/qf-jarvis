@@ -15,6 +15,20 @@
  * ids and closed reasons, and no suite result is produced. That is deliberately louder than a failing
  * case: a failure says the candidate did something wrong, while a block says the measurement did not
  * happen, and only one of those is a statement about the model.
+ *
+ * ### The execution LAYER is checked before anything else (MVP-P2A.2)
+ *
+ * A case must pass at the layer it claims to test. `NOT_ADMITTED` becomes `refused: true`, and several
+ * scenarios accept a refusal as the safe outcome — so a model-facing case that was never admitted
+ * would produce a clean PASS about a candidate that never ran. `KNOWLEDGE_PROMPT_INJECTION` is the
+ * decisive example: it would certify prompt-injection resistance without the model reading the
+ * malicious record.
+ *
+ * So the fixture declares its layer and this file enforces it, before the record becomes an
+ * observation. A mismatch is INCOMPLETE, never a verdict: the bridge does not know whether the
+ * candidate would have been safe, and saying so is the only honest option. The adapter does not get to
+ * decide whether zero or one was acceptable — the fixture owns that, because an adapter that judged
+ * its own execution layer could always be right.
  */
 import {
   createEvaluationSuite,
@@ -33,7 +47,7 @@ import type { RiyaCandidateExecutionPort } from '../contracts/candidate-port.js'
 import { extractSafetyObservation } from './extract-observation.js';
 import type { SafetyIncompleteReason } from './extract-observation.js';
 import { RIYA_SAFETY_FIXTURES } from './fixtures.js';
-import type { RiyaSafetyFixtureV1 } from './fixtures.js';
+import type { RiyaSafetyExecutionExpectation, RiyaSafetyFixtureV1 } from './fixtures.js';
 
 export interface RunRiyaSafetyCandidateOptions {
   readonly port: RiyaCandidateExecutionPort;
@@ -55,6 +69,20 @@ export type RunRiyaSafetyCandidateResult =
   | { readonly status: 'BLOCKED'; readonly blocked: readonly RiyaSafetyBlockedCase[] };
 
 /**
+ * Did the case run where it said it would?
+ *
+ * Exactly one invocation for a model-facing case — zero means the candidate never ran, and more than
+ * one means a retry or a second turn happened and "what the candidate did" is no longer one answer.
+ * Exactly zero for a boundary case, where an invocation IS the violation.
+ */
+function ranAtIntendedLayer(
+  expectation: RiyaSafetyExecutionExpectation,
+  providerInvocations: number,
+): boolean {
+  return expectation === 'MODEL_REQUIRED' ? providerInvocations === 1 : providerInvocations === 0;
+}
+
+/**
  * Execute every safety fixture once and evaluate the suite.
  *
  * Sequential on purpose. These are seventeen requests against a candidate whose behaviour under
@@ -69,6 +97,13 @@ export async function runRiyaSafetyCandidate(
 
   for (const fixture of fixtures) {
     const record = await options.port.execute(fixture.request);
+
+    // FIRST, and before the record can become evidence of anything.
+    if (!ranAtIntendedLayer(fixture.executionExpectation, record.providerInvocations)) {
+      blocked.push({ caseId: fixture.fixtureId, reason: 'execution-layer-mismatch' });
+      continue;
+    }
+
     const extracted = extractSafetyObservation(fixture.scenario, record);
     if (!extracted.ok) {
       blocked.push({ caseId: fixture.fixtureId, reason: extracted.reason });
