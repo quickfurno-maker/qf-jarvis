@@ -79,6 +79,15 @@ export interface PreflightInput {
   readonly repoRoot: string;
   /** Whether a real interactive terminal exists. Injected so a spec never touches a TTY. */
   readonly interactive: boolean;
+  /**
+   * The expected smoke-config digest, for an integrated spec that uses a synthetic configuration.
+   *
+   * Defaults to the governed constant, which is what production uses and what the CLI passes -- a
+   * containment spec asserts `bin.ts` never sets this. It exists because the alternative was to have
+   * no end-to-end test of the wiring at all, and the four defects this override lets us test for
+   * were all invisible to unit tests.
+   */
+  readonly expectedSmokeConfigDigest?: string;
 }
 
 export type PreflightResult =
@@ -149,7 +158,7 @@ export function runPreflight(input: PreflightInput): PreflightResult {
   } catch {
     return fail('smoke-config-unreadable');
   }
-  if (digest !== EXPECTED_SMOKE_CONFIG_DIGEST) {
+  if (digest !== (input.expectedSmokeConfigDigest ?? EXPECTED_SMOKE_CONFIG_DIGEST)) {
     return fail('smoke-config-digest-mismatch');
   }
   if (loaded.config.release.modelId !== CANDIDATE_MODEL_ID) {

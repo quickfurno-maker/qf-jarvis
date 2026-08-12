@@ -62,7 +62,7 @@ function session(): CandidateSession {
   return {
     turnDeps: () => undefined,
     cancellationTurnDeps: () => undefined,
-    invocations: () => 0,
+    invocationsFor: () => 0,
     continuedAfterCancellation: () => false,
   };
 }
@@ -88,9 +88,12 @@ function harness(overrides: Partial<OperatorDeps> = {}): Harness {
       repoRoot: REPO_ROOT,
       interactive: true,
     },
-    openSmokeCredential: () => {
+    openSmokeSecretSource: () => {
       smokeCredentials += 1;
-      return Promise.resolve({});
+      return Promise.resolve({
+        isInteractive: () => true,
+        readOnce: () => Promise.resolve('sk-fake-never-real-0000000000000000'),
+      });
     },
     runSmoke: () => Promise.resolve(SMOKE_PASS),
     openCandidateCredential: () => {

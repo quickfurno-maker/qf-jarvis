@@ -20,7 +20,11 @@
  * fakes count resolver constructions and provider calls, which is how "smoke failure creates no
  * candidate resolver" becomes a fact rather than a claim.
  */
-import type { SmokeConfig, SmokeRunResult } from '@qf-jarvis/groq-staging-smoke';
+import type {
+  MaskedSecretSource,
+  SmokeConfig,
+  SmokeRunResult,
+} from '@qf-jarvis/groq-staging-smoke';
 import { loadSmokeConfig } from '@qf-jarvis/groq-staging-smoke';
 import {
   buildRiyaQualityReviewBundle,
@@ -32,7 +36,7 @@ import type { EvaluationBinding, SuiteThresholds } from '@qf-jarvis/model-evalua
 import { createApprovalEvidence } from '@qf-jarvis/model-evaluation';
 
 import { createOperatorLedger } from './accounting.js';
-import type { RequestLedger } from './accounting.js';
+import type { LedgerRefusal, RequestLedger } from './accounting.js';
 import type { BaseTurnDeps } from './candidate-ports.js';
 import { createQualityCandidatePort, createSafetyCandidatePort } from './candidate-ports.js';
 import type { OperatorOutcome } from './exit-codes.js';
@@ -54,13 +58,27 @@ export const SECOND_CREDENTIAL_NOTICE =
 export interface OperatorDeps {
   readonly console: SafeConsole;
   readonly preflight: PreflightInput;
-  /** Build the ONE-SHOT smoke credential session. Called at most once, only after precheck. */
-  readonly openSmokeCredential: () => Promise<unknown>;
-  /** Run the existing one-shot smoke with that credential. */
-  readonly runSmoke: (config: SmokeConfig, credential: unknown) => Promise<SmokeRunResult>;
-  /** Build the ONE-SHOT candidate credential session. Called at most once, only after smoke PASS. */
-  readonly openCandidateCredential: () => Promise<unknown>;
-  /** Build the in-memory candidate composition. Returns per-turn deps and a live invocation count. */
+  /**
+   * Construct the ONE masked secret source the smoke will read from.
+   *
+   * Called at most once, and only after precheck passed. It returns the SOURCE rather than a resolved
+   * credential because `runGroqStagingSmokeOnce` already owns the TTY gate, the resolver, the single
+   * read and the single bind — handing it a different source than the one counted here would mean the
+   * count described an object nobody used.
+   */
+  readonly openSmokeSecretSource: () => Promise<MaskedSecretSource>;
+  /** Run the existing one-shot smoke against EXACTLY that source. */
+  readonly runSmoke: (config: SmokeConfig, source: MaskedSecretSource) => Promise<SmokeRunResult>;
+  /**
+   * Resolve the candidate credential through the EXISTING masked resolver.
+   *
+   * Not a raw `readOnce`: the resolver owns the length and charset bounds, the one-shot guarantee and
+   * the sanitized refusal codes, and reimplementing any of that here would be a second credential
+   * policy. It receives the governed opaque reference from the smoke configuration — the same account
+   * context the smoke just proved reachable.
+   */
+  readonly openCandidateCredential: (reference: { readonly ref: string }) => Promise<unknown>;
+  /** Build the in-memory candidate composition. Returns per-turn deps and per-case attempt counts. */
   readonly openCandidate: (credential: unknown) => Promise<CandidateSession>;
   readonly binding: EvaluationBinding;
   readonly thresholds: SuiteThresholds;
@@ -72,8 +90,17 @@ export interface OperatorDeps {
 export interface CandidateSession {
   readonly turnDeps: (caseId: string) => BaseTurnDeps | undefined;
   readonly cancellationTurnDeps: (caseId: string) => BaseTurnDeps | undefined;
-  readonly invocations: () => number;
+  /**
+   * How many provider attempts THIS case made.
+   *
+   * Per case, not cumulative. The safety bridge asks "did this case invoke exactly once", and a
+   * running total answers a different question — it would report the second model-facing case as 2
+   * and fail a run that was behaving correctly.
+   */
+  readonly invocationsFor: (caseId: string) => number;
   readonly continuedAfterCancellation: () => boolean;
+  /** A terminal accounting refusal, if a ceiling or a usage bound stopped the run. */
+  readonly accountingRefusal?: () => LedgerRefusal | undefined;
 }
 
 export interface OperatorResult {
@@ -112,8 +139,10 @@ export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<
     safe.line({ phase: 'smoke', status: 'REFUSED', reason: 'request-limit-reached' });
     return { outcome: 'REQUEST_LIMIT_REACHED' };
   }
-  const smokeCredential = await deps.openSmokeCredential();
-  const smoke = await deps.runSmoke(loaded.config, smokeCredential);
+  // ONE source, constructed here and handed straight to the smoke harness. Its own counters then
+  // prove at most one credential read happened.
+  const smokeSource = await deps.openSmokeSecretSource();
+  const smoke = await deps.runSmoke(loaded.config, smokeSource);
   ledger.settle(
     smoke.ok
       ? { inputTokens: smoke.usage.inputTokens, outputTokens: smoke.usage.outputTokens }
@@ -130,7 +159,11 @@ export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<
 
   // D/E. THE CANDIDATE — a fresh one-shot credential, and an in-memory composition.
   safe.notice(SECOND_CREDENTIAL_NOTICE);
-  const candidateCredential = await deps.openCandidateCredential();
+  // The governed opaque reference from the approved configuration — never a key, and never a value
+  // this operator invented.
+  const candidateCredential = await deps.openCandidateCredential({
+    ref: loaded.config.credentialReference,
+  });
   let session: CandidateSession;
   try {
     session = await deps.openCandidate(candidateCredential);
@@ -140,11 +173,13 @@ export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<
   }
 
   // F. SAFETY — all seventeen, at the layer each declares.
+  // No reservation here. Two boundary cases legitimately BUILD a turn and are then refused by the M4
+  // state gate before the invoker runs, so charging them at construction would bill a request that
+  // never happened. The accounted invoker reserves at the only moment a call is certain.
   const safetyPort = createSafetyCandidatePort({
-    turnDeps: (caseId) => (ledger.reserve('safety').ok ? session.turnDeps(caseId) : undefined),
-    cancellationTurnDeps: (caseId) =>
-      ledger.reserve('safety').ok ? session.cancellationTurnDeps(caseId) : undefined,
-    invocationsFor: () => session.invocations(),
+    turnDeps: session.turnDeps,
+    cancellationTurnDeps: session.cancellationTurnDeps,
+    invocationsFor: session.invocationsFor,
     continuedAfterCancellation: session.continuedAfterCancellation,
   });
   const safety = await runRiyaSafetyCandidate({
@@ -152,7 +187,29 @@ export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<
     binding: deps.binding,
     thresholds: deps.thresholds,
   });
+  // An accounting refusal is not a statement about the model. If a ceiling or a usage bound stopped
+  // the run, the outcome says so rather than blaming the candidate for evidence nobody collected.
+  const accountingOutcome = (): OperatorOutcome | undefined => {
+    switch (session.accountingRefusal?.()) {
+      case 'request-limit-reached':
+        return 'REQUEST_LIMIT_REACHED';
+      case 'cost-limit-reached':
+        return 'COST_LIMIT_REACHED';
+      case 'usage-bound-violated':
+        // The bound the reservation was derived from turned out to be wrong, so no later number can
+        // be trusted. Reported as the request ceiling being unusable rather than as a safety verdict.
+        return 'REQUEST_LIMIT_REACHED';
+      default:
+        return undefined;
+    }
+  };
+
   if (safety.status === 'BLOCKED') {
+    const accounting = accountingOutcome();
+    if (accounting !== undefined) {
+      safe.line({ phase: 'safety', status: 'ACCOUNTING_REFUSED', reason: accounting });
+      return { outcome: accounting };
+    }
     for (const blocked of safety.blocked) {
       safe.line({
         phase: 'safety',
@@ -181,14 +238,19 @@ export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<
 
   // G. P10 — only now, and all seventy-two.
   const qualityPort = createQualityCandidatePort({
-    turnDeps: (caseId) => (ledger.reserve('p10').ok ? session.turnDeps(caseId) : undefined),
-    invocationsFor: () => session.invocations(),
+    turnDeps: session.turnDeps,
+    invocationsFor: session.invocationsFor,
     admissionBlocked: (caseId) => {
       safe.line({ phase: 'p10', status: 'ADMISSION_BLOCKED', caseId });
     },
   });
   const capture = await captureRiyaQualityCandidates({ port: qualityPort });
   if (!capture.ok) {
+    const accounting = accountingOutcome();
+    if (accounting !== undefined) {
+      safe.line({ phase: 'p10', status: 'ACCOUNTING_REFUSED', reason: accounting });
+      return { outcome: accounting };
+    }
     for (const incomplete of capture.incomplete) {
       safe.line({
         phase: 'p10',

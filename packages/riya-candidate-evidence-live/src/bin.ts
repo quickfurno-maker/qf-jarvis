@@ -15,13 +15,13 @@
  */
 import { fileURLToPath } from 'node:url';
 
-import { createGroqApiKey } from '@qf-jarvis/model-gateway';
 import {
   createMaskedTtyCredentialResolver,
   createNodeMaskedSecretSource,
   createSystemSmokeTimer,
   runGroqStagingSmokeOnce,
 } from '@qf-jarvis/groq-staging-smoke';
+import type { GroqApiKey } from '@qf-jarvis/model-gateway';
 import { createFetchGroqTransport, createSystemClock } from '@qf-jarvis/model-gateway';
 import { createEvaluationBinding, createSuiteThresholds } from '@qf-jarvis/model-evaluation';
 import {
@@ -36,7 +36,13 @@ import {
   CANDIDATE_RELEASE,
   RIYA_CLIENT_PROMPT_DIGEST,
 } from './candidate-release.js';
-import { createCandidateGateway, createCandidateInvoker } from './evaluation-gateway.js';
+import { createAccountedSession } from './candidate-session.js';
+import {
+  createTransportBoundaryAbort,
+  createTransportStartHook,
+} from './cancellation-transport.js';
+import { createCandidateGateway } from './evaluation-gateway.js';
+import { createOperatorLedger } from './accounting.js';
 import { OPERATOR_EXIT_CODES } from './exit-codes.js';
 import { runCandidateEvidenceOperator } from './operator.js';
 import { createStdoutSafeConsole } from './safe-console.js';
@@ -98,56 +104,64 @@ async function main(): Promise<number> {
     return OPERATOR_EXIT_CODES.PRECHECK_FAILED;
   }
 
-  const source = createNodeMaskedSecretSource();
+  // DEFECT 1: the TTY fact is read from the process directly. Constructing a masked secret source
+  // merely to ask `isInteractive()` would mean a secret source existed before preflight had run,
+  // which is exactly the ordering this operator claims to guarantee.
+  const interactive = process.stdin.isTTY && process.stdout.isTTY;
+
+  const ledger = createOperatorLedger();
   const result = await runCandidateEvidenceOperator({
     console: safe,
     preflight: {
       smokeConfigPath: parsed.args.smokeConfig,
       reviewOutputPath: parsed.args.reviewOutput,
       repoRoot: repoRoot(),
-      // The real terminal check. Nothing is read from it here; preflight only asks whether one exists.
-      interactive: source.isInteractive(),
+      interactive,
     },
-    // ONE-SHOT, and a fresh source each time: the smoke credential and the candidate credential are
-    // two separate reads that never coexist.
-    openSmokeCredential: () =>
-      Promise.resolve(createMaskedTtyCredentialResolver(createNodeMaskedSecretSource())),
-    // The existing smoke owns its own one-shot masked read through `credentialSource`; the session
-    // opened above is what proves a resolver was constructed at all, and a spec counts it. Reusing a
-    // resolved key here would mean holding one credential across two phases.
-    runSmoke: (config) =>
+    ledger,
+    // ONE source, created only after preflight passed, and handed straight to the smoke harness
+    // below. The harness owns the TTY gate, the resolver, the single read and the single bind.
+    openSmokeSecretSource: () => Promise.resolve(createNodeMaskedSecretSource()),
+    runSmoke: (config, source) =>
       runGroqStagingSmokeOnce(config, {
         transport: createFetchGroqTransport(),
-        credentialSource: createNodeMaskedSecretSource(),
+        credentialSource: source,
         clock: createSystemClock(),
         timer: createSystemSmokeTimer(),
       }),
-    openCandidateCredential: async () => {
-      const fresh = createNodeMaskedSecretSource();
-      if (!fresh.isInteractive()) {
-        throw new Error('non-interactive');
-      }
-      return createGroqApiKey(await fresh.readOnce('Groq API key'));
-    },
+    // DEFECT 3: through the EXISTING masked resolver, against the governed opaque reference. A bare
+    // `readOnce` would bypass the resolver's bounds, charset and one-shot guarantees and become a
+    // second credential policy.
+    openCandidateCredential: (reference) =>
+      createMaskedTtyCredentialResolver(createNodeMaskedSecretSource()).resolve(reference),
     openCandidate: (credential) => {
-      const gateway = createCandidateGateway({
-        apiKey: credential as ReturnType<typeof createGroqApiKey>,
-      });
-      const invoker = createCandidateInvoker(gateway);
-      let invocations = 0;
-      const counted = {
-        invoke: async (request: Parameters<typeof invoker.invoke>[0]) => {
-          invocations += 1;
-          return invoker.invoke(request);
-        },
-      };
+      const apiKey = credential as GroqApiKey;
       const clock = (): string => new Date().toISOString();
-      return Promise.resolve({
-        turnDeps: () => ({ invoker: counted, clock }),
-        cancellationTurnDeps: () => ({ invoker: counted, clock }),
-        invocations: () => invocations,
-        continuedAfterCancellation: () => false,
+
+      // DEFECT 7: the cancellation case gets a gateway whose TRANSPORT is instrumented. Same release,
+      // same config, same credential — only the transport differs, so this is not a second model, a
+      // second provider or a second credential.
+      const abort = createTransportBoundaryAbort();
+      const cancellationTransport = createTransportStartHook(
+        createFetchGroqTransport(),
+        abort.onTransportStarted,
+      );
+
+      const session = createAccountedSession({
+        gateway: createCandidateGateway({ apiKey }),
+        cancellationGateway: createCandidateGateway({ apiKey, transport: cancellationTransport }),
+        cancellation: {
+          arm: () => undefined,
+          transportStarts: abort.started,
+          // Nothing accepted a reply after the abort: the adapter refuses a cancelled attempt, so a
+          // completed user-visible answer is the only thing that could make this true.
+          continuedAfterCancellation: () => false,
+        },
+        ledger,
+        clock,
+        phase: 'safety',
       });
+      return Promise.resolve(session.session);
     },
     binding: createEvaluationBinding({
       evaluationSuiteId: RIYA_SAFETY_SUITE_ID,

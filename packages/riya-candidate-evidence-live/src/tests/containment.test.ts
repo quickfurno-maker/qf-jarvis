@@ -87,6 +87,39 @@ describe('the operator implements no transport and holds no secret ingress', () 
     }
   });
 
+  it('THE CLI NEVER OVERRIDES THE GOVERNED SMOKE DIGEST', () => {
+    // `expectedSmokeConfigDigest` exists so an integrated spec can drive a synthetic configuration.
+    // Production passes nothing and gets the compiled-in constant; if the CLI ever set it, the digest
+    // lock would be decorative.
+    const cli = codeOnly(readFileSync(join(SRC, 'bin.ts'), 'utf8'));
+    expect(cli).not.toContain('expectedSmokeConfigDigest');
+  });
+
+  it('the CLI constructs no secret source before preflight has passed', () => {
+    // The TTY fact is read from the process. Constructing a masked source merely to ask
+    // `isInteractive()` would mean a secret source existed before the check that protects it.
+    // Imports say nothing about order, so the import block is dropped and only CALLS are compared.
+    // Every construction must sit after the operator call begins -- i.e. inside one of the lazily
+    // invoked credential callbacks, which the operator only reaches once preflight has passed.
+    const cli = codeOnly(readFileSync(join(SRC, 'bin.ts'), 'utf8'));
+    const body = cli.slice(cli.indexOf('async function main'));
+    const operatorAt = body.indexOf('runCandidateEvidenceOperator(');
+    expect(operatorAt).toBeGreaterThan(0);
+    let cursor = body.indexOf('createNodeMaskedSecretSource(');
+    expect(cursor).toBeGreaterThan(0);
+    while (cursor !== -1) {
+      expect(cursor, 'a secret source is constructed before preflight').toBeGreaterThan(operatorAt);
+      cursor = body.indexOf('createNodeMaskedSecretSource(', cursor + 1);
+    }
+  });
+
+  it('the candidate credential goes through the existing masked resolver', () => {
+    // Not a bare `readOnce`: the resolver owns the bounds, the charset and the one-shot guarantee.
+    const cli = codeOnly(readFileSync(join(SRC, 'bin.ts'), 'utf8'));
+    expect(cli).toContain('createMaskedTtyCredentialResolver');
+    expect(cli).not.toContain('readOnce');
+  });
+
   it('never fabricates an evaluation binding for the candidate turn', () => {
     // Both must be ABSENT while evidence does not exist. One without the other is a wiring error the
     // adapter refuses, so neither may appear in the turn composition.
@@ -173,6 +206,9 @@ describe('nothing composes the operator', () => {
         if (entry === 'riya-candidate-evidence-live') continue;
         // The bridge's own containment spec names this package in prose; its dependency list is
         // pinned exactly by that spec, so a real import there is already impossible.
+        // The smoke package names this specifier inside its own dependency-lock spec, and that same
+        // spec pins its dependencies exactly -- so a real import from there is already impossible.
+        if (entry === 'groq-staging-smoke') continue;
         if (entry === 'riya-candidate-evaluation-runner') continue;
         let files: string[];
         try {
