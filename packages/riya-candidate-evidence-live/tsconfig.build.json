@@ -22,6 +22,7 @@
     { "path": "../agent-runtime/tsconfig.build.json" },
     { "path": "../core-service-availability-read/tsconfig.build.json" },
     { "path": "../groq-staging-smoke/tsconfig.build.json" },
+    { "path": "../governed-knowledge/tsconfig.build.json" },
     { "path": "../model-evaluation/tsconfig.build.json" },
     { "path": "../model-gateway/tsconfig.build.json" },
     { "path": "../model-gateway-composition/tsconfig.build.json" },

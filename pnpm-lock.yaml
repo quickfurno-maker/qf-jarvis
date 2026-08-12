@@ -526,6 +526,9 @@ importers:
       '@qf-jarvis/core-service-availability-read':
         specifier: workspace:*
         version: link:../core-service-availability-read
+      '@qf-jarvis/governed-knowledge':
+        specifier: workspace:*
+        version: link:../governed-knowledge
       '@qf-jarvis/groq-staging-smoke':
         specifier: workspace:*
         version: link:../groq-staging-smoke

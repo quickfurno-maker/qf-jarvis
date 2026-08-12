@@ -19,6 +19,7 @@
   "dependencies": {
     "@qf-jarvis/agent-runtime": "workspace:*",
     "@qf-jarvis/core-service-availability-read": "workspace:*",
+    "@qf-jarvis/governed-knowledge": "workspace:*",
     "@qf-jarvis/groq-staging-smoke": "workspace:*",
     "@qf-jarvis/model-evaluation": "workspace:*",
     "@qf-jarvis/model-gateway": "workspace:*",

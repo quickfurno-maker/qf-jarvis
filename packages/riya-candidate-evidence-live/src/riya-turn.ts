@@ -30,7 +30,7 @@ import type { ModelReleaseRef, ReplyPlan } from '@qf-jarvis/agent-runtime';
 import type { ModelGatewayInvoker } from '@qf-jarvis/model-reply-adapter';
 import { createModelReplyAdapter } from '@qf-jarvis/model-reply-adapter';
 import type { ModelReplyAdapterResult, ReplyStateReader } from '@qf-jarvis/model-reply-adapter';
-import type { CandidateGroundedKnowledgeInput } from '@qf-jarvis/riya-candidate-evaluation-runner';
+import type { KnowledgeRecord } from '@qf-jarvis/governed-knowledge';
 import type { RiyaConversationPhase } from '@qf-jarvis/riya-conversation-continuity';
 import {
   createRiyaConversationModelProfile,
@@ -77,30 +77,31 @@ export function taskClassFor(args: {
 }
 
 /**
- * Translate the bridge's synthetic input into the exact public Riya grounded-context shape.
+ * Project ADMITTED governed records into the exact public Riya grounded-context shape.
  *
- * Only records whose lifecycle state is `CURRENT` are translatable. A `STALE` or `SUPERSEDED` record
- * reaching a hosted model is the violation the freshness scenario exists to catch, so this returns
- * `undefined` rather than a context — the caller must refuse the turn, not serialize the record.
+ * The input is what `retrieveGovernedKnowledge` RETURNED, never the candidate input object — a record
+ * the production authority refused has nothing to project, because it never reaches this function.
  *
- * `state` itself is NEVER carried across: it is evaluation execution metadata, and the five fields
- * below are the whole of what a model may be shown.
+ * Five fields cross, and only five. `contentFormat` is mapped back from the governed vocabulary to
+ * the wire value the Riya context declares. Nothing about lifecycle, permissions, approval, owner,
+ * source or supersession travels: that is governance metadata about who may see the record, and a
+ * model that could read it could describe it to a client.
  */
 export function toGroundedContext(
-  input: CandidateGroundedKnowledgeInput | undefined,
+  records: readonly KnowledgeRecord[],
 ): RiyaGroundedKnowledgeContextV1 | undefined {
-  if (input === undefined || input.state !== 'CURRENT') {
+  if (records.length === 0) {
     return undefined;
   }
   return Object.freeze({
     version: 1 as const,
     records: Object.freeze(
-      input.records.map((record) =>
+      records.map((record) =>
         Object.freeze({
           knowledgeId: record.knowledgeId,
           version: record.version,
           topic: record.topic,
-          contentFormat: record.contentFormat,
+          contentFormat: record.contentFormat === 'PLAIN_TEXT' ? 'text/plain' : 'text/markdown',
           content: record.content,
         }),
       ),
@@ -108,14 +109,20 @@ export function toGroundedContext(
   });
 }
 
-/** What one evaluation turn needs to know. Situation only — no expectation of any kind. */
+/**
+ * What one evaluation turn needs to know. Situation only — no expectation of any kind.
+ *
+ * `admittedKnowledge` is what the PRODUCTION authority returned, already. The turn does not re-decide
+ * admission and has no access to the candidate input's lifecycle state, so a refused record cannot
+ * reach a model through this path even by mistake.
+ */
 export interface RiyaTurnRequest {
   readonly caseId: string;
   readonly syntheticUserText: string;
   readonly phase: RiyaConversationPhase;
   readonly dataClass: 'HOSTED_ALLOWED' | 'LOCAL_ONLY' | 'HUMAN_ONLY';
   readonly humanTakeoverActive: boolean;
-  readonly groundedKnowledge?: CandidateGroundedKnowledgeInput | undefined;
+  readonly admittedKnowledge?: readonly KnowledgeRecord[] | undefined;
 }
 
 /** What the turn observably produced, plus the exact prompt identity it ran under. */
@@ -147,7 +154,7 @@ export async function runRiyaEvaluationTurn(
   request: RiyaTurnRequest,
   deps: RiyaTurnDeps,
 ): Promise<RiyaTurnOutcome> {
-  const grounded = toGroundedContext(request.groundedKnowledge);
+  const grounded = toGroundedContext(request.admittedKnowledge ?? []);
   const taskClass = taskClassFor({
     phase: request.phase,
     hasGroundedKnowledge: grounded !== undefined,
