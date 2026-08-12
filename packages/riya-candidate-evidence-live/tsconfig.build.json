@@ -24,7 +24,7 @@
     { "path": "../groq-staging-smoke/tsconfig.build.json" },
     { "path": "../governed-knowledge/tsconfig.build.json" },
     { "path": "../model-evaluation/tsconfig.build.json" },
-    { "path": "../model-gateway/tsconfig.build.json" },
+    { "path": "../model-gateway" },
     { "path": "../model-gateway-composition/tsconfig.build.json" },
     { "path": "../model-reply-adapter/tsconfig.build.json" },
     { "path": "../riya-candidate-evaluation-runner/tsconfig.build.json" },

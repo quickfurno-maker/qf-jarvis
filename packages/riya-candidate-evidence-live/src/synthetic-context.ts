@@ -76,6 +76,23 @@ const SUMMARY_DISCOVERY = Object.freeze({
   completeness: 'SUFFICIENT_FOR_CORE_REVIEW' as const,
 });
 
+/**
+ * Provenance for exactly the four facts above, and for nothing else.
+ *
+ * The continuity contract refuses a value with no provenance and a provenance with no value, in both
+ * directions. That is the right rule -- a value nobody can account for is exactly what a half-applied
+ * update leaves behind -- and it is why this map is written out rather than defaulted.
+ *
+ * `user_stated` because a synthetic prior conversation is one where the client said these things. It
+ * is the honest source for an invented history, and it is the one the corpus itself uses.
+ */
+const SUMMARY_PROVENANCE = Object.freeze({
+  serviceInterest: 'user_stated' as const,
+  location: 'user_stated' as const,
+  budget: 'user_stated' as const,
+  timeline: 'user_stated' as const,
+});
+
 /** Before a summary exists, discovery is legitimately empty and more is required. */
 const EARLY_DISCOVERY = Object.freeze({
   completeness: 'MORE_DISCOVERY_REQUIRED' as const,
@@ -109,6 +126,7 @@ export function syntheticContinuityFor(
     continuityRevision: postSummary ? 4 : 1,
     phase,
     discovery: postSummary ? SUMMARY_DISCOVERY : EARLY_DISCOVERY,
+    ...(postSummary ? { fieldProvenance: SUMMARY_PROVENANCE } : {}),
     summaryConfirmed: postSummary,
     // COMPLETE is reachable only through a governed confirmation, so the contract requires evidence
     // that one happened. Opaque, synthetic, and it asserts nothing about a real lead.

@@ -294,8 +294,12 @@ describe('the bridge can reach nothing real', () => {
         }
       }
     }
+    // RESTATED, not relaxed. Three names, and each is an evaluation surface: the corpus that AUTHORS
+    // the situation, the bridge that carries it, and the operator leaf that turns it into a governed
+    // retrieval. No runtime, service, app or production knowledge package is among them.
     expect([...namers].sort()).toStrictEqual([
       'riya-candidate-evaluation-runner',
+      'riya-candidate-evidence-live',
       'riya-quality-evaluation',
     ]);
   });
