@@ -36,12 +36,12 @@ import type { EvaluationBinding, SuiteThresholds } from '@qf-jarvis/model-evalua
 import { createApprovalEvidence } from '@qf-jarvis/model-evaluation';
 
 import { createOperatorLedger } from './accounting.js';
-import type { LedgerRefusal, RequestLedger } from './accounting.js';
-import type { BaseTurnDeps } from './candidate-ports.js';
+import type { RequestLedger } from './accounting.js';
+import type { CandidateSession } from './candidate-session.js';
 import { createQualityCandidatePort, createSafetyCandidatePort } from './candidate-ports.js';
 import type { OperatorOutcome } from './exit-codes.js';
 import { runPreflight } from './preflight.js';
-import type { PreflightInput } from './preflight.js';
+import type { PreflightInput, PreflightResult } from './preflight.js';
 import type { SafeConsole } from './safe-console.js';
 
 /** The notice printed between the two masked prompts. Content-free, and the only prose printed. */
@@ -84,23 +84,16 @@ export interface OperatorDeps {
   readonly thresholds: SuiteThresholds;
   readonly repoRoot: string;
   readonly ledger?: RequestLedger;
-}
-
-/** The in-memory candidate composition: how to run a turn, and how many attempts really happened. */
-export interface CandidateSession {
-  readonly turnDeps: (caseId: string) => BaseTurnDeps | undefined;
-  readonly cancellationTurnDeps: (caseId: string) => BaseTurnDeps | undefined;
   /**
-   * How many provider attempts THIS case made.
+   * TEST ONLY. Substitutes the preflight implementation so an integrated spec can drive a synthetic
+   * smoke configuration.
    *
-   * Per case, not cumulative. The safety bridge asks "did this case invoke exactly once", and a
-   * running total answers a different question — it would report the second model-facing case as 2
-   * and fail a run that was behaving correctly.
+   * The production CLI never sets it and a containment spec proves that, so the governed digest lock
+   * cannot be bypassed by anything that ships. It lives here rather than on `PreflightInput` because
+   * a field on the input contract is available to every caller; a field on the operator's own
+   * dependency object is only available to whoever constructs the run.
    */
-  readonly invocationsFor: (caseId: string) => number;
-  readonly continuedAfterCancellation: () => boolean;
-  /** A terminal accounting refusal, if a ceiling or a usage bound stopped the run. */
-  readonly accountingRefusal?: () => LedgerRefusal | undefined;
+  readonly preflightOverrideForTesting?: (input: PreflightInput) => PreflightResult;
 }
 
 export interface OperatorResult {
@@ -121,7 +114,7 @@ export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<
   const safe = deps.console;
 
   // A. PRECHECK — before any secret source exists.
-  const precheck = runPreflight(deps.preflight);
+  const precheck = (deps.preflightOverrideForTesting ?? runPreflight)(deps.preflight);
   if (!precheck.ok) {
     safe.line({ phase: 'preflight', status: 'FAILED', reason: precheck.failure });
     return { outcome: precheck.failure === 'tty-unavailable' ? 'TTY_REQUIRED' : 'PRECHECK_FAILED' };
@@ -177,10 +170,10 @@ export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<
   // state gate before the invoker runs, so charging them at construction would bill a request that
   // never happened. The accounted invoker reserves at the only moment a call is certain.
   const safetyPort = createSafetyCandidatePort({
-    turnDeps: session.turnDeps,
-    cancellationTurnDeps: session.cancellationTurnDeps,
+    turnDeps: session.safetyTurnDeps,
+    cancellationTurnDeps: session.safetyCancellationTurnDeps,
     invocationsFor: session.invocationsFor,
-    continuedAfterCancellation: session.continuedAfterCancellation,
+    cancellationObservedFor: session.cancellationObservedFor,
   });
   const safety = await runRiyaSafetyCandidate({
     port: safetyPort,
@@ -190,15 +183,16 @@ export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<
   // An accounting refusal is not a statement about the model. If a ceiling or a usage bound stopped
   // the run, the outcome says so rather than blaming the candidate for evidence nobody collected.
   const accountingOutcome = (): OperatorOutcome | undefined => {
-    switch (session.accountingRefusal?.()) {
+    switch (session.accountingRefusal()) {
       case 'request-limit-reached':
         return 'REQUEST_LIMIT_REACHED';
       case 'cost-limit-reached':
         return 'COST_LIMIT_REACHED';
       case 'usage-bound-violated':
-        // The bound the reservation was derived from turned out to be wrong, so no later number can
-        // be trusted. Reported as the request ceiling being unusable rather than as a safety verdict.
-        return 'REQUEST_LIMIT_REACHED';
+        // Its own outcome. The bound the reservation was derived from turned out to be wrong, which
+        // is a different failure from running out of requests, and calling it either a request-limit
+        // stop or a safety verdict would misdescribe it.
+        return 'USAGE_BOUND_VIOLATED';
       default:
         return undefined;
     }
@@ -237,8 +231,10 @@ export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<
   });
 
   // G. P10 — only now, and all seventy-two.
+  // The QUALITY accessor, so all 72 are booked to the p10 phase. A single shared accessor booked
+  // them as safety, and the advertised 1 / 10 / 72 split was unreachable.
   const qualityPort = createQualityCandidatePort({
-    turnDeps: session.turnDeps,
+    turnDeps: session.qualityTurnDeps,
     invocationsFor: session.invocationsFor,
     admissionBlocked: (caseId) => {
       safe.line({ phase: 'p10', status: 'ADMISSION_BLOCKED', caseId });

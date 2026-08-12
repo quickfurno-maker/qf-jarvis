@@ -107,6 +107,8 @@ export type { MeasuredLanguageMode } from './measurement/reply-language.js';
 
 // The sequence, and the only way it is allowed to speak.
 export { runCandidateEvidenceOperator, SECOND_CREDENTIAL_NOTICE } from './operator.js';
-export type { CandidateSession, OperatorDeps, OperatorResult } from './operator.js';
+export type { OperatorDeps, OperatorResult } from './operator.js';
+export { createAccountedSession } from './candidate-session.js';
+export type { CandidateSession, CandidateSessionDeps } from './candidate-session.js';
 export { createSafeConsole, createStdoutSafeConsole } from './safe-console.js';
 export type { SafeConsole, SafeValue } from './safe-console.js';

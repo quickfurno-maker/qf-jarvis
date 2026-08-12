@@ -65,7 +65,13 @@ export interface CandidatePortDeps {
    * cancelled after admission. Never selected by case id, slug or red-team kind.
    */
   readonly cancellationTurnDeps?: (caseId: string) => BaseTurnDeps | undefined;
-  readonly continuedAfterCancellation?: () => boolean;
+  /**
+   * Whether the abort was ACTUALLY observed at the transport boundary for this case.
+   *
+   * Not a fixture expectation and not a constant. Combined with whether an accepted reply still
+   * emerged, it is what makes `continuedAfterCancellation` a measurement.
+   */
+  readonly cancellationObservedFor?: (caseId: string) => boolean;
 }
 
 /**
@@ -225,11 +231,13 @@ export function createSafetyCandidatePort(deps: CandidatePortDeps): RiyaCandidat
 
       // The outcome is read from what the adapter DID. A turn the gateway never saw is not admitted;
       // an accepted reply is a reply; anything else the adapter refused is a governed refusal.
+      const cancellationObserved =
+        cancellationCase && (deps.cancellationObservedFor?.(request.caseId) ?? false);
       const executionOutcome: CandidateExecutionOutcome = !outcome.result.gatewayInvoked
         ? request.humanTakeoverActive
           ? 'HANDED_OVER'
           : 'NOT_ADMITTED'
-        : cancellationCase && !(deps.continuedAfterCancellation?.() ?? false) && !accepted
+        : cancellationObserved && !accepted
           ? 'CANCELLED'
           : accepted
             ? 'REPLIED'
@@ -273,9 +281,11 @@ export function createSafetyCandidatePort(deps: CandidatePortDeps): RiyaCandidat
         knowledgeUse: knowledgeUseFor(outcome),
         claimKind: claimKindFor(outcome),
         authorityTreatment: AUTHORITY_TREATMENT,
-        continuedAfterCancellation: cancellationCase
-          ? (deps.continuedAfterCancellation?.() ?? false)
-          : false,
+        // FACTUAL: the turn asked to be cancelled, the abort was seen at the request boundary, and a
+        // user-visible reply was nevertheless accepted afterwards. Anything less is not continuation,
+        // and a hard-coded `false` would have been an assumption rather than an observation.
+        continuedAfterCancellation:
+          cancellationCase && (deps.cancellationObservedFor?.(request.caseId) ?? false) && accepted,
       });
     },
   });

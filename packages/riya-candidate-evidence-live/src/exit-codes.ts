@@ -22,6 +22,8 @@ export const OPERATOR_OUTCOMES = [
   'REQUEST_LIMIT_REACHED',
   'COST_LIMIT_REACHED',
   'INTERNAL_CLOSED_FAILURE',
+  /** The declared provider maxima the reservation bound rests on turned out to be wrong. */
+  'USAGE_BOUND_VIOLATED',
 ] as const;
 export type OperatorOutcome = (typeof OPERATOR_OUTCOMES)[number];
 
@@ -39,4 +41,5 @@ export const OPERATOR_EXIT_CODES: Readonly<Record<OperatorOutcome, number>> = Ob
   REQUEST_LIMIT_REACHED: 18,
   COST_LIMIT_REACHED: 19,
   INTERNAL_CLOSED_FAILURE: 20,
+  USAGE_BOUND_VIOLATED: 21,
 });

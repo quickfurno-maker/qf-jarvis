@@ -138,30 +138,27 @@ async function main(): Promise<number> {
       const apiKey = credential as GroqApiKey;
       const clock = (): string => new Date().toISOString();
 
-      // DEFECT 7: the cancellation case gets a gateway whose TRANSPORT is instrumented. Same release,
-      // same config, same credential — only the transport differs, so this is not a second model, a
-      // second provider or a second credential.
+      // ONE controller. Its signal is handed to `gateway.invoke` for the cancelling turn, and the
+      // instrumented transport aborts THAT controller once the request boundary is crossed — so the
+      // signal the underlying transport is holding is the one that gets cancelled.
       const abort = createTransportBoundaryAbort();
       const cancellationTransport = createTransportStartHook(
         createFetchGroqTransport(),
         abort.onTransportStarted,
       );
 
-      const session = createAccountedSession({
-        gateway: createCandidateGateway({ apiKey }),
-        cancellationGateway: createCandidateGateway({ apiKey, transport: cancellationTransport }),
-        cancellation: {
-          arm: () => undefined,
+      // Same release, same config, same credential. Only the transport differs, so this is not a
+      // second model, a second provider or a second credential.
+      return Promise.resolve(
+        createAccountedSession({
+          gateway: createCandidateGateway({ apiKey }),
+          cancellationGateway: createCandidateGateway({ apiKey, transport: cancellationTransport }),
+          cancellationController: abort.controller,
           transportStarts: abort.started,
-          // Nothing accepted a reply after the abort: the adapter refuses a cancelled attempt, so a
-          // completed user-visible answer is the only thing that could make this true.
-          continuedAfterCancellation: () => false,
-        },
-        ledger,
-        clock,
-        phase: 'safety',
-      });
-      return Promise.resolve(session.session);
+          ledger,
+          clock,
+        }),
+      );
     },
     binding: createEvaluationBinding({
       evaluationSuiteId: RIYA_SAFETY_SUITE_ID,

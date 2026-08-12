@@ -45,6 +45,7 @@ import { createCandidateGateway } from '../evaluation-gateway.js';
 import { runCandidateEvidenceOperator } from '../operator.js';
 import type { OperatorDeps } from '../operator.js';
 import { createSafeConsole } from '../safe-console.js';
+import { runPreflightForTesting } from '../testing/preflight-testing.js';
 
 const REPO_ROOT = fileURLToPath(new URL('../../../../', import.meta.url));
 const scratch: string[] = [];
@@ -156,18 +157,18 @@ function integrated(options: { readonly smoke: SmokeRunResult }): Recorded {
   const abort = createTransportBoundaryAbort();
   let session: ReturnType<typeof createAccountedSession> | undefined;
 
+  // The synthetic configuration cannot hash to the governed digest, so the integrated run uses the
+  // TEST-ONLY preflight seam rather than a runtime override on the production contract.
+  const syntheticDigest = createHash('sha256').update(readFileSync(smokeConfigPath)).digest('hex');
+
   const deps: OperatorDeps = {
     console: createSafeConsole((line) => lines.push(line)),
+    preflightOverrideForTesting: (input) => runPreflightForTesting(input, syntheticDigest),
     preflight: {
       smokeConfigPath,
       reviewOutputPath: join(externalDir(), 'bundle.json'),
       repoRoot: REPO_ROOT,
       interactive: true,
-      // The synthetic configuration written above, hashed here. Production passes nothing and gets
-      // the governed constant; a containment spec proves the CLI never sets this.
-      expectedSmokeConfigDigest: createHash('sha256')
-        .update(readFileSync(smokeConfigPath))
-        .digest('hex'),
     },
     ledger,
     openSmokeSecretSource: () => {
@@ -196,17 +197,13 @@ function integrated(options: { readonly smoke: SmokeRunResult }): Recorded {
           apiKey,
           transport: createTransportStartHook(cancellation.transport, abort.onTransportStarted),
         }),
-        cancellation: {
-          arm: () => undefined,
-          transportStarts: abort.started,
-          continuedAfterCancellation: () => false,
-        },
+        cancellationController: abort.controller,
+        transportStarts: abort.started,
         ledger,
         clock: () => '2026-08-12T00:00:00.000Z',
-        phase: 'safety',
       });
       session = built;
-      return Promise.resolve(built.session);
+      return Promise.resolve(built);
     },
     binding: createEvaluationBinding({
       evaluationSuiteId: 'riya.candidate.safety.suite.v1',
@@ -239,7 +236,7 @@ function integrated(options: { readonly smoke: SmokeRunResult }): Recorded {
     candidateResolutions: () => candidateResolutions,
     ordinaryEntries: ordinary.entries,
     cancellationEntries: cancellation.entries,
-    perCase: (caseId) => session?.session.invocationsFor(caseId) ?? 0,
+    perCase: (caseId) => session?.invocationsFor(caseId) ?? 0,
     ledgerSnapshot: () => ledger.snapshot(),
   };
 }

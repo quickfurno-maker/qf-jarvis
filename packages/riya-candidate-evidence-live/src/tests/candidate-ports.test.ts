@@ -89,7 +89,7 @@ async function execute(request: RiyaCandidateRequest, cancellationDeps?: BaseTur
     ...(cancellationDeps === undefined
       ? { cancellationTurnDeps: () => baseDeps(cancellationCounting.invoker) }
       : { cancellationTurnDeps: () => cancellationDeps }),
-    continuedAfterCancellation: () => false,
+    cancellationObservedFor: () => false,
   });
   const record = await port.execute(request);
   return {

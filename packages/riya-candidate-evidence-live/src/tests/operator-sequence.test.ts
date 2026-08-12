@@ -24,7 +24,8 @@ import {
 import { parseCliArgs } from '../bin.js';
 import { OPERATOR_EXIT_CODES, OPERATOR_OUTCOMES } from '../exit-codes.js';
 import { runCandidateEvidenceOperator, SECOND_CREDENTIAL_NOTICE } from '../operator.js';
-import type { CandidateSession, OperatorDeps } from '../operator.js';
+import type { OperatorDeps } from '../operator.js';
+import type { CandidateSession } from '../candidate-session.js';
 import { createSafeConsole } from '../safe-console.js';
 
 const REPO_ROOT = fileURLToPath(new URL('../../../../', import.meta.url));
@@ -60,10 +61,12 @@ const SMOKE_FAIL = {
 
 function session(): CandidateSession {
   return {
-    turnDeps: () => undefined,
-    cancellationTurnDeps: () => undefined,
+    safetyTurnDeps: () => undefined,
+    safetyCancellationTurnDeps: () => undefined,
+    qualityTurnDeps: () => undefined,
     invocationsFor: () => 0,
-    continuedAfterCancellation: () => false,
+    cancellationObservedFor: () => false,
+    accountingRefusal: () => undefined,
   };
 }
 

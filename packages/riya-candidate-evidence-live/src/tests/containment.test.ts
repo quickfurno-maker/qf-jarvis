@@ -11,7 +11,7 @@
  * firewall reads RAW source, where a false negative is the expensive direction.
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
@@ -43,8 +43,16 @@ const codeOnly = (text: string): string =>
     .filter((line) => !/^\s*\/\//u.test(line))
     .join('\n');
 
+/**
+ * Production source: everything under `src/` except the specs and the explicitly test-only surface.
+ *
+ * `src/testing/` is excluded because it is not shipped behaviour — it exists so a spec can drive a
+ * synthetic configuration, and a separate assertion proves no production module imports it.
+ */
 const productionFiles = (): readonly { readonly file: string; readonly code: string }[] =>
-  walk(SRC, true).map((file) => ({ file, code: codeOnly(readFileSync(file, 'utf8')) }));
+  walk(SRC, true)
+    .filter((file) => !file.split(sep).includes('testing'))
+    .map((file) => ({ file, code: codeOnly(readFileSync(file, 'utf8')) }));
 
 describe('the operator implements no transport and holds no secret ingress', () => {
   it('WRITES NO HTTP OF ITS OWN', () => {
@@ -87,12 +95,31 @@ describe('the operator implements no transport and holds no secret ingress', () 
     }
   });
 
-  it('THE CLI NEVER OVERRIDES THE GOVERNED SMOKE DIGEST', () => {
-    // `expectedSmokeConfigDigest` exists so an integrated spec can drive a synthetic configuration.
-    // Production passes nothing and gets the compiled-in constant; if the CLI ever set it, the digest
-    // lock would be decorative.
+  it('THE GOVERNED SMOKE DIGEST IS NOT OVERRIDABLE FROM PRODUCTION', () => {
+    // The override used to sit on `PreflightInput`, which made the lock advisory for anybody holding
+    // the production contract. It is gone: `runPreflight` always passes the governed constant, and
+    // the only other caller is a file named for being test-only.
+    const preflight = readFileSync(join(SRC, 'preflight.ts'), 'utf8');
+    expect(preflight).not.toContain('expectedSmokeConfigDigest');
+    expect(preflight).toContain('return preflightCore(input, EXPECTED_SMOKE_CONFIG_DIGEST);');
+
     const cli = codeOnly(readFileSync(join(SRC, 'bin.ts'), 'utf8'));
-    expect(cli).not.toContain('expectedSmokeConfigDigest');
+    expect(cli).not.toContain('preflightCore');
+    expect(cli).not.toContain('preflightOverrideForTesting');
+    expect(cli).not.toContain('runPreflightForTesting');
+  });
+
+  it('NO PRODUCTION MODULE IMPORTS THE TEST-ONLY PREFLIGHT SEAM', () => {
+    // If anything that ships could reach it, the digest lock would be one import away from being
+    // decorative again.
+    for (const { file, code } of productionFiles()) {
+      expect(code, `${file} must not import the testing preflight`).not.toContain(
+        'preflight-testing',
+      );
+      expect(code, `${file} must not name runPreflightForTesting`).not.toContain(
+        'runPreflightForTesting',
+      );
+    }
   });
 
   it('the CLI constructs no secret source before preflight has passed', () => {
