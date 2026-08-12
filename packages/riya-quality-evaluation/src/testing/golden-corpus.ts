@@ -44,9 +44,17 @@ import type {
   RiyaQualityLanguageMode,
 } from '../contracts/vocabularies.js';
 
-/** The exact identity of this corpus. Bump on ANY fixture change — see the overfitting note in ADR-0106. */
+/**
+ * The exact identity of this corpus. Bump on ANY fixture change — see the overfitting note in ADR-0106.
+ *
+ * Manifest version 2 (MVP-P2A.2 inputs): the eighteen citation-required fixtures gained the synthetic
+ * grounded knowledge a candidate must actually be shown to be markable on a grounded answer. ADR-0106
+ * distinguishes the two bumps — a fixture correction moves the MANIFEST, adding or removing a case
+ * moves the suite as well. No case was added or removed and no expectation changed, so the suite
+ * version stays 1: this is an input change, not a scoring-policy change.
+ */
 export const RIYA_QUALITY_GOLDEN_FIXTURE_MANIFEST_ID = 'riya-quality-golden-v1';
-export const RIYA_QUALITY_GOLDEN_FIXTURE_MANIFEST_VERSION = 1;
+export const RIYA_QUALITY_GOLDEN_FIXTURE_MANIFEST_VERSION = 2;
 export const RIYA_QUALITY_GOLDEN_SUITE_ID = 'riya-quality-v1';
 export const RIYA_QUALITY_GOLDEN_SUITE_VERSION = 1;
 
@@ -506,6 +514,111 @@ const KIND_ORDER: readonly RiyaQualityInteractionKind[] = Object.freeze([
   'NEXT_STEP',
 ]);
 
+/**
+ * The lifecycle state a synthetic knowledge input carries.
+ *
+ * The same closed vocabulary the candidate bridge uses, written here rather than imported: the corpus
+ * must not depend on the bridge, and the two are bound at compile time where the bridge maps one to the
+ * other. Every P10 record is `CURRENT` — the corpus measures grounded ANSWERING, and a freshness
+ * situation is a SAFETY scenario with its own fixture.
+ */
+export type RiyaQualityGoldenKnowledgeState = 'CURRENT' | 'STALE' | 'SUPERSEDED';
+
+/** One synthetic governed record, minimized to exactly the five fields a model may be shown. */
+export interface RiyaQualityGoldenKnowledgeRecord {
+  readonly knowledgeId: string;
+  readonly version: number;
+  readonly topic: string;
+  readonly contentFormat: string;
+  readonly content: string;
+}
+
+/** The synthetic knowledge a candidate is actually given for one grounded case. */
+export interface RiyaQualityGoldenGroundedKnowledge {
+  readonly state: RiyaQualityGoldenKnowledgeState;
+  readonly records: readonly RiyaQualityGoldenKnowledgeRecord[];
+}
+
+/**
+ * The THREE canonical synthetic records, one per citation-required interaction kind.
+ *
+ * ### Why the corpus owns these bytes
+ *
+ * `passingShape.citations` already said a passing answer cites `knowledge.grounding-qa.alpha` v1 — but
+ * nothing in the repository held that record, so eighteen fixtures asked for a sourced answer and
+ * supplied no source. A candidate cannot be marked on grounded QA unless it was shown the material it
+ * was expected to use, and the only alternatives were to feed it the expected citation (handing over
+ * the answer key) or to let an adapter invent a fact (evidence about nothing).
+ *
+ * ### Authored INDEPENDENTLY of the expectation
+ *
+ * The identities below are written out, not derived from `passingShape`. A corpus consistency spec then
+ * proves the expected citation names the record the candidate was actually given. Deriving one from the
+ * other would make the check vacuous: changing the expectation would silently change the input, and the
+ * pair would always agree.
+ *
+ * ### One record per KIND, shared by both cases and all three languages
+ *
+ * The two cases of a kind ask two different questions of the same situation, and Hindi and Hinglish ask
+ * them in their own words — so a per-case or per-language record would be three copies of one fact
+ * drifting apart, and would make a language difference look like a knowledge difference.
+ *
+ * **SYNTHETIC EVALUATION ONLY. NOT TRAINING DATA.** Every fact is invented and says so inside its own
+ * content, so a record quoted into a reply, a review bundle or a report still announces what it is.
+ * `service.alpha`, `city.alpha`, `city.beta` and `synthetic-window.alpha` are placeholders; no price,
+ * package, vendor, contact detail or timing anybody could mistake for a real commitment appears.
+ */
+const CANONICAL_KNOWLEDGE: Readonly<
+  Partial<Record<RiyaQualityInteractionKind, RiyaQualityGoldenGroundedKnowledge>>
+> = Object.freeze({
+  // Case 1 asks whether painting is handled; case 2 asks which cities are accepted. Both are
+  // answerable from this one record, and neither is answerable from training weights.
+  GROUNDING_QA: Object.freeze({
+    state: 'CURRENT',
+    records: Object.freeze([
+      Object.freeze({
+        knowledgeId: 'knowledge.grounding-qa.alpha',
+        version: 1,
+        topic: 'synthetic.grounding-qa',
+        contentFormat: 'text/plain',
+        content:
+          'For this synthetic evaluation only: service.alpha includes painting support, and projects for service.alpha are accepted in city.alpha and city.beta. These identifiers are test placeholders and describe no real offering.',
+      }),
+    ]),
+  }),
+  // Case 1 asks about wardrobe handles, case 2 about painting — both inside the scope a summary the
+  // client already confirmed is supposed to have covered.
+  POST_SUMMARY_QA: Object.freeze({
+    state: 'CURRENT',
+    records: Object.freeze([
+      Object.freeze({
+        knowledgeId: 'knowledge.post-summary-qa.alpha',
+        version: 1,
+        topic: 'synthetic.post-summary-qa',
+        contentFormat: 'text/plain',
+        content:
+          'For this synthetic evaluation only: the previously summarized project scope includes wardrobe handles and painting. These are test-only facts and not a real customer scope.',
+      }),
+    ]),
+  }),
+  // Case 1 asks how long site measurement takes, case 2 what follows a booked consultation. The timing
+  // is a deliberately fictional LABEL rather than a duration: a plausible "two working days" in a
+  // fixture is the kind of value that gets quoted back later as if the business had committed to it.
+  COMPLETE_QA: Object.freeze({
+    state: 'CURRENT',
+    records: Object.freeze([
+      Object.freeze({
+        knowledgeId: 'knowledge.complete-qa.alpha',
+        version: 1,
+        topic: 'synthetic.complete-qa',
+        contentFormat: 'text/plain',
+        content:
+          'For this synthetic evaluation only: site measurement uses timing label synthetic-window.alpha. After a consultation is authoritatively booked, the next synthetic process step is a site-measurement coordination step handled by a human team. These are test-only facts.',
+      }),
+    ]),
+  }),
+});
+
 /** A shape that SATISFIES its scenario. Counts and canonical observations only — no reply text. */
 export interface RiyaQualityGoldenPassingShape {
   readonly replyCharCount: number;
@@ -523,6 +636,12 @@ export interface RiyaQualityGoldenFixture {
   readonly interactionKind: RiyaQualityInteractionKind;
   /** Synthetic client message. Exists ONLY on this subpath. */
   readonly syntheticUserText: string;
+  /**
+   * The synthetic governed knowledge this case's candidate is SHOWN. Present only where the scenario
+   * requires a citation; absent — not empty — everywhere else, because a case that supplies knowledge
+   * nobody asked about is a different case.
+   */
+  readonly syntheticGroundedKnowledge?: RiyaQualityGoldenGroundedKnowledge;
   readonly scenario: RiyaQualityScenarioV1;
   readonly passingShape: RiyaQualityGoldenPassingShape;
 }
@@ -562,11 +681,16 @@ function buildFixture(
   const replyCharCount = Math.max(1, shape.maxReplyChars - 60);
   const asked = caseShape.allowedAskedDiscoveryFields.slice(0, shape.maxQuestions);
 
+  // Keyed by the interaction kind and NEVER by the expected citation. The lookup is what makes the
+  // consistency spec meaningful: input and expectation are two independent authorings that must agree.
+  const knowledge = CANONICAL_KNOWLEDGE[interactionKind];
+
   return Object.freeze({
     fixtureId,
     languageMode,
     interactionKind,
     syntheticUserText,
+    ...(knowledge === undefined ? {} : { syntheticGroundedKnowledge: knowledge }),
     scenario,
     passingShape: Object.freeze({
       replyCharCount,

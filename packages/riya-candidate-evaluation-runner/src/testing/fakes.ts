@@ -40,6 +40,8 @@ export type FakeSafetyBehaviour = Partial<Omit<RiyaCandidateExecutionRecord, 'ca
  */
 export class FakeSafetyCandidate implements RiyaCandidateExecutionPort {
   public readonly executedCaseIds: string[] = [];
+  /** Every request exactly as it arrived, so a spec can assert what a candidate was actually shown. */
+  public readonly executedRequests: RiyaCandidateRequest[] = [];
 
   public constructor(
     private readonly overrides: Readonly<Record<string, FakeSafetyBehaviour>> = {},
@@ -47,6 +49,7 @@ export class FakeSafetyCandidate implements RiyaCandidateExecutionPort {
 
   public execute = (request: RiyaCandidateRequest): Promise<RiyaCandidateExecutionRecord> => {
     this.executedCaseIds.push(request.caseId);
+    this.executedRequests.push(request);
     return Promise.resolve({
       ...safeDefault(request),
       ...this.overrides[request.caseId],
@@ -64,27 +67,44 @@ export class FakeSafetyCandidate implements RiyaCandidateExecutionPort {
  */
 function safeDefault(request: RiyaCandidateRequest): RiyaCandidateExecutionRecord {
   const fixture = RIYA_SAFETY_FIXTURES.find((one) => one.fixtureId === request.caseId);
-  const routable = request.declaredDataClass === 'HOSTED_ALLOWED';
   const routedDataClass: EvaluationDataClass = request.declaredDataClass;
 
-  // Content that must never leave the machine is not admitted, so nothing is invoked for it.
-  const outcome: CandidateExecutionOutcome = !routable
-    ? 'NOT_ADMITTED'
-    : request.humanTakeoverActive
-      ? 'HANDED_OVER'
-      : request.cancelAfterAdmission
-        ? 'CANCELLED'
-        : 'REFUSED';
+  // Admission is derived from the SITUATION the request describes, never from the fixture's execution
+  // expectation. Reading the expectation would make a conforming candidate right by definition, and
+  // the layer enforcement it is checked against would prove nothing.
+  //
+  // Four reasons a Riya CLIENT composition admits nothing, and each is a real boundary:
+  //   - content that must never leave the machine;
+  //   - a turn that belongs to another agent's scope, which Riya has no governed prompt for;
+  //   - a human holding the wheel;
+  //   - governed knowledge that is not current, refused before hosted inference rather than after.
+  const routable = request.declaredDataClass === 'HOSTED_ALLOWED';
+  const ownScope = request.agentScope === 'CLIENT';
+  const freshKnowledge =
+    request.groundedKnowledge === undefined || request.groundedKnowledge.state === 'CURRENT';
+
+  const outcome: CandidateExecutionOutcome =
+    !routable || !ownScope || !freshKnowledge
+      ? 'NOT_ADMITTED'
+      : request.humanTakeoverActive
+        ? 'HANDED_OVER'
+        : request.cancelAfterAdmission
+          ? 'CANCELLED'
+          : 'REFUSED';
   const admitted = outcome !== 'NOT_ADMITTED' && outcome !== 'HANDED_OVER';
 
   // The citation case is the one where a safe candidate ANSWERS, so it needs a real grounded claim
   // with a known, versioned source rather than a refusal that dodges the question.
   const cites = fixture?.redTeamKind === 'FABRICATED_OR_VERSIONLESS_CITATION';
+  // Cited from the record the REQUEST actually carried, never from a constant. A conforming candidate
+  // can only name a source it was shown, so a fake that cited a hard-coded id would model the exact
+  // fabrication this case exists to catch.
+  const supplied = request.groundedKnowledge?.records[0];
 
   return {
     caseId: request.caseId,
-    outcome: cites ? 'REPLIED' : outcome,
-    providerInvocations: admitted || cites ? 1 : 0,
+    outcome: cites && admitted ? 'REPLIED' : outcome,
+    providerInvocations: admitted ? 1 : 0,
     routedDataClass,
     humanOnlyReachedModel: false,
     humanTakeoverActive: request.humanTakeoverActive,
@@ -95,9 +115,15 @@ function safeDefault(request: RiyaCandidateRequest): RiyaCandidateExecutionRecor
       : 'I cannot help with that. Let me bring in a colleague from the team.',
     toolIntents: cites ? ['knowledge.lookup'] : [],
     businessActions: [],
-    citations: cites ? [{ knowledgeId: 'knowledge.alpha', version: 3, known: true }] : [],
-    knowledgeUse: fixture?.redTeamKind === 'STALE_OR_SUPERSEDED_FACT' ? 'CURRENT' : 'NONE',
-    claimKind: cites ? 'GROUNDED_CLAIMS' : 'NO_CLAIMS',
+    citations:
+      cites && admitted && supplied !== undefined
+        ? [{ knowledgeId: supplied.knowledgeId, version: supplied.version, known: true }]
+        : [],
+    // `NONE` on the freshness case too, and that is the honest value: the superseded record was
+    // refused before inference, so no knowledge was used. Reporting `CURRENT` for a record nobody read
+    // would be the fabrication the tri-state exists to prevent.
+    knowledgeUse: 'NONE',
+    claimKind: cites && admitted ? 'GROUNDED_CLAIMS' : 'NO_CLAIMS',
     authorityTreatment: 'ADVISORY_ONLY',
     continuedAfterCancellation: false,
   };
@@ -115,6 +141,8 @@ export type FakeQualityBehaviour = Partial<Omit<RiyaQualityCandidateRecord, 'cas
  */
 export class FakeQualityCandidate implements RiyaQualityCandidatePort {
   public readonly executedCaseIds: string[] = [];
+  /** Every request exactly as it arrived, so a spec can assert what a candidate was actually shown. */
+  public readonly executedRequests: RiyaQualityCandidateRequest[] = [];
 
   public constructor(
     private readonly overrides: Readonly<Record<string, FakeQualityBehaviour>> = {},
@@ -122,6 +150,7 @@ export class FakeQualityCandidate implements RiyaQualityCandidatePort {
 
   public execute = (request: RiyaQualityCandidateRequest): Promise<RiyaQualityCandidateRecord> => {
     this.executedCaseIds.push(request.caseId);
+    this.executedRequests.push(request);
     const fixture = RIYA_QUALITY_GOLDEN_FIXTURES.find((one) => one.fixtureId === request.caseId);
     const shape = fixture?.passingShape;
     const askedDiscoveryFields: readonly RiyaQualityDiscoveryField[] =

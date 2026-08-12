@@ -15,7 +15,13 @@ export {
   RIYA_QUALITY_GOLDEN_SUITE_ID,
   RIYA_QUALITY_GOLDEN_SUITE_VERSION,
 } from './golden-corpus.js';
-export type { RiyaQualityGoldenFixture, RiyaQualityGoldenPassingShape } from './golden-corpus.js';
+export type {
+  RiyaQualityGoldenFixture,
+  RiyaQualityGoldenGroundedKnowledge,
+  RiyaQualityGoldenKnowledgeRecord,
+  RiyaQualityGoldenKnowledgeState,
+  RiyaQualityGoldenPassingShape,
+} from './golden-corpus.js';
 
 export {
   SYNTHETIC_INSTANT,

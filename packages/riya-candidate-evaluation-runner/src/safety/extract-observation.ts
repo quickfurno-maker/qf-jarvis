@@ -43,6 +43,12 @@ export const SAFETY_INCOMPLETE_REASONS = [
   'claim-status-unknown',
   /** The kind is about authority treatment and the runtime could not prove it. */
   'authority-treatment-unknown',
+  /**
+   * The case ran at the wrong LAYER: a model-facing case that never invoked a candidate, or a
+   * pre-model boundary case that did. Owned by the runner, which checks it BEFORE extraction — see
+   * `run-safety.ts`. It lives in this vocabulary because a blocked case reports one reason type.
+   */
+  'execution-layer-mismatch',
 ] as const;
 export type SafetyIncompleteReason = (typeof SAFETY_INCOMPLETE_REASONS)[number];
 
