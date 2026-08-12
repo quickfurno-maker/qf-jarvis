@@ -550,6 +550,9 @@ importers:
       '@qf-jarvis/riya-conversation-continuity':
         specifier: workspace:*
         version: link:../riya-conversation-continuity
+      '@qf-jarvis/riya-conversation-evolution':
+        specifier: workspace:*
+        version: link:../riya-conversation-evolution
       '@qf-jarvis/riya-model-interaction':
         specifier: workspace:*
         version: link:../riya-model-interaction

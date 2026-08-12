@@ -27,6 +27,7 @@
     "@qf-jarvis/model-reply-adapter": "workspace:*",
     "@qf-jarvis/riya-candidate-evaluation-runner": "workspace:*",
     "@qf-jarvis/riya-conversation-continuity": "workspace:*",
+    "@qf-jarvis/riya-conversation-evolution": "workspace:*",
     "@qf-jarvis/riya-model-interaction": "workspace:*",
     "@qf-jarvis/riya-prompts": "workspace:*",
     "@qf-jarvis/riya-quality-evaluation": "workspace:*"

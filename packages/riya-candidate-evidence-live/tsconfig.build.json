@@ -29,6 +29,7 @@
     { "path": "../model-reply-adapter/tsconfig.build.json" },
     { "path": "../riya-candidate-evaluation-runner/tsconfig.build.json" },
     { "path": "../riya-conversation-continuity/tsconfig.build.json" },
+    { "path": "../riya-conversation-evolution/tsconfig.build.json" },
     { "path": "../riya-model-interaction/tsconfig.build.json" },
     { "path": "../riya-prompts/tsconfig.build.json" },
     { "path": "../riya-quality-evaluation/tsconfig.build.json" }
