@@ -518,6 +518,45 @@ importers:
         specifier: workspace:*
         version: link:../riya-quality-evaluation
 
+  packages/riya-candidate-evidence-live:
+    dependencies:
+      '@qf-jarvis/agent-runtime':
+        specifier: workspace:*
+        version: link:../agent-runtime
+      '@qf-jarvis/core-service-availability-read':
+        specifier: workspace:*
+        version: link:../core-service-availability-read
+      '@qf-jarvis/groq-staging-smoke':
+        specifier: workspace:*
+        version: link:../groq-staging-smoke
+      '@qf-jarvis/model-evaluation':
+        specifier: workspace:*
+        version: link:../model-evaluation
+      '@qf-jarvis/model-gateway':
+        specifier: workspace:*
+        version: link:../model-gateway
+      '@qf-jarvis/model-gateway-composition':
+        specifier: workspace:*
+        version: link:../model-gateway-composition
+      '@qf-jarvis/model-reply-adapter':
+        specifier: workspace:*
+        version: link:../model-reply-adapter
+      '@qf-jarvis/riya-candidate-evaluation-runner':
+        specifier: workspace:*
+        version: link:../riya-candidate-evaluation-runner
+      '@qf-jarvis/riya-conversation-continuity':
+        specifier: workspace:*
+        version: link:../riya-conversation-continuity
+      '@qf-jarvis/riya-model-interaction':
+        specifier: workspace:*
+        version: link:../riya-model-interaction
+      '@qf-jarvis/riya-prompts':
+        specifier: workspace:*
+        version: link:../riya-prompts
+      '@qf-jarvis/riya-quality-evaluation':
+        specifier: workspace:*
+        version: link:../riya-quality-evaluation
+
   packages/riya-conversation-completion:
     dependencies:
       '@qf-jarvis/core-service-availability-read':

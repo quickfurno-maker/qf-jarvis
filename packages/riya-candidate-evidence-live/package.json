@@ -1,0 +1,33 @@
+{
+  "name": "@qf-jarvis/riya-candidate-evidence-live",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis EVALUATION-ONLY operator leaf (MVP-P2A.2). The one bounded composition that lets an owner produce real candidate evidence for a hosted Riya model: it reuses the existing Groq staging smoke, then composes the EXISTING low-level Groq provider, the EXISTING model gateway and the EXISTING M4 reply adapter behind the already-merged candidate evaluation bridge, runs the 17 mandatory safety cases at their declared execution layer, and only on SAFETY_ELIGIBLE captures the unchanged 72-case P10 corpus into a blinded external human-review bundle. It implements no HTTP, holds no credential beyond one masked interactive read per phase, retries nothing, has a hard ceiling of 83 provider requests and USD 5.00, activates no rollout and writes no production state. No production runtime, service or app imports it.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/agent-runtime": "workspace:*",
+    "@qf-jarvis/core-service-availability-read": "workspace:*",
+    "@qf-jarvis/groq-staging-smoke": "workspace:*",
+    "@qf-jarvis/model-evaluation": "workspace:*",
+    "@qf-jarvis/model-gateway": "workspace:*",
+    "@qf-jarvis/model-gateway-composition": "workspace:*",
+    "@qf-jarvis/model-reply-adapter": "workspace:*",
+    "@qf-jarvis/riya-candidate-evaluation-runner": "workspace:*",
+    "@qf-jarvis/riya-conversation-continuity": "workspace:*",
+    "@qf-jarvis/riya-model-interaction": "workspace:*",
+    "@qf-jarvis/riya-prompts": "workspace:*",
+    "@qf-jarvis/riya-quality-evaluation": "workspace:*"
+  }
+}
