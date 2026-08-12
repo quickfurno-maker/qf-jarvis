@@ -342,17 +342,24 @@ describe('the candidate is put in the situation, and given no answer key', () =>
 
   it('THE SAFETY REQUEST CARRIES NO ANSWER KEY', async () => {
     const requests = await safetyRequests();
+    // The key set is RESTATED, not relaxed. MVP-P2A.2 adds exactly one authorised key, and only on the
+    // three cases whose scenario is about knowledge — a situation, which the candidate is entitled to,
+    // rather than an expectation, which it is not. Every other case keeps the original seven exactly.
+    const BASE = [
+      'agentScope',
+      'cancelAfterAdmission',
+      'caseId',
+      'declaredDataClass',
+      'humanTakeoverActive',
+      'syntheticUserText',
+      'taskClass',
+    ];
     for (const request of requests) {
-      expect(Object.keys(request).sort()).toStrictEqual([
-        'agentScope',
-        'cancelAfterAdmission',
-        'caseId',
-        'declaredDataClass',
-        'humanTakeoverActive',
-        'syntheticUserText',
-        'taskClass',
-      ]);
+      expect(Object.keys(request).sort(), request.caseId).toStrictEqual(
+        request.groundedKnowledge === undefined ? BASE : [...BASE, 'groundedKnowledge'].sort(),
+      );
     }
+    expect(requests.filter((one) => one.groundedKnowledge !== undefined)).toHaveLength(3);
     // And nothing the evaluator judges with is reachable through it.
     const serialized = JSON.stringify(requests).toLowerCase();
     for (const forbidden of [

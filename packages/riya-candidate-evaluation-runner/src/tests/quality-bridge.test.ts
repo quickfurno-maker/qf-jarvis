@@ -36,17 +36,27 @@ import {
   RIYA_QUALITY_GOLDEN_SUITE_ID,
   RIYA_QUALITY_GOLDEN_SUITE_VERSION,
 } from '@qf-jarvis/riya-quality-evaluation/testing';
+import type { RiyaQualityGoldenFixture } from '@qf-jarvis/riya-quality-evaluation/testing';
 import { afterAll, describe, expect, it } from 'vitest';
 
 import { RiyaCandidateRunnerError } from '../contracts/errors.js';
 import { captureRiyaQualityCandidates } from '../quality/capture.js';
-import type { RiyaQualityCandidateCapture } from '../quality/capture.js';
+import type {
+  RiyaQualityCandidateCapture,
+  RiyaQualityCandidateRequest,
+} from '../quality/capture.js';
 import {
   evaluateRiyaQualityFromReviews,
   ingestRiyaQualityReviews,
 } from '../quality/ingest-reviews.js';
 import type { RiyaQualityCaseReviews } from '../quality/ingest-reviews.js';
 import { buildRiyaQualityReviewBundle } from '../quality/review-bundle.js';
+import {
+  RIYA_SAFETY_FIXTURE_MANIFEST_ID,
+  RIYA_SAFETY_FIXTURE_MANIFEST_VERSION,
+  RIYA_SAFETY_SUITE_ID,
+  RIYA_SAFETY_SUITE_VERSION,
+} from '../safety/fixtures.js';
 import { writeRiyaQualityReviewBundle } from '../quality/write-bundle.js';
 import { runRiyaSafetyCandidate } from '../safety/run-safety.js';
 import { FakeQualityCandidate, FakeSafetyCandidate } from '../testing/fakes.js';
@@ -71,10 +81,11 @@ async function safetyEvidence(): Promise<ApprovalEvidence> {
   const result = await runRiyaSafetyCandidate({
     port: new FakeSafetyCandidate(),
     binding: createEvaluationBinding({
-      evaluationSuiteId: 'riya.candidate.safety.suite.v1',
-      evaluationSuiteVersion: 1,
-      fixtureManifestId: 'riya.candidate.safety.v1',
-      fixtureManifestVersion: 1,
+      // The exported identity, not a retyped literal — see the same restatement in safety-bridge.
+      evaluationSuiteId: RIYA_SAFETY_SUITE_ID,
+      evaluationSuiteVersion: RIYA_SAFETY_SUITE_VERSION,
+      fixtureManifestId: RIYA_SAFETY_FIXTURE_MANIFEST_ID,
+      fixtureManifestVersion: RIYA_SAFETY_FIXTURE_MANIFEST_VERSION,
       evaluatorImplId: 'qfj.eval.deterministic',
       evaluatorImplVersion: 1,
       release: {
@@ -233,6 +244,123 @@ describe('P10 capture consumes the governed corpus unchanged', () => {
     expect(result.ok ? [] : result.incomplete).toStrictEqual([
       { fixtureId: target.fixtureId, reason },
     ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The situation reaches the candidate; the marking scheme does not (MVP-P2A.2 inputs).
+// ---------------------------------------------------------------------------
+
+describe('a grounded P10 case is given the source it is expected to cite', () => {
+  const groundedFixtures = RIYA_QUALITY_GOLDEN_FIXTURES.filter(
+    (f) => f.syntheticGroundedKnowledge !== undefined,
+  );
+
+  async function requests(
+    fixtures?: readonly RiyaQualityGoldenFixture[],
+  ): Promise<readonly RiyaQualityCandidateRequest[]> {
+    const port = new FakeQualityCandidate();
+    await captureRiyaQualityCandidates(fixtures === undefined ? { port } : { port, fixtures });
+    return port.executedRequests;
+  }
+
+  it('carries the fixture INPUT record to all eighteen grounded cases', async () => {
+    const sent = await requests();
+    const byCase = new Map(sent.map((one) => [one.caseId, one]));
+    expect(groundedFixtures).toHaveLength(18);
+    for (const fixture of groundedFixtures) {
+      const request = byCase.get(fixture.fixtureId);
+      expect(request?.groundedKnowledge, fixture.fixtureId).toStrictEqual(
+        fixture.syntheticGroundedKnowledge,
+      );
+    }
+  });
+
+  it('omits the field entirely on the other fifty-four', async () => {
+    const sent = await requests();
+    const ungrounded = sent.filter(
+      (one) =>
+        !groundedFixtures.some((fixture) => fixture.fixtureId === one.caseId) &&
+        one.caseId.length > 0,
+    );
+    expect(ungrounded).toHaveLength(54);
+    for (const request of ungrounded) {
+      expect(Object.keys(request).sort(), request.caseId).toStrictEqual([
+        'caseId',
+        'continuityPhaseBefore',
+        'syntheticUserText',
+      ]);
+    }
+  });
+
+  it('THE CANDIDATE INPUT DOES NOT COME FROM THE EXPECTED CITATION', async () => {
+    // Move the answer key and nothing else. What the candidate is shown must not follow it — otherwise
+    // editing an expectation would silently tell the model which source to name.
+    const target = groundedFixtures[0];
+    expect(target).toBeDefined();
+    if (target === undefined) {
+      return;
+    }
+    const drifted: RiyaQualityGoldenFixture = {
+      ...target,
+      passingShape: {
+        ...target.passingShape,
+        citations: [{ knowledgeId: 'knowledge.answer-key.alpha', version: 99 }],
+      },
+    };
+    const sent = await requests([drifted]);
+    const supplied = sent[0]?.groundedKnowledge?.records[0];
+    expect(supplied?.knowledgeId).toBe(target.syntheticGroundedKnowledge?.records[0]?.knowledgeId);
+    expect(supplied?.knowledgeId).not.toBe('knowledge.answer-key.alpha');
+    expect(supplied?.version).not.toBe(99);
+    expect(JSON.stringify(sent[0])).not.toContain('knowledge.answer-key.alpha');
+  });
+
+  it('a grounded request still carries NO marking scheme', async () => {
+    const sent = await requests();
+    const grounded = sent.filter((one) => one.groundedKnowledge !== undefined);
+    expect(grounded).toHaveLength(18);
+    for (const request of grounded) {
+      expect(Object.keys(request).sort(), request.caseId).toStrictEqual([
+        'caseId',
+        'continuityPhaseBefore',
+        'groundedKnowledge',
+        'syntheticUserText',
+      ]);
+      const serialized = JSON.stringify(request).toLowerCase();
+      for (const leak of [
+        'requiredcitation',
+        'requiredqualitydimensions',
+        'passingshape',
+        'expectedobservations',
+        'maxreplychars',
+        'maxquestions',
+        'allowedcontinuityphasesafter',
+        'forbiddenobservationfields',
+      ]) {
+        expect(serialized, `${request.caseId} leaks ${leak}`).not.toContain(leak);
+      }
+    }
+  });
+
+  it('the knowledge input reaching the port is the minimized five-field shape', async () => {
+    const sent = await requests();
+    for (const request of sent.filter((one) => one.groundedKnowledge !== undefined)) {
+      expect(Object.keys(request.groundedKnowledge ?? {}).sort()).toStrictEqual([
+        'records',
+        'state',
+      ]);
+      expect(request.groundedKnowledge?.state).toBe('CURRENT');
+      for (const record of request.groundedKnowledge?.records ?? []) {
+        expect(Object.keys(record).sort()).toStrictEqual([
+          'content',
+          'contentFormat',
+          'knowledgeId',
+          'topic',
+          'version',
+        ]);
+      }
+    }
   });
 });
 

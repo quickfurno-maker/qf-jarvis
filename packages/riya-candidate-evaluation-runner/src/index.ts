@@ -37,6 +37,9 @@ export {
   CANDIDATE_KNOWLEDGE_USES,
   CANDIDATE_CLAIM_KINDS,
   CANDIDATE_AUTHORITY_TREATMENTS,
+  CANDIDATE_KNOWLEDGE_INPUT_STATES,
+  MAX_CANDIDATE_GROUNDED_RECORDS,
+  createCandidateGroundedKnowledgeInput,
 } from './contracts/candidate-port.js';
 export type {
   RiyaCandidateExecutionPort,
@@ -47,6 +50,9 @@ export type {
   CandidateClaimKind,
   CandidateAuthorityTreatment,
   CandidateCitationFact,
+  CandidateKnowledgeInputState,
+  CandidateGroundedKnowledgeInput,
+  CandidateGroundedKnowledgeRecordInput,
 } from './contracts/candidate-port.js';
 
 // Safety: fixtures, extraction, runner.

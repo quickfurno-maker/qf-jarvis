@@ -16,6 +16,8 @@ export const RIYA_CANDIDATE_RUNNER_ERROR_CODES = [
   'FIXTURE_COVERAGE_INVALID',
   /** A fixture that the governed scenario constructor refused. */
   'FIXTURE_INVALID',
+  /** Synthetic grounded knowledge input that is malformed, unbounded or carries an unknown key. */
+  'KNOWLEDGE_INPUT_INVALID',
   /** The candidate execution port returned something the bridge cannot read as a record of facts. */
   'EXECUTION_RECORD_INVALID',
   /** A required observation could not be derived from what the run actually proved. */

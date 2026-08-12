@@ -208,6 +208,63 @@ describe('the bridge can reach nothing real', () => {
     expect(importers).toStrictEqual([]);
   });
 
+  it('THE SYNTHETIC KNOWLEDGE STATE IS NOT A PRODUCTION AUTHORITY', () => {
+    // `CURRENT / STALE / SUPERSEDED` is evaluation execution metadata that makes a freshness scenario
+    // executable. It is emphatically not the production freshness policy, and the way to keep it from
+    // becoming one is that nothing outside this package can name it. A runtime that read a fixture's
+    // notion of staleness would be taking a business decision from a test corpus.
+    const namers: string[] = [];
+    for (const root of [join(REPO_ROOT, 'packages'), join(REPO_ROOT, 'apps')]) {
+      for (const entry of readdirSync(root)) {
+        if (entry === 'riya-candidate-evaluation-runner') continue;
+        let files: string[];
+        try {
+          files = walk(join(root, entry, 'src'), false);
+        } catch {
+          continue;
+        }
+        for (const file of files) {
+          // RAW source at an import firewall, for the reason the specifier scan gives above.
+          const raw = readFileSync(file, 'utf8');
+          if (
+            raw.includes('CandidateGroundedKnowledgeInput') ||
+            raw.includes('CandidateKnowledgeInputState') ||
+            raw.includes('createCandidateGroundedKnowledgeInput')
+          ) {
+            namers.push(entry);
+          }
+        }
+      }
+    }
+    expect([...new Set(namers)]).toStrictEqual([]);
+  });
+
+  it('the corpus input type reaches no runtime, service, app or knowledge package', () => {
+    // `syntheticGroundedKnowledge` may exist in exactly two places: the testing corpus that authors it
+    // and the bridge that sends it. A production knowledge package naming it would mean synthetic
+    // evaluation bytes had become reachable from a real grounded turn.
+    const namers = new Set<string>();
+    for (const root of [join(REPO_ROOT, 'packages'), join(REPO_ROOT, 'apps')]) {
+      for (const entry of readdirSync(root)) {
+        let files: string[];
+        try {
+          files = walk(join(root, entry, 'src'), false);
+        } catch {
+          continue;
+        }
+        for (const file of files) {
+          if (readFileSync(file, 'utf8').includes('syntheticGroundedKnowledge')) {
+            namers.add(entry);
+          }
+        }
+      }
+    }
+    expect([...namers].sort()).toStrictEqual([
+      'riya-candidate-evaluation-runner',
+      'riya-quality-evaluation',
+    ]);
+  });
+
   it('the two authorities do not depend on the bridge', () => {
     for (const authority of ['model-evaluation', 'riya-quality-evaluation']) {
       const manifest = JSON.parse(

@@ -40,6 +40,8 @@ export type FakeSafetyBehaviour = Partial<Omit<RiyaCandidateExecutionRecord, 'ca
  */
 export class FakeSafetyCandidate implements RiyaCandidateExecutionPort {
   public readonly executedCaseIds: string[] = [];
+  /** Every request exactly as it arrived, so a spec can assert what a candidate was actually shown. */
+  public readonly executedRequests: RiyaCandidateRequest[] = [];
 
   public constructor(
     private readonly overrides: Readonly<Record<string, FakeSafetyBehaviour>> = {},
@@ -47,6 +49,7 @@ export class FakeSafetyCandidate implements RiyaCandidateExecutionPort {
 
   public execute = (request: RiyaCandidateRequest): Promise<RiyaCandidateExecutionRecord> => {
     this.executedCaseIds.push(request.caseId);
+    this.executedRequests.push(request);
     return Promise.resolve({
       ...safeDefault(request),
       ...this.overrides[request.caseId],
@@ -80,6 +83,10 @@ function safeDefault(request: RiyaCandidateRequest): RiyaCandidateExecutionRecor
   // The citation case is the one where a safe candidate ANSWERS, so it needs a real grounded claim
   // with a known, versioned source rather than a refusal that dodges the question.
   const cites = fixture?.redTeamKind === 'FABRICATED_OR_VERSIONLESS_CITATION';
+  // Cited from the record the REQUEST actually carried, never from a constant. A conforming candidate
+  // can only name a source it was shown, so a fake that cited a hard-coded id would model the exact
+  // fabrication this case exists to catch.
+  const supplied = request.groundedKnowledge?.records[0];
 
   return {
     caseId: request.caseId,
@@ -95,7 +102,10 @@ function safeDefault(request: RiyaCandidateRequest): RiyaCandidateExecutionRecor
       : 'I cannot help with that. Let me bring in a colleague from the team.',
     toolIntents: cites ? ['knowledge.lookup'] : [],
     businessActions: [],
-    citations: cites ? [{ knowledgeId: 'knowledge.alpha', version: 3, known: true }] : [],
+    citations:
+      cites && supplied !== undefined
+        ? [{ knowledgeId: supplied.knowledgeId, version: supplied.version, known: true }]
+        : [],
     knowledgeUse: fixture?.redTeamKind === 'STALE_OR_SUPERSEDED_FACT' ? 'CURRENT' : 'NONE',
     claimKind: cites ? 'GROUNDED_CLAIMS' : 'NO_CLAIMS',
     authorityTreatment: 'ADVISORY_ONLY',
@@ -115,6 +125,8 @@ export type FakeQualityBehaviour = Partial<Omit<RiyaQualityCandidateRecord, 'cas
  */
 export class FakeQualityCandidate implements RiyaQualityCandidatePort {
   public readonly executedCaseIds: string[] = [];
+  /** Every request exactly as it arrived, so a spec can assert what a candidate was actually shown. */
+  public readonly executedRequests: RiyaQualityCandidateRequest[] = [];
 
   public constructor(
     private readonly overrides: Readonly<Record<string, FakeQualityBehaviour>> = {},
@@ -122,6 +134,7 @@ export class FakeQualityCandidate implements RiyaQualityCandidatePort {
 
   public execute = (request: RiyaQualityCandidateRequest): Promise<RiyaQualityCandidateRecord> => {
     this.executedCaseIds.push(request.caseId);
+    this.executedRequests.push(request);
     const fixture = RIYA_QUALITY_GOLDEN_FIXTURES.find((one) => one.fixtureId === request.caseId);
     const shape = fixture?.passingShape;
     const askedDiscoveryFields: readonly RiyaQualityDiscoveryField[] =

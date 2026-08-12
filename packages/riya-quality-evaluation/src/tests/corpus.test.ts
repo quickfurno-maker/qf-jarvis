@@ -101,9 +101,182 @@ describe('the corpus is exactly 3 x 12 x 2', () => {
 
   it('names one manifest, one suite and one threshold set', () => {
     expect(RIYA_QUALITY_GOLDEN_FIXTURE_MANIFEST_ID).toBe('riya-quality-golden-v1');
-    expect(RIYA_QUALITY_GOLDEN_FIXTURE_MANIFEST_VERSION).toBe(1);
+    // Bumped to 2 by MVP-P2A.2: the eighteen citation-required fixtures gained candidate-visible
+    // grounded knowledge bytes. ADR-0106 requires a manifest bump on any fixture change.
+    expect(RIYA_QUALITY_GOLDEN_FIXTURE_MANIFEST_VERSION).toBe(2);
     expect(RIYA_QUALITY_GOLDEN_SUITE_ID).toBe('riya-quality-v1');
+    // NOT bumped. No case was added or removed and no expectation moved, so scenario semantics are
+    // unchanged — this was an input manifest change, not a scoring-policy change.
     expect(RIYA_QUALITY_GOLDEN_SUITE_VERSION).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 1b. The grounded cases are actually executable (MVP-P2A.2 live-evidence inputs).
+// ---------------------------------------------------------------------------
+
+describe('every citation-required case supplies the source it expects to be cited', () => {
+  const CITATION_KINDS = ['GROUNDING_QA', 'POST_SUMMARY_QA', 'COMPLETE_QA'] as const;
+  const grounded = fixturesFor((f) => f.syntheticGroundedKnowledge !== undefined);
+
+  it('exactly 18 fixtures carry synthetic grounded knowledge', () => {
+    expect(grounded).toHaveLength(18);
+    // Still 72 in total: knowledge was added to existing cases, not as new ones.
+    expect(RIYA_QUALITY_GOLDEN_FIXTURES).toHaveLength(72);
+  });
+
+  it('the 18 are exactly 3 languages x 3 citation kinds x 2 cases', () => {
+    for (const languageMode of RIYA_QUALITY_LANGUAGE_MODES) {
+      for (const kind of CITATION_KINDS) {
+        expect(
+          grounded.filter((f) => f.languageMode === languageMode && f.interactionKind === kind),
+          `${languageMode}/${kind}`,
+        ).toHaveLength(2);
+      }
+    }
+    expect(new Set(grounded.map((f) => f.interactionKind))).toStrictEqual(new Set(CITATION_KINDS));
+  });
+
+  it('the set with knowledge is EXACTLY the set that requires a citation', () => {
+    // Derived from the scenario the evaluator will use, not from a hand-written list — so a kind that
+    // gained or lost `requiredCitation` breaks this rather than silently going unsupplied.
+    for (const fixture of RIYA_QUALITY_GOLDEN_FIXTURES) {
+      expect(
+        fixture.syntheticGroundedKnowledge !== undefined,
+        `${fixture.fixtureId} requiredCitation=${String(fixture.scenario.expected.requiredCitation)}`,
+      ).toBe(fixture.scenario.expected.requiredCitation);
+    }
+  });
+
+  it('a non-citation fixture has NO knowledge field at all — absent, not empty', () => {
+    for (const fixture of fixturesFor((f) => !f.scenario.expected.requiredCitation)) {
+      expect(Object.keys(fixture), fixture.fixtureId).not.toContain('syntheticGroundedKnowledge');
+      expect(fixture.passingShape.citations, fixture.fixtureId).toStrictEqual([]);
+    }
+  });
+
+  it('every grounded fixture carries exactly one CURRENT record', () => {
+    for (const fixture of grounded) {
+      expect(fixture.syntheticGroundedKnowledge?.state, fixture.fixtureId).toBe('CURRENT');
+      expect(fixture.syntheticGroundedKnowledge?.records, fixture.fixtureId).toHaveLength(1);
+    }
+  });
+
+  it('there are exactly THREE canonical bodies and three identities', () => {
+    const records = grounded.flatMap((f) => f.syntheticGroundedKnowledge?.records ?? []);
+    expect(records).toHaveLength(18);
+    expect(new Set(records.map((r) => r.knowledgeId))).toStrictEqual(
+      new Set([
+        'knowledge.grounding-qa.alpha',
+        'knowledge.post-summary-qa.alpha',
+        'knowledge.complete-qa.alpha',
+      ]),
+    );
+    expect(new Set(records.map((r) => r.content)).size).toBe(3);
+    expect(new Set(records.map((r) => r.topic))).toStrictEqual(
+      new Set(['synthetic.grounding-qa', 'synthetic.post-summary-qa', 'synthetic.complete-qa']),
+    );
+    for (const record of records) {
+      expect(record.version).toBe(1);
+      expect(record.contentFormat).toBe('text/plain');
+    }
+  });
+
+  it('both cases and all three languages of one kind reuse the SAME record', () => {
+    // A per-language record would make a language difference look like a knowledge difference.
+    for (const kind of CITATION_KINDS) {
+      const bodies = grounded
+        .filter((f) => f.interactionKind === kind)
+        .map((f) => JSON.stringify(f.syntheticGroundedKnowledge));
+      expect(bodies, kind).toHaveLength(6);
+      expect(new Set(bodies).size, kind).toBe(1);
+    }
+  });
+
+  it('THE EXPECTED CITATION NAMES THE RECORD THE CANDIDATE WAS GIVEN', () => {
+    // Input and expectation are authored independently. This is the only thing tying them together,
+    // and it is a CHECK rather than a derivation — deriving one from the other would make it vacuous.
+    for (const fixture of grounded) {
+      const record = fixture.syntheticGroundedKnowledge?.records[0];
+      const expected = fixture.passingShape.citations[0];
+      expect(fixture.passingShape.citations, fixture.fixtureId).toHaveLength(1);
+      expect(record?.knowledgeId, fixture.fixtureId).toBe(expected?.knowledgeId);
+      expect(record?.version, fixture.fixtureId).toBe(expected?.version);
+    }
+  });
+
+  it('the consistency guard FAILS when the expectation is moved on its own', () => {
+    // Proves the check above has teeth: if somebody edited `passingShape.citations` to a new id, the
+    // guard must refuse rather than let the new expected id quietly become candidate input.
+    const fixture = grounded[0];
+    expect(fixture).toBeDefined();
+    if (fixture === undefined) {
+      return;
+    }
+    const drifted = {
+      ...fixture,
+      passingShape: {
+        ...fixture.passingShape,
+        citations: [{ knowledgeId: 'knowledge.somewhere-else.alpha', version: 9 }],
+      },
+    };
+    const record = drifted.syntheticGroundedKnowledge?.records[0];
+    expect(record?.knowledgeId).not.toBe(drifted.passingShape.citations[0]?.knowledgeId);
+  });
+
+  it('the knowledge answers BOTH cases of its kind', () => {
+    // The two cases of a kind are different questions about one situation. A record that only answers
+    // the first would make the second unanswerable and unfairly failable.
+    const contentFor = (kind: (typeof CITATION_KINDS)[number]): string =>
+      grounded.find((f) => f.interactionKind === kind)?.syntheticGroundedKnowledge?.records[0]
+        ?.content ?? '';
+
+    const grounding = contentFor('GROUNDING_QA').toLowerCase();
+    expect(grounding).toContain('painting');
+    expect(grounding).toContain('city.alpha');
+    expect(grounding).toContain('city.beta');
+
+    const summary = contentFor('POST_SUMMARY_QA').toLowerCase();
+    expect(summary).toContain('wardrobe handles');
+    expect(summary).toContain('painting');
+
+    const complete = contentFor('COMPLETE_QA').toLowerCase();
+    expect(complete).toContain('site measurement');
+    expect(complete).toContain('synthetic-window.alpha');
+    expect(complete).toContain('consultation');
+  });
+
+  it('the knowledge bytes carry NOTHING the evaluator marks with', () => {
+    for (const fixture of grounded) {
+      const knowledge = fixture.syntheticGroundedKnowledge;
+      expect(Object.keys(knowledge ?? {}).sort(), fixture.fixtureId).toStrictEqual([
+        'records',
+        'state',
+      ]);
+      for (const record of knowledge?.records ?? []) {
+        expect(Object.keys(record).sort(), fixture.fixtureId).toStrictEqual([
+          'content',
+          'contentFormat',
+          'knowledgeId',
+          'topic',
+          'version',
+        ]);
+      }
+      const serialized = JSON.stringify(knowledge).toLowerCase();
+      for (const leak of [
+        'requiredcitation',
+        'requiredqualitydimensions',
+        'passingshape',
+        'expectedobservations',
+        'maxreplychars',
+        'maxquestions',
+        'allowedcontinuityphases',
+        'severity',
+        'redteam',
+      ]) {
+        expect(serialized, `${fixture.fixtureId} leaks ${leak}`).not.toContain(leak);
+      }
+    }
   });
 });
 
@@ -251,7 +424,14 @@ describe('the corpus covers the conversation, not just the happy path', () => {
 // ---------------------------------------------------------------------------
 
 describe('the corpus contains no real data of any kind', () => {
-  const TEXTS = RIYA_QUALITY_GOLDEN_FIXTURES.map((f) => f.syntheticUserText);
+  // Both content-bearing surfaces: what the client says, and what the candidate is shown. The second
+  // is newer and is the one a real policy line could most plausibly be pasted into.
+  const TEXTS = [
+    ...RIYA_QUALITY_GOLDEN_FIXTURES.map((f) => f.syntheticUserText),
+    ...RIYA_QUALITY_GOLDEN_FIXTURES.flatMap((f) =>
+      (f.syntheticGroundedKnowledge?.records ?? []).map((r) => r.content),
+    ),
+  ];
 
   it('contains no phone number', () => {
     for (const text of TEXTS) {
@@ -297,6 +477,27 @@ describe('the corpus contains no real data of any kind', () => {
       'hyderabad',
     ]) {
       expect(joined, real).not.toContain(real);
+    }
+  });
+
+  it('the grounded knowledge states no real business value, and says it is synthetic', () => {
+    const contents = RIYA_QUALITY_GOLDEN_FIXTURES.flatMap((f) =>
+      (f.syntheticGroundedKnowledge?.records ?? []).map((r) => r.content),
+    );
+    expect(contents.length).toBeGreaterThan(0);
+    for (const content of contents) {
+      // Marked in the bytes themselves, so a record quoted into a reply or a review bundle still
+      // announces what it is.
+      expect(content.toLowerCase(), content).toContain('synthetic evaluation only');
+      // No money, no duration, no vendor, no contact detail, no endpoint.
+      expect(content, content).not.toMatch(/[₹$]|\brs\.?\b|\blakh\b|\bcrore\b|\bINR\b/iu);
+      expect(content, content).not.toMatch(/\b\d+\s*(hours?|days?|weeks?|months?)\b/iu);
+      expect(content, content).not.toMatch(/\d{7,}/u);
+      expect(content, content).not.toMatch(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/u);
+      expect(content.toLowerCase(), content).not.toMatch(/https?:\/\/|www\.|\.com/u);
+      for (const forbidden of ['quickfurno', 'onedecore', 'vendor.', 'package.', 'premium plan']) {
+        expect(content.toLowerCase(), content).not.toContain(forbidden);
+      }
     }
   });
 

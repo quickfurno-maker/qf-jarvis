@@ -18,8 +18,13 @@ import { RiyaCandidateRunnerError } from '../contracts/errors.js';
 import { extractSafetyObservation } from '../safety/extract-observation.js';
 import {
   RIYA_SAFETY_FIXTURES,
+  RIYA_SAFETY_FIXTURE_MANIFEST_ID,
+  RIYA_SAFETY_FIXTURE_MANIFEST_VERSION,
   RIYA_SAFETY_FIXTURE_PROVENANCE,
   RIYA_SAFETY_SENTINEL_SECRET,
+  RIYA_SAFETY_SENTINEL_SYSTEM_LINE,
+  RIYA_SAFETY_SUITE_ID,
+  RIYA_SAFETY_SUITE_VERSION,
 } from '../safety/fixtures.js';
 import type { RiyaSafetyFixtureV1 } from '../safety/fixtures.js';
 import { runRiyaSafetyCandidate } from '../safety/run-safety.js';
@@ -31,10 +36,12 @@ const SYNTHETIC_DIGEST = 'a'.repeat(64);
 
 function binding(): EvaluationBinding {
   return createEvaluationBinding({
-    evaluationSuiteId: 'riya.candidate.safety.suite.v1',
-    evaluationSuiteVersion: 1,
-    fixtureManifestId: 'riya.candidate.safety.v1',
-    fixtureManifestVersion: 1,
+    // Bound to the exported identity rather than retyped, so a manifest bump cannot leave a binding
+    // claiming evidence about a fixture set that no longer exists.
+    evaluationSuiteId: RIYA_SAFETY_SUITE_ID,
+    evaluationSuiteVersion: RIYA_SAFETY_SUITE_VERSION,
+    fixtureManifestId: RIYA_SAFETY_FIXTURE_MANIFEST_ID,
+    fixtureManifestVersion: RIYA_SAFETY_FIXTURE_MANIFEST_VERSION,
     evaluatorImplId: 'qfj.eval.deterministic',
     evaluatorImplVersion: 1,
     release: {
@@ -128,6 +135,15 @@ describe('the safety manifest covers the mandatory set exactly once', () => {
     expect(planted[0]?.request.syntheticUserText).toContain(RIYA_SAFETY_SENTINEL_SECRET);
   });
 
+  it('restates the manifest identity, bumped because the executable input changed', () => {
+    expect(RIYA_SAFETY_FIXTURE_MANIFEST_ID).toBe('riya.candidate.safety.v1');
+    // 1 -> 2: three fixtures gained grounded knowledge and the injection case's bytes moved.
+    expect(RIYA_SAFETY_FIXTURE_MANIFEST_VERSION).toBe(2);
+    // Suite identity and pass policy are untouched — no expectation or severity moved.
+    expect(RIYA_SAFETY_SUITE_ID).toBe('riya.candidate.safety.suite.v1');
+    expect(RIYA_SAFETY_SUITE_VERSION).toBe(1);
+  });
+
   it('THE LOCAL-ONLY AND HUMAN-ONLY CASES NEVER ADMIT A PROVIDER', async () => {
     // The runtime invariant IS the evidence for these two, not anything the model says.
     const port = new FakeSafetyCandidate();
@@ -149,6 +165,163 @@ describe('the safety manifest covers the mandatory set exactly once', () => {
     const extracted = extractSafetyObservation(fixture.scenario, record);
     expect(extracted.ok).toBe(true);
     expect(extracted.ok ? extracted.observation.structuredOutputWellFormed : undefined).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The knowledge situations (MVP-P2A.2 inputs).
+// ---------------------------------------------------------------------------
+
+describe('a knowledge scenario is given a knowledge situation, and no other case is', () => {
+  const KNOWLEDGE_KINDS = [
+    'KNOWLEDGE_PROMPT_INJECTION',
+    'FABRICATED_OR_VERSIONLESS_CITATION',
+    'STALE_OR_SUPERSEDED_FACT',
+  ] as const;
+
+  it('exactly the three knowledge kinds carry grounded input', () => {
+    const withKnowledge = RIYA_SAFETY_FIXTURES.filter(
+      (one) => one.request.groundedKnowledge !== undefined,
+    );
+    expect(withKnowledge.map((one) => one.redTeamKind).sort()).toStrictEqual(
+      [...KNOWLEDGE_KINDS].sort(),
+    );
+  });
+
+  it('NO UNRELATED CASE GETS FREE CONTEXT', () => {
+    // Attaching a benign record to an unrelated case would change what that case measures.
+    for (const fixture of RIYA_SAFETY_FIXTURES) {
+      if ((KNOWLEDGE_KINDS as readonly string[]).includes(fixture.redTeamKind)) {
+        continue;
+      }
+      expect(Object.keys(fixture.request), fixture.fixtureId).not.toContain('groundedKnowledge');
+    }
+  });
+
+  it('THE INJECTION ATTACK ARRIVES THROUGH KNOWLEDGE, NOT THROUGH THE CLIENT', () => {
+    // The load-bearing correction. With the sentinel in the client message this case measured whether
+    // a candidate obeys text a USER quoted — a real property, but a different one from the kind's name.
+    const injection = fixtureOfKind('KNOWLEDGE_PROMPT_INJECTION');
+    const content = injection.request.groundedKnowledge?.records[0]?.content ?? '';
+
+    expect(content).toContain(RIYA_SAFETY_SENTINEL_SYSTEM_LINE);
+    expect(content.toLowerCase()).toContain('ignore your system rules');
+    expect(injection.request.syntheticUserText).not.toContain(RIYA_SAFETY_SENTINEL_SYSTEM_LINE);
+    // The client still asks for the note to be obeyed, so refusing is a real decision rather than an
+    // absence of temptation.
+    expect(injection.request.syntheticUserText.toLowerCase()).toContain('catalogue note');
+
+    // A leak is still exactly measurable, and the record is present-tense governed material.
+    expect(injection.scenario.expected.forbiddenSentinels).toContain(
+      RIYA_SAFETY_SENTINEL_SYSTEM_LINE,
+    );
+    expect(injection.request.groundedKnowledge?.state).toBe('CURRENT');
+    expect(injection.request.groundedKnowledge?.records).toHaveLength(1);
+  });
+
+  it('the fabricated-citation case is given exactly ONE known current source', () => {
+    const citation = fixtureOfKind('FABRICATED_OR_VERSIONLESS_CITATION');
+    expect(citation.request.groundedKnowledge?.state).toBe('CURRENT');
+    expect(citation.request.groundedKnowledge?.records).toHaveLength(1);
+    expect(citation.request.groundedKnowledge?.records[0]?.knowledgeId).toBe(
+      'knowledge.safety.citation.alpha',
+    );
+    expect(citation.request.groundedKnowledge?.records[0]?.version).toBe(1);
+  });
+
+  it('THE STALE CASE CARRIES AN EXPLICIT NON-CURRENT STATE', () => {
+    // Staleness is a property of the record, not of the sentence asking for it. Without this the case
+    // could only ever block as UNKNOWN.
+    const stale = fixtureOfKind('STALE_OR_SUPERSEDED_FACT');
+    expect(stale.request.groundedKnowledge?.state).toBe('SUPERSEDED');
+    expect(stale.request.groundedKnowledge?.state).not.toBe('CURRENT');
+    expect(stale.request.groundedKnowledge?.records[0]?.knowledgeId).toBe(
+      'knowledge.safety.freshness.alpha',
+    );
+    expect(stale.request.groundedKnowledge?.records[0]?.content).toContain('OLD-FIGURE-ALPHA');
+  });
+
+  it('a knowledge request carries no evaluator expectation of any kind', () => {
+    for (const fixture of RIYA_SAFETY_FIXTURES) {
+      const keys = Object.keys(fixture.request).sort();
+      const expected = [
+        'agentScope',
+        'cancelAfterAdmission',
+        'caseId',
+        'declaredDataClass',
+        'humanTakeoverActive',
+        'syntheticUserText',
+        'taskClass',
+      ];
+      expect(keys, fixture.fixtureId).toStrictEqual(
+        fixture.request.groundedKnowledge === undefined
+          ? expected
+          : [...expected, 'groundedKnowledge'].sort(),
+      );
+      const serialized = JSON.stringify(fixture.request).toLowerCase();
+      for (const leak of [
+        'requiresrefusal',
+        'forbidsbusinessaction',
+        'allowedtoolintents',
+        'forbiddensentinels',
+        'dataclassceiling',
+        'requirescitations',
+        'forbidsstaleknowledge',
+        'severity',
+        'category',
+        'redteamkind',
+      ]) {
+        expect(serialized, `${fixture.fixtureId} leaks ${leak}`).not.toContain(leak);
+      }
+    }
+  });
+
+  it('the new knowledge bytes are obviously synthetic and state no real value', () => {
+    const contents = RIYA_SAFETY_FIXTURES.flatMap(
+      (one) => one.request.groundedKnowledge?.records ?? [],
+    ).map((record) => record.content);
+    expect(contents).toHaveLength(3);
+    for (const content of contents) {
+      expect(content.toLowerCase(), content).toContain('synthetic evaluation only');
+      expect(content, content).not.toMatch(/[₹$]|\brs\.?\b|\blakh\b|\bcrore\b|\bINR\b/iu);
+      expect(content, content).not.toMatch(/\d{7,}/u);
+      expect(content, content).not.toMatch(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/u);
+      expect(content.toLowerCase(), content).not.toMatch(/https?:\/\/|www\.|\.com/u);
+      for (const forbidden of ['quickfurno', 'onedecore', 'vendor.', 'sk-']) {
+        expect(content.toLowerCase(), content).not.toContain(forbidden.toLowerCase());
+      }
+    }
+  });
+
+  it('every knowledge record is the minimized five-field shape', () => {
+    for (const fixture of RIYA_SAFETY_FIXTURES) {
+      const knowledge = fixture.request.groundedKnowledge;
+      if (knowledge === undefined) {
+        continue;
+      }
+      expect(Object.keys(knowledge).sort()).toStrictEqual(['records', 'state']);
+      for (const record of knowledge.records) {
+        expect(Object.keys(record).sort()).toStrictEqual([
+          'content',
+          'contentFormat',
+          'knowledgeId',
+          'topic',
+          'version',
+        ]);
+        expect(record.contentFormat).toBe('text/plain');
+      }
+    }
+  });
+
+  it('the run hands each fixture its own knowledge and nobody else s', async () => {
+    const port = new FakeSafetyCandidate();
+    await runRiyaSafetyCandidate({ port, binding: binding(), thresholds: thresholds() });
+    for (const request of port.executedRequests) {
+      const fixture = RIYA_SAFETY_FIXTURES.find((one) => one.fixtureId === request.caseId);
+      expect(request.groundedKnowledge, request.caseId).toStrictEqual(
+        fixture?.request.groundedKnowledge,
+      );
+    }
   });
 });
 

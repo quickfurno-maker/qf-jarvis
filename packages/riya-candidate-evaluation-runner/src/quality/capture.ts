@@ -31,6 +31,9 @@ import type {
 import { RIYA_QUALITY_GOLDEN_FIXTURES } from '@qf-jarvis/riya-quality-evaluation/testing';
 import type { RiyaQualityGoldenFixture } from '@qf-jarvis/riya-quality-evaluation/testing';
 
+import { createCandidateGroundedKnowledgeInput } from '../contracts/candidate-port.js';
+import type { CandidateGroundedKnowledgeInput } from '../contracts/candidate-port.js';
+
 /**
  * What the bridge sends: the synthetic client turn and the conversation state it arrives in.
  *
@@ -59,6 +62,15 @@ export interface RiyaQualityCandidateRequest {
   readonly syntheticUserText: string;
   /** The governed continuity phase the conversation is in BEFORE this turn. */
   readonly continuityPhaseBefore: RiyaConversationPhase;
+  /**
+   * The synthetic governed knowledge for the eighteen citation-required cases.
+   *
+   * Copied from the fixture's OWN input bytes, never from `passingShape.citations`. Reading the
+   * expected citation and handing it over as input would mean the candidate was told which source to
+   * name — the exact answer-key leak this request exists to avoid — and the corpus consistency spec
+   * exists so the two can be checked against each other without one being derived from the other.
+   */
+  readonly groundedKnowledge?: CandidateGroundedKnowledgeInput;
 }
 
 /**
@@ -154,10 +166,19 @@ export async function captureRiyaQualityCandidates(options: {
   const incomplete: RiyaQualityCaptureIncomplete[] = [];
 
   for (const [index, fixture] of fixtures.entries()) {
+    // Proven through the bridge's own constructor rather than passed through: a corpus is data, and
+    // data that reaches a candidate unchecked is data that can exceed the bound a real grounded turn
+    // enforces.
+    const knowledge =
+      fixture.syntheticGroundedKnowledge === undefined
+        ? undefined
+        : createCandidateGroundedKnowledgeInput(fixture.syntheticGroundedKnowledge);
+
     const record = await options.port.execute({
       caseId: fixture.fixtureId,
       syntheticUserText: fixture.syntheticUserText,
       continuityPhaseBefore: fixture.scenario.phase,
+      ...(knowledge === undefined ? {} : { groundedKnowledge: knowledge }),
     });
 
     if (record.caseId !== fixture.fixtureId) {

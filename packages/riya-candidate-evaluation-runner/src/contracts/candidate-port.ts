@@ -38,6 +38,8 @@ import type {
   ObservationBusinessAction,
 } from '@qf-jarvis/model-evaluation';
 
+import { RiyaCandidateRunnerError } from './errors.js';
+
 /** What the runtime did with a request, as a closed outcome rather than a description. */
 export const CANDIDATE_EXECUTION_OUTCOMES = [
   /** The candidate produced a user-visible reply. */
@@ -74,6 +76,114 @@ export const CANDIDATE_AUTHORITY_TREATMENTS = [
   'UNKNOWN',
 ] as const;
 export type CandidateAuthorityTreatment = (typeof CANDIDATE_AUTHORITY_TREATMENTS)[number];
+
+/**
+ * The lifecycle situation a synthetic knowledge input puts the candidate in (MVP-P2A.2 inputs).
+ *
+ * ### This is EXECUTION METADATA, not a business authority
+ *
+ * A scenario like `STALE_OR_SUPERSEDED_FACT` cannot be executed from request text alone: "quote me the
+ * old figure" is a request, and whether the record behind it is current is a property of the KNOWLEDGE,
+ * not of the sentence. Without this the bridge could only block the case as `UNKNOWN`, or an adapter
+ * would be tempted to manufacture a benign fact — and a manufactured fact produces an artifact
+ * indistinguishable from a real measurement.
+ *
+ * It is deliberately NOT the production freshness policy, and nothing that serves a real turn may read
+ * it. A spec proves no production package names this type. The real admission boundary belongs to the
+ * runtime; this only makes the situation executable and observable.
+ */
+export const CANDIDATE_KNOWLEDGE_INPUT_STATES = ['CURRENT', 'STALE', 'SUPERSEDED'] as const;
+export type CandidateKnowledgeInputState = (typeof CANDIDATE_KNOWLEDGE_INPUT_STATES)[number];
+
+/**
+ * One synthetic governed record, minimized to exactly what a model may be shown.
+ *
+ * These five fields and no others. They mirror the five a real grounded turn minimizes a governed
+ * record down to, so a later live adapter translates rather than reshapes — but the type is LOCAL,
+ * because widening a production contract to carry evaluation metadata is how test vocabulary becomes
+ * runtime vocabulary.
+ */
+export interface CandidateGroundedKnowledgeRecordInput {
+  readonly knowledgeId: string;
+  readonly version: number;
+  readonly topic: string;
+  readonly contentFormat: string;
+  readonly content: string;
+}
+
+/**
+ * The synthetic knowledge situation for one case.
+ *
+ * `state` is evaluation execution metadata and MUST NOT be serialized into what the model sees. Only
+ * the five record fields may become the model's grounded context. Nothing the evaluator marks with —
+ * an expected citation, `requiresCitation`, a pass expectation, a severity, a required dimension —
+ * appears here, and a spec asserts the exact key set.
+ */
+export interface CandidateGroundedKnowledgeInput {
+  readonly state: CandidateKnowledgeInputState;
+  readonly records: readonly CandidateGroundedKnowledgeRecordInput[];
+}
+
+/** The same 1..8 ceiling a real grounded turn enforces, restated so this input cannot exceed it. */
+export const MAX_CANDIDATE_GROUNDED_RECORDS = 8;
+
+/** The exact key set a record may carry. An extra key is a refusal, never a silent drop. */
+const RECORD_KEYS: readonly string[] = [
+  'knowledgeId',
+  'version',
+  'topic',
+  'contentFormat',
+  'content',
+];
+
+function boundedText(value: string, max: number): boolean {
+  return value.length > 0 && value.length <= max && value === value.trim();
+}
+
+/**
+ * Prove a synthetic knowledge input is well formed and bounded, or refuse.
+ *
+ * Hand-rolled rather than a schema library: this package depends on the two evaluation authorities and
+ * two Riya contract packages and nothing else, and a validator dependency added "just for fixtures"
+ * would be a dependency the live adapter inherits. The checks are the same ones the production
+ * grounded-context schema applies, restated for five fields.
+ */
+export function createCandidateGroundedKnowledgeInput(
+  input: CandidateGroundedKnowledgeInput,
+): CandidateGroundedKnowledgeInput {
+  const states: readonly string[] = CANDIDATE_KNOWLEDGE_INPUT_STATES;
+  if (!states.includes(input.state)) {
+    throw new RiyaCandidateRunnerError('KNOWLEDGE_INPUT_INVALID');
+  }
+  if (input.records.length === 0 || input.records.length > MAX_CANDIDATE_GROUNDED_RECORDS) {
+    throw new RiyaCandidateRunnerError('KNOWLEDGE_INPUT_INVALID');
+  }
+  const records = input.records.map((record) => {
+    const keys = Object.keys(record).sort();
+    if (keys.length !== RECORD_KEYS.length || !RECORD_KEYS.every((key) => keys.includes(key))) {
+      throw new RiyaCandidateRunnerError('KNOWLEDGE_INPUT_INVALID');
+    }
+    if (
+      !/^[A-Za-z0-9._:-]{1,128}$/u.test(record.knowledgeId) ||
+      !Number.isInteger(record.version) ||
+      record.version < 1 ||
+      record.version > 1_000_000 ||
+      !boundedText(record.topic, 128) ||
+      !boundedText(record.contentFormat, 64) ||
+      !boundedText(record.content, 8192)
+    ) {
+      throw new RiyaCandidateRunnerError('KNOWLEDGE_INPUT_INVALID');
+    }
+    return Object.freeze({
+      knowledgeId: record.knowledgeId,
+      version: record.version,
+      topic: record.topic,
+      contentFormat: record.contentFormat,
+      content: record.content,
+    });
+  });
+  return Object.freeze({ state: input.state, records: Object.freeze(records) });
+}
 
 /** A citation the candidate produced, with the version the runtime resolved it at. */
 export interface CandidateCitationFact {
@@ -118,6 +228,14 @@ export interface RiyaCandidateRequest {
   readonly humanTakeoverActive: boolean;
   /** Whether the case cancels the turn after admission. */
   readonly cancelAfterAdmission: boolean;
+  /**
+   * The synthetic knowledge situation, on the cases whose scenario is ABOUT knowledge.
+   *
+   * Absent on every other case, because empty benign knowledge is itself a fact nobody supplied. A
+   * candidate asked to cite a source it was never given is being marked on a situation it was never
+   * placed in — which is the gap this field closes.
+   */
+  readonly groundedKnowledge?: CandidateGroundedKnowledgeInput;
 }
 
 /**

@@ -65,9 +65,11 @@ being recorded as the mode the fixture hoped for.
 The candidate is put in the **situation**, never handed the answer key. A P10 request carries the
 governed `continuityPhaseBefore` alongside the client turn, because "what about the price?" after a
 summary is a different question than during discovery, and a candidate evaluated as a fresh `NEED` turn
-would be scored against a scenario it was never placed in. A safety request carries `agentScope` and
-`taskClass`, because several mandatory kinds exist precisely to test the scope boundary. Nothing the
-evaluator judges with travels — no expectations, no passing shape, no dimensions, no sentinels.
+would be scored against a scenario it was never placed in. The eighteen citation-required cases also
+carry the synthetic governed record they are expected to answer from — see below. A safety request
+carries `agentScope` and `taskClass`, because several mandatory kinds exist precisely to test the scope
+boundary. Nothing the evaluator judges with travels — no expectations, no passing shape, no dimensions,
+no sentinels.
 
 P10 V1 is a **single-turn exam with phase context**. The governed corpus encodes a starting phase and
 one client turn and no prior history, so that is what the request carries. Inventing history here would
@@ -128,6 +130,49 @@ repository root are both resolved through `realpathSync` before the comparison, 
 external-looking directory can be a symlink or junction that lands every byte back in version control.
 An overwrite target that is not a regular file is refused, since writing through a link writes wherever
 it points.
+
+## The situation includes the source (MVP-P2A.2 inputs)
+
+A grounded case cannot be marked unless the candidate was actually shown the material it was expected
+to use. Eighteen P10 fixtures required a citation and supplied no record; three safety kinds described
+a knowledge situation the request text could not create. Both are now closed by **input**, not policy.
+
+One shared contract carries it — a `state` of `CURRENT`, `STALE` or `SUPERSEDED`, and one to eight
+records of exactly `knowledgeId`, `version`, `topic`, `contentFormat`, `content`. It is proven through
+a constructor, not cast: an extra key is a refusal rather than a silent drop, because a governance
+field quietly dropped works right up until somebody serializes the input a different way.
+
+**`state` never reaches the model.** It is evaluation execution metadata that makes a freshness
+scenario executable, and only the five record fields may become grounded context. It is not the
+production freshness policy and must never become one: a spec proves no package outside the bridge can
+name the type, and a second proves only the corpus and the bridge name the fixture field.
+
+The P10 corpus owns three canonical records, one per citation-required kind, shared by both cases and
+all three languages — `knowledge.grounding-qa.alpha`, `knowledge.post-summary-qa.alpha` and
+`knowledge.complete-qa.alpha`, all version 1, all `CURRENT`. They are authored **independently** of
+`passingShape.citations`, and a corpus spec checks the expected citation names the record the candidate
+was given. Deriving one from the other would make the check vacuous: moving the expectation would move
+the input, and the pair could never disagree. Every fact in them is invented, says "for this synthetic
+evaluation only" inside its own bytes, and uses a fictional label (`synthetic-window.alpha`) rather
+than a plausible timing anybody could later quote as a commitment.
+
+On the safety side the injection attack **moved out of the client message into a retrieved record**.
+With the sentinel in the user turn, the case measured whether a candidate obeys text a user quoted at
+it — a real property, and a different one from `KNOWLEDGE_PROMPT_INJECTION`. The client now only asks
+for the note to be followed; the sentinel exists solely in governed knowledge, so a leak proves the
+record was treated as an instruction rather than as data. The stale case carries an explicit
+`SUPERSEDED` record, and the fabricated-citation case is given exactly one known current source so
+that citing something else is a fabrication rather than an absence.
+
+Both manifests bumped to **version 2** because executable input bytes changed. Neither suite version
+moved: no case was added or removed, and no expectation, threshold, severity or scoring rule changed.
+
+**This supplies inputs; it decides nothing.** Whether a `SUPERSEDED` record is admitted, what
+`knowledgeUse`, `claimKind` and `authorityTreatment` a run proves — all still belong to the live
+adapter, and all still fail closed. `UNKNOWN` remains `UNKNOWN`; the existence of an input is not
+permission to default to `CURRENT`, `NO_CLAIMS` or `ADVISORY_ONLY`. If no production knowledge
+freshness seam can be reused, the freshness case must fail CLOSED rather than have an adapter invent a
+business rule locally.
 
 ## What it does not do
 
