@@ -95,6 +95,50 @@ describe('the operator implements no transport and holds no secret ingress', () 
     }
   });
 
+  it('THE PRODUCTION OPERATOR EXPOSES NO PREFLIGHT OVERRIDE', () => {
+    // Two earlier attempts put a seam on a production contract: a digest field on `PreflightInput`,
+    // then a whole-preflight callback on `OperatorDeps`. Both were reachable by any caller holding
+    // the public API, which is the opposite of a lock. Neither exists now.
+    const operator = readFileSync(join(SRC, 'operator.ts'), 'utf8');
+    expect(operator).not.toContain('preflightOverrideForTesting');
+    expect(operator).not.toContain('expectedSmokeConfigDigest');
+    // The call is direct, with no `??` fallback to anything injectable.
+    expect(codeOnly(operator)).toContain('runPreflight(deps.preflight)');
+
+    const root = readFileSync(join(SRC, 'index.ts'), 'utf8');
+    expect(root).not.toContain('preflightCore');
+    expect(root).not.toContain('runPreflightForTesting');
+    expect(root).not.toContain('preflightOverrideForTesting');
+  });
+
+  it('THE PARAMETERISED CORE IS INTERNAL AND UNREACHABLE BY SUBPATH', () => {
+    // `preflightCore` takes an expected digest, so it must not be part of the public surface. The
+    // package exposes only ".", which closes the deep-import route as well.
+    const manifest = JSON.parse(readFileSync(join(PKG, 'package.json'), 'utf8')) as {
+      exports?: Record<string, unknown>;
+    };
+    expect(Object.keys(manifest.exports ?? {})).toStrictEqual(['.']);
+
+    // Only `runPreflight` calls it in production.
+    const callers = productionFiles().filter(({ code }) => code.includes('preflightCore('));
+    expect(callers.map(({ file }) => file.split(sep).slice(-2).join('/')).sort()).toStrictEqual([
+      'internal/preflight-core.ts',
+      'src/preflight.ts',
+    ]);
+  });
+
+  it('THE OBSOLETE EARLY-DISPATCH CANCELLATION INVOKER IS GONE', () => {
+    // It fired its "admitted" callback right after `gateway.invoke` returned a promise, which proved
+    // dispatch rather than provider entry. Leaving it beside the transport-boundary path would mean
+    // two competing cancellation semantics and one of them wrong.
+    for (const { file, code } of productionFiles()) {
+      expect(code, `${file} must not name createCancellationInvoker`).not.toContain(
+        'createCancellationInvoker',
+      );
+    }
+    expect(readFileSync(join(SRC, 'index.ts'), 'utf8')).not.toContain('createCancellationInvoker');
+  });
+
   it('THE GOVERNED SMOKE DIGEST IS NOT OVERRIDABLE FROM PRODUCTION', () => {
     // The override used to sit on `PreflightInput`, which made the lock advisory for anybody holding
     // the production contract. It is gone: `runPreflight` always passes the governed constant, and
@@ -102,6 +146,8 @@ describe('the operator implements no transport and holds no secret ingress', () 
     const preflight = readFileSync(join(SRC, 'preflight.ts'), 'utf8');
     expect(preflight).not.toContain('expectedSmokeConfigDigest');
     expect(preflight).toContain('return preflightCore(input, EXPECTED_SMOKE_CONFIG_DIGEST);');
+    // `runPreflight` takes exactly one parameter: there is nowhere to pass another digest.
+    expect(preflight).toContain('export function runPreflight(input: PreflightInput)');
 
     const cli = codeOnly(readFileSync(join(SRC, 'bin.ts'), 'utf8'));
     expect(cli).not.toContain('preflightCore');
@@ -119,6 +165,7 @@ describe('the operator implements no transport and holds no secret ingress', () 
       expect(code, `${file} must not name runPreflightForTesting`).not.toContain(
         'runPreflightForTesting',
       );
+      expect(code, `${file} must not reach into tests/helpers`).not.toContain('tests/helpers');
     }
   });
 

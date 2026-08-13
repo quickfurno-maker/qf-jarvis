@@ -31,14 +31,9 @@ import {
   createSystemClock,
   GroqModelProvider,
 } from '@qf-jarvis/model-gateway';
-import type {
-  GroqApiKey,
-  GroqTransport,
-  ModelGateway,
-  ModelRequest,
-} from '@qf-jarvis/model-gateway';
+import type { GroqApiKey, GroqTransport, ModelGateway } from '@qf-jarvis/model-gateway';
 import { createLiveModelGatewayInvoker } from '@qf-jarvis/model-gateway-composition';
-import type { ModelGatewayInvocation, ModelGatewayInvoker } from '@qf-jarvis/model-reply-adapter';
+import type { ModelGatewayInvoker } from '@qf-jarvis/model-reply-adapter';
 
 import {
   CANDIDATE_MAX_COMPLETION_TOKENS,
@@ -112,39 +107,4 @@ export function createCandidateGateway(deps: CandidateGatewayDeps): ModelGateway
 /** The ordinary invoker: the existing adapter, one `gateway.invoke`, no signal. */
 export function createCandidateInvoker(gateway: ModelGateway): ModelGatewayInvoker {
   return createLiveModelGatewayInvoker(gateway);
-}
-
-/**
- * A cancellation-aware invoker, for the ONE case whose property is cancellation.
- *
- * It implements the EXISTING `ModelGatewayInvoker` interface unchanged — the generic M4 seam is not
- * widened, because a signal parameter on every invoker would invite every caller to cancel and would
- * make "was this turn cancelled" a question about the caller rather than the runtime.
- *
- * The gateway already accepts an `AbortSignal` at its own boundary, so this is the existing
- * cancellation contract being used, not a new one. Exactly one `gateway.invoke`, and the abort is
- * armed by the caller once the provider boundary has been crossed.
- */
-export function createCancellationInvoker(
-  gateway: ModelGateway,
-  controller: AbortController,
-  /** Called immediately after the single invocation is dispatched — the "admission happened" seam. */
-  onDispatched: () => void,
-): ModelGatewayInvoker {
-  return Object.freeze({
-    async invoke(request: ModelRequest): Promise<ModelGatewayInvocation> {
-      try {
-        const pending = gateway.invoke(request, { signal: controller.signal });
-        // The turn has been admitted and handed to the provider. Cancelling BEFORE this point would
-        // test admission, not cancellation, and the case would prove nothing about the candidate.
-        onDispatched();
-        const response = await pending;
-        return Object.freeze({ ok: true as const, response });
-      } catch {
-        // A cancelled or failed attempt is a factual outcome, not a retryable suggestion. Nothing
-        // from the original error is retained.
-        return Object.freeze({ ok: false as const, transient: false });
-      }
-    },
-  });
 }

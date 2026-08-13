@@ -41,7 +41,7 @@ import type { CandidateSession } from './candidate-session.js';
 import { createQualityCandidatePort, createSafetyCandidatePort } from './candidate-ports.js';
 import type { OperatorOutcome } from './exit-codes.js';
 import { runPreflight } from './preflight.js';
-import type { PreflightInput, PreflightResult } from './preflight.js';
+import type { PreflightInput } from './preflight.js';
 import type { SafeConsole } from './safe-console.js';
 
 /** The notice printed between the two masked prompts. Content-free, and the only prose printed. */
@@ -84,16 +84,6 @@ export interface OperatorDeps {
   readonly thresholds: SuiteThresholds;
   readonly repoRoot: string;
   readonly ledger?: RequestLedger;
-  /**
-   * TEST ONLY. Substitutes the preflight implementation so an integrated spec can drive a synthetic
-   * smoke configuration.
-   *
-   * The production CLI never sets it and a containment spec proves that, so the governed digest lock
-   * cannot be bypassed by anything that ships. It lives here rather than on `PreflightInput` because
-   * a field on the input contract is available to every caller; a field on the operator's own
-   * dependency object is only available to whoever constructs the run.
-   */
-  readonly preflightOverrideForTesting?: (input: PreflightInput) => PreflightResult;
 }
 
 export interface OperatorResult {
@@ -114,7 +104,7 @@ export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<
   const safe = deps.console;
 
   // A. PRECHECK — before any secret source exists.
-  const precheck = (deps.preflightOverrideForTesting ?? runPreflight)(deps.preflight);
+  const precheck = runPreflight(deps.preflight);
   if (!precheck.ok) {
     safe.line({ phase: 'preflight', status: 'FAILED', reason: precheck.failure });
     return { outcome: precheck.failure === 'tty-unavailable' ? 'TTY_REQUIRED' : 'PRECHECK_FAILED' };

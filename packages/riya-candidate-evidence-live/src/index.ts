@@ -72,11 +72,7 @@ export { admitGroundedInput, GROUNDED_ADMISSION_REFUSALS } from './governed-grou
 export type { GroundedAdmission, GroundedAdmissionRefusal } from './governed-grounded-input.js';
 
 // The evaluation-only execution composition.
-export {
-  createCancellationInvoker,
-  createCandidateGateway,
-  createCandidateInvoker,
-} from './evaluation-gateway.js';
+export { createCandidateGateway, createCandidateInvoker } from './evaluation-gateway.js';
 export type { CandidateGatewayDeps } from './evaluation-gateway.js';
 export {
   createTransportBoundaryAbort,

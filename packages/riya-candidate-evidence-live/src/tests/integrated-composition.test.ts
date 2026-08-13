@@ -28,7 +28,7 @@ import {
 } from '@qf-jarvis/groq-staging-smoke';
 import { createEvaluationBinding, createSuiteThresholds } from '@qf-jarvis/model-evaluation';
 import { RIYA_SAFETY_FIXTURES } from '@qf-jarvis/riya-candidate-evaluation-runner';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
 
 import { createOperatorLedger } from '../accounting.js';
 import { createAccountedSession } from '../candidate-session.js';
@@ -45,7 +45,28 @@ import { createCandidateGateway } from '../evaluation-gateway.js';
 import { runCandidateEvidenceOperator } from '../operator.js';
 import type { OperatorDeps } from '../operator.js';
 import { createSafeConsole } from '../safe-console.js';
-import { runPreflightForTesting } from '../testing/preflight-testing.js';
+import type * as ActualPreflightModule from '../preflight.js';
+import type { PreflightInput } from '../preflight.js';
+
+type ActualPreflight = typeof ActualPreflightModule;
+/**
+ * The synthetic configuration cannot hash to the governed digest, and production no longer offers any
+ * way to say otherwise — no field on `PreflightInput`, no callback on `OperatorDeps`. So the SPEC
+ * substitutes the module, which is a test-harness concern rather than a production seam.
+ *
+ * `runPreflight` is otherwise the real one: every path, digest, identity, version and ceiling check
+ * runs exactly as it ships. Only the expected smoke-config digest differs.
+ */
+const harnessState = vi.hoisted(() => ({ syntheticDigest: '' }));
+vi.mock('../preflight.js', async (importOriginal) => {
+  const actual = await importOriginal<ActualPreflight>();
+  const helper = await import('./helpers/preflight-testing.js');
+  return {
+    ...actual,
+    runPreflight: (input: PreflightInput) =>
+      helper.runPreflightForTesting(input, harnessState.syntheticDigest),
+  };
+});
 
 const REPO_ROOT = fileURLToPath(new URL('../../../../', import.meta.url));
 const scratch: string[] = [];
@@ -157,13 +178,12 @@ function integrated(options: { readonly smoke: SmokeRunResult }): Recorded {
   const abort = createTransportBoundaryAbort();
   let session: ReturnType<typeof createAccountedSession> | undefined;
 
-  // The synthetic configuration cannot hash to the governed digest, so the integrated run uses the
-  // TEST-ONLY preflight seam rather than a runtime override on the production contract.
-  const syntheticDigest = createHash('sha256').update(readFileSync(smokeConfigPath)).digest('hex');
+  harnessState.syntheticDigest = createHash('sha256')
+    .update(readFileSync(smokeConfigPath))
+    .digest('hex');
 
   const deps: OperatorDeps = {
     console: createSafeConsole((line) => lines.push(line)),
-    preflightOverrideForTesting: (input) => runPreflightForTesting(input, syntheticDigest),
     preflight: {
       smokeConfigPath,
       reviewOutputPath: join(externalDir(), 'bundle.json'),
