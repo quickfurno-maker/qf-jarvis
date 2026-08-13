@@ -236,6 +236,34 @@ describe('the operator cannot serve, activate or persist', () => {
     }
   });
 
+  it('THE EVALUATION GATEWAY IS CONSTRUCTED WITH THE DECLARED POSTURE', () => {
+    // A mutation campaign found this gap: `CANDIDATE_ALLOW_FALLBACK` was asserted as a constant, but
+    // nothing checked the value the gateway is ACTUALLY built with. Flipping `allowFallback` in the
+    // composition passed every test. The posture is a property of the construction, so the
+    // construction is what gets pinned.
+    const gateway = codeOnly(readFileSync(join(SRC, 'evaluation-gateway.ts'), 'utf8'));
+    expect(gateway).toContain('allowFallback: false');
+    expect(gateway).not.toContain('allowFallback: true');
+    // Exactly one provider, named inline. A second would make a case answerable by a model nobody
+    // is evaluating.
+    expect(gateway).toContain('providers: [new GroqModelProvider(config, clock)]');
+    expect(gateway).toContain("mode: 'ACTIVE'");
+    // The optional gateway seams that would turn this into something governed by a rollout.
+    for (const forbidden of ['rolloutController:', 'routingProfile:', 'evidenceVerifier:']) {
+      expect(gateway, `evaluation gateway must not configure ${forbidden}`).not.toContain(
+        forbidden,
+      );
+    }
+  });
+
+  it('EVERY CANDIDATE REQUEST CARRIES A ZERO RETRY BUDGET', () => {
+    // Same class of gap: the constant said zero while nothing checked the request the adapter is
+    // actually configured with.
+    const turn = codeOnly(readFileSync(join(SRC, 'riya-turn.ts'), 'utf8'));
+    expect(turn).toContain('budgets: { retryBudget: 0 }');
+    expect(turn).not.toMatch(/retryBudget:[ ]*[1-9]/u);
+  });
+
   it('CREATES AND MUTATES NO ROLLOUT', () => {
     // The evaluation gateway runs ACTIVE inside one short-lived process. That is an execution mode,
     // not a rollout: there is no controller, no policy, no attestation and no transition anywhere.

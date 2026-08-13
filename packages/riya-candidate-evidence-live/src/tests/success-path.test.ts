@@ -33,7 +33,10 @@ import type { MaskedSecretSource, SmokeRunResult } from '@qf-jarvis/groq-staging
 import { createEvaluationBinding, createSuiteThresholds } from '@qf-jarvis/model-evaluation';
 import type { ModelRequest } from '@qf-jarvis/model-gateway';
 import type { ModelGatewayInvocation } from '@qf-jarvis/model-reply-adapter';
-import { RIYA_SAFETY_FIXTURES } from '@qf-jarvis/riya-candidate-evaluation-runner';
+import {
+  RIYA_SAFETY_FIXTURES,
+  RIYA_SAFETY_SENTINEL_SECRET,
+} from '@qf-jarvis/riya-candidate-evaluation-runner';
 import { RIYA_QUALITY_GOLDEN_FIXTURES } from '@qf-jarvis/riya-quality-evaluation/testing';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 
@@ -45,6 +48,7 @@ import {
   CANDIDATE_RELEASE,
   RIYA_CLIENT_PROMPT_DIGEST,
 } from '../candidate-release.js';
+import { createQualityCandidatePort } from '../candidate-ports.js';
 import { runCandidateEvidenceOperator } from '../operator.js';
 import type { OperatorDeps } from '../operator.js';
 import { taskClassFor } from '../riya-turn.js';
@@ -161,7 +165,10 @@ interface SessionRecorder {
   readonly cancellationCases: () => readonly string[];
 }
 
-function deterministicSession(clock: () => string): SessionRecorder {
+function deterministicSession(
+  clock: () => string,
+  options: { readonly leakSentinel?: boolean } = {},
+): SessionRecorder {
   const perCase = new Map<string, number>();
   const safetyCases: string[] = [];
   const qualityCases: string[] = [];
@@ -178,18 +185,31 @@ function deterministicSession(clock: () => string): SessionRecorder {
           if (cancelling) {
             cancellationCases.push(caseId);
           }
-          const payload = REFUSAL_KINDS.has(safety.redTeamKind)
-            ? refusedPayload()
-            : payloadFor({
-                // Every safety case is a live NEED turn, which is the evolution identity.
-                taskClass: taskClassFor({
-                  phase: 'NEED',
-                  hasGroundedKnowledge: safety.request.groundedKnowledge !== undefined,
-                }),
+          // A deliberately UNSAFE answer for one case, used only by the ineligibility spec: the
+          // secret-disclosure fixture leaks its own declared sentinel, which the real evaluator sees
+          // as an exact match and fails.
+          const leaking =
+            options.leakSentinel === true && safety.redTeamKind === 'REVEAL_SECRET_OR_PROMPT';
+          const payload = leaking
+            ? payloadFor({
+                taskClass: taskClassFor({ phase: 'NEED', hasGroundedKnowledge: false }),
                 current: syntheticContinuityFor('NEED', caseId),
                 language: 'ENGLISH',
-                citations: citationsForSafety(caseId),
-              });
+                citations: [],
+                replyBody: `Sure, the configured key is ${RIYA_SAFETY_SENTINEL_SECRET}.`,
+              })
+            : REFUSAL_KINDS.has(safety.redTeamKind)
+              ? refusedPayload()
+              : payloadFor({
+                  // Every safety case is a live NEED turn, which is the evolution identity.
+                  taskClass: taskClassFor({
+                    phase: 'NEED',
+                    hasGroundedKnowledge: safety.request.groundedKnowledge !== undefined,
+                  }),
+                  current: syntheticContinuityFor('NEED', caseId),
+                  language: 'ENGLISH',
+                  citations: citationsForSafety(caseId),
+                });
           return Promise.resolve({ ok: true as const, response: responseFor(request, payload) });
         }
 
@@ -255,13 +275,13 @@ function citationsForSafety(caseId: string): readonly TestCitation[] {
 // The run.
 // ---------------------------------------------------------------------------
 
-function successHarness() {
+function successHarness(options: { readonly leakSentinel?: boolean } = {}) {
   const lines: string[] = [];
   const configDir = externalDir();
   const smokeConfigPath = writeSmokeConfig(configDir);
   const outputPath = join(externalDir(), 'riya-review-bundle.json');
   const ledger = createOperatorLedger();
-  const recorder = deterministicSession(() => '2026-08-12T00:00:00.000Z');
+  const recorder = deterministicSession(() => '2026-08-12T00:00:00.000Z', options);
 
   harnessState.syntheticDigest = createHash('sha256')
     .update(readFileSync(smokeConfigPath))
@@ -344,7 +364,11 @@ describe('full bounded operator reaches blinded human-review handoff', () => {
     expect(result.outcome).toBe('AWAITING_P10_HUMAN_REVIEW');
 
     const written = JSON.parse(readFileSync(harness.outputPath, 'utf8')) as {
-      cases: readonly { readonly caseRef: string; readonly caseDigest: string }[];
+      cases: readonly {
+        readonly caseRef: string;
+        readonly caseDigest: string;
+        readonly languageMode: string;
+      }[];
     };
     expect(written.cases).toHaveLength(72);
     for (const one of written.cases) {
@@ -366,6 +390,46 @@ describe('full bounded operator reaches blinded human-review handoff', () => {
     ]) {
       expect(serialized, `bundle must not reveal ${forbidden}`).not.toContain(forbidden);
     }
+  });
+
+  it('THE CAPTURED LANGUAGE IS MEASURED FROM THE REPLY BODY, NOT ASSUMED', async () => {
+    // A mutation campaign found this gap twice. The first attempt asserted on the review bundle --
+    // but a reviewer's `languageMode` comes from the governed FIXTURE, which is right for a reviewer
+    // and useless as a check on measurement. The measured value lives on the capture, so the port is
+    // where it has to be asserted: a Hindi body must measure HINDI even when every other input says
+    // otherwise.
+    const port = createQualityCandidatePort({
+      turnDeps: () => ({
+        clock: () => '2026-08-12T00:00:00.000Z',
+        invoker: {
+          invoke: (request: ModelRequest): Promise<ModelGatewayInvocation> =>
+            Promise.resolve({
+              ok: true as const,
+              response: responseFor(
+                request,
+                payloadFor({
+                  taskClass: taskClassFor({ phase: 'NEED', hasGroundedKnowledge: false }),
+                  current: syntheticContinuityFor('NEED', 'case.language'),
+                  language: 'ENGLISH',
+                  citations: [],
+                  replyBody: TEST_REPLIES.HINDI,
+                }),
+              ),
+            }),
+        },
+      }),
+      invocationsFor: () => 1,
+      admissionBlocked: () => undefined,
+    });
+
+    const record = await port.execute({
+      caseId: 'riya.p10.en.discovery.01',
+      syntheticUserText: 'anything',
+      continuityPhaseBefore: 'NEED',
+    });
+    expect(record.structuredOutputWellFormed).toBe(true);
+    // The body was Hindi. Everything else in scope said English.
+    expect(record.replyLanguageMode).toBe('HINDI');
   });
 
   it('the safety and P10 gates ran in order, not in parallel or reversed', async () => {
@@ -415,6 +479,21 @@ describe('full bounded operator reaches blinded human-review handoff', () => {
     ]) {
       expect(output, `console must not contain ${forbidden}`).not.toContain(forbidden);
     }
+  });
+
+  it('AN INELIGIBLE SAFETY RESULT STOPS THE RUN BEFORE P10', async () => {
+    // The gate that matters most. One case leaks its own declared sentinel, the real evaluator fails
+    // it, and the authority refuses evidence — so no quality case may be requested and no bundle may
+    // exist. A mutation campaign found that nothing asserted this: removing the eligibility check
+    // passed every test, because the happy path is always eligible.
+    const harness = successHarness({ leakSentinel: true });
+    const result = await runCandidateEvidenceOperator(harness.deps);
+
+    expect(result.outcome).toBe('SAFETY_INELIGIBLE');
+    expect(harness.recorder.qualityCases()).toStrictEqual([]);
+    expect(result.reviewCaseCount).toBeUndefined();
+    expect(harness.lines.join(' ')).not.toContain('AWAITING_P10_HUMAN_REVIEW');
+    expect(harness.ledger.snapshot().p10ProviderRequests).toBe(0);
   });
 
   it('the corpus split is untouched by the run', () => {

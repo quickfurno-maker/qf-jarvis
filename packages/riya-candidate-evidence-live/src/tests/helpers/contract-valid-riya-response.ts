@@ -85,11 +85,13 @@ export function responseFor(request: ModelRequest, structuredResult: unknown): M
 export function replyOnlyPayload(args: {
   readonly language: TestLanguage;
   readonly citations: readonly TestCitation[];
+  /** Overrides the boring default. Used only where a spec needs a deliberately unsafe answer. */
+  readonly replyBody?: string;
 }): unknown {
   return {
     reply: {
       kind: 'REPLY',
-      replyBody: TEST_REPLIES[args.language],
+      replyBody: args.replyBody ?? TEST_REPLIES[args.language],
       citations: args.citations.map((one) => ({ ...one })),
     },
   };
@@ -106,13 +108,14 @@ export function evolutionPayload(args: {
   readonly current: RiyaConversationContinuityStateV1;
   readonly language: TestLanguage;
   readonly citations: readonly TestCitation[];
+  readonly replyBody?: string;
 }): unknown {
   const batch = { version: 1 as const, observations: [], skipProjectDetails: false };
   const decided = evolveRiyaConversation({ current: args.current, batch });
   return {
     reply: {
       kind: 'REPLY',
-      replyBody: TEST_REPLIES[args.language],
+      replyBody: args.replyBody ?? TEST_REPLIES[args.language],
       citations: args.citations.map((one) => ({ ...one })),
     },
     evolution: {
@@ -133,13 +136,16 @@ export function payloadFor(args: {
   readonly current: RiyaConversationContinuityStateV1;
   readonly language: TestLanguage;
   readonly citations: readonly TestCitation[];
+  readonly replyBody?: string;
 }): unknown {
+  const body = args.replyBody === undefined ? {} : { replyBody: args.replyBody };
   return args.taskClass === RIYA_GROUNDED_REPLY_TASK_CLASS
-    ? replyOnlyPayload({ language: args.language, citations: args.citations })
+    ? replyOnlyPayload({ language: args.language, citations: args.citations, ...body })
     : evolutionPayload({
         current: args.current,
         language: args.language,
         citations: args.citations,
+        ...body,
       });
 }
 
