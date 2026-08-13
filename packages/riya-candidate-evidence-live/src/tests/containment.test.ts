@@ -155,6 +155,23 @@ describe('the operator implements no transport and holds no secret ingress', () 
     expect(cli).not.toContain('runPreflightForTesting');
   });
 
+  it('NO PRODUCTION MODULE IMPORTS A TEST-ONLY HELPER', () => {
+    // Both helpers -- the preflight seam and the contract-response factory -- live under
+    // `src/tests/helpers/`, which the emitting build excludes. If production could reach either, the
+    // digest lock would be one import away from decorative and the response factory would be one
+    // import away from becoming candidate logic.
+    for (const { file, code } of productionFiles()) {
+      for (const forbidden of [
+        'preflight-testing',
+        'contract-valid-riya-response',
+        'runPreflightForTesting',
+        'tests/helpers',
+      ]) {
+        expect(code, `${file} must not reach ${forbidden}`).not.toContain(forbidden);
+      }
+    }
+  });
+
   it('NO PRODUCTION MODULE IMPORTS THE TEST-ONLY PREFLIGHT SEAM', () => {
     // If anything that ships could reach it, the digest lock would be one import away from being
     // decorative again.
