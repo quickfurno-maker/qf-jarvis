@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
+  },
+
+  // The EMITTING build. Specs under src/tests are excluded so nothing test-only reaches dist/.
+  //
+  // This is a LEAF: it is the one place allowed to depend on both evaluation and execution, because
+  // producing candidate evidence needs both and nothing else in the repository may. Every reference
+  // below is an existing seam being reused rather than reimplemented — the gateway routes, the Groq
+  // provider speaks the wire, the M4 adapter owns the one call, the bridge owns the fixtures and the
+  // authorities own the verdicts.
+  //
+  // Deliberately absent: `jarvis-runtime`, `riya-web-conversation-service`, every app, every Postgres
+  // package, `riya-intelligence-dataset` and the benchmark packages. An operator that could reach a
+  // serving composition could activate one.
+  "references": [
+    { "path": "../agent-runtime/tsconfig.build.json" },
+    { "path": "../core-service-availability-read/tsconfig.build.json" },
+    { "path": "../groq-staging-smoke/tsconfig.build.json" },
+    { "path": "../governed-knowledge/tsconfig.build.json" },
+    { "path": "../model-evaluation/tsconfig.build.json" },
+    { "path": "../model-gateway" },
+    { "path": "../model-gateway-composition/tsconfig.build.json" },
+    { "path": "../model-reply-adapter/tsconfig.build.json" },
+    { "path": "../riya-candidate-evaluation-runner/tsconfig.build.json" },
+    { "path": "../riya-conversation-continuity/tsconfig.build.json" },
+    { "path": "../riya-conversation-evolution/tsconfig.build.json" },
+    { "path": "../riya-model-interaction/tsconfig.build.json" },
+    { "path": "../riya-prompts/tsconfig.build.json" },
+    { "path": "../riya-quality-evaluation/tsconfig.build.json" }
+  ],
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/tests/**"]
+}

@@ -462,6 +462,12 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // an authorised addition, it does not relax the assertion. It holds no provider, no
       // credential and no network, and no runtime, service or app imports it.
       'riya-candidate-evaluation-runner',
+      // MVP-P2A.2: the EVALUATION-ONLY live evidence operator -- the one composition allowed to
+      // depend on both evaluation and execution, so that combination lives in exactly one reviewable
+      // place off the serving path. Still an EXACT set match; it records an authorised addition, it
+      // does not relax the assertion. It writes no HTTP, holds no credential beyond one masked read
+      // per phase, retries nothing, activates no rollout, and no package or app imports it.
+      'riya-candidate-evidence-live',
       // RWC-P6A (ADR-0101): the PURE post-summary transitions RWC-P4A stopped short of -- structured
       // summary edit and confirmation, and the two governed advances CONTACT->CONSENT and
       // CONSENT->COMPLETE. Still an EXACT set match; it records an authorised addition, it does not

@@ -140,7 +140,9 @@ describe('the safety manifest covers the mandatory set exactly once', () => {
     expect(RIYA_SAFETY_FIXTURE_MANIFEST_ID).toBe('riya.candidate.safety.v1');
     // 1 -> 2: three fixtures gained grounded knowledge and the injection case's bytes moved.
     // 2 -> 3: eight model-facing scopes corrected, and every case declares its execution layer.
-    expect(RIYA_SAFETY_FIXTURE_MANIFEST_VERSION).toBe(3);
+    // 3 -> 4: every request carries `subjectErased`, so privacy state is a stated situation rather
+    // than something an adapter infers from a case identifier.
+    expect(RIYA_SAFETY_FIXTURE_MANIFEST_VERSION).toBe(4);
     expect(RIYA_SAFETY_SUITE_ID).toBe('riya.candidate.safety.suite.v1');
     // 1 -> 2, and only at the second correction: eight GOVERNED SCENARIO SITUATIONS changed, which is
     // more than an input-byte fix. Pass policy is still untouched — no expectation, severity or
@@ -254,6 +256,7 @@ describe('a knowledge scenario is given a knowledge situation, and no other case
         'caseId',
         'declaredDataClass',
         'humanTakeoverActive',
+        'subjectErased',
         'syntheticUserText',
         'taskClass',
       ];

@@ -229,6 +229,18 @@ export interface RiyaCandidateRequest {
   /** Whether the case cancels the turn after admission. */
   readonly cancelAfterAdmission: boolean;
   /**
+   * Whether this case's conversation subject has been ERASED (MVP-P2A.2).
+   *
+   * The same class of execution metadata as `humanTakeoverActive` and `cancelAfterAdmission`: a fact
+   * about the situation a candidate is put in, not a verdict about it. `ERASED_SUBJECT_RETRIEVAL`
+   * asks a runtime to recover a record somebody exercised their right to remove, and without this
+   * the only way an adapter could know was to read the case IDENTIFIER — which would mean renaming a
+   * fixture silently changed its privacy state.
+   *
+   * It carries no subject reference, no content and no PII: one boolean, and the model never sees it.
+   */
+  readonly subjectErased: boolean;
+  /**
    * The synthetic knowledge situation, on the cases whose scenario is ABOUT knowledge.
    *
    * Absent on every other case, because empty benign knowledge is itself a fact nobody supplied. A

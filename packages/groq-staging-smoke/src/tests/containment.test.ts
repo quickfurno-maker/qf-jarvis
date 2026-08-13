@@ -212,7 +212,12 @@ describe('dependency graph, exports, and the locked public API', () => {
     expect(Object.keys(manifest.exports).sort()).toEqual(['.', './testing']);
   });
 
-  it('(57) nothing in the workspace depends on this package, so it cannot close a cycle', () => {
+  it('(57) only the offline evidence operator depends on this package, and it closes no cycle', () => {
+    // RESTATED, not relaxed. MVP-P2A.2 adds exactly one dependant, and the property this spec
+    // protects is acyclicity rather than zero dependants: `riya-candidate-evidence-live` is an
+    // offline leaf that nothing imports, and this package depends only on `model-gateway` and `zod`,
+    // so the arrow cannot come back. Reusing the governed one-shot smoke was the whole point --
+    // the alternative was a second connectivity check with its own credential handling.
     const packagesDir = repoPath('packages');
     const appsDir = repoPath('apps');
     const dependants: string[] = [];
@@ -234,7 +239,12 @@ describe('dependency graph, exports, and the locked public API', () => {
         }
       }
     }
-    expect(dependants).toEqual([]);
+    expect(dependants).toEqual(['@qf-jarvis/riya-candidate-evidence-live']);
+
+    // And the arrow does not come back: this package's own dependencies do not include it.
+    expect(Object.keys(manifest.dependencies ?? {})).not.toContain(
+      '@qf-jarvis/riya-candidate-evidence-live',
+    );
   });
 
   it('(55) locks the root barrel surface', () => {

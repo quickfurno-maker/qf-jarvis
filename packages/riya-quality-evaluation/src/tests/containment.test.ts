@@ -316,8 +316,16 @@ describe('no runtime, service or application reaches this package', () => {
     // an evaluator that could reach a provider is one that eventually will.
     //
     // The set is pinned EXACTLY and no APPLICATION may import the contract at all.
+    //
+    // MVP-P2A.2 adds the third and last, and it is the one that finally sits the exam:
+    // `riya-candidate-evidence-live` is the offline operator leaf that runs the governed corpus
+    // through a real hosted candidate and writes a blinded bundle for two humans. It composes P10;
+    // P10 knows nothing about it, and the operator's own spec proves nothing composes the operator.
+    //
+    // Still EXACT, and still no application may import the contract at all.
     const ALLOWED_PACKAGE_IMPORTERS = [
       'riya-candidate-evaluation-runner',
+      'riya-candidate-evidence-live',
       'riya-intelligence-dataset',
     ];
     const importingPackages = new Set<string>();
