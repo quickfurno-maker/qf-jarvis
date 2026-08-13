@@ -40,14 +40,24 @@ import type { RequestLedger } from './accounting.js';
 import type { CandidateSession } from './candidate-session.js';
 import { createQualityCandidatePort, createSafetyCandidatePort } from './candidate-ports.js';
 import type { OperatorOutcome } from './exit-codes.js';
-import { emitSafetyIneligibilityDiagnostics } from './internal/safety-diagnostics.js';
+import { DEFAULT_RUN_GOAL, SECOND_CREDENTIAL_NOTICES } from './internal/run-goal.js';
+import type { OperatorRunGoal } from './internal/run-goal.js';
+import {
+  emitSafetyIneligibilityDiagnostics,
+  emitSafetyReplicationReceipt,
+} from './internal/safety-diagnostics.js';
 import { runPreflight } from './preflight.js';
 import type { PreflightInput } from './preflight.js';
 import type { SafeConsole } from './safe-console.js';
 
-/** The notice printed between the two masked prompts. Content-free, and the only prose printed. */
-export const SECOND_CREDENTIAL_NOTICE =
-  'Smoke passed. Enter the same Groq credential again for the bounded candidate evidence run.';
+/**
+ * The notice printed between the two masked prompts on a FULL_EVIDENCE run.
+ *
+ * Kept as a root export with its exact original wording — it is pinned by a spec and by the package
+ * surface lock. HF3 derives it from the per-goal table rather than restating the string, so the two
+ * cannot drift apart and quietly disagree about what an owner is being asked to fund.
+ */
+export const SECOND_CREDENTIAL_NOTICE = SECOND_CREDENTIAL_NOTICES.FULL_EVIDENCE;
 
 /**
  * What the operator needs from the outside world.
@@ -85,6 +95,13 @@ export interface OperatorDeps {
   readonly thresholds: SuiteThresholds;
   readonly repoRoot: string;
   readonly ledger?: RequestLedger;
+  /**
+   * What this run is FOR. Absent means `FULL_EVIDENCE`, so every pre-HF3 caller is unchanged.
+   *
+   * The only alternative is strictly more conservative: it stops after the safety authority and can
+   * reach no quality case, no bundle and no ceiling wider than its own.
+   */
+  readonly runGoal?: OperatorRunGoal;
 }
 
 export interface OperatorResult {
@@ -103,6 +120,8 @@ export interface OperatorResult {
 export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<OperatorResult> {
   const ledger = deps.ledger ?? createOperatorLedger();
   const safe = deps.console;
+  // Resolved once. Absence is FULL_EVIDENCE, which is what keeps every existing call site identical.
+  const runGoal = deps.runGoal ?? DEFAULT_RUN_GOAL;
 
   // A. PRECHECK — before any secret source exists.
   const precheck = runPreflight(deps.preflight);
@@ -142,7 +161,9 @@ export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<
   safe.line({ phase: 'smoke', status: 'PASS', requests: 1 });
 
   // D/E. THE CANDIDATE — a fresh one-shot credential, and an in-memory composition.
-  safe.notice(SECOND_CREDENTIAL_NOTICE);
+  // Per goal: telling an owner they are funding "the bounded candidate evidence run" when the run
+  // will stop after safety and write nothing would be a small lie at the moment they type a key.
+  safe.notice(SECOND_CREDENTIAL_NOTICES[runGoal]);
   // The governed opaque reference from the approved configuration — never a key, and never a value
   // this operator invented.
   const candidateCredential = await deps.openCandidateCredential({
@@ -203,6 +224,11 @@ export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<
         reason: blocked.reason,
       });
     }
+    if (runGoal === 'SAFETY_REPLICATION') {
+      emitSafetyReplicationReceipt(safe, ledger.snapshot());
+    }
+    // The verdict is unchanged: a BLOCKED suite is not eligible, not ineligible, and never becomes a
+    // replication "result". No P10 either way.
     return { outcome: 'SAFETY_EVIDENCE_BLOCKED' };
   }
   // Eligibility is the AUTHORITY's answer, produced by its own evidence constructor. The operator
@@ -217,6 +243,12 @@ export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<
     // so there was nothing left to read. The detail is emitted BEFORE the verdict; the verdict line
     // below is unchanged, and so is the outcome.
     emitSafetyIneligibilityDiagnostics(safe, safety.suiteResult, deps.thresholds);
+    // HF3 receipt goes BEFORE the verdict so the authoritative INELIGIBLE line remains the last
+    // safety line and remains byte-for-byte what it was. The outcome is unchanged too: safety
+    // semantics did not move, so inventing a second eligibility decision would be the mistake.
+    if (runGoal === 'SAFETY_REPLICATION') {
+      emitSafetyReplicationReceipt(safe, ledger.snapshot());
+    }
     safe.line({ phase: 'safety', status: 'INELIGIBLE', reason: evidence.code });
     return { outcome: 'SAFETY_INELIGIBLE' };
   }
@@ -226,6 +258,20 @@ export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<
     cases: 17,
     providerRequests: ledger.snapshot().safetyProviderRequests,
   });
+
+  // HF3. A SAFETY_REPLICATION stops HERE, and an ELIGIBLE result is exactly the case that makes the
+  // stop necessary rather than optional. RUN S1 was INELIGIBLE; the governed reading of an
+  // S1-INELIGIBLE / S2-ELIGIBLE disagreement is run-to-run variability that an OWNER interprets. If
+  // this run continued, it would spend 72 provider calls and write a bundle before that
+  // interpretation happened — deciding by default the one question the replication exists to ask.
+  //
+  // The return is placed before the quality port is CONSTRUCTED, not merely before it is used, so
+  // there is no window in which a P10 seam exists in this run at all.
+  if (runGoal === 'SAFETY_REPLICATION') {
+    emitSafetyReplicationReceipt(safe, ledger.snapshot());
+    safe.line({ finalStatus: 'SAFETY_REPLICATION_COMPLETE' });
+    return { outcome: 'SAFETY_REPLICATION_COMPLETE' };
+  }
 
   // G. P10 — only now, and all seventy-two.
   // The QUALITY accessor, so all 72 are booked to the p10 phase. A single shared accessor booked

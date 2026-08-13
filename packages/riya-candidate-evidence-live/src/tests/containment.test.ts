@@ -377,3 +377,89 @@ describe('nothing composes the operator', () => {
     }
   });
 });
+
+describe('HF3 — the run goal narrows, and can never widen', () => {
+  const operatorCode = (): string => codeOnly(readFileSync(join(SRC, 'operator.ts'), 'utf8'));
+
+  it('THE SAFETY AUTHORITY IS STILL THE ONLY SOURCE OF ELIGIBILITY', () => {
+    // A replication that graded itself would be worthless. `createApprovalEvidence` is called exactly
+    // once, and the run-goal branch happens strictly AFTER it — so no goal can reach a verdict by a
+    // different route, and none can substitute a local threshold comparison for the authority.
+    const code = operatorCode();
+    expect(code.match(/createApprovalEvidence\(/gu)).toHaveLength(1);
+    // The eligibility-bearing branch is the one that must come after the authority. (The BLOCKED
+    // branch also tests the goal, earlier, but a BLOCKED suite never reaches an eligibility decision
+    // at all -- it only decides whether to print an accounting receipt.)
+    expect(code.indexOf('createApprovalEvidence(')).toBeLessThan(
+      code.indexOf("return { outcome: 'SAFETY_REPLICATION_COMPLETE' }"),
+    );
+    // No local re-implementation of the authority's job.
+    for (const forbidden of [
+      'thresholdBreaches.length',
+      'criticalFailures ===',
+      'criticalFailures >',
+      'failuresByCategory[',
+      'maxFailuresByCategory[',
+    ]) {
+      expect(code, `the operator must not judge eligibility itself: ${forbidden}`).not.toContain(
+        forbidden,
+      );
+    }
+  });
+
+  it('A REPLICATION CANNOT REACH ANY QUALITY SEAM', () => {
+    // The early return sits before the quality port is CONSTRUCTED, not merely before it is used, so
+    // there is no window in which a P10 seam exists in that run at all.
+    const code = operatorCode();
+    const stopAt = code.indexOf("return { outcome: 'SAFETY_REPLICATION_COMPLETE' }");
+    expect(stopAt).toBeGreaterThan(0);
+    for (const seam of [
+      'createQualityCandidatePort(',
+      'captureRiyaQualityCandidates(',
+      'buildRiyaQualityReviewBundle(',
+      'writeRiyaQualityReviewBundle(',
+    ]) {
+      const at = code.indexOf(seam);
+      expect(at, `${seam} must exist`).toBeGreaterThan(0);
+      expect(at, `${seam} must come after the replication stop`).toBeGreaterThan(stopAt);
+    }
+  });
+
+  it('THE RUN GOAL IS CLOSED AND ADDS NO OVERRIDE FLAG', () => {
+    // The one new flag names a pre-reviewed purpose. Nothing here lets an operator choose a bound,
+    // skip a gate, or force a verdict.
+    const cli = codeOnly(readFileSync(join(SRC, 'bin.ts'), 'utf8'));
+    expect(cli).toContain("flag === '--run-goal'");
+    expect(cli).toContain("value !== 'SAFETY_REPLICATION'");
+    for (const forbidden of [
+      '--skip-p10',
+      '--skip-safety',
+      '--skip-smoke',
+      '--force',
+      '--force-pass',
+      '--no-smoke',
+      '--max-requests',
+      '--max-cost',
+      '--api-key',
+      "'--model'",
+      "'--provider'",
+    ]) {
+      expect(cli, `the CLI must not accept ${forbidden}`).not.toContain(forbidden);
+    }
+  });
+
+  it('the run-goal vocabulary and the replication ledger stay off the package root', () => {
+    const root = codeOnly(readFileSync(join(SRC, 'index.ts'), 'utf8'));
+    for (const internal of [
+      'OPERATOR_RUN_GOALS',
+      'DEFAULT_RUN_GOAL',
+      'SECOND_CREDENTIAL_NOTICES',
+      'createSafetyReplicationLedger',
+      'emitSafetyReplicationReceipt',
+      'run-goal.js',
+      'safety-diagnostics.js',
+    ]) {
+      expect(root, `${internal} must not be root-exported`).not.toContain(internal);
+    }
+  });
+});

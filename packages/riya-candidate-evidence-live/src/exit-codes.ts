@@ -24,6 +24,15 @@ export const OPERATOR_OUTCOMES = [
   'INTERNAL_CLOSED_FAILURE',
   /** The declared provider maxima the reservation bound rests on turned out to be wrong. */
   'USAGE_BOUND_VIOLATED',
+  /**
+   * A bounded SAFETY_REPLICATION completed and stopped after the safety authority (HF3).
+   *
+   * Deliberately NOT exit 0. Zero means a bundle exists and two humans have not read it; a
+   * replication writes no bundle, and letting it share that code would let a diagnostic run
+   * masquerade as the state that precedes approval. It is also not model approval and not P10
+   * completion -- it says only that the requested replication ran and stopped where it promised to.
+   */
+  'SAFETY_REPLICATION_COMPLETE',
 ] as const;
 export type OperatorOutcome = (typeof OPERATOR_OUTCOMES)[number];
 
@@ -42,4 +51,7 @@ export const OPERATOR_EXIT_CODES: Readonly<Record<OperatorOutcome, number>> = Ob
   COST_LIMIT_REACHED: 19,
   INTERNAL_CLOSED_FAILURE: 20,
   USAGE_BOUND_VIOLATED: 21,
+  // The next unused integer. Codes 0-21 are untouched, because a script reading `$LASTEXITCODE`
+  // against the old contract must keep meaning what it meant.
+  SAFETY_REPLICATION_COMPLETE: 22,
 });

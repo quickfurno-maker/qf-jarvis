@@ -7,11 +7,17 @@
  * immediately before every provider invocation and refuses rather than reports — so the ceiling is a
  * gate, not a statistic.
  *
- * ### 83 is the exact arithmetic of a complete run
+ * ### Each ceiling is the exact arithmetic of the run it bounds
  *
- * 1 smoke + 10 model-facing safety cases + 72 P10 captures. It is not a budget with slack: there is no
- * retry anywhere in this operator, so a request beyond 83 means a loop, a duplicate or a retry that
- * should not exist, and stopping is the correct response to all three.
+ * FULL_EVIDENCE is 83: 1 smoke + 10 model-facing safety cases + 72 P10 captures, at USD 5.
+ * SAFETY_REPLICATION is 11: 1 smoke + 10 model-facing safety cases, at USD 1 — it stops after the
+ * safety authority, so the 72 are not merely unused, they are unreachable.
+ *
+ * Neither is a budget with slack. There is no retry anywhere in this operator, so a request past a
+ * ceiling means a loop, a duplicate or a retry that should not exist, and stopping is the correct
+ * response to all three. The narrower ceiling is a SECOND line of defence for a replication run: the
+ * operator already returns before P10, and if that early return were ever removed, the first quality
+ * reservation would be request 12 and the ledger would refuse it before the provider was reached.
  *
  * ### Nothing here can hold content
  *
@@ -33,8 +39,23 @@ export const SAFETY_MODEL_REQUIRED_REQUESTS = 10;
 export const P10_REQUESTS = 72;
 export const MAX_PROVIDER_REQUESTS = SMOKE_REQUESTS + SAFETY_MODEL_REQUIRED_REQUESTS + P10_REQUESTS;
 
-/** The owner's hard spend ceiling for this phase. */
+/** The owner's hard spend ceiling for a FULL_EVIDENCE run. */
 export const MAX_ESTIMATED_COST_USD = 5;
+
+/**
+ * The exact arithmetic of a SAFETY_REPLICATION run: smoke plus the model-facing safety cases.
+ *
+ * Derived from the same two constants rather than typed as 11, so it cannot drift away from the split
+ * it claims to describe.
+ */
+export const SAFETY_REPLICATION_MAX_PROVIDER_REQUESTS =
+  SMOKE_REQUESTS + SAFETY_MODEL_REQUIRED_REQUESTS;
+
+/**
+ * The spend ceiling for a replication. A fifth of the full-run ceiling, because a run that can make
+ * at most 11 calls has no business being authorised for 83 calls' worth of spend.
+ */
+export const SAFETY_REPLICATION_MAX_ESTIMATED_COST_USD = 1;
 
 /** Why the ledger refused the next call. Closed and content-free. */
 export const LEDGER_REFUSALS = [
@@ -226,6 +247,27 @@ export function createOperatorLedger(): RequestLedger {
   return createRequestLedger({
     maxRequests: MAX_PROVIDER_REQUESTS,
     maxCostUsd: MAX_ESTIMATED_COST_USD,
+    pricePerMillionInputUsd: CANDIDATE_PRICE_PER_M_INPUT_USD,
+    pricePerMillionCachedInputUsd: CANDIDATE_PRICE_PER_M_CACHED_INPUT_USD,
+    pricePerMillionOutputUsd: CANDIDATE_PRICE_PER_M_OUTPUT_USD,
+    fallbackInputTokens: CANDIDATE_MAX_INPUT_TOKENS,
+    fallbackOutputTokens: CANDIDATE_MAX_COMPLETION_TOKENS,
+    hardMaxInputTokens: CANDIDATE_MAX_INPUT_TOKENS,
+    hardMaxOutputTokens: CANDIDATE_MAX_COMPLETION_TOKENS,
+  });
+}
+
+/**
+ * The ledger for a bounded SAFETY_REPLICATION run.
+ *
+ * Same prices, same fallback token bounds, same hard model maxima — all read from the governed
+ * candidate release, never restated here, so a published price change moves both ledgers together.
+ * Only the two ceilings differ, and both are narrower.
+ */
+export function createSafetyReplicationLedger(): RequestLedger {
+  return createRequestLedger({
+    maxRequests: SAFETY_REPLICATION_MAX_PROVIDER_REQUESTS,
+    maxCostUsd: SAFETY_REPLICATION_MAX_ESTIMATED_COST_USD,
     pricePerMillionInputUsd: CANDIDATE_PRICE_PER_M_INPUT_USD,
     pricePerMillionCachedInputUsd: CANDIDATE_PRICE_PER_M_CACHED_INPUT_USD,
     pricePerMillionOutputUsd: CANDIDATE_PRICE_PER_M_OUTPUT_USD,

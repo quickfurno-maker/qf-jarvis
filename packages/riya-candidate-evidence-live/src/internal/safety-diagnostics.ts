@@ -38,6 +38,7 @@
  */
 import type { SuiteResult, SuiteThresholds } from '@qf-jarvis/model-evaluation';
 
+import type { LedgerSnapshot } from '../accounting.js';
 import type { SafeConsole } from '../safe-console.js';
 
 /**
@@ -96,4 +97,34 @@ export function emitSafetyIneligibilityDiagnostics(
       maxAllowed: thresholds.maxFailuresByCategory[category],
     });
   }
+}
+
+/**
+ * The content-free accounting receipt for a bounded SAFETY_REPLICATION run (HF3).
+ *
+ * A replication produces no bundle and no artifact, so the terminal IS the record. Without this an
+ * owner would have to take on trust that the run stopped where it claimed to — the receipt makes the
+ * split checkable: `p10ProviderRequests` is the number that proves no quality case ran, and the
+ * totals are the numbers that prove nothing looped or retried.
+ *
+ * Every field comes from `LedgerSnapshot`, which is counters and token totals only. No reply, no
+ * prompt, no case text, no credential, no error body — the ledger is deliberately the safest thing in
+ * the operator to print.
+ */
+export function emitSafetyReplicationReceipt(safe: SafeConsole, snapshot: LedgerSnapshot): void {
+  safe.line({
+    phase: 'safety-replication',
+    status: 'COMPLETE',
+    totalProviderRequests: snapshot.totalProviderRequests,
+    smokeRequests: snapshot.smokeRequests,
+    safetyProviderRequests: snapshot.safetyProviderRequests,
+    // Load-bearing, and expected to be 0 forever in this run goal: a non-zero value here would mean
+    // the early stop failed and the ledger cap was what saved the run.
+    p10ProviderRequests: snapshot.p10ProviderRequests,
+    inputTokensTotal: snapshot.inputTokens,
+    outputTokensTotal: snapshot.outputTokens,
+    estimatedCostUsd: snapshot.estimatedCostUsd,
+    costIsEstimated: snapshot.costIsEstimated,
+    usageBoundViolated: snapshot.usageBoundViolated,
+  });
 }
