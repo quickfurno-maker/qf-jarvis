@@ -21,8 +21,13 @@ import {
   CANDIDATE_RELEASE,
   RIYA_CLIENT_PROMPT_DIGEST,
 } from '../candidate-release.js';
-import { parseCliArgs } from '../bin.js';
+import { ledgerForRunGoal, parseCliArgs } from '../bin.js';
 import { OPERATOR_EXIT_CODES, OPERATOR_OUTCOMES } from '../exit-codes.js';
+import {
+  DEFAULT_RUN_GOAL,
+  OPERATOR_RUN_GOALS,
+  SECOND_CREDENTIAL_NOTICES,
+} from '../internal/run-goal.js';
 import { runCandidateEvidenceOperator, SECOND_CREDENTIAL_NOTICE } from '../operator.js';
 import type { OperatorDeps } from '../operator.js';
 import type { CandidateSession } from '../candidate-session.js';
@@ -288,5 +293,152 @@ describe('smoke failure ends the run before the candidate exists', () => {
     expect(['PRECHECK_FAILED', 'SMOKE_FAILED']).toContain(result.outcome);
     expect(h.candidateCredentials()).toBe(0);
     expect(h.candidateSessions()).toBe(0);
+  });
+});
+
+describe('HF3 — the one optional governed run goal', () => {
+  it('THE OLD TWO-FLAG COMMAND STILL PARSES AND STILL MEANS FULL EVIDENCE', () => {
+    // The command an owner already has must keep meaning what it meant, with no new flag required.
+    const parsed = parseCliArgs([
+      '--smoke-config',
+      'C:\\x\\c.json',
+      '--review-output',
+      'C:\\y\\b.json',
+    ]);
+    expect(parsed.ok).toBe(true);
+    expect(parsed.ok ? parsed.args.runGoal : 'set').toBeUndefined();
+    expect(DEFAULT_RUN_GOAL).toBe('FULL_EVIDENCE');
+  });
+
+  it('accepts --run-goal SAFETY_REPLICATION alongside the two paths', () => {
+    const parsed = parseCliArgs([
+      '--smoke-config',
+      'C:\\x\\c.json',
+      '--review-output',
+      'C:\\y\\b.json',
+      '--run-goal',
+      'SAFETY_REPLICATION',
+    ]);
+    expect(parsed.ok).toBe(true);
+    expect(parsed.ok ? parsed.args.runGoal : undefined).toBe('SAFETY_REPLICATION');
+    expect(parsed.ok ? parsed.args.smokeConfig : undefined).toBe('C:\\x\\c.json');
+  });
+
+  it('--run-goal with no value is missing-value, not a silent default', () => {
+    expect(parseCliArgs(['--run-goal']).ok).toBe(false);
+    const bare = parseCliArgs(['--run-goal']);
+    expect(bare.ok ? undefined : bare.reason).toBe('missing-value');
+    const swallowing = parseCliArgs(['--run-goal', '--smoke-config', 'C:\\x\\c.json']);
+    expect(swallowing.ok ? undefined : swallowing.reason).toBe('missing-value');
+  });
+
+  it.each([
+    ['banana'],
+    ['safety_replication'],
+    ['SAFETY-REPLICATION'],
+    ['ALL'],
+    // Refused deliberately: absence already means full evidence, so a second spelling of the default
+    // is surface with no benefit.
+    ['FULL_EVIDENCE'],
+  ])('REFUSES --run-goal %s as invalid-run-goal', (value) => {
+    const parsed = parseCliArgs(['--run-goal', value]);
+    expect(parsed.ok).toBe(false);
+    expect(parsed.ok ? undefined : parsed.reason).toBe('invalid-run-goal');
+  });
+
+  it('A DUPLICATE --run-goal FAILS CLOSED RATHER THAN LETTING THE LAST WIN', () => {
+    // An ambiguous goal is exactly the kind of thing that silently becomes the wrong run.
+    const parsed = parseCliArgs([
+      '--run-goal',
+      'SAFETY_REPLICATION',
+      '--run-goal',
+      'SAFETY_REPLICATION',
+    ]);
+    expect(parsed.ok).toBe(false);
+    expect(parsed.ok ? undefined : parsed.reason).toBe('duplicate-run-goal');
+  });
+
+  it('THE GOAL VOCABULARY IS CLOSED, AND NEITHER MEMBER IS A BYPASS', () => {
+    expect([...OPERATOR_RUN_GOALS]).toStrictEqual(['FULL_EVIDENCE', 'SAFETY_REPLICATION']);
+    // No goal skips a gate or forces a verdict. Both notices are content-free and name no secret.
+    for (const goal of OPERATOR_RUN_GOALS) {
+      expect(SECOND_CREDENTIAL_NOTICES[goal]).not.toMatch(/sk-|key=|Bearer|Authorization/u);
+      expect(SECOND_CREDENTIAL_NOTICES[goal]).toContain('Smoke passed.');
+    }
+    // The replication notice must not promise the evidence run it will not perform.
+    expect(SECOND_CREDENTIAL_NOTICES.SAFETY_REPLICATION).toContain('safety diagnostic replication');
+    expect(SECOND_CREDENTIAL_NOTICES.FULL_EVIDENCE).toBe(SECOND_CREDENTIAL_NOTICE);
+  });
+
+  it('SAFETY_REPLICATION_COMPLETE IS EXIT 22, AND NOT ZERO', () => {
+    // Zero means "a bundle exists and two humans have not read it". A replication writes no bundle,
+    // so sharing that code would let a diagnostic run masquerade as the state before approval.
+    expect(OPERATOR_EXIT_CODES.SAFETY_REPLICATION_COMPLETE).toBe(22);
+    expect(OPERATOR_EXIT_CODES.SAFETY_REPLICATION_COMPLETE).not.toBe(0);
+    expect(OPERATOR_OUTCOMES).toContain('SAFETY_REPLICATION_COMPLETE');
+  });
+
+  it('EVERY PRE-HF3 EXIT CODE IS UNCHANGED', () => {
+    // A script reading `$LASTEXITCODE` against the old contract must keep meaning what it meant.
+    expect({
+      AWAITING_P10_HUMAN_REVIEW: OPERATOR_EXIT_CODES.AWAITING_P10_HUMAN_REVIEW,
+      PRECHECK_FAILED: OPERATOR_EXIT_CODES.PRECHECK_FAILED,
+      TTY_REQUIRED: OPERATOR_EXIT_CODES.TTY_REQUIRED,
+      SMOKE_FAILED: OPERATOR_EXIT_CODES.SMOKE_FAILED,
+      CANDIDATE_BIND_FAILED: OPERATOR_EXIT_CODES.CANDIDATE_BIND_FAILED,
+      SAFETY_INELIGIBLE: OPERATOR_EXIT_CODES.SAFETY_INELIGIBLE,
+      SAFETY_EVIDENCE_BLOCKED: OPERATOR_EXIT_CODES.SAFETY_EVIDENCE_BLOCKED,
+      P10_CAPTURE_BLOCKED: OPERATOR_EXIT_CODES.P10_CAPTURE_BLOCKED,
+      REVIEW_OUTPUT_REFUSED: OPERATOR_EXIT_CODES.REVIEW_OUTPUT_REFUSED,
+      REQUEST_LIMIT_REACHED: OPERATOR_EXIT_CODES.REQUEST_LIMIT_REACHED,
+      COST_LIMIT_REACHED: OPERATOR_EXIT_CODES.COST_LIMIT_REACHED,
+      INTERNAL_CLOSED_FAILURE: OPERATOR_EXIT_CODES.INTERNAL_CLOSED_FAILURE,
+      USAGE_BOUND_VIOLATED: OPERATOR_EXIT_CODES.USAGE_BOUND_VIOLATED,
+    }).toStrictEqual({
+      AWAITING_P10_HUMAN_REVIEW: 0,
+      PRECHECK_FAILED: 10,
+      TTY_REQUIRED: 11,
+      SMOKE_FAILED: 12,
+      CANDIDATE_BIND_FAILED: 13,
+      SAFETY_INELIGIBLE: 14,
+      SAFETY_EVIDENCE_BLOCKED: 15,
+      P10_CAPTURE_BLOCKED: 16,
+      REVIEW_OUTPUT_REFUSED: 17,
+      REQUEST_LIMIT_REACHED: 18,
+      COST_LIMIT_REACHED: 19,
+      INTERNAL_CLOSED_FAILURE: 20,
+      USAGE_BOUND_VIOLATED: 21,
+    });
+  });
+});
+
+describe('HF3 — the goal chooses the ledger, and the owner chooses no number', () => {
+  it('A SAFETY_REPLICATION GETS THE 11-REQUEST LEDGER, NOT THE FULL ONE', () => {
+    // A mutation campaign found this gap: swapping the replication ledger for the full 83-request one
+    // in `main()` changed nothing any test could see, because `main()` needs a real terminal and a
+    // real provider to run. A bounded run whose bound is untested is not bounded.
+    const ledger = ledgerForRunGoal('SAFETY_REPLICATION');
+    for (let index = 0; index < 11; index += 1) {
+      expect(ledger.reserve('safety'), `reservation ${String(index + 1)}`).toStrictEqual({
+        ok: true,
+      });
+    }
+    expect(ledger.reserve('safety')).toStrictEqual({
+      ok: false,
+      refusal: 'request-limit-reached',
+    });
+  });
+
+  it('FULL_EVIDENCE still gets the 83-request ledger', () => {
+    const ledger = ledgerForRunGoal('FULL_EVIDENCE');
+    for (let index = 0; index < 83; index += 1) {
+      expect(ledger.reserve('safety'), `reservation ${String(index + 1)}`).toStrictEqual({
+        ok: true,
+      });
+    }
+    expect(ledger.reserve('safety')).toStrictEqual({
+      ok: false,
+      refusal: 'request-limit-reached',
+    });
   });
 });

@@ -18,7 +18,7 @@
  * The answers are contract fixtures, not a simulated model. They exist so the machinery can be
  * observed crossing the branch; they say nothing about whether any candidate is good.
  */
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -41,7 +41,8 @@ import {
 import { RIYA_QUALITY_GOLDEN_FIXTURES } from '@qf-jarvis/riya-quality-evaluation/testing';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 
-import { createOperatorLedger } from '../accounting.js';
+import { createOperatorLedger, createSafetyReplicationLedger } from '../accounting.js';
+import type { OperatorRunGoal } from '../internal/run-goal.js';
 import type { BaseTurnDeps } from '../candidate-ports.js';
 import type { CandidateSession } from '../candidate-session.js';
 import {
@@ -302,13 +303,23 @@ function citationsForSafety(caseId: string): readonly TestCitation[] {
 // ---------------------------------------------------------------------------
 
 function successHarness(
-  options: { readonly leakSentinel?: boolean; readonly failStructuredOutput?: boolean } = {},
+  options: {
+    readonly leakSentinel?: boolean;
+    readonly failStructuredOutput?: boolean;
+    /** HF3. Absent means FULL_EVIDENCE, exactly as every pre-HF3 caller of this harness expects. */
+    readonly runGoal?: OperatorRunGoal;
+  } = {},
 ) {
   const lines: string[] = [];
   const configDir = externalDir();
   const { path: smokeConfigPath, digest: syntheticDigest } = writeSmokeConfig(configDir);
   const outputPath = join(externalDir(), 'riya-review-bundle.json');
-  const ledger = createOperatorLedger();
+  // The REAL ledger for the goal, so a replication is bounded by the real 11-request cap and the
+  // spill regression is genuine rather than staged.
+  const ledger =
+    options.runGoal === 'SAFETY_REPLICATION'
+      ? createSafetyReplicationLedger()
+      : createOperatorLedger();
   const recorder = deterministicSession(() => '2026-08-12T00:00:00.000Z', options);
 
   harnessState.syntheticDigest = syntheticDigest;
@@ -352,6 +363,7 @@ function successHarness(
       thresholdsVersion: 1,
     }),
     repoRoot: REPO_ROOT,
+    ...(options.runGoal === undefined ? {} : { runGoal: options.runGoal }),
   };
   return { deps, lines, recorder, ledger, outputPath };
 }
@@ -627,5 +639,108 @@ describe('full bounded operator reaches blinded human-review handoff', () => {
     expect(grounded).toHaveLength(18);
     expect(RIYA_QUALITY_GOLDEN_FIXTURES.length - grounded.length).toBe(54);
     expect(RIYA_SAFETY_FIXTURES).toHaveLength(17);
+  });
+});
+
+describe('HF3 — a bounded SAFETY_REPLICATION stops after the safety authority', () => {
+  it('AN ELIGIBLE REPLICATION STOPS BEFORE P10 AND WRITES NO BUNDLE', async () => {
+    // The load-bearing one, and ELIGIBLE is precisely the case that makes the stop necessary rather
+    // than decorative. RUN S1 was INELIGIBLE; the governed reading of an S1-INELIGIBLE /
+    // S2-ELIGIBLE disagreement is run-to-run variability an OWNER interprets. Continuing here would
+    // spend 72 provider calls and write a bundle before that interpretation happened — deciding by
+    // default the one question the replication exists to ask.
+    const harness = successHarness({ runGoal: 'SAFETY_REPLICATION' });
+    const result = await runCandidateEvidenceOperator(harness.deps);
+    const output = harness.lines.join('\n');
+
+    expect(output).toContain('phase=preflight status=PASS');
+    expect(output).toContain('phase=smoke status=PASS');
+    expect(output).toContain('phase=safety status=ELIGIBLE');
+    expect(result.outcome).toBe('SAFETY_REPLICATION_COMPLETE');
+    expect(output).toContain('finalStatus=SAFETY_REPLICATION_COMPLETE');
+
+    // No quality work of any kind.
+    expect(harness.recorder.qualityCases()).toStrictEqual([]);
+    expect(output).not.toContain('phase=p10');
+    expect(output).not.toContain('AWAITING_P10_HUMAN_REVIEW');
+    expect(result.reviewBundlePath).toBeUndefined();
+    expect(result.reviewCaseCount).toBeUndefined();
+    // The path preflight validated stays untouched, which is the claim an owner actually cares about.
+    expect(existsSync(harness.outputPath)).toBe(false);
+
+    // NOTE on counts: this harness substitutes a deterministic session for the accounted one, so its
+    // ledger only ever sees the smoke reservation. The real 1/10/72 split and the real 11-request
+    // ceiling are proved where real reservations happen -- `integrated-composition.test.ts` and
+    // `accounting.test.ts`. What IS decisive here is that zero quality work occurred at all.
+    expect(harness.ledger.snapshot().p10ProviderRequests).toBe(0);
+  });
+
+  it('the replication receipt reports the real split, content-free', async () => {
+    const harness = successHarness({ runGoal: 'SAFETY_REPLICATION' });
+    await runCandidateEvidenceOperator(harness.deps);
+    const receipt = harness.lines.find((line) => line.includes('phase=safety-replication'));
+
+    expect(receipt).toContain('status=COMPLETE');
+    expect(receipt).toContain('smokeRequests=1');
+    // The number that proves the stop held. See the harness note above for why the other counters
+    // are not asserted as absolutes here.
+    expect(receipt).toContain('p10ProviderRequests=0');
+    expect(receipt).toMatch(/totalProviderRequests=[0-9]+/u);
+    expect(receipt).toMatch(/estimatedCostUsd=[0-9.e-]+/u);
+    for (const forbidden of [
+      TEST_REPLIES.ENGLISH,
+      TEST_REPLIES.HINDI,
+      TEST_REPLIES.HINGLISH,
+      'sk-',
+      'SENTINEL-',
+      'Authorization',
+      'Bearer',
+      'apiKey',
+      'GROQ_API_KEY',
+      'https://',
+    ]) {
+      expect(harness.lines.join('\n'), `must not contain ${forbidden}`).not.toContain(forbidden);
+    }
+  });
+
+  it('AN INELIGIBLE REPLICATION STILL EMITS THE FULL HF2 DIAGNOSTICS', async () => {
+    // The new goal must not hide why a candidate failed — that is the whole point of running it.
+    const harness = successHarness({
+      runGoal: 'SAFETY_REPLICATION',
+      failStructuredOutput: true,
+    });
+    const result = await runCandidateEvidenceOperator(harness.deps);
+
+    expect(result.outcome).toBe('SAFETY_INELIGIBLE');
+    const summary = harness.lines.find((l) => l.includes('status=SUMMARY'));
+    const failedCase = harness.lines.find((l) => l.includes('status=CASE'));
+    const breach = harness.lines.find((l) => l.includes('status=THRESHOLD_BREACH'));
+    const verdict = harness.lines.find((l) => l.includes('status=INELIGIBLE'));
+
+    expect(summary).toContain('criticalFailures=0');
+    expect(failedCase).toContain('category=STRUCTURED_OUTPUT');
+    expect(breach).toContain('category=STRUCTURED_OUTPUT');
+    expect(verdict).toContain('reason=evidence-blocked-threshold');
+    // The authoritative verdict stays LAST, so the receipt cannot be mistaken for a second decision.
+    expect(harness.lines[harness.lines.length - 1]).toContain('status=INELIGIBLE');
+    expect(harness.lines.join('\n')).toContain('phase=safety-replication');
+
+    expect(harness.recorder.qualityCases()).toStrictEqual([]);
+    expect(existsSync(harness.outputPath)).toBe(false);
+    expect(harness.ledger.snapshot().p10ProviderRequests).toBe(0);
+  });
+
+  it('THE FULL DEFAULT RUN IS COMPLETELY UNCHANGED BY HF3', async () => {
+    // If this ever fails, HF3 turned the standard evidence operator into a safety-only run, which is
+    // the worst possible outcome of this change.
+    const harness = successHarness();
+    const result = await runCandidateEvidenceOperator(harness.deps);
+
+    expect(result.outcome).toBe('AWAITING_P10_HUMAN_REVIEW');
+    expect(harness.recorder.qualityCases().length).toBe(72);
+    expect(result.reviewCaseCount).toBe(72);
+    expect(existsSync(harness.outputPath)).toBe(true);
+    expect(harness.lines.join('\n')).not.toContain('phase=safety-replication');
+    expect(harness.lines.join('\n')).not.toContain('SAFETY_REPLICATION_COMPLETE');
   });
 });

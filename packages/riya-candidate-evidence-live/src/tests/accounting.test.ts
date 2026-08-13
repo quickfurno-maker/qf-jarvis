@@ -20,8 +20,14 @@ import {
 import {
   createOperatorLedger,
   createRequestLedger,
+  createSafetyReplicationLedger,
   MAX_ESTIMATED_COST_USD,
   MAX_PROVIDER_REQUESTS,
+  P10_REQUESTS,
+  SAFETY_MODEL_REQUIRED_REQUESTS,
+  SAFETY_REPLICATION_MAX_ESTIMATED_COST_USD,
+  SAFETY_REPLICATION_MAX_PROVIDER_REQUESTS,
+  SMOKE_REQUESTS,
 } from '../accounting.js';
 
 const WORST_CASE_PER_REQUEST_USD =
@@ -114,5 +120,87 @@ describe('reported usage is preferred, and an impossible figure closes the run',
     ledger.reserve('p10');
     ledger.settle({ inputTokens: 2_000, outputTokens: 300 }, true);
     expect(ledger.snapshot().usageBoundViolated).toBe(false);
+  });
+});
+
+describe('HF3 — the bounded SAFETY_REPLICATION ledger', () => {
+  it('the FULL ledger is untouched at 83 requests and USD 5', () => {
+    // First, because the thing most likely to go wrong in HF3 is narrowing the default by accident.
+    expect(MAX_PROVIDER_REQUESTS).toBe(83);
+    expect(MAX_ESTIMATED_COST_USD).toBe(5);
+    expect(SMOKE_REQUESTS + SAFETY_MODEL_REQUIRED_REQUESTS + P10_REQUESTS).toBe(83);
+  });
+
+  it('the replication ceiling is smoke + model-facing safety, DERIVED not typed', () => {
+    // Derived from the same two constants, so it cannot drift away from the split it describes.
+    expect(SAFETY_REPLICATION_MAX_PROVIDER_REQUESTS).toBe(11);
+    expect(SAFETY_REPLICATION_MAX_PROVIDER_REQUESTS).toBe(
+      SMOKE_REQUESTS + SAFETY_MODEL_REQUIRED_REQUESTS,
+    );
+    expect(SAFETY_REPLICATION_MAX_ESTIMATED_COST_USD).toBe(1);
+    expect(SAFETY_REPLICATION_MAX_PROVIDER_REQUESTS).toBeLessThan(MAX_PROVIDER_REQUESTS);
+    expect(SAFETY_REPLICATION_MAX_ESTIMATED_COST_USD).toBeLessThan(MAX_ESTIMATED_COST_USD);
+  });
+
+  it('ADMITS EXACTLY 11 RESERVATIONS AND REFUSES THE 12TH BEFORE THE CALL', () => {
+    const ledger = createSafetyReplicationLedger();
+    ledger.reserve('smoke');
+    for (let index = 0; index < SAFETY_MODEL_REQUIRED_REQUESTS; index += 1) {
+      expect(ledger.reserve('safety')).toStrictEqual({ ok: true });
+    }
+    expect(ledger.snapshot().totalProviderRequests).toBe(11);
+    // The 12th, refused BEFORE any provider is reached — and the count does not move, so a refusal
+    // cannot be mistaken for a spend.
+    expect(ledger.reserve('safety')).toStrictEqual({
+      ok: false,
+      refusal: 'request-limit-reached',
+    });
+    expect(ledger.snapshot().totalProviderRequests).toBe(11);
+  });
+
+  it('A P10 SPILL IS REFUSED EVEN IF THE OPERATOR EARLY STOP WERE REMOVED', () => {
+    // Defence in depth, and the reason the narrow ledger exists at all rather than just a code path.
+    // The primary invariant is the operator's early return; this proves that if somebody deleted it,
+    // the FIRST quality reservation is request 12 and never reaches the provider.
+    const ledger = createSafetyReplicationLedger();
+    ledger.reserve('smoke');
+    for (let index = 0; index < SAFETY_MODEL_REQUIRED_REQUESTS; index += 1) {
+      ledger.reserve('safety');
+    }
+    expect(ledger.reserve('p10')).toStrictEqual({ ok: false, refusal: 'request-limit-reached' });
+    expect(ledger.snapshot().p10ProviderRequests).toBe(0);
+  });
+
+  it('a complete replication needs no p10 reservation at all', () => {
+    const ledger = createSafetyReplicationLedger();
+    expect(ledger.reserve('smoke')).toStrictEqual({ ok: true });
+    for (let index = 0; index < SAFETY_MODEL_REQUIRED_REQUESTS; index += 1) {
+      expect(ledger.reserve('safety')).toStrictEqual({ ok: true });
+    }
+    const snapshot = ledger.snapshot();
+    expect(snapshot.smokeRequests).toBe(1);
+    expect(snapshot.safetyProviderRequests).toBe(10);
+    expect(snapshot.p10ProviderRequests).toBe(0);
+  });
+
+  it('ELEVEN WORST-CASE REQUESTS STILL FIT INSIDE USD 1 AT TODAY’S GOVERNED PRICES', () => {
+    // Arithmetic, not a wish. If a published price or a declared maximum ever rises far enough that
+    // 11 worst-case calls no longer fit the USD 1 ceiling, this fails and forces a review rather
+    // than letting a replication refuse itself halfway through for cost.
+    expect(WORST_CASE_PER_REQUEST_USD * SAFETY_REPLICATION_MAX_PROVIDER_REQUESTS).toBeLessThan(
+      SAFETY_REPLICATION_MAX_ESTIMATED_COST_USD,
+    );
+    const ledger = createSafetyReplicationLedger();
+    for (let index = 0; index < SAFETY_REPLICATION_MAX_PROVIDER_REQUESTS; index += 1) {
+      // Every reservation prices the NEXT call at the hard maxima, so a cost refusal here would mean
+      // the ceiling is not actually reachable.
+      expect(ledger.reserve('safety'), `reservation ${String(index + 1)}`).toStrictEqual({
+        ok: true,
+      });
+      ledger.settle(undefined, true);
+    }
+    expect(ledger.snapshot().estimatedCostUsd).toBeLessThan(
+      SAFETY_REPLICATION_MAX_ESTIMATED_COST_USD,
+    );
   });
 });

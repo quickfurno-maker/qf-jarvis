@@ -42,7 +42,10 @@ import {
   createTransportStartHook,
 } from './cancellation-transport.js';
 import { createCandidateGateway } from './evaluation-gateway.js';
-import { createOperatorLedger } from './accounting.js';
+import { createOperatorLedger, createSafetyReplicationLedger } from './accounting.js';
+import type { RequestLedger } from './accounting.js';
+import { DEFAULT_RUN_GOAL } from './internal/run-goal.js';
+import type { OperatorRunGoal } from './internal/run-goal.js';
 import { OPERATOR_EXIT_CODES } from './exit-codes.js';
 import { runCandidateEvidenceOperator } from './operator.js';
 import { createStdoutSafeConsole } from './safe-console.js';
@@ -51,23 +54,57 @@ import {
   RIYA_CLIENT_SALES_PROMPT_VERSION,
 } from '@qf-jarvis/riya-prompts';
 
-/** The only two flags. Anything else is a refusal, never a default. */
+/** Two path flags and one optional governed goal. Anything else is a refusal, never a default. */
 export interface CliArgs {
   readonly smokeConfig?: string;
   readonly reviewOutput?: string;
+  /** Absent means FULL_EVIDENCE, so the old two-flag command behaves exactly as it did before HF3. */
+  readonly runGoal?: OperatorRunGoal;
 }
 
 export type CliParse =
   | { readonly ok: true; readonly args: CliArgs }
-  | { readonly ok: false; readonly reason: 'unknown-argument' | 'missing-value' };
+  | {
+      readonly ok: false;
+      readonly reason:
+        'unknown-argument' | 'missing-value' | 'invalid-run-goal' | 'duplicate-run-goal';
+    };
 
-/** Parse argv. Pure, so a spec can prove the refusals without spawning a process. */
+/**
+ * Parse argv. Pure, so a spec can prove the refusals without spawning a process.
+ *
+ * HF3 adds exactly one flag. `--run-goal SAFETY_REPLICATION` names a pre-reviewed PURPOSE, not a
+ * bypass: it makes the run strictly more conservative by stopping after the safety authority. There
+ * is deliberately no `--skip-p10`, `--skip-safety`, `--force`, `--max-requests`, `--max-cost`,
+ * `--model`, `--provider` or `--api-key` — an operator selects a governed goal, never a bound
+ * and never a verdict.
+ *
+ * `FULL_EVIDENCE` is refused as a VALUE even though it is a real goal, because absence already
+ * means it and two spellings of one default is surface for no benefit.
+ */
 export function parseCliArgs(argv: readonly string[]): CliParse {
   let smokeConfig: string | undefined;
   let reviewOutput: string | undefined;
+  let runGoal: OperatorRunGoal | undefined;
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
     const value = argv[index + 1];
+    if (flag === '--run-goal') {
+      if (value === undefined || value.startsWith('--')) {
+        return { ok: false, reason: 'missing-value' };
+      }
+      // Fail closed rather than letting the last spelling win: an ambiguous goal is precisely the
+      // kind of thing that silently becomes the wrong run.
+      if (runGoal !== undefined) {
+        return { ok: false, reason: 'duplicate-run-goal' };
+      }
+      if (value !== 'SAFETY_REPLICATION') {
+        return { ok: false, reason: 'invalid-run-goal' };
+      }
+      runGoal = 'SAFETY_REPLICATION';
+      index += 1;
+      continue;
+    }
     if (flag === '--smoke-config' || flag === '--review-output') {
       if (value === undefined || value.startsWith('--')) {
         return { ok: false, reason: 'missing-value' };
@@ -87,11 +124,23 @@ export function parseCliArgs(argv: readonly string[]): CliParse {
     args: {
       ...(smokeConfig === undefined ? {} : { smokeConfig }),
       ...(reviewOutput === undefined ? {} : { reviewOutput }),
+      ...(runGoal === undefined ? {} : { runGoal }),
     },
   };
 }
 
 /** The repository root, four levels up from this module. Used only to keep the bundle outside it. */
+/**
+ * The ledger a goal is entitled to. The owner supplies a GOAL, never a number.
+ *
+ * Named and exported rather than inlined because a mutation campaign found the inline form: swapping
+ * the replication ledger for the full one changed nothing any test could see, since `main()` needs a
+ * real terminal and a real provider to run. A bounded run whose bound is untested is not bounded.
+ */
+export function ledgerForRunGoal(goal: OperatorRunGoal): RequestLedger {
+  return goal === 'SAFETY_REPLICATION' ? createSafetyReplicationLedger() : createOperatorLedger();
+}
+
 function repoRoot(): string {
   return fileURLToPath(new URL('../../../', import.meta.url));
 }
@@ -109,7 +158,8 @@ async function main(): Promise<number> {
   // which is exactly the ordering this operator claims to guarantee.
   const interactive = process.stdin.isTTY && process.stdout.isTTY;
 
-  const ledger = createOperatorLedger();
+  const runGoal = parsed.args.runGoal ?? DEFAULT_RUN_GOAL;
+  const ledger = ledgerForRunGoal(runGoal);
   const result = await runCandidateEvidenceOperator({
     console: safe,
     preflight: {
@@ -119,6 +169,7 @@ async function main(): Promise<number> {
       interactive,
     },
     ledger,
+    runGoal,
     // ONE source, created only after preflight passed, and handed straight to the smoke harness
     // below. The harness owns the TTY gate, the resolver, the single read and the single bind.
     openSmokeSecretSource: () => Promise.resolve(createNodeMaskedSecretSource()),
