@@ -40,6 +40,7 @@ import type { RequestLedger } from './accounting.js';
 import type { CandidateSession } from './candidate-session.js';
 import { createQualityCandidatePort, createSafetyCandidatePort } from './candidate-ports.js';
 import type { OperatorOutcome } from './exit-codes.js';
+import { emitSafetyIneligibilityDiagnostics } from './internal/safety-diagnostics.js';
 import { runPreflight } from './preflight.js';
 import type { PreflightInput } from './preflight.js';
 import type { SafeConsole } from './safe-console.js';
@@ -210,6 +211,12 @@ export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<
     createdAt: '2026-08-12T00:00:00.000Z',
   });
   if (!evidence.ok) {
+    // HF2. The suite is EVALUATED here -- every case completed and was judged -- so the SuiteResult
+    // already names which case, in which category, breached which ceiling. RUN S1 printed only the
+    // verdict and exited, and those facts died with the process: the run writes no safety artifact,
+    // so there was nothing left to read. The detail is emitted BEFORE the verdict; the verdict line
+    // below is unchanged, and so is the outcome.
+    emitSafetyIneligibilityDiagnostics(safe, safety.suiteResult, deps.thresholds);
     safe.line({ phase: 'safety', status: 'INELIGIBLE', reason: evidence.code });
     return { outcome: 'SAFETY_INELIGIBLE' };
   }
