@@ -25,7 +25,31 @@ import { preflightCore, WORST_CASE_REQUEST_USD } from './internal/preflight-core
 
 export { WORST_CASE_REQUEST_USD };
 
-/** The expected SHA-256 of the governed, secret-free smoke configuration. */
+/**
+ * The governed SEMANTIC approval digest of the secret-free smoke configuration (QFJ-S1C).
+ *
+ * The name is kept, because it is the governance identity and renaming it would suggest the approval
+ * changed when only our understanding of it did. What it means is stated exactly here, because HF1
+ * existed entirely because it had been misread:
+ *
+ *   - It is the SHA-256 of the approved CONFIGURATION — the values, canonically serialized with keys
+ *     sorted by Unicode code point, compact, UTF-8, no BOM, no trailing newline. 709 bytes.
+ *   - It EXCLUDES `release.configDigest`, because a digest cannot be an input to its own computation.
+ *   - It is NOT the SHA-256 of the serialized file. The generator's own emitted file is 888
+ *     pretty-printed bytes and hashes to something else; a raw serialization hash is not, and never
+ *     was, the governance identity.
+ *
+ * Three properties follow, and preflight relies on all three:
+ *
+ *   - Harmless formatting differences — indentation, key order, a trailing newline — do NOT change
+ *     the approved identity, because they do not change the configuration.
+ *   - An added field still fails, and fails EARLIER: `parseSmokeConfig` is `.strict()` over a closed
+ *     key-path allow-list, so an unapproved field never reaches approval at all.
+ *   - A changed approved VALUE fails, because recomputation from the parsed config changes.
+ *
+ * The embedded `release.configDigest` is verified SEPARATELY against this same constant. Self-exclusion
+ * means recomputation is structurally blind to it, so that second check is not redundant.
+ */
 export const EXPECTED_SMOKE_CONFIG_DIGEST =
   '4f97ef1e9e46905db253912bd56dab8aea4f38e4d606dfe93b16fc024f0c2be1';
 

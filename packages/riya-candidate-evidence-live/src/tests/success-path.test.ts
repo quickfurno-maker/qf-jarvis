@@ -18,13 +18,14 @@
  * The answers are contract fixtures, not a simulated model. They exist so the machinery can be
  * observed crossing the branch; they say nothing about whether any candidate is good.
  */
-import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
+  computeSmokeApprovalDigest,
+  parseSmokeConfig,
   SMOKE_PROMPT_FAMILY,
   SMOKE_PROMPT_VERSION,
   SMOKE_SCHEMA_REVISION,
@@ -101,36 +102,50 @@ const SMOKE_PASS = {
   diagnostics: {},
 } as unknown as SmokeRunResult;
 
-function writeSmokeConfig(directory: string): string {
+function writeSmokeConfig(directory: string): { readonly path: string; readonly digest: string } {
   const path = join(directory, 'groq-smoke-config.json');
+  const draft = {
+    credentialReference: 'secret.qfj-staging.groq.v1',
+    release: {
+      releaseId: 'rel.groq.qfj-staging.smoke.v1',
+      providerId: 'groq',
+      modelId: 'openai/gpt-oss-20b',
+      modelVersion: 'groq-catalog-snapshot-2026-08-12',
+      executionClass: 'HOSTED',
+      configDigest: 'a'.repeat(64),
+    },
+    dataClass: 'HOSTED_ALLOWED',
+    maxInputTokens: 4096,
+    maxCompletionTokens: 512,
+    supportsStrictJsonSchema: true,
+    capabilityProfileRef: CANDIDATE_CAPABILITY_PROFILE_REF,
+    evaluationRef: 'eval.groq.qfj-staging.smoke.v1',
+    dataControlsAttestationRef: 'att.groq.qfj-staging.global-zdr.2026-07-28',
+    dataControlsAttested: true,
+    promptFamily: SMOKE_PROMPT_FAMILY,
+    promptVersion: SMOKE_PROMPT_VERSION,
+    schemaRevision: SMOKE_SCHEMA_REVISION,
+    timeoutMs: 15_000,
+  };
+  // HF1. This used to write the config and then SHA-256 its own bytes as the expected digest, which
+  // is precisely the mistake that shipped: a harness grading itself agrees with itself no matter what
+  // preflight compares. The synthetic expected digest is now the SEMANTIC one, recomputed from the
+  // PARSED config through the same production helper preflight uses, and the embedded
+  // `release.configDigest` is set to that same value so both independent checks are genuinely
+  // exercised rather than accidentally satisfied.
+  const parsed = parseSmokeConfig(draft);
+  if (!parsed.ok) {
+    throw new Error(
+      'The synthetic smoke configuration must parse, or this harness proves nothing.',
+    );
+  }
+  const digest = computeSmokeApprovalDigest(parsed.config);
   writeFileSync(
     path,
-    JSON.stringify({
-      credentialReference: 'secret.qfj-staging.groq.v1',
-      release: {
-        releaseId: 'rel.groq.qfj-staging.smoke.v1',
-        providerId: 'groq',
-        modelId: 'openai/gpt-oss-20b',
-        modelVersion: 'groq-catalog-snapshot-2026-08-12',
-        executionClass: 'HOSTED',
-        configDigest: 'a'.repeat(64),
-      },
-      dataClass: 'HOSTED_ALLOWED',
-      maxInputTokens: 4096,
-      maxCompletionTokens: 512,
-      supportsStrictJsonSchema: true,
-      capabilityProfileRef: CANDIDATE_CAPABILITY_PROFILE_REF,
-      evaluationRef: 'eval.groq.qfj-staging.smoke.v1',
-      dataControlsAttestationRef: 'att.groq.qfj-staging.global-zdr.2026-07-28',
-      dataControlsAttested: true,
-      promptFamily: SMOKE_PROMPT_FAMILY,
-      promptVersion: SMOKE_PROMPT_VERSION,
-      schemaRevision: SMOKE_SCHEMA_REVISION,
-      timeoutMs: 15_000,
-    }),
+    JSON.stringify({ ...draft, release: { ...draft.release, configDigest: digest } }),
     'utf8',
   );
-  return path;
+  return { path, digest };
 }
 
 // ---------------------------------------------------------------------------
@@ -278,14 +293,12 @@ function citationsForSafety(caseId: string): readonly TestCitation[] {
 function successHarness(options: { readonly leakSentinel?: boolean } = {}) {
   const lines: string[] = [];
   const configDir = externalDir();
-  const smokeConfigPath = writeSmokeConfig(configDir);
+  const { path: smokeConfigPath, digest: syntheticDigest } = writeSmokeConfig(configDir);
   const outputPath = join(externalDir(), 'riya-review-bundle.json');
   const ledger = createOperatorLedger();
   const recorder = deterministicSession(() => '2026-08-12T00:00:00.000Z', options);
 
-  harnessState.syntheticDigest = createHash('sha256')
-    .update(readFileSync(smokeConfigPath))
-    .digest('hex');
+  harnessState.syntheticDigest = syntheticDigest;
 
   const source: MaskedSecretSource = {
     isInteractive: () => true,

@@ -194,10 +194,12 @@ describe('(41, 42) package-root runtime API locks', () => {
 });
 
 describe('(43, 44, 45) sibling package API locks are undisturbed', () => {
-  it('(43) groq-staging-smoke remains 24', () => {
+  it('(43) groq-staging-smoke remains 27', () => {
     expect(
       readRepo('packages/groq-staging-smoke/src/tests/credential-ingress-diagnostics.test.ts'),
-    ).toContain('toHaveLength(24)');
+      // MVP-P2A.2 HF1 restated the sibling count from 24 to 27 for the semantic approval-digest
+      // helper. This lock tracks that package's own assertion, so it moves with it.
+    ).toContain('toHaveLength(27)');
   });
 
   it('(44) model-evaluation remains 35', () => {

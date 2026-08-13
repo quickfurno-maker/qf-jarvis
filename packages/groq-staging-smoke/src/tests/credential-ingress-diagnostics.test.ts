@@ -513,9 +513,11 @@ describe('(15, 16, 17, 18, 19, 20, 21) behaviour locks', () => {
 });
 
 describe('(22-27) package, repository, and hygiene invariants', () => {
-  it('(22) the groq-staging-smoke package-root API is unchanged at 24', async () => {
+  it('(22) the groq-staging-smoke package-root API is unchanged at 27', async () => {
     const barrel = (await import('../index.js')) as unknown as Record<string, unknown>;
-    expect(Object.keys(barrel)).toHaveLength(24);
+    // 24 -> 27 for MVP-P2A.2 HF1: the semantic approval digest helper and its two readable parts.
+    // Counted, not merely permitted -- the exact-set lock in containment names all three.
+    expect(Object.keys(barrel)).toHaveLength(27);
     for (const internal of [
       'CREDENTIAL_OUTCOMES',
       'MaskedSecretReadError',

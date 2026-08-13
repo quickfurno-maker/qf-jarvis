@@ -248,6 +248,13 @@ describe('dependency graph, exports, and the locked public API', () => {
   });
 
   it('(55) locks the root barrel surface', () => {
+    // MVP-P2A.2 HF1 adds three: `computeSmokeApprovalDigest` and its two readable parts. They are the
+    // SEMANTIC approval digest of a parsed configuration -- the values, not the file bytes -- and the
+    // candidate evidence operator needs them because hashing the serialized file to verify an approval
+    // was the exact defect HF1 repaired. Pure functions over an already-parsed `SmokeConfig`: no
+    // filesystem, no clock, no network, no credential, and no way to reach one.
+    //
+    // Still an EXACT set match. This records three authorised additions; it does not relax the lock.
     const EXPECTED = [
       'CREDENTIAL_PROMPT_LABEL',
       'MAX_CREDENTIAL_LENGTH',
@@ -261,6 +268,8 @@ describe('dependency graph, exports, and the locked public API', () => {
       'SMOKE_SUCCESS_REASON',
       'SYNTHETIC_SMOKE_JSON_SCHEMA',
       'SYNTHETIC_SMOKE_MESSAGES',
+      'canonicalSmokeApprovalJson',
+      'computeSmokeApprovalDigest',
       'createMaskedTtyCredentialResolver',
       'createNodeMaskedSecretSource',
       'createSystemSmokeTimer',
@@ -273,6 +282,7 @@ describe('dependency graph, exports, and the locked public API', () => {
       'parseSmokeConfig',
       'runGroqStagingSmokeOnce',
       'runSmokeCli',
+      'smokeApprovalDigestPayload',
     ];
     expect(Object.keys(barrel).sort()).toEqual([...EXPECTED].sort());
   });

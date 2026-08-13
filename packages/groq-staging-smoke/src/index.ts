@@ -40,6 +40,15 @@ export {
   type SmokeConfigResult,
 } from './config.js';
 
+// The SEMANTIC approval digest of a parsed configuration — the values, not the file bytes. Exported
+// because the candidate evidence operator must verify the approval a config carries, and hashing the
+// serialized file to do it is the exact defect HF1 repaired.
+export {
+  computeSmokeApprovalDigest,
+  canonicalSmokeApprovalJson,
+  smokeApprovalDigestPayload,
+} from './config-digest.js';
+
 // The concrete masked-TTY credential ingress (outside @qf-jarvis/model-gateway). No key accessor.
 export {
   createMaskedTtyCredentialResolver,
