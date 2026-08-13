@@ -508,7 +508,10 @@ describe('(71-77) package API and dependency locks are untouched', () => {
       'model-evaluation': 35,
       'model-gateway': 71,
       'model-gateway-composition': 2,
-      'groq-staging-smoke': 24,
+      // MVP-P2A.2 HF1: 24 -> 27. The semantic approval-digest helper and its two readable parts.
+      // Pure functions over an already-parsed SmokeConfig -- no filesystem, no clock, no network, no
+      // credential. Restated exactly; the count is still pinned.
+      'groq-staging-smoke': 27,
       'event-backbone': 39,
       // QFJ-S3-D-A (ADR-0070): the new Anisha behaviour package, locked from the day it lands.
       'anisha-agent': 14,

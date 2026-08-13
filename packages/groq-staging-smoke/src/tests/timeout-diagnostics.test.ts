@@ -747,9 +747,11 @@ describe('(23, 24, 25, 26, 27, 28) the S1A contract is unchanged', () => {
 });
 
 describe('(29-35) package, repository, and hygiene invariants', () => {
-  it('(29) the groq-staging-smoke package-root API is unchanged at 24 symbols', async () => {
+  it('(29) the groq-staging-smoke package-root API is unchanged at 27 symbols', async () => {
     const barrel = (await import('../index.js')) as unknown as Record<string, unknown>;
-    expect(Object.keys(barrel)).toHaveLength(24);
+    // 24 -> 27 for MVP-P2A.2 HF1: the semantic approval digest helper and its two readable parts.
+    // Counted, not merely permitted -- the exact-set lock in containment names all three.
+    expect(Object.keys(barrel)).toHaveLength(27);
     // The diagnostics surface stays INTERNAL — imported relatively, never re-exported.
     for (const internal of [
       'createDiagnosticRecorder',

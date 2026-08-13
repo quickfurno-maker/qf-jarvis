@@ -12,8 +12,7 @@
  *
  * No network, no terminal, no key.
  */
-import { createHash } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -22,6 +21,8 @@ import { createGroqApiKey } from '@qf-jarvis/model-gateway';
 import type { GroqTransport } from '@qf-jarvis/model-gateway';
 import type { MaskedSecretSource, SmokeRunResult } from '@qf-jarvis/groq-staging-smoke';
 import {
+  computeSmokeApprovalDigest,
+  parseSmokeConfig,
   SMOKE_PROMPT_FAMILY,
   SMOKE_PROMPT_VERSION,
   SMOKE_SCHEMA_REVISION,
@@ -118,36 +119,50 @@ const SMOKE_FAIL = {
 } as unknown as SmokeRunResult;
 
 /** The governed, secret-free smoke configuration shape the loader accepts. */
-function writeSmokeConfig(directory: string): string {
+function writeSmokeConfig(directory: string): { readonly path: string; readonly digest: string } {
   const path = join(directory, 'groq-smoke-config.json');
+  const draft = {
+    credentialReference: 'secret.qfj-staging.groq.v1',
+    release: {
+      releaseId: 'rel.groq.qfj-staging.smoke.v1',
+      providerId: 'groq',
+      modelId: 'openai/gpt-oss-20b',
+      modelVersion: 'groq-catalog-snapshot-2026-08-12',
+      executionClass: 'HOSTED',
+      configDigest: 'a'.repeat(64),
+    },
+    dataClass: 'HOSTED_ALLOWED',
+    maxInputTokens: 4096,
+    maxCompletionTokens: 512,
+    supportsStrictJsonSchema: true,
+    capabilityProfileRef: CANDIDATE_CAPABILITY_PROFILE_REF,
+    evaluationRef: 'eval.groq.qfj-staging.smoke.v1',
+    dataControlsAttestationRef: 'att.groq.qfj-staging.global-zdr.2026-07-28',
+    dataControlsAttested: true,
+    promptFamily: SMOKE_PROMPT_FAMILY,
+    promptVersion: SMOKE_PROMPT_VERSION,
+    schemaRevision: SMOKE_SCHEMA_REVISION,
+    timeoutMs: 15_000,
+  };
+  // HF1. This used to write the config and then SHA-256 its own bytes as the expected digest, which
+  // is precisely the mistake that shipped: a harness grading itself agrees with itself no matter what
+  // preflight compares. The synthetic expected digest is now the SEMANTIC one, recomputed from the
+  // PARSED config through the same production helper preflight uses, and the embedded
+  // `release.configDigest` is set to that same value so both independent checks are genuinely
+  // exercised rather than accidentally satisfied.
+  const parsed = parseSmokeConfig(draft);
+  if (!parsed.ok) {
+    throw new Error(
+      'The synthetic smoke configuration must parse, or this harness proves nothing.',
+    );
+  }
+  const digest = computeSmokeApprovalDigest(parsed.config);
   writeFileSync(
     path,
-    JSON.stringify({
-      credentialReference: 'secret.qfj-staging.groq.v1',
-      release: {
-        releaseId: 'rel.groq.qfj-staging.smoke.v1',
-        providerId: 'groq',
-        modelId: 'openai/gpt-oss-20b',
-        modelVersion: 'groq-catalog-snapshot-2026-08-12',
-        executionClass: 'HOSTED',
-        configDigest: 'a'.repeat(64),
-      },
-      dataClass: 'HOSTED_ALLOWED',
-      maxInputTokens: 4096,
-      maxCompletionTokens: 512,
-      supportsStrictJsonSchema: true,
-      capabilityProfileRef: CANDIDATE_CAPABILITY_PROFILE_REF,
-      evaluationRef: 'eval.groq.qfj-staging.smoke.v1',
-      dataControlsAttestationRef: 'att.groq.qfj-staging.global-zdr.2026-07-28',
-      dataControlsAttested: true,
-      promptFamily: SMOKE_PROMPT_FAMILY,
-      promptVersion: SMOKE_PROMPT_VERSION,
-      schemaRevision: SMOKE_SCHEMA_REVISION,
-      timeoutMs: 15_000,
-    }),
+    JSON.stringify({ ...draft, release: { ...draft.release, configDigest: digest } }),
     'utf8',
   );
-  return path;
+  return { path, digest };
 }
 
 interface Recorded {
@@ -165,7 +180,7 @@ interface Recorded {
 function integrated(options: { readonly smoke: SmokeRunResult }): Recorded {
   const lines: string[] = [];
   const dir = externalDir();
-  const smokeConfigPath = writeSmokeConfig(dir);
+  const { path: smokeConfigPath, digest: syntheticDigest } = writeSmokeConfig(dir);
   const ledger = createOperatorLedger();
 
   let smokeSources = 0;
@@ -178,9 +193,7 @@ function integrated(options: { readonly smoke: SmokeRunResult }): Recorded {
   const abort = createTransportBoundaryAbort();
   let session: ReturnType<typeof createAccountedSession> | undefined;
 
-  harnessState.syntheticDigest = createHash('sha256')
-    .update(readFileSync(smokeConfigPath))
-    .digest('hex');
+  harnessState.syntheticDigest = syntheticDigest;
 
   const deps: OperatorDeps = {
     console: createSafeConsole((line) => lines.push(line)),

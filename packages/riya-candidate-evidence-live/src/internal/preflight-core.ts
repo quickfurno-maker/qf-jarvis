@@ -9,10 +9,10 @@
  * a seam that only test code can reach is a test seam, and one every caller can reach is a bypass.
  */
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 import { isAbsolute, resolve, sep } from 'node:path';
 
-import { loadSmokeConfig } from '@qf-jarvis/groq-staging-smoke';
+import { computeSmokeApprovalDigest, loadSmokeConfig } from '@qf-jarvis/groq-staging-smoke';
 import { createRiyaPromptRegistryV1 } from '@qf-jarvis/riya-prompts';
 import {
   RIYA_CLIENT_SALES_PROMPT_ID,
@@ -85,15 +85,36 @@ export function preflightCore(input: PreflightInput, expectedDigest: string): Pr
   if (!loaded.ok) {
     return fail('smoke-config-unreadable');
   }
-  // The WHOLE file, not the parsed subset: a digest over the parse would not notice a field the
-  // loader ignored.
-  let digest: string;
-  try {
-    digest = createHash('sha256').update(readFileSync(input.smokeConfigPath)).digest('hex');
-  } catch {
-    return fail('smoke-config-unreadable');
+
+  // HF1. This used to SHA-256 the WHOLE serialized file and compare that to the governed approval
+  // digest, on the reasoning that a digest over the parse would miss a field the loader ignored. Both
+  // halves of that were wrong. The loader ignores nothing -- `parseSmokeConfig` is `.strict()` with a
+  // closed key-path allow-list, so an extra field fails the config outright, above, before approval is
+  // ever considered. And the governed digest is not a file digest at all: it commits to the approved
+  // CONFIGURATION, canonically serialized WITHOUT `release.configDigest`, because a digest cannot be
+  // an input to its own computation. The emitted file is necessarily larger than what was hashed,
+  // precisely because it carries that hash inside itself.
+  //
+  // So the two numbers could never have matched, for the correct config or any other: the approved
+  // payload is 709 canonical bytes hashing to the governed value, while the generator's own emitted
+  // file is 888 pretty-printed bytes hashing to something else entirely. Preflight refused the
+  // unmodified, correctly generated configuration.
+  //
+  // Two independent checks replace it, and BOTH are required because neither can see what the other
+  // does:
+  //
+  //   1. Recomputation catches drift in an approved VALUE. Change `timeoutMs` and this fails, even if
+  //      the file still claims the approved digest.
+  //   2. The embedded comparison catches drift in the CLAIM about those values. Self-exclusion means
+  //      recomputation is blind to `release.configDigest` by construction, so a tampered embedded
+  //      digest would otherwise sail through.
+  //
+  // Checking only one of them is a hole. Checking the embedded value alone would be trusting the file
+  // to grade itself.
+  if (computeSmokeApprovalDigest(loaded.config) !== expectedDigest) {
+    return fail('smoke-config-digest-mismatch');
   }
-  if (digest !== expectedDigest) {
+  if (loaded.config.release.configDigest !== expectedDigest) {
     return fail('smoke-config-digest-mismatch');
   }
   if (loaded.config.release.modelId !== CANDIDATE_MODEL_ID) {
