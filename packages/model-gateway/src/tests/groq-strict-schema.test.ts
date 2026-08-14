@@ -308,3 +308,83 @@ describe('the response format a compatible schema produces', () => {
     });
   });
 });
+
+describe('HF4-R1 — the DOCUMENTED nullable scalar type-array form', () => {
+  // Owner review caught a false negative: Groq's strict Structured Outputs documentation demonstrates
+  // optional-as-nullable via `type: ["string","null"]` with the property still required, and the
+  // first HF4 checker knew only `anyOf`. The repaired Riya schemas were never affected — Zod 4.4.3
+  // renders their nullable `reasonCode` through `anyOf` — but a checker that rejects a form the
+  // provider demonstrates is wrong as a general contract.
+  const nullable = (type: unknown): Record<string, unknown> => ({
+    type: 'object',
+    properties: { nickname: { type } },
+    required: ['nickname'],
+    additionalProperties: false,
+  });
+
+  it.each([
+    ['T1 ["string","null"]', ['string', 'null']],
+    ['T2 ["null","string"] — order does not matter', ['null', 'string']],
+    ['T3 ["number","null"]', ['number', 'null']],
+    ['T4 ["integer","null"]', ['integer', 'null']],
+    ['T5 ["boolean","null"]', ['boolean', 'null']],
+  ])('accepts %s', (_name, type) => {
+    expect(isStrictCompatibleJsonSchema(nullable(type))).toBe(true);
+  });
+
+  it('T1 also builds a strict json_schema response format', () => {
+    const built = buildResponseFormat(nullable(['string', 'null']), true);
+    expect(built.ok).toBe(true);
+    if (!built.ok) return;
+    expect(built.responseFormat.type).toBe('json_schema');
+    expect(built.responseFormat).toMatchObject({ json_schema: { strict: true } });
+  });
+
+  it.each([
+    ['T6  an empty type array', []],
+    ['T7  a single-member array', ['string']],
+    ['T8  a duplicated member', ['string', 'string']],
+    ['T9  two non-null scalars — NOT general multi-type support', ['string', 'number']],
+    ['T10 three members', ['string', 'null', 'number']],
+    ['T11 an unknown member', ['geometry', 'null']],
+    ['T12 a non-string member', ['string', 42]],
+    ['    a null-only pair', ['null', 'null']],
+    ['    a nested type array', [['string'], 'null']],
+  ])('REFUSES %s', (_name, type) => {
+    expect(isStrictCompatibleJsonSchema(nullable(type))).toBe(false);
+  });
+
+  it('an invalid type array is refused BEFORE transport, with no downgrade', () => {
+    expect(buildResponseFormat(nullable(['string', 'number']), true)).toStrictEqual({ ok: false });
+  });
+
+  it('sibling scalar constraints on a nullable type are preserved, not stripped', () => {
+    // The check decides SHAPE. Dropping `enum`/`pattern`/`minLength` would silently widen what the
+    // model may return, which is the opposite of the point.
+    expect(
+      isStrictCompatibleJsonSchema({
+        type: 'object',
+        properties: {
+          code: { type: ['string', 'null'], minLength: 1, maxLength: 64, pattern: '^[a-z.]+$' },
+          pick: { type: ['string', 'null'], enum: ['A', 'B'] },
+        },
+        required: ['code', 'pick'],
+        additionalProperties: false,
+      }),
+    ).toBe(true);
+  });
+
+  it('nullable scalars still obey every surrounding rule', () => {
+    // Not required -> still refused, nullable or not.
+    expect(
+      isStrictCompatibleJsonSchema({
+        type: 'object',
+        properties: { a: { type: ['string', 'null'] } },
+        required: [],
+        additionalProperties: false,
+      }),
+    ).toBe(false);
+    // And a type array is not a licence for a non-object root.
+    expect(isStrictCompatibleJsonSchema({ type: ['string', 'null'] })).toBe(false);
+  });
+});

@@ -25,7 +25,11 @@
  * ### Optionality has to be expressed, not omitted
  *
  * Under this subset there is no such thing as an absent property. "No value" is expressed as an
- * explicit `null` branch with the property still required — which is why `anyOf` matters below.
+ * explicit `null` alternative with the property still REQUIRED. There are two supported ways to say
+ * that, and both are accepted here: `anyOf` is one supported union representation, and Groq also
+ * documents nullable scalar type arrays such as `type: ['string','null']`. An earlier revision of this
+ * checker knew only the first and therefore rejected the second — a false negative against a form the
+ * provider demonstrates.
  *
  * ### Fail closed on anything not proven supported
  *
@@ -66,6 +70,39 @@ const ROOT_POINTER = '#';
 const DEFS_KEY = '$defs';
 const REF_KEY = '$ref';
 const DEFS_PREFIX = '#/' + DEFS_KEY + '/';
+
+/**
+ * The scalar `type` values Groq's strict subset accepts. `const` and `enum` ride along on these —
+ * they constrain a value, they do not change its shape.
+ */
+const SCALAR_TYPES = ['string', 'number', 'integer', 'boolean', 'null'] as const;
+
+function isScalarType(value: unknown): boolean {
+  return (SCALAR_TYPES as readonly unknown[]).includes(value);
+}
+
+/**
+ * A NULLABLE SCALAR type array, exactly as Groq documents it: `['string','null']`.
+ *
+ * Deliberately narrow. This is not general multi-type union support — JSON Schema permits arbitrary
+ * type arrays and Groq does not demonstrate them, so anything other than one non-null scalar plus
+ * `null` fails closed. Both orderings are accepted because both express the same thing.
+ *
+ * Sibling constraints (`enum`, `const`, `minLength`, `pattern`, …) are untouched: this decides the
+ * SHAPE, and stripping a constraint would silently widen what the model may return.
+ */
+function isNullableScalarTypeArray(value: unknown): boolean {
+  if (!Array.isArray(value) || value.length !== 2) {
+    return false;
+  }
+  const [first, second] = value as readonly unknown[];
+  if (!isScalarType(first) || !isScalarType(second)) {
+    return false;
+  }
+  // Exactly one `null`, so `['null','null']` and any pair without it are both refused.
+  const nulls = [first, second].filter((one) => one === 'null').length;
+  return nulls === 1;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -185,15 +222,14 @@ function checkNode(
     return checkNode(items, root, visiting);
   }
 
-  // Scalars. `const` and `enum` ride along on these — they constrain a value, they do not change its
-  // shape. Anything whose `type` is absent or unrecognised is refused.
-  return (
-    type === 'string' ||
-    type === 'number' ||
-    type === 'integer' ||
-    type === 'boolean' ||
-    type === 'null'
-  );
+  // A documented nullable scalar, e.g. `type: ['string','null']` — the other supported way to say
+  // "no value" while keeping the property required.
+  if (Array.isArray(type)) {
+    return isNullableScalarTypeArray(type);
+  }
+
+  // A plain scalar. Anything whose `type` is absent or unrecognised is refused.
+  return isScalarType(type);
 }
 
 /**
@@ -206,11 +242,13 @@ export function isStrictCompatibleJsonSchema(jsonSchema: unknown): boolean {
   if (!isRecord(jsonSchema)) {
     return false;
   }
-  // The ROOT must be an object. A bare scalar or a root-level union is not a valid strict
-  // `json_schema` root even though either is fine as a property schema, and the recursive walk below
-  // would happily accept one — the pre-HF4 checker got this part right and it must not be lost while
-  // fixing the part it got wrong. A root `$ref` is followed first, so a schema that names its root
-  // object in `$defs` is still admitted.
+  // qf-jarvis INTENTIONALLY requires an object root on its strict `json_schema` path. This is a
+  // pre-existing fail-closed invariant of this codebase rather than a claim about what the provider
+  // would tolerate: every schema this gateway sends is object-rooted, a bare scalar or root-level
+  // union is fine as a PROPERTY schema but meaningless as a whole structured answer, and the
+  // recursive walk below would otherwise accept one. The pre-HF4 checker enforced this and it must
+  // not be lost while fixing the part it got wrong. A root `$ref` is followed first, so a schema that
+  // names its root object in `$defs` is still admitted.
   let root: Record<string, unknown> = jsonSchema;
   const followed = new Set<string>();
   while (REF_KEY in root) {

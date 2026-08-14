@@ -16,8 +16,13 @@
  * the same gate, and a superseded record is refused by `retrieveGovernedKnowledge`. Each of those is
  * an existing boundary being exercised — none is an operator rule written to make a case pass.
  */
+import type { ModelGatewayErrorCode } from '@qf-jarvis/model-gateway';
 import type { EvaluationDataClass } from '@qf-jarvis/model-evaluation';
-import type { ReplyState, ReplyStateReader } from '@qf-jarvis/model-reply-adapter';
+import type {
+  ModelReplyAdapterReason,
+  ReplyState,
+  ReplyStateReader,
+} from '@qf-jarvis/model-reply-adapter';
 import type {
   CandidateAuthorityTreatment,
   CandidateClaimKind,
@@ -65,14 +70,27 @@ export type BaseTurnDeps = Omit<RiyaTurnDeps, 'stateReader'>;
  * Every field is closed or a count. No reply, no user text, no knowledge, no citation identity, no
  * provider body, no error message.
  */
+/**
+ * The gateway code, or the sentinel meaning "the gateway returned a response".
+ *
+ * A local alias, not a new export: nothing outside this package needs to name it, and widening the
+ * gateway or adapter package API for a live-only diagnostic would be the wrong trade.
+ */
+export type CandidateGatewayDiagnosticCode = ModelGatewayErrorCode | 'NONE';
+
 export interface CandidateExecutionDiagnostic {
   readonly caseId: string;
   readonly providerInvocations: number;
   readonly executionOutcome: CandidateExecutionOutcome;
   readonly gatewayInvoked: boolean;
-  readonly adapterReason: string;
+  /**
+   * The adapter's OWN closed reason. Typed as the vocabulary rather than `string` (HF4-R1): the
+   * comment said "closed" while the type said "any string", and a comment is not a contract — a
+   * benign constant or a raw provider message would have compiled cleanly.
+   */
+  readonly adapterReason: ModelReplyAdapterReason;
   /** The closed gateway code, or `NONE` when the gateway returned a response. */
-  readonly gatewayErrorCode: string;
+  readonly gatewayErrorCode: CandidateGatewayDiagnosticCode;
   readonly structuredOutputWellFormed: boolean;
   /** A COUNT, not the names — the names are content-free but the count is what a reader needs. */
   readonly structuredFieldCount: number;
@@ -107,7 +125,7 @@ export interface CandidatePortDeps {
    */
   readonly onExecutionDiagnostic?: (diagnostic: CandidateExecutionDiagnostic) => void;
   /** The closed gateway error code for a case, when the gateway threw. */
-  readonly gatewayErrorFor?: (caseId: string) => string | undefined;
+  readonly gatewayErrorFor?: (caseId: string) => ModelGatewayErrorCode | undefined;
 }
 
 /**

@@ -25,6 +25,8 @@
  */
 import { describe, expect, it } from 'vitest';
 
+import type { CandidateExecutionDiagnostic } from '../candidate-ports.js';
+
 import {
   CANDIDATE_MAX_COMPLETION_TOKENS,
   CANDIDATE_MAX_INPUT_TOKENS,
@@ -159,19 +161,19 @@ describe('THE PER-CASE EXECUTION DIAGNOSTIC DISTINGUISHES THE FOUR LAYERS', () =
     return lines;
   };
 
-  const base = {
+  const base: CandidateExecutionDiagnostic = {
     caseId: 'riya.safety.example.01',
     providerInvocations: 1,
-    executionOutcome: 'REFUSED' as const,
+    executionOutcome: 'REFUSED',
     gatewayInvoked: true,
     adapterReason: 'model-gateway-refused',
     gatewayErrorCode: 'provider-failed',
     structuredOutputWellFormed: false,
     structuredFieldCount: 0,
     citationCount: 0,
-    knowledgeUse: 'NONE' as const,
-    claimKind: 'NO_CLAIMS' as const,
-    authorityTreatment: 'ADVISORY_ONLY' as const,
+    knowledgeUse: 'NONE',
+    claimKind: 'NO_CLAIMS',
+    authorityTreatment: 'ADVISORY_ONLY',
     continuedAfterCancellation: false,
   };
 
@@ -287,5 +289,40 @@ describe('THE PER-CASE EXECUTION DIAGNOSTIC DISTINGUISHES THE FOUR LAYERS', () =
     ]) {
       expect(lines, `diagnostics must not contain ${forbidden}`).not.toContain(forbidden);
     }
+  });
+});
+
+describe('HF4-R1 — the diagnostic vocabularies are CLOSED IN THE TYPE, not only in prose', () => {
+  // Owner review caught this: the fields were documented as closed and typed as `string`, so a
+  // benign constant or a raw provider message would have compiled. A comment is not a contract.
+  //
+  // These assertions are compile-time. The `@ts-expect-error` directives are the real test — if the
+  // fields were ever widened back to `string`, the directives would become unused and `tsc` fails.
+  type AdapterReason = CandidateExecutionDiagnostic['adapterReason'];
+  type GatewayCode = CandidateExecutionDiagnostic['gatewayErrorCode'];
+
+  it('accepts members of the real closed vocabularies', () => {
+    const completed: AdapterReason = 'model-adapter-completed';
+    const refused: AdapterReason = 'model-gateway-refused';
+    const invalid: AdapterReason = 'model-structured-output-invalid';
+    const cancelled: AdapterReason = 'model-cancelled';
+    const providerFailed: GatewayCode = 'provider-failed';
+    const invariant: GatewayCode = 'internal-invariant';
+    // The sentinel meaning "the gateway returned a response".
+    const none: GatewayCode = 'NONE';
+
+    expect([completed, refused, invalid, cancelled]).toHaveLength(4);
+    expect([providerFailed, invariant, none]).toHaveLength(3);
+  });
+
+  it('REFUSES an arbitrary string at compile time', () => {
+    // @ts-expect-error an arbitrary value is not a closed adapter reason
+    const badAdapter: AdapterReason = 'arbitrary-provider-message';
+    // @ts-expect-error raw error text is not a closed gateway code
+    const badGateway: GatewayCode = 'raw-http-400-body';
+    // @ts-expect-error a plausible-looking invention is still not in the vocabulary
+    const invented: AdapterReason = 'model-looks-fine';
+
+    expect([badAdapter, badGateway, invented]).toHaveLength(3);
   });
 });

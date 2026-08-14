@@ -20,6 +20,8 @@ import type { RiyaCandidateRequest } from '@qf-jarvis/riya-candidate-evaluation-
 import type { ModelGatewayInvocation, ModelGatewayInvoker } from '@qf-jarvis/model-reply-adapter';
 import { describe, expect, it } from 'vitest';
 
+import type { ModelGatewayErrorCode } from '@qf-jarvis/model-gateway';
+
 import type { CandidateExecutionDiagnostic } from '../candidate-ports.js';
 
 import { CANDIDATE_CAPABILITY_PROFILE_REF } from '../candidate-release.js';
@@ -270,7 +272,7 @@ describe('HF4 — the execution diagnostic reports the REAL closed facts, not co
   const modelRequired = fixtureOf('FABRICATED_OR_VERSIONLESS_CITATION').request;
 
   async function diagnose(options: {
-    readonly gatewayErrorFor?: (caseId: string) => string | undefined;
+    readonly gatewayErrorFor?: (caseId: string) => ModelGatewayErrorCode | undefined;
     readonly invoker?: BaseTurnDeps['invoker'];
   }) {
     const seen: CandidateExecutionDiagnostic[] = [];
