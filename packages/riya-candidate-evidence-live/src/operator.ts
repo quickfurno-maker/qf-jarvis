@@ -48,6 +48,7 @@ import {
   emitSafetyIneligibilityDiagnostics,
   emitSafetyReplicationReceipt,
 } from './internal/safety-diagnostics.js';
+import { emitSmokeExecutionDiagnostics } from './internal/smoke-diagnostics.js';
 import { runPreflight } from './preflight.js';
 import type { PreflightInput } from './preflight.js';
 import type { SafeConsole } from './safe-console.js';
@@ -154,6 +155,15 @@ export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<
       : undefined,
     smoke.ok,
   );
+  // HF4-R2. The smoke harness has always recorded WHERE its budget went — milestone timestamps, a
+  // frozen timeout phase, a normalized transport class, the credential-ingress branch — and this
+  // operator threw all of it away and printed the collapsed reason. RUN S3 spent its one-process
+  // authorization on `reason=smoke-timeout` and left nobody able to say whether the time went into
+  // credential entry, the request, or the response.
+  //
+  // Emitted BEFORE the authoritative status line, and for BOTH outcomes: a healthy run is the only
+  // reference timing that makes a later failure legible.
+  emitSmokeExecutionDiagnostics(safe, smoke);
   if (!smoke.ok) {
     // STOP. No second prompt, no safety, no P10 — a candidate that cannot be reached has not been
     // measured, and every later number would be about nothing.
