@@ -20,6 +20,8 @@ import type { RiyaCandidateRequest } from '@qf-jarvis/riya-candidate-evaluation-
 import type { ModelGatewayInvocation, ModelGatewayInvoker } from '@qf-jarvis/model-reply-adapter';
 import { describe, expect, it } from 'vitest';
 
+import type { CandidateExecutionDiagnostic } from '../candidate-ports.js';
+
 import { CANDIDATE_CAPABILITY_PROFILE_REF } from '../candidate-release.js';
 import { createSafetyCandidatePort, stateReaderFor } from '../candidate-ports.js';
 import type { BaseTurnDeps } from '../candidate-ports.js';
@@ -257,5 +259,68 @@ describe('the adapter is bound to the GOVERNED capability profile', () => {
       'cap.groq.openai-gpt-oss-20b.strict-json.2026-07-28',
     );
     expect(CANDIDATE_CAPABILITY_PROFILE_REF).not.toContain('rel.groq');
+  });
+});
+
+describe('HF4 — the execution diagnostic reports the REAL closed facts, not constants', () => {
+  // A mutation campaign found this gap. The HF4 emitter tests build diagnostics by hand, so they
+  // prove the LINE FORMAT and prove nothing about the wiring: discarding the gateway error code in
+  // `candidate-session`, or replacing `adapterReason` with a benign constant, left every one of them
+  // green. These drive the REAL port so the values have to travel.
+  const modelRequired = fixtureOf('FABRICATED_OR_VERSIONLESS_CITATION').request;
+
+  async function diagnose(options: {
+    readonly gatewayErrorFor?: (caseId: string) => string | undefined;
+    readonly invoker?: BaseTurnDeps['invoker'];
+  }) {
+    const seen: CandidateExecutionDiagnostic[] = [];
+    const counting = countingInvoker();
+    const port = createSafetyCandidatePort({
+      turnDeps: () => ({
+        ...baseDeps(options.invoker ?? counting.invoker),
+      }),
+      invocationsFor: () => counting.calls(),
+      cancellationTurnDeps: () => baseDeps(counting.invoker),
+      cancellationObservedFor: () => false,
+      ...(options.gatewayErrorFor === undefined
+        ? {}
+        : { gatewayErrorFor: options.gatewayErrorFor }),
+      onExecutionDiagnostic: (diagnostic) => seen.push(diagnostic),
+    });
+    await port.execute(modelRequired);
+    return seen;
+  }
+
+  it('CARRIES THE CLOSED GATEWAY ERROR CODE THE SESSION RECORDED', async () => {
+    const [diagnostic] = await diagnose({
+      // Exactly what `candidate-session` exposes after catching a `ModelGatewayError`.
+      gatewayErrorFor: () => 'provider-failed',
+      invoker: { invoke: () => Promise.resolve({ ok: false as const, transient: false }) },
+    });
+    expect(diagnostic?.gatewayErrorCode).toBe('provider-failed');
+  });
+
+  it('reports NONE when the session recorded no gateway error', async () => {
+    const [diagnostic] = await diagnose({ gatewayErrorFor: () => undefined });
+    expect(diagnostic?.gatewayErrorCode).toBe('NONE');
+  });
+
+  it('CARRIES THE ADAPTER REASON THE TURN ACTUALLY PRODUCED', async () => {
+    // A refused turn must not report `model-adapter-completed`. This is the assertion that kills the
+    // benign-constant mutant.
+    const [refused] = await diagnose({
+      invoker: { invoke: () => Promise.resolve({ ok: false as const, transient: false }) },
+    });
+    expect(refused?.adapterReason).not.toBe('model-adapter-completed');
+    expect(refused?.structuredOutputWellFormed).toBe(false);
+    // And the reason is a member of the adapter's own closed vocabulary, not an invented string.
+    expect(refused?.adapterReason).toMatch(/^model-/u);
+  });
+
+  it('emits exactly one diagnostic per executed case, with the real invocation count', async () => {
+    const seen = await diagnose({});
+    expect(seen).toHaveLength(1);
+    expect(seen[0]?.caseId).toBe(modelRequired.caseId);
+    expect(seen[0]?.providerInvocations).toBe(1);
   });
 });

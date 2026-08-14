@@ -228,12 +228,23 @@ export function createRiyaConversationModelProfile(args: {
       try {
         batch = createRiyaConversationObservationBatch({
           version: 1,
-          observations: answer.evolution.observations.map((observation) => ({
-            field: observation.field,
-            operation: observation.operation,
-            ...(observation.value === undefined ? {} : { value: observation.value }),
-            provenance: observation.provenance,
-          })),
+          // HF4: the observation is a UNION now, so `value` exists only on the SET branch. Narrowing
+          // on the operation is what makes that structural — there is no longer a way to reach a
+          // CLEAR's value, because a CLEAR does not have one.
+          observations: answer.evolution.observations.map((observation) =>
+            observation.operation === 'SET'
+              ? {
+                  field: observation.field,
+                  operation: observation.operation,
+                  value: observation.value,
+                  provenance: observation.provenance,
+                }
+              : {
+                  field: observation.field,
+                  operation: observation.operation,
+                  provenance: observation.provenance,
+                },
+          ),
           skipProjectDetails: answer.evolution.skipProjectDetails,
         });
       } catch {
@@ -337,7 +348,11 @@ export function createRiyaConversationModelProfile(args: {
           // the authoritative Riya pipeline can actually carry as a draft.
           kind: answer.reply.kind,
           replyBody: answer.reply.replyBody,
-          ...(answer.reply.reasonCode === undefined ? {} : { reasonCode: answer.reply.reasonCode }),
+          // HF4: the model-facing schema requires `reasonCode` and permits `null`, because Groq
+          // strict mode cannot express an absent property. Null projects back to ABSENCE here, so the
+          // provider-neutral `StructuredReply` is byte-for-byte what it was before — "no reason
+          // code" is still an absent key, and the M4 re-proof is unaffected.
+          ...(answer.reply.reasonCode === null ? {} : { reasonCode: answer.reply.reasonCode }),
           citations: Object.freeze(answer.reply.citations.map((c) => Object.freeze({ ...c }))),
         }),
         detail,
@@ -402,7 +417,9 @@ export function createRiyaGroundedReplyModelProfile(args: {
         reply: Object.freeze({
           kind: answer.reply.kind,
           replyBody: answer.reply.replyBody,
-          ...(answer.reply.reasonCode === undefined ? {} : { reasonCode: answer.reply.reasonCode }),
+          // HF4, exactly as in the evolution profile: a required-but-null `reasonCode` projects back
+          // to an absent key, so both profiles keep the same provider-neutral reply contract.
+          ...(answer.reply.reasonCode === null ? {} : { reasonCode: answer.reply.reasonCode }),
           citations: Object.freeze(answer.reply.citations.map((c) => Object.freeze({ ...c }))),
         }),
       };

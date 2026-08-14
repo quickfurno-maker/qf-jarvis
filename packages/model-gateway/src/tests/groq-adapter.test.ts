@@ -34,6 +34,27 @@ import { ModelGatewayError } from '../errors/gateway-error.js';
 
 // A fixed non-secret placeholder. It is NOT a real Groq key and grants nothing; it exists only to prove
 // the value never escapes the transport boundary.
+
+/**
+ * A GENUINELY Groq-strict-compatible schema (MVP-P2A.2 HF4).
+ *
+ * These fixtures used to be `{ type: 'object', additionalProperties: false }` with no `properties`
+ * and no `required` at all. The pre-HF4 checker looked only at the root type and
+ * `additionalProperties`, so that passed — but Groq strict mode requires both keys, with every
+ * property named in `required`. The tests below own transport and parsing behaviour, not schema
+ * validation, so the fixture is corrected rather than the expectation: they need a schema that
+ * genuinely reaches the wire.
+ *
+ * The property/required relationship is written out here rather than derived, so a reviewer can see
+ * that the sets match.
+ */
+const STRICT_COMPATIBLE_SCHEMA = {
+  type: 'object',
+  properties: { kind: { type: 'string' } },
+  required: ['kind'],
+  additionalProperties: false,
+};
+
 const SENTINEL_KEY = 'gsk_SENTINEL_test_value_do_not_use_000000';
 
 const OFF_KILL: GatewayKillSwitch = { active: (): boolean => false };
@@ -336,7 +357,7 @@ describe('GroqModelProvider.invoke — request mapping', () => {
     await provider.invoke(
       makeInput({
         resultMode: 'STRUCTURED',
-        structuredJsonSchema: { type: 'object', additionalProperties: false },
+        structuredJsonSchema: STRICT_COMPATIBLE_SCHEMA,
       }),
     );
     expect(firstCall(harness).parsedBody['response_format']).toMatchObject({
@@ -393,7 +414,7 @@ describe('GroqModelProvider.invoke — completed responses', () => {
     const result = await provider.invoke(
       makeInput({
         resultMode: 'STRUCTURED',
-        structuredJsonSchema: { type: 'object', additionalProperties: false },
+        structuredJsonSchema: STRICT_COMPATIBLE_SCHEMA,
       }),
     );
     expect(result).toMatchObject({
@@ -508,7 +529,7 @@ describe('GroqModelProvider.invoke — error normalization', () => {
     const result = await provider.invoke(
       makeInput({
         resultMode: 'STRUCTURED',
-        structuredJsonSchema: { type: 'object', additionalProperties: false },
+        structuredJsonSchema: STRICT_COMPATIBLE_SCHEMA,
       }),
     );
     expect(result.status).toBe('malformed');

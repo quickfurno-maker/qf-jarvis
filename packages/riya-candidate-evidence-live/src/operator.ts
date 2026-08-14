@@ -39,10 +39,12 @@ import { createOperatorLedger } from './accounting.js';
 import type { RequestLedger } from './accounting.js';
 import type { CandidateSession } from './candidate-session.js';
 import { createQualityCandidatePort, createSafetyCandidatePort } from './candidate-ports.js';
+import type { CandidateExecutionDiagnostic } from './candidate-ports.js';
 import type { OperatorOutcome } from './exit-codes.js';
 import { DEFAULT_RUN_GOAL, SECOND_CREDENTIAL_NOTICES } from './internal/run-goal.js';
 import type { OperatorRunGoal } from './internal/run-goal.js';
 import {
+  emitExecutionDiagnostics,
   emitSafetyIneligibilityDiagnostics,
   emitSafetyReplicationReceipt,
 } from './internal/safety-diagnostics.js';
@@ -181,11 +183,17 @@ export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<
   // No reservation here. Two boundary cases legitimately BUILD a turn and are then refused by the M4
   // state gate before the invoker runs, so charging them at construction would bill a request that
   // never happened. The accounted invoker reserves at the only moment a call is certain.
+  // HF4: collected during execution, printed after the suite completes. Collecting rather than
+  // printing inline keeps the ordering deterministic and keeps execution facts out of the middle of
+  // the evaluator's own output.
+  const executionDiagnostics: CandidateExecutionDiagnostic[] = [];
   const safetyPort = createSafetyCandidatePort({
     turnDeps: session.safetyTurnDeps,
     cancellationTurnDeps: session.safetyCancellationTurnDeps,
     invocationsFor: session.invocationsFor,
     cancellationObservedFor: session.cancellationObservedFor,
+    gatewayErrorFor: session.gatewayErrorFor,
+    onExecutionDiagnostic: (diagnostic) => executionDiagnostics.push(diagnostic),
   });
   const safety = await runRiyaSafetyCandidate({
     port: safetyPort,
@@ -242,6 +250,10 @@ export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<
     // verdict and exited, and those facts died with the process: the run writes no safety artifact,
     // so there was nothing left to read. The detail is emitted BEFORE the verdict; the verdict line
     // below is unchanged, and so is the outcome.
+    // HF4 ordering: what the machinery DID, then what the authority DECIDED, then the receipt, then
+    // the verdict. Execution facts come first because they determine whether the verdict below is
+    // interpretable as model quality at all.
+    emitExecutionDiagnostics(safe, executionDiagnostics);
     emitSafetyIneligibilityDiagnostics(safe, safety.suiteResult, deps.thresholds);
     // HF3 receipt goes BEFORE the verdict so the authoritative INELIGIBLE line remains the last
     // safety line and remains byte-for-byte what it was. The outcome is unchanged too: safety
@@ -268,6 +280,7 @@ export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<
   // The return is placed before the quality port is CONSTRUCTED, not merely before it is used, so
   // there is no window in which a P10 seam exists in this run at all.
   if (runGoal === 'SAFETY_REPLICATION') {
+    emitExecutionDiagnostics(safe, executionDiagnostics);
     emitSafetyReplicationReceipt(safe, ledger.snapshot());
     safe.line({ finalStatus: 'SAFETY_REPLICATION_COMPLETE' });
     return { outcome: 'SAFETY_REPLICATION_COMPLETE' };

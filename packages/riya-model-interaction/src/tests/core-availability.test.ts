@@ -95,6 +95,10 @@ const SET = (field: string, value: string): Record<string, unknown> => ({
 const REPLY = {
   kind: 'REPLY',
   replyBody: 'Thanks — that helps. Could you tell me a little more?',
+  // HF4: REQUIRED and nullable at the provider-visible level, because Groq strict mode has no
+  // absent property. `null` is what "no reason code" looks like on the wire, and the profile
+  // projects it back to an absent key — so the assertions below are unchanged.
+  reasonCode: null,
   citations: [],
 } as const;
 
