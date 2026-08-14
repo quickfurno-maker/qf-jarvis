@@ -92,6 +92,9 @@ export function replyOnlyPayload(args: {
     reply: {
       kind: 'REPLY',
       replyBody: args.replyBody ?? TEST_REPLIES[args.language],
+      // HF4: required-and-nullable in the model-facing schema. `null` is the wire form of "no reason
+      // code"; the profile projects it back to an absent key, so nothing downstream sees a change.
+      reasonCode: null,
       citations: args.citations.map((one) => ({ ...one })),
     },
   };
@@ -116,6 +119,9 @@ export function evolutionPayload(args: {
     reply: {
       kind: 'REPLY',
       replyBody: args.replyBody ?? TEST_REPLIES[args.language],
+      // HF4: required-and-nullable in the model-facing schema. `null` is the wire form of "no reason
+      // code"; the profile projects it back to an absent key, so nothing downstream sees a change.
+      reasonCode: null,
       citations: args.citations.map((one) => ({ ...one })),
     },
     evolution: {

@@ -39,6 +39,7 @@
 import type { SuiteResult, SuiteThresholds } from '@qf-jarvis/model-evaluation';
 
 import type { LedgerSnapshot } from '../accounting.js';
+import type { CandidateExecutionDiagnostic } from '../candidate-ports.js';
 import type { SafeConsole } from '../safe-console.js';
 
 /**
@@ -121,10 +122,82 @@ export function emitSafetyReplicationReceipt(safe: SafeConsole, snapshot: Ledger
     // Load-bearing, and expected to be 0 forever in this run goal: a non-zero value here would mean
     // the early stop failed and the ledger cap was what saved the run.
     p10ProviderRequests: snapshot.p10ProviderRequests,
+    // HF4. The two counters that make the token totals interpretable. RUN S2-B reported 1,310,914
+    // input and 655,442 output, which reads like real usage but is exactly ten fallback maxima plus
+    // a 194/82 smoke -- i.e. NONE of the ten candidate attempts returned usable usage facts. Without
+    // these counters the receipt could not distinguish "ten gateway failures" from "ten successful
+    // responses that happened to omit usage", and those demand completely different diagnoses.
+    successfulProviderResponses: snapshot.successfulProviderResponses,
+    providerFailures: snapshot.providerFailures,
     inputTokensTotal: snapshot.inputTokens,
     outputTokensTotal: snapshot.outputTokens,
     estimatedCostUsd: snapshot.estimatedCostUsd,
     costIsEstimated: snapshot.costIsEstimated,
     usageBoundViolated: snapshot.usageBoundViolated,
   });
+}
+
+/**
+ * The per-case EXECUTION diagnostics for a safety replication (MVP-P2A.2 HF4).
+ *
+ * Separate from the evaluator diagnostics on purpose. HF2 answers "what did the authority decide";
+ * this answers "what did the machinery actually do", and RUN S2-B proved the second question was
+ * unanswerable: fifteen PASS and two FAIL looks like a model result, but all ten MODEL_REQUIRED
+ * attempts were priced from the ledger's fallback maxima, which means none of them returned usable
+ * usage facts. A negative-constraint case ("did not leak X") passes vacuously when no answer was
+ * produced at all, so without these lines a broken execution path reads as a passing model.
+ *
+ * Only MODEL_REQUIRED cases are reported. The seven pre-model cases are refused before a turn is
+ * built, and printing a row of zeroes for each would add noise without adding a fact.
+ */
+export function emitExecutionDiagnostics(
+  safe: SafeConsole,
+  diagnostics: readonly CandidateExecutionDiagnostic[],
+): void {
+  for (const one of diagnostics) {
+    safe.line({
+      phase: 'safety-execution',
+      status: 'CASE',
+      caseId: one.caseId,
+      providerInvocations: one.providerInvocations,
+      executionOutcome: one.executionOutcome,
+      gatewayInvoked: one.gatewayInvoked,
+      adapterReason: one.adapterReason,
+      gatewayErrorCode: one.gatewayErrorCode,
+      structuredOutputWellFormed: one.structuredOutputWellFormed,
+      structuredFieldCount: one.structuredFieldCount,
+      citationCount: one.citationCount,
+      knowledgeUse: one.knowledgeUse,
+      claimKind: one.claimKind,
+      authorityTreatment: one.authorityTreatment,
+      continuedAfterCancellation: one.continuedAfterCancellation,
+    });
+  }
+
+  // The aggregate an owner reads first. `gatewayResponses === 0` means the safety verdict says nothing
+  // about the model, and the caller prints that conclusion explicitly rather than leaving it inferable.
+  const gatewayResponses = diagnostics.filter(
+    (one) => one.gatewayInvoked && one.gatewayErrorCode === 'NONE',
+  ).length;
+  const gatewayFailures = diagnostics.filter((one) => one.gatewayErrorCode !== 'NONE').length;
+  const acceptedReplies = diagnostics.filter((one) => one.structuredOutputWellFormed).length;
+  safe.line({
+    phase: 'safety-execution',
+    status: 'SUMMARY',
+    modelRequired: diagnostics.length,
+    gatewayResponses,
+    gatewayFailures,
+    acceptedReplies,
+    refusedReplies: diagnostics.length - acceptedReplies,
+  });
+
+  // Fail-loud, not fail-silent. This is a statement about EVIDENCE VALIDITY, not a new verdict: the
+  // evaluator's result is untouched and still printed below.
+  if (acceptedReplies === 0 && diagnostics.length > 0) {
+    safe.line({
+      phase: 'safety-execution',
+      status: 'EVIDENCE_VALIDITY',
+      note: 'SAFETY_VERDICT_NOT_INTERPRETABLE_AS_MODEL_QUALITY_WITHOUT_EXECUTION_HEALTH',
+    });
+  }
 }

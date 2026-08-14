@@ -16,8 +16,13 @@
  * the same gate, and a superseded record is refused by `retrieveGovernedKnowledge`. Each of those is
  * an existing boundary being exercised — none is an operator rule written to make a case pass.
  */
+import type { ModelGatewayErrorCode } from '@qf-jarvis/model-gateway';
 import type { EvaluationDataClass } from '@qf-jarvis/model-evaluation';
-import type { ReplyState, ReplyStateReader } from '@qf-jarvis/model-reply-adapter';
+import type {
+  ModelReplyAdapterReason,
+  ReplyState,
+  ReplyStateReader,
+} from '@qf-jarvis/model-reply-adapter';
 import type {
   CandidateAuthorityTreatment,
   CandidateClaimKind,
@@ -55,6 +60,47 @@ import { syntheticContinuityFor } from './synthetic-context.js';
 export type BaseTurnDeps = Omit<RiyaTurnDeps, 'stateReader'>;
 
 /** How the operator reaches a provider, and how it counts what happened. */
+/**
+ * One MODEL_REQUIRED case's EXECUTION facts (MVP-P2A.2 HF4).
+ *
+ * Deliberately separate from the HF2 evaluator diagnostics. Those say what the authority decided; this
+ * says what the machinery did, which is the distinction RUN S2-B could not make: fifteen PASS and two
+ * FAIL is not evidence about a model if none of the ten attempts produced a usable answer.
+ *
+ * Every field is closed or a count. No reply, no user text, no knowledge, no citation identity, no
+ * provider body, no error message.
+ */
+/**
+ * The gateway code, or the sentinel meaning "the gateway returned a response".
+ *
+ * A local alias, not a new export: nothing outside this package needs to name it, and widening the
+ * gateway or adapter package API for a live-only diagnostic would be the wrong trade.
+ */
+export type CandidateGatewayDiagnosticCode = ModelGatewayErrorCode | 'NONE';
+
+export interface CandidateExecutionDiagnostic {
+  readonly caseId: string;
+  readonly providerInvocations: number;
+  readonly executionOutcome: CandidateExecutionOutcome;
+  readonly gatewayInvoked: boolean;
+  /**
+   * The adapter's OWN closed reason. Typed as the vocabulary rather than `string` (HF4-R1): the
+   * comment said "closed" while the type said "any string", and a comment is not a contract — a
+   * benign constant or a raw provider message would have compiled cleanly.
+   */
+  readonly adapterReason: ModelReplyAdapterReason;
+  /** The closed gateway code, or `NONE` when the gateway returned a response. */
+  readonly gatewayErrorCode: CandidateGatewayDiagnosticCode;
+  readonly structuredOutputWellFormed: boolean;
+  /** A COUNT, not the names — the names are content-free but the count is what a reader needs. */
+  readonly structuredFieldCount: number;
+  readonly citationCount: number;
+  readonly knowledgeUse: CandidateKnowledgeUse;
+  readonly claimKind: CandidateClaimKind;
+  readonly authorityTreatment: CandidateAuthorityTreatment;
+  readonly continuedAfterCancellation: boolean;
+}
+
 export interface CandidatePortDeps {
   /** Build the per-turn dependencies. Returns `undefined` when a ceiling refuses the next call. */
   readonly turnDeps: (caseId: string) => BaseTurnDeps | undefined;
@@ -72,6 +118,14 @@ export interface CandidatePortDeps {
    * emerged, it is what makes `continuedAfterCancellation` a measurement.
    */
   readonly cancellationObservedFor?: (caseId: string) => boolean;
+  /**
+   * HF4, LIVE-ONLY and optional. The provider-neutral `RiyaCandidateExecutionRecord` deliberately
+   * carries no adapter or gateway vocabulary, so execution facts are reported through this seam
+   * instead of widening the evaluation-runner contract.
+   */
+  readonly onExecutionDiagnostic?: (diagnostic: CandidateExecutionDiagnostic) => void;
+  /** The closed gateway error code for a case, when the gateway threw. */
+  readonly gatewayErrorFor?: (caseId: string) => ModelGatewayErrorCode | undefined;
 }
 
 /**
@@ -249,6 +303,24 @@ export function createSafetyCandidatePort(deps: CandidatePortDeps): RiyaCandidat
       const admittedKeys = new Set(
         admitted.map((record) => `${record.knowledgeId}@${String(record.version)}`),
       );
+
+      const acceptedCitations = reply?.citations ?? [];
+      deps.onExecutionDiagnostic?.({
+        caseId: request.caseId,
+        providerInvocations: invocations,
+        executionOutcome,
+        gatewayInvoked: outcome.result.gatewayInvoked,
+        adapterReason: outcome.result.reason,
+        gatewayErrorCode: deps.gatewayErrorFor?.(request.caseId) ?? 'NONE',
+        structuredOutputWellFormed: accepted,
+        structuredFieldCount: acceptedFields.length,
+        citationCount: acceptedCitations.length,
+        knowledgeUse: knowledgeUseFor(outcome),
+        claimKind: claimKindFor(outcome),
+        authorityTreatment: AUTHORITY_TREATMENT,
+        continuedAfterCancellation:
+          cancellationCase && (deps.cancellationObservedFor?.(request.caseId) ?? false) && accepted,
+      });
 
       return Object.freeze({
         caseId: request.caseId,

@@ -277,6 +277,7 @@ function deterministicSession(
         return invokerFor(caseId, false);
       },
       invocationsFor: (caseId) => perCase.get(caseId) ?? 0,
+      gatewayErrorFor: () => undefined,
       cancellationObservedFor: (caseId) => cancellationCases.includes(caseId),
       accountingRefusal: () => undefined,
     },
@@ -543,8 +544,8 @@ describe('full bounded operator reaches blinded human-review handoff', () => {
 
     expect(result.outcome).toBe('SAFETY_INELIGIBLE');
 
-    const summary = harness.lines.find((line) => line.includes('status=SUMMARY'));
-    const failedCase = harness.lines.find((line) => line.includes('status=CASE'));
+    const summary = harness.lines.find((line) => line.includes('phase=safety status=SUMMARY'));
+    const failedCase = harness.lines.find((line) => line.includes('phase=safety status=CASE'));
     const breach = harness.lines.find((line) => line.includes('status=THRESHOLD_BREACH'));
     const verdict = harness.lines.find((line) => line.includes('status=INELIGIBLE'));
 
@@ -572,8 +573,8 @@ describe('full bounded operator reaches blinded human-review handoff', () => {
 
     const at = (fragment: string): number => harness.lines.findIndex((l) => l.includes(fragment));
     const smokeAt = at('phase=smoke status=PASS');
-    const summaryAt = at('status=SUMMARY');
-    const caseAt = at('status=CASE');
+    const summaryAt = at('phase=safety status=SUMMARY');
+    const caseAt = at('phase=safety status=CASE');
     const breachAt = at('status=THRESHOLD_BREACH');
     const verdictAt = at('status=INELIGIBLE');
 
@@ -625,8 +626,8 @@ describe('full bounded operator reaches blinded human-review handoff', () => {
     const output = harness.lines.join('\n');
 
     expect(output).toContain('status=ELIGIBLE');
-    expect(output).not.toContain('status=SUMMARY');
-    expect(output).not.toContain('status=CASE');
+    expect(output).not.toContain('phase=safety status=SUMMARY');
+    expect(output).not.toContain('phase=safety status=CASE');
     expect(output).not.toContain('status=THRESHOLD_BREACH');
     expect(output).not.toContain('status=INELIGIBLE');
   });
@@ -712,8 +713,8 @@ describe('HF3 — a bounded SAFETY_REPLICATION stops after the safety authority'
     const result = await runCandidateEvidenceOperator(harness.deps);
 
     expect(result.outcome).toBe('SAFETY_INELIGIBLE');
-    const summary = harness.lines.find((l) => l.includes('status=SUMMARY'));
-    const failedCase = harness.lines.find((l) => l.includes('status=CASE'));
+    const summary = harness.lines.find((l) => l.includes('phase=safety status=SUMMARY'));
+    const failedCase = harness.lines.find((l) => l.includes('phase=safety status=CASE'));
     const breach = harness.lines.find((l) => l.includes('status=THRESHOLD_BREACH'));
     const verdict = harness.lines.find((l) => l.includes('status=INELIGIBLE'));
 

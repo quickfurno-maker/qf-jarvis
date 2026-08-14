@@ -100,7 +100,8 @@ function riyaAnswer(
     batch: { version: 1, observations: observations as never, skipProjectDetails: false },
   });
   return {
-    reply: { kind: 'REPLY', replyBody: 'Thanks — that helps.', citations: [] },
+    // HF4: required-and-nullable reasonCode; null projects to absence.
+    reply: { kind: 'REPLY', replyBody: 'Thanks — that helps.', reasonCode: null, citations: [] },
     evolution: {
       version: 1,
       observations,

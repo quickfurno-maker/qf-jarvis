@@ -79,39 +79,78 @@ const riyaReplySchema = z
     kind: z.literal('REPLY'),
     // Required, not optional-with-a-refinement: a `REPLY` with no body is not a reply.
     replyBody: z.string().min(1).max(MAX_RIYA_REPLY_BODY_CHARS),
+    // REQUIRED and nullable, not optional (MVP-P2A.2 HF4). Groq strict mode has no concept of an
+    // absent property: every key of every object must appear in `required`, so "no reason code" has
+    // to be SAID rather than omitted. `.nullable()` renders to `anyOf: [string, null]` with the
+    // property required, which is exactly the supported way to express it.
+    //
+    // This does not widen the external contract. `projectStructuredResult` maps `null` back to an
+    // absent key, so the provider-neutral `StructuredReply` still expresses "no reason code" as
+    // absence and the M4 re-proof against the generic schema is unchanged.
     reasonCode: z
       .string()
       .min(1)
       .max(64)
       .regex(/^[A-Za-z0-9._:-]+$/u)
-      .optional(),
+      .nullable(),
     citations: z
       .array(z.object({ knowledgeId: IDENTIFIER, version: z.int().min(1).max(1_000_000) }).strict())
       .max(64),
   })
   .strict();
 
-const observationSchema = z
+const OBSERVATION_VALUE = z.string().min(1).max(2048);
+
+/**
+ * A SET: the value is what is being set, so it is REQUIRED. Either model provenance may set a fact.
+ */
+const setObservationSchema = z
   .object({
     field: FIELD,
-    operation: z.enum(RIYA_DISCOVERY_OBSERVATION_OPERATIONS),
-    value: z.string().min(1).max(2048).optional(),
+    operation: z.literal('SET'),
+    value: OBSERVATION_VALUE,
     provenance: z.enum(RIYA_MODEL_PROVENANCES),
   })
-  .strict()
-  .superRefine((observation, ctx) => {
-    if (observation.operation === 'SET' && observation.value === undefined) {
-      ctx.addIssue({ code: 'custom', message: 'SET requires a value.' });
-    }
-    if (observation.operation === 'CLEAR' && observation.value !== undefined) {
-      ctx.addIssue({ code: 'custom', message: 'CLEAR forbids a value.' });
-    }
-    if (observation.operation === 'CLEAR' && observation.provenance !== 'user_stated') {
-      // An inference may not withdraw a fact. RWC-P4A refuses this too; refusing it HERE means the
-      // whole model answer is rejected rather than one observation being quietly dropped.
-      ctx.addIssue({ code: 'custom', message: 'CLEAR requires an explicit user statement.' });
-    }
-  });
+  .strict();
+
+/**
+ * A CLEAR: there is no value to carry, so the branch has NO `value` property at all — the strongest
+ * possible form of "CLEAR forbids a value", because `.strict()` then refuses one as an unknown key.
+ *
+ * `provenance` is the literal `user_stated`: an inference may not withdraw a fact. RWC-P4A refuses
+ * this too, and refusing it HERE means the whole model answer is rejected rather than one observation
+ * being quietly dropped.
+ */
+const clearObservationSchema = z
+  .object({
+    field: FIELD,
+    operation: z.literal('CLEAR'),
+    provenance: z.literal('user_stated'),
+  })
+  .strict();
+
+/**
+ * The two operations, as a UNION rather than one object plus `.superRefine()` (MVP-P2A.2 HF4).
+ *
+ * The rules did not change — SET requires a value, CLEAR forbids one, CLEAR requires an explicit user
+ * statement — but they were previously enforced ONLY locally. A `.superRefine()` is invisible to
+ * `z.toJSONSchema`, so the schema the provider saw was a generic object where `value` was optional
+ * and every operation/provenance combination was permitted. The model was being shown a laxer contract
+ * than the one its answer would be judged against.
+ *
+ * Expressing the branches structurally makes the provider-visible schema say what the local schema has
+ * always meant. `z.union` is deliberate: it renders to `anyOf`, which Groq's strict subset supports,
+ * whereas `z.discriminatedUnion` renders to `oneOf`, which it does not document.
+ */
+const observationSchema = z.union([setObservationSchema, clearObservationSchema]);
+
+/**
+ * The union above names its operations as literals, so this keeps it tied to the governed vocabulary:
+ * if RWC-P4A ever gains a third operation, this stops compiling and someone has to decide what a model
+ * may claim about it, rather than the new operation silently becoming unrepresentable.
+ */
+const _OPERATIONS_COVERED: readonly ['SET', 'CLEAR'] = RIYA_DISCOVERY_OBSERVATION_OPERATIONS;
+void _OPERATIONS_COVERED;
 
 const questionPlanSchema = z
   .object({

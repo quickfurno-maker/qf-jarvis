@@ -141,6 +141,10 @@ function riyaAnswer(
     reply: {
       kind: 'REPLY',
       replyBody: 'Thanks — that helps. Could you tell me a little more?',
+      // HF4: `reasonCode` is REQUIRED and nullable in the model-facing schema — Groq strict mode
+      // has no absent property. The profile projects null back to an absent key, so the
+      // provider-neutral reply these assertions read is unchanged.
+      reasonCode: null,
       citations: [],
     },
     evolution: {

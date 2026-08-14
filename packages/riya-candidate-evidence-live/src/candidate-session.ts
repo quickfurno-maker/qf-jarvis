@@ -24,6 +24,8 @@
  * so the signal the underlying transport receives is the signal that gets cancelled — provable by
  * object identity, which is what the spec asserts.
  */
+import { isModelGatewayError } from '@qf-jarvis/model-gateway';
+import type { ModelGatewayErrorCode } from '@qf-jarvis/model-gateway';
 import type { ModelGateway, ModelResponse } from '@qf-jarvis/model-gateway';
 import type { ModelGatewayInvocation, ModelGatewayInvoker } from '@qf-jarvis/model-reply-adapter';
 
@@ -31,6 +33,15 @@ import type { LedgerPhase, LedgerRefusal, RequestLedger } from './accounting.js'
 import type { BaseTurnDeps } from './candidate-ports.js';
 
 /** What the operator needs from a live candidate composition. */
+/**
+ * The code recorded when a throw was NOT a `ModelGatewayError`.
+ *
+ * A member of the real closed vocabulary rather than an invented string, so every consumer can branch
+ * on one enum. It means "the gateway threw something outside its own contract", which is itself the
+ * finding.
+ */
+const UNKNOWN_GATEWAY_FAILURE: ModelGatewayErrorCode = 'internal-invariant';
+
 export interface CandidateSession {
   /** Per-turn dependencies for a SAFETY case. Charged to the safety phase. */
   readonly safetyTurnDeps: (caseId: string) => BaseTurnDeps | undefined;
@@ -40,6 +51,13 @@ export interface CandidateSession {
   readonly qualityTurnDeps: (caseId: string) => BaseTurnDeps | undefined;
   /** How many provider attempts THIS case made. Per case, never a running total. */
   readonly invocationsFor: (caseId: string) => number;
+  /**
+   * The CLOSED gateway error code for this case, or `undefined` when the gateway returned a response.
+   *
+   * Content-free by construction: the vocabulary is fixed and provider-neutral, and the originating
+   * exception's message, stack and cause are never retained.
+   */
+  readonly gatewayErrorFor: (caseId: string) => ModelGatewayErrorCode | undefined;
   /** Whether the abort was actually observed at the transport boundary for this case. */
   readonly cancellationObservedFor: (caseId: string) => boolean;
   /** A terminal accounting refusal, if a ceiling or a usage bound stopped the run. */
@@ -85,6 +103,8 @@ function usageOf(response: ModelResponse): {
 /** Build the accounted session. */
 export function createAccountedSession(deps: CandidateSessionDeps): CandidateSession {
   const perCase = new Map<string, number>();
+  /** HF4: the closed gateway error code per case. Never a message, stack or cause. */
+  const perCaseGatewayError = new Map<string, ModelGatewayErrorCode>();
   const cancellationObserved = new Set<string>();
   let refusal: LedgerRefusal | undefined;
 
@@ -123,9 +143,19 @@ export function createAccountedSession(deps: CandidateSessionDeps): CandidateSes
         }
         observe();
         return Object.freeze({ ok: true as const, response });
-      } catch {
-        // A failed attempt still consumed a request. Nothing about the error is retained, and no
-        // usage is invented — the ledger prices it at the guaranteed bound and marks it estimated.
+      } catch (error) {
+        // A failed attempt still consumed a request. No usage is invented — the ledger prices it at
+        // the guaranteed bound and marks it estimated.
+        //
+        // HF4: the CLOSED error code is retained, and nothing else. Previously the whole exception was
+        // discarded, which is why RUN S2-B could show ten candidate attempts priced from the fallback
+        // bound with no way to say WHY. `ModelGatewayErrorCode` is a fixed provider-neutral
+        // vocabulary — `provider-failed`, `structured-output-invalid`, `timeout` and so on — so it
+        // is safe to print, unlike the message, stack or cause, which are not retained here at all.
+        perCaseGatewayError.set(
+          caseId,
+          isModelGatewayError(error) ? error.code : UNKNOWN_GATEWAY_FAILURE,
+        );
         deps.ledger.settle(undefined, false);
         observe();
         return Object.freeze({ ok: false as const, transient: false });
@@ -149,6 +179,7 @@ export function createAccountedSession(deps: CandidateSessionDeps): CandidateSes
       depsFor(deps.cancellationGateway, caseId, 'safety', true),
     qualityTurnDeps: (caseId: string) => depsFor(deps.gateway, caseId, 'p10', false),
     invocationsFor: (caseId: string) => perCase.get(caseId) ?? 0,
+    gatewayErrorFor: (caseId: string) => perCaseGatewayError.get(caseId),
     cancellationObservedFor: (caseId: string) => cancellationObserved.has(caseId),
     accountingRefusal: () => refusal,
   });

@@ -70,6 +70,7 @@ function session(): CandidateSession {
     safetyCancellationTurnDeps: () => undefined,
     qualityTurnDeps: () => undefined,
     invocationsFor: () => 0,
+    gatewayErrorFor: () => undefined,
     cancellationObservedFor: () => false,
     accountingRefusal: () => undefined,
   };

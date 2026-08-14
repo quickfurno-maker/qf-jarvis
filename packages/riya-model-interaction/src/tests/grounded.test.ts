@@ -87,8 +87,9 @@ const ACTUAL_PLAN = evolveRiyaConversation({
   batch: { version: 1, observations: [], skipProjectDetails: false },
 }).questionPlan;
 
+// HF4: `reasonCode` is required-and-nullable in the model-facing schema; null projects to absence.
 const evolutionAnswer = (citations: readonly object[]) => ({
-  reply: { kind: 'REPLY', replyBody: 'About four to six weeks.', citations },
+  reply: { kind: 'REPLY', replyBody: 'About four to six weeks.', reasonCode: null, citations },
   evolution: {
     version: 1,
     observations: [],
@@ -101,7 +102,7 @@ const evolutionAnswer = (citations: readonly object[]) => ({
 });
 
 const replyAnswer = (citations: readonly object[]) => ({
-  reply: { kind: 'REPLY', replyBody: 'About four to six weeks.', citations },
+  reply: { kind: 'REPLY', replyBody: 'About four to six weeks.', reasonCode: null, citations },
 });
 
 // ---------------------------------------------------------------------------
