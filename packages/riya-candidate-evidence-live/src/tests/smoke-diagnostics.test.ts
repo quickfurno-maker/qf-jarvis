@@ -18,25 +18,54 @@
  * **S3's actual timeout phase is NOT recoverable** and is never guessed: every phase below is a
  * synthetic fixture.
  */
+import {
+  computeSmokeApprovalDigest,
+  parseSmokeConfig,
+  SMOKE_PROMPT_FAMILY,
+  SMOKE_PROMPT_VERSION,
+  SMOKE_SCHEMA_REVISION,
+} from '@qf-jarvis/groq-staging-smoke';
 import type { MaskedSecretSource, SmokeRunResult } from '@qf-jarvis/groq-staging-smoke';
 import { createEvaluationBinding, createSuiteThresholds } from '@qf-jarvis/model-evaluation';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
 
 import {
   CANDIDATE_CAPABILITY_PROFILE_REF,
   CANDIDATE_RELEASE,
   RIYA_CLIENT_PROMPT_DIGEST,
 } from '../candidate-release.js';
-import type { CandidateSession } from '../candidate-session.js';
 import { OPERATOR_EXIT_CODES } from '../exit-codes.js';
 import { emitSmokeExecutionDiagnostics } from '../internal/smoke-diagnostics.js';
 import { runCandidateEvidenceOperator } from '../operator.js';
+import type * as ActualPreflightModule from '../preflight.js';
+import type { PreflightInput } from '../preflight.js';
 import type { OperatorDeps } from '../operator.js';
 import { createSafeConsole } from '../safe-console.js';
+
+type ActualPreflight = typeof ActualPreflightModule;
+
+/**
+ * The established TEST-ONLY preflight seam (see `integrated-composition.test.ts`).
+ *
+ * Production offers no preflight override by design, so the SPEC substitutes the module and supplies a
+ * SYNTHETIC expected digest. Everything else about preflight stays real — the path fences, the closed
+ * config parse, the embedded-digest comparison and the semantic recomputation all run exactly as they
+ * would live. No production bypass is added and `EXPECTED_SMOKE_CONFIG_DIGEST` is untouched.
+ */
+const harnessState = vi.hoisted(() => ({ syntheticDigest: '' }));
+vi.mock('../preflight.js', async (importOriginal) => {
+  const actual = await importOriginal<ActualPreflight>();
+  const helper = await import('./helpers/preflight-testing.js');
+  return {
+    ...actual,
+    runPreflight: (input: PreflightInput) =>
+      helper.runPreflightForTesting(input, harnessState.syntheticDigest),
+  };
+});
 
 /** Sentinels that must never reach the terminal. */
 const KEY_SENTINEL = 'sk-SENTINEL-NEVER-A-REAL-KEY-000000000000';
@@ -96,33 +125,106 @@ function smokeResult(
   } as unknown as SmokeRunResult;
 }
 
-/** Drive the REAL operator to the smoke gate and capture every line it printed. */
-async function runToSmoke(smoke: SmokeRunResult): Promise<{
+/**
+ * A valid, secret-free synthetic smoke configuration, digest-consistent with the test seam.
+ *
+ * Built through the REAL parser and the REAL semantic-digest helper, then written with that digest
+ * embedded — so preflight's two independent checks (recomputation and the embedded claim) are both
+ * genuinely satisfied rather than accidentally bypassed.
+ */
+function writeSmokeConfig(directory: string): { readonly path: string; readonly digest: string } {
+  const path = join(directory, 'groq-smoke-config.json');
+  const draft = {
+    credentialReference: 'secret.qfj-staging.groq.v1',
+    release: {
+      releaseId: 'rel.groq.qfj-staging.smoke.v1',
+      providerId: 'groq',
+      modelId: 'openai/gpt-oss-20b',
+      modelVersion: 'groq-catalog-snapshot-2026-08-12',
+      executionClass: 'HOSTED',
+      configDigest: 'a'.repeat(64),
+    },
+    dataClass: 'HOSTED_ALLOWED',
+    maxInputTokens: 4096,
+    maxCompletionTokens: 512,
+    supportsStrictJsonSchema: true,
+    capabilityProfileRef: CANDIDATE_CAPABILITY_PROFILE_REF,
+    evaluationRef: 'eval.groq.qfj-staging.smoke.v1',
+    dataControlsAttestationRef: 'att.groq.qfj-staging.global-zdr.2026-07-28',
+    dataControlsAttested: true,
+    promptFamily: SMOKE_PROMPT_FAMILY,
+    promptVersion: SMOKE_PROMPT_VERSION,
+    schemaRevision: SMOKE_SCHEMA_REVISION,
+    timeoutMs: 15_000,
+  };
+  const parsed = parseSmokeConfig(draft);
+  if (!parsed.ok) {
+    throw new Error(
+      'The synthetic smoke configuration must parse, or this harness proves nothing.',
+    );
+  }
+  const digest = computeSmokeApprovalDigest(parsed.config);
+  writeFileSync(
+    path,
+    JSON.stringify({ ...draft, release: { ...draft.release, configDigest: digest } }),
+    'utf8',
+  );
+  return { path, digest };
+}
+
+interface SmokeGateRun {
   readonly lines: string[];
   readonly outcome: string;
+  readonly reviewBundlePath: string | undefined;
+  readonly smokeRuns: number;
   readonly candidateCredentials: number;
-}> {
+  readonly candidateSessions: number;
+  readonly reviewOutputPath: string;
+}
+
+/**
+ * Drive the REAL operator PAST preflight and into the supplied synthetic smoke result.
+ *
+ * The first version of this helper pointed `smokeConfigPath` at a non-existent file, so preflight
+ * refused and the run never reached smoke at all — the test asserted an outer fence while claiming to
+ * prove the smoke-failure one. That is the defect R2.1 corrects; the seam above is what lets the run
+ * genuinely arrive at the smoke gate.
+ */
+async function runToSmoke(smoke: SmokeRunResult): Promise<SmokeGateRun> {
   const lines: string[] = [];
+  let smokeRuns = 0;
   let candidateCredentials = 0;
+  let candidateSessions = 0;
+  const configDir = externalDir();
+  const { path: smokeConfigPath, digest } = writeSmokeConfig(configDir);
+  harnessState.syntheticDigest = digest;
+  const reviewOutputPath = join(externalDir(), 'riya-review-bundle.json');
+
   const deps: OperatorDeps = {
     console: createSafeConsole((line) => lines.push(line)),
-    preflight: {
-      smokeConfigPath: join(externalDir(), 'missing.json'),
-      reviewOutputPath: join(externalDir(), 'bundle.json'),
-      repoRoot: REPO_ROOT,
-      interactive: true,
-    },
+    preflight: { smokeConfigPath, reviewOutputPath, repoRoot: REPO_ROOT, interactive: true },
     openSmokeSecretSource: () =>
       Promise.resolve({
         isInteractive: () => true,
         readOnce: () => Promise.resolve(KEY_SENTINEL),
       } as MaskedSecretSource),
-    runSmoke: () => Promise.resolve(smoke),
+    runSmoke: () => {
+      smokeRuns += 1;
+      return Promise.resolve(smoke);
+    },
     openCandidateCredential: () => {
       candidateCredentials += 1;
       return Promise.resolve({});
     },
-    openCandidate: () => Promise.resolve({} as CandidateSession),
+    openCandidate: () => {
+      candidateSessions += 1;
+      // This harness owns the SMOKE gate only. A passing smoke legitimately continues, so the bind is
+      // refused here on purpose: the operator's own catch turns that into CANDIDATE_BIND_FAILED,
+      // which stops the run cleanly after the smoke lines this file is about. Returning a stub
+      // session instead would crash inside the safety port on an unimplemented member, which would
+      // be an accident rather than a decision.
+      return Promise.reject(new Error('bind refused: this harness owns the smoke gate only'));
+    },
     binding: createEvaluationBinding({
       evaluationSuiteId: 'riya.candidate.safety.suite.v1',
       evaluationSuiteVersion: 2,
@@ -145,10 +247,17 @@ async function runToSmoke(smoke: SmokeRunResult): Promise<{
     }),
     repoRoot: REPO_ROOT,
   };
-  // Preflight refuses before smoke here, so the smoke gate is exercised through the emitter directly
-  // for the operator-level ordering specs below; this helper proves the FENCES around it.
+
   const result = await runCandidateEvidenceOperator(deps);
-  return { lines, outcome: result.outcome, candidateCredentials };
+  return {
+    lines,
+    outcome: result.outcome,
+    reviewBundlePath: result.reviewBundlePath,
+    smokeRuns,
+    candidateCredentials,
+    candidateSessions,
+    reviewOutputPath,
+  };
 }
 
 /** Emit one fixture's diagnostics in isolation and return the single line. */
@@ -300,15 +409,79 @@ describe('G — NOTHING CONTENT-BEARING CAN REACH THE TERMINAL', () => {
 });
 
 describe('THE S3 INCIDENT SHAPE — the fences held, and now the phase is legible', () => {
-  it('F/H/I — a smoke failure emits diagnostics first, opens NO candidate credential, and stops', async () => {
+  it('F/H/I — PREFLIGHT PASSES, SMOKE FAILS, AND THE WHOLE SEQUENCE HOLDS IN ONE RUN', async () => {
+    // The load-bearing R2 regression, and the one owner review corrected. The first version pointed
+    // the config path at a missing file, so preflight refused and the run never reached smoke — it
+    // asserted an outer fence while its name claimed the smoke-failure one. This drives the REAL
+    // operator through a passing preflight into a synthetic smoke failure and proves the whole
+    // sequence R2 claims, in a single execution.
     const run = await runToSmoke(
-      smokeResult(false, 'smoke-timeout', { timeoutPhase: 'awaiting-headers' }),
+      smokeResult(false, 'smoke-timeout', {
+        timeoutPhase: 'awaiting-headers',
+        transportErrorCode: 'ABORT',
+        credentialOutcome: 'resolved',
+        credentialReadAttempts: 1,
+        credentialResolutions: 1,
+        fetchStartedMs: 4_200,
+      }),
     );
-    // Preflight refuses first in this harness, which is itself the outer fence: no smoke, and
-    // certainly no second credential.
+
+    const at = (fragment: string): number => run.lines.findIndex((l) => l.includes(fragment));
+    const preflightAt = at('phase=preflight status=PASS');
+    const diagnosticAt = at('phase=smoke-execution status=DIAGNOSTIC');
+    const failedAt = at('phase=smoke status=FAILED reason=smoke-timeout requests=1');
+
+    // 1. preflight genuinely passed — without this the rest of the assertions prove nothing.
+    expect(preflightAt).toBeGreaterThanOrEqual(0);
+    // 2. the diagnostic, BEFORE the verdict.
+    expect(diagnosticAt).toBeGreaterThan(preflightAt);
+    // 3. the authoritative failure line, unchanged and last.
+    expect(failedAt).toBeGreaterThan(diagnosticAt);
+    expect(failedAt).toBe(run.lines.length - 1);
+
+    // The smoke actually ran, exactly once.
+    expect(run.smokeRuns).toBe(1);
+    // The synthetic phase travelled verbatim.
+    expect(run.lines[diagnosticAt]).toContain('timeoutPhase=awaiting-headers');
+    expect(run.lines[diagnosticAt]).toContain('transportErrorCode=ABORT');
+
+    // The fences this test is named for.
+    expect(run.outcome).toBe('SMOKE_FAILED');
     expect(run.candidateCredentials).toBe(0);
-    expect(run.lines.join('\n')).not.toContain('phase=safety');
-    expect(run.lines.join('\n')).not.toContain('phase=p10');
+    expect(run.candidateSessions).toBe(0);
+    expect(run.lines.join(' ')).not.toContain('phase=safety');
+    expect(run.lines.join(' ')).not.toContain('phase=p10');
+    expect(run.reviewBundlePath).toBeUndefined();
+    expect(existsSync(run.reviewOutputPath)).toBe(false);
+  });
+
+  it('a SUCCESSFUL smoke also emits its diagnostic before the PASS line', async () => {
+    const run = await runToSmoke(
+      smokeResult(true, 'smoke-ok', {
+        credentialResolutions: 1,
+        credentialEntryMs: 6_200,
+        networkElapsedMs: 900,
+        totalElapsedMs: 7_300,
+      }),
+    );
+    const at = (fragment: string): number => run.lines.findIndex((l) => l.includes(fragment));
+    expect(at('phase=smoke-execution status=DIAGNOSTIC')).toBeGreaterThan(
+      at('phase=preflight status=PASS'),
+    );
+    expect(at('phase=smoke status=PASS requests=1')).toBeGreaterThan(
+      at('phase=smoke-execution status=DIAGNOSTIC'),
+    );
+    expect(run.smokeRuns).toBe(1);
+    // The healthy reference timing is what a later failure gets compared against.
+    expect(run.lines[at('phase=smoke-execution status=DIAGNOSTIC')]).toContain(
+      'credentialEntryMs=6200',
+    );
+    expect(run.lines[at('phase=smoke-execution status=DIAGNOSTIC')]).toContain(
+      'networkElapsedMs=900',
+    );
+    // A passing smoke DOES proceed to the second credential — the fence is specific to failure.
+    expect(run.candidateCredentials).toBe(1);
+    expect(run.outcome).toBe('CANDIDATE_BIND_FAILED');
   });
 
   it('the operator emits the diagnostic BEFORE the authoritative status line', () => {
