@@ -4,8 +4,11 @@
  * The first authorized smoke returned `smoke-timeout` with every counter at 1, which proved the harness
  * behaved and left the cause completely open. These specs pin the instrumentation that closes that gap
  * — and, just as importantly, pin the behaviour it must NOT have changed: one credential read, one bind,
- * one invocation, one HTTP attempt, zero retries, the timer still armed before credential entry, and a
- * 30 s bound that is neither moved nor extended.
+ * one invocation, one HTTP attempt, zero retries, and a 30 s bound that is neither moved nor extended.
+ *
+ * HF4-R3 corrected ONE thing here and nothing else: the timer now arms AFTER the credential is resolved,
+ * so the 30 s bounds the provider request instead of the operator's typing. The bound's VALUE, the phase
+ * vocabulary, and every diagnostic field are unchanged — see `request-timeout-ownership.test.ts`.
  *
  * Everything is offline and deterministic. No resolver, no network, no provider endpoint, no database.
  */
@@ -128,8 +131,8 @@ function harness(fetchLike: FetchLike, over: Readonly<Record<string, unknown>> =
   };
 }
 
-describe('(1, 2) the timer order is unchanged and credential entry is measured separately', () => {
-  it('(1) the timer is still armed BEFORE any credential read', async () => {
+describe('(1, 2) the request timer follows the bind, and credential entry is measured separately', () => {
+  it('(1) the timer is armed only AFTER the credential read (HF4-R3)', async () => {
     const source = scriptedSecretSource();
     const clock = manualMonotonic();
     const recorder = createDiagnosticRecorder(clock);
@@ -161,13 +164,16 @@ describe('(1, 2) the timer order is unchanged and credential entry is measured s
       diagnostics: recorder,
     });
 
-    expect(order[0]).toBe('armed:30000');
-    expect(order).toContain('credentialRead');
-    expect(order.indexOf('armed:30000')).toBeLessThan(order.indexOf('credentialRead'));
-    expect(result.diagnostics.timerArmedMs).toBeLessThanOrEqual(
+    expect(result.ok).toBe(true);
+    // HF4-R3. The read comes FIRST and the arm follows it. RUN S4 ran the other way round and spent the
+    // request budget on a human typing, then reported the operator's 43.8 s as a provider timeout.
+    expect(order[0]).toBe('credentialRead');
+    expect(order).toContain('armed:30000');
+    expect(order.indexOf('credentialRead')).toBeLessThan(order.indexOf('armed:30000'));
+    expect(result.diagnostics.timerArmedMs ?? Number.NEGATIVE_INFINITY).toBeGreaterThanOrEqual(
       result.diagnostics.credentialResolvedMs ?? Number.POSITIVE_INFINITY,
     );
-    // (25) the bound itself is untouched.
+    // (25) the bound itself is untouched. Only WHEN it starts moved.
     expect(timer.armedMs()).toBe(30_000);
   });
 
@@ -253,7 +259,13 @@ describe('(3, 9) a completed run emits a monotonic, complete milestone set', () 
 });
 
 describe('(4, 5, 6, 7, 8) an abort is attributed to the phase it landed in', () => {
-  it('(4) abort during credential resolution maps to credential-resolution', async () => {
+  it('(4) the credential-resolution phase survives as history, and no longer as live behaviour', async () => {
+    // HISTORY. S3 and S4 both terminated in this phase and their reports must stay readable, so the
+    // derivation is unchanged and still answers `credential-resolution` for those milestone sets.
+    expect(deriveTimeoutPhase({ timerArmed: 0, bindStarted: 1 })).toBe('credential-resolution');
+
+    // LIVE BEHAVIOUR (HF4-R3). The same stalled operator no longer produces a request timeout at all:
+    // with the timer armed only after the bind, `timer.fire()` here has nothing armed to fire.
     const clock = manualMonotonic();
     const recorder = createDiagnosticRecorder(clock);
     const timer = manualSmokeTimer();
@@ -261,7 +273,8 @@ describe('(4, 5, 6, 7, 8) an abort is attributed to the phase it landed in', () 
       isInteractive: () => true,
       readOnce: () =>
         new Promise<string>((_resolve, reject) => {
-          // The operator never finishes typing; the timer fires first.
+          // The operator abandons the prompt. Pre-R3 the already-armed timer fired here and the run was
+          // reported as `smoke-timeout`; now the abandonment is reported as what it is.
           timer.fire();
           reject(codedError('ABORT_ERR', 'AbortError'));
         }),
@@ -276,7 +289,17 @@ describe('(4, 5, 6, 7, 8) an abort is attributed to the phase it landed in', () 
       timer,
       diagnostics: recorder,
     });
-    expect(result.diagnostics.timeoutPhase).toBe('credential-resolution');
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).not.toBe('smoke-timeout');
+    }
+    // Nothing was armed, so nothing aborted, so there is no phase to attribute.
+    expect(timer.armed()).toBe(0);
+    expect(result.counters.timersArmed).toBe(0);
+    expect(result.counters.timersCleared).toBe(0);
+    expect(result.counters.invocations).toBe(0);
+    expect(result.diagnostics.abortSignalledMs).toBeUndefined();
+    expect(result.diagnostics.timeoutPhase).toBe('unknown');
     expect(result.diagnostics.credentialResolvedMs).toBeUndefined();
   });
 

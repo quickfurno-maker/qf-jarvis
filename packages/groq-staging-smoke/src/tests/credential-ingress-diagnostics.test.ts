@@ -435,7 +435,7 @@ describe('(15, 16, 17, 18, 19, 20, 21) behaviour locks', () => {
     expect(result.diagnostics.credentialResolutions).toBe(1);
   });
 
-  it('(16) the timer is still armed before credential resolution', async () => {
+  it('(16) the timer is armed after credential resolution (HF4-R3)', async () => {
     const order: string[] = [];
     const timer = manualSmokeTimer();
     const result = await runGroqStagingSmokeOnce(validConfig(), {
@@ -456,7 +456,9 @@ describe('(15, 16, 17, 18, 19, 20, 21) behaviour locks', () => {
       },
       diagnostics: createDiagnosticRecorder(manualMonotonic()),
     });
-    expect(order).toEqual(['armed:30000', 'read']);
+    // The read completes, THEN the request timer arms. RUN S4 proved the reverse order charges the
+    // operator's typing time to the provider request budget.
+    expect(order).toEqual(['read', 'armed:30000']);
     expect(result.counters.timersArmed).toBe(1);
     expect(result.counters.timersCleared).toBe(1);
   });

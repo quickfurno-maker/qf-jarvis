@@ -13,6 +13,18 @@
  * harness deliberately does not route through the gateway, so it owns the abort and the timer for its
  * single invocation — and owns nothing else.
  *
+ * ### What `config.timeoutMs` bounds (HF4-R3)
+ *
+ * The PROVIDER REQUEST, and only that. The timer arms after the credential is resolved and the provider
+ * is bound, and it is cleared the moment the invocation settles. Credential entry sits OUTSIDE it.
+ *
+ * It was not always so. RUN S4 armed the timer first and then waited for a human to type a key into a
+ * masked prompt: the abort fired at 30004 ms, the operator finished at 43802 ms, and the harness
+ * reported `smoke-timeout` — for a request whose `fetchStarted` milestone was never stamped, against a
+ * provider that was never contacted. The measurement was of the operator, reported as a failure of the
+ * model. Moving the arm point is the whole correction; `config.timeoutMs` itself is untouched, and no
+ * credential-entry bound replaces it here.
+ *
  * The Groq answer is a DISCARDED staging draft. It is validated structurally and then thrown away; its
  * content is never returned, printed, or recorded. QuickFurno Core remains the final business authority.
  */
@@ -163,16 +175,36 @@ function referencesOf(config: SmokeConfig): SmokeReferences {
   });
 }
 
-/** Bind once, invoke once, classify. Never loops, never retries, never calls anything else. */
-async function bindAndInvokeOnce(
+/** The successful half of the gateway's bind result, named so the invoke phase can be typed exactly. */
+type BoundGroqProvider = Extract<
+  Awaited<ReturnType<typeof bindGroqStagingProvider>>,
+  { ok: true }
+>['provider'];
+
+/** The bind phase outcome: either a bound provider, or the sanitized reason the bind refused. */
+type BindPhase =
+  | { readonly ok: true; readonly provider: BoundGroqProvider }
+  | { readonly ok: false; readonly outcome: SmokeOutcome };
+
+/**
+ * Bind once — resolve the credential and open the provider. UNTIMED, deliberately (HF4-R3).
+ *
+ * RUN S4 armed the request timer before this ran, so the 30 s request bound was spent on an operator
+ * typing a key: abort fired at 30004 ms, the credential resolved at 43802 ms, and `fetchStarted` was
+ * never reached. The run reported `smoke-timeout` for a request that had not been constructed, let
+ * alone sent. A human at a masked prompt is not a provider request, and a provider-request timeout is
+ * the wrong instrument to bound them with.
+ *
+ * So this phase owns no timer and no controller. It still stamps `bindStarted`, which is what keeps
+ * `credentialEntryMs` measurable — entry time remains fully observable, it just stops being fatal.
+ */
+async function bindOnce(
   config: SmokeConfig,
   deps: SmokeRunDeps,
   resolver: StagingCredentialResolver,
-  controller: AbortController,
-  timedOut: { value: boolean },
   counters: MutableCounters,
   recorder: DiagnosticRecorder,
-): Promise<SmokeOutcome> {
+): Promise<BindPhase> {
   counters.binds += 1;
   recorder.mark('bindStarted');
   const bind = await bindGroqStagingProvider({
@@ -203,9 +235,26 @@ async function bindAndInvokeOnce(
       bind.reason === 'groq-bind-credential-unavailable' && credentialCode !== undefined
         ? credentialCode
         : 'smoke-bind-refused';
-    return { ok: false, reason, bindReason: bind.reason };
+    return { ok: false, outcome: { ok: false, reason, bindReason: bind.reason } };
   }
+  return { ok: true, provider: bind.provider };
+}
 
+/**
+ * Invoke once, under the request timer, and classify. Never loops, never retries.
+ *
+ * Entered ONLY after a successful bind, so everything it spans is machine time: our own request
+ * construction, the provider invocation, the transport, the headers, the body, and settlement. That is
+ * exactly what `config.timeoutMs` was always meant to bound — the value itself is unchanged.
+ */
+async function invokeOnce(
+  config: SmokeConfig,
+  provider: BoundGroqProvider,
+  controller: AbortController,
+  timedOut: { value: boolean },
+  counters: MutableCounters,
+  recorder: DiagnosticRecorder,
+): Promise<SmokeOutcome> {
   // The ONE invocation. There is no loop and no second call site anywhere in this package.
   const input: ProviderInvocationInput = {
     runId: `${config.promptFamily}.v${String(config.promptVersion)}`,
@@ -228,7 +277,7 @@ async function bindAndInvokeOnce(
   let result;
   try {
     recorder.mark('invokeStarted');
-    result = await bind.provider.invoke(input);
+    result = await provider.invoke(input);
   } catch {
     // A provider signals a normal failure by RETURNING a status; a throw is an adapter/harness invariant.
     return { ok: false, reason: 'smoke-invariant' };
@@ -298,8 +347,14 @@ function withCredentialMilestone(
  *
  * Ordering matters and is asserted by the tests: the TTY gate runs FIRST, so a non-interactive session
  * is refused before any credential read is attempted; the gateway's own fail-closed gates then run
- * before the credential is resolved; the timer is armed around the one invocation only; and the timer is
- * always cancelled in the `finally`, on every path including a thrown one.
+ * before the credential is resolved; the request timer is armed ONLY after that bind succeeds, so it
+ * bounds the provider request and never the operator (HF4-R3); and the timer is always cancelled in the
+ * `finally`, on every path including a thrown one.
+ *
+ * A run that refuses at the TTY gate or at the bind therefore arms nothing: `timersArmed` and
+ * `timersCleared` both stay at 0, and `invocations` stays at 0. That is not bookkeeping trivia — it is
+ * the difference between "the request timed out" and "we never got as far as a request", which is the
+ * exact distinction RUN S4 could not make.
  */
 export async function runGroqStagingSmokeOnce(
   config: SmokeConfig,
@@ -337,8 +392,27 @@ export async function runGroqStagingSmokeOnce(
     recorder,
   );
 
-  // Exactly one AbortController and exactly one timer, both owned here. The arm order is UNCHANGED:
-  // the timer is still armed before credential resolution, so the 30 s bound still covers typing time.
+  // PHASE ONE — bind. No timer, no controller, no abort. See `bindOnce`: RUN S4 proved that bounding a
+  // human at a masked prompt with the PROVIDER REQUEST timeout reports a request failure for a request
+  // that was never built. Credential entry is still measured; it is simply no longer fatal.
+  let bound: BindPhase;
+  try {
+    bound = await bindOnce(config, deps, resolver, counters, recorder);
+  } catch {
+    bound = { ok: false, outcome: { ok: false, reason: 'smoke-invariant' } };
+  }
+
+  if (!bound.ok) {
+    // Refused before any invocation existed. Nothing was armed, so nothing is cleared and both timer
+    // counters stay at zero — the honest record of a run that never reached a provider request.
+    counters.credentialReads = resolver.reads();
+    return terminal(bound.outcome, references, counters, recorder);
+  }
+
+  // PHASE TWO — the ONE provider request, and the only thing `config.timeoutMs` now bounds. Exactly one
+  // AbortController and exactly one timer, both owned here, both armed only now that the credential is
+  // resolved. The bound is UNCHANGED; only what it measures is. It covers our request construction, the
+  // invocation, the transport, the headers, the body, and settlement — all of it machine time.
   const controller = new AbortController();
   const timedOut = { value: false };
   const cancelTimer = deps.timer.arm(config.timeoutMs, () => {
@@ -352,15 +426,7 @@ export async function runGroqStagingSmokeOnce(
 
   let outcome: SmokeOutcome;
   try {
-    outcome = await bindAndInvokeOnce(
-      config,
-      deps,
-      resolver,
-      controller,
-      timedOut,
-      counters,
-      recorder,
-    );
+    outcome = await invokeOnce(config, bound.provider, controller, timedOut, counters, recorder);
   } catch {
     outcome = { ok: false, reason: 'smoke-invariant' };
   } finally {
@@ -372,6 +438,16 @@ export async function runGroqStagingSmokeOnce(
   }
 
   counters.credentialReads = resolver.reads();
+  return terminal(outcome, references, counters, recorder);
+}
+
+/** Freeze the terminal result. One shape, one place, so every exit path reports identically. */
+function terminal(
+  outcome: SmokeOutcome,
+  references: SmokeReferences,
+  counters: MutableCounters,
+  recorder: DiagnosticRecorder,
+): SmokeRunResult {
   const finalCounters = Object.freeze({ ...counters });
   const diagnostics = recorder.snapshot();
 
