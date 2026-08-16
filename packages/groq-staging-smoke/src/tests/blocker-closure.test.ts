@@ -79,9 +79,14 @@ describe('(2) QFJ-S1-BLOCK-002 — a one-shot executable harness exists', () => 
     const bin = readPackageFile('src/bin.ts');
     expect(bin.startsWith('#!/usr/bin/env node')).toBe(true);
     // Since QFJ-S1D-B the real transport is the instrumented one, still targeting the gateway's
-    // fixed endpoint through the platform fetch seam.
-    expect(bin).toContain('createInstrumentedGroqTransport({');
-    expect(bin).toContain('createSystemFetchLike()');
+    // fixed endpoint through the platform fetch seam. Since HF4-R4 that pairing lives in ONE named
+    // module rather than being written out here: RUN S5 proved a second composition root had got it
+    // wrong, and a convention duplicated across two files is not a guarantee. The composition is the
+    // same; the assertion follows it.
+    const wire = readPackageFile('src/system-wire.ts');
+    expect(bin).toContain('createSystemSmokeWireDeps()');
+    expect(wire).toContain('createInstrumentedGroqTransport({');
+    expect(wire).toContain('createSystemFetchLike()');
     expect(bin).toContain('createNodeMaskedSecretSource()');
     expect(bin).toContain('createSystemSmokeTimer()');
     expect(bin).toContain('runSmokeCli(');
@@ -183,7 +188,8 @@ describe('(5) all four blocker codes are demonstrably cleared by code and contra
 
     // BLOCK-002: an executable one-shot harness exists and has a real, non-test call site.
     expect(manifest.bin?.['qfj-groq-staging-smoke']).toBe('./dist/bin.js');
-    expect(readPackageFile('src/bin.ts')).toContain('createInstrumentedGroqTransport({');
+    expect(readPackageFile('src/bin.ts')).toContain('createSystemSmokeWireDeps()');
+    expect(readPackageFile('src/system-wire.ts')).toContain('createInstrumentedGroqTransport({');
 
     // BLOCK-003: the harness owns the abort and the timer, and always clears it.
     const result = await runOnce({});

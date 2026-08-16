@@ -45,6 +45,7 @@ import { createOperatorLedger, createSafetyReplicationLedger } from '../accounti
 import type { OperatorRunGoal } from '../internal/run-goal.js';
 import type { BaseTurnDeps } from '../candidate-ports.js';
 import type { CandidateSession } from '../candidate-session.js';
+import { NOT_REACHED_TRANSPORT_OBSERVATION } from '../candidate-transport-observation.js';
 import {
   CANDIDATE_CAPABILITY_PROFILE_REF,
   CANDIDATE_RELEASE,
@@ -279,6 +280,19 @@ function deterministicSession(
       invocationsFor: (caseId) => perCase.get(caseId) ?? 0,
       gatewayErrorFor: () => undefined,
       cancellationObservedFor: (caseId) => cancellationCases.includes(caseId),
+      // Every case this fake actually invoked crossed the boundary and got a 200; every case it did
+      // not invoke never reached it. Derived from the same per-case counter the invocation count is,
+      // so the two can never disagree.
+      transportObservationFor: (caseId) =>
+        (perCase.get(caseId) ?? 0) > 0
+          ? Object.freeze({
+              providerTransportStarted: true,
+              providerHttpStatus: 200,
+              providerHttpClass: 'SUCCESS_2XX' as const,
+              providerErrorType: 'NONE' as const,
+              providerErrorCode: 'NONE' as const,
+            })
+          : NOT_REACHED_TRANSPORT_OBSERVATION,
       accountingRefusal: () => undefined,
     },
     safetyCases: () => safetyCases,

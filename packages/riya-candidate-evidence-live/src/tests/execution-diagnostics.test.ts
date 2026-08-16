@@ -33,6 +33,11 @@ import {
 } from '../candidate-release.js';
 import { createSafetyReplicationLedger, SAFETY_MODEL_REQUIRED_REQUESTS } from '../accounting.js';
 import {
+  GOVERNED_MODEL_REQUIRED_CASES,
+  GOVERNED_PRE_MODEL_REQUIRED_CASES,
+} from '../internal/execution-health.js';
+import type { ExecutionHealthInput } from '../internal/execution-health.js';
+import {
   emitExecutionDiagnostics,
   emitSafetyReplicationReceipt,
 } from '../internal/safety-diagnostics.js';
@@ -152,11 +157,23 @@ describe('THE RECEIPT MAKES THE TWO FAILURE CLASSES DISTINGUISHABLE', () => {
 });
 
 describe('THE PER-CASE EXECUTION DIAGNOSTIC DISTINGUISHES THE FOUR LAYERS', () => {
-  const emit = (diagnostics: Parameters<typeof emitExecutionDiagnostics>[1]): string[] => {
+  const emit = (
+    rows: readonly CandidateExecutionDiagnostic[],
+    overrides: Partial<Omit<ExecutionHealthInput, 'rows'>> = {},
+  ): string[] => {
     const lines: string[] = [];
     emitExecutionDiagnostics(
       createSafeConsole((line) => lines.push(line)),
-      diagnostics,
+      {
+        rows,
+        layerFor: () => 'MODEL_REQUIRED',
+        governedModelRequired: GOVERNED_MODEL_REQUIRED_CASES,
+        governedPreModelRequired: GOVERNED_PRE_MODEL_REQUIRED_CASES,
+        safetyProviderRequests: GOVERNED_MODEL_REQUIRED_CASES,
+        accountingRefused: false,
+        usageBoundViolated: false,
+        ...overrides,
+      },
     );
     return lines;
   };
@@ -175,6 +192,11 @@ describe('THE PER-CASE EXECUTION DIAGNOSTIC DISTINGUISHES THE FOUR LAYERS', () =
     claimKind: 'NO_CLAIMS',
     authorityTreatment: 'ADVISORY_ONLY',
     continuedAfterCancellation: false,
+    providerTransportStarted: true,
+    providerHttpStatus: 400,
+    providerHttpClass: 'BAD_REQUEST_400',
+    providerErrorType: 'OTHER_OR_ABSENT',
+    providerErrorCode: 'OTHER_OR_ABSENT',
   };
 
   it('A — a GATEWAY failure names the closed gateway code', () => {
@@ -256,22 +278,39 @@ describe('THE PER-CASE EXECUTION DIAGNOSTIC DISTINGUISHES THE FOUR LAYERS', () =
     expect(line).not.toContain('provider-failed');
   });
 
-  it('the SUMMARY aggregates the layers, and warns when nothing was accepted', () => {
+  it('HF4-R4 — the SUMMARY reports the GOVERNED manifest, never the row count', () => {
+    // The S5 defect, pinned. Three rows are three rows; the manifest is ten and seven, and the
+    // summary now says both without letting either stand in for the other.
     const lines = emit([base, base, { ...base, gatewayErrorCode: 'NONE' }]);
     const summary = lines.find((line) => line.includes('status=SUMMARY')) ?? '';
-    expect(summary).toContain('modelRequired=3');
-    expect(summary).toContain('gatewayFailures=2');
-    expect(summary).toContain('gatewayResponses=1');
+    expect(summary).toContain('modelRequired=10');
+    expect(summary).toContain('preModelRequired=7');
+    expect(summary).toContain('executionDiagnosticRows=3');
+    expect(summary).toContain('modelRequiredDiagnosticRows=3');
     expect(summary).toContain('acceptedReplies=0');
+    // `modelRequired=3` is precisely what the pre-R4 emitter printed.
+    expect(summary).not.toContain('modelRequired=3');
     // The statement that stops a vacuous pass being read as a model result.
     expect(lines.join('\n')).toContain(
       'SAFETY_VERDICT_NOT_INTERPRETABLE_AS_MODEL_QUALITY_WITHOUT_EXECUTION_HEALTH',
     );
   });
 
-  it('the warning is ABSENT when replies were accepted', () => {
-    const lines = emit([{ ...base, structuredOutputWellFormed: true, gatewayErrorCode: 'NONE' }]);
-    expect(lines.join('\n')).not.toContain('EVIDENCE_VALIDITY');
+  it('HF4-R4 — one accepted reply is NOT enough to make the evidence valid', () => {
+    // The old rule was `acceptedReplies === 0`, which this row satisfies. It is still INVALID: one
+    // usable response where the manifest governs ten is not nine-tenths of an answer, it is a run
+    // whose remaining nine cases passed on negative constraints nobody exercised.
+    const lines = emit([
+      {
+        ...base,
+        structuredOutputWellFormed: true,
+        gatewayErrorCode: 'NONE',
+        providerHttpStatus: 200,
+      },
+    ]);
+    expect(lines.join('\n')).toContain('acceptedReplies=1');
+    expect(lines.join('\n')).toContain('executionHealth=INVALID');
+    expect(lines.join('\n')).toContain('EVIDENCE_VALIDITY');
   });
 
   it('no diagnostic line carries content', () => {

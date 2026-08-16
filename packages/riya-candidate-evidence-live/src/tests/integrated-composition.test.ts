@@ -37,6 +37,7 @@ import {
   createTransportBoundaryAbort,
   createTransportStartHook,
 } from '../cancellation-transport.js';
+import { createCandidateTransportObservations } from '../candidate-transport-observation.js';
 import {
   CANDIDATE_CAPABILITY_PROFILE_REF,
   CANDIDATE_RELEASE,
@@ -83,21 +84,30 @@ function externalDir(): string {
 }
 
 /** A transport that answers nothing useful but records that it was entered. Never opens a socket. */
-function fakeTransport(): { readonly transport: GroqTransport; readonly entries: () => number } {
+function fakeTransport(wire: WireOutcome = {}): {
+  readonly transport: GroqTransport;
+  readonly entries: () => number;
+} {
   let entries = 0;
   return {
     transport: {
       send: () => {
         entries += 1;
         return Promise.resolve({
-          status: 200,
-          bodyText: '{}',
+          status: wire.status ?? 200,
+          bodyText: wire.bodyText ?? '{}',
           retryAfterSeconds: null,
         } as Awaited<ReturnType<GroqTransport['send']>>);
       },
     },
     entries: () => entries,
   };
+}
+
+/** What the fake wire answers. HF4-R4: the status is what the observer classifies. */
+interface WireOutcome {
+  readonly status?: number;
+  readonly bodyText?: string;
 }
 
 const SMOKE_PASS = {
@@ -175,9 +185,13 @@ interface Recorded {
   readonly cancellationEntries: () => number;
   readonly perCase: (caseId: string) => number;
   readonly ledgerSnapshot: () => ReturnType<ReturnType<typeof createOperatorLedger>['snapshot']>;
+  readonly observations: () => ReturnType<typeof createCandidateTransportObservations>;
 }
 
-function integrated(options: { readonly smoke: SmokeRunResult }): Recorded {
+function integrated(options: {
+  readonly smoke: SmokeRunResult;
+  readonly wire?: WireOutcome;
+}): Recorded {
   const lines: string[] = [];
   const dir = externalDir();
   const { path: smokeConfigPath, digest: syntheticDigest } = writeSmokeConfig(dir);
@@ -188,9 +202,12 @@ function integrated(options: { readonly smoke: SmokeRunResult }): Recorded {
   let receivedSource: MaskedSecretSource | undefined;
   let candidateResolutions = 0;
 
-  const ordinary = fakeTransport();
-  const cancellation = fakeTransport();
+  const ordinary = fakeTransport(options.wire);
+  const cancellation = fakeTransport(options.wire);
   const abort = createTransportBoundaryAbort();
+  // HF4-R4. Wired exactly as `bin.ts` wires it: ONE recorder, both gateways observed, the observer
+  // sitting outside the cancellation hook.
+  const observations = createCandidateTransportObservations();
   let session: ReturnType<typeof createAccountedSession> | undefined;
 
   harnessState.syntheticDigest = syntheticDigest;
@@ -225,13 +242,19 @@ function integrated(options: { readonly smoke: SmokeRunResult }): Recorded {
     openCandidate: (credential) => {
       const apiKey = credential as Parameters<typeof createCandidateGateway>[0]['apiKey'];
       const built = createAccountedSession({
-        gateway: createCandidateGateway({ apiKey, transport: ordinary.transport }),
+        gateway: createCandidateGateway({
+          apiKey,
+          transport: observations.observe(ordinary.transport),
+        }),
         cancellationGateway: createCandidateGateway({
           apiKey,
-          transport: createTransportStartHook(cancellation.transport, abort.onTransportStarted),
+          transport: observations.observe(
+            createTransportStartHook(cancellation.transport, abort.onTransportStarted),
+          ),
         }),
         cancellationController: abort.controller,
         transportStarts: abort.started,
+        transportObservations: observations,
         ledger,
         clock: () => '2026-08-12T00:00:00.000Z',
       });
@@ -271,6 +294,7 @@ function integrated(options: { readonly smoke: SmokeRunResult }): Recorded {
     cancellationEntries: cancellation.entries,
     perCase: (caseId) => session?.invocationsFor(caseId) ?? 0,
     ledgerSnapshot: () => ledger.snapshot(),
+    observations: () => observations,
   };
 }
 
@@ -347,6 +371,147 @@ describe('the wired composition charges and counts exactly what it does', () => 
     for (const forbidden of ['sk-', 'Authorization', 'Bearer', 'SENTINEL-', 'modular kitchen']) {
       expect(output, `console must not contain ${forbidden}`).not.toContain(forbidden);
     }
+  });
+});
+
+describe('HF4-R4 — the WIRED run labels every row from the manifest and classifies every failure', () => {
+  const caseLines = (lines: readonly string[]): readonly string[] =>
+    lines.filter((line) => line.includes('phase=safety-execution status=CASE'));
+  const lineFor = (lines: readonly string[], caseId: string): string =>
+    caseLines(lines).find((line) => line.includes(`caseId=${caseId} `)) ?? '';
+  const summaryOf = (lines: readonly string[]): string =>
+    lines.find((line) => line.includes('phase=safety-execution status=SUMMARY')) ?? '';
+  const healthOf = (lines: readonly string[]): string =>
+    lines.find((line) => line.includes('status=EXECUTION_HEALTH')) ?? '';
+
+  it('the S5 SHAPE: twelve rows, ten model-facing, two adapter-boundary — never modelRequired=12', async () => {
+    // The end-to-end version of the defect. `erased-subject.01` and `human-takeover.01` build a real
+    // turn, are refused by the M4 state gate, and emit a row each. Twelve rows; ten model cases.
+    const run = integrated({ smoke: SMOKE_PASS, wire: { status: 400 } });
+    await runCandidateEvidenceOperator(run.deps);
+
+    expect(caseLines(run.lines)).toHaveLength(12);
+    const summary = summaryOf(run.lines);
+    expect(summary).toContain('modelRequired=10');
+    expect(summary).toContain('preModelRequired=7');
+    expect(summary).toContain('executionDiagnosticRows=12');
+    expect(summary).toContain('modelRequiredDiagnosticRows=10');
+    expect(summary).toContain('preModelRequiredDiagnosticRows=2');
+    expect(summary).toContain('providerInvokedCases=10');
+    expect(summary).not.toContain('modelRequired=12');
+    expect(summary).toContain('unknownLayerDiagnosticRows=0');
+  });
+
+  it('every row carries the layer the REAL fixture manifest declares', async () => {
+    const run = integrated({ smoke: SMOKE_PASS, wire: { status: 400 } });
+    await runCandidateEvidenceOperator(run.deps);
+
+    for (const line of caseLines(run.lines)) {
+      const id = /caseId=(\S+)/u.exec(line)?.[1] ?? '';
+      const fixture = RIYA_SAFETY_FIXTURES.find((one) => one.request.caseId === id);
+      expect(fixture, `${id} must be a governed fixture`).toBeDefined();
+      expect(line, id).toContain(`executionLayer=${fixture?.executionExpectation ?? ''}`);
+    }
+    // Named explicitly, because these are the two the pre-R4 summary silently promoted.
+    for (const id of ['riya.safety.erased-subject.01', 'riya.safety.human-takeover.01']) {
+      expect(lineFor(run.lines, id)).toContain('executionLayer=PRE_MODEL_REQUIRED');
+      expect(lineFor(run.lines, id)).toContain('providerInvocations=0');
+      expect(lineFor(run.lines, id)).toContain('providerHttpClass=NOT_REACHED');
+    }
+  });
+
+  it('a 400 across the wire is named as BAD_REQUEST_400 on every model-facing row', async () => {
+    // What RUN S5 could not say. The gateway code is free to stay `provider-failed`; the HTTP class
+    // is what distinguishes a rejected request from a revoked key.
+    const run = integrated({ smoke: SMOKE_PASS, wire: { status: 400 } });
+    await runCandidateEvidenceOperator(run.deps);
+
+    for (const fixture of MODEL_REQUIRED) {
+      const line = lineFor(run.lines, fixture.request.caseId);
+      expect(line, fixture.fixtureId).toContain('providerTransportStarted=true');
+      expect(line, fixture.fixtureId).toContain('providerHttpClass=BAD_REQUEST_400');
+      expect(line, fixture.fixtureId).toContain('providerHttpStatus=400');
+      expect(run.observations().observationCountFor(fixture.request.caseId)).toBe(1);
+    }
+    expect(run.observations().unattributedObservations()).toBe(0);
+    expect(run.observations().overlappingCaseWindows()).toBe(0);
+    expect(healthOf(run.lines)).toContain('executionHealth=INVALID');
+  });
+
+  it('the 401 and 403 that S5 could not have distinguished now differ on the row', async () => {
+    for (const [status, expected] of [
+      [401, 'UNAUTHORIZED_401'],
+      [403, 'FORBIDDEN_403'],
+      [429, 'RATE_LIMITED_429'],
+      [500, 'SERVER_5XX'],
+    ] as const) {
+      const run = integrated({ smoke: SMOKE_PASS, wire: { status } });
+      await runCandidateEvidenceOperator(run.deps);
+      const line = lineFor(run.lines, 'riya.safety.override-core.01');
+      const label = `HTTP ${String(status)}`;
+      expect(line, label).toContain(`providerHttpClass=${expected}`);
+      expect(line, label).toContain(`providerHttpStatus=${String(status)}`);
+    }
+  });
+
+  it('a hostile provider body reaches no line of the wired run', async () => {
+    const run = integrated({
+      smoke: SMOKE_PASS,
+      wire: {
+        status: 403,
+        bodyText: JSON.stringify({
+          error: {
+            message: 'key sk-SENTINEL-NEVER-A-REAL-KEY-0000 lacks access',
+            type: 'permissions_error',
+            code: 'model_permission_blocked_project',
+            failed_generation: 'the client asked about a modular kitchen',
+          },
+        }),
+      },
+    });
+    await runCandidateEvidenceOperator(run.deps);
+
+    const output = run.lines.join('\n');
+    // The reviewed code survives; nothing beside it does.
+    expect(output).toContain('providerErrorCode=MODEL_PERMISSION_BLOCKED_PROJECT');
+    expect(output).toContain('providerErrorType=PERMISSIONS_ERROR');
+    for (const forbidden of [
+      'sk-',
+      'SENTINEL-',
+      'lacks access',
+      'failed_generation',
+      'modular kitchen',
+      'Authorization',
+      'Bearer',
+      'https://',
+      'at Object.',
+    ]) {
+      expect(output, `the wired run must not print ${forbidden}`).not.toContain(forbidden);
+    }
+  });
+
+  it('no case claims another case observation, and the cancellation claims its own', async () => {
+    const run = integrated({ smoke: SMOKE_PASS, wire: { status: 400 } });
+    await runCandidateEvidenceOperator(run.deps);
+
+    // Every boundary case: no observation at all, rather than the previous case value.
+    for (const fixture of PRE_MODEL) {
+      expect(
+        run.observations().observationCountFor(fixture.request.caseId),
+        fixture.fixtureId,
+      ).toBe(0);
+      expect(
+        run.observations().observationFor(fixture.request.caseId).providerHttpClass,
+        fixture.fixtureId,
+      ).toBe('NOT_REACHED');
+    }
+    // The cancellation went through its OWN transport and its observation is its own.
+    expect(run.cancellationEntries()).toBe(1);
+    expect(run.observations().observationCountFor('riya.safety.cancellation-ignored.01')).toBe(1);
+    expect(
+      run.observations().observationFor('riya.safety.cancellation-ignored.01')
+        .providerTransportStarted,
+    ).toBe(true);
   });
 });
 

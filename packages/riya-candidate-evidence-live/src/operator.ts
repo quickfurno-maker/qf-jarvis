@@ -29,6 +29,7 @@ import { loadSmokeConfig } from '@qf-jarvis/groq-staging-smoke';
 import {
   buildRiyaQualityReviewBundle,
   captureRiyaQualityCandidates,
+  RIYA_SAFETY_FIXTURES,
   runRiyaSafetyCandidate,
   writeRiyaQualityReviewBundle,
 } from '@qf-jarvis/riya-candidate-evaluation-runner';
@@ -41,6 +42,7 @@ import type { CandidateSession } from './candidate-session.js';
 import { createQualityCandidatePort, createSafetyCandidatePort } from './candidate-ports.js';
 import type { CandidateExecutionDiagnostic } from './candidate-ports.js';
 import type { OperatorOutcome } from './exit-codes.js';
+import type { CandidateExecutionLayer, ExecutionHealthInput } from './internal/execution-health.js';
 import { DEFAULT_RUN_GOAL, SECOND_CREDENTIAL_NOTICES } from './internal/run-goal.js';
 import type { OperatorRunGoal } from './internal/run-goal.js';
 import {
@@ -61,6 +63,34 @@ import type { SafeConsole } from './safe-console.js';
  * cannot drift apart and quietly disagree about what an owner is being asked to fund.
  */
 export const SECOND_CREDENTIAL_NOTICE = SECOND_CREDENTIAL_NOTICES.FULL_EVIDENCE;
+
+/**
+ * The GOVERNED layer of every safety case, read from the fixture manifest (HF4-R4).
+ *
+ * Built here rather than in the port on purpose. The port reports what a run observably DID and is
+ * deliberately blind to what a fixture expects — a port that could read its own declared layer could
+ * satisfy the bridge's layer check by construction. Labelling a printed row is a different job: the
+ * label IS the manifest's claim, and reading it from anywhere else would be inventing one.
+ *
+ * Derived from the real fixtures, never a literal table. If the manifest gains or loses a case this
+ * moves with it, and the health rule — which pins 10 / 7 — is what turns that into a loud failure.
+ */
+const SAFETY_EXECUTION_LAYERS: ReadonlyMap<string, CandidateExecutionLayer> = new Map(
+  RIYA_SAFETY_FIXTURES.map((fixture) => [fixture.request.caseId, fixture.executionExpectation]),
+);
+
+/** A case the manifest does not name is `UNKNOWN`, which the health rule treats as disqualifying. */
+function safetyLayerFor(caseId: string): CandidateExecutionLayer {
+  return SAFETY_EXECUTION_LAYERS.get(caseId) ?? 'UNKNOWN';
+}
+
+const GOVERNED_MODEL_REQUIRED = RIYA_SAFETY_FIXTURES.filter(
+  (fixture) => fixture.executionExpectation === 'MODEL_REQUIRED',
+).length;
+
+const GOVERNED_PRE_MODEL_REQUIRED = RIYA_SAFETY_FIXTURES.filter(
+  (fixture) => fixture.executionExpectation === 'PRE_MODEL_REQUIRED',
+).length;
 
 /**
  * What the operator needs from the outside world.
@@ -203,6 +233,7 @@ export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<
     invocationsFor: session.invocationsFor,
     cancellationObservedFor: session.cancellationObservedFor,
     gatewayErrorFor: session.gatewayErrorFor,
+    transportObservationFor: session.transportObservationFor,
     onExecutionDiagnostic: (diagnostic) => executionDiagnostics.push(diagnostic),
   });
   const safety = await runRiyaSafetyCandidate({
@@ -210,6 +241,19 @@ export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<
     binding: deps.binding,
     thresholds: deps.thresholds,
   });
+  // HF4-R4. Everything the health rule needs, assembled where all of it is in scope. The governed
+  // counts come from the manifest, the ledger supplies the fact that covers the five pre-model cases
+  // which never emit a row, and the refusal flags say whether the run was truncated rather than run.
+  const executionHealthInput = (): ExecutionHealthInput => ({
+    rows: executionDiagnostics,
+    layerFor: safetyLayerFor,
+    governedModelRequired: GOVERNED_MODEL_REQUIRED,
+    governedPreModelRequired: GOVERNED_PRE_MODEL_REQUIRED,
+    safetyProviderRequests: ledger.snapshot().safetyProviderRequests,
+    accountingRefused: session.accountingRefusal() !== undefined,
+    usageBoundViolated: ledger.snapshot().usageBoundViolated,
+  });
+
   // An accounting refusal is not a statement about the model. If a ceiling or a usage bound stopped
   // the run, the outcome says so rather than blaming the candidate for evidence nobody collected.
   const accountingOutcome = (): OperatorOutcome | undefined => {
@@ -263,7 +307,7 @@ export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<
     // HF4 ordering: what the machinery DID, then what the authority DECIDED, then the receipt, then
     // the verdict. Execution facts come first because they determine whether the verdict below is
     // interpretable as model quality at all.
-    emitExecutionDiagnostics(safe, executionDiagnostics);
+    emitExecutionDiagnostics(safe, executionHealthInput());
     emitSafetyIneligibilityDiagnostics(safe, safety.suiteResult, deps.thresholds);
     // HF3 receipt goes BEFORE the verdict so the authoritative INELIGIBLE line remains the last
     // safety line and remains byte-for-byte what it was. The outcome is unchanged too: safety
@@ -290,7 +334,7 @@ export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<
   // The return is placed before the quality port is CONSTRUCTED, not merely before it is used, so
   // there is no window in which a P10 seam exists in this run at all.
   if (runGoal === 'SAFETY_REPLICATION') {
-    emitExecutionDiagnostics(safe, executionDiagnostics);
+    emitExecutionDiagnostics(safe, executionHealthInput());
     emitSafetyReplicationReceipt(safe, ledger.snapshot());
     safe.line({ finalStatus: 'SAFETY_REPLICATION_COMPLETE' });
     return { outcome: 'SAFETY_REPLICATION_COMPLETE' };

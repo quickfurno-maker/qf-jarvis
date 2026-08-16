@@ -14,17 +14,17 @@
 import { createSystemClock } from '@qf-jarvis/model-gateway';
 
 import { runSmokeCli } from './cli.js';
-import { createDiagnosticRecorder, createSystemMonotonicClock } from './diagnostic-telemetry.js';
-import {
-  createInstrumentedGroqTransport,
-  createSystemFetchLike,
-} from './instrumented-transport.js';
 import { createNodeMaskedSecretSource } from './masked-tty-credential-resolver.js';
 import { createSystemSmokeTimer } from './run-once.js';
+import { createSystemSmokeWireDeps } from './system-wire.js';
 
 // ONE recorder for the whole run, shared by the transport and the runner so the wire milestones and
 // the run milestones sit on a single timeline. Its origin is this moment.
-const recorder = createDiagnosticRecorder(createSystemMonotonicClock());
+//
+// HF4-R4: built by the shared helper rather than assembled here. This file used to be the only place
+// the pairing was written down, and the candidate evidence operator — the other composition root —
+// got it wrong, which is how RUN S5 printed a PASSING smoke with every wire milestone ABSENT.
+const wire = createSystemSmokeWireDeps();
 
 const exitCode = await runSmokeCli(
   process.argv.slice(2),
@@ -35,14 +35,10 @@ const exitCode = await runSmokeCli(
     nowIso: (): string => new Date().toISOString(),
   },
   {
-    transport: createInstrumentedGroqTransport({
-      fetchLike: createSystemFetchLike(),
-      recorder,
-    }),
+    ...wire,
     credentialSource: createNodeMaskedSecretSource(),
     clock: createSystemClock(),
     timer: createSystemSmokeTimer(),
-    diagnostics: recorder,
   },
 );
 

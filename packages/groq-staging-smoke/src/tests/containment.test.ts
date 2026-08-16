@@ -254,7 +254,15 @@ describe('dependency graph, exports, and the locked public API', () => {
     // was the exact defect HF1 repaired. Pure functions over an already-parsed `SmokeConfig`: no
     // filesystem, no clock, no network, no credential, and no way to reach one.
     //
-    // Still an EXACT set match. This records three authorised additions; it does not relax the lock.
+    // MVP-P2A.2 HF4-R4 adds ONE: `createSystemSmokeWireDeps`. RUN S5's smoke PASSED and printed every
+    // wire milestone ABSENT, because the instrumented transport and the recorder that owns its
+    // milestones have to be the same pair and that pairing was a convention written out in two
+    // separate composition roots. The candidate evidence operator held the other one and got it
+    // wrong. The helper is the pairing, as one value: it exposes neither the recorder factory nor the
+    // transport factory, reads no environment, holds no credential, and changes no request, timer,
+    // retry or configuration semantic.
+    //
+    // Still an EXACT set match. This records four authorised additions; it does not relax the lock.
     const EXPECTED = [
       'CREDENTIAL_PROMPT_LABEL',
       'MAX_CREDENTIAL_LENGTH',
@@ -273,6 +281,7 @@ describe('dependency graph, exports, and the locked public API', () => {
       'createMaskedTtyCredentialResolver',
       'createNodeMaskedSecretSource',
       'createSystemSmokeTimer',
+      'createSystemSmokeWireDeps',
       'formatSanitizedPreRunFailure',
       'formatSanitizedSmokeResult',
       'isSmokeReason',
@@ -374,12 +383,19 @@ describe('the S1 safety contract is preserved, not re-implemented', () => {
       // And no spec ever wires the REAL terminal into a run; every run injects a scripted source.
       expect(text).not.toMatch(/credentialSource:\s*createNodeMaskedSecretSource/);
     }
-    // The one real transport call site is the executable composition root, which no spec imports.
-    // Since QFJ-S1D-B it composes the instrumented transport over the platform fetch seam.
-    expect(readPackageSource('src/bin.ts')).toContain('createInstrumentedGroqTransport({');
-    expect(readPackageSource('src/bin.ts')).toContain('createSystemFetchLike()');
+    // The one real transport call site is `system-wire.ts`, which the executable composition root
+    // reaches through one named helper. Since QFJ-S1D-B it composes the instrumented transport over
+    // the platform fetch seam; since HF4-R4 it lives in one module rather than being written out in
+    // every composition root, because RUN S5 proved the second root had got it wrong.
+    expect(readPackageSource('src/system-wire.ts')).toContain('createInstrumentedGroqTransport({');
+    expect(readPackageSource('src/system-wire.ts')).toContain('createSystemFetchLike()');
+    expect(readPackageSource('src/bin.ts')).toContain('createSystemSmokeWireDeps()');
+    // Neither the executable root nor the real-capability wiring is IMPORTED by a spec. Specs name
+    // both in assertions — that is the point of the two lines above — so the check is on the import
+    // statement, which is what would actually construct a network client inside the suite.
     for (const file of specs) {
       expect(readFileSync(file, 'utf8')).not.toMatch(/from ['"][./]*bin\.js['"]/);
+      expect(readFileSync(file, 'utf8')).not.toMatch(/from ['"][./]*system-wire\.js['"]/);
     }
   });
 });

@@ -19,6 +19,7 @@ import {
   createMaskedTtyCredentialResolver,
   createNodeMaskedSecretSource,
   createSystemSmokeTimer,
+  createSystemSmokeWireDeps,
   runGroqStagingSmokeOnce,
 } from '@qf-jarvis/groq-staging-smoke';
 import type { GroqApiKey } from '@qf-jarvis/model-gateway';
@@ -41,6 +42,7 @@ import {
   createTransportBoundaryAbort,
   createTransportStartHook,
 } from './cancellation-transport.js';
+import { createCandidateTransportObservations } from './candidate-transport-observation.js';
 import { createCandidateGateway } from './evaluation-gateway.js';
 import { createOperatorLedger, createSafetyReplicationLedger } from './accounting.js';
 import type { RequestLedger } from './accounting.js';
@@ -173,9 +175,14 @@ async function main(): Promise<number> {
     // ONE source, created only after preflight passed, and handed straight to the smoke harness
     // below. The harness owns the TTY gate, the resolver, the single read and the single bind.
     openSmokeSecretSource: () => Promise.resolve(createNodeMaskedSecretSource()),
+    // HF4-R4. The INSTRUMENTED transport and the recorder that owns its milestones, paired by the
+    // smoke package itself. This call site used to pass a plain transport and no recorder, so the
+    // harness built a private recorder nothing on the wire could reach — which is why RUN S5's smoke
+    // PASSED while printing fetchStarted / headersReceived / responseBody* / networkElapsed as
+    // ABSENT. Same request, same timer, same credential policy, same zero retries.
     runSmoke: (config, source) =>
       runGroqStagingSmokeOnce(config, {
-        transport: createFetchGroqTransport(),
+        ...createSystemSmokeWireDeps(),
         credentialSource: source,
         clock: createSystemClock(),
         timer: createSystemSmokeTimer(),
@@ -193,19 +200,32 @@ async function main(): Promise<number> {
       // instrumented transport aborts THAT controller once the request boundary is crossed — so the
       // signal the underlying transport is holding is the one that gets cancelled.
       const abort = createTransportBoundaryAbort();
-      const cancellationTransport = createTransportStartHook(
-        createFetchGroqTransport(),
-        abort.onTransportStarted,
+
+      // HF4-R4. ONE recorder for the whole candidate run, shared by both gateways so a case's
+      // observation is claimed by the case that made the request regardless of which transport
+      // served it. It observes and delegates: the response object and any thrown error pass through
+      // unchanged, so the gateway's normalization, the ledger and the safety verdict are untouched.
+      const observations = createCandidateTransportObservations();
+
+      // The observer sits OUTSIDE the abort hook, so the cancellation case records the boundary
+      // crossing that the abort then interrupts — `providerTransportStarted=true` with a transport
+      // throw, which is the shape a healthy cancellation has.
+      const cancellationTransport = observations.observe(
+        createTransportStartHook(createFetchGroqTransport(), abort.onTransportStarted),
       );
 
       // Same release, same config, same credential. Only the transport differs, so this is not a
       // second model, a second provider or a second credential.
       return Promise.resolve(
         createAccountedSession({
-          gateway: createCandidateGateway({ apiKey }),
+          gateway: createCandidateGateway({
+            apiKey,
+            transport: observations.observe(createFetchGroqTransport()),
+          }),
           cancellationGateway: createCandidateGateway({ apiKey, transport: cancellationTransport }),
           cancellationController: abort.controller,
           transportStarts: abort.started,
+          transportObservations: observations,
           ledger,
           clock,
         }),

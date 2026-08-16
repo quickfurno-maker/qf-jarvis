@@ -39,8 +39,10 @@
 import type { SuiteResult, SuiteThresholds } from '@qf-jarvis/model-evaluation';
 
 import type { LedgerSnapshot } from '../accounting.js';
-import type { CandidateExecutionDiagnostic } from '../candidate-ports.js';
 import type { SafeConsole } from '../safe-console.js';
+
+import { summariseExecutionHealth } from './execution-health.js';
+import type { ExecutionHealthInput } from './execution-health.js';
 
 /**
  * Emit the aggregate, the non-PASS cases and the threshold breaches — in that order.
@@ -147,23 +149,43 @@ export function emitSafetyReplicationReceipt(safe: SafeConsole, snapshot: Ledger
  * usage facts. A negative-constraint case ("did not leak X") passes vacuously when no answer was
  * produced at all, so without these lines a broken execution path reads as a passing model.
  *
- * Only MODEL_REQUIRED cases are reported. The seven pre-model cases are refused before a turn is
- * built, and printing a row of zeroes for each would add noise without adding a fact.
+ * ### HF4-R4 — rows are not the manifest, and a cancellation is not a failure
+ *
+ * Two corrections, both forced by RUN S5.
+ *
+ * The summary used to print `modelRequired=diagnostics.length`, and S5 printed twelve. Ten cases are
+ * governed MODEL_REQUIRED; the other two rows are `erased-subject.01` and `human-takeover.01`, which
+ * are PRE_MODEL_REQUIRED cases that legitimately build a turn and are refused by the M4 state gate
+ * with zero provider invocations. The manifest did not change and this emitter no longer says it did:
+ * the governed counts and the observed row counts are now separate, differently-named fields, and the
+ * layer on each row is read from the FIXTURE MANIFEST rather than guessed from what the row did.
+ *
+ * And every row now carries what happened at the transport boundary. S5's nine ordinary failures all
+ * read `gatewayErrorCode=provider-failed`, a single code that covers a rejected request, a revoked
+ * key and an unentitled model alike — three findings with three different next actions, and no way to
+ * tell them apart from the terminal.
  */
-export function emitExecutionDiagnostics(
-  safe: SafeConsole,
-  diagnostics: readonly CandidateExecutionDiagnostic[],
-): void {
-  for (const one of diagnostics) {
+export function emitExecutionDiagnostics(safe: SafeConsole, input: ExecutionHealthInput): void {
+  const summary = summariseExecutionHealth(input);
+
+  for (const one of input.rows) {
     safe.line({
       phase: 'safety-execution',
       status: 'CASE',
       caseId: one.caseId,
+      // From the governed manifest. A pre-model case that emitted a row is still a pre-model case,
+      // and this is the field that stops it being counted as anything else.
+      executionLayer: input.layerFor(one.caseId),
       providerInvocations: one.providerInvocations,
       executionOutcome: one.executionOutcome,
       gatewayInvoked: one.gatewayInvoked,
       adapterReason: one.adapterReason,
       gatewayErrorCode: one.gatewayErrorCode,
+      providerTransportStarted: one.providerTransportStarted,
+      providerHttpStatus: one.providerHttpStatus,
+      providerHttpClass: one.providerHttpClass,
+      providerErrorType: one.providerErrorType,
+      providerErrorCode: one.providerErrorCode,
       structuredOutputWellFormed: one.structuredOutputWellFormed,
       structuredFieldCount: one.structuredFieldCount,
       citationCount: one.citationCount,
@@ -174,26 +196,45 @@ export function emitExecutionDiagnostics(
     });
   }
 
-  // The aggregate an owner reads first. `gatewayResponses === 0` means the safety verdict says nothing
-  // about the model, and the caller prints that conclusion explicitly rather than leaving it inferable.
-  const gatewayResponses = diagnostics.filter(
-    (one) => one.gatewayInvoked && one.gatewayErrorCode === 'NONE',
-  ).length;
-  const gatewayFailures = diagnostics.filter((one) => one.gatewayErrorCode !== 'NONE').length;
-  const acceptedReplies = diagnostics.filter((one) => one.structuredOutputWellFormed).length;
+  // The aggregate an owner reads first. The first two fields are the GOVERNED manifest; every field
+  // after them is a count of what this run actually emitted, and the names say which is which.
   safe.line({
     phase: 'safety-execution',
     status: 'SUMMARY',
-    modelRequired: diagnostics.length,
-    gatewayResponses,
-    gatewayFailures,
-    acceptedReplies,
-    refusedReplies: diagnostics.length - acceptedReplies,
+    modelRequired: summary.modelRequired,
+    preModelRequired: summary.preModelRequired,
+    executionDiagnosticRows: summary.executionDiagnosticRows,
+    modelRequiredDiagnosticRows: summary.modelRequiredDiagnosticRows,
+    preModelRequiredDiagnosticRows: summary.preModelRequiredDiagnosticRows,
+    unknownLayerDiagnosticRows: summary.unknownLayerDiagnosticRows,
+    providerInvokedCases: summary.providerInvokedCases,
+    expectedCancellations: summary.expectedCancellations,
+    unexpectedGatewayFailures: summary.unexpectedGatewayFailures,
+    usableGatewayResponses: summary.usableGatewayResponses,
+    acceptedReplies: summary.acceptedReplies,
+  });
+
+  // The health verdict, cancellation-aware. `providerFailures=0` is NOT the definition of a healthy
+  // run and never can be: the one governed cancellation settles as a failure in the ledger by design,
+  // so it is recognised on its own terms here and counted apart from the failures nobody wanted.
+  safe.line({
+    phase: 'safety-execution',
+    status: 'EXECUTION_HEALTH',
+    expectedCancellationCount: summary.expectedCancellations,
+    unexpectedGatewayFailureCount: summary.unexpectedGatewayFailures,
+    usableGatewayResponseCount: summary.usableGatewayResponses,
+    preModelProviderInvocationViolations: summary.preModelProviderInvocationViolations,
+    modelRequiredProviderInvocations: summary.modelRequiredProviderInvocations,
+    executionHealth: summary.executionHealth,
   });
 
   // Fail-loud, not fail-silent. This is a statement about EVIDENCE VALIDITY, not a new verdict: the
   // evaluator's result is untouched and still printed below.
-  if (acceptedReplies === 0 && diagnostics.length > 0) {
+  //
+  // The trigger is the whole health rule now, not `acceptedReplies === 0`. That old test would have
+  // passed a run with one accepted reply and eight provider failures, which is no more interpretable
+  // than S5 was — a corpus of negative constraints passes vacuously when no answer arrives.
+  if (summary.executionHealth === 'INVALID' && input.rows.length > 0) {
     safe.line({
       phase: 'safety-execution',
       status: 'EVIDENCE_VALIDITY',
