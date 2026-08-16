@@ -31,6 +31,11 @@ import type { ModelGatewayInvocation, ModelGatewayInvoker } from '@qf-jarvis/mod
 
 import type { LedgerPhase, LedgerRefusal, RequestLedger } from './accounting.js';
 import type { BaseTurnDeps } from './candidate-ports.js';
+import { NOT_REACHED_TRANSPORT_OBSERVATION } from './candidate-transport-observation.js';
+import type {
+  CandidateTransportObservation,
+  CandidateTransportObservations,
+} from './candidate-transport-observation.js';
 
 /** What the operator needs from a live candidate composition. */
 /**
@@ -60,6 +65,13 @@ export interface CandidateSession {
   readonly gatewayErrorFor: (caseId: string) => ModelGatewayErrorCode | undefined;
   /** Whether the abort was actually observed at the transport boundary for this case. */
   readonly cancellationObservedFor: (caseId: string) => boolean;
+  /**
+   * HF4-R4. The transport-boundary observation this case CLAIMED, or `NOT_REACHED`.
+   *
+   * Claimed rather than looked up by ordering: the invoker opens a window around the one gateway call
+   * it is making, and only a crossing inside that window belongs to that case.
+   */
+  readonly transportObservationFor: (caseId: string) => CandidateTransportObservation;
   /** A terminal accounting refusal, if a ceiling or a usage bound stopped the run. */
   readonly accountingRefusal: () => LedgerRefusal | undefined;
 }
@@ -81,6 +93,13 @@ export interface CandidateSessionDeps {
   readonly cancellationController: AbortController;
   /** How many times the instrumented transport has been entered. */
   readonly transportStarts: () => number;
+  /**
+   * HF4-R4. The run-local transport observation recorder, shared by both gateways.
+   *
+   * Optional so a pre-R4 composition still builds, and PASSIVE by contract: it wraps a transport,
+   * records four content-free facts, and returns the same response or rethrows the same error.
+   */
+  readonly transportObservations?: CandidateTransportObservations;
   readonly ledger: RequestLedger;
   readonly clock: () => string;
 }
@@ -131,12 +150,21 @@ export function createAccountedSession(deps: CandidateSessionDeps): CandidateSes
           cancellationObserved.add(caseId);
         }
       };
+      // The ONE place a signal is supplied, and only for the cancelling turn. The gateway's own
+      // options argument already carries it, so the generic M4 invoker contract stays untouched.
+      const invokeGateway = (): Promise<ModelResponse> =>
+        cancelling
+          ? gateway.invoke(request, { signal: deps.cancellationController.signal })
+          : gateway.invoke(request);
+      // HF4-R4. The attribution window opens HERE — around the one gateway call this case makes —
+      // because this is the only place that knows both the case id and the exact extent of its
+      // invocation. Anything the transport observes inside it belongs to this case and to no other.
+      const invokeInWindow = (): Promise<ModelResponse> =>
+        deps.transportObservations === undefined
+          ? invokeGateway()
+          : deps.transportObservations.duringCase(caseId, invokeGateway);
       try {
-        // The ONE place a signal is supplied, and only for the cancelling turn. The gateway's own
-        // options argument already carries it, so the generic M4 invoker contract stays untouched.
-        const response = cancelling
-          ? await gateway.invoke(request, { signal: deps.cancellationController.signal })
-          : await gateway.invoke(request);
+        const response = await invokeInWindow();
         deps.ledger.settle(usageOf(response), true);
         if (deps.ledger.snapshot().usageBoundViolated) {
           refusal = 'usage-bound-violated';
@@ -181,6 +209,8 @@ export function createAccountedSession(deps: CandidateSessionDeps): CandidateSes
     invocationsFor: (caseId: string) => perCase.get(caseId) ?? 0,
     gatewayErrorFor: (caseId: string) => perCaseGatewayError.get(caseId),
     cancellationObservedFor: (caseId: string) => cancellationObserved.has(caseId),
+    transportObservationFor: (caseId: string) =>
+      deps.transportObservations?.observationFor(caseId) ?? NOT_REACHED_TRANSPORT_OBSERVATION,
     accountingRefusal: () => refusal,
   });
 }

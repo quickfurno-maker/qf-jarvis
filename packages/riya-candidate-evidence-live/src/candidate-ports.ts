@@ -43,6 +43,13 @@ import { evolveRiyaConversation } from '@qf-jarvis/riya-conversation-evolution';
 import type { RiyaConversationPhase } from '@qf-jarvis/riya-conversation-continuity';
 import { RIYA_GROUNDED_REPLY_TASK_CLASS } from '@qf-jarvis/riya-model-interaction';
 
+import { NOT_REACHED_TRANSPORT_OBSERVATION } from './candidate-transport-observation.js';
+import type {
+  CandidateProviderErrorCode,
+  CandidateProviderErrorType,
+  CandidateProviderHttpClass,
+  CandidateTransportObservation,
+} from './candidate-transport-observation.js';
 import { admitGroundedInput } from './governed-grounded-input.js';
 import { measureReplyLanguage } from './measurement/reply-language.js';
 import { runRiyaEvaluationTurn } from './riya-turn.js';
@@ -99,6 +106,27 @@ export interface CandidateExecutionDiagnostic {
   readonly claimKind: CandidateClaimKind;
   readonly authorityTreatment: CandidateAuthorityTreatment;
   readonly continuedAfterCancellation: boolean;
+  /**
+   * HF4-R4. Whether the REAL request boundary was crossed for this case.
+   *
+   * `gatewayInvoked` says the gateway was asked; routing, budget policy and the concurrency queue all
+   * sit between that and a request leaving the process. This says the transport was entered, which is
+   * the difference between "the model did not answer" and "nothing was ever sent".
+   */
+  readonly providerTransportStarted: boolean;
+  /** The exact HTTP status, bounded to 100-599. `0` when no status was received. */
+  readonly providerHttpStatus: number;
+  /**
+   * The closed HTTP class.
+   *
+   * The field RUN S5 needed and did not have: nine ordinary calls all reported `provider-failed`,
+   * which is one gateway code covering rejected requests, revoked keys and unentitled models alike.
+   */
+  readonly providerHttpClass: CandidateProviderHttpClass;
+  /** The closed provider error family, from the reviewed allowlist only. */
+  readonly providerErrorType: CandidateProviderErrorType;
+  /** The closed provider error code, from the reviewed allowlist only. */
+  readonly providerErrorCode: CandidateProviderErrorCode;
 }
 
 export interface CandidatePortDeps {
@@ -126,6 +154,14 @@ export interface CandidatePortDeps {
   readonly onExecutionDiagnostic?: (diagnostic: CandidateExecutionDiagnostic) => void;
   /** The closed gateway error code for a case, when the gateway threw. */
   readonly gatewayErrorFor?: (caseId: string) => ModelGatewayErrorCode | undefined;
+  /**
+   * HF4-R4. The transport-boundary observation CLAIMED by this case.
+   *
+   * Optional so every pre-R4 composition keeps working, and absent means `NOT_REACHED` rather than
+   * the previous case's value — a default that cannot leak is worth more than a default that is
+   * usually right.
+   */
+  readonly transportObservationFor?: (caseId: string) => CandidateTransportObservation;
 }
 
 /**
@@ -305,6 +341,11 @@ export function createSafetyCandidatePort(deps: CandidatePortDeps): RiyaCandidat
       );
 
       const acceptedCitations = reply?.citations ?? [];
+      // Claimed, never inherited. A case with no observation of its own reports that the boundary was
+      // never crossed for it, which is a fact; reading whatever the recorder last saw would be a guess
+      // that is correct exactly as often as the cases happen to run one at a time.
+      const transport =
+        deps.transportObservationFor?.(request.caseId) ?? NOT_REACHED_TRANSPORT_OBSERVATION;
       deps.onExecutionDiagnostic?.({
         caseId: request.caseId,
         providerInvocations: invocations,
@@ -320,6 +361,11 @@ export function createSafetyCandidatePort(deps: CandidatePortDeps): RiyaCandidat
         authorityTreatment: AUTHORITY_TREATMENT,
         continuedAfterCancellation:
           cancellationCase && (deps.cancellationObservedFor?.(request.caseId) ?? false) && accepted,
+        providerTransportStarted: transport.providerTransportStarted,
+        providerHttpStatus: transport.providerHttpStatus,
+        providerHttpClass: transport.providerHttpClass,
+        providerErrorType: transport.providerErrorType,
+        providerErrorCode: transport.providerErrorCode,
       });
 
       return Object.freeze({

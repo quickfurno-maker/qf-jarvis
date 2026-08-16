@@ -378,6 +378,61 @@ describe('nothing composes the operator', () => {
   });
 });
 
+describe('HF4-R4 — the transport observer is wired, passive, and off the package root', () => {
+  it('BOTH candidate gateways are built over the OBSERVED transport, and share one recorder', () => {
+    // A recorder wired into one gateway and not the other would leave whichever half it missed
+    // reporting NOT_REACHED for every case — indistinguishable, on the terminal, from a run that
+    // never sent anything. One recorder, both gateways, asserted at the composition root.
+    const cli = codeOnly(readFileSync(join(SRC, 'bin.ts'), 'utf8'));
+    expect(cli).toContain('createCandidateTransportObservations()');
+    expect(cli.match(/createCandidateTransportObservations\(\)/gu)).toHaveLength(1);
+    expect(cli).toContain('transport: observations.observe(createFetchGroqTransport())');
+    expect(cli).toContain('observations.observe(');
+    expect(cli.match(/observations\.observe\(/gu)).toHaveLength(2);
+    expect(cli).toContain('transportObservations: observations');
+    // A gateway constructed WITHOUT a transport would fall back to the bare fetch transport and be
+    // invisible to the observer.
+    expect(cli).not.toMatch(/createCandidateGateway\(\{\s*apiKey\s*\}\)/u);
+  });
+
+  it('THE SMOKE RUNS OVER THE INSTRUMENTED TRANSPORT AND ITS OWN RECORDER', () => {
+    // RUN S5's smoke PASSED and printed every wire milestone ABSENT because this call site handed
+    // the harness a plain transport and no recorder. The pairing now comes from the smoke package as
+    // one value, so it cannot be half-composed here again.
+    const cli = codeOnly(readFileSync(join(SRC, 'bin.ts'), 'utf8'));
+    expect(cli).toContain('createSystemSmokeWireDeps()');
+    expect(cli).not.toMatch(/transport:\s*createFetchGroqTransport\(\),\s*\n\s*credentialSource/u);
+  });
+
+  it('THE OBSERVER IS PASSIVE — it writes no request, no retry and no fallback', () => {
+    const observer = codeOnly(
+      readFileSync(join(SRC, 'candidate-transport-observation.ts'), 'utf8'),
+    );
+    for (const forbidden of ['retry', 'fallback', 'setTimeout', 'AbortController', '.abort(']) {
+      expect(observer, `the observer must not name ${forbidden}`).not.toContain(forbidden);
+    }
+    // The response is returned and the error is rethrown, both unchanged.
+    expect(observer).toContain('return response;');
+    expect(observer).toContain('throw error;');
+  });
+
+  it('the R4 diagnostic surface stays OFF the package root — export delta is zero', () => {
+    const root = codeOnly(readFileSync(join(SRC, 'index.ts'), 'utf8'));
+    for (const internal of [
+      'candidate-transport-observation.js',
+      'execution-health.js',
+      'createCandidateTransportObservations',
+      'CANDIDATE_PROVIDER_HTTP_CLASSES',
+      'CANDIDATE_PROVIDER_ERROR_TYPES',
+      'CANDIDATE_PROVIDER_ERROR_CODES',
+      'summariseExecutionHealth',
+      'emitExecutionDiagnostics',
+    ]) {
+      expect(root, `${internal} must not be root-exported`).not.toContain(internal);
+    }
+  });
+});
+
 describe('HF3 — the run goal narrows, and can never widen', () => {
   const operatorCode = (): string => codeOnly(readFileSync(join(SRC, 'operator.ts'), 'utf8'));
 

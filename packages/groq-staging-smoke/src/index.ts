@@ -71,6 +71,13 @@ export {
   type SmokeReferences,
 } from './run-once.js';
 
+// The ONE production pairing of the instrumented transport and its recorder. Exported because RUN S5
+// proved the pairing cannot live as a convention in two composition roots: the candidate evidence
+// operator held the other root, wired a plain transport, and printed a PASSING smoke with every wire
+// milestone ABSENT. It exposes no internals — the recorder and the transport factory both stay
+// unexported — and it changes no request, timer, credential or retry semantic.
+export { createSystemSmokeWireDeps } from './system-wire.js';
+
 // The sanitized report and the command surface.
 export {
   formatSanitizedSmokeResult,

@@ -31,6 +31,7 @@ import {
 import { runCandidateEvidenceOperator, SECOND_CREDENTIAL_NOTICE } from '../operator.js';
 import type { OperatorDeps } from '../operator.js';
 import type { CandidateSession } from '../candidate-session.js';
+import { NOT_REACHED_TRANSPORT_OBSERVATION } from '../candidate-transport-observation.js';
 import { createSafeConsole } from '../safe-console.js';
 
 const REPO_ROOT = fileURLToPath(new URL('../../../../', import.meta.url));
@@ -72,6 +73,8 @@ function session(): CandidateSession {
     invocationsFor: () => 0,
     gatewayErrorFor: () => undefined,
     cancellationObservedFor: () => false,
+    // This fake never builds a turn, so no case ever reaches the transport boundary.
+    transportObservationFor: () => NOT_REACHED_TRANSPORT_OBSERVATION,
     accountingRefusal: () => undefined,
   };
 }

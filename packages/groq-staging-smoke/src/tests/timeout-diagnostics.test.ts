@@ -770,11 +770,15 @@ describe('(23, 24, 25, 26, 27, 28) the S1A contract is unchanged', () => {
 });
 
 describe('(29-35) package, repository, and hygiene invariants', () => {
-  it('(29) the groq-staging-smoke package-root API is unchanged at 27 symbols', async () => {
+  it('(29) the groq-staging-smoke package-root API is unchanged at 28 symbols', async () => {
     const barrel = (await import('../index.js')) as unknown as Record<string, unknown>;
     // 24 -> 27 for MVP-P2A.2 HF1: the semantic approval digest helper and its two readable parts.
-    // Counted, not merely permitted -- the exact-set lock in containment names all three.
-    expect(Object.keys(barrel)).toHaveLength(27);
+    // 27 -> 28 for MVP-P2A.2 HF4-R4: `createSystemSmokeWireDeps`, the ONE pairing of the
+    // instrumented transport with the recorder that owns its wire milestones. RUN S5's smoke PASSED
+    // while printing every wire milestone ABSENT, because that pairing was a convention written out
+    // in two composition roots and the other root got it wrong.
+    // Counted, not merely permitted -- the exact-set lock in containment names all four.
+    expect(Object.keys(barrel)).toHaveLength(28);
     // The diagnostics surface stays INTERNAL — imported relatively, never re-exported.
     for (const internal of [
       'createDiagnosticRecorder',
