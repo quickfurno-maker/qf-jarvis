@@ -41,14 +41,56 @@ export {
   RIYA_CLIENT_PROMPT_DIGEST,
 } from './candidate-release.js';
 
+// MVP-P2A.2 HF4-R8. The Groq HTTP-400 DIFFERENTIAL CANARY harness: eight contracts that vary one
+// request axis at a time, and the pure function that reads their outcomes. Exported because a spec
+// must be able to assert the matrix and the classifier directly — S9 and S10 each spent a live
+// authorization learning only that something was rejected, and a classifier nobody can check before
+// the run is a classifier that spends the next one too.
+export {
+  CANARY_ANYOF_NULLABLE_SCHEMA,
+  CANARY_CAP_PAIRS,
+  CANARY_COMPLETION_CAP_CLASSES,
+  CANARY_HIGH_COMPLETION_CAP,
+  CANARY_LOW_COMPLETION_CAP,
+  CANARY_MESSAGE_SOURCES,
+  CANARY_MINIMAL_SCHEMA,
+  CANARY_NUMERIC_ENUM_SCHEMA,
+  CANARY_REQUEST_CLASSES,
+  CANARY_SCHEMA_SOURCES,
+  CANARY_SYNTHETIC_SYSTEM_MESSAGE,
+  CANARY_SYNTHETIC_USER_MESSAGE,
+  canaryById,
+  DIAGNOSTIC_CANARIES,
+  DIAGNOSTIC_CANARY_IDS,
+} from './diagnostic-canaries.js';
+export type {
+  CanaryCompletionCapClass,
+  CanaryMessageSource,
+  CanaryRequestClass,
+  CanarySchemaSource,
+  DiagnosticCanary,
+  DiagnosticCanaryId,
+} from './diagnostic-canaries.js';
+export { createDiagnosticCanaryPort, SYNTHETIC_CANARY_MESSAGES } from './diagnostic-canary-port.js';
+export type {
+  CanaryInvocationResult,
+  CanaryMessage,
+  DiagnosticCanaryPortDeps,
+  DiagnosticProviderSeam,
+} from './diagnostic-canary-port.js';
+
 // Ceilings and content-free accounting.
 export {
   createOperatorLedger,
+  createRequestContractDiagnosticLedger,
   createRequestLedger,
   LEDGER_PHASES,
   LEDGER_REFUSALS,
+  DIAGNOSTIC_CANARY_REQUESTS,
   MAX_ESTIMATED_COST_USD,
   MAX_PROVIDER_REQUESTS,
+  REQUEST_CONTRACT_DIAGNOSTIC_MAX_ESTIMATED_COST_USD,
+  REQUEST_CONTRACT_DIAGNOSTIC_MAX_PROVIDER_REQUESTS,
 } from './accounting.js';
 export type {
   LedgerPhase,

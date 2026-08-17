@@ -39,6 +39,15 @@ import { createApprovalEvidence } from '@qf-jarvis/model-evaluation';
 import { createOperatorLedger } from './accounting.js';
 import type { RequestLedger } from './accounting.js';
 import type { ClipboardIngressCounters } from './credential-composition.js';
+import type { DiagnosticCanary } from './diagnostic-canaries.js';
+import { DIAGNOSTIC_CANARIES } from './diagnostic-canaries.js';
+import type { CanaryOutcome } from './internal/diagnostic-classification.js';
+import { classifyDiagnosticCanaries } from './internal/diagnostic-classification.js';
+import {
+  emitCanaryOutcome,
+  emitDiagnosticClassification,
+  emitDiagnosticReceipt,
+} from './internal/diagnostic-emitters.js';
 import { DEFAULT_CREDENTIAL_SOURCE_MODE } from './credential-source.js';
 import type { CredentialSourceMode } from './credential-source.js';
 import type { CandidateSession } from './candidate-session.js';
@@ -160,6 +169,14 @@ export interface OperatorDeps {
   readonly credentialSource?: CredentialSourceMode;
   /** Content-free ingress counters, when the selected ingress has any. Numbers and booleans only. */
   readonly ingressCounters?: () => ClipboardIngressCounters | undefined;
+  /**
+   * HF4-R8. Run ONE synthetic request-contract canary and report what the boundary did.
+   *
+   * Required only for `REQUEST_CONTRACT_DIAGNOSTIC`; every other goal never reaches it, and a spec
+   * asserts that. It receives the canary CONTRACT rather than a built request, so the port owns the
+   * projection and the strict check and the operator cannot smuggle a shape past them.
+   */
+  readonly runDiagnosticCanary?: (canary: DiagnosticCanary) => Promise<CanaryOutcome>;
 }
 
 export interface OperatorResult {
@@ -290,6 +307,47 @@ export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<
   } catch {
     safe.line({ phase: 'candidate', status: 'BIND_FAILED' });
     return { outcome: 'CANDIDATE_BIND_FAILED' };
+  }
+
+  // F'. THE REQUEST-CONTRACT DIAGNOSTIC (HF4-R8) — and then STOP.
+  //
+  // Placed BEFORE the safety port is constructed, not merely before it is used, so a diagnostic run
+  // contains no window in which a safety seam exists at all. It reaches no fixture, no evaluator, no
+  // authority, no P10 and no bundle: it asks the provider whether it accepts a request, eight times,
+  // varying one axis at a time. S9 and S10 each spent a live authorization proving only that
+  // something was rejected; this is the run that can say WHAT.
+  if (runGoal === 'REQUEST_CONTRACT_DIAGNOSTIC') {
+    const runCanary = deps.runDiagnosticCanary;
+    if (runCanary === undefined) {
+      // A diagnostic goal with no canary port is a composition bug, not an operator error.
+      safe.line({ phase: 'request-contract-diagnostic', status: 'FAILED', reason: 'port-missing' });
+      return { outcome: 'INTERNAL_CLOSED_FAILURE' };
+    }
+    const outcomes: CanaryOutcome[] = [];
+    for (const canary of DIAGNOSTIC_CANARIES) {
+      // Reserved against the diagnostic ledger's own ceiling, immediately before the call, exactly as
+      // every other provider request in this operator is.
+      const reservation = ledger.reserve('diagnostic');
+      if (!reservation.ok) {
+        safe.line({
+          phase: 'request-contract-diagnostic',
+          status: 'REFUSED',
+          canaryId: canary.canaryId,
+          reason: reservation.refusal,
+        });
+        break;
+      }
+      const outcome = await runCanary(canary);
+      ledger.settle(undefined, outcome.providerCompleted);
+      outcomes.push(outcome);
+      emitCanaryOutcome(safe, canary, outcome);
+    }
+    // A pure function over closed tokens. An incomplete matrix classifies as DIAGNOSTIC_NOT_RUN
+    // rather than as a partial verdict.
+    emitDiagnosticClassification(safe, classifyDiagnosticCanaries(outcomes), outcomes.length);
+    emitDiagnosticReceipt(safe, ledger.snapshot());
+    safe.line({ finalStatus: 'REQUEST_CONTRACT_DIAGNOSTIC_COMPLETE' });
+    return { outcome: 'REQUEST_CONTRACT_DIAGNOSTIC_COMPLETE' };
   }
 
   // F. SAFETY — all seventeen, at the layer each declares.
