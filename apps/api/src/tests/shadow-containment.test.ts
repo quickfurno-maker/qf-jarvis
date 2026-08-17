@@ -622,7 +622,10 @@ describe('(133-148) the declared budget and every prior lock', () => {
   it('(141-148) every prior package-root runtime API lock still holds', async () => {
     const expected: Readonly<Record<string, number>> = {
       'model-evaluation': 35,
-      'model-gateway': 71,
+      // MVP-P2A.2 HF4-R7: 71 -> 74 for the Groq strict-schema projection —
+      // `projectGroqStrictJsonSchema`, `renderStructuredJsonSchema`, `GROQ_STRICT_PROJECTION_REASONS`.
+      // Restated exactly; the count is still pinned.
+      'model-gateway': 74,
       'model-gateway-composition': 2,
       // MVP-P2A.2 HF1: 24 -> 27. The semantic approval-digest helper and its two readable parts.
       // Pure functions over an already-parsed SmokeConfig -- no filesystem, no clock, no network, no

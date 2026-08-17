@@ -18,6 +18,19 @@ export {
   type GroqTransport,
 } from './groq-transport.js';
 
+// MVP-P2A.2 HF4-R7. The provider-facing strict-schema projection. Exported because the candidate
+// evidence operator is the only package that can see BOTH this gateway and the real Riya schemas, and
+// "the production Riya schema projects into the documented Groq subset" is a claim that has to be
+// asserted against the real schema rather than a replica. It is a pure function over a JSON Schema
+// document: no credential, no transport, no configuration, and it never mutates its input.
+export {
+  GROQ_STRICT_PROJECTION_REASONS,
+  projectGroqStrictJsonSchema,
+  renderStructuredJsonSchema,
+  type GroqStrictProjection,
+  type GroqStrictProjectionReason,
+} from './groq-strict-schema-projection.js';
+
 // QFJ-S1 staging binding (ADR-0060) — a release-driven factory over the existing adapter. No live call.
 export type {
   GroqCredentialReference,

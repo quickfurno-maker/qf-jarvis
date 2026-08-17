@@ -55,6 +55,7 @@
  * validation is still in progress higher up, and re-entering it would only repeat that work.
  */
 import type { GroqChatRequestBody } from './groq-contracts.js';
+import { projectGroqStrictJsonSchema } from './groq-strict-schema-projection.js';
 
 type ResponseFormat = NonNullable<GroqChatRequestBody['response_format']>;
 
@@ -278,14 +279,28 @@ export function buildResponseFormat(
   strictSupported: boolean,
 ): ResponseFormatBuild {
   if (strictSupported) {
-    if (!isStrictCompatibleJsonSchema(jsonSchema)) {
+    // MVP-P2A.2 HF4-R7. PROJECT first, then check the projection.
+    //
+    // This used to send `jsonSchema` verbatim once the structural check passed, which is how RUN S9
+    // shipped `$schema`, `const`, `minLength`, `maxLength`, `pattern`, `minimum`, `maximum` and
+    // `maxItems` to a strict endpoint and collected nine identical HTTP 400s. The checker was not
+    // wrong about what it checked; it simply never constrained the keyword set, and nothing downstream
+    // did either.
+    //
+    // The order matters. Projection rebuilds every node from a closed policy table, so what is checked
+    // below is exactly what goes on the wire — not a different document that happened to pass.
+    const projected = projectGroqStrictJsonSchema(jsonSchema);
+    if (!projected.ok) {
+      return { ok: false };
+    }
+    if (!isStrictCompatibleJsonSchema(projected.schema)) {
       return { ok: false };
     }
     return {
       ok: true,
       responseFormat: {
         type: 'json_schema',
-        json_schema: { name: 'qf_structured_output', strict: true, schema: jsonSchema },
+        json_schema: { name: 'qf_structured_output', strict: true, schema: projected.schema },
       },
     };
   }

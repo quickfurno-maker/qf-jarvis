@@ -112,6 +112,16 @@ export {
   type GroqTransport,
 } from './providers/groq/index.js';
 
+// MVP-P2A.2 HF4-R7 — the provider-facing strict-schema projection, so the real Riya schemas can be
+// asserted against the documented Groq subset from the one package that can see both.
+export {
+  GROQ_STRICT_PROJECTION_REASONS,
+  projectGroqStrictJsonSchema,
+  renderStructuredJsonSchema,
+  type GroqStrictProjection,
+  type GroqStrictProjectionReason,
+} from './providers/groq/index.js';
+
 // QFJ-S1 Groq staging provider binding (ADR-0060) — a release-driven factory over the existing Groq
 // adapter (an injected async credential resolver + fail-closed data-class/execution/attestation gates +
 // content-free bind observability). No real key, no live call, no activation/rollout.
