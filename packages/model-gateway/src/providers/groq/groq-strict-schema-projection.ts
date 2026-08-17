@@ -108,6 +108,7 @@ const PRESERVED = new Set([
   'anyOf',
   '$defs',
   '$ref',
+  'description',
 ]);
 
 /**
@@ -126,7 +127,6 @@ const DROPPED = new Set([
   '$id',
   '$comment',
   'title',
-  'description',
   'default',
   'examples',
   'deprecated',
@@ -210,7 +210,46 @@ function typeIsSupported(type: unknown): boolean {
   return [first, second].filter((one) => one === 'null').length === 1;
 }
 
-/** Project one node, rebuilding it from the policy table. Returns the node or a closed reason. */
+/**
+ * The ONLY sibling keys a `$ref` node may carry.
+ *
+ * Groq demonstrates the pure reference form (`{ "$ref": "#" }`, `{ "$ref": "#/$defs/file_node" }`)
+ * and the root form that pairs a reference with the definitions it names. Nothing else is shown, and
+ * an undemonstrated sibling combination is refused rather than guessed at — a `$ref` must never be a
+ * way to say "stop validating the rest of this document", which is exactly the bypass R7-R1 closes.
+ */
+const REF_ALLOWED_SIBLINGS = new Set(['$ref', '$defs']);
+
+/** The only sibling keys an `anyOf` node may carry. Same reasoning, same refusal. */
+const ANYOF_ALLOWED_SIBLINGS = new Set(['anyOf', '$defs', 'description']);
+
+/** Keys that only mean something on an object node, and only there. */
+const OBJECT_ONLY = new Set(['properties', 'required', 'additionalProperties']);
+
+/**
+ * Project one node, rebuilding it from the policy table.
+ *
+ * ### Why the phases are separated (MVP-P2A.2 HF4-R7-R1)
+ *
+ * The first version classified keys, copied the PRESERVED ones RAW, and then returned early on `$ref`
+ * or `anyOf`. `$defs` is a PRESERVED key, so a document like `{ $ref: '#/$defs/root', $defs: {...} }`
+ * copied its definitions across untouched and returned success BEFORE the recursion that would have
+ * projected them ever ran. Any keyword at all could live inside those definitions and reach the
+ * provider, and `isStrictCompatibleJsonSchema` could not catch it — that function checks STRUCTURE and
+ * knows nothing about the keyword policy. Owner review caught it; the closed table was only as closed
+ * as the control flow that reached it.
+ *
+ * So projection is now strictly ordered, and the order IS the invariant:
+ *
+ *   1. CLASSIFY every key of this node. Nothing is projected yet, and nothing is trusted.
+ *   2. RECURSE into every schema-bearing container — `$defs`, `properties`, `items`, `anyOf` — BEFORE
+ *      any success return exists.
+ *   3. VALIDATE this node's own shape, and only then return.
+ *
+ * If step 3 is reached, step 2 has already rebuilt every descendant from this same table. That makes
+ * "ok:true implies every sent descendant was projected" true by construction, rather than by an author
+ * remembering to recurse on each new early-return path they add.
+ */
 function projectNode(node: unknown): GroqStrictProjection {
   if (!isRecord(node)) {
     return fail('not-an-object');
@@ -218,6 +257,7 @@ function projectNode(node: unknown): GroqStrictProjection {
 
   const out: Record<string, unknown> = {};
 
+  // ---- PHASE 1: classify this node's own keys. -------------------------------------------------
   for (const key of Object.keys(node)) {
     if (UNSUPPORTED_COMPOSITION.has(key)) {
       return fail('unsupported-composition');
@@ -250,31 +290,7 @@ function projectNode(node: unknown): GroqStrictProjection {
     return fail('unsupported-keyword');
   }
 
-  if ('$ref' in out) {
-    if (typeof out['$ref'] !== 'string') {
-      return fail('unsupported-keyword');
-    }
-    // A reference node carries nothing else in the documented form; siblings were already policed.
-    return { ok: true, schema: out };
-  }
-
-  if ('anyOf' in out) {
-    const branches = out['anyOf'];
-    if (!Array.isArray(branches) || branches.length === 0) {
-      return fail('unsupported-composition');
-    }
-    const projected: unknown[] = [];
-    for (const branch of branches) {
-      const one = projectNode(branch);
-      if (!one.ok) {
-        return one;
-      }
-      projected.push(one.schema);
-    }
-    out['anyOf'] = projected;
-    return { ok: true, schema: out };
-  }
-
+  // ---- PHASE 2: recurse into EVERY schema container, before any success return exists. ----------
   if ('$defs' in out) {
     const defs = out['$defs'];
     if (!isRecord(defs)) {
@@ -291,17 +307,7 @@ function projectNode(node: unknown): GroqStrictProjection {
     out['$defs'] = projectedDefs;
   }
 
-  const type = out['type'];
-  if (type === undefined) {
-    // Every node the subset can express names its type, except the `$ref` and `anyOf` forms handled
-    // above. An untyped node is not something to guess at.
-    return fail('unsupported-type');
-  }
-  if (!typeIsSupported(type)) {
-    return fail('unsupported-type');
-  }
-
-  if (type === 'object') {
+  if ('properties' in out) {
     const properties = out['properties'];
     if (!isRecord(properties)) {
       return fail('malformed-object');
@@ -315,6 +321,78 @@ function projectNode(node: unknown): GroqStrictProjection {
       projectedProperties[name] = one.schema;
     }
     out['properties'] = projectedProperties;
+  }
+
+  if ('items' in out) {
+    const items = out['items'];
+    // The tuple form would need per-position support that is not documented.
+    if (items === undefined || Array.isArray(items)) {
+      return fail('malformed-array');
+    }
+    const one = projectNode(items);
+    if (!one.ok) {
+      return one;
+    }
+    out['items'] = one.schema;
+  }
+
+  if ('anyOf' in out) {
+    const branches = out['anyOf'];
+    if (!Array.isArray(branches) || branches.length === 0) {
+      return fail('unsupported-composition');
+    }
+    const projectedBranches: unknown[] = [];
+    for (const branch of branches) {
+      const one = projectNode(branch);
+      if (!one.ok) {
+        return one;
+      }
+      projectedBranches.push(one.schema);
+    }
+    out['anyOf'] = projectedBranches;
+  }
+
+  // ---- PHASE 3: validate this node's own shape. ------------------------------------------------
+  if ('$ref' in out) {
+    if (typeof out['$ref'] !== 'string') {
+      return fail('unsupported-keyword');
+    }
+    if (!Object.keys(out).every((key) => REF_ALLOWED_SIBLINGS.has(key))) {
+      return fail('unsupported-composition');
+    }
+    return { ok: true, schema: out };
+  }
+
+  if ('anyOf' in out) {
+    if (!Object.keys(out).every((key) => ANYOF_ALLOWED_SIBLINGS.has(key))) {
+      return fail('unsupported-composition');
+    }
+    return { ok: true, schema: out };
+  }
+
+  const type = out['type'];
+  if (type === undefined) {
+    // Every node the subset can express names its type, except the `$ref` and `anyOf` forms handled
+    // above. An untyped node is not something to guess at.
+    return fail('unsupported-type');
+  }
+  if (!typeIsSupported(type)) {
+    return fail('unsupported-type');
+  }
+
+  // An object-only or array-only key sitting on the wrong type is a malformed node, not a stricter one.
+  if (type !== 'object' && Object.keys(out).some((key) => OBJECT_ONLY.has(key))) {
+    return fail('malformed-object');
+  }
+  if (type !== 'array' && 'items' in out) {
+    return fail('malformed-array');
+  }
+
+  if (type === 'object') {
+    const projectedProperties = out['properties'];
+    if (!isRecord(projectedProperties)) {
+      return fail('malformed-object');
+    }
     // The strict-mode requirements are RESTATED here rather than assumed: every property required,
     // nothing else required, and the object closed. `isStrictCompatibleJsonSchema` re-proves it on the
     // projected document afterwards, so this is belt and braces on the one rule Groq states outright.
@@ -335,16 +413,9 @@ function projectNode(node: unknown): GroqStrictProjection {
   }
 
   if (type === 'array') {
-    const items = out['items'];
-    if (items === undefined || Array.isArray(items)) {
-      // The tuple form would need per-position support that is not documented.
+    if (!('items' in out)) {
       return fail('malformed-array');
     }
-    const one = projectNode(items);
-    if (!one.ok) {
-      return one;
-    }
-    out['items'] = one.schema;
     return { ok: true, schema: out };
   }
 

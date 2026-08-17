@@ -175,13 +175,16 @@ describe('R7-C2/C9 — unproven keywords never reach the provider', () => {
     exclusiveMinimum: 0,
     exclusiveMaximum: 11,
     multipleOf: 1,
-    description: 'a description',
     title: 'a title',
     default: 'x',
     examples: ['x'],
   };
 
   it('R7-C9 drops every validation-only keyword from the provider document', () => {
+    // HF4-R7-R1 removed `description` from this list: owner review found Groq's own strict:true
+    // examples (the organization-chart and file-system recursion schemas) carry it inside property
+    // definitions, so it IS part of the documented subset and dropping it was the wrong call. The
+    // rest stay dropped — none of them is demonstrated under strict mode.
     const out = projected(closedObject({ body: { type: 'string', ...VALIDATION_ONLY } }));
     const body = (out['properties'] as Record<string, unknown>)['body'];
     expect(body).toEqual({ type: 'string' });
@@ -455,5 +458,223 @@ describe('R7-C11 — the projection is broader, and local zod is still the autho
     expect(JSON.stringify(z.toJSONSchema(localSchema))).toBe(before);
     // The bound is still in the local rendering, so nothing was mutated in place.
     expect(before).toContain('maxLength');
+  });
+});
+
+describe('R7-R1 — no schema container survives unprojected', () => {
+  /**
+   * The owner-review blocker, reproduced.
+   *
+   * At PR #129 head, `projectNode` copied PRESERVED keys — including `$defs` — into the output RAW,
+   * and then returned early on `$ref` before `$defs` was ever recursively projected. So a definition
+   * could carry any keyword at all and still ride out on a successful projection. The downstream
+   * `isStrictCompatibleJsonSchema` could not catch it: it is a STRUCTURAL checker and knows nothing
+   * about the closed keyword policy.
+   *
+   * That defeated the whole point of rebuilding from a table, and it defeated M2.
+   */
+  const ROOT_REF_WITH_DEFS = (nameNode: Record<string, unknown>): Record<string, unknown> => ({
+    $ref: '#/$defs/root',
+    $defs: {
+      root: {
+        type: 'object',
+        properties: { name: nameNode },
+        required: ['name'],
+        additionalProperties: false,
+      },
+    },
+  });
+
+  it('R7R1-C1 a local-only constraint inside `$defs` is projected away', () => {
+    const out = projected(ROOT_REF_WITH_DEFS({ type: 'string', maxLength: 5 }));
+    expect(keywordsOf(out).has('maxLength')).toBe(false);
+  });
+
+  it('R7R1-C2 an UNKNOWN keyword inside `$defs` fails closed', () => {
+    const result = projectGroqStrictJsonSchema(
+      ROOT_REF_WITH_DEFS({ type: 'string', someFutureKeyword: true }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.ok ? undefined : result.reason).toBe('unsupported-keyword');
+  });
+
+  it('R7R1-C3 `buildResponseFormat` cannot be used to bypass it', () => {
+    const build = buildResponseFormat(
+      ROOT_REF_WITH_DEFS({ type: 'string', someFutureKeyword: true }),
+      true,
+    );
+    expect(build.ok).toBe(false);
+    expect('responseFormat' in build).toBe(false);
+  });
+
+  it('R7R1-C4 an ordinary object carrying `$defs` projects them too', () => {
+    const withDefs = (leaf: Record<string, unknown>): Record<string, unknown> => ({
+      ...closedObject({ child: { $ref: '#/$defs/leaf' } }),
+      $defs: { leaf },
+    });
+    expect(keywordsOf(projected(withDefs({ type: 'string', maxLength: 4 }))).has('maxLength')).toBe(
+      false,
+    );
+    const bad = projectGroqStrictJsonSchema(withDefs({ type: 'string', someFutureKeyword: 1 }));
+    expect(bad.ok).toBe(false);
+    expect(bad.ok ? undefined : bad.reason).toBe('unsupported-keyword');
+  });
+
+  it('R7R1-C5 an `anyOf` node cannot smuggle a sibling container past projection', () => {
+    const result = projectGroqStrictJsonSchema({
+      anyOf: [{ type: 'string' }, { type: 'null' }],
+      $defs: { leaf: { type: 'string', someFutureKeyword: true } },
+    });
+    // Either the defs are projected (and therefore refused) or the sibling combination is refused.
+    // What must NEVER happen is ok:true with the unknown keyword still present.
+    expect(result.ok).toBe(false);
+  });
+
+  it('R7R1-C6 pure root recursion `$ref: "#"` is still supported', () => {
+    const out = projected({
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        reports: { type: 'array', items: { $ref: '#' } },
+      },
+      required: ['name', 'reports'],
+      additionalProperties: false,
+    });
+    const reports = (out['properties'] as Record<string, unknown>)['reports'] as Record<
+      string,
+      unknown
+    >;
+    expect(reports['items']).toEqual({ $ref: '#' });
+  });
+
+  it('R7R1-C7 root object + `$defs` + a property/items `$ref` is still supported', () => {
+    const out = projected({
+      type: 'object',
+      properties: {
+        children: { type: 'array', items: { $ref: '#/$defs/file_node' } },
+      },
+      required: ['children'],
+      additionalProperties: false,
+      $defs: {
+        file_node: {
+          type: 'object',
+          properties: { name: { type: 'string', description: 'File or directory name' } },
+          required: ['name'],
+          additionalProperties: false,
+        },
+      },
+    });
+    const children = (out['properties'] as Record<string, unknown>)['children'] as Record<
+      string,
+      unknown
+    >;
+    expect(children['items']).toEqual({ $ref: '#/$defs/file_node' });
+    expect(out['$defs']).toBeDefined();
+  });
+
+  it('R7R1-C8 `description` is PRESERVED — Groq demonstrates it under strict:true', () => {
+    // Re-checked against the current Structured Outputs page: the organization-chart and file-system
+    // recursion examples both set `strict: true` and both carry `description` inside property
+    // definitions. R7 classified it as a local-only drop, which was wrong about the documented subset.
+    const out = projected(
+      closedObject({ employee_id: { type: 'string', description: 'Unique employee identifier' } }),
+    );
+    expect((out['properties'] as Record<string, unknown>)['employee_id']).toEqual({
+      type: 'string',
+      description: 'Unique employee identifier',
+    });
+  });
+
+  it('R7R1-C9 after ok:true no unknown keyword exists ANYWHERE', () => {
+    const DOCUMENTED = new Set([
+      'type',
+      'properties',
+      'required',
+      'additionalProperties',
+      'items',
+      'enum',
+      'anyOf',
+      '$defs',
+      '$ref',
+      'description',
+    ]);
+    const out = projected({
+      type: 'object',
+      properties: {
+        a: { type: 'string', maxLength: 3, description: 'kept' },
+        b: { type: 'array', items: { $ref: '#/$defs/leaf' }, maxItems: 2 },
+        c: { anyOf: [{ type: 'string', pattern: '^x$' }, { type: 'null' }] },
+        d: { $ref: '#' },
+      },
+      required: ['a', 'b', 'c', 'd'],
+      additionalProperties: false,
+      $defs: { leaf: { type: 'integer', minimum: 1, description: 'also kept' } },
+    });
+    for (const keyword of keywordsOf(out)) {
+      expect(DOCUMENTED.has(keyword), `${keyword} escaped the closed policy`).toBe(true);
+    }
+  });
+});
+
+describe('R7-R1 — the audit instrument and the sibling policies are themselves pinned', () => {
+  it('the keyword audit descends into `$defs`, `anyOf`, `items` and `properties`', () => {
+    // The recursive audit is the instrument every "no unknown keyword survives" assertion relies on.
+    // An audit that quietly stopped descending would make those assertions vacuous — they would pass
+    // by not looking. So the instrument is calibrated against markers planted in each container.
+    const found = keywordsOf({
+      $defs: { a: { markerInDefs: true } },
+      properties: { p: { anyOf: [{ markerInAnyOf: true }] } },
+      items: { markerInItems: true },
+    });
+    expect(found.has('markerInDefs')).toBe(true);
+    expect(found.has('markerInAnyOf')).toBe(true);
+    expect(found.has('markerInItems')).toBe(true);
+  });
+
+  it('a `$ref` node carrying an unreviewed sibling fails closed', () => {
+    // Groq demonstrates the pure reference form and the root `$ref` + `$defs` pairing. Everything else
+    // is undemonstrated, and an undemonstrated combination is exactly what R7-R1 refuses to guess at.
+    for (const sibling of [
+      { type: 'object' },
+      { enum: ['x'] },
+      { description: 'a description' },
+      { items: { type: 'string' } },
+      { properties: {}, required: [] },
+    ]) {
+      const result = projectGroqStrictJsonSchema({ $ref: '#', ...sibling });
+      expect(result.ok, `\`$ref\` + ${Object.keys(sibling).join('/')} must fail closed`).toBe(
+        false,
+      );
+      expect(result.ok ? undefined : result.reason).toBe('unsupported-composition');
+    }
+    // And the two reviewed forms still project.
+    expect(projectGroqStrictJsonSchema({ $ref: '#' }).ok).toBe(true);
+    expect(
+      projectGroqStrictJsonSchema({
+        $ref: '#/$defs/root',
+        $defs: { root: closedObject({ a: { type: 'string' } }) },
+      }).ok,
+    ).toBe(true);
+  });
+
+  it('an `anyOf` node carrying an unreviewed sibling fails closed', () => {
+    for (const sibling of [{ type: 'string' }, { enum: ['x'] }, { items: { type: 'string' } }]) {
+      const result = projectGroqStrictJsonSchema({
+        anyOf: [{ type: 'string' }, { type: 'null' }],
+        ...sibling,
+      });
+      expect(result.ok, `anyOf + ${Object.keys(sibling).join('/')} must fail closed`).toBe(false);
+      expect(result.ok ? undefined : result.reason).toBe('unsupported-composition');
+    }
+    // The reviewed forms — bare, and with a documented `description` — still project.
+    expect(projectGroqStrictJsonSchema({ anyOf: [{ type: 'string' }, { type: 'null' }] }).ok).toBe(
+      true,
+    );
+    expect(
+      projectGroqStrictJsonSchema({
+        anyOf: [{ type: 'string' }, { type: 'null' }],
+        description: 'an optional value',
+      }).ok,
+    ).toBe(true);
   });
 });

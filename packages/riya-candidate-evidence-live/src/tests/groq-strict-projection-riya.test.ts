@@ -64,7 +64,14 @@ function keywordsOf(node: unknown, out = new Set<string>()): Set<string> {
   return out;
 }
 
-/** The keywords Groq's Structured Outputs documentation establishes for strict mode. */
+/**
+ * The keywords Groq's Structured Outputs documentation establishes for strict mode.
+ *
+ * `description` is here as of HF4-R7-R1: owner review found it inside property definitions in the
+ * strict:true organization-chart and file-system recursion examples. The Riya schemas happen to carry
+ * none, so nothing about their projection changes — but the set has to describe the POLICY, not just
+ * the two schemas it is currently applied to.
+ */
 const DOCUMENTED_SUBSET = new Set([
   'type',
   'properties',
@@ -75,6 +82,7 @@ const DOCUMENTED_SUBSET = new Set([
   'anyOf',
   '$defs',
   '$ref',
+  'description',
 ]);
 
 describe('R7-C1 — the measured keyword inventory of the real Riya schemas', () => {
