@@ -17,22 +17,55 @@
  *
  * ### The clipboard is CONSUMED, not merely read
  *
- * The helper clears the clipboard BEFORE the captured text is written back to this process. That
- * ordering is the security property: if the parent dies, is killed, or overruns its output bound
- * partway through, the clipboard has already been cleared. And if the OS refuses to clear, this
- * process never receives the value at all — the refusal arrives instead, and the run fails closed.
+ * The helper OVERWRITES the credential-bearing clipboard entry BEFORE the captured text is written
+ * back to this process. That ordering is the security property: if the parent dies, is killed, or
+ * overruns its output bound partway through, the credential is already out of the clipboard. And if
+ * the OS refuses the overwrite, this process never receives the value at all — the refusal arrives
+ * instead, and the run fails closed.
  *
- * Continuing after a failed clear was considered and rejected. The operator explicitly asked for
+ * Continuing after a failed overwrite was considered and rejected. The operator explicitly asked for
  * clipboard ingestion; proceeding while knowingly leaving a live API key resident in the clipboard
  * would be the one outcome nobody would choose if asked.
  *
- * ### What clearing does and does NOT guarantee
+ * ### HF4-R6 — why the removal is an overwrite and not an empty clear
  *
- * It replaces the CURRENT clipboard entry. It does not, and this module never claims it does, purge
- * Windows Clipboard History (Win+V) or a cloud-synced clipboard, because `Set-Clipboard` cannot. An
- * owner who has either feature enabled must clear that history themselves. Nothing here mutates a
- * registry key or a system setting to try — silently disabling an operating-system feature is not a
- * credential resolver's business.
+ * R5 removed the credential with `Set-Clipboard -Value ''`. RUN S7 spent its one live authorization
+ * proving that does not work here: the helper reached the clipboard, the clear step failed, and the
+ * run stopped at `credentialOutcome=clipboard-clear-failed` with zero holders, zero provider requests
+ * and exit code 12. Nothing about Groq or the model was measured — the run never got that far.
+ *
+ * Empty-string support in `Set-Clipboard` was added in PowerShell 7.2, and PowerShell 7.x changes are
+ * not back-ported to Windows PowerShell 5.1. This helper deliberately runs `powershell.exe`, which IS
+ * Windows PowerShell 5.1 on the owner's machine, so the R5 form was asking for a capability that
+ * release does not have.
+ *
+ * The pre-merge check that missed it is worth naming: the `-Value` parameter carries
+ * `AllowEmptyStringAttribute`, so an empty string BINDS. Binding is not execution — the cmdlet body
+ * still refuses. A metadata probe could not have caught this, and the fix is to stop depending on the
+ * behaviour at all rather than to probe it better.
+ *
+ * So the credential entry is now replaced by a FIXED, non-secret {@link CLIPBOARD_CLEARED_SENTINEL}.
+ * Writing a real string is the operation Windows PowerShell 5.1 has always supported. Microsoft also
+ * documents that a clipboard write can rarely fail while the clipboard is still in use, and names a
+ * short delay as the mitigation — hence ONE fixed {@link CLIPBOARD_PREWRITE_DELAY_MS} pause before the
+ * single write. That is a pre-write delay, not a retry: there is still exactly one `Set-Clipboard`.
+ *
+ * ### What the removal does and does NOT guarantee
+ *
+ * It replaces the CURRENT clipboard entry so that entry no longer holds the credential. It does NOT
+ * leave the clipboard empty — it leaves the sentinel — and it does not, and this module never claims
+ * it does, purge Windows Clipboard History (Win+V) or a cloud-synced clipboard. An owner who has
+ * either feature enabled must clear that history themselves. Nothing here mutates a registry key or a
+ * system setting to try — silently disabling an operating-system feature is not a credential
+ * resolver's business.
+ *
+ * ### The sentinel is refused as an ingress value
+ *
+ * The sentinel is 21 characters of the allowed charset, so the shared credential policy would ACCEPT
+ * it — which would turn a second clipboard run into a run that resolved a holder from the marker this
+ * ingress itself wrote. It is therefore refused explicitly, before any holder exists, as
+ * `clipboard-sentinel-present`. That guard belongs to this ingress alone: the TTY policy is not
+ * widened to know about a value only clipboard mode can produce.
  *
  * ### The helper carries no secret
  *
@@ -75,6 +108,31 @@ export const CLIPBOARD_READ_FAILURE_KINDS = [
 ] as const;
 export type ClipboardReadFailureKind = (typeof CLIPBOARD_READ_FAILURE_KINDS)[number];
 
+/**
+ * The FIXED, non-secret marker that replaces the credential in the current clipboard entry (HF4-R6).
+ *
+ * Every property of it is deliberate. It is a compile-time constant, so no operator, flag, file or
+ * environment variable can choose it — a configurable marker would be one more place a value could be
+ * smuggled in. It is not derived from the captured credential in any way, so it leaks nothing: the
+ * same nineteen bytes are written whether the clipboard held a key, a shopping list, or nothing. And
+ * it is written rather than cleared because writing a real string is the operation Windows PowerShell
+ * 5.1 actually supports.
+ *
+ * It is safe to leave as the current clipboard value: it names what happened, in a form an owner who
+ * pastes it somewhere will recognise rather than mistake for data.
+ */
+export const CLIPBOARD_CLEARED_SENTINEL = 'QFJ_CLIPBOARD_CLEARED';
+
+/**
+ * The ONE fixed pause before the single clipboard write.
+ *
+ * Microsoft's own `Set-Clipboard` guidance notes that a write can rarely fail while the clipboard is
+ * still in use, and names a short delay as the mitigation. This is that delay and nothing more: it
+ * runs once, before the one write, and no failure re-enters it. A retry would be a second write, and
+ * the one-write contract is what makes "the credential was removed exactly once" checkable.
+ */
+export const CLIPBOARD_PREWRITE_DELAY_MS = 100;
+
 /** The one typed rejection the production source raises. Carries a kind, never a value or a cause. */
 export class ClipboardReadError extends Error {
   public readonly kind: ClipboardReadFailureKind;
@@ -95,10 +153,15 @@ export interface ClipboardTextSource {
   /** True only on a platform this ingress supports. Checked before any helper is spawned. */
   isSupportedPlatform(): boolean;
   /**
-   * Capture the current clipboard text AND clear the OS clipboard, in ONE helper invocation.
+   * Capture the current clipboard text AND overwrite that entry, in ONE helper invocation.
    *
-   * Called at most once per process. The clear happens BEFORE the text is handed back, so a refused
-   * clear resolves to no value at all rather than to a value plus a warning.
+   * Called at most once per process. The overwrite happens BEFORE the text is handed back, so a
+   * refused overwrite resolves to no value at all rather than to a value plus a warning.
+   *
+   * HF4-R6: the removal is an overwrite with a fixed non-secret sentinel, not an empty clear — see
+   * the module header for why Windows PowerShell 5.1 cannot do the latter. The method name is kept so
+   * no consumer signature churns; what it guarantees is that the credential is no longer the current
+   * clipboard entry, never that the clipboard is empty.
    */
   readAndClearOnce(): Promise<string>;
 }
@@ -114,7 +177,16 @@ export interface ClipboardCredentialResolver extends StagingCredentialResolver {
   readonly clipboardReadAttempts: () => number;
   /** How many times the OS clipboard was successfully captured. At most one, ever. */
   readonly clipboardReads: () => number;
-  /** Whether the OS clipboard was cleared. False until a capture succeeds; a failed clear never sets it. */
+  /**
+   * Whether the credential-bearing clipboard entry was successfully REMOVED before the value was
+   * returned to this process — that is, replaced by {@link CLIPBOARD_CLEARED_SENTINEL}.
+   *
+   * It does NOT mean the clipboard is empty; it never did, and after HF4-R6 it demonstrably is not.
+   * The name is kept because renaming a printed diagnostic field would churn every receipt an owner
+   * has already read, and the meaning is stated here instead. False until a capture succeeds, and a
+   * failed overwrite never sets it — the helper exits before emitting, so a run that could not remove
+   * the credential returns no value to count.
+   */
   readonly clipboardCleared: () => boolean;
   /** How many credential holders were constructed. At most one, ever. */
   readonly holderCreations: () => number;
@@ -232,6 +304,14 @@ export function createClipboardCredentialResolver(
     // REMOVE characters the policy already forbids, so it cannot turn a refused value into a
     // different accepted one. The bounds and the character class themselves are untouched.
     const value = captured.trim();
+    // HF4-R6. The marker this ingress itself writes is refused BEFORE the shared policy runs, because
+    // the shared policy would accept it: 21 characters, all inside the allowed charset. Without this
+    // the second clipboard run of a session would build a holder out of "the credential was removed"
+    // and carry it to a provider. Checked here rather than in `credential-policy.ts` on purpose — the
+    // TTY ingress can never produce this value and must not be taught to care about it.
+    if (value === CLIPBOARD_CLEARED_SENTINEL) {
+      return fail('clipboard-sentinel-present');
+    }
     if (!isBoundedCredential(value)) {
       return fail(classifyRejection(value));
     }
@@ -311,15 +391,22 @@ export const CLIPBOARD_HELPER_TIMEOUT_MS = 5_000;
  *
  * The value only ever lives in the child's own `$value` variable, which is assigned from the clipboard
  * and written to stdout at the end. It is never an argument, never an environment entry, never a file.
+ * The only literals interpolated at module load are the two exit codes, the fixed delay and the fixed
+ * sentinel — all compile-time constants, none derived from anything the clipboard held.
  *
- * The order is deliberate: read, then CLEAR, then emit. A clear that fails exits before the value is
- * written, so this process cannot receive a credential it failed to take out of the clipboard.
+ * The order is deliberate and is the security property: read, WAIT, OVERWRITE, then emit. An overwrite
+ * that fails exits before the value is written, so this process cannot receive a credential it failed
+ * to take out of the clipboard.
+ *
+ * HF4-R6 replaced `Set-Clipboard -Value ''` here. That form needs PowerShell 7.2 and this helper runs
+ * Windows PowerShell 5.1, which is what RUN S7 hit; writing a real sentinel is supported everywhere.
  */
 const CLIPBOARD_HELPER_PROGRAM = [
   "$ErrorActionPreference = 'Stop'",
   `try { $value = Get-Clipboard -Raw } catch { exit ${String(CLIPBOARD_HELPER_READ_FAILED_EXIT)} }`,
   "if ($null -eq $value) { $value = '' }",
-  `try { Set-Clipboard -Value '' } catch { exit ${String(CLIPBOARD_HELPER_CLEAR_FAILED_EXIT)} }`,
+  `Start-Sleep -Milliseconds ${String(CLIPBOARD_PREWRITE_DELAY_MS)}`,
+  `try { Set-Clipboard -Value '${CLIPBOARD_CLEARED_SENTINEL}' } catch { exit ${String(CLIPBOARD_HELPER_CLEAR_FAILED_EXIT)} }`,
   '[Console]::Out.Write($value)',
   'exit 0',
 ].join('; ');
