@@ -21,8 +21,8 @@
  * candidate resolver" becomes a fact rather than a claim.
  */
 import type {
-  MaskedSecretSource,
   SmokeConfig,
+  SmokeCredentialDeps,
   SmokeRunResult,
 } from '@qf-jarvis/groq-staging-smoke';
 import { loadSmokeConfig } from '@qf-jarvis/groq-staging-smoke';
@@ -38,12 +38,19 @@ import { createApprovalEvidence } from '@qf-jarvis/model-evaluation';
 
 import { createOperatorLedger } from './accounting.js';
 import type { RequestLedger } from './accounting.js';
+import type { ClipboardIngressCounters } from './credential-composition.js';
+import { DEFAULT_CREDENTIAL_SOURCE_MODE } from './credential-source.js';
+import type { CredentialSourceMode } from './credential-source.js';
 import type { CandidateSession } from './candidate-session.js';
 import { createQualityCandidatePort, createSafetyCandidatePort } from './candidate-ports.js';
 import type { CandidateExecutionDiagnostic } from './candidate-ports.js';
 import type { OperatorOutcome } from './exit-codes.js';
 import type { CandidateExecutionLayer, ExecutionHealthInput } from './internal/execution-health.js';
-import { DEFAULT_RUN_GOAL, SECOND_CREDENTIAL_NOTICES } from './internal/run-goal.js';
+import {
+  DEFAULT_RUN_GOAL,
+  REUSED_CREDENTIAL_NOTICES,
+  SECOND_CREDENTIAL_NOTICES,
+} from './internal/run-goal.js';
 import type { OperatorRunGoal } from './internal/run-goal.js';
 import {
   emitExecutionDiagnostics,
@@ -103,16 +110,23 @@ export interface OperatorDeps {
   readonly console: SafeConsole;
   readonly preflight: PreflightInput;
   /**
-   * Construct the ONE masked secret source the smoke will read from.
+   * Open the ONE credential ingress the smoke will use.
    *
-   * Called at most once, and only after precheck passed. It returns the SOURCE rather than a resolved
-   * credential because `runGroqStagingSmokeOnce` already owns the TTY gate, the resolver, the single
-   * read and the single bind — handing it a different source than the one counted here would mean the
-   * count described an object nobody used.
+   * Called at most once, and only after precheck passed. It returns the credential SLICE of the smoke
+   * dependencies rather than a resolved credential, because `runGroqStagingSmokeOnce` already owns the
+   * gate, the single bind and the milestone stamping — handing it a different ingress than the one
+   * counted here would mean the count described an object nobody used.
+   *
+   * HF4-R5 widened this from "the masked secret source" to "whichever governed ingress was selected".
+   * The operator deliberately cannot tell which one it received: it forwards the slice untouched, so
+   * no branch here can weaken a gate that belongs to the ingress.
    */
-  readonly openSmokeSecretSource: () => Promise<MaskedSecretSource>;
-  /** Run the existing one-shot smoke against EXACTLY that source. */
-  readonly runSmoke: (config: SmokeConfig, source: MaskedSecretSource) => Promise<SmokeRunResult>;
+  readonly openSmokeCredential: () => Promise<SmokeCredentialDeps>;
+  /** Run the existing one-shot smoke against EXACTLY that ingress. */
+  readonly runSmoke: (
+    config: SmokeConfig,
+    credential: SmokeCredentialDeps,
+  ) => Promise<SmokeRunResult>;
   /**
    * Resolve the candidate credential through the EXISTING masked resolver.
    *
@@ -135,12 +149,58 @@ export interface OperatorDeps {
    * reach no quality case, no bundle and no ceiling wider than its own.
    */
   readonly runGoal?: OperatorRunGoal;
+  /**
+   * HF4-R5. Which credential ingress this run selected. Absent means `tty`.
+   *
+   * Used for exactly two things, both of them output: choosing between the "enter it again" and the
+   * "reusing what was already read" notice, and labelling the ingress line. It selects no behaviour —
+   * the ingress itself is whatever `openSmokeCredential` returns, so a wrong value here cannot make a
+   * clipboard run behave like a TTY run or the reverse.
+   */
+  readonly credentialSource?: CredentialSourceMode;
+  /** Content-free ingress counters, when the selected ingress has any. Numbers and booleans only. */
+  readonly ingressCounters?: () => ClipboardIngressCounters | undefined;
 }
 
 export interface OperatorResult {
   readonly outcome: OperatorOutcome;
   readonly reviewBundlePath?: string;
   readonly reviewCaseCount?: number;
+}
+
+/**
+ * Emit the content-free credential-ingress line (HF4-R5).
+ *
+ * Every field is a closed mode, a small count, or a boolean. There is deliberately no field here that
+ * could hold a credential, a prefix, a suffix, a length, a hash, a fingerprint, a clipboard string, or
+ * a helper's output — a credential LENGTH is omitted on purpose, because it narrows the value and buys
+ * an owner nothing they cannot get from `credentialOutcome`.
+ *
+ * The properties are named one by one rather than spread, so a counter added upstream cannot start
+ * printing here without someone deciding it should.
+ */
+function emitCredentialIngress(
+  safe: SafeConsole,
+  mode: CredentialSourceMode,
+  phase: 'SMOKE' | 'CANDIDATE',
+  counters: ClipboardIngressCounters | undefined,
+): void {
+  if (counters === undefined) {
+    // An ingress with no counters of its own — the masked terminal. The mode is still worth stating:
+    // it is how a receipt says which door the credential came through.
+    safe.line({ phase: 'credential-ingress', status: phase, credentialSource: mode });
+    return;
+  }
+  safe.line({
+    phase: 'credential-ingress',
+    status: phase,
+    credentialSource: mode,
+    credentialClipboardReadAttempts: counters.credentialClipboardReadAttempts,
+    credentialClipboardReads: counters.credentialClipboardReads,
+    credentialClipboardCleared: counters.credentialClipboardCleared,
+    credentialHolderCreations: counters.credentialHolderCreations,
+    credentialReuseCount: counters.credentialReuseCount,
+  });
 }
 
 /**
@@ -155,6 +215,8 @@ export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<
   const safe = deps.console;
   // Resolved once. Absence is FULL_EVIDENCE, which is what keeps every existing call site identical.
   const runGoal = deps.runGoal ?? DEFAULT_RUN_GOAL;
+  // Same rule, same reason: absence is the masked terminal, so a pre-HF4-R5 caller is unchanged.
+  const credentialSource = deps.credentialSource ?? DEFAULT_CREDENTIAL_SOURCE_MODE;
 
   // A. PRECHECK — before any secret source exists.
   const precheck = runPreflight(deps.preflight);
@@ -175,10 +237,10 @@ export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<
     safe.line({ phase: 'smoke', status: 'REFUSED', reason: 'request-limit-reached' });
     return { outcome: 'REQUEST_LIMIT_REACHED' };
   }
-  // ONE source, constructed here and handed straight to the smoke harness. Its own counters then
-  // prove at most one credential read happened.
-  const smokeSource = await deps.openSmokeSecretSource();
-  const smoke = await deps.runSmoke(loaded.config, smokeSource);
+  // ONE ingress, opened here and handed straight to the smoke harness. Its own counters then prove at
+  // most one credential read happened.
+  const smokeCredential = await deps.openSmokeCredential();
+  const smoke = await deps.runSmoke(loaded.config, smokeCredential);
   ledger.settle(
     smoke.ok
       ? { inputTokens: smoke.usage.inputTokens, outputTokens: smoke.usage.outputTokens }
@@ -194,6 +256,10 @@ export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<
   // Emitted BEFORE the authoritative status line, and for BOTH outcomes: a healthy run is the only
   // reference timing that makes a later failure legible.
   emitSmokeExecutionDiagnostics(safe, smoke);
+  // HF4-R5. What the ingress DID, for both outcomes. Emitted after the smoke diagnostics and before
+  // the authoritative status line, so a failed smoke still reports whether the clipboard was read and
+  // — the field an owner actually needs after a failure — whether it was cleared.
+  emitCredentialIngress(safe, credentialSource, 'SMOKE', deps.ingressCounters?.());
   if (!smoke.ok) {
     // STOP. No second prompt, no safety, no P10 — a candidate that cannot be reached has not been
     // measured, and every later number would be about nothing.
@@ -205,12 +271,19 @@ export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<
   // D/E. THE CANDIDATE — a fresh one-shot credential, and an in-memory composition.
   // Per goal: telling an owner they are funding "the bounded candidate evidence run" when the run
   // will stop after safety and write nothing would be a small lie at the moment they type a key.
-  safe.notice(SECOND_CREDENTIAL_NOTICES[runGoal]);
+  safe.notice(
+    credentialSource === 'clipboard'
+      ? REUSED_CREDENTIAL_NOTICES[runGoal]
+      : SECOND_CREDENTIAL_NOTICES[runGoal],
+  );
   // The governed opaque reference from the approved configuration — never a key, and never a value
   // this operator invented.
   const candidateCredential = await deps.openCandidateCredential({
     ref: loaded.config.credentialReference,
   });
+  // The second ingress line. In clipboard mode this is where `credentialReuseCount` becomes 2 while
+  // `credentialClipboardReads` stays 1 — the pair of numbers that IS the copy-once guarantee.
+  emitCredentialIngress(safe, credentialSource, 'CANDIDATE', deps.ingressCounters?.());
   let session: CandidateSession;
   try {
     session = await deps.openCandidate(candidateCredential);

@@ -192,23 +192,45 @@ describe('the operator implements no transport and holds no secret ingress', () 
     // Imports say nothing about order, so the import block is dropped and only CALLS are compared.
     // Every construction must sit after the operator call begins -- i.e. inside one of the lazily
     // invoked credential callbacks, which the operator only reaches once preflight has passed.
+    //
+    // HF4-R5 moved both ingress factories behind `createCredentialComposition`, which IS built before
+    // the operator call — and constructs nothing when it is. So the property is now proved
+    // STRUCTURALLY rather than positionally: every construction site must sit inside an arrow that
+    // only the operator's lazily-invoked credential callbacks reach. That is a stronger claim than
+    // the old index comparison, which a lambda defined early would have satisfied anyway.
     const cli = codeOnly(readFileSync(join(SRC, 'bin.ts'), 'utf8'));
     const body = cli.slice(cli.indexOf('async function main'));
-    const operatorAt = body.indexOf('runCandidateEvidenceOperator(');
-    expect(operatorAt).toBeGreaterThan(0);
-    let cursor = body.indexOf('createNodeMaskedSecretSource(');
-    expect(cursor).toBeGreaterThan(0);
-    while (cursor !== -1) {
-      expect(cursor, 'a secret source is constructed before preflight').toBeGreaterThan(operatorAt);
-      cursor = body.indexOf('createNodeMaskedSecretSource(', cursor + 1);
+    expect(body.indexOf('runCandidateEvidenceOperator(')).toBeGreaterThan(0);
+    for (const factory of [
+      'createNodeMaskedSecretSource',
+      'createWindowsPowerShellClipboardSource',
+    ]) {
+      const constructions = body.match(new RegExp(`${factory}\\(`, 'g')) ?? [];
+      const lazy = body.match(new RegExp(`\\(\\)\\s*=>\\s*${factory}\\(`, 'g')) ?? [];
+      expect(constructions.length, `${factory} must be constructed in main()`).toBeGreaterThan(0);
+      expect(lazy.length, `${factory} is constructed eagerly, before preflight`).toBe(
+        constructions.length,
+      );
     }
   });
 
-  it('the candidate credential goes through the existing masked resolver', () => {
-    // Not a bare `readOnce`: the resolver owns the bounds, the charset and the one-shot guarantee.
+  it('the candidate credential goes through the existing bounded resolvers', () => {
+    // Not a bare `readOnce`: a resolver owns the bounds, the charset and the one-shot guarantee, and
+    // HF4-R5 kept that true for BOTH ingresses by sharing one predicate rather than adding a second
+    // credential policy. The wiring moved out of `bin.ts` into the composition module so a spec could
+    // reach it; neither file may reach past a resolver to a raw read.
     const cli = codeOnly(readFileSync(join(SRC, 'bin.ts'), 'utf8'));
-    expect(cli).toContain('createMaskedTtyCredentialResolver');
+    const composition = codeOnly(readFileSync(join(SRC, 'credential-composition.ts'), 'utf8'));
+    expect(composition).toContain('createMaskedTtyCredentialResolver');
+    expect(composition).toContain('createClipboardCredentialResolver');
     expect(cli).not.toContain('readOnce');
+    expect(composition).not.toContain('readOnce');
+    // And neither one reimplements the acceptance rule it is supposed to be delegating to.
+    for (const source of [cli, composition]) {
+      expect(source).not.toContain('MIN_CREDENTIAL_LENGTH');
+      expect(source).not.toContain('MAX_CREDENTIAL_LENGTH');
+      expect(source).not.toMatch(/A-Za-z0-9/);
+    }
   });
 
   it('never fabricates an evaluation binding for the candidate turn', () => {

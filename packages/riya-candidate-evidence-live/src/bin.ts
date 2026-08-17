@@ -16,10 +16,10 @@
 import { fileURLToPath } from 'node:url';
 
 import {
-  createMaskedTtyCredentialResolver,
   createNodeMaskedSecretSource,
   createSystemSmokeTimer,
   createSystemSmokeWireDeps,
+  createWindowsPowerShellClipboardSource,
   runGroqStagingSmokeOnce,
 } from '@qf-jarvis/groq-staging-smoke';
 import type { GroqApiKey } from '@qf-jarvis/model-gateway';
@@ -46,6 +46,9 @@ import { createCandidateTransportObservations } from './candidate-transport-obse
 import { createCandidateGateway } from './evaluation-gateway.js';
 import { createOperatorLedger, createSafetyReplicationLedger } from './accounting.js';
 import type { RequestLedger } from './accounting.js';
+import { createCredentialComposition } from './credential-composition.js';
+import { DEFAULT_CREDENTIAL_SOURCE_MODE, isCredentialSourceMode } from './credential-source.js';
+import type { CredentialSourceMode } from './credential-source.js';
 import { DEFAULT_RUN_GOAL } from './internal/run-goal.js';
 import type { OperatorRunGoal } from './internal/run-goal.js';
 import { OPERATOR_EXIT_CODES } from './exit-codes.js';
@@ -56,12 +59,14 @@ import {
   RIYA_CLIENT_SALES_PROMPT_VERSION,
 } from '@qf-jarvis/riya-prompts';
 
-/** Two path flags and one optional governed goal. Anything else is a refusal, never a default. */
+/** Two path flags and two optional governed modes. Anything else is a refusal, never a default. */
 export interface CliArgs {
   readonly smokeConfig?: string;
   readonly reviewOutput?: string;
   /** Absent means FULL_EVIDENCE, so the old two-flag command behaves exactly as it did before HF3. */
   readonly runGoal?: OperatorRunGoal;
+  /** Absent means `tty`, so every pre-HF4-R5 command line behaves exactly as it did. */
+  readonly credentialSource?: CredentialSourceMode;
 }
 
 export type CliParse =
@@ -69,7 +74,12 @@ export type CliParse =
   | {
       readonly ok: false;
       readonly reason:
-        'unknown-argument' | 'missing-value' | 'invalid-run-goal' | 'duplicate-run-goal';
+        | 'unknown-argument'
+        | 'missing-value'
+        | 'invalid-run-goal'
+        | 'duplicate-run-goal'
+        | 'invalid-credential-source'
+        | 'duplicate-credential-source';
     };
 
 /**
@@ -88,9 +98,29 @@ export function parseCliArgs(argv: readonly string[]): CliParse {
   let smokeConfig: string | undefined;
   let reviewOutput: string | undefined;
   let runGoal: OperatorRunGoal | undefined;
+  let credentialSource: CredentialSourceMode | undefined;
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
     const value = argv[index + 1];
+    // HF4-R5. A MODE, never a carrier. Its value set is two reviewed literals, so this flag cannot be
+    // the thing that puts a credential into shell history — which is why `--credential`, `--api-key`
+    // and `--key` are still absent and still fall through to `unknown-argument` below.
+    if (flag === '--credential-source') {
+      if (value === undefined || value.startsWith('--')) {
+        return { ok: false, reason: 'missing-value' };
+      }
+      // Fail closed rather than letting the last spelling win, exactly as `--run-goal` does: an
+      // ambiguous ingress is precisely the kind of thing that silently becomes the wrong run.
+      if (credentialSource !== undefined) {
+        return { ok: false, reason: 'duplicate-credential-source' };
+      }
+      if (!isCredentialSourceMode(value)) {
+        return { ok: false, reason: 'invalid-credential-source' };
+      }
+      credentialSource = value;
+      index += 1;
+      continue;
+    }
     if (flag === '--run-goal') {
       if (value === undefined || value.startsWith('--')) {
         return { ok: false, reason: 'missing-value' };
@@ -127,6 +157,7 @@ export function parseCliArgs(argv: readonly string[]): CliParse {
       ...(smokeConfig === undefined ? {} : { smokeConfig }),
       ...(reviewOutput === undefined ? {} : { reviewOutput }),
       ...(runGoal === undefined ? {} : { runGoal }),
+      ...(credentialSource === undefined ? {} : { credentialSource }),
     },
   };
 }
@@ -161,7 +192,26 @@ async function main(): Promise<number> {
   const interactive = process.stdin.isTTY && process.stdout.isTTY;
 
   const runGoal = parsed.args.runGoal ?? DEFAULT_RUN_GOAL;
+  const credentialSource = parsed.args.credentialSource ?? DEFAULT_CREDENTIAL_SOURCE_MODE;
   const ledger = ledgerForRunGoal(runGoal);
+
+  // HF4-R4's pairing, built ONCE for a clipboard run.
+  //
+  // The clipboard ingress has to stamp its milestones on the SAME recorder the smoke prints from, and
+  // it exists before the smoke does — so in clipboard mode the pairing is constructed here and reused
+  // below. A TTY run keeps constructing it inside `runSmoke`, which is where it has always been built,
+  // so the recorder's origin instant and therefore every millisecond delta a TTY run reports are
+  // byte-for-byte unchanged by this hunk.
+  const clipboardWire = credentialSource === 'clipboard' ? createSystemSmokeWireDeps() : undefined;
+
+  // The credential wiring for this run, per governed ingress. Nothing is read here and no clipboard is
+  // touched: the clipboard resolver is built lazily on first use, which is after preflight.
+  const credentials = createCredentialComposition(credentialSource, {
+    openMaskedSource: () => createNodeMaskedSecretSource(),
+    openClipboard: () => createWindowsPowerShellClipboardSource(),
+    ...(clipboardWire?.diagnostics === undefined ? {} : { recorder: clipboardWire.diagnostics }),
+  });
+
   const result = await runCandidateEvidenceOperator({
     console: safe,
     preflight: {
@@ -169,29 +219,34 @@ async function main(): Promise<number> {
       reviewOutputPath: parsed.args.reviewOutput,
       repoRoot: repoRoot(),
       interactive,
+      // The TTY requirement belongs to the TTY ingress. A clipboard run reads no stdin, so preflight
+      // is told which ingress it is gating rather than assuming the terminal one.
+      credentialSource,
     },
     ledger,
     runGoal,
-    // ONE source, created only after preflight passed, and handed straight to the smoke harness
-    // below. The harness owns the TTY gate, the resolver, the single read and the single bind.
-    openSmokeSecretSource: () => Promise.resolve(createNodeMaskedSecretSource()),
+    credentialSource,
+    // ONE ingress, opened only after preflight passed, and handed straight to the smoke harness below.
+    // The harness still owns the gate, the single bind and the milestone stamping.
+    openSmokeCredential: credentials.openSmokeCredential,
     // HF4-R4. The INSTRUMENTED transport and the recorder that owns its milestones, paired by the
     // smoke package itself. This call site used to pass a plain transport and no recorder, so the
     // harness built a private recorder nothing on the wire could reach — which is why RUN S5's smoke
     // PASSED while printing fetchStarted / headersReceived / responseBody* / networkElapsed as
     // ABSENT. Same request, same timer, same credential policy, same zero retries.
-    runSmoke: (config, source) =>
+    runSmoke: (config, credential) =>
       runGroqStagingSmokeOnce(config, {
-        ...createSystemSmokeWireDeps(),
-        credentialSource: source,
+        ...(clipboardWire ?? createSystemSmokeWireDeps()),
+        ...credential,
         clock: createSystemClock(),
         timer: createSystemSmokeTimer(),
       }),
-    // DEFECT 3: through the EXISTING masked resolver, against the governed opaque reference. A bare
-    // `readOnce` would bypass the resolver's bounds, charset and one-shot guarantees and become a
-    // second credential policy.
-    openCandidateCredential: (reference) =>
-      createMaskedTtyCredentialResolver(createNodeMaskedSecretSource()).resolve(reference),
+    // DEFECT 3: through the EXISTING resolver for whichever ingress is in use, against the governed
+    // opaque reference. A bare `readOnce` would bypass the bounds, charset and one-shot guarantees and
+    // become a second credential policy. In clipboard mode this returns the SAME holder the smoke
+    // used — no second OS clipboard access, and nothing asked of the owner.
+    openCandidateCredential: credentials.openCandidateCredential,
+    ingressCounters: credentials.ingressCounters,
     openCandidate: (credential) => {
       const apiKey = credential as GroqApiKey;
       const clock = (): string => new Date().toISOString();

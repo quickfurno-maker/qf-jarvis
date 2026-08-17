@@ -25,7 +25,7 @@ import {
   SMOKE_PROMPT_VERSION,
   SMOKE_SCHEMA_REVISION,
 } from '@qf-jarvis/groq-staging-smoke';
-import type { MaskedSecretSource, SmokeRunResult } from '@qf-jarvis/groq-staging-smoke';
+import type { SmokeRunResult } from '@qf-jarvis/groq-staging-smoke';
 import { createEvaluationBinding, createSuiteThresholds } from '@qf-jarvis/model-evaluation';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -203,11 +203,13 @@ async function runToSmoke(smoke: SmokeRunResult): Promise<SmokeGateRun> {
   const deps: OperatorDeps = {
     console: createSafeConsole((line) => lines.push(line)),
     preflight: { smokeConfigPath, reviewOutputPath, repoRoot: REPO_ROOT, interactive: true },
-    openSmokeSecretSource: () =>
+    openSmokeCredential: () =>
       Promise.resolve({
-        isInteractive: () => true,
-        readOnce: () => Promise.resolve(KEY_SENTINEL),
-      } as MaskedSecretSource),
+        credentialSource: {
+          isInteractive: () => true,
+          readOnce: () => Promise.resolve(KEY_SENTINEL),
+        },
+      }),
     runSmoke: () => {
       smokeRuns += 1;
       return Promise.resolve(smoke);

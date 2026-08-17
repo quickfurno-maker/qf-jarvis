@@ -67,6 +67,22 @@ export type { OperatorOutcome } from './exit-codes.js';
 export { EXPECTED_SMOKE_CONFIG_DIGEST, PREFLIGHT_FAILURES, runPreflight } from './preflight.js';
 export type { PreflightFailure, PreflightInput, PreflightResult } from './preflight.js';
 
+// HF4-R5. The governed credential ingress: a closed MODE vocabulary and the wiring it selects.
+// Neither can carry a credential — the modes are two literals, and the composition holds only the
+// redacting holder the resolver produced.
+export {
+  CREDENTIAL_SOURCE_MODES,
+  DEFAULT_CREDENTIAL_SOURCE_MODE,
+  isCredentialSourceMode,
+} from './credential-source.js';
+export type { CredentialSourceMode } from './credential-source.js';
+export { createCredentialComposition } from './credential-composition.js';
+export type {
+  ClipboardIngressCounters,
+  CredentialComposition,
+  CredentialCompositionSeams,
+} from './credential-composition.js';
+
 // Governed synthetic knowledge admission, through the production authority.
 export { admitGroundedInput, GROUNDED_ADMISSION_REFUSALS } from './governed-grounded-input.js';
 export type { GroundedAdmission, GroundedAdmissionRefusal } from './governed-grounded-input.js';

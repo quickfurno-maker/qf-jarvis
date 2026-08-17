@@ -61,10 +61,24 @@ export {
 } from './masked-tty-credential-resolver.js';
 
 // The one-shot run: one bind, one invocation, one HTTP request, zero retries, harness-owned abort.
+// HF4-R5. The one-shot Windows clipboard ingress. Exported because the candidate evidence operator is
+// the composition root that selects an ingress, and the alternative — a second credential policy over
+// there — is exactly what this package exists to prevent. It exposes the resolver factory and the OS
+// seam and nothing else: the helper program, its arguments, its exit codes and its bounds all stay
+// unexported, so no caller can reach past the seam and run a clipboard command of its own.
+export {
+  createClipboardCredentialResolver,
+  createWindowsPowerShellClipboardSource,
+  type ClipboardCredentialResolver,
+  type ClipboardResolverOptions,
+  type ClipboardTextSource,
+} from './clipboard-credential-resolver.js';
+
 export {
   runGroqStagingSmokeOnce,
   createSystemSmokeTimer,
   type SmokeTimer,
+  type SmokeCredentialDeps,
   type SmokeRunDeps,
   type SmokeRunResult,
   type SmokeCounters,

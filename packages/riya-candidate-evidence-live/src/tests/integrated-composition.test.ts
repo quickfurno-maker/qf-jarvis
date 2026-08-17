@@ -221,16 +221,16 @@ function integrated(options: {
       interactive: true,
     },
     ledger,
-    openSmokeSecretSource: () => {
+    openSmokeCredential: () => {
       smokeSources += 1;
       handedSource = {
         isInteractive: () => true,
         readOnce: () => Promise.resolve('sk-fake-never-real-000000000000000000'),
       };
-      return Promise.resolve(handedSource);
+      return Promise.resolve({ credentialSource: handedSource });
     },
-    runSmoke: (_config, source) => {
-      receivedSource = source;
+    runSmoke: (_config, credential) => {
+      receivedSource = credential.credentialSource;
       return Promise.resolve(options.smoke);
     },
     openCandidateCredential: () => {

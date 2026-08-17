@@ -107,6 +107,20 @@ export type TransportErrorCode = (typeof TRANSPORT_ERROR_CODES)[number];
  *   - `rejected-holder`   the credential holder refused construction after the earlier guards
  *   - `resolved`          a credential object was successfully created
  *
+ * MVP-P2A.2 HF4-R5 adds the four branches the CLIPBOARD ingress can take before a value is ever
+ * classified. They name a failure of the INGRESS, never a property of a credential:
+ *
+ *   - `clipboard-platform-unsupported` the ingress is Windows-only and this is not Windows
+ *   - `clipboard-helper-failed`        the helper could not run, timed out, or overran its bound
+ *   - `clipboard-unavailable`          the helper ran and the OS refused the clipboard read
+ *   - `clipboard-clear-failed`         the value was read and the OS refused to clear the clipboard
+ *
+ * `clipboard-clear-failed` is a REFUSAL, not a warning. A run that could not take the credential back
+ * out of the clipboard fails closed rather than continuing with a live key sitting in it.
+ *
+ * The shape classifications above are deliberately SHARED with the clipboard ingress rather than
+ * duplicated: a value that is too short is `rejected-too-short` whichever door it arrived through.
+ *
  * A finer member is NEVER inferred when the source cannot prove it; unclassified source failures are
  * `read-unavailable`. Classification uses typed error identity, never message parsing.
  */
@@ -115,6 +129,10 @@ export const CREDENTIAL_OUTCOMES = [
   'tty-required',
   'read-aborted',
   'read-unavailable',
+  'clipboard-platform-unsupported',
+  'clipboard-helper-failed',
+  'clipboard-unavailable',
+  'clipboard-clear-failed',
   'rejected-empty',
   'rejected-too-short',
   'rejected-too-long',

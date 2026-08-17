@@ -91,8 +91,15 @@ describe('containment — the harness reaches nothing it must not reach', () => 
         expect(text).not.toMatch(/\bfetch\s*\(/);
       }
       expect(text).not.toMatch(/\bXMLHttpRequest\b/);
+      // MVP-P2A.2 HF4-R5: exactly ONE production module may name `node:child_process` — the clipboard
+      // credential ingress, whose whole purpose is to run the OS clipboard helper. It reaches the
+      // local clipboard and nothing else: no socket, no DNS, no worker. The spec below pins that the
+      // child is shell-free, constant-argument, bounded, timed, and carries no secret.
+      if (!file.replace(/\\/g, '/').endsWith('/clipboard-credential-resolver.ts')) {
+        expect(text).not.toMatch(/from ['"]node:child_process['"]/);
+      }
       expect(text).not.toMatch(
-        /from ['"]node:(net|http|http2|https|dns|tls|dgram|child_process|worker_threads)['"]/,
+        /from ['"]node:(net|http|http2|https|dns|tls|dgram|worker_threads)['"]/,
       );
       expect(text).not.toMatch(
         /from ['"](pg|groq-sdk|openai|axios|undici|node-fetch|whatsapp-web\.js|@whiskeysockets\/baileys|n8n)['"]/,
@@ -262,9 +269,19 @@ describe('dependency graph, exports, and the locked public API', () => {
     // transport factory, reads no environment, holds no credential, and changes no request, timer,
     // retry or configuration semantic.
     //
-    // Still an EXACT set match. This records four authorised additions; it does not relax the lock.
+    // MVP-P2A.2 HF4-R5 adds TWO: `createClipboardCredentialResolver` and
+    // `createWindowsPowerShellClipboardSource`. The owner asked to copy the credential once instead of
+    // typing it twice, and the candidate evidence operator is the composition root that selects an
+    // ingress — so the resolver factory and the OS seam have to be reachable from there. What stays
+    // unexported is the point: the helper program, its arguments, its exit codes and its output bounds
+    // are all module-private, so no caller can reach past the seam and run a clipboard command of its
+    // own, and no root export can carry a credential.
+    //
+    // Still an EXACT set match. This records six authorised additions; it does not relax the lock.
     const EXPECTED = [
       'CREDENTIAL_PROMPT_LABEL',
+      'createClipboardCredentialResolver',
+      'createWindowsPowerShellClipboardSource',
       'MAX_CREDENTIAL_LENGTH',
       'MAX_SMOKE_TIMEOUT_MS',
       'MIN_CREDENTIAL_LENGTH',

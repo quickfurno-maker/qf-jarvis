@@ -42,3 +42,21 @@ export const SECOND_CREDENTIAL_NOTICES: Readonly<Record<OperatorRunGoal, string>
   SAFETY_REPLICATION:
     'Smoke passed. Enter the same Groq credential again for the bounded safety diagnostic replication.',
 });
+
+/**
+ * The same notice for an ingress that will NOT ask again (MVP-P2A.2 HF4-R5).
+ *
+ * Clipboard mode read the credential once and cleared the clipboard doing it. Printing "enter the same
+ * credential again" there would be a plain untruth at the exact moment an owner is deciding whether to
+ * let the run continue — they would reach for a clipboard that no longer holds anything, and the run
+ * would meanwhile proceed without them. The wording states what is actually about to happen.
+ *
+ * Both tables are per-goal for the same reason the first one is: an owner is told which bounded run
+ * their credential is about to fund, not merely that one is starting.
+ */
+export const REUSED_CREDENTIAL_NOTICES: Readonly<Record<OperatorRunGoal, string>> = Object.freeze({
+  FULL_EVIDENCE:
+    'Smoke passed. Reusing the credential already read for the bounded candidate evidence run.',
+  SAFETY_REPLICATION:
+    'Smoke passed. Reusing the credential already read for the bounded safety diagnostic replication.',
+});

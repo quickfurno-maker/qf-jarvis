@@ -33,6 +33,7 @@ import {
   CANDIDATE_PRICE_PER_M_OUTPUT_USD,
   RIYA_CLIENT_PROMPT_DIGEST,
 } from '../candidate-release.js';
+import { DEFAULT_CREDENTIAL_SOURCE_MODE } from '../credential-source.js';
 import type { PreflightFailure, PreflightInput, PreflightResult } from '../preflight.js';
 
 const fail = (failure: PreflightFailure): PreflightResult => ({ ok: false, failure });
@@ -176,7 +177,12 @@ export function preflightCore(input: PreflightInput, expectedDigest: string): Pr
   }
 
   // Last, because it is the one an owner can fix by running the command differently.
-  if (!input.interactive) {
+  //
+  // HF4-R5: the requirement belongs to the TTY INGRESS, not to the run. Clipboard mode consumes no
+  // stdin and prompts for nothing, so demanding an interactive terminal for it would gate on a fact
+  // the run never uses — and would refuse a correctly-composed clipboard run for no reason. Absence
+  // still means `tty`, so every pre-HF4-R5 caller reaches this check exactly as strictly as before.
+  if ((input.credentialSource ?? DEFAULT_CREDENTIAL_SOURCE_MODE) === 'tty' && !input.interactive) {
     return fail('tty-unavailable');
   }
   return { ok: true };

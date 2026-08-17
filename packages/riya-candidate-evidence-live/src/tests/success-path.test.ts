@@ -353,7 +353,7 @@ function successHarness(
       interactive: true,
     },
     ledger,
-    openSmokeSecretSource: () => Promise.resolve(source),
+    openSmokeCredential: () => Promise.resolve({ credentialSource: source }),
     runSmoke: () => Promise.resolve(SMOKE_PASS),
     openCandidateCredential: () => Promise.resolve({ redacted: true }),
     openCandidate: () => Promise.resolve(recorder.session),

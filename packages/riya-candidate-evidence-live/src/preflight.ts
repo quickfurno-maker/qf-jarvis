@@ -21,6 +21,7 @@
  * about the rejected value is echoed, because a config that failed validation is exactly the kind of
  * thing that might contain something it should not.
  */
+import type { CredentialSourceMode } from './credential-source.js';
 import { preflightCore, WORST_CASE_REQUEST_USD } from './internal/preflight-core.js';
 
 export { WORST_CASE_REQUEST_USD };
@@ -87,6 +88,16 @@ export interface PreflightInput {
   readonly repoRoot: string;
   /** Whether a real interactive terminal exists. Injected so a spec never touches a TTY. */
   readonly interactive: boolean;
+  /**
+   * HF4-R5. Which credential ingress this run selected. Absent means `tty`.
+   *
+   * It exists here for ONE reason: the interactive-terminal requirement is a property of the masked
+   * TTY ingress, not of the run. A clipboard run prompts for nothing and reads no stdin, so gating it
+   * on `process.stdin.isTTY` would refuse a correctly-composed run over a fact it never consults.
+   *
+   * It is a MODE and can never carry a credential — the closed vocabulary has exactly two literals.
+   */
+  readonly credentialSource?: CredentialSourceMode;
 }
 
 export type PreflightResult =

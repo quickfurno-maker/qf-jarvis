@@ -194,7 +194,7 @@ describe('(41, 42) package-root runtime API locks', () => {
 });
 
 describe('(43, 44, 45) sibling package API locks are undisturbed', () => {
-  it('(43) groq-staging-smoke remains 28', () => {
+  it('(43) groq-staging-smoke remains 30', () => {
     expect(
       readRepo('packages/groq-staging-smoke/src/tests/credential-ingress-diagnostics.test.ts'),
       // MVP-P2A.2 HF1 restated the sibling count from 24 to 27 for the semantic approval-digest
@@ -202,8 +202,10 @@ describe('(43, 44, 45) sibling package API locks are undisturbed', () => {
       // instrumented transport with the recorder that owns its wire milestones -- RUN S5's smoke
       // PASSED while printing every wire milestone ABSENT because that pairing was duplicated
       // across two composition roots and the other one got it wrong.
+      // HF4-R5 restates it to 30 for the one-shot Windows clipboard credential ingress:
+      // `createClipboardCredentialResolver` and `createWindowsPowerShellClipboardSource`.
       // This lock tracks that package's own assertion, so it moves with it.
-    ).toContain('toHaveLength(28)');
+    ).toContain('toHaveLength(30)');
   });
 
   it('(44) model-evaluation remains 35', () => {

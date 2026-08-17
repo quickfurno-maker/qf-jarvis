@@ -25,13 +25,22 @@
 import { createGroqApiKey, type GroqApiKey } from '@qf-jarvis/model-gateway';
 import type { GroqCredentialReference, GroqCredentialResolver } from '@qf-jarvis/model-gateway';
 
+import {
+  classifyRejection,
+  isBoundedCredential,
+  MAX_CREDENTIAL_LENGTH,
+  MIN_CREDENTIAL_LENGTH,
+} from './credential-policy.js';
 import type { CredentialOutcome, DiagnosticRecorder } from './diagnostic-telemetry.js';
 import type { SmokeFailureReason } from './smoke-reasons.js';
 
-/** The bounded shape an accepted staging credential must have. No provider prefix is asserted. */
-export const MIN_CREDENTIAL_LENGTH = 20;
-export const MAX_CREDENTIAL_LENGTH = 200;
-const CREDENTIAL_PATTERN = /^[A-Za-z0-9_-]+$/;
+/**
+ * The bounded shape an accepted staging credential must have. No provider prefix is asserted.
+ *
+ * HF4-R5 moved the rule itself into `credential-policy.ts` so the clipboard ingress applies the SAME
+ * predicate rather than a second copy of it. These re-exports keep this module's surface unchanged.
+ */
+export { MAX_CREDENTIAL_LENGTH, MIN_CREDENTIAL_LENGTH };
 
 /** The label shown at the prompt. It names the reference, never a value. */
 export const CREDENTIAL_PROMPT_LABEL = 'Staging Groq credential (input hidden): ';
@@ -103,33 +112,6 @@ export interface MaskedResolverOptions {
    * production guards are NOT weakened to make that branch testable.
    */
   readonly createHolder?: (value: string) => GroqApiKey;
-}
-
-function isBoundedCredential(value: string): boolean {
-  return (
-    value.length >= MIN_CREDENTIAL_LENGTH &&
-    value.length <= MAX_CREDENTIAL_LENGTH &&
-    CREDENTIAL_PATTERN.test(value)
-  );
-}
-
-/**
- * Name WHY a value that has ALREADY failed {@link isBoundedCredential} was refused.
- *
- * This decides nothing. Acceptance remains exactly `length >= MIN && length <= MAX && pattern`,
- * byte-for-byte the baseline rule; this only reports which clause of it was the one that said no.
- */
-function classifyRejection(value: string): CredentialOutcome {
-  if (value.length === 0) {
-    return 'rejected-empty';
-  }
-  if (value.length < MIN_CREDENTIAL_LENGTH) {
-    return 'rejected-too-short';
-  }
-  if (value.length > MAX_CREDENTIAL_LENGTH) {
-    return 'rejected-too-long';
-  }
-  return 'rejected-charset';
 }
 
 /**
