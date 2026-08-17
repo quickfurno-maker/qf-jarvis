@@ -666,12 +666,19 @@ describe('(22-27) package, repository, and hygiene invariants', () => {
     // before a value is ever classified — an ineligible platform, a helper that could not run, a
     // refused read and a refused CLEAR. None of them describes a property of a credential, and the
     // shape classifications are deliberately SHARED rather than duplicated per ingress.
-    expect(CREDENTIAL_OUTCOMES).toHaveLength(14);
+    // 14 -> 15 for MVP-P2A.2 HF4-R6: `clipboard-sentinel-present`. HF4-R6 removes the credential from
+    // the clipboard by overwriting it with a fixed non-secret marker rather than by clearing it to
+    // empty, because Windows PowerShell 5.1 cannot do the latter — which is exactly where RUN S7
+    // stopped. That marker satisfies the shared credential shape, so a later run finding it must be
+    // refused explicitly, and it deserves its own token: it is not a malformed credential, it is the
+    // correct sign that a previous run removed one.
+    expect(CREDENTIAL_OUTCOMES).toHaveLength(15);
     expect([...CREDENTIAL_OUTCOMES].filter((one) => one.startsWith('clipboard-'))).toEqual([
       'clipboard-platform-unsupported',
       'clipboard-helper-failed',
       'clipboard-unavailable',
       'clipboard-clear-failed',
+      'clipboard-sentinel-present',
     ]);
   });
 });

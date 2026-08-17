@@ -1,16 +1,24 @@
 /**
- * MVP-P2A.2 HF4-R5 — the one-shot Windows clipboard credential ingress.
+ * MVP-P2A.2 HF4-R5 / HF4-R6 — the one-shot Windows clipboard credential ingress.
  *
- * Matrix: a valid clipboard value produces exactly one helper invocation, one read, one clear and one
- * redacting holder, and every later phase gets that SAME holder without a second clipboard access; an
- * empty, short, long or wrongly-charactered value is refused by the SHARED policy with the clipboard
- * already cleared; a missing helper, a refused read, a refused CLEAR, a non-Windows platform, an
- * oversize capture and a refusing holder factory each fail closed with their own token and reach no
- * provider; the helper carries no secret in its arguments and its stderr can never reach a diagnostic;
- * and the whole ingress runs with no TTY while the masked-TTY ingress keeps refusing without one.
+ * Matrix: a valid clipboard value produces exactly one helper invocation, one read, one overwrite and
+ * one redacting holder, and every later phase gets that SAME holder without a second clipboard access;
+ * an empty, short, long or wrongly-charactered value is refused by the SHARED policy with the
+ * credential already removed; a missing helper, a refused read, a refused OVERWRITE, a non-Windows
+ * platform, an oversize capture and a refusing holder factory each fail closed with their own token
+ * and reach no provider; the helper carries no secret in its arguments and its stderr can never reach
+ * a diagnostic; and the whole ingress runs with no TTY while the masked-TTY ingress keeps refusing
+ * without one.
  *
- * NOTHING here reads or clears a real clipboard, spawns a real helper, or uses a real credential: the
- * OS seam is injected in every case and the value is an obvious synthetic sentinel.
+ * HF4-R6 adds the Windows PowerShell 5.1 compatibility contract that RUN S7 proved was missing. The
+ * credential is removed by OVERWRITING the entry with a fixed non-secret sentinel rather than clearing
+ * it to empty — `Set-Clipboard -Value ''` needs PowerShell 7.2, and this helper runs `powershell.exe`.
+ * The specs pin the program exactly, pin the read → wait → overwrite → emit order, pin one read and
+ * one write with no loop, and pin that the sentinel is refused if a later run finds it in the
+ * clipboard (it satisfies the shared credential shape, so nothing else would stop it).
+ *
+ * NOTHING here reads, clears or writes a real clipboard, spawns a real helper, or uses a real
+ * credential: the OS seam is injected in every case and every value is an obvious synthetic sentinel.
  */
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -19,9 +27,11 @@ import type { createGroqApiKey } from '@qf-jarvis/model-gateway';
 import { describe, expect, it } from 'vitest';
 
 import {
+  CLIPBOARD_CLEARED_SENTINEL,
   CLIPBOARD_HELPER_CLEAR_FAILED_EXIT,
   CLIPBOARD_HELPER_READ_FAILED_EXIT,
   CLIPBOARD_HELPER_TIMEOUT_MS,
+  CLIPBOARD_PREWRITE_DELAY_MS,
   CLIPBOARD_READ_FAILURE_KINDS,
   ClipboardReadError,
   createClipboardCredentialResolver,
@@ -29,7 +39,11 @@ import {
   type ClipboardReadFailureKind,
   type ClipboardTextSource,
 } from '../clipboard-credential-resolver.js';
-import { MAX_CREDENTIAL_LENGTH, MIN_CREDENTIAL_LENGTH } from '../credential-policy.js';
+import {
+  isBoundedCredential,
+  MAX_CREDENTIAL_LENGTH,
+  MIN_CREDENTIAL_LENGTH,
+} from '../credential-policy.js';
 import { createDiagnosticRecorder } from '../diagnostic-telemetry.js';
 import type { CredentialOutcome } from '../diagnostic-telemetry.js';
 import { createMaskedTtyCredentialResolver } from '../masked-tty-credential-resolver.js';
@@ -242,6 +256,76 @@ describe('HF4-R5 C2-C5, C12 — the SHARED policy refuses, with the clipboard al
   });
 });
 
+describe('HF4-R6 C8-C12 — the sentinel is refused, and a healthy run is unaffected', () => {
+  it('R6-C8 the marker a previous run wrote is refused BEFORE any holder exists', async () => {
+    // The shared policy would ACCEPT this value — 21 characters, all inside the allowed charset — so
+    // without the explicit guard a second clipboard run would build a credential holder out of "the
+    // credential was removed" and carry it to a provider.
+    const clipboard = scriptedClipboard({ value: CLIPBOARD_CLEARED_SENTINEL });
+    const recorder = recorderFor();
+    const resolver = createClipboardCredentialResolver(clipboard, { recorder });
+
+    await expect(resolver.resolve(REFERENCE)).rejects.toThrow('QFJ_SMOKE_CREDENTIAL_REFUSED');
+
+    expect(resolver.outcome()).toBe('clipboard-sentinel-present');
+    expect(resolver.holderCreations()).toBe(0);
+    expect(resolver.resolutions()).toBe(0);
+    // The read and the overwrite still happened, so the counters describe what the helper did.
+    expect(resolver.clipboardReads()).toBe(1);
+    expect(resolver.clipboardCleared()).toBe(true);
+    expect(recorder.snapshot().credentialResolutions).toBe(0);
+  });
+
+  it('the sentinel would otherwise pass the shared policy — which is why the guard exists', () => {
+    // Stated as a fact rather than assumed: if this ever stops being true the guard is still correct,
+    // but the REASON in the module header would be stale, and a reader deserves to know which it is.
+    expect(isBoundedCredential(CLIPBOARD_CLEARED_SENTINEL)).toBe(true);
+  });
+
+  it('R6-C9 the sentinel refusal is PERMANENT and never re-reads the clipboard', async () => {
+    const clipboard = scriptedClipboard({ value: CLIPBOARD_CLEARED_SENTINEL });
+    const resolver = createClipboardCredentialResolver(clipboard);
+    await expect(resolver.resolve(REFERENCE)).rejects.toThrow();
+    await expect(resolver.resolve(REFERENCE)).rejects.toThrow();
+    expect(clipboard.reads()).toBe(1);
+    expect(resolver.outcome()).toBe('clipboard-sentinel-present');
+    expect(resolver.holderCreations()).toBe(0);
+  });
+
+  it('R6-C7 the guard matches the sentinel EXACTLY — it is not a prefix rule', async () => {
+    // A real credential that merely starts with the marker is still a credential. Over-matching here
+    // would refuse valid keys, which is the failure mode a substring check would introduce.
+    const looksSimilar = `${CLIPBOARD_CLEARED_SENTINEL}_BUT_LONGER_0000`;
+    const resolver = createClipboardCredentialResolver(scriptedClipboard({ value: looksSimilar }));
+    await expect(resolver.resolve(REFERENCE)).resolves.toBeDefined();
+    expect(resolver.holderCreations()).toBe(1);
+  });
+
+  it('R6-C10 a normal synthetic credential still reads once, overwrites once, holds once', async () => {
+    const clipboard = scriptedClipboard();
+    const resolver = createClipboardCredentialResolver(clipboard);
+    const first = await resolver.resolve(REFERENCE);
+    const second = await resolver.resolve(REFERENCE);
+    expect(first).toBe(second);
+    expect(clipboard.reads()).toBe(1);
+    expect(resolver.clipboardReads()).toBe(1);
+    expect(resolver.clipboardCleared()).toBe(true);
+    expect(resolver.holderCreations()).toBe(1);
+  });
+
+  it('R6-C12 a refused overwrite reports no successful read, no removal, and no holder', async () => {
+    const clipboard = scriptedClipboard({ fail: 'clear-refused' });
+    const resolver = createClipboardCredentialResolver(clipboard);
+    await expect(resolver.resolve(REFERENCE)).rejects.toThrow();
+    // These are exactly the counters RUN S7 printed: attempts 1, reads 0, cleared false, holders 0.
+    expect(resolver.clipboardReadAttempts()).toBe(1);
+    expect(resolver.clipboardReads()).toBe(0);
+    expect(resolver.clipboardCleared()).toBe(false);
+    expect(resolver.holderCreations()).toBe(0);
+    expect(resolver.outcome()).toBe('clipboard-clear-failed');
+  });
+});
+
 describe('HF4-R5 C6-C9 — the ingress itself fails closed, each with its own token', () => {
   const kinds: readonly {
     readonly kind: ClipboardReadFailureKind;
@@ -308,6 +392,18 @@ describe('HF4-R5 C10, C11 — the helper carries no secret and its stderr reache
     'utf8',
   );
 
+  /**
+   * Just the PowerShell program constant.
+   *
+   * Assertions about what the CHILD does are scoped here rather than to the whole file, because the
+   * module header deliberately quotes the pre-HF4-R6 form when explaining what RUN S7 hit — and a
+   * whole-file ban on that string would make documenting the defect impossible.
+   */
+  const PROGRAM = SOURCE.slice(
+    SOURCE.indexOf('const CLIPBOARD_HELPER_PROGRAM'),
+    SOURCE.indexOf('const CLIPBOARD_HELPER_ARGS'),
+  );
+
   it('C10 the captured output is strictly bounded and the helper is timed', () => {
     // Bounded well above a legitimate credential and far below a document.
     expect(MAX_CLIPBOARD_OUTPUT_BYTES).toBe(MAX_CREDENTIAL_LENGTH * 5);
@@ -363,34 +459,102 @@ describe('HF4-R5 C10, C11 — the helper carries no secret and its stderr reache
     expect(SOURCE.match(/resolve\(stdout\)/g)).toHaveLength(1);
   });
 
-  it('the helper program is EXACTLY the reviewed statements, in the reviewed order', () => {
-    // An exact-match lock on the whole program. It is what makes M2 (never clear), M3 (clear last)
-    // and M16 (a literal smuggled into the command) all fail loudly rather than silently.
+  it('R6-C1/C2/C3/C5 the helper program is EXACTLY the reviewed statements, in order', () => {
+    // An exact-match lock on the whole program. It is what makes M1 (restore the empty clear), M2
+    // (drop the sentinel), M3 (emit before overwrite), M7/M8 (a second write or a retry) and M10 (a
+    // literal smuggled into the command) all fail loudly rather than silently.
     expect(SOURCE).toContain(`const CLIPBOARD_HELPER_PROGRAM = [
   "$ErrorActionPreference = 'Stop'",
   \`try { $value = Get-Clipboard -Raw } catch { exit \${String(CLIPBOARD_HELPER_READ_FAILED_EXIT)} }\`,
   "if ($null -eq $value) { $value = '' }",
-  \`try { Set-Clipboard -Value '' } catch { exit \${String(CLIPBOARD_HELPER_CLEAR_FAILED_EXIT)} }\`,
+  \`Start-Sleep -Milliseconds \${String(CLIPBOARD_PREWRITE_DELAY_MS)}\`,
+  \`try { Set-Clipboard -Value '\${CLIPBOARD_CLEARED_SENTINEL}' } catch { exit \${String(CLIPBOARD_HELPER_CLEAR_FAILED_EXIT)} }\`,
   '[Console]::Out.Write($value)',
   'exit 0',
 ].join('; ');`);
   });
 
-  it('the helper program is a constant with no interpolation point for a value', () => {
-    // The PowerShell text is assembled from literals and two numeric exit codes — there is no
-    // template hole a credential could occupy, and the value only ever lives in the child's own
-    // variable. The command line a process listing would show therefore contains no secret.
-    expect(SOURCE).toContain('$value = Get-Clipboard -Raw');
-    expect(SOURCE).toContain("Set-Clipboard -Value ''");
-    expect(SOURCE).toContain('[Console]::Out.Write($value)');
-    // Read, then CLEAR, then emit — the ordering that makes a refused clear yield no value at all.
-    const read = SOURCE.indexOf('$value = Get-Clipboard -Raw');
-    const clear = SOURCE.indexOf("Set-Clipboard -Value ''");
-    const emit = SOURCE.indexOf('[Console]::Out.Write($value)');
-    expect(read).toBeLessThan(clear);
-    expect(clear).toBeLessThan(emit);
-    // The two exit codes are distinct, so a refused read and a refused clear stay different findings.
+  it('R6-C1 the PowerShell-7-only empty-string clear is GONE from the program', () => {
+    // The exact form RUN S7 failed on. `Set-Clipboard -Value ''` gained empty-string support in
+    // PowerShell 7.2 and this helper runs `powershell.exe` — Windows PowerShell 5.1 — so depending on
+    // it meant depending on a capability the target shell does not have.
+    //
+    // Scoped to the PROGRAM. The module header names the old form deliberately, to record what was
+    // repaired and why; a whole-file ban would forbid documenting the defect.
+    expect(PROGRAM).not.toContain("Set-Clipboard -Value ''");
+    expect(PROGRAM).not.toMatch(/Set-Clipboard\s+-Value\s+(''|""|\$null)/);
+  });
+
+  it('R6-C2/C7/C11 the sentinel is fixed, non-secret, and not derived from the credential', () => {
+    expect(CLIPBOARD_CLEARED_SENTINEL).toBe('QFJ_CLIPBOARD_CLEARED');
+    expect(SOURCE).toContain("export const CLIPBOARD_CLEARED_SENTINEL = 'QFJ_CLIPBOARD_CLEARED';");
+    // It is written as a literal interpolation of that constant — never built from the capture.
+    expect(PROGRAM).toContain("Set-Clipboard -Value '${CLIPBOARD_CLEARED_SENTINEL}'");
+    // Nothing lets an operator choose it: it is not a resolver option, not a parameter, not read
+    // from anywhere, and not concatenated with anything.
+    expect(SOURCE).not.toMatch(/sentinel\s*[?]?:\s*string/i);
+    expect(SOURCE).not.toMatch(/options\s*\.\s*sentinel/i);
+    expect(SOURCE).not.toMatch(/CLIPBOARD_CLEARED_SENTINEL\s*\+/);
+    // Declared exactly once, as a literal.
+    expect(SOURCE.match(/CLIPBOARD_CLEARED_SENTINEL\s*=/g)).toHaveLength(1);
+  });
+
+  it('R6-C3/C4/C5 read, wait, overwrite, emit — one write, no loop, fail-closed before emit', () => {
+    expect(PROGRAM).toContain('$value = Get-Clipboard -Raw');
+    expect(PROGRAM).toContain('[Console]::Out.Write($value)');
+    const read = PROGRAM.indexOf('$value = Get-Clipboard -Raw');
+    const sleep = PROGRAM.indexOf('Start-Sleep -Milliseconds');
+    const write = PROGRAM.indexOf('Set-Clipboard -Value');
+    const emit = PROGRAM.indexOf('[Console]::Out.Write($value)');
+    // The ordering that makes a refused overwrite yield no value at all.
+    expect(read).toBeGreaterThan(-1);
+    expect(read).toBeLessThan(sleep);
+    expect(sleep).toBeLessThan(write);
+    expect(write).toBeLessThan(emit);
+    // EXACTLY one read and one write in the program. A second of either would be a second clipboard
+    // operation, which the one-read/one-write contract forbids.
+    expect(PROGRAM.match(/Get-Clipboard/g)).toHaveLength(1);
+    expect(PROGRAM.match(/Set-Clipboard/g)).toHaveLength(1);
+    expect(PROGRAM.match(/Start-Sleep/g)).toHaveLength(1);
+    // No PowerShell-side loop or retry either.
+    expect(PROGRAM).not.toMatch(/\b(foreach|while|do\s*\{|for\s*\()/i);
+    // The two exit codes are distinct, so a refused read and a refused overwrite stay different.
     expect(CLIPBOARD_HELPER_READ_FAILED_EXIT).not.toBe(CLIPBOARD_HELPER_CLEAR_FAILED_EXIT);
+  });
+
+  it('R6-C9 the pre-write delay is ONE fixed pause, not a backoff', () => {
+    expect(CLIPBOARD_PREWRITE_DELAY_MS).toBe(100);
+    expect(SOURCE).toContain('export const CLIPBOARD_PREWRITE_DELAY_MS = 100;');
+    expect(SOURCE).toContain('`Start-Sleep -Milliseconds ${String(CLIPBOARD_PREWRITE_DELAY_MS)}`');
+    // It is not multiplied, incremented, or recomputed anywhere — a backoff would need one of those.
+    expect(SOURCE).not.toMatch(/CLIPBOARD_PREWRITE_DELAY_MS\s*[*+]/);
+  });
+
+  it('R6 windows-powershell 5.1 compatibility contract', () => {
+    // A deterministic, offline contract test. It never invokes powershell.exe and never touches a
+    // real clipboard; it pins that the generated program asks Windows PowerShell 5.1 for nothing it
+    // cannot do — which is the whole class of defect RUN S7 spent its authorization discovering.
+    expect(SOURCE).toContain("const CLIPBOARD_HELPER_EXECUTABLE = 'powershell.exe'");
+    // No empty-string / null clear: that is the PowerShell 7.2+ behaviour, never back-ported to 5.1.
+    expect(PROGRAM).not.toContain("Set-Clipboard -Value ''");
+    // A non-empty literal is written instead — supported by every PowerShell release.
+    expect(PROGRAM).toMatch(/Set-Clipboard -Value '\$\{CLIPBOARD_CLEARED_SENTINEL\}'/);
+    // And no other PowerShell-7-only cmdlet, parameter or operator appears in the program.
+    for (const sevenOnly of [
+      'ForEach-Object -Parallel',
+      '-AsHashtable',
+      '??',
+      '?.',
+      'Test-Json',
+      'ConvertFrom-Markdown',
+      '-ErrorAction Break',
+    ]) {
+      expect(PROGRAM, `the program must not require ${sevenOnly}`).not.toContain(sevenOnly);
+    }
+    // Every cmdlet it DOES use has shipped in Windows PowerShell 5.1 since 5.0.
+    for (const supported of ['Get-Clipboard', 'Set-Clipboard', 'Start-Sleep']) {
+      expect(PROGRAM).toContain(supported);
+    }
   });
 
   it('the ingress writes no file, reads no environment, and stores no value', () => {

@@ -113,10 +113,19 @@ export type TransportErrorCode = (typeof TRANSPORT_ERROR_CODES)[number];
  *   - `clipboard-platform-unsupported` the ingress is Windows-only and this is not Windows
  *   - `clipboard-helper-failed`        the helper could not run, timed out, or overran its bound
  *   - `clipboard-unavailable`          the helper ran and the OS refused the clipboard read
- *   - `clipboard-clear-failed`         the value was read and the OS refused to clear the clipboard
+ *   - `clipboard-clear-failed`         the value was read and the OS refused to overwrite the entry
  *
  * `clipboard-clear-failed` is a REFUSAL, not a warning. A run that could not take the credential back
- * out of the clipboard fails closed rather than continuing with a live key sitting in it.
+ * out of the clipboard fails closed rather than continuing with a live key sitting in it. RUN S7 ended
+ * exactly here, on Windows PowerShell 5.1, and reached no holder and no provider.
+ *
+ * MVP-P2A.2 HF4-R6 adds one more:
+ *
+ *   - `clipboard-sentinel-present`     the clipboard held the marker a previous run wrote, not a key
+ *
+ * It is separate from `rejected-*` because it is not a malformed credential — it is the correct sign
+ * that the previous run removed one, and the operator simply has not copied a new value yet. Telling
+ * an owner "the charset was wrong" there would send them looking for a defect that is not present.
  *
  * The shape classifications above are deliberately SHARED with the clipboard ingress rather than
  * duplicated: a value that is too short is `rejected-too-short` whichever door it arrived through.
@@ -133,6 +142,7 @@ export const CREDENTIAL_OUTCOMES = [
   'clipboard-helper-failed',
   'clipboard-unavailable',
   'clipboard-clear-failed',
+  'clipboard-sentinel-present',
   'rejected-empty',
   'rejected-too-short',
   'rejected-too-long',
