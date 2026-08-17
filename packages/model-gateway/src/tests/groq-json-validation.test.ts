@@ -104,7 +104,20 @@ describe('(1-4) the strict structured-output request', () => {
     expect(rf.type).toBe('json_schema');
     expect(rf.json_schema['strict']).toBe(true);
     expect(rf.json_schema['name']).toBe('qf_structured_output');
-    expect(rf.json_schema['schema']).toEqual(TINY_SCHEMA);
+    // MVP-P2A.2 HF4-R7: the sent document is the PROJECTION of `TINY_SCHEMA`, not the schema itself.
+    // This assertion used to require them to be byte-identical, which is exactly the behaviour RUN S9
+    // proved wrong: `$schema` and `const` are not in Groq's documented strict subset and were being
+    // forwarded because nothing constrained the keyword set. The structural meaning is unchanged —
+    // `const: 'ok'` becomes the singleton `enum: ['ok']` the docs establish, and the root meta
+    // annotation is dropped.
+    expect(rf.json_schema['schema']).toEqual({
+      type: 'object',
+      properties: { status: { type: 'string', enum: ['ok'] } },
+      required: ['status'],
+      additionalProperties: false,
+    });
+    // The caller's document is untouched, so the local schema it came from is unaffected.
+    expect(TINY_SCHEMA.$schema).toBe('https://json-schema.org/draft/2020-12/schema');
   });
 
   it('(2, 3) the schema requires every property and forbids additional ones', () => {

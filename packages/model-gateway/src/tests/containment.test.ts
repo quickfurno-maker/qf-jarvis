@@ -97,9 +97,20 @@ describe('model-gateway package containment', () => {
    * the imported barrel counts runtime exports only — `export type` produces no runtime binding — so
    * adding a type costs nothing and adding a value is a deliberate, reviewed change.
    */
-  it('freezes the package-root runtime API at exactly 71 symbols', async () => {
+  it('freezes the package-root runtime API at exactly 74 symbols', async () => {
+    // MVP-P2A.2 HF4-R7: 71 -> 74. `projectGroqStrictJsonSchema`, `renderStructuredJsonSchema` and
+    // `GROQ_STRICT_PROJECTION_REASONS`. RUN S9's nine ordinary safety requests were all rejected with
+    // HTTP 400 because the raw Zod rendering carried `$schema`, `const`, `minLength`, `maxLength`,
+    // `pattern`, `minimum`, `maximum` and `maxItems` — none of which Groq's strict documentation
+    // establishes — and nothing constrained the keyword set before the schema went on the wire.
+    //
+    // All three are pure functions or a closed vocabulary over a JSON Schema document: no credential,
+    // no transport, no configuration, no mutation of the input. They are exported because the
+    // candidate evidence operator is the ONLY package that can see both this gateway and the real Riya
+    // schemas, and "the production schema projects into the documented subset" has to be asserted
+    // against the real schema rather than a replica.
     const barrel = (await import('../index.js')) as unknown as Record<string, unknown>;
-    expect(Object.keys(barrel)).toHaveLength(71);
+    expect(Object.keys(barrel)).toHaveLength(74);
   });
 
   it('does not export FakeModelProvider from the production root', () => {

@@ -506,7 +506,12 @@ describe('(71-77) package API and dependency locks are untouched', () => {
   it('(73-77) every package-root runtime API count is unchanged', async () => {
     const expected: Readonly<Record<string, number>> = {
       'model-evaluation': 35,
-      'model-gateway': 71,
+      // MVP-P2A.2 HF4-R7: 71 -> 74. The Groq strict-schema projection —
+      // `projectGroqStrictJsonSchema`, `renderStructuredJsonSchema`, `GROQ_STRICT_PROJECTION_REASONS`.
+      // RUN S9's nine ordinary safety requests were rejected HTTP 400 because the raw Zod rendering
+      // forwarded keywords Groq's strict documentation does not establish. Pure functions and a closed
+      // vocabulary over a JSON Schema document: no credential, no transport, no configuration.
+      'model-gateway': 74,
       'model-gateway-composition': 2,
       // MVP-P2A.2 HF1: 24 -> 27. The semantic approval-digest helper and its two readable parts.
       // Pure functions over an already-parsed SmokeConfig -- no filesystem, no clock, no network, no

@@ -8,7 +8,7 @@
  * + circuit) → at most ONE fallback → validate output → provenance. No voting, no parallel fan-out, at
  * most one accepted response. All time is injected; there is no wall-clock sleep and no background work.
  */
-import { z } from 'zod';
+import { renderStructuredJsonSchema } from './providers/groq/groq-strict-schema-projection.js';
 
 import type { GatewayMode } from './contracts/enums.js';
 import type { ModelProvider, ProviderOutput } from './contracts/provider.js';
@@ -132,11 +132,10 @@ function toStructuredJsonSchema(request: ModelRequest): unknown {
   if (request.structuredSchema === undefined) {
     return {};
   }
-  try {
-    return z.toJSONSchema(request.structuredSchema);
-  } catch {
-    return {};
-  }
+  // HF4-R7: one rendering step, shared with the spec that proves the real Riya schema projects. Two
+  // copies of "how the schema is rendered" is how a spec ends up asserting on a document the gateway
+  // does not actually build.
+  return renderStructuredJsonSchema(request.structuredSchema);
 }
 
 /** Map a rollout serving refusal to a safe closed gateway error code (never a rollout-internal reason). */

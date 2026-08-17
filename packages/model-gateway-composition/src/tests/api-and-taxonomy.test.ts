@@ -155,9 +155,12 @@ describe('(36, 37, 38) existing Groq HTTP mappings are unchanged', () => {
 });
 
 describe('(41, 42) package-root runtime API locks', () => {
-  it('(41) @qf-jarvis/model-gateway root runtime API is exactly 71', async () => {
+  it('(41) @qf-jarvis/model-gateway root runtime API is exactly 74', async () => {
+    // MVP-P2A.2 HF4-R7: 71 -> 74 for the Groq strict-schema projection —
+    // `projectGroqStrictJsonSchema`, `renderStructuredJsonSchema` and
+    // `GROQ_STRICT_PROJECTION_REASONS`. This lock tracks that package's own count, so it moves with it.
     const barrel = (await import('@qf-jarvis/model-gateway')) as unknown as Record<string, unknown>;
-    expect(Object.keys(barrel)).toHaveLength(71);
+    expect(Object.keys(barrel)).toHaveLength(74);
   });
 
   it('(42) @qf-jarvis/model-gateway-composition root runtime API is exactly 2', async () => {
