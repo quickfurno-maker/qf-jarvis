@@ -82,8 +82,22 @@ export function createSystemSmokeTimer(): SmokeTimer {
 export interface SmokeRunDeps {
   /** Production: `createFetchGroqTransport()`. Tests: a deterministic fake. Never both. */
   readonly transport: GroqTransport;
-  /** Production: the masked TTY. Tests: a scripted fake that touches no real terminal. */
-  readonly credentialSource: MaskedSecretSource;
+  /**
+   * The masked-TTY ingress. Production: the real terminal. Tests: a scripted fake.
+   *
+   * EXACTLY ONE of this and {@link SmokeRunDeps.credentialResolver} must be supplied. Supplying both,
+   * or neither, is a composition bug and is refused as `smoke-invariant` before anything is read.
+   */
+  readonly credentialSource?: MaskedSecretSource;
+  /**
+   * HF4-R5. An ALREADY-CONSTRUCTED resolver, for an ingress that does not consume stdin.
+   *
+   * The narrowest seam that lets the clipboard ingress reuse this harness: the resolver still owns the
+   * bounds, the charset, the one-shot guarantee and the sanitized refusal codes, so nothing here is a
+   * second credential policy. The interactive gate below does NOT apply to this branch — a clipboard
+   * read is not a terminal read, and requiring a TTY for it would be a check about the wrong thing.
+   */
+  readonly credentialResolver?: StagingCredentialResolver;
   readonly clock: GatewayClock;
   readonly timer: SmokeTimer;
   /**
@@ -93,6 +107,15 @@ export interface SmokeRunDeps {
    */
   readonly diagnostics?: DiagnosticRecorder;
 }
+
+/**
+ * The CREDENTIAL slice of the run dependencies (HF4-R5).
+ *
+ * A `Pick` of the existing contract rather than a new interface, so a composition root can build
+ * exactly the ingress half and spread it — the same shape `createSystemSmokeWireDeps` uses for the
+ * transport half — without a second named type joining the package surface.
+ */
+export type SmokeCredentialDeps = Pick<SmokeRunDeps, 'credentialSource' | 'credentialResolver'>;
 
 /** The one-request counters. They are the proof that "exactly once" held, not a claim that it did. */
 export interface SmokeCounters {
@@ -370,27 +393,46 @@ export async function runGroqStagingSmokeOnce(
     timersCleared: 0,
   };
 
-  // An interactive terminal is required. Refused BEFORE the resolver is even constructed, so a piped or
-  // redirected session can never reach a prompt — and never leaves a key in a shell pipeline.
-  if (!deps.credentialSource.isInteractive()) {
-    // The gate refused before the resolver existed, so record the outcome here. No read was entered,
-    // so the attempt and resolution counters stay at zero.
-    recorder.recordCredentialOutcome('tty-required');
-    return Object.freeze({
+  const refuse = (reason: SmokeFailureReason): SmokeRunResult =>
+    Object.freeze({
       ok: false as const,
-      reason: 'smoke-tty-required' as const,
+      reason,
       references,
       counters: Object.freeze({ ...counters }),
       diagnostics: recorder.snapshot(),
     });
+
+  // HF4-R5. EXACTLY ONE credential ingress. Both, or neither, is a composition bug rather than an
+  // operator error, so it is reported as a harness invariant and nothing at all is read. Making the
+  // two fields optional is what lets a second ingress exist; this is the guard that keeps "optional"
+  // from meaning "absent is fine".
+  const source = deps.credentialSource;
+  const supplied = deps.credentialResolver;
+  let base: StagingCredentialResolver;
+  if (source !== undefined && supplied !== undefined) {
+    return refuse('smoke-invariant');
+  } else if (source !== undefined) {
+    // An interactive terminal is required FOR THIS INGRESS. Refused before the resolver is even
+    // constructed, so a piped or redirected session can never reach a prompt — and never leaves a key
+    // in a shell pipeline. Unchanged: the gate is exactly as strict as it has always been.
+    if (!source.isInteractive()) {
+      // The gate refused before the resolver existed, so record the outcome here. No read was entered,
+      // so the attempt and resolution counters stay at zero.
+      recorder.recordCredentialOutcome('tty-required');
+      return refuse('smoke-tty-required');
+    }
+    base = createMaskedTtyCredentialResolver(source, { recorder });
+  } else if (supplied !== undefined) {
+    // A pre-constructed ingress that does not consume stdin. No TTY gate applies, because there is no
+    // terminal read to gate — asking whether stdout is a terminal would answer a different question.
+    base = supplied;
+  } else {
+    return refuse('smoke-invariant');
   }
 
   // The resolver is wrapped only to stamp the credential milestone. The wrapper adds no behaviour: it
   // never inspects, copies, or retains the key, and it forwards `reads`/`lastFailure` untouched.
-  const resolver = withCredentialMilestone(
-    createMaskedTtyCredentialResolver(deps.credentialSource, { recorder }),
-    recorder,
-  );
+  const resolver = withCredentialMilestone(base, recorder);
 
   // PHASE ONE — bind. No timer, no controller, no abort. See `bindOnce`: RUN S4 proved that bounding a
   // human at a masked prompt with the PROVIDER REQUEST timeout reports a request failure for a request

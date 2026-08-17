@@ -352,10 +352,21 @@ describe('(11, 12) nothing credential-derived can reach the output', () => {
 
 describe('(13, 14) acceptance semantics are UNCHANGED', () => {
   it('(14) the bounds and charset predicate are byte-for-byte the baseline rule', () => {
+    // MVP-P2A.2 HF4-R5 moved the rule into `credential-policy.ts` so the clipboard ingress applies
+    // THIS predicate rather than a second copy of it. The rule itself did not change — the assertions
+    // below are the same bytes they always were, read from where they now live. Two ingresses sharing
+    // one predicate is the point: a value is accepted, or refused with the same token, whichever door
+    // it arrived through.
     const source = readFileSync(
+      fileURLToPath(new URL('src/credential-policy.ts', PKG_DIR)),
+      'utf8',
+    );
+    // And the masked resolver still exposes the two constants, so its own surface is unchanged.
+    const masked = readFileSync(
       fileURLToPath(new URL('src/masked-tty-credential-resolver.ts', PKG_DIR)),
       'utf8',
     );
+    expect(masked).toContain('export { MAX_CREDENTIAL_LENGTH, MIN_CREDENTIAL_LENGTH };');
     expect(source).toContain('export const MIN_CREDENTIAL_LENGTH = 20;');
     expect(source).toContain('export const MAX_CREDENTIAL_LENGTH = 200;');
     expect(source).toContain('const CREDENTIAL_PATTERN = /^[A-Za-z0-9_-]+$/;');
@@ -366,8 +377,12 @@ describe('(13, 14) acceptance semantics are UNCHANGED', () => {
     CREDENTIAL_PATTERN.test(value)
   );
 }`);
-    // No trim was introduced.
-    expect(source).not.toMatch(/typed\s*\.\s*trim\(\)/);
+    // No trim was introduced into the shared policy, and none into the masked ingress: a value typed
+    // at the prompt is still accepted or refused exactly as it was entered. (The clipboard ingress
+    // strips SURROUNDING whitespace before applying this predicate, which can only remove characters
+    // the charset already forbids — it is asserted in that ingress's own suite, not smuggled here.)
+    expect(source).not.toMatch(/\.\s*trim\(\)/);
+    expect(masked).not.toMatch(/typed\s*\.\s*trim\(\)/);
   });
 
   it('(14) accept/reject decisions match the baseline predicate across a corpus', async () => {
@@ -515,15 +530,20 @@ describe('(15, 16, 17, 18, 19, 20, 21) behaviour locks', () => {
 });
 
 describe('(22-27) package, repository, and hygiene invariants', () => {
-  it('(22) the groq-staging-smoke package-root API is unchanged at 28', async () => {
+  it('(22) the groq-staging-smoke package-root API is locked at 30', async () => {
     const barrel = (await import('../index.js')) as unknown as Record<string, unknown>;
     // 24 -> 27 for MVP-P2A.2 HF1: the semantic approval digest helper and its two readable parts.
     // 27 -> 28 for MVP-P2A.2 HF4-R4: `createSystemSmokeWireDeps`, the ONE pairing of the
     // instrumented transport with the recorder that owns its wire milestones. RUN S5's smoke PASSED
     // while printing every wire milestone ABSENT, because that pairing was a convention written out
     // in two composition roots and the other root got it wrong.
-    // Counted, not merely permitted -- the exact-set lock in containment names all four.
-    expect(Object.keys(barrel)).toHaveLength(28);
+    // 28 -> 30 for MVP-P2A.2 HF4-R5: `createClipboardCredentialResolver` and
+    // `createWindowsPowerShellClipboardSource`, the one-shot Windows clipboard credential ingress the
+    // owner asked for. The candidate evidence operator is the composition root that selects an
+    // ingress, so both have to be reachable from there; the helper program, its arguments, its exit
+    // codes and its output bound all stay module-private.
+    // Counted, not merely permitted -- the exact-set lock in containment names all six.
+    expect(Object.keys(barrel)).toHaveLength(30);
     for (const internal of [
       'CREDENTIAL_OUTCOMES',
       'MaskedSecretReadError',
@@ -642,6 +662,16 @@ describe('(22-27) package, repository, and hygiene invariants', () => {
       'utf8',
     );
     expect(source).toContain("from '@qf-jarvis/model-gateway'");
-    expect(CREDENTIAL_OUTCOMES).toHaveLength(10);
+    // 10 -> 14 for MVP-P2A.2 HF4-R5. The four additions all name a failure of the CLIPBOARD INGRESS
+    // before a value is ever classified — an ineligible platform, a helper that could not run, a
+    // refused read and a refused CLEAR. None of them describes a property of a credential, and the
+    // shape classifications are deliberately SHARED rather than duplicated per ingress.
+    expect(CREDENTIAL_OUTCOMES).toHaveLength(14);
+    expect([...CREDENTIAL_OUTCOMES].filter((one) => one.startsWith('clipboard-'))).toEqual([
+      'clipboard-platform-unsupported',
+      'clipboard-helper-failed',
+      'clipboard-unavailable',
+      'clipboard-clear-failed',
+    ]);
   });
 });

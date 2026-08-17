@@ -100,11 +100,13 @@ function harness(overrides: Partial<OperatorDeps> = {}): Harness {
       repoRoot: REPO_ROOT,
       interactive: true,
     },
-    openSmokeSecretSource: () => {
+    openSmokeCredential: () => {
       smokeCredentials += 1;
       return Promise.resolve({
-        isInteractive: () => true,
-        readOnce: () => Promise.resolve('sk-fake-never-real-0000000000000000'),
+        credentialSource: {
+          isInteractive: () => true,
+          readOnce: () => Promise.resolve('sk-fake-never-real-0000000000000000'),
+        },
       });
     },
     runSmoke: () => Promise.resolve(SMOKE_PASS),

@@ -633,7 +633,13 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // two composition roots and the second one got it wrong. It exposes no internals, reads no
       // environment, holds no credential, and changes no request, timer or retry semantic.
       // Restated exactly; the count is still pinned.
-      'groq-staging-smoke': 28,
+      // MVP-P2A.2 HF4-R5: 28 -> 30. `createClipboardCredentialResolver` and
+      // `createWindowsPowerShellClipboardSource`, the one-shot Windows clipboard credential ingress
+      // the owner asked for so the credential is copied once instead of typed twice. Both are needed
+      // by the candidate evidence operator, which is the composition root that selects an ingress;
+      // the helper program, its arguments, its exit codes and its output bound stay module-private.
+      // Restated exactly; the count is still pinned.
+      'groq-staging-smoke': 30,
       'event-backbone': 39,
       // QFJ-S3-D-A (ADR-0070): the new Anisha behaviour package, locked from the day it lands.
       'anisha-agent': 14,
