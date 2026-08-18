@@ -364,8 +364,17 @@ describe('HF3 — the one optional governed run goal', () => {
     expect(parsed.ok ? undefined : parsed.reason).toBe('duplicate-run-goal');
   });
 
-  it('THE GOAL VOCABULARY IS CLOSED, AND NEITHER MEMBER IS A BYPASS', () => {
-    expect([...OPERATOR_RUN_GOALS]).toStrictEqual(['FULL_EVIDENCE', 'SAFETY_REPLICATION']);
+  it('THE GOAL VOCABULARY IS CLOSED, AND NO MEMBER IS A BYPASS', () => {
+    // MVP-P2A.2 HF4-R8 adds a THIRD governed purpose. `REQUEST_CONTRACT_DIAGNOSTIC` is strictly the
+    // narrowest of the three: it runs the text smoke and eight SYNTHETIC canaries, reaches no fixture,
+    // no evaluator, no authority, no P10 and no bundle, and is capped at nine provider requests
+    // against the replication's eleven. It exists because S9 and S10 each spent a live authorization
+    // re-observing nine identical HTTP 400s without isolating which request dimension was rejected.
+    expect([...OPERATOR_RUN_GOALS]).toStrictEqual([
+      'FULL_EVIDENCE',
+      'SAFETY_REPLICATION',
+      'REQUEST_CONTRACT_DIAGNOSTIC',
+    ]);
     // No goal skips a gate or forces a verdict. Both notices are content-free and name no secret.
     for (const goal of OPERATOR_RUN_GOALS) {
       expect(SECOND_CREDENTIAL_NOTICES[goal]).not.toMatch(/sk-|key=|Bearer|Authorization/u);

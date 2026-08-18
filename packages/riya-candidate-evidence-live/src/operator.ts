@@ -39,6 +39,15 @@ import { createApprovalEvidence } from '@qf-jarvis/model-evaluation';
 import { createOperatorLedger } from './accounting.js';
 import type { RequestLedger } from './accounting.js';
 import type { ClipboardIngressCounters } from './credential-composition.js';
+import type { DiagnosticCanary } from './diagnostic-canaries.js';
+import { DIAGNOSTIC_CANARIES } from './diagnostic-canaries.js';
+import type { CanaryOutcome } from './internal/diagnostic-classification.js';
+import { classifyDiagnosticCanaries } from './internal/diagnostic-classification.js';
+import {
+  emitCanaryOutcome,
+  emitDiagnosticClassification,
+  emitDiagnosticReceipt,
+} from './internal/diagnostic-emitters.js';
 import { DEFAULT_CREDENTIAL_SOURCE_MODE } from './credential-source.js';
 import type { CredentialSourceMode } from './credential-source.js';
 import type { CandidateSession } from './candidate-session.js';
@@ -160,6 +169,26 @@ export interface OperatorDeps {
   readonly credentialSource?: CredentialSourceMode;
   /** Content-free ingress counters, when the selected ingress has any. Numbers and booleans only. */
   readonly ingressCounters?: () => ClipboardIngressCounters | undefined;
+  /**
+   * HF4-R8-R1. Bind the request-contract canary runner to the ALREADY-RESOLVED candidate credential.
+   *
+   * A credential-bound FACTORY rather than a ready-made runner, and the shape is load-bearing. R8's
+   * seam was supplied at composition time — before the credential existed — so the only way `bin.ts`
+   * could have satisfied it was to hold a second ingress or a mutable slot. It held neither, and the
+   * real CLI therefore reached the diagnostic branch with no port at all: preflight, smoke and the
+   * candidate credential all spent, zero canaries run, `INTERNAL_CLOSED_FAILURE` returned. A future
+   * authorized run is consumed at process launch, so that composition would have burned it.
+   *
+   * Called at most ONCE, and only after `openCandidateCredential` returned. It receives that exact
+   * credential object, so no second holder can exist. Required only for
+   * `REQUEST_CONTRACT_DIAGNOSTIC`; every other goal never reaches it, and a spec asserts that.
+   *
+   * The runner it returns receives the canary CONTRACT rather than a built request, so the port owns
+   * the projection and the strict check and the operator cannot smuggle a shape past them.
+   */
+  readonly openDiagnosticCanaryRunner?: (
+    credential: unknown,
+  ) => Promise<(canary: DiagnosticCanary) => Promise<CanaryOutcome>>;
 }
 
 export interface OperatorResult {
@@ -284,6 +313,67 @@ export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<
   // The second ingress line. In clipboard mode this is where `credentialReuseCount` becomes 2 while
   // `credentialClipboardReads` stays 1 — the pair of numbers that IS the copy-once guarantee.
   emitCredentialIngress(safe, credentialSource, 'CANDIDATE', deps.ingressCounters?.());
+
+  // F'. THE REQUEST-CONTRACT DIAGNOSTIC (HF4-R8, rewired HF4-R8-R1) — and then STOP.
+  //
+  // Placed BEFORE `openCandidate`, not merely before the safety port. R8 put it after, which meant a
+  // diagnostic run constructed the ordinary candidate session — two gateways, a cancellation
+  // controller, a second transport observer — and immediately discarded all of it. Nothing measured
+  // it and nothing used it, but it existed, and a run that evaluates nothing should not build the
+  // machinery for evaluating something. Now the only composition a diagnostic creates is the canary
+  // runner, bound to the credential resolved immediately above.
+  //
+  // It reaches no fixture, no evaluator, no authority, no P10 and no bundle: it asks the provider
+  // whether it accepts a request, eight times, varying one axis at a time. S9 and S10 each spent a
+  // live authorization proving only that something was rejected; this is the run that can say WHAT.
+  if (runGoal === 'REQUEST_CONTRACT_DIAGNOSTIC') {
+    const openRunner = deps.openDiagnosticCanaryRunner;
+    if (openRunner === undefined) {
+      // A diagnostic goal with no canary port is a composition bug, not an operator error.
+      safe.line({ phase: 'request-contract-diagnostic', status: 'FAILED', reason: 'port-missing' });
+      return { outcome: 'INTERNAL_CLOSED_FAILURE' };
+    }
+    let runCanary: (canary: DiagnosticCanary) => Promise<CanaryOutcome>;
+    try {
+      runCanary = await openRunner(candidateCredential);
+    } catch {
+      // Fails closed BEFORE D1, and nothing from the original error is read or printed. A runner
+      // that could not be built is a local composition failure — a credential that did not narrow, a
+      // production request that could not be assembled — never a statement about the provider.
+      safe.line({
+        phase: 'request-contract-diagnostic',
+        status: 'FAILED',
+        reason: 'runner-bind-failed',
+      });
+      return { outcome: 'INTERNAL_CLOSED_FAILURE' };
+    }
+    const outcomes: CanaryOutcome[] = [];
+    for (const canary of DIAGNOSTIC_CANARIES) {
+      // Reserved against the diagnostic ledger's own ceiling, immediately before the call, exactly as
+      // every other provider request in this operator is.
+      const reservation = ledger.reserve('diagnostic');
+      if (!reservation.ok) {
+        safe.line({
+          phase: 'request-contract-diagnostic',
+          status: 'REFUSED',
+          canaryId: canary.canaryId,
+          reason: reservation.refusal,
+        });
+        break;
+      }
+      const outcome = await runCanary(canary);
+      ledger.settle(undefined, outcome.providerCompleted);
+      outcomes.push(outcome);
+      emitCanaryOutcome(safe, canary, outcome);
+    }
+    // A pure function over closed tokens. An incomplete matrix classifies as DIAGNOSTIC_NOT_RUN
+    // rather than as a partial verdict.
+    emitDiagnosticClassification(safe, classifyDiagnosticCanaries(outcomes), outcomes.length);
+    emitDiagnosticReceipt(safe, ledger.snapshot());
+    safe.line({ finalStatus: 'REQUEST_CONTRACT_DIAGNOSTIC_COMPLETE' });
+    return { outcome: 'REQUEST_CONTRACT_DIAGNOSTIC_COMPLETE' };
+  }
+
   let session: CandidateSession;
   try {
     session = await deps.openCandidate(candidateCredential);

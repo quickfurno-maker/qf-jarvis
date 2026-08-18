@@ -44,9 +44,14 @@ import {
 } from './cancellation-transport.js';
 import { createCandidateTransportObservations } from './candidate-transport-observation.js';
 import { createCandidateGateway } from './evaluation-gateway.js';
-import { createOperatorLedger, createSafetyReplicationLedger } from './accounting.js';
+import {
+  createOperatorLedger,
+  createRequestContractDiagnosticLedger,
+  createSafetyReplicationLedger,
+} from './accounting.js';
 import type { RequestLedger } from './accounting.js';
 import { createCredentialComposition } from './credential-composition.js';
+import { openLiveDiagnosticCanaryRunner } from './live-diagnostic-canary-composition.js';
 import { DEFAULT_CREDENTIAL_SOURCE_MODE, isCredentialSourceMode } from './credential-source.js';
 import type { CredentialSourceMode } from './credential-source.js';
 import { DEFAULT_RUN_GOAL } from './internal/run-goal.js';
@@ -130,10 +135,12 @@ export function parseCliArgs(argv: readonly string[]): CliParse {
       if (runGoal !== undefined) {
         return { ok: false, reason: 'duplicate-run-goal' };
       }
-      if (value !== 'SAFETY_REPLICATION') {
+      // HF4-R8 adds one more governed PURPOSE. `FULL_EVIDENCE` stays refused as a VALUE because
+      // absence already means it and two spellings of one default is surface for no benefit.
+      if (value !== 'SAFETY_REPLICATION' && value !== 'REQUEST_CONTRACT_DIAGNOSTIC') {
         return { ok: false, reason: 'invalid-run-goal' };
       }
-      runGoal = 'SAFETY_REPLICATION';
+      runGoal = value;
       index += 1;
       continue;
     }
@@ -171,6 +178,11 @@ export function parseCliArgs(argv: readonly string[]): CliParse {
  * real terminal and a real provider to run. A bounded run whose bound is untested is not bounded.
  */
 export function ledgerForRunGoal(goal: OperatorRunGoal): RequestLedger {
+  if (goal === 'REQUEST_CONTRACT_DIAGNOSTIC') {
+    // Nine requests, one dollar — the narrowest ceilings in the codebase, and deliberately narrower
+    // than the eleven-call replication this diagnostic exists to explain.
+    return createRequestContractDiagnosticLedger();
+  }
   return goal === 'SAFETY_REPLICATION' ? createSafetyReplicationLedger() : createOperatorLedger();
 }
 
@@ -247,6 +259,18 @@ async function main(): Promise<number> {
     // used — no second OS clipboard access, and nothing asked of the owner.
     openCandidateCredential: credentials.openCandidateCredential,
     ingressCounters: credentials.ingressCounters,
+    // HF4-R8-R1. The REAL canary port, bound to the credential the operator just resolved.
+    //
+    // R8 left this line out. Every other piece existed — the CLI goal, the nine-request ledger, the
+    // matrix, the port, the classifier, the emitters — and without it the compiled command was
+    // GUARANTEED to reach the diagnostic branch, find no port and return INTERNAL_CLOSED_FAILURE
+    // after spending the smoke request and both credential steps. A live authorization is consumed
+    // at process launch, so the run would have been burned on a missing local wire.
+    //
+    // Credential-BOUND, not credential-holding: it receives the object `openCandidateCredential`
+    // returned, so no second ingress, resolver or holder can exist. A spec drives this exact
+    // composition end to end with fake transports.
+    openDiagnosticCanaryRunner: (credential) => openLiveDiagnosticCanaryRunner({ credential }),
     openCandidate: (credential) => {
       const apiKey = credential as GroqApiKey;
       const clock = (): string => new Date().toISOString();

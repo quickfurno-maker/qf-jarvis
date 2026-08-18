@@ -33,6 +33,14 @@ export const OPERATOR_OUTCOMES = [
    * completion -- it says only that the requested replication ran and stopped where it promised to.
    */
   'SAFETY_REPLICATION_COMPLETE',
+  /**
+   * MVP-P2A.2 HF4-R8. A bounded REQUEST_CONTRACT_DIAGNOSTIC ran its canaries and stopped.
+   *
+   * Its own code for the same reason the replication has one: it is not approval, not P10 completion
+   * and not a safety result, and sharing an integer with any of those would let a run that evaluated
+   * nothing be read as one that evaluated something.
+   */
+  'REQUEST_CONTRACT_DIAGNOSTIC_COMPLETE',
 ] as const;
 export type OperatorOutcome = (typeof OPERATOR_OUTCOMES)[number];
 
@@ -54,4 +62,6 @@ export const OPERATOR_EXIT_CODES: Readonly<Record<OperatorOutcome, number>> = Ob
   // The next unused integer. Codes 0-21 are untouched, because a script reading `$LASTEXITCODE`
   // against the old contract must keep meaning what it meant.
   SAFETY_REPLICATION_COMPLETE: 22,
+  // The next unused integer; 0-22 keep meaning exactly what they meant.
+  REQUEST_CONTRACT_DIAGNOSTIC_COMPLETE: 23,
 });

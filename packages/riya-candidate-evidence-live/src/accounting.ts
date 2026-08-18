@@ -57,6 +57,20 @@ export const SAFETY_REPLICATION_MAX_PROVIDER_REQUESTS =
  */
 export const SAFETY_REPLICATION_MAX_ESTIMATED_COST_USD = 1;
 
+/**
+ * The exact arithmetic of a REQUEST_CONTRACT_DIAGNOSTIC run (MVP-P2A.2 HF4-R8): the text smoke plus
+ * the eight canaries, and nothing else.
+ *
+ * NINE, which is deliberately BELOW the replication's eleven. A diagnostic that isolates a request
+ * dimension has no business being authorised for more calls than the run it is diagnosing.
+ */
+export const DIAGNOSTIC_CANARY_REQUESTS = 8;
+export const REQUEST_CONTRACT_DIAGNOSTIC_MAX_PROVIDER_REQUESTS =
+  SMOKE_REQUESTS + DIAGNOSTIC_CANARY_REQUESTS;
+
+/** The spend ceiling for a diagnostic. Same conservative figure as a replication. */
+export const REQUEST_CONTRACT_DIAGNOSTIC_MAX_ESTIMATED_COST_USD = 1;
+
 /** Why the ledger refused the next call. Closed and content-free. */
 export const LEDGER_REFUSALS = [
   'request-limit-reached',
@@ -73,13 +87,15 @@ export const LEDGER_REFUSALS = [
 export type LedgerRefusal = (typeof LEDGER_REFUSALS)[number];
 
 /** Which phase a request belongs to. Used for reporting only; every phase shares one ceiling. */
-export const LEDGER_PHASES = ['smoke', 'safety', 'p10'] as const;
+export const LEDGER_PHASES = ['smoke', 'safety', 'p10', 'diagnostic'] as const;
 export type LedgerPhase = (typeof LEDGER_PHASES)[number];
 
 export interface LedgerSnapshot {
   readonly smokeRequests: number;
   readonly safetyProviderRequests: number;
   readonly p10ProviderRequests: number;
+  /** HF4-R8. Synthetic canary requests. Counted APART from safety so no receipt can conflate them. */
+  readonly diagnosticProviderRequests: number;
   readonly totalProviderRequests: number;
   readonly successfulProviderResponses: number;
   readonly providerFailures: number;
@@ -141,7 +157,7 @@ function cost(tokens: number, pricePerMillion: number): number {
 
 /** Build a fresh in-memory ledger. Holds no content, reads no clock and writes nothing. */
 export function createRequestLedger(config: RequestLedgerConfig): RequestLedger {
-  const counts = { smoke: 0, safety: 0, p10: 0 };
+  const counts = { smoke: 0, safety: 0, p10: 0, diagnostic: 0 };
   let successes = 0;
   let failures = 0;
   let inputTokens = 0;
@@ -150,7 +166,9 @@ export function createRequestLedger(config: RequestLedgerConfig): RequestLedger 
   let estimated = false;
   let usageBoundViolated = false;
 
-  const total = (): number => counts.smoke + counts.safety + counts.p10;
+  // Every phase, including HF4-R8's diagnostic canaries. One ceiling covers them all, so a phase left
+  // out of this sum would be a phase that spends requests nothing counts.
+  const total = (): number => counts.smoke + counts.safety + counts.p10 + counts.diagnostic;
 
   const currentCost = (): number =>
     cost(inputTokens, config.pricePerMillionInputUsd) +
@@ -220,6 +238,7 @@ export function createRequestLedger(config: RequestLedgerConfig): RequestLedger 
         smokeRequests: counts.smoke,
         safetyProviderRequests: counts.safety,
         p10ProviderRequests: counts.p10,
+        diagnosticProviderRequests: counts.diagnostic,
         totalProviderRequests: total(),
         successfulProviderResponses: successes,
         providerFailures: failures,
@@ -268,6 +287,30 @@ export function createSafetyReplicationLedger(): RequestLedger {
   return createRequestLedger({
     maxRequests: SAFETY_REPLICATION_MAX_PROVIDER_REQUESTS,
     maxCostUsd: SAFETY_REPLICATION_MAX_ESTIMATED_COST_USD,
+    pricePerMillionInputUsd: CANDIDATE_PRICE_PER_M_INPUT_USD,
+    pricePerMillionCachedInputUsd: CANDIDATE_PRICE_PER_M_CACHED_INPUT_USD,
+    pricePerMillionOutputUsd: CANDIDATE_PRICE_PER_M_OUTPUT_USD,
+    fallbackInputTokens: CANDIDATE_MAX_INPUT_TOKENS,
+    fallbackOutputTokens: CANDIDATE_MAX_COMPLETION_TOKENS,
+    hardMaxInputTokens: CANDIDATE_MAX_INPUT_TOKENS,
+    hardMaxOutputTokens: CANDIDATE_MAX_COMPLETION_TOKENS,
+  });
+}
+
+/**
+ * The ledger for a bounded REQUEST_CONTRACT_DIAGNOSTIC run (MVP-P2A.2 HF4-R8).
+ *
+ * Same prices, same fallback bounds, same governed model maxima as the other two — read from the
+ * candidate release rather than restated, so a published price change moves all three together. Only
+ * the ceilings differ, and both are the narrowest in the codebase: nine requests, one dollar.
+ *
+ * Nine is deliberately fewer than the replication's eleven. A run whose entire purpose is to isolate a
+ * request dimension should not be authorised for more calls than the run it is diagnosing.
+ */
+export function createRequestContractDiagnosticLedger(): RequestLedger {
+  return createRequestLedger({
+    maxRequests: REQUEST_CONTRACT_DIAGNOSTIC_MAX_PROVIDER_REQUESTS,
+    maxCostUsd: REQUEST_CONTRACT_DIAGNOSTIC_MAX_ESTIMATED_COST_USD,
     pricePerMillionInputUsd: CANDIDATE_PRICE_PER_M_INPUT_USD,
     pricePerMillionCachedInputUsd: CANDIDATE_PRICE_PER_M_CACHED_INPUT_USD,
     pricePerMillionOutputUsd: CANDIDATE_PRICE_PER_M_OUTPUT_USD,

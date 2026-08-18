@@ -23,7 +23,22 @@
  *
  * Internal: not exported from the package root, because nothing outside this package selects a goal.
  */
-export const OPERATOR_RUN_GOALS = ['FULL_EVIDENCE', 'SAFETY_REPLICATION'] as const;
+export const OPERATOR_RUN_GOALS = [
+  'FULL_EVIDENCE',
+  'SAFETY_REPLICATION',
+  /**
+   * MVP-P2A.2 HF4-R8. A REQUEST-CONTRACT diagnostic: the text smoke, then eight synthetic canaries,
+   * then stop.
+   *
+   * It exists because S9 and S10 each spent a live authorization re-observing the same nine HTTP 400s
+   * without isolating which dimension the provider rejected. This goal reaches NO safety authority, NO
+   * P10 and NO review bundle, and it evaluates no fixture — it asks only whether the provider accepts a
+   * request, one varied axis at a time. A separate goal rather than a flag on `SAFETY_REPLICATION`,
+   * because a run that evaluates nothing must not be able to produce something a reader could mistake
+   * for a safety result.
+   */
+  'REQUEST_CONTRACT_DIAGNOSTIC',
+] as const;
 export type OperatorRunGoal = (typeof OPERATOR_RUN_GOALS)[number];
 
 /** The goal a run has when nobody said. Full evidence, exactly as before HF3. */
@@ -41,6 +56,8 @@ export const SECOND_CREDENTIAL_NOTICES: Readonly<Record<OperatorRunGoal, string>
     'Smoke passed. Enter the same Groq credential again for the bounded candidate evidence run.',
   SAFETY_REPLICATION:
     'Smoke passed. Enter the same Groq credential again for the bounded safety diagnostic replication.',
+  REQUEST_CONTRACT_DIAGNOSTIC:
+    'Smoke passed. Enter the same Groq credential again for the bounded request-contract diagnostic.',
 });
 
 /**
@@ -59,4 +76,6 @@ export const REUSED_CREDENTIAL_NOTICES: Readonly<Record<OperatorRunGoal, string>
     'Smoke passed. Reusing the credential already read for the bounded candidate evidence run.',
   SAFETY_REPLICATION:
     'Smoke passed. Reusing the credential already read for the bounded safety diagnostic replication.',
+  REQUEST_CONTRACT_DIAGNOSTIC:
+    'Smoke passed. Reusing the credential already read for the bounded request-contract diagnostic.',
 });
