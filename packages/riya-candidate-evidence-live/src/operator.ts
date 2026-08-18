@@ -48,6 +48,14 @@ import {
   emitDiagnosticClassification,
   emitDiagnosticReceipt,
 } from './internal/diagnostic-emitters.js';
+import type { SchemaProbe } from './internal/riya-schema-probe-matrix.js';
+import { analyseSchemaProbeMatrix } from './internal/schema-differential-classification.js';
+import type { SchemaProbeOutcome } from './internal/schema-differential-classification.js';
+import {
+  emitSchemaDifferentialClassification,
+  emitSchemaDifferentialReceipt,
+  emitSchemaProbeOutcome,
+} from './internal/schema-differential-emitters.js';
 import { DEFAULT_CREDENTIAL_SOURCE_MODE } from './credential-source.js';
 import type { CredentialSourceMode } from './credential-source.js';
 import type { CandidateSession } from './candidate-session.js';
@@ -189,6 +197,21 @@ export interface OperatorDeps {
   readonly openDiagnosticCanaryRunner?: (
     credential: unknown,
   ) => Promise<(canary: DiagnosticCanary) => Promise<CanaryOutcome>>;
+  /**
+   * POST-PR-131. Bind the SCHEMA PROBE runner to the ALREADY-RESOLVED candidate credential.
+   *
+   * The same credential-bound factory shape as the canary seam above, and for the same reason: a
+   * seam supplied before the credential exists cannot be satisfied by a composition root that holds
+   * no credential, which is exactly how HF4-R8 shipped a diagnostic the executable could not run.
+   *
+   * Required only for `SCHEMA_DIFFERENTIAL_DIAGNOSTIC`. It returns the planned matrix ALONGSIDE the
+   * runner, because the matrix is derived from the real projected schema and the operator must not
+   * invent or reorder it.
+   */
+  readonly openSchemaProbeRunner?: (credential: unknown) => Promise<{
+    readonly probes: readonly SchemaProbe[];
+    readonly run: (probe: SchemaProbe) => Promise<SchemaProbeOutcome>;
+  }>;
 }
 
 export interface OperatorResult {
@@ -313,6 +336,87 @@ export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<
   // The second ingress line. In clipboard mode this is where `credentialReuseCount` becomes 2 while
   // `credentialClipboardReads` stays 1 — the pair of numbers that IS the copy-once guarantee.
   emitCredentialIngress(safe, credentialSource, 'CANDIDATE', deps.ingressCounters?.());
+
+  // F''. THE SCHEMA DIFFERENTIAL DIAGNOSTIC (POST-PR-131) — and then STOP.
+  //
+  // Placed beside the request-contract branch and BEFORE `openCandidate`, so a run that evaluates
+  // nothing constructs none of the machinery for evaluating something: no ordinary gateway, no
+  // cancellation controller, no safety or quality port, no bundle writer.
+  //
+  // It holds the completion cap fixed at the low control value and varies only the SCHEMA, over real
+  // fragments of the projected production document. S11 already showed the high cap is its own
+  // sensitive axis; varying both again would isolate neither.
+  if (runGoal === 'SCHEMA_DIFFERENTIAL_DIAGNOSTIC') {
+    const openRunner = deps.openSchemaProbeRunner;
+    if (openRunner === undefined) {
+      // A diagnostic goal with no probe port is a composition bug, not an operator error.
+      safe.line({
+        phase: 'schema-differential-diagnostic',
+        status: 'FAILED',
+        reason: 'port-missing',
+      });
+      return { outcome: 'INTERNAL_CLOSED_FAILURE' };
+    }
+    let runner: {
+      readonly probes: readonly SchemaProbe[];
+      readonly run: (probe: SchemaProbe) => Promise<SchemaProbeOutcome>;
+    };
+    try {
+      runner = await openRunner(candidateCredential);
+    } catch {
+      // Fails closed BEFORE R0, and nothing from the original error is read or printed. A runner that
+      // could not be built is a local composition failure — never a statement about the provider.
+      safe.line({
+        phase: 'schema-differential-diagnostic',
+        status: 'FAILED',
+        reason: 'runner-bind-failed',
+      });
+      return { outcome: 'INTERNAL_CLOSED_FAILURE' };
+    }
+
+    const probeOutcomes: SchemaProbeOutcome[] = [];
+    for (const probe of runner.probes) {
+      const reservation = ledger.reserve('schema-probe');
+      if (!reservation.ok) {
+        safe.line({
+          phase: 'schema-differential-diagnostic',
+          status: 'REFUSED',
+          stepId: probe.stepId,
+          reason: reservation.refusal,
+        });
+        break;
+      }
+      const outcome = await runner.run(probe);
+      ledger.settle(undefined, outcome.providerCompleted);
+      probeOutcomes.push(outcome);
+      emitSchemaProbeOutcome(safe, probe, outcome);
+
+      // THE ONE stop rule. If the known-good minimal control is refused, the account, the model
+      // entitlement or the request envelope moved, and no later probe could be attributed to the Riya
+      // schema — so the remaining eight authorized requests are not spent proving nothing.
+      //
+      // Deliberately the ONLY early exit. A FEATURE or GROUP rejection does NOT stop the matrix:
+      // these probes are independent, so the useful answer is the complete SET of rejections, and
+      // stopping at the first one would reintroduce exactly the precedence blindness S11 exposed.
+      const controlFailed =
+        probe.probeKind === 'CONTROL' &&
+        !(outcome.providerCompleted && outcome.providerHttpClass === 'SUCCESS_2XX');
+      if (controlFailed) {
+        break;
+      }
+    }
+
+    // A pure function over closed tokens. It reports every step id in its own bucket rather than
+    // promoting one rejection to "the cause".
+    emitSchemaDifferentialClassification(
+      safe,
+      analyseSchemaProbeMatrix(probeOutcomes),
+      probeOutcomes.length,
+    );
+    emitSchemaDifferentialReceipt(safe, ledger.snapshot());
+    safe.line({ finalStatus: 'SCHEMA_DIFFERENTIAL_DIAGNOSTIC_COMPLETE' });
+    return { outcome: 'SCHEMA_DIFFERENTIAL_DIAGNOSTIC_COMPLETE' };
+  }
 
   // F'. THE REQUEST-CONTRACT DIAGNOSTIC (HF4-R8, rewired HF4-R8-R1) — and then STOP.
   //

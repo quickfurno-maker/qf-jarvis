@@ -283,6 +283,64 @@ magnitude comparison across units is not.
 
 ---
 
+## 6B. POST-PR-131 — the probe matrix is ORTHOGONAL, not a cumulative ladder
+
+Owner review of the merged §6 material found that its "reduction ladder" language overclaimed.
+
+**The retracted claim.** The module described consecutive rungs as adding "exactly ONE dimension
+each", so that "the FIRST rejection names a cause". The implementation never did that: each probe
+wraps ONE fragment located in the real projected document, so `R2_SCALAR_ARRAY` is a _different_
+single fragment rather than `R1` plus an array — it does not contain R1's numeric enum at all. The
+supporting test asserted only that the dimension LABELS were distinct, which proves nothing
+structural, and the complexity test checked only that the control was shallowest and the exact
+document deepest.
+
+**The corrected semantics.** R0–R8 is an **orthogonal / incrementally broadening probe matrix**:
+
+| Probe                     | Kind    | Question                                                                                     |
+| ------------------------- | ------- | -------------------------------------------------------------------------------------------- |
+| `R0_MINIMAL_CONTROL`      | CONTROL | Does the account/model/envelope still accept the known minimal strict schema at the low cap? |
+| `R1`–`R5`                 | FEATURE | Does the provider accept THIS real fragment, alone, at the low cap?                          |
+| `R6`, `R7`                | GROUP   | Does it accept this whole real top-level group, alone?                                       |
+| `R8_EXACT_PROJECTED_RIYA` | EXACT   | Does it accept the exact projected document?                                                 |
+
+Each answers its own question. None asserts a relationship to its predecessor.
+
+**Consequences, enforced by the runner rather than left to a reader:**
+
+- a failed **control** stops the matrix — nothing after it is attributable to the Riya schema;
+- a failed **feature or group** probe does **not** stop the matrix; every remaining probe runs, and
+  the result is the complete **SET** of rejections;
+- no probe is promoted to "the cause" by ordering.
+
+A spec now proves the non-cumulative property _structurally_ — zero adjacent FEATURE pairs satisfy
+`dimensions(n-1) ⊆ dimensions(n)` — rather than inferring it from labels.
+
+### Governance of the future run
+
+| Field                        | Value                                                                                    |
+| ---------------------------- | ---------------------------------------------------------------------------------------- |
+| Run goal                     | `SCHEMA_DIFFERENTIAL_DIAGNOSTIC` (new; S11's `REQUEST_CONTRACT_DIAGNOSTIC` is untouched) |
+| Exit code                    | `24` (request-contract keeps `23`)                                                       |
+| Completion cap               | **512 for every probe** — fixed, so the S11 cap axis is not reintroduced                 |
+| Max provider requests        | **10** = 1 smoke + 9 probes                                                              |
+| Max estimated cost           | **USD 1.00**                                                                             |
+| Safety / P10 / bundle writes | 0 / 0 / 0                                                                                |
+| Retry / fallback / 120B      | 0 / 0 / 0                                                                                |
+
+Classifications: `DIAGNOSTIC_INVALID_CONTROL`, `ISOLATED_SCHEMA_FEATURE_REJECTION`,
+`FULL_SCHEMA_COMPOSITION_REJECTED`, `EXACT_PROJECTED_RIYA_SCHEMA_ACCEPTED_LOW_CAP`,
+`MIXED_OR_INCONCLUSIVE` — each reported with `acceptedStepIds` / `rejectedStepIds` /
+`inconclusiveStepIds`.
+
+`EXACT_PROJECTED_RIYA_SCHEMA_ACCEPTED_LOW_CAP` would mean **only** that the exact projected schema was
+accepted with synthetic messages at the low cap. It would not establish the operational Riya budget,
+the production message shape, safety eligibility, model quality, P10 eligibility or release readiness.
+
+**This matrix has NOT been executed.** It requires separate owner authorization.
+
+---
+
 ## 7. CONTAINMENT FOR THIS PHASE
 
 ```

@@ -370,10 +370,17 @@ describe('HF3 — the one optional governed run goal', () => {
     // no evaluator, no authority, no P10 and no bundle, and is capped at nine provider requests
     // against the replication's eleven. It exists because S9 and S10 each spent a live authorization
     // re-observing nine identical HTTP 400s without isolating which request dimension was rejected.
+    //
+    // POST-PR-131 adds a FOURTH. `SCHEMA_DIFFERENTIAL_DIAGNOSTIC` is narrower still along the axis
+    // that matters: it holds the completion cap fixed at the low control value and varies only the
+    // SCHEMA, over real fragments of the projected production document. A separate token rather than
+    // a reuse, because S11's D1-D8 evidence is immutable and a receipt must always be able to say
+    // which live matrix produced it.
     expect([...OPERATOR_RUN_GOALS]).toStrictEqual([
       'FULL_EVIDENCE',
       'SAFETY_REPLICATION',
       'REQUEST_CONTRACT_DIAGNOSTIC',
+      'SCHEMA_DIFFERENTIAL_DIAGNOSTIC',
     ]);
     // No goal skips a gate or forces a verdict. Both notices are content-free and name no secret.
     for (const goal of OPERATOR_RUN_GOALS) {

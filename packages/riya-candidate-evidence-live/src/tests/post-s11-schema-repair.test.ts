@@ -15,10 +15,10 @@ import { beforeAll, describe, expect, it } from 'vitest';
 
 import { captureProductionRiyaCanaryRequest } from '../diagnostic-canary-materials.js';
 import {
-  planRiyaSchemaReduction,
-  RIYA_REDUCTION_STEP_IDS,
-} from '../internal/riya-schema-reducer.js';
-import type { RiyaReductionStep } from '../internal/riya-schema-reducer.js';
+  planRiyaSchemaProbeMatrix,
+  SCHEMA_PROBE_STEP_IDS,
+} from '../internal/riya-schema-probe-matrix.js';
+import type { SchemaProbe } from '../internal/riya-schema-probe-matrix.js';
 import { inventoryStrictSchema, SCHEMA_DIMENSIONS } from '../internal/strict-schema-inventory.js';
 import type { StrictSchemaInventory } from '../internal/strict-schema-inventory.js';
 
@@ -142,63 +142,105 @@ describe('the exact D5 document, audited offline', () => {
   });
 });
 
-describe('the reduction ladder is derived from the real schema', () => {
-  let plan: readonly RiyaReductionStep[];
+describe('the probe matrix is derived from the real schema', () => {
+  let probes: readonly SchemaProbe[];
   beforeAll(() => {
-    plan = planRiyaSchemaReduction(projected);
+    probes = planRiyaSchemaProbeMatrix(projected);
   });
 
-  it('has one rung per governed step id, in order', () => {
-    expect(plan.map((one) => one.stepId)).toEqual([...RIYA_REDUCTION_STEP_IDS]);
+  it('has one probe per governed step id, in order', () => {
+    expect(probes.map((one) => one.stepId)).toEqual([...SCHEMA_PROBE_STEP_IDS]);
   });
 
-  it('every rung is a closed object schema with no offline-checkable violation', () => {
-    for (const rung of plan) {
-      const audit = inventoryStrictSchema(rung.schema);
-      expect(audit.rootIsObject, rung.stepId).toBe(true);
-      // A rung that was itself malformed would send the next authorization after a defect this
+  it('every probe is a closed object schema with no offline-checkable violation', () => {
+    for (const probe of probes) {
+      const audit = inventoryStrictSchema(probe.schema);
+      expect(audit.rootIsObject, probe.stepId).toBe(true);
+      // A probe that was itself malformed would send the next authorization after a defect this
       // module introduced rather than after the one it is hunting.
       expect(
         audit.findings.map((one) => one.violation),
-        rung.stepId,
+        probe.stepId,
       ).toEqual([]);
     }
   });
 
-  it('each rung carries a REAL fragment, located by path, never a replica', () => {
-    const byId = new Map(plan.map((one) => [one.stepId, one]));
-    // Every rung except the synthetic control names where in the real document it came from.
-    for (const rung of plan) {
-      if (rung.stepId === 'R0_MINIMAL_CONTROL') {
-        expect(rung.derivedFromPath).toBe('$');
+  it('each probe carries a REAL fragment, located by path, never a replica', () => {
+    const byId = new Map(probes.map((one) => [one.stepId, one]));
+    for (const probe of probes) {
+      if (probe.stepId === 'R0_MINIMAL_CONTROL') {
+        expect(probe.derivedFromPath).toBe('$');
         continue;
       }
-      expect(rung.derivedFromPath.startsWith('$'), rung.stepId).toBe(true);
+      expect(probe.derivedFromPath.startsWith('$'), probe.stepId).toBe(true);
     }
-    // The last rung IS the exact document D5 sent — object identity, not a rebuild of it.
+    // The last probe IS the exact document D5 sent — object identity, not a rebuild of it.
     expect(byId.get('R8_EXACT_PROJECTED_RIYA')?.schema).toBe(projected);
   });
 
-  it('consecutive rungs add exactly ONE declared dimension each', () => {
-    const dimensions = plan.map((one) => one.addsDimension);
-    // Every rung names a distinct dimension, so no two rungs vary the same axis.
-    expect(new Set(dimensions).size).toBe(dimensions.length);
+  it('POST-PR-131 — the probes are INDEPENDENT, not a cumulative ladder', () => {
+    // The retracted claim, asserted false so it cannot quietly return.
+    //
+    // A previous revision described these as a ladder whose consecutive rungs "add exactly ONE
+    // dimension each", so that "the FIRST rejection names a cause". The implementation never did
+    // that: each probe wraps ONE located fragment, so R2 is a different single fragment rather than
+    // R1 plus an array, and it does not contain R1's numeric enum at all.
+    const byId = new Map(probes.map((one) => [one.stepId, one]));
+    const dimensionsOf = (stepId: string): readonly string[] =>
+      inventoryStrictSchema(byId.get(stepId as never)?.schema).dimensions;
+
+    const numericEnum = dimensionsOf('R1_NUMERIC_ENUM_AS_NUMBER');
+    const scalarArray = dimensionsOf('R2_SCALAR_ARRAY');
+    expect(numericEnum).toContain('NUMERIC_ENUM');
+    // If R2 were R1 plus one dimension it would still carry the numeric enum. It does not.
+    expect(scalarArray).not.toContain('NUMERIC_ENUM');
+
+    // The same the other way: R3 does not contain R2's scalar array.
+    expect(dimensionsOf('R3_OBJECT_ARRAY')).not.toContain('SCALAR_ARRAY');
   });
 
-  it('the ladder climbs in structural complexity', () => {
-    const complexity = plan.map((one) => {
-      const audit = inventoryStrictSchema(one.schema);
-      return audit.maxDepth;
-    });
-    // The control is the shallowest and the exact document is the deepest, which is what makes the
-    // FIRST rejection meaningful rather than merely the earliest.
-    expect(complexity[0]).toBe(Math.min(...complexity));
-    expect(complexity.at(-1)).toBe(Math.max(...complexity));
+  it('POST-PR-131 — no probe except the exact document is a superset of its predecessor', () => {
+    // A structural check rather than a label check. For a genuinely cumulative matrix every adjacent
+    // pair would satisfy `dimensions(n-1) ⊆ dimensions(n)`. Between the FEATURE probes that fails,
+    // which is exactly why the interpretation is a set and not an ordering.
+    const featureIds = probes.filter((one) => one.probeKind === 'FEATURE').map((one) => one.stepId);
+    const dims = (stepId: string): ReadonlySet<string> =>
+      new Set(
+        inventoryStrictSchema(probes.find((one) => one.stepId === stepId)?.schema).dimensions,
+      );
+    let cumulativePairs = 0;
+    for (let index = 1; index < featureIds.length; index += 1) {
+      const previous = dims(featureIds[index - 1] ?? '');
+      const current = dims(featureIds[index] ?? '');
+      if ([...previous].every((one) => current.has(one))) {
+        cumulativePairs += 1;
+      }
+    }
+    // Not one adjacent FEATURE pair is a superset relationship. The word "ladder" would be a lie.
+    expect(cumulativePairs).toBe(0);
+  });
+
+  it('POST-PR-131 — distinct dimension LABELS are not treated as proof of anything structural', () => {
+    // The old spec asserted only this, then the comments concluded one-axis adjacent deltas from it.
+    // The property is kept because it IS true and useful — no two probes claim the same axis — but it
+    // is asserted here as a labelling fact and nothing more.
+    const labels = probes.map((one) => one.probeDimension);
+    expect(new Set(labels).size).toBe(labels.length);
+  });
+
+  it('every probe declares its role, and exactly one is the control', () => {
+    const controls = probes.filter((one) => one.probeKind === 'CONTROL');
+    expect(controls.map((one) => one.stepId)).toEqual(['R0_MINIMAL_CONTROL']);
+    expect(probes.filter((one) => one.probeKind === 'EXACT').map((one) => one.stepId)).toEqual([
+      'R8_EXACT_PROJECTED_RIYA',
+    ]);
+    // Feature and group probes make up the rest; every probe has a role.
+    expect(probes.every((one) => one.probeKind.length > 0)).toBe(true);
   });
 
   it('isolates each dimension the S11 canaries never tested', () => {
     const dimensionsOf = (stepId: string): readonly string[] =>
-      inventoryStrictSchema(plan.find((one) => one.stepId === stepId)?.schema).dimensions;
+      inventoryStrictSchema(probes.find((one) => one.stepId === stepId)?.schema).dimensions;
 
     expect(dimensionsOf('R2_SCALAR_ARRAY')).toContain('SCALAR_ARRAY');
     expect(dimensionsOf('R3_OBJECT_ARRAY')).toContain('OBJECT_ARRAY');
@@ -211,23 +253,21 @@ describe('the reduction ladder is derived from the real schema', () => {
     }
   });
 
-  it('is deterministic — two plans over the same schema are byte-identical', () => {
-    expect(JSON.stringify(planRiyaSchemaReduction(projected))).toBe(JSON.stringify(plan));
+  it('is deterministic — two matrices over the same schema are byte-identical', () => {
+    expect(JSON.stringify(planRiyaSchemaProbeMatrix(projected))).toBe(JSON.stringify(probes));
   });
 
   it('is bounded — a future run needs a small, reviewable number of calls', () => {
-    // Nine rungs. Deliberately of the same order as the eight-canary matrix S11 was authorized for,
-    // so the next authorization is a comparable ask rather than an open-ended search.
-    expect(plan.length).toBeLessThanOrEqual(10);
+    expect(probes.length).toBe(9);
     expect(SCHEMA_DIMENSIONS.length).toBeGreaterThan(0);
   });
 
   it('refuses to plan over a document it cannot partition', () => {
-    expect(() => planRiyaSchemaReduction({ type: 'string' })).toThrow(/ROOT_NOT_OBJECT/u);
-    // A root object with none of the dimensions present fails loudly rather than producing a ladder
-    // with silently missing rungs.
+    expect(() => planRiyaSchemaProbeMatrix({ type: 'string' })).toThrow(/ROOT_NOT_OBJECT/u);
+    // A root object with none of the dimensions present fails loudly rather than producing a matrix
+    // with silently missing probes.
     expect(() =>
-      planRiyaSchemaReduction({
+      planRiyaSchemaProbeMatrix({
         type: 'object',
         properties: { a: { type: 'string' } },
         required: ['a'],

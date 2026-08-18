@@ -38,6 +38,21 @@ export const OPERATOR_RUN_GOALS = [
    * for a safety result.
    */
   'REQUEST_CONTRACT_DIAGNOSTIC',
+  /**
+   * POST-PR-131. A SCHEMA DIFFERENTIAL diagnostic: the text smoke, then nine schema probes, then
+   * stop.
+   *
+   * A SEPARATE token from `REQUEST_CONTRACT_DIAGNOSTIC`, deliberately. That goal names S11's
+   * historical eight-canary D1-D8 matrix, which varied a completion cap and a request shape
+   * together; this one holds the completion cap fixed at the low control value and varies only the
+   * SCHEMA, over real fragments of the projected production document. Reusing one token for two
+   * materially different live matrices would make S11's immutable evidence unreadable — a receipt
+   * could no longer say which matrix produced it.
+   *
+   * Strictly more conservative than `FULL_EVIDENCE` and narrower than the replication: it reaches no
+   * fixture, no evaluator, no authority, no P10 and no review bundle.
+   */
+  'SCHEMA_DIFFERENTIAL_DIAGNOSTIC',
 ] as const;
 export type OperatorRunGoal = (typeof OPERATOR_RUN_GOALS)[number];
 
@@ -58,6 +73,8 @@ export const SECOND_CREDENTIAL_NOTICES: Readonly<Record<OperatorRunGoal, string>
     'Smoke passed. Enter the same Groq credential again for the bounded safety diagnostic replication.',
   REQUEST_CONTRACT_DIAGNOSTIC:
     'Smoke passed. Enter the same Groq credential again for the bounded request-contract diagnostic.',
+  SCHEMA_DIFFERENTIAL_DIAGNOSTIC:
+    'Smoke passed. Enter the same Groq credential again for the bounded schema differential diagnostic.',
 });
 
 /**
@@ -78,4 +95,6 @@ export const REUSED_CREDENTIAL_NOTICES: Readonly<Record<OperatorRunGoal, string>
     'Smoke passed. Reusing the credential already read for the bounded safety diagnostic replication.',
   REQUEST_CONTRACT_DIAGNOSTIC:
     'Smoke passed. Reusing the credential already read for the bounded request-contract diagnostic.',
+  SCHEMA_DIFFERENTIAL_DIAGNOSTIC:
+    'Smoke passed. Reusing the credential already read for the bounded schema differential diagnostic.',
 });
