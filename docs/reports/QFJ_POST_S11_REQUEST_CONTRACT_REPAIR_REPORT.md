@@ -199,6 +199,68 @@ rejection names the dimension.
 
 ---
 
+## 6A. COMPLETION BUDGET — what it is, and what it is not
+
+`ProviderInvocationInput` carried no per-request completion bound, so `GroqModelProvider` sent its
+configured **model capability ceiling** on every invocation. The two numbers now travel separately:
+an optional `completionBudget` on the request, forwarded only when present, and clamped by the
+provider with `Math.min` against its ceiling — so an application budget can narrow a capability and
+can never widen one.
+
+The model ceiling is **not** lowered: 65,536 output / 131,072 input are unchanged. 65,536 was not
+globally replaced with 512.
+
+### `RIYA_COMPLETION_BUDGET_TOKENS = 14,336` is an OPERATIONAL budget
+
+An earlier revision of this work claimed the budget "covers every schema-legal document". **That
+claim was wrong and has been withdrawn.** The Riya schema bounds free text with
+`z.string().max(n)`, and Zod counts UTF-16 code units, not bytes. The worst case had been measured by
+filling those fields with ASCII `x`, where one unit is one byte — so what was measured was the
+largest _ASCII_ document, not the largest document.
+
+Measured against the real schema at identical field lengths:
+
+| free-text fill                        | schema-valid | serialized bytes |
+| ------------------------------------- | ------------ | ---------------- |
+| single-byte ASCII                     | yes          | 28,241           |
+| astral pair (emoji)                   | yes          | 45,077           |
+| three-byte BMP (Devanagari, CJK)      | yes          | 61,913           |
+| JSON-escaped control / lone surrogate | yes          | **112,421**      |
+
+A control character costs six serialized bytes per unit once `JSON.stringify` escapes it.
+
+### What is proven
+
+`14,336` tokens × an assumed 2 bytes/token = **28,672 serialized bytes of coverage**. That is:
+
+- **above** the schema maximum for single-byte free text (28,241 bytes);
+- **far above** a full-length 2,500-unit reply in a three-byte script — the realistic worst case for
+  this product.
+
+`ASSUMED_BYTES_PER_TOKEN = 2` is an operational assumption, conservative for ordinary ASCII JSON. It
+is **not** a proven tokenizer bound for arbitrary Unicode; no tokenizer runs offline, and no claim
+here depends on one.
+
+### What is NOT covered — and why nothing could be
+
+The pathological schema maximum (~112,421 bytes) is not covered. **No completion budget covers it**:
+at one token per byte — the floor for any tokenizer — it exceeds the model's own 65,536 output
+ceiling.
+
+**The Riya output schema therefore permits documents this model physically cannot emit.** That is a
+finding about the output contract, not about this budget.
+
+Residual risk: truncation of such a pathological answer into malformed strict JSON, which the gateway
+refuses as invalid structured output rather than accepting. The lever that would reduce it is
+contracting the citation and observation array maxima — the dominant terms, which a real turn never
+fills. **That is an owner decision about Riya's behaviour contract and was deliberately not taken
+here to rescue arithmetic.**
+
+Adversarial Unicode specs pin every figure above, including the negative claims, so an ASCII-only
+"largest document" cannot again be presented as a universal maximum.
+
+---
+
 ## 7. CONTAINMENT FOR THIS PHASE
 
 ```

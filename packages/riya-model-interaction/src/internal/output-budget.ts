@@ -1,5 +1,5 @@
 /**
- * The COMPLETION budget one Riya turn actually needs (POST-S11 REQUEST-CONTRACT REPAIR).
+ * The COMPLETION budget one Riya turn is given (POST-S11 REQUEST-CONTRACT REPAIR).
  *
  * ### What S11 established, and what it did not
  *
@@ -13,26 +13,56 @@
  * and that the candidate path had only the first. Every invocation therefore asked for the entire
  * model allowance regardless of how small the answer could possibly be.
  *
- * ### The number is DERIVED, not chosen
+ * ### This budget is OPERATIONAL. It is not a universal schema bound, and none could be.
  *
- * 512 is not adopted merely because D1 happened to use it. The budget below is computed from the
- * Riya structured output schema's OWN maxima: the largest JSON document the schema can accept is
- * constructed here, validated against the real schema so it cannot drift into being invalid, measured
- * in UTF-8 bytes, and converted to tokens under a deliberately pessimistic ratio.
+ * An earlier revision of this module claimed the budget "covers every schema-legal document". That
+ * claim was WRONG, and the way it was wrong is worth writing down because it is easy to repeat.
  *
- * If the schema gains a field or widens a bound, this number moves with it and the pinned constant's
- * spec fails — which is the point. A budget nobody can re-derive is a budget that silently rots.
+ * The Riya schema bounds free text with `z.string().max(n)`, and Zod counts **UTF-16 code units**,
+ * not bytes. The worst case was measured by filling those fields with ASCII `x`, where one unit is
+ * one byte — so the "largest document" was the largest ASCII document, which is not the largest
+ * document. Measured against the real schema, the same field limits admit:
+ *
+ * | free-text fill                        | schema-valid | serialized bytes |
+ * | ------------------------------------- | ------------ | ---------------- |
+ * | single-byte ASCII                     | yes          | ~28,000          |
+ * | astral pair (e.g. emoji)              | yes          | ~45,000          |
+ * | three-byte BMP (e.g. Devanagari, CJK) | yes          | ~62,000          |
+ * | JSON-escaped control / lone surrogate | yes          | ~112,000         |
+ *
+ * A control character costs SIX bytes per unit once `JSON.stringify` escapes it, so the true schema
+ * maximum is roughly four times the ASCII figure.
+ *
+ * ### Why no budget can carry the schema maximum
+ *
+ * At any bound at or above one token per byte, ~112,000 bytes needs more tokens than the model can
+ * emit at all — its ceiling is 65,536. **The Riya output schema therefore permits documents this
+ * model physically cannot produce**, and that is a fact about every possible completion budget, not
+ * about this one.
+ *
+ * The lever that would change it is the output contract itself: the dominant terms are the citation
+ * and observation array maxima, which a real turn never fills. Contracting them is a change to Riya's
+ * behaviour contract and an OWNER decision — deliberately not taken here to rescue arithmetic.
+ *
+ * ### So what is actually proven
+ *
+ * One thing, stated as a byte figure so it needs no judgement about realism:
+ * {@link RIYA_COMPLETION_BUDGET_TOKENS} covers {@link RIYA_COMPLETION_BUDGET_COVERED_BYTES}
+ * serialized bytes under {@link ASSUMED_BYTES_PER_TOKEN}. That is above the schema maximum for
+ * single-byte free text, and far above a full-length reply in a three-byte script. Beyond that it is
+ * an operational budget with a stated residual risk, and specs pin every claim here — including the
+ * negative ones.
  */
+import { DISCOVERY_FIELDS_FROZEN } from '@qf-jarvis/riya-agent';
+import { RIYA_CONVERSATION_PHASES } from '@qf-jarvis/riya-conversation-continuity';
+
 import {
   MAX_RIYA_REPLY_BODY_CHARS,
   RIYA_MODEL_PROVENANCES,
   riyaStructuredOutputSchema,
 } from './output-schema.js';
 
-import { DISCOVERY_FIELDS_FROZEN } from '@qf-jarvis/riya-agent';
-import { RIYA_CONVERSATION_PHASES } from '@qf-jarvis/riya-conversation-continuity';
-
-/** The schema's own bounds, restated nowhere: every one of these is imported or read from a literal. */
+/** The schema's own bounds. Everything else is imported rather than restated. */
 const MAX_REASON_CODE_CHARS = 64;
 const MAX_CITATIONS = 64;
 const MAX_KNOWLEDGE_ID_CHARS = 128;
@@ -41,14 +71,50 @@ const MAX_OBSERVATION_VALUE_CHARS = 2048;
 const MAX_QUESTION_FIELDS = 2;
 
 /**
- * The LARGEST document the Riya structured schema can accept.
+ * How a free-text field is filled when measuring.
  *
- * Every string is filled to its maximum, every array to its maximum length, and the observation union
- * uses the `SET` branch because it is the one that carries a value. Built rather than hand-measured,
- * and validated below, so "worst case" is a fact about the schema rather than an estimate about it.
+ * Not a stylistic choice. Each costs a different number of serialized bytes per UTF-16 unit, which is
+ * exactly why the previous ASCII-only measurement was not a maximum.
  */
-export function largestValidRiyaStructuredOutput(): unknown {
-  const fill = (length: number, character = 'x'): string => character.repeat(length);
+export const RIYA_FREE_TEXT_FILLS = [
+  /** One byte per unit. What a Latin-script reply mostly is. */
+  'SINGLE_BYTE_ASCII',
+  /** Two bytes per unit. */
+  'TWO_BYTE_LATIN',
+  /** A surrogate pair: four bytes across two units, so two bytes per unit. */
+  'ASTRAL_PAIR',
+  /** Three bytes per unit. Devanagari, CJK — the realistic worst case for this product. */
+  'THREE_BYTE_BMP',
+  /** Six bytes per unit once JSON-escaped. The true schema maximum. */
+  'JSON_ESCAPED_CONTROL',
+] as const;
+export type RiyaFreeTextFill = (typeof RIYA_FREE_TEXT_FILLS)[number];
+
+const FILL_CHARACTER: Readonly<Record<RiyaFreeTextFill, string>> = Object.freeze({
+  SINGLE_BYTE_ASCII: 'x',
+  TWO_BYTE_LATIN: 'é',
+  ASTRAL_PAIR: '\u{1F600}',
+  THREE_BYTE_BMP: '一',
+  JSON_ESCAPED_CONTROL: '',
+});
+
+/** Repeat to exactly `units` UTF-16 code units, which is what the schema bounds. */
+function fillToUnits(character: string, units: number): string {
+  return character.repeat(Math.ceil(units / character.length)).slice(0, units);
+}
+
+/**
+ * The largest document the schema accepts WHEN FREE TEXT USES THIS FILL.
+ *
+ * Every string is filled to its maximum in UTF-16 units and every array to its maximum length. Two
+ * fields stay ASCII whatever the fill, because their schemas carry an ASCII-only pattern: a non-ASCII
+ * `reasonCode` or `knowledgeId` would make the document schema-INVALID, and measuring an invalid
+ * document measures nothing.
+ */
+export function riyaStructuredOutputAtFill(fill: RiyaFreeTextFill): unknown {
+  const character = FILL_CHARACTER[fill];
+  const ascii = (units: number): string => 'x'.repeat(units);
+  const free = (units: number): string => fillToUnits(character, units);
   const provenance = RIYA_MODEL_PROVENANCES[0];
   // A model may not name CONTACT, CONSENT or COMPLETE as a next step; the schema enforces it, so the
   // worst case is drawn from the same filtered vocabulary rather than from a literal.
@@ -58,10 +124,12 @@ export function largestValidRiyaStructuredOutput(): unknown {
   return {
     reply: {
       kind: 'REPLY',
-      replyBody: fill(MAX_RIYA_REPLY_BODY_CHARS),
-      reasonCode: fill(MAX_REASON_CODE_CHARS),
+      replyBody: free(MAX_RIYA_REPLY_BODY_CHARS),
+      // ASCII-only by schema pattern.
+      reasonCode: ascii(MAX_REASON_CODE_CHARS),
       citations: Array.from({ length: MAX_CITATIONS }, () => ({
-        knowledgeId: fill(MAX_KNOWLEDGE_ID_CHARS),
+        // ASCII-only by schema pattern.
+        knowledgeId: ascii(MAX_KNOWLEDGE_ID_CHARS),
         version: MAX_CITATION_VERSION,
       })),
     },
@@ -70,7 +138,7 @@ export function largestValidRiyaStructuredOutput(): unknown {
       observations: DISCOVERY_FIELDS_FROZEN.map((field) => ({
         field,
         operation: 'SET',
-        value: fill(MAX_OBSERVATION_VALUE_CHARS),
+        value: free(MAX_OBSERVATION_VALUE_CHARS),
         provenance,
       })),
       skipProjectDetails: false,
@@ -83,45 +151,58 @@ export function largestValidRiyaStructuredOutput(): unknown {
 }
 
 /**
- * The worst case, in UTF-8 bytes, proven valid against the real schema.
+ * Serialized UTF-8 bytes of that document, proven schema-valid first.
  *
  * Throws rather than returning a number if the constructed document does not satisfy the schema: a
- * measurement of something the schema would reject is not a measurement of the worst case.
+ * measurement of something Riya would refuse is not a measurement of anything.
  */
-export function maxRiyaStructuredOutputBytes(): number {
-  const largest = largestValidRiyaStructuredOutput();
-  const parsed = riyaStructuredOutputSchema.safeParse(largest);
-  if (!parsed.success) {
-    throw new Error('QFJ_RIYA_WORST_CASE_OUTPUT_NOT_SCHEMA_VALID');
+export function maxRiyaStructuredOutputBytesAtFill(fill: RiyaFreeTextFill): number {
+  const document = riyaStructuredOutputAtFill(fill);
+  if (!riyaStructuredOutputSchema.safeParse(document).success) {
+    throw new Error(`QFJ_RIYA_WORST_CASE_OUTPUT_NOT_SCHEMA_VALID_${fill}`);
   }
-  return Buffer.byteLength(JSON.stringify(largest), 'utf8');
+  return Buffer.byteLength(JSON.stringify(document), 'utf8');
+}
+
+/** The schema maximum when free text is single-byte. The figure the budget below is sized to. */
+export function maxRiyaStructuredOutputBytesSingleByte(): number {
+  return maxRiyaStructuredOutputBytesAtFill('SINGLE_BYTE_ASCII');
 }
 
 /**
- * Bytes per token, assumed PESSIMISTICALLY.
+ * The TRUE schema maximum, across every fill.
  *
- * Byte-pair encoders average roughly 3.5-4 bytes per token on ASCII JSON. Assuming 2 therefore
- * roughly doubles the token estimate, which is the correct direction to be wrong in: a budget that is
- * too small truncates a legitimate answer, and truncation would look like a model quality failure.
- * It is stated as a named constant so the assumption is reviewable rather than buried in arithmetic.
+ * Computed rather than assumed, so a fill added to the vocabulary is included automatically. This is
+ * the number that exceeds what the model can emit at all.
  */
-export const PESSIMISTIC_BYTES_PER_TOKEN = 2;
+export function maxRiyaStructuredOutputBytesAnyFill(): number {
+  return Math.max(...RIYA_FREE_TEXT_FILLS.map((fill) => maxRiyaStructuredOutputBytesAtFill(fill)));
+}
 
 /**
- * Rounded UP to a multiple of this, so the governed number is legible rather than arbitrary.
+ * Bytes per token, ASSUMED for operational sizing.
  *
- * There is deliberately NO separate headroom multiplier. An earlier draft stacked a 1.5x margin on
- * top of the pessimistic ratio above, which produced roughly three times the realistic requirement
- * and is the opposite of "the smallest safe budget". The ratio already carries the safety, and the
- * one risk a multiplier was meant to cover — a schema field added between two reviews — is covered
- * better by the spec that pins the constant to this derivation and fails loudly when it moves.
+ * Byte-pair encoders average roughly 3.5-4 bytes per token on ASCII JSON, so assuming 2 is
+ * deliberately conservative for ordinary text. It is NOT a proven upper bound: no tokenizer runs in
+ * this process, and for adversarial or unusual Unicode a tokenizer can approach one token per byte.
+ *
+ * Named and exported so the assumption is reviewable rather than buried in arithmetic, and so a spec
+ * can state plainly which claims depend on it.
  */
+export const ASSUMED_BYTES_PER_TOKEN = 2;
+
+/** Rounded UP to a multiple of this, so the governed number is legible rather than arbitrary. */
 const ROUNDING_GRANULARITY = 512;
 
-/** Compute the budget from the schema. Pure and deterministic. */
-export function deriveRiyaCompletionBudgetTokens(): number {
-  const bytes = maxRiyaStructuredOutputBytes();
-  const tokens = Math.ceil(bytes / PESSIMISTIC_BYTES_PER_TOKEN);
+/**
+ * The budget that covers the SINGLE-BYTE schema maximum under the assumed ratio.
+ *
+ * Explicitly the single-byte derivation — the name says so, because the previous name did not, and
+ * that is how an ASCII measurement came to be presented as a universal one.
+ */
+export function deriveSingleByteRiyaCompletionBudgetTokens(): number {
+  const bytes = maxRiyaStructuredOutputBytesSingleByte();
+  const tokens = Math.ceil(bytes / ASSUMED_BYTES_PER_TOKEN);
   return Math.ceil(tokens / ROUNDING_GRANULARITY) * ROUNDING_GRANULARITY;
 }
 
@@ -129,25 +210,33 @@ export function deriveRiyaCompletionBudgetTokens(): number {
  * The GOVERNED per-request completion budget for one Riya turn.
  *
  * Pinned as a literal rather than computed at module load, for the same reason the candidate release
- * pins its digests: a number that recomputes itself silently absorbs a schema change that somebody
- * should have reviewed. A spec asserts this equals {@link deriveRiyaCompletionBudgetTokens}, so a
- * schema change fails loudly here instead of quietly re-budgeting production.
+ * pins its digests: a number that recomputes itself silently absorbs a schema change somebody should
+ * have reviewed. A spec asserts it equals {@link deriveSingleByteRiyaCompletionBudgetTokens}.
  *
- * This is an APPLICATION budget. It is NOT a claim about what the model can emit, and it does not
- * replace or lower the provider's model capability ceiling — the two now travel separately, which is
- * the whole repair.
+ * ### What it is
  *
- * ### What dominates it, and what would shrink it
+ * An APPLICATION budget. Not a claim about what the model can emit, and it does not lower the
+ * provider's model capability ceiling — the two travel separately, which is the repair.
  *
- * Roughly nine tenths of the measured worst case is two arrays the schema permits but a real turn
- * never fills: 64 citations at a 128-character identifier each, and one 2,048-character observation
- * value per governed discovery field. A realistic Riya answer is a few thousand bytes.
+ * ### What it provably covers
  *
- * Budgeting to the SCHEMA maximum rather than to the realistic case is deliberate. Truncating a
- * schema-legal answer yields malformed strict JSON, which would surface as a model quality failure
- * and would be exactly the kind of false signal this whole phase exists to remove. If this number
- * should be smaller, the honest lever is tightening those array bounds in the Riya output contract —
- * an owner decision about Riya's behaviour, not a request-contract repair, and therefore out of
- * scope here.
+ * {@link RIYA_COMPLETION_BUDGET_COVERED_BYTES} serialized bytes at {@link ASSUMED_BYTES_PER_TOKEN}:
+ * above the schema maximum for single-byte free text, and far above a full-length 2,500-unit reply in
+ * a three-byte script such as Devanagari — the realistic worst case for this product.
+ *
+ * ### What it does NOT cover, and why nothing could
+ *
+ * The pathological schema maximum — seven maximal observation values and a maximal reply body of
+ * JSON-escaped control characters, which the schema permits and which serialises to roughly 112,000
+ * bytes. No budget covers that: at one token per byte it exceeds the model's own 65,536 ceiling. The
+ * residual risk is truncation of such an answer into malformed strict JSON, which the gateway refuses
+ * as invalid structured output rather than accepting.
+ *
+ * Reducing that residual risk means contracting the citation and observation array maxima in Riya's
+ * output contract. That is an owner decision about behaviour, deliberately not taken here.
  */
 export const RIYA_COMPLETION_BUDGET_TOKENS = 14_336;
+
+/** The serialized-byte coverage the budget buys under the assumed ratio. Derived, never typed. */
+export const RIYA_COMPLETION_BUDGET_COVERED_BYTES =
+  RIYA_COMPLETION_BUDGET_TOKENS * ASSUMED_BYTES_PER_TOKEN;
