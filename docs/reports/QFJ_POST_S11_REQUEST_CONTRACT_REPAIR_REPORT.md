@@ -241,23 +241,45 @@ A control character costs six serialized bytes per unit once `JSON.stringify` es
 is **not** a proven tokenizer bound for arbitrary Unicode; no tokenizer runs offline, and no claim
 here depends on one.
 
-### What is NOT covered — and why nothing could be
+### Where the assumed coverage runs out
 
-The pathological schema maximum (~112,421 bytes) is not covered. **No completion budget covers it**:
-at one token per byte — the floor for any tokenizer — it exceeds the model's own 65,536 output
-ceiling.
+The pathological schema-valid document serialises to ~112,421 bytes, which is larger than the 28,672
+bytes of assumed operational coverage. That is a byte-to-byte comparison and it is all it claims.
 
-**The Riya output schema therefore permits documents this model physically cannot emit.** That is a
-finding about the output contract, not about this budget.
+### BYTES are not TOKENS — a second retracted claim
 
-Residual risk: truncation of such a pathological answer into malformed strict JSON, which the gateway
-refuses as invalid structured output rather than accepting. The lever that would reduce it is
-contracting the citation and observation array maxima — the dominant terms, which a real turn never
-fills. **That is an owner decision about Riya's behaviour contract and was deliberately not taken
-here to rescue arithmetic.**
+An intermediate revision of this report compared that ~112,421-**byte** figure against the model's
+65,536-**token** output ceiling and concluded the schema permits documents the model physically
+cannot emit. **That conclusion was invalid and is withdrawn.** The two quantities are in different
+units: a token can represent several bytes, so a larger byte count implies nothing about token count,
+and "one token per byte is the floor for any tokenizer" is not a bound any evidence here supports.
 
-Adversarial Unicode specs pin every figure above, including the negative claims, so an ASCII-only
-"largest document" cannot again be presented as a universal maximum.
+**No governed tokenizer is available offline.** A search of this repository and its dependency tree
+found no GPT-OSS-20B tokenizer package, no manifest entry, and no vocab/merges/tokenizer artifact. No
+tokenizer was downloaded, and no network request was made to obtain one.
+
+Therefore:
+
+- the **token** cost of every fixture above is **NOT MEASURED**;
+- whether the pathological document exceeds the model's 65,536-token ceiling is **UNRESOLVED**;
+- that gap is left open rather than closed with an approximation presented as a theorem.
+
+What does follow is bounded: for such a document the budget may be too small, in which case a
+truncated answer becomes malformed strict JSON and the gateway refuses it as invalid structured
+output rather than accepting it.
+
+Narrowing that gap would mean contracting the citation and observation array maxima — the dominant
+terms, which a real turn never fills. **That is an owner decision about Riya's behaviour contract, and
+no schema contraction was performed here.**
+
+### How both mistakes are prevented from returning
+
+Adversarial Unicode specs pin every byte figure above, including the negative ones, so an ASCII-only
+"largest document" cannot again be presented as a universal maximum. A structural guard additionally
+scans the budget module and its spec and fails if any ORDERING comparison places a byte-named
+quantity against a token-named one — with a self-test proving the guard fires on the exact assertion
+that was retracted. Unit conversion through the declared assumption is deliberately still permitted;
+magnitude comparison across units is not.
 
 ---
 
