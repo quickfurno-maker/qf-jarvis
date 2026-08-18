@@ -15,15 +15,13 @@
  * P10, no review bundle. A run that evaluates nothing must be structurally incapable of producing
  * something a reader could mistake for a verdict.
  */
-import { projectGroqStrictJsonSchema, renderStructuredJsonSchema } from '@qf-jarvis/model-gateway';
+import { projectGroqStrictJsonSchema } from '@qf-jarvis/model-gateway';
 import { createEvaluationBinding, createSuiteThresholds } from '@qf-jarvis/model-evaluation';
-import { RIYA_SAFETY_FIXTURES } from '@qf-jarvis/riya-candidate-evaluation-runner';
-import { createRiyaConversationModelProfile } from '@qf-jarvis/riya-model-interaction';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   computeSmokeApprovalDigest,
   parseSmokeConfig,
@@ -42,14 +40,19 @@ import {
 } from '../candidate-release.js';
 import { createRequestContractDiagnosticLedger } from '../accounting.js';
 import { DIAGNOSTIC_CANARIES } from '../diagnostic-canaries.js';
+import type { DiagnosticCanary } from '../diagnostic-canaries.js';
 import type { CanaryOutcome } from '../internal/diagnostic-classification.js';
+import {
+  captureProductionRiyaRequestFor,
+  ordinaryModelRequiredRequests,
+} from '../diagnostic-canary-materials.js';
+import type { CapturedProductionRiyaRequest } from '../diagnostic-canary-materials.js';
 import { measureRequestShape, spanOf } from '../internal/request-shape-inventory.js';
 import { runCandidateEvidenceOperator } from '../operator.js';
 import type { OperatorDeps } from '../operator.js';
 import type * as ActualPreflightModule from '../preflight.js';
 import type { PreflightInput } from '../preflight.js';
 import { createSafeConsole } from '../safe-console.js';
-import { SYNTHETIC_AVAILABILITY, syntheticContinuityFor } from '../synthetic-context.js';
 
 type ActualPreflight = typeof ActualPreflightModule;
 
@@ -78,64 +81,53 @@ function externalDir(): string {
 }
 
 /** The nine ordinary MODEL_REQUIRED safety cases — the exact set that returned 400 in S9 and S10. */
-const ORDINARY_MODEL_REQUIRED = RIYA_SAFETY_FIXTURES.filter(
-  (fixture) =>
-    fixture.executionExpectation === 'MODEL_REQUIRED' &&
-    fixture.request.caseId !== 'riya.safety.cancellation-ignored.01',
-);
+const ORDINARY_MODEL_REQUIRED = ordinaryModelRequiredRequests();
 
-/** The projected document that actually goes on the wire, via the real render + projection. */
-function firstFixture(): (typeof ORDINARY_MODEL_REQUIRED)[number] {
-  const [first] = ORDINARY_MODEL_REQUIRED;
-  if (first === undefined) {
-    throw new Error('the ordinary MODEL_REQUIRED set must not be empty');
+/**
+ * Every ordinary request, CAPTURED through the production path (HF4-R8-R1).
+ *
+ * This measurement used to build its own approximation: the real user half through
+ * `buildUserContent`, and an EMPTY string for the system half. That understated every size by the
+ * whole governed prompt, and — worse — it meant the recipe for a production request lived only in
+ * this file, which is precisely why `bin.ts` had no way to build the D7/D8 canaries and shipped
+ * without them. One helper now serves both, so the numbers in a receipt and the bytes on the wire
+ * come from the same assembled `ModelRequest`.
+ */
+async function captureAll(): Promise<readonly CapturedProductionRiyaRequest[]> {
+  const captures: CapturedProductionRiyaRequest[] = [];
+  for (const request of ORDINARY_MODEL_REQUIRED) {
+    captures.push(await captureProductionRiyaRequestFor(request));
   }
-  return first;
+  return captures;
 }
 
-function projectedRiyaSchema(): unknown {
-  const profile = createRiyaConversationModelProfile({
-    current: syntheticContinuityFor('NEED', 'r8-inventory'),
-    availabilitySnapshot: SYNTHETIC_AVAILABILITY,
-  });
-  const result = projectGroqStrictJsonSchema(renderStructuredJsonSchema(profile.structuredSchema));
+/** The projected document that actually goes on the wire, via the real render + projection. */
+function projectedRiyaSchema(raw: unknown): unknown {
+  const result = projectGroqStrictJsonSchema(raw);
   if (!result.ok) {
     throw new Error(`the real Riya schema must project: ${result.reason}`);
   }
   return result.schema;
 }
 
-/**
- * The real system + user content the production profile builds for one fixture.
- *
- * Built through `buildUserContent` and the governed prompt registry rather than approximated, so the
- * measured sizes describe the request production sends. The TEXT is never asserted on or printed.
- */
-function messagesFor(fixture: (typeof ORDINARY_MODEL_REQUIRED)[number]): readonly {
-  role: 'system' | 'user';
-  content: string;
-}[] {
-  const profile = createRiyaConversationModelProfile({
-    current: syntheticContinuityFor('NEED', fixture.request.caseId),
-    availabilitySnapshot: SYNTHETIC_AVAILABILITY,
-  });
-  const user = profile.buildUserContent({
-    normalizedText: fixture.request.syntheticUserText,
-  } as Parameters<typeof profile.buildUserContent>[0]);
-  return [
-    // The system half is the governed prompt; its SIZE is what matters here, never its text.
-    { role: 'system', content: '' },
-    { role: 'user', content: user },
-  ];
-}
-
 describe('R8-C27 — the static request-shape inventory is lengths and counts only', () => {
-  const schema = projectedRiyaSchema();
+  let captures: readonly CapturedProductionRiyaRequest[];
+  let schema: unknown;
+  let first: CapturedProductionRiyaRequest;
+  beforeAll(async () => {
+    captures = await captureAll();
+    const [head] = captures;
+    if (head === undefined) {
+      throw new Error('the ordinary MODEL_REQUIRED set must not be empty');
+    }
+    first = head;
+    schema = projectedRiyaSchema(head.rawStructuredJsonSchema);
+  });
 
   it('measures the projected Riya schema without carrying it', () => {
     const inventory = measureRequestShape({
       model: CANDIDATE_MODEL_ID,
-      messages: messagesFor(firstFixture()),
+      messages: first.messages,
       projectedSchema: schema,
       highCompletionCap: CANDIDATE_MAX_COMPLETION_TOKENS,
       responseFormatName: 'qf_structured_output',
@@ -172,14 +164,19 @@ describe('R8-C27 — the static request-shape inventory is lengths and counts on
     // Nothing content-bearing escapes: the inventory holds no message text and no schema document.
     const serialized = JSON.stringify(inventory);
     expect(serialized).not.toContain('additionalProperties');
-    expect(serialized).not.toContain(firstFixture().request.syntheticUserText);
+    expect(serialized).not.toContain(ORDINARY_MODEL_REQUIRED[0]?.syntheticUserText ?? 'x');
+    // HF4-R8-R1: the system half is now the REAL governed prompt, not a placeholder, so the
+    // measurement finally describes the request production sends.
+    expect(inventory.systemMessageChars).toBeGreaterThan(0);
+    expect(inventory.roleSequence).toContain('system');
+    expect(inventory.roleSequence).toContain('user');
   });
 
   it('spans all nine ordinary fixtures, so size variance is a measured fact', () => {
-    const inventories = ORDINARY_MODEL_REQUIRED.map((fixture) =>
+    const inventories = captures.map((capture) =>
       measureRequestShape({
         model: CANDIDATE_MODEL_ID,
-        messages: messagesFor(fixture),
+        messages: capture.messages,
         projectedSchema: schema,
         highCompletionCap: CANDIDATE_MAX_COMPLETION_TOKENS,
         responseFormatName: 'qf_structured_output',
@@ -195,7 +192,7 @@ describe('R8-C27 — the static request-shape inventory is lengths and counts on
   });
 
   it('R8-C26 the real Riya schema still projects under merged HF4-R7/R1', () => {
-    expect(() => projectedRiyaSchema()).not.toThrow();
+    expect(() => projectedRiyaSchema(first.rawStructuredJsonSchema)).not.toThrow();
   });
 });
 
@@ -281,7 +278,8 @@ describe('R8-C20/C21/C22/C30 — diagnostic mode reaches no evaluator, no P10, n
       runSmoke: () => Promise.resolve(SMOKE_PASS),
       openCandidateCredential: () => Promise.resolve({ redacted: true }),
       openCandidate: () => {
-        // Constructed, but the diagnostic must never build a safety port from it.
+        // HF4-R8-R1: a diagnostic must never reach this at all. R8 called it and threw the session
+        // away; the branch now returns before it, so `safetySessions` stays 0.
         safetySessions += 1;
         return Promise.resolve({
           safetyTurnDeps: () => {
@@ -304,19 +302,20 @@ describe('R8-C20/C21/C22/C30 — diagnostic mode reaches no evaluator, no P10, n
           accountingRefusal: () => undefined,
         });
       },
-      runDiagnosticCanary: (canary) => {
-        canariesRun += 1;
-        const result: CanaryOutcome = {
-          canaryId: canary.canaryId,
-          providerTransportStarted: true,
-          providerHttpStatus: 200,
-          providerHttpClass: 'SUCCESS_2XX',
-          providerErrorType: 'NONE',
-          providerErrorCode: 'NONE',
-          providerCompleted: true,
-        };
-        return Promise.resolve(result);
-      },
+      openDiagnosticCanaryRunner: () =>
+        Promise.resolve((canary: DiagnosticCanary) => {
+          canariesRun += 1;
+          const result: CanaryOutcome = {
+            canaryId: canary.canaryId,
+            providerTransportStarted: true,
+            providerHttpStatus: 200,
+            providerHttpClass: 'SUCCESS_2XX',
+            providerErrorType: 'NONE',
+            providerErrorCode: 'NONE',
+            providerCompleted: true,
+          };
+          return Promise.resolve(result);
+        }),
       binding: createEvaluationBinding({
         evaluationSuiteId: 'riya.candidate.safety.suite.v1',
         evaluationSuiteVersion: 2,
@@ -351,6 +350,10 @@ describe('R8-C20/C21/C22/C30 — diagnostic mode reaches no evaluator, no P10, n
     // The safety turn deps throw if ever touched, so reaching here proves the evaluator was not run.
     expect(run.lines.some((line) => line.includes('phase=safety'))).toBe(false);
     expect(run.lines.some((line) => line.includes('phase=p10'))).toBe(false);
+    // R8R1-C5/C6: the ordinary candidate session is never CONSTRUCTED in diagnostic mode, so there
+    // is no window in which a safety gateway, a cancellation controller or a second transport
+    // observer exists in a run that evaluates nothing.
+    expect(run.safetySessions).toBe(0);
   });
 
   it('R8-C22 writes no review bundle and reports none', async () => {

@@ -72,6 +72,29 @@ export type {
   DiagnosticCanaryId,
 } from './diagnostic-canaries.js';
 export { createDiagnosticCanaryPort, SYNTHETIC_CANARY_MESSAGES } from './diagnostic-canary-port.js';
+
+// MVP-P2A.2 HF4-R8-R1. The LIVE composition the executable itself uses, and the production-safe
+// helper that captures the exact Riya request D7/D8 carry. Exported because the owner review found
+// the opposite arrangement — a reviewed port that `bin.ts` never bound — and the only durable fix is
+// a composition a spec can drive end to end rather than a textual assertion about a call site.
+export {
+  captureProductionRiyaCanaryRequest,
+  createDiagnosticCanaryMaterials,
+  DIAGNOSTIC_CAPTURE_INSTANT,
+  diagnosticRepresentativeCaseId,
+} from './diagnostic-canary-materials.js';
+export type {
+  CapturedProductionRiyaRequest,
+  DiagnosticCanaryMaterials,
+} from './diagnostic-canary-materials.js';
+export {
+  createLiveDiagnosticCanaryComposition,
+  openLiveDiagnosticCanaryRunner,
+} from './live-diagnostic-canary-composition.js';
+export type {
+  LiveDiagnosticCanaryComposition,
+  LiveDiagnosticCanaryDeps,
+} from './live-diagnostic-canary-composition.js';
 export type {
   CanaryInvocationResult,
   CanaryMessage,

@@ -30,9 +30,16 @@ import {
 } from './diagnostic-canaries.js';
 import type { CanaryOutcome } from './internal/diagnostic-classification.js';
 
-/** One message, in the provider-neutral shape the gateway and the provider both speak. */
+/**
+ * One message, in the provider-neutral shape the gateway and the provider both speak.
+ *
+ * The role union is the PROVIDER's, not a narrower one of this module's choosing (HF4-R8-R1). D7/D8
+ * carry the request production actually assembles, captured rather than reconstructed, and a union
+ * that could not express one of its roles would force a filter — which would make the exact
+ * production shape into an approximation of it.
+ */
 export interface CanaryMessage {
-  readonly role: 'system' | 'user';
+  readonly role: 'system' | 'user' | 'assistant';
   readonly content: string;
 }
 
