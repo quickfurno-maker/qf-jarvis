@@ -756,3 +756,60 @@ describe('gateway integration — Groq behind the governed waist', () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------------------------------
+// POST-S11 REQUEST-CONTRACT REPAIR — the per-request completion budget.
+//
+// S11 sent the same minimal strict request twice, differing only in `max_completion_tokens`: HTTP 200
+// at 512, HTTP 413 at 65,536. The cause was that `ProviderInvocationInput` had no per-request bound,
+// so this provider put `config.maxCompletionTokens` — the MODEL CAPABILITY ceiling — on every request.
+//
+// The two numbers now travel separately. These specs pin the three cases that matter: absent (the
+// pre-repair behaviour, so every existing caller is unchanged), smaller (honoured), and larger
+// (clamped, because an application budget may narrow a capability and may never widen one).
+// ---------------------------------------------------------------------------------------------------
+describe('GroqModelProvider.invoke — per-request completion budget', () => {
+  it('falls back to the configured model ceiling when the request names no budget', async () => {
+    const harness = makeTransport(() => ({ bodyText: chatBody('ok') }));
+    const provider = new GroqModelProvider(makeConfig(harness.transport), createManualClock());
+    await provider.invoke(makeInput());
+    // Byte-for-byte the pre-repair behaviour: a caller that has not adopted a budget is unchanged.
+    expect(firstCall(harness).parsedBody['max_completion_tokens']).toBe(1024);
+  });
+
+  it('honours a request budget SMALLER than the model ceiling', async () => {
+    const harness = makeTransport(() => ({ bodyText: chatBody('ok') }));
+    const provider = new GroqModelProvider(makeConfig(harness.transport), createManualClock());
+    await provider.invoke(makeInput({ maxCompletionTokens: 512 }));
+    expect(firstCall(harness).parsedBody['max_completion_tokens']).toBe(512);
+  });
+
+  it('CLAMPS a request budget larger than the model ceiling', async () => {
+    const harness = makeTransport(() => ({ bodyText: chatBody('ok') }));
+    const provider = new GroqModelProvider(makeConfig(harness.transport), createManualClock());
+    await provider.invoke(makeInput({ maxCompletionTokens: 999_999 }));
+    // An application cannot buy more output than the provider was configured to give.
+    expect(firstCall(harness).parsedBody['max_completion_tokens']).toBe(1024);
+  });
+
+  it('ignores a nonsensical budget and falls back to the ceiling', async () => {
+    for (const nonsense of [0, -1, 1.5, Number.NaN]) {
+      const harness = makeTransport(() => ({ bodyText: chatBody('ok') }));
+      const provider = new GroqModelProvider(makeConfig(harness.transport), createManualClock());
+      await provider.invoke(makeInput({ maxCompletionTokens: nonsense }));
+      // Fail CLOSED to the governed ceiling rather than sending a value no provider would accept.
+      expect(firstCall(harness).parsedBody['max_completion_tokens']).toBe(1024);
+    }
+  });
+
+  it('the model capability ceiling remains a separate, unchanged configuration value', async () => {
+    const harness = makeTransport(() => ({ bodyText: chatBody('ok') }));
+    const config = makeConfig(harness.transport, { maxCompletionTokens: 65_536 });
+    // The capability the provider ADVERTISES is the model's, not the request's.
+    expect(config.maxCompletionTokens).toBe(65_536);
+    const provider = new GroqModelProvider(config, createManualClock());
+    await provider.invoke(makeInput({ maxCompletionTokens: 4096 }));
+    expect(firstCall(harness).parsedBody['max_completion_tokens']).toBe(4096);
+    expect(provider.capabilities().maxInputTokens).toBe(128_000);
+  });
+});

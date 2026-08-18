@@ -47,6 +47,17 @@ export interface ModelRequest {
    */
   readonly promptDigest: string;
   readonly tokenBudget: number;
+  /**
+   * The per-request COMPLETION bound in tokens (POST-S11 REQUEST-CONTRACT REPAIR).
+   *
+   * Deliberately separate from `tokenBudget`, which is the whole-request accounting estimate the
+   * budget policy checks. This one is narrower and different in kind: it is how many tokens the
+   * answer is allowed to occupy, and it is the value a provider puts on the wire.
+   *
+   * Optional so every existing caller is unchanged. Absent means the provider falls back to its
+   * configured model ceiling, which is the pre-repair behaviour.
+   */
+  readonly completionBudget?: number;
   readonly costBudget: number;
   readonly timeoutMs: number;
   readonly retryBudget: number;
@@ -95,6 +106,9 @@ const requestPrimitivesSchema = z
     promptVersion: IDENTIFIER,
     promptDigest: z.string().regex(/^[0-9a-f]{64}$/),
     tokenBudget: z.int().min(1).max(100_000_000),
+    // Bounded by the same ceiling a provider config accepts, so a request cannot name a completion
+    // budget no provider could be configured to honour.
+    completionBudget: z.int().min(1).max(1_000_000).optional(),
     costBudget: z.number().min(0).max(1_000_000),
     timeoutMs: z.int().min(1).max(600_000),
     retryBudget: z.int().min(0).max(10),
@@ -130,7 +144,11 @@ export function validateModelRequest(input: unknown): ModelRequestValidation {
   if (!parsed.success) {
     return { ok: false };
   }
-  const primitives = parsed.data;
+  // `exactOptionalPropertyTypes` is on, so an optional field must be ABSENT rather than present and
+  // `undefined`. Zod renders `.optional()` as the latter, so it is split out and re-added only when
+  // the caller actually supplied one.
+  const { completionBudget, ...primitives } = parsed.data;
+  const optionalCompletionBudget = completionBudget === undefined ? {} : { completionBudget };
 
   if (primitives.resultMode === 'STRUCTURED') {
     if (!isZodSchema(candidateSchema)) {
@@ -143,6 +161,7 @@ export function validateModelRequest(input: unknown): ModelRequestValidation {
       ok: true,
       request: Object.freeze({
         ...primitives,
+        ...optionalCompletionBudget,
         messages: Object.freeze(primitives.messages.map((m: ModelMessage) => Object.freeze(m))),
         metadata: Object.freeze({ ...primitives.metadata }),
         structuredSchema: candidateSchema,
@@ -158,6 +177,7 @@ export function validateModelRequest(input: unknown): ModelRequestValidation {
     ok: true,
     request: Object.freeze({
       ...primitives,
+      ...optionalCompletionBudget,
       messages: Object.freeze(primitives.messages.map((m: ModelMessage) => Object.freeze(m))),
       metadata: Object.freeze({ ...primitives.metadata }),
     }),

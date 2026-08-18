@@ -73,6 +73,20 @@ export type {
 } from './diagnostic-canaries.js';
 export { createDiagnosticCanaryPort, SYNTHETIC_CANARY_MESSAGES } from './diagnostic-canary-port.js';
 
+// POST-S11 REQUEST-CONTRACT REPAIR. The full reading of a matrix, not just its single token. S11
+// carried two independent findings and the classifier reported one; a caller that can see the
+// findings can no longer be misled by the summary.
+export {
+  analyseDiagnosticCanaries,
+  classifyDiagnosticCanaries,
+  DIAGNOSTIC_CLASSIFICATIONS,
+} from './internal/diagnostic-classification.js';
+export type {
+  CanaryOutcome,
+  DiagnosticAnalysis,
+  DiagnosticClassification,
+} from './internal/diagnostic-classification.js';
+
 // MVP-P2A.2 HF4-R8-R1. The LIVE composition the executable itself uses, and the production-safe
 // helper that captures the exact Riya request D7/D8 carry. Exported because the owner review found
 // the opposite arrangement — a reviewed port that `bin.ts` never bound — and the only durable fix is

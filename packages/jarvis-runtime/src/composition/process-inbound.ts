@@ -18,6 +18,7 @@ import type {
 import { createOrchestrator, runAgentTurn } from '@qf-jarvis/agent-runtime';
 import { createCoreDecisionAdapter } from '@qf-jarvis/core-decision-adapter';
 import { createModelReplyAdapter } from '@qf-jarvis/model-reply-adapter';
+import { RIYA_COMPLETION_BUDGET_TOKENS } from '@qf-jarvis/riya-model-interaction';
 import type {
   ModelReplyPromptBinding,
   ModelReplyStructuredOutputProfile,
@@ -236,6 +237,10 @@ export async function composeAndProcessInternal(
           stateReader: replyStateReader,
           clock: config.clock,
           structuredOutputProfile: riya.profile,
+          // POST-S11. The Riya envelope's own completion budget, derived from its output schema
+          // maxima. It bounds what a provider is asked to emit; it does not lower any model's
+          // published capability, and a provider still clamps it to its own configured ceiling.
+          budgets: { completionBudget: RIYA_COMPLETION_BUDGET_TOKENS },
           ...(config.gatewayInvoker === undefined ? {} : { invoker: config.gatewayInvoker }),
         });
 

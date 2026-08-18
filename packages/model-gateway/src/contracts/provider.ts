@@ -38,6 +38,18 @@ export interface ProviderInvocationInput {
    */
   readonly structuredJsonSchema?: unknown;
   readonly timeoutMs: number;
+  /**
+   * The APPLICATION's per-request completion bound, in tokens (POST-S11 REQUEST-CONTRACT REPAIR).
+   *
+   * Absent means "the caller expressed no bound", and a provider then falls back to its configured
+   * model ceiling — which is exactly what every invocation used to do unconditionally. S11's D1/D2
+   * pair returned HTTP 200 at 512 and HTTP 413 at 65,536 against an otherwise identical request, so
+   * a path with no way to ask for less than the model maximum could not stop asking for it.
+   *
+   * A provider MUST treat this as an upper bound to be clamped, never as permission to exceed its
+   * own configured ceiling: this is an application budget, and it cannot raise a model capability.
+   */
+  readonly maxCompletionTokens?: number;
   /** Cooperative cancellation. A provider that supports cancellation must honour this. */
   readonly signal: AbortSignal;
 }

@@ -86,6 +86,26 @@ export class GroqModelProvider implements ModelProvider {
     return Promise.resolve({ available: this.config.dataControlsAttested });
   }
 
+  /**
+   * The completion bound this invocation puts on the wire (POST-S11 REQUEST-CONTRACT REPAIR).
+   *
+   * `this.config.maxCompletionTokens` is the MODEL CAPABILITY ceiling — what the model can emit — and
+   * it used to be sent verbatim on every request, so a two-sentence reply asked for 65,536 tokens.
+   * S11 measured the consequence: the same minimal strict request returned HTTP 200 at 512 and HTTP
+   * 413 at 65,536.
+   *
+   * The request's own budget now wins when it is smaller. It can only ever narrow: the ceiling is
+   * still applied with `Math.min`, so an application cannot use this to ask for more than the model
+   * was configured to give, and a request that names no budget behaves exactly as it did before.
+   */
+  private completionTokensFor(input: ProviderInvocationInput): number {
+    const requested = input.maxCompletionTokens;
+    if (requested === undefined || !Number.isInteger(requested) || requested < 1) {
+      return this.config.maxCompletionTokens;
+    }
+    return Math.min(requested, this.config.maxCompletionTokens);
+  }
+
   public async invoke(input: ProviderInvocationInput): Promise<ProviderInvocationResult> {
     if (isAborted(input.signal)) {
       return { status: 'cancelled' };
@@ -109,7 +129,7 @@ export class GroqModelProvider implements ModelProvider {
       messages: input.messages,
       stream: false,
       n: 1,
-      max_completion_tokens: this.config.maxCompletionTokens,
+      max_completion_tokens: this.completionTokensFor(input),
       ...(responseFormat === undefined ? {} : { response_format: responseFormat }),
     };
 

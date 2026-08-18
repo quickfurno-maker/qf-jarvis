@@ -17,15 +17,35 @@
  *
  * ### It refuses to over-claim
  *
- * Each rule carries the preconditions that make its conclusion actually follow. `D1 accepted, D2
- * rejected` means the cap is implicated; it does NOT also mean `anyOf` is implicated just because D3
- * happened to fail behind a cap that already fails. So the `anyOf` and numeric-enum rules require D2
- * to have been accepted first. When two genuinely different findings both hold, the answer is
- * `MIXED_OR_INCONCLUSIVE` — an honest "the matrix disagrees with itself" beats a confident wrong
- * dimension, because the next phase spends a live authorization on whatever this says.
+ * Each rule carries the preconditions that make its conclusion actually follow. When two genuinely
+ * different findings both hold, the answer is `MIXED_OR_INCONCLUSIVE` — an honest "the matrix
+ * disagrees with itself" beats a confident wrong dimension, because the next phase spends a live
+ * authorization on whatever this says.
+ *
+ * ### The precedence defect S11 exposed, and the repair
+ *
+ * The original preconditions used the WRONG control. The shape rules — `anyOf`, numeric enum, real
+ * Riya schema — each required D2 to have been ACCEPTED, on the reasoning that "behind a cap that
+ * already fails, a shape failing says nothing about the shape".
+ *
+ * That reasoning is sound but it named the wrong canary. D2 is the HIGH-cap canary. D3, D4, D5 and
+ * D7 all run at LOW_512, so D2's fate cannot explain any of them; the control that shares their cap
+ * is D1. Gating low-cap shape rules on a high-cap result meant any high-cap sensitivity silently
+ * suppressed every low-cap shape finding.
+ *
+ * S11 is exactly that matrix. D1 accepted at 512 and D2 was rejected at 65,536, while D5 — the real
+ * projected Riya schema at 512 — was independently rejected. The cap rule fired, the real-schema rule
+ * could not, and a matrix carrying two findings was reported as the single cause
+ * `HIGH_COMPLETION_CAP_SENSITIVE`. The completion-cap repair alone would then have been read as the
+ * whole fix, and the next live authorization would have been spent rediscovering D5.
+ *
+ * Every shape rule now gates on its OWN cap's control. The cap axis is read from `CANARY_CAP_PAIRS`
+ * rather than a hand-picked subset, so the matrix and the classifier cannot drift. And because
+ * `MIXED_OR_INCONCLUSIVE` is deliberately unspecific, {@link analyseDiagnosticCanaries} also returns
+ * the findings that held — a reader should not have to re-derive which two collided.
  */
 import type { DiagnosticCanaryId } from '../diagnostic-canaries.js';
-import { DIAGNOSTIC_CANARY_IDS } from '../diagnostic-canaries.js';
+import { CANARY_CAP_PAIRS, DIAGNOSTIC_CANARY_IDS } from '../diagnostic-canaries.js';
 import type {
   CandidateProviderErrorCode,
   CandidateProviderErrorType,
@@ -109,47 +129,41 @@ function rejected(
 export function classifyDiagnosticCanaries(
   outcomes: readonly CanaryOutcome[],
 ): DiagnosticClassification {
-  const byId = new Map<DiagnosticCanaryId, CanaryOutcome>();
-  for (const one of outcomes) {
-    byId.set(one.canaryId, one);
-  }
-  if (!DIAGNOSTIC_CANARY_IDS.every((id) => byId.has(id))) {
-    return 'DIAGNOSTIC_NOT_RUN';
-  }
+  return analyseDiagnosticCanaries(outcomes).classification;
+}
 
-  if (DIAGNOSTIC_CANARY_IDS.every((id) => accepted(byId, id))) {
-    return 'CURRENT_EXACT_REQUEST_ACCEPTED';
-  }
-
+/** Every rule that holds for a COMPLETE matrix. Split out so the analysis below can report them. */
+function matchedFindings(
+  byId: ReadonlyMap<DiagnosticCanaryId, CanaryOutcome>,
+): ReadonlySet<DiagnosticClassification> {
   const matched = new Set<DiagnosticClassification>();
 
-  // The floor. If the smallest documented strict schema is refused, every later canary is refused for
-  // a reason that has nothing to do with what it was varying — so no other rule may fire.
+  // The floor. If the smallest documented strict schema is refused AT THE LOW CAP, every later canary
+  // is refused for a reason that has nothing to do with what it was varying — so no shape rule below
+  // may fire, and each one re-checks `accepted(D1)` to say so.
   if (rejected(byId, 'D1')) {
     matched.add('MINIMAL_STRICT_REJECTED');
   }
 
-  // A pair that disagrees across the cap and nothing else. Either pair is sufficient.
-  if (
-    (accepted(byId, 'D1') && rejected(byId, 'D2')) ||
-    (accepted(byId, 'D7') && rejected(byId, 'D8'))
-  ) {
+  // Any governed cap pair that disagrees. Read from CANARY_CAP_PAIRS — the same constant the matrix
+  // declares — so a pair added there is read here rather than silently ignored.
+  if (CANARY_CAP_PAIRS.some(([low, high]) => accepted(byId, low) && rejected(byId, high))) {
     matched.add('HIGH_COMPLETION_CAP_SENSITIVE');
   }
 
-  // These require D2 accepted as well as D1: behind a cap that already fails, a low-cap shape failing
-  // says nothing about the shape.
-  if (accepted(byId, 'D1') && accepted(byId, 'D2') && rejected(byId, 'D3')) {
+  // The LOW-cap shape rules. Their control is D1 — the canary that shares their completion cap — and
+  // deliberately NOT D2. See the module note: gating these on the high-cap canary is what let S11's
+  // real-schema rejection be masked by its cap sensitivity.
+  if (accepted(byId, 'D1') && rejected(byId, 'D3')) {
     matched.add('ANYOF_NULLABLE_REJECTED');
   }
-  if (accepted(byId, 'D1') && accepted(byId, 'D2') && rejected(byId, 'D4')) {
+  if (accepted(byId, 'D1') && rejected(byId, 'D4')) {
     matched.add('NUMERIC_ENUM_REJECTED');
   }
 
-  // Every synthetic shape passed, so the real schema is the first thing that did not.
+  // Every synthetic shape passed at this cap, so the real schema is the first thing that did not.
   if (
     accepted(byId, 'D1') &&
-    accepted(byId, 'D2') &&
     accepted(byId, 'D3') &&
     accepted(byId, 'D4') &&
     rejected(byId, 'D5')
@@ -157,16 +171,58 @@ export function classifyDiagnosticCanaries(
     matched.add('REAL_RIYA_SCHEMA_REJECTED');
   }
 
-  // The schema is fine at both caps, so what is left is the message shape.
-  if (accepted(byId, 'D5') && accepted(byId, 'D6') && rejected(byId, 'D7')) {
+  // The real schema is fine at this cap, so what D7 adds — the production message shape — is what is
+  // left. Its control is D5, which carries the same schema at the same cap.
+  if (accepted(byId, 'D5') && rejected(byId, 'D7')) {
     matched.add('EXACT_RIYA_MESSAGE_SHAPE_REJECTED');
   }
 
-  if (matched.size === 1) {
-    const [only] = [...matched];
-    return only ?? 'MIXED_OR_INCONCLUSIVE';
+  return matched;
+}
+
+/**
+ * The full reading of a matrix: the classification, and every finding that held.
+ *
+ * `MIXED_OR_INCONCLUSIVE` is honest but unspecific, and S11 is precisely the case where the detail
+ * matters — "cap-sensitive AND the real schema was rejected" is two pieces of work, and a reader who
+ * only sees `MIXED` has to re-derive both from eight status codes. The findings are the same closed
+ * tokens, so nothing content-bearing is added by reporting them.
+ */
+export interface DiagnosticAnalysis {
+  readonly classification: DiagnosticClassification;
+  /** Every rule that fired, in vocabulary order. Empty when the matrix fits no rule. */
+  readonly findings: readonly DiagnosticClassification[];
+}
+
+export function analyseDiagnosticCanaries(outcomes: readonly CanaryOutcome[]): DiagnosticAnalysis {
+  const byId = new Map<DiagnosticCanaryId, CanaryOutcome>();
+  for (const one of outcomes) {
+    byId.set(one.canaryId, one);
   }
-  // Zero rules fired, or two different findings both hold. Either way this matrix does not name one
-  // dimension, and saying so is the useful answer.
-  return 'MIXED_OR_INCONCLUSIVE';
+  if (!DIAGNOSTIC_CANARY_IDS.every((id) => byId.has(id))) {
+    return Object.freeze({ classification: 'DIAGNOSTIC_NOT_RUN' as const, findings: [] });
+  }
+  if (DIAGNOSTIC_CANARY_IDS.every((id) => accepted(byId, id))) {
+    return Object.freeze({
+      classification: 'CURRENT_EXACT_REQUEST_ACCEPTED' as const,
+      findings: Object.freeze(['CURRENT_EXACT_REQUEST_ACCEPTED' as const]),
+    });
+  }
+
+  const matched = matchedFindings(byId);
+  // Vocabulary order, so two runs of the same matrix report the same list.
+  const findings = DIAGNOSTIC_CLASSIFICATIONS.filter((one) => matched.has(one));
+  if (matched.size === 1) {
+    const [only] = findings;
+    return Object.freeze({
+      classification: only ?? 'MIXED_OR_INCONCLUSIVE',
+      findings: Object.freeze(findings),
+    });
+  }
+  // Zero rules fired, or two different findings both hold. Either way this matrix does not name ONE
+  // dimension. Saying so — and naming the ones that did hold — is the useful answer.
+  return Object.freeze({
+    classification: 'MIXED_OR_INCONCLUSIVE' as const,
+    findings: Object.freeze(findings),
+  });
 }

@@ -229,6 +229,11 @@ export function createModelGateway(config: ModelGatewayConfig): ModelGateway {
         messages: request.messages,
         resultMode: request.resultMode,
         timeoutMs: request.timeoutMs,
+        // Forwarded only when the request expressed one. Absent stays absent, so a provider's own
+        // fallback remains the pre-repair behaviour for every caller that has not adopted a budget.
+        ...(request.completionBudget === undefined
+          ? {}
+          : { maxCompletionTokens: request.completionBudget }),
         signal,
         ...(request.resultMode === 'STRUCTURED'
           ? { structuredJsonSchema: toStructuredJsonSchema(request) }
