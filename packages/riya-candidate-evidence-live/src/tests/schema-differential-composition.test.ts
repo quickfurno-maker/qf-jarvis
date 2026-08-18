@@ -44,7 +44,7 @@ import { captureProductionRiyaCanaryRequest } from '../diagnostic-canary-materia
 import type { CapturedProductionRiyaRequest } from '../diagnostic-canary-materials.js';
 import { OPERATOR_EXIT_CODES } from '../exit-codes.js';
 import { SCHEMA_PROBE_STEP_IDS } from '../internal/riya-schema-probe-matrix.js';
-import { openLiveSchemaProbeRunner } from '../live-schema-probe-composition.js';
+import { createLiveSchemaProbeComposition } from '../live-schema-probe-composition.js';
 import { runCandidateEvidenceOperator } from '../operator.js';
 import type { OperatorDeps } from '../operator.js';
 import type * as ActualPreflightModule from '../preflight.js';
@@ -217,6 +217,7 @@ interface RunRecord {
   readonly credentialsHandedToRunner: readonly unknown[];
   readonly candidateCredential: unknown;
   readonly sends: readonly RecordedSend[];
+  readonly composition: ReturnType<typeof createLiveSchemaProbeComposition> | undefined;
 }
 
 interface RunOptions {
@@ -236,6 +237,7 @@ async function runDiagnostic(options: RunOptions = {}): Promise<RunRecord> {
   const credentialsHandedToRunner: unknown[] = [];
   let runnerOpenCalls = 0;
   let openCandidateCalls = 0;
+  let composition: ReturnType<typeof createLiveSchemaProbeComposition> | undefined;
 
   const deps: OperatorDeps = {
     console: createSafeConsole((line) => lines.push(line)),
@@ -270,13 +272,14 @@ async function runDiagnostic(options: RunOptions = {}): Promise<RunRecord> {
               return Promise.reject(new Error('SECRET-BIND-DETAIL-MUST-NOT-APPEAR'));
             }
             // THE composition bin.ts uses, with only the transport and the projection injected.
-            return openLiveSchemaProbeRunner({
+            // The SAME composition bin.ts uses, kept so both budget axes are observable directly.
+            composition = createLiveSchemaProbeComposition({
               credential,
               openTransport: () => wire.transport,
               captured,
               projectedSchema,
-              projectSchema: () => projectedSchema,
             });
+            return Promise.resolve({ probes: composition.probes, run: composition.run });
           },
         }),
     binding: createEvaluationBinding({
@@ -311,6 +314,7 @@ async function runDiagnostic(options: RunOptions = {}): Promise<RunRecord> {
     credentialsHandedToRunner,
     candidateCredential,
     sends: wire.sends(),
+    composition,
   };
 }
 
@@ -372,24 +376,118 @@ describe('a healthy run executes exactly R0-R8 once each', () => {
     });
   });
 
-  it('EVERY probe goes on the wire at the fixed 512 cap', async () => {
+  it('EVERY probe goes on the wire at the fixed 512 budget', async () => {
     const run = await runDiagnostic();
     for (const send of run.sends) {
       expect(send.maxCompletionTokens).toBe(SCHEMA_PROBE_COMPLETION_CAP);
       expect(send.maxCompletionTokens).toBe(512);
-      // The two caps a probe must never inherit.
+      // The two budgets a probe must never inherit.
       expect(send.maxCompletionTokens).not.toBe(RIYA_COMPLETION_BUDGET_TOKENS);
       expect(send.maxCompletionTokens).not.toBe(CANDIDATE_MAX_COMPLETION_TOKENS);
       expect(send.responseFormatStrict).toBe(true);
       expect(send.model).toBe(CANDIDATE_MODEL_ID);
       expect(send.signalAbortedAtSend).toBe(false);
     }
-    // The model capability ceiling itself is untouched by this run.
-    expect(CANDIDATE_MAX_COMPLETION_TOKENS).toBe(65_536);
     // One holder: every request carries the same authorization value.
     expect(new Set(run.sends.map((one) => one.authorization)).size).toBe(1);
     // Nine distinct controllers: a shared signal would make one probe's fate another's.
     expect(new Set(run.sends.map((one) => one.signal)).size).toBe(9);
+  });
+
+  it('CAPABILITY ceiling and REQUEST budget stay separate in the composition', async () => {
+    // THE regression PR #131 repaired and an earlier revision of this harness reintroduced: passing
+    // the 512 probe budget into `createGroqProviderConfig` made the diagnostic provider DECLARE a
+    // 512-token model capability. The wire was right for the wrong reason.
+    //
+    // Observed from the composition itself rather than from source text.
+    const run = await runDiagnostic();
+    const composition = run.composition;
+    expect(composition).toBeDefined();
+    if (composition === undefined) {
+      return;
+    }
+
+    // Nine providers built, one per probe.
+    const ceilings = [...composition.capabilityCeilingsUsed()];
+    const budgets = [...composition.requestCompletionBudgetsUsed()];
+    expect(ceilings).toHaveLength(9);
+    expect(budgets).toHaveLength(9);
+
+    // The MODEL CAPABILITY the diagnostic provider declares is the candidate's real one.
+    expect(new Set(ceilings)).toEqual(new Set([CANDIDATE_MAX_COMPLETION_TOKENS]));
+    expect(new Set(ceilings)).toEqual(new Set([65_536]));
+
+    // The PER-REQUEST budget is the probe cap, and it is a different number.
+    expect(new Set(budgets)).toEqual(new Set([SCHEMA_PROBE_COMPLETION_CAP]));
+    expect(new Set(budgets)).toEqual(new Set([512]));
+    expect(budgets[0]).not.toBe(ceilings[0]);
+
+    // And the clamp resolves to the budget on the wire: min(512, 65_536).
+    for (const send of run.sends) {
+      expect(send.maxCompletionTokens).toBe(Math.min(512, 65_536));
+    }
+
+    // The governed constants are untouched by this run.
+    expect(CANDIDATE_MAX_COMPLETION_TOKENS).toBe(65_536);
+    expect(RIYA_COMPLETION_BUDGET_TOKENS).toBe(14_336);
+  });
+
+  it('the wire schema for EVERY probe is the production projection of its planned schema', async () => {
+    // The matrix is planned from the already-projected document, and the provider projects again
+    // before building `response_format`. That second pass must be identity-preserving on these
+    // fragments, or the diagnostic would be measuring a transformed target rather than the one
+    // reviewed. Proven per probe rather than assumed.
+    const run = await runDiagnostic();
+    const composition = run.composition;
+    expect(composition).toBeDefined();
+    if (composition === undefined) {
+      return;
+    }
+    const probes = composition.probes;
+    expect(run.sends).toHaveLength(probes.length);
+
+    probes.forEach((probe, index) => {
+      const projection = projectGroqStrictJsonSchema(probe.schema);
+      expect(projection.ok, probe.stepId).toBe(true);
+      if (!projection.ok) {
+        return;
+      }
+      // Send order corresponds exactly to R0-R8.
+      expect(JSON.stringify(run.sends[index]?.responseFormatSchema), probe.stepId).toBe(
+        JSON.stringify(projection.schema),
+      );
+      // Identity-preserving: projecting an already-projected fragment changes nothing.
+      expect(JSON.stringify(projection.schema), probe.stepId).toBe(JSON.stringify(probe.schema));
+    });
+  });
+
+  it('R8 puts the EXACT projected production Riya schema on the wire', async () => {
+    // The owner exit criterion. R8 is the D5 shape, and what reaches the wire must be structurally
+    // the exact projected document the matrix was planned from — not a re-derived approximation.
+    const run = await runDiagnostic();
+    const composition = run.composition;
+    expect(composition).toBeDefined();
+    if (composition === undefined) {
+      return;
+    }
+    const index = composition.probes.findIndex((one) => one.stepId === 'R8_EXACT_PROJECTED_RIYA');
+    expect(index).toBeGreaterThanOrEqual(0);
+    const sent = run.sends[index]?.responseFormatSchema;
+    expect(JSON.stringify(sent)).toBe(JSON.stringify(projectedSchema));
+    // And it is the real document, not a stub.
+    expect(JSON.stringify(sent)).toContain('properties');
+    expect(JSON.stringify(sent).length).toBeGreaterThan(500);
+  });
+
+  it('the send ORDER is exactly R0 through R8', async () => {
+    const run = await runDiagnostic();
+    const composition = run.composition;
+    expect(composition?.probes.map((one) => one.stepId)).toEqual([...SCHEMA_PROBE_STEP_IDS]);
+    // Each probe row is emitted in the same order, so a reader can align rows with sends.
+    const rowIds = run.lines
+      .filter((line) => line.includes('status=PROBE'))
+      .map((line) => /stepId=(\S+)/u.exec(line)?.[1]);
+    expect(rowIds).toEqual([...SCHEMA_PROBE_STEP_IDS]);
   });
 
   it('the receipt names the schema matrix and states safety and P10 as zero', async () => {
@@ -447,9 +545,12 @@ describe('the stop rules', () => {
     const run = await runDiagnostic({ statusFor: (index) => (index === 2 ? 400 : 200) });
     expect(run.sends).toHaveLength(9);
     const classification = run.lines.find((line) => line.includes('status=CLASSIFICATION')) ?? '';
+    // R8 was accepted here, so the SUMMARY is the acceptance token — the exact production schema was
+    // taken, and an isolated wrapper rejection may not headline as though it had not been.
     expect(classification).toContain(
-      'schemaDifferentialClassification=ISOLATED_SCHEMA_FEATURE_REJECTION',
+      'schemaDifferentialClassification=EXACT_PROJECTED_RIYA_SCHEMA_ACCEPTED_LOW_CAP',
     );
+    // And the isolated finding is still fully visible.
     expect(classification).toContain('rejectedStepIds=R2_SCALAR_ARRAY');
   });
 
@@ -462,6 +563,30 @@ describe('the stop rules', () => {
     expect(classification).toContain('R2_SCALAR_ARRAY');
     expect(classification).toContain('R4_ANYOF_ARRAY_ITEMS');
     expect(classification).toContain('R6_REPLY_GROUP');
+  });
+
+  it('wrapper rejections WITH an R8 rejection report ISOLATED_SCHEMA_FEATURE_REJECTION', async () => {
+    // The other side of the corrected precedence, driven through the real composition: R2 and R8
+    // (indices 2 and 8) both refused. Now the exact document really was rejected, so the isolated
+    // finding is the headline — and both ids survive.
+    const run = await runDiagnostic({ statusFor: (index) => ([2, 8].includes(index) ? 400 : 200) });
+    expect(run.sends).toHaveLength(9);
+    const classification = run.lines.find((line) => line.includes('status=CLASSIFICATION')) ?? '';
+    expect(classification).toContain(
+      'schemaDifferentialClassification=ISOLATED_SCHEMA_FEATURE_REJECTION',
+    );
+    expect(classification).toContain('R2_SCALAR_ARRAY');
+    expect(classification).toContain('R8_EXACT_PROJECTED_RIYA');
+  });
+
+  it('only R8 rejected reports FULL_SCHEMA_COMPOSITION_REJECTED', async () => {
+    const run = await runDiagnostic({ statusFor: (index) => (index === 8 ? 400 : 200) });
+    expect(run.sends).toHaveLength(9);
+    const classification = run.lines.find((line) => line.includes('status=CLASSIFICATION')) ?? '';
+    expect(classification).toContain(
+      'schemaDifferentialClassification=FULL_SCHEMA_COMPOSITION_REJECTED',
+    );
+    expect(classification).toContain('rejectedStepIds=R8_EXACT_PROJECTED_RIYA');
   });
 
   it('a failed SMOKE never constructs the probe runner', async () => {

@@ -17,9 +17,21 @@
  * One `CandidateTransportObservations` recorder and one observed transport serve all nine probes, so
  * a per-probe observation is a fact about that probe's own attribution window.
  *
- * Every probe is built at `SCHEMA_PROBE_COMPLETION_CAP`. The cap is a constant here, not a per-probe
- * field — S11 proved the high cap is its own sensitive axis, and a schema-isolation run that also
- * varied it would isolate nothing.
+ * ### Capability ceiling and request budget stay SEPARATE
+ *
+ * PR #131 repaired exactly this confusion, and an earlier revision of this file reintroduced it: it
+ * passed the 512 probe cap into `createGroqProviderConfig`, so the diagnostic provider's declared
+ * MODEL CAPABILITY became 512. The wire happened to be right for the wrong reason.
+ *
+ * The two axes are now distinct here as they are everywhere else:
+ *
+ * - capability ceiling = `CANDIDATE_MAX_COMPLETION_TOKENS` (65,536) — what the model can emit;
+ * - request budget = `SCHEMA_PROBE_COMPLETION_CAP` (512) — what this diagnostic asks for.
+ *
+ * The provider clamps with `Math.min(512, 65_536)`, so `max_completion_tokens=512` reaches the wire
+ * while neither constant is misrepresented. The cap is fixed for every probe because S11 proved the
+ * high cap is its own sensitive axis, and a schema-isolation run that also varied it would isolate
+ * nothing.
  */
 import {
   createFetchGroqTransport,
@@ -31,6 +43,7 @@ import {
 import type { GroqTransport } from '@qf-jarvis/model-gateway';
 
 import {
+  CANDIDATE_MAX_COMPLETION_TOKENS,
   CANDIDATE_MAX_INPUT_TOKENS,
   CANDIDATE_MODEL_ID,
   CANDIDATE_PROVIDER_ID,
@@ -44,7 +57,7 @@ import type { CapturedProductionRiyaRequest } from './diagnostic-canary-material
 import type { SchemaProbe } from './internal/riya-schema-probe-matrix.js';
 import { planRiyaSchemaProbeMatrix } from './internal/riya-schema-probe-matrix.js';
 import type { SchemaProbeOutcome } from './internal/schema-differential-classification.js';
-import { createSchemaProbePort, SCHEMA_PROBE_COMPLETION_CAP } from './schema-probe-port.js';
+import { createSchemaProbePort } from './schema-probe-port.js';
 import type { SchemaProbeProviderSeam } from './schema-probe-port.js';
 
 /** What the live schema probe runner needs. Everything except the credential has a default. */
@@ -70,8 +83,15 @@ export interface LiveSchemaProbeComposition {
   readonly run: (probe: SchemaProbe) => Promise<SchemaProbeOutcome>;
   /** The ONE recorder every probe is observed through. */
   readonly observations: CandidateTransportObservations;
-  /** The exact completion caps handed to `createGroqProviderConfig`, in call order. */
-  readonly completionCapsUsed: () => readonly number[];
+  /**
+   * The per-request completion BUDGETS asked for, in call order. Expect 512 each.
+   *
+   * Separate from the capability ceilings below so a spec can prove the two axes did not collapse
+   * into one — the exact defect this composition previously had.
+   */
+  readonly requestCompletionBudgetsUsed: () => readonly number[];
+  /** The MODEL CAPABILITY ceilings the built provider configs declared. Expect 65,536 each. */
+  readonly capabilityCeilingsUsed: () => readonly number[];
 }
 
 /** Build the composition over an already-projected schema. */
@@ -96,34 +116,39 @@ export function createLiveSchemaProbeComposition(
   );
   const probes = planRiyaSchemaProbeMatrix(deps.projectedSchema);
 
-  const capsUsed: number[] = [];
-  const providerForCompletionCap = (maxCompletionTokens: number): SchemaProbeProviderSeam => {
-    capsUsed.push(maxCompletionTokens);
-    // The candidate's own identity at every field. Only the completion budget differs from a serving
-    // request, and it differs to the fixed low probe cap rather than to anything a probe chose.
+  // Recorded separately, because the whole point is that they are different numbers.
+  const requestBudgetsUsed: number[] = [];
+  const capabilityCeilingsUsed: number[] = [];
+  const providerForCompletionCap = (requestCompletionBudget: number): SchemaProbeProviderSeam => {
+    requestBudgetsUsed.push(requestCompletionBudget);
+    // The candidate's own identity at EVERY field, including the model capability ceiling. This
+    // provider is configured exactly as a serving one; what differs is the per-request budget below.
     const config = createGroqProviderConfig({
       providerId: CANDIDATE_PROVIDER_ID,
       modelId: CANDIDATE_MODEL_ID,
       modelVersion: CANDIDATE_RELEASE.modelVersion,
       executionClass: 'HOSTED',
       maxInputTokens: CANDIDATE_MAX_INPUT_TOKENS,
-      // The provider clamps a request budget against this ceiling, so the config ceiling IS the probe
-      // cap here — a probe cannot inherit the model maximum even by accident.
-      maxCompletionTokens,
+      // The MODEL CAPABILITY ceiling — what the model can emit. NOT the probe budget: writing 512
+      // here would misdescribe the model, which is the confusion PR #131 exists to have removed.
+      maxCompletionTokens: CANDIDATE_MAX_COMPLETION_TOKENS,
       supportsStrictJsonSchema: CANDIDATE_SUPPORTS_STRICT_JSON,
       apiKey,
       transport: observedTransport,
       // Proven by preflight from the governed attestation, exactly as the candidate gateway proves it.
       dataControlsAttested: true,
     });
+    capabilityCeilingsUsed.push(config.maxCompletionTokens);
     const provider = new GroqModelProvider(config, clock);
     return {
       invoke: (input) =>
-        // The ONE thing this wrapper adds: a FRESH controller per invocation, so every probe carries a
-        // live non-aborted signal and no probe can cancel another.
         provider.invoke({
           ...input,
-          maxCompletionTokens: SCHEMA_PROBE_COMPLETION_CAP,
+          // The per-request BUDGET. The provider clamps it against the capability ceiling above, so
+          // the wire carries min(512, 65_536) = 512 with both numbers still meaning what they say.
+          maxCompletionTokens: requestCompletionBudget,
+          // A FRESH controller per invocation, so every probe carries a live non-aborted signal and
+          // no probe can cancel another.
           signal: new AbortController().signal,
         }),
     };
@@ -140,7 +165,8 @@ export function createLiveSchemaProbeComposition(
     probes,
     run,
     observations,
-    completionCapsUsed: () => Object.freeze([...capsUsed]),
+    requestCompletionBudgetsUsed: () => Object.freeze([...requestBudgetsUsed]),
+    capabilityCeilingsUsed: () => Object.freeze([...capabilityCeilingsUsed]),
   });
 }
 

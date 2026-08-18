@@ -337,6 +337,42 @@ Classifications: `DIAGNOSTIC_INVALID_CONTROL`, `ISOLATED_SCHEMA_FEATURE_REJECTIO
 accepted with synthetic messages at the low cap. It would not establish the operational Riya budget,
 the production message shape, safety eligibility, model quality, P10 eligibility or release readiness.
 
+### Summary precedence — corrected after owner review
+
+Two precedences, and only two:
+
+1. **R0 (control)** — if it fails, nothing else is attributable to the Riya schema and the matrix
+   stops.
+2. **R8 (exact document)** — if it is **accepted**, the summary is
+   `EXACT_PROJECTED_RIYA_SCHEMA_ACCEPTED_LOW_CAP` regardless of any isolated wrapper rejection. R8 is
+   the D5 shape under this envelope, so an accepted R8 means the historical D5 rejection was not
+   reproduced in this run.
+
+An earlier revision checked wrapper rejections first, so `R2 rejected + R8 accepted` headlined
+`ISOLATED_SCHEMA_FEATURE_REJECTION` — announcing a schema rejection in a run where the production
+schema had actually been accepted. Isolated findings always remain in `rejectedStepIds`; they are
+evidence about that wrapper shape, not the headline.
+
+Between FEATURE and GROUP probes there is no precedence at all.
+
+**No monotonicity is assumed.** A provider may refuse a minimal wrapper and accept the full document,
+or accept every fragment and refuse their composition. Observing which actually happens is the whole
+point of an orthogonal matrix.
+
+### Capability ceiling vs request budget
+
+The diagnostic provider is configured at the **real** model capability ceiling
+(`CANDIDATE_MAX_COMPLETION_TOKENS = 65,536`) and asks for a **per-request budget** of
+`SCHEMA_PROBE_COMPLETION_CAP = 512`. The provider clamps `min(512, 65_536)`, so the wire carries 512
+while neither constant is misrepresented — the separation PR #131 established. A spec observes both
+axes from the composition itself.
+
+### Wire-schema equivalence
+
+The matrix is planned from the already-projected document and the provider projects again before
+building `response_format`. A spec proves that second pass is **identity-preserving** for every probe,
+and that R8's wire schema structurally equals the exact projected production Riya schema.
+
 **This matrix has NOT been executed.** It requires separate owner authorization.
 
 ---

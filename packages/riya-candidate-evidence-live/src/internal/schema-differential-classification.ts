@@ -14,12 +14,26 @@
  * complete set of rejected step ids, always, plus a closed summary token that says what SHAPE the
  * matrix has rather than which single thing is to blame.
  *
- * ### The control is the one exception
+ * ### Two precedences, and only two
  *
- * R0 is the only probe whose failure changes how the others may be read. If the known-good minimal
- * strict schema is refused, the account, the model entitlement or the request envelope moved, and
- * nothing the remaining probes did could be attributed to the Riya schema. That is a precedence, and
- * it is the only one.
+ * R0 is the probe whose failure changes how the others may be read. If the known-good minimal strict
+ * schema is refused, the account, the model entitlement or the request envelope moved, and nothing
+ * the remaining probes did could be attributed to the Riya schema.
+ *
+ * R8 is the probe that decides the SUMMARY. It is the exact D5 shape under this envelope, so if the
+ * provider took it, the historical D5 rejection is not reproduced in this run and no isolated wrapper
+ * result can overturn that. An earlier revision had this backwards — a rejected wrapper headlined a
+ * run whose exact production schema had been accepted.
+ *
+ * Between the FEATURE and GROUP probes there is no precedence at all: they are reported as a set.
+ *
+ * ### What is deliberately NOT assumed
+ *
+ * That a rejected fragment implies a rejected document, or the reverse. These probes are wrapped
+ * independently, so a provider may refuse a minimal wrapper and accept the full document, or accept
+ * every fragment and refuse their composition. Observing which of those actually happens is the
+ * entire purpose of an orthogonal matrix, and assuming a monotonic relationship would throw away the
+ * finding before it was read.
  *
  * ### Pure
  *
@@ -181,18 +195,27 @@ export function analyseSchemaProbeMatrix(
     return result('MIXED_OR_INCONCLUSIVE');
   }
 
-  const exactRejected = rejectedIds.includes('R8_EXACT_PROJECTED_RIYA');
-  const featureOrGroupRejected = rejectedIds.filter(
-    (one) => one !== 'R8_EXACT_PROJECTED_RIYA',
-  ).length;
+  // R8 ACCEPTED wins the summary, whatever the isolated wrappers did.
+  //
+  // R8 is the exact D5 shape under this low-cap synthetic-message envelope. If the provider took it,
+  // the historical D5 rejection is NOT reproduced in this run, and no isolated wrapper result can
+  // change that fact about the exact document.
+  //
+  // An earlier revision checked the feature rejections FIRST, so `R2 rejected + R8 accepted` reported
+  // ISOLATED_SCHEMA_FEATURE_REJECTION and headlined a run in which the production schema had actually
+  // been accepted. The isolated finding is real and stays in `rejectedStepIds` — it is evidence about
+  // that wrapper shape — but it is not the headline.
+  if (!rejectedIds.includes('R8_EXACT_PROJECTED_RIYA')) {
+    return result('EXACT_PROJECTED_RIYA_SCHEMA_ACCEPTED_LOW_CAP');
+  }
 
-  if (featureOrGroupRejected > 0) {
-    // At least one isolated fragment was refused on its own. The set is what is reported; no single
-    // member of it is promoted to "the cause", whether or not the exact document also failed.
+  // R8 was refused. Now the wrappers say whether anything smaller was refused too.
+  const featureOrGroupRejected = rejectedIds.some((one) => one !== 'R8_EXACT_PROJECTED_RIYA');
+  if (featureOrGroupRejected) {
+    // At least one isolated fragment was refused on its own, and so was the whole document. The set
+    // is what is reported; no single member of it is promoted to "the cause".
     return result('ISOLATED_SCHEMA_FEATURE_REJECTION');
   }
-  if (exactRejected) {
-    return result('FULL_SCHEMA_COMPOSITION_REJECTED');
-  }
-  return result('EXACT_PROJECTED_RIYA_SCHEMA_ACCEPTED_LOW_CAP');
+  // Every isolated fragment was accepted and only their exact composition was not.
+  return result('FULL_SCHEMA_COMPOSITION_REJECTED');
 }

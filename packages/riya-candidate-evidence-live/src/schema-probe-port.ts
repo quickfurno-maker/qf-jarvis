@@ -49,12 +49,16 @@ export interface SchemaProbeProviderSeam {
 
 export interface SchemaProbePortDeps {
   /**
-   * Build the provider for a probe. Called once per probe, always at the SAME cap.
+   * Build the provider for a probe, bound to the given per-request completion BUDGET.
    *
-   * A factory rather than one provider, purely so a spec can observe how many were built and at what
-   * cap; the cap it is handed is `SCHEMA_PROBE_COMPLETION_CAP` every time.
+   * A budget, not a capability: the composition configures the provider at the model's real ceiling
+   * and asks for this many tokens per request, so the two stay distinguishable. It is handed
+   * `SCHEMA_PROBE_COMPLETION_CAP` every time.
+   *
+   * A factory rather than one provider, purely so a spec can observe how many were built and with
+   * what budget.
    */
-  readonly providerForCompletionCap: (maxCompletionTokens: number) => SchemaProbeProviderSeam;
+  readonly providerForCompletionCap: (requestCompletionBudget: number) => SchemaProbeProviderSeam;
   /** The SAME run-scoped observer every probe is observed through. */
   readonly observations: CandidateTransportObservations;
   readonly timeoutMs: number;

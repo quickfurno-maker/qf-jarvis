@@ -101,19 +101,23 @@ describe('the control is the only precedence', () => {
   });
 });
 
-describe('every rejection survives — no precedence masking', () => {
-  it('one isolated feature rejection is reported with its exact step id', () => {
+describe('R8 ACCEPTED decides the summary, and every rejection is still preserved', () => {
+  it('R2 rejected + R8 accepted is EXACT_PROJECTED_RIYA_SCHEMA_ACCEPTED_LOW_CAP', () => {
+    // THE precedence fix. R8 is the exact D5 shape under this envelope: if the provider took it, the
+    // historical D5 rejection is not reproduced in this run, and an isolated wrapper rejection cannot
+    // headline the diagnostic as though the production schema were still refused.
+    //
+    // The previous revision returned ISOLATED_SCHEMA_FEATURE_REJECTION here.
     const analysis = analyseSchemaProbeMatrix(
       matrix({ R2_SCALAR_ARRAY: refused('R2_SCALAR_ARRAY') }),
     );
-    expect(analysis.classification).toBe('ISOLATED_SCHEMA_FEATURE_REJECTION');
+    expect(analysis.classification).toBe('EXACT_PROJECTED_RIYA_SCHEMA_ACCEPTED_LOW_CAP');
+    // The isolated finding survives in full — evidence about that wrapper shape, not hidden.
     expect([...analysis.rejectedStepIds]).toEqual(['R2_SCALAR_ARRAY']);
-    expect(analysis.acceptedStepIds).toHaveLength(8);
+    expect([...analysis.acceptedStepIds]).toContain('R8_EXACT_PROJECTED_RIYA');
   });
 
-  it('MULTIPLE independent rejections are ALL preserved', () => {
-    // THE regression S11 taught. Three independent fragments refused: reporting one of them as the
-    // cause would be a guess, and dropping the other two would be evidence destruction.
+  it('MULTIPLE wrapper rejections + R8 accepted keeps the acceptance summary and every id', () => {
     const analysis = analyseSchemaProbeMatrix(
       matrix({
         R1_NUMERIC_ENUM_AS_NUMBER: refused('R1_NUMERIC_ENUM_AS_NUMBER'),
@@ -121,17 +125,30 @@ describe('every rejection survives — no precedence masking', () => {
         R4_ANYOF_ARRAY_ITEMS: refused('R4_ANYOF_ARRAY_ITEMS'),
       }),
     );
-    expect(analysis.classification).toBe('ISOLATED_SCHEMA_FEATURE_REJECTION');
+    expect(analysis.classification).toBe('EXACT_PROJECTED_RIYA_SCHEMA_ACCEPTED_LOW_CAP');
     expect([...analysis.rejectedStepIds]).toEqual([
       'R1_NUMERIC_ENUM_AS_NUMBER',
       'R3_OBJECT_ARRAY',
       'R4_ANYOF_ARRAY_ITEMS',
     ]);
+    expect([...analysis.acceptedStepIds]).toContain('R8_EXACT_PROJECTED_RIYA');
   });
 
-  it('a feature rejection is NOT hidden when the exact document also fails', () => {
-    // The exact document failing is expected once a fragment it contains fails. The feature finding
-    // must still be the headline, and the exact rejection must still appear in the set.
+  it('a GROUP rejection + R8 accepted also keeps the acceptance summary', () => {
+    const analysis = analyseSchemaProbeMatrix(
+      matrix({ R7_EVOLUTION_GROUP: refused('R7_EVOLUTION_GROUP') }),
+    );
+    expect(analysis.classification).toBe('EXACT_PROJECTED_RIYA_SCHEMA_ACCEPTED_LOW_CAP');
+    expect([...analysis.rejectedStepIds]).toEqual(['R7_EVOLUTION_GROUP']);
+    expect([...analysis.acceptedStepIds]).toContain('R6_REPLY_GROUP');
+  });
+});
+
+describe('when R8 is REJECTED, the wrappers say what kind of rejection it is', () => {
+  it('R4 rejected + R8 rejected is ISOLATED_SCHEMA_FEATURE_REJECTION, both preserved', () => {
+    // No monotonicity is assumed in either direction: this combination is OBSERVED, not derived.
+    // A provider may refuse a minimal wrapper and accept the full document, or the reverse, and
+    // finding out which is the entire purpose of an orthogonal matrix.
     const analysis = analyseSchemaProbeMatrix(
       matrix({
         R4_ANYOF_ARRAY_ITEMS: refused('R4_ANYOF_ARRAY_ITEMS'),
@@ -145,25 +162,29 @@ describe('every rejection survives — no precedence masking', () => {
     ]);
   });
 
-  it('a group rejection counts as an isolated rejection too', () => {
+  it('several wrappers rejected + R8 rejected names no unique root cause', () => {
     const analysis = analyseSchemaProbeMatrix(
-      matrix({ R7_EVOLUTION_GROUP: refused('R7_EVOLUTION_GROUP') }),
+      matrix({
+        R2_SCALAR_ARRAY: refused('R2_SCALAR_ARRAY'),
+        R5_NESTED_OBJECT_GROUP: refused('R5_NESTED_OBJECT_GROUP'),
+        R8_EXACT_PROJECTED_RIYA: refused('R8_EXACT_PROJECTED_RIYA'),
+      }),
     );
     expect(analysis.classification).toBe('ISOLATED_SCHEMA_FEATURE_REJECTION');
-    expect([...analysis.rejectedStepIds]).toEqual(['R7_EVOLUTION_GROUP']);
-    expect([...analysis.acceptedStepIds]).toContain('R6_REPLY_GROUP');
+    // All three survive. Promoting one would be a guess.
+    expect(analysis.rejectedStepIds).toHaveLength(3);
   });
-});
 
-describe('the composition and acceptance readings', () => {
-  it('all features accepted and only the exact document refused is a COMPOSITION rejection', () => {
+  it('all wrappers accepted + R8 rejected is FULL_SCHEMA_COMPOSITION_REJECTED', () => {
     const analysis = analyseSchemaProbeMatrix(
       matrix({ R8_EXACT_PROJECTED_RIYA: refused('R8_EXACT_PROJECTED_RIYA') }),
     );
     expect(analysis.classification).toBe('FULL_SCHEMA_COMPOSITION_REJECTED');
     expect([...analysis.rejectedStepIds]).toEqual(['R8_EXACT_PROJECTED_RIYA']);
   });
+});
 
+describe('the all-accepted reading', () => {
   it('everything accepted is the low-cap acceptance token, and nothing wider', () => {
     const analysis = analyseSchemaProbeMatrix(matrix());
     expect(analysis.classification).toBe('EXACT_PROJECTED_RIYA_SCHEMA_ACCEPTED_LOW_CAP');

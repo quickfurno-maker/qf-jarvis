@@ -331,14 +331,14 @@ export function createSafetyReplicationLedger(): RequestLedger {
 }
 
 /**
- * The ledger for a bounded REQUEST_CONTRACT_DIAGNOSTIC run (MVP-P2A.2 HF4-R8).
+ * The ledger for a bounded SCHEMA_DIFFERENTIAL_DIAGNOSTIC run (POST-PR-131).
  *
- * Same prices, same fallback bounds, same governed model maxima as the other two — read from the
- * candidate release rather than restated, so a published price change moves all three together. Only
- * the ceilings differ, and both are the narrowest in the codebase: nine requests, one dollar.
+ * The text smoke plus the nine R0-R8 schema probes: TEN requests, one dollar.
  *
- * Nine is deliberately fewer than the replication's eleven. A run whose entire purpose is to isolate a
- * request dimension should not be authorised for more calls than the run it is diagnosing.
+ * Same prices, same fallback bounds and same governed model maxima as the other three, read from the
+ * candidate release rather than restated. Only the ceilings differ, and this one is separate from the
+ * request-contract ledger on purpose — S11's D1-D8 evidence is immutable, and a shared ceiling would
+ * make two different matrices indistinguishable in a receipt.
  */
 export function createSchemaDifferentialDiagnosticLedger(): RequestLedger {
   return createRequestLedger({
@@ -355,10 +355,13 @@ export function createSchemaDifferentialDiagnosticLedger(): RequestLedger {
 }
 
 /**
- * The ledger for a bounded SCHEMA_DIFFERENTIAL_DIAGNOSTIC run (POST-PR-131).
+ * The ledger for a bounded REQUEST_CONTRACT_DIAGNOSTIC run (MVP-P2A.2 HF4-R8).
  *
- * Ten requests, one dollar. Same prices, same fallback bounds and same governed model maxima as the
- * other three, read from the candidate release rather than restated.
+ * The text smoke plus the eight D1-D8 canaries: NINE requests, one dollar. This is S11's historical
+ * accounting and it keeps describing exactly that matrix.
+ *
+ * Nine is deliberately fewer than the replication's eleven. A run whose entire purpose is to isolate a
+ * request dimension should not be authorised for more calls than the run it is diagnosing.
  */
 export function createRequestContractDiagnosticLedger(): RequestLedger {
   return createRequestLedger({
