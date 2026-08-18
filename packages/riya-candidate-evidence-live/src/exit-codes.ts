@@ -41,6 +41,17 @@ export const OPERATOR_OUTCOMES = [
    * nothing be read as one that evaluated something.
    */
   'REQUEST_CONTRACT_DIAGNOSTIC_COMPLETE',
+  /**
+   * POST-PR-131. A bounded SCHEMA_DIFFERENTIAL_DIAGNOSTIC ran its probes and stopped.
+   *
+   * Its own code, for the same reason the other two diagnostics have one: it is not approval, not
+   * P10 completion and not a safety result. It is also NOT the request-contract diagnostic's code —
+   * a script reading `$LASTEXITCODE` must be able to tell the two matrices apart.
+   *
+   * Note this code says the run COMPLETED, not that the schema was accepted. What was found is in
+   * the classification line, including the case where the control itself failed.
+   */
+  'SCHEMA_DIFFERENTIAL_DIAGNOSTIC_COMPLETE',
 ] as const;
 export type OperatorOutcome = (typeof OPERATOR_OUTCOMES)[number];
 
@@ -64,4 +75,6 @@ export const OPERATOR_EXIT_CODES: Readonly<Record<OperatorOutcome, number>> = Ob
   SAFETY_REPLICATION_COMPLETE: 22,
   // The next unused integer; 0-22 keep meaning exactly what they meant.
   REQUEST_CONTRACT_DIAGNOSTIC_COMPLETE: 23,
+  // The next unused integer; 0-23 keep meaning exactly what they meant.
+  SCHEMA_DIFFERENTIAL_DIAGNOSTIC_COMPLETE: 24,
 });

@@ -23,7 +23,11 @@ import {
   runGroqStagingSmokeOnce,
 } from '@qf-jarvis/groq-staging-smoke';
 import type { GroqApiKey } from '@qf-jarvis/model-gateway';
-import { createFetchGroqTransport, createSystemClock } from '@qf-jarvis/model-gateway';
+import {
+  createFetchGroqTransport,
+  createSystemClock,
+  projectGroqStrictJsonSchema,
+} from '@qf-jarvis/model-gateway';
 import { createEvaluationBinding, createSuiteThresholds } from '@qf-jarvis/model-evaluation';
 import {
   RIYA_SAFETY_FIXTURE_MANIFEST_ID,
@@ -48,10 +52,12 @@ import {
   createOperatorLedger,
   createRequestContractDiagnosticLedger,
   createSafetyReplicationLedger,
+  createSchemaDifferentialDiagnosticLedger,
 } from './accounting.js';
 import type { RequestLedger } from './accounting.js';
 import { createCredentialComposition } from './credential-composition.js';
 import { openLiveDiagnosticCanaryRunner } from './live-diagnostic-canary-composition.js';
+import { openLiveSchemaProbeRunner } from './live-schema-probe-composition.js';
 import { DEFAULT_CREDENTIAL_SOURCE_MODE, isCredentialSourceMode } from './credential-source.js';
 import type { CredentialSourceMode } from './credential-source.js';
 import { DEFAULT_RUN_GOAL } from './internal/run-goal.js';
@@ -137,7 +143,13 @@ export function parseCliArgs(argv: readonly string[]): CliParse {
       }
       // HF4-R8 adds one more governed PURPOSE. `FULL_EVIDENCE` stays refused as a VALUE because
       // absence already means it and two spellings of one default is surface for no benefit.
-      if (value !== 'SAFETY_REPLICATION' && value !== 'REQUEST_CONTRACT_DIAGNOSTIC') {
+      if (
+        value !== 'SAFETY_REPLICATION' &&
+        value !== 'REQUEST_CONTRACT_DIAGNOSTIC' &&
+        // POST-PR-131. A SEPARATE token: S11's historical matrix keeps its own goal, so a receipt can
+        // always say which live matrix produced it.
+        value !== 'SCHEMA_DIFFERENTIAL_DIAGNOSTIC'
+      ) {
         return { ok: false, reason: 'invalid-run-goal' };
       }
       runGoal = value;
@@ -178,6 +190,11 @@ export function parseCliArgs(argv: readonly string[]): CliParse {
  * real terminal and a real provider to run. A bounded run whose bound is untested is not bounded.
  */
 export function ledgerForRunGoal(goal: OperatorRunGoal): RequestLedger {
+  if (goal === 'SCHEMA_DIFFERENTIAL_DIAGNOSTIC') {
+    // Ten requests, one dollar: the smoke plus nine schema probes. Its own ledger rather than the
+    // request-contract one, so the two diagnostics can never be confused in a receipt.
+    return createSchemaDifferentialDiagnosticLedger();
+  }
   if (goal === 'REQUEST_CONTRACT_DIAGNOSTIC') {
     // Nine requests, one dollar — the narrowest ceilings in the codebase, and deliberately narrower
     // than the eleven-call replication this diagnostic exists to explain.
@@ -271,6 +288,26 @@ async function main(): Promise<number> {
     // returned, so no second ingress, resolver or holder can exist. A spec drives this exact
     // composition end to end with fake transports.
     openDiagnosticCanaryRunner: (credential) => openLiveDiagnosticCanaryRunner({ credential }),
+    // POST-PR-131. The REAL schema probe port, bound to the credential the operator just resolved.
+    //
+    // Bound here from the day the seam exists. HF4-R8 shipped a reviewed canary port that bin.ts
+    // never passed, and the compiled command was therefore guaranteed to spend the smoke request and
+    // both credential steps before returning INTERNAL_CLOSED_FAILURE with nothing run.
+    //
+    // The projection is injected rather than imported inside the composition, so the probe matrix is
+    // built by the SAME production projection the provider applies to a real request.
+    openSchemaProbeRunner: (credential) =>
+      openLiveSchemaProbeRunner({
+        credential,
+        projectSchema: (rawSchema) => {
+          const projection = projectGroqStrictJsonSchema(rawSchema);
+          if (!projection.ok) {
+            // Fail closed: a document that will not project is not a document to probe.
+            throw new Error('QFJ_SCHEMA_PROBE_PROJECTION_FAILED');
+          }
+          return projection.schema;
+        },
+      }),
     openCandidate: (credential) => {
       const apiKey = credential as GroqApiKey;
       const clock = (): string => new Date().toISOString();

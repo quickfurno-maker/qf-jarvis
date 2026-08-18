@@ -71,6 +71,21 @@ export const REQUEST_CONTRACT_DIAGNOSTIC_MAX_PROVIDER_REQUESTS =
 /** The spend ceiling for a diagnostic. Same conservative figure as a replication. */
 export const REQUEST_CONTRACT_DIAGNOSTIC_MAX_ESTIMATED_COST_USD = 1;
 
+/**
+ * The exact arithmetic of a SCHEMA_DIFFERENTIAL_DIAGNOSTIC run (POST-PR-131): the text smoke plus
+ * the nine schema probes R0-R8, and nothing else.
+ *
+ * Counted APART from the historical eight-canary diagnostic. S11's D1-D8 matrix is immutable
+ * evidence and its ledger keeps describing exactly it; a run with a different matrix borrowing that
+ * ceiling would make two different runs indistinguishable in a receipt.
+ */
+export const SCHEMA_DIFFERENTIAL_PROBE_REQUESTS = 9;
+export const SCHEMA_DIFFERENTIAL_MAX_PROVIDER_REQUESTS =
+  SMOKE_REQUESTS + SCHEMA_DIFFERENTIAL_PROBE_REQUESTS;
+
+/** The spend ceiling. Same conservative figure as the other two bounded diagnostics. */
+export const SCHEMA_DIFFERENTIAL_MAX_ESTIMATED_COST_USD = 1;
+
 /** Why the ledger refused the next call. Closed and content-free. */
 export const LEDGER_REFUSALS = [
   'request-limit-reached',
@@ -87,7 +102,7 @@ export const LEDGER_REFUSALS = [
 export type LedgerRefusal = (typeof LEDGER_REFUSALS)[number];
 
 /** Which phase a request belongs to. Used for reporting only; every phase shares one ceiling. */
-export const LEDGER_PHASES = ['smoke', 'safety', 'p10', 'diagnostic'] as const;
+export const LEDGER_PHASES = ['smoke', 'safety', 'p10', 'diagnostic', 'schema-probe'] as const;
 export type LedgerPhase = (typeof LEDGER_PHASES)[number];
 
 export interface LedgerSnapshot {
@@ -96,6 +111,14 @@ export interface LedgerSnapshot {
   readonly p10ProviderRequests: number;
   /** HF4-R8. Synthetic canary requests. Counted APART from safety so no receipt can conflate them. */
   readonly diagnosticProviderRequests: number;
+  /**
+   * POST-PR-131. Schema probe requests (R0-R8).
+   *
+   * A THIRD counter rather than a reuse of `diagnosticProviderRequests`: that one describes S11's
+   * historical D1-D8 canary matrix, and a receipt in which two different diagnostics increment the
+   * same field could not say which run it came from.
+   */
+  readonly schemaProbeProviderRequests: number;
   readonly totalProviderRequests: number;
   readonly successfulProviderResponses: number;
   readonly providerFailures: number;
@@ -157,7 +180,14 @@ function cost(tokens: number, pricePerMillion: number): number {
 
 /** Build a fresh in-memory ledger. Holds no content, reads no clock and writes nothing. */
 export function createRequestLedger(config: RequestLedgerConfig): RequestLedger {
-  const counts = { smoke: 0, safety: 0, p10: 0, diagnostic: 0 };
+  // Keyed by the closed phase vocabulary, so a phase added there must be counted here.
+  const counts: Record<LedgerPhase, number> = {
+    smoke: 0,
+    safety: 0,
+    p10: 0,
+    diagnostic: 0,
+    'schema-probe': 0,
+  };
   let successes = 0;
   let failures = 0;
   let inputTokens = 0;
@@ -168,7 +198,9 @@ export function createRequestLedger(config: RequestLedgerConfig): RequestLedger 
 
   // Every phase, including HF4-R8's diagnostic canaries. One ceiling covers them all, so a phase left
   // out of this sum would be a phase that spends requests nothing counts.
-  const total = (): number => counts.smoke + counts.safety + counts.p10 + counts.diagnostic;
+  // Summed over the CLOSED phase vocabulary rather than by naming each phase. A phase added to
+  // LEDGER_PHASES and forgotten here would be a request the ceiling never saw.
+  const total = (): number => LEDGER_PHASES.reduce((sum, phase) => sum + counts[phase], 0);
 
   const currentCost = (): number =>
     cost(inputTokens, config.pricePerMillionInputUsd) +
@@ -239,6 +271,7 @@ export function createRequestLedger(config: RequestLedgerConfig): RequestLedger 
         safetyProviderRequests: counts.safety,
         p10ProviderRequests: counts.p10,
         diagnosticProviderRequests: counts.diagnostic,
+        schemaProbeProviderRequests: counts['schema-probe'],
         totalProviderRequests: total(),
         successfulProviderResponses: successes,
         providerFailures: failures,
@@ -298,11 +331,34 @@ export function createSafetyReplicationLedger(): RequestLedger {
 }
 
 /**
+ * The ledger for a bounded SCHEMA_DIFFERENTIAL_DIAGNOSTIC run (POST-PR-131).
+ *
+ * The text smoke plus the nine R0-R8 schema probes: TEN requests, one dollar.
+ *
+ * Same prices, same fallback bounds and same governed model maxima as the other three, read from the
+ * candidate release rather than restated. Only the ceilings differ, and this one is separate from the
+ * request-contract ledger on purpose — S11's D1-D8 evidence is immutable, and a shared ceiling would
+ * make two different matrices indistinguishable in a receipt.
+ */
+export function createSchemaDifferentialDiagnosticLedger(): RequestLedger {
+  return createRequestLedger({
+    maxRequests: SCHEMA_DIFFERENTIAL_MAX_PROVIDER_REQUESTS,
+    maxCostUsd: SCHEMA_DIFFERENTIAL_MAX_ESTIMATED_COST_USD,
+    pricePerMillionInputUsd: CANDIDATE_PRICE_PER_M_INPUT_USD,
+    pricePerMillionCachedInputUsd: CANDIDATE_PRICE_PER_M_CACHED_INPUT_USD,
+    pricePerMillionOutputUsd: CANDIDATE_PRICE_PER_M_OUTPUT_USD,
+    fallbackInputTokens: CANDIDATE_MAX_INPUT_TOKENS,
+    fallbackOutputTokens: CANDIDATE_MAX_COMPLETION_TOKENS,
+    hardMaxInputTokens: CANDIDATE_MAX_INPUT_TOKENS,
+    hardMaxOutputTokens: CANDIDATE_MAX_COMPLETION_TOKENS,
+  });
+}
+
+/**
  * The ledger for a bounded REQUEST_CONTRACT_DIAGNOSTIC run (MVP-P2A.2 HF4-R8).
  *
- * Same prices, same fallback bounds, same governed model maxima as the other two — read from the
- * candidate release rather than restated, so a published price change moves all three together. Only
- * the ceilings differ, and both are the narrowest in the codebase: nine requests, one dollar.
+ * The text smoke plus the eight D1-D8 canaries: NINE requests, one dollar. This is S11's historical
+ * accounting and it keeps describing exactly that matrix.
  *
  * Nine is deliberately fewer than the replication's eleven. A run whose entire purpose is to isolate a
  * request dimension should not be authorised for more calls than the run it is diagnosing.

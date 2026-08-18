@@ -1,39 +1,58 @@
 /**
- * The DETERMINISTIC schema-reduction ladder for the next live diagnostic (POST-S11).
+ * The ORTHOGONAL schema probe matrix for a future bounded diagnostic (POST-PR-131).
  *
  * ### The question S11 could not answer
  *
  * S11 asked "does the whole real Riya schema fail?" and got yes: D5 sent the exact projected schema
- * with tiny messages at a 512 cap and Groq returned HTTP 400. That is one bit of information for one
- * live authorization, and it is not enough to change anything — D3 and D4 had already shown that the
- * `anyOf`/nullable form and a numeric singleton enum are individually accepted, so the cause is
- * somewhere between those two facts and the whole document.
+ * with tiny messages at a 512 completion cap and Groq returned HTTP 400. That is one bit of
+ * information for one live authorization. D3 and D4 had already shown the `anyOf`/nullable form and a
+ * numeric singleton enum are individually accepted, so the cause sits somewhere between those facts
+ * and the whole document, and the offline audit found no strict-subset violation to explain it.
  *
- * The offline audit closes the obvious explanations: the projected schema has NO offline-checkable
- * violation. Every object is closed, every property is required, no unsupported keyword or `$ref`
- * survives projection. So the remaining cause is a dimension the canaries never exercised, and this
- * module names them by INSPECTING the real schema rather than by guessing.
+ * ### These are INDEPENDENT probes, not a cumulative ladder
  *
- * ### What D1-D4 never tested
+ * An earlier revision of this module called the nine steps a "reduction ladder" and its specs claimed
+ * consecutive rungs "add exactly ONE dimension each", so that "the FIRST rejection names a cause".
+ * **That claim was not true of the implementation and is withdrawn.**
  *
- * The real projected schema contains three arrays, an `anyOf` in ARRAY ITEMS position, objects nested
- * six levels deep, and a numeric enum rendered as `type: number` — while D4 tested `type: integer`.
- * Not one of those appears in D1, D3 or D4. Each is a candidate cause and each is cheap to isolate.
+ * Each probe is built by locating one fragment of the real projected document and wrapping it in a
+ * minimal closed object. R2 is therefore NOT R1 plus an array — it is a different single fragment,
+ * and it does not contain R1's numeric enum at all. The old spec only asserted that the dimension
+ * LABELS were distinct, which proves nothing about the schemas, and the complexity spec only checked
+ * that the control was shallowest and the exact document deepest.
  *
- * ### Every rung carries REAL schema, never a replica
+ * So the honest reading is a MATRIX of independent questions, each of the form:
  *
- * A rung is built by locating a subtree inside the real projected document and wrapping it in a
- * minimal closed object. The fragment on the wire is therefore production's own, so a rejection is a
- * fact about the real schema rather than about something this file composed. Rungs are ordered so
- * that consecutive rungs differ by ONE dimension, which is what makes the first rejection name a
- * cause instead of a suspect.
+ *   "Does the provider accept THIS real schema fragment, alone, at the controlled low cap?"
+ *
+ * and NOT:
+ *
+ *   "Did this probe add exactly one feature to the previous one?"
+ *
+ * The consequence for a future run is concrete and is enforced by the runner rather than left to a
+ * reader: after the control passes, EVERY feature and group probe runs, and the result is the SET of
+ * rejections. Stopping at the first rejection, or reading it as the unique root cause, would be the
+ * same precedence mistake the S11 classifier made.
+ *
+ * ### Every probe carries REAL schema, never a replica
+ *
+ * A fragment is located inside the real projected document by structural search, so a rejection is a
+ * fact about production's own schema rather than about something this file composed. If Riya's schema
+ * changes shape, the matrix follows it.
  *
  * This module PLANS. It sends nothing, and nothing here may be executed against a provider without a
  * separate owner authorization.
  */
 
-/** The ordered ladder. Each step adds exactly one structural dimension to the one before it. */
-export const RIYA_REDUCTION_STEP_IDS = [
+/**
+ * The nine probes.
+ *
+ * The `R0`-`R8` identifiers are retained from the previous revision deliberately: they already appear
+ * in the merged report and in review history, and renaming them would create churn without adding
+ * meaning. The ORDER is a reading order for a human, not an execution dependency — every probe after
+ * the control is independent of every other.
+ */
+export const SCHEMA_PROBE_STEP_IDS = [
   'R0_MINIMAL_CONTROL',
   'R1_NUMERIC_ENUM_AS_NUMBER',
   'R2_SCALAR_ARRAY',
@@ -44,14 +63,29 @@ export const RIYA_REDUCTION_STEP_IDS = [
   'R7_EVOLUTION_GROUP',
   'R8_EXACT_PROJECTED_RIYA',
 ] as const;
-export type RiyaReductionStepId = (typeof RIYA_REDUCTION_STEP_IDS)[number];
+export type SchemaProbeStepId = (typeof SCHEMA_PROBE_STEP_IDS)[number];
 
-/** One rung: what it adds, and the real fragment that carries it. */
-export interface RiyaReductionStep {
-  readonly stepId: RiyaReductionStepId;
-  /** The ONE dimension this rung adds relative to the rung before it. A closed token. */
-  readonly addsDimension: string;
-  /** Where in the real projected schema the fragment was taken from. A path, never a value. */
+/**
+ * What role a probe plays in the matrix.
+ *
+ * Load-bearing for the analysis: only `CONTROL` can invalidate the run, only `EXACT` answers the
+ * composition question, and `FEATURE`/`GROUP` results are read as a SET rather than in order.
+ */
+export const SCHEMA_PROBE_KINDS = ['CONTROL', 'FEATURE', 'GROUP', 'EXACT'] as const;
+export type SchemaProbeKind = (typeof SCHEMA_PROBE_KINDS)[number];
+
+/** One probe: what it isolates, and the real fragment that carries it. */
+export interface SchemaProbe {
+  readonly stepId: SchemaProbeStepId;
+  readonly probeKind: SchemaProbeKind;
+  /**
+   * The structure this probe isolates. A closed descriptive token.
+   *
+   * It says what THIS probe carries. It does NOT assert any relationship to the probe before it —
+   * that was the retracted claim.
+   */
+  readonly probeDimension: string;
+  /** Where in the real projected schema the fragment came from. A path, never a value. */
   readonly derivedFromPath: string;
   /** The schema to send: a minimal closed object wrapping the real fragment. */
   readonly schema: unknown;
@@ -82,8 +116,8 @@ interface Located {
  * Depth-first search of the REAL document for the first node satisfying a structural predicate.
  *
  * Deterministic: property order in the projected document is stable, so the same schema always yields
- * the same fragment and therefore the same plan. Searching rather than hardcoding is what makes the
- * partition come from the schema — if Riya's schema changes shape, the ladder follows it.
+ * the same fragment and therefore the same matrix. Searching rather than hardcoding is what makes the
+ * partition come from the schema.
  */
 function locate(
   schema: unknown,
@@ -139,11 +173,10 @@ const isArrayOf = (
 ): boolean => node['type'] === 'array' && isRecord(node['items']) && itemMatches(node['items']);
 
 /**
- * Locate a required dimension, or fail loudly.
+ * Locate a required structure, or fail loudly.
  *
- * A plan with a silently missing rung would send the next authorization after an incomplete
- * partition, which is the failure mode this whole phase exists to stop — so an absent dimension is an
- * error rather than a shorter ladder.
+ * A matrix with a silently missing probe would send the next authorization after an incomplete
+ * partition, which is the failure mode this whole phase exists to stop.
  */
 function mustLocate(
   schema: unknown,
@@ -152,15 +185,15 @@ function mustLocate(
 ): Located {
   const found = locate(schema, matches);
   if (found === undefined) {
-    throw new Error(`QFJ_REDUCER_DIMENSION_NOT_LOCATED_${dimension}`);
+    throw new Error(`QFJ_SCHEMA_PROBE_DIMENSION_NOT_LOCATED_${dimension}`);
   }
   return found;
 }
 
-/** Build the ladder from the REAL projected schema. */
-export function planRiyaSchemaReduction(projected: unknown): readonly RiyaReductionStep[] {
+/** Build the matrix from the REAL projected schema. */
+export function planRiyaSchemaProbeMatrix(projected: unknown): readonly SchemaProbe[] {
   if (!isRecord(projected) || projected['type'] !== 'object') {
-    throw new Error('QFJ_REDUCER_ROOT_NOT_OBJECT');
+    throw new Error('QFJ_SCHEMA_PROBE_ROOT_NOT_OBJECT');
   }
 
   const numericEnum = mustLocate(projected, 'NUMERICENUM', isNumericEnum);
@@ -173,13 +206,12 @@ export function planRiyaSchemaReduction(projected: unknown): readonly RiyaReduct
   const anyOfArray = mustLocate(projected, 'ANYOFARRAY', (node) =>
     isArrayOf(node, (items) => Array.isArray(items['anyOf'])),
   );
-  // The shallowest nested object that is NOT the root and carries its own properties.
+  // The shallowest nested object that is NOT the root and carries its own nested structure.
   const nestedObject = mustLocate(projected, 'NESTEDOBJECT', (node) => {
     if (node === projected || node['type'] !== 'object') {
       return false;
     }
     const properties = isRecord(node['properties']) ? node['properties'] : {};
-    // A group, not a leaf-bearing array item: it must itself contain a nested structure.
     return Object.values(properties).some(
       (one) => isRecord(one) && (one['type'] === 'object' || one['type'] === 'array'),
     );
@@ -189,21 +221,24 @@ export function planRiyaSchemaReduction(projected: unknown): readonly RiyaReduct
   const topLevelNames = Object.keys(rootProperties);
   const [firstGroup, secondGroup] = topLevelNames;
   if (firstGroup === undefined || secondGroup === undefined) {
-    throw new Error('QFJ_REDUCER_ROOT_GROUPS_MISSING');
+    throw new Error('QFJ_SCHEMA_PROBE_ROOT_GROUPS_MISSING');
   }
 
-  const step = (
-    stepId: RiyaReductionStepId,
-    addsDimension: string,
+  const probe = (
+    stepId: SchemaProbeStepId,
+    probeKind: SchemaProbeKind,
+    probeDimension: string,
     derivedFromPath: string,
     schema: unknown,
-  ): RiyaReductionStep => Object.freeze({ stepId, addsDimension, derivedFromPath, schema });
+  ): SchemaProbe => Object.freeze({ stepId, probeKind, probeDimension, derivedFromPath, schema });
 
   return Object.freeze([
-    // The control. Identical in shape to the canary that PASSED in S11, so a rejection here would
-    // mean the account or the envelope changed rather than the schema.
-    step(
+    // The CONTROL. Identical in shape to the canary that PASSED in S11, so a rejection here means the
+    // account, the model entitlement or the request envelope changed — not the Riya schema. It is the
+    // only probe whose failure invalidates the rest.
+    probe(
       'R0_MINIMAL_CONTROL',
+      'CONTROL',
       'CLOSED_OBJECT_STRING_ENUM',
       '$',
       Object.freeze({
@@ -213,55 +248,60 @@ export function planRiyaSchemaReduction(projected: unknown): readonly RiyaReduct
         additionalProperties: false,
       }),
     ),
-    // D4 tested `type: integer`. The real projection emits `type: number` for the same Zod literal,
-    // and that difference has never been on the wire.
-    step(
+    // FEATURE probes. Each carries ONE real fragment alone. They are independent of each other and of
+    // the reading order: none of them contains any other.
+    probe(
       'R1_NUMERIC_ENUM_AS_NUMBER',
+      'FEATURE',
       'NUMERIC_ENUM_AS_NUMBER',
       numericEnum.path,
       wrap(numericEnum.name, numericEnum.node),
     ),
-    // No canary has ever sent an array of any kind.
-    step(
+    probe(
       'R2_SCALAR_ARRAY',
+      'FEATURE',
       'SCALAR_ARRAY',
       scalarArray.path,
       wrap(scalarArray.name, scalarArray.node),
     ),
-    step(
+    probe(
       'R3_OBJECT_ARRAY',
+      'FEATURE',
       'OBJECT_ARRAY',
       objectArray.path,
       wrap(objectArray.name, objectArray.node),
     ),
-    // D3 proved `anyOf` in a PROPERTY position. This is `anyOf` in ITEMS position, which is a
-    // different place in the document and has never been tested.
-    step(
+    probe(
       'R4_ANYOF_ARRAY_ITEMS',
+      'FEATURE',
       'ANYOF_IN_ARRAY_ITEMS',
       anyOfArray.path,
       wrap(anyOfArray.name, anyOfArray.node),
     ),
-    step(
+    probe(
       'R5_NESTED_OBJECT_GROUP',
+      'FEATURE',
       'NESTED_OBJECT_GROUP',
       nestedObject.path,
       wrap(nestedObject.name, nestedObject.node),
     ),
-    // The two real halves, each whole, before the two together.
-    step(
+    // GROUP probes: the two real halves, each whole and each on its own.
+    probe(
       'R6_REPLY_GROUP',
+      'GROUP',
       'FIRST_TOP_LEVEL_GROUP',
       `$.${firstGroup}`,
       wrap(firstGroup, rootProperties[firstGroup]),
     ),
-    step(
+    probe(
       'R7_EVOLUTION_GROUP',
+      'GROUP',
       'SECOND_TOP_LEVEL_GROUP',
       `$.${secondGroup}`,
       wrap(secondGroup, rootProperties[secondGroup]),
     ),
-    // The exact document D5 sent. Reaching this rung accepted means the rejection is not the schema.
-    step('R8_EXACT_PROJECTED_RIYA', 'FULL_DOCUMENT', '$', projected),
+    // The EXACT document D5 sent. Accepted here while every other probe also passed means the
+    // rejection S11 saw is not reproduced by this matrix at this cap.
+    probe('R8_EXACT_PROJECTED_RIYA', 'EXACT', 'FULL_DOCUMENT', '$', projected),
   ]);
 }

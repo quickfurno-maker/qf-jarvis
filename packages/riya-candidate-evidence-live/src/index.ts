@@ -120,10 +120,14 @@ export type {
 export {
   createOperatorLedger,
   createRequestContractDiagnosticLedger,
+  createSchemaDifferentialDiagnosticLedger,
   createRequestLedger,
   LEDGER_PHASES,
   LEDGER_REFUSALS,
   DIAGNOSTIC_CANARY_REQUESTS,
+  SCHEMA_DIFFERENTIAL_MAX_ESTIMATED_COST_USD,
+  SCHEMA_DIFFERENTIAL_MAX_PROVIDER_REQUESTS,
+  SCHEMA_DIFFERENTIAL_PROBE_REQUESTS,
   MAX_ESTIMATED_COST_USD,
   MAX_PROVIDER_REQUESTS,
   REQUEST_CONTRACT_DIAGNOSTIC_MAX_ESTIMATED_COST_USD,
@@ -203,3 +207,41 @@ export { createAccountedSession } from './candidate-session.js';
 export type { CandidateSession, CandidateSessionDeps } from './candidate-session.js';
 export { createSafeConsole, createStdoutSafeConsole } from './safe-console.js';
 export type { SafeConsole, SafeValue } from './safe-console.js';
+
+// POST-PR-131 SCHEMA DIFFERENTIAL HARNESS. The orthogonal probe matrix, its pure analysis, the probe
+// port and the live composition the executable binds.
+//
+// Exported because the previous round proved a reviewed seam the executable does not bind is worth
+// nothing, and because the analysis must be assertable on fixtures before a live authorization is
+// spent on it. The matrix is deliberately NOT a cumulative ladder: each probe carries one real
+// fragment, so the result is read as a SET of rejections rather than as an ordering.
+export {
+  planRiyaSchemaProbeMatrix,
+  SCHEMA_PROBE_KINDS,
+  SCHEMA_PROBE_STEP_IDS,
+} from './internal/riya-schema-probe-matrix.js';
+export type {
+  SchemaProbe,
+  SchemaProbeKind,
+  SchemaProbeStepId,
+} from './internal/riya-schema-probe-matrix.js';
+export {
+  analyseSchemaProbeMatrix,
+  SCHEMA_DIFFERENTIAL_CLASSIFICATIONS,
+} from './internal/schema-differential-classification.js';
+export type {
+  SchemaDifferentialAnalysis,
+  SchemaDifferentialClassification,
+  SchemaProbeOutcome,
+} from './internal/schema-differential-classification.js';
+export { createSchemaProbePort, SCHEMA_PROBE_COMPLETION_CAP } from './schema-probe-port.js';
+export type { SchemaProbePortDeps, SchemaProbeProviderSeam } from './schema-probe-port.js';
+export {
+  createLiveSchemaProbeComposition,
+  openLiveSchemaProbeRunner,
+} from './live-schema-probe-composition.js';
+export type {
+  LiveSchemaProbeComposition,
+  LiveSchemaProbeDeps,
+  SchemaProbeRunner,
+} from './live-schema-probe-composition.js';
