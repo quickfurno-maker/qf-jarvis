@@ -14,7 +14,7 @@
 import type { LedgerSnapshot } from '../accounting.js';
 import type { DiagnosticCanary } from '../diagnostic-canaries.js';
 import type { SafeConsole } from '../safe-console.js';
-import type { CanaryOutcome, DiagnosticClassification } from './diagnostic-classification.js';
+import type { CanaryOutcome, DiagnosticAnalysis } from './diagnostic-classification.js';
 
 /** One canary row: what was asked, and what the boundary did. Named field by field, never spread. */
 export function emitCanaryOutcome(
@@ -41,17 +41,25 @@ export function emitCanaryOutcome(
   });
 }
 
-/** The differential conclusion. One closed token, and the count it was derived from. */
+/**
+ * The differential conclusion: one closed token, the findings behind it, and the count.
+ *
+ * POST-S11 adds `diagnosticFindings`. `MIXED_OR_INCONCLUSIVE` is honest but says nothing about WHICH
+ * findings collided, and S11 is exactly the matrix where that matters — completion-cap sensitivity
+ * and an independent real-schema rejection are two pieces of work, not one. Every entry is a member
+ * of the same closed vocabulary as the classification, so this carries no content.
+ */
 export function emitDiagnosticClassification(
   safe: SafeConsole,
-  classification: DiagnosticClassification,
+  analysis: DiagnosticAnalysis,
   canariesRun: number,
 ): void {
   safe.line({
     phase: 'request-contract-diagnostic',
     status: 'CLASSIFICATION',
     canariesRun,
-    diagnosticClassification: classification,
+    diagnosticClassification: analysis.classification,
+    diagnosticFindings: analysis.findings.length === 0 ? 'NONE' : analysis.findings.join('+'),
   });
 }
 

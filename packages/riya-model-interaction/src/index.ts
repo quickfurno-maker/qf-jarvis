@@ -72,3 +72,20 @@ export type {
   RiyaGroundedKnowledgeContextV1,
   RiyaGroundedKnowledgeItemV1,
 } from './internal/grounded-context.js';
+
+// POST-S11 REQUEST-CONTRACT REPAIR. The per-request COMPLETION budget one Riya turn needs, derived
+// from this package's own output schema maxima.
+//
+// Exported because the composition roots that build a Riya turn have to put it on the request, and
+// because S11 measured what happens when they cannot: with no request-level bound, the Groq provider
+// sent its configured MODEL ceiling of 65,536 on every invocation, and an otherwise identical
+// minimal request that returned HTTP 200 at 512 returned HTTP 413 at 65,536.
+//
+// The raw bounds it is derived from stay internal, for the reason stated above — they are policy this
+// package owns. Only the derived number and the derivation itself cross, so a caller can re-prove it
+// without being able to redefine it.
+// ONLY the derived number crosses. The derivation itself, the worst-case constructor and the
+// tokenizer assumption stay internal: a spec proves them by importing the internal module directly,
+// and exporting them for that convenience would put three more values under change control with no
+// production consumer — the rule this barrel already holds every other bound to.
+export { RIYA_COMPLETION_BUDGET_TOKENS } from './internal/output-budget.js';

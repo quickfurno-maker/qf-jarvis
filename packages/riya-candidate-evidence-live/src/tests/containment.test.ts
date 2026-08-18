@@ -282,7 +282,13 @@ describe('the operator cannot serve, activate or persist', () => {
     // Same class of gap: the constant said zero while nothing checked the request the adapter is
     // actually configured with.
     const turn = codeOnly(readFileSync(join(SRC, 'riya-turn.ts'), 'utf8'));
-    expect(turn).toContain('budgets: { retryBudget: 0 }');
+    expect(turn).toContain('retryBudget: 0');
+    // POST-S11: the same request object now also carries the derived COMPLETION budget, so the
+    // Groq provider stops putting its configured model ceiling on the wire for every turn. Asserted
+    // here beside the retry lock because both are properties of the one request the adapter builds.
+    expect(turn).toContain('completionBudget: RIYA_COMPLETION_BUDGET_TOKENS');
+    // And no retry crept in beside it.
+    expect(turn).not.toMatch(/retryBudget:\s*[1-9]/u);
     expect(turn).not.toMatch(/retryBudget:[ ]*[1-9]/u);
   });
 

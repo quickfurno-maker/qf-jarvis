@@ -42,7 +42,7 @@ import type { ClipboardIngressCounters } from './credential-composition.js';
 import type { DiagnosticCanary } from './diagnostic-canaries.js';
 import { DIAGNOSTIC_CANARIES } from './diagnostic-canaries.js';
 import type { CanaryOutcome } from './internal/diagnostic-classification.js';
-import { classifyDiagnosticCanaries } from './internal/diagnostic-classification.js';
+import { analyseDiagnosticCanaries } from './internal/diagnostic-classification.js';
 import {
   emitCanaryOutcome,
   emitDiagnosticClassification,
@@ -367,8 +367,9 @@ export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<
       emitCanaryOutcome(safe, canary, outcome);
     }
     // A pure function over closed tokens. An incomplete matrix classifies as DIAGNOSTIC_NOT_RUN
-    // rather than as a partial verdict.
-    emitDiagnosticClassification(safe, classifyDiagnosticCanaries(outcomes), outcomes.length);
+    // rather than as a partial verdict, and a matrix carrying two findings reports both rather than
+    // letting one precedence rule speak for the whole thing.
+    emitDiagnosticClassification(safe, analyseDiagnosticCanaries(outcomes), outcomes.length);
     emitDiagnosticReceipt(safe, ledger.snapshot());
     safe.line({ finalStatus: 'REQUEST_CONTRACT_DIAGNOSTIC_COMPLETE' });
     return { outcome: 'REQUEST_CONTRACT_DIAGNOSTIC_COMPLETE' };

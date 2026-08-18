@@ -45,6 +45,7 @@ import {
 } from '../diagnostic-canary-port.js';
 import { OPERATOR_EXIT_CODES } from '../exit-codes.js';
 import {
+  analyseDiagnosticCanaries,
   classifyDiagnosticCanaries,
   DIAGNOSTIC_CLASSIFICATIONS,
 } from '../internal/diagnostic-classification.js';
@@ -261,18 +262,97 @@ describe('R8-C24/C25/C29 — the differential classifier', () => {
     }
   });
 
-  it('M23 — a cap-sensitive matrix stays cap-sensitive even when everything behind it fails', () => {
-    // Behind a cap that already fails, a later shape failing says nothing about the shape. The
-    // shape rules require D2 accepted precisely so this does not become MIXED.
-    expect(classifyDiagnosticCanaries(matrix('D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8'))).toBe(
+  it('M23 — a matrix that is ONLY cap-sensitive stays cap-sensitive', () => {
+    // The high-cap canaries fail and every low-cap canary passes. Exactly one dimension is
+    // implicated, so exactly one is named.
+    expect(classifyDiagnosticCanaries(matrix('D2', 'D6', 'D8'))).toBe(
       'HIGH_COMPLETION_CAP_SENSITIVE',
     );
+  });
+
+  it('POST-S11 — a high-cap failure may NOT mask an independent low-cap shape failure', () => {
+    // The defect this replaces. The previous version of M23 asserted that
+    // matrix('D2','D3','D4','D5','D6','D7','D8') is HIGH_COMPLETION_CAP_SENSITIVE, on the reasoning
+    // that "behind a cap that already fails, a later shape failing says nothing about the shape".
+    //
+    // The reasoning named the wrong control. D3, D4, D5 and D7 all run at LOW_512, so D2's fate at
+    // 65,536 cannot explain any of them — the canary that shares their cap is D1, and D1 passed.
+    // Gating low-cap shape rules on a high-cap result let one finding silently swallow the others.
+    const result = classifyDiagnosticCanaries(matrix('D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8'));
+    expect(result).not.toBe('HIGH_COMPLETION_CAP_SENSITIVE');
+    expect(result).toBe('MIXED_OR_INCONCLUSIVE');
   });
 
   it('R8-C25 two genuinely different findings return MIXED_OR_INCONCLUSIVE', () => {
     // anyOf AND numeric enum both rejected, at a cap that is fine: the matrix names two dimensions,
     // so it names none. An honest "inconclusive" beats a confident wrong dimension.
     expect(classifyDiagnosticCanaries(matrix('D3', 'D4'))).toBe('MIXED_OR_INCONCLUSIVE');
+  });
+
+  it('POST-S11 — the EXACT S11 matrix reports both findings, not one cause', () => {
+    // The matrix RUN S11 actually produced:
+    //   D1 200  D2 413  D3 200  D4 200  D5 400  D6 400  D7 400  D8 400
+    //
+    // Two independent facts hold at once. D1 passed at 512 and D2 failed at 65,536, so the request
+    // path IS completion-cap sensitive. And D5 — the real projected Riya schema at 512, behind a
+    // control that passed — failed on its own, so the cap cannot be the whole story.
+    //
+    // S11 was reported as HIGH_COMPLETION_CAP_SENSITIVE. Had that stood, the completion-budget
+    // repair would have looked like the entire fix and the next live authorization would have been
+    // spent rediscovering D5.
+    const s11 = matrix('D2', 'D5', 'D6', 'D7', 'D8');
+    expect(classifyDiagnosticCanaries(s11)).toBe('MIXED_OR_INCONCLUSIVE');
+
+    const analysis = analyseDiagnosticCanaries(s11);
+    expect(analysis.classification).toBe('MIXED_OR_INCONCLUSIVE');
+    // Both findings are named, so a reader does not have to re-derive them from eight status codes.
+    expect([...analysis.findings]).toEqual([
+      'HIGH_COMPLETION_CAP_SENSITIVE',
+      'REAL_RIYA_SCHEMA_REJECTED',
+    ]);
+  });
+
+  it('POST-S11 — the low-cap shape rules use their OWN cap control, never D2', () => {
+    // Each of these is a low-cap shape rejection sitting behind a rejected high-cap canary. Every
+    // one of them must still be reported; before the repair every one of them was suppressed.
+    for (const [shape, finding] of [
+      ['D3', 'ANYOF_NULLABLE_REJECTED'],
+      ['D4', 'NUMERIC_ENUM_REJECTED'],
+      ['D5', 'REAL_RIYA_SCHEMA_REJECTED'],
+    ] as const) {
+      const analysis = analyseDiagnosticCanaries(matrix('D2', shape));
+      expect(analysis.findings).toContain(finding);
+      expect(analysis.findings).toContain('HIGH_COMPLETION_CAP_SENSITIVE');
+      expect(analysis.classification).toBe('MIXED_OR_INCONCLUSIVE');
+    }
+  });
+
+  it('POST-S11 — a rejected D1 still suppresses every shape finding', () => {
+    // The repair narrows which control each rule reads; it does NOT remove the floor. With the
+    // minimal schema refused at the low cap, no low-cap shape rule may claim anything.
+    const analysis = analyseDiagnosticCanaries(
+      matrix('D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8'),
+    );
+    expect([...analysis.findings]).toEqual(['MINIMAL_STRICT_REJECTED']);
+    expect(analysis.classification).toBe('MINIMAL_STRICT_REJECTED');
+  });
+
+  it('POST-S11 — the cap axis is read from the governed pair table', () => {
+    // Every declared pair counts, including D5/D6 which the original rule did not consult.
+    expect([...CANARY_CAP_PAIRS]).toEqual([
+      ['D1', 'D2'],
+      ['D5', 'D6'],
+      ['D7', 'D8'],
+    ]);
+    expect(analyseDiagnosticCanaries(matrix('D6')).findings).toContain(
+      'HIGH_COMPLETION_CAP_SENSITIVE',
+    );
+  });
+
+  it('an incomplete matrix reports no findings at all', () => {
+    const analysis = analyseDiagnosticCanaries([]);
+    expect(analysis.classification).toBe('DIAGNOSTIC_NOT_RUN');
+    expect(analysis.findings).toEqual([]);
   });
 
   it('the classification vocabulary is closed and complete', () => {

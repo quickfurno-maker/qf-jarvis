@@ -244,13 +244,19 @@ describe('it stays a leaf', () => {
     expect(code).not.toMatch(/@qf-jarvis\/[a-z-]+\/(src|dist|internal)\//u);
   });
 
-  it('exposes exactly the six runtime values a composition can use', () => {
+  it('exposes exactly the seven runtime values a composition can use', () => {
     // The task class to bind, the profile to hand M4, and the guard to use instead of casting M4's
     // generic `unknown` detail. Nothing else: the schemas, the field map, the input projection, the
     // two bounds and the producer vocabulary are all POLICY this package enforces rather than
     // capabilities a caller invokes, and exporting them for the convenience of tests would put three
     // more values under change control with no production consumer.
     expect(Object.keys(barrel).sort()).toStrictEqual([
+      // POST-S11: 6 -> 7. The per-request COMPLETION budget, derived from this package's own output
+      // schema maxima. It crosses because the composition roots that build a Riya turn have to put
+      // it on the request — S11 measured what happens when they cannot, and the Groq provider sent
+      // its configured model ceiling of 65,536 on every invocation. The derivation, the worst-case
+      // constructor and the tokenizer assumption stay internal, per the rule above.
+      'RIYA_COMPLETION_BUDGET_TOKENS',
       'RIYA_CONVERSATION_EVOLUTION_TASK_CLASS',
       // RWC-P7 (ADR-0103): 3 -> 6. Two dedicated GROUNDED prompt/orchestration identities and the
       // post-summary reply-only profile factory. The grounded context types are TYPE-only; the

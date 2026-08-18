@@ -30,6 +30,14 @@ import { contentDigest, isCanonicalInstant } from '../contracts/digest.js';
 /** The bounded per-request budgets/timeout the adapter passes through to the gateway. */
 export interface GatewayRequestBudgets {
   readonly tokenBudget: number;
+  /**
+   * The per-request COMPLETION bound in tokens (POST-S11 REQUEST-CONTRACT REPAIR).
+   *
+   * Separate from `tokenBudget` on purpose: that one is the accounting estimate, this one is what a
+   * provider puts on the wire as `max_completion_tokens`. Before this existed the Groq provider had
+   * no request-level bound to read and sent its configured model ceiling every time.
+   */
+  readonly completionBudget: number;
   readonly costBudget: number;
   readonly timeoutMs: number;
   readonly retryBudget: number;
@@ -39,6 +47,9 @@ export interface GatewayRequestBudgets {
 
 export const DEFAULT_GATEWAY_REQUEST_BUDGETS: GatewayRequestBudgets = Object.freeze({
   tokenBudget: 4096,
+  // Matched to the generic structured reply bound rather than to any model's maximum. An agent whose
+  // envelope needs more says so explicitly; nothing inherits a model ceiling by default any more.
+  completionBudget: 4096,
   costBudget: 1,
   timeoutMs: 30_000,
   retryBudget: 0,
@@ -173,6 +184,7 @@ export function buildGatewayRequest(args: {
     promptVersion,
     promptDigest: prompt.contentDigest,
     tokenBudget: budgets.tokenBudget,
+    completionBudget: budgets.completionBudget,
     costBudget: budgets.costBudget,
     timeoutMs: budgets.timeoutMs,
     retryBudget: budgets.retryBudget,

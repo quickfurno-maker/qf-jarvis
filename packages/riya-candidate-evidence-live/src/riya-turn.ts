@@ -40,6 +40,7 @@ import {
   RIYA_GROUNDED_REPLY_TASK_CLASS,
 } from '@qf-jarvis/riya-model-interaction';
 import type { RiyaGroundedKnowledgeContextV1 } from '@qf-jarvis/riya-model-interaction';
+import { RIYA_COMPLETION_BUDGET_TOKENS } from '@qf-jarvis/riya-model-interaction';
 import { createRiyaPromptRegistryV1 } from '@qf-jarvis/riya-prompts';
 import {
   RIYA_CLIENT_SALES_PROMPT_ID,
@@ -202,7 +203,11 @@ export async function runRiyaEvaluationTurn(
     invoker: deps.invoker,
     // Restated at the request level too: the gateway is configured without fallback and every
     // request carries a zero retry budget, so neither layer can quietly acquire one.
-    budgets: { retryBudget: 0 },
+    //
+    // POST-S11: and a COMPLETION budget, derived from the Riya output schema's own maxima. Without
+    // it the Groq provider put its configured model ceiling — 65,536 — on the wire for every one of
+    // these turns, which is the dimension S11's D1/D2 pair showed the request path is sensitive to.
+    budgets: { retryBudget: 0, completionBudget: RIYA_COMPLETION_BUDGET_TOKENS },
   });
 
   const context = createOrchestrationContext({

@@ -158,3 +158,43 @@ describe('FakeModelProvider', () => {
     expect(JSON.stringify(provider.seenRunIds)).not.toContain('private message');
   });
 });
+
+// ---------------------------------------------------------------------------------------------------
+// POST-S11 REQUEST-CONTRACT REPAIR — the optional per-request completion budget.
+// ---------------------------------------------------------------------------------------------------
+describe('validateModelRequest — completionBudget', () => {
+  it('is OPTIONAL, and its absence leaves the request without the key at all', () => {
+    const result = validateModelRequest(textReq());
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      // Absent rather than present-and-undefined: the gateway forwards it only when it exists, so a
+      // caller that has not adopted a budget produces exactly the request it produced before.
+      expect('completionBudget' in result.request).toBe(false);
+    }
+  });
+
+  it('accepts a bounded positive integer and carries it through', () => {
+    const result = validateModelRequest(textReq({ completionBudget: 4096 }));
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.request.completionBudget).toBe(4096);
+    }
+  });
+
+  it('refuses a budget that is not a bounded positive integer', () => {
+    for (const bad of [0, -1, 1.5, 1_000_001, '4096', null]) {
+      expect(validateModelRequest(textReq({ completionBudget: bad })).ok).toBe(false);
+    }
+  });
+
+  it('is distinct from tokenBudget — they are different quantities', () => {
+    // `tokenBudget` is the whole-request accounting estimate the budget policy checks;
+    // `completionBudget` is how many tokens the ANSWER may occupy and is what reaches the wire.
+    const result = validateModelRequest(textReq({ tokenBudget: 100, completionBudget: 4096 }));
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.request.tokenBudget).toBe(100);
+      expect(result.request.completionBudget).toBe(4096);
+    }
+  });
+});
