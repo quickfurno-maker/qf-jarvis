@@ -381,6 +381,9 @@ describe('HF3 — the one optional governed run goal', () => {
       'SAFETY_REPLICATION',
       'REQUEST_CONTRACT_DIAGNOSTIC',
       'SCHEMA_DIFFERENTIAL_DIAGNOSTIC',
+      // POST-SDH4 adds a FIFTH: the bounded verification that the observation schema repair is
+      // accepted. Separate again, because SDH4's receipts already say what its matrix meant.
+      'POST_SDH4_SCHEMA_REPAIR_VERIFICATION',
     ]);
     // No goal skips a gate or forces a verdict. Both notices are content-free and name no secret.
     for (const goal of OPERATOR_RUN_GOALS) {

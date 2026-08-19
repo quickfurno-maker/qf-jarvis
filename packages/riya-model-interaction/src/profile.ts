@@ -228,23 +228,32 @@ export function createRiyaConversationModelProfile(args: {
       try {
         batch = createRiyaConversationObservationBatch({
           version: 1,
-          // HF4: the observation is a UNION now, so `value` exists only on the SET branch. Narrowing
+          // (HF4 shipped this as a tagged UNION whose SET branch alone carried `value`. SDH4 proved
+          // Groq rejects that union under array items, so the branches are two arrays now and the
+          // narrowing below is by ARRAY rather than by an `operation` field.)
           // on the operation is what makes that structural — there is no longer a way to reach a
           // CLEAR's value, because a CLEAR does not have one.
-          observations: answer.evolution.observations.map((observation) =>
-            observation.operation === 'SET'
-              ? {
-                  field: observation.field,
-                  operation: observation.operation,
-                  value: observation.value,
-                  provenance: observation.provenance,
-                }
-              : {
-                  field: observation.field,
-                  operation: observation.operation,
-                  provenance: observation.provenance,
-                },
-          ),
+          // POST-SDH4: the provider representation splits the operations into two typed arrays, so
+          // the operation is recovered from WHICH array an item came from rather than from a tagged
+          // union under array items — the exact fragment SDH4 proved Groq rejects.
+          //
+          // Order is sets-then-clears and is deterministic, so two identical answers always produce
+          // the same canonical list. The COMBINED list is what the canonical constructor sees, which
+          // is where the total ceiling and the one-per-field rule are enforced: two arrays each
+          // bounded at seven do not prove a combined seven, and this is the seam that does.
+          observations: [
+            ...answer.evolution.observations.sets.map((observation) => ({
+              field: observation.field,
+              operation: 'SET' as const,
+              value: observation.value,
+              provenance: observation.provenance,
+            })),
+            ...answer.evolution.observations.clears.map((observation) => ({
+              field: observation.field,
+              operation: 'CLEAR' as const,
+              provenance: observation.provenance,
+            })),
+          ],
           skipProjectDetails: answer.evolution.skipProjectDetails,
         });
       } catch {

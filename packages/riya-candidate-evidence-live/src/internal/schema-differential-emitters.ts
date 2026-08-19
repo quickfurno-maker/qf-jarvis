@@ -69,6 +69,87 @@ export function emitSchemaDifferentialClassification(
   });
 }
 
+/** One verification probe row. Same closed field set, its own phase name. */
+export function emitSchemaRepairProbeOutcome(
+  safe: SafeConsole,
+  probe: {
+    readonly stepId: string;
+    readonly probeKind: string;
+    readonly probeDimension: string;
+    readonly derivedFromPath: string;
+  },
+  outcome: {
+    readonly providerTransportStarted: boolean;
+    readonly providerHttpStatus: number;
+    readonly providerHttpClass: string;
+    readonly providerErrorType: string;
+    readonly providerErrorCode: string;
+    readonly providerCompleted: boolean;
+  },
+): void {
+  safe.line({
+    phase: 'schema-repair-verification',
+    status: 'PROBE',
+    stepId: probe.stepId,
+    probeKind: probe.probeKind,
+    probeDimension: probe.probeDimension,
+    derivedFromPath: probe.derivedFromPath,
+    completionCapClass: 'LOW_512',
+    maxCompletionTokens: SCHEMA_PROBE_COMPLETION_CAP,
+    providerTransportStarted: outcome.providerTransportStarted,
+    providerHttpStatus: outcome.providerHttpStatus,
+    providerHttpClass: outcome.providerHttpClass,
+    providerErrorType: outcome.providerErrorType,
+    providerErrorCode: outcome.providerErrorCode,
+    providerCompleted: outcome.providerCompleted,
+  });
+}
+
+/** The verification conclusion, with every step id in its bucket. */
+export function emitSchemaRepairClassification(
+  safe: SafeConsole,
+  analysis: {
+    readonly classification: string;
+    readonly acceptedStepIds: readonly string[];
+    readonly rejectedStepIds: readonly string[];
+    readonly inconclusiveStepIds: readonly string[];
+  },
+  probesRun: number,
+): void {
+  const list = (ids: readonly string[]): string => (ids.length === 0 ? 'NONE' : ids.join('+'));
+  safe.line({
+    phase: 'schema-repair-verification',
+    status: 'CLASSIFICATION',
+    probesRun,
+    schemaRepairClassification: analysis.classification,
+    acceptedStepIds: list(analysis.acceptedStepIds),
+    rejectedStepIds: list(analysis.rejectedStepIds),
+    inconclusiveStepIds: list(analysis.inconclusiveStepIds),
+  });
+}
+
+/** The verification receipt. Names its own counter; states safety and P10 as zero explicitly. */
+export function emitSchemaRepairReceipt(safe: SafeConsole, snapshot: LedgerSnapshot): void {
+  safe.line({
+    phase: 'schema-repair-verification',
+    status: 'RECEIPT',
+    totalProviderRequests: snapshot.totalProviderRequests,
+    smokeRequests: snapshot.smokeRequests,
+    schemaRepairProbeRequests: snapshot.schemaRepairProbeProviderRequests,
+    safetyProviderRequests: snapshot.safetyProviderRequests,
+    p10ProviderRequests: snapshot.p10ProviderRequests,
+    successfulProviderResponses: snapshot.successfulProviderResponses,
+    providerFailures: snapshot.providerFailures,
+    inputTokensTotal: snapshot.inputTokens,
+    outputTokensTotal: snapshot.outputTokens,
+    estimatedCostUsd: snapshot.estimatedCostUsd,
+    costIsEstimated: snapshot.costIsEstimated,
+    usageBoundViolated: snapshot.usageBoundViolated,
+    safetyEvaluated: false,
+    reviewBundleWritten: false,
+  });
+}
+
 /**
  * The receipt.
  *

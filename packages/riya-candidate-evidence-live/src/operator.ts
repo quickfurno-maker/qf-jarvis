@@ -55,7 +55,13 @@ import {
   emitSchemaDifferentialClassification,
   emitSchemaDifferentialReceipt,
   emitSchemaProbeOutcome,
+  emitSchemaRepairClassification,
+  emitSchemaRepairProbeOutcome,
+  emitSchemaRepairReceipt,
 } from './internal/schema-differential-emitters.js';
+import type { SchemaRepairVerificationProbe } from './internal/riya-schema-repair-verification-plan.js';
+import { analyseSchemaRepairVerification } from './internal/schema-repair-verification-classification.js';
+import type { SchemaRepairProbeOutcome } from './internal/schema-repair-verification-classification.js';
 import { DEFAULT_CREDENTIAL_SOURCE_MODE } from './credential-source.js';
 import type { CredentialSourceMode } from './credential-source.js';
 import type { CandidateSession } from './candidate-session.js';
@@ -212,6 +218,17 @@ export interface OperatorDeps {
     readonly probes: readonly SchemaProbe[];
     readonly run: (probe: SchemaProbe) => Promise<SchemaProbeOutcome>;
   }>;
+  /**
+   * POST-SDH4. Bind the schema-repair VERIFICATION runner to the already-resolved credential.
+   *
+   * Same credential-bound factory shape as the two seams above. Required only for
+   * `POST_SDH4_SCHEMA_REPAIR_VERIFICATION`; it returns the planned V0-V4 matrix alongside the runner,
+   * because that matrix is derived from the real repaired schema and the operator must not invent it.
+   */
+  readonly openSchemaRepairVerificationRunner?: (credential: unknown) => Promise<{
+    readonly probes: readonly SchemaRepairVerificationProbe[];
+    readonly run: (probe: SchemaRepairVerificationProbe) => Promise<SchemaRepairProbeOutcome>;
+  }>;
 }
 
 export interface OperatorResult {
@@ -336,6 +353,74 @@ export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<
   // The second ingress line. In clipboard mode this is where `credentialReuseCount` becomes 2 while
   // `credentialClipboardReads` stays 1 — the pair of numbers that IS the copy-once guarantee.
   emitCredentialIngress(safe, credentialSource, 'CANDIDATE', deps.ingressCounters?.());
+
+  // F'''. THE SCHEMA REPAIR VERIFICATION (POST-SDH4) — and then STOP.
+  //
+  // Same placement and same discipline as the two diagnostics beside it: before `openCandidate`, so a
+  // run that evaluates nothing builds none of the machinery for evaluating something.
+  //
+  // It runs V0-V4 against the REPAIRED schema. SDH4's R0-R8 matrix described the pre-repair document
+  // and its receipts already say what those probes meant, so this goal, its counter, its ledger and
+  // its exit code are all separate.
+  if (runGoal === 'POST_SDH4_SCHEMA_REPAIR_VERIFICATION') {
+    const openRunner = deps.openSchemaRepairVerificationRunner;
+    if (openRunner === undefined) {
+      safe.line({ phase: 'schema-repair-verification', status: 'FAILED', reason: 'port-missing' });
+      return { outcome: 'INTERNAL_CLOSED_FAILURE' };
+    }
+    let runner: {
+      readonly probes: readonly SchemaRepairVerificationProbe[];
+      readonly run: (probe: SchemaRepairVerificationProbe) => Promise<SchemaRepairProbeOutcome>;
+    };
+    try {
+      runner = await openRunner(candidateCredential);
+    } catch {
+      // Fails closed BEFORE V0, and nothing from the original error is read or printed.
+      safe.line({
+        phase: 'schema-repair-verification',
+        status: 'FAILED',
+        reason: 'runner-bind-failed',
+      });
+      return { outcome: 'INTERNAL_CLOSED_FAILURE' };
+    }
+
+    const verificationOutcomes: SchemaRepairProbeOutcome[] = [];
+    for (const probe of runner.probes) {
+      const reservation = ledger.reserve('schema-repair-probe');
+      if (!reservation.ok) {
+        safe.line({
+          phase: 'schema-repair-verification',
+          status: 'REFUSED',
+          stepId: probe.stepId,
+          reason: reservation.refusal,
+        });
+        break;
+      }
+      const outcome = await runner.run(probe);
+      ledger.settle(undefined, outcome.providerCompleted);
+      verificationOutcomes.push(outcome);
+      emitSchemaRepairProbeOutcome(safe, probe, outcome);
+
+      // The ONE stop rule, same as the historical matrix: a failed control means the envelope moved,
+      // so the remaining authorized requests are not spent proving nothing. A repaired-feature or
+      // group rejection does NOT stop the run — the useful answer is the complete SET.
+      const controlFailed =
+        probe.probeKind === 'CONTROL' &&
+        !(outcome.providerCompleted && outcome.providerHttpClass === 'SUCCESS_2XX');
+      if (controlFailed) {
+        break;
+      }
+    }
+
+    emitSchemaRepairClassification(
+      safe,
+      analyseSchemaRepairVerification(verificationOutcomes),
+      verificationOutcomes.length,
+    );
+    emitSchemaRepairReceipt(safe, ledger.snapshot());
+    safe.line({ finalStatus: 'POST_SDH4_SCHEMA_REPAIR_VERIFICATION_COMPLETE' });
+    return { outcome: 'POST_SDH4_SCHEMA_REPAIR_VERIFICATION_COMPLETE' };
+  }
 
   // F''. THE SCHEMA DIFFERENTIAL DIAGNOSTIC (POST-PR-131) — and then STOP.
   //

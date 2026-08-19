@@ -92,7 +92,8 @@ const evolutionAnswer = (citations: readonly object[]) => ({
   reply: { kind: 'REPLY', replyBody: 'About four to six weeks.', reasonCode: null, citations },
   evolution: {
     version: 1,
-    observations: [],
+    // POST-SDH4: the container, with both arrays required. Empty means no observations this turn.
+    observations: { sets: [], clears: [] },
     skipProjectDetails: false,
     questionPlan: {
       phase: ACTUAL_PLAN.phase,

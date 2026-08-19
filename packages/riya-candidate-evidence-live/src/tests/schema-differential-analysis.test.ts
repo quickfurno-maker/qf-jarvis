@@ -303,6 +303,7 @@ describe('the historical S11 goal is untouched', () => {
       'SAFETY_REPLICATION',
       'REQUEST_CONTRACT_DIAGNOSTIC',
       'SCHEMA_DIFFERENTIAL_DIAGNOSTIC',
+      'POST_SDH4_SCHEMA_REPAIR_VERIFICATION',
     ]);
   });
 

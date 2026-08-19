@@ -161,11 +161,18 @@ describe('R7-C12/C13 — both real schemas project into the documented subset', 
       return;
     }
     const document = JSON.stringify(result.schema);
-    // `kind: REPLY`, the two observation operations, the provenance and the evolution version all
-    // reach the provider as constraints rather than being silently dropped with the `const` keyword.
-    for (const literal of ['"REPLY"', '"SET"', '"CLEAR"', '"user_stated"']) {
+    // `kind: REPLY`, the provenance and the evolution version all reach the provider as constraints
+    // rather than being silently dropped with the `const` keyword.
+    //
+    // POST-SDH4: `"SET"` and `"CLEAR"` are no longer literals in the document. The repair removed the
+    // operation tag from the provider payload entirely — the array a payload sits in IS the
+    // discriminator now — so there is no `operation` property left to carry them. The rule they
+    // expressed is unchanged and still structural: a SET requires a value, a CLEAR has nowhere to put
+    // one, and a CLEAR's provenance is still pinned to `user_stated` below.
+    for (const literal of ['"REPLY"', '"user_stated"']) {
       expect(document).toContain(literal);
     }
+    expect(document).not.toContain('"operation"');
     expect(document).not.toContain('"const"');
     const properties = (result.schema['properties'] as Record<string, Record<string, unknown>>)[
       'evolution'

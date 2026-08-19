@@ -124,50 +124,77 @@ describe('reply.reasonCode is REQUIRED and nullable, in both schemas', () => {
   });
 });
 
-describe('the observation SET/CLEAR rules are now PROVIDER-VISIBLE', () => {
-  const observationItems = (): Node => {
+describe('POST-SDH4 — the observation SET/CLEAR rules are provider-visible WITHOUT anyOf items', () => {
+  const observationsNode = (): Node => {
     const evolution = (render(riyaStructuredOutputSchema)['properties'] as Node)[
       'evolution'
     ] as Node;
-    return ((evolution['properties'] as Node)['observations'] as Node)['items'] as Node;
+    return (evolution['properties'] as Node)['observations'] as Node;
   };
+  const itemsOf = (arrayName: 'sets' | 'clears'): Node =>
+    ((observationsNode()['properties'] as Node)[arrayName] as Node)['items'] as Node;
 
-  it('renders as anyOf — the composition Groq documents, not oneOf', () => {
-    // `z.union` renders `anyOf`; `z.discriminatedUnion` renders `oneOf`, which Groq does not document.
-    // The choice between them is therefore a provider-compatibility decision, not a style one.
-    const items = observationItems();
-    expect(Array.isArray(items['anyOf'])).toBe(true);
-    expect(items['oneOf']).toBeUndefined();
-    expect((items['anyOf'] as Node[]).length).toBe(2);
+  it('the rejected anyOf-under-array-items composition is GONE', () => {
+    // THE repair, asserted directly. RUN SDH4 sent this exact real fragment as R4_ANYOF_ARRAY_ITEMS
+    // at a 512-token cap and Groq returned HTTP 400; R7 and R8, which contain it, failed the same
+    // way while every other probe returned 200.
+    const observations = observationsNode();
+    // `observations` is no longer an array at all, so there are no array items to carry a union.
+    expect(observations['type']).toBe('object');
+    expect(observations['items']).toBeUndefined();
+    for (const arrayName of ['sets', 'clears'] as const) {
+      const items = itemsOf(arrayName);
+      expect(items['anyOf'], arrayName).toBeUndefined();
+      expect(items['oneOf'], arrayName).toBeUndefined();
+      expect(items['type'], arrayName).toBe('object');
+    }
   });
 
-  it('the SET branch REQUIRES value; the CLEAR branch has NO value property at all', () => {
-    const branches = observationItems()['anyOf'] as Node[];
-    const byOperation = new Map(
-      branches.map((branch) => [
-        ((branch['properties'] as Node)['operation'] as Node)['const'],
-        branch,
-      ]),
-    );
+  it('the container is a closed object with BOTH arrays required', () => {
+    const observations = observationsNode();
+    expect(observations['additionalProperties']).toBe(false);
+    // Groq strict mode has no absent property: "no clears this turn" is an empty array, said out loud.
+    expect([...(observations['required'] as string[])].sort()).toStrictEqual(['clears', 'sets']);
+    expect(Object.keys(observations['properties'] as Node).sort()).toStrictEqual([
+      'clears',
+      'sets',
+    ]);
+  });
 
-    const set = byOperation.get('SET');
-    expect(set).toBeDefined();
-    expect(set?.['required']).toContain('value');
+  it('the SETS item carries exactly the SET payload, and REQUIRES value', () => {
+    const item = itemsOf('sets');
+    expect(Object.keys(item['properties'] as Node).sort()).toStrictEqual([
+      'field',
+      'provenance',
+      'value',
+    ]);
+    expect([...(item['required'] as string[])].sort()).toStrictEqual([
+      'field',
+      'provenance',
+      'value',
+    ]);
+    // No `operation` property: the array a payload sits in IS the discriminator.
+    expect(Object.keys(item['properties'] as Node)).not.toContain('operation');
+  });
 
-    const clear = byOperation.get('CLEAR');
-    expect(clear).toBeDefined();
+  it('the CLEARS item has NO value property, and is pinned to an explicit user statement', () => {
+    const item = itemsOf('clears');
+    expect(Object.keys(item['properties'] as Node).sort()).toStrictEqual(['field', 'provenance']);
     // Absence, not a nullable value. `CLEAR forbids a value` is expressed by there being nowhere to
     // put one, which `additionalProperties:false` then enforces.
-    expect(Object.keys((clear?.['properties'] ?? {}) as Node)).not.toContain('value');
-    // And CLEAR is pinned to an explicit user statement — an inference may not withdraw a fact.
-    expect(((clear?.['properties'] as Node)['provenance'] as Node)['const']).toBe('user_stated');
+    expect(Object.keys(item['properties'] as Node)).not.toContain('value');
+    // An inference may not withdraw a fact — still structural, still provider-visible.
+    const provenance = (item['properties'] as Node)['provenance'] as Node;
+    expect(provenance['const'] ?? (provenance['enum'] as unknown[] | undefined)?.[0]).toBe(
+      'user_stated',
+    );
   });
 
-  it('every branch is independently closed and fully required', () => {
-    for (const branch of observationItems()['anyOf'] as Node[]) {
-      expect(branch['additionalProperties']).toBe(false);
-      expect(Object.keys(branch['properties'] as Node).sort()).toStrictEqual(
-        [...(branch['required'] as string[])].sort(),
+  it('every observation object is independently closed and fully required', () => {
+    for (const node of [observationsNode(), itemsOf('sets'), itemsOf('clears')]) {
+      expect(node['additionalProperties']).toBe(false);
+      expect(Object.keys(node['properties'] as Node).sort()).toStrictEqual(
+        [...(node['required'] as string[])].sort(),
       );
     }
   });
@@ -177,11 +204,28 @@ describe('LOCAL accepted language is EXACTLY what it was before HF4', () => {
   // The repair moved the SET/CLEAR rules from a `.superRefine()` into union branches so the provider
   // could see them. That is only safe if the set of accepted values did not move by one element, in
   // either direction — so every branch of the old refinement is pinned here.
+  //
+  // POST-SDH4 the provider representation splits the operations into two arrays, so each case below
+  // is routed by its declared `operation` and the tag itself is dropped from the payload. The set of
+  // ACCEPTED LANGUAGE must not move by one element in either direction, which is what these pin.
+  const container = (observation: unknown): Record<string, unknown> => {
+    const one = observation as Record<string, unknown>;
+    const { operation, ...payload } = one;
+    if (operation === 'SET') {
+      return { sets: [payload], clears: [] };
+    }
+    if (operation === 'CLEAR') {
+      return { sets: [], clears: [payload] };
+    }
+    // An unknown operation has no array to belong to. Offering it to BOTH is the strictest reading:
+    // if either array would accept it, the language widened.
+    return { sets: [payload], clears: [payload] };
+  };
   const answer = (observation: unknown, reasonCode: unknown = null): unknown => ({
     reply: { kind: 'REPLY', replyBody: 'hi', reasonCode, citations: [] },
     evolution: {
       version: 1,
-      observations: [observation],
+      observations: container(observation),
       skipProjectDetails: false,
       questionPlan: { phase: 'NEED', questionFields: [] },
     },
@@ -270,7 +314,7 @@ describe('LOCAL strictness is a SEPARATE guarantee from the rendered additionalP
     reply: { kind: 'REPLY', replyBody: 'hi', reasonCode: null, citations: [] },
     evolution: {
       version: 1,
-      observations: [],
+      observations: { sets: [], clears: [] },
       skipProjectDetails: false,
       questionPlan: { phase: 'NEED', questionFields: [] },
     },

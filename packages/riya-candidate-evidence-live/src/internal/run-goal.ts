@@ -53,6 +53,15 @@ export const OPERATOR_RUN_GOALS = [
    * fixture, no evaluator, no authority, no P10 and no review bundle.
    */
   'SCHEMA_DIFFERENTIAL_DIAGNOSTIC',
+  /**
+   * POST-SDH4. A bounded verification that the observation schema REPAIR is accepted.
+   *
+   * A separate token again, and for the reason the last one was: SDH4's R0-R8 matrix ran against the
+   * pre-repair schema and its receipts already say what those probes meant. This goal runs V0-V4
+   * against the repaired document, at the same fixed low cap, and reaches no fixture, no evaluator,
+   * no authority, no P10 and no review bundle.
+   */
+  'POST_SDH4_SCHEMA_REPAIR_VERIFICATION',
 ] as const;
 export type OperatorRunGoal = (typeof OPERATOR_RUN_GOALS)[number];
 
@@ -75,6 +84,8 @@ export const SECOND_CREDENTIAL_NOTICES: Readonly<Record<OperatorRunGoal, string>
     'Smoke passed. Enter the same Groq credential again for the bounded request-contract diagnostic.',
   SCHEMA_DIFFERENTIAL_DIAGNOSTIC:
     'Smoke passed. Enter the same Groq credential again for the bounded schema differential diagnostic.',
+  POST_SDH4_SCHEMA_REPAIR_VERIFICATION:
+    'Smoke passed. Enter the same Groq credential again for the bounded schema repair verification.',
 });
 
 /**
@@ -97,4 +108,6 @@ export const REUSED_CREDENTIAL_NOTICES: Readonly<Record<OperatorRunGoal, string>
     'Smoke passed. Reusing the credential already read for the bounded request-contract diagnostic.',
   SCHEMA_DIFFERENTIAL_DIAGNOSTIC:
     'Smoke passed. Reusing the credential already read for the bounded schema differential diagnostic.',
+  POST_SDH4_SCHEMA_REPAIR_VERIFICATION:
+    'Smoke passed. Reusing the credential already read for the bounded schema repair verification.',
 });

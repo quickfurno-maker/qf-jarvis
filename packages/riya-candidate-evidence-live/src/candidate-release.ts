@@ -31,9 +31,25 @@ import {
   RIYA_CLIENT_SALES_PROMPT_VERSION,
 } from '@qf-jarvis/riya-prompts';
 
-/** The exact Riya CLIENT prompt bytes this candidate is evaluated behind (MVP-P2A.2-P, PR #117). */
+/**
+ * The exact Riya CLIENT prompt bytes this candidate is evaluated behind (MVP-P2A.2-P, PR #117).
+ *
+ * POST-SDH4: this digest MOVED, and that is an owner-visible governance event rather than a routine
+ * edit. The observation repair removed the `operation` property from the provider payload, and the
+ * prompt still instructed the model to record `"SET"` and `"CLEAR"` — strings the schema no longer
+ * has anywhere. One paragraph was rewritten to name the two arrays instead.
+ *
+ * Nothing else about the prompt changed: no personality, no sales strategy, no safety instruction, no
+ * knowledge policy, no business authority. Every RWC-P4A rule the old wording carried is still
+ * stated — a set carries a value, `user_stated` versus `model_inferred`, a clear only on an explicit
+ * withdrawal and only `user_stated`.
+ *
+ * The consequence is that this candidate's prompt identity is no longer byte-identical to the one S11
+ * and SDH4 ran behind, so evidence from those runs is comparable on the request contract but not on
+ * prompt bytes.
+ */
 export const RIYA_CLIENT_PROMPT_DIGEST =
-  'b8ae461c855358caf9c389bd0b21a44c3f697955f9d9d09fe593f38f362657b8';
+  'd0c2da57f53c2541274e090b8dec997c885f65f60c6bd8467e98d0be684b71fb';
 
 export const CANDIDATE_RELEASE_ID = 'rel.groq.qfj.riya-candidate.gpt-oss-20b.v1';
 export const CANDIDATE_PROVIDER_ID = 'groq';

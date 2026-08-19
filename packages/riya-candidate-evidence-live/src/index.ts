@@ -121,6 +121,7 @@ export {
   createOperatorLedger,
   createRequestContractDiagnosticLedger,
   createSchemaDifferentialDiagnosticLedger,
+  createSchemaRepairVerificationLedger,
   createRequestLedger,
   LEDGER_PHASES,
   LEDGER_REFUSALS,
@@ -128,6 +129,9 @@ export {
   SCHEMA_DIFFERENTIAL_MAX_ESTIMATED_COST_USD,
   SCHEMA_DIFFERENTIAL_MAX_PROVIDER_REQUESTS,
   SCHEMA_DIFFERENTIAL_PROBE_REQUESTS,
+  SCHEMA_REPAIR_VERIFICATION_MAX_ESTIMATED_COST_USD,
+  SCHEMA_REPAIR_VERIFICATION_MAX_PROVIDER_REQUESTS,
+  SCHEMA_REPAIR_VERIFICATION_PROBE_REQUESTS,
   MAX_ESTIMATED_COST_USD,
   MAX_PROVIDER_REQUESTS,
   REQUEST_CONTRACT_DIAGNOSTIC_MAX_ESTIMATED_COST_USD,
@@ -245,3 +249,38 @@ export type {
   LiveSchemaProbeDeps,
   SchemaProbeRunner,
 } from './live-schema-probe-composition.js';
+
+// POST-SDH4 SCHEMA REPAIR VERIFICATION. A NEW bounded plan, vocabulary and composition for verifying
+// the repaired observation schema. Separate from SDH4's historical R0-R8 matrix in every respect —
+// step ids, classification tokens, ledger counter, exit code — so a receipt can always say which
+// matrix produced it and the immutable SDH4 evidence stays readable.
+export {
+  planRiyaSchemaRepairVerification,
+  SCHEMA_REPAIR_PROBE_KINDS,
+  SCHEMA_REPAIR_VERIFICATION_STEP_IDS,
+} from './internal/riya-schema-repair-verification-plan.js';
+export type {
+  SchemaRepairProbeKind,
+  SchemaRepairVerificationProbe,
+  SchemaRepairVerificationStepId,
+} from './internal/riya-schema-repair-verification-plan.js';
+export {
+  analyseSchemaRepairVerification,
+  SCHEMA_REPAIR_VERIFICATION_CLASSIFICATIONS,
+} from './internal/schema-repair-verification-classification.js';
+export type {
+  SchemaRepairProbeOutcome,
+  SchemaRepairVerificationAnalysis,
+  SchemaRepairVerificationClassification,
+} from './internal/schema-repair-verification-classification.js';
+export {
+  createLiveSchemaRepairVerificationComposition,
+  createSchemaRepairVerificationPort,
+  openLiveSchemaRepairVerificationRunner,
+} from './schema-repair-verification-port.js';
+export type {
+  LiveSchemaRepairVerificationComposition,
+  LiveSchemaRepairVerificationDeps,
+  SchemaRepairProviderSeam,
+  SchemaRepairVerificationRunner,
+} from './schema-repair-verification-port.js';
