@@ -144,16 +144,28 @@ export function riyaStructuredOutputAtFill(fill: RiyaFreeTextFill): unknown {
     },
     evolution: {
       version: 1,
-      // POST-SDH4: two typed arrays rather than one array of tagged unions. The worst case fills
-      // `sets` to the per-array maximum; `clears` stays empty because a CLEAR carries no value and
-      // therefore contributes almost nothing to the byte extent this measures.
+      // POST-SDH4: two typed arrays rather than one array of tagged unions, and BOTH are filled to
+      // their per-array maxima.
+      //
+      // An earlier revision left `clears` empty on the reasoning that a CLEAR carries no value and so
+      // contributes little. That made the function measure a SUBSET while its own contract claimed
+      // "the largest document the schema accepts" — the provider schema bounds the two arrays
+      // independently, so a document with both at maximum is schema-valid and strictly larger.
+      //
+      // Note this maximum is a PROVIDER-schema maximum. The canonical constructor would refuse it,
+      // because seven sets plus seven clears exceeds the combined ceiling and repeats every field —
+      // which is exactly the cross-array invariant the schema cannot express. Budgeting to the larger
+      // provider bound is the conservative direction.
       observations: {
         sets: DISCOVERY_FIELDS_FROZEN.map((field) => ({
           field,
           value: free(MAX_OBSERVATION_VALUE_CHARS),
           provenance,
         })),
-        clears: [],
+        clears: DISCOVERY_FIELDS_FROZEN.map((field) => ({
+          field,
+          provenance: 'user_stated',
+        })),
       },
       skipProjectDetails: false,
       questionPlan: {

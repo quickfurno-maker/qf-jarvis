@@ -14,6 +14,14 @@
  * the repaired-feature and group probes there is no precedence at all — the result is a SET, and no
  * member of it is promoted to "the cause" by ordering.
  *
+ * ### What each probe is allowed to conclude
+ *
+ * Only `V1` and `V2` isolate the repair, so only they can support an OBSERVATION-level finding.
+ * `V3_EVOLUTION_GROUP` carries a whole group: its rejection says the group failed, not which member
+ * did, and reading it as an observation finding would attribute a cause the evidence does not
+ * establish — especially when both observation arrays were accepted alone. The three
+ * exact-rejected outcomes are therefore distinct claims rather than one collapsed token.
+ *
  * Pure: no clock, no I/O, no provider, no credential.
  */
 import type {
@@ -37,16 +45,33 @@ export const SCHEMA_REPAIR_VERIFICATION_CLASSIFICATIONS = [
    */
   'REPAIRED_EXACT_SCHEMA_ACCEPTED_LOW_CAP',
   /**
-   * The exact document was rejected AND at least one repaired observation array was rejected on its
-   * own. The rejected set is reported in full; no single member is named as the cause.
+   * The exact document was rejected AND at least one REPAIRED OBSERVATION ARRAY was rejected alone.
+   *
+   * Driven only by `V1_OBSERVATION_SETS_ARRAY` and `V2_OBSERVATION_CLEARS_ARRAY`, because those are
+   * the only probes that isolate the repair itself. `V3_EVOLUTION_GROUP` is a whole group and its
+   * rejection says nothing about which member caused it — counting it here would report an
+   * observation-level finding the evidence does not support.
+   *
+   * The rejected set is reported in full; no single member is named as the cause.
    */
   'REPAIRED_OBSERVATION_SCHEMA_REJECTED',
   /**
-   * The exact document was rejected while every isolated repaired fragment was accepted.
+   * The exact document AND the evolution group were rejected while both repaired observation arrays
+   * were accepted alone.
    *
-   * The remaining cause is a composition or a limit these probes do not isolate. Not guessed.
+   * The cause is somewhere in the group's composition — an interaction between its members, or a
+   * limit — and is deliberately NOT attributed to the observation repair, which was accepted in
+   * isolation. Which member is not guessed.
    */
-  'REPAIRED_EVOLUTION_COMPOSITION_REJECTED',
+  'REPAIRED_EVOLUTION_GROUP_REJECTED',
+  /**
+   * ONLY the exact document was rejected: every isolated fragment and the evolution group were
+   * accepted.
+   *
+   * The remaining cause is a whole-document composition or limit these probes do not isolate. Not
+   * guessed.
+   */
+  'REPAIRED_FULL_SCHEMA_COMPOSITION_REJECTED',
   /** The matrix did not run completely, or transport failures prevent a clean reading. */
   'MIXED_OR_INCONCLUSIVE',
 ] as const;
@@ -138,9 +163,24 @@ export function analyseSchemaRepairVerification(
   if (!rejectedIds.includes('V4_EXACT_PROJECTED_RIYA')) {
     return result('REPAIRED_EXACT_SCHEMA_ACCEPTED_LOW_CAP');
   }
-  const repairedFragmentRejected = rejectedIds.some((one) => one !== 'V4_EXACT_PROJECTED_RIYA');
-  if (repairedFragmentRejected) {
+
+  // The exact document was rejected. WHICH finding that is depends on what else was refused, and the
+  // three cases are genuinely different claims.
+  //
+  // Only V1 and V2 isolate the repair. An earlier revision counted ANY non-V4 rejection here, so
+  // `V3 + V4 rejected, V1/V2 accepted` reported REPAIRED_OBSERVATION_SCHEMA_REJECTED — an
+  // observation-level finding in a run where both observation arrays had been accepted on their own.
+  const observationArrayRejected =
+    rejectedIds.includes('V1_OBSERVATION_SETS_ARRAY') ||
+    rejectedIds.includes('V2_OBSERVATION_CLEARS_ARRAY');
+  if (observationArrayRejected) {
     return result('REPAIRED_OBSERVATION_SCHEMA_REJECTED');
   }
-  return result('REPAIRED_EVOLUTION_COMPOSITION_REJECTED');
+  // Both arrays stood alone; the group did not. That is a composition finding about the group, and
+  // it deliberately does not implicate the repair.
+  if (rejectedIds.includes('V3_EVOLUTION_GROUP')) {
+    return result('REPAIRED_EVOLUTION_GROUP_REJECTED');
+  }
+  // Every fragment and the group stood; only their full composition did not.
+  return result('REPAIRED_FULL_SCHEMA_COMPOSITION_REJECTED');
 }

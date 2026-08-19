@@ -228,7 +228,9 @@ export function createRiyaConversationModelProfile(args: {
       try {
         batch = createRiyaConversationObservationBatch({
           version: 1,
-          // HF4: the observation is a UNION now, so `value` exists only on the SET branch. Narrowing
+          // (HF4 shipped this as a tagged UNION whose SET branch alone carried `value`. SDH4 proved
+          // Groq rejects that union under array items, so the branches are two arrays now and the
+          // narrowing below is by ARRAY rather than by an `operation` field.)
           // on the operation is what makes that structural — there is no longer a way to reach a
           // CLEAR's value, because a CLEAR does not have one.
           // POST-SDH4: the provider representation splits the operations into two typed arrays, so

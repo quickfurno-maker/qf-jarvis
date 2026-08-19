@@ -71,7 +71,10 @@ describe('every fill produces a document the real schema accepts', () => {
     expect(largest.reply.replyBody).toHaveLength(2500);
     expect(largest.reply.reasonCode).toHaveLength(64);
     expect(largest.reply.citations).toHaveLength(64);
+    // BOTH arrays at their per-array maxima. An earlier revision left `clears` empty, so the
+    // function measured a subset while claiming to be the largest document the schema accepts.
     expect(largest.evolution.observations.sets).toHaveLength(7);
+    expect(largest.evolution.observations.clears).toHaveLength(7);
     expect(largest.evolution.questionPlan.questionFields).toHaveLength(2);
   });
 });
@@ -97,6 +100,40 @@ describe('ADVERSARIAL — an ASCII fill is not the schema maximum', () => {
     const ascii = maxRiyaStructuredOutputBytesAtFill('SINGLE_BYTE_ASCII');
     const bmp = maxRiyaStructuredOutputBytesAtFill('THREE_BYTE_BMP');
     expect(bmp).toBeGreaterThan(ascii * 2);
+  });
+});
+
+describe('the maximum is the PROVIDER-schema maximum, both arrays filled', () => {
+  it('the constructed maximum is accepted by the provider schema with both arrays full', () => {
+    // The provider schema bounds the two observation arrays independently, so seven sets AND seven
+    // clears is schema-valid and strictly larger than seven sets alone.
+    const largest = riyaStructuredOutputAtFill('SINGLE_BYTE_ASCII');
+    expect(riyaStructuredOutputSchema.safeParse(largest).success).toBe(true);
+  });
+
+  it('filling clears strictly increases the measured maximum', () => {
+    // Guards the exact regression: dropping `clears` back to empty would shrink this number.
+    const largest = riyaStructuredOutputAtFill('SINGLE_BYTE_ASCII') as {
+      evolution: { observations: { clears: unknown[] } };
+    };
+    const withoutClears = JSON.parse(JSON.stringify(largest)) as typeof largest;
+    withoutClears.evolution.observations.clears = [];
+    expect(Buffer.byteLength(JSON.stringify(largest), 'utf8')).toBeGreaterThan(
+      Buffer.byteLength(JSON.stringify(withoutClears), 'utf8'),
+    );
+  });
+
+  it('this is a PROVIDER maximum; the canonical constructor would refuse it', () => {
+    // Seven sets plus seven clears exceeds the combined canonical ceiling and repeats every field.
+    // That is the cross-array invariant the schema cannot express, and budgeting to the larger
+    // provider bound is the conservative direction — stated here so nobody reads the number as a
+    // canonical-domain maximum.
+    const largest = riyaStructuredOutputAtFill('SINGLE_BYTE_ASCII') as {
+      evolution: { observations: { sets: unknown[]; clears: unknown[] } };
+    };
+    expect(
+      largest.evolution.observations.sets.length + largest.evolution.observations.clears.length,
+    ).toBeGreaterThan(7);
   });
 });
 

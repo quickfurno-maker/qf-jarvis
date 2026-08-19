@@ -353,7 +353,7 @@ describe('the CLI and the executable composition bind the new goal', () => {
 });
 
 describe('a healthy run executes exactly V0-V4 once each', () => {
-  it('runs all five probes and stops at exit code 24', async () => {
+  it('runs all five probes and stops at exit code 25', async () => {
     const run = await runDiagnostic();
     expect(run.outcome).toBe('POST_SDH4_SCHEMA_REPAIR_VERIFICATION_COMPLETE');
     expect(OPERATOR_EXIT_CODES.POST_SDH4_SCHEMA_REPAIR_VERIFICATION_COMPLETE).toBe(25);
@@ -409,7 +409,7 @@ describe('a healthy run executes exactly V0-V4 once each', () => {
       return;
     }
 
-    // Nine providers built, one per probe.
+    // Five providers built, one per probe.
     const ceilings = [...composition.capabilityCeilingsUsed()];
     const budgets = [...composition.requestCompletionBudgetsUsed()];
     expect(ceilings).toHaveLength(5);
@@ -463,9 +463,10 @@ describe('a healthy run executes exactly V0-V4 once each', () => {
     });
   });
 
-  it('R8 puts the EXACT projected production Riya schema on the wire', async () => {
-    // The owner exit criterion. R8 is the D5 shape, and what reaches the wire must be structurally
-    // the exact projected document the matrix was planned from — not a re-derived approximation.
+  it('V4 puts the EXACT projected production Riya schema on the wire', async () => {
+    // The owner exit criterion. V4 is the repaired equivalent of SDH4's R8, and what reaches the wire
+    // must be structurally the exact projected document the matrix was planned from — not a
+    // re-derived approximation.
     const run = await runDiagnostic();
     const composition = run.composition;
     expect(composition).toBeDefined();
@@ -549,7 +550,7 @@ describe('the stop rules', () => {
     const run = await runDiagnostic({ statusFor: (index) => (index === 1 ? 400 : 200) });
     expect(run.sends).toHaveLength(5);
     const classification = run.lines.find((line) => line.includes('status=CLASSIFICATION')) ?? '';
-    // R8 was accepted here, so the SUMMARY is the acceptance token — the exact production schema was
+    // V4 was accepted here, so the SUMMARY is the acceptance token — the exact production schema was
     // taken, and an isolated wrapper rejection may not headline as though it had not been.
     expect(classification).toContain(
       'schemaRepairClassification=REPAIRED_EXACT_SCHEMA_ACCEPTED_LOW_CAP',
@@ -571,7 +572,7 @@ describe('the stop rules', () => {
 
   it('wrapper rejections WITH an R8 rejection report REPAIRED_OBSERVATION_SCHEMA_REJECTED', async () => {
     // The other side of the corrected precedence, driven through the real composition: R2 and R8
-    // (indices 2 and 8) both refused. Now the exact document really was rejected, so the isolated
+    // (indices 1 and 4) both refused. Now the exact document really was rejected, so the isolated
     // finding is the headline — and both ids survive.
     const run = await runDiagnostic({ statusFor: (index) => ([1, 4].includes(index) ? 400 : 200) });
     expect(run.sends).toHaveLength(5);
@@ -583,12 +584,29 @@ describe('the stop rules', () => {
     expect(classification).toContain('V4_EXACT_PROJECTED_RIYA');
   });
 
-  it('only R8 rejected reports REPAIRED_EVOLUTION_COMPOSITION_REJECTED', async () => {
+  it('V3 + V4 rejected reports a GROUP finding, not an observation one', async () => {
+    // The corrected precedence, driven through the REAL composition: V3 (index 3) and V4 (index 4)
+    // are refused while both observation arrays are accepted. Reporting this as an observation
+    // rejection would attribute a cause to a repair that had just been accepted in isolation.
+    const run = await runDiagnostic({ statusFor: (index) => ([3, 4].includes(index) ? 400 : 200) });
+    expect(run.sends).toHaveLength(5);
+    const classification = run.lines.find((line) => line.includes('status=CLASSIFICATION')) ?? '';
+    expect(classification).toContain(
+      'schemaRepairClassification=REPAIRED_EVOLUTION_GROUP_REJECTED',
+    );
+    expect(classification).toContain('V3_EVOLUTION_GROUP');
+    expect(classification).toContain('V4_EXACT_PROJECTED_RIYA');
+    // Both observation arrays are visibly in the accepted bucket.
+    expect(classification).toContain('V1_OBSERVATION_SETS_ARRAY');
+    expect(classification).toContain('V2_OBSERVATION_CLEARS_ARRAY');
+  });
+
+  it('only V4 rejected reports REPAIRED_FULL_SCHEMA_COMPOSITION_REJECTED', async () => {
     const run = await runDiagnostic({ statusFor: (index) => (index === 4 ? 400 : 200) });
     expect(run.sends).toHaveLength(5);
     const classification = run.lines.find((line) => line.includes('status=CLASSIFICATION')) ?? '';
     expect(classification).toContain(
-      'schemaRepairClassification=REPAIRED_EVOLUTION_COMPOSITION_REJECTED',
+      'schemaRepairClassification=REPAIRED_FULL_SCHEMA_COMPOSITION_REJECTED',
     );
     expect(classification).toContain('rejectedStepIds=V4_EXACT_PROJECTED_RIYA');
   });
