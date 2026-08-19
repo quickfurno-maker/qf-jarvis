@@ -388,14 +388,13 @@ export function createSafetyReplicationLedger(): RequestLedger {
 }
 
 /**
- * The ledger for a bounded SCHEMA_DIFFERENTIAL_DIAGNOSTIC run (POST-PR-131).
+ * The ledger for a bounded POST_SRV1_OPERATIONAL_ACCEPTANCE_DIAGNOSTIC run.
  *
- * The text smoke plus the nine R0-R8 schema probes: TEN requests, one dollar.
+ * The text smoke plus the four O0-O3 probes: FIVE requests, one dollar — the narrowest ceiling here.
  *
- * Same prices, same fallback bounds and same governed model maxima as the other three, read from the
- * candidate release rather than restated. Only the ceilings differ, and this one is separate from the
- * request-contract ledger on purpose — S11's D1-D8 evidence is immutable, and a shared ceiling would
- * make two different matrices indistinguishable in a receipt.
+ * Its own ledger and its own counter, so it can never be confused with SRV1's six-request
+ * verification, SDH4's ten-request matrix or S11's nine-request diagnostic. A receipt must always be
+ * able to say which matrix produced it.
  */
 export function createOperationalAcceptanceDiagnosticLedger(): RequestLedger {
   return createRequestLedger({
@@ -412,11 +411,10 @@ export function createOperationalAcceptanceDiagnosticLedger(): RequestLedger {
 }
 
 /**
- * The ledger for a bounded POST_SRV1_OPERATIONAL_ACCEPTANCE_DIAGNOSTIC run.
+ * The ledger for a bounded POST_SDH4_SCHEMA_REPAIR_VERIFICATION run.
  *
- * The text smoke plus the four O0-O3 probes: FIVE requests, one dollar. Its own ledger and its own
- * counter, so it can never be confused with SRV1's five-probe verification or SDH4's nine-probe
- * matrix.
+ * The text smoke plus the five V0-V4 probes: SIX requests, one dollar. Its own ledger and its own
+ * counter, so it can never be confused with SDH4's ten-request historical matrix.
  */
 export function createSchemaRepairVerificationLedger(): RequestLedger {
   return createRequestLedger({
@@ -433,10 +431,14 @@ export function createSchemaRepairVerificationLedger(): RequestLedger {
 }
 
 /**
- * The ledger for a bounded POST_SDH4_SCHEMA_REPAIR_VERIFICATION run.
+ * The ledger for a bounded SCHEMA_DIFFERENTIAL_DIAGNOSTIC run (POST-PR-131).
  *
- * The text smoke plus the five V0-V4 probes: SIX requests, one dollar. Its own ledger and its own
- * counter, so it can never be confused with SDH4's nine-probe historical matrix.
+ * The text smoke plus the nine R0-R8 schema probes: TEN requests, one dollar.
+ *
+ * Same prices, same fallback bounds and same governed model maxima as the others, read from the
+ * candidate release rather than restated. Only the ceilings differ, and this one is separate from the
+ * request-contract ledger on purpose — S11's D1-D8 evidence is immutable, and a shared ceiling would
+ * make two different matrices indistinguishable in a receipt.
  */
 export function createSchemaDifferentialDiagnosticLedger(): RequestLedger {
   return createRequestLedger({

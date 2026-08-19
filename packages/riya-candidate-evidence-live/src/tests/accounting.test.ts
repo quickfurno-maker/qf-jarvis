@@ -9,6 +9,8 @@
  * request can be, so "could the next call breach the ceiling" has a real answer before anything is
  * spent — rather than `settle()` noticing an overrun after the money is gone.
  */
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -18,9 +20,13 @@ import {
   CANDIDATE_PRICE_PER_M_OUTPUT_USD,
 } from '../candidate-release.js';
 import {
+  createOperationalAcceptanceDiagnosticLedger,
   createOperatorLedger,
+  createRequestContractDiagnosticLedger,
   createRequestLedger,
   createSafetyReplicationLedger,
+  createSchemaDifferentialDiagnosticLedger,
+  createSchemaRepairVerificationLedger,
   MAX_ESTIMATED_COST_USD,
   MAX_PROVIDER_REQUESTS,
   P10_REQUESTS,
@@ -29,6 +35,7 @@ import {
   SAFETY_REPLICATION_MAX_PROVIDER_REQUESTS,
   SMOKE_REQUESTS,
 } from '../accounting.js';
+import type { RequestLedger } from '../accounting.js';
 
 const WORST_CASE_PER_REQUEST_USD =
   (CANDIDATE_MAX_INPUT_TOKENS / 1_000_000) * CANDIDATE_PRICE_PER_M_INPUT_USD +
@@ -203,4 +210,76 @@ describe('HF3 — the bounded SAFETY_REPLICATION ledger', () => {
       SAFETY_REPLICATION_MAX_ESTIMATED_COST_USD,
     );
   });
+});
+
+/**
+ * The docblock above each bounded-diagnostic ledger must describe THAT ledger.
+ *
+ * This guard exists because the defect has now shipped twice, both times the same way: a new factory
+ * inserted above an existing one takes the docblock that belonged to its neighbour, and every
+ * comment below it shifts down by one. Nothing fails — the ceilings are still correct, the types
+ * still check, the tests still pass — and the file quietly claims that the five-request ledger is the
+ * ten-request one.
+ *
+ * That is expensive in exactly this codebase, because these comments are what an owner reads when
+ * deciding how many live provider calls a run may make.
+ *
+ * So the pairing is asserted structurally: for each factory, the nearest docblock ABOVE it must name
+ * the right run count and the right probe range. A third insertion cannot shift them silently.
+ */
+describe('every bounded diagnostic ledger wears its OWN docblock', () => {
+  const SOURCE = readFileSync(fileURLToPath(new URL('../accounting.ts', import.meta.url)), 'utf8');
+
+  /** The docblock immediately preceding a factory, with no other declaration in between. */
+  function docblockAbove(factory: string): string {
+    const index = SOURCE.indexOf(`export function ${factory}(`);
+    expect(index, `${factory} must exist`).toBeGreaterThan(-1);
+    const before = SOURCE.slice(0, index);
+    const opened = before.lastIndexOf('/**');
+    const closed = before.lastIndexOf('*/');
+    // The comment must be the thing directly above: a `*/` that is not the last token before the
+    // factory would mean some other declaration sits between them.
+    expect(closed, `${factory} must be preceded by a docblock`).toBeGreaterThan(opened);
+    expect(before.slice(closed + 2).trim()).toBe('');
+    return before.slice(opened, closed);
+  }
+
+  it.each([
+    ['createOperationalAcceptanceDiagnosticLedger', 'FIVE', 'O0-O3', 5],
+    ['createSchemaRepairVerificationLedger', 'SIX', 'V0-V4', 6],
+    ['createSchemaDifferentialDiagnosticLedger', 'TEN', 'R0-R8', 10],
+    ['createRequestContractDiagnosticLedger', 'NINE', 'D1-D8', 9],
+  ])('%s says %s and names %s', (factory, spelledCount, probeRange, requests) => {
+    const doc = docblockAbove(factory);
+    expect(doc).toContain(spelledCount);
+    expect(doc).toContain(probeRange);
+    // No OTHER diagnostic's spelled count may appear in this docblock, which is precisely what a
+    // shifted comment looks like.
+    for (const other of ['FIVE', 'SIX', 'TEN', 'NINE']) {
+      if (other !== spelledCount) {
+        expect(doc, `${factory} must not claim ${other}`).not.toContain(other);
+      }
+    }
+    // And the prose count must match the ceiling the factory actually builds, which is the thing the
+    // comment exists to describe.
+    const ledger = ledgerFor(factory);
+    for (let index = 0; index < requests; index += 1) {
+      expect(ledger.reserve('smoke').ok, `reservation ${String(index + 1)}`).toBe(true);
+      ledger.settle(undefined, true);
+    }
+    expect(ledger.reserve('smoke').ok).toBe(false);
+  });
+
+  function ledgerFor(factory: string): RequestLedger {
+    switch (factory) {
+      case 'createOperationalAcceptanceDiagnosticLedger':
+        return createOperationalAcceptanceDiagnosticLedger();
+      case 'createSchemaRepairVerificationLedger':
+        return createSchemaRepairVerificationLedger();
+      case 'createSchemaDifferentialDiagnosticLedger':
+        return createSchemaDifferentialDiagnosticLedger();
+      default:
+        return createRequestContractDiagnosticLedger();
+    }
+  }
 });

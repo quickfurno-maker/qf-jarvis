@@ -10,8 +10,12 @@
  * Two fields are new and both are load-bearing. `completionCapClass: 'OPERATIONAL'` and the budget
  * beside it exist because every prior matrix printed `LOW_512`, and a reader comparing an OAD1 row to
  * an SRV1 row must be able to see the envelope changed. `messageSource` exists because O2 and O3 carry
- * the same schema bytes and differ ONLY there — a row that could not show it would make the pair
- * unreadable as evidence.
+ * the same schema bytes and are authored to differ there — a row that could not show which messages it
+ * carried would leave the pair unreadable.
+ *
+ * A row states what was SENT and what came back. It draws no inference: the production body carries no
+ * `temperature`, `top_p` or `seed`, so two rows are two independent generation draws and no pair of
+ * them isolates a variable.
  */
 import { OPERATIONAL_ACCEPTANCE_COMPLETION_BUDGET } from '../operational-acceptance-port.js';
 import type { LedgerSnapshot } from '../accounting.js';
@@ -38,14 +42,15 @@ export function emitOperationalAcceptanceProbeOutcome(
     // The axis this whole run varies. NOT 'LOW_512'.
     completionCapClass: 'OPERATIONAL',
     maxCompletionTokens: OPERATIONAL_ACCEPTANCE_COMPLETION_BUDGET,
-    // The axis O2 and O3 differ on, and the only one.
+    // Which messages this probe carried. The authored axis O2 and O3 vary — not a controlled one.
     messageSource: probe.messageSource,
     providerTransportStarted: outcome.providerTransportStarted,
     providerHttpStatus: outcome.providerHttpStatus,
     providerHttpClass: outcome.providerHttpClass,
     providerErrorType: outcome.providerErrorType,
-    // Preserved verbatim from the observer. `JSON_VALIDATE_FAILED` versus anything else is the whole
-    // difference between "the provider validated the schema and refused it" and "something else broke".
+    // Preserved verbatim from the observer, and NOT interpreted: this says Groq returned that literal
+    // code, so `400 + JSON_VALIDATE_FAILED` is distinguishable from `400 + OTHER_OR_ABSENT`. What the
+    // provider did internally to produce it is undocumented and is not claimed here.
     providerErrorCode: outcome.providerErrorCode,
     providerCompleted: outcome.providerCompleted,
   });
@@ -55,8 +60,9 @@ export function emitOperationalAcceptanceProbeOutcome(
  * The conclusion: one closed token, every step id in its bucket, and the rejected codes.
  *
  * `rejectedErrorCodes` is printed alongside the buckets because a rejected step id alone does not say
- * whether the provider refused the SHAPE or fell over for some unrelated reason, and an owner deciding
- * whether to authorize another live run needs that distinction without any provider content.
+ * WHICH literal provider code came back, and an owner deciding whether to authorize another live run
+ * needs to tell one code from another without any provider content being printed. The codes are
+ * reported, not interpreted.
  */
 export function emitOperationalAcceptanceClassification(
   safe: SafeConsole,

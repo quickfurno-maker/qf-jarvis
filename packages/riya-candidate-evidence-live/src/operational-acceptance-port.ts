@@ -17,7 +17,9 @@
  *
  * The production request is captured ONCE and its schema projected ONCE. O1, O2 and O3 are all
  * derived from that single projected object, so O2 and O3 share a schema by construction rather than
- * by comparison — which is what makes their disagreement attributable to the messages alone.
+ * by comparison. That removes ONE source of difference between them; it does not make the pair a
+ * controlled experiment, because the body carries no `temperature`, `top_p` or `seed` and the two
+ * probes remain independent generation draws.
  */
 import {
   createFetchGroqTransport,
@@ -77,7 +79,7 @@ export interface OperationalAcceptancePortDeps {
 /**
  * Build the port.
  *
- * Each probe carries its OWN messages — that is the axis O2 and O3 vary — and runs inside its own
+ * Each probe carries its OWN messages — the axis O2 and O3 are authored to vary — and runs in its own
  * attribution window on the shared observer. A provider that throws is a failed probe, not a thrown
  * run.
  */

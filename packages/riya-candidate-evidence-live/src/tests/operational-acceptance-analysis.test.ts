@@ -15,8 +15,17 @@
  * single cause, and PR #132 inverted acceptance precedence outright. So the classifier specs walk
  * every branch and, for each, also assert what the OTHER buckets say — because a summary token that is
  * right while its buckets are wrong is a receipt an owner cannot act on.
+ *
+ * The third is an OVERCLAIM, which is what PR #134 shipped: the classifier named a token
+ * `..._MESSAGE_SHAPE_REJECTED` and its docblocks said the pair isolated the messages. It does not.
+ * The production body carries no `temperature`, `top_p` or `seed`, so O2 and O3 are two independent
+ * generation draws and the pair is descriptive, not causal. These specs pin the bounded token and
+ * assert the causal one is GONE — a rename that left the old spelling anywhere would let a receipt
+ * keep making the withdrawn claim.
  */
 import { projectGroqStrictJsonSchema } from '@qf-jarvis/model-gateway';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import { captureProductionRiyaCanaryRequest } from '../diagnostic-canary-materials.js';
@@ -209,7 +218,7 @@ describe('the classifier reports the strongest supported claim and never more', 
     expect([...OPERATIONAL_ACCEPTANCE_CLASSIFICATIONS]).toEqual([
       'OPERATIONAL_CONTROL_INVALID',
       'OPERATIONAL_EXACT_REPRESENTATIVE_ACCEPTED',
-      'OPERATIONAL_REPRESENTATIVE_MESSAGE_SHAPE_REJECTED',
+      'OPERATIONAL_REPRESENTATIVE_REJECTED_AFTER_SYNTHETIC_ACCEPTED',
       'OPERATIONAL_FULL_SCHEMA_REJECTED',
       'OPERATIONAL_EVOLUTION_GROUP_REJECTED',
       'MIXED_OR_INCONCLUSIVE',
@@ -246,19 +255,41 @@ describe('the classifier reports the strongest supported claim and never more', 
     expect(analysis.rejectedStepIds).toEqual(['O1_EVOLUTION_GROUP_OPERATIONAL']);
   });
 
-  it('O2 accepted with O3 refused implicates the MESSAGE SHAPE and says only that', () => {
+  it('O2 accepted with O3 refused reports the SEQUENCE, naming no cause', () => {
     const analysis = analyseOperationalAcceptance([
       ok('O0_MINIMAL_CONTROL_OPERATIONAL'),
       ok('O1_EVOLUTION_GROUP_OPERATIONAL'),
       ok('O2_EXACT_SYNTHETIC_OPERATIONAL'),
       refused('O3_EXACT_REPRESENTATIVE_OPERATIONAL'),
     ]);
-    expect(analysis.classification).toBe('OPERATIONAL_REPRESENTATIVE_MESSAGE_SHAPE_REJECTED');
+    expect(analysis.classification).toBe(
+      'OPERATIONAL_REPRESENTATIVE_REJECTED_AFTER_SYNTHETIC_ACCEPTED',
+    );
     expect(analysis.rejectedStepIds).toEqual(['O3_EXACT_REPRESENTATIVE_OPERATIONAL']);
     expect(analysis.inconclusiveStepIds).toEqual([]);
   });
 
-  it('O1 accepted with O2 and O3 refused implicates the FULL DOCUMENT', () => {
+  it('the WITHDRAWN causal token exists nowhere in the classifier', () => {
+    // A rename that left the old spelling behind would let a receipt keep asserting that the pair
+    // isolated the message shape, which the harness cannot support: with no temperature, top_p or
+    // seed on the production body, O2 and O3 are independent draws.
+    expect(OPERATIONAL_ACCEPTANCE_CLASSIFICATIONS).not.toContain(
+      'OPERATIONAL_REPRESENTATIVE_MESSAGE_SHAPE_REJECTED',
+    );
+    const source = readFileSync(
+      fileURLToPath(
+        new URL('../internal/operational-acceptance-classification.ts', import.meta.url),
+      ),
+      'utf8',
+    );
+    expect(source).not.toContain('OPERATIONAL_REPRESENTATIVE_MESSAGE_SHAPE_REJECTED');
+    // And no surviving prose claims the pair isolates a variable.
+    expect(source).not.toMatch(
+      /only thing that could|attributable to the message|isolates the message/i,
+    );
+  });
+
+  it('O1 accepted with O2 and O3 refused reports the full document as rejected in this run', () => {
     const analysis = analyseOperationalAcceptance([
       ok('O0_MINIMAL_CONTROL_OPERATIONAL'),
       ok('O1_EVOLUTION_GROUP_OPERATIONAL'),
@@ -272,7 +303,7 @@ describe('the classifier reports the strongest supported claim and never more', 
     ]);
   });
 
-  it('O1, O2 and O3 all refused says the budget was not what SRV1 was seeing', () => {
+  it('O1, O2 and O3 all refused REPRODUCES the SRV1 rejection, excluding nothing', () => {
     const analysis = analyseOperationalAcceptance([
       ok('O0_MINIMAL_CONTROL_OPERATIONAL'),
       refused('O1_EVOLUTION_GROUP_OPERATIONAL'),

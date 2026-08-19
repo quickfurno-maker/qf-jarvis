@@ -28,12 +28,20 @@
  * production messages. It is the closest thing to a real Riya turn that can be sent without
  * evaluating anything.
  *
- * ### O2 and O3 differ by MESSAGES alone
+ * ### O2 and O3 are authored to differ by MESSAGES — which is NOT a controlled experiment
  *
  * Both are built from the same projected object, so their schema bytes are identical by construction
  * rather than by comparison. Provider, model, budget, timeout, retry posture, fallback posture,
- * strict mode and transport are shared. If they disagree, the message shape is the only thing that
- * could have caused it — which is the entire evidentiary value of the pair.
+ * strict mode and transport are shared.
+ *
+ * They are still not an A/B test. The production Groq body carries no `temperature`, no `top_p` and
+ * no `seed`, and Groq documents temperature as defaulting to 1, so the two probes are independent
+ * generation draws however carefully their authored fields are matched. A disagreement between them
+ * is therefore a DESCRIPTION — the representative request was refused in the same run the synthetic
+ * one was taken — and never a demonstration that the messages caused it.
+ *
+ * Controlling the draw is deliberately NOT the fix. A diagnostic-only temperature or seed would make
+ * this harness deterministic while making it measure a request posture production never sends.
  *
  * This module PLANS. It sends nothing.
  */
@@ -179,8 +187,8 @@ export function planOperationalAcceptance(
       projected,
       input.syntheticMessages,
     ),
-    // The strongest probe. Identical to O2 in every respect except the messages, so a disagreement
-    // between the two is attributable to the message shape and to nothing else.
+    // The strongest probe: identical to O2 in every AUTHORED respect except the messages. The draw
+    // is still uncontrolled, so a disagreement describes the pair rather than explaining it.
     probe(
       'O3_EXACT_REPRESENTATIVE_OPERATIONAL',
       'EXACT_REPRESENTATIVE',

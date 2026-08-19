@@ -14,7 +14,13 @@
  * projection, the observer, the ledger, the emitters — is the production path. The bodies the fake
  * transport receives are the bodies the real one would have sent, which is what lets these specs
  * assert the two things this whole run turns on: that every probe went out at the governed
- * OPERATIONAL budget, and that O2 and O3 differ on the messages and on nothing else.
+ * OPERATIONAL budget, and that O2 and O3 are authored to differ on the messages alone.
+ *
+ * "Authored to differ" is the careful phrasing and it is load-bearing. The production body carries no
+ * `temperature`, `top_p` or `seed`, so the two probes are independent generation draws and the pair
+ * describes rather than explains. These specs therefore verify what was SENT — identical schema
+ * bytes, different messages — and pin the bounded classification token, without asserting anywhere
+ * that the messages caused a disagreement.
  */
 import { createGroqApiKey, projectGroqStrictJsonSchema } from '@qf-jarvis/model-gateway';
 import type { GroqTransport } from '@qf-jarvis/model-gateway';
@@ -102,6 +108,8 @@ interface RecordedSend {
   readonly signal: AbortSignal;
   readonly signalAbortedAtSend: boolean;
   readonly authorization: string;
+  /** The whole parsed body, so a spec can assert what is ABSENT as well as what is present. */
+  readonly body: Record<string, unknown>;
 }
 
 interface FakeTransport {
@@ -155,6 +163,7 @@ function fakeTransport(statusFor: (index: number) => number = () => 200): FakeTr
         signal,
         signalAbortedAtSend: signal.aborted,
         authorization: request.headers['authorization'] ?? '',
+        body: parsed,
       });
       const status = statusFor(index);
       return Promise.resolve({
@@ -560,7 +569,7 @@ describe('a healthy run executes exactly O0-O3 once each', () => {
   });
 });
 
-describe('O2 and O3 differ by MESSAGES and by nothing else', () => {
+describe('O2 and O3 are authored to differ by MESSAGES alone', () => {
   it('the two probes put byte-identical schemas on the wire', async () => {
     const run = await runDiagnostic();
     const synthetic = run.sends[O2];
@@ -570,7 +579,8 @@ describe('O2 and O3 differ by MESSAGES and by nothing else', () => {
     if (synthetic === undefined || representative === undefined) {
       return;
     }
-    // Serialised BYTES, as the provider receives them — not the plan objects.
+    // Serialised BYTES, as the provider receives them — not the plan objects. This removes one source
+    // of difference between the pair; it does not make them a controlled experiment.
     expect(JSON.stringify(representative.responseFormatSchema)).toBe(
       JSON.stringify(synthetic.responseFormatSchema),
     );
@@ -596,8 +606,15 @@ describe('O2 and O3 differ by MESSAGES and by nothing else', () => {
     expect(representative.messages).toEqual(
       captured.messages.map((one) => ({ role: one.role, content: one.content })),
     );
-    // The pair genuinely differs on this axis — otherwise O3 would be O2 sent twice.
+    // The pair genuinely differs on this AUTHORED axis — otherwise O3 would be O2 sent twice.
     expect(JSON.stringify(representative.messages)).not.toBe(JSON.stringify(synthetic.messages));
+    // What the harness does NOT send: any sampling control. Their absence is why the pair cannot be
+    // read causally, and pinning it here stops a later revision from "fixing" the pair by adding one.
+    for (const send of run.sends) {
+      expect(send.body).not.toHaveProperty('temperature');
+      expect(send.body).not.toHaveProperty('top_p');
+      expect(send.body).not.toHaveProperty('seed');
+    }
   });
 
   it('O0 sends the minimal control and O1 sends the real evolution group', async () => {
@@ -655,14 +672,16 @@ describe('the stop rule spends the authorization on the question it was granted 
     );
   });
 
-  it('an accepted O2 with a refused O3 reports the MESSAGE SHAPE finding', async () => {
+  it('an accepted O2 with a refused O3 reports the bounded SEQUENCE token', async () => {
     const run = await runDiagnostic({ statusFor: (index) => (index === O3 ? 400 : 200) });
     expect(run.sends).toHaveLength(4);
     const classification = run.lines.find((line) => line.includes('status=CLASSIFICATION')) ?? '';
     expect(classification).toContain(
-      'operationalAcceptanceClassification=OPERATIONAL_REPRESENTATIVE_MESSAGE_SHAPE_REJECTED',
+      'operationalAcceptanceClassification=OPERATIONAL_REPRESENTATIVE_REJECTED_AFTER_SYNTHETIC_ACCEPTED',
     );
     expect(classification).toContain('rejectedStepIds=O3_EXACT_REPRESENTATIVE_OPERATIONAL');
+    // The withdrawn causal token must not reach a receipt by any path.
+    expect(run.lines.join('\n')).not.toContain('MESSAGE_SHAPE_REJECTED');
   });
 });
 
@@ -675,8 +694,9 @@ describe('the output stays content-free and preserves the provider code', () => 
           line.includes('status=PROBE') &&
           line.includes('stepId=O3_EXACT_REPRESENTATIVE_OPERATIONAL'),
       ) ?? '';
-    // The distinction between "the provider validated the schema and refused the shape" and
-    // "something else broke" is the whole reason a further authorization would be worth granting.
+    // Preserved, not interpreted: this shows Groq returned that LITERAL code, so a reader can tell it
+    // from OTHER_OR_ABSENT. What the provider did internally to produce it is undocumented and is not
+    // claimed anywhere. The distinction alone is what a further authorization would turn on.
     expect(probeRow).toContain('providerErrorCode=JSON_VALIDATE_FAILED');
     expect(probeRow).toContain('providerHttpStatus=400');
     const classification = run.lines.find((line) => line.includes('status=CLASSIFICATION')) ?? '';
