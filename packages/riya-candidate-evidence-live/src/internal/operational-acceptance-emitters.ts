@@ -84,7 +84,10 @@ export function emitOperationalAcceptanceClassification(
 }
 
 /** The receipt. Names its OWN counter; states safety and P10 as zero explicitly rather than omitting. */
-export function emitOperationalAcceptanceReceipt(safe: SafeConsole, snapshot: LedgerSnapshot): void {
+export function emitOperationalAcceptanceReceipt(
+  safe: SafeConsole,
+  snapshot: LedgerSnapshot,
+): void {
   safe.line({
     phase: 'operational-acceptance-diagnostic',
     status: 'RECEIPT',

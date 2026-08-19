@@ -84,9 +84,9 @@ describe('the plan derives every probe from the ONE real projected document', ()
   it('O1 is derived from the REAL projected $.evolution subtree, by identity', () => {
     const group = probeFor('O1_EVOLUTION_GROUP_OPERATIONAL');
     expect(group.derivedFromPath).toBe('$.evolution');
-    const realEvolution = (
-      (projectedSchema as { properties: Record<string, unknown> }).properties
-    )['evolution'];
+    const realEvolution = (projectedSchema as { properties: Record<string, unknown> }).properties[
+      'evolution'
+    ];
     const wrapped = group.schema as { properties: Record<string, unknown> };
     // Object IDENTITY, not deep equality: a re-derived or hand-written copy would pass `toEqual`
     // while measuring a document the provider is never sent.

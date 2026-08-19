@@ -232,25 +232,25 @@ Reply schema, citations, reply bounds, grounding, `evolution.version`, `question
 Executed **once** under owner authorization. Process exit `25`. Every probe used
 `max_completion_tokens=512`, zero retry, zero fallback.
 
-| Probe                         | Kind             | Result                                      |
-| ----------------------------- | ---------------- | ------------------------------------------- |
-| `V0_MINIMAL_CONTROL`          | CONTROL          | HTTP 200                                    |
-| `V1_OBSERVATION_SETS_ARRAY`   | REPAIRED_FEATURE | HTTP 200                                    |
-| `V2_OBSERVATION_CLEARS_ARRAY` | REPAIRED_FEATURE | HTTP 200                                    |
-| **`V3_EVOLUTION_GROUP`**      | GROUP            | **HTTP 400 `JSON_VALIDATE_FAILED`**         |
-| **`V4_EXACT_PROJECTED_RIYA`** | EXACT            | **HTTP 400 `JSON_VALIDATE_FAILED`**         |
+| Probe                         | Kind             | Result                              |
+| ----------------------------- | ---------------- | ----------------------------------- |
+| `V0_MINIMAL_CONTROL`          | CONTROL          | HTTP 200                            |
+| `V1_OBSERVATION_SETS_ARRAY`   | REPAIRED_FEATURE | HTTP 200                            |
+| `V2_OBSERVATION_CLEARS_ARRAY` | REPAIRED_FEATURE | HTTP 200                            |
+| **`V3_EVOLUTION_GROUP`**      | GROUP            | **HTTP 400 `JSON_VALIDATE_FAILED`** |
+| **`V4_EXACT_PROJECTED_RIYA`** | EXACT            | **HTTP 400 `JSON_VALIDATE_FAILED`** |
 
 Classification: `REPAIRED_EVOLUTION_COMPOSITION_REJECTED`. Inconclusive: none.
 
-| Field                            | Value      |
-| -------------------------------- | ---------- |
-| `totalProviderRequests`          | 6          |
-| `smokeRequests`                  | 1          |
-| `schemaRepairProbeRequests`      | 5          |
-| `estimatedCostUsd`               | 0.14753415 |
-| `safetyEvaluated`                | false      |
-| `reviewBundleWritten`            | false      |
-| safety / P10 / bundle            | none       |
+| Field                       | Value      |
+| --------------------------- | ---------- |
+| `totalProviderRequests`     | 6          |
+| `smokeRequests`             | 1          |
+| `schemaRepairProbeRequests` | 5          |
+| `estimatedCostUsd`          | 0.14753415 |
+| `safetyEvaluated`           | false      |
+| `reviewBundleWritten`       | false      |
+| safety / P10 / bundle       | none       |
 
 Repository containment held. `SRV1_RERUN=NO`. `20B_MODEL_QUALITY_VERDICT=UNRESOLVED`.
 
@@ -289,12 +289,12 @@ excluded rather than implicated, and that is an equally useful result.
 
 ### The OAD1 matrix
 
-| Probe                                | Kind                 | Schema                          | Messages                   |
-| ------------------------------------ | -------------------- | ------------------------------- | -------------------------- |
-| `O0_MINIMAL_CONTROL_OPERATIONAL`     | CONTROL              | minimal closed object           | synthetic tiny             |
-| `O1_EVOLUTION_GROUP_OPERATIONAL`     | GROUP                | real `$.evolution`, wrapped     | synthetic tiny             |
-| `O2_EXACT_SYNTHETIC_OPERATIONAL`     | EXACT_SYNTHETIC      | exact projected Riya document   | synthetic tiny             |
-| `O3_EXACT_REPRESENTATIVE_OPERATIONAL`| EXACT_REPRESENTATIVE | **the same object as `O2`**     | **captured representative** |
+| Probe                                 | Kind                 | Schema                        | Messages                    |
+| ------------------------------------- | -------------------- | ----------------------------- | --------------------------- |
+| `O0_MINIMAL_CONTROL_OPERATIONAL`      | CONTROL              | minimal closed object         | synthetic tiny              |
+| `O1_EVOLUTION_GROUP_OPERATIONAL`      | GROUP                | real `$.evolution`, wrapped   | synthetic tiny              |
+| `O2_EXACT_SYNTHETIC_OPERATIONAL`      | EXACT_SYNTHETIC      | exact projected Riya document | synthetic tiny              |
+| `O3_EXACT_REPRESENTATIVE_OPERATIONAL` | EXACT_REPRESENTATIVE | **the same object as `O2`**   | **captured representative** |
 
 Run goal `POST_SRV1_OPERATIONAL_ACCEPTANCE_DIAGNOSTIC`, exit code **26**, its own ledger counter
 (`operationalAcceptanceProbeRequests`), its own classification vocabulary

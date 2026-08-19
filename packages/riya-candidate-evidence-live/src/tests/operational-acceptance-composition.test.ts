@@ -141,8 +141,7 @@ function fakeTransport(statusFor: (index: number) => number = () => 200): FakeTr
     send: (request, signal) => {
       const parsed = JSON.parse(request.body) as Record<string, unknown>;
       const responseFormat = parsed['response_format'] as
-        | { json_schema?: { strict?: boolean; schema?: unknown } }
-        | undefined;
+        { json_schema?: { strict?: boolean; schema?: unknown } } | undefined;
       const index = sends.length;
       sends.push({
         model: String(parsed['model']),
@@ -235,9 +234,7 @@ interface RunRecord {
   readonly credentialsHandedToRunner: readonly unknown[];
   readonly candidateCredential: unknown;
   readonly sends: readonly RecordedSend[];
-  readonly composition:
-    | ReturnType<typeof createLiveOperationalAcceptanceComposition>
-    | undefined;
+  readonly composition: ReturnType<typeof createLiveOperationalAcceptanceComposition> | undefined;
 }
 
 interface RunOptions {
@@ -257,9 +254,7 @@ async function runDiagnostic(options: RunOptions = {}): Promise<RunRecord> {
   const credentialsHandedToRunner: unknown[] = [];
   let runnerOpenCalls = 0;
   let openCandidateCalls = 0;
-  let composition:
-    | ReturnType<typeof createLiveOperationalAcceptanceComposition>
-    | undefined;
+  let composition: ReturnType<typeof createLiveOperationalAcceptanceComposition> | undefined;
 
   const deps: OperatorDeps = {
     console: createSafeConsole((line) => lines.push(line)),
@@ -677,7 +672,8 @@ describe('the output stays content-free and preserves the provider code', () => 
     const probeRow =
       run.lines.find(
         (line) =>
-          line.includes('status=PROBE') && line.includes('stepId=O3_EXACT_REPRESENTATIVE_OPERATIONAL'),
+          line.includes('status=PROBE') &&
+          line.includes('stepId=O3_EXACT_REPRESENTATIVE_OPERATIONAL'),
       ) ?? '';
     // The distinction between "the provider validated the schema and refused the shape" and
     // "something else broke" is the whole reason a further authorization would be worth granting.
@@ -698,9 +694,9 @@ describe('the output stays content-free and preserves the provider code', () => 
     }
     // And each row says which messages it carried, since that is the axis the pair varies.
     const rows = run.lines.filter((one) => one.includes('status=PROBE'));
-    expect(rows.filter((one) => one.includes('messageSource=CAPTURED_REPRESENTATIVE'))).toHaveLength(
-      1,
-    );
+    expect(
+      rows.filter((one) => one.includes('messageSource=CAPTURED_REPRESENTATIVE')),
+    ).toHaveLength(1);
     expect(rows.filter((one) => one.includes('messageSource=SYNTHETIC_TINY'))).toHaveLength(3);
   });
 

@@ -150,7 +150,9 @@ export function createLiveOperationalAcceptanceComposition(
 
   const clock = createSystemClock();
   const observations = createCandidateTransportObservations();
-  const observedTransport = observations.observe((deps.openTransport ?? createFetchGroqTransport)());
+  const observedTransport = observations.observe(
+    (deps.openTransport ?? createFetchGroqTransport)(),
+  );
   const probes = planOperationalAcceptance({
     projectedSchema: deps.projectedSchema,
     syntheticMessages: SYNTHETIC_CANARY_MESSAGES,

@@ -153,9 +153,7 @@ export function analyseOperationalAcceptance(
       acceptedIds.push(stepId);
     } else if (rejected(one)) {
       rejectedIds.push(stepId);
-      rejectedErrorCodes.push(
-        Object.freeze({ stepId, providerErrorCode: one.providerErrorCode }),
-      );
+      rejectedErrorCodes.push(Object.freeze({ stepId, providerErrorCode: one.providerErrorCode }));
     } else {
       inconclusiveIds.push(stepId);
     }
