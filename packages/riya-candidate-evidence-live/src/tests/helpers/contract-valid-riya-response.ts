@@ -126,7 +126,8 @@ export function evolutionPayload(args: {
     },
     evolution: {
       version: 1,
-      observations: [],
+      // POST-SDH4: the observation container, with both arrays required and empty.
+      observations: { sets: [], clears: [] },
       skipProjectDetails: false,
       questionPlan: {
         phase: decided.questionPlan.phase,

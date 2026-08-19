@@ -102,6 +102,26 @@ const REPLY = {
   citations: [],
 } as const;
 
+/**
+ * Split a canonical-style observation list into the POST-SDH4 provider container.
+ *
+ * The provider representation no longer carries `operation` on the item — the array a payload sits in
+ * IS the discriminator — so these fixtures keep expressing intent as one tagged list and this helper
+ * projects it into what the wire now expects.
+ */
+function providerObservations(
+  observations: readonly Record<string, unknown>[],
+): Record<string, unknown> {
+  const strip = (one: Record<string, unknown>): Record<string, unknown> => {
+    const { operation: _operation, ...rest } = one;
+    return rest;
+  };
+  return {
+    sets: observations.filter((one) => one['operation'] === 'SET').map(strip),
+    clears: observations.filter((one) => one['operation'] === 'CLEAR').map(strip),
+  };
+}
+
 /** A well-formed answer whose claimed plan is the one the reducer actually decides. */
 function answerFor(
   current: RiyaConversationContinuityStateV1,
@@ -115,7 +135,7 @@ function answerFor(
     reply: REPLY,
     evolution: {
       version: 1,
-      observations,
+      observations: providerObservations(observations),
       skipProjectDetails: false,
       questionPlan: {
         phase: decided.questionPlan.phase,

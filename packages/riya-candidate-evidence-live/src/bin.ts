@@ -53,11 +53,13 @@ import {
   createRequestContractDiagnosticLedger,
   createSafetyReplicationLedger,
   createSchemaDifferentialDiagnosticLedger,
+  createSchemaRepairVerificationLedger,
 } from './accounting.js';
 import type { RequestLedger } from './accounting.js';
 import { createCredentialComposition } from './credential-composition.js';
 import { openLiveDiagnosticCanaryRunner } from './live-diagnostic-canary-composition.js';
 import { openLiveSchemaProbeRunner } from './live-schema-probe-composition.js';
+import { openLiveSchemaRepairVerificationRunner } from './schema-repair-verification-port.js';
 import { DEFAULT_CREDENTIAL_SOURCE_MODE, isCredentialSourceMode } from './credential-source.js';
 import type { CredentialSourceMode } from './credential-source.js';
 import { DEFAULT_RUN_GOAL } from './internal/run-goal.js';
@@ -148,7 +150,9 @@ export function parseCliArgs(argv: readonly string[]): CliParse {
         value !== 'REQUEST_CONTRACT_DIAGNOSTIC' &&
         // POST-PR-131. A SEPARATE token: S11's historical matrix keeps its own goal, so a receipt can
         // always say which live matrix produced it.
-        value !== 'SCHEMA_DIFFERENTIAL_DIAGNOSTIC'
+        value !== 'SCHEMA_DIFFERENTIAL_DIAGNOSTIC' &&
+        // POST-SDH4. Again a SEPARATE token: SDH4's matrix keeps its own goal and its own receipts.
+        value !== 'POST_SDH4_SCHEMA_REPAIR_VERIFICATION'
       ) {
         return { ok: false, reason: 'invalid-run-goal' };
       }
@@ -190,6 +194,10 @@ export function parseCliArgs(argv: readonly string[]): CliParse {
  * real terminal and a real provider to run. A bounded run whose bound is untested is not bounded.
  */
 export function ledgerForRunGoal(goal: OperatorRunGoal): RequestLedger {
+  if (goal === 'POST_SDH4_SCHEMA_REPAIR_VERIFICATION') {
+    // Six requests, one dollar: the smoke plus five V0-V4 probes. The narrowest ceiling here.
+    return createSchemaRepairVerificationLedger();
+  }
   if (goal === 'SCHEMA_DIFFERENTIAL_DIAGNOSTIC') {
     // Ten requests, one dollar: the smoke plus nine schema probes. Its own ledger rather than the
     // request-contract one, so the two diagnostics can never be confused in a receipt.
@@ -296,6 +304,20 @@ async function main(): Promise<number> {
     //
     // The projection is injected rather than imported inside the composition, so the probe matrix is
     // built by the SAME production projection the provider applies to a real request.
+    // POST-SDH4. The REAL repair-verification port, bound to the credential just resolved. Bound from
+    // the day the seam exists, for the reason HF4-R8 taught: a reviewed seam bin.ts never passes is
+    // a diagnostic that burns a live authorization and learns nothing.
+    openSchemaRepairVerificationRunner: (credential) =>
+      openLiveSchemaRepairVerificationRunner({
+        credential,
+        projectSchema: (rawSchema) => {
+          const projection = projectGroqStrictJsonSchema(rawSchema);
+          if (!projection.ok) {
+            throw new Error('QFJ_SCHEMA_REPAIR_PROJECTION_FAILED');
+          }
+          return projection.schema;
+        },
+      }),
     openSchemaProbeRunner: (credential) =>
       openLiveSchemaProbeRunner({
         credential,

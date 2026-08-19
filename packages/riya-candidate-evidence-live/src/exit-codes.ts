@@ -52,6 +52,14 @@ export const OPERATOR_OUTCOMES = [
    * the classification line, including the case where the control itself failed.
    */
   'SCHEMA_DIFFERENTIAL_DIAGNOSTIC_COMPLETE',
+  /**
+   * POST-SDH4. A bounded schema-repair verification ran its probes and stopped.
+   *
+   * Its own code, so a script reading `$LASTEXITCODE` can tell a verification run from SDH4's
+   * historical matrix. As with the others, it says the run COMPLETED, not that the schema was
+   * accepted — that is in the classification line.
+   */
+  'POST_SDH4_SCHEMA_REPAIR_VERIFICATION_COMPLETE',
 ] as const;
 export type OperatorOutcome = (typeof OPERATOR_OUTCOMES)[number];
 
@@ -77,4 +85,6 @@ export const OPERATOR_EXIT_CODES: Readonly<Record<OperatorOutcome, number>> = Ob
   REQUEST_CONTRACT_DIAGNOSTIC_COMPLETE: 23,
   // The next unused integer; 0-23 keep meaning exactly what they meant.
   SCHEMA_DIFFERENTIAL_DIAGNOSTIC_COMPLETE: 24,
+  // The next unused integer; 0-24 keep meaning exactly what they meant.
+  POST_SDH4_SCHEMA_REPAIR_VERIFICATION_COMPLETE: 25,
 });

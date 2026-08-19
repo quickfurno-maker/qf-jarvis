@@ -14,12 +14,13 @@ import { projectGroqStrictJsonSchema } from '@qf-jarvis/model-gateway';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import { captureProductionRiyaCanaryRequest } from '../diagnostic-canary-materials.js';
+import { planRiyaSchemaProbeMatrix } from '../internal/riya-schema-probe-matrix.js';
 import {
-  planRiyaSchemaProbeMatrix,
-  SCHEMA_PROBE_STEP_IDS,
-} from '../internal/riya-schema-probe-matrix.js';
-import type { SchemaProbe } from '../internal/riya-schema-probe-matrix.js';
-import { inventoryStrictSchema, SCHEMA_DIMENSIONS } from '../internal/strict-schema-inventory.js';
+  planRiyaSchemaRepairVerification,
+  SCHEMA_REPAIR_VERIFICATION_STEP_IDS,
+} from '../internal/riya-schema-repair-verification-plan.js';
+import type { SchemaRepairVerificationProbe } from '../internal/riya-schema-repair-verification-plan.js';
+import { inventoryStrictSchema } from '../internal/strict-schema-inventory.js';
 import type { StrictSchemaInventory } from '../internal/strict-schema-inventory.js';
 
 /** The exact document D5 put on the wire: the real Riya schema, through the real HF4-R7 projection. */
@@ -80,18 +81,18 @@ describe('the exact D5 document, audited offline', () => {
     expect(inventory.propertyCount).toBeGreaterThan(0);
   });
 
-  it('names the dimensions no S11 canary exercised', () => {
-    // S11 tested: a closed object with a string enum (D1), a nullable anyOf PROPERTY (D3), and a
-    // numeric singleton enum (D4). It never sent an array of any kind, never sent `anyOf` in ITEMS
-    // position, and never nested beyond two levels.
-    for (const untested of [
-      'SCALAR_ARRAY',
-      'OBJECT_ARRAY',
-      'ANYOF_ARRAY_ITEMS',
-      'NESTED_OBJECT',
-    ] as const) {
-      expect(inventory.dimensions).toContain(untested);
+  it('POST-SDH4 — the ANYOF_ARRAY_ITEMS dimension is GONE from the production schema', () => {
+    // S11 tested a closed object with a string enum (D1), a nullable anyOf PROPERTY (D3) and a
+    // numeric singleton enum (D4), and never sent an array of any kind or `anyOf` in ITEMS position.
+    // SDH4 then sent exactly that items-position union and Groq refused it.
+    //
+    // The other structures the canaries never exercised are still present and still worth naming.
+    for (const present of ['SCALAR_ARRAY', 'OBJECT_ARRAY', 'NESTED_OBJECT'] as const) {
+      expect(inventory.dimensions).toContain(present);
     }
+    // The rejected one is not.
+    expect(inventory.dimensions).not.toContain('ANYOF_ARRAY_ITEMS');
+    expect(inventory.anyOfCount).toBeGreaterThan(0);
   });
 
   it('is deterministic — the same schema inventories identically twice', () => {
@@ -142,22 +143,66 @@ describe('the exact D5 document, audited offline', () => {
   });
 });
 
-describe('the probe matrix is derived from the real schema', () => {
-  let probes: readonly SchemaProbe[];
+describe('POST-SDH4 — the historical R0-R8 matrix can no longer be planned, and that is the proof', () => {
+  it('planning the historical matrix over the REPAIRED schema fails loudly', () => {
+    // SDH4 sent `R4_ANYOF_ARRAY_ITEMS` — the real `anyOf` object union under
+    // `$.evolution.observations` array items — and Groq returned HTTP 400. The repair removed that
+    // composition, so the historical planner can no longer locate the fragment it is named after.
+    //
+    // It THROWS rather than quietly re-pointing R4 at some other shape, which is exactly right: every
+    // SDH4 receipt already says what R4 meant, and a planner that silently changed it would make the
+    // immutable evidence unreadable. The failure is therefore a regression proof that the rejected
+    // fragment is gone.
+    expect(() => planRiyaSchemaProbeMatrix(projected)).toThrow(/DIMENSION_NOT_LOCATED_ANYOFARRAY/u);
+  });
+
+  it('the repaired document contains NO anyOf under any array items', () => {
+    // The same fact, asserted structurally rather than through the planner.
+    const walk = (node: unknown): void => {
+      if (typeof node !== 'object' || node === null) {
+        return;
+      }
+      const record = node as Record<string, unknown>;
+      if (record['type'] === 'array') {
+        const items = record['items'];
+        if (typeof items === 'object' && items !== null) {
+          expect(Array.isArray((items as Record<string, unknown>)['anyOf'])).toBe(false);
+        }
+      }
+      for (const value of Object.values(record)) {
+        if (Array.isArray(value)) {
+          value.forEach(walk);
+        } else {
+          walk(value);
+        }
+      }
+    };
+    walk(projected);
+  });
+
+  it('the repaired document still violates NO offline-checkable strict rule', () => {
+    // The repair must not have introduced a new problem while removing the old one.
+    expect([...inventoryStrictSchema(projected).findings]).toEqual([]);
+  });
+});
+
+describe('POST-SDH4 — the verification matrix IS derived from the repaired schema', () => {
+  let probes: readonly SchemaRepairVerificationProbe[];
   beforeAll(() => {
-    probes = planRiyaSchemaProbeMatrix(projected);
+    probes = planRiyaSchemaRepairVerification(projected);
   });
 
   it('has one probe per governed step id, in order', () => {
-    expect(probes.map((one) => one.stepId)).toEqual([...SCHEMA_PROBE_STEP_IDS]);
+    expect(probes.map((one) => one.stepId)).toEqual([...SCHEMA_REPAIR_VERIFICATION_STEP_IDS]);
+    // Five, not nine: verifying one structural change needs fewer questions than isolating an
+    // unknown one did.
+    expect(probes).toHaveLength(5);
   });
 
   it('every probe is a closed object schema with no offline-checkable violation', () => {
     for (const probe of probes) {
       const audit = inventoryStrictSchema(probe.schema);
       expect(audit.rootIsObject, probe.stepId).toBe(true);
-      // A probe that was itself malformed would send the next authorization after a defect this
-      // module introduced rather than after the one it is hunting.
       expect(
         audit.findings.map((one) => one.violation),
         probe.stepId,
@@ -165,114 +210,58 @@ describe('the probe matrix is derived from the real schema', () => {
     }
   });
 
-  it('each probe carries a REAL fragment, located by path, never a replica', () => {
+  it('each probe carries a REAL fragment located by path, and V4 is the exact document', () => {
     const byId = new Map(probes.map((one) => [one.stepId, one]));
-    for (const probe of probes) {
-      if (probe.stepId === 'R0_MINIMAL_CONTROL') {
-        expect(probe.derivedFromPath).toBe('$');
-        continue;
-      }
-      expect(probe.derivedFromPath.startsWith('$'), probe.stepId).toBe(true);
-    }
-    // The last probe IS the exact document D5 sent — object identity, not a rebuild of it.
-    expect(byId.get('R8_EXACT_PROJECTED_RIYA')?.schema).toBe(projected);
+    expect(byId.get('V1_OBSERVATION_SETS_ARRAY')?.derivedFromPath).toBe(
+      '$.evolution.observations.sets',
+    );
+    expect(byId.get('V2_OBSERVATION_CLEARS_ARRAY')?.derivedFromPath).toBe(
+      '$.evolution.observations.clears',
+    );
+    // Object identity, not a rebuild.
+    expect(byId.get('V4_EXACT_PROJECTED_RIYA')?.schema).toBe(projected);
   });
 
-  it('POST-PR-131 — the probes are INDEPENDENT, not a cumulative ladder', () => {
-    // The retracted claim, asserted false so it cannot quietly return.
-    //
-    // A previous revision described these as a ladder whose consecutive rungs "add exactly ONE
-    // dimension each", so that "the FIRST rejection names a cause". The implementation never did
-    // that: each probe wraps ONE located fragment, so R2 is a different single fragment rather than
-    // R1 plus an array, and it does not contain R1's numeric enum at all.
-    const byId = new Map(probes.map((one) => [one.stepId, one]));
-    const dimensionsOf = (stepId: string): readonly string[] =>
-      inventoryStrictSchema(byId.get(stepId as never)?.schema).dimensions;
-
-    const numericEnum = dimensionsOf('R1_NUMERIC_ENUM_AS_NUMBER');
-    const scalarArray = dimensionsOf('R2_SCALAR_ARRAY');
-    expect(numericEnum).toContain('NUMERIC_ENUM');
-    // If R2 were R1 plus one dimension it would still carry the numeric enum. It does not.
-    expect(scalarArray).not.toContain('NUMERIC_ENUM');
-
-    // The same the other way: R3 does not contain R2's scalar array.
-    expect(dimensionsOf('R3_OBJECT_ARRAY')).not.toContain('SCALAR_ARRAY');
-  });
-
-  it('POST-PR-131 — no probe except the exact document is a superset of its predecessor', () => {
-    // A structural check rather than a label check. For a genuinely cumulative matrix every adjacent
-    // pair would satisfy `dimensions(n-1) ⊆ dimensions(n)`. Between the FEATURE probes that fails,
-    // which is exactly why the interpretation is a set and not an ordering.
-    const featureIds = probes.filter((one) => one.probeKind === 'FEATURE').map((one) => one.stepId);
-    const dims = (stepId: string): ReadonlySet<string> =>
-      new Set(
-        inventoryStrictSchema(probes.find((one) => one.stepId === stepId)?.schema).dimensions,
-      );
-    let cumulativePairs = 0;
-    for (let index = 1; index < featureIds.length; index += 1) {
-      const previous = dims(featureIds[index - 1] ?? '');
-      const current = dims(featureIds[index] ?? '');
-      if ([...previous].every((one) => current.has(one))) {
-        cumulativePairs += 1;
-      }
-    }
-    // Not one adjacent FEATURE pair is a superset relationship. The word "ladder" would be a lie.
-    expect(cumulativePairs).toBe(0);
-  });
-
-  it('POST-PR-131 — distinct dimension LABELS are not treated as proof of anything structural', () => {
-    // The old spec asserted only this, then the comments concluded one-axis adjacent deltas from it.
-    // The property is kept because it IS true and useful — no two probes claim the same axis — but it
-    // is asserted here as a labelling fact and nothing more.
-    const labels = probes.map((one) => one.probeDimension);
-    expect(new Set(labels).size).toBe(labels.length);
-  });
-
-  it('every probe declares its role, and exactly one is the control', () => {
-    const controls = probes.filter((one) => one.probeKind === 'CONTROL');
-    expect(controls.map((one) => one.stepId)).toEqual(['R0_MINIMAL_CONTROL']);
-    expect(probes.filter((one) => one.probeKind === 'EXACT').map((one) => one.stepId)).toEqual([
-      'R8_EXACT_PROJECTED_RIYA',
+  it('exactly one control and one exact probe, and the two arrays are independent', () => {
+    expect(probes.filter((one) => one.probeKind === 'CONTROL').map((one) => one.stepId)).toEqual([
+      'V0_MINIMAL_CONTROL',
     ]);
-    // Feature and group probes make up the rest; every probe has a role.
-    expect(probes.every((one) => one.probeKind.length > 0)).toBe(true);
-  });
-
-  it('isolates each dimension the S11 canaries never tested', () => {
+    expect(probes.filter((one) => one.probeKind === 'EXACT').map((one) => one.stepId)).toEqual([
+      'V4_EXACT_PROJECTED_RIYA',
+    ]);
+    // V2 is not V1 plus a field — each wraps its own real array.
     const dimensionsOf = (stepId: string): readonly string[] =>
       inventoryStrictSchema(probes.find((one) => one.stepId === stepId)?.schema).dimensions;
-
-    expect(dimensionsOf('R2_SCALAR_ARRAY')).toContain('SCALAR_ARRAY');
-    expect(dimensionsOf('R3_OBJECT_ARRAY')).toContain('OBJECT_ARRAY');
-    expect(dimensionsOf('R4_ANYOF_ARRAY_ITEMS')).toContain('ANYOF_ARRAY_ITEMS');
-    expect(dimensionsOf('R1_NUMERIC_ENUM_AS_NUMBER')).toContain('NUMERIC_ENUM');
-    // And the control carries none of them, so a rejection at R0 means something else changed.
-    const control = dimensionsOf('R0_MINIMAL_CONTROL');
-    for (const untested of ['SCALAR_ARRAY', 'OBJECT_ARRAY', 'ANYOF_ARRAY_ITEMS'] as const) {
-      expect(control).not.toContain(untested);
-    }
+    expect(dimensionsOf('V1_OBSERVATION_SETS_ARRAY')).toContain('OBJECT_ARRAY');
+    expect(dimensionsOf('V2_OBSERVATION_CLEARS_ARRAY')).toContain('OBJECT_ARRAY');
+    // And the control carries neither array.
+    expect(dimensionsOf('V0_MINIMAL_CONTROL')).not.toContain('OBJECT_ARRAY');
   });
 
-  it('is deterministic — two matrices over the same schema are byte-identical', () => {
-    expect(JSON.stringify(planRiyaSchemaProbeMatrix(projected))).toBe(JSON.stringify(probes));
+  it('is deterministic — two plans over the same schema are byte-identical', () => {
+    expect(JSON.stringify(planRiyaSchemaRepairVerification(projected))).toBe(
+      JSON.stringify(probes),
+    );
   });
 
-  it('is bounded — a future run needs a small, reviewable number of calls', () => {
-    expect(probes.length).toBe(9);
-    expect(SCHEMA_DIMENSIONS.length).toBeGreaterThan(0);
-  });
-
-  it('refuses to plan over a document it cannot partition', () => {
-    expect(() => planRiyaSchemaProbeMatrix({ type: 'string' })).toThrow(/ROOT_NOT_OBJECT/u);
-    // A root object with none of the dimensions present fails loudly rather than producing a matrix
-    // with silently missing probes.
+  it('refuses to plan over a document that is not the repaired shape', () => {
+    expect(() => planRiyaSchemaRepairVerification({ type: 'string' })).toThrow(/ROOT_NOT_OBJECT/u);
+    // A document whose observations is still an ARRAY is the pre-repair shape; verifying against it
+    // would be verifying the wrong thing.
     expect(() =>
-      planRiyaSchemaProbeMatrix({
+      planRiyaSchemaRepairVerification({
         type: 'object',
-        properties: { a: { type: 'string' } },
-        required: ['a'],
+        properties: {
+          evolution: {
+            type: 'object',
+            properties: { observations: { type: 'array', items: { type: 'object' } } },
+            required: ['observations'],
+            additionalProperties: false,
+          },
+        },
+        required: ['evolution'],
         additionalProperties: false,
       }),
-    ).toThrow(/DIMENSION_NOT_LOCATED/u);
+    ).toThrow(/OBSERVATIONS_NOT_A_CONTAINER/u);
   });
 });

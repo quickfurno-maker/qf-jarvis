@@ -86,6 +86,21 @@ export const SCHEMA_DIFFERENTIAL_MAX_PROVIDER_REQUESTS =
 /** The spend ceiling. Same conservative figure as the other two bounded diagnostics. */
 export const SCHEMA_DIFFERENTIAL_MAX_ESTIMATED_COST_USD = 1;
 
+/**
+ * The exact arithmetic of a POST_SDH4_SCHEMA_REPAIR_VERIFICATION run: the text smoke plus the five
+ * V0-V4 probes.
+ *
+ * SIX, the narrowest ceiling in the codebase. The repair is a single structural change, so verifying
+ * it needs five questions rather than the nine SDH4 spent isolating an unknown one — and a run that
+ * asks less has no business being authorised for more.
+ */
+export const SCHEMA_REPAIR_VERIFICATION_PROBE_REQUESTS = 5;
+export const SCHEMA_REPAIR_VERIFICATION_MAX_PROVIDER_REQUESTS =
+  SMOKE_REQUESTS + SCHEMA_REPAIR_VERIFICATION_PROBE_REQUESTS;
+
+/** The spend ceiling. Same conservative figure as every other bounded diagnostic. */
+export const SCHEMA_REPAIR_VERIFICATION_MAX_ESTIMATED_COST_USD = 1;
+
 /** Why the ledger refused the next call. Closed and content-free. */
 export const LEDGER_REFUSALS = [
   'request-limit-reached',
@@ -102,7 +117,14 @@ export const LEDGER_REFUSALS = [
 export type LedgerRefusal = (typeof LEDGER_REFUSALS)[number];
 
 /** Which phase a request belongs to. Used for reporting only; every phase shares one ceiling. */
-export const LEDGER_PHASES = ['smoke', 'safety', 'p10', 'diagnostic', 'schema-probe'] as const;
+export const LEDGER_PHASES = [
+  'smoke',
+  'safety',
+  'p10',
+  'diagnostic',
+  'schema-probe',
+  'schema-repair-probe',
+] as const;
 export type LedgerPhase = (typeof LEDGER_PHASES)[number];
 
 export interface LedgerSnapshot {
@@ -119,6 +141,13 @@ export interface LedgerSnapshot {
    * same field could not say which run it came from.
    */
   readonly schemaProbeProviderRequests: number;
+  /**
+   * POST-SDH4. Repair-verification probe requests (V0-V4).
+   *
+   * A FOURTH counter. SDH4's R0-R8 evidence is immutable and describes the pre-repair schema; a
+   * receipt in which a verification run incremented that counter could not say which matrix ran.
+   */
+  readonly schemaRepairProbeProviderRequests: number;
   readonly totalProviderRequests: number;
   readonly successfulProviderResponses: number;
   readonly providerFailures: number;
@@ -187,6 +216,7 @@ export function createRequestLedger(config: RequestLedgerConfig): RequestLedger 
     p10: 0,
     diagnostic: 0,
     'schema-probe': 0,
+    'schema-repair-probe': 0,
   };
   let successes = 0;
   let failures = 0;
@@ -272,6 +302,7 @@ export function createRequestLedger(config: RequestLedgerConfig): RequestLedger 
         p10ProviderRequests: counts.p10,
         diagnosticProviderRequests: counts.diagnostic,
         schemaProbeProviderRequests: counts['schema-probe'],
+        schemaRepairProbeProviderRequests: counts['schema-repair-probe'],
         totalProviderRequests: total(),
         successfulProviderResponses: successes,
         providerFailures: failures,
@@ -339,6 +370,26 @@ export function createSafetyReplicationLedger(): RequestLedger {
  * candidate release rather than restated. Only the ceilings differ, and this one is separate from the
  * request-contract ledger on purpose — S11's D1-D8 evidence is immutable, and a shared ceiling would
  * make two different matrices indistinguishable in a receipt.
+ */
+export function createSchemaRepairVerificationLedger(): RequestLedger {
+  return createRequestLedger({
+    maxRequests: SCHEMA_REPAIR_VERIFICATION_MAX_PROVIDER_REQUESTS,
+    maxCostUsd: SCHEMA_REPAIR_VERIFICATION_MAX_ESTIMATED_COST_USD,
+    pricePerMillionInputUsd: CANDIDATE_PRICE_PER_M_INPUT_USD,
+    pricePerMillionCachedInputUsd: CANDIDATE_PRICE_PER_M_CACHED_INPUT_USD,
+    pricePerMillionOutputUsd: CANDIDATE_PRICE_PER_M_OUTPUT_USD,
+    fallbackInputTokens: CANDIDATE_MAX_INPUT_TOKENS,
+    fallbackOutputTokens: CANDIDATE_MAX_COMPLETION_TOKENS,
+    hardMaxInputTokens: CANDIDATE_MAX_INPUT_TOKENS,
+    hardMaxOutputTokens: CANDIDATE_MAX_COMPLETION_TOKENS,
+  });
+}
+
+/**
+ * The ledger for a bounded POST_SDH4_SCHEMA_REPAIR_VERIFICATION run.
+ *
+ * The text smoke plus the five V0-V4 probes: SIX requests, one dollar. Its own ledger and its own
+ * counter, so it can never be confused with SDH4's nine-probe historical matrix.
  */
 export function createSchemaDifferentialDiagnosticLedger(): RequestLedger {
   return createRequestLedger({

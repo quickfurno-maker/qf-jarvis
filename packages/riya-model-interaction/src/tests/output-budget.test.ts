@@ -62,13 +62,16 @@ describe('every fill produces a document the real schema accepts', () => {
   it.each([...RIYA_FREE_TEXT_FILLS])('%s fills every bounded field to its maximum', (fill) => {
     const largest = riyaStructuredOutputAtFill(fill) as {
       reply: { replyBody: string; reasonCode: string; citations: unknown[] };
-      evolution: { observations: unknown[]; questionPlan: { questionFields: unknown[] } };
+      evolution: {
+        observations: { sets: unknown[]; clears: unknown[] };
+        questionPlan: { questionFields: unknown[] };
+      };
     };
     // UTF-16 code units, because that is the unit the schema bounds.
     expect(largest.reply.replyBody).toHaveLength(2500);
     expect(largest.reply.reasonCode).toHaveLength(64);
     expect(largest.reply.citations).toHaveLength(64);
-    expect(largest.evolution.observations).toHaveLength(7);
+    expect(largest.evolution.observations.sets).toHaveLength(7);
     expect(largest.evolution.questionPlan.questionFields).toHaveLength(2);
   });
 });

@@ -86,7 +86,7 @@ const TASK_CLASSES: readonly string[] = [
 ];
 
 /** The digest the owner reviewed. See the pinning note below. */
-const REVIEWED_DIGEST = 'b8ae461c855358caf9c389bd0b21a44c3f697955f9d9d09fe593f38f362657b8';
+const REVIEWED_DIGEST = 'd0c2da57f53c2541274e090b8dec997c885f65f60c6bd8467e98d0be684b71fb';
 
 // ---------------------------------------------------------------------------
 // Identity.

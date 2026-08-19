@@ -67,7 +67,7 @@ describe('the candidate identity is exact and has no wildcard in it', () => {
 
   it('the reviewed Riya prompt digest is the one from PR #117', () => {
     expect(RIYA_CLIENT_PROMPT_DIGEST).toBe(
-      'b8ae461c855358caf9c389bd0b21a44c3f697955f9d9d09fe593f38f362657b8',
+      'd0c2da57f53c2541274e090b8dec997c885f65f60c6bd8467e98d0be684b71fb',
     );
   });
 

@@ -144,12 +144,17 @@ export function riyaStructuredOutputAtFill(fill: RiyaFreeTextFill): unknown {
     },
     evolution: {
       version: 1,
-      observations: DISCOVERY_FIELDS_FROZEN.map((field) => ({
-        field,
-        operation: 'SET',
-        value: free(MAX_OBSERVATION_VALUE_CHARS),
-        provenance,
-      })),
+      // POST-SDH4: two typed arrays rather than one array of tagged unions. The worst case fills
+      // `sets` to the per-array maximum; `clears` stays empty because a CLEAR carries no value and
+      // therefore contributes almost nothing to the byte extent this measures.
+      observations: {
+        sets: DISCOVERY_FIELDS_FROZEN.map((field) => ({
+          field,
+          value: free(MAX_OBSERVATION_VALUE_CHARS),
+          provenance,
+        })),
+        clears: [],
+      },
       skipProjectDetails: false,
       questionPlan: {
         phase,

@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { captureProductionRiyaCanaryRequest } from '../diagnostic-canary-materials.js';
-import { planRiyaSchemaProbeMatrix } from '../internal/riya-schema-probe-matrix.js';
+import { planRiyaSchemaRepairVerification } from '../internal/riya-schema-repair-verification-plan.js';
 import { inventoryStrictSchema } from '../internal/strict-schema-inventory.js';
 
 const SRC = fileURLToPath(new URL('../', import.meta.url));
@@ -27,6 +27,8 @@ const SRC = fileURLToPath(new URL('../', import.meta.url));
 const OFFLINE_MODULES = [
   'internal/strict-schema-inventory.ts',
   'internal/riya-schema-probe-matrix.ts',
+  'internal/riya-schema-repair-verification-plan.ts',
+  'internal/schema-repair-verification-classification.ts',
   'internal/schema-differential-classification.ts',
   'internal/schema-differential-emitters.ts',
   'diagnostic-canary-materials.ts',
@@ -84,7 +86,7 @@ describe('the reducer and the inventory run with the network trapped', () => {
       return;
     }
     const inventory = inventoryStrictSchema(projection.schema);
-    const plan = planRiyaSchemaProbeMatrix(projection.schema);
+    const plan = planRiyaSchemaRepairVerification(projection.schema);
 
     // The work genuinely happened...
     expect(inventory.objectCount).toBeGreaterThan(0);

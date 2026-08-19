@@ -102,52 +102,85 @@ const riyaReplySchema = z
 const OBSERVATION_VALUE = z.string().min(1).max(2048);
 
 /**
- * A SET: the value is what is being set, so it is REQUIRED. Either model provenance may set a fact.
+ * The observation payloads, SPLIT BY OPERATION (POST-SDH4).
+ *
+ * ### What SDH4 proved, and what it did not
+ *
+ * The previous provider representation was `z.array(z.union([SET, CLEAR]))`, which projects to an
+ * `anyOf` object union sitting directly under array `items`. RUN SDH4 sent that exact real fragment
+ * as probe `R4_ANYOF_ARRAY_ITEMS` at a 512-token cap and Groq returned HTTP 400
+ * `invalid_request_error`. `R7_EVOLUTION_GROUP` and `R8_EXACT_PROJECTED_RIYA` — both of which contain
+ * it — failed the same way, while the minimal control, a numeric enum, a scalar array, an object
+ * array, a nested object group and the whole reply group all returned HTTP 200.
+ *
+ * That is evidence about ONE structural composition. It is NOT "Groq does not support `anyOf`": S11's
+ * D3 probe accepted a nullable `anyOf` scalar union, and the provider documents `anyOf` as supported.
+ * The narrow, defensible statement is that this specific object-union-under-array-items shape was
+ * rejected, so the repair is contained to this representation rather than generalised into a
+ * provider-wide rule.
+ *
+ * ### The repair is representational, not semantic
+ *
+ * The array-of-union becomes a closed object carrying two separately typed arrays. The containing
+ * array IS the operation discriminator, so neither item needs an `operation` property:
+ *
+ *   member of `sets`   => operation SET
+ *   member of `clears` => operation CLEAR
+ *
+ * Every RWC-P4A rule the union expressed structurally is still expressed structurally. A SET carries
+ * a required value; a CLEAR has NO `value` property at all, so `.strict()` refuses one; a CLEAR's
+ * provenance is the literal `user_stated`, so an inference still cannot withdraw a fact. What the
+ * model may claim did not change — only where the discriminator lives.
+ *
+ * ### The combined bound is the canonical constructor's job
+ *
+ * Splitting one bounded array into two creates a gap the schema cannot close: two independent
+ * `max(7)` constraints do not prove a combined `max(7)`, and Groq's documented strict subset offers
+ * no supported cross-sibling total-count constraint. Each array is therefore individually bounded
+ * here, and `projectStructuredResult` re-proves the COMBINED canonical list through
+ * `createRiyaConversationObservationBatch`, which already enforces the total ceiling and the
+ * one-observation-per-field rule and refuses the whole answer rather than truncating it.
  */
-const setObservationSchema = z
+const setObservationItemSchema = z
   .object({
     field: FIELD,
-    operation: z.literal('SET'),
+    // Required: a SET with nothing to set is not a SET.
     value: OBSERVATION_VALUE,
     provenance: z.enum(RIYA_MODEL_PROVENANCES),
   })
   .strict();
 
 /**
- * A CLEAR: there is no value to carry, so the branch has NO `value` property at all — the strongest
- * possible form of "CLEAR forbids a value", because `.strict()` then refuses one as an unknown key.
+ * A CLEAR payload: no `value` property AT ALL, so `.strict()` refuses one.
  *
- * `provenance` is the literal `user_stated`: an inference may not withdraw a fact. RWC-P4A refuses
- * this too, and refusing it HERE means the whole model answer is rejected rather than one observation
- * being quietly dropped.
+ * `provenance` is the literal `user_stated` because an inference may not withdraw a fact. RWC-P4A
+ * refuses that too, and refusing it HERE means the whole model answer is rejected rather than one
+ * observation being quietly dropped.
  */
-const clearObservationSchema = z
+const clearObservationItemSchema = z
   .object({
     field: FIELD,
-    operation: z.literal('CLEAR'),
     provenance: z.literal('user_stated'),
   })
   .strict();
 
 /**
- * The two operations, as a UNION rather than one object plus `.superRefine()` (MVP-P2A.2 HF4).
+ * The observations container: a closed object with two REQUIRED arrays.
  *
- * The rules did not change — SET requires a value, CLEAR forbids one, CLEAR requires an explicit user
- * statement — but they were previously enforced ONLY locally. A `.superRefine()` is invisible to
- * `z.toJSONSchema`, so the schema the provider saw was a generic object where `value` was optional
- * and every operation/provenance combination was permitted. The model was being shown a laxer contract
- * than the one its answer would be judged against.
- *
- * Expressing the branches structurally makes the provider-visible schema say what the local schema has
- * always meant. `z.union` is deliberate: it renders to `anyOf`, which Groq's strict subset supports,
- * whereas `z.discriminatedUnion` renders to `oneOf`, which it does not document.
+ * Both are required rather than optional because Groq strict mode has no concept of an absent
+ * property — "no clears this turn" has to be SAID, and it is said with an empty array.
  */
-const observationSchema = z.union([setObservationSchema, clearObservationSchema]);
+const observationsSchema = z
+  .object({
+    sets: z.array(setObservationItemSchema).max(DISCOVERY_FIELDS_FROZEN.length),
+    clears: z.array(clearObservationItemSchema).max(DISCOVERY_FIELDS_FROZEN.length),
+  })
+  .strict();
 
 /**
- * The union above names its operations as literals, so this keeps it tied to the governed vocabulary:
- * if RWC-P4A ever gains a third operation, this stops compiling and someone has to decide what a model
- * may claim about it, rather than the new operation silently becoming unrepresentable.
+ * The two operations, still named as literals so the governed vocabulary stays tied to this file: if
+ * RWC-P4A ever gains a third operation, this stops compiling and someone has to decide what a model
+ * may claim about it rather than the new operation silently becoming unrepresentable.
  */
 const _OPERATIONS_COVERED: readonly ['SET', 'CLEAR'] = RIYA_DISCOVERY_OBSERVATION_OPERATIONS;
 void _OPERATIONS_COVERED;
@@ -168,7 +201,9 @@ const questionPlanSchema = z
 const evolutionSchema = z
   .object({
     version: z.literal(1),
-    observations: z.array(observationSchema).max(DISCOVERY_FIELDS_FROZEN.length),
+    // The container, not an array. See the note above: the array-of-union this replaced is the exact
+    // fragment SDH4's R4 probe proved Groq rejects.
+    observations: observationsSchema,
     skipProjectDetails: z.boolean(),
     questionPlan: questionPlanSchema,
   })

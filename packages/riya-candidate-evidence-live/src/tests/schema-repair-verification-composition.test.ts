@@ -43,8 +43,9 @@ import {
 import { captureProductionRiyaCanaryRequest } from '../diagnostic-canary-materials.js';
 import type { CapturedProductionRiyaRequest } from '../diagnostic-canary-materials.js';
 import { OPERATOR_EXIT_CODES } from '../exit-codes.js';
-import { SCHEMA_PROBE_STEP_IDS } from '../internal/riya-schema-probe-matrix.js';
-import { createLiveSchemaProbeComposition } from '../live-schema-probe-composition.js';
+import { createLiveSchemaRepairVerificationComposition } from '../schema-repair-verification-port.js';
+import { SCHEMA_REPAIR_VERIFICATION_STEP_IDS } from '../internal/riya-schema-repair-verification-plan.js';
+import { createSchemaRepairVerificationLedger } from '../accounting.js';
 import { runCandidateEvidenceOperator } from '../operator.js';
 import type { OperatorDeps } from '../operator.js';
 import type * as ActualPreflightModule from '../preflight.js';
@@ -217,7 +218,8 @@ interface RunRecord {
   readonly credentialsHandedToRunner: readonly unknown[];
   readonly candidateCredential: unknown;
   readonly sends: readonly RecordedSend[];
-  readonly composition: ReturnType<typeof createLiveSchemaProbeComposition> | undefined;
+  readonly composition:
+    ReturnType<typeof createLiveSchemaRepairVerificationComposition> | undefined;
 }
 
 interface RunOptions {
@@ -237,7 +239,7 @@ async function runDiagnostic(options: RunOptions = {}): Promise<RunRecord> {
   const credentialsHandedToRunner: unknown[] = [];
   let runnerOpenCalls = 0;
   let openCandidateCalls = 0;
-  let composition: ReturnType<typeof createLiveSchemaProbeComposition> | undefined;
+  let composition: ReturnType<typeof createLiveSchemaRepairVerificationComposition> | undefined;
 
   const deps: OperatorDeps = {
     console: createSafeConsole((line) => lines.push(line)),
@@ -247,8 +249,8 @@ async function runDiagnostic(options: RunOptions = {}): Promise<RunRecord> {
       repoRoot: REPO_ROOT,
       interactive: true,
     },
-    ledger: createSchemaDifferentialDiagnosticLedger(),
-    runGoal: 'SCHEMA_DIFFERENTIAL_DIAGNOSTIC',
+    ledger: createSchemaRepairVerificationLedger(),
+    runGoal: 'POST_SDH4_SCHEMA_REPAIR_VERIFICATION',
     openSmokeCredential: () =>
       Promise.resolve({
         credentialSource: {
@@ -265,7 +267,7 @@ async function runDiagnostic(options: RunOptions = {}): Promise<RunRecord> {
     ...(options.omitRunner === true
       ? {}
       : {
-          openSchemaProbeRunner: (credential: unknown) => {
+          openSchemaRepairVerificationRunner: (credential: unknown) => {
             runnerOpenCalls += 1;
             credentialsHandedToRunner.push(credential);
             if (options.bindThrows === true) {
@@ -273,7 +275,7 @@ async function runDiagnostic(options: RunOptions = {}): Promise<RunRecord> {
             }
             // THE composition bin.ts uses, with only the transport and the projection injected.
             // The SAME composition bin.ts uses, kept so both budget axes are observable directly.
-            composition = createLiveSchemaProbeComposition({
+            composition = createLiveSchemaRepairVerificationComposition({
               credential,
               openTransport: () => wire.transport,
               captured,
@@ -332,12 +334,12 @@ describe('the CLI and the executable composition bind the new goal', () => {
     expect(parseCliArgs(['--run-goal', 'SCHEMA_DIFF']).ok).toBe(false);
   });
 
-  it('bin.ts binds the concrete live probe runner and its own ledger', () => {
+  it('bin.ts binds the concrete live verification runner and its own ledger', () => {
     const bin = readFileSync(join(SRC, 'bin.ts'), 'utf8');
-    expect(bin).toContain("from './live-schema-probe-composition.js'");
-    expect(bin).toContain('openSchemaProbeRunner: (credential) =>');
-    expect(bin).toContain('openLiveSchemaProbeRunner({');
-    expect(bin).toContain('createSchemaDifferentialDiagnosticLedger()');
+    expect(bin).toContain("from './schema-repair-verification-port.js'");
+    expect(bin).toContain('openSchemaRepairVerificationRunner: (credential) =>');
+    expect(bin).toContain('openLiveSchemaRepairVerificationRunner({');
+    expect(bin).toContain('createSchemaRepairVerificationLedger()');
   });
 
   it('a composition with no probe port fails closed and runs nothing', () => {
@@ -350,15 +352,15 @@ describe('the CLI and the executable composition bind the new goal', () => {
   });
 });
 
-describe('a healthy run executes exactly R0-R8 once each', () => {
-  it('runs all nine probes and stops at exit code 24', async () => {
+describe('a healthy run executes exactly V0-V4 once each', () => {
+  it('runs all five probes and stops at exit code 24', async () => {
     const run = await runDiagnostic();
-    expect(run.outcome).toBe('SCHEMA_DIFFERENTIAL_DIAGNOSTIC_COMPLETE');
-    expect(OPERATOR_EXIT_CODES.SCHEMA_DIFFERENTIAL_DIAGNOSTIC_COMPLETE).toBe(24);
-    expect(run.sends).toHaveLength(SCHEMA_PROBE_STEP_IDS.length);
+    expect(run.outcome).toBe('POST_SDH4_SCHEMA_REPAIR_VERIFICATION_COMPLETE');
+    expect(OPERATOR_EXIT_CODES.POST_SDH4_SCHEMA_REPAIR_VERIFICATION_COMPLETE).toBe(25);
+    expect(run.sends).toHaveLength(SCHEMA_REPAIR_VERIFICATION_STEP_IDS.length);
     const probeRows = run.lines.filter((line) => line.includes('status=PROBE'));
-    expect(probeRows).toHaveLength(9);
-    expect(run.lines.at(-1)).toContain('finalStatus=SCHEMA_DIFFERENTIAL_DIAGNOSTIC_COMPLETE');
+    expect(probeRows).toHaveLength(5);
+    expect(run.lines.at(-1)).toContain('finalStatus=POST_SDH4_SCHEMA_REPAIR_VERIFICATION_COMPLETE');
   });
 
   it('binds the runner once, to the SAME credential object, and builds no candidate session', () => {
@@ -391,7 +393,7 @@ describe('a healthy run executes exactly R0-R8 once each', () => {
     // One holder: every request carries the same authorization value.
     expect(new Set(run.sends.map((one) => one.authorization)).size).toBe(1);
     // Nine distinct controllers: a shared signal would make one probe's fate another's.
-    expect(new Set(run.sends.map((one) => one.signal)).size).toBe(9);
+    expect(new Set(run.sends.map((one) => one.signal)).size).toBe(5);
   });
 
   it('CAPABILITY ceiling and REQUEST budget stay separate in the composition', async () => {
@@ -410,8 +412,8 @@ describe('a healthy run executes exactly R0-R8 once each', () => {
     // Nine providers built, one per probe.
     const ceilings = [...composition.capabilityCeilingsUsed()];
     const budgets = [...composition.requestCompletionBudgetsUsed()];
-    expect(ceilings).toHaveLength(9);
-    expect(budgets).toHaveLength(9);
+    expect(ceilings).toHaveLength(5);
+    expect(budgets).toHaveLength(5);
 
     // The MODEL CAPABILITY the diagnostic provider declares is the candidate's real one.
     expect(new Set(ceilings)).toEqual(new Set([CANDIDATE_MAX_COMPLETION_TOKENS]));
@@ -470,7 +472,7 @@ describe('a healthy run executes exactly R0-R8 once each', () => {
     if (composition === undefined) {
       return;
     }
-    const index = composition.probes.findIndex((one) => one.stepId === 'R8_EXACT_PROJECTED_RIYA');
+    const index = composition.probes.findIndex((one) => one.stepId === 'V4_EXACT_PROJECTED_RIYA');
     expect(index).toBeGreaterThanOrEqual(0);
     const sent = run.sends[index]?.responseFormatSchema;
     expect(JSON.stringify(sent)).toBe(JSON.stringify(projectedSchema));
@@ -479,23 +481,25 @@ describe('a healthy run executes exactly R0-R8 once each', () => {
     expect(JSON.stringify(sent).length).toBeGreaterThan(500);
   });
 
-  it('the send ORDER is exactly R0 through R8', async () => {
+  it('the send ORDER is exactly V0 through V4', async () => {
     const run = await runDiagnostic();
     const composition = run.composition;
-    expect(composition?.probes.map((one) => one.stepId)).toEqual([...SCHEMA_PROBE_STEP_IDS]);
+    expect(composition?.probes.map((one) => one.stepId)).toEqual([
+      ...SCHEMA_REPAIR_VERIFICATION_STEP_IDS,
+    ]);
     // Each probe row is emitted in the same order, so a reader can align rows with sends.
     const rowIds = run.lines
       .filter((line) => line.includes('status=PROBE'))
       .map((line) => /stepId=(\S+)/u.exec(line)?.[1]);
-    expect(rowIds).toEqual([...SCHEMA_PROBE_STEP_IDS]);
+    expect(rowIds).toEqual([...SCHEMA_REPAIR_VERIFICATION_STEP_IDS]);
   });
 
   it('the receipt names the schema matrix and states safety and P10 as zero', async () => {
     const run = await runDiagnostic();
     const receipt = run.lines.find((line) => line.includes('status=RECEIPT')) ?? '';
-    expect(receipt).toContain('totalProviderRequests=10');
+    expect(receipt).toContain('totalProviderRequests=6');
     expect(receipt).toContain('smokeRequests=1');
-    expect(receipt).toContain('schemaDiagnosticRequests=9');
+    expect(receipt).toContain('schemaRepairProbeRequests=5');
     expect(receipt).toContain('safetyProviderRequests=0');
     expect(receipt).toContain('p10ProviderRequests=0');
     expect(receipt).toContain('safetyEvaluated=false');
@@ -506,10 +510,10 @@ describe('a healthy run executes exactly R0-R8 once each', () => {
     const run = await runDiagnostic();
     const classification = run.lines.find((line) => line.includes('status=CLASSIFICATION')) ?? '';
     expect(classification).toContain(
-      'schemaDifferentialClassification=EXACT_PROJECTED_RIYA_SCHEMA_ACCEPTED_LOW_CAP',
+      'schemaRepairClassification=REPAIRED_EXACT_SCHEMA_ACCEPTED_LOW_CAP',
     );
     expect(classification).toContain('rejectedStepIds=NONE');
-    expect(classification).toContain('probesRun=9');
+    expect(classification).toContain('probesRun=5');
   });
 
   it('nothing content-bearing reaches the console', async () => {
@@ -534,59 +538,59 @@ describe('the stop rules', () => {
     const run = await runDiagnostic({ statusFor: (index) => (index === 0 ? 400 : 200) });
     expect(run.sends).toHaveLength(1);
     const classification = run.lines.find((line) => line.includes('status=CLASSIFICATION')) ?? '';
-    expect(classification).toContain('schemaDifferentialClassification=DIAGNOSTIC_INVALID_CONTROL');
+    expect(classification).toContain('schemaRepairClassification=CONTROL_INVALID');
     // The run still completes and reports — a control failure is a finding, not a crash.
-    expect(run.outcome).toBe('SCHEMA_DIFFERENTIAL_DIAGNOSTIC_COMPLETE');
+    expect(run.outcome).toBe('POST_SDH4_SCHEMA_REPAIR_VERIFICATION_COMPLETE');
   });
 
   it('a FEATURE rejection does NOT stop the matrix — the whole set is collected', async () => {
     // THE property that separates this from S11. R2 (index 2) is refused; every later probe must
     // still run, because the useful answer is the complete set of rejections.
-    const run = await runDiagnostic({ statusFor: (index) => (index === 2 ? 400 : 200) });
-    expect(run.sends).toHaveLength(9);
+    const run = await runDiagnostic({ statusFor: (index) => (index === 1 ? 400 : 200) });
+    expect(run.sends).toHaveLength(5);
     const classification = run.lines.find((line) => line.includes('status=CLASSIFICATION')) ?? '';
     // R8 was accepted here, so the SUMMARY is the acceptance token — the exact production schema was
     // taken, and an isolated wrapper rejection may not headline as though it had not been.
     expect(classification).toContain(
-      'schemaDifferentialClassification=EXACT_PROJECTED_RIYA_SCHEMA_ACCEPTED_LOW_CAP',
+      'schemaRepairClassification=REPAIRED_EXACT_SCHEMA_ACCEPTED_LOW_CAP',
     );
     // And the isolated finding is still fully visible.
-    expect(classification).toContain('rejectedStepIds=R2_SCALAR_ARRAY');
+    expect(classification).toContain('rejectedStepIds=V1_OBSERVATION_SETS_ARRAY');
   });
 
   it('MULTIPLE feature rejections are all reported, none masked', async () => {
     const run = await runDiagnostic({
-      statusFor: (index) => ([2, 4, 6].includes(index) ? 400 : 200),
+      statusFor: (index) => ([1, 2, 3].includes(index) ? 400 : 200),
     });
-    expect(run.sends).toHaveLength(9);
+    expect(run.sends).toHaveLength(5);
     const classification = run.lines.find((line) => line.includes('status=CLASSIFICATION')) ?? '';
-    expect(classification).toContain('R2_SCALAR_ARRAY');
-    expect(classification).toContain('R4_ANYOF_ARRAY_ITEMS');
-    expect(classification).toContain('R6_REPLY_GROUP');
+    expect(classification).toContain('V1_OBSERVATION_SETS_ARRAY');
+    expect(classification).toContain('V2_OBSERVATION_CLEARS_ARRAY');
+    expect(classification).toContain('V3_EVOLUTION_GROUP');
   });
 
-  it('wrapper rejections WITH an R8 rejection report ISOLATED_SCHEMA_FEATURE_REJECTION', async () => {
+  it('wrapper rejections WITH an R8 rejection report REPAIRED_OBSERVATION_SCHEMA_REJECTED', async () => {
     // The other side of the corrected precedence, driven through the real composition: R2 and R8
     // (indices 2 and 8) both refused. Now the exact document really was rejected, so the isolated
     // finding is the headline — and both ids survive.
-    const run = await runDiagnostic({ statusFor: (index) => ([2, 8].includes(index) ? 400 : 200) });
-    expect(run.sends).toHaveLength(9);
+    const run = await runDiagnostic({ statusFor: (index) => ([1, 4].includes(index) ? 400 : 200) });
+    expect(run.sends).toHaveLength(5);
     const classification = run.lines.find((line) => line.includes('status=CLASSIFICATION')) ?? '';
     expect(classification).toContain(
-      'schemaDifferentialClassification=ISOLATED_SCHEMA_FEATURE_REJECTION',
+      'schemaRepairClassification=REPAIRED_OBSERVATION_SCHEMA_REJECTED',
     );
-    expect(classification).toContain('R2_SCALAR_ARRAY');
-    expect(classification).toContain('R8_EXACT_PROJECTED_RIYA');
+    expect(classification).toContain('V1_OBSERVATION_SETS_ARRAY');
+    expect(classification).toContain('V4_EXACT_PROJECTED_RIYA');
   });
 
-  it('only R8 rejected reports FULL_SCHEMA_COMPOSITION_REJECTED', async () => {
-    const run = await runDiagnostic({ statusFor: (index) => (index === 8 ? 400 : 200) });
-    expect(run.sends).toHaveLength(9);
+  it('only R8 rejected reports REPAIRED_EVOLUTION_COMPOSITION_REJECTED', async () => {
+    const run = await runDiagnostic({ statusFor: (index) => (index === 4 ? 400 : 200) });
+    expect(run.sends).toHaveLength(5);
     const classification = run.lines.find((line) => line.includes('status=CLASSIFICATION')) ?? '';
     expect(classification).toContain(
-      'schemaDifferentialClassification=FULL_SCHEMA_COMPOSITION_REJECTED',
+      'schemaRepairClassification=REPAIRED_EVOLUTION_COMPOSITION_REJECTED',
     );
-    expect(classification).toContain('rejectedStepIds=R8_EXACT_PROJECTED_RIYA');
+    expect(classification).toContain('rejectedStepIds=V4_EXACT_PROJECTED_RIYA');
   });
 
   it('a failed SMOKE never constructs the probe runner', async () => {
@@ -641,7 +645,7 @@ describe('the other run goals are untouched', () => {
           openCandidateCalls += 1;
           throw new Error('bind-refused');
         },
-        openSchemaProbeRunner: () => {
+        openSchemaRepairVerificationRunner: () => {
           runnerOpenCalls += 1;
           return Promise.reject(new Error('MUST-NOT-BE-OPENED'));
         },
@@ -677,9 +681,7 @@ describe('the other run goals are untouched', () => {
         expect(openCandidateCalls, goal).toBe(1);
       }
       // No schema-probe output leaked into any other goal.
-      expect(lines.some((line) => line.includes('phase=schema-differential-diagnostic'))).toBe(
-        false,
-      );
+      expect(lines.some((line) => line.includes('phase=schema-repair-verification'))).toBe(false);
     }
   });
 });
