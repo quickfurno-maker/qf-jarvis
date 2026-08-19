@@ -210,7 +210,7 @@ can never widen one.
 The model ceiling is **not** lowered: 65,536 output / 131,072 input are unchanged. 65,536 was not
 globally replaced with 512.
 
-### `RIYA_COMPLETION_BUDGET_TOKENS = 14,336` is an OPERATIONAL budget
+### `RIYA_COMPLETION_BUDGET_TOKENS` is an OPERATIONAL budget
 
 An earlier revision of this work claimed the budget "covers every schema-legal document". **That
 claim was wrong and has been withdrawn.** The Riya schema bounds free text with
@@ -231,7 +231,14 @@ A control character costs six serialized bytes per unit once `JSON.stringify` es
 
 ### What is proven
 
-`14,336` tokens × an assumed 2 bytes/token = **28,672 serialized bytes of coverage**. That is:
+> **Superseded POST-SDH4.** The figures below were derived from a measurement that undercounted the
+> provider maximum — it filled only the `sets` array and took the first member of each closed
+> vocabulary rather than the longest. The corrected single-byte maximum is **28,699 bytes** and the
+> governed budget is **14,848 tokens** (**29,696 bytes** of assumed coverage). The reasoning in this
+> section is unchanged; only the numbers moved. See
+> `QFJ_SDH4_SCHEMA_DIFFERENTIAL_AND_OBSERVATION_REPAIR_REPORT.md`.
+
+`14,336` tokens × an assumed 2 bytes/token = **28,672 serialized bytes of coverage**. That was:
 
 - **above** the schema maximum for single-byte free text (28,241 bytes);
 - **far above** a full-length 2,500-unit reply in a three-byte script — the realistic worst case for

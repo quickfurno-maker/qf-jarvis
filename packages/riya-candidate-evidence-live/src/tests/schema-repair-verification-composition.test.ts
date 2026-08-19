@@ -431,7 +431,7 @@ describe('a healthy run executes exactly V0-V4 once each', () => {
 
     // The governed constants are untouched by this run.
     expect(CANDIDATE_MAX_COMPLETION_TOKENS).toBe(65_536);
-    expect(RIYA_COMPLETION_BUDGET_TOKENS).toBe(14_336);
+    expect(RIYA_COMPLETION_BUDGET_TOKENS).toBe(14_848);
   });
 
   it('the wire schema for EVERY probe is the production projection of its planned schema', async () => {

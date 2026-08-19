@@ -78,6 +78,8 @@ const MAX_KNOWLEDGE_ID_CHARS = 128;
 const MAX_CITATION_VERSION = 1_000_000;
 const MAX_OBSERVATION_VALUE_CHARS = 2048;
 const MAX_QUESTION_FIELDS = 2;
+/** The per-array observation ceiling. One per governed discovery field, by array LENGTH only. */
+const MAX_OBSERVATION_ITEMS = DISCOVERY_FIELDS_FROZEN.length;
 
 /**
  * How a free-text field is filled when measuring.
@@ -113,23 +115,55 @@ function fillToUnits(character: string, units: number): string {
 }
 
 /**
+ * The member of a closed vocabulary that serialises to the MOST bytes.
+ *
+ * A maximum has to be selected, not stumbled into. An earlier revision took `[0]`, `.find(...)` and
+ * `.slice(0, n)` from these vocabularies, so the "maximum" document quietly carried whichever value
+ * happened to be declared first — `user_stated` over `model_inferred`, `INTRO` over
+ * `BUDGET_TIMELINE`, one of each discovery field rather than the longest repeated. That is a
+ * measurement of an arbitrary document, not of the largest one.
+ *
+ * Ties break lexicographically so the choice is stable, and the whole function is independent of
+ * declaration ORDER — reordering a vocabulary can no longer change what this measures.
+ */
+function longestOf(values: readonly string[]): string {
+  const [longest] = [...values].sort(
+    (left, right) =>
+      Buffer.byteLength(right, 'utf8') - Buffer.byteLength(left, 'utf8') ||
+      left.localeCompare(right),
+  );
+  if (longest === undefined) {
+    throw new Error('QFJ_RIYA_EMPTY_VOCABULARY');
+  }
+  return longest;
+}
+
+/** The phases a MODEL may name as a next step. The schema filters the other three out. */
+const MODEL_NAMEABLE_PHASES: readonly string[] = RIYA_CONVERSATION_PHASES.filter(
+  (one) => one !== 'CONTACT' && one !== 'CONSENT' && one !== 'COMPLETE',
+);
+
+/** The maximising choices, each derived from its governed vocabulary rather than typed. */
+export const LONGEST_DISCOVERY_FIELD = longestOf(DISCOVERY_FIELDS_FROZEN);
+export const LONGEST_MODEL_PROVENANCE = longestOf(RIYA_MODEL_PROVENANCES);
+export const LONGEST_MODEL_NAMEABLE_PHASE = longestOf(MODEL_NAMEABLE_PHASES);
+
+/**
  * The largest document the schema accepts WHEN FREE TEXT USES THIS FILL.
  *
- * Every string is filled to its maximum in UTF-16 units and every array to its maximum length. Two
- * fields stay ASCII whatever the fill, because their schemas carry an ASCII-only pattern: a non-ASCII
- * `reasonCode` or `knowledgeId` would make the document schema-INVALID, and measuring an invalid
- * document measures nothing.
+ * Every string is filled to its maximum in UTF-16 units, every array to its maximum length, and every
+ * closed vocabulary to its LONGEST member — because a maximum that picked whichever enum happened to
+ * be declared first would not be a maximum.
+ *
+ * Two fields stay ASCII whatever the fill, because their schemas carry an ASCII-only pattern: a
+ * non-ASCII `reasonCode` or `knowledgeId` would make the document schema-INVALID, and measuring an
+ * invalid document measures nothing. `clears[].provenance` is pinned by the schema to a literal, so
+ * it has no longer value to choose.
  */
 export function riyaStructuredOutputAtFill(fill: RiyaFreeTextFill): unknown {
   const character = FILL_CHARACTER[fill];
   const ascii = (units: number): string => 'x'.repeat(units);
   const free = (units: number): string => fillToUnits(character, units);
-  const provenance = RIYA_MODEL_PROVENANCES[0];
-  // A model may not name CONTACT, CONSENT or COMPLETE as a next step; the schema enforces it, so the
-  // worst case is drawn from the same filtered vocabulary rather than from a literal.
-  const phase = RIYA_CONVERSATION_PHASES.find(
-    (one) => one !== 'CONTACT' && one !== 'CONSENT' && one !== 'COMPLETE',
-  );
   return {
     reply: {
       kind: 'REPLY',
@@ -157,20 +191,26 @@ export function riyaStructuredOutputAtFill(fill: RiyaFreeTextFill): unknown {
       // which is exactly the cross-array invariant the schema cannot express. Budgeting to the larger
       // provider bound is the conservative direction.
       observations: {
-        sets: DISCOVERY_FIELDS_FROZEN.map((field) => ({
-          field,
+        // The provider schema bounds each array by LENGTH only — it carries no uniqueness
+        // constraint, so the largest accepted array repeats the longest field enum rather than
+        // naming each field once. Uniqueness is a CANONICAL rule, re-proved later by
+        // `createRiyaConversationObservationBatch`, and it is deliberately not smuggled in here to
+        // make this number smaller.
+        sets: Array.from({ length: MAX_OBSERVATION_ITEMS }, () => ({
+          field: LONGEST_DISCOVERY_FIELD,
           value: free(MAX_OBSERVATION_VALUE_CHARS),
-          provenance,
+          provenance: LONGEST_MODEL_PROVENANCE,
         })),
-        clears: DISCOVERY_FIELDS_FROZEN.map((field) => ({
-          field,
+        clears: Array.from({ length: MAX_OBSERVATION_ITEMS }, () => ({
+          field: LONGEST_DISCOVERY_FIELD,
+          // Pinned by the schema to this literal, so there is no longer value to choose.
           provenance: 'user_stated',
         })),
       },
       skipProjectDetails: false,
       questionPlan: {
-        phase,
-        questionFields: DISCOVERY_FIELDS_FROZEN.slice(0, MAX_QUESTION_FIELDS),
+        phase: LONGEST_MODEL_NAMEABLE_PHASE,
+        questionFields: Array.from({ length: MAX_QUESTION_FIELDS }, () => LONGEST_DISCOVERY_FIELD),
       },
     },
   };
@@ -243,6 +283,16 @@ export function deriveSingleByteRiyaCompletionBudgetTokens(): number {
  * pins its digests: a number that recomputes itself silently absorbs a schema change somebody should
  * have reviewed. A spec asserts it equals {@link deriveSingleByteRiyaCompletionBudgetTokens}.
  *
+ * POST-SDH4 this MOVED, 14,336 -> 14,848, and the move is the pin doing its job. Two corrections to
+ * the measurement raised the single-byte provider maximum: filling BOTH observation arrays rather
+ * than only `sets`, and selecting the LONGEST member of every closed vocabulary instead of whichever
+ * was declared first. The document grew to 28,699 bytes, which is 14,350 tokens at the assumed ratio
+ * and rounds up to 14,848.
+ *
+ * It is NOT held at the old value: that number belonged to a measurement that undercounted what the
+ * provider schema actually accepts. Historical S11 and SDH4 receipts keep the budgets they were
+ * emitted with; this is the governed budget for post-repair execution.
+ *
  * ### What it is
  *
  * An APPLICATION budget. Not a claim about what the model can emit, and it does not lower the
@@ -256,7 +306,7 @@ export function deriveSingleByteRiyaCompletionBudgetTokens(): number {
  * realistic worst case for this product.
  *
  * This is a sizing statement in bytes under a stated assumption. It is NOT a guarantee that any
- * particular document fits in 14,336 tokens, because nothing here converts a document to tokens.
+ * particular document fits in 14,848 tokens, because nothing here converts a document to tokens.
  *
  * ### Where the assumed coverage runs out
  *
@@ -272,7 +322,7 @@ export function deriveSingleByteRiyaCompletionBudgetTokens(): number {
  * observation array maxima in Riya's output contract — an owner decision about behaviour,
  * deliberately not taken here.
  */
-export const RIYA_COMPLETION_BUDGET_TOKENS = 14_336;
+export const RIYA_COMPLETION_BUDGET_TOKENS = 14_848;
 
 /** The serialized-byte coverage the budget buys under the assumed ratio. Derived, never typed. */
 export const RIYA_COMPLETION_BUDGET_COVERED_BYTES =

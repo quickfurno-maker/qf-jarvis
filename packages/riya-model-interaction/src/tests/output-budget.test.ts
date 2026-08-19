@@ -28,6 +28,9 @@ import { describe, expect, it } from 'vitest';
 
 import {
   ASSUMED_BYTES_PER_TOKEN,
+  LONGEST_DISCOVERY_FIELD,
+  LONGEST_MODEL_NAMEABLE_PHASE,
+  LONGEST_MODEL_PROVENANCE,
   deriveSingleByteRiyaCompletionBudgetTokens,
   maxRiyaStructuredOutputBytesAnyFill,
   maxRiyaStructuredOutputBytesAtFill,
@@ -134,6 +137,80 @@ describe('the maximum is the PROVIDER-schema maximum, both arrays filled', () =>
     expect(
       largest.evolution.observations.sets.length + largest.evolution.observations.clears.length,
     ).toBeGreaterThan(7);
+  });
+});
+
+describe('every closed vocabulary is filled to its LONGEST member', () => {
+  interface MaxDoc {
+    readonly evolution: {
+      readonly observations: {
+        readonly sets: readonly { readonly field: string; readonly provenance: string }[];
+        readonly clears: readonly { readonly field: string; readonly provenance: string }[];
+      };
+      readonly questionPlan: { readonly phase: string; readonly questionFields: readonly string[] };
+    };
+  }
+  const doc = (): MaxDoc => riyaStructuredOutputAtFill('SINGLE_BYTE_ASCII') as MaxDoc;
+
+  it('the maximising choices are the longest members of their vocabularies', () => {
+    expect(LONGEST_DISCOVERY_FIELD).toBe('consultationPreference');
+    expect(LONGEST_MODEL_PROVENANCE).toBe('model_inferred');
+    // A model may not name CONTACT, CONSENT or COMPLETE, so the phase is drawn from the filtered set.
+    expect(LONGEST_MODEL_NAMEABLE_PHASE.length).toBe(15);
+  });
+
+  it('every SET field and provenance is maximised', () => {
+    const sets = doc().evolution.observations.sets;
+    expect(sets).toHaveLength(7);
+    for (const one of sets) {
+      expect(one.field).toBe(LONGEST_DISCOVERY_FIELD);
+      expect(one.provenance).toBe(LONGEST_MODEL_PROVENANCE);
+    }
+  });
+
+  it('every CLEAR field is maximised, and its provenance stays the schema literal', () => {
+    const clears = doc().evolution.observations.clears;
+    expect(clears).toHaveLength(7);
+    for (const one of clears) {
+      expect(one.field).toBe(LONGEST_DISCOVERY_FIELD);
+      // Pinned by the schema — there is no longer value to choose.
+      expect(one.provenance).toBe('user_stated');
+    }
+  });
+
+  it('the question plan is maximised in both phase and fields', () => {
+    const plan = doc().evolution.questionPlan;
+    expect(plan.phase).toBe(LONGEST_MODEL_NAMEABLE_PHASE);
+    expect(plan.questionFields).toHaveLength(2);
+    for (const field of plan.questionFields) {
+      expect(field).toBe(LONGEST_DISCOVERY_FIELD);
+    }
+  });
+
+  it('repeated enum values are genuinely provider-schema-valid', () => {
+    // The arrays are bounded by LENGTH only — uniqueness is a canonical rule, not a provider one.
+    // If that were ever false, repeating the longest field would be measuring an invalid document.
+    expect(
+      riyaStructuredOutputSchema.safeParse(riyaStructuredOutputAtFill('SINGLE_BYTE_ASCII')).success,
+    ).toBe(true);
+  });
+
+  it('REGRESSION — vocabulary ORDER cannot change the maximum', () => {
+    // The exact defect this replaces: `[0]`, `.find(...)` and `.slice(0, n)` selected whichever
+    // member happened to be declared first, so reordering a vocabulary would silently change the
+    // measured maximum. Selection is by serialized length now, and the source must not reach for
+    // positional access on these vocabularies again.
+    const source = readFileSync(MODULE_PATH, 'utf8');
+    expect(source).toContain('function longestOf');
+    expect(source).not.toContain('RIYA_MODEL_PROVENANCES[0]');
+    expect(source).not.toMatch(/DISCOVERY_FIELDS_FROZEN\.slice\(/u);
+    expect(source).not.toMatch(/RIYA_CONVERSATION_PHASES\.find\(/u);
+  });
+
+  it('the measured maximum equals the exact serialized fixture bytes', () => {
+    expect(maxRiyaStructuredOutputBytesSingleByte()).toBe(
+      Buffer.byteLength(JSON.stringify(riyaStructuredOutputAtFill('SINGLE_BYTE_ASCII')), 'utf8'),
+    );
   });
 });
 

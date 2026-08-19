@@ -139,6 +139,44 @@ authorization.
 
 ---
 
+## 4A. SECOND OWNER-VISIBLE CONSEQUENCE — THE OPERATIONAL BUDGET MOVED
+
+`RIYA_COMPLETION_BUDGET_TOKENS`: **14,336 → 14,848**.
+
+The budget is derived from the largest document the provider schema accepts, and two review passes
+found that measurement was undercounting:
+
+1. it filled only `observations.sets`, leaving `clears` empty, while claiming to be the schema
+   maximum — the provider bounds the two arrays independently, so both full is valid and larger;
+2. it selected the **first** member of every closed vocabulary rather than the **longest** —
+   `user_stated` over `model_inferred`, `INTRO` over a 15-character phase, one of each discovery
+   field rather than the longest repeated. The provider arrays carry no uniqueness constraint, so
+   repeating `consultationPreference` is schema-valid.
+
+Corrected measurement:
+
+|                                        |                                                                      |
+| -------------------------------------- | -------------------------------------------------------------------- |
+| `SINGLE_BYTE_MAX_BYTES`                | 28,241 → 28,491 → **28,699**                                         |
+| `DERIVED_COMPLETION_BUDGET_TOKENS`     | **14,848** (`ceil(28699/2) = 14,350`, rounded up to 512 granularity) |
+| `RIYA_COMPLETION_BUDGET_COVERED_BYTES` | **29,696**                                                           |
+
+The literal was **not** held at 14,336: that value belonged to a measurement that undercounted what
+the provider schema actually accepts. Selection is now by serialized length, with a regression test
+proving vocabulary ORDER cannot change the maximum again.
+
+This is a **provider-schema** maximum. The canonical constructor would refuse it — 7 sets plus 7
+clears exceeds the combined ceiling and repeats every field — and budgeting to the larger provider
+bound is the conservative direction.
+
+Historical S11 and SDH4 receipts keep the budgets they were emitted with. 14,848 is the governed
+operational budget for post-repair execution only. The three quantities remain distinct: model
+capability ceiling **65,536**, operational Riya request budget **14,848**, V0–V4 probe budget **512**.
+
+No tokenizer was introduced; pathological/tokenizer status remains UNRESOLVED.
+
+---
+
 ## 5. HISTORICAL MATRIX IMMUTABILITY
 
 SDH4's `R0`-`R8` semantics are frozen. The historical planner was **not** repurposed: it looks for a
