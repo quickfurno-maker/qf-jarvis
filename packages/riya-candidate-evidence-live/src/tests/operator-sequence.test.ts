@@ -384,6 +384,12 @@ describe('HF3 — the one optional governed run goal', () => {
       // POST-SDH4 adds a FIFTH: the bounded verification that the observation schema repair is
       // accepted. Separate again, because SDH4's receipts already say what its matrix meant.
       'POST_SDH4_SCHEMA_REPAIR_VERIFICATION',
+      // POST-SRV1 adds a SIXTH, and along a NEW axis. Every goal above holds the completion budget at
+      // the low control cap, which was right while a schema was being isolated; this one holds the
+      // repaired schema fixed and varies the ENVELOPE — the real governed operational budget, and the
+      // captured representative production message shape. Separate again, so a receipt can always say
+      // which envelope produced it.
+      'POST_SRV1_OPERATIONAL_ACCEPTANCE_DIAGNOSTIC',
     ]);
     // No goal skips a gate or forces a verdict. Both notices are content-free and name no secret.
     for (const goal of OPERATOR_RUN_GOALS) {

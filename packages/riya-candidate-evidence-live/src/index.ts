@@ -284,3 +284,43 @@ export type {
   SchemaRepairProviderSeam,
   SchemaRepairVerificationRunner,
 } from './schema-repair-verification-port.js';
+
+// POST-SRV1 OPERATIONAL ACCEPTANCE. The first bounded matrix that runs at the REAL governed Riya
+// completion budget rather than the low control cap, and the first that puts the captured
+// representative production messages on the wire beside the repaired schema. Separate plan,
+// vocabulary, ledger counter and exit code again, for the same reason: a receipt must always say
+// which envelope produced it.
+export {
+  OPERATIONAL_ACCEPTANCE_STEP_IDS,
+  OPERATIONAL_MESSAGE_SOURCES,
+  OPERATIONAL_PROBE_KINDS,
+  planOperationalAcceptance,
+} from './internal/operational-acceptance-plan.js';
+export type {
+  OperationalAcceptancePlanInput,
+  OperationalAcceptanceProbe,
+  OperationalAcceptanceStepId,
+  OperationalMessageSource,
+  OperationalProbeKind,
+} from './internal/operational-acceptance-plan.js';
+export {
+  analyseOperationalAcceptance,
+  OPERATIONAL_ACCEPTANCE_CLASSIFICATIONS,
+} from './internal/operational-acceptance-classification.js';
+export type {
+  OperationalAcceptanceAnalysis,
+  OperationalAcceptanceClassification,
+  OperationalAcceptanceOutcome,
+} from './internal/operational-acceptance-classification.js';
+export {
+  createLiveOperationalAcceptanceComposition,
+  createOperationalAcceptancePort,
+  OPERATIONAL_ACCEPTANCE_COMPLETION_BUDGET,
+  openLiveOperationalAcceptanceRunner,
+} from './operational-acceptance-port.js';
+export type {
+  LiveOperationalAcceptanceComposition,
+  LiveOperationalAcceptanceDeps,
+  OperationalAcceptanceRunner,
+  OperationalProviderSeam,
+} from './operational-acceptance-port.js';

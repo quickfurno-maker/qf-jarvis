@@ -60,6 +60,14 @@ export const OPERATOR_OUTCOMES = [
    * accepted — that is in the classification line.
    */
   'POST_SDH4_SCHEMA_REPAIR_VERIFICATION_COMPLETE',
+  /**
+   * POST-SRV1. A bounded operational acceptance diagnostic ran its probes and stopped.
+   *
+   * Its own code again. It says the run COMPLETED — not that the request was accepted, not that the
+   * candidate is safe, not that anything is quality-approved or release-ready. The classification
+   * line carries the finding.
+   */
+  'POST_SRV1_OPERATIONAL_ACCEPTANCE_DIAGNOSTIC_COMPLETE',
 ] as const;
 export type OperatorOutcome = (typeof OPERATOR_OUTCOMES)[number];
 
@@ -87,4 +95,6 @@ export const OPERATOR_EXIT_CODES: Readonly<Record<OperatorOutcome, number>> = Ob
   SCHEMA_DIFFERENTIAL_DIAGNOSTIC_COMPLETE: 24,
   // The next unused integer; 0-24 keep meaning exactly what they meant.
   POST_SDH4_SCHEMA_REPAIR_VERIFICATION_COMPLETE: 25,
+  // The next unused integer; 0-25 keep meaning exactly what they meant.
+  POST_SRV1_OPERATIONAL_ACCEPTANCE_DIAGNOSTIC_COMPLETE: 26,
 });

@@ -62,6 +62,21 @@ export const OPERATOR_RUN_GOALS = [
    * no authority, no P10 and no review bundle.
    */
   'POST_SDH4_SCHEMA_REPAIR_VERIFICATION',
+  /**
+   * POST-SRV1. The OPERATIONAL ACCEPTANCE diagnostic: the text smoke, then four probes at the REAL
+   * governed Riya completion budget, then stop.
+   *
+   * SRV1 answered the schema question at the low control cap: the two repaired observation arrays
+   * were accepted independently, while the evolution group and the exact document came back HTTP 400
+   * with the provider's own `json_validate_failed` code. Every matrix so far has held the completion
+   * budget at 512, which was right for isolating a schema, and which means the operational envelope
+   * has never been measured.
+   *
+   * So this goal varies exactly that: the same real schema, at `RIYA_COMPLETION_BUDGET_TOKENS`, with
+   * synthetic messages and then with the captured representative production messages. A separate
+   * token again, because a receipt must always say which envelope produced it.
+   */
+  'POST_SRV1_OPERATIONAL_ACCEPTANCE_DIAGNOSTIC',
 ] as const;
 export type OperatorRunGoal = (typeof OPERATOR_RUN_GOALS)[number];
 
@@ -86,6 +101,8 @@ export const SECOND_CREDENTIAL_NOTICES: Readonly<Record<OperatorRunGoal, string>
     'Smoke passed. Enter the same Groq credential again for the bounded schema differential diagnostic.',
   POST_SDH4_SCHEMA_REPAIR_VERIFICATION:
     'Smoke passed. Enter the same Groq credential again for the bounded schema repair verification.',
+  POST_SRV1_OPERATIONAL_ACCEPTANCE_DIAGNOSTIC:
+    'Smoke passed. Enter the same Groq credential again for the bounded operational acceptance diagnostic.',
 });
 
 /**
@@ -110,4 +127,6 @@ export const REUSED_CREDENTIAL_NOTICES: Readonly<Record<OperatorRunGoal, string>
     'Smoke passed. Reusing the credential already read for the bounded schema differential diagnostic.',
   POST_SDH4_SCHEMA_REPAIR_VERIFICATION:
     'Smoke passed. Reusing the credential already read for the bounded schema repair verification.',
+  POST_SRV1_OPERATIONAL_ACCEPTANCE_DIAGNOSTIC:
+    'Smoke passed. Reusing the credential already read for the bounded operational acceptance diagnostic.',
 });
