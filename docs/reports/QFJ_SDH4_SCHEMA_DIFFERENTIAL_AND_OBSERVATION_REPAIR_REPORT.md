@@ -29,6 +29,12 @@ Executed once under owner authorization. Process exit `24`. Credential source: t
 
 Classification: `ISOLATED_SCHEMA_FEATURE_REJECTION`. Inconclusive: none.
 
+The token in the Result column above is the provider error **TYPE**. For completeness, both observed
+fields for `R4`, `R7` and `R8` were:
+
+- `providerErrorType=INVALID_REQUEST_ERROR`
+- `providerErrorCode=OTHER_OR_ABSENT`
+
 ### Accounting
 
 | Field                         | Value      |
@@ -194,9 +200,13 @@ A **new** vocabulary covers verification instead:
 | `V4_EXACT_PROJECTED_RIYA`     | EXACT            |
 
 Run goal `POST_SDH4_SCHEMA_REPAIR_VERIFICATION`, exit code **25**, its own ledger counter, its own
-classification vocabulary (`CONTROL_INVALID`, `REPAIRED_EXACT_SCHEMA_ACCEPTED_LOW_CAP`,
-`REPAIRED_OBSERVATION_SCHEMA_REJECTED`, `REPAIRED_EVOLUTION_GROUP_REJECTED`,
-`MIXED_OR_INCONCLUSIVE`).
+classification vocabulary — the closed set is `CONTROL_INVALID`,
+`REPAIRED_EXACT_SCHEMA_ACCEPTED_LOW_CAP`, `REPAIRED_OBSERVATION_SCHEMA_REJECTED`,
+`REPAIRED_EVOLUTION_GROUP_REJECTED`, `REPAIRED_FULL_SCHEMA_COMPOSITION_REJECTED` and
+`MIXED_OR_INCONCLUSIVE`, six members in all.
+
+The run emitted `REPAIRED_EVOLUTION_GROUP_REJECTED`; that immutable result is recorded in section 7
+and is unchanged.
 
 Bounds: **1 smoke + 5 probes = 6 requests**, USD 1.00, every probe at `max_completion_tokens=512`,
 zero retry, zero fallback, zero safety, zero P10, zero bundle writes, no 120B.
@@ -242,6 +252,12 @@ Executed **once** under owner authorization. Process exit `25`. Every probe used
 
 Classification: `REPAIRED_EVOLUTION_GROUP_REJECTED`. Inconclusive: none.
 
+The token in the Result column above is the provider error **CODE**. Both observed fields for `V3`
+and `V4` were:
+
+- `providerErrorType=INVALID_REQUEST_ERROR`
+- `providerErrorCode=JSON_VALIDATE_FAILED`
+
 | Field                       | Value      |
 | --------------------------- | ---------- |
 | `totalProviderRequests`     | 6          |
@@ -260,17 +276,20 @@ It settled the repair's own question: both repaired observation arrays are accep
 at the low control cap. The `anyOf`-under-`array.items` construction SDH4 isolated is gone, and
 nothing that replaced it is refused on its own.
 
-It did not settle the document. `V3` and `V4` are still refused — but carrying a **different literal
-provider error code** from the pre-repair rejection: `json_validate_failed` rather than a bare
-`invalid_request_error`.
+It did not settle the document. `V3` and `V4` are still refused.
 
-`JSON_VALIDATE_FAILED` is a distinct literal provider-reported error code and is preserved without
-interpreting its undocumented internal cause. What is established is that `HTTP 400 +
-JSON_VALIDATE_FAILED` can be distinguished from `HTTP 400 + OTHER_OR_ABSENT`. Nothing more — in
-particular, no claim is made here about what Groq did internally to produce it.
+**The error TYPE did not change; the recognized error CODE did.** SDH4 and SRV1 both reported
+`providerErrorType=INVALID_REQUEST_ERROR`. In SDH4 the provider error-code bucket was
+`OTHER_OR_ABSENT`; in SRV1 `V3`/`V4` the provider returned the recognized literal code
+`json_validate_failed`, mapped to `JSON_VALIDATE_FAILED`.
 
-That the code CHANGED across the repair is itself the observation that makes a further axis worth
-measuring rather than the same axis worth re-measuring.
+`JSON_VALIDATE_FAILED` is preserved without interpreting its undocumented internal cause. What is
+established is that `HTTP 400 + JSON_VALIDATE_FAILED` can be distinguished from `HTTP 400 +
+OTHER_OR_ABSENT`. Nothing more — in particular, no claim is made here about what Groq did internally
+to produce it.
+
+That the CODE bucket changed across the repair, while the TYPE stayed constant, is itself the
+observation that makes a further axis worth measuring rather than the same axis worth re-measuring.
 
 ---
 
@@ -285,9 +304,10 @@ not run at 512. They run at `RIYA_COMPLETION_BUDGET_TOKENS`, and they carry the 
 shape rather than a two-line synthetic pair. Neither has ever been on the wire together with the
 repaired schema, so no evidence in this document speaks to whether a real Riya turn would be accepted.
 
-Because `JSON_VALIDATE_FAILED` is a materially different provider code from the pre-repair schema
-rejection, and because Groq documents strict GPT-OSS structured output as constrained, the next
-controlled axis is the **operational completion budget** and the **representative message shape**.
+Because the recognized provider error CODE moved from `OTHER_OR_ABSENT` to `JSON_VALIDATE_FAILED`
+across the repair — at an unchanged `providerErrorType=INVALID_REQUEST_ERROR` — and because Groq
+documents strict GPT-OSS structured output as constrained, the next axis worth varying is the
+**operational completion budget** and the **representative message shape**.
 
 **The 512 cap is NOT claimed to be the cause of the `V3`/`V4` rejections.** It has not been varied, so
 nothing here can support that claim. OAD1 exists to vary it.
