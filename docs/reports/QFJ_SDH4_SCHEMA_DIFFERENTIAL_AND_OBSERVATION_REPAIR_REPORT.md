@@ -378,7 +378,11 @@ authorizations for a result this phase has not been granted the budget to establ
 sections 9 and 10 below. The plan as described above is unchanged by those executions, except that the
 operational budget it inherits moved 14,848 -> 4,096 for the reason section 11 gives.
 
-### Containment for this phase
+### Containment for this phase — HISTORICAL SNAPSHOT
+
+> **Historical snapshot at the end of the pre-OAD phase.** The values below were correct when this
+> section was written and are kept unchanged. The status line here is **superseded by section 11**,
+> which is the current source: `REQUEST_CONTRACT_STATUS=UNRESOLVED_PENDING_OAD3`.
 
 ```
 GROQ_CALLS=0
@@ -552,11 +556,21 @@ Under `ASSUMED_BYTES_PER_TOKEN`, 4,096 tokens corresponds to **8,192 serialized 
 **below** every schema maximum measured in that module, the single-byte one at 28,699 bytes included.
 A maximal 2,500-unit reply body in a three-byte script is 7,500 bytes of that on its own.
 
-That is the decoupling working as intended, not an oversight, and its consequence is bounded: a
-response needing more than the budget is truncated, truncated strict JSON is malformed, and the
-gateway **refuses** it as invalid structured output rather than accepting a partial answer. It fails
-closed. Whether real Riya turns approach that limit is an empirical question for the next acceptance
-run, not one this document can settle.
+That is the decoupling working as intended, not an oversight. 4,096 does not guarantee every
+schema-valid document can be completed.
+
+The required invariant is **fail-closed**, and only that: if the budget is insufficient for a valid
+structured answer, the provider/gateway path must fail closed, and no incomplete, malformed or
+schema-invalid partial result may be accepted as a valid Riya answer.
+
+Which mechanism produces that failure is **not** asserted. The provider may refuse the request or the
+completion, return an incomplete result, return content the gateway cannot parse or validate, or fail
+in some other way before a valid structured result exists. No claim is made that truncation must
+occur, that the gateway must be the component that refuses, or that Groq must return any particular
+status or error code.
+
+Whether real Riya turns approach that limit is an empirical question for the next acceptance run, not
+one this document can settle.
 
 ### Unchanged by this repair
 
@@ -570,7 +584,7 @@ The merged `POST_SRV1_OPERATIONAL_ACCEPTANCE_DIAGNOSTIC` run goal is unchanged a
 repaired constant automatically; no new run goal is created. Its stop and classification semantics are
 untouched, and no historical receipt is rewritten.
 
-### Containment for this phase
+### Containment for this phase — CURRENT
 
 ```
 GROQ_CALLS=0

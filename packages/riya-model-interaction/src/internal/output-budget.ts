@@ -298,7 +298,7 @@ const ROUNDING_GRANULARITY = 512;
  * design error the repair removes.
  *
  * It is kept because the CAPACITY question is still worth being able to ask — "how big could this get
- * in principle" is useful when reasoning about truncation risk. It is simply not the policy.
+ * in principle" is useful when reasoning about over-budget risk. It is simply not the policy.
  *
  * A spec asserts the governed budget is a numeric literal rather than a call to this function, so
  * reconnecting the two cannot happen quietly.
@@ -353,12 +353,22 @@ export function deriveSingleByteRiyaCompletionBudgetTokens(): number {
  * including the single-byte one at 28,699 bytes. A maximal 2,500-unit reply body in a three-byte
  * script is 7,500 bytes of that figure on its own, before the surrounding envelope.
  *
- * That is the decoupling working as intended rather than a defect, and the consequence is bounded and
- * worth naming: a response that would need more than the budget is truncated, truncated strict JSON
- * is malformed, and the gateway REFUSES it as invalid structured output rather than accepting a
- * partial answer. It fails closed. Whether real Riya turns approach that limit is an empirical
- * question for the next acceptance run and the quality evidence after it — not something this file
- * can settle.
+ * That is the decoupling working as intended rather than a defect. 4,096 does not guarantee every
+ * schema-valid document can be completed.
+ *
+ * The required invariant is FAIL-CLOSED, and only that: if the budget is insufficient for a valid
+ * structured answer, the provider/gateway path must fail closed, and no incomplete, malformed or
+ * schema-invalid partial result may be accepted as a valid Riya answer.
+ *
+ * WHICH mechanism produces that failure is deliberately not asserted here, because no evidence in
+ * this repository establishes it. The provider may refuse the request or the completion, return an
+ * incomplete result, return content the gateway cannot parse or validate, or fail in some other way
+ * before a valid structured result exists. An earlier revision of this comment named one specific
+ * chain — truncation, then malformed strict JSON, then a gateway refusal — which was more specific
+ * than anything measured.
+ *
+ * Whether real Riya turns approach that limit is an empirical question for the next acceptance run
+ * and the quality evidence after it — not something this file can settle.
  */
 export const RIYA_COMPLETION_BUDGET_TOKENS = 4_096;
 
