@@ -324,3 +324,36 @@ export type {
   OperationalAcceptanceRunner,
   OperationalProviderSeam,
 } from './operational-acceptance-port.js';
+
+// POST-OAD3 REPRESENTATIVE ACCEPTANCE. The one-probe gate that re-asks OAD3's single unanswered
+// question. It reuses OAD3's plan, capture and projection rather than copying them, and carries its
+// own tiny vocabulary in which a rate limit is NOT a verdict — the distinction OAD3's matrix
+// classifier lacked, and the reason its receipt named the message shape on a 429.
+export {
+  INFRASTRUCTURE_HTTP_CLASSES,
+  isInfrastructureInterrupted,
+  isProviderAccepted,
+  isProviderRejected,
+} from './internal/provider-outcome-classes.js';
+export {
+  analyseRepresentativeAcceptance,
+  REPRESENTATIVE_ACCEPTANCE_CLASSIFICATIONS,
+} from './internal/representative-acceptance-classification.js';
+export type {
+  RepresentativeAcceptanceAnalysis,
+  RepresentativeAcceptanceClassification,
+  RepresentativeAcceptanceOutcome,
+} from './internal/representative-acceptance-classification.js';
+export {
+  createLiveRepresentativeAcceptanceComposition,
+  createRepresentativeAcceptancePort,
+  openLiveRepresentativeAcceptanceRunner,
+  REPRESENTATIVE_ACCEPTANCE_COMPLETION_BUDGET,
+  REPRESENTATIVE_ACCEPTANCE_STEP_ID,
+  selectRepresentativeProbe,
+} from './representative-acceptance-port.js';
+export type {
+  LiveRepresentativeAcceptanceComposition,
+  LiveRepresentativeAcceptanceDeps,
+  RepresentativeAcceptanceRunner,
+} from './representative-acceptance-port.js';

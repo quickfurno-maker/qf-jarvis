@@ -390,6 +390,10 @@ describe('HF3 — the one optional governed run goal', () => {
       // captured representative production message shape. Separate again, so a receipt can always say
       // which envelope produced it.
       'POST_SRV1_OPERATIONAL_ACCEPTANCE_DIAGNOSTIC',
+      // POST-OAD3 adds a SEVENTH, and it is the narrowest yet. OAD3 settled the control and the
+      // exact synthetic schema at the operational budget; only the representative request is still
+      // unresolved, and only because it met an HTTP 429. So this goal sends the smoke and ONE probe.
+      'POST_OAD3_REPRESENTATIVE_ACCEPTANCE',
     ]);
     // No goal skips a gate or forces a verdict. Both notices are content-free and name no secret.
     for (const goal of OPERATOR_RUN_GOALS) {

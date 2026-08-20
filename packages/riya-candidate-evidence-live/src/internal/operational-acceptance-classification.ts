@@ -30,6 +30,15 @@
  * A rejected control means the operational envelope itself was refused, so nothing after it is
  * interpretable. An incomplete matrix supports no conclusion about the probes that did settle.
  *
+ * POST-OAD3, "incomplete" also covers a probe the provider never JUDGED. OAD3 returned HTTP 429 on
+ * `O1` and `O3` while `O0` and `O2` returned 200, and the harness emitted
+ * `OPERATIONAL_REPRESENTATIVE_REJECTED_AFTER_SYNTHETIC_ACCEPTED` — a token pointing at the message
+ * shape, on evidence that was a rate limit. A 429 means the provider declined to process; it is not a
+ * verdict on the schema or the messages. Those rows are now inconclusive, so the same matrix would
+ * read `MIXED_OR_INCONCLUSIVE` instead.
+ *
+ * The historical OAD3 receipt keeps the token it emitted. Only future analysis changes.
+ *
  * Pure: no clock, no I/O, no provider, no credential.
  */
 import type {
@@ -39,6 +48,11 @@ import type {
 } from '../candidate-transport-observation.js';
 import type { OperationalAcceptanceStepId } from './operational-acceptance-plan.js';
 import { OPERATIONAL_ACCEPTANCE_STEP_IDS } from './operational-acceptance-plan.js';
+import {
+  isInfrastructureInterrupted,
+  isProviderAccepted,
+  isProviderRejected,
+} from './provider-outcome-classes.js';
 
 /** The closed conclusions an operational acceptance matrix can support. */
 export const OPERATIONAL_ACCEPTANCE_CLASSIFICATIONS = [
@@ -124,21 +138,20 @@ export interface OperationalAcceptanceAnalysis {
 }
 
 /** Accepted means the provider TOOK the request. Local semantics are not consulted. */
-function accepted(one: OperationalAcceptanceOutcome): boolean {
-  return one.providerCompleted && one.providerHttpClass === 'SUCCESS_2XX';
-}
+const accepted = isProviderAccepted;
 
-/** Refused BY the provider, as distinct from never having settled. */
-function rejected(one: OperationalAcceptanceOutcome): boolean {
-  return (
-    !accepted(one) &&
-    one.providerTransportStarted &&
-    one.providerHttpStatus >= 100 &&
-    one.providerHttpClass !== 'TRANSPORT_THROW' &&
-    one.providerHttpClass !== 'NOT_REACHED' &&
-    one.providerHttpClass !== 'NONE'
-  );
-}
+/**
+ * Refused BY the provider, as distinct from never having reached a provider verdict.
+ *
+ * POST-OAD3 this narrowed. The previous predicate counted every non-2xx response with a status as a
+ * rejection, which put HTTP 429 in the same bucket as HTTP 400 — and OAD3's `O1` and `O3` were both
+ * 429s, so the run emitted a token naming the message shape when the provider had simply declined to
+ * process. A rate limit is now INFRASTRUCTURE and lands in `inconclusiveStepIds`, where the existing
+ * completeness rule turns the matrix into `MIXED_OR_INCONCLUSIVE` before any acceptance branch runs.
+ *
+ * That is the whole repair: no new token, no new precedence, one narrowed predicate.
+ */
+const rejected = isProviderRejected;
 
 /** Read an operational acceptance matrix. Every declared step lands in exactly one bucket. */
 export function analyseOperationalAcceptance(
@@ -159,7 +172,8 @@ export function analyseOperationalAcceptance(
 
   for (const stepId of OPERATIONAL_ACCEPTANCE_STEP_IDS) {
     const one = byId.get(stepId);
-    if (one === undefined) {
+    if (one === undefined || isInfrastructureInterrupted(one)) {
+      // Never sent, or sent and never judged. Both are an ABSENCE of contract evidence.
       inconclusiveIds.push(stepId);
     } else if (accepted(one)) {
       acceptedIds.push(stepId);

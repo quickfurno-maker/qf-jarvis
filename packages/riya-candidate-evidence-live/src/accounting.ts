@@ -116,6 +116,21 @@ export const OPERATIONAL_ACCEPTANCE_MAX_PROVIDER_REQUESTS =
 /** The spend ceiling. Same conservative figure as every other bounded diagnostic. */
 export const OPERATIONAL_ACCEPTANCE_MAX_ESTIMATED_COST_USD = 1;
 
+/**
+ * The exact arithmetic of a POST_OAD3_REPRESENTATIVE_ACCEPTANCE run: the text smoke plus ONE probe.
+ *
+ * TWO. The narrowest ceiling in the repository, and narrow for a reason rather than for neatness:
+ * OAD3 already established the control and the exact synthetic schema at this budget, so a run that
+ * re-sent them would spend live authorization re-proving settled facts. One question remains, so one
+ * probe is authorized.
+ */
+export const REPRESENTATIVE_ACCEPTANCE_PROBE_REQUESTS = 1;
+export const REPRESENTATIVE_ACCEPTANCE_MAX_PROVIDER_REQUESTS =
+  SMOKE_REQUESTS + REPRESENTATIVE_ACCEPTANCE_PROBE_REQUESTS;
+
+/** The spend ceiling. Same conservative figure as every other bounded diagnostic. */
+export const REPRESENTATIVE_ACCEPTANCE_MAX_ESTIMATED_COST_USD = 1;
+
 /** Why the ledger refused the next call. Closed and content-free. */
 export const LEDGER_REFUSALS = [
   'request-limit-reached',
@@ -140,6 +155,7 @@ export const LEDGER_PHASES = [
   'schema-probe',
   'schema-repair-probe',
   'operational-acceptance-probe',
+  'representative-acceptance-probe',
 ] as const;
 export type LedgerPhase = (typeof LEDGER_PHASES)[number];
 
@@ -172,6 +188,13 @@ export interface LedgerSnapshot {
    * produced it.
    */
   readonly operationalAcceptanceProbeProviderRequests: number;
+  /**
+   * POST-OAD3. Representative acceptance probe requests.
+   *
+   * A SIXTH counter. OAD3's four-probe matrix and this one-probe gate ask different questions at the
+   * same budget, and a receipt that shared a counter between them could not say which run produced it.
+   */
+  readonly representativeAcceptanceProbeProviderRequests: number;
   readonly totalProviderRequests: number;
   readonly successfulProviderResponses: number;
   readonly providerFailures: number;
@@ -242,6 +265,7 @@ export function createRequestLedger(config: RequestLedgerConfig): RequestLedger 
     'schema-probe': 0,
     'schema-repair-probe': 0,
     'operational-acceptance-probe': 0,
+    'representative-acceptance-probe': 0,
   };
   let successes = 0;
   let failures = 0;
@@ -329,6 +353,7 @@ export function createRequestLedger(config: RequestLedgerConfig): RequestLedger 
         schemaProbeProviderRequests: counts['schema-probe'],
         schemaRepairProbeProviderRequests: counts['schema-repair-probe'],
         operationalAcceptanceProbeProviderRequests: counts['operational-acceptance-probe'],
+        representativeAcceptanceProbeProviderRequests: counts['representative-acceptance-probe'],
         totalProviderRequests: total(),
         successfulProviderResponses: successes,
         providerFailures: failures,
@@ -377,6 +402,28 @@ export function createSafetyReplicationLedger(): RequestLedger {
   return createRequestLedger({
     maxRequests: SAFETY_REPLICATION_MAX_PROVIDER_REQUESTS,
     maxCostUsd: SAFETY_REPLICATION_MAX_ESTIMATED_COST_USD,
+    pricePerMillionInputUsd: CANDIDATE_PRICE_PER_M_INPUT_USD,
+    pricePerMillionCachedInputUsd: CANDIDATE_PRICE_PER_M_CACHED_INPUT_USD,
+    pricePerMillionOutputUsd: CANDIDATE_PRICE_PER_M_OUTPUT_USD,
+    fallbackInputTokens: CANDIDATE_MAX_INPUT_TOKENS,
+    fallbackOutputTokens: CANDIDATE_MAX_COMPLETION_TOKENS,
+    hardMaxInputTokens: CANDIDATE_MAX_INPUT_TOKENS,
+    hardMaxOutputTokens: CANDIDATE_MAX_COMPLETION_TOKENS,
+  });
+}
+
+/**
+ * The ledger for a bounded POST_OAD3_REPRESENTATIVE_ACCEPTANCE run.
+ *
+ * The text smoke plus ONE representative probe: TWO requests, one dollar — the narrowest ceiling here.
+ *
+ * Its own ledger and its own counter, so it can never be confused with OAD3's five-request matrix,
+ * SRV1's six, SDH4's ten or S11's nine.
+ */
+export function createRepresentativeAcceptanceLedger(): RequestLedger {
+  return createRequestLedger({
+    maxRequests: REPRESENTATIVE_ACCEPTANCE_MAX_PROVIDER_REQUESTS,
+    maxCostUsd: REPRESENTATIVE_ACCEPTANCE_MAX_ESTIMATED_COST_USD,
     pricePerMillionInputUsd: CANDIDATE_PRICE_PER_M_INPUT_USD,
     pricePerMillionCachedInputUsd: CANDIDATE_PRICE_PER_M_CACHED_INPUT_USD,
     pricePerMillionOutputUsd: CANDIDATE_PRICE_PER_M_OUTPUT_USD,
