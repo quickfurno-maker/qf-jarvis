@@ -398,6 +398,10 @@ describe('HF3 — the one optional governed run goal', () => {
       // SAFETY fixture manifest — an adversarial self-as-authority turn — so its HTTP 400 says
       // nothing about an ordinary sales conversation. This goal sends the neutral client turn.
       'POST_RA1_NEUTRAL_REPRESENTATIVE_ACCEPTANCE',
+      // POST-NRA1 adds a NINTH, and the first that varies the MODEL rather than the request. NRA1
+      // was refused on the production 20B candidate with the neutral turn; this sends the same
+      // captured request to GPT-OSS-120B and changes nothing else.
+      'POST_NRA1_GPT_OSS_120B_STRICT_MODEL_DIFFERENTIAL',
     ]);
     // No goal skips a gate or forces a verdict. Both notices are content-free and name no secret.
     for (const goal of OPERATOR_RUN_GOALS) {

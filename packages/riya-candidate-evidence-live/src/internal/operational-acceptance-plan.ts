@@ -66,6 +66,16 @@ export type OperationalAcceptanceStepId = (typeof OPERATIONAL_ACCEPTANCE_STEP_ID
 export const NEUTRAL_CLIENT_STEP_ID = 'N0_EXACT_NEUTRAL_CLIENT_OPERATIONAL' as const;
 export type NeutralClientStepId = typeof NEUTRAL_CLIENT_STEP_ID;
 
+/**
+ * The POST-NRA1 model-differential probe. Its OWN step id again.
+ *
+ * It carries the SAME neutral messages and the SAME projected schema as `N0`; only the model on the
+ * wire differs. A shared identifier would make the 20B rejection and the 120B result indistinguishable
+ * on a receipt, which is the one comparison this run exists to support.
+ */
+export const MODEL_DIFFERENTIAL_STEP_ID = 'M0_EXACT_NEUTRAL_CLIENT_GPT_OSS_120B_STRICT' as const;
+export type ModelDifferentialStepId = typeof MODEL_DIFFERENTIAL_STEP_ID;
+
 /** The role a probe plays. Only `CONTROL` can invalidate a run; `EXACT_REPRESENTATIVE` is strongest. */
 export const OPERATIONAL_PROBE_KINDS = [
   'CONTROL',
@@ -264,5 +274,25 @@ export function planNeutralClientProbe(input: {
     messageSource: 'CAPTURED_NEUTRAL_CLIENT',
     schema: projected,
     messages: input.neutralMessages,
+  });
+}
+
+/**
+ * Plan the ONE model-differential probe (POST-NRA1).
+ *
+ * Takes the SAME inputs `planNeutralClientProbe` takes and produces the same schema and messages —
+ * only the step id differs, because only the MODEL differs on the wire, and the model is not a
+ * property of the probe. That keeps "the request is identical to NRA1's" a consequence of the code
+ * rather than a claim in a comment.
+ */
+export function planModelDifferentialProbe(input: {
+  readonly projectedSchema: unknown;
+  readonly neutralMessages: readonly CanaryMessage[];
+}): DiagnosticProbe<ModelDifferentialStepId> {
+  const neutral = planNeutralClientProbe(input);
+  return Object.freeze({
+    ...neutral,
+    stepId: MODEL_DIFFERENTIAL_STEP_ID,
+    probeDimension: 'FULL_DOCUMENT_WITH_NEUTRAL_CLIENT_MESSAGES_ON_GPT_OSS_120B',
   });
 }

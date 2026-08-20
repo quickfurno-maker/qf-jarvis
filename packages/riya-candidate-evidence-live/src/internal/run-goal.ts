@@ -104,6 +104,20 @@ export const OPERATOR_RUN_GOALS = [
    * path. A separate goal, because a receipt must say which turn produced it.
    */
   'POST_RA1_NEUTRAL_REPRESENTATIVE_ACCEPTANCE',
+  /**
+   * POST-NRA1. The GPT-OSS-120B strict MODEL DIFFERENTIAL: the smoke, ONE probe, then stop.
+   *
+   * NRA1 sent the NEUTRAL production-built request to `openai/gpt-oss-20b` and received HTTP 400 with
+   * `JSON_VALIDATE_FAILED` — the same failure class RA1 met on the safety-derived turn. So the strict
+   * failure is not confined to adversarial content, while OAD3's `O2` had already shown the same exact
+   * schema accepted at this budget with synthetic tiny messages.
+   *
+   * This goal changes exactly ONE thing: the model id on the wire. Same captured request, same prompt
+   * bytes, same projected schema, same 4,096 budget, same strict mode, same timeout and retry posture.
+   *
+   * It is a DIAGNOSTIC, not a rollout decision. Production candidate identity stays 20B.
+   */
+  'POST_NRA1_GPT_OSS_120B_STRICT_MODEL_DIFFERENTIAL',
 ] as const;
 export type OperatorRunGoal = (typeof OPERATOR_RUN_GOALS)[number];
 
@@ -134,6 +148,8 @@ export const SECOND_CREDENTIAL_NOTICES: Readonly<Record<OperatorRunGoal, string>
     'Smoke passed. Enter the same Groq credential again for the representative acceptance probe.',
   POST_RA1_NEUTRAL_REPRESENTATIVE_ACCEPTANCE:
     'Smoke passed. Enter the same Groq credential again for the neutral client acceptance probe.',
+  POST_NRA1_GPT_OSS_120B_STRICT_MODEL_DIFFERENTIAL:
+    'Smoke passed. Enter the same Groq credential again for the 120B strict model differential probe.',
 });
 
 /**
@@ -164,4 +180,6 @@ export const REUSED_CREDENTIAL_NOTICES: Readonly<Record<OperatorRunGoal, string>
     'Smoke passed. Reusing the credential already read for the representative acceptance probe.',
   POST_RA1_NEUTRAL_REPRESENTATIVE_ACCEPTANCE:
     'Smoke passed. Reusing the credential already read for the neutral client acceptance probe.',
+  POST_NRA1_GPT_OSS_120B_STRICT_MODEL_DIFFERENTIAL:
+    'Smoke passed. Reusing the credential already read for the 120B strict model differential probe.',
 });

@@ -146,6 +146,20 @@ export const NEUTRAL_REPRESENTATIVE_MAX_PROVIDER_REQUESTS =
 /** The spend ceiling. Same conservative figure as every other bounded diagnostic. */
 export const NEUTRAL_REPRESENTATIVE_MAX_ESTIMATED_COST_USD = 1;
 
+/**
+ * The exact arithmetic of a POST_NRA1_GPT_OSS_120B_STRICT_MODEL_DIFFERENTIAL run: smoke plus ONE probe.
+ *
+ * TWO, and its OWN counter. The differential asks a different question of a different MODEL, and a
+ * receipt that shared NRA1's counter could not say which model produced it — which is the only thing
+ * this run measures.
+ */
+export const MODEL_DIFFERENTIAL_PROBE_REQUESTS = 1;
+export const MODEL_DIFFERENTIAL_MAX_PROVIDER_REQUESTS =
+  SMOKE_REQUESTS + MODEL_DIFFERENTIAL_PROBE_REQUESTS;
+
+/** The spend ceiling. Same conservative figure as every other bounded diagnostic. */
+export const MODEL_DIFFERENTIAL_MAX_ESTIMATED_COST_USD = 1;
+
 /** Why the ledger refused the next call. Closed and content-free. */
 export const LEDGER_REFUSALS = [
   'request-limit-reached',
@@ -172,6 +186,7 @@ export const LEDGER_PHASES = [
   'operational-acceptance-probe',
   'representative-acceptance-probe',
   'neutral-representative-probe',
+  'model-differential-probe',
 ] as const;
 export type LedgerPhase = (typeof LEDGER_PHASES)[number];
 
@@ -217,6 +232,13 @@ export interface LedgerSnapshot {
    * A SEVENTH counter, for the reason the sixth existed: the question differs, so the receipt must.
    */
   readonly neutralRepresentativeProbeProviderRequests: number;
+  /**
+   * POST-NRA1. GPT-OSS-120B strict model-differential probe requests.
+   *
+   * An EIGHTH counter. The model is the variable this run exists to change, so the receipt must be
+   * able to say a request was spent on 120B rather than on the production candidate.
+   */
+  readonly modelDifferentialProbeProviderRequests: number;
   readonly totalProviderRequests: number;
   readonly successfulProviderResponses: number;
   readonly providerFailures: number;
@@ -289,6 +311,7 @@ export function createRequestLedger(config: RequestLedgerConfig): RequestLedger 
     'operational-acceptance-probe': 0,
     'representative-acceptance-probe': 0,
     'neutral-representative-probe': 0,
+    'model-differential-probe': 0,
   };
   let successes = 0;
   let failures = 0;
@@ -378,6 +401,7 @@ export function createRequestLedger(config: RequestLedgerConfig): RequestLedger 
         operationalAcceptanceProbeProviderRequests: counts['operational-acceptance-probe'],
         representativeAcceptanceProbeProviderRequests: counts['representative-acceptance-probe'],
         neutralRepresentativeProbeProviderRequests: counts['neutral-representative-probe'],
+        modelDifferentialProbeProviderRequests: counts['model-differential-probe'],
         totalProviderRequests: total(),
         successfulProviderResponses: successes,
         providerFailures: failures,
@@ -426,6 +450,28 @@ export function createSafetyReplicationLedger(): RequestLedger {
   return createRequestLedger({
     maxRequests: SAFETY_REPLICATION_MAX_PROVIDER_REQUESTS,
     maxCostUsd: SAFETY_REPLICATION_MAX_ESTIMATED_COST_USD,
+    pricePerMillionInputUsd: CANDIDATE_PRICE_PER_M_INPUT_USD,
+    pricePerMillionCachedInputUsd: CANDIDATE_PRICE_PER_M_CACHED_INPUT_USD,
+    pricePerMillionOutputUsd: CANDIDATE_PRICE_PER_M_OUTPUT_USD,
+    fallbackInputTokens: CANDIDATE_MAX_INPUT_TOKENS,
+    fallbackOutputTokens: CANDIDATE_MAX_COMPLETION_TOKENS,
+    hardMaxInputTokens: CANDIDATE_MAX_INPUT_TOKENS,
+    hardMaxOutputTokens: CANDIDATE_MAX_COMPLETION_TOKENS,
+  });
+}
+
+/**
+ * The ledger for a bounded POST_NRA1_GPT_OSS_120B_STRICT_MODEL_DIFFERENTIAL run.
+ *
+ * The text smoke plus ONE differential probe: TWO requests, one dollar.
+ *
+ * Its own ledger and its own counter, so it can never be confused with NRA1 — which sent the same
+ * captured request to the production 20B candidate and was refused.
+ */
+export function createModelDifferentialLedger(): RequestLedger {
+  return createRequestLedger({
+    maxRequests: MODEL_DIFFERENTIAL_MAX_PROVIDER_REQUESTS,
+    maxCostUsd: MODEL_DIFFERENTIAL_MAX_ESTIMATED_COST_USD,
     pricePerMillionInputUsd: CANDIDATE_PRICE_PER_M_INPUT_USD,
     pricePerMillionCachedInputUsd: CANDIDATE_PRICE_PER_M_CACHED_INPUT_USD,
     pricePerMillionOutputUsd: CANDIDATE_PRICE_PER_M_OUTPUT_USD,

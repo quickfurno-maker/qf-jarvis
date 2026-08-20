@@ -66,6 +66,14 @@ import {
 } from './internal/representative-acceptance-emitters.js';
 import { analyseRepresentativeAcceptance } from './internal/representative-acceptance-classification.js';
 import type { NeutralClientProbe } from './internal/operational-acceptance-plan.js';
+import {
+  emitModelDifferentialClassification,
+  emitModelDifferentialProbeOutcome,
+  emitModelDifferentialReceipt,
+} from './internal/model-differential-emitters.js';
+import { analyseModelDifferential } from './internal/model-differential-classification.js';
+import type { ModelDifferentialOutcome } from './internal/model-differential-classification.js';
+import type { ModelDifferentialProbe } from './model-differential-port.js';
 import type { RepresentativeAcceptanceOutcome } from './internal/representative-acceptance-classification.js';
 import {
   emitOperationalAcceptanceClassification,
@@ -280,6 +288,17 @@ export interface OperatorDeps {
     readonly probe: NeutralClientProbe;
     readonly run: (probe: NeutralClientProbe) => Promise<RepresentativeAcceptanceOutcome>;
   }>;
+  /**
+   * POST-NRA1. Bind the GPT-OSS-120B MODEL DIFFERENTIAL runner to the already-resolved credential.
+   *
+   * Same credential-bound one-probe shape as the seam above, and required only for
+   * `POST_NRA1_GPT_OSS_120B_STRICT_MODEL_DIFFERENTIAL`. Its probe carries the SAME neutral request
+   * NRA1 sent; only the model on the wire differs.
+   */
+  readonly openModelDifferentialRunner?: (credential: unknown) => Promise<{
+    readonly probe: ModelDifferentialProbe;
+    readonly run: (probe: ModelDifferentialProbe) => Promise<ModelDifferentialOutcome>;
+  }>;
 }
 
 export interface OperatorResult {
@@ -404,6 +423,54 @@ export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<
   // The second ingress line. In clipboard mode this is where `credentialReuseCount` becomes 2 while
   // `credentialClipboardReads` stays 1 — the pair of numbers that IS the copy-once guarantee.
   emitCredentialIngress(safe, credentialSource, 'CANDIDATE', deps.ingressCounters?.());
+
+  // F'''''''. THE GPT-OSS-120B STRICT MODEL DIFFERENTIAL (POST-NRA1) — and then STOP.
+  //
+  // ONE probe, like the two gates below it. NRA1 sent the neutral production-built request to the
+  // production 20B candidate and was refused with JSON_VALIDATE_FAILED; this sends the SAME captured
+  // request and changes only the model id. No baseline request is re-sent — NRA1 already established
+  // it, and spending a live request to re-prove it would answer nothing new.
+  if (runGoal === 'POST_NRA1_GPT_OSS_120B_STRICT_MODEL_DIFFERENTIAL') {
+    const openRunner = deps.openModelDifferentialRunner;
+    if (openRunner === undefined) {
+      safe.line({ phase: 'model-differential', status: 'FAILED', reason: 'port-missing' });
+      return { outcome: 'INTERNAL_CLOSED_FAILURE' };
+    }
+    let runner: {
+      readonly probe: ModelDifferentialProbe;
+      readonly run: (probe: ModelDifferentialProbe) => Promise<ModelDifferentialOutcome>;
+    };
+    try {
+      runner = await openRunner(candidateCredential);
+    } catch {
+      safe.line({ phase: 'model-differential', status: 'FAILED', reason: 'runner-bind-failed' });
+      return { outcome: 'INTERNAL_CLOSED_FAILURE' };
+    }
+
+    let differentialOutcome: ModelDifferentialOutcome | undefined;
+    const differentialReservation = ledger.reserve('model-differential-probe');
+    if (!differentialReservation.ok) {
+      safe.line({
+        phase: 'model-differential',
+        status: 'REFUSED',
+        stepId: runner.probe.stepId,
+        reason: differentialReservation.refusal,
+      });
+    } else {
+      differentialOutcome = await runner.run(runner.probe);
+      ledger.settle(undefined, differentialOutcome.providerCompleted);
+      emitModelDifferentialProbeOutcome(safe, runner.probe, differentialOutcome);
+    }
+
+    emitModelDifferentialClassification(
+      safe,
+      analyseModelDifferential(differentialOutcome),
+      differentialOutcome === undefined ? 0 : 1,
+    );
+    emitModelDifferentialReceipt(safe, ledger.snapshot());
+    safe.line({ finalStatus: 'POST_NRA1_GPT_OSS_120B_STRICT_MODEL_DIFFERENTIAL_COMPLETE' });
+    return { outcome: 'POST_NRA1_GPT_OSS_120B_STRICT_MODEL_DIFFERENTIAL_COMPLETE' };
+  }
 
   // F''''''. THE NEUTRAL CLIENT ACCEPTANCE GATE (POST-RA1) — and then STOP.
   //

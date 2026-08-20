@@ -1052,7 +1052,7 @@ If NRA1 also returns 400 / `JSON_VALIDATE_FAILED`, stop. That would show the str
 not confined to the safety-derived canary, and the next decision is provider / model / output-contract
 strategy — not another blind 20B rerun.
 
-### Containment for this phase
+### Containment for this phase — SNAPSHOT AT THE POST-RA1 BRIDGE
 
 ```
 GROQ_CALLS=0
@@ -1071,4 +1071,268 @@ SAFETY_FIXTURE_CHANGED=NO
 REQUEST_CONTRACT_STATUS=UNRESOLVED_PENDING_NEUTRAL_REPRESENTATIVE_ACCEPTANCE
 20B_MODEL_QUALITY_VERDICT=UNRESOLVED
 SAFETY_AUTHORIZED=NO
+```
+
+> Superseded by section 19. NRA1 has since run; the current status is
+> `REQUEST_CONTRACT_STATUS=GPT_OSS_20B_FULL_PRODUCTION_MESSAGE_STRICT_PATH_REJECTED`. The values above
+> are kept unchanged as the record of this phase.
+
+---
+
+## 18. RUN NRA1 — `POST_RA1_NEUTRAL_REPRESENTATIVE_ACCEPTANCE` (IMMUTABLE)
+
+Executed **once** under owner authorization. Preflight PASS. Smoke PASS (1 request).
+
+| Field                      | Value                                        |
+| -------------------------- | -------------------------------------------- |
+| `phase`                    | `neutral-representative-acceptance`          |
+| `stepId`                   | `N0_EXACT_NEUTRAL_CLIENT_OPERATIONAL`        |
+| `probeKind`                | `EXACT_REPRESENTATIVE`                       |
+| `probeDimension`           | `FULL_DOCUMENT_WITH_NEUTRAL_CLIENT_MESSAGES` |
+| `derivedFromPath`          | `$`                                          |
+| `completionCapClass`       | `OPERATIONAL`                                |
+| `maxCompletionTokens`      | 4096                                         |
+| `messageSource`            | `CAPTURED_NEUTRAL_CLIENT`                    |
+| `providerTransportStarted` | true                                         |
+| **`providerHttpStatus`**   | **400**                                      |
+| **`providerHttpClass`**    | **`BAD_REQUEST_400`**                        |
+| **`providerErrorType`**    | **`INVALID_REQUEST_ERROR`**                  |
+| **`providerErrorCode`**    | **`JSON_VALIDATE_FAILED`**                   |
+| `providerCompleted`        | false                                        |
+
+Classification: **`REPRESENTATIVE_PROVIDER_REJECTED`**
+
+| Field                                   | Value      |
+| --------------------------------------- | ---------- |
+| `totalProviderRequests`                 | 2          |
+| `smokeRequests`                         | 1          |
+| `representativeAcceptanceProbeRequests` | 0          |
+| `neutralRepresentativeProbeRequests`    | 1          |
+| `safetyProviderRequests`                | 0          |
+| `p10ProviderRequests`                   | 0          |
+| `successfulProviderResponses`           | 1          |
+| `providerFailures`                      | 1          |
+| `inputTokensTotal`                      | 131,266    |
+| `outputTokensTotal`                     | 65,632     |
+| `estimatedCostUsd`                      | 0.02953455 |
+| `costIsEstimated`                       | true       |
+| `usageBoundViolated`                    | false      |
+| `safetyEvaluated`                       | false      |
+| `reviewBundleWritten`                   | false      |
+
+Final: `POST_RA1_NEUTRAL_REPRESENTATIVE_ACCEPTANCE_COMPLETE`.
+
+> **Not recorded, because it was not supplied.** The owner-supplied excerpt did not include the
+> post-command PowerShell values for `NRA1_EXIT_CODE`, `REVIEW_OUTPUT_EXISTS`, the post-run local and
+> remote SHAs, the post-run divergence, or the final `git status`. Those fields are deliberately left
+> blank here rather than inferred from the run goal or from prior runs. If they are supplied later they
+> may be appended as additional owner evidence.
+
+```
+NRA1_CONSUMED=YES
+NRA1_RERUN=NO
+RA1_CONSUMED=YES
+RA1_RERUN=NO
+```
+
+---
+
+## 19. OWNER INTERPRETATION OF NRA1
+
+**Emitted classification:** `REPRESENTATIVE_PROVIDER_REJECTED`
+
+**Owner bounded interpretation:**
+`NEUTRAL_PRODUCTION_REQUEST_STRICT_VALIDATION_REJECTED_ON_GPT_OSS_20B`
+
+What NRA1 establishes: the exact current production Riya request construction, the production prompt,
+the exact projected strict schema, a **neutral ordinary synthetic client turn**, Groq GPT-OSS-20B, and
+`max_completion_tokens=4096` produced HTTP 400 with `INVALID_REQUEST_ERROR` /
+`JSON_VALIDATE_FAILED` and no provider-completed structured reply.
+
+### The three results together
+
+| Run       | Messages                                     | Model | Result                                 |
+| --------- | -------------------------------------------- | ----- | -------------------------------------- |
+| OAD3 `O2` | synthetic tiny                               | 20B   | **HTTP 200**, `providerCompleted=true` |
+| RA1       | safety-derived adversarial, production-built | 20B   | HTTP 400 `JSON_VALIDATE_FAILED`        |
+| NRA1      | **neutral**, production-built                | 20B   | HTTP 400 `JSON_VALIDATE_FAILED`        |
+
+Therefore:
+
+- schema-global rejection is **NOT** established — `O2` sent the same exact schema and was accepted;
+- the failure is **not** confined to adversarial content;
+- the current 20B + full production-message strict path is **not** accepted for production release;
+- the exact undocumented provider cause remains **unknown**.
+
+No claim is made that a Groq bug is proven, that 20B model quality is bad, that 4,096 is universally
+invalid, that prompt length is causal, or that schema complexity is causal.
+
+### Status after NRA1
+
+```
+REQUEST_CONTRACT_STATUS=GPT_OSS_20B_FULL_PRODUCTION_MESSAGE_STRICT_PATH_REJECTED
+NORMAL_CLIENT_REQUEST_CONTRACT=REJECTED_ONCE_ON_GPT_OSS_20B_STRICT
+RA1_SAFETY_DERIVED_STRICT_VALIDATION=REJECTED
+20B_MODEL_QUALITY_VERDICT=UNRESOLVED
+SAFETY_AUTHORIZED=NO
+P10_AUTHORIZED=NO
+PRODUCTION_RELEASE_AUTHORIZED=NO
+```
+
+This supersedes the section 17 status line, which remains as its own labelled snapshot.
+
+### Provider capability context — NOT causal fact
+
+As of owner review date 2026-08-20, Groq documentation lists both GPT-OSS models as production models
+supporting JSON Schema Mode, with a 131,072-token context and 65,536-token max output:
+
+| Model                 | Approx. speed | Input / 1M | Output / 1M |
+| --------------------- | ------------- | ---------- | ----------- |
+| `openai/gpt-oss-20b`  | ~1000 tok/s   | $0.075     | $0.30       |
+| `openai/gpt-oss-120b` | ~500 tok/s    | $0.15      | $0.60       |
+
+Groq describes `response_format` `type=json_schema` as Structured Outputs intended to match the
+supplied schema. This is **provider-capability context only**. Documented support does not guarantee
+that this exact Jarvis request succeeds on either model.
+
+---
+
+## 20. THE GPT-OSS-120B STRICT MODEL DIFFERENTIAL
+
+### The question
+
+> Keeping the neutral production-built messages, exact production strict schema, request budget,
+> sampling posture, reasoning posture and transport contract fixed, does changing **only** the
+> candidate model from GPT-OSS-20B to GPT-OSS-120B produce a provider-completed structured response?
+
+A **model differential**, not a rollout decision. No 20B candidate request is sent — NRA1 already
+established that baseline, and re-sending it would spend one of two authorized requests re-proving a
+settled fact.
+
+### The gate
+
+`POST_NRA1_GPT_OSS_120B_STRICT_MODEL_DIFFERENTIAL`, exit **29**, future live label **MD120B1**.
+
+| Bound                                             | Value                                                            |
+| ------------------------------------------------- | ---------------------------------------------------------------- |
+| Max provider requests                             | **2** (1 smoke + 1 differential probe)                           |
+| Max spend                                         | USD 1.00                                                         |
+| Wire completion budget                            | 4,096                                                            |
+| Capability ceiling                                | 65,536 (held fixed — Groq documents both models at this maximum) |
+| strict                                            | true                                                             |
+| retry / fallback / safety / P10 / bundle / matrix | 0                                                                |
+
+Step id `M0_EXACT_NEUTRAL_CLIENT_GPT_OSS_120B_STRICT`, message source `CAPTURED_NEUTRAL_CLIENT`
+(**unchanged** — the messages are what must be held constant), its own ledger phase and counter.
+
+### One variable, proven by construction
+
+The differential port calls `captureNeutralClientRiyaRequest()` — the identical function NRA1's port
+calls — and plans its probe through `planModelDifferentialProbe`, which delegates to the neutral
+planner and overwrites nothing but the step id. There is no second capture, no second fixture and no
+re-derived schema.
+
+An offline spec asserts the differential probe and the neutral probe share their schema and messages
+**by object identity**, and that the only differences are the step id and the probe dimension label.
+
+The **only** intentional wire difference is:
+
+```
+NRA1      model=openai/gpt-oss-20b
+MD120B1   model=openai/gpt-oss-120b
+```
+
+### Production is untouched
+
+`CANDIDATE_MODEL_ID` remains `openai/gpt-oss-20b`. The differential model is a diagnostic-only
+constant in its own module, and specs assert both that production still names 20B and that no
+production module imports the diagnostic identity or the 120B id.
+
+The package's HTTP containment guard allowlists provider model ids by line. It has been extended to
+admit `openai/gpt-oss-120b` — deliberately, because that guard exists so a new provider model id
+cannot enter this package without someone deciding it should.
+
+### The entitlement trap, handled in the classifier
+
+The governed staging smoke runs against the **20B** configuration:
+
+```
+SMOKE_PROVIDER_CREDENTIAL_CHECK_MODEL=openai/gpt-oss-20b
+CANDIDATE_DIFFERENTIAL_MODEL=openai/gpt-oss-120b
+SMOKE_PROVES_DIFFERENTIAL_MODEL_ENTITLEMENT=false
+```
+
+A passing smoke proves the credential works. It does **not** prove the account may call 120B. So a
+401, 403 or 404 on the differential probe is an **entitlement** answer and is classified
+`STRICT_120B_INCONCLUSIVE`, never as the model rejecting the request contract. The receipt prints the
+gap rather than leaving it to be inferred.
+
+### Vocabulary
+
+| Outcome                         | Reached by                                            |
+| ------------------------------- | ----------------------------------------------------- |
+| `STRICT_120B_ACCEPTED`          | 2xx + `providerCompleted=true`                        |
+| `STRICT_120B_PROVIDER_REJECTED` | 400 / 413 / 422 only                                  |
+| `STRICT_120B_RATE_LIMITED`      | 429                                                   |
+| `STRICT_120B_INFRA_INTERRUPTED` | 498 / 499 / 5xx / transport throw / not reached       |
+| `STRICT_120B_INCONCLUSIVE`      | 401 / 403 / 404 / `OTHER_HTTP` / `NONE` / did not run |
+
+No low-level HTTP logic is duplicated: every branch switches on the shared total
+`PROVIDER_OUTCOME_ROLE` map, so a class added to the observation vocabulary cannot reach a verdict by
+falling through. A spec asserts that over the whole governed class list.
+
+### Decision table for a future MD120B1 — recorded, not executed
+
+**If `STRICT_120B_ACCEPTED`:** the evidence becomes _20B full production-message strict path rejected;
+120B exact same neutral strict path accepted once_ — `MODEL_DIFFERENTIAL_FAVORS_120B_STRICT_PATH`.
+Then: do **not** release immediately; make provider/model selection configurable offline if it is not
+already; run bounded 120B safety replication before P10; keep 20B only for paths whose contract has
+separately passed, not Riya strict production replies.
+
+**If `STRICT_120B_PROVIDER_REJECTED` with `JSON_VALIDATE_FAILED`:**
+`STRICT_FAILURE_REPRODUCED_ACROSS_GPT_OSS_20B_AND_120B`. The next decision is an offline
+output-contract strategy comparison, in order: (A) Groq Responses API with the exact JSON Schema, if
+it preserves the same downstream contract; (B) Chat Completions JSON Object Mode with **local** strict
+validation and no silent acceptance; (C) an alternative provider/model with strict schema support. Do
+not blindly run either GPT-OSS model again.
+
+**If rate-limited, infra-interrupted or inconclusive:** stop and diagnose that exact non-verdict. No
+rerun under the same one-shot authorization.
+
+### Telemetry unchanged
+
+No raw `failed_generation`, no provider response body, no provider error message, no prompt, message,
+schema or credential content, no credential length, hash, fingerprint or Authorization header. The
+allowlisted literals are preserved: `providerHttpStatus`, `providerHttpClass`, `providerErrorType`,
+`providerErrorCode`, `providerCompleted`.
+
+### Containment for this phase
+
+```
+GROQ_CALLS=0
+PROVIDER_CALLS=0
+CREDENTIAL_READS=0
+LIVE_MD120B1_EXECUTED=NO
+LIVE_MD120B1_AUTHORIZED=NO
+NRA1_RERUN=NO
+RA1_RERUN=NO
+OAD3_RERUN=NO
+OAD2_RERUN=NO
+OAD1_RERUN=NO
+SRV1_RERUN=NO
+SDH4_RERUN=NO
+S11_RERUN=NO
+PRODUCTION_MODEL_CHANGED=NO
+PRODUCTION_SCHEMA_CHANGED=NO
+PRODUCTION_PROMPT_CHANGED=NO
+PRODUCTION_BUDGET_CHANGED=NO
+PRODUCTION_SAMPLING_CHANGED=NO
+PRODUCTION_REASONING_CHANGED=NO
+PRODUCTION_RETRY_CHANGED=NO
+PRODUCTION_FALLBACK_CHANGED=NO
+SAFETY_FIXTURE_CHANGED=NO
+P10_CORPUS_CHANGED=NO
+20B_MODEL_QUALITY_VERDICT=UNRESOLVED
+SAFETY_AUTHORIZED=NO
+P10_AUTHORIZED=NO
 ```
