@@ -21,7 +21,7 @@ import type {
   CandidateProviderErrorType,
   CandidateProviderHttpClass,
 } from '../candidate-transport-observation.js';
-import { isProviderAccepted, isProviderRejected } from './provider-outcome-classes.js';
+import { isProviderAccepted, PROVIDER_OUTCOME_ROLE } from './provider-outcome-classes.js';
 
 /** The closed conclusions ONE representative probe can support. */
 export const REPRESENTATIVE_ACCEPTANCE_CLASSIFICATIONS = [
@@ -35,10 +35,14 @@ export const REPRESENTATIVE_ACCEPTANCE_CLASSIFICATIONS = [
    */
   'REPRESENTATIVE_ACCEPTED',
   /**
-   * The provider judged the request and refused it.
+   * The provider judged the request and refused it on CONTRACT grounds: 400, 413 or 422.
    *
    * The literal provider error type and code travel with this outcome and are NOT interpreted. A 400
    * is a refusal; which part of the request it refers to is not established by this run.
+   *
+   * A 401, 403 or 404 is deliberately NOT this. Those say the caller was not authorised, not
+   * permitted, or pointed somewhere that does not exist — real problems, but not evidence about the
+   * request shape, and a mistyped candidate credential must never land here.
    */
   'REPRESENTATIVE_PROVIDER_REJECTED',
   /**
@@ -50,12 +54,19 @@ export const REPRESENTATIVE_ACCEPTANCE_CLASSIFICATIONS = [
    */
   'REPRESENTATIVE_RATE_LIMITED',
   /**
-   * A transport failure, a timeout with no provider response, or provider unavailability.
+   * The request failed to EXECUTE: transport failure, timeout with no provider response, capacity,
+   * cancellation, or provider unavailability.
    *
    * No provider verdict exists, so there is no contract evidence either way.
    */
   'REPRESENTATIVE_INFRA_INTERRUPTED',
-  /** The probe did not run, or its observation supports none of the above. */
+  /**
+   * The probe did not run, or the outcome is a credential, permission, configuration or ungoverned
+   * HTTP class.
+   *
+   * Separated from `..._INFRA_INTERRUPTED` because the operator action differs: an execution failure
+   * says try again, whereas a 401 or a 404 says fix something before trying again.
+   */
   'REPRESENTATIVE_INCONCLUSIVE',
 ] as const;
 export type RepresentativeAcceptanceClassification =
@@ -114,21 +125,24 @@ export function analyseRepresentativeAcceptance(
   if (isProviderAccepted(outcome)) {
     return result('REPRESENTATIVE_ACCEPTED');
   }
-  // BEFORE the rejection test. This ordering is the whole point of the vocabulary.
-  if (outcome.providerHttpClass === 'RATE_LIMITED_429') {
-    return result('REPRESENTATIVE_RATE_LIMITED');
+
+  // Read the reviewed ROLE rather than testing statuses here, so this function cannot drift from the
+  // allowlist the matrix classifier uses. The role map is total, so there is no unhandled class.
+  switch (PROVIDER_OUTCOME_ROLE[outcome.providerHttpClass]) {
+    case 'CONTRACT_REJECTION':
+      // 400 / 413 / 422 only. Requires a real response, exactly as the shared predicate demands.
+      return outcome.providerTransportStarted && outcome.providerHttpStatus >= 100
+        ? result('REPRESENTATIVE_PROVIDER_REJECTED')
+        : result('REPRESENTATIVE_INCONCLUSIVE');
+    case 'RATE_LIMITED':
+      return result('REPRESENTATIVE_RATE_LIMITED');
+    case 'EXECUTION_INTERRUPTED':
+      return result('REPRESENTATIVE_INFRA_INTERRUPTED');
+    case 'NON_VERDICT_OTHER':
+      // Credential, permission, configuration, ungoverned. Never a contract verdict.
+      return result('REPRESENTATIVE_INCONCLUSIVE');
+    case 'ACCEPTED':
+      // A 2xx whose provider did not complete. Not acceptance, and not evidence of a refusal either.
+      return result('REPRESENTATIVE_INCONCLUSIVE');
   }
-  if (isProviderRejected(outcome)) {
-    return result('REPRESENTATIVE_PROVIDER_REJECTED');
-  }
-  if (
-    outcome.providerHttpClass === 'TRANSPORT_THROW' ||
-    outcome.providerHttpClass === 'SERVER_5XX' ||
-    outcome.providerHttpClass === 'CAPACITY_498' ||
-    outcome.providerHttpClass === 'CANCELLED_499' ||
-    outcome.providerHttpClass === 'NOT_REACHED'
-  ) {
-    return result('REPRESENTATIVE_INFRA_INTERRUPTED');
-  }
-  return result('REPRESENTATIVE_INCONCLUSIVE');
 }

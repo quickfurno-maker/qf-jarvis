@@ -730,11 +730,30 @@ The OAD matrix classifier counted every non-2xx response carrying a status as re
 is adequate for "did the provider take this" and wrong for "is this request contract valid", because
 the two differ exactly where the provider never got as far as judging the request.
 
-A new module classifies each observed transport class into one of three roles. `RATE_LIMITED_429`,
-`CAPACITY_498`, `CANCELLED_499`, `SERVER_5XX`, `TRANSPORT_THROW`, `NOT_REACHED` and `NONE` are
-**infrastructure** — an absence of evidence, filed as inconclusive. A response where the provider
-actually judged the request, a 400 most obviously, stays a **rejection**, with its literal error type
-and code preserved and uninterpreted.
+A new module assigns a reviewed role to **every** governed transport class, in a map that is total by
+type — a class added to the vocabulary does not compile until somebody decides its role, so nothing
+can inherit a role by falling through.
+
+Contract-rejection evidence is an explicit **allowlist of three**:
+
+| Class                   | Why it is contract evidence                                       |
+| ----------------------- | ----------------------------------------------------------------- |
+| `BAD_REQUEST_400`       | the provider validated the request and refused it                 |
+| `PAYLOAD_TOO_LARGE_413` | the envelope was refused as too large — how OAD2 read its own 413 |
+| `UNPROCESSABLE_422`     | the provider reports the request as unprocessable                 |
+
+For all three the literal error type and code travel onward **uninterpreted**: a 400 says a refusal
+happened, not which part of the request caused it.
+
+Everything else establishes **nothing** about the request contract: `UNAUTHORIZED_401`,
+`FORBIDDEN_403`, `NOT_FOUND_404`, `RATE_LIMITED_429`, `CAPACITY_498`, `CANCELLED_499`, `SERVER_5XX`,
+`TRANSPORT_THROW`, `NOT_REACHED`, `NONE` and `OTHER_HTTP`.
+
+That list matters as much as the allowlist. A first attempt at this repair excluded the infrastructure
+classes and treated the leftovers as rejections, which quietly swept in 401, 403, 404 and
+`OTHER_HTTP` — so a mistyped **second** candidate credential, entered after smoke had already passed
+on the first, would have been filed as evidence about Riya's schema. The safest default for any future
+or unknown class is inconclusive, never rejection.
 
 The precedence and the token list are unchanged; only which evidence reaches which token moved. A
 future matrix identical to OAD3's would now read **`MIXED_OR_INCONCLUSIVE`**, and a spec replays
@@ -765,10 +784,10 @@ Its vocabulary is five tokens, and the split between them is the OAD3 lesson:
 | Outcome                            | Meaning                                                                                                                                  |
 | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | `REPRESENTATIVE_ACCEPTED`          | HTTP 2xx and completed. The contract was accepted **once**. Sufficient to move to bounded safety replication; **not** a quality verdict. |
-| `REPRESENTATIVE_PROVIDER_REJECTED` | The provider judged the request and refused it. Literal codes preserved, uninterpreted.                                                  |
+| `REPRESENTATIVE_PROVIDER_REJECTED` | The provider judged the request and refused it on contract grounds — 400, 413 or 422 only. Literal codes preserved, uninterpreted.       |
 | `REPRESENTATIVE_RATE_LIMITED`      | HTTP 429. The provider declined to process. **Not a verdict.**                                                                           |
-| `REPRESENTATIVE_INFRA_INTERRUPTED` | Transport failure, timeout with no response, or unavailability.                                                                          |
-| `REPRESENTATIVE_INCONCLUSIVE`      | The probe did not run, or supports none of the above.                                                                                    |
+| `REPRESENTATIVE_INFRA_INTERRUPTED` | The request failed to EXECUTE: transport, capacity, cancellation, 5xx.                                                                   |
+| `REPRESENTATIVE_INCONCLUSIVE`      | Did not run, or a credential / permission / configuration / ungoverned class — 401, 403, 404, `OTHER_HTTP`.                              |
 
 ### Pacing is operational, not code
 

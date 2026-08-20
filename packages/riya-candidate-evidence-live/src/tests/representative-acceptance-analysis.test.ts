@@ -25,11 +25,15 @@ import {
 } from '../internal/operational-acceptance-classification.js';
 import type { OperationalAcceptanceOutcome } from '../internal/operational-acceptance-classification.js';
 import type { OperationalAcceptanceStepId } from '../internal/operational-acceptance-plan.js';
+import { CANDIDATE_PROVIDER_HTTP_CLASSES } from '../candidate-transport-observation.js';
+import type { CandidateProviderHttpClass } from '../candidate-transport-observation.js';
 import {
-  INFRASTRUCTURE_HTTP_CLASSES,
-  isInfrastructureInterrupted,
   isProviderAccepted,
-  isProviderRejected,
+  isProviderContractRejected,
+  isProviderOutcomeInconclusive,
+  NON_VERDICT_HTTP_CLASSES,
+  PROVIDER_CONTRACT_REJECTION_HTTP_CLASSES,
+  PROVIDER_OUTCOME_ROLE,
 } from '../internal/provider-outcome-classes.js';
 import {
   analyseRepresentativeAcceptance,
@@ -76,41 +80,123 @@ function refused(stepId: OperationalAcceptanceStepId): OperationalAcceptanceOutc
   };
 }
 
-describe('a rate limit is INFRASTRUCTURE, not a provider verdict', () => {
-  it('classifies each observed class into exactly one of the three roles', () => {
-    const accepted = ok('O2_EXACT_SYNTHETIC_OPERATIONAL');
-    expect(isProviderAccepted(accepted)).toBe(true);
-    expect(isInfrastructureInterrupted(accepted)).toBe(false);
-    expect(isProviderRejected(accepted)).toBe(false);
+/**
+ * The role of EVERY governed transport class, reviewed one by one.
+ *
+ * This table is the point of the whole guard. The first repair listed the classes that were not
+ * evidence and treated the leftovers as provider rejections — which quietly swept in
+ * `UNAUTHORIZED_401`, `FORBIDDEN_403`, `NOT_FOUND_404` and `OTHER_HTTP`. A mistyped SECOND candidate
+ * credential (smoke passes on the first entry) would then have been filed as evidence about Riya's
+ * schema.
+ *
+ * So the expectation is written out here per class. A new `CandidateProviderHttpClass` fails this
+ * spec until somebody adds it, and fails the compiler until somebody gives it a role — there is no
+ * path by which it inherits "rejection" through a fallback.
+ */
+const EXPECTED_ROLE: Readonly<Record<CandidateProviderHttpClass, string>> = {
+  SUCCESS_2XX: 'ACCEPTED',
 
-    const limited = rateLimited('O3_EXACT_REPRESENTATIVE_OPERATIONAL');
-    expect(isProviderAccepted(limited)).toBe(false);
-    expect(isInfrastructureInterrupted(limited)).toBe(true);
-    // THE repair: a 429 is no longer a rejection.
-    expect(isProviderRejected(limited)).toBe(false);
+  // The contract-rejection allowlist. Exactly three.
+  BAD_REQUEST_400: 'CONTRACT_REJECTION',
+  PAYLOAD_TOO_LARGE_413: 'CONTRACT_REJECTION',
+  UNPROCESSABLE_422: 'CONTRACT_REJECTION',
 
-    const verdict = refused('O2_EXACT_SYNTHETIC_OPERATIONAL');
-    expect(isProviderAccepted(verdict)).toBe(false);
-    expect(isInfrastructureInterrupted(verdict)).toBe(false);
-    expect(isProviderRejected(verdict)).toBe(true);
+  RATE_LIMITED_429: 'RATE_LIMITED',
+
+  CAPACITY_498: 'EXECUTION_INTERRUPTED',
+  CANCELLED_499: 'EXECUTION_INTERRUPTED',
+  SERVER_5XX: 'EXECUTION_INTERRUPTED',
+  TRANSPORT_THROW: 'EXECUTION_INTERRUPTED',
+  NOT_REACHED: 'EXECUTION_INTERRUPTED',
+
+  // Credential, permission, configuration, ungoverned. NEVER contract evidence.
+  UNAUTHORIZED_401: 'NON_VERDICT_OTHER',
+  FORBIDDEN_403: 'NON_VERDICT_OTHER',
+  NOT_FOUND_404: 'NON_VERDICT_OTHER',
+  OTHER_HTTP: 'NON_VERDICT_OTHER',
+  NONE: 'NON_VERDICT_OTHER',
+};
+
+describe('GUARD — every governed HTTP class has an explicitly reviewed role', () => {
+  it('assigns the reviewed role to every declared class, with none left over', () => {
+    // Both directions: no class without a decision, and no decision without a class.
+    expect([...CANDIDATE_PROVIDER_HTTP_CLASSES].sort()).toEqual(Object.keys(EXPECTED_ROLE).sort());
+    for (const providerHttpClass of CANDIDATE_PROVIDER_HTTP_CLASSES) {
+      expect(PROVIDER_OUTCOME_ROLE[providerHttpClass], providerHttpClass).toBe(
+        EXPECTED_ROLE[providerHttpClass],
+      );
+    }
   });
 
-  it('treats every declared infrastructure class as inconclusive, never as rejection', () => {
-    for (const providerHttpClass of INFRASTRUCTURE_HTTP_CLASSES) {
+  it('contract-rejection evidence is EXACTLY 400, 413 and 422', () => {
+    expect([...PROVIDER_CONTRACT_REJECTION_HTTP_CLASSES].sort()).toEqual([
+      'BAD_REQUEST_400',
+      'PAYLOAD_TOO_LARGE_413',
+      'UNPROCESSABLE_422',
+    ]);
+    // The four classes the previous revision let through by fallback.
+    for (const notEvidence of [
+      'UNAUTHORIZED_401',
+      'FORBIDDEN_403',
+      'NOT_FOUND_404',
+      'OTHER_HTTP',
+    ] as const) {
+      expect(PROVIDER_CONTRACT_REJECTION_HTTP_CLASSES, notEvidence).not.toContain(notEvidence);
+      expect(NON_VERDICT_HTTP_CLASSES, notEvidence).toContain(notEvidence);
+    }
+    expect(NON_VERDICT_HTTP_CLASSES).toContain('RATE_LIMITED_429');
+  });
+
+  it('every class lands in exactly one of accepted / contract-rejected / inconclusive', () => {
+    for (const providerHttpClass of CANDIDATE_PROVIDER_HTTP_CLASSES) {
+      // Driven with a REAL response so a class can reach the rejection branch if it is allowed to.
+      const outcome = {
+        providerCompleted: providerHttpClass === 'SUCCESS_2XX',
+        providerTransportStarted: true,
+        providerHttpStatus: 400,
+        providerHttpClass,
+      };
+      const roles = [
+        isProviderAccepted(outcome),
+        isProviderContractRejected(outcome),
+        isProviderOutcomeInconclusive(outcome),
+      ].filter(Boolean);
+      expect(roles, providerHttpClass).toHaveLength(1);
+      // And rejection is reachable ONLY from the allowlist.
+      expect(isProviderContractRejected(outcome), providerHttpClass).toBe(
+        PROVIDER_CONTRACT_REJECTION_HTTP_CLASSES.includes(providerHttpClass),
+      );
+    }
+  });
+
+  it('a credential, permission or configuration failure is NOT contract evidence', () => {
+    for (const providerHttpClass of [
+      'UNAUTHORIZED_401',
+      'FORBIDDEN_403',
+      'NOT_FOUND_404',
+      'OTHER_HTTP',
+    ] as const) {
       const outcome = {
         providerCompleted: false,
         providerTransportStarted: true,
-        providerHttpStatus: 429,
+        providerHttpStatus: 401,
         providerHttpClass,
       };
-      expect(isInfrastructureInterrupted(outcome), providerHttpClass).toBe(true);
-      expect(isProviderRejected(outcome), providerHttpClass).toBe(false);
+      // A wrong SECOND candidate credential lands on 401. It must not become evidence about Riya.
+      expect(isProviderContractRejected(outcome), providerHttpClass).toBe(false);
+      expect(isProviderOutcomeInconclusive(outcome), providerHttpClass).toBe(true);
     }
-    // And a rate limit is genuinely in that set, which is the case OAD3 hit.
-    expect(INFRASTRUCTURE_HTTP_CLASSES).toContain('RATE_LIMITED_429');
-    // A real verdict class is NOT.
-    expect(INFRASTRUCTURE_HTTP_CLASSES).not.toContain('BAD_REQUEST_400');
-    expect(INFRASTRUCTURE_HTTP_CLASSES).not.toContain('SUCCESS_2XX');
+  });
+
+  it('a rate limit is not a verdict, and a 400 still is', () => {
+    const limited = rateLimited('O3_EXACT_REPRESENTATIVE_OPERATIONAL');
+    expect(isProviderAccepted(limited)).toBe(false);
+    expect(isProviderContractRejected(limited)).toBe(false);
+    expect(isProviderOutcomeInconclusive(limited)).toBe(true);
+
+    const verdict = refused('O2_EXACT_SYNTHETIC_OPERATIONAL');
+    expect(isProviderContractRejected(verdict)).toBe(true);
+    expect(isProviderOutcomeInconclusive(verdict)).toBe(false);
   });
 });
 
@@ -166,6 +252,60 @@ describe("OAD3's exact matrix no longer supports a message-shape claim", () => {
         providerErrorCode: 'JSON_VALIDATE_FAILED',
       },
     ]);
+  });
+
+  it.each([
+    ['UNAUTHORIZED_401', 401],
+    ['FORBIDDEN_403', 403],
+    ['NOT_FOUND_404', 404],
+    ['OTHER_HTTP', 418],
+  ] as const)(
+    'O0/O1/O2 accepted with O3 %s reads as MIXED_OR_INCONCLUSIVE',
+    (providerHttpClass, providerHttpStatus) => {
+      // The exact scenario the fallback would have mis-filed: three green probes and a credential,
+      // permission, configuration or ungoverned failure on the representative one.
+      const analysis = analyseOperationalAcceptance([
+        ok('O0_MINIMAL_CONTROL_OPERATIONAL'),
+        ok('O1_EVOLUTION_GROUP_OPERATIONAL'),
+        ok('O2_EXACT_SYNTHETIC_OPERATIONAL'),
+        {
+          stepId: 'O3_EXACT_REPRESENTATIVE_OPERATIONAL',
+          providerTransportStarted: true,
+          providerHttpStatus,
+          providerHttpClass,
+          providerErrorType: 'OTHER_OR_ABSENT',
+          providerErrorCode: 'OTHER_OR_ABSENT',
+          providerCompleted: false,
+        },
+      ]);
+      expect(analysis.classification).toBe('MIXED_OR_INCONCLUSIVE');
+      expect(analysis.classification).not.toBe(
+        'OPERATIONAL_REPRESENTATIVE_REJECTED_AFTER_SYNTHETIC_ACCEPTED',
+      );
+      expect(analysis.rejectedStepIds).toEqual([]);
+      expect(analysis.inconclusiveStepIds).toEqual(['O3_EXACT_REPRESENTATIVE_OPERATIONAL']);
+    },
+  );
+
+  it('a 413 on O3 IS contract evidence, as OAD2 read its own 413', () => {
+    const analysis = analyseOperationalAcceptance([
+      ok('O0_MINIMAL_CONTROL_OPERATIONAL'),
+      ok('O1_EVOLUTION_GROUP_OPERATIONAL'),
+      ok('O2_EXACT_SYNTHETIC_OPERATIONAL'),
+      {
+        stepId: 'O3_EXACT_REPRESENTATIVE_OPERATIONAL',
+        providerTransportStarted: true,
+        providerHttpStatus: 413,
+        providerHttpClass: 'PAYLOAD_TOO_LARGE_413',
+        providerErrorType: 'OTHER_OR_ABSENT',
+        providerErrorCode: 'OTHER_OR_ABSENT',
+        providerCompleted: false,
+      },
+    ]);
+    expect(analysis.classification).toBe(
+      'OPERATIONAL_REPRESENTATIVE_REJECTED_AFTER_SYNTHETIC_ACCEPTED',
+    );
+    expect(analysis.rejectedStepIds).toEqual(['O3_EXACT_REPRESENTATIVE_OPERATIONAL']);
   });
 
   it('the matrix vocabulary itself is unchanged', () => {
@@ -255,6 +395,28 @@ describe('the representative-only vocabulary keeps the rate limit separate', () 
     expect(analysis.providerErrorCode).toBe('JSON_VALIDATE_FAILED');
   });
 
+  it.each(['UNAUTHORIZED_401', 'FORBIDDEN_403', 'NOT_FOUND_404', 'OTHER_HTTP'] as const)(
+    '%s is INCONCLUSIVE and never a provider rejection',
+    (providerHttpClass) => {
+      const analysis = analyseRepresentativeAcceptance(
+        probe({ providerHttpClass, providerHttpStatus: 401, providerCompleted: false }),
+      );
+      // A mistyped candidate credential must never read as a verdict on the request.
+      expect(analysis.classification).not.toBe('REPRESENTATIVE_PROVIDER_REJECTED');
+      expect(analysis.classification).toBe('REPRESENTATIVE_INCONCLUSIVE');
+    },
+  );
+
+  it.each(['PAYLOAD_TOO_LARGE_413', 'UNPROCESSABLE_422'] as const)(
+    '%s IS a provider contract rejection',
+    (providerHttpClass) => {
+      const analysis = analyseRepresentativeAcceptance(
+        probe({ providerHttpClass, providerHttpStatus: 413, providerCompleted: false }),
+      );
+      expect(analysis.classification).toBe('REPRESENTATIVE_PROVIDER_REJECTED');
+    },
+  );
+
   it('transport and availability failures are INFRA_INTERRUPTED', () => {
     for (const providerHttpClass of [
       'TRANSPORT_THROW',
@@ -263,6 +425,7 @@ describe('the representative-only vocabulary keeps the rate limit separate', () 
       'CANCELLED_499',
       'NOT_REACHED',
     ] as const) {
+      // Separated from the credential/config cases above: an execution failure says try again.
       const analysis = analyseRepresentativeAcceptance(
         probe({ providerHttpClass, providerHttpStatus: 0, providerCompleted: false }),
       );
@@ -277,19 +440,28 @@ describe('the representative-only vocabulary keeps the rate limit separate', () 
     expect(analysis.providerHttpStatus).toBe(0);
   });
 
-  it('every outcome it can produce is a member of the published vocabulary', () => {
-    const cases: readonly (RepresentativeAcceptanceOutcome | undefined)[] = [
-      undefined,
-      probe({}),
-      probe({ providerHttpClass: 'RATE_LIMITED_429', providerCompleted: false }),
-      probe({ providerHttpClass: 'BAD_REQUEST_400', providerCompleted: false }),
-      probe({ providerHttpClass: 'TRANSPORT_THROW', providerCompleted: false }),
-      probe({ providerHttpClass: 'NONE', providerHttpStatus: 0, providerCompleted: false }),
-    ];
-    for (const one of cases) {
-      expect(REPRESENTATIVE_ACCEPTANCE_CLASSIFICATIONS).toContain(
-        analyseRepresentativeAcceptance(one).classification,
+  it('EVERY governed class produces a published token, and only 400/413/422 reject', () => {
+    expect(
+      REPRESENTATIVE_ACCEPTANCE_CLASSIFICATIONS.includes(
+        analyseRepresentativeAcceptance(undefined).classification,
+      ),
+    ).toBe(true);
+    for (const providerHttpClass of CANDIDATE_PROVIDER_HTTP_CLASSES) {
+      const analysis = analyseRepresentativeAcceptance(
+        probe({
+          providerHttpClass,
+          providerHttpStatus: 400,
+          providerCompleted: providerHttpClass === 'SUCCESS_2XX',
+        }),
       );
+      expect(REPRESENTATIVE_ACCEPTANCE_CLASSIFICATIONS, providerHttpClass).toContain(
+        analysis.classification,
+      );
+      // The boundary, asserted over the WHOLE vocabulary rather than a sample.
+      expect(
+        analysis.classification === 'REPRESENTATIVE_PROVIDER_REJECTED',
+        providerHttpClass,
+      ).toBe(PROVIDER_CONTRACT_REJECTION_HTTP_CLASSES.includes(providerHttpClass));
     }
   });
 });

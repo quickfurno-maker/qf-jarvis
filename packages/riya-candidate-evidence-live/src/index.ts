@@ -330,11 +330,15 @@ export type {
 // own tiny vocabulary in which a rate limit is NOT a verdict — the distinction OAD3's matrix
 // classifier lacked, and the reason its receipt named the message shape on a 429.
 export {
-  INFRASTRUCTURE_HTTP_CLASSES,
-  isInfrastructureInterrupted,
   isProviderAccepted,
-  isProviderRejected,
+  isProviderContractRejected,
+  isProviderOutcomeInconclusive,
+  NON_VERDICT_HTTP_CLASSES,
+  PROVIDER_CONTRACT_REJECTION_HTTP_CLASSES,
+  PROVIDER_OUTCOME_ROLE,
+  PROVIDER_OUTCOME_ROLES,
 } from './internal/provider-outcome-classes.js';
+export type { ProviderOutcomeRole } from './internal/provider-outcome-classes.js';
 export {
   analyseRepresentativeAcceptance,
   REPRESENTATIVE_ACCEPTANCE_CLASSIFICATIONS,
