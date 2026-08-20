@@ -59,6 +59,14 @@ import {
   emitSchemaRepairProbeOutcome,
   emitSchemaRepairReceipt,
 } from './internal/schema-differential-emitters.js';
+import {
+  emitOperationalAcceptanceClassification,
+  emitOperationalAcceptanceProbeOutcome,
+  emitOperationalAcceptanceReceipt,
+} from './internal/operational-acceptance-emitters.js';
+import type { OperationalAcceptanceProbe } from './internal/operational-acceptance-plan.js';
+import { analyseOperationalAcceptance } from './internal/operational-acceptance-classification.js';
+import type { OperationalAcceptanceOutcome } from './internal/operational-acceptance-classification.js';
 import type { SchemaRepairVerificationProbe } from './internal/riya-schema-repair-verification-plan.js';
 import { analyseSchemaRepairVerification } from './internal/schema-repair-verification-classification.js';
 import type { SchemaRepairProbeOutcome } from './internal/schema-repair-verification-classification.js';
@@ -229,6 +237,19 @@ export interface OperatorDeps {
     readonly probes: readonly SchemaRepairVerificationProbe[];
     readonly run: (probe: SchemaRepairVerificationProbe) => Promise<SchemaRepairProbeOutcome>;
   }>;
+  /**
+   * POST-SRV1. Bind the OPERATIONAL ACCEPTANCE runner to the already-resolved credential.
+   *
+   * The same credential-bound factory shape as the three seams above, and required only for
+   * `POST_SRV1_OPERATIONAL_ACCEPTANCE_DIAGNOSTIC`. It returns the planned O0-O3 matrix alongside the
+   * runner because that matrix is derived from ONE capture and ONE projection of the real production
+   * request — the operator must not invent, reorder or re-derive it, since O2 and O3 sharing a schema
+   * object is precisely what makes their disagreement mean anything.
+   */
+  readonly openOperationalAcceptanceRunner?: (credential: unknown) => Promise<{
+    readonly probes: readonly OperationalAcceptanceProbe[];
+    readonly run: (probe: OperationalAcceptanceProbe) => Promise<OperationalAcceptanceOutcome>;
+  }>;
 }
 
 export interface OperatorResult {
@@ -353,6 +374,80 @@ export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<
   // The second ingress line. In clipboard mode this is where `credentialReuseCount` becomes 2 while
   // `credentialClipboardReads` stays 1 — the pair of numbers that IS the copy-once guarantee.
   emitCredentialIngress(safe, credentialSource, 'CANDIDATE', deps.ingressCounters?.());
+
+  // F''''. THE OPERATIONAL ACCEPTANCE DIAGNOSTIC (POST-SRV1) — and then STOP.
+  //
+  // Same placement and same discipline as the three diagnostics below it: before `openCandidate`, so
+  // a run that evaluates nothing builds none of the machinery for evaluating something.
+  //
+  // It runs O0-O3 at the REAL governed Riya completion budget. Every earlier matrix held the budget at
+  // the low control cap, so this goal, its counter, its ledger and its exit code are all separate —
+  // a receipt must always say which envelope produced it.
+  if (runGoal === 'POST_SRV1_OPERATIONAL_ACCEPTANCE_DIAGNOSTIC') {
+    const openRunner = deps.openOperationalAcceptanceRunner;
+    if (openRunner === undefined) {
+      safe.line({
+        phase: 'operational-acceptance-diagnostic',
+        status: 'FAILED',
+        reason: 'port-missing',
+      });
+      return { outcome: 'INTERNAL_CLOSED_FAILURE' };
+    }
+    let runner: {
+      readonly probes: readonly OperationalAcceptanceProbe[];
+      readonly run: (probe: OperationalAcceptanceProbe) => Promise<OperationalAcceptanceOutcome>;
+    };
+    try {
+      runner = await openRunner(candidateCredential);
+    } catch {
+      // Fails closed BEFORE O0 — which is also where a failed capture or a failed projection lands,
+      // since both happen inside the factory. Nothing from the original error is read or printed.
+      safe.line({
+        phase: 'operational-acceptance-diagnostic',
+        status: 'FAILED',
+        reason: 'runner-bind-failed',
+      });
+      return { outcome: 'INTERNAL_CLOSED_FAILURE' };
+    }
+
+    const operationalOutcomes: OperationalAcceptanceOutcome[] = [];
+    for (const probe of runner.probes) {
+      const reservation = ledger.reserve('operational-acceptance-probe');
+      if (!reservation.ok) {
+        safe.line({
+          phase: 'operational-acceptance-diagnostic',
+          status: 'REFUSED',
+          stepId: probe.stepId,
+          reason: reservation.refusal,
+        });
+        break;
+      }
+      const outcome = await runner.run(probe);
+      ledger.settle(undefined, outcome.providerCompleted);
+      operationalOutcomes.push(outcome);
+      emitOperationalAcceptanceProbeOutcome(safe, probe, outcome);
+
+      // The ONE stop rule, same as every governed matrix before it: a failed control means the
+      // envelope itself was refused, so the remaining authorized requests are not spent proving
+      // nothing. An O1 or O2 rejection does NOT stop the run — O3 is the probe this whole run exists
+      // to send, and stopping before it would answer the wrong question at the same cost.
+      const controlFailed =
+        probe.probeKind === 'CONTROL' &&
+        !(outcome.providerCompleted && outcome.providerHttpClass === 'SUCCESS_2XX');
+      if (controlFailed) {
+        break;
+      }
+    }
+
+    emitOperationalAcceptanceClassification(
+      safe,
+      analyseOperationalAcceptance(operationalOutcomes),
+      operationalOutcomes.length,
+    );
+    emitOperationalAcceptanceReceipt(safe, ledger.snapshot());
+    safe.line({ finalStatus: 'POST_SRV1_OPERATIONAL_ACCEPTANCE_DIAGNOSTIC_COMPLETE' });
+    return { outcome: 'POST_SRV1_OPERATIONAL_ACCEPTANCE_DIAGNOSTIC_COMPLETE' };
+  }
 
   // F'''. THE SCHEMA REPAIR VERIFICATION (POST-SDH4) — and then STOP.
   //

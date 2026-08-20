@@ -29,6 +29,12 @@ Executed once under owner authorization. Process exit `24`. Credential source: t
 
 Classification: `ISOLATED_SCHEMA_FEATURE_REJECTION`. Inconclusive: none.
 
+The token in the Result column above is the provider error **TYPE**. For completeness, both observed
+fields for `R4`, `R7` and `R8` were:
+
+- `providerErrorType=INVALID_REQUEST_ERROR`
+- `providerErrorCode=OTHER_OR_ABSENT`
+
 ### Accounting
 
 | Field                         | Value      |
@@ -194,9 +200,13 @@ A **new** vocabulary covers verification instead:
 | `V4_EXACT_PROJECTED_RIYA`     | EXACT            |
 
 Run goal `POST_SDH4_SCHEMA_REPAIR_VERIFICATION`, exit code **25**, its own ledger counter, its own
-classification vocabulary (`CONTROL_INVALID`, `REPAIRED_EXACT_SCHEMA_ACCEPTED_LOW_CAP`,
-`REPAIRED_OBSERVATION_SCHEMA_REJECTED`, `REPAIRED_EVOLUTION_COMPOSITION_REJECTED`,
-`MIXED_OR_INCONCLUSIVE`).
+classification vocabulary — the closed set is `CONTROL_INVALID`,
+`REPAIRED_EXACT_SCHEMA_ACCEPTED_LOW_CAP`, `REPAIRED_OBSERVATION_SCHEMA_REJECTED`,
+`REPAIRED_EVOLUTION_GROUP_REJECTED`, `REPAIRED_FULL_SCHEMA_COMPOSITION_REJECTED` and
+`MIXED_OR_INCONCLUSIVE`, six members in all.
+
+The run emitted `REPAIRED_EVOLUTION_GROUP_REJECTED`; that immutable result is recorded in section 7
+and is unchanged.
 
 Bounds: **1 smoke + 5 probes = 6 requests**, USD 1.00, every probe at `max_completion_tokens=512`,
 zero retry, zero fallback, zero safety, zero P10, zero bundle writes, no 120B.
@@ -204,7 +214,8 @@ zero retry, zero fallback, zero safety, zero P10, zero bundle writes, no 120B.
 Precedence: a failed control stops the matrix; a repaired-feature or group rejection does **not**;
 `V4` accepted decides the summary while every wrapper rejection stays in `rejectedStepIds`.
 
-**This verification has NOT been executed.** It requires separate owner authorization.
+**This verification has since been executed exactly once.** Its result is recorded immutably in
+section 7 below; the plan as described above is unchanged by that execution.
 
 ---
 
@@ -223,3 +234,158 @@ D5_ROOT_CAUSE=NARROWED_TO_OBSERVATION_SCHEMA_REPRESENTATION_PENDING_REPAIR_VERIF
 
 Reply schema, citations, reply bounds, grounding, `evolution.version`, `questionPlan`,
 `skipProjectDetails`, safety fixtures, evaluator thresholds and migrations are all unchanged.
+
+---
+
+## 7. RUN SRV1 — `POST_SDH4_SCHEMA_REPAIR_VERIFICATION` (IMMUTABLE)
+
+Executed **once** under owner authorization. Process exit `25`. Every probe used
+`max_completion_tokens=512`, zero retry, zero fallback.
+
+| Probe                         | Kind             | Result                              |
+| ----------------------------- | ---------------- | ----------------------------------- |
+| `V0_MINIMAL_CONTROL`          | CONTROL          | HTTP 200                            |
+| `V1_OBSERVATION_SETS_ARRAY`   | REPAIRED_FEATURE | HTTP 200                            |
+| `V2_OBSERVATION_CLEARS_ARRAY` | REPAIRED_FEATURE | HTTP 200                            |
+| **`V3_EVOLUTION_GROUP`**      | GROUP            | **HTTP 400 `JSON_VALIDATE_FAILED`** |
+| **`V4_EXACT_PROJECTED_RIYA`** | EXACT            | **HTTP 400 `JSON_VALIDATE_FAILED`** |
+
+Classification: `REPAIRED_EVOLUTION_GROUP_REJECTED`. Inconclusive: none.
+
+The token in the Result column above is the provider error **CODE**. Both observed fields for `V3`
+and `V4` were:
+
+- `providerErrorType=INVALID_REQUEST_ERROR`
+- `providerErrorCode=JSON_VALIDATE_FAILED`
+
+| Field                       | Value      |
+| --------------------------- | ---------- |
+| `totalProviderRequests`     | 6          |
+| `smokeRequests`             | 1          |
+| `schemaRepairProbeRequests` | 5          |
+| `estimatedCostUsd`          | 0.14753415 |
+| `safetyEvaluated`           | false      |
+| `reviewBundleWritten`       | false      |
+| safety / P10 / bundle       | none       |
+
+Repository containment held. `SRV1_RERUN=NO`. `20B_MODEL_QUALITY_VERDICT=UNRESOLVED`.
+
+### What SRV1 settled, and what it did not
+
+It settled the repair's own question: both repaired observation arrays are accepted **independently**
+at the low control cap. The `anyOf`-under-`array.items` construction SDH4 isolated is gone, and
+nothing that replaced it is refused on its own.
+
+It did not settle the document. `V3` and `V4` are still refused.
+
+**The error TYPE did not change; the recognized error CODE did.** SDH4 and SRV1 both reported
+`providerErrorType=INVALID_REQUEST_ERROR`. In SDH4 the provider error-code bucket was
+`OTHER_OR_ABSENT`; in SRV1 `V3`/`V4` the provider returned the recognized literal code
+`json_validate_failed`, mapped to `JSON_VALIDATE_FAILED`.
+
+`JSON_VALIDATE_FAILED` is preserved without interpreting its undocumented internal cause. What is
+established is that `HTTP 400 + JSON_VALIDATE_FAILED` can be distinguished from `HTTP 400 +
+OTHER_OR_ABSENT`. Nothing more — in particular, no claim is made here about what Groq did internally
+to produce it.
+
+That the CODE bucket changed across the repair, while the TYPE stayed constant, is itself the
+observation that makes a further axis worth measuring rather than the same axis worth re-measuring.
+
+---
+
+## 8. WHY OAD1 — THE OPERATIONAL ACCEPTANCE BRIDGE
+
+Every governed matrix so far — S11's D1-D8, SDH4's R0-R8, SRV1's V0-V4 — has held the completion
+budget at the low control value of 512. That was the right choice each time: all three were isolating
+a **schema**, and varying two axes at once would have isolated neither.
+
+The consequence is that the **operational envelope has never been measured**. Riya's real requests do
+not run at 512. They run at `RIYA_COMPLETION_BUDGET_TOKENS`, and they carry the production message
+shape rather than a two-line synthetic pair. Neither has ever been on the wire together with the
+repaired schema, so no evidence in this document speaks to whether a real Riya turn would be accepted.
+
+Because the recognized provider error CODE moved from `OTHER_OR_ABSENT` to `JSON_VALIDATE_FAILED`
+across the repair — at an unchanged `providerErrorType=INVALID_REQUEST_ERROR` — and because Groq
+documents strict GPT-OSS structured output as constrained, the next axis worth varying is the
+**operational completion budget** and the **representative message shape**.
+
+**The 512 cap is NOT claimed to be the cause of the `V3`/`V4` rejections.** It has not been varied, so
+nothing here can support that claim. OAD1 exists to vary it.
+
+If the rejection is reproduced at 14,848, then raising the cap from 512 to the governed operational
+budget did not produce a healthy acceptance in that run; the 512 cap is not supported as a sufficient
+or sole explanation. That is a bounded and useful result, and it is **not** the same as excluding the
+budget as a factor.
+
+If `O1` or `O2` is instead accepted at 14,848 after SRV1 rejected at 512, the finding is that **the
+prior low-cap rejection was not reproduced at the operational budget** — not that the budget caused or
+fixed anything.
+
+### The OAD1 matrix
+
+| Probe                                 | Kind                 | Schema                        | Messages                    |
+| ------------------------------------- | -------------------- | ----------------------------- | --------------------------- |
+| `O0_MINIMAL_CONTROL_OPERATIONAL`      | CONTROL              | minimal closed object         | synthetic tiny              |
+| `O1_EVOLUTION_GROUP_OPERATIONAL`      | GROUP                | real `$.evolution`, wrapped   | synthetic tiny              |
+| `O2_EXACT_SYNTHETIC_OPERATIONAL`      | EXACT_SYNTHETIC      | exact projected Riya document | synthetic tiny              |
+| `O3_EXACT_REPRESENTATIVE_OPERATIONAL` | EXACT_REPRESENTATIVE | **the same object as `O2`**   | **captured representative** |
+
+Run goal `POST_SRV1_OPERATIONAL_ACCEPTANCE_DIAGNOSTIC`, exit code **26**, its own ledger counter
+(`operationalAcceptanceProbeRequests`), its own classification vocabulary
+(`OPERATIONAL_CONTROL_INVALID`, `OPERATIONAL_EXACT_REPRESENTATIVE_ACCEPTED`,
+`OPERATIONAL_REPRESENTATIVE_REJECTED_AFTER_SYNTHETIC_ACCEPTED`, `OPERATIONAL_FULL_SCHEMA_REJECTED`,
+`OPERATIONAL_EVOLUTION_GROUP_REJECTED`, `MIXED_OR_INCONCLUSIVE`).
+
+### What each outcome may be read as
+
+| Outcome                                                        | Bounded reading                                                                                                                                                                                   |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OPERATIONAL_EXACT_REPRESENTATIVE_ACCEPTED`                    | The representative operational request contract was accepted **once**. Sufficient to move to bounded safety replication. **Not** a quality verdict.                                               |
+| `OPERATIONAL_REPRESENTATIVE_REJECTED_AFTER_SYNTHETIC_ACCEPTED` | The representative request was rejected after the synthetic exact request was accepted, in this run. Message shape is a plausible differentiator; run-to-run and model variability is unexcluded. |
+| `OPERATIONAL_FULL_SCHEMA_REJECTED`                             | The evolution group was taken and the full document was not, in this run.                                                                                                                         |
+| `OPERATIONAL_EVOLUTION_GROUP_REJECTED`                         | The evolution/full rejection is reproduced at the operational budget in this run. The budget is **not** excluded.                                                                                 |
+| `OPERATIONAL_CONTROL_INVALID`                                  | The envelope itself was refused, so nothing after it is interpretable.                                                                                                                            |
+| `MIXED_OR_INCONCLUSIVE`                                        | The matrix did not settle completely.                                                                                                                                                             |
+
+Bounds: **1 smoke + 4 probes = 5 requests**, USD 1.00 — narrower than SRV1's six. Every probe runs at
+`RIYA_COMPLETION_BUDGET_TOKENS` against the unchanged model capability ceiling of 65,536; zero retry,
+zero fallback, zero safety, zero P10, zero bundle writes, no 120B, strict mode preserved.
+
+One capture, one projection per run. `O1`, `O2` and `O3` are all derived from that single projected
+object, so `O2` and `O3` share their schema **by construction** rather than by comparison. Provider,
+model, budget, timeout, retry posture, fallback posture, strict mode and transport are identical
+between them.
+
+**The pair is descriptive, not causal.** The production Groq request body carries no `temperature`,
+no `top_p` and no `seed`, and Groq documents temperature as defaulting to 1, so `O2` and `O3` are two
+independent generation draws however carefully their authored fields are matched. A disagreement
+between them says _the representative request was refused in the same run the synthetic one was
+taken_. The message shape is a plausible differentiator; run-to-run and model variability is
+**unexcluded**.
+
+Controlling that draw is deliberately not the fix. Adding a diagnostic-only `temperature`, `seed` or
+retry would make the harness deterministic while making it measure a request posture production does
+not send.
+
+Precedence: a failed control invalidates the run; an `O1` or `O2` rejection does **not** stop it,
+because `O3` is the probe the run exists to send. An accepted `O3` decides the summary while every
+rejection stays visible in `rejectedStepIds`, each with its own preserved literal provider error code.
+
+No repeated live probes are added. A rerun to average out the generation draw would cost further live
+authorizations for a result this phase has not been granted the budget to establish.
+
+**OAD1 has NOT been executed.** It requires separate owner authorization.
+
+### Containment for this phase
+
+```
+GROQ_CALLS=0
+PROVIDER_CALLS=0
+CREDENTIAL_READS=0
+LIVE_OAD1_EXECUTED=NO
+SRV1_RERUN=NO
+SDH4_RERUN=NO
+S11_RERUN=NO
+20B_MODEL_QUALITY_VERDICT=UNRESOLVED
+REQUEST_CONTRACT_STATUS=UNRESOLVED_PENDING_OPERATIONAL_ACCEPTANCE
+```

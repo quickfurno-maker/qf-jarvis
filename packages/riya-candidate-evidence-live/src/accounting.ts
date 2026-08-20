@@ -101,6 +101,21 @@ export const SCHEMA_REPAIR_VERIFICATION_MAX_PROVIDER_REQUESTS =
 /** The spend ceiling. Same conservative figure as every other bounded diagnostic. */
 export const SCHEMA_REPAIR_VERIFICATION_MAX_ESTIMATED_COST_USD = 1;
 
+/**
+ * The exact arithmetic of a POST_SRV1_OPERATIONAL_ACCEPTANCE_DIAGNOSTIC run: the text smoke plus the
+ * four O0-O3 probes.
+ *
+ * FIVE, narrower again than SRV1's six. SRV1 answered the schema question at the low control cap and
+ * left exactly one axis open — whether the repaired schema and the representative production message
+ * shape survive at the REAL operational completion budget. Four probes is what that costs.
+ */
+export const OPERATIONAL_ACCEPTANCE_PROBE_REQUESTS = 4;
+export const OPERATIONAL_ACCEPTANCE_MAX_PROVIDER_REQUESTS =
+  SMOKE_REQUESTS + OPERATIONAL_ACCEPTANCE_PROBE_REQUESTS;
+
+/** The spend ceiling. Same conservative figure as every other bounded diagnostic. */
+export const OPERATIONAL_ACCEPTANCE_MAX_ESTIMATED_COST_USD = 1;
+
 /** Why the ledger refused the next call. Closed and content-free. */
 export const LEDGER_REFUSALS = [
   'request-limit-reached',
@@ -124,6 +139,7 @@ export const LEDGER_PHASES = [
   'diagnostic',
   'schema-probe',
   'schema-repair-probe',
+  'operational-acceptance-probe',
 ] as const;
 export type LedgerPhase = (typeof LEDGER_PHASES)[number];
 
@@ -148,6 +164,14 @@ export interface LedgerSnapshot {
    * receipt in which a verification run incremented that counter could not say which matrix ran.
    */
   readonly schemaRepairProbeProviderRequests: number;
+  /**
+   * POST-SRV1. Operational acceptance probe requests (O0-O3).
+   *
+   * A FIFTH counter. Every prior matrix ran at the low control cap; this one runs at the governed
+   * operational budget, so a receipt that shared a counter with them could not say which envelope
+   * produced it.
+   */
+  readonly operationalAcceptanceProbeProviderRequests: number;
   readonly totalProviderRequests: number;
   readonly successfulProviderResponses: number;
   readonly providerFailures: number;
@@ -217,6 +241,7 @@ export function createRequestLedger(config: RequestLedgerConfig): RequestLedger 
     diagnostic: 0,
     'schema-probe': 0,
     'schema-repair-probe': 0,
+    'operational-acceptance-probe': 0,
   };
   let successes = 0;
   let failures = 0;
@@ -303,6 +328,7 @@ export function createRequestLedger(config: RequestLedgerConfig): RequestLedger 
         diagnosticProviderRequests: counts.diagnostic,
         schemaProbeProviderRequests: counts['schema-probe'],
         schemaRepairProbeProviderRequests: counts['schema-repair-probe'],
+        operationalAcceptanceProbeProviderRequests: counts['operational-acceptance-probe'],
         totalProviderRequests: total(),
         successfulProviderResponses: successes,
         providerFailures: failures,
@@ -362,14 +388,33 @@ export function createSafetyReplicationLedger(): RequestLedger {
 }
 
 /**
- * The ledger for a bounded SCHEMA_DIFFERENTIAL_DIAGNOSTIC run (POST-PR-131).
+ * The ledger for a bounded POST_SRV1_OPERATIONAL_ACCEPTANCE_DIAGNOSTIC run.
  *
- * The text smoke plus the nine R0-R8 schema probes: TEN requests, one dollar.
+ * The text smoke plus the four O0-O3 probes: FIVE requests, one dollar — the narrowest ceiling here.
  *
- * Same prices, same fallback bounds and same governed model maxima as the other three, read from the
- * candidate release rather than restated. Only the ceilings differ, and this one is separate from the
- * request-contract ledger on purpose — S11's D1-D8 evidence is immutable, and a shared ceiling would
- * make two different matrices indistinguishable in a receipt.
+ * Its own ledger and its own counter, so it can never be confused with SRV1's six-request
+ * verification, SDH4's ten-request matrix or S11's nine-request diagnostic. A receipt must always be
+ * able to say which matrix produced it.
+ */
+export function createOperationalAcceptanceDiagnosticLedger(): RequestLedger {
+  return createRequestLedger({
+    maxRequests: OPERATIONAL_ACCEPTANCE_MAX_PROVIDER_REQUESTS,
+    maxCostUsd: OPERATIONAL_ACCEPTANCE_MAX_ESTIMATED_COST_USD,
+    pricePerMillionInputUsd: CANDIDATE_PRICE_PER_M_INPUT_USD,
+    pricePerMillionCachedInputUsd: CANDIDATE_PRICE_PER_M_CACHED_INPUT_USD,
+    pricePerMillionOutputUsd: CANDIDATE_PRICE_PER_M_OUTPUT_USD,
+    fallbackInputTokens: CANDIDATE_MAX_INPUT_TOKENS,
+    fallbackOutputTokens: CANDIDATE_MAX_COMPLETION_TOKENS,
+    hardMaxInputTokens: CANDIDATE_MAX_INPUT_TOKENS,
+    hardMaxOutputTokens: CANDIDATE_MAX_COMPLETION_TOKENS,
+  });
+}
+
+/**
+ * The ledger for a bounded POST_SDH4_SCHEMA_REPAIR_VERIFICATION run.
+ *
+ * The text smoke plus the five V0-V4 probes: SIX requests, one dollar. Its own ledger and its own
+ * counter, so it can never be confused with SDH4's ten-request historical matrix.
  */
 export function createSchemaRepairVerificationLedger(): RequestLedger {
   return createRequestLedger({
@@ -386,10 +431,14 @@ export function createSchemaRepairVerificationLedger(): RequestLedger {
 }
 
 /**
- * The ledger for a bounded POST_SDH4_SCHEMA_REPAIR_VERIFICATION run.
+ * The ledger for a bounded SCHEMA_DIFFERENTIAL_DIAGNOSTIC run (POST-PR-131).
  *
- * The text smoke plus the five V0-V4 probes: SIX requests, one dollar. Its own ledger and its own
- * counter, so it can never be confused with SDH4's nine-probe historical matrix.
+ * The text smoke plus the nine R0-R8 schema probes: TEN requests, one dollar.
+ *
+ * Same prices, same fallback bounds and same governed model maxima as the others, read from the
+ * candidate release rather than restated. Only the ceilings differ, and this one is separate from the
+ * request-contract ledger on purpose — S11's D1-D8 evidence is immutable, and a shared ceiling would
+ * make two different matrices indistinguishable in a receipt.
  */
 export function createSchemaDifferentialDiagnosticLedger(): RequestLedger {
   return createRequestLedger({

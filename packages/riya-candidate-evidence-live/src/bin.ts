@@ -50,6 +50,7 @@ import { createCandidateTransportObservations } from './candidate-transport-obse
 import { createCandidateGateway } from './evaluation-gateway.js';
 import {
   createOperatorLedger,
+  createOperationalAcceptanceDiagnosticLedger,
   createRequestContractDiagnosticLedger,
   createSafetyReplicationLedger,
   createSchemaDifferentialDiagnosticLedger,
@@ -60,6 +61,7 @@ import { createCredentialComposition } from './credential-composition.js';
 import { openLiveDiagnosticCanaryRunner } from './live-diagnostic-canary-composition.js';
 import { openLiveSchemaProbeRunner } from './live-schema-probe-composition.js';
 import { openLiveSchemaRepairVerificationRunner } from './schema-repair-verification-port.js';
+import { openLiveOperationalAcceptanceRunner } from './operational-acceptance-port.js';
 import { DEFAULT_CREDENTIAL_SOURCE_MODE, isCredentialSourceMode } from './credential-source.js';
 import type { CredentialSourceMode } from './credential-source.js';
 import { DEFAULT_RUN_GOAL } from './internal/run-goal.js';
@@ -152,7 +154,11 @@ export function parseCliArgs(argv: readonly string[]): CliParse {
         // always say which live matrix produced it.
         value !== 'SCHEMA_DIFFERENTIAL_DIAGNOSTIC' &&
         // POST-SDH4. Again a SEPARATE token: SDH4's matrix keeps its own goal and its own receipts.
-        value !== 'POST_SDH4_SCHEMA_REPAIR_VERIFICATION'
+        value !== 'POST_SDH4_SCHEMA_REPAIR_VERIFICATION' &&
+        // POST-SRV1. Separate again, and for a new reason: this is the first matrix that runs at the
+        // real operational completion budget rather than the low control cap, and a receipt must say
+        // which envelope produced it.
+        value !== 'POST_SRV1_OPERATIONAL_ACCEPTANCE_DIAGNOSTIC'
       ) {
         return { ok: false, reason: 'invalid-run-goal' };
       }
@@ -194,6 +200,10 @@ export function parseCliArgs(argv: readonly string[]): CliParse {
  * real terminal and a real provider to run. A bounded run whose bound is untested is not bounded.
  */
 export function ledgerForRunGoal(goal: OperatorRunGoal): RequestLedger {
+  if (goal === 'POST_SRV1_OPERATIONAL_ACCEPTANCE_DIAGNOSTIC') {
+    // Five requests, one dollar: the smoke plus four O0-O3 probes. Narrower still than SRV1's six.
+    return createOperationalAcceptanceDiagnosticLedger();
+  }
   if (goal === 'POST_SDH4_SCHEMA_REPAIR_VERIFICATION') {
     // Six requests, one dollar: the smoke plus five V0-V4 probes. The narrowest ceiling here.
     return createSchemaRepairVerificationLedger();
@@ -314,6 +324,22 @@ async function main(): Promise<number> {
           const projection = projectGroqStrictJsonSchema(rawSchema);
           if (!projection.ok) {
             throw new Error('QFJ_SCHEMA_REPAIR_PROJECTION_FAILED');
+          }
+          return projection.schema;
+        },
+      }),
+    // POST-SRV1. The REAL operational acceptance port, bound to the credential just resolved.
+    //
+    // Bound here from the day the seam exists, for the same reason as the three above it. The SAME
+    // production projection is injected, so O1/O2/O3 carry the document the provider would really be
+    // sent rather than a re-derivation of it.
+    openOperationalAcceptanceRunner: (credential) =>
+      openLiveOperationalAcceptanceRunner({
+        credential,
+        projectSchema: (rawSchema) => {
+          const projection = projectGroqStrictJsonSchema(rawSchema);
+          if (!projection.ok) {
+            throw new Error('QFJ_OPERATIONAL_ACCEPTANCE_PROJECTION_FAILED');
           }
           return projection.schema;
         },
