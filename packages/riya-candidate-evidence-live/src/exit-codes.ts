@@ -83,6 +83,13 @@ export const OPERATOR_OUTCOMES = [
    * HTTP 400, which is exactly why the exit status is never the finding.
    */
   'POST_RA1_NEUTRAL_REPRESENTATIVE_ACCEPTANCE_COMPLETE',
+  /**
+   * POST-NRA1. The 120B strict model differential ran its one probe and stopped.
+   *
+   * Its own code. Both RA1 and NRA1 exited on an HTTP 400, which is exactly why the exit status is
+   * never the finding — the classification line carries it.
+   */
+  'POST_NRA1_GPT_OSS_120B_STRICT_MODEL_DIFFERENTIAL_COMPLETE',
 ] as const;
 export type OperatorOutcome = (typeof OPERATOR_OUTCOMES)[number];
 
@@ -116,4 +123,6 @@ export const OPERATOR_EXIT_CODES: Readonly<Record<OperatorOutcome, number>> = Ob
   POST_OAD3_REPRESENTATIVE_ACCEPTANCE_COMPLETE: 27,
   // The next unused integer; 0-27 keep meaning exactly what they meant.
   POST_RA1_NEUTRAL_REPRESENTATIVE_ACCEPTANCE_COMPLETE: 28,
+  // The next unused integer; 0-28 keep meaning exactly what they meant.
+  POST_NRA1_GPT_OSS_120B_STRICT_MODEL_DIFFERENTIAL_COMPLETE: 29,
 });

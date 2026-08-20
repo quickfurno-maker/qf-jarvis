@@ -73,15 +73,21 @@ describe('the operator implements no transport and holds no secret ingress', () 
       }
       // `fetch(` never appears; only the existing factory is referenced.
       expect(code, `${file} must not call fetch directly`).not.toMatch(/[^a-zA-Z]fetch\(/u);
-      // `openai` appears ONLY inside a governed identifier — the Groq catalogue model id
-      // `openai/gpt-oss-20b` and the capability ref that names it — never as an SDK import. Scoped
-      // by line rather than banned outright, because both are the real identities under evaluation.
+      // `openai` appears ONLY inside a governed identifier — never as an SDK import. Scoped by line
+      // rather than banned outright, because these are the real identities under evaluation.
+      //
+      // POST-NRA1 the allowlist gains `openai/gpt-oss-120b`, the DIAGNOSTIC-ONLY model the strict
+      // model differential sends. It is listed deliberately: the guard exists so a new provider model
+      // id cannot enter this package without somebody deciding it should, and that decision is this
+      // line. Production routing still uses the 20B id, which a separate spec pins.
       for (const line of code.split(String.fromCharCode(10))) {
         if (!line.includes('openai')) {
           continue;
         }
         const governed =
-          line.includes('openai/gpt-oss-20b') || line.includes('cap.groq.openai-gpt-oss-20b');
+          line.includes('openai/gpt-oss-20b') ||
+          line.includes('openai/gpt-oss-120b') ||
+          line.includes('cap.groq.openai-gpt-oss-20b');
         expect(governed, `${file} may name openai only in a governed identifier`).toBe(true);
       }
     }

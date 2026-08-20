@@ -395,3 +395,41 @@ export type {
   LiveNeutralRepresentativeDeps,
   NeutralRepresentativeRunner,
 } from './neutral-representative-acceptance-port.js';
+
+// POST-NRA1 GPT-OSS-120B STRICT MODEL DIFFERENTIAL. NRA1 sent the neutral production-built request to
+// the production 20B candidate and was refused with JSON_VALIDATE_FAILED — the same failure class RA1
+// met on the adversarial turn. This changes exactly ONE variable: the model id on the wire. Production
+// candidate identity is untouched, and the differential model is diagnostic-only.
+export {
+  MODEL_DIFFERENTIAL_BASELINE_MODEL_ID,
+  MODEL_DIFFERENTIAL_CANDIDATE_MODEL_ID,
+  MODEL_DIFFERENTIAL_CATALOG_SNAPSHOT,
+  SMOKE_PROVES_DIFFERENTIAL_MODEL_ENTITLEMENT,
+  SMOKE_PROVIDER_CREDENTIAL_CHECK_MODEL,
+} from './model-differential-identity.js';
+export {
+  analyseModelDifferential,
+  MODEL_DIFFERENTIAL_CLASSIFICATIONS,
+} from './internal/model-differential-classification.js';
+export type {
+  ModelDifferentialAnalysis,
+  ModelDifferentialClassification,
+  ModelDifferentialOutcome,
+} from './internal/model-differential-classification.js';
+export {
+  MODEL_DIFFERENTIAL_STEP_ID,
+  planModelDifferentialProbe,
+} from './internal/operational-acceptance-plan.js';
+export type { ModelDifferentialStepId } from './internal/operational-acceptance-plan.js';
+export {
+  createLiveModelDifferentialComposition,
+  createModelDifferentialPort,
+  MODEL_DIFFERENTIAL_COMPLETION_BUDGET,
+  openLiveModelDifferentialRunner,
+} from './model-differential-port.js';
+export type {
+  LiveModelDifferentialComposition,
+  LiveModelDifferentialDeps,
+  ModelDifferentialProbe,
+  ModelDifferentialRunner,
+} from './model-differential-port.js';

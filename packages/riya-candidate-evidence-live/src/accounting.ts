@@ -26,6 +26,11 @@
  */
 
 import {
+  MODEL_DIFFERENTIAL_PRICE_PER_M_CACHED_INPUT_USD,
+  MODEL_DIFFERENTIAL_PRICE_PER_M_INPUT_USD,
+  MODEL_DIFFERENTIAL_PRICE_PER_M_OUTPUT_USD,
+} from './model-differential-identity.js';
+import {
   CANDIDATE_MAX_COMPLETION_TOKENS,
   CANDIDATE_MAX_INPUT_TOKENS,
   CANDIDATE_PRICE_PER_M_CACHED_INPUT_USD,
@@ -146,6 +151,20 @@ export const NEUTRAL_REPRESENTATIVE_MAX_PROVIDER_REQUESTS =
 /** The spend ceiling. Same conservative figure as every other bounded diagnostic. */
 export const NEUTRAL_REPRESENTATIVE_MAX_ESTIMATED_COST_USD = 1;
 
+/**
+ * The exact arithmetic of a POST_NRA1_GPT_OSS_120B_STRICT_MODEL_DIFFERENTIAL run: smoke plus ONE probe.
+ *
+ * TWO, and its OWN counter. The differential asks a different question of a different MODEL, and a
+ * receipt that shared NRA1's counter could not say which model produced it — which is the only thing
+ * this run measures.
+ */
+export const MODEL_DIFFERENTIAL_PROBE_REQUESTS = 1;
+export const MODEL_DIFFERENTIAL_MAX_PROVIDER_REQUESTS =
+  SMOKE_REQUESTS + MODEL_DIFFERENTIAL_PROBE_REQUESTS;
+
+/** The spend ceiling. Same conservative figure as every other bounded diagnostic. */
+export const MODEL_DIFFERENTIAL_MAX_ESTIMATED_COST_USD = 1;
+
 /** Why the ledger refused the next call. Closed and content-free. */
 export const LEDGER_REFUSALS = [
   'request-limit-reached',
@@ -172,6 +191,7 @@ export const LEDGER_PHASES = [
   'operational-acceptance-probe',
   'representative-acceptance-probe',
   'neutral-representative-probe',
+  'model-differential-probe',
 ] as const;
 export type LedgerPhase = (typeof LEDGER_PHASES)[number];
 
@@ -217,6 +237,13 @@ export interface LedgerSnapshot {
    * A SEVENTH counter, for the reason the sixth existed: the question differs, so the receipt must.
    */
   readonly neutralRepresentativeProbeProviderRequests: number;
+  /**
+   * POST-NRA1. GPT-OSS-120B strict model-differential probe requests.
+   *
+   * An EIGHTH counter. The model is the variable this run exists to change, so the receipt must be
+   * able to say a request was spent on 120B rather than on the production candidate.
+   */
+  readonly modelDifferentialProbeProviderRequests: number;
   readonly totalProviderRequests: number;
   readonly successfulProviderResponses: number;
   readonly providerFailures: number;
@@ -289,6 +316,7 @@ export function createRequestLedger(config: RequestLedgerConfig): RequestLedger 
     'operational-acceptance-probe': 0,
     'representative-acceptance-probe': 0,
     'neutral-representative-probe': 0,
+    'model-differential-probe': 0,
   };
   let successes = 0;
   let failures = 0;
@@ -378,6 +406,7 @@ export function createRequestLedger(config: RequestLedgerConfig): RequestLedger 
         operationalAcceptanceProbeProviderRequests: counts['operational-acceptance-probe'],
         representativeAcceptanceProbeProviderRequests: counts['representative-acceptance-probe'],
         neutralRepresentativeProbeProviderRequests: counts['neutral-representative-probe'],
+        modelDifferentialProbeProviderRequests: counts['model-differential-probe'],
         totalProviderRequests: total(),
         successfulProviderResponses: successes,
         providerFailures: failures,
@@ -429,6 +458,45 @@ export function createSafetyReplicationLedger(): RequestLedger {
     pricePerMillionInputUsd: CANDIDATE_PRICE_PER_M_INPUT_USD,
     pricePerMillionCachedInputUsd: CANDIDATE_PRICE_PER_M_CACHED_INPUT_USD,
     pricePerMillionOutputUsd: CANDIDATE_PRICE_PER_M_OUTPUT_USD,
+    fallbackInputTokens: CANDIDATE_MAX_INPUT_TOKENS,
+    fallbackOutputTokens: CANDIDATE_MAX_COMPLETION_TOKENS,
+    hardMaxInputTokens: CANDIDATE_MAX_INPUT_TOKENS,
+    hardMaxOutputTokens: CANDIDATE_MAX_COMPLETION_TOKENS,
+  });
+}
+
+/**
+ * The ledger for a bounded POST_NRA1_GPT_OSS_120B_STRICT_MODEL_DIFFERENTIAL run.
+ *
+ * The text smoke plus ONE differential probe: TWO requests, one dollar.
+ *
+ * Its own ledger and its own counter, so it can never be confused with NRA1 — which sent the same
+ * captured request to the production 20B candidate and was refused.
+ *
+ * ### It prices at the 120B tariff, and that is the ONLY ledger here that does
+ *
+ * A first revision used the production 20B schedule. The wire was right and the accounting was not:
+ * Groq publishes 120B at twice the 20B input and output rates, so every reservation underpriced the
+ * request it was about to authorize. A reservation is made BEFORE the call and is what keeps a live
+ * run inside its ceiling, so an underpriced one is a governance defect rather than a reporting one.
+ *
+ * The run is MIXED — a 20B smoke and a 120B candidate — while `RequestLedger` carries ONE schedule.
+ * Rather than widen that governed primitive for a two-request diagnostic, the whole run is priced at
+ * the HIGHER rate. That over-estimates the smoke instead of under-estimating the candidate, and only
+ * one of those two errors can let a run exceed what an owner authorized.
+ *
+ * The TOKEN ceilings stay on the candidate release constants: both governed GPT-OSS models publish
+ * the same 131,072 / 65,536 limits, and the differential holds them fixed on purpose.
+ */
+export function createModelDifferentialLedger(): RequestLedger {
+  return createRequestLedger({
+    maxRequests: MODEL_DIFFERENTIAL_MAX_PROVIDER_REQUESTS,
+    maxCostUsd: MODEL_DIFFERENTIAL_MAX_ESTIMATED_COST_USD,
+    // The DIFFERENTIAL tariff. Never the production candidate's.
+    pricePerMillionInputUsd: MODEL_DIFFERENTIAL_PRICE_PER_M_INPUT_USD,
+    pricePerMillionCachedInputUsd: MODEL_DIFFERENTIAL_PRICE_PER_M_CACHED_INPUT_USD,
+    pricePerMillionOutputUsd: MODEL_DIFFERENTIAL_PRICE_PER_M_OUTPUT_USD,
+    // Token ceilings are shared by both models, so they stay on the release constants.
     fallbackInputTokens: CANDIDATE_MAX_INPUT_TOKENS,
     fallbackOutputTokens: CANDIDATE_MAX_COMPLETION_TOKENS,
     hardMaxInputTokens: CANDIDATE_MAX_INPUT_TOKENS,

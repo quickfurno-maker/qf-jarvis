@@ -51,6 +51,7 @@ import { createCandidateGateway } from './evaluation-gateway.js';
 import {
   createOperatorLedger,
   createOperationalAcceptanceDiagnosticLedger,
+  createModelDifferentialLedger,
   createNeutralRepresentativeLedger,
   createRepresentativeAcceptanceLedger,
   createRequestContractDiagnosticLedger,
@@ -66,6 +67,7 @@ import { openLiveSchemaRepairVerificationRunner } from './schema-repair-verifica
 import { openLiveOperationalAcceptanceRunner } from './operational-acceptance-port.js';
 import { openLiveRepresentativeAcceptanceRunner } from './representative-acceptance-port.js';
 import { openLiveNeutralRepresentativeRunner } from './neutral-representative-acceptance-port.js';
+import { openLiveModelDifferentialRunner } from './model-differential-port.js';
 import { DEFAULT_CREDENTIAL_SOURCE_MODE, isCredentialSourceMode } from './credential-source.js';
 import type { CredentialSourceMode } from './credential-source.js';
 import { DEFAULT_RUN_GOAL } from './internal/run-goal.js';
@@ -168,7 +170,10 @@ export function parseCliArgs(argv: readonly string[]): CliParse {
         value !== 'POST_OAD3_REPRESENTATIVE_ACCEPTANCE' &&
         // POST-RA1. Separate again: RA1's probe carried the safety-derived adversarial turn, this one
         // carries an ordinary client turn, and a receipt must say which.
-        value !== 'POST_RA1_NEUTRAL_REPRESENTATIVE_ACCEPTANCE'
+        value !== 'POST_RA1_NEUTRAL_REPRESENTATIVE_ACCEPTANCE' &&
+        // POST-NRA1. Separate again: this goal sends the same request to a DIFFERENT model, and a
+        // receipt must say which model produced it.
+        value !== 'POST_NRA1_GPT_OSS_120B_STRICT_MODEL_DIFFERENTIAL'
       ) {
         return { ok: false, reason: 'invalid-run-goal' };
       }
@@ -210,6 +215,10 @@ export function parseCliArgs(argv: readonly string[]): CliParse {
  * real terminal and a real provider to run. A bounded run whose bound is untested is not bounded.
  */
 export function ledgerForRunGoal(goal: OperatorRunGoal): RequestLedger {
+  if (goal === 'POST_NRA1_GPT_OSS_120B_STRICT_MODEL_DIFFERENTIAL') {
+    // Two requests, one dollar: the smoke plus ONE 120B differential probe.
+    return createModelDifferentialLedger();
+  }
   if (goal === 'POST_RA1_NEUTRAL_REPRESENTATIVE_ACCEPTANCE') {
     // Two requests, one dollar: the smoke plus ONE neutral client probe.
     return createNeutralRepresentativeLedger();
@@ -342,6 +351,22 @@ async function main(): Promise<number> {
           const projection = projectGroqStrictJsonSchema(rawSchema);
           if (!projection.ok) {
             throw new Error('QFJ_SCHEMA_REPAIR_PROJECTION_FAILED');
+          }
+          return projection.schema;
+        },
+      }),
+    // POST-NRA1. The REAL 120B model differential port, bound to the credential just resolved.
+    //
+    // Bound from the day the seam exists, for the reason HF4-R8 taught. The SAME production
+    // projection is injected, and the port reuses NRA1's own neutral capture rather than building a
+    // second one — so the only wire difference is the model id.
+    openModelDifferentialRunner: (credential) =>
+      openLiveModelDifferentialRunner({
+        credential,
+        projectSchema: (rawSchema) => {
+          const projection = projectGroqStrictJsonSchema(rawSchema);
+          if (!projection.ok) {
+            throw new Error('QFJ_MODEL_DIFFERENTIAL_PROJECTION_FAILED');
           }
           return projection.schema;
         },
