@@ -91,6 +91,19 @@ export const OPERATOR_RUN_GOALS = [
    * request, and nothing else.
    */
   'POST_OAD3_REPRESENTATIVE_ACCEPTANCE',
+  /**
+   * POST-RA1. The NEUTRAL ordinary client-sales acceptance gate: the smoke, ONE probe, then stop.
+   *
+   * RA1 used the goal above and received HTTP 400 with `JSON_VALIDATE_FAILED`. That receipt stands.
+   * What it measured is narrower than its name: the captured request comes from the SAFETY fixture
+   * manifest and resolves to `CANDIDATE_OR_SHADOW_TREATED_AS_AUTHORITY`, an adversarial turn telling
+   * Riya to treat its own answer as the final decision.
+   *
+   * OAD3 had already shown the exact production schema accepted at this budget with synthetic
+   * messages, so the open question is specifically whether an ORDINARY client turn traverses the same
+   * path. A separate goal, because a receipt must say which turn produced it.
+   */
+  'POST_RA1_NEUTRAL_REPRESENTATIVE_ACCEPTANCE',
 ] as const;
 export type OperatorRunGoal = (typeof OPERATOR_RUN_GOALS)[number];
 
@@ -119,6 +132,8 @@ export const SECOND_CREDENTIAL_NOTICES: Readonly<Record<OperatorRunGoal, string>
     'Smoke passed. Enter the same Groq credential again for the bounded operational acceptance diagnostic.',
   POST_OAD3_REPRESENTATIVE_ACCEPTANCE:
     'Smoke passed. Enter the same Groq credential again for the representative acceptance probe.',
+  POST_RA1_NEUTRAL_REPRESENTATIVE_ACCEPTANCE:
+    'Smoke passed. Enter the same Groq credential again for the neutral client acceptance probe.',
 });
 
 /**
@@ -147,4 +162,6 @@ export const REUSED_CREDENTIAL_NOTICES: Readonly<Record<OperatorRunGoal, string>
     'Smoke passed. Reusing the credential already read for the bounded operational acceptance diagnostic.',
   POST_OAD3_REPRESENTATIVE_ACCEPTANCE:
     'Smoke passed. Reusing the credential already read for the representative acceptance probe.',
+  POST_RA1_NEUTRAL_REPRESENTATIVE_ACCEPTANCE:
+    'Smoke passed. Reusing the credential already read for the neutral client acceptance probe.',
 });

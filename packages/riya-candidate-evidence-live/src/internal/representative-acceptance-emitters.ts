@@ -8,11 +8,20 @@
  * The probe row carries `providerHttpClass` prominently because THAT is the field OAD3's reader
  * needed and did not weigh: `RATE_LIMITED_429` and `BAD_REQUEST_400` are both non-2xx, and only one of
  * them is the provider judging the request.
+ *
+ * POST-RA1 the three functions take a `phase` and, for the receipt, the counter value. Two runs share
+ * this content-free discipline while remaining distinguishable on every line: RA1 emits
+ * `representative-acceptance` and NRA1 emits `neutral-representative-acceptance`. Sharing the emitters
+ * rather than copying them keeps one place where "what may be printed" is decided.
  */
+
+/** Which bounded run is emitting. A closed token, printed on every line the run produces. */
+export type RepresentativeEmitterPhase =
+  'representative-acceptance' | 'neutral-representative-acceptance';
 import type { LedgerSnapshot } from '../accounting.js';
 import type { SafeConsole } from '../safe-console.js';
 import { REPRESENTATIVE_ACCEPTANCE_COMPLETION_BUDGET } from '../representative-acceptance-port.js';
-import type { OperationalAcceptanceProbe } from './operational-acceptance-plan.js';
+import type { DiagnosticProbe } from './operational-acceptance-plan.js';
 import type {
   RepresentativeAcceptanceAnalysis,
   RepresentativeAcceptanceOutcome,
@@ -21,11 +30,12 @@ import type {
 /** The ONE probe row: what was asked, at which envelope, with which messages, and what came back. */
 export function emitRepresentativeProbeOutcome(
   safe: SafeConsole,
-  probe: OperationalAcceptanceProbe,
+  probe: DiagnosticProbe<string>,
   outcome: RepresentativeAcceptanceOutcome,
+  phase: RepresentativeEmitterPhase = 'representative-acceptance',
 ): void {
   safe.line({
-    phase: 'representative-acceptance',
+    phase,
     status: 'PROBE',
     stepId: outcome.stepId,
     probeKind: probe.probeKind,
@@ -49,9 +59,10 @@ export function emitRepresentativeClassification(
   safe: SafeConsole,
   analysis: RepresentativeAcceptanceAnalysis,
   probesRun: number,
+  phase: RepresentativeEmitterPhase = 'representative-acceptance',
 ): void {
   safe.line({
-    phase: 'representative-acceptance',
+    phase,
     status: 'CLASSIFICATION',
     probesRun,
     completionCapClass: 'OPERATIONAL',
@@ -65,13 +76,20 @@ export function emitRepresentativeClassification(
 }
 
 /** The receipt. Names its OWN counter; states safety and P10 as zero explicitly. */
-export function emitRepresentativeReceipt(safe: SafeConsole, snapshot: LedgerSnapshot): void {
+export function emitRepresentativeReceipt(
+  safe: SafeConsole,
+  snapshot: LedgerSnapshot,
+  phase: RepresentativeEmitterPhase = 'representative-acceptance',
+): void {
   safe.line({
-    phase: 'representative-acceptance',
+    phase,
     status: 'RECEIPT',
     totalProviderRequests: snapshot.totalProviderRequests,
     smokeRequests: snapshot.smokeRequests,
+    // BOTH counters, always. Stating the other as zero is how a reader tells the two runs apart
+    // without having to know which phase owns which counter.
     representativeAcceptanceProbeRequests: snapshot.representativeAcceptanceProbeProviderRequests,
+    neutralRepresentativeProbeRequests: snapshot.neutralRepresentativeProbeProviderRequests,
     safetyProviderRequests: snapshot.safetyProviderRequests,
     p10ProviderRequests: snapshot.p10ProviderRequests,
     successfulProviderResponses: snapshot.successfulProviderResponses,

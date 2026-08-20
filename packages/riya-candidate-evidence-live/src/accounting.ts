@@ -131,6 +131,21 @@ export const REPRESENTATIVE_ACCEPTANCE_MAX_PROVIDER_REQUESTS =
 /** The spend ceiling. Same conservative figure as every other bounded diagnostic. */
 export const REPRESENTATIVE_ACCEPTANCE_MAX_ESTIMATED_COST_USD = 1;
 
+/**
+ * The exact arithmetic of a POST_RA1_NEUTRAL_REPRESENTATIVE_ACCEPTANCE run: the smoke plus ONE probe.
+ *
+ * TWO, the same ceiling RA1 had — but its OWN counter. Reusing RA1's would leave two runs that ask
+ * genuinely different questions, on genuinely different client turns, indistinguishable in a receipt.
+ * RA1's 400 came from an adversarial safety-derived turn; this one carries an ordinary client turn,
+ * and an owner reading a receipt must be able to tell which.
+ */
+export const NEUTRAL_REPRESENTATIVE_PROBE_REQUESTS = 1;
+export const NEUTRAL_REPRESENTATIVE_MAX_PROVIDER_REQUESTS =
+  SMOKE_REQUESTS + NEUTRAL_REPRESENTATIVE_PROBE_REQUESTS;
+
+/** The spend ceiling. Same conservative figure as every other bounded diagnostic. */
+export const NEUTRAL_REPRESENTATIVE_MAX_ESTIMATED_COST_USD = 1;
+
 /** Why the ledger refused the next call. Closed and content-free. */
 export const LEDGER_REFUSALS = [
   'request-limit-reached',
@@ -156,6 +171,7 @@ export const LEDGER_PHASES = [
   'schema-repair-probe',
   'operational-acceptance-probe',
   'representative-acceptance-probe',
+  'neutral-representative-probe',
 ] as const;
 export type LedgerPhase = (typeof LEDGER_PHASES)[number];
 
@@ -195,6 +211,12 @@ export interface LedgerSnapshot {
    * same budget, and a receipt that shared a counter between them could not say which run produced it.
    */
   readonly representativeAcceptanceProbeProviderRequests: number;
+  /**
+   * POST-RA1. Neutral client acceptance probe requests.
+   *
+   * A SEVENTH counter, for the reason the sixth existed: the question differs, so the receipt must.
+   */
+  readonly neutralRepresentativeProbeProviderRequests: number;
   readonly totalProviderRequests: number;
   readonly successfulProviderResponses: number;
   readonly providerFailures: number;
@@ -266,6 +288,7 @@ export function createRequestLedger(config: RequestLedgerConfig): RequestLedger 
     'schema-repair-probe': 0,
     'operational-acceptance-probe': 0,
     'representative-acceptance-probe': 0,
+    'neutral-representative-probe': 0,
   };
   let successes = 0;
   let failures = 0;
@@ -354,6 +377,7 @@ export function createRequestLedger(config: RequestLedgerConfig): RequestLedger 
         schemaRepairProbeProviderRequests: counts['schema-repair-probe'],
         operationalAcceptanceProbeProviderRequests: counts['operational-acceptance-probe'],
         representativeAcceptanceProbeProviderRequests: counts['representative-acceptance-probe'],
+        neutralRepresentativeProbeProviderRequests: counts['neutral-representative-probe'],
         totalProviderRequests: total(),
         successfulProviderResponses: successes,
         providerFailures: failures,
@@ -402,6 +426,28 @@ export function createSafetyReplicationLedger(): RequestLedger {
   return createRequestLedger({
     maxRequests: SAFETY_REPLICATION_MAX_PROVIDER_REQUESTS,
     maxCostUsd: SAFETY_REPLICATION_MAX_ESTIMATED_COST_USD,
+    pricePerMillionInputUsd: CANDIDATE_PRICE_PER_M_INPUT_USD,
+    pricePerMillionCachedInputUsd: CANDIDATE_PRICE_PER_M_CACHED_INPUT_USD,
+    pricePerMillionOutputUsd: CANDIDATE_PRICE_PER_M_OUTPUT_USD,
+    fallbackInputTokens: CANDIDATE_MAX_INPUT_TOKENS,
+    fallbackOutputTokens: CANDIDATE_MAX_COMPLETION_TOKENS,
+    hardMaxInputTokens: CANDIDATE_MAX_INPUT_TOKENS,
+    hardMaxOutputTokens: CANDIDATE_MAX_COMPLETION_TOKENS,
+  });
+}
+
+/**
+ * The ledger for a bounded POST_RA1_NEUTRAL_REPRESENTATIVE_ACCEPTANCE run.
+ *
+ * The text smoke plus ONE neutral client probe: TWO requests, one dollar.
+ *
+ * Its own ledger and its own counter, so it can never be confused with RA1's representative probe —
+ * which carried the safety-derived adversarial turn and returned HTTP 400.
+ */
+export function createNeutralRepresentativeLedger(): RequestLedger {
+  return createRequestLedger({
+    maxRequests: NEUTRAL_REPRESENTATIVE_MAX_PROVIDER_REQUESTS,
+    maxCostUsd: NEUTRAL_REPRESENTATIVE_MAX_ESTIMATED_COST_USD,
     pricePerMillionInputUsd: CANDIDATE_PRICE_PER_M_INPUT_USD,
     pricePerMillionCachedInputUsd: CANDIDATE_PRICE_PER_M_CACHED_INPUT_USD,
     pricePerMillionOutputUsd: CANDIDATE_PRICE_PER_M_OUTPUT_USD,

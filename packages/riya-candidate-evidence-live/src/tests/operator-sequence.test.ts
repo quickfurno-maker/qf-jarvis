@@ -394,6 +394,10 @@ describe('HF3 — the one optional governed run goal', () => {
       // exact synthetic schema at the operational budget; only the representative request is still
       // unresolved, and only because it met an HTTP 429. So this goal sends the smoke and ONE probe.
       'POST_OAD3_REPRESENTATIVE_ACCEPTANCE',
+      // POST-RA1 adds an EIGHTH. RA1 used the goal above and its captured request came from the
+      // SAFETY fixture manifest — an adversarial self-as-authority turn — so its HTTP 400 says
+      // nothing about an ordinary sales conversation. This goal sends the neutral client turn.
+      'POST_RA1_NEUTRAL_REPRESENTATIVE_ACCEPTANCE',
     ]);
     // No goal skips a gate or forces a verdict. Both notices are content-free and name no secret.
     for (const goal of OPERATOR_RUN_GOALS) {
