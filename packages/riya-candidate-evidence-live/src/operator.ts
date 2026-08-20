@@ -60,6 +60,13 @@ import {
   emitSchemaRepairReceipt,
 } from './internal/schema-differential-emitters.js';
 import {
+  emitRepresentativeClassification,
+  emitRepresentativeProbeOutcome,
+  emitRepresentativeReceipt,
+} from './internal/representative-acceptance-emitters.js';
+import { analyseRepresentativeAcceptance } from './internal/representative-acceptance-classification.js';
+import type { RepresentativeAcceptanceOutcome } from './internal/representative-acceptance-classification.js';
+import {
   emitOperationalAcceptanceClassification,
   emitOperationalAcceptanceProbeOutcome,
   emitOperationalAcceptanceReceipt,
@@ -250,6 +257,17 @@ export interface OperatorDeps {
     readonly probes: readonly OperationalAcceptanceProbe[];
     readonly run: (probe: OperationalAcceptanceProbe) => Promise<OperationalAcceptanceOutcome>;
   }>;
+  /**
+   * POST-OAD3. Bind the REPRESENTATIVE ACCEPTANCE runner to the already-resolved credential.
+   *
+   * The same credential-bound factory shape as the four seams above, and required only for
+   * `POST_OAD3_REPRESENTATIVE_ACCEPTANCE`. It returns ONE probe rather than a list, because the shape
+   * of the seam is itself part of the bound: an operator handed a list could iterate it.
+   */
+  readonly openRepresentativeAcceptanceRunner?: (credential: unknown) => Promise<{
+    readonly probe: OperationalAcceptanceProbe;
+    readonly run: (probe: OperationalAcceptanceProbe) => Promise<RepresentativeAcceptanceOutcome>;
+  }>;
 }
 
 export interface OperatorResult {
@@ -374,6 +392,61 @@ export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<
   // The second ingress line. In clipboard mode this is where `credentialReuseCount` becomes 2 while
   // `credentialClipboardReads` stays 1 — the pair of numbers that IS the copy-once guarantee.
   emitCredentialIngress(safe, credentialSource, 'CANDIDATE', deps.ingressCounters?.());
+
+  // F'''''. THE REPRESENTATIVE ACCEPTANCE GATE (POST-OAD3) — and then STOP.
+  //
+  // Same placement and discipline as the four diagnostics below it: before `openCandidate`, so a run
+  // that evaluates nothing builds none of the machinery for evaluating something.
+  //
+  // ONE probe. OAD3 already established the control and the exact synthetic schema at this budget, so
+  // re-sending them would spend live authorization re-proving settled facts. There is no loop here
+  // and no stop rule, because there is nothing to stop.
+  if (runGoal === 'POST_OAD3_REPRESENTATIVE_ACCEPTANCE') {
+    const openRunner = deps.openRepresentativeAcceptanceRunner;
+    if (openRunner === undefined) {
+      safe.line({ phase: 'representative-acceptance', status: 'FAILED', reason: 'port-missing' });
+      return { outcome: 'INTERNAL_CLOSED_FAILURE' };
+    }
+    let runner: {
+      readonly probe: OperationalAcceptanceProbe;
+      readonly run: (probe: OperationalAcceptanceProbe) => Promise<RepresentativeAcceptanceOutcome>;
+    };
+    try {
+      runner = await openRunner(candidateCredential);
+    } catch {
+      // Fails closed BEFORE the request — which is also where a failed capture or projection lands.
+      safe.line({
+        phase: 'representative-acceptance',
+        status: 'FAILED',
+        reason: 'runner-bind-failed',
+      });
+      return { outcome: 'INTERNAL_CLOSED_FAILURE' };
+    }
+
+    let representativeOutcome: RepresentativeAcceptanceOutcome | undefined;
+    const reservation = ledger.reserve('representative-acceptance-probe');
+    if (!reservation.ok) {
+      safe.line({
+        phase: 'representative-acceptance',
+        status: 'REFUSED',
+        stepId: runner.probe.stepId,
+        reason: reservation.refusal,
+      });
+    } else {
+      representativeOutcome = await runner.run(runner.probe);
+      ledger.settle(undefined, representativeOutcome.providerCompleted);
+      emitRepresentativeProbeOutcome(safe, runner.probe, representativeOutcome);
+    }
+
+    emitRepresentativeClassification(
+      safe,
+      analyseRepresentativeAcceptance(representativeOutcome),
+      representativeOutcome === undefined ? 0 : 1,
+    );
+    emitRepresentativeReceipt(safe, ledger.snapshot());
+    safe.line({ finalStatus: 'POST_OAD3_REPRESENTATIVE_ACCEPTANCE_COMPLETE' });
+    return { outcome: 'POST_OAD3_REPRESENTATIVE_ACCEPTANCE_COMPLETE' };
+  }
 
   // F''''. THE OPERATIONAL ACCEPTANCE DIAGNOSTIC (POST-SRV1) — and then STOP.
   //

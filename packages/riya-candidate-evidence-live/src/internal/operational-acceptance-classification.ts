@@ -30,6 +30,18 @@
  * A rejected control means the operational envelope itself was refused, so nothing after it is
  * interpretable. An incomplete matrix supports no conclusion about the probes that did settle.
  *
+ * POST-OAD3, "incomplete" also covers a probe the provider never judged ON CONTRACT GROUNDS. OAD3
+ * returned HTTP 429 on `O1` and `O3` while `O0` and `O2` returned 200, and the harness emitted
+ * `OPERATIONAL_REPRESENTATIVE_REJECTED_AFTER_SYNTHETIC_ACCEPTED` — a token pointing at the message
+ * shape, on evidence that was a rate limit. A 429 means the provider declined to process; it is not a
+ * verdict on the schema or the messages. Those rows are now inconclusive, so the same matrix would
+ * read `MIXED_OR_INCONCLUSIVE` instead.
+ *
+ * The same is true of a credential, permission or configuration failure. Only 400, 413 and 422 carry
+ * contract evidence; a 401 says the caller was not authorised, which is a different problem entirely.
+ *
+ * The historical OAD3 receipt keeps the token it emitted. Only future analysis changes.
+ *
  * Pure: no clock, no I/O, no provider, no credential.
  */
 import type {
@@ -39,6 +51,11 @@ import type {
 } from '../candidate-transport-observation.js';
 import type { OperationalAcceptanceStepId } from './operational-acceptance-plan.js';
 import { OPERATIONAL_ACCEPTANCE_STEP_IDS } from './operational-acceptance-plan.js';
+import {
+  isProviderAccepted,
+  isProviderContractRejected,
+  isProviderOutcomeInconclusive,
+} from './provider-outcome-classes.js';
 
 /** The closed conclusions an operational acceptance matrix can support. */
 export const OPERATIONAL_ACCEPTANCE_CLASSIFICATIONS = [
@@ -124,21 +141,28 @@ export interface OperationalAcceptanceAnalysis {
 }
 
 /** Accepted means the provider TOOK the request. Local semantics are not consulted. */
-function accepted(one: OperationalAcceptanceOutcome): boolean {
-  return one.providerCompleted && one.providerHttpClass === 'SUCCESS_2XX';
-}
+const accepted = isProviderAccepted;
 
-/** Refused BY the provider, as distinct from never having settled. */
-function rejected(one: OperationalAcceptanceOutcome): boolean {
-  return (
-    !accepted(one) &&
-    one.providerTransportStarted &&
-    one.providerHttpStatus >= 100 &&
-    one.providerHttpClass !== 'TRANSPORT_THROW' &&
-    one.providerHttpClass !== 'NOT_REACHED' &&
-    one.providerHttpClass !== 'NONE'
-  );
-}
+/**
+ * Refused BY the provider on CONTRACT grounds, as distinct from any other way a request can fail.
+ *
+ * POST-OAD3 this narrowed twice. The original predicate counted every non-2xx response with a status
+ * as a rejection, which put HTTP 429 beside HTTP 400 — and OAD3's `O1` and `O3` were both 429s, so
+ * the run emitted a token naming the message shape when the provider had simply declined to process.
+ *
+ * The first repair excluded a list of infrastructure classes and kept the leftovers as rejections,
+ * which was still wrong in the other direction: `UNAUTHORIZED_401`, `FORBIDDEN_403`, `NOT_FOUND_404`
+ * and `OTHER_HTTP` remained in the leftover set. A mistyped second candidate credential would have
+ * reached `OPERATIONAL_REPRESENTATIVE_REJECTED_AFTER_SYNTHETIC_ACCEPTED` as if it were evidence about
+ * Riya's schema.
+ *
+ * Contract rejection is now an explicit ALLOWLIST — 400, 413, 422 — over a role map that is total by
+ * type. Everything else lands in `inconclusiveStepIds`, where the existing completeness rule turns
+ * the matrix into `MIXED_OR_INCONCLUSIVE` before any acceptance branch runs.
+ *
+ * Still no new token and no new precedence: only which evidence reaches which branch.
+ */
+const rejected = isProviderContractRejected;
 
 /** Read an operational acceptance matrix. Every declared step lands in exactly one bucket. */
 export function analyseOperationalAcceptance(
@@ -159,7 +183,8 @@ export function analyseOperationalAcceptance(
 
   for (const stepId of OPERATIONAL_ACCEPTANCE_STEP_IDS) {
     const one = byId.get(stepId);
-    if (one === undefined) {
+    if (one === undefined || isProviderOutcomeInconclusive(one)) {
+      // Never sent, or sent and never judged ON CONTRACT GROUNDS. Both are an ABSENCE of evidence.
       inconclusiveIds.push(stepId);
     } else if (accepted(one)) {
       acceptedIds.push(stepId);

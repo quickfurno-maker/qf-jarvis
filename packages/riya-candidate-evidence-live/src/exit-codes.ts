@@ -68,6 +68,14 @@ export const OPERATOR_OUTCOMES = [
    * line carries the finding.
    */
   'POST_SRV1_OPERATIONAL_ACCEPTANCE_DIAGNOSTIC_COMPLETE',
+  /**
+   * POST-OAD3. The representative acceptance gate ran its one probe and stopped.
+   *
+   * Its own code, because every run goal here carries one: a shell reading the exit status must be
+   * able to say WHICH bounded run produced it. It says the run COMPLETED — not that the request was
+   * accepted. The classification line carries that.
+   */
+  'POST_OAD3_REPRESENTATIVE_ACCEPTANCE_COMPLETE',
 ] as const;
 export type OperatorOutcome = (typeof OPERATOR_OUTCOMES)[number];
 
@@ -97,4 +105,6 @@ export const OPERATOR_EXIT_CODES: Readonly<Record<OperatorOutcome, number>> = Ob
   POST_SDH4_SCHEMA_REPAIR_VERIFICATION_COMPLETE: 25,
   // The next unused integer; 0-25 keep meaning exactly what they meant.
   POST_SRV1_OPERATIONAL_ACCEPTANCE_DIAGNOSTIC_COMPLETE: 26,
+  // The next unused integer; 0-26 keep meaning exactly what they meant.
+  POST_OAD3_REPRESENTATIVE_ACCEPTANCE_COMPLETE: 27,
 });

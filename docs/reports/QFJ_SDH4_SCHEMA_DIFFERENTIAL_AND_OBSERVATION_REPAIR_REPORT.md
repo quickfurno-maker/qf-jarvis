@@ -584,7 +584,7 @@ The merged `POST_SRV1_OPERATIONAL_ACCEPTANCE_DIAGNOSTIC` run goal is unchanged a
 repaired constant automatically; no new run goal is created. Its stop and classification semantics are
 untouched, and no historical receipt is rewritten.
 
-### Containment for this phase — CURRENT
+### Containment for this phase — SNAPSHOT AT THE POST-OAD2 REPAIR
 
 ```
 GROQ_CALLS=0
@@ -600,7 +600,220 @@ S11_RERUN=NO
 REQUEST_CONTRACT_STATUS=UNRESOLVED_PENDING_OAD3
 ```
 
+> Superseded by section 13. OAD3 has since run; the current status is
+> `REQUEST_CONTRACT_STATUS=UNRESOLVED_PENDING_REPRESENTATIVE_ACCEPTANCE`. The values above are kept
+> unchanged as the record of this phase.
+
 **Bounded conclusion.** OAD2 rejected the 14,848-token operational envelope at the minimal control
 before the repaired Riya schema participated. The schema remains untested at the operational budget.
 The governed launch budget is therefore decoupled from maximum-schema sizing and lowered to 4,096 for
 the next separately authorized acceptance run.
+
+---
+
+## 12. RUN OAD3 — `POST_SRV1_OPERATIONAL_ACCEPTANCE_DIAGNOSTIC` (IMMUTABLE)
+
+Executed **once** under owner authorization on certified main
+`d69e4399e424910d86e85c6632d077736b2d8060`. Preflight PASS. Smoke PASS. Operational budget **4,096**;
+model capability ceiling **65,536**.
+
+| Probe                                 | Budget | Messages                  | Status  | Class              | Completed |
+| ------------------------------------- | ------ | ------------------------- | ------- | ------------------ | --------- |
+| `O0_MINIMAL_CONTROL_OPERATIONAL`      | 4096   | `SYNTHETIC_TINY`          | **200** | `SUCCESS_2XX`      | true      |
+| `O1_EVOLUTION_GROUP_OPERATIONAL`      | 4096   | `SYNTHETIC_TINY`          | **429** | `RATE_LIMITED_429` | false     |
+| `O2_EXACT_SYNTHETIC_OPERATIONAL`      | 4096   | `SYNTHETIC_TINY`          | **200** | `SUCCESS_2XX`      | true      |
+| `O3_EXACT_REPRESENTATIVE_OPERATIONAL` | 4096   | `CAPTURED_REPRESENTATIVE` | **429** | `RATE_LIMITED_429` | false     |
+
+`O0` and `O2` carried `providerErrorType=NONE`, `providerErrorCode=NONE`. `O1` and `O3` carried
+`providerErrorType=OTHER_OR_ABSENT`, `providerErrorCode=OTHER_OR_ABSENT`.
+
+**Classifier emitted by the merged harness, recorded verbatim and never rewritten:**
+
+```
+OPERATIONAL_REPRESENTATIVE_REJECTED_AFTER_SYNTHETIC_ACCEPTED
+acceptedStepIds = O0_MINIMAL_CONTROL_OPERATIONAL + O2_EXACT_SYNTHETIC_OPERATIONAL
+rejectedStepIds = O1_EVOLUTION_GROUP_OPERATIONAL + O3_EXACT_REPRESENTATIVE_OPERATIONAL
+```
+
+| Field                                | Value      |
+| ------------------------------------ | ---------- |
+| `totalProviderRequests`              | 5          |
+| `smokeRequests`                      | 1          |
+| `operationalAcceptanceProbeRequests` | 4          |
+| `safetyProviderRequests`             | 0          |
+| `p10ProviderRequests`                | 0          |
+| `successfulProviderResponses`        | 3          |
+| `providerFailures`                   | 2          |
+| `inputTokensTotal`                   | 524,482    |
+| `outputTokensTotal`                  | 262,245    |
+| `estimatedCostUsd`                   | 0.11800965 |
+| `costIsEstimated`                    | true       |
+| `usageBoundViolated`                 | false      |
+| `safetyEvaluated`                    | false      |
+| `reviewBundleWritten`                | false      |
+
+Final: `POST_SRV1_OPERATIONAL_ACCEPTANCE_DIAGNOSTIC_COMPLETE`, exit `26`.
+
+Repository containment held: `main` and `origin/main` remained
+`d69e4399e424910d86e85c6632d077736b2d8060`, divergence `0 0`, only the protected untracked pathnames
+present.
+
+```
+OAD3_CONSUMED=YES
+OAD3_RERUN=NO
+```
+
+---
+
+## 13. OWNER INTERPRETATION OF OAD3 — SEPARATE FROM THE EMITTED RECORD
+
+The section above is the receipt. This section is the reading of it, and the two are deliberately kept
+apart.
+
+**Emitted classifier:** `OPERATIONAL_REPRESENTATIVE_REJECTED_AFTER_SYNTHETIC_ACCEPTED`
+
+**Owner interpretation:** `REPRESENTATIVE_ACCEPTANCE_UNRESOLVED_RATE_LIMIT_INTERRUPTED`
+
+The emitted token must **not** be read as evidence that the representative messages caused a
+request-contract rejection.
+
+The harness of the day grouped every non-2xx response that carried a status into one rejection bucket.
+`O3` returned **HTTP 429** with `providerCompleted=false`. A 429 means the provider **declined to
+process** because a rate limit was reached — it is not a verdict on the schema, the messages or the
+budget. `O1` received the same 429 in the same run, while `O2` had already shown that the exact full
+current Riya schema at 4,096 can receive HTTP 200.
+
+So the token names a message-shape sequence on evidence that cannot support one.
+
+```
+OAD3_OPERATIONAL_BUDGET_CONTROL=ACCEPTED
+OAD3_EXACT_SYNTHETIC_SCHEMA=ACCEPTED
+OAD3_REPRESENTATIVE_ACCEPTANCE=UNRESOLVED_RATE_LIMIT_INTERRUPTED
+```
+
+No claim is made that the representative messages were rejected semantically, that the Riya schema
+failed, that 4,096 failed, that model quality failed, that safety failed, or that any particular Groq
+quota produced the 429. The exact rate-limit dimension is not known from this receipt.
+
+### What OAD3 positively PROVED
+
+**A. The 4,096 operational envelope is accepted.** OAD2 sent the minimal strict control at 14,848 and
+received HTTP 413; OAD3 sent the same control at 4,096 and received HTTP 200. The current candidate
+path accepts the minimal strict control at the repaired application budget. This does not make 4,096
+universally optimal.
+
+**B. The exact production Riya schema is accepted at 4,096 with synthetic messages.** `O2` sent the
+exact current projected production schema at 4,096 and received HTTP 200 with
+`providerCompleted=true`. That closes the schema-composition uncertainty for that tested request — the
+observation split, the schema composition, the 4,096 budget, the prompt digest and the provider/model
+are not to be reopened without new contradictory evidence.
+
+**C. Representative acceptance is the only remaining request-contract gap** before safety.
+
+### Current status
+
+```
+REQUEST_CONTRACT_STATUS=UNRESOLVED_PENDING_REPRESENTATIVE_ACCEPTANCE
+20B_MODEL_QUALITY_VERDICT=UNRESOLVED
+SAFETY_AUTHORIZED=NO
+```
+
+This supersedes the section 11 status line, which remains as its own labelled snapshot.
+
+---
+
+## 14. THE ANALYSIS REPAIR AND THE REPRESENTATIVE-ONLY GATE
+
+### Future analysis distinguishes infrastructure from a verdict
+
+The OAD matrix classifier counted every non-2xx response carrying a status as rejection evidence. That
+is adequate for "did the provider take this" and wrong for "is this request contract valid", because
+the two differ exactly where the provider never got as far as judging the request.
+
+A new module assigns a reviewed role to **every** governed transport class, in a map that is total by
+type — a class added to the vocabulary does not compile until somebody decides its role, so nothing
+can inherit a role by falling through.
+
+Contract-rejection evidence is an explicit **allowlist of three**:
+
+| Class                   | Why it is contract evidence                                       |
+| ----------------------- | ----------------------------------------------------------------- |
+| `BAD_REQUEST_400`       | the provider validated the request and refused it                 |
+| `PAYLOAD_TOO_LARGE_413` | the envelope was refused as too large — how OAD2 read its own 413 |
+| `UNPROCESSABLE_422`     | the provider reports the request as unprocessable                 |
+
+For all three the literal error type and code travel onward **uninterpreted**: a 400 says a refusal
+happened, not which part of the request caused it.
+
+Everything else establishes **nothing** about the request contract: `UNAUTHORIZED_401`,
+`FORBIDDEN_403`, `NOT_FOUND_404`, `RATE_LIMITED_429`, `CAPACITY_498`, `CANCELLED_499`, `SERVER_5XX`,
+`TRANSPORT_THROW`, `NOT_REACHED`, `NONE` and `OTHER_HTTP`.
+
+That list matters as much as the allowlist. A first attempt at this repair excluded the infrastructure
+classes and treated the leftovers as rejections, which quietly swept in 401, 403, 404 and
+`OTHER_HTTP` — so a mistyped **second** candidate credential, entered after smoke had already passed
+on the first, would have been filed as evidence about Riya's schema. The safest default for any future
+or unknown class is inconclusive, never rejection.
+
+The precedence and the token list are unchanged; only which evidence reaches which token moved. A
+future matrix identical to OAD3's would now read **`MIXED_OR_INCONCLUSIVE`**, and a spec replays
+OAD3's exact rows to prove it. No new token was introduced.
+
+**The historical OAD3 receipt in section 12 is not rewritten.** It records what the harness emitted.
+
+### The representative-only gate
+
+A new run goal, `POST_OAD3_REPRESENTATIVE_ACCEPTANCE` (future live label **RA1**), exit code **27**,
+answers only the unresolved question.
+
+| Bound                                           | Value                     |
+| ----------------------------------------------- | ------------------------- |
+| Maximum provider requests                       | **2** (1 smoke + 1 probe) |
+| Maximum spend                                   | USD 1.00                  |
+| Wire completion budget                          | 4,096                     |
+| Model capability ceiling                        | 65,536                    |
+| Retry / fallback / safety / P10 / 120B / bundle | 0                         |
+
+It does **not** repeat `O0`, `O1` or `O2` — those already produced the evidence this phase needs. It
+reuses OAD3's own plan, capture and projection and SELECTS
+`O3_EXACT_REPRESENTATIVE_OPERATIONAL` out of them, rather than rebuilding an equivalent probe, so what
+goes on the wire is the same object OAD3 sent.
+
+Its vocabulary is five tokens, and the split between them is the OAD3 lesson:
+
+| Outcome                            | Meaning                                                                                                                                  |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `REPRESENTATIVE_ACCEPTED`          | HTTP 2xx and completed. The contract was accepted **once**. Sufficient to move to bounded safety replication; **not** a quality verdict. |
+| `REPRESENTATIVE_PROVIDER_REJECTED` | The provider judged the request and refused it on contract grounds — 400, 413 or 422 only. Literal codes preserved, uninterpreted.       |
+| `REPRESENTATIVE_RATE_LIMITED`      | HTTP 429. The provider declined to process. **Not a verdict.**                                                                           |
+| `REPRESENTATIVE_INFRA_INTERRUPTED` | The request failed to EXECUTE: transport, capacity, cancellation, 5xx.                                                                   |
+| `REPRESENTATIVE_INCONCLUSIVE`      | Did not run, or a credential / permission / configuration / ungoverned class — 401, 403, 404, `OTHER_HTTP`.                              |
+
+### Pacing is operational, not code
+
+RA1 remains **one attempt**. No retry is added to production or to the diagnostic, and no cooldown is
+compiled into the runtime. The owner authorization for RA1 controls pacing operationally: no other
+Groq staging calls for at least 90 seconds before launch, and at least 90 seconds after smoke PASS
+before the second hidden credential is entered.
+
+No rate-limit header plumbing is added. If RA1 is rate-limited again after a clean cooldown, that
+becomes the next question.
+
+### Containment for this phase
+
+```
+GROQ_CALLS=0
+PROVIDER_CALLS=0
+CREDENTIAL_READS=0
+LIVE_RA1_EXECUTED=NO
+LIVE_RA1_AUTHORIZED=NO
+OAD3_RERUN=NO
+OAD2_RERUN=NO
+OAD1_RERUN=NO
+SRV1_RERUN=NO
+SDH4_RERUN=NO
+S11_RERUN=NO
+REQUEST_CONTRACT_STATUS=UNRESOLVED_PENDING_REPRESENTATIVE_ACCEPTANCE
+20B_MODEL_QUALITY_VERDICT=UNRESOLVED
+SAFETY_AUTHORIZED=NO
+```

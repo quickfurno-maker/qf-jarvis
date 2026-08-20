@@ -77,6 +77,20 @@ export const OPERATOR_RUN_GOALS = [
    * token again, because a receipt must always say which envelope produced it.
    */
   'POST_SRV1_OPERATIONAL_ACCEPTANCE_DIAGNOSTIC',
+  /**
+   * POST-OAD3. The REPRESENTATIVE-ONLY acceptance gate: the text smoke, then ONE probe, then stop.
+   *
+   * OAD3 answered most of the question. At the repaired 4,096-token budget the minimal control
+   * returned HTTP 200, and the exact current production Riya schema with synthetic messages returned
+   * HTTP 200 — which closes the schema-composition doubt for that request. What it did NOT answer is
+   * the representative one: `O3` came back HTTP 429, a rate limit, which is the provider declining to
+   * process rather than a verdict on the request.
+   *
+   * So exactly one question is left, and repeating `O0`, `O1` and `O2` to ask it would spend live
+   * authorization re-proving what is already proven. This goal sends the smoke and the representative
+   * request, and nothing else.
+   */
+  'POST_OAD3_REPRESENTATIVE_ACCEPTANCE',
 ] as const;
 export type OperatorRunGoal = (typeof OPERATOR_RUN_GOALS)[number];
 
@@ -103,6 +117,8 @@ export const SECOND_CREDENTIAL_NOTICES: Readonly<Record<OperatorRunGoal, string>
     'Smoke passed. Enter the same Groq credential again for the bounded schema repair verification.',
   POST_SRV1_OPERATIONAL_ACCEPTANCE_DIAGNOSTIC:
     'Smoke passed. Enter the same Groq credential again for the bounded operational acceptance diagnostic.',
+  POST_OAD3_REPRESENTATIVE_ACCEPTANCE:
+    'Smoke passed. Enter the same Groq credential again for the representative acceptance probe.',
 });
 
 /**
@@ -129,4 +145,6 @@ export const REUSED_CREDENTIAL_NOTICES: Readonly<Record<OperatorRunGoal, string>
     'Smoke passed. Reusing the credential already read for the bounded schema repair verification.',
   POST_SRV1_OPERATIONAL_ACCEPTANCE_DIAGNOSTIC:
     'Smoke passed. Reusing the credential already read for the bounded operational acceptance diagnostic.',
+  POST_OAD3_REPRESENTATIVE_ACCEPTANCE:
+    'Smoke passed. Reusing the credential already read for the representative acceptance probe.',
 });

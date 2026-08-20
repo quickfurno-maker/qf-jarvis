@@ -51,6 +51,7 @@ import { createCandidateGateway } from './evaluation-gateway.js';
 import {
   createOperatorLedger,
   createOperationalAcceptanceDiagnosticLedger,
+  createRepresentativeAcceptanceLedger,
   createRequestContractDiagnosticLedger,
   createSafetyReplicationLedger,
   createSchemaDifferentialDiagnosticLedger,
@@ -62,6 +63,7 @@ import { openLiveDiagnosticCanaryRunner } from './live-diagnostic-canary-composi
 import { openLiveSchemaProbeRunner } from './live-schema-probe-composition.js';
 import { openLiveSchemaRepairVerificationRunner } from './schema-repair-verification-port.js';
 import { openLiveOperationalAcceptanceRunner } from './operational-acceptance-port.js';
+import { openLiveRepresentativeAcceptanceRunner } from './representative-acceptance-port.js';
 import { DEFAULT_CREDENTIAL_SOURCE_MODE, isCredentialSourceMode } from './credential-source.js';
 import type { CredentialSourceMode } from './credential-source.js';
 import { DEFAULT_RUN_GOAL } from './internal/run-goal.js';
@@ -158,7 +160,10 @@ export function parseCliArgs(argv: readonly string[]): CliParse {
         // POST-SRV1. Separate again, and for a new reason: this is the first matrix that runs at the
         // real operational completion budget rather than the low control cap, and a receipt must say
         // which envelope produced it.
-        value !== 'POST_SRV1_OPERATIONAL_ACCEPTANCE_DIAGNOSTIC'
+        value !== 'POST_SRV1_OPERATIONAL_ACCEPTANCE_DIAGNOSTIC' &&
+        // POST-OAD3. Separate again: this goal sends ONE probe rather than a matrix, and a receipt
+        // must be able to say which of the two produced it.
+        value !== 'POST_OAD3_REPRESENTATIVE_ACCEPTANCE'
       ) {
         return { ok: false, reason: 'invalid-run-goal' };
       }
@@ -200,6 +205,10 @@ export function parseCliArgs(argv: readonly string[]): CliParse {
  * real terminal and a real provider to run. A bounded run whose bound is untested is not bounded.
  */
 export function ledgerForRunGoal(goal: OperatorRunGoal): RequestLedger {
+  if (goal === 'POST_OAD3_REPRESENTATIVE_ACCEPTANCE') {
+    // Two requests, one dollar: the smoke plus ONE representative probe. The narrowest ceiling here.
+    return createRepresentativeAcceptanceLedger();
+  }
   if (goal === 'POST_SRV1_OPERATIONAL_ACCEPTANCE_DIAGNOSTIC') {
     // Five requests, one dollar: the smoke plus four O0-O3 probes. Narrower still than SRV1's six.
     return createOperationalAcceptanceDiagnosticLedger();
@@ -324,6 +333,21 @@ async function main(): Promise<number> {
           const projection = projectGroqStrictJsonSchema(rawSchema);
           if (!projection.ok) {
             throw new Error('QFJ_SCHEMA_REPAIR_PROJECTION_FAILED');
+          }
+          return projection.schema;
+        },
+      }),
+    // POST-OAD3. The REAL representative acceptance port, bound to the credential just resolved.
+    //
+    // Bound here from the day the seam exists, for the reason HF4-R8 taught. The SAME production
+    // projection is injected, and the port selects OAD3's own O3 probe rather than rebuilding it.
+    openRepresentativeAcceptanceRunner: (credential) =>
+      openLiveRepresentativeAcceptanceRunner({
+        credential,
+        projectSchema: (rawSchema) => {
+          const projection = projectGroqStrictJsonSchema(rawSchema);
+          if (!projection.ok) {
+            throw new Error('QFJ_REPRESENTATIVE_ACCEPTANCE_PROJECTION_FAILED');
           }
           return projection.schema;
         },

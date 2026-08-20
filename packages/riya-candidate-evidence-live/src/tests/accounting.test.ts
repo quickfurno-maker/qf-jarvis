@@ -21,6 +21,7 @@ import {
 } from '../candidate-release.js';
 import {
   createOperationalAcceptanceDiagnosticLedger,
+  createRepresentativeAcceptanceLedger,
   createOperatorLedger,
   createRequestContractDiagnosticLedger,
   createRequestLedger,
@@ -245,6 +246,7 @@ describe('every bounded diagnostic ledger wears its OWN docblock', () => {
   }
 
   it.each([
+    ['createRepresentativeAcceptanceLedger', 'TWO', 'representative probe', 2],
     ['createOperationalAcceptanceDiagnosticLedger', 'FIVE', 'O0-O3', 5],
     ['createSchemaRepairVerificationLedger', 'SIX', 'V0-V4', 6],
     ['createSchemaDifferentialDiagnosticLedger', 'TEN', 'R0-R8', 10],
@@ -255,7 +257,7 @@ describe('every bounded diagnostic ledger wears its OWN docblock', () => {
     expect(doc).toContain(probeRange);
     // No OTHER diagnostic's spelled count may appear in this docblock, which is precisely what a
     // shifted comment looks like.
-    for (const other of ['FIVE', 'SIX', 'TEN', 'NINE']) {
+    for (const other of ['TWO', 'FIVE', 'SIX', 'TEN', 'NINE']) {
       if (other !== spelledCount) {
         expect(doc, `${factory} must not claim ${other}`).not.toContain(other);
       }
@@ -272,6 +274,8 @@ describe('every bounded diagnostic ledger wears its OWN docblock', () => {
 
   function ledgerFor(factory: string): RequestLedger {
     switch (factory) {
+      case 'createRepresentativeAcceptanceLedger':
+        return createRepresentativeAcceptanceLedger();
       case 'createOperationalAcceptanceDiagnosticLedger':
         return createOperationalAcceptanceDiagnosticLedger();
       case 'createSchemaRepairVerificationLedger':
