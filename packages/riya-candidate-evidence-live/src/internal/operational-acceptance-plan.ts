@@ -56,6 +56,16 @@ export const OPERATIONAL_ACCEPTANCE_STEP_IDS = [
 ] as const;
 export type OperationalAcceptanceStepId = (typeof OPERATIONAL_ACCEPTANCE_STEP_IDS)[number];
 
+/**
+ * The POST-RA1 neutral probe. Its OWN step id, deliberately outside the matrix above.
+ *
+ * RA1's `O3` carried the `CANDIDATE_OR_SHADOW_TREATED_AS_AUTHORITY` adversarial turn. This carries an ordinary client turn, and
+ * a shared identifier would make the two indistinguishable on a receipt — which is the entire reason
+ * a neutral run is worth authorizing.
+ */
+export const NEUTRAL_CLIENT_STEP_ID = 'N0_EXACT_NEUTRAL_CLIENT_OPERATIONAL' as const;
+export type NeutralClientStepId = typeof NEUTRAL_CLIENT_STEP_ID;
+
 /** The role a probe plays. Only `CONTROL` can invalidate a run; `EXACT_REPRESENTATIVE` is strongest. */
 export const OPERATIONAL_PROBE_KINDS = [
   'CONTROL',
@@ -65,13 +75,30 @@ export const OPERATIONAL_PROBE_KINDS = [
 ] as const;
 export type OperationalProbeKind = (typeof OPERATIONAL_PROBE_KINDS)[number];
 
-/** Where a probe's messages come from. The only axis O2 and O3 differ on. */
-export const OPERATIONAL_MESSAGE_SOURCES = ['SYNTHETIC_TINY', 'CAPTURED_REPRESENTATIVE'] as const;
+/**
+ * Where a probe's messages come from.
+ *
+ * POST-RA1 adds a THIRD. `CAPTURED_REPRESENTATIVE` is the SAFETY-DERIVED capture RA1 sent — the
+ * `CANDIDATE_OR_SHADOW_TREATED_AS_AUTHORITY` adversarial turn — and it keeps that spelling because it
+ * appears on immutable receipts. `CAPTURED_NEUTRAL_CLIENT` is the ordinary client turn, and it is a separate token
+ * precisely so RA1 and a future neutral run can never be confused in a report.
+ */
+export const OPERATIONAL_MESSAGE_SOURCES = [
+  'SYNTHETIC_TINY',
+  'CAPTURED_REPRESENTATIVE',
+  'CAPTURED_NEUTRAL_CLIENT',
+] as const;
 export type OperationalMessageSource = (typeof OPERATIONAL_MESSAGE_SOURCES)[number];
 
-/** One probe: what it isolates, the real fragment it carries, and which messages go with it. */
-export interface OperationalAcceptanceProbe {
-  readonly stepId: OperationalAcceptanceStepId;
+/**
+ * One probe: what it isolates, the real fragment it carries, and which messages go with it.
+ *
+ * Generic over the step id so the POST-RA1 neutral probe can share this exact shape without joining
+ * the matrix vocabulary. Widening `OperationalAcceptanceStepId` itself would have let a neutral step
+ * flow into the matrix classifier, which reasons about a set of four.
+ */
+export interface DiagnosticProbe<TStepId extends string> {
+  readonly stepId: TStepId;
   readonly probeKind: OperationalProbeKind;
   /** The structure this probe isolates. It asserts nothing about any other probe. */
   readonly probeDimension: string;
@@ -83,6 +110,11 @@ export interface OperationalAcceptanceProbe {
   /** The messages to send. */
   readonly messages: readonly CanaryMessage[];
 }
+
+/** The matrix probe: one of O0-O3. */
+export type OperationalAcceptanceProbe = DiagnosticProbe<OperationalAcceptanceStepId>;
+/** The POST-RA1 neutral probe. Same shape, its own identifier. */
+export type NeutralClientProbe = DiagnosticProbe<NeutralClientStepId>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -199,4 +231,38 @@ export function planOperationalAcceptance(
       input.representativeMessages,
     ),
   ]);
+}
+
+/**
+ * Plan the ONE neutral client probe (POST-RA1).
+ *
+ * Deliberately a separate function rather than a fifth member of the matrix above. The matrix exists
+ * to compare probes against each other; this run compares nothing, because everything it would have
+ * compared against is already settled — `O0` and `O2` both returned HTTP 200 at this budget in OAD3.
+ *
+ * The schema is the SAME projected object the matrix uses, so the neutral run and RA1 differ in the
+ * client turn and in nothing else a reader has to verify by hand.
+ */
+export function planNeutralClientProbe(input: {
+  readonly projectedSchema: unknown;
+  readonly neutralMessages: readonly CanaryMessage[];
+}): NeutralClientProbe {
+  const projected = input.projectedSchema;
+  if (!isRecord(projected) || projected['type'] !== 'object') {
+    throw new Error('QFJ_NEUTRAL_CLIENT_ROOT_NOT_OBJECT');
+  }
+  if (input.neutralMessages.length === 0) {
+    // The messages ARE the question. A probe carrying none would measure nothing and still spend the
+    // one authorized request.
+    throw new Error('QFJ_NEUTRAL_CLIENT_MESSAGES_MISSING');
+  }
+  return Object.freeze({
+    stepId: NEUTRAL_CLIENT_STEP_ID,
+    probeKind: 'EXACT_REPRESENTATIVE',
+    probeDimension: 'FULL_DOCUMENT_WITH_NEUTRAL_CLIENT_MESSAGES',
+    derivedFromPath: '$',
+    messageSource: 'CAPTURED_NEUTRAL_CLIENT',
+    schema: projected,
+    messages: input.neutralMessages,
+  });
 }

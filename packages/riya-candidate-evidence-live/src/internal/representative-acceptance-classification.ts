@@ -74,7 +74,14 @@ export type RepresentativeAcceptanceClassification =
 
 /** What the ONE probe did at the provider boundary. Content-free by construction. */
 export interface RepresentativeAcceptanceOutcome {
-  readonly stepId: 'O3_EXACT_REPRESENTATIVE_OPERATIONAL';
+  /**
+   * Which probe this was.
+   *
+   * POST-RA1 this admits the neutral step too. The CLASSIFIER is deliberately shared — the reading of
+   * a 400, a 429 or a 401 does not depend on which client turn was sent — while the step id keeps the
+   * two runs distinguishable on the row itself.
+   */
+  readonly stepId: 'O3_EXACT_REPRESENTATIVE_OPERATIONAL' | 'N0_EXACT_NEUTRAL_CLIENT_OPERATIONAL';
   readonly providerTransportStarted: boolean;
   readonly providerHttpStatus: number;
   readonly providerHttpClass: CandidateProviderHttpClass;

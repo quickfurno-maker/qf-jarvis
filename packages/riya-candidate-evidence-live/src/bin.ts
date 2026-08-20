@@ -51,6 +51,7 @@ import { createCandidateGateway } from './evaluation-gateway.js';
 import {
   createOperatorLedger,
   createOperationalAcceptanceDiagnosticLedger,
+  createNeutralRepresentativeLedger,
   createRepresentativeAcceptanceLedger,
   createRequestContractDiagnosticLedger,
   createSafetyReplicationLedger,
@@ -64,6 +65,7 @@ import { openLiveSchemaProbeRunner } from './live-schema-probe-composition.js';
 import { openLiveSchemaRepairVerificationRunner } from './schema-repair-verification-port.js';
 import { openLiveOperationalAcceptanceRunner } from './operational-acceptance-port.js';
 import { openLiveRepresentativeAcceptanceRunner } from './representative-acceptance-port.js';
+import { openLiveNeutralRepresentativeRunner } from './neutral-representative-acceptance-port.js';
 import { DEFAULT_CREDENTIAL_SOURCE_MODE, isCredentialSourceMode } from './credential-source.js';
 import type { CredentialSourceMode } from './credential-source.js';
 import { DEFAULT_RUN_GOAL } from './internal/run-goal.js';
@@ -163,7 +165,10 @@ export function parseCliArgs(argv: readonly string[]): CliParse {
         value !== 'POST_SRV1_OPERATIONAL_ACCEPTANCE_DIAGNOSTIC' &&
         // POST-OAD3. Separate again: this goal sends ONE probe rather than a matrix, and a receipt
         // must be able to say which of the two produced it.
-        value !== 'POST_OAD3_REPRESENTATIVE_ACCEPTANCE'
+        value !== 'POST_OAD3_REPRESENTATIVE_ACCEPTANCE' &&
+        // POST-RA1. Separate again: RA1's probe carried the safety-derived adversarial turn, this one
+        // carries an ordinary client turn, and a receipt must say which.
+        value !== 'POST_RA1_NEUTRAL_REPRESENTATIVE_ACCEPTANCE'
       ) {
         return { ok: false, reason: 'invalid-run-goal' };
       }
@@ -205,6 +210,10 @@ export function parseCliArgs(argv: readonly string[]): CliParse {
  * real terminal and a real provider to run. A bounded run whose bound is untested is not bounded.
  */
 export function ledgerForRunGoal(goal: OperatorRunGoal): RequestLedger {
+  if (goal === 'POST_RA1_NEUTRAL_REPRESENTATIVE_ACCEPTANCE') {
+    // Two requests, one dollar: the smoke plus ONE neutral client probe.
+    return createNeutralRepresentativeLedger();
+  }
   if (goal === 'POST_OAD3_REPRESENTATIVE_ACCEPTANCE') {
     // Two requests, one dollar: the smoke plus ONE representative probe. The narrowest ceiling here.
     return createRepresentativeAcceptanceLedger();
@@ -333,6 +342,22 @@ async function main(): Promise<number> {
           const projection = projectGroqStrictJsonSchema(rawSchema);
           if (!projection.ok) {
             throw new Error('QFJ_SCHEMA_REPAIR_PROJECTION_FAILED');
+          }
+          return projection.schema;
+        },
+      }),
+    // POST-RA1. The REAL neutral client acceptance port, bound to the credential just resolved.
+    //
+    // Bound from the day the seam exists, for the reason HF4-R8 taught. The SAME production
+    // projection is injected, and the port captures the NEUTRAL request through the same production
+    // builder the safety-derived capture uses.
+    openNeutralRepresentativeRunner: (credential) =>
+      openLiveNeutralRepresentativeRunner({
+        credential,
+        projectSchema: (rawSchema) => {
+          const projection = projectGroqStrictJsonSchema(rawSchema);
+          if (!projection.ok) {
+            throw new Error('QFJ_NEUTRAL_REPRESENTATIVE_PROJECTION_FAILED');
           }
           return projection.schema;
         },

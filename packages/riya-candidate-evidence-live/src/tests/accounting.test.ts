@@ -20,6 +20,7 @@ import {
   CANDIDATE_PRICE_PER_M_OUTPUT_USD,
 } from '../candidate-release.js';
 import {
+  createNeutralRepresentativeLedger,
   createOperationalAcceptanceDiagnosticLedger,
   createRepresentativeAcceptanceLedger,
   createOperatorLedger,
@@ -246,6 +247,7 @@ describe('every bounded diagnostic ledger wears its OWN docblock', () => {
   }
 
   it.each([
+    ['createNeutralRepresentativeLedger', 'TWO', 'neutral client probe', 2],
     ['createRepresentativeAcceptanceLedger', 'TWO', 'representative probe', 2],
     ['createOperationalAcceptanceDiagnosticLedger', 'FIVE', 'O0-O3', 5],
     ['createSchemaRepairVerificationLedger', 'SIX', 'V0-V4', 6],
@@ -274,6 +276,8 @@ describe('every bounded diagnostic ledger wears its OWN docblock', () => {
 
   function ledgerFor(factory: string): RequestLedger {
     switch (factory) {
+      case 'createNeutralRepresentativeLedger':
+        return createNeutralRepresentativeLedger();
       case 'createRepresentativeAcceptanceLedger':
         return createRepresentativeAcceptanceLedger();
       case 'createOperationalAcceptanceDiagnosticLedger':

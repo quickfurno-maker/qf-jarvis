@@ -361,3 +361,37 @@ export type {
   LiveRepresentativeAcceptanceDeps,
   RepresentativeAcceptanceRunner,
 } from './representative-acceptance-port.js';
+
+// POST-RA1 NEUTRAL CLIENT ACCEPTANCE. RA1's captured request came from the SAFETY fixture manifest
+// and resolves to CANDIDATE_OR_SHADOW_TREATED_AS_AUTHORITY — an adversarial self-as-authority turn — so its 400 is a fact
+// about that turn rather than about an ordinary sales conversation. This is the neutral counterpart:
+// same schema, same budget, same production builder, an ordinary client turn.
+export {
+  captureNeutralClientRiyaRequest,
+  DIAGNOSTIC_REQUEST_SOURCES,
+  NEUTRAL_CLIENT_DIAGNOSTIC_CASE_ID,
+  NEUTRAL_CLIENT_DIAGNOSTIC_REQUEST,
+  NEUTRAL_CLIENT_DIAGNOSTIC_TEXT,
+  NEUTRAL_CLIENT_REQUEST_PROVENANCE,
+} from './neutral-client-diagnostic-request.js';
+export type { DiagnosticRequestSource } from './neutral-client-diagnostic-request.js';
+export { diagnosticRepresentativeSource } from './diagnostic-canary-materials.js';
+export {
+  NEUTRAL_CLIENT_STEP_ID,
+  planNeutralClientProbe,
+} from './internal/operational-acceptance-plan.js';
+export type {
+  DiagnosticProbe,
+  NeutralClientProbe,
+} from './internal/operational-acceptance-plan.js';
+export {
+  createLiveNeutralRepresentativeComposition,
+  createNeutralRepresentativePort,
+  NEUTRAL_REPRESENTATIVE_COMPLETION_BUDGET,
+  openLiveNeutralRepresentativeRunner,
+} from './neutral-representative-acceptance-port.js';
+export type {
+  LiveNeutralRepresentativeComposition,
+  LiveNeutralRepresentativeDeps,
+  NeutralRepresentativeRunner,
+} from './neutral-representative-acceptance-port.js';

@@ -76,6 +76,13 @@ export const OPERATOR_OUTCOMES = [
    * accepted. The classification line carries that.
    */
   'POST_OAD3_REPRESENTATIVE_ACCEPTANCE_COMPLETE',
+  /**
+   * POST-RA1. The neutral client acceptance gate ran its one probe and stopped.
+   *
+   * Its own code. It says the run COMPLETED — not that the request was accepted. RA1 exited 27 on an
+   * HTTP 400, which is exactly why the exit status is never the finding.
+   */
+  'POST_RA1_NEUTRAL_REPRESENTATIVE_ACCEPTANCE_COMPLETE',
 ] as const;
 export type OperatorOutcome = (typeof OPERATOR_OUTCOMES)[number];
 
@@ -107,4 +114,6 @@ export const OPERATOR_EXIT_CODES: Readonly<Record<OperatorOutcome, number>> = Ob
   POST_SRV1_OPERATIONAL_ACCEPTANCE_DIAGNOSTIC_COMPLETE: 26,
   // The next unused integer; 0-26 keep meaning exactly what they meant.
   POST_OAD3_REPRESENTATIVE_ACCEPTANCE_COMPLETE: 27,
+  // The next unused integer; 0-27 keep meaning exactly what they meant.
+  POST_RA1_NEUTRAL_REPRESENTATIVE_ACCEPTANCE_COMPLETE: 28,
 });

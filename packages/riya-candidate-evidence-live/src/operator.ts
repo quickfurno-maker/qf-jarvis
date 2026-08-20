@@ -65,6 +65,7 @@ import {
   emitRepresentativeReceipt,
 } from './internal/representative-acceptance-emitters.js';
 import { analyseRepresentativeAcceptance } from './internal/representative-acceptance-classification.js';
+import type { NeutralClientProbe } from './internal/operational-acceptance-plan.js';
 import type { RepresentativeAcceptanceOutcome } from './internal/representative-acceptance-classification.js';
 import {
   emitOperationalAcceptanceClassification,
@@ -268,6 +269,17 @@ export interface OperatorDeps {
     readonly probe: OperationalAcceptanceProbe;
     readonly run: (probe: OperationalAcceptanceProbe) => Promise<RepresentativeAcceptanceOutcome>;
   }>;
+  /**
+   * POST-RA1. Bind the NEUTRAL client acceptance runner to the already-resolved credential.
+   *
+   * Same credential-bound one-probe shape as the seam above, and required only for
+   * `POST_RA1_NEUTRAL_REPRESENTATIVE_ACCEPTANCE`. Its probe carries the ordinary client turn rather
+   * than the safety-derived `CANDIDATE_OR_SHADOW_TREATED_AS_AUTHORITY` one RA1 sent.
+   */
+  readonly openNeutralRepresentativeRunner?: (credential: unknown) => Promise<{
+    readonly probe: NeutralClientProbe;
+    readonly run: (probe: NeutralClientProbe) => Promise<RepresentativeAcceptanceOutcome>;
+  }>;
 }
 
 export interface OperatorResult {
@@ -392,6 +404,67 @@ export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<
   // The second ingress line. In clipboard mode this is where `credentialReuseCount` becomes 2 while
   // `credentialClipboardReads` stays 1 — the pair of numbers that IS the copy-once guarantee.
   emitCredentialIngress(safe, credentialSource, 'CANDIDATE', deps.ingressCounters?.());
+
+  // F''''''. THE NEUTRAL CLIENT ACCEPTANCE GATE (POST-RA1) — and then STOP.
+  //
+  // ONE probe, like the gate below it, and for a narrower reason. RA1 sent the capture drawn from the
+  // SAFETY fixture manifest — `CANDIDATE_OR_SHADOW_TREATED_AS_AUTHORITY`, an adversarial
+  // self-as-authority turn — and received HTTP 400. This sends the same schema at the same budget carrying an ORDINARY client turn.
+  if (runGoal === 'POST_RA1_NEUTRAL_REPRESENTATIVE_ACCEPTANCE') {
+    const openRunner = deps.openNeutralRepresentativeRunner;
+    if (openRunner === undefined) {
+      safe.line({
+        phase: 'neutral-representative-acceptance',
+        status: 'FAILED',
+        reason: 'port-missing',
+      });
+      return { outcome: 'INTERNAL_CLOSED_FAILURE' };
+    }
+    let runner: {
+      readonly probe: NeutralClientProbe;
+      readonly run: (probe: NeutralClientProbe) => Promise<RepresentativeAcceptanceOutcome>;
+    };
+    try {
+      runner = await openRunner(candidateCredential);
+    } catch {
+      safe.line({
+        phase: 'neutral-representative-acceptance',
+        status: 'FAILED',
+        reason: 'runner-bind-failed',
+      });
+      return { outcome: 'INTERNAL_CLOSED_FAILURE' };
+    }
+
+    let neutralOutcome: RepresentativeAcceptanceOutcome | undefined;
+    const neutralReservation = ledger.reserve('neutral-representative-probe');
+    if (!neutralReservation.ok) {
+      safe.line({
+        phase: 'neutral-representative-acceptance',
+        status: 'REFUSED',
+        stepId: runner.probe.stepId,
+        reason: neutralReservation.refusal,
+      });
+    } else {
+      neutralOutcome = await runner.run(runner.probe);
+      ledger.settle(undefined, neutralOutcome.providerCompleted);
+      emitRepresentativeProbeOutcome(
+        safe,
+        runner.probe,
+        neutralOutcome,
+        'neutral-representative-acceptance',
+      );
+    }
+
+    emitRepresentativeClassification(
+      safe,
+      analyseRepresentativeAcceptance(neutralOutcome),
+      neutralOutcome === undefined ? 0 : 1,
+      'neutral-representative-acceptance',
+    );
+    emitRepresentativeReceipt(safe, ledger.snapshot(), 'neutral-representative-acceptance');
+    safe.line({ finalStatus: 'POST_RA1_NEUTRAL_REPRESENTATIVE_ACCEPTANCE_COMPLETE' });
+    return { outcome: 'POST_RA1_NEUTRAL_REPRESENTATIVE_ACCEPTANCE_COMPLETE' };
+  }
 
   // F'''''. THE REPRESENTATIVE ACCEPTANCE GATE (POST-OAD3) — and then STOP.
   //
