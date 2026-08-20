@@ -429,9 +429,11 @@ describe('a healthy run executes exactly V0-V4 once each', () => {
       expect(send.maxCompletionTokens).toBe(Math.min(512, 65_536));
     }
 
-    // The governed constants are untouched by this run.
+    // The governed constants are untouched by this run. The operational budget moved 14,848 ->
+    // 4,096 POST-OAD2; SRV1's probes are unaffected because they run at the low control cap, which
+    // is the property this assertion exists to keep true.
     expect(CANDIDATE_MAX_COMPLETION_TOKENS).toBe(65_536);
-    expect(RIYA_COMPLETION_BUDGET_TOKENS).toBe(14_848);
+    expect(RIYA_COMPLETION_BUDGET_TOKENS).toBe(4_096);
   });
 
   it('the wire schema for EVERY probe is the production projection of its planned schema', async () => {

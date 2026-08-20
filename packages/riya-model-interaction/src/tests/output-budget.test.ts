@@ -35,7 +35,7 @@ import {
   maxRiyaStructuredOutputBytesAnyFill,
   maxRiyaStructuredOutputBytesAtFill,
   maxRiyaStructuredOutputBytesSingleByte,
-  RIYA_COMPLETION_BUDGET_COVERED_BYTES,
+  RIYA_COMPLETION_BUDGET_ASSUMED_BYTES,
   RIYA_COMPLETION_BUDGET_TOKENS,
   RIYA_FREE_TEXT_FILLS,
   riyaStructuredOutputAtFill,
@@ -214,41 +214,89 @@ describe('every closed vocabulary is filled to its LONGEST member', () => {
   });
 });
 
-describe('the governed budget is the SINGLE-BYTE derivation, pinned', () => {
-  it('RIYA_COMPLETION_BUDGET_TOKENS equals the single-byte derivation', () => {
-    expect(RIYA_COMPLETION_BUDGET_TOKENS).toBe(deriveSingleByteRiyaCompletionBudgetTokens());
+/**
+ * POST-OAD2. The governed budget is CHOSEN by an owner, not computed from the schema maximum.
+ *
+ * The previous revision asserted `RIYA_COMPLETION_BUDGET_TOKENS === derive...()`, which made the
+ * request envelope a function of whatever a validator would tolerate. OAD2 refused that envelope —
+ * HTTP 413 at 14,848 on the KNOWN-GOOD MINIMAL STRICT CONTROL, with no Riya schema on the wire — so
+ * the invariant is not merely inelegant, it encoded a value the provider rejected.
+ *
+ * These specs pin the replacement: the budget is a literal, it is decoupled from the derivation, and
+ * the derivation survives as diagnostics only.
+ */
+describe('the governed budget is an OWNER-SELECTED launch value, pinned', () => {
+  it('RIYA_COMPLETION_BUDGET_TOKENS is exactly 4_096', () => {
+    expect(RIYA_COMPLETION_BUDGET_TOKENS).toBe(4_096);
   });
 
-  it('its coverage is stated in bytes, and derived from the assumption', () => {
-    expect(RIYA_COMPLETION_BUDGET_COVERED_BYTES).toBe(
+  it('is DECOUPLED from the maximum-schema derivation', () => {
+    // The semantic half of the regression guard: the two are no longer the same number.
+    expect(RIYA_COMPLETION_BUDGET_TOKENS).not.toBe(deriveSingleByteRiyaCompletionBudgetTokens());
+    // And the derivation still works, because it is kept as a capacity diagnostic.
+    expect(deriveSingleByteRiyaCompletionBudgetTokens()).toBeGreaterThan(0);
+  });
+
+  it('its assumed byte extent is stated in bytes, and derived from the assumption', () => {
+    expect(RIYA_COMPLETION_BUDGET_ASSUMED_BYTES).toBe(
       RIYA_COMPLETION_BUDGET_TOKENS * ASSUMED_BYTES_PER_TOKEN,
     );
   });
 
-  it('COVERS the schema maximum when free text is single-byte', () => {
-    expect(RIYA_COMPLETION_BUDGET_COVERED_BYTES).toBeGreaterThanOrEqual(
+  it('does NOT assume-cover the single-byte schema maximum, by design', () => {
+    // The decoupling, stated as an executable fact rather than left to a comment. Under the previous
+    // policy this relationship was inverted and that was the whole problem.
+    expect(RIYA_COMPLETION_BUDGET_ASSUMED_BYTES).toBeLessThan(
       maxRiyaStructuredOutputBytesSingleByte(),
     );
   });
 
-  it('COVERS a full-length reply body in a three-byte script with a wide margin', () => {
-    // The realistic worst case for this product: a maximal 2,500-unit Devanagari or CJK reply.
-    // 2,500 units at three bytes each, plus the surrounding envelope.
-    const fullThreeByteReplyBytes = 2500 * 3;
-    expect(RIYA_COMPLETION_BUDGET_COVERED_BYTES).toBeGreaterThan(fullThreeByteReplyBytes * 3);
-  });
-
-  it('its assumed byte coverage runs out before the pathological schema-valid document', () => {
-    // A byte-to-byte comparison, which is the only kind these two quantities support. It says the
-    // assumed coverage is smaller than that document's serialized size; it says NOTHING about how
-    // many tokens either one costs.
-    expect(RIYA_COMPLETION_BUDGET_COVERED_BYTES).toBeLessThan(
+  it('does not assume-cover the pathological schema-valid document either', () => {
+    // A byte-to-byte comparison, which is the only kind these two quantities support. It says
+    // NOTHING about how many tokens either one costs.
+    expect(RIYA_COMPLETION_BUDGET_ASSUMED_BYTES).toBeLessThan(
       maxRiyaStructuredOutputBytesAnyFill(),
     );
   });
 
   it('is far below the model capability ceiling, which is the whole point', () => {
     expect(RIYA_COMPLETION_BUDGET_TOKENS).toBeLessThan(MODEL_OUTPUT_CEILING_TOKENS / 2);
+  });
+});
+
+/**
+ * The structural half of the regression guard.
+ *
+ * A semantic assertion cannot prove "this constant is a literal rather than a call", because both
+ * forms yield a number — and `!== derive()` would pass even if someone wrote
+ * `= derive() - 1`. So this reads the DECLARATION and requires a numeric literal.
+ *
+ * It is deliberately the narrowest source-text assertion that proves the property: it matches only
+ * the initializer of the one exported constant, and it is self-tested below against the exact
+ * expression the pre-OAD2 revision would have shipped.
+ */
+describe('GUARD — the governed budget may not be reconnected to the derivation', () => {
+  /** The initializer text of the exported budget constant. */
+  function budgetInitializer(source: string): string {
+    const match = /export const RIYA_COMPLETION_BUDGET_TOKENS\s*=\s*([^;]+);/u.exec(source);
+    expect(match, 'the budget constant must be declared and exported').not.toBeNull();
+    return (match?.[1] ?? '').trim();
+  }
+
+  it('the declaration is a numeric literal, not a computation', () => {
+    expect(budgetInitializer(readFileSync(MODULE_PATH, 'utf8'))).toMatch(/^\d[\d_]*$/u);
+  });
+
+  it('the guard actually fires on a reconnected declaration', () => {
+    // A guard nobody has seen fail is a guard nobody can trust. Both the direct reconnection and the
+    // arithmetic-disguised one must be caught.
+    for (const offending of [
+      'export const RIYA_COMPLETION_BUDGET_TOKENS = deriveSingleByteRiyaCompletionBudgetTokens();',
+      'export const RIYA_COMPLETION_BUDGET_TOKENS = deriveSingleByteRiyaCompletionBudgetTokens() - 1;',
+      'export const RIYA_COMPLETION_BUDGET_TOKENS = maxRiyaStructuredOutputBytesSingleByte() / 2;',
+    ]) {
+      expect(budgetInitializer(offending)).not.toMatch(/^\d[\d_]*$/u);
+    }
   });
 });
 

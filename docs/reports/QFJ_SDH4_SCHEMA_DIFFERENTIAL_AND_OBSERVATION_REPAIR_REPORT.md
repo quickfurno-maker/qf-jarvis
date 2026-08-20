@@ -374,7 +374,9 @@ rejection stays visible in `rejectedStepIds`, each with its own preserved litera
 No repeated live probes are added. A rerun to average out the generation draw would cost further live
 authorizations for a result this phase has not been granted the budget to establish.
 
-**OAD1 has NOT been executed.** It requires separate owner authorization.
+**OAD1 and OAD2 have since been executed, once each.** Their results are recorded immutably in
+sections 9 and 10 below. The plan as described above is unchanged by those executions, except that the
+operational budget it inherits moved 14,848 -> 4,096 for the reason section 11 gives.
 
 ### Containment for this phase
 
@@ -389,3 +391,202 @@ S11_RERUN=NO
 20B_MODEL_QUALITY_VERDICT=UNRESOLVED
 REQUEST_CONTRACT_STATUS=UNRESOLVED_PENDING_OPERATIONAL_ACCEPTANCE
 ```
+
+---
+
+## 9. RUN OAD1 — CREDENTIAL INGRESS FAILURE (IMMUTABLE)
+
+The authorized process launched exactly once. TTY credential ingress returned **rejected-empty** at
+the smoke prompt.
+
+| Fact                | Value                                         |
+| ------------------- | --------------------------------------------- |
+| Run goal            | `POST_SRV1_OPERATIONAL_ACCEPTANCE_DIAGNOSTIC` |
+| Credential ingress  | tty                                           |
+| Smoke credential    | rejected-empty                                |
+| Request constructed | absent                                        |
+| Provider invoke     | absent                                        |
+| Network fetch       | absent                                        |
+| Exit                | `12`                                          |
+
+No request was constructed, invoked or fetched. There is **no provider or network evidence of any
+kind** from this run.
+
+```
+OAD1_CONSUMED=YES
+OAD1_RERUN=NO
+OAD1_DIAGNOSTIC_RESULT=NO_EVIDENCE
+```
+
+---
+
+## 10. RUN OAD2 — `POST_SRV1_OPERATIONAL_ACCEPTANCE_DIAGNOSTIC` (IMMUTABLE)
+
+Executed **once** under owner authorization on certified main
+`bcf2fcaf102479382898a0a76c8a18cf31da6650`. Preflight PASS. Smoke PASS.
+
+| Probe                                 | Budget                  | Messages         | Result                               |
+| ------------------------------------- | ----------------------- | ---------------- | ------------------------------------ |
+| **`O0_MINIMAL_CONTROL_OPERATIONAL`**  | `14848` (`OPERATIONAL`) | `SYNTHETIC_TINY` | **HTTP 413 `PAYLOAD_TOO_LARGE_413`** |
+| `O1_EVOLUTION_GROUP_OPERATIONAL`      | —                       | —                | not run (stop rule)                  |
+| `O2_EXACT_SYNTHETIC_OPERATIONAL`      | —                       | —                | not run (stop rule)                  |
+| `O3_EXACT_REPRESENTATIVE_OPERATIONAL` | —                       | —                | not run (stop rule)                  |
+
+O0 observed fields:
+
+- `providerTransportStarted=true`
+- `providerHttpStatus=413`
+- `providerHttpClass=PAYLOAD_TOO_LARGE_413`
+- `providerErrorType=OTHER_OR_ABSENT`
+- `providerErrorCode=OTHER_OR_ABSENT`
+- `providerCompleted=false`
+
+Classification: **`OPERATIONAL_CONTROL_INVALID`**. The stop rule correctly prevented O1-O3.
+
+| Field                                | Value      |
+| ------------------------------------ | ---------- |
+| `totalProviderRequests`              | 2          |
+| `smokeRequests`                      | 1          |
+| `operationalAcceptanceProbeRequests` | 1          |
+| `safetyProviderRequests`             | 0          |
+| `p10ProviderRequests`                | 0          |
+| `successfulProviderResponses`        | 1          |
+| `providerFailures`                   | 1          |
+| `estimatedCostUsd`                   | 0.02956815 |
+| `usageBoundViolated`                 | false      |
+| `safetyEvaluated`                    | false      |
+| `reviewBundleWritten`                | false      |
+
+Exit `26`. Repository containment held: `main` and `origin/main` remained
+`bcf2fcaf102479382898a0a76c8a18cf31da6650`, divergence `0 0`, only the protected untracked pathnames
+present.
+
+```
+OAD2_CONSUMED=YES
+OAD2_RERUN=NO
+```
+
+### What OAD2 proves — and what it does not
+
+The failure occurred on `O0_MINIMAL_CONTROL_OPERATIONAL`. That probe carries the known-good minimal
+strict control schema, not Riya's. **The repaired Riya schema did not participate in this failure and
+never reached the wire.**
+
+OAD2 establishes exactly one thing:
+
+> The current candidate request path rejected the known-good minimal strict control at
+> `max_completion_tokens=14,848` with HTTP 413.
+
+It is consistent with the historical S11 evidence, which varied the same axis against the same
+minimal control:
+
+| S11 canary          | Budget       | Result   |
+| ------------------- | ------------ | -------- |
+| `D1` STRICT_MINIMAL | `LOW_512`    | HTTP 200 |
+| `D2` STRICT_MINIMAL | `HIGH_65536` | HTTP 413 |
+
+It does **not** establish a universal Groq output-token limit. Groq currently advertises GPT-OSS-20B
+with a 131,072-token context window and 65,536 max output tokens. The constrained quantity is the
+**application request budget on this candidate path**, not the model capability constant.
+
+Accordingly: the Riya schema is unchanged, the observation repair is not implicated, safety is not
+authorized, model quality is not interpreted, O1-O3 are not run under the failed envelope, and OAD2 is
+not rerun.
+
+---
+
+## 11. THE OPERATIONAL BUDGET IS DECOUPLED FROM SCHEMA SIZING
+
+### The policy defect
+
+`packages/riya-model-interaction/src/internal/output-budget.ts` derived the governed operational
+completion budget from the largest document the schema would accept:
+
+```
+maxRiyaStructuredOutputBytesSingleByte()  /  ASSUMED_BYTES_PER_TOKEN  , rounded up to 512
+=> RIYA_COMPLETION_BUDGET_TOKENS = 14,848
+```
+
+The module already admitted the bytes-per-token value is an operational assumption rather than a
+tokenizer result, that the largest schema-legal document is not the typical output, and that the
+token cost was never measured. OAD2 supplied the missing live fact: **14,848 is not an accepted
+operational request envelope on this path, even for the minimal control.**
+
+Sizing a request envelope to a validator's tolerance was the design error.
+
+### The repair
+
+| Constant                          | Before           | After                              |
+| --------------------------------- | ---------------- | ---------------------------------- |
+| `RIYA_COMPLETION_BUDGET_TOKENS`   | 14,848 (derived) | **4,096 (owner-selected literal)** |
+| `CANDIDATE_MAX_COMPLETION_TOKENS` | 65,536           | 65,536 (unchanged)                 |
+
+4,096 is an **owner-selected operational launch budget**. It is not a tokenizer theorem, not the
+schema maximum, not the model maximum, not a new model capability, and not a guarantee that every
+schema-valid document fits.
+
+The product path is a concise WhatsApp sales agent, not a document generator. The schema's ceilings —
+a 2,500-character reply body, 64 citations, seven SET and seven CLEAR observations with 2,048
+character values — are **validation** bounds, not a target response size.
+
+It is not claimed to be globally optimal. Later quality or load evidence may justify moving it in
+either direction, and the next separately-authorized acceptance run tests this exact production budget
+empirically before safety.
+
+### What is preserved
+
+The maximum-document measurement helpers are kept and reclassified as **DIAGNOSTIC / CAPACITY
+ANALYSIS**: `RIYA_FREE_TEXT_FILLS`, `riyaStructuredOutputAtFill`, `maxRiyaStructuredOutputBytesAtFill`,
+`maxRiyaStructuredOutputBytesSingleByte`, `maxRiyaStructuredOutputBytesAnyFill`,
+`ASSUMED_BYTES_PER_TOKEN` and `deriveSingleByteRiyaCompletionBudgetTokens`. Their measured values are
+unchanged. They no longer define the request budget.
+
+The invariant `RIYA_COMPLETION_BUDGET_TOKENS === deriveSingleByteRiyaCompletionBudgetTokens()` is
+removed and replaced by explicit ones: the budget is exactly 4,096, it is a numeric literal rather
+than a computation, and it is not equal to the derivation. A regression guard reads the declaration
+and fails if the two are ever reconnected.
+
+### One consequence worth stating plainly
+
+Under `ASSUMED_BYTES_PER_TOKEN`, 4,096 tokens corresponds to **8,192 serialized bytes** — which is
+**below** every schema maximum measured in that module, the single-byte one at 28,699 bytes included.
+A maximal 2,500-unit reply body in a three-byte script is 7,500 bytes of that on its own.
+
+That is the decoupling working as intended, not an oversight, and its consequence is bounded: a
+response needing more than the budget is truncated, truncated strict JSON is malformed, and the
+gateway **refuses** it as invalid structured output rather than accepting a partial answer. It fails
+closed. Whether real Riya turns approach that limit is an empirical question for the next acceptance
+run, not one this document can settle.
+
+### Unchanged by this repair
+
+The Riya structured schema, the observation split, `MAX_RIYA_REPLY_BODY_CHARS`, `MAX_CITATIONS`,
+`MAX_OBSERVATION_VALUE_CHARS`, the observation array bounds, `questionFields`, the reply schema, the
+evolution schema, the provider projection, the prompt bytes and digest, canonical observation
+validation, the candidate model, the provider, sampling posture, reasoning posture, retry, fallback,
+safety and P10.
+
+The merged `POST_SRV1_OPERATIONAL_ACCEPTANCE_DIAGNOSTIC` run goal is unchanged and inherits the
+repaired constant automatically; no new run goal is created. Its stop and classification semantics are
+untouched, and no historical receipt is rewritten.
+
+### Containment for this phase
+
+```
+GROQ_CALLS=0
+PROVIDER_CALLS=0
+CREDENTIAL_READS=0
+LIVE_OAD3_EXECUTED=NO
+OAD2_RERUN=NO
+OAD1_RERUN=NO
+SRV1_RERUN=NO
+SDH4_RERUN=NO
+S11_RERUN=NO
+20B_MODEL_QUALITY_VERDICT=UNRESOLVED
+REQUEST_CONTRACT_STATUS=UNRESOLVED_PENDING_OAD3
+```
+
+**Bounded conclusion.** OAD2 rejected the 14,848-token operational envelope at the minimal control
+before the repaired Riya schema participated. The schema remains untested at the operational budget.
+The governed launch budget is therefore decoupled from maximum-schema sizing and lowered to 4,096 for
+the next separately authorized acceptance run.

@@ -508,6 +508,12 @@ describe('a healthy run executes exactly O0-O3 once each', () => {
     for (const send of run.sends) {
       expect(send.maxCompletionTokens).toBe(RIYA_COMPLETION_BUDGET_TOKENS);
       expect(send.maxCompletionTokens).toBe(OPERATIONAL_ACCEPTANCE_COMPLETION_BUDGET);
+      // POST-OAD2, pinned at the wire as a literal too. OAD2 sent 14,848 here and the provider
+      // answered HTTP 413 on the MINIMAL CONTROL, so what this harness puts on the wire is the whole
+      // question the next acceptance run exists to settle.
+      expect(send.maxCompletionTokens).toBe(4096);
+      // And never the envelope OAD2 proved is refused on this path.
+      expect(send.maxCompletionTokens).not.toBe(14_848);
       // The two budgets a probe here must NOT inherit: SRV1's low control cap below it, and the
       // model capability ceiling above it.
       expect(send.maxCompletionTokens).not.toBe(SCHEMA_PROBE_COMPLETION_CAP);
@@ -522,17 +528,19 @@ describe('a healthy run executes exactly O0-O3 once each', () => {
     expect(new Set(run.sends.map((one) => one.signal)).size).toBe(4);
   });
 
-  it('the pinned operational budget is 14_848, recomputed through the production module', () => {
-    // A pin, not a definition. If the governed budget moves, this fails loudly rather than letting a
-    // diagnostic quietly measure an envelope production no longer uses.
-    expect(RIYA_COMPLETION_BUDGET_TOKENS).toBe(14_848);
+  it('inherits the repaired production budget of 4_096 without a harness edit', () => {
+    // A pin, not a definition. The harness holds NO budget of its own: this value arrived purely by
+    // the production constant moving 14,848 -> 4,096, which is exactly the property the repair needs
+    // — the merged OAD run goal must track production rather than carry its own copy.
+    expect(RIYA_COMPLETION_BUDGET_TOKENS).toBe(4_096);
     expect(OPERATIONAL_ACCEPTANCE_COMPLETION_BUDGET).toBe(RIYA_COMPLETION_BUDGET_TOKENS);
     // And it is IMPORTED rather than retyped: a second literal is exactly how the two numbers drift.
     const port = readFileSync(join(SRC, 'operational-acceptance-port.ts'), 'utf8');
     expect(port).toContain(
       "import { RIYA_COMPLETION_BUDGET_TOKENS } from '@qf-jarvis/riya-model-interaction'",
     );
-    // No second spelling of the number anywhere in the port, in either literal form.
+    // No spelling of the budget anywhere in the port, old or new, in either literal form.
+    expect(port).not.toMatch(/4_?096/);
     expect(port).not.toMatch(/14_?848/);
   });
 

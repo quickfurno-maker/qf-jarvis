@@ -1,5 +1,28 @@
 /**
- * The COMPLETION budget one Riya turn is given (POST-S11 REQUEST-CONTRACT REPAIR).
+ * The COMPLETION budget one Riya turn is given (POST-OAD2 OPERATIONAL BUDGET REPAIR).
+ *
+ * ### The headline: this budget is CHOSEN, not computed
+ *
+ * Everything below the budget constant in this file measures how large a schema-legal Riya document
+ * can get. That is DIAGNOSTIC / CAPACITY ANALYSIS. It is NOT the request-budget policy, and an
+ * earlier revision made exactly that mistake: it derived the governed operational budget from the
+ * largest document the schema would accept, divided by an assumed bytes-per-token ratio.
+ *
+ * OAD2 falsified the result. Running the KNOWN-GOOD MINIMAL STRICT CONTROL — no Riya schema involved
+ * at all — at `max_completion_tokens=14,848` on the current candidate path returned **HTTP 413**. The
+ * repaired Riya schema never reached the wire, so nothing about the schema, the observation split or
+ * the projection is implicated. What was refused was the ENVELOPE.
+ *
+ * That is consistent with S11, which ran the same minimal control at two budgets: 512 returned
+ * HTTP 200 and 65,536 returned HTTP 413. It is NOT the claim that Groq caps output at some universal
+ * figure — GPT-OSS-20B is advertised with a 131,072-token context and 65,536 max output tokens, and
+ * this file does not contradict that. The constrained quantity is the APPLICATION REQUEST BUDGET on
+ * this candidate path.
+ *
+ * So the budget is now an OWNER-SELECTED OPERATIONAL LAUNCH VALUE, pinned as a literal, deliberately
+ * decoupled from the maximum-document sizing below it. Sizing a request envelope to the largest
+ * document a validator would tolerate was the design error; a concise WhatsApp sales agent does not
+ * need a document-generator's envelope.
  *
  * ### What S11 established, and what it did not
  *
@@ -54,13 +77,14 @@
  * - the measured serialized byte extent of each fill above, every one of them schema-valid;
  * - that the single-byte figure is NOT the universal maximum;
  * - that {@link RIYA_COMPLETION_BUDGET_TOKENS} corresponds to
- *   {@link RIYA_COMPLETION_BUDGET_COVERED_BYTES} serialized bytes UNDER
+ *   {@link RIYA_COMPLETION_BUDGET_ASSUMED_BYTES} serialized bytes UNDER
  *   {@link ASSUMED_BYTES_PER_TOKEN}, which is an operational sizing assumption and not a tokenizer
  *   result;
- * - that this assumed coverage is above the single-byte schema maximum, and below the pathological
- *   one.
+ * - that this assumed byte extent is BELOW every schema maximum measured here, which is a
+ *   consequence of the decoupling rather than an oversight.
  *
- * Nothing here states what any of these documents costs in tokens.
+ * Nothing here states what any of these documents costs in tokens, and nothing here derives the
+ * governed budget from any of them.
  */
 import { DISCOVERY_FIELDS_FROZEN } from '@qf-jarvis/riya-agent';
 import { RIYA_CONVERSATION_PHASES } from '@qf-jarvis/riya-conversation-continuity';
@@ -265,10 +289,19 @@ export const ASSUMED_BYTES_PER_TOKEN = 2;
 const ROUNDING_GRANULARITY = 512;
 
 /**
- * The budget that covers the SINGLE-BYTE schema maximum under the assumed ratio.
+ * DIAGNOSTIC ONLY. The token count that would cover the SINGLE-BYTE schema maximum under the assumed
+ * ratio.
  *
- * Explicitly the single-byte derivation — the name says so, because the previous name did not, and
- * that is how an ASCII measurement came to be presented as a universal one.
+ * This function used to define {@link RIYA_COMPLETION_BUDGET_TOKENS}. It no longer does, and it must
+ * not again: OAD2 refused the envelope this sizing produced, at the minimal control, before any Riya
+ * schema was sent. Sizing a request budget to the largest document a validator tolerates is the
+ * design error the repair removes.
+ *
+ * It is kept because the CAPACITY question is still worth being able to ask — "how big could this get
+ * in principle" is useful when reasoning about truncation risk. It is simply not the policy.
+ *
+ * A spec asserts the governed budget is a numeric literal rather than a call to this function, so
+ * reconnecting the two cannot happen quietly.
  */
 export function deriveSingleByteRiyaCompletionBudgetTokens(): number {
   const bytes = maxRiyaStructuredOutputBytesSingleByte();
@@ -279,51 +312,61 @@ export function deriveSingleByteRiyaCompletionBudgetTokens(): number {
 /**
  * The GOVERNED per-request completion budget for one Riya turn.
  *
- * Pinned as a literal rather than computed at module load, for the same reason the candidate release
- * pins its digests: a number that recomputes itself silently absorbs a schema change somebody should
- * have reviewed. A spec asserts it equals {@link deriveSingleByteRiyaCompletionBudgetTokens}.
+ * ### An OWNER-SELECTED OPERATIONAL LAUNCH BUDGET
  *
- * POST-SDH4 this MOVED, 14,336 -> 14,848, and the move is the pin doing its job. Two corrections to
- * the measurement raised the single-byte provider maximum: filling BOTH observation arrays rather
- * than only `sets`, and selecting the LONGEST member of every closed vocabulary instead of whichever
- * was declared first. The document grew to 28,699 bytes, which is 14,350 tokens at the assumed ratio
- * and rounds up to 14,848.
+ * A literal, chosen by the owner, pinned here. It is deliberately NOT computed from anything in this
+ * file, and a spec asserts the declaration is a numeric literal rather than a call.
  *
- * It is NOT held at the old value: that number belonged to a measurement that undercounted what the
- * provider schema actually accepts. Historical S11 and SDH4 receipts keep the budgets they were
- * emitted with; this is the governed budget for post-repair execution.
+ * It is NOT a tokenizer theorem, NOT the schema maximum, NOT the model maximum, NOT a new model
+ * capability, and NOT a guarantee that every schema-valid document fits inside it.
+ *
+ * ### Why it moved, 14,848 -> 4,096
+ *
+ * The previous value was `deriveSingleByteRiyaCompletionBudgetTokens()`: the single-byte schema
+ * maximum of 28,699 bytes, halved by the assumed ratio and rounded up. OAD2 put that envelope on the
+ * wire carrying the KNOWN-GOOD MINIMAL STRICT CONTROL — the Riya schema was not involved — and the
+ * provider answered HTTP 413. The stop rule then correctly refused to spend the remaining probes.
+ *
+ * So the old number was not merely generous, it was not accepted. The repair is to stop deriving an
+ * operational envelope from a validator's tolerance at all.
+ *
+ * ### Why 4,096
+ *
+ * The product is a concise WhatsApp sales agent, not a document generator. The schema's ceilings —
+ * a 2,500-character reply body, 64 citations, seven SET and seven CLEAR observations with 2,048
+ * character values — are VALIDATION bounds, not a target response size. 4,096 is the conservative
+ * launch budget selected to bound a normal one-turn answer with headroom.
+ *
+ * It is not claimed to be optimal. Later quality or load evidence may justify moving it either way,
+ * and the next separately-authorized acceptance run tests THIS number empirically before safety.
  *
  * ### What it is
  *
  * An APPLICATION budget. Not a claim about what the model can emit, and it does not lower the
- * provider's model capability ceiling — the two travel separately, which is the repair.
+ * provider's model capability ceiling — the two travel separately, which was the S11 repair and
+ * still holds. The provider clamps request budget against capability ceiling.
  *
- * ### Its assumed operational coverage
+ * ### What it does NOT assume-cover, stated plainly
  *
- * {@link RIYA_COMPLETION_BUDGET_COVERED_BYTES} serialized bytes UNDER
- * {@link ASSUMED_BYTES_PER_TOKEN}. That figure is above the schema maximum for single-byte free
- * text, and above a full-length 2,500-unit reply in a three-byte script such as Devanagari — the
- * realistic worst case for this product.
+ * {@link RIYA_COMPLETION_BUDGET_ASSUMED_BYTES} serialized bytes under
+ * {@link ASSUMED_BYTES_PER_TOKEN} — which is BELOW every schema maximum measured in this file,
+ * including the single-byte one at 28,699 bytes. A maximal 2,500-unit reply body in a three-byte
+ * script is 7,500 bytes of that figure on its own, before the surrounding envelope.
  *
- * This is a sizing statement in bytes under a stated assumption. It is NOT a guarantee that any
- * particular document fits in 14,848 tokens, because nothing here converts a document to tokens.
- *
- * ### Where the assumed coverage runs out
- *
- * The pathological schema-valid document — seven maximal observation values and a maximal reply body
- * of JSON-escaped control characters — serialises to substantially more bytes than the assumed
- * coverage above. Its TOKEN cost has not been established by this offline phase, and whether it
- * exceeds the model's 65,536-token capability ceiling is therefore UNRESOLVED without exact governed
- * tokenizer evidence.
- *
- * What follows from that is bounded: for such a document the budget may be too small, in which case a
- * truncated answer becomes malformed strict JSON and the gateway refuses it as invalid structured
- * output rather than accepting it. Narrowing that gap would mean contracting the citation and
- * observation array maxima in Riya's output contract — an owner decision about behaviour,
- * deliberately not taken here.
+ * That is the decoupling working as intended rather than a defect, and the consequence is bounded and
+ * worth naming: a response that would need more than the budget is truncated, truncated strict JSON
+ * is malformed, and the gateway REFUSES it as invalid structured output rather than accepting a
+ * partial answer. It fails closed. Whether real Riya turns approach that limit is an empirical
+ * question for the next acceptance run and the quality evidence after it — not something this file
+ * can settle.
  */
-export const RIYA_COMPLETION_BUDGET_TOKENS = 14_848;
+export const RIYA_COMPLETION_BUDGET_TOKENS = 4_096;
 
-/** The serialized-byte coverage the budget buys under the assumed ratio. Derived, never typed. */
-export const RIYA_COMPLETION_BUDGET_COVERED_BYTES =
+/**
+ * The serialized-byte extent the budget corresponds to under the assumed ratio. Derived, never typed.
+ *
+ * Renamed from `..._COVERED_BYTES`: with the budget decoupled from schema sizing this figure no
+ * longer COVERS any schema maximum, and a name asserting coverage would be false.
+ */
+export const RIYA_COMPLETION_BUDGET_ASSUMED_BYTES =
   RIYA_COMPLETION_BUDGET_TOKENS * ASSUMED_BYTES_PER_TOKEN;
