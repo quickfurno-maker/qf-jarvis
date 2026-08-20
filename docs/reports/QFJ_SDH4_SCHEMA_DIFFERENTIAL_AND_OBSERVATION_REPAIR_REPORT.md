@@ -1299,6 +1299,49 @@ not blindly run either GPT-OSS model again.
 **If rate-limited, infra-interrupted or inconclusive:** stop and diagnose that exact non-verdict. No
 rerun under the same one-shot authorization.
 
+### Accounting — priced at the 120B tariff, deliberately conservatively
+
+A first revision of this bridge priced the differential ledger with the production 20B schedule while
+the run sends its candidate request to 120B. The wire was correct; the accounting was not, and Groq
+publishes 120B at twice the 20B input and output rates — so every reservation underpriced the request
+it was about to authorize by roughly half.
+
+That is a governance defect rather than a reporting one: a reservation is priced and checked BEFORE
+the call, and it is the mechanism that keeps a live run inside the authorized dollar ceiling.
+
+MD120B1 is a **mixed-model** run — a 20B smoke and a 120B candidate — while `RequestLedger` carries a
+single price schedule. Rather than widen a governed accounting primitive for a two-request diagnostic,
+the whole run is priced at the **higher** tariff. That over-estimates the smoke instead of
+under-estimating the candidate, and only one of those two errors can let a run exceed what an owner
+authorized.
+
+| Rate         | Value                              |
+| ------------ | ---------------------------------- |
+| input        | $0.15 / 1M                         |
+| cached input | $0.075 / 1M                        |
+| output       | $0.60 / 1M                         |
+| snapshot     | `groq-pricing-snapshot-2026-08-20` |
+
+Worst-case arithmetic, proved by spec:
+
+```
+one request   131072/1e6 * 0.15  +  65536/1e6 * 0.60  =  0.0589824 USD
+two requests                                             0.1179648 USD
+ceiling                                                  1.00      USD
+```
+
+The receipt states the posture rather than leaving the figure unexplained:
+
+```
+costPricingPosture=CONSERVATIVE_120B_RATES_FOR_MIXED_MODEL_RUN
+smokePricedAtCandidateRate=true
+pricingSnapshot=groq-pricing-snapshot-2026-08-20
+```
+
+The **production 20B price schedule is unchanged** (input $0.075, cached $0.037, output $0.30), and a
+spec asserts every other ledger factory still prices at it. NRA1's historical
+`estimatedCostUsd=0.02953455` is untouched.
+
 ### Telemetry unchanged
 
 No raw `failed_generation`, no provider response body, no provider error message, no prompt, message,

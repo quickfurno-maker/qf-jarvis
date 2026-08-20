@@ -107,7 +107,8 @@ const okBody = JSON.stringify({
   id: 'chatcmpl-md',
   object: 'chat.completion',
   created: 1,
-  model: CANDIDATE_MODEL_ID,
+  // The request under test is 120B, so its fake SUCCESSFUL response names 120B too.
+  model: MODEL_DIFFERENTIAL_CANDIDATE_MODEL_ID,
   choices: [
     { index: 0, message: { role: 'assistant', content: '{"ok":"OK"}' }, finish_reason: 'stop' },
   ],
@@ -502,6 +503,12 @@ describe('the gate sends EXACTLY ONE request, and it is the 120B differential on
     // And the entitlement gap is printed rather than left to be inferred.
     expect(receipt).toContain('smokeCredentialCheckModel=openai/gpt-oss-20b');
     expect(receipt).toContain('smokeProvesCandidateModelEntitlement=false');
+    // As is the tariff that produced the cost. The run is mixed — a 20B smoke and a 120B candidate
+    // against a one-schedule ledger — so it is priced entirely at the higher rate, and a cost figure
+    // whose schedule was invisible would be a number nobody could check.
+    expect(receipt).toContain('costPricingPosture=CONSERVATIVE_120B_RATES_FOR_MIXED_MODEL_RUN');
+    expect(receipt).toContain('smokePricedAtCandidateRate=true');
+    expect(receipt).toContain('pricingSnapshot=groq-pricing-snapshot-2026-08-20');
   });
 
   it('the one request carries the exact production schema and the CAPTURED messages', async () => {

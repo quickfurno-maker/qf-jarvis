@@ -13,12 +13,20 @@
  * runs against the baseline configuration, so a passing smoke proves the credential works and NOT that
  * the account may call the differential model. Printing the gap keeps an entitlement failure from
  * being misread as a model verdict.
+ *
+ * The receipt also names the PRICING POSTURE. This run is mixed — a baseline smoke and a differential
+ * candidate — while the ledger carries one schedule, so it is priced entirely at the higher tariff.
+ * That over-estimates the smoke on purpose, and a cost figure whose schedule was invisible would be a
+ * number nobody could check.
  */
 import type { LedgerSnapshot } from '../accounting.js';
 import type { SafeConsole } from '../safe-console.js';
 import {
   MODEL_DIFFERENTIAL_BASELINE_MODEL_ID,
   MODEL_DIFFERENTIAL_CANDIDATE_MODEL_ID,
+  MODEL_DIFFERENTIAL_COST_PRICING_POSTURE,
+  MODEL_DIFFERENTIAL_PRICING_SNAPSHOT,
+  MODEL_DIFFERENTIAL_SMOKE_PRICED_AT_CANDIDATE_RATE,
   SMOKE_PROVES_DIFFERENTIAL_MODEL_ENTITLEMENT,
   SMOKE_PROVIDER_CREDENTIAL_CHECK_MODEL,
 } from '../model-differential-identity.js';
@@ -105,6 +113,13 @@ export function emitModelDifferentialReceipt(safe: SafeConsole, snapshot: Ledger
     outputTokensTotal: snapshot.outputTokens,
     estimatedCostUsd: snapshot.estimatedCostUsd,
     costIsEstimated: snapshot.costIsEstimated,
+    // WHICH tariff produced that estimate, and on what terms. The run is mixed — a 20B smoke and a
+    // 120B candidate — against a ledger that carries one schedule, so the whole run is priced at the
+    // higher rate. Printing the posture keeps the over-estimate a stated decision rather than a
+    // number an owner has to reverse-engineer.
+    costPricingPosture: MODEL_DIFFERENTIAL_COST_PRICING_POSTURE,
+    smokePricedAtCandidateRate: MODEL_DIFFERENTIAL_SMOKE_PRICED_AT_CANDIDATE_RATE,
+    pricingSnapshot: MODEL_DIFFERENTIAL_PRICING_SNAPSHOT,
     usageBoundViolated: snapshot.usageBoundViolated,
     safetyEvaluated: false,
     reviewBundleWritten: false,

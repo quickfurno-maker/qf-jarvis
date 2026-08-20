@@ -16,10 +16,22 @@ import { describe, expect, it } from 'vitest';
 import {
   CANDIDATE_MAX_COMPLETION_TOKENS,
   CANDIDATE_MAX_INPUT_TOKENS,
+  CANDIDATE_PRICE_PER_M_CACHED_INPUT_USD,
   CANDIDATE_PRICE_PER_M_INPUT_USD,
   CANDIDATE_PRICE_PER_M_OUTPUT_USD,
 } from '../candidate-release.js';
 import {
+  MODEL_DIFFERENTIAL_COST_PRICING_POSTURE,
+  MODEL_DIFFERENTIAL_PRICE_PER_M_CACHED_INPUT_USD,
+  MODEL_DIFFERENTIAL_PRICE_PER_M_INPUT_USD,
+  MODEL_DIFFERENTIAL_PRICE_PER_M_OUTPUT_USD,
+  MODEL_DIFFERENTIAL_PRICING_SNAPSHOT,
+  MODEL_DIFFERENTIAL_SMOKE_PRICED_AT_CANDIDATE_RATE,
+} from '../model-differential-identity.js';
+import {
+  createModelDifferentialLedger,
+  MODEL_DIFFERENTIAL_MAX_ESTIMATED_COST_USD,
+  MODEL_DIFFERENTIAL_MAX_PROVIDER_REQUESTS,
   createNeutralRepresentativeLedger,
   createOperationalAcceptanceDiagnosticLedger,
   createRepresentativeAcceptanceLedger,
@@ -290,4 +302,125 @@ describe('every bounded diagnostic ledger wears its OWN docblock', () => {
         return createRequestContractDiagnosticLedger();
     }
   }
+});
+
+/**
+ * POST-NRA1 — the model-differential ledger prices its OWN model.
+ *
+ * ### The defect this proves is gone
+ *
+ * The first revision of the differential ledger reused the production 20B price schedule while the
+ * run sends its candidate request to 120B, which Groq publishes at twice the input and output rates.
+ * The wire was correct; the accounting was not.
+ *
+ * That matters more than a wrong number in a report. A reservation is priced and checked BEFORE the
+ * request is made — it is the mechanism that keeps a live run inside the dollar ceiling an owner
+ * authorized — so a schedule that underprices by half is a governance defect.
+ *
+ * ### And the run is mixed
+ *
+ * MD120B1 sends a 20B smoke and a 120B candidate, while `RequestLedger` carries ONE schedule. Rather
+ * than widen a governed accounting primitive for a two-request diagnostic, the whole run is priced at
+ * the higher tariff. These specs pin that as a deliberate over-estimate: the arithmetic is checked
+ * against the published 120B rates, and the conservative two-request worst case is proved to sit far
+ * under the ceiling.
+ */
+describe('the model-differential ledger prices at the 120B tariff', () => {
+  it('the PRODUCTION 20B schedule is unchanged', () => {
+    // The differential must never move production pricing. Pinned first, because a "fix" that
+    // achieved the right differential cost by editing these would be the worse bug.
+    expect(CANDIDATE_PRICE_PER_M_INPUT_USD).toBe(0.075);
+    expect(CANDIDATE_PRICE_PER_M_CACHED_INPUT_USD).toBe(0.037);
+    expect(CANDIDATE_PRICE_PER_M_OUTPUT_USD).toBe(0.3);
+  });
+
+  it('the DIFFERENTIAL schedule is the published 120B tariff', () => {
+    expect(MODEL_DIFFERENTIAL_PRICE_PER_M_INPUT_USD).toBe(0.15);
+    expect(MODEL_DIFFERENTIAL_PRICE_PER_M_CACHED_INPUT_USD).toBe(0.075);
+    expect(MODEL_DIFFERENTIAL_PRICE_PER_M_OUTPUT_USD).toBe(0.6);
+    expect(MODEL_DIFFERENTIAL_PRICING_SNAPSHOT).toBe('groq-pricing-snapshot-2026-08-20');
+    // Twice the production rates, which is exactly why reusing them underpriced by half.
+    expect(MODEL_DIFFERENTIAL_PRICE_PER_M_INPUT_USD).toBe(CANDIDATE_PRICE_PER_M_INPUT_USD * 2);
+    expect(MODEL_DIFFERENTIAL_PRICE_PER_M_OUTPUT_USD).toBe(CANDIDATE_PRICE_PER_M_OUTPUT_USD * 2);
+  });
+
+  it('the pricing posture is recorded, not implied', () => {
+    expect(MODEL_DIFFERENTIAL_COST_PRICING_POSTURE).toBe(
+      'CONSERVATIVE_120B_RATES_FOR_MIXED_MODEL_RUN',
+    );
+    expect(MODEL_DIFFERENTIAL_SMOKE_PRICED_AT_CANDIDATE_RATE).toBe(true);
+  });
+
+  it('one hard-max 120B request costs the published arithmetic', () => {
+    // 131,072 input at $0.15/1M plus 65,536 output at $0.60/1M.
+    const expectedOne =
+      (CANDIDATE_MAX_INPUT_TOKENS / 1e6) * MODEL_DIFFERENTIAL_PRICE_PER_M_INPUT_USD +
+      (CANDIDATE_MAX_COMPLETION_TOKENS / 1e6) * MODEL_DIFFERENTIAL_PRICE_PER_M_OUTPUT_USD;
+    expect(expectedOne).toBeCloseTo(0.0589824, 10);
+
+    // The ledger charges that per RESERVATION, so the ceiling is reachable arithmetic rather than a
+    // hope. Two requests priced conservatively at the candidate rate:
+    const expectedTwo = expectedOne * MODEL_DIFFERENTIAL_MAX_PROVIDER_REQUESTS;
+    expect(expectedTwo).toBeCloseTo(0.1179648, 10);
+    expect(expectedTwo).toBeLessThan(MODEL_DIFFERENTIAL_MAX_ESTIMATED_COST_USD);
+    expect(MODEL_DIFFERENTIAL_MAX_ESTIMATED_COST_USD).toBe(1);
+  });
+
+  it('the ledger actually charges the 120B schedule, and admits exactly two requests', () => {
+    const ledger = createModelDifferentialLedger();
+
+    // The SMOKE is priced at the candidate rate too — the deliberate over-estimate.
+    expect(ledger.reserve('smoke').ok).toBe(true);
+    ledger.settle(undefined, true);
+    const afterSmoke = ledger.snapshot().estimatedCostUsd;
+    expect(afterSmoke).toBeCloseTo(0.0589824, 10);
+    // Not the production tariff, which would have been half.
+    expect(afterSmoke).not.toBeCloseTo(0.0294912, 10);
+
+    expect(ledger.reserve('model-differential-probe').ok).toBe(true);
+    ledger.settle(undefined, true);
+    expect(ledger.snapshot().estimatedCostUsd).toBeCloseTo(0.1179648, 10);
+    expect(ledger.snapshot().totalProviderRequests).toBe(2);
+    expect(ledger.snapshot().modelDifferentialProbeProviderRequests).toBe(1);
+
+    // A THIRD reservation is refused BEFORE it is spent.
+    const third = ledger.reserve('model-differential-probe');
+    expect(third.ok).toBe(false);
+    if (!third.ok) {
+      expect(third.refusal).toBe('request-limit-reached');
+    }
+    expect(ledger.snapshot().usageBoundViolated).toBe(false);
+  });
+
+  it('unreported differential usage keeps the cost flagged as an ESTIMATE', () => {
+    const ledger = createModelDifferentialLedger();
+    expect(ledger.reserve('smoke').ok).toBe(true);
+    // The smoke reports real usage; the differential request does not.
+    ledger.settle({ inputTokens: 120, outputTokens: 40 }, true);
+    expect(ledger.reserve('model-differential-probe').ok).toBe(true);
+    ledger.settle(undefined, false);
+    // A run that silently presented a partly-guessed figure as measured would be unauditable.
+    expect(ledger.snapshot().costIsEstimated).toBe(true);
+  });
+
+  it('no OTHER ledger factory moved to the 120B schedule', () => {
+    // Every other bounded run still sends to the production candidate, so every other ledger must
+    // still price at the production tariff. One smoke reservation each is enough to tell them apart.
+    const productionRate =
+      (CANDIDATE_MAX_INPUT_TOKENS / 1e6) * CANDIDATE_PRICE_PER_M_INPUT_USD +
+      (CANDIDATE_MAX_COMPLETION_TOKENS / 1e6) * CANDIDATE_PRICE_PER_M_OUTPUT_USD;
+    for (const [label, make] of [
+      ['neutral', createNeutralRepresentativeLedger],
+      ['representative', createRepresentativeAcceptanceLedger],
+      ['operational', createOperationalAcceptanceDiagnosticLedger],
+      ['schemaRepair', createSchemaRepairVerificationLedger],
+      ['schemaDifferential', createSchemaDifferentialDiagnosticLedger],
+      ['requestContract', createRequestContractDiagnosticLedger],
+    ] as const) {
+      const ledger = make();
+      expect(ledger.reserve('smoke').ok, label).toBe(true);
+      ledger.settle(undefined, true);
+      expect(ledger.snapshot().estimatedCostUsd, label).toBeCloseTo(productionRate, 10);
+    }
+  });
 });

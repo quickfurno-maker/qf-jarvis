@@ -211,15 +211,18 @@ describe('the differential classifier keeps entitlement out of the verdict', () 
     expect(analysis.providerErrorCode).toBe('JSON_VALIDATE_FAILED');
   });
 
-  it.each(['PAYLOAD_TOO_LARGE_413', 'UNPROCESSABLE_422'] as const)(
-    '%s is also a contract rejection',
-    (providerHttpClass) => {
-      const analysis = analyseModelDifferential(
-        probe({ providerHttpClass, providerHttpStatus: 413, providerCompleted: false }),
-      );
-      expect(analysis.classification).toBe('STRICT_120B_PROVIDER_REJECTED');
-    },
-  );
+  it.each([
+    ['PAYLOAD_TOO_LARGE_413', 413],
+    ['UNPROCESSABLE_422', 422],
+  ] as const)('%s is also a contract rejection', (providerHttpClass, providerHttpStatus) => {
+    // Status and class are MATCHED. A 422 row carrying status 413 would still have passed, which is
+    // exactly the kind of fixture that makes a green suite say less than it appears to.
+    const analysis = analyseModelDifferential(
+      probe({ providerHttpClass, providerHttpStatus, providerCompleted: false }),
+    );
+    expect(analysis.classification).toBe('STRICT_120B_PROVIDER_REJECTED');
+    expect(analysis.providerHttpStatus).toBe(providerHttpStatus);
+  });
 
   it('HTTP 429 is RATE_LIMITED, never a rejection', () => {
     const analysis = analyseModelDifferential(
