@@ -418,7 +418,7 @@ describe('the ledger bounds the run at two requests and one dollar', () => {
 });
 
 describe('the gate sends EXACTLY ONE request, and it is the representative one', () => {
-  it('runs one probe after the smoke and stops at exit 27', async () => {
+  it('runs one probe after the smoke and stops at exit 28', async () => {
     const run = await runGate();
     expect(run.outcome).toBe('POST_RA1_NEUTRAL_REPRESENTATIVE_ACCEPTANCE_COMPLETE');
     // THE bound this whole goal exists to hold.
@@ -573,7 +573,7 @@ describe('the classification reads the boundary honestly', () => {
     );
     expect(classification).toContain('providerHttpClass=RATE_LIMITED_429');
     expect(run.lines.join('\n')).not.toContain('REPRESENTATIVE_PROVIDER_REJECTED');
-    // The run still COMPLETES: exit 27 says the gate ran, not that it passed.
+    // The run still COMPLETES: exit 28 says the gate ran, not that it passed.
     expect(run.outcome).toBe('POST_RA1_NEUTRAL_REPRESENTATIVE_ACCEPTANCE_COMPLETE');
   });
 

@@ -25,6 +25,7 @@
  * authorizing.
  */
 import { RIYA_SAFETY_FIXTURES } from '@qf-jarvis/riya-candidate-evaluation-runner';
+import { RIYA_QUALITY_GOLDEN_FIXTURES } from '@qf-jarvis/riya-quality-evaluation/testing';
 import { projectGroqStrictJsonSchema } from '@qf-jarvis/model-gateway';
 import { beforeAll, describe, expect, it } from 'vitest';
 
@@ -91,8 +92,18 @@ describe('the HISTORICAL representative capture is safety-derived', () => {
   });
 });
 
+/**
+ * The neutral turn must sit outside BOTH governed corpora.
+ *
+ * Absence from the safety manifest keeps a safety run measuring what it measured. Absence from the
+ * P10 / Human Gold corpus keeps a quality run measuring what it measured. Both are asserted against
+ * the real exported corpora rather than described, because "we did not add it anywhere" is exactly
+ * the kind of claim that stays true right up until it does not.
+ */
 describe('the NEUTRAL diagnostic request is not a governed fixture', () => {
   it('is absent from the safety fixture manifest', () => {
+    // Same vacuous-pass guard as the P10 spec below.
+    expect(RIYA_SAFETY_FIXTURES.length).toBeGreaterThan(0);
     for (const fixture of RIYA_SAFETY_FIXTURES) {
       expect(fixture.request.caseId).not.toBe(NEUTRAL_CLIENT_DIAGNOSTIC_CASE_ID);
       expect(fixture.request.syntheticUserText).not.toBe(NEUTRAL_CLIENT_DIAGNOSTIC_TEXT);
@@ -100,6 +111,21 @@ describe('the NEUTRAL diagnostic request is not a governed fixture', () => {
     // And its identity is namespaced away from the safety population entirely.
     expect(NEUTRAL_CLIENT_DIAGNOSTIC_CASE_ID.startsWith('riya.safety.')).toBe(false);
     expect(NEUTRAL_CLIENT_DIAGNOSTIC_CASE_ID.startsWith('riya.diagnostic.')).toBe(true);
+  });
+
+  it('is absent from the governed P10 / Human Gold corpus', () => {
+    // The claim "not P10, not training data" was PROSE until now: the spec above proved only the
+    // safety half mechanically. A diagnostic turn that had drifted into the golden corpus would
+    // change what a quality run measures, and nothing here would have caught it.
+    //
+    // The non-empty assertion is the half that matters most: an import that silently resolved to an
+    // empty array would make the loop below pass while proving nothing at all.
+    expect(RIYA_QUALITY_GOLDEN_FIXTURES.length).toBeGreaterThan(0);
+
+    for (const fixture of RIYA_QUALITY_GOLDEN_FIXTURES) {
+      expect(fixture.fixtureId).not.toBe(NEUTRAL_CLIENT_DIAGNOSTIC_CASE_ID);
+      expect(fixture.syntheticUserText).not.toBe(NEUTRAL_CLIENT_DIAGNOSTIC_TEXT);
+    }
   });
 
   it('declares its provenance rather than leaving it to be inferred', () => {
