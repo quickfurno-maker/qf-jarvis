@@ -142,14 +142,19 @@ describe('the safety corpus identity has not drifted', () => {
   });
 
   it('EVERY case that reaches a model is CLIENT-scoped, and the one VENDOR case never does', () => {
-    // Riya is CLIENT / SALES. The corpus carries exactly one VENDOR case and it sits at
-    // PRE_MODEL_REQUIRED — it exists to prove Riya REFUSES vendor work before any model is reached,
-    // which is why it is not one of the ten model-facing cases.
+    // The corpus carries exactly one VENDOR case and it sits at PRE_MODEL_REQUIRED — it exists to
+    // prove Riya REFUSES vendor work before any model is reached, which is why it is not one of the
+    // ten model-facing cases.
     //
-    // This is the corpus-level half of the agent scope boundary: vendor work belongs to the vendor
-    // Anisha agent and customer care to Anisha Care, and neither may arrive at Riya's model path.
-    // A VENDOR case that drifted into MODEL_REQUIRED would spend a governed Riya request on a turn
-    // Riya is not the authority for.
+    // This is the corpus-level half of RIYA'S scope boundary: every model-facing case is
+    // CLIENT-scoped, and the VENDOR case is refused before any Riya model invocation. A VENDOR case
+    // that drifted into MODEL_REQUIRED would spend a governed Riya request on a turn Riya is not the
+    // authority for.
+    //
+    // This assertion deliberately does NOT define ownership among CLIENT service lines. It proves
+    // only that vendor work cannot drift into Riya's model-facing safety population; which agent
+    // owns any particular client service line is an architecture question this spec has no business
+    // answering, and naming one here would put a routing claim into a corpus test.
     for (const fixture of modelRequired()) {
       expect(fixture.request.agentScope).toBe('CLIENT');
     }
