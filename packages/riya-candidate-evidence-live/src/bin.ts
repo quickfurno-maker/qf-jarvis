@@ -52,6 +52,7 @@ import {
   createOperatorLedger,
   createOperationalAcceptanceDiagnosticLedger,
   createModelDifferentialLedger,
+  createResponsesDifferentialLedger,
   createNeutralRepresentativeLedger,
   createRepresentativeAcceptanceLedger,
   createRequestContractDiagnosticLedger,
@@ -68,6 +69,7 @@ import { openLiveOperationalAcceptanceRunner } from './operational-acceptance-po
 import { openLiveRepresentativeAcceptanceRunner } from './representative-acceptance-port.js';
 import { openLiveNeutralRepresentativeRunner } from './neutral-representative-acceptance-port.js';
 import { openLiveModelDifferentialRunner } from './model-differential-port.js';
+import { openLiveResponsesDifferentialRunner } from './responses-differential-port.js';
 import { DEFAULT_CREDENTIAL_SOURCE_MODE, isCredentialSourceMode } from './credential-source.js';
 import type { CredentialSourceMode } from './credential-source.js';
 import { DEFAULT_RUN_GOAL } from './internal/run-goal.js';
@@ -173,7 +175,10 @@ export function parseCliArgs(argv: readonly string[]): CliParse {
         value !== 'POST_RA1_NEUTRAL_REPRESENTATIVE_ACCEPTANCE' &&
         // POST-NRA1. Separate again: this goal sends the same request to a DIFFERENT model, and a
         // receipt must say which model produced it.
-        value !== 'POST_NRA1_GPT_OSS_120B_STRICT_MODEL_DIFFERENTIAL'
+        value !== 'POST_NRA1_GPT_OSS_120B_STRICT_MODEL_DIFFERENTIAL' &&
+        // POST-MD120B3. Separate again: this goal sends the same request over a DIFFERENT ENDPOINT,
+        // and a receipt must say which output contract produced it.
+        value !== 'POST_MD120B3_GROQ_RESPONSES_API_STRICT_DIFFERENTIAL'
       ) {
         return { ok: false, reason: 'invalid-run-goal' };
       }
@@ -215,6 +220,11 @@ export function parseCliArgs(argv: readonly string[]): CliParse {
  * real terminal and a real provider to run. A bounded run whose bound is untested is not bounded.
  */
 export function ledgerForRunGoal(goal: OperatorRunGoal): RequestLedger {
+  if (goal === 'POST_MD120B3_GROQ_RESPONSES_API_STRICT_DIFFERENTIAL') {
+    // Two requests, one dollar: the smoke plus ONE Responses endpoint probe. Priced at the
+    // PRODUCTION tariff, because unlike MD120B3 both requests go to the production 20B model.
+    return createResponsesDifferentialLedger();
+  }
   if (goal === 'POST_NRA1_GPT_OSS_120B_STRICT_MODEL_DIFFERENTIAL') {
     // Two requests, one dollar: the smoke plus ONE 120B differential probe.
     return createModelDifferentialLedger();
@@ -351,6 +361,23 @@ async function main(): Promise<number> {
           const projection = projectGroqStrictJsonSchema(rawSchema);
           if (!projection.ok) {
             throw new Error('QFJ_SCHEMA_REPAIR_PROJECTION_FAILED');
+          }
+          return projection.schema;
+        },
+      }),
+    // POST-MD120B3. The REAL Responses API endpoint differential port, bound to the credential just
+    // resolved.
+    //
+    // Bound from the day the seam exists, for the reason HF4-R8 taught. The SAME production
+    // projection is injected, and the port reuses NRA1's own neutral capture rather than building a
+    // second one — so the only wire difference is the endpoint and the envelope it requires.
+    openResponsesDifferentialRunner: (credential) =>
+      openLiveResponsesDifferentialRunner({
+        credential,
+        projectSchema: (rawSchema) => {
+          const projection = projectGroqStrictJsonSchema(rawSchema);
+          if (!projection.ok) {
+            throw new Error('QFJ_RESPONSES_DIFFERENTIAL_PROJECTION_FAILED');
           }
           return projection.schema;
         },

@@ -76,6 +76,18 @@ export type NeutralClientStepId = typeof NEUTRAL_CLIENT_STEP_ID;
 export const MODEL_DIFFERENTIAL_STEP_ID = 'M0_EXACT_NEUTRAL_CLIENT_GPT_OSS_120B_STRICT' as const;
 export type ModelDifferentialStepId = typeof MODEL_DIFFERENTIAL_STEP_ID;
 
+/**
+ * The POST-MD120B3 Responses-endpoint differential probe. Its OWN step id, for the third time.
+ *
+ * It carries the SAME neutral messages and the SAME projected schema as `N0` and `M0`, on the SAME
+ * production model `N0` used. Only the provider ENDPOINT differs. A shared identifier would make a
+ * Chat Completions rejection and a Responses result indistinguishable on a receipt, which is the one
+ * comparison this run exists to support.
+ */
+export const RESPONSES_DIFFERENTIAL_STEP_ID =
+  'E0_EXACT_NEUTRAL_CLIENT_GPT_OSS_20B_RESPONSES_STRICT' as const;
+export type ResponsesDifferentialStepId = typeof RESPONSES_DIFFERENTIAL_STEP_ID;
+
 /** The role a probe plays. Only `CONTROL` can invalidate a run; `EXACT_REPRESENTATIVE` is strongest. */
 export const OPERATIONAL_PROBE_KINDS = [
   'CONTROL',
@@ -294,5 +306,28 @@ export function planModelDifferentialProbe(input: {
     ...neutral,
     stepId: MODEL_DIFFERENTIAL_STEP_ID,
     probeDimension: 'FULL_DOCUMENT_WITH_NEUTRAL_CLIENT_MESSAGES_ON_GPT_OSS_120B',
+  });
+}
+
+/**
+ * Plan the ONE Responses-endpoint differential probe (POST-MD120B3).
+ *
+ * Delegates to `planNeutralClientProbe` for exactly the reason `planModelDifferentialProbe` does, and
+ * overwrites the same two fields: an identifier, and the sentence describing what is being isolated.
+ * The schema and the messages are the objects the neutral planner produced — the SAME objects, not
+ * copies — so "identical to NRA1's request except the endpoint" is a consequence of the code.
+ *
+ * The endpoint is not a property of the probe, exactly as the model was not. It belongs to the
+ * transport the port builds, which is where it can actually be asserted on the wire.
+ */
+export function planResponsesDifferentialProbe(input: {
+  readonly projectedSchema: unknown;
+  readonly neutralMessages: readonly CanaryMessage[];
+}): DiagnosticProbe<ResponsesDifferentialStepId> {
+  const neutral = planNeutralClientProbe(input);
+  return Object.freeze({
+    ...neutral,
+    stepId: RESPONSES_DIFFERENTIAL_STEP_ID,
+    probeDimension: 'FULL_DOCUMENT_WITH_NEUTRAL_CLIENT_MESSAGES_ON_RESPONSES_API',
   });
 }

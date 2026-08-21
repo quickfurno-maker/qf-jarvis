@@ -50,6 +50,16 @@ import type { CanaryMessage } from './diagnostic-canary-port.js';
 import { runRiyaEvaluationTurn } from './riya-turn.js';
 
 /**
+ * The type of the production canonical validator, taken FROM the gateway request contract.
+ *
+ * Derived rather than imported from `zod` directly: this package does not declare `zod` as a
+ * dependency, and a diagnostic is not a reason to add one. Deriving it also states the real
+ * constraint — whatever the gateway parses structured output with is exactly what a local validation
+ * check has to run.
+ */
+export type CanonicalStructuredSchema = NonNullable<ModelRequest['structuredSchema']>;
+
+/**
  * The instant the captured turn is stamped with.
  *
  * Fixed and synthetic, so two captures produce byte-identical messages. It reaches `requestedAt` and
@@ -137,6 +147,18 @@ export interface CapturedProductionRiyaRequest {
   readonly messages: readonly CanaryMessage[];
   /** The RAW rendering of the real Riya structured schema, before the Groq strict projection. */
   readonly rawStructuredJsonSchema: unknown;
+  /**
+   * The production CANONICAL validator — the zod schema the gateway itself parses output with.
+   *
+   * POST-MD120B3. Carried because the Responses endpoint differential has to answer a question no
+   * earlier probe could: a provider 2xx is not the finding if the document that came back does not
+   * satisfy Riya's contract. The gateway's own authority is `request.structuredSchema.safeParse(...)`,
+   * so the differential runs THAT object rather than a second opinion about it — the same schema
+   * that produced `rawStructuredJsonSchema`, not a re-derivation.
+   *
+   * It is a validator, never a source of content: `safeParse` is the only thing ever called on it.
+   */
+  readonly canonicalStructuredSchema: CanonicalStructuredSchema;
   readonly timeoutMs: number;
   readonly retryBudget: number;
 }
@@ -199,6 +221,9 @@ export async function captureProductionRiyaRequestFor(
       captured.messages.map((one) => Object.freeze({ role: one.role, content: one.content })),
     ),
     rawStructuredJsonSchema: renderStructuredJsonSchema(captured.structuredSchema),
+    // The SAME object the render above was taken from, so the projected document and the canonical
+    // validator can never describe two different schemas.
+    canonicalStructuredSchema: captured.structuredSchema,
     timeoutMs: captured.timeoutMs,
     retryBudget: captured.retryBudget,
   });

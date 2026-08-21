@@ -118,6 +118,22 @@ export const OPERATOR_RUN_GOALS = [
    * It is a DIAGNOSTIC, not a rollout decision. Production candidate identity stays 20B.
    */
   'POST_NRA1_GPT_OSS_120B_STRICT_MODEL_DIFFERENTIAL',
+  /**
+   * POST-MD120B3. The Groq RESPONSES API strict ENDPOINT differential: the smoke, ONE probe, stop.
+   *
+   * MD120B3 used the goal above and received HTTP 400 with `JSON_VALIDATE_FAILED` — the same failure
+   * class NRA1 met on 20B. So the strict Chat Completions failure reproduces across BOTH governed
+   * GPT-OSS models, and the model is no longer the open axis.
+   *
+   * Groq documents a second output contract for the same models — the Responses API, currently beta,
+   * with structured-output support — so this goal changes exactly ONE thing: the provider endpoint and
+   * the envelope it requires. Same captured request, same prompt bytes, same projected schema, same
+   * 4,096 output bound, same strict mode, same PRODUCTION 20B model, same timeout and retry posture.
+   *
+   * A separate token again, because a receipt must say which output contract produced it. It is a
+   * DIAGNOSTIC, not a migration: production routing stays Chat Completions.
+   */
+  'POST_MD120B3_GROQ_RESPONSES_API_STRICT_DIFFERENTIAL',
 ] as const;
 export type OperatorRunGoal = (typeof OPERATOR_RUN_GOALS)[number];
 
@@ -150,6 +166,8 @@ export const SECOND_CREDENTIAL_NOTICES: Readonly<Record<OperatorRunGoal, string>
     'Smoke passed. Enter the same Groq credential again for the neutral client acceptance probe.',
   POST_NRA1_GPT_OSS_120B_STRICT_MODEL_DIFFERENTIAL:
     'Smoke passed. Enter the same Groq credential again for the 120B strict model differential probe.',
+  POST_MD120B3_GROQ_RESPONSES_API_STRICT_DIFFERENTIAL:
+    'Smoke passed. Enter the same Groq credential again for the Responses API strict endpoint differential probe.',
 });
 
 /**
@@ -182,4 +200,6 @@ export const REUSED_CREDENTIAL_NOTICES: Readonly<Record<OperatorRunGoal, string>
     'Smoke passed. Reusing the credential already read for the neutral client acceptance probe.',
   POST_NRA1_GPT_OSS_120B_STRICT_MODEL_DIFFERENTIAL:
     'Smoke passed. Reusing the credential already read for the 120B strict model differential probe.',
+  POST_MD120B3_GROQ_RESPONSES_API_STRICT_DIFFERENTIAL:
+    'Smoke passed. Reusing the credential already read for the Responses API strict endpoint differential probe.',
 });

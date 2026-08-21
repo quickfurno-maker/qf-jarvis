@@ -74,3 +74,54 @@ export function createFetchGroqTransport(): GroqTransport {
     },
   };
 }
+
+/**
+ * The fixed, official Groq Responses API endpoint. Not overridable. DIAGNOSTIC-ONLY.
+ *
+ * Groq documents the Responses API at this path and currently labels it BETA. It is reachable from
+ * this package only through {@link createFetchGroqResponsesTransport}, and no production composition
+ * in this repository builds that transport — the serving path is Chat Completions and stays so.
+ */
+export const GROQ_RESPONSES_ENDPOINT = 'https://api.groq.com/openai/v1/responses';
+
+/**
+ * The production transport's DIAGNOSTIC sibling, pinned to the Responses endpoint instead.
+ *
+ * ### Why a second function rather than a parameter on the first
+ *
+ * A base-URL parameter on {@link createFetchGroqTransport} would turn an SSRF guard into a setting:
+ * the guarantee that the serving path can only ever reach Chat Completions comes from that function
+ * naming ONE constant and refusing everything else. Adding an argument would move the guarantee from
+ * the code to whoever calls it.
+ *
+ * So the guard stays exactly as strict here, just around a different single endpoint. Neither
+ * function can reach the other's URL, and the fifteen lines they have in common are worth less than
+ * that property.
+ *
+ * Same discipline in every other respect: one `fetch`, no redirect, a bounded read, no retry, no
+ * sleep, and no environment access.
+ */
+export function createFetchGroqResponsesTransport(): GroqTransport {
+  return {
+    async send(request: GroqHttpRequest, signal: AbortSignal): Promise<GroqHttpResponse> {
+      if (request.url !== GROQ_RESPONSES_ENDPOINT) {
+        throw new Error('Refusing a Groq request to a non-official endpoint.');
+      }
+      const response = await fetch(request.url, {
+        method: 'POST',
+        headers: { ...request.headers },
+        body: request.body,
+        redirect: 'error',
+        signal,
+      });
+      const raw = await response.text();
+      const bodyText =
+        raw.length > GROQ_MAX_RESPONSE_BYTES ? raw.slice(0, GROQ_MAX_RESPONSE_BYTES) : raw;
+      return {
+        status: response.status,
+        retryAfterSeconds: parseRetryAfter(response.headers.get('retry-after')),
+        bodyText,
+      };
+    },
+  };
+}
