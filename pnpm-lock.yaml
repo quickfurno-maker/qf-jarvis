@@ -254,6 +254,28 @@ importers:
         specifier: workspace:*
         version: link:../event-backbone
 
+  packages/execution-dispatch-composition:
+    dependencies:
+      '@qf-jarvis/execution-dispatch-runtime':
+        specifier: workspace:*
+        version: link:../execution-dispatch-runtime
+      '@qf-jarvis/postgres-execution-replay-store':
+        specifier: workspace:*
+        version: link:../postgres-execution-replay-store
+      pg:
+        specifier: 8.22.0
+        version: 8.22.0
+    devDependencies:
+      '@qf-jarvis/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@qf-jarvis/event-backbone':
+        specifier: workspace:*
+        version: link:../event-backbone
+      '@types/pg':
+        specifier: 8.20.0
+        version: 8.20.0
+
   packages/execution-dispatch-runtime:
     dependencies:
       '@qf-jarvis/contracts':

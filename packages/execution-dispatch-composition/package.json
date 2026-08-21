@@ -1,0 +1,29 @@
+{
+  "name": "@qf-jarvis/execution-dispatch-composition",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis durable execution dispatch composition (QFJ-P09.04). The ONE composition that binds the merged QFJ-P09.02 execution-dispatch verification boundary to the merged QFJ-P09.03 durable PostgreSQL replay guard, so a dispatch boundary is restart-durable BY CONSTRUCTION and cannot be assembled with a process-lifetime guard by mistake -- the exact composition P09.03 recorded as belonging to nobody. It adopts NO transport and sends NOTHING: no URL, webhook, endpoint, n8n client, workflow id, credential, provider client, message, recipient, retry, poll or queue. It creates no migration (0010 is P09.03's and is reused unchanged), owns no table, issues no DDL, opens no connection at construction and never closes a pool it did not open. It returns the P09.02 result verbatim rather than re-classifying it, and exposes no canExecute, canSend, isAuthorized, executed, sent, delivered or consentValid -- a verified first-seen dispatch is a bounded validation observation, never execution truth, and composing a verifier with a store creates no new authority for Jarvis, for n8n or for itself.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/execution-dispatch-runtime": "workspace:*",
+    "@qf-jarvis/postgres-execution-replay-store": "workspace:*",
+    "pg": "8.22.0"
+  },
+  "devDependencies": {
+    "@qf-jarvis/contracts": "workspace:*",
+    "@qf-jarvis/event-backbone": "workspace:*",
+    "@types/pg": "8.20.0"
+  }
+}

@@ -254,7 +254,21 @@ describe('nothing EXECUTES anything through this package', () => {
    * importers is pinned EXACTLY, no application may import this package at all, and the one package
    * that may is checked below to be a storage adapter rather than a dispatcher.
    */
-  const ALLOWED_PACKAGE_IMPORTERS = ['postgres-execution-replay-store'];
+  /**
+   * QFJ-P09.04 (ADR-0109) adds the SECOND permitted importer: the durable dispatch composition.
+   *
+   * It is the composition ADR-0091 recorded as belonging to nobody -- it binds this boundary to
+   * the durable replay store so a caller cannot assemble the pair with an in-memory guard. It
+   * holds no transport, endpoint, URL, webhook, n8n client, provider client or credential, and it
+   * returns this package's result verbatim rather than re-classifying it.
+   *
+   * The guarantee is not weakened: the set stays pinned EXACTLY, no application may import this
+   * package at all, and the spec below still proves each importer is a non-dispatching consumer.
+   */
+  const ALLOWED_PACKAGE_IMPORTERS = [
+    'execution-dispatch-composition',
+    'postgres-execution-replay-store',
+  ];
 
   it('no APPLICATION imports it, and the only package that does is the durable replay store', () => {
     const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url));

@@ -18,7 +18,8 @@
  *   3. The AVG overlay stays an overlay -- no QFJ-P13 phase is ever defined.
  *   4. Aarohi's runtime stays PLANNED/DISABLED.
  */
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
@@ -90,7 +91,7 @@ describe('QFJ-P12 (ADR-0085) canonical governance consistency', () => {
       }
     });
 
-    it('records QFJ-P09.02 and QFJ-P09.03 as MERGED, names no successor, with live send off', () => {
+    it('records QFJ-P09.02/03 as MERGED and P09.04 as the owner-locked successor, live send off', () => {
       // The wording moves as the truth does. Each slice read "next" while planned, "CURRENT" while
       // being implemented, and "MERGED" once its PR landed -- always with the exact head and merge
       // commit, so the claim is checkable rather than merely asserted. The lock has not weakened at
@@ -109,11 +110,27 @@ describe('QFJ-P12 (ADR-0085) canonical governance consistency', () => {
       expect(roadmap).not.toMatch(/QFJ-P09\.0[23][\s\S]{0,300}?NOT merged/u);
       expect(roadmap).not.toMatch(/QFJ-P09\.0[23][\s\S]{0,200}?not yet merged/u);
 
-      // And no successor was invented to fill the gap. The QFJ execution track genuinely has no
-      // owner-locked next slice; the work in flight belongs to a separately governed track, and a
-      // roadmap that named a QFJ-P09.04 here would be inventing one.
-      expect(roadmap).not.toContain('QFJ-P09.04');
-      expect(roadmap).toMatch(/No QFJ-P09 successor slice is owner-locked/u);
+      // The successor is now OWNER-LOCKED, and this assertion inverted rather than relaxed.
+      //
+      // It previously refused any mention of QFJ-P09.04, and that was right at the time: the
+      // execution track had no owner-locked next slice, so a roadmap naming one would have been
+      // inventing it. The owner has since locked QFJ-P09.04 -- the durable execution dispatch
+      // composition binding the merged P09.02 verifier to the merged P09.03 durable store, which
+      // ADR-0091 recorded as belonging to nobody.
+      //
+      // So the lock still does the same job: it refuses a successor that exists only in prose. It
+      // now requires the ADR to exist alongside the claim, which is strictly harder to satisfy than
+      // the absence it replaced.
+      expect(roadmap).toContain('QFJ-P09.04');
+      expect(roadmap).toContain('ADR-0109-qfj-p09-04-durable-execution-dispatch-composition.md');
+      expect(
+        readdirSync(join(REPO_ROOT, 'docs/decisions')).some((entry) =>
+          entry.startsWith('ADR-0109-qfj-p09-04'),
+        ),
+      ).toBe(true);
+      // The stale claim must be gone: it and the locked successor cannot both be true.
+      expect(roadmap).not.toMatch(/No QFJ-P09 successor slice is owner-locked/u);
+      // P09.04 adopts no transport, so the two statements below must still hold after it.
 
       expect(roadmap).toMatch(/wire protocol[\s\S]{0,120}?remains\s*\n?\s*PROPOSED/u);
       expect(roadmap).toMatch(/Live send remains OFF/u);
