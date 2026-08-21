@@ -34,7 +34,11 @@
  */
 import type { ModelRequest } from '@qf-jarvis/model-gateway';
 import { renderStructuredJsonSchema } from '@qf-jarvis/model-gateway';
-import type { ModelGatewayInvocation, ModelGatewayInvoker } from '@qf-jarvis/model-reply-adapter';
+import type {
+  ModelGatewayInvocation,
+  ModelGatewayInvoker,
+  ModelReplyStructuredOutputProfile,
+} from '@qf-jarvis/model-reply-adapter';
 import { RIYA_SAFETY_FIXTURES } from '@qf-jarvis/riya-candidate-evaluation-runner';
 import type { RiyaCandidateRequest } from '@qf-jarvis/riya-candidate-evaluation-runner';
 
@@ -47,7 +51,30 @@ import {
 import type { DiagnosticCanary } from './diagnostic-canaries.js';
 import { SYNTHETIC_CANARY_MESSAGES } from './diagnostic-canary-port.js';
 import type { CanaryMessage } from './diagnostic-canary-port.js';
-import { runRiyaEvaluationTurn } from './riya-turn.js';
+import { createRiyaEvaluationProfile, runRiyaEvaluationTurn } from './riya-turn.js';
+import type { RiyaTurnRequest } from './riya-turn.js';
+
+/**
+ * The FIRST-STAGE structured wire schema, taken FROM the gateway request contract.
+ *
+ * Derived rather than imported from `zod` directly: this package does not declare `zod` as a
+ * dependency, and a diagnostic is not a reason to add one.
+ *
+ * Named for what it actually proves. `safeParse` establishes that a document has the SHAPE the
+ * provider was asked for — nothing more. It is the same object the gateway validates structured
+ * output with at the provider boundary, and it is NOT Riya's acceptance authority: see
+ * {@link CapturedProductionRiyaRequest.projectStructuredResult}.
+ */
+export type StructuredWireSchema = NonNullable<ModelRequest['structuredSchema']>;
+
+/**
+ * The FULL production acceptance authority for a Riya structured answer.
+ *
+ * The exact `projectStructuredResult` of the profile the evaluation turn for this request runs
+ * under. `undefined` means production would refuse the document; a projection means it would carry
+ * it as a draft.
+ */
+export type ProjectStructuredResult = ModelReplyStructuredOutputProfile['projectStructuredResult'];
 
 /**
  * The instant the captured turn is stamped with.
@@ -137,6 +164,38 @@ export interface CapturedProductionRiyaRequest {
   readonly messages: readonly CanaryMessage[];
   /** The RAW rendering of the real Riya structured schema, before the Groq strict projection. */
   readonly rawStructuredJsonSchema: unknown;
+  /**
+   * The FIRST-STAGE structured wire schema — the zod object the gateway parses output with.
+   *
+   * The same object that produced `rawStructuredJsonSchema`, not a re-derivation. It establishes
+   * that a document has the SHAPE the provider was asked for.
+   *
+   * It is deliberately NOT the acceptance authority, and its name says so. A document can pass
+   * `safeParse` and still be refused by production for a citation it was never shown, an observation
+   * batch that violates a combined invariant, an availability ref that does not exist, or a
+   * next-question plan that disagrees with the deterministic reducer. Use
+   * {@link CapturedProductionRiyaRequest.projectStructuredResult} for a verdict.
+   *
+   * A validator, never a source of content: `safeParse` is the only thing ever called on it.
+   */
+  readonly structuredWireSchema: StructuredWireSchema;
+  /**
+   * The FULL production acceptance authority, bound to THIS request's profile context.
+   *
+   * POST-MD120B3. Carried because the Responses endpoint differential asks a question no earlier
+   * probe could: a provider 2xx is not the finding if the document that came back is not something
+   * production Riya would accept. The first revision of that gate rested on `safeParse` alone, which
+   * would have let a wire-shaped but production-invalid answer be reported as an accepted endpoint —
+   * a false-positive verdict, and the worst possible failure for a diagnostic.
+   *
+   * So this is the profile's own `projectStructuredResult`, obtained from
+   * `createRiyaEvaluationProfile` — the one function `runRiyaEvaluationTurn` also builds its profile
+   * with, given the SAME request object. There is no second opinion about what production accepts.
+   *
+   * Returns a projection, or `undefined` for refusal. The projection is a VERDICT input and never a
+   * source of content: no caller may emit, log or retain what it returns.
+   */
+  readonly projectStructuredResult: ProjectStructuredResult;
   readonly timeoutMs: number;
   readonly retryBudget: number;
 }
@@ -162,6 +221,18 @@ export function captureProductionRiyaCanaryRequest(): Promise<CapturedProduction
 export async function captureProductionRiyaRequestFor(
   request: RiyaCandidateRequest,
 ): Promise<CapturedProductionRiyaRequest> {
+  // Built ONCE and handed to both the turn and the profile helper, so "the capture validates through
+  // the profile this turn ran under" cannot drift into "through a profile built from similar-looking
+  // arguments".
+  const turnRequest: RiyaTurnRequest = {
+    caseId: request.caseId,
+    syntheticUserText: request.syntheticUserText,
+    // The same phase every safety case runs at, so the profile and the prompt identity match.
+    phase: 'NEED',
+    dataClass: request.declaredDataClass,
+    humanTakeoverActive: request.humanTakeoverActive,
+  };
+
   let captured: ModelRequest | undefined;
   const invoker: ModelGatewayInvoker = {
     invoke: (modelRequest: ModelRequest): Promise<ModelGatewayInvocation> => {
@@ -171,22 +242,12 @@ export async function captureProductionRiyaRequestFor(
     },
   };
 
-  await runRiyaEvaluationTurn(
-    {
-      caseId: request.caseId,
-      syntheticUserText: request.syntheticUserText,
-      // The same phase every safety case runs at, so the profile and the prompt identity match.
-      phase: 'NEED',
-      dataClass: request.declaredDataClass,
-      humanTakeoverActive: request.humanTakeoverActive,
-    },
-    {
-      invoker,
-      clock: () => DIAGNOSTIC_CAPTURE_INSTANT,
-      // The production state reader, built from the fixture's own execution metadata.
-      stateReader: stateReaderFor(request),
-    },
-  );
+  await runRiyaEvaluationTurn(turnRequest, {
+    invoker,
+    clock: () => DIAGNOSTIC_CAPTURE_INSTANT,
+    // The production state reader, built from the fixture's own execution metadata.
+    stateReader: stateReaderFor(request),
+  });
 
   if (captured?.structuredSchema === undefined) {
     // A gate refused before the gateway seam. That is a real finding and it fails CLOSED: the caller
@@ -199,6 +260,14 @@ export async function captureProductionRiyaRequestFor(
       captured.messages.map((one) => Object.freeze({ role: one.role, content: one.content })),
     ),
     rawStructuredJsonSchema: renderStructuredJsonSchema(captured.structuredSchema),
+    // The SAME object the render above was taken from, so the projected JSON Schema and the wire
+    // validator can never describe two different schemas.
+    structuredWireSchema: captured.structuredSchema,
+    // The FULL production acceptance authority, built by the SAME function the turn above built its
+    // profile with, from the SAME request object. A fresh instance, identically configured —
+    // construction authority is the property, not instance identity.
+    projectStructuredResult: (value: unknown) =>
+      createRiyaEvaluationProfile(turnRequest).profile.projectStructuredResult(value),
     timeoutMs: captured.timeoutMs,
     retryBudget: captured.retryBudget,
   });

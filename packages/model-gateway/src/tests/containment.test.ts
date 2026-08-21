@@ -97,7 +97,24 @@ describe('model-gateway package containment', () => {
    * the imported barrel counts runtime exports only — `export type` produces no runtime binding — so
    * adding a type costs nothing and adding a value is a deliberate, reviewed change.
    */
-  it('freezes the package-root runtime API at exactly 74 symbols', async () => {
+  it('freezes the package-root runtime API at exactly 77 symbols', async () => {
+    // POST-MD120B3: 74 -> 77. `GROQ_RESPONSES_ENDPOINT`, `createFetchGroqResponsesTransport` and
+    // `createGroqResponsesDiagnosticProvider` — the DIAGNOSTIC-ONLY Groq Responses API surface.
+    //
+    // Widening this lock is a deliberate decision recorded here rather than a number that drifted.
+    // MD120B3 established that the same neutral production Riya request under strict Chat Completions
+    // is refused with `json_validate_failed` on BOTH governed GPT-OSS models, so the next diagnostic
+    // has to move the OUTPUT CONTRACT — and the candidate evidence operator, which is the only package
+    // that can see both this gateway and the real Riya request, cannot compose that from outside
+    // without an endpoint, a transport pinned to it, and an adapter that speaks its envelope.
+    //
+    // Three and no more. The body builder, the payload decoder and the response schema are asserted
+    // by this package's own specs through a relative import and stay off the root: a caller that never
+    // needs to build a Responses body must not be handed the means to.
+    //
+    // None of the three is a production surface. Nothing here registers a provider, declares a
+    // capability, or joins the routing table, and a spec below asserts that no production composition
+    // in this repository builds either factory. Groq currently ships the Responses API as beta.
     // MVP-P2A.2 HF4-R7: 71 -> 74. `projectGroqStrictJsonSchema`, `renderStructuredJsonSchema` and
     // `GROQ_STRICT_PROJECTION_REASONS`. RUN S9's nine ordinary safety requests were all rejected with
     // HTTP 400 because the raw Zod rendering carried `$schema`, `const`, `minLength`, `maxLength`,
@@ -110,7 +127,7 @@ describe('model-gateway package containment', () => {
     // schemas, and "the production schema projects into the documented subset" has to be asserted
     // against the real schema rather than a replica.
     const barrel = (await import('../index.js')) as unknown as Record<string, unknown>;
-    expect(Object.keys(barrel)).toHaveLength(74);
+    expect(Object.keys(barrel)).toHaveLength(77);
   });
 
   it('does not export FakeModelProvider from the production root', () => {

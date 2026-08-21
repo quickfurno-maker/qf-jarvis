@@ -1379,3 +1379,618 @@ P10_CORPUS_CHANGED=NO
 SAFETY_AUTHORIZED=NO
 P10_AUTHORIZED=NO
 ```
+
+---
+
+## 21. RUNS MD120B1 AND MD120B2 — NON-RESULTS (IMMUTABLE)
+
+Two authorizations preceded the differential result, and neither produced provider evidence about the
+model. They are recorded because a run that is not recorded is a run that gets repeated.
+
+| Field               | MD120B1                         | MD120B2                            |
+| ------------------- | ------------------------------- | ---------------------------------- |
+| Consumed            | YES                             | YES                                |
+| Rerun               | NO                              | NO                                 |
+| Result              | `NO_EVIDENCE_CLI_MISSING_VALUE` | `STRICT_120B_INCONCLUSIVE`         |
+| Provider requests   | 0                               | —                                  |
+| HTTP                | —                               | 403                                |
+| `providerHttpClass` | —                               | `FORBIDDEN_403`                    |
+| `providerErrorType` | —                               | `PERMISSIONS_ERROR`                |
+| `providerErrorCode` | —                               | `MODEL_PERMISSION_BLOCKED_PROJECT` |
+| `providerCompleted` | —                               | false                              |
+
+MD120B1 never reached the provider: the command was rejected for a missing CLI value, so zero requests
+were sent.
+
+MD120B2 reached the provider and was refused at the PROJECT PERMISSION layer. The classifier read it
+as `STRICT_120B_INCONCLUSIVE`, which is exactly what the vocabulary was shaped to do — the governed
+smoke runs against the 20B configuration and therefore proves the credential works, not that the
+account may call 120B. A classifier that had filed this as a model rejection would have retired the
+differential on evidence that never touched it.
+
+The project permission was subsequently corrected to allow **both** 20B and 120B.
+
+```
+MD120B1_CONSUMED=YES
+MD120B1_RERUN=NO
+MD120B2_CONSUMED=YES
+MD120B2_RERUN=NO
+```
+
+---
+
+## 22. RUN MD120B3 — `POST_NRA1_GPT_OSS_120B_STRICT_MODEL_DIFFERENTIAL` (IMMUTABLE)
+
+Executed **once** under owner authorization, after the project permission correction. Preflight PASS.
+Smoke PASS (1 request).
+
+| Field                      | Value                                                        |
+| -------------------------- | ------------------------------------------------------------ |
+| `model`                    | `openai/gpt-oss-120b`                                        |
+| `baselineModel`            | `openai/gpt-oss-20b`                                         |
+| `endpoint`                 | Groq Chat Completions                                        |
+| `stepId`                   | `M0_EXACT_NEUTRAL_CLIENT_GPT_OSS_120B_STRICT`                |
+| `probeKind`                | `EXACT_REPRESENTATIVE`                                       |
+| `probeDimension`           | `FULL_DOCUMENT_WITH_NEUTRAL_CLIENT_MESSAGES_ON_GPT_OSS_120B` |
+| `derivedFromPath`          | `$`                                                          |
+| `completionCapClass`       | `OPERATIONAL`                                                |
+| `maxCompletionTokens`      | 4096                                                         |
+| `messageSource`            | `CAPTURED_NEUTRAL_CLIENT`                                    |
+| `providerTransportStarted` | true                                                         |
+| **`providerHttpStatus`**   | **400**                                                      |
+| **`providerHttpClass`**    | **`BAD_REQUEST_400`**                                        |
+| **`providerErrorType`**    | **`INVALID_REQUEST_ERROR`**                                  |
+| **`providerErrorCode`**    | **`JSON_VALIDATE_FAILED`**                                   |
+| `providerCompleted`        | false                                                        |
+
+Classification: **`STRICT_120B_PROVIDER_REJECTED`**
+
+| Field                                   | Value                                         |
+| --------------------------------------- | --------------------------------------------- |
+| `totalProviderRequests`                 | 2                                             |
+| `smokeRequests`                         | 1                                             |
+| `modelDifferentialProbeRequests`        | 1                                             |
+| `neutralRepresentativeProbeRequests`    | 0                                             |
+| `representativeAcceptanceProbeRequests` | 0                                             |
+| `safetyProviderRequests`                | 0                                             |
+| `p10ProviderRequests`                   | 0                                             |
+| `successfulProviderResponses`           | 1                                             |
+| `providerFailures`                      | 1                                             |
+| `inputTokensTotal`                      | 131,266                                       |
+| `outputTokensTotal`                     | 65,659                                        |
+| `estimatedCostUsd`                      | 0.05908529999999999                           |
+| `costIsEstimated`                       | true                                          |
+| `costPricingPosture`                    | `CONSERVATIVE_120B_RATES_FOR_MIXED_MODEL_RUN` |
+| `smokePricedAtCandidateRate`            | true                                          |
+| `pricingSnapshot`                       | `groq-pricing-snapshot-2026-08-20`            |
+| `usageBoundViolated`                    | false                                         |
+| `safetyEvaluated`                       | false                                         |
+| `reviewBundleWritten`                   | false                                         |
+
+Final: `POST_NRA1_GPT_OSS_120B_STRICT_MODEL_DIFFERENTIAL_COMPLETE`.
+
+> **Not recorded, because it was not supplied.** The owner-supplied excerpt did not include
+> `MD120B3_EXIT_CODE`, `REVIEW_OUTPUT_EXISTS`, the post-run local and remote SHAs, the post-run
+> divergence, or the final `git status`. Those fields are deliberately left blank rather than inferred
+> from the run goal or from prior runs. If they are supplied later they may be appended as additional
+> owner evidence.
+
+```
+MD120B3_CONSUMED=YES
+MD120B3_RERUN=NO
+NRA1_RERUN=NO
+RA1_RERUN=NO
+OAD3_RERUN=NO
+```
+
+---
+
+## 23. OWNER INTERPRETATION OF MD120B3 — SEPARATE FROM THE EMITTED RECORD
+
+**Emitted classification:** `STRICT_120B_PROVIDER_REJECTED`
+
+**Owner bounded interpretation:**
+
+```
+STRICT_FAILURE_REPRODUCED_ACROSS_GPT_OSS_20B_AND_120B=YES
+```
+
+### What this establishes
+
+The **same** neutral, full production-built Riya request path under Groq Chat Completions strict
+structured output failed on **GPT-OSS-20B** and on **GPT-OSS-120B**, both with HTTP 400 /
+`INVALID_REQUEST_ERROR` / `JSON_VALIDATE_FAILED`. Changing only the GPT-OSS model did not repair the
+path.
+
+The MD120B2 permission problem is resolved for MD120B3: the 120B call reached the provider **contract**
+path and returned 400 rather than a project-permission 403. So the 400 is a statement about the
+request, not about entitlement.
+
+### What this does NOT establish
+
+- **Not** that the schema is globally invalid. OAD3's `O2` previously sent the exact production
+  projected schema at the same 4,096 budget with synthetic tiny messages on 20B and received HTTP 200
+  with `providerCompleted=true`. That result stands.
+- **Not** that prompt length, message length, schema complexity, token budget, or a Groq internal bug
+  is the proven cause. None of those has been isolated.
+- **Not** anything about 20B or 120B model **quality**. No fixture was evaluated and no reply was read.
+
+```
+REQUEST_CONTRACT_STATUS=GROQ_CHAT_COMPLETIONS_FULL_PRODUCTION_MESSAGE_STRICT_PATH_REJECTED_ACROSS_GPT_OSS_20B_AND_120B
+NORMAL_CLIENT_CHAT_COMPLETIONS_STRICT=REJECTED_ON_20B_AND_120B
+STRICT_FAILURE_REPRODUCED_ACROSS_GPT_OSS_20B_AND_120B=YES
+20B_MODEL_QUALITY_VERDICT=UNRESOLVED
+SAFETY_AUTHORIZED=NO
+P10_AUTHORIZED=NO
+PRODUCTION_RELEASE_AUTHORIZED=NO
+```
+
+---
+
+## 24. WHY THE NEXT DIMENSION IS THE RESPONSES API — AND WHY NOTHING ELSE MOVES YET
+
+Section 20's recorded decision table named this branch before the run happened. MD120B3 landed on
+`STRICT_120B_PROVIDER_REJECTED` with `JSON_VALIDATE_FAILED`, and that branch's first ordered option
+was: **Groq Responses API with the exact JSON Schema, if it preserves the same downstream contract.**
+This bridge is that option, built.
+
+The other options stay closed for now, deliberately:
+
+- the schema is **not** weakened;
+- JSON Object Mode is **not** adopted;
+- no retry is added;
+- no prompt content changes;
+- no production routing changes.
+
+Weakening any of those before the endpoint question is answered would destroy the one comparison that
+is still cheap to make. Four variables have now been held across five runs; a fifth run that moved two
+at once would answer neither.
+
+### What the provider's current documentation says
+
+- Strict Structured Outputs are **intended to guarantee schema adherence** on supported models.
+- Groq **explicitly asks developers to provide repros** when strict mode returns 400 errors. MD120B3
+  plus NRA1 is precisely such a repro pair, on two models, with the request held constant.
+- The Responses API is available at `/openai/v1/responses` and is **currently beta**.
+- The Responses API **supports structured outputs**, and the published examples include GPT-OSS-20B
+  through the Responses API with structured parsing, and GPT-OSS-120B structured outputs through the
+  Responses API.
+
+The beta status is recorded on the receipt as `endpointMaturity=BETA`. It is a reason to **measure**
+the endpoint and is not a reason to select it: nothing in this bridge presents the Responses API as
+chosen for production.
+
+### The differential
+
+| Held constant                                       | Changed                                              |
+| --------------------------------------------------- | ---------------------------------------------------- |
+| model — `openai/gpt-oss-20b` (`CANDIDATE_MODEL_ID`) | provider endpoint to `/openai/v1/responses`          |
+| the exact neutral Riya capture (case, system, user) | the structured-output envelope the endpoint requires |
+| the exact current raw and projected JSON Schema     |                                                      |
+| the 4,096 output budget                             |                                                      |
+| strict mode, timeout, retry=0, fallback=false       |                                                      |
+| all downstream canonical validation and projection  |                                                      |
+
+This is an **endpoint / output-contract transport differential**, not a production migration.
+
+---
+
+## 25. THE RESPONSES API STRICT DIFFERENTIAL BRIDGE (OFFLINE)
+
+Future live label **RSP20B1**. Run goal `POST_MD120B3_GROQ_RESPONSES_API_STRICT_DIFFERENTIAL`, exit
+code **30**, step id `E0_EXACT_NEUTRAL_CLIENT_GPT_OSS_20B_RESPONSES_STRICT`.
+
+### One variable, by construction rather than by claim
+
+The port calls `captureNeutralClientRiyaRequest()` — the identical function NRA1's and MD120B3's ports
+call — and plans through `planResponsesDifferentialProbe`, which delegates to the neutral planner and
+overwrites nothing but the step id and the dimension label. A spec asserts that the neutral, the model
+differential and the Responses probes share their schema and messages **by object identity**.
+
+The model is not restated anywhere. `RESPONSES_DIFFERENTIAL_MODEL_ID` **is** `CANDIDATE_MODEL_ID`,
+re-exported, so "the model did not move" cannot drift. There is deliberately no diagnostic model id in
+this bridge: one existing would be one thing a future edit could quietly change.
+
+### Where the HTTP lives
+
+The evidence-live package implements no HTTP and its containment spec forbids `fetch(`, `api.groq.com`,
+`Authorization` and `Bearer` in its production source. That guard is **not** weakened. The Responses
+transport is added to `model-gateway`, in the file the gateway's own containment spec already
+designates as a transport boundary, as a **separate factory** rather than a base-URL parameter:
+
+- `createFetchGroqTransport()` refuses any URL but `GROQ_CHAT_COMPLETIONS_ENDPOINT`;
+- `createFetchGroqResponsesTransport()` refuses any URL but `GROQ_RESPONSES_ENDPOINT`.
+
+Specs assert both refusals in **both** directions. A base-URL parameter would have turned an SSRF guard
+into a setting; the guarantee that the serving path only ever speaks Chat Completions comes from each
+factory naming one constant and refusing everything else.
+
+The gateway's package-root API lock moves **74 to 77** for exactly three runtime symbols — an endpoint
+to name, a transport pinned to it, and the adapter that speaks the envelope. The body builder, the
+payload decoder and the response schema stay off the root. Widening the lock is recorded as a decision
+in that package's containment spec rather than as a number that drifted.
+
+### The envelope, and section 8
+
+| Chat Completions                     | Responses API        |
+| ------------------------------------ | -------------------- |
+| `messages`                           | `input`              |
+| `max_completion_tokens`              | `max_output_tokens`  |
+| `response_format.json_schema.schema` | `text.format.schema` |
+
+Those three renamings **are** the experiment. Equivalence of the output-bound field is **not** inferred
+from naming: a spec reads the emitted request body and asserts the integer **4,096** landed in
+`max_output_tokens`, that `max_completion_tokens` is absent, and that the value equals
+`RIYA_COMPLETION_BUDGET_TOKENS`. The capability ceiling stays 65,536 and never reaches the wire.
+
+`store` is sent as **`false`** explicitly. The Responses API is stateful by design, and a diagnostic
+that silently left a copy of a production prompt on a provider would be a privacy decision nobody made.
+There is no `previous_response_id`, no `background`, no `tools`, no `instructions`, no sampling field
+and no reasoning field — and a spec enumerates every one of them as absent.
+
+### A provider 2xx is NOT the finding — the sixth token
+
+> **Corrected by §26.** The paragraphs below describe the acceptance authority as "the production
+> canonical validator". At the reviewed head that authority was `structuredSchema.safeParse` alone,
+> which is only its FIRST STAGE. Owner review found this a merge blocker; §26 records the defect and
+> the correction. The vocabulary and the reasoning for the sixth token are unchanged.
+
+Every earlier gate could stop at the provider boundary, because every earlier gate asked whether the
+provider would **accept** the request. This one asks whether a different output contract yields a
+usable Riya reply, and those are not the same question. A 2xx whose document does not satisfy Riya's
+canonical schema is a **worse** outcome than a 400, because it looks like success; `json_validate_failed`
+is at least the provider saying so out loud.
+
+So the port runs the **production canonical validator** — the same zod schema object the gateway itself
+parses structured output with, carried through the capture rather than re-derived — and the vocabulary
+carries a token for the result:
+
+| Outcome                                        | Reached by                                             |
+| ---------------------------------------------- | ------------------------------------------------------ |
+| `RESPONSES_20B_STRICT_ACCEPTED`                | 2xx + provider completed + **local validation passed** |
+| `RESPONSES_20B_STRICT_PROVIDER_REJECTED`       | 400 / 413 / 422 only                                   |
+| `RESPONSES_20B_STRICT_RATE_LIMITED`            | 429                                                    |
+| `RESPONSES_20B_STRICT_INFRA_INTERRUPTED`       | 498 / 499 / 5xx / transport throw / not reached        |
+| `RESPONSES_20B_STRICT_INCONCLUSIVE`            | 401 / 403 / 404 / `OTHER_HTTP` / `NONE` / did not run  |
+| `RESPONSES_20B_STRICT_LOCAL_VALIDATION_FAILED` | 2xx + provider completed + **local validation failed** |
+
+Local validation failure is deliberately **not** collapsed into provider rejection: the provider did
+not reject anything, and filing it as though it had would send the next reader to audit a request the
+endpoint accepted. Symmetrically, a 2xx that produced no readable document is `INCONCLUSIVE` rather
+than `LOCAL_VALIDATION_FAILED` — nothing reached the validator, so reporting a verdict would be a claim
+about a check that never ran.
+
+No low-level HTTP logic is duplicated: every branch switches on the shared total
+`PROVIDER_OUTCOME_ROLE` map, so a class added to the observation vocabulary cannot reach a verdict by
+falling through. A spec asserts that over the whole governed class list.
+
+### The entitlement trap, in its endpoint form
+
+The governed staging smoke runs against the 20B **Chat Completions** configuration. A passing smoke
+proves the credential works **there**; it does not prove the project may call `/openai/v1/responses`,
+which is beta and may require separate enrolment. MD120B2 already demonstrated the model-shaped version
+of this trap with its 403.
+
+So 401 / 403 / 404 is `RESPONSES_20B_STRICT_INCONCLUSIVE`, never an endpoint verdict, and the receipt
+prints the gap rather than leaving it to be inferred:
+
+```
+smokeEndpointCheckFamily=CHAT_COMPLETIONS
+smokeProvesEndpointEntitlement=false
+endpointMaturity=BETA
+```
+
+### Accounting — the production tariff, and why that differs from MD120B3
+
+MD120B3 is a **mixed-model** run (a 20B smoke, a 120B candidate) against a `RequestLedger` that carries
+one price schedule, so it is priced conservatively at the higher 120B tariff.
+
+RSP20B1 is **single-model**. Both requests go to `CANDIDATE_MODEL_ID`, so the production schedule is
+the right schedule for both and no conservative posture is needed. The rates are read from
+`candidate-release.ts` rather than restated, so a published price change moves this ledger with every
+other one.
+
+| Rate         | Value                              |
+| ------------ | ---------------------------------- |
+| input        | $0.075 / 1M                        |
+| cached input | $0.037 / 1M                        |
+| output       | $0.30 / 1M                         |
+| snapshot     | `groq-pricing-snapshot-2026-08-20` |
+
+Ceiling: **2 provider requests** (1 governed 20B smoke + 1 Responses probe), **USD 1.00**. Its own
+ledger, its own counter (`responsesDifferentialProbeRequests`), retry 0, fallback 0, safety 0, P10 0,
+bundle 0. The receipt states the posture rather than leaving the figure unexplained:
+
+```
+costPricingPosture=PRODUCTION_20B_RATES_FOR_SINGLE_MODEL_RUN
+smokePricedAtCandidateRate=true
+pricingSnapshot=groq-pricing-snapshot-2026-08-20
+```
+
+### Telemetry containment
+
+Allowed closed telemetry only: `endpointFamily`, `baselineEndpoint`, `endpointMaturity`,
+`candidateModel`, `stepId`, `messageSource`, `maxOutputTokens`, `providerTransportStarted`,
+`providerHttpStatus`, `providerHttpClass`, `providerErrorType`, `providerErrorCode`,
+`providerCompleted`, `localValidationCompleted`, `localValidationPassed`, `classification`, usage token
+counts and the estimated cost.
+
+Never emitted: raw provider response body, raw output text, `failed_generation`, prompt text, user
+text, schema document, credential, credential length, credential hash or fingerprint, Authorization
+header, provider error message, **reasoning text**, or the endpoint URL. No review bundle is written.
+
+The reasoning item deserves its own note. GPT-OSS models emit one inside a Responses payload, and the
+decoder skips it by `type` without reading it — the specs put a marker string inside a reasoning item
+and assert it never reaches a line. The **validated model output** carries the same risk, because this
+is the first gate that decodes a document in order to check it: the parsed value is consumed by
+`safeParse` in one expression and two booleans survive the statement. A spec asserts that the accepted
+reply body never appears in the output.
+
+### Production is untouched
+
+`CANDIDATE_MODEL_ID` remains `openai/gpt-oss-20b`; the production Chat Completions adapter, request
+routing, prompt, raw and projected Riya schemas, `RIYA_COMPLETION_BUDGET_TOKENS=4096`,
+`CANDIDATE_MAX_COMPLETION_TOKENS=65536`, sampling and reasoning defaults, retry=0, fallback=false, the
+safety corpus and the P10 corpus are all unchanged.
+
+Specs assert this rather than claim it: the production adapter names `GROQ_CHAT_COMPLETIONS_ENDPOINT`
+and `max_completion_tokens` and does **not** name `GROQ_RESPONSES_ENDPOINT`, `max_output_tokens` or the
+diagnostic provider factory; the evaluation gateway still composes exactly `GroqModelProvider`; and a
+repository-wide scan proves that **no module outside the one diagnostic port and the executable that
+binds it for its own run goal** names `createGroqResponsesDiagnosticProvider`,
+`createFetchGroqResponsesTransport`, `openLiveResponsesDifferentialRunner` or
+`createLiveResponsesDifferentialComposition`. The diagnostic adapter declares no descriptor, no
+capabilities and no health check, so it cannot be selected to serve a turn at all.
+
+### Decision table for a future RSP20B1 — recorded, not executed
+
+**If `RESPONSES_20B_STRICT_ACCEPTED`:** the evidence becomes _the same neutral production Riya request
+is rejected on Chat Completions strict across both GPT-OSS models and accepted once on the Responses
+API with a canonically valid reply_. That is an **endpoint** finding on a **beta** contract. Then: do
+**not** release; file the Chat Completions repro with Groq as their documentation requests; evaluate
+offline whether the Responses envelope can preserve the full downstream contract; and only after that
+consider a bounded safety replication over the new endpoint. One accepted request is not a migration.
+
+**If `RESPONSES_20B_STRICT_LOCAL_VALIDATION_FAILED`:** the endpoint accepts the request and does not
+produce a usable Riya reply. Worse than a 400 for adoption purposes, and it closes the Responses branch
+without needing another provider run. Next: option (B) — JSON Object Mode with local strict validation
+and no silent acceptance — or option (C), an alternative provider/model with strict schema support.
+
+**If `RESPONSES_20B_STRICT_PROVIDER_REJECTED` with `JSON_VALIDATE_FAILED`:** the strict failure is
+reproduced across **both** governed models **and both** documented output contracts. That materially
+strengthens the repro to file with Groq, and it retires the "wrong endpoint" hypothesis. Next: options
+(B) then (C), offline, and do not run either GPT-OSS model against this contract again.
+
+**If rate-limited, infra-interrupted or inconclusive:** stop and diagnose that exact non-verdict. In
+particular an `INCONCLUSIVE` here most likely means the project is not enrolled for the beta endpoint,
+which is an account action and not a code change. No rerun under the same one-shot authorization.
+
+### Containment for this phase
+
+```
+GROQ_CALLS=0
+PROVIDER_CALLS=0
+CREDENTIAL_READS=0
+LIVE_RSP20B1_EXECUTED=NO
+LIVE_RSP20B1_AUTHORIZED=NO
+MD120B3_RERUN=NO
+MD120B2_RERUN=NO
+MD120B1_RERUN=NO
+NRA1_RERUN=NO
+RA1_RERUN=NO
+OAD3_RERUN=NO
+OAD2_RERUN=NO
+OAD1_RERUN=NO
+SRV1_RERUN=NO
+SDH4_RERUN=NO
+S11_RERUN=NO
+PRODUCTION_MODEL_CHANGED=NO
+PRODUCTION_ENDPOINT_CHANGED=NO
+PRODUCTION_SCHEMA_CHANGED=NO
+PRODUCTION_PROMPT_CHANGED=NO
+PRODUCTION_BUDGET_CHANGED=NO
+PRODUCTION_SAMPLING_CHANGED=NO
+PRODUCTION_REASONING_CHANGED=NO
+PRODUCTION_RETRY_CHANGED=NO
+PRODUCTION_FALLBACK_CHANGED=NO
+SAFETY_FIXTURE_CHANGED=NO
+P10_CORPUS_CHANGED=NO
+FAILED_GENERATION_LOGGING_ADDED=NO
+RAW_PROVIDER_BODY_LOGGING_ADDED=NO
+20B_MODEL_QUALITY_VERDICT=UNRESOLVED
+SAFETY_AUTHORIZED=NO
+P10_AUTHORIZED=NO
+```
+
+---
+
+## 26. PR #139 OWNER CORRECTION — THE ACCEPTANCE AUTHORITY WAS ONLY THE FIRST STAGE
+
+Owner review of PR #139 at head `6e2bcb32a7f2436834000d2dff50117823fd4f69` returned
+`PASS_WITH_ONE_MATERIAL_ACCEPTANCE_BLOCKER`. The endpoint-differential architecture is kept unchanged;
+one thing inside it was wrong, and it was wrong in the expensive direction.
+
+### The defect
+
+§25 described the gate as running "the production canonical validator". What it actually ran was:
+
+```
+captured.canonicalStructuredSchema.safeParse(structuredValue).success
+```
+
+That object is real — it is `ModelRequest.structuredSchema`, the same schema the gateway validates
+structured output with at the provider boundary. But it is the **first stage** of production
+acceptance, not the whole of it.
+
+The real authority is `createRiyaConversationModelProfile(...).projectStructuredResult`, which the M4
+adapter uses to decide whether a Riya answer may be carried as a draft. After the wire shape parses,
+it still requires:
+
+- grounded citations to be records the model was actually shown;
+- the provider-wire SET/CLEAR arrays to reproject and survive
+  `createRiyaConversationObservationBatch`, including the **combined** duplicate, conflict and limit
+  invariants that neither per-array bound proves;
+- every asserted service and location ref to exist in the availability snapshot;
+- `evolveRiyaConversation` to produce a state without refusing, and the **prospective** state to be
+  self-consistent;
+- the model's claimed next-question plan to agree with the reducer's **exactly**, phase and field
+  order included;
+- and only then does it return a projection.
+
+So a document can satisfy:
+
+```
+WIRE_SCHEMA_SAFE_PARSE=PASS
+PRODUCTION_PROJECT_STRUCTURED_RESULT=FAIL
+```
+
+At the reviewed head, that document would have been classified `RESPONSES_20B_STRICT_ACCEPTED`.
+
+### Why that is the worst possible failure for this diagnostic
+
+Every other misclassification in this vocabulary is conservative. A rate limit read as a rejection
+wastes an authorization; an entitlement 403 read as inconclusive is exactly right; a 400 says a
+refusal happened and claims nothing about its cause.
+
+A false ACCEPTED is not conservative. It would tell an owner that the Responses API repairs the strict
+path — the finding this entire five-run sequence exists to establish or rule out — when production
+Riya would have refused the very answer the endpoint returned. It would then be used to justify a
+bounded safety replication on a beta endpoint that does not work.
+
+`json_validate_failed` on Chat Completions is at least the provider saying so out loud. A wire-shaped
+document that production silently refuses says nothing out loud at all.
+
+### The correction
+
+No downstream Riya rule is copied or reimplemented. The **exact production projector** is reused.
+
+**One profile-construction site.** `createRiyaEvaluationProfile(request)` is factored out of
+`runRiyaEvaluationTurn` and returns the task class, the continuity state, the grounded context and the
+profile. The turn now calls it; the diagnostic capture calls it with the **same request object** it
+hands the turn. Neither builds a profile any other way, and a spec asserts both factories are called
+exactly once each in `riya-turn.ts`, inside that helper, before the turn function. Behaviour for
+existing evaluation turns is unchanged.
+
+**The capture carries both layers, named for what each proves.**
+
+| Field                     | What it proves                                        |
+| ------------------------- | ----------------------------------------------------- |
+| `structuredWireSchema`    | the document has the SHAPE the provider was asked for |
+| `projectStructuredResult` | production Riya would carry this answer as a draft    |
+
+`canonicalStructuredSchema` is **gone**, not merely re-described: a spec asserts the capture no longer
+has the property, so nothing can reach a shape-only check by that name again. No `zod` dependency was
+added — both types are derived from contracts this package already imports.
+
+**The verdict.** The port's dependency is the projector, not the schema:
+
+```
+localValidationCompleted = true
+localValidationPassed    = projectStructuredResult(structuredValue) !== undefined
+```
+
+A projector that throws is a refusal like any other — the adapter documents `undefined` and a throw as
+the same outcome — and the thrown object is never read. The projection is consumed as a presence check
+and discarded in the same statement: two booleans survive it.
+
+`RESPONSES_20B_STRICT_ACCEPTED` is therefore reachable **only** when the full production projector
+succeeds. Nothing about the HTTP classifier changed, and full-projection failure is still
+`RESPONSES_20B_STRICT_LOCAL_VALIDATION_FAILED` — never provider rejection, because nobody rejected
+anything at the provider.
+
+### The two fixtures, both proven on both layers
+
+The required negative isolates the **reducer-agreement** invariant, chosen because it is the most
+stable rule in the projector and the one the profile's own documentation calls the point of the
+single-call design. It is the valid document with exactly one field moved: a next-question phase the
+reducer did not decide. The replacement is **computed** rather than hard-coded, so it can never
+accidentally be the decided phase, and both values are members of the model-facing phase enum so the
+document stays wire-valid either way.
+
+| Fixture                         | `WIRE_SAFE_PARSE` | `FULL_PRODUCTION_PROJECTION` | Classification                                 |
+| ------------------------------- | ----------------- | ---------------------------- | ---------------------------------------------- |
+| production-valid                | PASS              | PASS                         | `RESPONSES_20B_STRICT_ACCEPTED`                |
+| wire-valid / production-invalid | **PASS**          | **FAIL**                     | `RESPONSES_20B_STRICT_LOCAL_VALIDATION_FAILED` |
+| wire-invalid                    | FAIL              | FAIL                         | `RESPONSES_20B_STRICT_LOCAL_VALIDATION_FAILED` |
+
+Both layers are asserted on both fixtures **before any composition runs**, in `beforeAll`, so a future
+edit that let either fixture drift fails loudly rather than passing for the wrong reason — a
+wire-invalid negative would still produce `LOCAL_VALIDATION_FAILED` while proving nothing about the
+gap it exists to cover. The projector is never stubbed or bypassed in the end-to-end specs.
+
+The third row is deliberately the same token as the second. For the ENDPOINT question, "malformed
+shape" and "valid shape production will not carry" are the same answer — the contract did not produce
+a usable reply — and splitting them would invent a distinction no decision acts on.
+
+### What did NOT change
+
+The provider wire is untouched: `POST /openai/v1/responses`, `openai/gpt-oss-20b`, the same neutral
+role-based input, `max_output_tokens=4096`, `stream=false`, `store=false`,
+`text.format.type=json_schema`, `text.format.strict=true`, the same exact projected Riya schema. No
+sampling, reasoning, tool, state or background field; no retry; no fallback. This correction is about
+**local acceptance authority** and nothing else.
+
+`model-gateway`'s package-root API count stays **77** — the projection helper lives in
+`riya-candidate-evidence-live` and required no further gateway exports. Production routing, prompt,
+schemas, budgets, postures and both corpora are unchanged. MD120B3's classification and receipt are
+untouched, and `STRICT_FAILURE_REPRODUCED_ACROSS_GPT_OSS_20B_AND_120B=YES` still stands.
+
+### Telemetry
+
+Unchanged, and the new risk is closed the same way the reasoning-trace risk was. The projector
+returns a projection containing the model's reply text; it is compared against `undefined` and
+discarded in that statement. A spec asserts the accepted reply body, the document bytes and the field
+names never reach a line.
+
+### Governance note — protected-path incident on the pre-correction pass
+
+The implementation session that produced `6e2bcb3` ran `git stash -u` while verifying that a
+`format:check` warning pre-existed. That temporarily moved the two protected untracked paths into a
+stash and restored them on `pop`.
+
+```
+PROTECTED_PATH_GOVERNANCE_INCIDENT=YES
+PROTECTED_PATH_TEMPORARY_STASH_MOVE=YES
+PROTECTED_PATH_CONTENT_READ=NO
+PROTECTED_PATH_REFERENCED_BY_CODE=NO
+PROTECTED_PATH_STAGED_IN_PR=NO
+PROTECTED_PATH_IN_DIFF=NO
+PROTECTED_PATH_CURRENT_STATUS=RESTORED_UNTRACKED
+STASH_LIST_AFTER_RESTORE=EMPTY
+```
+
+The correction pass used no `git stash`, no `git clean`, no `git add .` and no broad untracked-file
+operation; every file was staged by explicit tracked path.
+
+### Containment for this correction
+
+```
+GROQ_CALLS=0
+PROVIDER_CALLS=0
+CREDENTIAL_READS=0
+LIVE_RSP20B1_EXECUTED=NO
+LIVE_RSP20B1_AUTHORIZED=NO
+RSP20B1_PROVIDER_WIRE_CHANGED=NO
+RESPONSES_ENDPOINT_CHANGED=NO
+RESPONSES_MODEL_CHANGED=NO
+RESPONSES_OUTPUT_BUDGET_CHANGED=NO
+RESPONSES_SCHEMA_ENVELOPE_CHANGED=NO
+MODEL_GATEWAY_ROOT_API_COUNT=77
+MODEL_GATEWAY_ROOT_API_CHANGED_BY_CORRECTION=NO
+PRODUCTION_MODEL_CHANGED=NO
+PRODUCTION_ENDPOINT_CHANGED=NO
+PRODUCTION_SCHEMA_CHANGED=NO
+PRODUCTION_PROMPT_CHANGED=NO
+PRODUCTION_BUDGET_CHANGED=NO
+PRODUCTION_SAMPLING_CHANGED=NO
+PRODUCTION_REASONING_CHANGED=NO
+PRODUCTION_RETRY_CHANGED=NO
+PRODUCTION_FALLBACK_CHANGED=NO
+MD120B3_HISTORICAL_CLASSIFICATION_UNCHANGED=YES
+MD120B3_HISTORICAL_RECEIPT_UNCHANGED=YES
+STRICT_FAILURE_REPRODUCED_ACROSS_GPT_OSS_20B_AND_120B=YES
+20B_MODEL_QUALITY_VERDICT=UNRESOLVED
+SAFETY_AUTHORIZED=NO
+P10_AUTHORIZED=NO
+MERGE_AUTHORIZED=NO
+```

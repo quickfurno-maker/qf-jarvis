@@ -433,3 +433,67 @@ export type {
   ModelDifferentialProbe,
   ModelDifferentialRunner,
 } from './model-differential-port.js';
+
+// POST-MD120B3 GROQ RESPONSES API STRICT ENDPOINT DIFFERENTIAL. MD120B3 sent the neutral
+// production-built request to GPT-OSS-120B over Chat Completions and was refused with
+// JSON_VALIDATE_FAILED — the same failure class NRA1 met on 20B. The strict failure therefore
+// reproduces across BOTH governed GPT-OSS models, and the model is no longer the open axis.
+//
+// This changes exactly ONE variable: the provider ENDPOINT. The model stays the production candidate,
+// the schema stays the production projected document, the messages stay NRA1's own capture, and the
+// output bound stays 4,096. It is a DIAGNOSTIC and not a migration: the Responses API is currently
+// beta, production routing is untouched, and nothing here selects an endpoint for serving.
+//
+// The vocabulary carries one token the earlier gates did not need. On this endpoint a provider 2xx is
+// not the finding, and neither is a wire-shaped document: the verdict runs the FULL production
+// projector — the profile's own `projectStructuredResult`, not `structuredSchema.safeParse`, which is
+// only its first stage. A 2xx whose document production would refuse is
+// RESPONSES_20B_STRICT_LOCAL_VALIDATION_FAILED rather than either acceptance or provider rejection.
+// Accepting on shape alone would be a false-positive endpoint verdict, which is the worst thing this
+// diagnostic could produce.
+export {
+  PROVIDER_ENDPOINT_FAMILIES,
+  RESPONSES_DIFFERENTIAL_BASELINE_ENDPOINT_FAMILY,
+  RESPONSES_DIFFERENTIAL_ENDPOINT_FAMILY,
+  RESPONSES_DIFFERENTIAL_ENDPOINT_MATURITY,
+  RESPONSES_DIFFERENTIAL_MODEL_ID,
+  RESPONSES_DIFFERENTIAL_SCHEMA_NAME,
+  SMOKE_PROVES_RESPONSES_ENDPOINT_ENTITLEMENT,
+  SMOKE_PROVIDER_ENDPOINT_CHECK_FAMILY,
+} from './responses-differential-identity.js';
+export type { ProviderEndpointFamily } from './responses-differential-identity.js';
+export {
+  analyseResponsesDifferential,
+  RESPONSES_DIFFERENTIAL_CLASSIFICATIONS,
+} from './internal/responses-differential-classification.js';
+export type {
+  ResponsesDifferentialAnalysis,
+  ResponsesDifferentialClassification,
+  ResponsesDifferentialOutcome,
+} from './internal/responses-differential-classification.js';
+export {
+  planResponsesDifferentialProbe,
+  RESPONSES_DIFFERENTIAL_STEP_ID,
+} from './internal/operational-acceptance-plan.js';
+export type { ResponsesDifferentialStepId } from './internal/operational-acceptance-plan.js';
+export {
+  createLiveResponsesDifferentialComposition,
+  createResponsesDifferentialPort,
+  openLiveResponsesDifferentialRunner,
+  RESPONSES_DIFFERENTIAL_OUTPUT_BUDGET,
+} from './responses-differential-port.js';
+export type {
+  LiveResponsesDifferentialComposition,
+  LiveResponsesDifferentialDeps,
+  ResponsesDifferentialProbe,
+  ResponsesDifferentialRunner,
+  ResponsesProviderSeam,
+} from './responses-differential-port.js';
+export type {
+  ProjectStructuredResult,
+  StructuredWireSchema,
+} from './diagnostic-canary-materials.js';
+// POST-MD120B3. The ONE profile-construction site, exported so a spec can prove the capture and the
+// evaluation turn share it rather than reconstructing similar-looking arguments.
+export { createRiyaEvaluationProfile } from './riya-turn.js';
+export type { RiyaEvaluationProfile } from './riya-turn.js';

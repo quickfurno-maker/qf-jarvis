@@ -402,6 +402,7 @@ describe('HF3 — the one optional governed run goal', () => {
       // was refused on the production 20B candidate with the neutral turn; this sends the same
       // captured request to GPT-OSS-120B and changes nothing else.
       'POST_NRA1_GPT_OSS_120B_STRICT_MODEL_DIFFERENTIAL',
+      'POST_MD120B3_GROQ_RESPONSES_API_STRICT_DIFFERENTIAL',
     ]);
     // No goal skips a gate or forces a verdict. Both notices are content-free and name no secret.
     for (const goal of OPERATOR_RUN_GOALS) {

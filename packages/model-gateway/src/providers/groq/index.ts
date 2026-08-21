@@ -18,6 +18,28 @@ export {
   type GroqTransport,
 } from './groq-transport.js';
 
+// POST-MD120B3. The DIAGNOSTIC-ONLY Groq Responses API surface: a second transport pinned to
+// `/openai/v1/responses`, and the narrow adapter that speaks its envelope.
+//
+// Exported because the candidate evidence operator is the only package that can see BOTH this
+// gateway and the real Riya request, and the endpoint differential it exists to run cannot be
+// composed from outside without these two symbols. It is NOT a production surface: nothing here
+// registers a provider, declares a capability, or joins the routing table, and a spec asserts that no
+// production composition builds either symbol.
+export { createFetchGroqResponsesTransport, GROQ_RESPONSES_ENDPOINT } from './groq-transport.js';
+export {
+  buildGroqResponsesDiagnosticBody,
+  createGroqResponsesDiagnosticProvider,
+  decodeGroqResponsesStructuredValue,
+  groqResponsesResponseSchema,
+  type GroqResponsesDecode,
+  type GroqResponsesDiagnosticInput,
+  type GroqResponsesDiagnosticProvider,
+  type GroqResponsesDiagnosticRequestBody,
+  type GroqResponsesDiagnosticResult,
+  type GroqResponsesResponse,
+} from './groq-responses-diagnostic.js';
+
 // MVP-P2A.2 HF4-R7. The provider-facing strict-schema projection. Exported because the candidate
 // evidence operator is the only package that can see BOTH this gateway and the real Riya schemas, and
 // "the production Riya schema projects into the documented Groq subset" is a claim that has to be

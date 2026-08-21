@@ -165,6 +165,21 @@ export const MODEL_DIFFERENTIAL_MAX_PROVIDER_REQUESTS =
 /** The spend ceiling. Same conservative figure as every other bounded diagnostic. */
 export const MODEL_DIFFERENTIAL_MAX_ESTIMATED_COST_USD = 1;
 
+/**
+ * The exact arithmetic of a POST_MD120B3_GROQ_RESPONSES_API_STRICT_DIFFERENTIAL run: smoke plus ONE
+ * probe.
+ *
+ * TWO, and its OWN counter. The differential asks a different question over a different ENDPOINT, and
+ * a receipt that shared MD120B3's counter could not say which output contract produced it — which is
+ * the only thing this run measures.
+ */
+export const RESPONSES_DIFFERENTIAL_PROBE_REQUESTS = 1;
+export const RESPONSES_DIFFERENTIAL_MAX_PROVIDER_REQUESTS =
+  SMOKE_REQUESTS + RESPONSES_DIFFERENTIAL_PROBE_REQUESTS;
+
+/** The spend ceiling. Same conservative figure as every other bounded diagnostic. */
+export const RESPONSES_DIFFERENTIAL_MAX_ESTIMATED_COST_USD = 1;
+
 /** Why the ledger refused the next call. Closed and content-free. */
 export const LEDGER_REFUSALS = [
   'request-limit-reached',
@@ -192,6 +207,7 @@ export const LEDGER_PHASES = [
   'representative-acceptance-probe',
   'neutral-representative-probe',
   'model-differential-probe',
+  'responses-differential-probe',
 ] as const;
 export type LedgerPhase = (typeof LEDGER_PHASES)[number];
 
@@ -244,6 +260,14 @@ export interface LedgerSnapshot {
    * able to say a request was spent on 120B rather than on the production candidate.
    */
   readonly modelDifferentialProbeProviderRequests: number;
+  /**
+   * POST-MD120B3. Groq Responses API strict endpoint-differential probe requests.
+   *
+   * A NINTH counter. The endpoint is the variable this run exists to change, so the receipt must be
+   * able to say a request was spent on `/openai/v1/responses` rather than on the production Chat
+   * Completions contract every earlier probe used.
+   */
+  readonly responsesDifferentialProbeProviderRequests: number;
   readonly totalProviderRequests: number;
   readonly successfulProviderResponses: number;
   readonly providerFailures: number;
@@ -317,6 +341,7 @@ export function createRequestLedger(config: RequestLedgerConfig): RequestLedger 
     'representative-acceptance-probe': 0,
     'neutral-representative-probe': 0,
     'model-differential-probe': 0,
+    'responses-differential-probe': 0,
   };
   let successes = 0;
   let failures = 0;
@@ -407,6 +432,7 @@ export function createRequestLedger(config: RequestLedgerConfig): RequestLedger 
         representativeAcceptanceProbeProviderRequests: counts['representative-acceptance-probe'],
         neutralRepresentativeProbeProviderRequests: counts['neutral-representative-probe'],
         modelDifferentialProbeProviderRequests: counts['model-differential-probe'],
+        responsesDifferentialProbeProviderRequests: counts['responses-differential-probe'],
         totalProviderRequests: total(),
         successfulProviderResponses: successes,
         providerFailures: failures,
@@ -497,6 +523,41 @@ export function createModelDifferentialLedger(): RequestLedger {
     pricePerMillionCachedInputUsd: MODEL_DIFFERENTIAL_PRICE_PER_M_CACHED_INPUT_USD,
     pricePerMillionOutputUsd: MODEL_DIFFERENTIAL_PRICE_PER_M_OUTPUT_USD,
     // Token ceilings are shared by both models, so they stay on the release constants.
+    fallbackInputTokens: CANDIDATE_MAX_INPUT_TOKENS,
+    fallbackOutputTokens: CANDIDATE_MAX_COMPLETION_TOKENS,
+    hardMaxInputTokens: CANDIDATE_MAX_INPUT_TOKENS,
+    hardMaxOutputTokens: CANDIDATE_MAX_COMPLETION_TOKENS,
+  });
+}
+
+/**
+ * The ledger for a bounded POST_MD120B3_GROQ_RESPONSES_API_STRICT_DIFFERENTIAL run.
+ *
+ * The text smoke plus ONE Responses endpoint probe: TWO requests, one dollar.
+ *
+ * Its own ledger and its own counter, so it can never be confused with MD120B3 — which sent the same
+ * captured request to 120B over Chat Completions and was refused.
+ *
+ * ### It prices at the PRODUCTION tariff, and that is correct rather than convenient
+ *
+ * MD120B3's ledger prices at the 120B schedule because that run is MIXED: a 20B smoke and a 120B
+ * candidate against a `RequestLedger` that carries one schedule, deliberately over-estimating the
+ * smoke rather than under-estimating the candidate.
+ *
+ * This run is SINGLE-model. Both requests go to `CANDIDATE_MODEL_ID`, so the production schedule is
+ * the right schedule for both and no conservative posture is needed. Reading the rates from
+ * `candidate-release.ts` rather than restating them means a published price change moves this ledger
+ * with every other one — and it also means this ledger cannot quietly diverge from what production
+ * believes the candidate costs.
+ */
+export function createResponsesDifferentialLedger(): RequestLedger {
+  return createRequestLedger({
+    maxRequests: RESPONSES_DIFFERENTIAL_MAX_PROVIDER_REQUESTS,
+    maxCostUsd: RESPONSES_DIFFERENTIAL_MAX_ESTIMATED_COST_USD,
+    // The PRODUCTION tariff. Both requests are the production 20B model.
+    pricePerMillionInputUsd: CANDIDATE_PRICE_PER_M_INPUT_USD,
+    pricePerMillionCachedInputUsd: CANDIDATE_PRICE_PER_M_CACHED_INPUT_USD,
+    pricePerMillionOutputUsd: CANDIDATE_PRICE_PER_M_OUTPUT_USD,
     fallbackInputTokens: CANDIDATE_MAX_INPUT_TOKENS,
     fallbackOutputTokens: CANDIDATE_MAX_COMPLETION_TOKENS,
     hardMaxInputTokens: CANDIDATE_MAX_INPUT_TOKENS,

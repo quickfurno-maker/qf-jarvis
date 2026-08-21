@@ -74,6 +74,14 @@ import {
 import { analyseModelDifferential } from './internal/model-differential-classification.js';
 import type { ModelDifferentialOutcome } from './internal/model-differential-classification.js';
 import type { ModelDifferentialProbe } from './model-differential-port.js';
+import {
+  emitResponsesDifferentialClassification,
+  emitResponsesDifferentialProbeOutcome,
+  emitResponsesDifferentialReceipt,
+} from './internal/responses-differential-emitters.js';
+import { analyseResponsesDifferential } from './internal/responses-differential-classification.js';
+import type { ResponsesDifferentialOutcome } from './internal/responses-differential-classification.js';
+import type { ResponsesDifferentialProbe } from './responses-differential-port.js';
 import type { RepresentativeAcceptanceOutcome } from './internal/representative-acceptance-classification.js';
 import {
   emitOperationalAcceptanceClassification,
@@ -299,6 +307,17 @@ export interface OperatorDeps {
     readonly probe: ModelDifferentialProbe;
     readonly run: (probe: ModelDifferentialProbe) => Promise<ModelDifferentialOutcome>;
   }>;
+  /**
+   * POST-MD120B3. Bind the RESPONSES API endpoint differential runner to the resolved credential.
+   *
+   * Same credential-bound one-probe shape as the seam above, and required only for
+   * `POST_MD120B3_GROQ_RESPONSES_API_STRICT_DIFFERENTIAL`. Its probe carries the SAME neutral request
+   * NRA1 and MD120B3 sent, on the SAME production model NRA1 used; only the provider endpoint differs.
+   */
+  readonly openResponsesDifferentialRunner?: (credential: unknown) => Promise<{
+    readonly probe: ResponsesDifferentialProbe;
+    readonly run: (probe: ResponsesDifferentialProbe) => Promise<ResponsesDifferentialOutcome>;
+  }>;
 }
 
 export interface OperatorResult {
@@ -423,6 +442,64 @@ export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<
   // The second ingress line. In clipboard mode this is where `credentialReuseCount` becomes 2 while
   // `credentialClipboardReads` stays 1 — the pair of numbers that IS the copy-once guarantee.
   emitCredentialIngress(safe, credentialSource, 'CANDIDATE', deps.ingressCounters?.());
+
+  // F''''''''. THE GROQ RESPONSES API STRICT ENDPOINT DIFFERENTIAL (POST-MD120B3) — and then STOP.
+  //
+  // ONE probe, like the three gates below it. MD120B3 sent the neutral production-built request to
+  // GPT-OSS-120B over Chat Completions and was refused with JSON_VALIDATE_FAILED, exactly as NRA1 was
+  // on 20B — so the strict failure reproduces across both governed models and the model is no longer
+  // the open axis. This sends the SAME captured request, on the SAME production 20B model, and
+  // changes only the provider endpoint. No baseline request is re-sent: NRA1 and MD120B3 already
+  // established it, and spending a live request to re-prove it would answer nothing new.
+  //
+  // The one structural difference from every gate below: a provider 2xx is not the finding here. The
+  // runner also validates the returned document against the PRODUCTION canonical schema, and the
+  // classification line carries both halves.
+  if (runGoal === 'POST_MD120B3_GROQ_RESPONSES_API_STRICT_DIFFERENTIAL') {
+    const openRunner = deps.openResponsesDifferentialRunner;
+    if (openRunner === undefined) {
+      safe.line({ phase: 'responses-differential', status: 'FAILED', reason: 'port-missing' });
+      return { outcome: 'INTERNAL_CLOSED_FAILURE' };
+    }
+    let runner: {
+      readonly probe: ResponsesDifferentialProbe;
+      readonly run: (probe: ResponsesDifferentialProbe) => Promise<ResponsesDifferentialOutcome>;
+    };
+    try {
+      runner = await openRunner(candidateCredential);
+    } catch {
+      safe.line({
+        phase: 'responses-differential',
+        status: 'FAILED',
+        reason: 'runner-bind-failed',
+      });
+      return { outcome: 'INTERNAL_CLOSED_FAILURE' };
+    }
+
+    let responsesOutcome: ResponsesDifferentialOutcome | undefined;
+    const responsesReservation = ledger.reserve('responses-differential-probe');
+    if (!responsesReservation.ok) {
+      safe.line({
+        phase: 'responses-differential',
+        status: 'REFUSED',
+        stepId: runner.probe.stepId,
+        reason: responsesReservation.refusal,
+      });
+    } else {
+      responsesOutcome = await runner.run(runner.probe);
+      ledger.settle(undefined, responsesOutcome.providerCompleted);
+      emitResponsesDifferentialProbeOutcome(safe, runner.probe, responsesOutcome);
+    }
+
+    emitResponsesDifferentialClassification(
+      safe,
+      analyseResponsesDifferential(responsesOutcome),
+      responsesOutcome === undefined ? 0 : 1,
+    );
+    emitResponsesDifferentialReceipt(safe, ledger.snapshot());
+    safe.line({ finalStatus: 'POST_MD120B3_GROQ_RESPONSES_API_STRICT_DIFFERENTIAL_COMPLETE' });
+    return { outcome: 'POST_MD120B3_GROQ_RESPONSES_API_STRICT_DIFFERENTIAL_COMPLETE' };
+  }
 
   // F'''''''. THE GPT-OSS-120B STRICT MODEL DIFFERENTIAL (POST-NRA1) — and then STOP.
   //

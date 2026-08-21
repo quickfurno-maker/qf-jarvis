@@ -90,6 +90,15 @@ export const OPERATOR_OUTCOMES = [
    * never the finding — the classification line carries it.
    */
   'POST_NRA1_GPT_OSS_120B_STRICT_MODEL_DIFFERENTIAL_COMPLETE',
+  /**
+   * POST-MD120B3. The Responses API endpoint differential ran its one probe and stopped.
+   *
+   * Its own code. It says the run COMPLETED — not that the request was accepted, and not that the
+   * reply was valid. RA1, NRA1 and MD120B3 all exited on an HTTP 400, which is exactly why the exit
+   * status is never the finding: the classification line carries it, and on this goal that line has
+   * a local-validation half as well as a provider one.
+   */
+  'POST_MD120B3_GROQ_RESPONSES_API_STRICT_DIFFERENTIAL_COMPLETE',
 ] as const;
 export type OperatorOutcome = (typeof OPERATOR_OUTCOMES)[number];
 
@@ -125,4 +134,6 @@ export const OPERATOR_EXIT_CODES: Readonly<Record<OperatorOutcome, number>> = Ob
   POST_RA1_NEUTRAL_REPRESENTATIVE_ACCEPTANCE_COMPLETE: 28,
   // The next unused integer; 0-28 keep meaning exactly what they meant.
   POST_NRA1_GPT_OSS_120B_STRICT_MODEL_DIFFERENTIAL_COMPLETE: 29,
+  // The next unused integer; 0-29 keep meaning exactly what they meant.
+  POST_MD120B3_GROQ_RESPONSES_API_STRICT_DIFFERENTIAL_COMPLETE: 30,
 });

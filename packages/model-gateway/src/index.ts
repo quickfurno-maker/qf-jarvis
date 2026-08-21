@@ -112,6 +112,26 @@ export {
   type GroqTransport,
 } from './providers/groq/index.js';
 
+// POST-MD120B3 — the DIAGNOSTIC-ONLY Groq Responses API surface (endpoint, transport, envelope).
+//
+// MD120B3 reproduced the strict Chat Completions rejection across BOTH governed GPT-OSS models, so
+// the next question is whether the SAME request traverses Groq's OTHER documented output contract.
+// These symbols exist so the candidate evidence operator can ask it. They compose no provider into
+// the gateway, declare no capability and join no routing table; the serving path is Chat Completions
+// and stays so, and the Responses API is currently BETA.
+// Exactly THREE runtime symbols, which is what composing the differential costs: an endpoint to name,
+// a transport pinned to it, and the adapter that speaks its envelope. The body builder, the decoder
+// and the payload schema stay off the root and are asserted by this package's own specs, because a
+// caller that never needs to build a Responses body must not be handed the means to.
+export {
+  createFetchGroqResponsesTransport,
+  createGroqResponsesDiagnosticProvider,
+  GROQ_RESPONSES_ENDPOINT,
+  type GroqResponsesDiagnosticInput,
+  type GroqResponsesDiagnosticProvider,
+  type GroqResponsesDiagnosticResult,
+} from './providers/groq/index.js';
+
 // MVP-P2A.2 HF4-R7 — the provider-facing strict-schema projection, so the real Riya schemas can be
 // asserted against the documented Groq subset from the one package that can see both.
 export {
