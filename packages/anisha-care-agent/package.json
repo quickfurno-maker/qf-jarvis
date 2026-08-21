@@ -1,0 +1,23 @@
+{
+  "name": "@qf-jarvis/anisha-care-agent",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis Anisha CUSTOMER-CARE behaviour. The client-care half of the Anisha persona family, and nothing else: a closed care intent vocabulary, a content-minimised context snapshot carrying opaque references and BANDS (never amounts, dates, addresses or names), a closed target-neutral escalation vocabulary, and one deterministic turn decision. It is fixed to ANISHA/CLIENT/CUSTOMER_CARE and refuses vendor work before any model is reached; a SALES turn is REFERRED to the sibling sales agent rather than declined. Care notices and explains; it never resolves a refund, credit, cancellation, order state, assignment or policy exception -- every one of those is QuickFurno Core's. It is a sibling of @qf-jarvis/anisha-agent (VENDOR journey) and imports it never. It builds no model gateway, no event backbone, no memory engine, no provider abstraction and no conversation runtime -- those are reused, not replaced. No prompt text (opaque promptRef only), no model call, no transport, no persistence, no external action. Depends on @qf-jarvis/agent-runtime and zod.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/agent-runtime": "workspace:*",
+    "zod": "4.4.3"
+  }
+}
