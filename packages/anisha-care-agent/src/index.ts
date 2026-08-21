@@ -64,10 +64,7 @@ export {
 } from './contracts/care-outcome.js';
 export type { CareDisposition } from './contracts/care-outcome.js';
 
-export {
-  CARE_ESCALATION_REASONS,
-  CARE_ESCALATION_REASONS_FROZEN,
-} from './contracts/escalation.js';
+export { CARE_ESCALATION_REASONS, CARE_ESCALATION_REASONS_FROZEN } from './contracts/escalation.js';
 export type { CareEscalationReason } from './contracts/escalation.js';
 
 export {

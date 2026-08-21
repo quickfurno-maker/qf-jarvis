@@ -63,16 +63,16 @@ export type CareEngagementStage = (typeof CARE_ENGAGEMENT_STAGES)[number];
 /** What one care turn was told about the matter it concerns. Frozen, opaque, banded. */
 export interface CareContext {
   /** Which engagement this turn is about. Opaque; this package never resolves it. */
-  readonly engagementRef?: string;
+  readonly engagementRef?: string | undefined;
   /** Which open care matter, when one exists. Opaque. */
-  readonly caseRef?: string;
-  readonly stage?: CareEngagementStage;
-  readonly valueBand?: CareValueBand;
-  readonly ageBand?: CareAgeBand;
+  readonly caseRef?: string | undefined;
+  readonly stage?: CareEngagementStage | undefined;
+  readonly valueBand?: CareValueBand | undefined;
+  readonly ageBand?: CareAgeBand | undefined;
   /** Whether a care matter is already open. A boolean, never a count of them. */
-  readonly hasOpenCase?: boolean;
+  readonly hasOpenCase?: boolean | undefined;
   /** Whether this matter has already been escalated once. Repeat escalation reads differently. */
-  readonly previouslyEscalated?: boolean;
+  readonly previouslyEscalated?: boolean | undefined;
 }
 
 export const careContextSchema = z

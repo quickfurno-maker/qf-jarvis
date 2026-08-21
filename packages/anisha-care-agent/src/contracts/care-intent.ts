@@ -94,23 +94,23 @@ export const CARE_INTENTS_FROZEN: readonly CareIntent[] = Object.freeze([...CARE
  */
 export interface CareSignals {
   /** The client explicitly asked for a human. */
-  readonly humanRequested?: boolean;
+  readonly humanRequested?: boolean | undefined;
   /** A complaint was registered upstream for this conversation. */
-  readonly complaintRaised?: boolean;
+  readonly complaintRaised?: boolean | undefined;
   /** Upstream classified this as disputed, sensitive, legal, fraud or policy-exception. */
-  readonly escalationRequired?: boolean;
+  readonly escalationRequired?: boolean | undefined;
   /** The turn concerns refund, cancellation or billing. */
-  readonly refundCancellationOrBilling?: boolean;
+  readonly refundCancellationOrBilling?: boolean | undefined;
   /** The turn concerns warranty, defect or aftercare. */
-  readonly warrantyOrAftercare?: boolean;
+  readonly warrantyOrAftercare?: boolean | undefined;
   /** The turn concerns scheduling, delivery or installation timing. */
-  readonly schedulingOrDelivery?: boolean;
+  readonly schedulingOrDelivery?: boolean | undefined;
   /** The turn asks where an existing order or project has reached. */
-  readonly orderOrProjectStatus?: boolean;
+  readonly orderOrProjectStatus?: boolean | undefined;
   /** Upstream identified this as a NEW sales enquiry rather than care on existing business. */
-  readonly salesEnquiry?: boolean;
+  readonly salesEnquiry?: boolean | undefined;
   /** The turn is not customer care at all. */
-  readonly outOfScope?: boolean;
+  readonly outOfScope?: boolean | undefined;
 }
 
 export const careSignalsSchema = z

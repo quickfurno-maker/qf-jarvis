@@ -146,6 +146,15 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
 
+  packages/anisha-care-agent:
+    dependencies:
+      '@qf-jarvis/agent-runtime':
+        specifier: workspace:*
+        version: link:../agent-runtime
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+
   packages/approval-core-adapter:
     dependencies:
       '@qf-jarvis/approval-runtime':

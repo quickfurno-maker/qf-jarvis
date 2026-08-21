@@ -375,6 +375,16 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // QFJ-S3-D-A (ADR-0070): the Anisha vendor-journey behaviour package. Still an EXACT set
       // match -- this records an authorised addition, it does not relax the assertion.
       'anisha-agent',
+      // TRACK B: the Anisha CUSTOMER-CARE behaviour package, a SIBLING of the vendor one above.
+      // Still an EXACT set match -- this records an authorised addition, it does not relax the
+      // assertion.
+      //
+      // A separate package rather than a widening, because the vendor package is fixed to
+      // ANISHA/VENDOR and refuses client work before any model is reached; covering customer care
+      // inside it would have meant relaxing both of those in a package `jarvis-runtime` already
+      // depends on. The two are siblings that import each other in neither direction, and a spec in
+      // the new package asserts that symmetry.
+      'anisha-care-agent',
       // QFJ-P08 (ADR-0082): the Core approval submission protocol. Still an EXACT set match -- this
       // records an authorised addition, it does not relax the assertion.
       'approval-core-adapter',
