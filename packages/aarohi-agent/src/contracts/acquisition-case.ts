@@ -75,6 +75,19 @@ export function isTerminalAcquisitionCaseState(state: AcquisitionCaseState): boo
  *
  * Note what is absent: nothing returns to `DISCOVERED`, and nothing leaves a terminal state. There
  * is no path that re-approaches a party the gate already refused.
+ *
+ * ### `HANDED_OFF_TO_ANISHA` is UNREACHABLE from this table, deliberately
+ *
+ * An earlier revision listed it as an ordinary transition out of `AWAITING_CORE_ACTIVATION`. That
+ * was an authority bypass: a caller could reach the terminal handoff state through
+ * `transitionAcquisitionCase` alone, supplying no Core activation attestation at all, and the
+ * "happy path" spec did exactly that while claiming to prove the opposite.
+ *
+ * Only QuickFurno Core authoritatively confirming ACTIVE may end Aarohi ownership. A case-state
+ * transition can never substitute for that truth, so the generic route is GONE rather than
+ * discouraged: `completeCoreActiveHandoff` in `active-handoff.ts` is the only public path into this
+ * state, and it requires the attestation. A comment asking callers to use it would have left the
+ * bypass one call away.
  */
 export const ACQUISITION_CASE_TRANSITIONS: Readonly<
   Record<AcquisitionCaseState, readonly AcquisitionCaseState[]>
@@ -83,8 +96,9 @@ export const ACQUISITION_CASE_TRANSITIONS: Readonly<
   ELIGIBILITY_PENDING: Object.freeze(['ELIGIBLE_NET_NEW', 'REFUSED', 'CLOSED'] as const),
   ELIGIBLE_NET_NEW: Object.freeze(['CONTACT_APPROVED', 'REFUSED', 'CLOSED'] as const),
   CONTACT_APPROVED: Object.freeze(['AWAITING_CORE_ACTIVATION', 'REFUSED', 'CLOSED'] as const),
-  // The ONLY path to handoff, and it still requires a Core-confirmed observation at the boundary.
-  AWAITING_CORE_ACTIVATION: Object.freeze(['HANDED_OFF_TO_ANISHA', 'REFUSED', 'CLOSED'] as const),
+  // NO handoff entry. Reaching `HANDED_OFF_TO_ANISHA` requires a Core ACTIVE attestation, which this
+  // table cannot carry — so the only ordinary exits from the boundary are refusal and closure.
+  AWAITING_CORE_ACTIVATION: Object.freeze(['REFUSED', 'CLOSED'] as const),
   HANDED_OFF_TO_ANISHA: Object.freeze([] as const),
   REFUSED: Object.freeze([] as const),
   CLOSED: Object.freeze([] as const),
@@ -145,10 +159,14 @@ export type CaseTransitionResult =
   | { readonly ok: false; readonly refusal: CaseTransitionRefusal };
 
 /**
- * Advance a case, or refuse.
+ * Advance a case through an ORDINARY lifecycle transition, or refuse.
  *
  * Returns a NEW frozen case rather than mutating: a case that could be edited in place would make
  * "terminal" advisory. A `REFUSED` transition must carry a reason, and no other transition may.
+ *
+ * This function CANNOT reach `HANDED_OFF_TO_ANISHA` from any state — the transition table has no
+ * entry for it. Handing off requires Core's ACTIVE attestation and lives in
+ * `completeCoreActiveHandoff`.
  */
 export function transitionAcquisitionCase(
   current: AcquisitionCase,

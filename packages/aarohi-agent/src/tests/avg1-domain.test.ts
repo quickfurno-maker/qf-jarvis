@@ -7,9 +7,11 @@
  *    governed status — including all three shapes of not-knowing — stops. The test iterates the
  *    CLOSED vocabulary, so a status added without a decision fails here rather than defaulting to
  *    contacting somebody.
- * 2. The ACTIVE handoff trusts exactly one authority. The substitutes ADR-0085 rules out — provider
- *    receipt, model inference, conversation claim, agent case state — are enumerated and each is
- *    proved refused even when it asserts `active: true`.
+ * 2. The ACTIVE handoff trusts exactly one authority, AND is the only route into the terminal
+ *    state. An earlier revision of this suite contained the defect it was supposed to catch: its
+ *    "happy path" walked `AWAITING_CORE_ACTIVATION -> HANDED_OFF_TO_ANISHA` through the ORDINARY
+ *    transition function, with no attestation anywhere — demonstrating the bypass while claiming to
+ *    prove the invariant. The generic route is gone, and the first test below is the regression.
  *
  * Synthetic data only. Nothing here reaches a provider, a channel, a credential or a network.
  */
@@ -27,7 +29,7 @@ import {
 import type { AcquisitionCase, AcquisitionCaseState } from '../contracts/acquisition-case.js';
 import {
   ACTIVATION_AUTHORITIES,
-  evaluateHandoffReadiness,
+  completeCoreActiveHandoff,
   HANDOFF_REJECTED_AUTHORITIES,
   HANDOFF_TRUSTED_AUTHORITY,
 } from '../contracts/active-handoff.js';
@@ -279,11 +281,14 @@ describe('the case lifecycle tracks AAROHI’S WORK, never the party’s busines
     }
   });
 
-  it('handoff is reachable ONLY from AWAITING_CORE_ACTIVATION', () => {
+  it('handoff is reachable from NO state through the ordinary table', () => {
+    // This assertion used to read `toStrictEqual(['AWAITING_CORE_ACTIVATION'])`, which encoded the
+    // bypass as if it were the design. Ending Aarohi ownership requires Core's ACTIVE attestation,
+    // and the ordinary table cannot carry one, so it must offer no route at all.
     const sources = ACQUISITION_CASE_STATES.filter((one) =>
       canTransition(one, 'HANDED_OFF_TO_ANISHA'),
     );
-    expect([...sources]).toStrictEqual(['AWAITING_CORE_ACTIVATION']);
+    expect([...sources]).toStrictEqual([]);
   });
 
   it('a refusal must name a reason, and nothing else may carry one', () => {
@@ -321,8 +326,18 @@ describe('the case lifecycle tracks AAROHI’S WORK, never the party’s busines
       expect(opened.state).toBe('DISCOVERED');
     }
   });
+});
 
-  it('the happy path reaches handoff and stops there', () => {
+describe('THE HANDOFF — Core ACTIVE is required, and generic transition cannot substitute', () => {
+  const attest = (authority: string, active: boolean, prospectRef = PROSPECT): unknown => ({
+    prospectRef,
+    coreAttestationRef: 'core.att.1',
+    authority,
+    active,
+  });
+
+  /** A case sitting exactly at the handoff boundary, built through the ordinary lifecycle. */
+  const atBoundary = (): AcquisitionCase => {
     const opened = openAcquisitionCase({ caseRef: 'case.1', prospectRef: PROSPECT });
     if (opened === undefined) {
       throw new Error('the case must open');
@@ -333,37 +348,75 @@ describe('the case lifecycle tracks AAROHI’S WORK, never the party’s busines
       'ELIGIBLE_NET_NEW',
       'CONTACT_APPROVED',
       'AWAITING_CORE_ACTIVATION',
-      'HANDED_OFF_TO_ANISHA',
     ] as AcquisitionCaseState[]) {
       const result = transitionAcquisitionCase(current, step);
-      expect(result.ok, step).toBe(true);
-      if (result.ok) {
-        current = result.next;
+      if (!result.ok) {
+        throw new Error(`the ordinary lifecycle must reach ${step}`);
+      }
+      current = result.next;
+    }
+    return current;
+  };
+
+  it('REGRESSION: generic transition cannot reach handoff from ANY state', () => {
+    // The defect owner review found. `transitionAcquisitionCase` must have no route into the
+    // terminal state, from anywhere -- most of all from the boundary itself, where it used to.
+    for (const state of ACQUISITION_CASE_STATES) {
+      expect(canTransition(state, 'HANDED_OFF_TO_ANISHA'), state).toBe(false);
+    }
+    const boundary = atBoundary();
+    expect(boundary.state).toBe('AWAITING_CORE_ACTIVATION');
+    const bypass = transitionAcquisitionCase(boundary, 'HANDED_OFF_TO_ANISHA');
+    expect(bypass.ok).toBe(false);
+    if (!bypass.ok) {
+      expect(bypass.refusal).toBe('TRANSITION_NOT_PERMITTED');
+    }
+  });
+
+  it('the boundary state has only refusal and closure as ordinary exits', () => {
+    expect([...ACQUISITION_CASE_TRANSITIONS.AWAITING_CORE_ACTIVATION]).toStrictEqual([
+      'REFUSED',
+      'CLOSED',
+    ]);
+  });
+
+  it('Core confirming ACTIVE at the boundary hands off, preserving identity', () => {
+    const boundary = atBoundary();
+    const result = completeCoreActiveHandoff(boundary, attest(HANDOFF_TRUSTED_AUTHORITY, true));
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.next.state).toBe('HANDED_OFF_TO_ANISHA');
+      expect(Object.isFrozen(result.next)).toBe(true);
+      // Identity preserved, and nothing else travels.
+      expect(result.next.caseRef).toBe(boundary.caseRef);
+      expect(result.next.prospectRef).toBe(boundary.prospectRef);
+      expect(Object.keys(result.next).sort()).toStrictEqual(['caseRef', 'prospectRef', 'state']);
+      // The original is untouched.
+      expect(boundary.state).toBe('AWAITING_CORE_ACTIVATION');
+    }
+  });
+
+  it('EVERY state other than the boundary is refused, even with a valid Core ACTIVE attestation', () => {
+    // Order matters: a valid attestation must never PROMOTE a case that had not reached the
+    // handoff point. Core's truth about a party cannot stand in for the acquisition work.
+    for (const state of ACQUISITION_CASE_STATES) {
+      if (state === 'AWAITING_CORE_ACTIVATION') continue;
+      const wrong: AcquisitionCase = Object.freeze({
+        caseRef: 'case.1',
+        prospectRef: PROSPECT,
+        state,
+      });
+      const result = completeCoreActiveHandoff(wrong, attest(HANDOFF_TRUSTED_AUTHORITY, true));
+      expect(result.ok, state).toBe(false);
+      if (!result.ok) {
+        expect(result.reason, state).toBe('CASE_NOT_AWAITING_ACTIVATION');
       }
     }
-    expect(current.state).toBe('HANDED_OFF_TO_ANISHA');
-    expect(isTerminalAcquisitionCaseState('HANDED_OFF_TO_ANISHA')).toBe(true);
-  });
-});
-
-describe('THE HANDOFF BOUNDARY — only QuickFurno Core may confirm ACTIVE', () => {
-  const attest = (authority: string, active: boolean, prospectRef = PROSPECT): unknown => ({
-    prospectRef,
-    coreAttestationRef: 'core.att.1',
-    authority,
-    active,
-  });
-
-  it('Core confirming ACTIVE is ready', () => {
-    expect(
-      evaluateHandoffReadiness(PROSPECT, attest(HANDOFF_TRUSTED_AUTHORITY, true)),
-    ).toStrictEqual({ ready: true });
   });
 
   it('EVERY non-Core authority is refused, even asserting active:true', () => {
-    // The substitutes ADR-0085 names explicitly: a provider receipt, a model's reading of a
-    // conversation, and a message claiming payment. Each is enumerated so its refusal is provable
-    // rather than merely intended.
+    // The substitutes ADR-0085 names: a provider receipt, a model's reading of a conversation, and
+    // a message claiming payment. Each enumerated so its refusal is provable rather than intended.
     expect([...HANDOFF_REJECTED_AUTHORITIES].sort()).toStrictEqual([
       'AGENT_CASE_STATE',
       'CONVERSATION_CLAIM',
@@ -371,60 +424,124 @@ describe('THE HANDOFF BOUNDARY — only QuickFurno Core may confirm ACTIVE', () 
       'PROVIDER_RECEIPT',
     ]);
     for (const authority of HANDOFF_REJECTED_AUTHORITIES) {
-      const verdict = evaluateHandoffReadiness(PROSPECT, attest(authority, true));
-      expect(verdict.ready, authority).toBe(false);
-      if (!verdict.ready) {
-        // Refused as a WRONG AUTHORITY, not evaluated as a fact — the ordering is the point.
-        expect(verdict.reason).toBe('AUTHORITY_NOT_CORE');
+      const result = completeCoreActiveHandoff(atBoundary(), attest(authority, true));
+      expect(result.ok, authority).toBe(false);
+      if (!result.ok) {
+        expect(result.reason).toBe('AUTHORITY_NOT_CORE');
       }
     }
   });
 
-  it('exactly one authority is trusted, across the closed vocabulary', () => {
+  it('exactly one authority can hand off, across the closed vocabulary', () => {
     const trusted = ACTIVATION_AUTHORITIES.filter(
-      (one) => evaluateHandoffReadiness(PROSPECT, attest(one, true)).ready,
+      (one) => completeCoreActiveHandoff(atBoundary(), attest(one, true)).ok,
     );
     expect([...trusted]).toStrictEqual(['QUICKFURNO_CORE']);
   });
 
   it('Core declining to confirm is refused for that reason', () => {
-    const verdict = evaluateHandoffReadiness(PROSPECT, attest(HANDOFF_TRUSTED_AUTHORITY, false));
-    expect(verdict.ready).toBe(false);
-    if (!verdict.ready) {
-      expect(verdict.reason).toBe('CORE_DID_NOT_CONFIRM_ACTIVE');
+    const result = completeCoreActiveHandoff(
+      atBoundary(),
+      attest(HANDOFF_TRUSTED_AUTHORITY, false),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe('CORE_DID_NOT_CONFIRM_ACTIVE');
     }
   });
 
-  it('an attestation for a different prospect, or a malformed one, fails closed', () => {
-    for (const bad of [
+  it('an attestation for a DIFFERENT prospect cannot hand off this case', () => {
+    const result = completeCoreActiveHandoff(
+      atBoundary(),
       attest(HANDOFF_TRUSTED_AUTHORITY, true, 'prospect.someone-else'),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe('ATTESTATION_INVALID');
+    }
+  });
+
+  it('a malformed or extra-key attestation fails closed', () => {
+    for (const bad of [
       undefined,
       null,
       {},
+      'QUICKFURNO_CORE',
       { prospectRef: PROSPECT, coreAttestationRef: 'core.att.1', active: true },
-      // No authority field at all: an attestation that did not say who asserts it is not one.
       {
         prospectRef: PROSPECT,
         coreAttestationRef: 'core.att.1',
         authority: 'NOBODY',
         active: true,
       },
-      // Unknown key smuggling.
+      // Unknown-key smuggling: a receipt id or model verdict has no field to occupy, and .strict()
+      // refuses it rather than ignoring it.
       {
         prospectRef: PROSPECT,
         coreAttestationRef: 'core.att.1',
         authority: 'QUICKFURNO_CORE',
         active: true,
-        force: true,
+        providerReceiptId: 'wamid.123',
       },
     ]) {
-      expect(evaluateHandoffReadiness(PROSPECT, bad).ready, JSON.stringify(bad)).toBe(false);
+      const result = completeCoreActiveHandoff(atBoundary(), bad);
+      expect(result.ok, JSON.stringify(bad)).toBe(false);
+      if (!result.ok) {
+        expect(result.reason).toBe('ATTESTATION_INVALID');
+      }
     }
   });
 
-  it('readiness moves nothing — it is a verdict, not an action', () => {
-    const verdict = evaluateHandoffReadiness(PROSPECT, attest(HANDOFF_TRUSTED_AUTHORITY, true));
-    expect(Object.isFrozen(verdict)).toBe(true);
-    expect(Object.keys(verdict)).toStrictEqual(['ready']);
+  it('a malformed CASE is refused as CASE_INVALID, not blamed on the attestation', () => {
+    for (const bad of [
+      { caseRef: '', prospectRef: PROSPECT, state: 'AWAITING_CORE_ACTIVATION' },
+      { caseRef: 'case.1', prospectRef: 'has space', state: 'AWAITING_CORE_ACTIVATION' },
+      { caseRef: 'case.1', prospectRef: PROSPECT, state: 'NOT_A_STATE' },
+    ] as unknown as AcquisitionCase[]) {
+      const result = completeCoreActiveHandoff(bad, attest(HANDOFF_TRUSTED_AUTHORITY, true));
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.reason).toBe('CASE_INVALID');
+      }
+    }
+  });
+
+  it('the handed-off case stays terminal under every ordinary transition', () => {
+    const result = completeCoreActiveHandoff(atBoundary(), attest(HANDOFF_TRUSTED_AUTHORITY, true));
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(isTerminalAcquisitionCaseState(result.next.state)).toBe(true);
+    for (const target of ACQUISITION_CASE_STATES) {
+      const after = transitionAcquisitionCase(result.next, target);
+      expect(after.ok, target).toBe(false);
+      if (!after.ok) {
+        expect(after.refusal).toBe('CASE_ALREADY_TERMINAL');
+      }
+    }
+    // And it cannot be handed off twice.
+    const again = completeCoreActiveHandoff(result.next, attest(HANDOFF_TRUSTED_AUTHORITY, true));
+    expect(again.ok).toBe(false);
+    if (!again.ok) {
+      expect(again.reason).toBe('CASE_NOT_AWAITING_ACTIVATION');
+    }
+  });
+
+  it('the full lifecycle: ordinary transitions to the boundary, then Core-authorized handoff', () => {
+    // The corrected happy path. The last step is NOT an ordinary transition, and that is the point.
+    const boundary = atBoundary();
+    expect(boundary.state).toBe('AWAITING_CORE_ACTIVATION');
+    const handed = completeCoreActiveHandoff(boundary, attest(HANDOFF_TRUSTED_AUTHORITY, true));
+    expect(handed.ok).toBe(true);
+    if (handed.ok) {
+      expect(handed.next.state).toBe('HANDED_OFF_TO_ANISHA');
+    }
+  });
+
+  it('handing off moves nothing — it is a domain transition, not an action', () => {
+    const result = completeCoreActiveHandoff(atBoundary(), attest(HANDOFF_TRUSTED_AUTHORITY, true));
+    expect(Object.isFrozen(result)).toBe(true);
+    expect(Object.keys(result).sort()).toStrictEqual(['next', 'ok']);
   });
 });

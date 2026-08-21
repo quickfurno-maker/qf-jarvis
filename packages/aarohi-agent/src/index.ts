@@ -23,8 +23,12 @@
  * ### The two invariants worth reading the code for
  *
  * The existing-vendor gate is an ALLOWLIST with exactly one permitted status, and absent or
- * ambiguous Core truth is a STOP rather than a gap. The ACTIVE handoff boundary trusts exactly one
- * authority, and the substitutes the overlay rules out are enumerated so their refusal is provable.
+ * ambiguous Core truth is a STOP rather than a gap.
+ *
+ * The ACTIVE handoff trusts exactly one authority, and `completeCoreActiveHandoff` is the ONLY
+ * public route into `HANDED_OFF_TO_ANISHA` — the ordinary transition table has no entry for it, so a
+ * caller cannot end Aarohi ownership without Core's attestation in hand. Substitute authority tokens
+ * are enumerated so their refusal is provable; substitute EVIDENCE has no field to occupy at all.
  */
 
 export {
@@ -79,7 +83,7 @@ export type {
 export {
   ACTIVATION_AUTHORITIES,
   activationAttestationSchema,
-  evaluateHandoffReadiness,
+  completeCoreActiveHandoff,
   HANDOFF_REFUSAL_REASONS,
   HANDOFF_REJECTED_AUTHORITIES,
   HANDOFF_TRUSTED_AUTHORITY,
@@ -87,6 +91,6 @@ export {
 export type {
   ActivationAttestation,
   ActivationAuthority,
-  HandoffReadiness,
+  CoreActiveHandoffResult,
   HandoffRefusalReason,
 } from './contracts/active-handoff.js';
