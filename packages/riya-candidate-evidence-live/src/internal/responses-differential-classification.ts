@@ -20,9 +20,21 @@
  * Every earlier gate could stop at the provider boundary, because every earlier gate was asking
  * whether the provider would ACCEPT the request. This one is asking whether a different output
  * contract produces a usable Riya reply, and those are not the same question: a 2xx from an endpoint
- * whose document does not satisfy Riya's canonical schema is a WORSE outcome than a 400, because it
- * looks like success. `json_validate_failed` on Chat Completions is at least the provider saying so
- * out loud.
+ * whose document production would refuse is a WORSE outcome than a 400, because it looks like
+ * success. `json_validate_failed` on Chat Completions is at least the provider saying so out loud.
+ *
+ * ### "Local validation" here means the FULL production projector, not a shape check
+ *
+ * The authority is the profile's `projectStructuredResult` — the same function the M4 adapter uses to
+ * decide whether a Riya answer may be carried as a draft. Wire-schema `safeParse` is its FIRST STAGE
+ * and nothing more; after it, production still checks grounded citations, rebuilds the observation
+ * batch through its canonical constructor, validates availability refs, runs the deterministic
+ * reducer, checks the prospective state, and requires the claimed next-question plan to agree with
+ * the reducer's exactly.
+ *
+ * A document can pass the wire schema and fail all of that. Accepting one on shape alone would be a
+ * FALSE-POSITIVE endpoint verdict — the single worst thing this diagnostic could produce, because it
+ * would report that the Responses API repairs the path when production would refuse its answer.
  *
  * So local validation is a first-class result rather than a footnote, and it is deliberately NOT
  * collapsed into provider rejection: the provider did not reject anything, and filing it as though it
@@ -51,12 +63,13 @@ import { isProviderAccepted, PROVIDER_OUTCOME_ROLE } from './provider-outcome-cl
 /** The closed conclusions ONE Responses differential probe can support. */
 export const RESPONSES_DIFFERENTIAL_CLASSIFICATIONS = [
   /**
-   * HTTP 2xx, the provider completed, AND the local canonical validator accepted the document.
+   * HTTP 2xx, the provider completed, AND the FULL production projector accepted the document.
    *
    * The neutral production-built request that Chat Completions refused on both GPT-OSS models was
-   * taken by the Responses API, once, and what came back is a valid Riya reply. That is an endpoint
-   * differential and nothing more: not a release decision, not a migration, not a quality verdict,
-   * not safety, not P10 eligibility, and not evidence about any other request. The endpoint is beta.
+   * taken by the Responses API, once, and what came back is an answer production Riya would carry as
+   * a draft — not merely one shaped like it. That is an endpoint differential and nothing more: not a
+   * release decision, not a migration, not a quality verdict, not safety, not P10 eligibility, and
+   * not evidence about any other request. The endpoint is beta.
    */
   'RESPONSES_20B_STRICT_ACCEPTED',
   /**
@@ -81,12 +94,14 @@ export const RESPONSES_DIFFERENTIAL_CLASSIFICATIONS = [
    */
   'RESPONSES_20B_STRICT_INCONCLUSIVE',
   /**
-   * HTTP 2xx and a decoded document, which the LOCAL canonical validator then rejected.
+   * HTTP 2xx and a decoded document, which the FULL production projector then rejected.
    *
-   * The provider accepted the request and returned something. It is not a Riya reply. Distinct from
-   * `PROVIDER_REJECTED` because nobody rejected anything at the provider, and distinct from
-   * `ACCEPTED` because the endpoint did not produce a usable result — a two-token collapse in either
-   * direction would misdirect the next decision.
+   * The provider accepted the request and returned something. It is not an answer production Riya
+   * would carry — whether it failed at the wire shape or at any later production invariant, which
+   * this token deliberately does not distinguish because both mean the same thing for the endpoint
+   * question. Distinct from `PROVIDER_REJECTED` because nobody rejected anything at the provider, and
+   * distinct from `ACCEPTED` because the endpoint did not produce a usable result — a two-token
+   * collapse in either direction would misdirect the next decision.
    */
   'RESPONSES_20B_STRICT_LOCAL_VALIDATION_FAILED',
 ] as const;
@@ -109,7 +124,7 @@ export interface ResponsesDifferentialOutcome {
   readonly providerErrorType: CandidateProviderErrorType;
   readonly providerErrorCode: CandidateProviderErrorCode;
   readonly providerCompleted: boolean;
-  /** Whether the local canonical validator was reached at all. False unless a document came back. */
+  /** Whether the full production projector was reached at all. False unless a document came back. */
   readonly localValidationCompleted: boolean;
   /** What it said. Meaningless — and always false — unless `localValidationCompleted`. */
   readonly localValidationPassed: boolean;
@@ -165,8 +180,8 @@ export function analyseResponsesDifferential(
   ): ResponsesDifferentialAnalysis => Object.freeze({ classification, ...observed });
 
   if (isProviderAccepted(outcome)) {
-    // The provider took the request. Whether the ENDPOINT answered the question is now the local
-    // validator's call, and a 2xx does not get to speak for it.
+    // The provider took the request. Whether the ENDPOINT answered the question is now the FULL
+    // production projector's call, and neither a 2xx nor a wire-shaped document speaks for it.
     return outcome.localValidationCompleted && outcome.localValidationPassed
       ? result('RESPONSES_20B_STRICT_ACCEPTED')
       : result('RESPONSES_20B_STRICT_LOCAL_VALIDATION_FAILED');

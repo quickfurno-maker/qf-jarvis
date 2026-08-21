@@ -1630,6 +1630,11 @@ and no reasoning field — and a spec enumerates every one of them as absent.
 
 ### A provider 2xx is NOT the finding — the sixth token
 
+> **Corrected by §26.** The paragraphs below describe the acceptance authority as "the production
+> canonical validator". At the reviewed head that authority was `structuredSchema.safeParse` alone,
+> which is only its FIRST STAGE. Owner review found this a merge blocker; §26 records the defect and
+> the correction. The vocabulary and the reasoning for the sixth token are unchanged.
+
 Every earlier gate could stop at the provider boundary, because every earlier gate asked whether the
 provider would **accept** the request. This one asks whether a different output contract yields a
 usable Riya reply, and those are not the same question. A 2xx whose document does not satisfy Riya's
@@ -1795,4 +1800,197 @@ RAW_PROVIDER_BODY_LOGGING_ADDED=NO
 20B_MODEL_QUALITY_VERDICT=UNRESOLVED
 SAFETY_AUTHORIZED=NO
 P10_AUTHORIZED=NO
+```
+
+---
+
+## 26. PR #139 OWNER CORRECTION — THE ACCEPTANCE AUTHORITY WAS ONLY THE FIRST STAGE
+
+Owner review of PR #139 at head `6e2bcb32a7f2436834000d2dff50117823fd4f69` returned
+`PASS_WITH_ONE_MATERIAL_ACCEPTANCE_BLOCKER`. The endpoint-differential architecture is kept unchanged;
+one thing inside it was wrong, and it was wrong in the expensive direction.
+
+### The defect
+
+§25 described the gate as running "the production canonical validator". What it actually ran was:
+
+```
+captured.canonicalStructuredSchema.safeParse(structuredValue).success
+```
+
+That object is real — it is `ModelRequest.structuredSchema`, the same schema the gateway validates
+structured output with at the provider boundary. But it is the **first stage** of production
+acceptance, not the whole of it.
+
+The real authority is `createRiyaConversationModelProfile(...).projectStructuredResult`, which the M4
+adapter uses to decide whether a Riya answer may be carried as a draft. After the wire shape parses,
+it still requires:
+
+- grounded citations to be records the model was actually shown;
+- the provider-wire SET/CLEAR arrays to reproject and survive
+  `createRiyaConversationObservationBatch`, including the **combined** duplicate, conflict and limit
+  invariants that neither per-array bound proves;
+- every asserted service and location ref to exist in the availability snapshot;
+- `evolveRiyaConversation` to produce a state without refusing, and the **prospective** state to be
+  self-consistent;
+- the model's claimed next-question plan to agree with the reducer's **exactly**, phase and field
+  order included;
+- and only then does it return a projection.
+
+So a document can satisfy:
+
+```
+WIRE_SCHEMA_SAFE_PARSE=PASS
+PRODUCTION_PROJECT_STRUCTURED_RESULT=FAIL
+```
+
+At the reviewed head, that document would have been classified `RESPONSES_20B_STRICT_ACCEPTED`.
+
+### Why that is the worst possible failure for this diagnostic
+
+Every other misclassification in this vocabulary is conservative. A rate limit read as a rejection
+wastes an authorization; an entitlement 403 read as inconclusive is exactly right; a 400 says a
+refusal happened and claims nothing about its cause.
+
+A false ACCEPTED is not conservative. It would tell an owner that the Responses API repairs the strict
+path — the finding this entire five-run sequence exists to establish or rule out — when production
+Riya would have refused the very answer the endpoint returned. It would then be used to justify a
+bounded safety replication on a beta endpoint that does not work.
+
+`json_validate_failed` on Chat Completions is at least the provider saying so out loud. A wire-shaped
+document that production silently refuses says nothing out loud at all.
+
+### The correction
+
+No downstream Riya rule is copied or reimplemented. The **exact production projector** is reused.
+
+**One profile-construction site.** `createRiyaEvaluationProfile(request)` is factored out of
+`runRiyaEvaluationTurn` and returns the task class, the continuity state, the grounded context and the
+profile. The turn now calls it; the diagnostic capture calls it with the **same request object** it
+hands the turn. Neither builds a profile any other way, and a spec asserts both factories are called
+exactly once each in `riya-turn.ts`, inside that helper, before the turn function. Behaviour for
+existing evaluation turns is unchanged.
+
+**The capture carries both layers, named for what each proves.**
+
+| Field                     | What it proves                                        |
+| ------------------------- | ----------------------------------------------------- |
+| `structuredWireSchema`    | the document has the SHAPE the provider was asked for |
+| `projectStructuredResult` | production Riya would carry this answer as a draft    |
+
+`canonicalStructuredSchema` is **gone**, not merely re-described: a spec asserts the capture no longer
+has the property, so nothing can reach a shape-only check by that name again. No `zod` dependency was
+added — both types are derived from contracts this package already imports.
+
+**The verdict.** The port's dependency is the projector, not the schema:
+
+```
+localValidationCompleted = true
+localValidationPassed    = projectStructuredResult(structuredValue) !== undefined
+```
+
+A projector that throws is a refusal like any other — the adapter documents `undefined` and a throw as
+the same outcome — and the thrown object is never read. The projection is consumed as a presence check
+and discarded in the same statement: two booleans survive it.
+
+`RESPONSES_20B_STRICT_ACCEPTED` is therefore reachable **only** when the full production projector
+succeeds. Nothing about the HTTP classifier changed, and full-projection failure is still
+`RESPONSES_20B_STRICT_LOCAL_VALIDATION_FAILED` — never provider rejection, because nobody rejected
+anything at the provider.
+
+### The two fixtures, both proven on both layers
+
+The required negative isolates the **reducer-agreement** invariant, chosen because it is the most
+stable rule in the projector and the one the profile's own documentation calls the point of the
+single-call design. It is the valid document with exactly one field moved: a next-question phase the
+reducer did not decide. The replacement is **computed** rather than hard-coded, so it can never
+accidentally be the decided phase, and both values are members of the model-facing phase enum so the
+document stays wire-valid either way.
+
+| Fixture                         | `WIRE_SAFE_PARSE` | `FULL_PRODUCTION_PROJECTION` | Classification                                 |
+| ------------------------------- | ----------------- | ---------------------------- | ---------------------------------------------- |
+| production-valid                | PASS              | PASS                         | `RESPONSES_20B_STRICT_ACCEPTED`                |
+| wire-valid / production-invalid | **PASS**          | **FAIL**                     | `RESPONSES_20B_STRICT_LOCAL_VALIDATION_FAILED` |
+| wire-invalid                    | FAIL              | FAIL                         | `RESPONSES_20B_STRICT_LOCAL_VALIDATION_FAILED` |
+
+Both layers are asserted on both fixtures **before any composition runs**, in `beforeAll`, so a future
+edit that let either fixture drift fails loudly rather than passing for the wrong reason — a
+wire-invalid negative would still produce `LOCAL_VALIDATION_FAILED` while proving nothing about the
+gap it exists to cover. The projector is never stubbed or bypassed in the end-to-end specs.
+
+The third row is deliberately the same token as the second. For the ENDPOINT question, "malformed
+shape" and "valid shape production will not carry" are the same answer — the contract did not produce
+a usable reply — and splitting them would invent a distinction no decision acts on.
+
+### What did NOT change
+
+The provider wire is untouched: `POST /openai/v1/responses`, `openai/gpt-oss-20b`, the same neutral
+role-based input, `max_output_tokens=4096`, `stream=false`, `store=false`,
+`text.format.type=json_schema`, `text.format.strict=true`, the same exact projected Riya schema. No
+sampling, reasoning, tool, state or background field; no retry; no fallback. This correction is about
+**local acceptance authority** and nothing else.
+
+`model-gateway`'s package-root API count stays **77** — the projection helper lives in
+`riya-candidate-evidence-live` and required no further gateway exports. Production routing, prompt,
+schemas, budgets, postures and both corpora are unchanged. MD120B3's classification and receipt are
+untouched, and `STRICT_FAILURE_REPRODUCED_ACROSS_GPT_OSS_20B_AND_120B=YES` still stands.
+
+### Telemetry
+
+Unchanged, and the new risk is closed the same way the reasoning-trace risk was. The projector
+returns a projection containing the model's reply text; it is compared against `undefined` and
+discarded in that statement. A spec asserts the accepted reply body, the document bytes and the field
+names never reach a line.
+
+### Governance note — protected-path incident on the pre-correction pass
+
+The implementation session that produced `6e2bcb3` ran `git stash -u` while verifying that a
+`format:check` warning pre-existed. That temporarily moved the two protected untracked paths into a
+stash and restored them on `pop`.
+
+```
+PROTECTED_PATH_GOVERNANCE_INCIDENT=YES
+PROTECTED_PATH_TEMPORARY_STASH_MOVE=YES
+PROTECTED_PATH_CONTENT_READ=NO
+PROTECTED_PATH_REFERENCED_BY_CODE=NO
+PROTECTED_PATH_STAGED_IN_PR=NO
+PROTECTED_PATH_IN_DIFF=NO
+PROTECTED_PATH_CURRENT_STATUS=RESTORED_UNTRACKED
+STASH_LIST_AFTER_RESTORE=EMPTY
+```
+
+The correction pass used no `git stash`, no `git clean`, no `git add .` and no broad untracked-file
+operation; every file was staged by explicit tracked path.
+
+### Containment for this correction
+
+```
+GROQ_CALLS=0
+PROVIDER_CALLS=0
+CREDENTIAL_READS=0
+LIVE_RSP20B1_EXECUTED=NO
+LIVE_RSP20B1_AUTHORIZED=NO
+RSP20B1_PROVIDER_WIRE_CHANGED=NO
+RESPONSES_ENDPOINT_CHANGED=NO
+RESPONSES_MODEL_CHANGED=NO
+RESPONSES_OUTPUT_BUDGET_CHANGED=NO
+RESPONSES_SCHEMA_ENVELOPE_CHANGED=NO
+MODEL_GATEWAY_ROOT_API_COUNT=77
+MODEL_GATEWAY_ROOT_API_CHANGED_BY_CORRECTION=NO
+PRODUCTION_MODEL_CHANGED=NO
+PRODUCTION_ENDPOINT_CHANGED=NO
+PRODUCTION_SCHEMA_CHANGED=NO
+PRODUCTION_PROMPT_CHANGED=NO
+PRODUCTION_BUDGET_CHANGED=NO
+PRODUCTION_SAMPLING_CHANGED=NO
+PRODUCTION_REASONING_CHANGED=NO
+PRODUCTION_RETRY_CHANGED=NO
+PRODUCTION_FALLBACK_CHANGED=NO
+MD120B3_HISTORICAL_CLASSIFICATION_UNCHANGED=YES
+MD120B3_HISTORICAL_RECEIPT_UNCHANGED=YES
+STRICT_FAILURE_REPRODUCED_ACROSS_GPT_OSS_20B_AND_120B=YES
+20B_MODEL_QUALITY_VERDICT=UNRESOLVED
+SAFETY_AUTHORIZED=NO
+P10_AUTHORIZED=NO
+MERGE_AUTHORIZED=NO
 ```

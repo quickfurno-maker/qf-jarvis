@@ -14,8 +14,9 @@
  *
  * `localValidationCompleted` / `localValidationPassed` are emitted beside the provider fields for the
  * reason the classifier has a sixth token: on this endpoint a 2xx is not the finding. A receipt that
- * printed only the HTTP facts would let a provider acceptance read as an answer the local contract
- * never gave.
+ * printed only the HTTP facts would let a provider acceptance read as an answer production never
+ * gave. `localValidationPassed` reports the FULL production projector — not a wire-shape check — and
+ * it is a boolean precisely so no part of the document it judged can ride out on it.
  *
  * `smokeEndpointCheckFamily` is printed for the opposite reason: the governed smoke runs against the
  * CHAT COMPLETIONS configuration, so a passing smoke proves the credential works there and NOT that

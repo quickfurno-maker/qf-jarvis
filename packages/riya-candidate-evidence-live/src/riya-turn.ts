@@ -29,9 +29,16 @@ import {
 import type { ModelReleaseRef, ReplyPlan } from '@qf-jarvis/agent-runtime';
 import type { ModelGatewayInvoker } from '@qf-jarvis/model-reply-adapter';
 import { createModelReplyAdapter } from '@qf-jarvis/model-reply-adapter';
-import type { ModelReplyAdapterResult, ReplyStateReader } from '@qf-jarvis/model-reply-adapter';
+import type {
+  ModelReplyAdapterResult,
+  ModelReplyStructuredOutputProfile,
+  ReplyStateReader,
+} from '@qf-jarvis/model-reply-adapter';
 import type { KnowledgeRecord } from '@qf-jarvis/governed-knowledge';
-import type { RiyaConversationPhase } from '@qf-jarvis/riya-conversation-continuity';
+import type {
+  RiyaConversationContinuityStateV1,
+  RiyaConversationPhase,
+} from '@qf-jarvis/riya-conversation-continuity';
 import {
   createRiyaConversationModelProfile,
   createRiyaGroundedReplyModelProfile,
@@ -155,10 +162,46 @@ export interface RiyaTurnDeps {
  * second one against the first one's context. Construction is pure and reaches no provider; the ONE
  * gateway call happens inside `draftReplyDetailed`.
  */
-export async function runRiyaEvaluationTurn(
-  request: RiyaTurnRequest,
-  deps: RiyaTurnDeps,
-): Promise<RiyaTurnOutcome> {
+/**
+ * The structured-output profile ONE evaluation turn runs under, and the context it was built from.
+ *
+ * `profile.projectStructuredResult` is the PRODUCTION acceptance authority for a Riya answer. It is
+ * emphatically not `structuredSchema.safeParse` — that is only the first stage. After the wire shape
+ * parses, the profile still checks grounded citations, rebuilds the observation batch through
+ * `createRiyaConversationObservationBatch` (which enforces the combined duplicate, conflict and limit
+ * invariants), checks every asserted service and location ref against the availability snapshot, runs
+ * `evolveRiyaConversation` and checks the PROSPECTIVE state, and finally requires the model's claimed
+ * next-question plan to agree exactly with the reducer's — phase and field order included.
+ *
+ * A document can pass the wire schema and fail every one of those.
+ */
+export interface RiyaEvaluationProfile {
+  readonly taskClass: string;
+  readonly current: RiyaConversationContinuityStateV1;
+  /** The context the model would be shown, or `undefined` on an ungrounded turn. */
+  readonly grounded: RiyaGroundedKnowledgeContextV1 | undefined;
+  readonly profile: ModelReplyStructuredOutputProfile;
+}
+
+/**
+ * Build the EXACT profile an evaluation turn for this request runs under.
+ *
+ * ### Why this is a function rather than four lines inside the turn
+ *
+ * POST-MD120B3 the Responses endpoint differential has to answer a question no earlier gate asked:
+ * not "did the provider accept the request" but "is what came back a usable Riya reply". Only
+ * `projectStructuredResult` can answer that, and it is meaningless unless it is bound to the SAME
+ * continuity state, the SAME availability snapshot and the SAME grounded source the turn would use.
+ *
+ * Reconstructing that context beside the turn would be a second opinion about what production
+ * accepts, which is exactly the class of approximation `diagnostic-canary-materials.ts` exists to
+ * refuse for the request. So there is ONE construction site and both callers go through it.
+ *
+ * Pure: no provider, no credential, no network, no clock. Two calls with the same request produce
+ * independent but identically-configured profiles — shared construction authority is the property,
+ * not shared instances.
+ */
+export function createRiyaEvaluationProfile(request: RiyaTurnRequest): RiyaEvaluationProfile {
   const grounded = toGroundedContext(request.admittedKnowledge ?? []);
   const taskClass = taskClassFor({
     phase: request.phase,
@@ -177,6 +220,18 @@ export async function runRiyaEvaluationTurn(
     taskClass === RIYA_GROUNDED_REPLY_TASK_CLASS
       ? createRiyaGroundedReplyModelProfile(profileArgs)
       : createRiyaConversationModelProfile(profileArgs);
+
+  return Object.freeze({ taskClass, current, grounded, profile });
+}
+
+export async function runRiyaEvaluationTurn(
+  request: RiyaTurnRequest,
+  deps: RiyaTurnDeps,
+): Promise<RiyaTurnOutcome> {
+  // The ONE profile-construction site. A diagnostic capture calls the same function with the same
+  // request, so "the capture validates through the profile this turn ran under" is a property of the
+  // code rather than a claim in a comment.
+  const { taskClass, current, grounded, profile } = createRiyaEvaluationProfile(request);
 
   const release: ModelReleaseRef = CANDIDATE_RELEASE;
 

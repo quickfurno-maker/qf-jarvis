@@ -35,15 +35,29 @@
  * re-exported, never a second literal — and a spec reads the emitted request body and asserts the
  * integer 4,096 landed in the Responses field.
  *
- * ### A 2xx is not the finding
+ * ### A 2xx is not the finding — and neither is a wire-shaped document
  *
  * Every earlier gate stopped at the provider boundary because every earlier gate asked whether the
  * provider would ACCEPT the request. This one asks whether a different output contract yields a
- * usable Riya reply, so it runs the PRODUCTION canonical validator — the zod schema the gateway
- * itself parses structured output with, carried through the capture — against whatever came back.
+ * usable Riya reply.
  *
- * The validated value is consumed by `safeParse` and discarded in the same expression. Nothing about
- * it, not its shape, its length or its keys, reaches the outcome record: two booleans do.
+ * A first revision answered that with `structuredSchema.safeParse`. That was wrong, and wrong in the
+ * expensive direction. `safeParse` is the FIRST STAGE of production acceptance — it establishes the
+ * document has the shape the provider was asked for. Production then still requires the profile's
+ * `projectStructuredResult` to succeed, which additionally checks grounded citations, rebuilds the
+ * observation batch through its canonical constructor (combined duplicate, conflict and limit
+ * invariants), validates every asserted service and location ref against the availability snapshot,
+ * runs the deterministic reducer, checks the PROSPECTIVE state, and requires the model's claimed
+ * next-question plan to agree with the reducer's exactly — phase and field order included.
+ *
+ * A document can pass the wire schema and fail every one of those. Reporting such a document as
+ * `RESPONSES_20B_STRICT_ACCEPTED` would be a FALSE-POSITIVE endpoint verdict: it would tell an owner
+ * the Responses API repairs the path when production would refuse the very answer it returned.
+ *
+ * So the verdict runs the FULL production projector, carried through the capture and built by the
+ * same function `runRiyaEvaluationTurn` builds its profile with. The projection is consumed as a
+ * presence check and discarded in the same statement. Nothing about the document or the projection —
+ * not its shape, its length, its keys or its reply text — reaches the outcome record: two booleans do.
  *
  * ### The smoke does not prove entitlement
  *
@@ -72,8 +86,8 @@ import {
 import { createCandidateTransportObservations } from './candidate-transport-observation.js';
 import type { CandidateTransportObservations } from './candidate-transport-observation.js';
 import type {
-  CanonicalStructuredSchema,
   CapturedProductionRiyaRequest,
+  ProjectStructuredResult,
 } from './diagnostic-canary-materials.js';
 import {
   planResponsesDifferentialProbe,
@@ -121,13 +135,16 @@ export interface ResponsesDifferentialPortDeps {
   readonly providerForOutputBudget: (budget: number) => ResponsesProviderSeam;
   readonly observations: CandidateTransportObservations;
   /**
-   * The PRODUCTION canonical validator, carried through the capture.
+   * The FULL production acceptance authority, carried through the capture.
    *
-   * Injected rather than imported so the port cannot acquire a second opinion about what a valid
-   * Riya reply is: the only schema it can run is the one the captured production request was built
-   * with.
+   * Injected rather than imported so the port cannot acquire a second opinion about what production
+   * accepts: the only projector it can run is the one built for the captured request, by the same
+   * function the evaluation turn uses.
+   *
+   * Deliberately NOT the wire schema. A port handed `structuredSchema` could only ever prove shape,
+   * and this gate exists to prove more than shape.
    */
-  readonly canonicalSchema: CanonicalStructuredSchema;
+  readonly projectStructuredResult: ProjectStructuredResult;
 }
 
 /** Build the runner for the ONE probe. Same observation discipline as every port beside it. */
@@ -157,14 +174,22 @@ export function createResponsesDifferentialPort(
         return;
       }
       if (!providerCompleted) {
-        // Nothing came back to validate. The validator is NOT run, and a check that never ran must
+        // Nothing came back to validate. The projector is NOT run, and a check that never ran must
         // not report a verdict — `localValidationCompleted` stays false and the classifier reads it.
         return;
       }
-      // The production authority, run exactly as the gateway runs it. The parsed value is discarded
-      // in this expression: only the boolean survives the statement.
+      // The FULL production acceptance authority, run exactly as the M4 adapter runs it. Wire-shape
+      // parsing is its first stage and emphatically not its last.
+      //
+      // The projection is consumed as a presence check and discarded in this statement: only the
+      // boolean survives it. A projector that throws is a refusal like any other — the adapter
+      // documents `undefined` or a throw as the same outcome — and the thrown object is never read.
       localValidationCompleted = true;
-      localValidationPassed = deps.canonicalSchema.safeParse(structuredValue).success;
+      try {
+        localValidationPassed = deps.projectStructuredResult(structuredValue) !== undefined;
+      } catch {
+        localValidationPassed = false;
+      }
     });
     const observed = deps.observations.observationFor(probe.stepId);
     return Object.freeze({
@@ -269,7 +294,8 @@ export function createLiveResponsesDifferentialComposition(
   const run = createResponsesDifferentialPort({
     providerForOutputBudget,
     observations,
-    canonicalSchema: deps.captured.canonicalStructuredSchema,
+    // The FULL projector, never `deps.captured.structuredWireSchema`. Shape is not acceptance.
+    projectStructuredResult: deps.captured.projectStructuredResult,
   });
 
   return Object.freeze({

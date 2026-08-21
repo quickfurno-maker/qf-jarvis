@@ -14,9 +14,17 @@
  * the projected production schema byte-for-byte, NRA1's captured message bytes, and the integer 4,096
  * in the Responses output field — and NOT a Chat Completions request, NOT 120B, and NOT a second send.
  *
- * The one structural difference from every earlier gate: a provider 2xx is not the finding. A 2xx
- * whose document the PRODUCTION canonical validator rejects must classify as
- * `RESPONSES_20B_STRICT_LOCAL_VALIDATION_FAILED`, and a spec drives exactly that.
+ * The one structural difference from every earlier gate: a provider 2xx is not the finding, and
+ * neither is a wire-shaped document. The verdict runs the FULL production projector — the profile's
+ * own `projectStructuredResult`, which after wire parsing still checks grounded citations, the
+ * canonical observation batch, availability refs, the deterministic reducer and the prospective
+ * state, and requires the claimed next-question plan to agree exactly.
+ *
+ * So two end-to-end fixtures matter, and `beforeAll` proves BOTH layers on BOTH of them before any
+ * composition runs: one document that passes wire parsing AND production, which must classify
+ * ACCEPTED; and one that passes wire parsing and that production REFUSES, which must classify
+ * `RESPONSES_20B_STRICT_LOCAL_VALIDATION_FAILED`. The second is the false-positive this gate exists
+ * to be incapable of. The projector is never stubbed or bypassed.
  *
  * The transport is fake and no credential is real; everything above it is the production path.
  */
@@ -263,8 +271,25 @@ let captured: CapturedProductionRiyaRequest;
 /** The SAFETY-DERIVED capture RA1 sent. Held only so the specs can assert it is NOT sent here. */
 let safetyDerived: CapturedProductionRiyaRequest;
 let projectedSchema: unknown;
-/** A document the PRODUCTION canonical schema accepts, built by the production evolution reducer. */
-let canonicalValidDocument: string;
+/**
+ * A document the FULL PRODUCTION PROJECTOR accepts, built by the production evolution reducer.
+ *
+ * Not hand-written: the profile refuses an answer whose claimed plan disagrees with what the reducer
+ * independently decides, so a genuinely valid document has to be computed the way production
+ * computes it. `beforeAll` then ASSERTS the projector accepts it, so this fixture cannot silently
+ * degrade into a merely shape-valid fake and quietly stop testing that ACCEPTED is reachable.
+ */
+let productionValidDocument: string;
+/**
+ * A document that passes the WIRE SCHEMA and that PRODUCTION REFUSES.
+ *
+ * The fixture the owner correction requires. It is the valid document with exactly one field moved —
+ * a next-question phase the deterministic reducer did not decide — so it isolates one stable
+ * production invariant. `beforeAll` asserts BOTH layers, because a fixture that had drifted into
+ * wire-invalid would still produce LOCAL_VALIDATION_FAILED and would pass this suite for the wrong
+ * reason, proving nothing about the gap it exists to cover.
+ */
+let wireValidProductionInvalidDocument: string;
 beforeAll(async () => {
   captured = await captureNeutralClientRiyaRequest();
   safetyDerived = await captureProductionRiyaCanaryRequest();
@@ -273,16 +298,49 @@ beforeAll(async () => {
     throw new Error('the real Riya schema must project');
   }
   projectedSchema = projection.schema;
-  // Not hand-written: the profile refuses an answer whose claimed plan disagrees with what the
-  // reducer independently decides, so a valid document has to be computed the same way production
-  // computes it.
-  canonicalValidDocument = JSON.stringify(
-    evolutionPayload({
-      current: syntheticContinuityFor('NEED', NEUTRAL_CLIENT_DIAGNOSTIC_CASE_ID),
-      language: 'ENGLISH',
-      citations: [],
-    }),
-  );
+
+  const valid = evolutionPayload({
+    current: syntheticContinuityFor('NEED', NEUTRAL_CLIENT_DIAGNOSTIC_CASE_ID),
+    language: 'ENGLISH',
+    citations: [],
+  }) as {
+    readonly reply: unknown;
+    readonly evolution: {
+      readonly questionPlan: { readonly phase: string; readonly questionFields: readonly string[] };
+    };
+  };
+  // The replacement phase is COMPUTED, so it can never accidentally be the decided one. Both values
+  // are members of the model-facing phase enum, so the document stays wire-valid either way.
+  const decidedPhase = valid.evolution.questionPlan.phase;
+  const disagreeing = {
+    ...valid,
+    evolution: {
+      ...valid.evolution,
+      questionPlan: {
+        ...valid.evolution.questionPlan,
+        phase: decidedPhase === 'SUMMARY' ? 'NEED' : 'SUMMARY',
+      },
+    },
+  };
+
+  // Both fixtures are PROVEN on both layers here, before any composition runs. The projector is
+  // never stubbed or bypassed in the end-to-end specs below; it is the real one, and these four
+  // assertions are what stop a future edit from making the suite vacuous.
+  if (!captured.structuredWireSchema.safeParse(valid).success) {
+    throw new Error('the production-valid fixture must pass the wire schema');
+  }
+  if (captured.projectStructuredResult(valid) === undefined) {
+    throw new Error('the production-valid fixture must pass the FULL production projector');
+  }
+  if (!captured.structuredWireSchema.safeParse(disagreeing).success) {
+    throw new Error('the wire-valid/production-invalid fixture must pass the wire schema');
+  }
+  if (captured.projectStructuredResult(disagreeing) !== undefined) {
+    throw new Error('the wire-valid/production-invalid fixture must FAIL the production projector');
+  }
+
+  productionValidDocument = JSON.stringify(valid);
+  wireValidProductionInvalidDocument = JSON.stringify(disagreeing);
 });
 
 interface RunRecord {
@@ -739,8 +797,11 @@ describe('Q/R/S — no safety, no P10, no bundle', () => {
 });
 
 describe('M/N/O/P — the classification reads BOTH boundaries honestly', () => {
-  it('N: 2xx carrying a canonically valid Riya document => ACCEPTED', async () => {
-    const run = await runGate({ bodyText: responsesOkBody(canonicalValidDocument) });
+  it('N: 2xx carrying a FULLY production-valid Riya document => ACCEPTED', async () => {
+    // ACCEPTED must stay REACHABLE through the real projector. `beforeAll` already proved this exact
+    // document passes both layers, so a green result here means the endpoint produced something
+    // production would carry as a draft — not something merely shaped like it.
+    const run = await runGate({ bodyText: responsesOkBody(productionValidDocument) });
     const classification = run.lines.find((line) => line.includes('status=CLASSIFICATION')) ?? '';
     expect(classification).toContain(
       'responsesDifferentialClassification=RESPONSES_20B_STRICT_ACCEPTED',
@@ -751,11 +812,18 @@ describe('M/N/O/P — the classification reads BOTH boundaries honestly', () => 
     expect(run.outcome).toBe('POST_MD120B3_GROQ_RESPONSES_API_STRICT_DIFFERENTIAL_COMPLETE');
   });
 
-  it('O: 2xx carrying a document the PRODUCTION schema rejects => LOCAL_VALIDATION_FAILED', async () => {
-    // The failure mode that matters most on a new output contract: the provider accepted the request
-    // and returned something, and it is not a Riya reply. A gate that stopped at the provider
-    // boundary would have called this a success.
-    const run = await runGate({ bodyText: responsesOkBody('{"reply":{"kind":"REPLY"}}') });
+  it('O: 2xx carrying a WIRE-VALID but PRODUCTION-INVALID document => LOCAL_VALIDATION_FAILED', async () => {
+    // THE owner-correction case, and the reason `safeParse` alone was a merge blocker.
+    //
+    // This document passes the structured WIRE SCHEMA — a shape-only gate would report the endpoint
+    // ACCEPTED — and production refuses it, because the next-question plan it claims disagrees with
+    // the deterministic reducer. Reporting it as accepted would be a FALSE-POSITIVE endpoint verdict:
+    // it would tell an owner the Responses API repairs the strict path when production would refuse
+    // the very answer it returned.
+    //
+    // `beforeAll` asserted WIRE_SAFE_PARSE=PASS and FULL_PRODUCTION_PROJECTION=FAIL on these exact
+    // bytes, so this spec cannot pass for the wrong reason.
+    const run = await runGate({ bodyText: responsesOkBody(wireValidProductionInvalidDocument) });
     const classification = run.lines.find((line) => line.includes('status=CLASSIFICATION')) ?? '';
     expect(classification).toContain(
       'responsesDifferentialClassification=RESPONSES_20B_STRICT_LOCAL_VALIDATION_FAILED',
@@ -767,6 +835,19 @@ describe('M/N/O/P — the classification reads BOTH boundaries honestly', () => 
     expect(run.lines.join('\n')).not.toContain('RESPONSES_20B_STRICT_PROVIDER_REJECTED');
     // The run still COMPLETES: exit 30 says the gate ran, not that it passed.
     expect(run.outcome).toBe('POST_MD120B3_GROQ_RESPONSES_API_STRICT_DIFFERENTIAL_COMPLETE');
+  });
+
+  it('O2: a WIRE-INVALID document is refused by the same projector, same token', async () => {
+    // The weaker failure the first revision already caught. Kept, because both layers of refusal
+    // must reach the same classification: for the ENDPOINT question, "malformed shape" and "valid
+    // shape production will not carry" are the same answer — the contract did not produce a usable
+    // reply — and splitting them would invent a distinction no decision acts on.
+    const run = await runGate({ bodyText: responsesOkBody('{"reply":{"kind":"REPLY"}}') });
+    const classification = run.lines.find((line) => line.includes('status=CLASSIFICATION')) ?? '';
+    expect(classification).toContain(
+      'responsesDifferentialClassification=RESPONSES_20B_STRICT_LOCAL_VALIDATION_FAILED',
+    );
+    expect(classification).toContain('localValidationPassed=false');
   });
 
   it('M: HTTP 400 json_validate_failed preserves both literals and classifies REJECTED', async () => {
@@ -829,7 +910,7 @@ describe('T — provider, body, prompt, schema and OUTPUT content cannot be emit
     for (const options of [
       { status: 429 },
       { status: 400, bodyText: jsonValidateFailedBody },
-      { bodyText: responsesOkBody(canonicalValidDocument) },
+      { bodyText: responsesOkBody(productionValidDocument) },
     ] as const) {
       const run = await runGate(options);
       const output = run.lines.join('\n');
@@ -842,7 +923,7 @@ describe('T — provider, body, prompt, schema and OUTPUT content cannot be emit
   });
 
   it('no credential, header, prompt, message or schema document reaches the output', async () => {
-    const run = await runGate({ bodyText: responsesOkBody(canonicalValidDocument) });
+    const run = await runGate({ bodyText: responsesOkBody(productionValidDocument) });
     const output = run.lines.join('\n');
     expect(output).not.toContain(SENTINEL_KEY);
     expect(output).not.toContain('Bearer');
@@ -860,16 +941,16 @@ describe('T — provider, body, prompt, schema and OUTPUT content cannot be emit
   it('the accepted MODEL OUTPUT never reaches a line, even though it was validated', async () => {
     // The one new content risk on this gate: the port decodes a document in order to validate it.
     // Two booleans survive that statement, and nothing else.
-    const run = await runGate({ bodyText: responsesOkBody(canonicalValidDocument) });
+    const run = await runGate({ bodyText: responsesOkBody(productionValidDocument) });
     const output = run.lines.join('\n');
-    const document = JSON.parse(canonicalValidDocument) as {
+    const document = JSON.parse(productionValidDocument) as {
       reply: { replyBody: string };
     };
     expect(document.reply.replyBody.length).toBeGreaterThan(0);
     expect(output).not.toContain(document.reply.replyBody);
     expect(output).not.toContain('replyBody');
     expect(output).not.toContain('questionPlan');
-    expect(output).not.toContain(canonicalValidDocument);
+    expect(output).not.toContain(productionValidDocument);
   });
 });
 

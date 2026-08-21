@@ -445,8 +445,12 @@ export type {
 // beta, production routing is untouched, and nothing here selects an endpoint for serving.
 //
 // The vocabulary carries one token the earlier gates did not need. On this endpoint a provider 2xx is
-// not the finding, so a 2xx whose document the PRODUCTION canonical validator rejects is
+// not the finding, and neither is a wire-shaped document: the verdict runs the FULL production
+// projector — the profile's own `projectStructuredResult`, not `structuredSchema.safeParse`, which is
+// only its first stage. A 2xx whose document production would refuse is
 // RESPONSES_20B_STRICT_LOCAL_VALIDATION_FAILED rather than either acceptance or provider rejection.
+// Accepting on shape alone would be a false-positive endpoint verdict, which is the worst thing this
+// diagnostic could produce.
 export {
   PROVIDER_ENDPOINT_FAMILIES,
   RESPONSES_DIFFERENTIAL_BASELINE_ENDPOINT_FAMILY,
@@ -485,4 +489,11 @@ export type {
   ResponsesDifferentialRunner,
   ResponsesProviderSeam,
 } from './responses-differential-port.js';
-export type { CanonicalStructuredSchema } from './diagnostic-canary-materials.js';
+export type {
+  ProjectStructuredResult,
+  StructuredWireSchema,
+} from './diagnostic-canary-materials.js';
+// POST-MD120B3. The ONE profile-construction site, exported so a spec can prove the capture and the
+// evaluation turn share it rather than reconstructing similar-looking arguments.
+export { createRiyaEvaluationProfile } from './riya-turn.js';
+export type { RiyaEvaluationProfile } from './riya-turn.js';
