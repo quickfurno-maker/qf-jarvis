@@ -131,6 +131,12 @@ importers:
         specifier: workspace:*
         version: link:../../packages/event-backbone
 
+  packages/aarohi-agent:
+    dependencies:
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+
   packages/agent-runtime:
     dependencies:
       zod:

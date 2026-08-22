@@ -371,6 +371,12 @@ describe('(133-148) the declared budget and every prior lock', () => {
         .filter((entry) => statSync(join(REPO_ROOT, relative, entry)).isDirectory())
         .sort();
     expect(dirs('packages')).toEqual([
+      // QFJ-P12 / ADR-0085 (AVG-1): the Aarohi prospect identity and acquisition-case DOMAIN. Still
+      // an EXACT set match -- this records an authorised addition, it does not relax the assertion.
+      //
+      // A domain, not a runtime: Aarohi's runtime status remains PLANNED / DISABLED. The package
+      // depends on zod alone, imports no workspace package, and nothing imports it.
+      'aarohi-agent',
       'agent-runtime',
       // QFJ-S3-D-A (ADR-0070): the Anisha vendor-journey behaviour package. Still an EXACT set
       // match -- this records an authorised addition, it does not relax the assertion.

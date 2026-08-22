@@ -30,6 +30,7 @@
     { "path": "./packages/riya-web-conversation-service/tsconfig.build.json" },
     { "path": "./packages/postgres-riya-conversation-continuity-store/tsconfig.build.json" },
     { "path": "./packages/postgres-riya-turn-coordinator/tsconfig.build.json" },
+    { "path": "./packages/aarohi-agent/tsconfig.build.json" },
     { "path": "./packages/anisha-agent/tsconfig.build.json" },
     { "path": "./packages/prompt-registry/tsconfig.build.json" },
     { "path": "./packages/conversation-control/tsconfig.build.json" },

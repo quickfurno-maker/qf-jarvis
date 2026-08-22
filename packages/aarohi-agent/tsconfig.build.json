@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
+  },
+
+  // The EMITTING build, referenced by the root solution. The vitest specs under src/tests are
+  // EXCLUDED so nothing test-only reaches dist/. NO project references: AVG-1 is a pure domain and
+  // depends on no other workspace package -- not agent-runtime, not a gateway, not a runtime. The
+  // absence is the containment, and a spec asserts it.
+  "references": [],
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/tests/**"]
+}
