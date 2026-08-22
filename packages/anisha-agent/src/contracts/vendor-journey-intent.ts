@@ -2,13 +2,28 @@
  * The closed vendor-journey intent vocabulary (QFJ-S3-D-A, ADR-0070).
  *
  * Nine values covering what a vendor-journey turn can BE, without encoding anything QuickFurno Core
- * owns. The governed scope is broad — ADR-0006 §1 gives Anisha acquisition, qualification, onboarding,
- * profile completion, activation readiness, package readiness, recharge, retention, upgrade,
- * inactivity recovery and win-back; QFJ-P07 adds complaint intake, routine query resolution, vendor
- * education and lead-response guidance. What is absent is just as deliberate: verification decisions,
- * activation decisions, eligibility, ranking, assignment, packages, wallets, credits, money and
- * lead-quality scoring are Core's, and `agent-model.md` says so in those words. Anisha's role in each
- * is to notice and explain.
+ * owns. The governed scope covers onboarding, profile completion, activation readiness, package
+ * readiness, recharge, retention, upgrade, inactivity recovery and win-back; QFJ-P07 adds complaint
+ * intake, routine query resolution, vendor education and lead-response guidance. What is absent is
+ * just as deliberate: verification decisions, activation decisions, eligibility, ranking, assignment,
+ * packages, wallets, credits, money and lead-quality scoring are Core's, and `agent-model.md` says so
+ * in those words. Anisha's role in each is to notice and explain.
+ *
+ * ### ADR-0085 moved the FRONT EDGE, and this comment used to predate it
+ *
+ * An earlier revision of this note cited ADR-0006 §1 as giving Anisha "acquisition, qualification"
+ * among the above. That was the governance at the time and it is no longer current.
+ * [ADR-0085](../../../../docs/decisions/ADR-0085-qfj-p12-aarohi-vendor-growth-and-roadmap-reconciliation.md)
+ * moves cold acquisition of genuinely UNREGISTERED prospects to **Aarohi**, and leaves Anisha the
+ * REGISTERED / EXISTING vendor relationship and success lifecycle.
+ *
+ * The ownership boundary is QuickFurno Core's registration truth, not topic or channel: when Core
+ * authoritatively confirms ACTIVE, Aarohi stops acquisition selling and relationship ownership moves
+ * here.
+ *
+ * The executable vocabulary below was ALREADY consistent with that split — none of these nine values
+ * is cold acquisition of an unregistered prospect — so nothing about behaviour changes with this
+ * correction. Only the sentence describing the scope was stale.
  *
  * `LEAD_RESPONSE_GUIDANCE` is kept distinct from `ROUTINE_VENDOR_QUERY` on purpose. Helping a vendor
  * respond well to the leads they already have is Anisha's; judging whether those leads were any good
