@@ -418,6 +418,14 @@ describe('(133-148) the declared budget and every prior lock', () => {
       'core-service-availability-read',
       'event-backbone',
       'event-ingestion',
+      // QFJ-P09.04 (ADR-0109): the durable execution dispatch composition binding the merged
+      // P09.02 verifier to the merged P09.03 durable store. Still an EXACT set match -- this
+      // records an authorised addition, it does not relax the assertion.
+      //
+      // It adopts no transport and executes nothing: the composition exists so a dispatch
+      // boundary is restart-durable BY CONSTRUCTION and cannot be assembled with an in-memory
+      // guard by mistake.
+      'execution-dispatch-composition',
       // QFJ-P09.02 (ADR-0090): the test-only Core -> n8n execution DISPATCH boundary. It holds no
       // transport, and no application imports it. Its ONE consumer is the durable replay store
       // below, which implements the guard contract this package declares.
