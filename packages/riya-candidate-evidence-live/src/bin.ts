@@ -52,6 +52,7 @@ import {
   createOperatorLedger,
   createOperationalAcceptanceDiagnosticLedger,
   createModelDifferentialLedger,
+  createReasoningDifferentialLedger,
   createResponsesDifferentialLedger,
   createNeutralRepresentativeLedger,
   createRepresentativeAcceptanceLedger,
@@ -70,6 +71,7 @@ import { openLiveRepresentativeAcceptanceRunner } from './representative-accepta
 import { openLiveNeutralRepresentativeRunner } from './neutral-representative-acceptance-port.js';
 import { openLiveModelDifferentialRunner } from './model-differential-port.js';
 import { openLiveResponsesDifferentialRunner } from './responses-differential-port.js';
+import { openLiveReasoningDifferentialRunner } from './reasoning-differential-port.js';
 import { DEFAULT_CREDENTIAL_SOURCE_MODE, isCredentialSourceMode } from './credential-source.js';
 import type { CredentialSourceMode } from './credential-source.js';
 import { DEFAULT_RUN_GOAL } from './internal/run-goal.js';
@@ -178,7 +180,11 @@ export function parseCliArgs(argv: readonly string[]): CliParse {
         value !== 'POST_NRA1_GPT_OSS_120B_STRICT_MODEL_DIFFERENTIAL' &&
         // POST-MD120B3. Separate again: this goal sends the same request over a DIFFERENT ENDPOINT,
         // and a receipt must say which output contract produced it.
-        value !== 'POST_MD120B3_GROQ_RESPONSES_API_STRICT_DIFFERENTIAL'
+        value !== 'POST_MD120B3_GROQ_RESPONSES_API_STRICT_DIFFERENTIAL' &&
+        // POST-RSP20B2. Separate again: this goal sends the same request at a DIFFERENT REASONING
+        // EFFORT, and a receipt must say which effort produced it. There is deliberately no
+        // `--reasoning-effort` flag -- the owner selects a governed PURPOSE, never a raw parameter.
+        value !== 'POST_RSP20B2_REASONING_EFFORT_LOW_DIFFERENTIAL'
       ) {
         return { ok: false, reason: 'invalid-run-goal' };
       }
@@ -220,6 +226,11 @@ export function parseCliArgs(argv: readonly string[]): CliParse {
  * real terminal and a real provider to run. A bounded run whose bound is untested is not bounded.
  */
 export function ledgerForRunGoal(goal: OperatorRunGoal): RequestLedger {
+  if (goal === 'POST_RSP20B2_REASONING_EFFORT_LOW_DIFFERENTIAL') {
+    // Two requests, one dollar: the smoke plus ONE low reasoning-effort probe. Priced at the
+    // PRODUCTION tariff -- both requests go to the production 20B model.
+    return createReasoningDifferentialLedger();
+  }
   if (goal === 'POST_MD120B3_GROQ_RESPONSES_API_STRICT_DIFFERENTIAL') {
     // Two requests, one dollar: the smoke plus ONE Responses endpoint probe. Priced at the
     // PRODUCTION tariff, because unlike MD120B3 both requests go to the production 20B model.
@@ -378,6 +389,24 @@ async function main(): Promise<number> {
           const projection = projectGroqStrictJsonSchema(rawSchema);
           if (!projection.ok) {
             throw new Error('QFJ_RESPONSES_DIFFERENTIAL_PROJECTION_FAILED');
+          }
+          return projection.schema;
+        },
+      }),
+    // POST-RSP20B2. The REAL low reasoning-effort differential port, bound to the credential just
+    // resolved.
+    //
+    // Bound from the day the seam exists, for the reason HF4-R8 taught: a reviewed seam bin.ts never
+    // passes is a diagnostic that burns a live authorization and learns nothing. The SAME production
+    // projection is injected, and the port reuses NRA1's own neutral capture rather than building a
+    // second one -- so the only wire difference is the added `reasoning_effort` field.
+    openReasoningDifferentialRunner: (credential) =>
+      openLiveReasoningDifferentialRunner({
+        credential,
+        projectSchema: (rawSchema) => {
+          const projection = projectGroqStrictJsonSchema(rawSchema);
+          if (!projection.ok) {
+            throw new Error('QFJ_REASONING_DIFFERENTIAL_PROJECTION_FAILED');
           }
           return projection.schema;
         },

@@ -492,6 +492,68 @@ export type {
   ResponsesDifferentialRunner,
   ResponsesProviderSeam,
 } from './responses-differential-port.js';
+// POST-RSP20B2 REASONING-EFFORT LOW DIFFERENTIAL. RSP20B2 sent the neutral production-built request
+// over the Groq Responses API and reproduced JSON_VALIDATE_FAILED, as MD120B3 had on 120B and NRA1 on
+// 20B. Model and endpoint are both closed as axes.
+//
+// What every one of those requests shares is that it carried NO reasoning field at all. GPT-OSS
+// reasoning tokens are drawn from the same completion budget the structured answer needs, so a model
+// reasoning at the documented default has less of that budget left for the JSON. This changes exactly
+// ONE variable: it sends `reasoning_effort='low'`. The model, the endpoint, the schema, the captured
+// messages and the 4,096 bound are all held -- and the bound most of all, because it is the quantity
+// the effort setting competes for.
+//
+// It composes the MERGED, separately reviewed diagnostic adapter and creates no new one. Production
+// sends no reasoning field of any spelling, and this run does not change that: a production effort
+// change is a separate owner decision.
+//
+// The vocabulary splits a token every earlier classifier collapsed. `json_validate_failed` is the
+// provider reporting that its OWN OUTPUT failed strict validation -- the request was accepted and
+// generation ran -- so it is REASONING_LOW_20B_STRICT_PROVIDER_OUTPUT_INVALID rather than a request
+// rejection. A 400 carrying any other code is REASONING_LOW_20B_STRICT_PROVIDER_REQUEST_REJECTED,
+// which would mean something entirely different: that adding the field changed how the provider reads
+// the request, invalidating the differential rather than answering it. Historical classifiers keep
+// their own wording, because their receipts are immutable.
+export {
+  REASONING_DIFFERENTIAL_BASELINE_DOCUMENTED_DEFAULT,
+  REASONING_DIFFERENTIAL_BASELINE_ENDPOINT_FAMILY,
+  REASONING_DIFFERENTIAL_BASELINE_FIELD_POSTURE,
+  REASONING_DIFFERENTIAL_CANDIDATE_EFFORT,
+  REASONING_DIFFERENTIAL_ENDPOINT_FAMILY,
+  REASONING_DIFFERENTIAL_MODEL_ID,
+  REASONING_FIELD_POSTURES,
+  SMOKE_PROVES_REASONING_DIAGNOSTIC_ENTITLEMENT,
+} from './reasoning-differential-identity.js';
+export type { ReasoningFieldPosture } from './reasoning-differential-identity.js';
+export {
+  analyseReasoningDifferential,
+  REASONING_DIFFERENTIAL_CLASSIFICATIONS,
+} from './internal/reasoning-differential-classification.js';
+export type {
+  ReasoningDifferentialAnalysis,
+  ReasoningDifferentialClassification,
+  ReasoningDifferentialOutcome,
+} from './internal/reasoning-differential-classification.js';
+export {
+  planReasoningDifferentialProbe,
+  REASONING_DIFFERENTIAL_STEP_ID,
+} from './internal/operational-acceptance-plan.js';
+export type { ReasoningDifferentialStepId } from './internal/operational-acceptance-plan.js';
+export {
+  createLiveReasoningDifferentialComposition,
+  createReasoningDifferentialPort,
+  openLiveReasoningDifferentialRunner,
+  REASONING_DIFFERENTIAL_OUTPUT_BUDGET,
+} from './reasoning-differential-port.js';
+export type {
+  LiveReasoningDifferentialComposition,
+  LiveReasoningDifferentialDeps,
+  ReasoningDifferentialProbe,
+  ReasoningDifferentialRunner,
+  ReasoningDifferentialRunResult,
+  ReasoningProviderSeam,
+  ReasoningProviderSeamResult,
+} from './reasoning-differential-port.js';
 export type {
   ProjectStructuredResult,
   StructuredWireSchema,

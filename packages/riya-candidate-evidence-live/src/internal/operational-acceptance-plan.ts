@@ -88,6 +88,20 @@ export const RESPONSES_DIFFERENTIAL_STEP_ID =
   'E0_EXACT_NEUTRAL_CLIENT_GPT_OSS_20B_RESPONSES_STRICT' as const;
 export type ResponsesDifferentialStepId = typeof RESPONSES_DIFFERENTIAL_STEP_ID;
 
+/**
+ * The POST-RSP20B2 reasoning-effort differential probe. Its OWN step id, for the fourth time.
+ *
+ * It carries the SAME neutral messages and the SAME projected schema as `N0`, `M0` and `E0`, on the
+ * SAME production model and the SAME production endpoint `N0` used. Only `reasoning_effort` differs,
+ * and the baseline did not carry that field at all.
+ *
+ * A shared identifier would make a default-effort strict failure and a low-effort result
+ * indistinguishable on a receipt, which is the one comparison this run exists to support.
+ */
+export const REASONING_DIFFERENTIAL_STEP_ID =
+  'R0_EXACT_NEUTRAL_CLIENT_GPT_OSS_20B_REASONING_LOW' as const;
+export type ReasoningDifferentialStepId = typeof REASONING_DIFFERENTIAL_STEP_ID;
+
 /** The role a probe plays. Only `CONTROL` can invalidate a run; `EXACT_REPRESENTATIVE` is strongest. */
 export const OPERATIONAL_PROBE_KINDS = [
   'CONTROL',
@@ -329,5 +343,30 @@ export function planResponsesDifferentialProbe(input: {
     ...neutral,
     stepId: RESPONSES_DIFFERENTIAL_STEP_ID,
     probeDimension: 'FULL_DOCUMENT_WITH_NEUTRAL_CLIENT_MESSAGES_ON_RESPONSES_API',
+  });
+}
+
+/**
+ * Plan the ONE reasoning-effort differential probe (POST-RSP20B2).
+ *
+ * Delegates to `planNeutralClientProbe` for exactly the reason the two planners above do, and
+ * overwrites the same two fields: an identifier, and the sentence describing what is being isolated.
+ * The schema and the messages are the objects the neutral planner produced — the SAME objects, not
+ * copies — so "identical to NRA1's request except the reasoning effort" is a consequence of the code
+ * rather than a claim in a comment.
+ *
+ * `reasoning_effort` is not a property of the probe, exactly as the model and the endpoint were not.
+ * It belongs to the request body the port builds, which is where it can actually be asserted on the
+ * wire.
+ */
+export function planReasoningDifferentialProbe(input: {
+  readonly projectedSchema: unknown;
+  readonly neutralMessages: readonly CanaryMessage[];
+}): DiagnosticProbe<ReasoningDifferentialStepId> {
+  const neutral = planNeutralClientProbe(input);
+  return Object.freeze({
+    ...neutral,
+    stepId: REASONING_DIFFERENTIAL_STEP_ID,
+    probeDimension: 'FULL_DOCUMENT_WITH_NEUTRAL_CLIENT_MESSAGES_AT_REASONING_EFFORT_LOW',
   });
 }

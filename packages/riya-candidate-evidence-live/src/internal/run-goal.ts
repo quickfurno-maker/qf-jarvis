@@ -134,6 +134,27 @@ export const OPERATOR_RUN_GOALS = [
    * DIAGNOSTIC, not a migration: production routing stays Chat Completions.
    */
   'POST_MD120B3_GROQ_RESPONSES_API_STRICT_DIFFERENTIAL',
+  /**
+   * POST-RSP20B2. The `reasoning_effort='low'` differential: the smoke, ONE probe, then stop.
+   *
+   * RSP20B2 used the goal above and reproduced the strict failure over the Responses API, as MD120B3
+   * had on 120B and NRA1 on 20B. Model and endpoint are both closed as axes.
+   *
+   * What every one of those requests shares is that it carried NO reasoning field at all. GPT-OSS
+   * reasoning tokens are drawn from the same completion budget the structured answer needs, so a
+   * model reasoning at the documented default has less of that budget left for the JSON it was asked
+   * to produce. This goal changes exactly ONE thing: it sends `reasoning_effort='low'`.
+   *
+   * Everything else is held -- same captured request, same prompt bytes, same projected schema, same
+   * 4,096 budget, same strict mode, same PRODUCTION 20B model, same Chat Completions endpoint, same
+   * timeout and zero-retry posture. Holding the budget matters more here than anywhere else: it is
+   * the quantity the effort setting competes for.
+   *
+   * A separate token again, because a receipt must say which effort produced it. It is a DIAGNOSTIC:
+   * production sends no reasoning field, and changing that is a separate owner decision this goal
+   * does not make.
+   */
+  'POST_RSP20B2_REASONING_EFFORT_LOW_DIFFERENTIAL',
 ] as const;
 export type OperatorRunGoal = (typeof OPERATOR_RUN_GOALS)[number];
 
@@ -168,6 +189,8 @@ export const SECOND_CREDENTIAL_NOTICES: Readonly<Record<OperatorRunGoal, string>
     'Smoke passed. Enter the same Groq credential again for the 120B strict model differential probe.',
   POST_MD120B3_GROQ_RESPONSES_API_STRICT_DIFFERENTIAL:
     'Smoke passed. Enter the same Groq credential again for the Responses API strict endpoint differential probe.',
+  POST_RSP20B2_REASONING_EFFORT_LOW_DIFFERENTIAL:
+    'Smoke passed. Enter the same Groq credential again for the low reasoning-effort differential probe.',
 });
 
 /**
@@ -202,4 +225,6 @@ export const REUSED_CREDENTIAL_NOTICES: Readonly<Record<OperatorRunGoal, string>
     'Smoke passed. Reusing the credential already read for the 120B strict model differential probe.',
   POST_MD120B3_GROQ_RESPONSES_API_STRICT_DIFFERENTIAL:
     'Smoke passed. Reusing the credential already read for the Responses API strict endpoint differential probe.',
+  POST_RSP20B2_REASONING_EFFORT_LOW_DIFFERENTIAL:
+    'Smoke passed. Reusing the credential already read for the low reasoning-effort differential probe.',
 });

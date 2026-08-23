@@ -99,6 +99,22 @@ export const OPERATOR_OUTCOMES = [
    * a local-validation half as well as a provider one.
    */
   'POST_MD120B3_GROQ_RESPONSES_API_STRICT_DIFFERENTIAL_COMPLETE',
+  /**
+   * POST-RSP20B2. The `reasoning_effort='low'` differential ran its one probe and stopped.
+   *
+   * Its OWN code, and deliberately not a reuse of 30.
+   *
+   * The convention here is not "one integer for completed diagnostics" -- it is one integer PER
+   * GOAL, which is why 22-30 are nine distinct codes rather than one repeated. Reusing 30 would make
+   * a shell reading `$LASTEXITCODE` unable to tell this run from RSP20B2's, and telling bounded runs
+   * apart is the entire reason the vocabulary is closed.
+   *
+   * It says the run COMPLETED -- not that the request was accepted, and not that the reply was valid.
+   * RA1, NRA1 and MD120B3 all exited on an HTTP 400, which is exactly why the exit status is never
+   * the finding: the classification line carries it, and on this goal that line distinguishes a
+   * provider OUTPUT failure from a provider REQUEST rejection.
+   */
+  'POST_RSP20B2_REASONING_EFFORT_LOW_DIFFERENTIAL_COMPLETE',
 ] as const;
 export type OperatorOutcome = (typeof OPERATOR_OUTCOMES)[number];
 
@@ -136,4 +152,6 @@ export const OPERATOR_EXIT_CODES: Readonly<Record<OperatorOutcome, number>> = Ob
   POST_NRA1_GPT_OSS_120B_STRICT_MODEL_DIFFERENTIAL_COMPLETE: 29,
   // The next unused integer; 0-29 keep meaning exactly what they meant.
   POST_MD120B3_GROQ_RESPONSES_API_STRICT_DIFFERENTIAL_COMPLETE: 30,
+  // The next unused integer; 0-30 keep meaning exactly what they meant.
+  POST_RSP20B2_REASONING_EFFORT_LOW_DIFFERENTIAL_COMPLETE: 31,
 });

@@ -82,6 +82,16 @@ import {
 import { analyseResponsesDifferential } from './internal/responses-differential-classification.js';
 import type { ResponsesDifferentialOutcome } from './internal/responses-differential-classification.js';
 import type { ResponsesDifferentialProbe } from './responses-differential-port.js';
+import {
+  emitReasoningDifferentialClassification,
+  emitReasoningDifferentialProbeOutcome,
+  emitReasoningDifferentialReceipt,
+} from './internal/reasoning-differential-emitters.js';
+import { analyseReasoningDifferential } from './internal/reasoning-differential-classification.js';
+import type {
+  ReasoningDifferentialProbe,
+  ReasoningDifferentialRunResult,
+} from './reasoning-differential-port.js';
 import type { RepresentativeAcceptanceOutcome } from './internal/representative-acceptance-classification.js';
 import {
   emitOperationalAcceptanceClassification,
@@ -318,6 +328,22 @@ export interface OperatorDeps {
     readonly probe: ResponsesDifferentialProbe;
     readonly run: (probe: ResponsesDifferentialProbe) => Promise<ResponsesDifferentialOutcome>;
   }>;
+  /**
+   * POST-RSP20B2. Bind the `reasoning_effort='low'` differential runner to the resolved credential.
+   *
+   * Same credential-bound one-probe shape as the seam above, and required only for
+   * `POST_RSP20B2_REASONING_EFFORT_LOW_DIFFERENTIAL`. Its probe carries the SAME neutral request
+   * NRA1, MD120B3 and RSP20B2 sent, on the SAME production model and the SAME production endpoint
+   * NRA1 used; only `reasoning_effort` differs, and the baseline carried no such field at all.
+   *
+   * Its runner returns a RESULT rather than a bare outcome, because it also carries the
+   * provider-reported usage the ledger settles with. Every seam above it drops that, which is why
+   * their receipts price a completed probe from a fallback bound rather than from a measurement.
+   */
+  readonly openReasoningDifferentialRunner?: (credential: unknown) => Promise<{
+    readonly probe: ReasoningDifferentialProbe;
+    readonly run: (probe: ReasoningDifferentialProbe) => Promise<ReasoningDifferentialRunResult>;
+  }>;
 }
 
 export interface OperatorResult {
@@ -442,6 +468,67 @@ export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<
   // The second ingress line. In clipboard mode this is where `credentialReuseCount` becomes 2 while
   // `credentialClipboardReads` stays 1 — the pair of numbers that IS the copy-once guarantee.
   emitCredentialIngress(safe, credentialSource, 'CANDIDATE', deps.ingressCounters?.());
+
+  // F'''''''''. THE reasoning_effort='low' DIFFERENTIAL (POST-RSP20B2) — and then STOP.
+  //
+  // ONE probe, like the four gates below it. NRA1, MD120B3 and RSP20B2 between them reproduced the
+  // strict failure across both governed models AND both documented output contracts, so neither the
+  // model nor the endpoint is the open axis. What all three requests share is that they carried NO
+  // reasoning field: GPT-OSS reasoning tokens are drawn from the same completion budget the
+  // structured answer needs. This sends the SAME captured request, on the SAME production model and
+  // endpoint, at the SAME 4,096 budget, and adds exactly `reasoning_effort='low'`.
+  //
+  // Two structural differences from the gates below. A provider 2xx is not the finding — the runner
+  // also validates the returned document against the FULL production projector. And the runner
+  // returns provider-reported USAGE, which is settled into the ledger instead of `undefined`, so a
+  // completed probe is priced from what the provider measured rather than from a conservative bound.
+  if (runGoal === 'POST_RSP20B2_REASONING_EFFORT_LOW_DIFFERENTIAL') {
+    const openRunner = deps.openReasoningDifferentialRunner;
+    if (openRunner === undefined) {
+      safe.line({ phase: 'reasoning-differential', status: 'FAILED', reason: 'port-missing' });
+      return { outcome: 'INTERNAL_CLOSED_FAILURE' };
+    }
+    let runner: {
+      readonly probe: ReasoningDifferentialProbe;
+      readonly run: (probe: ReasoningDifferentialProbe) => Promise<ReasoningDifferentialRunResult>;
+    };
+    try {
+      runner = await openRunner(candidateCredential);
+    } catch {
+      safe.line({
+        phase: 'reasoning-differential',
+        status: 'FAILED',
+        reason: 'runner-bind-failed',
+      });
+      return { outcome: 'INTERNAL_CLOSED_FAILURE' };
+    }
+
+    let reasoningResult: ReasoningDifferentialRunResult | undefined;
+    const reasoningReservation = ledger.reserve('reasoning-differential-probe');
+    if (!reasoningReservation.ok) {
+      safe.line({
+        phase: 'reasoning-differential',
+        status: 'REFUSED',
+        stepId: runner.probe.stepId,
+        reason: reasoningReservation.refusal,
+      });
+    } else {
+      reasoningResult = await runner.run(runner.probe);
+      // The USAGE the provider reported, when it reported any. `undefined` still means "bound it",
+      // and the ledger's per-dimension provenance says which of the two happened.
+      ledger.settle(reasoningResult.usage, reasoningResult.outcome.providerCompleted);
+      emitReasoningDifferentialProbeOutcome(safe, runner.probe, reasoningResult.outcome);
+    }
+
+    emitReasoningDifferentialClassification(
+      safe,
+      analyseReasoningDifferential(reasoningResult?.outcome),
+      reasoningResult === undefined ? 0 : 1,
+    );
+    emitReasoningDifferentialReceipt(safe, ledger.snapshot());
+    safe.line({ finalStatus: 'POST_RSP20B2_REASONING_EFFORT_LOW_DIFFERENTIAL_COMPLETE' });
+    return { outcome: 'POST_RSP20B2_REASONING_EFFORT_LOW_DIFFERENTIAL_COMPLETE' };
+  }
 
   // F''''''''. THE GROQ RESPONSES API STRICT ENDPOINT DIFFERENTIAL (POST-MD120B3) — and then STOP.
   //
