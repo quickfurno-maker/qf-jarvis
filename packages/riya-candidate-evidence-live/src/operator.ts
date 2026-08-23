@@ -144,6 +144,7 @@ import {
 } from './internal/safety-diagnostics.js';
 import { emitSmokeExecutionDiagnostics } from './internal/smoke-diagnostics.js';
 import { runPreflight } from './preflight.js';
+import { isOneShotDiagnosticRunGoal } from './internal/one-shot-consumption.js';
 import type { OneShotConsumptionGuard } from './internal/one-shot-consumption.js';
 import type { PreflightInput } from './preflight.js';
 import type { SafeConsole } from './safe-console.js';
@@ -488,15 +489,26 @@ export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<
   // Consumption is claimed BEFORE the smoke, not after it. A goal whose smoke fails is still spent:
   // the authorization was for one launch, and the incident showed that "it failed, so try again" is
   // exactly the reasoning a guard has to refuse.
-  if (deps.oneShotGuard !== undefined) {
+  // ELIGIBILITY FIRST. `FULL_EVIDENCE` and `SAFETY_REPLICATION` are repeatable evidence purposes,
+  // not single historical differentials, and they bypass the guard entirely -- no tombstone check,
+  // no marker, and no `one-shot` line, because a run the guard never governed must not look as if it
+  // was. An earlier revision of this hunk claimed EVERY goal, which would have made the repository's
+  // default operator one-shot per workstation.
+  if (deps.oneShotGuard !== undefined && isOneShotDiagnosticRunGoal(runGoal)) {
     const claim = deps.oneShotGuard.claim(runGoal);
     if (!claim.ok) {
       safe.line({ phase: 'one-shot', status: 'REFUSED', runGoal, reason: claim.reason });
+      // EXACT mapping, one outcome per reason. The guard already tells these apart, and collapsing
+      // "the marker could not be written" into "you already ran this" would send an owner looking
+      // for a run that never happened.
+      if (claim.reason === 'statically-consumed-goal') {
+        return { outcome: 'RUN_GOAL_STATICALLY_CONSUMED' };
+      }
       return {
         outcome:
-          claim.reason === 'statically-consumed-goal'
-            ? 'RUN_GOAL_STATICALLY_CONSUMED'
-            : 'RUN_GOAL_ALREADY_CONSUMED',
+          claim.reason === 'goal-already-consumed'
+            ? 'RUN_GOAL_ALREADY_CONSUMED'
+            : 'RUN_GOAL_CONSUMPTION_MARKER_UNAVAILABLE',
       };
     }
     safe.line({ phase: 'one-shot', status: 'CLAIMED', runGoal });

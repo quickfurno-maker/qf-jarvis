@@ -20,6 +20,8 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { OPERATOR_EXIT_CODES, OPERATOR_OUTCOMES } from '../exit-codes.js';
 import {
   createOneShotConsumptionGuard,
+  isOneShotDiagnosticRunGoal,
+  ONE_SHOT_DIAGNOSTIC_RUN_GOALS,
   ONE_SHOT_MARKER_FORMAT_VERSION,
   ONE_SHOT_REFUSALS,
   oneShotMarkerFileName,
@@ -40,9 +42,19 @@ function markerDirectory(): string {
   return directory;
 }
 
-/** A goal that is NOT statically consumed, so the marker path can be exercised. */
-const FRESH_GOAL = 'FULL_EVIDENCE';
-const OTHER_FRESH_GOAL = 'SAFETY_REPLICATION';
+/**
+ * Marker-path fixtures.
+ *
+ * Deliberately NOT `FULL_EVIDENCE` or `SAFETY_REPLICATION`. An earlier revision used the default as
+ * the "fresh" goal, which both misrepresented production eligibility and asserted the very behaviour
+ * that would have taken the main operator offline. Every real marker-eligible goal is also
+ * statically tombstoned, so the marker mechanics are exercised through synthetic tokens -- the
+ * production tombstones are never weakened to make a test convenient.
+ */
+const FRESH_GOAL = 'SYNTHETIC_FUTURE_ONE_SHOT_DIAGNOSTIC' as unknown as Parameters<
+  ReturnType<typeof createOneShotConsumptionGuard>['claim']
+>[0];
+const OTHER_FRESH_GOAL = 'SYNTHETIC_OTHER_ONE_SHOT_DIAGNOSTIC' as unknown as typeof FRESH_GOAL;
 
 describe('the static tombstones', () => {
   it('every tombstoned token is a real member of the closed goal vocabulary', () => {
@@ -78,10 +90,15 @@ describe('the static tombstones', () => {
     ).toBe('SFD1');
   });
 
-  it('does NOT tombstone the default, so an ordinary evidence run stays available', () => {
-    // FULL_EVIDENCE is the default and has never been recorded consumed. Blocking it would take the
-    // repository's main purpose offline to fix a diagnostic incident.
+  it('does NOT tombstone the default or the replication purpose', () => {
+    // Blocking either would take the repository's main purpose -- or its repeatable safety
+    // replication -- offline to fix a diagnostic incident.
     expect(Object.keys(STATICALLY_CONSUMED_RUN_GOALS)).not.toContain('FULL_EVIDENCE');
+    expect(Object.keys(STATICALLY_CONSUMED_RUN_GOALS)).not.toContain('SAFETY_REPLICATION');
+  });
+
+  it('holds all ELEVEN tombstones', () => {
+    expect(Object.keys(STATICALLY_CONSUMED_RUN_GOALS)).toHaveLength(11);
   });
 
   it('refuses a tombstoned goal before touching the filesystem at all', () => {
@@ -98,6 +115,46 @@ describe('the static tombstones', () => {
     expect(claim.ok).toBe(false);
     expect(claim.ok ? undefined : claim.reason).toBe('statically-consumed-goal');
     expect(readdirSync(directory)).toStrictEqual([]);
+  });
+});
+
+describe('one-shot ELIGIBILITY is a closed set, not a naming rule', () => {
+  it('excludes the repeatable evidence purposes', () => {
+    // The defect owner review found: the guard was wired to every goal, which made the repository's
+    // DEFAULT operator one-shot per workstation and would have blocked a second safety replication
+    // whose disagreement an owner is meant to interpret.
+    expect(isOneShotDiagnosticRunGoal('FULL_EVIDENCE')).toBe(false);
+    expect(isOneShotDiagnosticRunGoal('SAFETY_REPLICATION')).toBe(false);
+    expect(ONE_SHOT_DIAGNOSTIC_RUN_GOALS).not.toContain('FULL_EVIDENCE');
+    expect(ONE_SHOT_DIAGNOSTIC_RUN_GOALS).not.toContain('SAFETY_REPLICATION');
+  });
+
+  it('includes every bounded historical one-shot diagnostic', () => {
+    expect([...ONE_SHOT_DIAGNOSTIC_RUN_GOALS].sort()).toStrictEqual(
+      Object.keys(STATICALLY_CONSUMED_RUN_GOALS).sort(),
+    );
+    for (const goal of ONE_SHOT_DIAGNOSTIC_RUN_GOALS) {
+      expect(isOneShotDiagnosticRunGoal(goal), goal).toBe(true);
+      expect(OPERATOR_RUN_GOALS, goal).toContain(goal);
+    }
+  });
+
+  it('is NOT derived from a name prefix', () => {
+    // A prefix rule would silently enrol the next badly-named goal and exclude a well-named one.
+    expect(isOneShotDiagnosticRunGoal('POST_SOMETHING_NOT_IN_THE_SET')).toBe(false);
+    // And two eligible members do not share one prefix, so no prefix rule could reproduce the set.
+    expect(isOneShotDiagnosticRunGoal('REQUEST_CONTRACT_DIAGNOSTIC')).toBe(true);
+    expect(isOneShotDiagnosticRunGoal('POST_RSP20B2_REASONING_EFFORT_LOW_DIFFERENTIAL')).toBe(true);
+  });
+
+  it('accounts for every member of the closed goal vocabulary', () => {
+    // Every goal is either a repeatable purpose or a bounded one-shot. A goal that is neither would
+    // be a governance question nobody answered.
+    const eligible = new Set(ONE_SHOT_DIAGNOSTIC_RUN_GOALS);
+    const repeatable = new Set(['FULL_EVIDENCE', 'SAFETY_REPLICATION']);
+    for (const goal of OPERATOR_RUN_GOALS) {
+      expect(eligible.has(goal) || repeatable.has(goal), goal).toBe(true);
+    }
   });
 });
 
@@ -184,9 +241,12 @@ describe('the refusal vocabulary and its exit codes', () => {
     ]);
   });
 
-  it('takes exits 34 and 35, and 0-33 keep meaning exactly what they meant', () => {
+  it('takes exits 34, 35 and 36, and 0-33 keep meaning exactly what they meant', () => {
     expect(OPERATOR_EXIT_CODES.RUN_GOAL_STATICALLY_CONSUMED).toBe(34);
     expect(OPERATOR_EXIT_CODES.RUN_GOAL_ALREADY_CONSUMED).toBe(35);
+    // A THIRD code: "the marker could not be written" is a different problem with a different fix
+    // from "you already ran this", and collapsing them sends an owner looking for the wrong thing.
+    expect(OPERATOR_EXIT_CODES.RUN_GOAL_CONSUMPTION_MARKER_UNAVAILABLE).toBe(36);
     // The consumed diagnostics keep their integers; those are immutable evidence.
     expect(OPERATOR_EXIT_CODES.POST_RSP20B2_REASONING_EFFORT_LOW_DIFFERENTIAL_COMPLETE).toBe(31);
     expect(
@@ -205,9 +265,13 @@ describe('the refusal vocabulary and its exit codes', () => {
     // first is lifted by a governance decision, the second by using a different workstation.
     expect(OPERATOR_OUTCOMES).toContain('RUN_GOAL_STATICALLY_CONSUMED');
     expect(OPERATOR_OUTCOMES).toContain('RUN_GOAL_ALREADY_CONSUMED');
-    expect(OPERATOR_EXIT_CODES.RUN_GOAL_STATICALLY_CONSUMED).not.toBe(
+    expect(OPERATOR_OUTCOMES).toContain('RUN_GOAL_CONSUMPTION_MARKER_UNAVAILABLE');
+    const three = [
+      OPERATOR_EXIT_CODES.RUN_GOAL_STATICALLY_CONSUMED,
       OPERATOR_EXIT_CODES.RUN_GOAL_ALREADY_CONSUMED,
-    );
+      OPERATOR_EXIT_CODES.RUN_GOAL_CONSUMPTION_MARKER_UNAVAILABLE,
+    ];
+    expect(new Set(three).size).toBe(3);
   });
 });
 

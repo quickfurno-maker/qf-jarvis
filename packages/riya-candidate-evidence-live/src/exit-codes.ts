@@ -161,6 +161,18 @@ export const OPERATOR_OUTCOMES = [
    * cannot guarantee one, so it refuses rather than assuming first-use.
    */
   'RUN_GOAL_ALREADY_CONSUMED',
+  /**
+   * POST-SFD1. The consumption marker could not be written, so a claim cannot be guaranteed.
+   *
+   * A THIRD code, because the guard already distinguishes this internally and collapsing it into
+   * "already consumed" gives the operator the wrong remediation. An owner told their goal was
+   * already spent will go looking for a previous run; an owner told the marker is unavailable will
+   * go and look at the directory. Those are different problems with different fixes.
+   *
+   * Still a refusal, and still before any credential is read: a guard that cannot record a claim
+   * must not permit the launch it is guarding.
+   */
+  'RUN_GOAL_CONSUMPTION_MARKER_UNAVAILABLE',
 ] as const;
 export type OperatorOutcome = (typeof OPERATOR_OUTCOMES)[number];
 
@@ -208,4 +220,6 @@ export const OPERATOR_EXIT_CODES: Readonly<Record<OperatorOutcome, number>> = Ob
   // because a shell must be able to tell "history settled this" from "this machine already ran it".
   RUN_GOAL_STATICALLY_CONSUMED: 34,
   RUN_GOAL_ALREADY_CONSUMED: 35,
+  // The next unused integer; 0-35 keep meaning exactly what they meant.
+  RUN_GOAL_CONSUMPTION_MARKER_UNAVAILABLE: 36,
 });

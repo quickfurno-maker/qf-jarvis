@@ -280,6 +280,47 @@ describe('the localized classifier', () => {
     );
   });
 
+  it('2xx with the WIRE STAGE NEVER RUN -> INCONCLUSIVE, whatever production said', () => {
+    // The defect owner review found. The runner keeps the wire schema optional for backward
+    // compatibility, so this shape is reachable -- and an earlier revision read it as ACCEPTED, or
+    // worse as POST_WIRE_PRODUCTION_INVARIANT_FAILED, which names a stage that never ran.
+    for (const productionValidationPassed of [true, false]) {
+      expect(
+        analyseLocalizedStructuredReply(
+          base({
+            wireValidationCompleted: false,
+            wireValidationPassed: false,
+            productionValidationCompleted: true,
+            productionValidationPassed,
+          }),
+        ).classification,
+        String(productionValidationPassed),
+      ).toBe('STRUCTURED_REPLY_INCONCLUSIVE');
+    }
+  });
+
+  it('never infers a wire PASS from the production projector result', () => {
+    // Even a projector that passed cannot stand in for an unobserved wire stage: the whole point of
+    // this vocabulary is OBSERVED stage provenance.
+    const analysis = analyseLocalizedStructuredReply(
+      base({
+        wireValidationCompleted: false,
+        wireValidationPassed: true,
+        productionValidationCompleted: true,
+        productionValidationPassed: true,
+      }),
+    );
+    expect(analysis.classification).toBe('STRUCTURED_REPLY_INCONCLUSIVE');
+  });
+
+  it('2xx + wire PASS + production NOT COMPLETED -> INCONCLUSIVE', () => {
+    expect(
+      analyseLocalizedStructuredReply(
+        base({ productionValidationCompleted: false, productionValidationPassed: false }),
+      ).classification,
+    ).toBe('STRUCTURED_REPLY_INCONCLUSIVE');
+  });
+
   it('2xx with NEITHER stage run -> INCONCLUSIVE, never a verdict about a check that never ran', () => {
     expect(
       analyseLocalizedStructuredReply(

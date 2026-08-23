@@ -102,6 +102,53 @@ export const STATICALLY_CONSUMED_RUN_GOALS: Readonly<Record<string, string>> = O
   POST_RBD1_REASONING_LOW_OUTPUT_BUDGET_8192_STRICT_FALSE_DIFFERENTIAL: 'SFD1',
 });
 
+/**
+ * The run goals the one-shot guard governs AT ALL.
+ *
+ * ### Why this exists, and why it is a list rather than a rule
+ *
+ * The first revision of this module wired the guard to EVERY goal. That made `FULL_EVIDENCE` -- the
+ * default, the repository's ordinary evidence purpose -- consumable once per workstation, which
+ * would have taken the main operator offline to fix a diagnostic incident. `SAFETY_REPLICATION` too,
+ * whose whole design is that a later replication may legitimately disagree with an earlier one and
+ * an owner interprets the difference.
+ *
+ * So eligibility is an explicit closed set, and it is deliberately NOT derived from the `POST_`
+ * prefix or any other spelling. A naming rule would silently enrol the next goal somebody names
+ * badly, and silently exclude one named well. Adding a bounded one-shot diagnostic means adding it
+ * here, in the same PR that adds the goal -- which is exactly the review moment where "is this
+ * runnable more than once?" should be asked.
+ *
+ * Everything here is a BOUNDED ONE-SHOT DIAGNOSTIC: a single governed live question, whose answer is
+ * recorded and whose re-execution would spend an authorization to learn nothing.
+ */
+export const ONE_SHOT_DIAGNOSTIC_RUN_GOALS: readonly string[] = Object.freeze([
+  'REQUEST_CONTRACT_DIAGNOSTIC',
+  'SCHEMA_DIFFERENTIAL_DIAGNOSTIC',
+  'POST_SDH4_SCHEMA_REPAIR_VERIFICATION',
+  'POST_SRV1_OPERATIONAL_ACCEPTANCE_DIAGNOSTIC',
+  'POST_OAD3_REPRESENTATIVE_ACCEPTANCE',
+  'POST_RA1_NEUTRAL_REPRESENTATIVE_ACCEPTANCE',
+  'POST_NRA1_GPT_OSS_120B_STRICT_MODEL_DIFFERENTIAL',
+  'POST_MD120B3_GROQ_RESPONSES_API_STRICT_DIFFERENTIAL',
+  'POST_RSP20B2_REASONING_EFFORT_LOW_DIFFERENTIAL',
+  'POST_RLD1_REASONING_LOW_OUTPUT_BUDGET_8192_DIFFERENTIAL',
+  'POST_RBD1_REASONING_LOW_OUTPUT_BUDGET_8192_STRICT_FALSE_DIFFERENTIAL',
+]);
+
+/**
+ * Whether the one-shot guard governs this goal at all.
+ *
+ * `false` for `FULL_EVIDENCE` and `SAFETY_REPLICATION`, which are repeatable evidence purposes
+ * subject to their own live authorization -- not single historical differentials. A goal this
+ * returns `false` for bypasses the guard entirely: no tombstone check, no marker, and no `one-shot`
+ * line on the transcript, because a run that was never governed by the guard must not look as if it
+ * was.
+ */
+export function isOneShotDiagnosticRunGoal(goal: string): boolean {
+  return ONE_SHOT_DIAGNOSTIC_RUN_GOALS.includes(goal);
+}
+
 /** Why a launch was refused. Closed, and content-free. */
 export const ONE_SHOT_REFUSALS = [
   /** Repository evidence already records this goal as consumed by a completed live run. */

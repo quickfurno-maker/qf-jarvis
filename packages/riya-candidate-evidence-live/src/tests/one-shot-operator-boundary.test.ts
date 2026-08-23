@@ -127,6 +127,16 @@ async function launch(options: {
   readonly runGoal?: OperatorDeps['runGoal'];
   readonly smokeFails?: boolean;
   readonly badSmokeConfigPath?: boolean;
+  /**
+   * Bypass the STATIC tombstone so the marker path can be exercised on a real eligible goal.
+   *
+   * Every marker-eligible goal is also tombstoned, which is correct: history settled them. This
+   * option changes only WHICH refusal fires first inside the guard double -- the operator still
+   * consults a guard, still only for eligible goals, and the production tombstone list is untouched.
+   */
+  readonly markerOnlyGuard?: boolean;
+  /** Make the marker unwritable, to prove it reports as its OWN outcome. */
+  readonly markerUnavailable?: boolean;
 }): Promise<{ readonly outcome: string; readonly counters: Counters; readonly lines: string[] }> {
   const lines: string[] = [];
   const { path: smokeConfigPath, digest } = writeSmokeConfig(externalDir('qfj-one-shot-cfg-'));
@@ -142,7 +152,38 @@ async function launch(options: {
       repoRoot: REPO_ROOT,
       interactive: true,
     },
-    oneShotGuard: createOneShotConsumptionGuard({ markerDirectory: options.markerDirectory }),
+    oneShotGuard: (() => {
+      const real = createOneShotConsumptionGuard({
+        markerDirectory: options.markerDirectory,
+        ...(options.markerUnavailable === true
+          ? {
+              claimExclusive: (): never => {
+                throw Object.assign(new Error('SECRET-DETAIL-MUST-NOT-APPEAR'), { code: 'EACCES' });
+              },
+            }
+          : {}),
+      });
+      if (options.markerOnlyGuard !== true) {
+        return real;
+      }
+      // Marker-only: skip the static tombstone, keep everything else real.
+      const markerOnly = createOneShotConsumptionGuard({
+        markerDirectory: options.markerDirectory,
+        ...(options.markerUnavailable === true
+          ? {
+              claimExclusive: (): never => {
+                throw Object.assign(new Error('SECRET-DETAIL-MUST-NOT-APPEAR'), { code: 'EACCES' });
+              },
+            }
+          : {}),
+      });
+      return {
+        claim: (goal) =>
+          markerOnly.claim(
+            `MARKER-ONLY::${goal}` as unknown as Parameters<typeof markerOnly.claim>[0],
+          ),
+      };
+    })(),
     ...(options.runGoal === undefined ? {} : { runGoal: options.runGoal }),
     openSmokeCredential: () => {
       counters.credentialReads += 1;
@@ -193,16 +234,64 @@ async function launch(options: {
   return { outcome: result.outcome, counters, lines };
 }
 
-describe('a second launch of the same goal spends nothing', () => {
+describe('THE DEFAULT AND THE REPLICATION STAY REPEATABLE', () => {
+  /**
+   * The defect owner review found.
+   *
+   * The first revision wired the guard to EVERY goal, so `FULL_EVIDENCE` -- the repository's default
+   * evidence purpose -- became consumable once per workstation, and `SAFETY_REPLICATION` likewise,
+   * despite its whole design being that a later replication may disagree and an owner interprets the
+   * difference. A diagnostic incident must not take the main operator offline.
+   *
+   * A smoke-failing harness is used so each launch stops cheaply while still passing preflight and
+   * reaching the point where the guard would have claimed.
+   */
+  it('runs FULL_EVIDENCE twice over one marker directory, writing no marker', async () => {
+    const markerDirectory = externalDir('qfj-one-shot-marker-');
+    const first = await launch({ markerDirectory, smokeFails: true });
+    expect(first.outcome).toBe('SMOKE_FAILED');
+    expect(first.counters.credentialReads).toBe(1);
+    expect(readdirSync(markerDirectory)).toStrictEqual([]);
+    expect(first.lines.some((one) => one.includes('phase=one-shot'))).toBe(false);
+
+    const second = await launch({ markerDirectory, smokeFails: true });
+    expect(second.outcome).not.toBe('RUN_GOAL_ALREADY_CONSUMED');
+    expect(second.outcome).toBe('SMOKE_FAILED');
+    // It reached the credential and the smoke exactly as the first launch did.
+    expect(second.counters.credentialReads).toBe(1);
+    expect(second.counters.smokes).toBe(1);
+    expect(readdirSync(markerDirectory)).toStrictEqual([]);
+    expect(second.lines.some((one) => one.includes('phase=one-shot'))).toBe(false);
+  });
+
+  it('runs SAFETY_REPLICATION twice over one marker directory, writing no marker', async () => {
+    const markerDirectory = externalDir('qfj-one-shot-marker-');
+    for (const attempt of [1, 2]) {
+      const run = await launch({
+        markerDirectory,
+        runGoal: 'SAFETY_REPLICATION',
+        smokeFails: true,
+      });
+      expect(run.outcome, `attempt ${String(attempt)}`).toBe('SMOKE_FAILED');
+      expect(run.counters.credentialReads, `attempt ${String(attempt)}`).toBe(1);
+      expect(run.lines.some((one) => one.includes('phase=one-shot'))).toBe(false);
+    }
+    expect(readdirSync(markerDirectory)).toStrictEqual([]);
+  });
+});
+
+describe('a second launch of a MARKER-ELIGIBLE goal spends nothing', () => {
+  const ELIGIBLE = 'POST_RBD1_REASONING_LOW_OUTPUT_BUDGET_8192_STRICT_FALSE_DIFFERENTIAL' as const;
+
   it('refuses before any credential, smoke or candidate request', async () => {
     const markerDirectory = externalDir('qfj-one-shot-marker-');
-    // First launch: the goal is claimed and the run proceeds into the smoke.
-    const first = await launch({ markerDirectory });
+    const first = await launch({ markerDirectory, runGoal: ELIGIBLE, markerOnlyGuard: true });
     expect(first.counters.credentialReads).toBe(1);
     expect(first.counters.smokes).toBe(1);
+    expect(readdirSync(markerDirectory)).toHaveLength(1);
 
     // Second launch, same goal, same workstation. THE INCIDENT.
-    const second = await launch({ markerDirectory });
+    const second = await launch({ markerDirectory, runGoal: ELIGIBLE, markerOnlyGuard: true });
     expect(second.outcome).toBe('RUN_GOAL_ALREADY_CONSUMED');
     expect(second.counters.credentialReads).toBe(0);
     expect(second.counters.smokes).toBe(0);
@@ -211,13 +300,28 @@ describe('a second launch of the same goal spends nothing', () => {
 
   it('emits a content-free refusal line naming the goal and the reason', async () => {
     const markerDirectory = externalDir('qfj-one-shot-marker-');
-    await launch({ markerDirectory });
-    const second = await launch({ markerDirectory });
+    await launch({ markerDirectory, runGoal: ELIGIBLE, markerOnlyGuard: true });
+    const second = await launch({ markerDirectory, runGoal: ELIGIBLE, markerOnlyGuard: true });
     const line = second.lines.find((one) => one.includes('phase=one-shot'));
     expect(line).toBeDefined();
     expect(line).toContain('status=REFUSED');
     expect(line).toContain('reason=goal-already-consumed');
     expect(second.lines.join('\n')).not.toContain(SENTINEL_KEY);
+  });
+
+  it('reports an UNAVAILABLE marker as its OWN outcome, never as already-consumed', async () => {
+    // The second defect owner review found: the guard distinguished these internally and the
+    // operator collapsed them, sending an owner to look for a run that never happened.
+    const run = await launch({
+      markerDirectory: externalDir('qfj-one-shot-marker-'),
+      runGoal: ELIGIBLE,
+      markerOnlyGuard: true,
+      markerUnavailable: true,
+    });
+    expect(run.outcome).toBe('RUN_GOAL_CONSUMPTION_MARKER_UNAVAILABLE');
+    expect(run.counters.credentialReads).toBe(0);
+    expect(run.counters.smokes).toBe(0);
+    expect(run.lines.join('\n')).not.toContain('SECRET-DETAIL-MUST-NOT-APPEAR');
   });
 });
 
@@ -240,86 +344,39 @@ describe('a statically consumed goal refuses on a FRESH workstation', () => {
 });
 
 describe('the consumption boundary', () => {
+  const ELIGIBLE = 'POST_RBD1_REASONING_LOW_OUTPUT_BUDGET_8192_STRICT_FALSE_DIFFERENTIAL' as const;
+
   it('does NOT consume a goal when preflight refuses', async () => {
-    // A malformed or unreadable configuration must never spend a governed one-shot. The marker
-    // directory stays empty, and a later legitimate launch still works.
+    // A malformed or unreadable configuration must never spend a governed one-shot.
     const markerDirectory = externalDir('qfj-one-shot-marker-');
-    const failed = await launch({ markerDirectory, badSmokeConfigPath: true });
+    const failed = await launch({
+      markerDirectory,
+      runGoal: ELIGIBLE,
+      markerOnlyGuard: true,
+      badSmokeConfigPath: true,
+    });
     expect(failed.outcome).toBe('PRECHECK_FAILED');
     expect(readdirSync(markerDirectory)).toStrictEqual([]);
     expect(failed.counters.credentialReads).toBe(0);
 
-    const later = await launch({ markerDirectory });
+    const later = await launch({ markerDirectory, runGoal: ELIGIBLE, markerOnlyGuard: true });
     expect(later.counters.credentialReads).toBe(1);
   });
 
   it('DOES consume a goal whose smoke later fails', async () => {
-    // The authorization was for one launch, not for one success. "It failed, so try again" is
-    // exactly the reasoning the guard exists to refuse.
+    // The authorization was for one launch, not for one success.
     const markerDirectory = externalDir('qfj-one-shot-marker-');
-    const first = await launch({ markerDirectory, smokeFails: true });
+    const first = await launch({
+      markerDirectory,
+      runGoal: ELIGIBLE,
+      markerOnlyGuard: true,
+      smokeFails: true,
+    });
     expect(first.outcome).toBe('SMOKE_FAILED');
     expect(first.counters.smokes).toBe(1);
 
-    const second = await launch({ markerDirectory });
+    const second = await launch({ markerDirectory, runGoal: ELIGIBLE, markerOnlyGuard: true });
     expect(second.outcome).toBe('RUN_GOAL_ALREADY_CONSUMED');
     expect(second.counters.smokes).toBe(0);
-  });
-
-  it('leaves a run without a guard exactly as it was', async () => {
-    // Every pre-existing spec omits the seam, and their behaviour must be untouched.
-    const lines: string[] = [];
-    const { path: smokeConfigPath, digest } = writeSmokeConfig(externalDir('qfj-one-shot-cfg-'));
-    harnessState.syntheticDigest = digest;
-    const result = await runCandidateEvidenceOperator({
-      console: createSafeConsole((line) => lines.push(line)),
-      preflight: {
-        smokeConfigPath,
-        reviewOutputPath: join(externalDir('qfj-one-shot-out-'), 'bundle.json'),
-        repoRoot: REPO_ROOT,
-        interactive: true,
-      },
-      openSmokeCredential: () =>
-        Promise.resolve({
-          credentialSource: {
-            isInteractive: () => true,
-            readOnce: () => Promise.resolve(SENTINEL_KEY),
-          },
-        }),
-      runSmoke: () =>
-        Promise.resolve({
-          ...SMOKE_PASS,
-          ok: false,
-          reason: 'smoke-refused',
-        } as unknown as SmokeRunResult),
-      openCandidateCredential: () => Promise.resolve({}),
-      openCandidate: () => {
-        throw new Error('CANDIDATE-SESSION-MUST-NOT-BE-CONSTRUCTED');
-      },
-      binding: createEvaluationBinding({
-        evaluationSuiteId: 'riya.candidate.safety.suite.v1',
-        evaluationSuiteVersion: 2,
-        fixtureManifestId: 'riya.candidate.safety.v1',
-        fixtureManifestVersion: 4,
-        evaluatorImplId: 'qfj.eval.deterministic',
-        evaluatorImplVersion: 1,
-        release: CANDIDATE_RELEASE,
-        promptFamily: 'riya.client-sales',
-        promptVersion: 1,
-        promptDigest: RIYA_CLIENT_PROMPT_DIGEST,
-        capabilityProfileRef: CANDIDATE_CAPABILITY_PROFILE_REF,
-        knowledgeRevision: 'know.rev.1',
-        policyContractRevision: 'policy.rev.1',
-        createdAt: '2026-08-12T00:00:00.000Z',
-      }),
-      thresholds: createSuiteThresholds({
-        thresholdsId: 'riya.candidate.safety.thresholds.v1',
-        thresholdsVersion: 1,
-      }),
-      repoRoot: REPO_ROOT,
-    });
-    expect(result.outcome).toBe('SMOKE_FAILED');
-    // No one-shot line at all when the seam is absent.
-    expect(lines.some((one) => one.includes('phase=one-shot'))).toBe(false);
   });
 });

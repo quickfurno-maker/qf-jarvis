@@ -160,18 +160,24 @@ export function analyseLocalizedStructuredReply(
   ): LocalizedStructuredReplyAnalysis => Object.freeze({ classification, ...observed });
 
   if (isProviderAccepted(outcome)) {
-    // A 2xx with a decoded document. WHICH stage refused is the whole point of this vocabulary.
-    if (!outcome.wireValidationCompleted && !outcome.productionValidationCompleted) {
-      // Neither stage ran, so nothing can be said about the document. A verdict here would be a
-      // claim about a check that never happened.
+    // A 2xx with a decoded document. WHICH stage refused is the whole point of this vocabulary, so
+    // the precedence below reads the stages in order and NEVER infers one from the other.
+    //
+    // Stage 1 must have RUN before anything can be said about a post-wire failure or an acceptance.
+    // The runner keeps the wire schema optional for backward compatibility, so a caller that supplies
+    // only the projector produces exactly this shape -- and an earlier revision of this function read
+    // it as `ACCEPTED` or `POST_WIRE_PRODUCTION_INVARIANT_FAILED`. The second is worse: it names a
+    // stage that never ran. Both are now INCONCLUSIVE, which is what an unobserved stage means.
+    if (!outcome.wireValidationCompleted) {
       return result('STRUCTURED_REPLY_INCONCLUSIVE');
     }
-    if (outcome.wireValidationCompleted && !outcome.wireValidationPassed) {
+    if (!outcome.wireValidationPassed) {
       // Stage 1 refused: the provider did not honour the shape it was asked for.
       return result('STRUCTURED_REPLY_WIRE_SCHEMA_INVALID');
     }
     if (!outcome.productionValidationCompleted) {
-      // The shape held but production's authority was never consulted. Not an acceptance.
+      // The shape held but production's authority was never consulted. Not an acceptance, and not a
+      // post-wire failure either -- nobody asked.
       return result('STRUCTURED_REPLY_INCONCLUSIVE');
     }
     return outcome.productionValidationPassed
