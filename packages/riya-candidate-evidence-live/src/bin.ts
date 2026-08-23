@@ -13,6 +13,8 @@
  * to a default would write seventy-two client turns and seventy-two candidate replies somewhere
  * nobody chose.
  */
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -81,6 +83,7 @@ import type { CredentialSourceMode } from './credential-source.js';
 import { DEFAULT_RUN_GOAL } from './internal/run-goal.js';
 import type { OperatorRunGoal } from './internal/run-goal.js';
 import { OPERATOR_EXIT_CODES } from './exit-codes.js';
+import { createOneShotConsumptionGuard } from './internal/one-shot-consumption.js';
 import { runCandidateEvidenceOperator } from './operator.js';
 import { createStdoutSafeConsole } from './safe-console.js';
 import {
@@ -332,6 +335,15 @@ async function main(): Promise<number> {
 
   const result = await runCandidateEvidenceOperator({
     console: safe,
+    // POST-SFD1. The one-shot guard, wired for every executable launch.
+    //
+    // The marker directory is the OS temp directory: outside the repository, so it can never appear
+    // in `git status` or break the exact-worktree preflight a live authorization depends on, and
+    // durable enough to survive between two launches minutes apart -- which is the interval the
+    // incident actually spanned.
+    oneShotGuard: createOneShotConsumptionGuard({
+      markerDirectory: join(tmpdir(), 'qfj-one-shot'),
+    }),
     preflight: {
       smokeConfigPath: parsed.args.smokeConfig,
       reviewOutputPath: parsed.args.reviewOutput,

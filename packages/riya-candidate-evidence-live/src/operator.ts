@@ -144,6 +144,8 @@ import {
 } from './internal/safety-diagnostics.js';
 import { emitSmokeExecutionDiagnostics } from './internal/smoke-diagnostics.js';
 import { runPreflight } from './preflight.js';
+import { isOneShotDiagnosticRunGoal } from './internal/one-shot-consumption.js';
+import type { OneShotConsumptionGuard } from './internal/one-shot-consumption.js';
 import type { PreflightInput } from './preflight.js';
 import type { SafeConsole } from './safe-console.js';
 
@@ -206,6 +208,18 @@ export interface OperatorDeps {
    * The operator deliberately cannot tell which one it received: it forwards the slice untouched, so
    * no branch here can weaken a gate that belongs to the ingress.
    */
+  /**
+   * POST-SFD1. The one-shot consumption guard, claimed AFTER preflight and BEFORE any credential.
+   *
+   * Optional on this seam and always supplied by `bin.ts`, which is the only path that can reach a
+   * real provider. A spec asserts the executable wires it; omitting it in a unit spec leaves the
+   * pre-existing behaviour those specs were written against.
+   *
+   * The boundary is deliberate. Preflight must pass first, so a malformed command or a bad worktree
+   * never spends a governed goal -- but nothing that touches a credential may run before the claim,
+   * because the incident was a second launch that reached the provider.
+   */
+  readonly oneShotGuard?: OneShotConsumptionGuard;
   readonly openSmokeCredential: () => Promise<SmokeCredentialDeps>;
   /** Run the existing one-shot smoke against EXACTLY that ingress. */
   readonly runSmoke: (
@@ -463,6 +477,41 @@ export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<
   if (!loaded.ok) {
     safe.line({ phase: 'preflight', status: 'FAILED', reason: 'smoke-config-unreadable' });
     return { outcome: 'PRECHECK_FAILED' };
+  }
+
+  // A'. ONE-SHOT CONSUMPTION (POST-SFD1) -- the launch is accepted here, and only here.
+  //
+  // The boundary is the point of the control. Preflight and the smoke configuration have passed, so
+  // a malformed command, a moved worktree or an unreadable config can never spend a governed goal.
+  // Nothing that reads a credential, sends a smoke or contacts a provider has run yet, so a refusal
+  // here costs nothing and a claim here covers everything that follows.
+  //
+  // Consumption is claimed BEFORE the smoke, not after it. A goal whose smoke fails is still spent:
+  // the authorization was for one launch, and the incident showed that "it failed, so try again" is
+  // exactly the reasoning a guard has to refuse.
+  // ELIGIBILITY FIRST. `FULL_EVIDENCE` and `SAFETY_REPLICATION` are repeatable evidence purposes,
+  // not single historical differentials, and they bypass the guard entirely -- no tombstone check,
+  // no marker, and no `one-shot` line, because a run the guard never governed must not look as if it
+  // was. An earlier revision of this hunk claimed EVERY goal, which would have made the repository's
+  // default operator one-shot per workstation.
+  if (deps.oneShotGuard !== undefined && isOneShotDiagnosticRunGoal(runGoal)) {
+    const claim = deps.oneShotGuard.claim(runGoal);
+    if (!claim.ok) {
+      safe.line({ phase: 'one-shot', status: 'REFUSED', runGoal, reason: claim.reason });
+      // EXACT mapping, one outcome per reason. The guard already tells these apart, and collapsing
+      // "the marker could not be written" into "you already ran this" would send an owner looking
+      // for a run that never happened.
+      if (claim.reason === 'statically-consumed-goal') {
+        return { outcome: 'RUN_GOAL_STATICALLY_CONSUMED' };
+      }
+      return {
+        outcome:
+          claim.reason === 'goal-already-consumed'
+            ? 'RUN_GOAL_ALREADY_CONSUMED'
+            : 'RUN_GOAL_CONSUMPTION_MARKER_UNAVAILABLE',
+      };
+    }
+    safe.line({ phase: 'one-shot', status: 'CLAIMED', runGoal });
   }
 
   // B/C. SMOKE — one credential, one request.

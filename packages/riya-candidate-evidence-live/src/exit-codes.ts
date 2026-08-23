@@ -139,6 +139,43 @@ export const OPERATOR_OUTCOMES = [
    * emphatically not that production should change its strict posture.
    */
   'POST_RBD1_REASONING_LOW_OUTPUT_BUDGET_8192_STRICT_FALSE_DIFFERENTIAL_COMPLETE',
+  /**
+   * POST-SFD1. The goal is recorded CONSUMED by the repository's own evidence and may not run.
+   *
+   * Separate from the marker refusal below, because the two are fixed in different places. This one
+   * says HISTORY settled the question: a fresh workstation, a new clone, a colleague's machine would
+   * all refuse it, and lifting it is a reviewed edit to the tombstone list. The other says only that
+   * THIS workstation already spent it.
+   *
+   * Refused before any credential is read, any smoke is sent, or any provider is contacted.
+   */
+  'RUN_GOAL_STATICALLY_CONSUMED',
+  /**
+   * POST-SFD1. This workstation already claimed this governed one-shot goal.
+   *
+   * The incident code. SFD1 was authorized once and accidentally launched twice; the second launch
+   * reached the provider because nothing but an instruction stood in the way. Now the first accepted
+   * launch claims the goal atomically, and a later launch of the same marker-eligible goal on this
+   * workstation is refused before any credential is read, smoke is sent, or provider is contacted.
+   *
+   * It does NOT cover a failure to create or write the consumption marker. That is a different
+   * problem with a different fix -- an owner told they already ran something goes looking for a
+   * previous run, when the directory may simply be unwritable -- and it is represented separately by
+   * `RUN_GOAL_CONSUMPTION_MARKER_UNAVAILABLE`.
+   */
+  'RUN_GOAL_ALREADY_CONSUMED',
+  /**
+   * POST-SFD1. The consumption marker could not be written, so a claim cannot be guaranteed.
+   *
+   * A THIRD code, because the guard already distinguishes this internally and collapsing it into
+   * "already consumed" gives the operator the wrong remediation. An owner told their goal was
+   * already spent will go looking for a previous run; an owner told the marker is unavailable will
+   * go and look at the directory. Those are different problems with different fixes.
+   *
+   * Still a refusal, and still before any credential is read: a guard that cannot record a claim
+   * must not permit the launch it is guarding.
+   */
+  'RUN_GOAL_CONSUMPTION_MARKER_UNAVAILABLE',
 ] as const;
 export type OperatorOutcome = (typeof OPERATOR_OUTCOMES)[number];
 
@@ -182,4 +219,10 @@ export const OPERATOR_EXIT_CODES: Readonly<Record<OperatorOutcome, number>> = Ob
   POST_RLD1_REASONING_LOW_OUTPUT_BUDGET_8192_DIFFERENTIAL_COMPLETE: 32,
   // The next unused integer; 0-32 keep meaning exactly what they meant.
   POST_RBD1_REASONING_LOW_OUTPUT_BUDGET_8192_STRICT_FALSE_DIFFERENTIAL_COMPLETE: 33,
+  // The next unused integers; 0-33 keep meaning exactly what they meant. Two codes rather than one
+  // because a shell must be able to tell "history settled this" from "this machine already ran it".
+  RUN_GOAL_STATICALLY_CONSUMED: 34,
+  RUN_GOAL_ALREADY_CONSUMED: 35,
+  // The next unused integer; 0-35 keep meaning exactly what they meant.
+  RUN_GOAL_CONSUMPTION_MARKER_UNAVAILABLE: 36,
 });
