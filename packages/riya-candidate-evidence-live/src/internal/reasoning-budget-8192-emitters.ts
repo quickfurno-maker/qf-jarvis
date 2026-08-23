@@ -71,7 +71,8 @@ export function emitReasoningBudget8192ProbeOutcome(
     // THE variable, printed beside the number it is being compared against.
     baselineCompletionBudget: REASONING_BUDGET_8192_BASELINE_BUDGET,
     candidateCompletionBudget: REASONING_BUDGET_8192_CANDIDATE_BUDGET,
-    // HELD. RLD1 settled this posture; printing it keeps a budget run readable as a budget run.
+    // HELD at the value RLD1 sent. Printing it keeps a budget run readable as a budget run, and
+    // records that the effort was held rather than concluded about.
     reasoningEffort: REASONING_BUDGET_8192_REASONING_EFFORT,
     // The SAME neutral messages every gate since NRA1 has sent.
     messageSource: probe.messageSource,

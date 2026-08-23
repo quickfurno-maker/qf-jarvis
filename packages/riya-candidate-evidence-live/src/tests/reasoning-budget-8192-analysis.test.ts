@@ -98,8 +98,8 @@ describe('the identity: the budget moves, everything else is HELD', () => {
   });
 
   it('holds the reasoning effort, and reads it from RLD1 rather than restating it', () => {
-    // The posture RLD1 settled. Reading the constant means the two runs cannot disagree about what
-    // is being held, which is the whole basis for calling this a one-variable differential.
+    // The value RLD1 sent, HELD rather than re-tested. Reading the constant means the two runs
+    // cannot disagree about what is being held, which is the basis for calling this one-variable.
     expect(REASONING_BUDGET_8192_REASONING_EFFORT).toBe('low');
     expect(REASONING_BUDGET_8192_REASONING_EFFORT).toBe(REASONING_DIFFERENTIAL_CANDIDATE_EFFORT);
   });

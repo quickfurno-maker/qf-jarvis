@@ -160,9 +160,14 @@ export const OPERATOR_RUN_GOALS = [
    *
    * RLD1 used the goal above and received HTTP 400 with `json_validate_failed` --
    * `REASONING_LOW_20B_STRICT_PROVIDER_OUTPUT_INVALID`. Explicit low reasoning effort did NOT repair
-   * the exact neutral path at 4,096, so the effort axis joins the model and endpoint axes as settled.
+   * the exact neutral path at 4,096.
    *
-   * This goal holds all three -- same model, same endpoint, same `reasoning_effort='low'`, same
+   * What that closes is the explicit-low-at-4096 REPAIR ATTEMPT, and only that. Other
+   * reasoning-effort values remain UNTESTED -- `high` has never been sent -- and nothing here claims
+   * reasoning effort is generally irrelevant. The next selected one-variable diagnostic therefore
+   * HOLDS the effort at low rather than treating the axis as finished with.
+   *
+   * This goal holds three things -- same model, same endpoint, same `reasoning_effort='low'`, same
    * captured messages, same projected schema, same strict mode, same timeout and zero-retry posture
    * -- and changes exactly ONE thing: `max_completion_tokens`, from 4,096 to 8,192.
    *

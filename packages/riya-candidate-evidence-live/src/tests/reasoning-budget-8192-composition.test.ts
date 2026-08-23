@@ -17,9 +17,11 @@
  * mode, `reasoning_effort`, `stream` and `n` in one loop — and catches a twelfth field a hand-written
  * list would miss.
  *
- * The two ports are callers of ONE shared primitive, so this is confirming a property of the
- * construction rather than propping one up. The diff would still catch a regression that gave either
- * port its own config, adapter or transport.
+ * The two ports are callers of ONE shared primitive, which centralises provider construction — so
+ * this diff is confirming a narrow, already-constrained claim rather than carrying it alone. It is
+ * still the thing that pins the VALUES: the primitive takes a budget and an effort as parameters, so
+ * a regression that passed a different effort, or gave either port its own config, adapter or
+ * transport, is caught here and not by the architecture.
  *
  * ### Production must not move
  *

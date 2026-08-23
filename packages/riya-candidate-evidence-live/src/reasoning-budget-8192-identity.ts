@@ -8,8 +8,13 @@
  * `json_validate_failed` — `REASONING_LOW_20B_STRICT_PROVIDER_OUTPUT_INVALID`. Explicit low
  * reasoning effort did **not** repair the exact neutral path.
  *
- * So the effort axis is now settled the way the model and endpoint axes were settled before it, and
- * this run holds it: `low`, exactly as RLD1 sent. What moves is the budget, and only the budget.
+ * What RLD1 closed is the explicit-low-at-4096 REPAIR ATTEMPT, and only that. Other reasoning-effort
+ * values remain UNTESTED -- `high` has never been sent on this path -- and no claim is made that
+ * reasoning effort is generally irrelevant. The axis is not finished with; it is being HELD so that
+ * one variable moves at a time.
+ *
+ * So this run holds the effort at `low`, exactly as RLD1 sent it. What moves is the budget, and only
+ * the budget.
  *
  * ### What RLD1 did NOT establish, stated because it is easy to assume
  *

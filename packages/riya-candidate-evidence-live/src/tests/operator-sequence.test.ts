@@ -414,8 +414,9 @@ describe('HF3 — the one optional governed run goal', () => {
       'POST_RSP20B2_REASONING_EFFORT_LOW_DIFFERENTIAL',
       // POST-RLD1 adds a TWELFTH, along the axis RLD1 left open. RLD1 used the goal above and met
       // HTTP 400 with json_validate_failed, so explicit low reasoning effort did NOT repair the
-      // exact neutral path at 4,096 and the effort axis joins the model and endpoint axes as
-      // settled. This goal holds all three and moves only `max_completion_tokens`, 4,096 -> 8,192.
+      // exact neutral path at 4,096 -- which closes that repair ATTEMPT and nothing wider, since
+      // other effort values remain untested. This goal HOLDS the effort at low, along with the model
+      // and endpoint, and moves only `max_completion_tokens`, 4,096 -> 8,192.
       // Separate again, so a receipt can say which budget produced it -- RLD1 is CONSUMED and its
       // evidence is immutable. Strictly narrower than a bypass: the smoke plus ONE probe, reaching
       // no fixture, no evaluator, no authority, no P10 and no bundle, and it does NOT replay RLD1.

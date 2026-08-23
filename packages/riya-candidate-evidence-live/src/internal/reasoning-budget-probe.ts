@@ -12,12 +12,19 @@
  * moves ONE field: the same request at 8192.
  *
  * Two independently written ports could each send "the same request", and the claim that they
- * differed in one key would then be something a spec asserts about two code paths. Built here
- * instead, from ONE parameterised composition, the two requests differ in the budget **because
- * nothing else can differ** — the model, the endpoint, the transport, the config, the adapter, the
- * messages, the schema and the effort are all built by this file, once, and the budget is the only
- * argument that varies. The spec that diffs the two recorded wire bodies is then confirming a
- * property of the construction rather than propping one up.
+ * differed in one key would then rest entirely on a spec comparing two separate code paths. Built
+ * here instead, provider construction is CENTRALISED: the model, the endpoint, the transport, the
+ * config, the capability ceiling and the adapter are decided by this file, once, for every caller.
+ *
+ * Be precise about what that does and does not establish. This runner still ACCEPTS `completionBudget`
+ * and `reasoningEffort` as parameters, and each run supplies its own probe metadata — so the
+ * primitive alone does not make a one-variable run impossible to break.
+ *
+ * What holds the current guarantee is the combination: for the TWO governed callers, the effort is
+ * read from one shared constant, the messages and schema come from one shared neutral capture,
+ * provider construction happens here, and a spec diffs the two RECORDED WIRE BODIES and requires
+ * exactly one changed key. Centralisation removes the ways they could drift silently; the shared
+ * references and that test are what pin the values.
  *
  * ### What is deliberately NOT shared
  *
@@ -116,7 +123,7 @@ export interface ReasoningBudgetRunnerDeps<TStepId extends string> {
   readonly stepId: TStepId;
   /** THE variable across runs. Every other input to the request is fixed by this file. */
   readonly completionBudget: number;
-  /** Fixed at `'low'` by every current caller; RLD1 settled that posture. */
+  /** Fixed at `'low'` by both current callers: the value RLD1 sent, HELD rather than re-tested. */
   readonly reasoningEffort: GroqGptOssReasoningEffort;
   readonly providerForCompletionBudget: (budget: number) => ReasoningBudgetSeam;
   readonly observations: CandidateTransportObservations;

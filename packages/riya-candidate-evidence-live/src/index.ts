@@ -556,8 +556,11 @@ export type {
 } from './reasoning-differential-port.js';
 // POST-RLD1 LOW-REASONING 8192 OUTPUT-BUDGET DIFFERENTIAL. RLD1 sent the neutral production request
 // at reasoning_effort='low' and max_completion_tokens=4096 and received HTTP 400 with
-// json_validate_failed. Explicit low reasoning effort did NOT repair the exact neutral path, so the
-// effort axis joins the model and endpoint axes as settled.
+// json_validate_failed. Explicit low reasoning effort did NOT repair the exact neutral path.
+//
+// That closes the explicit-low-at-4096 REPAIR ATTEMPT and nothing wider. Other reasoning-effort
+// values remain untested, and no claim is made that reasoning effort is generally irrelevant -- so
+// this run holds low rather than concluding the axis is finished with.
 //
 // This changes exactly ONE variable: the per-request completion bound, 4096 -> 8192. The model, the
 // endpoint, the effort, the captured messages, the projected schema and the strict mode are all held

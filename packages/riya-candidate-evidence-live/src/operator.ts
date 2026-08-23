@@ -498,8 +498,9 @@ export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<
   //
   // ONE probe, like the five gates below it. RLD1 used the goal below and met HTTP 400 with
   // json_validate_failed: explicit low reasoning effort did NOT repair the exact neutral path at
-  // 4,096. So the effort axis is settled alongside the model and endpoint axes, and this run holds
-  // all three while moving only `max_completion_tokens` to 8,192.
+  // 4,096. That closes the explicit-low-at-4096 REPAIR ATTEMPT and nothing wider -- other
+  // reasoning-effort values remain untested. So this run HOLDS the effort at low, along with the
+  // model and endpoint, and moves only `max_completion_tokens` to 8,192.
   //
   // RLD1's 4,096 request is NOT replayed. That answer is recorded, and spending a live request to
   // re-prove it would answer nothing new.

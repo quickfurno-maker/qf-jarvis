@@ -5,21 +5,27 @@
  *
  * RLD1 sent the neutral production request on `openai/gpt-oss-20b`, over Chat Completions, at
  * `max_completion_tokens=4096`, with `reasoning_effort='low'`, and received HTTP 400 with
- * `json_validate_failed`. Low reasoning effort did not repair the exact neutral path, so the effort
- * axis joins the model and endpoint axes as settled — and this run holds all three.
+ * `json_validate_failed`. Low reasoning effort did not repair the exact neutral path at that budget.
+ *
+ * That closes the explicit-low-at-4096 REPAIR ATTEMPT and nothing wider: other reasoning-effort
+ * values remain untested, and reasoning effort is not claimed to be generally irrelevant. The effort
+ * is HELD here — along with the model and the endpoint — so that one variable moves at a time.
  *
  * What moves is the per-request completion bound: 4,096 to 8,192.
  *
  * ### The one-variable claim is a property of the CONSTRUCTION
  *
  * This port and the RLD1 port are two callers of ONE shared primitive. The model, the capability
- * ceiling, the endpoint, the transport, the config, the merged diagnostic adapter and the effort are
- * all decided inside {@link createReasoningBudgetProviderFactory}; the probe body inside
- * {@link createReasoningBudgetProbeRunner}. Neither port can vary any of them.
+ * ceiling, the endpoint, the transport, the config and the merged diagnostic adapter are decided
+ * inside {@link createReasoningBudgetProviderFactory}; the probe body inside
+ * {@link createReasoningBudgetProbeRunner}. Neither port constructs any of those for itself.
  *
- * So "identical to RLD1's request except `max_completion_tokens`" is not a claim a spec props up
- * about two independently written code paths — it is what the code can produce. The spec that diffs
- * the two recorded wire bodies confirms it; it does not carry it.
+ * Stated precisely, because the primitive is parameterised rather than rigid: it still accepts a
+ * budget and an effort. For the two CURRENTLY GOVERNED callers, what pins the one-variable claim is
+ * the combination of shared references — this port reads RLD1's own effort constant, and both read
+ * one neutral capture — with a spec that diffs the two RECORDED WIRE BODIES and requires exactly one
+ * changed key. The primitive removes the ways they could drift apart silently; the references and
+ * that test are what fix the values.
  *
  * The messages and the schema come from `captureNeutralClientRiyaRequest()`, the identical function
  * NRA1's, MD120B3's, RSP20B2's and RLD1's ports call. There is no second capture, no second fixture
