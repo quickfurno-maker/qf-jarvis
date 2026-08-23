@@ -50,6 +50,11 @@ import type { GroqProviderConfig } from './groq-config.js';
 import type { GroqChatRequestBody } from './groq-contracts.js';
 import { buildResponseFormat } from './groq-structured-output.js';
 
+/** Local, because the pre-build cancellation check must not depend on the exchange being reached. */
+function isAborted(signal: AbortSignal): boolean {
+  return signal.aborted;
+}
+
 /**
  * The reasoning efforts Groq documents for GPT-OSS.
  *
@@ -143,6 +148,16 @@ export function createGroqChatReasoningDiagnosticProvider(
 ): GroqChatReasoningDiagnosticProvider {
   return Object.freeze({
     async invoke(input: GroqChatReasoningDiagnosticInput): Promise<ProviderInvocationResult> {
+      // CANCELLATION OUTRANKS EVERYTHING, and it is checked BEFORE the body is built.
+      //
+      // The order is load-bearing and was nearly lost when the exchange was extracted. The exchange
+      // checks the signal too, but it only runs once a body EXISTS -- so an already-aborted call
+      // whose body also refuses would have reported `failed` instead of `cancelled`. A caller who
+      // cancelled and then asked what happened must be told they cancelled, not handed a verdict
+      // about a request nobody was going to send.
+      if (isAborted(input.signal)) {
+        return { status: 'cancelled' };
+      }
       const body = buildGroqChatReasoningDiagnosticBody(config, input);
       if (body === undefined) {
         // An invalid strict schema fails BEFORE any transport call, exactly as production does.

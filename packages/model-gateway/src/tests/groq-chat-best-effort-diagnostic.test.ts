@@ -339,3 +339,107 @@ describe('the adapter runs through the shared exchange', () => {
     }
   });
 });
+
+describe('CANCELLATION PRECEDENCE — an already-aborted signal outranks a body refusal', () => {
+  /**
+   * The regression owner review found in the shared-exchange extraction.
+   *
+   * The merged reasoning adapter checked `signal.aborted` BEFORE building the body. The extraction
+   * moved the only abort check into the exchange, which runs AFTER the build — so an already-aborted
+   * call whose body ALSO refuses changed from `cancelled` to `failed`.
+   *
+   * The pre-existing suite could not see it: its already-aborted case uses a VALID schema, so the
+   * body builds and the exchange's own check still answers `cancelled`. It takes BOTH conditions.
+   */
+  const ABORTED = (): AbortSignal => {
+    const controller = new AbortController();
+    controller.abort();
+    return controller.signal;
+  };
+  // A schema the strict path cannot build: a bare scalar root is not strict-compatible.
+  const UNBUILDABLE = { type: 'string' } as const;
+
+  it('reasoning adapter: already-aborted + unbuildable schema is CANCELLED, not FAILED', async () => {
+    const wire = recordingTransport();
+    const { createGroqChatReasoningDiagnosticProvider } =
+      await import('../providers/groq/groq-chat-reasoning-diagnostic.js');
+    const result = await createGroqChatReasoningDiagnosticProvider(
+      configFor(wire.transport),
+      createManualClock(),
+    ).invoke({ ...INPUT, structuredJsonSchema: UNBUILDABLE, signal: ABORTED() });
+    expect(result.status).toBe('cancelled');
+    expect(wire.bodies()).toHaveLength(0);
+  });
+
+  it('best-effort adapter: already-aborted + unbuildable schema is CANCELLED', async () => {
+    const wire = recordingTransport();
+    const result = await createGroqChatBestEffortDiagnosticProvider(
+      configFor(wire.transport),
+      createManualClock(),
+    ).invoke({ ...INPUT, structuredJsonSchema: UNBUILDABLE, signal: ABORTED() });
+    expect(result.status).toBe('cancelled');
+    expect(wire.bodies()).toHaveLength(0);
+  });
+
+  it('best-effort adapter: already-aborted + strict-INCAPABLE config is CANCELLED', async () => {
+    // The other way the best-effort builder refuses: no strict baseline to flip.
+    const wire = recordingTransport();
+    const result = await createGroqChatBestEffortDiagnosticProvider(
+      configFor(wire.transport, false),
+      createManualClock(),
+    ).invoke({ ...INPUT, signal: ABORTED() });
+    expect(result.status).toBe('cancelled');
+    expect(wire.bodies()).toHaveLength(0);
+  });
+
+  it('already-aborted + VALID schema is CANCELLED in both adapters, and sends nothing', async () => {
+    const reasoningWire = recordingTransport();
+    const { createGroqChatReasoningDiagnosticProvider } =
+      await import('../providers/groq/groq-chat-reasoning-diagnostic.js');
+    const reasoning = await createGroqChatReasoningDiagnosticProvider(
+      configFor(reasoningWire.transport),
+      createManualClock(),
+    ).invoke({ ...INPUT, signal: ABORTED() });
+    expect(reasoning.status).toBe('cancelled');
+    expect(reasoningWire.bodies()).toHaveLength(0);
+
+    const bestEffortWire = recordingTransport();
+    const bestEffort = await createGroqChatBestEffortDiagnosticProvider(
+      configFor(bestEffortWire.transport),
+      createManualClock(),
+    ).invoke({ ...INPUT, signal: ABORTED() });
+    expect(bestEffort.status).toBe('cancelled');
+    expect(bestEffortWire.bodies()).toHaveLength(0);
+  });
+
+  it('an ACTIVE signal + unbuildable schema is FAILED non-retryable in both adapters', async () => {
+    // The other half of the precedence rule: without an abort, a body refusal is still a refusal.
+    const reasoningWire = recordingTransport();
+    const { createGroqChatReasoningDiagnosticProvider } =
+      await import('../providers/groq/groq-chat-reasoning-diagnostic.js');
+    const reasoning = await createGroqChatReasoningDiagnosticProvider(
+      configFor(reasoningWire.transport),
+      createManualClock(),
+    ).invoke({ ...INPUT, structuredJsonSchema: UNBUILDABLE });
+    expect(reasoning.status).toBe('failed');
+    expect(reasoningWire.bodies()).toHaveLength(0);
+
+    const bestEffortWire = recordingTransport();
+    const bestEffort = await createGroqChatBestEffortDiagnosticProvider(
+      configFor(bestEffortWire.transport),
+      createManualClock(),
+    ).invoke({ ...INPUT, structuredJsonSchema: UNBUILDABLE });
+    expect(bestEffort.status).toBe('failed');
+    expect(bestEffortWire.bodies()).toHaveLength(0);
+  });
+
+  it('an ACTIVE signal + valid schema still reaches the shared exchange', async () => {
+    const wire = recordingTransport();
+    const result = await createGroqChatBestEffortDiagnosticProvider(
+      configFor(wire.transport),
+      createManualClock(),
+    ).invoke(INPUT);
+    expect(result.status).toBe('completed');
+    expect(wire.bodies()).toHaveLength(1);
+  });
+});

@@ -127,6 +127,13 @@ export function createGroqChatBestEffortDiagnosticProvider(
 ): GroqChatBestEffortDiagnosticProvider {
   return Object.freeze({
     async invoke(input: GroqChatBestEffortDiagnosticInput): Promise<ProviderInvocationResult> {
+      // CANCELLATION OUTRANKS EVERYTHING, checked BEFORE the body is built -- the same precedence
+      // the reasoning adapter has always had, and for the same reason. The body builder here refuses
+      // in two ways (an invalid strict schema, or a strict-incapable config), and neither may
+      // overwrite the fact that the caller had already cancelled.
+      if (input.signal.aborted) {
+        return { status: 'cancelled' };
+      }
       const body = buildGroqChatBestEffortDiagnosticBody(config, input);
       if (body === undefined) {
         return { status: 'failed', retryable: false };

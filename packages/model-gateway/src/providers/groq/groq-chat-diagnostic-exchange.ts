@@ -77,6 +77,12 @@ export async function executeGroqChatDiagnosticExchange(
   body: GroqChatRequestBody,
   signal: AbortSignal,
 ): Promise<ProviderInvocationResult> {
+  // This check is NOT the only one, and must not be treated as such.
+  //
+  // Each adapter checks the signal BEFORE building its body, because cancellation outranks a body
+  // refusal and this function only ever runs once a body exists. What this check adds is the window
+  // the adapter's cannot cover: cancellation between body construction and the transport call.
+  // Both are needed, and neither is redundant.
   if (isAborted(signal)) {
     return { status: 'cancelled' };
   }
