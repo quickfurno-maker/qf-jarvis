@@ -13,6 +13,12 @@
  * explicit `null` rather than an omitted field so that a caller has to say which case they mean.
  * Forgetting to pass a current record and starting a lifecycle by accident is exactly the mistake a
  * required-but-nullable field prevents: `evaluate({ next })` does not compile.
+ *
+ * **And it does not run, either.** The type alone would be a paper guarantee — a cast, a JavaScript
+ * caller or a value read back from storage all reach the runtime with the field missing. So the
+ * runtime enforces the same thing structurally: only a literal `null` declares a start, while an
+ * absent `current`, an explicit `undefined` and non-object input are all refused as
+ * `current-record-invalid`. A start is DECLARED here; it is never inferred from a gap.
  */
 import type { CommunicationStateRecordV1 } from '@qf-jarvis/contracts';
 

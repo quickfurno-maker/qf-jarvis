@@ -103,12 +103,35 @@ function identityRefusal(
 }
 
 function evaluate(input: unknown): CommunicationLifecycleTransitionResult {
-  const supplied: Record<string, unknown> = isRecord(input) ? input : {};
-
-  // A missing `current` and an explicit `null` mean the same thing -- lifecycle START -- because
-  // both say "there is no record being left". The declared type asks for the explicit `null` so a
-  // TypeScript caller cannot start a lifecycle by forgetting a field.
-  const suppliedCurrent = supplied['current'] ?? null;
+  // --- the start marker must be DECLARED, never inferred -----------------------------------------
+  //
+  // `current` is checked before anything else, and the three cases below are kept apart on purpose.
+  // An earlier revision collapsed them with `supplied['current'] ?? null`, which made
+  // `{ next: draft }` and `{ current: undefined, next: draft }` mean exactly what
+  // `{ current: null, next: draft }` means. That is the whole failure this boundary exists to
+  // prevent: a caller who FORGOT to say where the lifecycle stands would have had a lifecycle
+  // started for them, and the accident would have returned `ok: true`.
+  //
+  // The declared input type asks for an explicit `null`, but the implementation treats caller types
+  // as untrusted everywhere else -- it re-parses both records rather than believing the annotation
+  // -- so it has to enforce this one structurally too. A type is a claim, and a claim that
+  // `current` was supplied is worth exactly as much as a claim that a record is valid.
+  //
+  // Only a literal `null` is the start marker. Absent, `undefined` and non-object input are all
+  // broken PREMISES rather than start declarations, and every one of them fails closed as
+  // `current-record-invalid` -- the existing reason for "your idea of where the lifecycle stands
+  // does not hold up". No new bucket is added for them: a caller who omitted the field and a caller
+  // who supplied a malformed record have made the same class of mistake about the same field.
+  if (!isRecord(input)) {
+    return refuse('current-record-invalid');
+  }
+  if (!Object.prototype.hasOwnProperty.call(input, 'current')) {
+    return refuse('current-record-invalid');
+  }
+  const suppliedCurrent = input['current'];
+  if (suppliedCurrent === undefined) {
+    return refuse('current-record-invalid');
+  }
 
   // Parsed BEFORE the candidate: if the caller's idea of where the lifecycle stands is broken, the
   // premise of the whole question is broken, and reporting a defect in the candidate first would
@@ -124,7 +147,7 @@ function evaluate(input: unknown): CommunicationLifecycleTransitionResult {
     current = parsedCurrent.data;
   }
 
-  const parsedNext = safeParseCommunicationStateRecord(supplied['next']);
+  const parsedNext = safeParseCommunicationStateRecord(input['next']);
   if (!parsedNext.success) {
     return refuse('next-record-invalid');
   }

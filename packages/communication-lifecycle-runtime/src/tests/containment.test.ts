@@ -279,6 +279,11 @@ describe('no authority creation', () => {
     const code = codeOnly(policy);
     expect(code).not.toMatch(/TRANSITIONS\s*\[[^\]]*\]\s*\?\?/);
     expect(code).not.toMatch(/\bdefault\s*:/);
+    // And no nullish coalescing on the START MARKER. `input['current'] ?? null` would silently
+    // convert an omitted or `undefined` field into an explicit start declaration, which is the one
+    // fallback in this package that could begin a lifecycle nobody asked to begin.
+    expect(code).not.toMatch(/\[\s*'current'\s*\]\s*\?\?/);
+    expect(code).toContain("hasOwnProperty.call(input, 'current')");
     expect(code).toContain(
       'COMMUNICATION_LIFECYCLE_TRANSITIONS[current.state].includes(next.state)',
     );

@@ -353,7 +353,94 @@ describe('the canonical record schema stays load-bearing', () => {
       undefined as unknown as { current: null; next: CommunicationStateRecordV1 },
     );
     expect(result.ok).toBe(false);
-    expect(reasonOf(result)).toBe('next-record-invalid');
+    // The PREMISE is what is missing, not the candidate. An earlier revision reported
+    // `next-record-invalid` here, which read as "your proposal is wrong" when in fact nothing at all
+    // had been supplied.
+    expect(reasonOf(result)).toBe('current-record-invalid');
+  });
+});
+
+describe('the lifecycle start marker must be DECLARED, never inferred', () => {
+  /**
+   * The regression this suite exists for.
+   *
+   * An earlier revision read the field as `supplied['current'] ?? null`, which made an omitted or
+   * `undefined` `current` mean exactly what an explicit `null` means. A caller who simply forgot to
+   * say where the lifecycle stood would have had a lifecycle STARTED for them — and, because the
+   * candidate was a valid `draft`, would have been told `ok: true`.
+   *
+   * The declared type asks for an explicit `null`, but a type is a claim: a cast, a JavaScript
+   * caller, or a value read back from storage all reach the runtime with the field missing. So the
+   * separation is proved at runtime, not assumed from the annotation.
+   */
+  const FIRST_DRAFT = stateRecord({ state: 'draft', recordedAt: EARLIER });
+
+  it('accepts an explicit null as the one and only start declaration', () => {
+    const result = evaluateCommunicationLifecycleTransition({ current: null, next: FIRST_DRAFT });
+    expect(result.ok).toBe(true);
+  });
+
+  it('refuses an OMITTED current instead of starting a lifecycle', () => {
+    const result = evaluateCommunicationLifecycleTransition({
+      next: FIRST_DRAFT,
+    } as unknown as { current: null; next: CommunicationStateRecordV1 });
+    expect(result.ok).toBe(false);
+    expect(reasonOf(result)).toBe('current-record-invalid');
+  });
+
+  it('refuses an explicit undefined current instead of starting a lifecycle', () => {
+    const result = evaluateCommunicationLifecycleTransition({
+      current: undefined,
+      next: FIRST_DRAFT,
+    } as unknown as { current: null; next: CommunicationStateRecordV1 });
+    expect(result.ok).toBe(false);
+    expect(reasonOf(result)).toBe('current-record-invalid');
+  });
+
+  it.each([null, 'draft', 42, [], true])(
+    'refuses non-object input (%p) on the current premise',
+    (bad) => {
+      const result = evaluateCommunicationLifecycleTransition(
+        bad as unknown as { current: null; next: CommunicationStateRecordV1 },
+      );
+      expect(result.ok).toBe(false);
+      expect(reasonOf(result)).toBe('current-record-invalid');
+    },
+  );
+
+  it('does not accept a current inherited from the prototype chain', () => {
+    // `hasOwnProperty`, not `in`. A start declaration has to be made by THIS caller, on THIS input.
+    const viaPrototype = Object.create({ current: null }) as Record<string, unknown>;
+    viaPrototype['next'] = FIRST_DRAFT;
+    const result = evaluateCommunicationLifecycleTransition(
+      viaPrototype as unknown as { current: null; next: CommunicationStateRecordV1 },
+    );
+    expect(result.ok).toBe(false);
+    expect(reasonOf(result)).toBe('current-record-invalid');
+  });
+
+  it('still refuses a non-draft first record, and a first draft claiming a previous state', () => {
+    // The start RULES are unchanged by the marker correction; only the way a start is declared is.
+    const notDraft = evaluateCommunicationLifecycleTransition({
+      current: null,
+      next: stateRecord({ state: 'authorized', recordedAt: EARLIER }),
+    });
+    expect(reasonOf(notDraft)).toBe('initial-state-not-draft');
+
+    const claimsHistory = evaluateCommunicationLifecycleTransition({
+      current: null,
+      next: stateRecord({ state: 'draft', previousState: 'cancelled', recordedAt: EARLIER }),
+    });
+    expect(reasonOf(claimsHistory)).toBe('initial-previous-state-present');
+  });
+
+  it('never reaches the candidate when the premise is missing', () => {
+    // Both halves are broken. A missing `current` is reported, so the caller is not sent to fix a
+    // candidate that was never the problem.
+    const result = evaluateCommunicationLifecycleTransition({
+      next: withoutEvidence(stateRecord({ state: 'delivered' }), 'executionResultId'),
+    } as unknown as { current: null; next: CommunicationStateRecordV1 });
+    expect(reasonOf(result)).toBe('current-record-invalid');
   });
 });
 
