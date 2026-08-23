@@ -27,6 +27,23 @@ export {
 // registers a provider, declares a capability, or joins the routing table, and a spec asserts that no
 // production composition builds either symbol.
 export { createFetchGroqResponsesTransport, GROQ_RESPONSES_ENDPOINT } from './groq-transport.js';
+// POST-RSP20B2 FORENSICS. The DIAGNOSTIC-ONLY Chat Completions reasoning-effort adapter.
+//
+// The production adapter carries no reasoning field and must keep carrying none: adding an optional
+// parameter there would put a reasoning control one argument away from every production invocation.
+// This is a separate instrument, composed by nobody in production, with no descriptor, capabilities,
+// health or routing identity. It controls reasoning EFFORT only and never reasoning content.
+export {
+  buildGroqChatReasoningDiagnosticBody,
+  createGroqChatReasoningDiagnosticProvider,
+  GROQ_GPT_OSS_DOCUMENTED_DEFAULT_REASONING_EFFORT,
+  GROQ_GPT_OSS_REASONING_EFFORTS,
+  type GroqChatReasoningDiagnosticInput,
+  type GroqChatReasoningDiagnosticProvider,
+  type GroqChatReasoningDiagnosticRequestBody,
+  type GroqGptOssReasoningEffort,
+} from './groq-chat-reasoning-diagnostic.js';
+
 export {
   buildGroqResponsesDiagnosticBody,
   createGroqResponsesDiagnosticProvider,

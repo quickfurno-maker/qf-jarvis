@@ -97,7 +97,19 @@ describe('model-gateway package containment', () => {
    * the imported barrel counts runtime exports only — `export type` produces no runtime binding — so
    * adding a type costs nothing and adding a value is a deliberate, reviewed change.
    */
-  it('freezes the package-root runtime API at exactly 77 symbols', async () => {
+  it('freezes the package-root runtime API at exactly 79 symbols', async () => {
+    // POST-RSP20B2 FORENSICS: 77 -> 79. `createGroqChatReasoningDiagnosticProvider` and
+    // `GROQ_GPT_OSS_DOCUMENTED_DEFAULT_REASONING_EFFORT` -- the DIAGNOSTIC-ONLY Chat Completions
+    // reasoning-effort adapter, and the documented default the historical baseline is recorded
+    // against.
+    //
+    // Two and no more. The closed effort vocabulary and the body builder stay off the root and are
+    // asserted through a relative import: a caller passing `'low'` needs the TYPE, not the array.
+    //
+    // The production adapter is untouched and still sends no reasoning field of any spelling, which
+    // the diagnostic's own spec asserts before it asserts anything about the diagnostic. Adding an
+    // optional parameter to `GroqModelProvider` instead would have put a reasoning control one
+    // argument away from every production invocation, which is the change that is NOT authorized.
     // POST-MD120B3: 74 -> 77. `GROQ_RESPONSES_ENDPOINT`, `createFetchGroqResponsesTransport` and
     // `createGroqResponsesDiagnosticProvider` — the DIAGNOSTIC-ONLY Groq Responses API surface.
     //
@@ -127,7 +139,7 @@ describe('model-gateway package containment', () => {
     // schemas, and "the production schema projects into the documented subset" has to be asserted
     // against the real schema rather than a replica.
     const barrel = (await import('../index.js')) as unknown as Record<string, unknown>;
-    expect(Object.keys(barrel)).toHaveLength(77);
+    expect(Object.keys(barrel)).toHaveLength(79);
   });
 
   it('does not export FakeModelProvider from the production root', () => {

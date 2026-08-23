@@ -141,6 +141,10 @@ export function emitResponsesDifferentialReceipt(
     outputTokensTotal: snapshot.outputTokens,
     estimatedCostUsd: snapshot.estimatedCostUsd,
     costIsEstimated: snapshot.costIsEstimated,
+    // WHERE those totals came from, per dimension. A run that mixes an observed smoke with a
+    // fallback-bounded probe reports MIXED, so a bounded figure can never read as a measurement.
+    inputUsageProvenance: snapshot.inputUsageProvenance,
+    outputUsageProvenance: snapshot.outputUsageProvenance,
     // WHICH tariff produced that estimate. Both requests are the production 20B model, so the
     // production schedule is exactly right and no conservative posture is needed — the opposite of
     // MD120B3's mixed-model run, and a receipt that could not say which is which would leave the two

@@ -113,6 +113,10 @@ export function emitModelDifferentialReceipt(safe: SafeConsole, snapshot: Ledger
     outputTokensTotal: snapshot.outputTokens,
     estimatedCostUsd: snapshot.estimatedCostUsd,
     costIsEstimated: snapshot.costIsEstimated,
+    // WHERE those totals came from, per dimension. A run that mixes an observed smoke with a
+    // fallback-bounded probe reports MIXED, so a bounded figure can never read as a measurement.
+    inputUsageProvenance: snapshot.inputUsageProvenance,
+    outputUsageProvenance: snapshot.outputUsageProvenance,
     // WHICH tariff produced that estimate, and on what terms. The run is mixed — a 20B smoke and a
     // 120B candidate — against a ledger that carries one schedule, so the whole run is priced at the
     // higher rate. Printing the posture keeps the over-estimate a stated decision rather than a
