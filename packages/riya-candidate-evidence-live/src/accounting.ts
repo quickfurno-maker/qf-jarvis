@@ -181,6 +181,20 @@ export const RESPONSES_DIFFERENTIAL_MAX_PROVIDER_REQUESTS =
 export const RESPONSES_DIFFERENTIAL_MAX_ESTIMATED_COST_USD = 1;
 
 /**
+ * The exact arithmetic of a POST_RSP20B2_REASONING_EFFORT_LOW_DIFFERENTIAL run: smoke plus ONE probe.
+ *
+ * TWO, and its OWN counter. The differential varies `reasoning_effort`, and a receipt that shared
+ * RSP20B2's counter could not say whether a request was spent at the documented default or at low --
+ * which is the only thing this run measures.
+ */
+export const REASONING_DIFFERENTIAL_PROBE_REQUESTS = 1;
+export const REASONING_DIFFERENTIAL_MAX_PROVIDER_REQUESTS =
+  SMOKE_REQUESTS + REASONING_DIFFERENTIAL_PROBE_REQUESTS;
+
+/** The spend ceiling. Same conservative figure as every other bounded diagnostic. */
+export const REASONING_DIFFERENTIAL_MAX_ESTIMATED_COST_USD = 1;
+
+/**
  * Where an aggregate token total came from.
  *
  * ### Why this is per-DIMENSION and not one flag on the run
@@ -254,6 +268,7 @@ export const LEDGER_PHASES = [
   'neutral-representative-probe',
   'model-differential-probe',
   'responses-differential-probe',
+  'reasoning-differential-probe',
 ] as const;
 export type LedgerPhase = (typeof LEDGER_PHASES)[number];
 
@@ -314,6 +329,14 @@ export interface LedgerSnapshot {
    * Completions contract every earlier probe used.
    */
   readonly responsesDifferentialProbeProviderRequests: number;
+  /**
+   * POST-RSP20B2. `reasoning_effort='low'` differential probe requests.
+   *
+   * A TENTH counter. The reasoning effort is the variable this run exists to change, so the receipt
+   * must be able to say a request was spent at `low` rather than at the documented default every
+   * earlier probe carried by omitting the field entirely.
+   */
+  readonly reasoningDifferentialProbeProviderRequests: number;
   readonly totalProviderRequests: number;
   readonly successfulProviderResponses: number;
   readonly providerFailures: number;
@@ -406,6 +429,7 @@ export function createRequestLedger(config: RequestLedgerConfig): RequestLedger 
     'neutral-representative-probe': 0,
     'model-differential-probe': 0,
     'responses-differential-probe': 0,
+    'reasoning-differential-probe': 0,
   };
   let successes = 0;
   let failures = 0;
@@ -513,6 +537,7 @@ export function createRequestLedger(config: RequestLedgerConfig): RequestLedger 
         neutralRepresentativeProbeProviderRequests: counts['neutral-representative-probe'],
         modelDifferentialProbeProviderRequests: counts['model-differential-probe'],
         responsesDifferentialProbeProviderRequests: counts['responses-differential-probe'],
+        reasoningDifferentialProbeProviderRequests: counts['reasoning-differential-probe'],
         totalProviderRequests: total(),
         successfulProviderResponses: successes,
         providerFailures: failures,
@@ -648,6 +673,42 @@ export function createResponsesDifferentialLedger(): RequestLedger {
   return createRequestLedger({
     maxRequests: RESPONSES_DIFFERENTIAL_MAX_PROVIDER_REQUESTS,
     maxCostUsd: RESPONSES_DIFFERENTIAL_MAX_ESTIMATED_COST_USD,
+    // The PRODUCTION tariff. Both requests are the production 20B model.
+    pricePerMillionInputUsd: CANDIDATE_PRICE_PER_M_INPUT_USD,
+    pricePerMillionCachedInputUsd: CANDIDATE_PRICE_PER_M_CACHED_INPUT_USD,
+    pricePerMillionOutputUsd: CANDIDATE_PRICE_PER_M_OUTPUT_USD,
+    fallbackInputTokens: CANDIDATE_MAX_INPUT_TOKENS,
+    fallbackOutputTokens: CANDIDATE_MAX_COMPLETION_TOKENS,
+    hardMaxInputTokens: CANDIDATE_MAX_INPUT_TOKENS,
+    hardMaxOutputTokens: CANDIDATE_MAX_COMPLETION_TOKENS,
+  });
+}
+
+/**
+ * The ledger for a bounded POST_RSP20B2_REASONING_EFFORT_LOW_DIFFERENTIAL run.
+ *
+ * The text smoke plus ONE reasoning-effort probe: TWO requests, one dollar.
+ *
+ * Its own ledger and its own counter, so it can never be confused with RSP20B2 -- which sent the same
+ * captured request over the Responses API with no reasoning field at all.
+ *
+ * ### It prices at the PRODUCTION tariff
+ *
+ * SINGLE-model, exactly as the Responses differential is: both requests go to `CANDIDATE_MODEL_ID`,
+ * so the production schedule is the right schedule for both and no conservative posture is needed.
+ * Reading the rates from `candidate-release.ts` rather than restating them means a published price
+ * change moves this ledger with every other one.
+ *
+ * ### The fallback bounds are the ones RSP20B2 exposed
+ *
+ * They are unchanged and deliberately so. What changes in this lane is that the PORT propagates
+ * provider-reported usage, so a completed probe settles with measured tokens and the bound applies
+ * only when the provider reported nothing -- with the R2 provenance posture saying which happened.
+ */
+export function createReasoningDifferentialLedger(): RequestLedger {
+  return createRequestLedger({
+    maxRequests: REASONING_DIFFERENTIAL_MAX_PROVIDER_REQUESTS,
+    maxCostUsd: REASONING_DIFFERENTIAL_MAX_ESTIMATED_COST_USD,
     // The PRODUCTION tariff. Both requests are the production 20B model.
     pricePerMillionInputUsd: CANDIDATE_PRICE_PER_M_INPUT_USD,
     pricePerMillionCachedInputUsd: CANDIDATE_PRICE_PER_M_CACHED_INPUT_USD,

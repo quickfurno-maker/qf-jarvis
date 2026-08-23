@@ -403,6 +403,15 @@ describe('HF3 — the one optional governed run goal', () => {
       // captured request to GPT-OSS-120B and changes nothing else.
       'POST_NRA1_GPT_OSS_120B_STRICT_MODEL_DIFFERENTIAL',
       'POST_MD120B3_GROQ_RESPONSES_API_STRICT_DIFFERENTIAL',
+      // POST-RSP20B2 adds an ELEVENTH, along the last axis left. NRA1, MD120B3 and RSP20B2 between
+      // them reproduced the strict failure across both governed models and both documented output
+      // contracts, and every one of those requests carried NO reasoning field. GPT-OSS reasoning
+      // tokens come out of the same completion budget the structured answer needs, so this goal
+      // holds the model, the endpoint, the schema, the captured messages AND the 4,096 budget, and
+      // sends `reasoning_effort='low'`. Separate again, so a receipt can say which effort produced
+      // it -- and strictly narrower than a bypass: it is the smoke plus ONE probe, and it reaches no
+      // fixture, no evaluator, no authority, no P10 and no bundle.
+      'POST_RSP20B2_REASONING_EFFORT_LOW_DIFFERENTIAL',
     ]);
     // No goal skips a gate or forces a verdict. Both notices are content-free and name no secret.
     for (const goal of OPERATOR_RUN_GOALS) {
