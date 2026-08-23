@@ -151,14 +151,17 @@ export const OPERATOR_OUTCOMES = [
    */
   'RUN_GOAL_STATICALLY_CONSUMED',
   /**
-   * POST-SFD1. This workstation already claimed this goal, or the claim could not be recorded.
+   * POST-SFD1. This workstation already claimed this governed one-shot goal.
    *
    * The incident code. SFD1 was authorized once and accidentally launched twice; the second launch
    * reached the provider because nothing but an instruction stood in the way. Now the first accepted
-   * launch claims the goal atomically and a second fails closed, before any credential is read.
+   * launch claims the goal atomically, and a later launch of the same marker-eligible goal on this
+   * workstation is refused before any credential is read, smoke is sent, or provider is contacted.
    *
-   * It also covers a marker that could not be written at all: a guard unable to record a claim
-   * cannot guarantee one, so it refuses rather than assuming first-use.
+   * It does NOT cover a failure to create or write the consumption marker. That is a different
+   * problem with a different fix -- an owner told they already ran something goes looking for a
+   * previous run, when the directory may simply be unwritable -- and it is represented separately by
+   * `RUN_GOAL_CONSUMPTION_MARKER_UNAVAILABLE`.
    */
   'RUN_GOAL_ALREADY_CONSUMED',
   /**
