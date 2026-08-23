@@ -391,13 +391,17 @@ describe('the classifier duplicates no HTTP logic and cannot fall through', () =
 describe('the run goal, exit code and ledger are this run’s own', () => {
   it('the goal is a NEW closed token and no earlier goal moved', () => {
     expect(OPERATOR_RUN_GOALS).toContain('POST_MD120B3_GROQ_RESPONSES_API_STRICT_DIFFERENTIAL');
-    // POST-RSP20B2 appended a successor goal, so this token is no longer LAST. What this spec owns
-    // is that ITS goal still exists, is unique, and did not move to the front -- being final was
-    // never the property worth pinning, and asserting it here would make every future goal an edit
-    // to a settled run's spec.
-    expect(OPERATOR_RUN_GOALS.indexOf('POST_MD120B3_GROQ_RESPONSES_API_STRICT_DIFFERENTIAL')).toBe(
-      OPERATOR_RUN_GOALS.length - 2,
-    );
+    // Successor goals keep being appended, so this token is neither last nor at any fixed index.
+    // What this spec owns is that ITS goal still EXISTS, appears exactly once, and did not become
+    // the default -- and pinning a position here would make every future goal an edit to a settled
+    // run's spec, which is churn that proves nothing. The exact ORDER of the closed vocabulary is
+    // locked once, in operator-sequence.test.ts, where it belongs.
+    expect(
+      OPERATOR_RUN_GOALS.filter(
+        (one) => one === 'POST_MD120B3_GROQ_RESPONSES_API_STRICT_DIFFERENTIAL',
+      ),
+    ).toHaveLength(1);
+    expect(OPERATOR_RUN_GOALS[0]).not.toBe('POST_MD120B3_GROQ_RESPONSES_API_STRICT_DIFFERENTIAL');
     expect(OPERATOR_RUN_GOALS[0]).toBe('FULL_EVIDENCE');
     expect(new Set(OPERATOR_RUN_GOALS).size).toBe(OPERATOR_RUN_GOALS.length);
   });

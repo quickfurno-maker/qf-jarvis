@@ -1,5 +1,5 @@
 /**
- * The POST-RSP20B2 `reasoning_effort='low'` differential port (future live label RLD1).
+ * The POST-RSP20B2 `reasoning_effort='low'` differential port (live label RLD1 — CONSUMED).
  *
  * ### One variable, and the code is what makes that true
  *
@@ -18,59 +18,47 @@
  * It reaches that by calling `captureNeutralClientRiyaRequest()`, the identical function NRA1's,
  * MD120B3's and RSP20B2's ports call, and by planning its probe through
  * `planReasoningDifferentialProbe`, which delegates to the neutral planner and overwrites nothing but
- * the step id and the dimension label. There is no second capture, no second fixture and no
- * re-derived schema.
+ * the step id and the dimension label.
  *
- * ### The adapter is the MERGED diagnostic one, and no new adapter exists
+ * ### RLD1 ran, and its answer is recorded
  *
- * `createGroqChatReasoningDiagnosticProvider` was reviewed and merged separately, with a spec
- * proving its body is the production body plus exactly `reasoning_effort` and that both adapters
- * classify an identical response identically. This port composes it and adds nothing to the wire.
- * `GroqModelProvider` is not touched, is not imported here, and production routing is unchanged.
+ * The probe returned HTTP 400 with `json_validate_failed` —
+ * `REASONING_LOW_20B_STRICT_PROVIDER_OUTPUT_INVALID`. Low reasoning effort did NOT repair the exact
+ * neutral path at 4,096. This port is retained unchanged as the baseline the budget differential
+ * beside it is measured against, and its label is never rerun.
+ *
+ * ### The request is built by the SHARED primitive, which is the point
+ *
+ * Everything about the wire — the model, the capability ceiling, the endpoint, the config, the
+ * merged diagnostic adapter, the effort — comes from
+ * {@link createReasoningBudgetProviderFactory}, and the probe body from
+ * {@link createReasoningBudgetProbeRunner}. The budget is the only argument this port supplies that
+ * a successor supplies differently.
+ *
+ * That is what lets the 8192 differential prove "identical except `max_completion_tokens`" as a
+ * property of the CONSTRUCTION rather than as a claim about two independently written code paths.
+ * Nothing about this port's behaviour changed when the primitive was extracted; its specs are
+ * unmodified and are the guard for that.
  *
  * ### Usage is PROPAGATED, which the historical seams could not do
  *
  * Every earlier one-probe seam narrows the provider result to `{ providerCompleted, structuredValue }`
  * and the operator settles `ledger.settle(undefined, …)`. That is why RSP20B2's receipt printed
- * `outputTokensTotal=65622` — a 65,536 fallback BOUND, not a measurement.
- *
- * This seam returns `usage` as well, so a completion that reports real token counts settles with
- * them. When the provider reports nothing the ledger still bounds it, and the R2 provenance posture
- * makes the difference visible on the receipt rather than leaving a bound to read as an observation.
- *
- * Historical seams are deliberately NOT widened here. This is one lane, and a bulk change to seams
- * whose receipts are already written would be a second, unreviewed variable.
+ * `outputTokensTotal=65622` — a 65,536 fallback BOUND, not a measurement. This seam returns `usage`,
+ * so a completion that reports real token counts settles with them.
  *
  * ### A 2xx is not the finding
  *
  * The verdict runs the FULL production projector — grounded citations, the canonical observation
  * batch, availability refs, the deterministic reducer, the prospective state, the next-question plan
- * — carried through the capture and built by the same function `runRiyaEvaluationTurn` uses. Wire
- * `safeParse` is its first stage and nothing more. The projection is consumed as a presence check and
- * discarded in the same statement: two booleans survive it, and nothing about the document does.
+ * — carried through the capture. Wire `safeParse` is its first stage and nothing more.
  */
-import {
-  createFetchGroqTransport,
-  createGroqChatReasoningDiagnosticProvider,
-  createGroqProviderConfig,
-  createSystemClock,
-  GroqApiKey,
-} from '@qf-jarvis/model-gateway';
 import type {
   GroqGptOssReasoningEffort,
   GroqTransport,
   ModelUsage,
 } from '@qf-jarvis/model-gateway';
 
-import {
-  CANDIDATE_MAX_COMPLETION_TOKENS,
-  CANDIDATE_MAX_INPUT_TOKENS,
-  CANDIDATE_MODEL_ID,
-  CANDIDATE_PROVIDER_ID,
-  CANDIDATE_SUPPORTS_STRICT_JSON,
-  CANDIDATE_CATALOG_SNAPSHOT,
-} from './candidate-release.js';
-import { createCandidateTransportObservations } from './candidate-transport-observation.js';
 import type { CandidateTransportObservations } from './candidate-transport-observation.js';
 import type {
   CapturedProductionRiyaRequest,
@@ -84,6 +72,14 @@ import type {
   DiagnosticProbe,
   ReasoningDifferentialStepId,
 } from './internal/operational-acceptance-plan.js';
+import {
+  createReasoningBudgetProbeRunner,
+  createReasoningBudgetProviderFactory,
+} from './internal/reasoning-budget-probe.js';
+import type {
+  ReasoningBudgetSeam,
+  ReasoningBudgetSeamResult,
+} from './internal/reasoning-budget-probe.js';
 import type { ReasoningDifferentialOutcome } from './internal/reasoning-differential-classification.js';
 import { captureNeutralClientRiyaRequest } from './neutral-client-diagnostic-request.js';
 import { OPERATIONAL_ACCEPTANCE_COMPLETION_BUDGET } from './operational-acceptance-port.js';
@@ -98,36 +94,16 @@ export type ReasoningDifferentialProbe = DiagnosticProbe<ReasoningDifferentialSt
  * Re-exported from the OAD port, which re-exports the production constant. One number, several names,
  * never a second literal.
  *
- * Holding it fixed matters more here than anywhere else: reasoning tokens are drawn from THIS budget,
- * so moving it would change the very quantity the effort setting competes for and make the result
- * uninterpretable.
+ * Holding it fixed is what made RLD1 a one-variable run: reasoning tokens are drawn from THIS budget,
+ * so moving it would have changed the very quantity the effort setting competes for. Moving it is now
+ * the SUCCESSOR run's job, with the effort held instead — one variable each time, never both.
  */
 export const REASONING_DIFFERENTIAL_OUTPUT_BUDGET = OPERATIONAL_ACCEPTANCE_COMPLETION_BUDGET;
 
-/**
- * What the port learned from one invocation. Narrow, and deliberately wider than its predecessors by
- * exactly one field.
- */
-export interface ReasoningProviderSeamResult {
-  readonly providerCompleted: boolean;
-  readonly structuredValue?: unknown;
-  /** Present only when the provider REPORTED usage. Absent is absent, never zero. */
-  readonly usage?: ModelUsage;
-}
-
 /** The narrow seam the port invokes. Deliberately not the gateway's provider contract. */
-export interface ReasoningProviderSeam {
-  readonly invoke: (input: {
-    readonly messages: readonly {
-      readonly role: 'system' | 'user' | 'assistant';
-      readonly content: string;
-    }[];
-    readonly structuredJsonSchema: unknown;
-    readonly maxCompletionTokens: number;
-    readonly reasoningEffort: GroqGptOssReasoningEffort;
-    readonly signal: AbortSignal;
-  }) => Promise<ReasoningProviderSeamResult>;
-}
+export type ReasoningProviderSeam = ReasoningBudgetSeam;
+/** What the port learned from one invocation, including the usage the ledger settles with. */
+export type ReasoningProviderSeamResult = ReasoningBudgetSeamResult;
 
 export interface ReasoningDifferentialPortDeps {
   readonly providerForCompletionBudget: (budget: number) => ReasoningProviderSeam;
@@ -138,9 +114,6 @@ export interface ReasoningDifferentialPortDeps {
    * Injected rather than imported so the port cannot acquire a second opinion about what production
    * accepts: the only projector it can run is the one built for the captured request, by the same
    * function the evaluation turn uses.
-   *
-   * Deliberately NOT the wire schema. A port handed `structuredWireSchema` could only ever prove
-   * shape, and this gate exists to prove more than shape.
    */
   readonly projectStructuredResult: ProjectStructuredResult;
 }
@@ -151,75 +124,25 @@ export interface ReasoningDifferentialRunResult {
   /**
    * The provider-reported usage, when there was any.
    *
-   * Handed to the operator so it can call `ledger.settle(usage, …)` rather than
-   * `ledger.settle(undefined, …)`. Absent means the provider reported nothing, and the ledger's
-   * conservative bound then applies and is labelled as one.
+   * Absent means the provider reported nothing, and the ledger's conservative bound then applies and
+   * is labelled as one.
    */
   readonly usage?: ModelUsage;
 }
 
-/** Build the runner for the ONE probe. Same observation discipline as every port beside it. */
+/** Build the runner for the ONE probe, at the 4,096 baseline budget. */
 export function createReasoningDifferentialPort(
   deps: ReasoningDifferentialPortDeps,
 ): (probe: ReasoningDifferentialProbe) => Promise<ReasoningDifferentialRunResult> {
-  return async (probe: ReasoningDifferentialProbe): Promise<ReasoningDifferentialRunResult> => {
-    const provider = deps.providerForCompletionBudget(REASONING_DIFFERENTIAL_OUTPUT_BUDGET);
-    let providerCompleted = false;
-    let localValidationCompleted = false;
-    let localValidationPassed = false;
-    let usage: ModelUsage | undefined;
-    await deps.observations.duringCase(probe.stepId, async () => {
-      let structuredValue: unknown;
-      try {
-        const result = await provider.invoke({
-          messages: probe.messages,
-          structuredJsonSchema: probe.schema,
-          maxCompletionTokens: REASONING_DIFFERENTIAL_OUTPUT_BUDGET,
-          // THE ONE VARIABLE.
-          reasoningEffort: REASONING_DIFFERENTIAL_CANDIDATE_EFFORT,
-          signal: new AbortController().signal,
-        });
-        providerCompleted = result.providerCompleted;
-        structuredValue = result.structuredValue;
-        // Token COUNTS only. The gateway's `ModelUsage` carries integers and nothing else — no text,
-        // no ids, no headers — so propagating it cannot carry content out of the provider boundary.
-        usage = result.usage;
-      } catch {
-        // The thrown object is never read, so nothing it carries can reach the record below.
-        providerCompleted = false;
-        return;
-      }
-      if (!providerCompleted) {
-        // Nothing came back to validate. The projector is NOT run, and a check that never ran must
-        // not report a verdict — `localValidationCompleted` stays false and the classifier reads it.
-        return;
-      }
-      // The FULL production acceptance authority, run exactly as the M4 adapter runs it.
-      //
-      // The projection is consumed as a presence check and discarded in this statement: only the
-      // boolean survives it. A projector that throws is a refusal like any other, and the thrown
-      // object is never read.
-      localValidationCompleted = true;
-      try {
-        localValidationPassed = deps.projectStructuredResult(structuredValue) !== undefined;
-      } catch {
-        localValidationPassed = false;
-      }
-    });
-    const observed = deps.observations.observationFor(probe.stepId);
-    const outcome: ReasoningDifferentialOutcome = Object.freeze({
-      stepId: REASONING_DIFFERENTIAL_STEP_ID,
-      providerTransportStarted: observed.providerTransportStarted,
-      providerHttpStatus: observed.providerHttpStatus,
-      providerHttpClass: observed.providerHttpClass,
-      providerErrorType: observed.providerErrorType,
-      providerErrorCode: observed.providerErrorCode,
-      providerCompleted,
-      localValidationCompleted,
-      localValidationPassed,
-    });
-    return Object.freeze({ outcome, ...(usage === undefined ? {} : { usage }) });
-  };
+  return createReasoningBudgetProbeRunner({
+    stepId: REASONING_DIFFERENTIAL_STEP_ID,
+    // THE budget this run holds. A successor passes a different one and changes nothing else.
+    completionBudget: REASONING_DIFFERENTIAL_OUTPUT_BUDGET,
+    reasoningEffort: REASONING_DIFFERENTIAL_CANDIDATE_EFFORT,
+    providerForCompletionBudget: deps.providerForCompletionBudget,
+    observations: deps.observations,
+    projectStructuredResult: deps.projectStructuredResult,
+  });
 }
 
 export interface LiveReasoningDifferentialDeps {
@@ -253,81 +176,21 @@ export function createLiveReasoningDifferentialComposition(
     readonly projectedSchema: unknown;
   },
 ): LiveReasoningDifferentialComposition {
-  const apiKey: unknown = deps.credential;
-  if (!(apiKey instanceof GroqApiKey)) {
-    // Fails CLOSED, before the probe. Nothing about the value is read, printed or retained.
-    throw new Error('QFJ_REASONING_DIFFERENTIAL_CREDENTIAL_NOT_BOUND');
-  }
+  const factory = createReasoningBudgetProviderFactory({
+    credential: deps.credential,
+    ...(deps.openTransport === undefined ? {} : { openTransport: deps.openTransport }),
+    unboundCredentialError: 'QFJ_REASONING_DIFFERENTIAL_CREDENTIAL_NOT_BOUND',
+  });
 
-  const clock = createSystemClock();
-  const observations = createCandidateTransportObservations();
-  const endpointsUsed: string[] = [];
-  // The PRODUCTION Chat Completions transport. The endpoint is the thing this run holds fixed, and
-  // the Responses transport factory is deliberately not read here.
-  const underlying = (deps.openTransport ?? createFetchGroqTransport)();
-  const observedTransport = observations.observe(
-    Object.freeze({
-      send: (request: Parameters<GroqTransport['send']>[0], signal: AbortSignal) => {
-        // Recorded so a spec can assert the CONTRACT on the wire rather than trusting the factory
-        // name. The URL is an endpoint identifier, never request content.
-        endpointsUsed.push(request.url);
-        return underlying.send(request, signal);
-      },
-    }),
-  );
   const probe = planReasoningDifferentialProbe({
     projectedSchema: deps.projectedSchema,
     // The CAPTURED neutral production messages NRA1 sent, never reconstructed.
     neutralMessages: deps.captured.messages,
   });
 
-  const requestCompletionBudgetsUsed: number[] = [];
-  const capabilityCeilingsUsed: number[] = [];
-  const candidateModelsUsed: string[] = [];
-  const reasoningEffortsUsed: GroqGptOssReasoningEffort[] = [];
-
-  const providerForCompletionBudget = (budget: number): ReasoningProviderSeam => {
-    requestCompletionBudgetsUsed.push(budget);
-    const config = createGroqProviderConfig({
-      providerId: CANDIDATE_PROVIDER_ID,
-      // The PRODUCTION candidate. The model is a thing this differential holds fixed.
-      modelId: CANDIDATE_MODEL_ID,
-      modelVersion: CANDIDATE_CATALOG_SNAPSHOT,
-      executionClass: 'HOSTED',
-      maxInputTokens: CANDIDATE_MAX_INPUT_TOKENS,
-      // The MODEL CAPABILITY ceiling, held FIXED at the value every earlier gate used.
-      maxCompletionTokens: CANDIDATE_MAX_COMPLETION_TOKENS,
-      supportsStrictJsonSchema: CANDIDATE_SUPPORTS_STRICT_JSON,
-      apiKey,
-      transport: observedTransport,
-      dataControlsAttested: true,
-    });
-    capabilityCeilingsUsed.push(config.maxCompletionTokens);
-    candidateModelsUsed.push(config.modelId);
-    // The MERGED, separately reviewed diagnostic adapter. No new adapter is created by this lane.
-    const provider = createGroqChatReasoningDiagnosticProvider(config, clock);
-    return {
-      invoke: async (input) => {
-        reasoningEffortsUsed.push(input.reasoningEffort);
-        const result = await provider.invoke({ ...input, maxCompletionTokens: budget });
-        if (result.status !== 'completed') {
-          // A non-completion carries no usage worth settling. The transport observation already
-          // recorded WHAT happened; nothing else about the result is read.
-          return { providerCompleted: false };
-        }
-        return {
-          providerCompleted: true,
-          ...(result.output.mode === 'STRUCTURED' ? { structuredValue: result.output.value } : {}),
-          // Propagated when the provider reported it. This is the field the historical seams dropped.
-          ...(result.usage === undefined ? {} : { usage: result.usage }),
-        };
-      },
-    };
-  };
-
   const run = createReasoningDifferentialPort({
-    providerForCompletionBudget,
-    observations,
+    providerForCompletionBudget: factory.providerForCompletionBudget,
+    observations: factory.observations,
     // The FULL projector, never `deps.captured.structuredWireSchema`. Shape is not acceptance.
     projectStructuredResult: deps.captured.projectStructuredResult,
   });
@@ -335,12 +198,12 @@ export function createLiveReasoningDifferentialComposition(
   return Object.freeze({
     probe,
     run,
-    observations,
-    requestCompletionBudgetsUsed: () => Object.freeze([...requestCompletionBudgetsUsed]),
-    capabilityCeilingsUsed: () => Object.freeze([...capabilityCeilingsUsed]),
-    candidateModelsUsed: () => Object.freeze([...candidateModelsUsed]),
-    endpointsUsed: () => Object.freeze([...endpointsUsed]),
-    reasoningEffortsUsed: () => Object.freeze([...reasoningEffortsUsed]),
+    observations: factory.observations,
+    requestCompletionBudgetsUsed: factory.requestCompletionBudgetsUsed,
+    capabilityCeilingsUsed: factory.capabilityCeilingsUsed,
+    candidateModelsUsed: factory.candidateModelsUsed,
+    endpointsUsed: factory.endpointsUsed,
+    reasoningEffortsUsed: factory.reasoningEffortsUsed,
   });
 }
 

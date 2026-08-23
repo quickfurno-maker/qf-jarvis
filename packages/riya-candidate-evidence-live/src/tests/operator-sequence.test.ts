@@ -412,6 +412,14 @@ describe('HF3 — the one optional governed run goal', () => {
       // it -- and strictly narrower than a bypass: it is the smoke plus ONE probe, and it reaches no
       // fixture, no evaluator, no authority, no P10 and no bundle.
       'POST_RSP20B2_REASONING_EFFORT_LOW_DIFFERENTIAL',
+      // POST-RLD1 adds a TWELFTH, along the axis RLD1 left open. RLD1 used the goal above and met
+      // HTTP 400 with json_validate_failed, so explicit low reasoning effort did NOT repair the
+      // exact neutral path at 4,096 and the effort axis joins the model and endpoint axes as
+      // settled. This goal holds all three and moves only `max_completion_tokens`, 4,096 -> 8,192.
+      // Separate again, so a receipt can say which budget produced it -- RLD1 is CONSUMED and its
+      // evidence is immutable. Strictly narrower than a bypass: the smoke plus ONE probe, reaching
+      // no fixture, no evaluator, no authority, no P10 and no bundle, and it does NOT replay RLD1.
+      'POST_RLD1_REASONING_LOW_OUTPUT_BUDGET_8192_DIFFERENTIAL',
     ]);
     // No goal skips a gate or forces a verdict. Both notices are content-free and name no secret.
     for (const goal of OPERATOR_RUN_GOALS) {

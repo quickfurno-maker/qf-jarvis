@@ -155,6 +155,25 @@ export const OPERATOR_RUN_GOALS = [
    * does not make.
    */
   'POST_RSP20B2_REASONING_EFFORT_LOW_DIFFERENTIAL',
+  /**
+   * POST-RLD1. The low-reasoning OUTPUT-BUDGET differential: the smoke, ONE probe, then stop.
+   *
+   * RLD1 used the goal above and received HTTP 400 with `json_validate_failed` --
+   * `REASONING_LOW_20B_STRICT_PROVIDER_OUTPUT_INVALID`. Explicit low reasoning effort did NOT repair
+   * the exact neutral path at 4,096, so the effort axis joins the model and endpoint axes as settled.
+   *
+   * This goal holds all three -- same model, same endpoint, same `reasoning_effort='low'`, same
+   * captured messages, same projected schema, same strict mode, same timeout and zero-retry posture
+   * -- and changes exactly ONE thing: `max_completion_tokens`, from 4,096 to 8,192.
+   *
+   * It is a BUDGET differential and not a second reasoning one, and it does NOT replay RLD1's 4,096
+   * request: that answer is recorded and spending a live request to re-prove it would answer nothing.
+   *
+   * A separate token again, because a receipt must say which budget produced it. It is a DIAGNOSTIC:
+   * `RIYA_COMPLETION_BUDGET_TOKENS` stays 4,096, and moving production is a separate owner decision
+   * this goal does not make.
+   */
+  'POST_RLD1_REASONING_LOW_OUTPUT_BUDGET_8192_DIFFERENTIAL',
 ] as const;
 export type OperatorRunGoal = (typeof OPERATOR_RUN_GOALS)[number];
 
@@ -191,6 +210,8 @@ export const SECOND_CREDENTIAL_NOTICES: Readonly<Record<OperatorRunGoal, string>
     'Smoke passed. Enter the same Groq credential again for the Responses API strict endpoint differential probe.',
   POST_RSP20B2_REASONING_EFFORT_LOW_DIFFERENTIAL:
     'Smoke passed. Enter the same Groq credential again for the low reasoning-effort differential probe.',
+  POST_RLD1_REASONING_LOW_OUTPUT_BUDGET_8192_DIFFERENTIAL:
+    'Smoke passed. Enter the same Groq credential again for the low-reasoning 8192 output-budget differential probe.',
 });
 
 /**
@@ -227,4 +248,6 @@ export const REUSED_CREDENTIAL_NOTICES: Readonly<Record<OperatorRunGoal, string>
     'Smoke passed. Reusing the credential already read for the Responses API strict endpoint differential probe.',
   POST_RSP20B2_REASONING_EFFORT_LOW_DIFFERENTIAL:
     'Smoke passed. Reusing the credential already read for the low reasoning-effort differential probe.',
+  POST_RLD1_REASONING_LOW_OUTPUT_BUDGET_8192_DIFFERENTIAL:
+    'Smoke passed. Reusing the credential already read for the low-reasoning 8192 output-budget differential probe.',
 });

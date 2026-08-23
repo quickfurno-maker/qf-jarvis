@@ -373,7 +373,12 @@ describe('the classifier: json_validate_failed is an OUTPUT failure, not a rejec
 describe('the goal, exit code and ledger are this run’s own', () => {
   it('adds ONE closed token and moves no earlier goal', () => {
     expect(OPERATOR_RUN_GOALS).toContain('POST_RSP20B2_REASONING_EFFORT_LOW_DIFFERENTIAL');
-    expect(OPERATOR_RUN_GOALS.at(-1)).toBe('POST_RSP20B2_REASONING_EFFORT_LOW_DIFFERENTIAL');
+    // POST-RLD1 appended a successor, so this token is no longer last. What this spec owns is that
+    // ITS goal exists exactly once and did not become the default; the exact ORDER of the closed
+    // vocabulary is locked once, in operator-sequence.test.ts.
+    expect(
+      OPERATOR_RUN_GOALS.filter((one) => one === 'POST_RSP20B2_REASONING_EFFORT_LOW_DIFFERENTIAL'),
+    ).toHaveLength(1);
     expect(OPERATOR_RUN_GOALS[0]).toBe('FULL_EVIDENCE');
     expect(new Set(OPERATOR_RUN_GOALS).size).toBe(OPERATOR_RUN_GOALS.length);
   });

@@ -554,6 +554,63 @@ export type {
   ReasoningProviderSeam,
   ReasoningProviderSeamResult,
 } from './reasoning-differential-port.js';
+// POST-RLD1 LOW-REASONING 8192 OUTPUT-BUDGET DIFFERENTIAL. RLD1 sent the neutral production request
+// at reasoning_effort='low' and max_completion_tokens=4096 and received HTTP 400 with
+// json_validate_failed. Explicit low reasoning effort did NOT repair the exact neutral path, so the
+// effort axis joins the model and endpoint axes as settled.
+//
+// This changes exactly ONE variable: the per-request completion bound, 4096 -> 8192. The model, the
+// endpoint, the effort, the captured messages, the projected schema and the strict mode are all held
+// -- and held by CONSTRUCTION rather than by assertion: this port and the RLD1 port are two callers
+// of one shared internal primitive that decides everything except the budget.
+//
+// It does NOT replay RLD1's 4096 request; that answer is recorded. It does NOT move
+// RIYA_COMPLETION_BUDGET_TOKENS, which stays 4096 -- the 8192 lives only in this diagnostic identity.
+//
+// The vocabulary keeps RLD1's split: json_validate_failed is the provider reporting that its OWN
+// OUTPUT failed strict validation, so it is REASONING_LOW_8192_STRICT_PROVIDER_OUTPUT_INVALID rather
+// than a request rejection; a 400/413/422 carrying any other code is
+// REASONING_LOW_8192_STRICT_PROVIDER_REQUEST_REJECTED, which at this budget would most likely be a
+// 413 saying the request itself became unacceptable -- invalidating the differential rather than
+// answering it. RLD1's own classifier vocabulary is untouched, because its receipt is immutable.
+export {
+  REASONING_BUDGET_8192_BASELINE_BUDGET,
+  REASONING_BUDGET_8192_BASELINE_CLASSIFICATION,
+  REASONING_BUDGET_8192_CANDIDATE_BUDGET,
+  REASONING_BUDGET_8192_ENDPOINT_FAMILY,
+  REASONING_BUDGET_8192_MODEL_ID,
+  REASONING_BUDGET_8192_REASONING_EFFORT,
+  RLD1_FAILED_PROBE_USAGE_OBSERVED,
+  RLD1_TRUNCATION_AT_BASELINE_PROVEN,
+  SMOKE_PROVES_BUDGET_DIAGNOSTIC_ENTITLEMENT,
+} from './reasoning-budget-8192-identity.js';
+export {
+  analyseReasoningBudget8192,
+  REASONING_BUDGET_8192_CLASSIFICATIONS,
+} from './internal/reasoning-budget-8192-classification.js';
+export type {
+  ReasoningBudget8192Analysis,
+  ReasoningBudget8192Classification,
+  ReasoningBudget8192Outcome,
+} from './internal/reasoning-budget-8192-classification.js';
+export {
+  planReasoningBudget8192Probe,
+  REASONING_BUDGET_8192_STEP_ID,
+} from './internal/operational-acceptance-plan.js';
+export type { ReasoningBudget8192StepId } from './internal/operational-acceptance-plan.js';
+export {
+  createLiveReasoningBudget8192Composition,
+  createReasoningBudget8192Port,
+  openLiveReasoningBudget8192Runner,
+  REASONING_BUDGET_8192_OUTPUT_BUDGET,
+} from './reasoning-budget-8192-port.js';
+export type {
+  LiveReasoningBudget8192Composition,
+  LiveReasoningBudget8192Deps,
+  ReasoningBudget8192Probe,
+  ReasoningBudget8192RunResult,
+  ReasoningBudget8192Runner,
+} from './reasoning-budget-8192-port.js';
 export type {
   ProjectStructuredResult,
   StructuredWireSchema,

@@ -195,6 +195,22 @@ export const REASONING_DIFFERENTIAL_MAX_PROVIDER_REQUESTS =
 export const REASONING_DIFFERENTIAL_MAX_ESTIMATED_COST_USD = 1;
 
 /**
+ * The exact arithmetic of a POST_RLD1_REASONING_LOW_OUTPUT_BUDGET_8192_DIFFERENTIAL run: smoke plus
+ * ONE probe.
+ *
+ * TWO, and its OWN counter. The differential varies `max_completion_tokens` with the reasoning
+ * posture held, and a receipt that shared RLD1's counter could not say whether a request was spent
+ * at 4,096 or at 8,192 -- which is the only thing this run measures. RLD1 is CONSUMED and its
+ * evidence is immutable; a shared counter would make it unreadable.
+ */
+export const REASONING_BUDGET_8192_PROBE_REQUESTS = 1;
+export const REASONING_BUDGET_8192_MAX_PROVIDER_REQUESTS =
+  SMOKE_REQUESTS + REASONING_BUDGET_8192_PROBE_REQUESTS;
+
+/** The spend ceiling. Same conservative figure as every other bounded diagnostic. */
+export const REASONING_BUDGET_8192_MAX_ESTIMATED_COST_USD = 1;
+
+/**
  * Where an aggregate token total came from.
  *
  * ### Why this is per-DIMENSION and not one flag on the run
@@ -269,6 +285,7 @@ export const LEDGER_PHASES = [
   'model-differential-probe',
   'responses-differential-probe',
   'reasoning-differential-probe',
+  'reasoning-budget-8192-probe',
 ] as const;
 export type LedgerPhase = (typeof LEDGER_PHASES)[number];
 
@@ -337,6 +354,13 @@ export interface LedgerSnapshot {
    * earlier probe carried by omitting the field entirely.
    */
   readonly reasoningDifferentialProbeProviderRequests: number;
+  /**
+   * POST-RLD1. Low-reasoning 8,192 output-budget differential probe requests.
+   *
+   * An ELEVENTH counter. The completion budget is the variable this run exists to change, so the
+   * receipt must be able to say a request was spent at 8,192 rather than at the 4,096 RLD1 sent.
+   */
+  readonly reasoningBudget8192ProbeProviderRequests: number;
   readonly totalProviderRequests: number;
   readonly successfulProviderResponses: number;
   readonly providerFailures: number;
@@ -430,6 +454,7 @@ export function createRequestLedger(config: RequestLedgerConfig): RequestLedger 
     'model-differential-probe': 0,
     'responses-differential-probe': 0,
     'reasoning-differential-probe': 0,
+    'reasoning-budget-8192-probe': 0,
   };
   let successes = 0;
   let failures = 0;
@@ -538,6 +563,7 @@ export function createRequestLedger(config: RequestLedgerConfig): RequestLedger 
         modelDifferentialProbeProviderRequests: counts['model-differential-probe'],
         responsesDifferentialProbeProviderRequests: counts['responses-differential-probe'],
         reasoningDifferentialProbeProviderRequests: counts['reasoning-differential-probe'],
+        reasoningBudget8192ProbeProviderRequests: counts['reasoning-budget-8192-probe'],
         totalProviderRequests: total(),
         successfulProviderResponses: successes,
         providerFailures: failures,
@@ -673,6 +699,41 @@ export function createResponsesDifferentialLedger(): RequestLedger {
   return createRequestLedger({
     maxRequests: RESPONSES_DIFFERENTIAL_MAX_PROVIDER_REQUESTS,
     maxCostUsd: RESPONSES_DIFFERENTIAL_MAX_ESTIMATED_COST_USD,
+    // The PRODUCTION tariff. Both requests are the production 20B model.
+    pricePerMillionInputUsd: CANDIDATE_PRICE_PER_M_INPUT_USD,
+    pricePerMillionCachedInputUsd: CANDIDATE_PRICE_PER_M_CACHED_INPUT_USD,
+    pricePerMillionOutputUsd: CANDIDATE_PRICE_PER_M_OUTPUT_USD,
+    fallbackInputTokens: CANDIDATE_MAX_INPUT_TOKENS,
+    fallbackOutputTokens: CANDIDATE_MAX_COMPLETION_TOKENS,
+    hardMaxInputTokens: CANDIDATE_MAX_INPUT_TOKENS,
+    hardMaxOutputTokens: CANDIDATE_MAX_COMPLETION_TOKENS,
+  });
+}
+
+/**
+ * The ledger for a bounded POST_RLD1_REASONING_LOW_OUTPUT_BUDGET_8192_DIFFERENTIAL run.
+ *
+ * The text smoke plus ONE 8,192-budget probe: TWO requests, one dollar.
+ *
+ * Its own ledger and its own counter, so it can never be confused with RLD1 -- which sent the same
+ * captured request, at the same effort, at 4,096, and met `json_validate_failed`.
+ *
+ * ### The fallback bounds are unchanged, and they are why RLD1 reads the way it does
+ *
+ * `fallbackInputTokens` and `fallbackOutputTokens` are the CONFIGURED CEILINGS -- 131,072 and 65,536
+ * -- not the request budget. RLD1's failed probe reported no usage, so its receipt printed
+ * `inputTokensTotal=131266` and `outputTokensTotal=65593`: the smoke's observed figures plus those
+ * bounds. Those are conservative bounds and were never generation lengths.
+ *
+ * They stay unchanged here on purpose. Narrowing them to flatter a receipt would make an
+ * unmeasured probe look measured, which is the exact failure the R2 provenance posture exists to
+ * prevent -- and this run's PORT propagates real usage when the provider reports any, so a completed
+ * probe is priced from what was measured rather than from a bound.
+ */
+export function createReasoningBudget8192Ledger(): RequestLedger {
+  return createRequestLedger({
+    maxRequests: REASONING_BUDGET_8192_MAX_PROVIDER_REQUESTS,
+    maxCostUsd: REASONING_BUDGET_8192_MAX_ESTIMATED_COST_USD,
     // The PRODUCTION tariff. Both requests are the production 20B model.
     pricePerMillionInputUsd: CANDIDATE_PRICE_PER_M_INPUT_USD,
     pricePerMillionCachedInputUsd: CANDIDATE_PRICE_PER_M_CACHED_INPUT_USD,
