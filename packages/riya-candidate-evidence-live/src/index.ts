@@ -677,6 +677,45 @@ export type {
   StrictFalseDifferentialRunResult,
   StrictFalseDifferentialRunner,
 } from './strict-false-differential-port.js';
+// POST-SFD1 ONE-SHOT CONSUMPTION INTEGRITY. SFD1 was authorized as ONE execution and accidentally
+// launched a second time, which reached the provider. The instruction "run once" was the only
+// control, and an instruction is not a control.
+//
+// The guard refuses a governed goal the repository's evidence already records as CONSUMED, and
+// atomically claims a goal on first accepted launch so a second launch on the same workstation fails
+// closed -- both BEFORE any credential is read, smoke is sent or provider is contacted. The marker
+// is content-free, lives outside the repository, and there is deliberately no --force/--rerun.
+export {
+  createOneShotConsumptionGuard,
+  ONE_SHOT_MARKER_FORMAT_VERSION,
+  ONE_SHOT_REFUSALS,
+  oneShotMarkerFileName,
+  STATICALLY_CONSUMED_RUN_GOALS,
+} from './internal/one-shot-consumption.js';
+export type {
+  OneShotClaim,
+  OneShotConsumptionGuard,
+  OneShotRefusal,
+} from './internal/one-shot-consumption.js';
+
+// POST-SFD1 LOCAL VALIDATION PROVENANCE. SFD1's duplicate observation reported only that production
+// refused a 2xx document. That cannot distinguish a document which failed the WIRE SHAPE from one
+// which held the shape and failed a later production invariant -- two findings pointing at entirely
+// different investigations.
+//
+// Both authorities already travel with the captured request, so no second validator is written:
+// structuredWireSchema.safeParse is the gateway's own first stage and projectStructuredResult is
+// production's own acceptance authority. This closed vocabulary is run-NEUTRAL and owned by no
+// consumed run; RLD1's, RBD1's and SFD1's vocabularies are untouched.
+export {
+  analyseLocalizedStructuredReply,
+  LOCALIZED_STRUCTURED_REPLY_CLASSIFICATIONS,
+} from './internal/localized-structured-reply-classification.js';
+export type {
+  LocalizedStructuredReplyAnalysis,
+  LocalizedStructuredReplyClassification,
+  LocalizedStructuredReplyOutcome,
+} from './internal/localized-structured-reply-classification.js';
 export type {
   ProjectStructuredResult,
   StructuredWireSchema,

@@ -69,7 +69,10 @@ import type {
   CandidateProviderHttpClass,
   CandidateTransportObservations,
 } from '../candidate-transport-observation.js';
-import type { ProjectStructuredResult } from '../diagnostic-canary-materials.js';
+import type {
+  ProjectStructuredResult,
+  StructuredWireSchema,
+} from '../diagnostic-canary-materials.js';
 import type { DiagnosticProbe } from './operational-acceptance-plan.js';
 
 /** What one probe did, at the provider boundary AND at the local validator. Content-free. */
@@ -85,6 +88,37 @@ export interface ReasoningBudgetObservation<TStepId extends string> {
   readonly localValidationCompleted: boolean;
   /** What it said. Meaningless — and always false — unless `localValidationCompleted`. */
   readonly localValidationPassed: boolean;
+  /**
+   * POST-SFD1. WHICH STAGE of local validation refused, as two independent booleans per stage.
+   *
+   * ### Why this exists
+   *
+   * SFD1's unauthorized duplicate observation returned HTTP 200 and then
+   * `localValidationCompleted=true` / `localValidationPassed=false`. That says production refused
+   * the document and nothing else. It cannot say whether the document failed the WIRE SHAPE the
+   * provider was asked for, or passed the shape and then failed a later production invariant --
+   * grounded citations, the canonical observation batch, availability refs, the reducer, the
+   * prospective state, the next-question plan. Those two point at completely different next steps,
+   * and the receipt could not tell them apart.
+   *
+   * Both authorities already travel with the captured request, so no second validator is written
+   * here and none may be: `structuredWireSchema.safeParse` is the gateway's own first stage, and
+   * `projectStructuredResult` is production's own acceptance authority.
+   *
+   * ### The policy, chosen deliberately
+   *
+   * When the provider completes, BOTH stages run, and the projector runs even if the wire parse
+   * already failed. That keeps `localValidationPassed` byte-identical to what it has always been --
+   * it is still exactly the projector's verdict -- so this addition cannot move any existing
+   * classification. The localization is carried by the PAIR, not by suppressing a stage.
+   *
+   * A wire failure implies a production failure by construction, since the projector's own first
+   * stage is that same parse; a spec pins that rather than leaving it as an assumption.
+   */
+  readonly wireValidationCompleted: boolean;
+  readonly wireValidationPassed: boolean;
+  readonly productionValidationCompleted: boolean;
+  readonly productionValidationPassed: boolean;
 }
 
 /** What one probe run produced: the observation, and the usage the ledger must settle with. */
@@ -134,10 +168,21 @@ export interface ReasoningBudgetRunnerDeps<TStepId extends string> {
    * The FULL production acceptance authority, carried through the capture.
    *
    * Injected rather than imported so the runner cannot acquire a second opinion about what
-   * production accepts. Deliberately NOT the wire schema: a runner handed `structuredWireSchema`
-   * could only ever prove shape, and these gates exist to prove more than shape.
+   * production accepts. It remains the ONLY thing that decides `localValidationPassed`: the wire
+   * schema below localizes a refusal, it never overrules this.
    */
   readonly projectStructuredResult: ProjectStructuredResult;
+  /**
+   * POST-SFD1. The gateway's own first-stage structured schema, from the SAME captured request.
+   *
+   * Optional so every pre-existing caller is untouched: without it the two wire fields report
+   * `false`/`false` and nothing else moves. Supplied, it localizes a 2xx refusal into "failed the
+   * shape" versus "passed the shape and failed a later production invariant".
+   *
+   * `safeParse` is the only thing ever called on it, and only its boolean survives -- no issue list,
+   * no path, no offending value.
+   */
+  readonly structuredWireSchema?: StructuredWireSchema;
 }
 
 /** Build the runner for ONE probe. */
@@ -149,6 +194,10 @@ export function createReasoningBudgetProbeRunner<TStepId extends string>(
     let providerCompleted = false;
     let localValidationCompleted = false;
     let localValidationPassed = false;
+    let wireValidationCompleted = false;
+    let wireValidationPassed = false;
+    let productionValidationCompleted = false;
+    let productionValidationPassed = false;
     let usage: ModelUsage | undefined;
     await deps.observations.duringCase(probe.stepId, async () => {
       let structuredValue: unknown;
@@ -181,11 +230,31 @@ export function createReasoningBudgetProbeRunner<TStepId extends string>(
       // boolean survives it. A projector that throws is a refusal like any other, and the thrown
       // object is never read.
       localValidationCompleted = true;
+      // STAGE 1 -- the wire shape, using the gateway's own schema from this same captured request.
+      // Only the boolean survives: zod's issues quote the values that failed, and those values are
+      // the model's answer.
+      if (deps.structuredWireSchema !== undefined) {
+        wireValidationCompleted = true;
+        try {
+          wireValidationPassed = deps.structuredWireSchema.safeParse(structuredValue).success;
+        } catch {
+          wireValidationPassed = false;
+        }
+      }
+      // STAGE 2 -- the FULL production authority, run REGARDLESS of stage 1's answer.
+      //
+      // Running it unconditionally is what keeps `localValidationPassed` exactly what it has always
+      // been. Skipping it after a wire failure would have been defensible -- the refusal is already
+      // localized -- but it would make this field's meaning depend on a stage that did not exist
+      // when the historical receipts were written.
+      productionValidationCompleted = true;
       try {
         localValidationPassed = deps.projectStructuredResult(structuredValue) !== undefined;
       } catch {
+        // A throw is a refusal like any other, and the thrown object is never read.
         localValidationPassed = false;
       }
+      productionValidationPassed = localValidationPassed;
     });
     const observed = deps.observations.observationFor(probe.stepId);
     const outcome: ReasoningBudgetObservation<TStepId> = Object.freeze({
@@ -198,6 +267,10 @@ export function createReasoningBudgetProbeRunner<TStepId extends string>(
       providerCompleted,
       localValidationCompleted,
       localValidationPassed,
+      wireValidationCompleted,
+      wireValidationPassed,
+      productionValidationCompleted,
+      productionValidationPassed,
     });
     return Object.freeze({ outcome, ...(usage === undefined ? {} : { usage }) });
   };

@@ -139,6 +139,28 @@ export const OPERATOR_OUTCOMES = [
    * emphatically not that production should change its strict posture.
    */
   'POST_RBD1_REASONING_LOW_OUTPUT_BUDGET_8192_STRICT_FALSE_DIFFERENTIAL_COMPLETE',
+  /**
+   * POST-SFD1. The goal is recorded CONSUMED by the repository's own evidence and may not run.
+   *
+   * Separate from the marker refusal below, because the two are fixed in different places. This one
+   * says HISTORY settled the question: a fresh workstation, a new clone, a colleague's machine would
+   * all refuse it, and lifting it is a reviewed edit to the tombstone list. The other says only that
+   * THIS workstation already spent it.
+   *
+   * Refused before any credential is read, any smoke is sent, or any provider is contacted.
+   */
+  'RUN_GOAL_STATICALLY_CONSUMED',
+  /**
+   * POST-SFD1. This workstation already claimed this goal, or the claim could not be recorded.
+   *
+   * The incident code. SFD1 was authorized once and accidentally launched twice; the second launch
+   * reached the provider because nothing but an instruction stood in the way. Now the first accepted
+   * launch claims the goal atomically and a second fails closed, before any credential is read.
+   *
+   * It also covers a marker that could not be written at all: a guard unable to record a claim
+   * cannot guarantee one, so it refuses rather than assuming first-use.
+   */
+  'RUN_GOAL_ALREADY_CONSUMED',
 ] as const;
 export type OperatorOutcome = (typeof OPERATOR_OUTCOMES)[number];
 
@@ -182,4 +204,8 @@ export const OPERATOR_EXIT_CODES: Readonly<Record<OperatorOutcome, number>> = Ob
   POST_RLD1_REASONING_LOW_OUTPUT_BUDGET_8192_DIFFERENTIAL_COMPLETE: 32,
   // The next unused integer; 0-32 keep meaning exactly what they meant.
   POST_RBD1_REASONING_LOW_OUTPUT_BUDGET_8192_STRICT_FALSE_DIFFERENTIAL_COMPLETE: 33,
+  // The next unused integers; 0-33 keep meaning exactly what they meant. Two codes rather than one
+  // because a shell must be able to tell "history settled this" from "this machine already ran it".
+  RUN_GOAL_STATICALLY_CONSUMED: 34,
+  RUN_GOAL_ALREADY_CONSUMED: 35,
 });
