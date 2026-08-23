@@ -180,6 +180,52 @@ export const RESPONSES_DIFFERENTIAL_MAX_PROVIDER_REQUESTS =
 /** The spend ceiling. Same conservative figure as every other bounded diagnostic. */
 export const RESPONSES_DIFFERENTIAL_MAX_ESTIMATED_COST_USD = 1;
 
+/**
+ * Where an aggregate token total came from.
+ *
+ * ### Why this is per-DIMENSION and not one flag on the run
+ *
+ * A run mixes both. RSP20B2 is the worked example: its governed smoke reported real usage, its
+ * diagnostic probe reported none, and the receipt printed `outputTokensTotal=65622` — 86 observed
+ * tokens from the smoke plus the 65,536 fallback BOUND for the probe. A single run-level
+ * `usageSource` would have had to call that either PROVIDER or FALLBACK, and both answers are false.
+ *
+ * So provenance is tracked per settlement and per dimension, and the posture below is DERIVED from
+ * the counts rather than set by anyone. `MIXED` is the honest answer whenever both appear, and a
+ * total that contains even one fallback contribution can never report `PROVIDER_ONLY`.
+ *
+ * Input and output are tracked SEPARATELY because a provider may report one and omit the other, and
+ * collapsing them would let an observed input launder an unobserved output.
+ */
+export const USAGE_PROVENANCES = [
+  /** Nothing settled this dimension yet. */
+  'NONE',
+  /** Every contribution was a provider-reported figure. */
+  'PROVIDER_ONLY',
+  /** Every contribution was a conservative fallback bound. Not a measurement. */
+  'FALLBACK_ONLY',
+  /** Both appear in the same total. The only truthful answer for a mixed run. */
+  'MIXED',
+] as const;
+export type UsageProvenance = (typeof USAGE_PROVENANCES)[number];
+
+/** Derive the posture from two counts. Total by construction: every pair maps to a member. */
+export function usageProvenanceOf(
+  providerSettlements: number,
+  fallbackSettlements: number,
+): UsageProvenance {
+  if (providerSettlements === 0 && fallbackSettlements === 0) {
+    return 'NONE';
+  }
+  if (fallbackSettlements === 0) {
+    return 'PROVIDER_ONLY';
+  }
+  if (providerSettlements === 0) {
+    return 'FALLBACK_ONLY';
+  }
+  return 'MIXED';
+}
+
 /** Why the ledger refused the next call. Closed and content-free. */
 export const LEDGER_REFUSALS = [
   'request-limit-reached',
@@ -276,6 +322,24 @@ export interface LedgerSnapshot {
   readonly outputTokens: number;
   /** True when any request had to be priced from a bound rather than from reported usage. */
   readonly costIsEstimated: boolean;
+  /**
+   * How many settlements contributed a PROVIDER-REPORTED figure to each dimension.
+   *
+   * Counters rather than a flag, so a reader can see the mixture rather than a verdict about it.
+   */
+  readonly providerReportedInputSettlements: number;
+  readonly providerReportedOutputSettlements: number;
+  /** How many contributed a conservative FALLBACK BOUND instead. Never a measurement. */
+  readonly fallbackInputSettlements: number;
+  readonly fallbackOutputSettlements: number;
+  /**
+   * The derived posture per dimension.
+   *
+   * `MIXED` whenever both appear. A total carrying even one fallback contribution can never report
+   * `PROVIDER_ONLY`, which is the whole point of tracking this.
+   */
+  readonly inputUsageProvenance: UsageProvenance;
+  readonly outputUsageProvenance: UsageProvenance;
   readonly estimatedCostUsd: number;
   /** True once a provider reported usage above the declared hard maxima. Closes the run. */
   readonly usageBoundViolated: boolean;
@@ -350,6 +414,11 @@ export function createRequestLedger(config: RequestLedgerConfig): RequestLedger 
   let outputTokens = 0;
   let estimated = false;
   let usageBoundViolated = false;
+  // Per-dimension provenance counts. Incremented in `settle`, never set from outside.
+  let providerReportedInputSettlements = 0;
+  let providerReportedOutputSettlements = 0;
+  let fallbackInputSettlements = 0;
+  let fallbackOutputSettlements = 0;
 
   // Every phase, including HF4-R8's diagnostic canaries. One ceiling covers them all, so a phase left
   // out of this sum would be a phase that spends requests nothing counts.
@@ -404,19 +473,30 @@ export function createRequestLedger(config: RequestLedgerConfig): RequestLedger 
       const reportedInput = usage?.inputTokens;
       const reportedOutput = usage?.outputTokens;
       const reportedCached = usage?.cachedInputTokens;
-      if (reportedInput === undefined && reportedOutput === undefined) {
-        // Nothing reported. Bound it and mark the whole run's figure as estimated rather than
-        // inventing an exact token count nobody measured.
+
+      // ONE path for both dimensions, rather than an early return for the both-absent case.
+      //
+      // The arithmetic is unchanged -- the old early return added the two fallback bounds and no
+      // cached tokens, which is exactly what the general path below computes when both are absent.
+      // Unifying them is what lets provenance be counted per DIMENSION: the early return could only
+      // ever describe a settlement as wholly observed or wholly bounded, and a provider that reports
+      // input but not output is neither.
+      if (reportedInput === undefined) {
         estimated = true;
+        fallbackInputSettlements += 1;
         inputTokens += config.fallbackInputTokens;
-        outputTokens += config.fallbackOutputTokens;
-        return;
+      } else {
+        providerReportedInputSettlements += 1;
+        inputTokens += reportedInput;
       }
-      if (reportedInput === undefined || reportedOutput === undefined) {
+      if (reportedOutput === undefined) {
         estimated = true;
+        fallbackOutputSettlements += 1;
+        outputTokens += config.fallbackOutputTokens;
+      } else {
+        providerReportedOutputSettlements += 1;
+        outputTokens += reportedOutput;
       }
-      inputTokens += reportedInput ?? config.fallbackInputTokens;
-      outputTokens += reportedOutput ?? config.fallbackOutputTokens;
       cachedInputTokens += reportedCached ?? 0;
     },
 
@@ -440,6 +520,20 @@ export function createRequestLedger(config: RequestLedgerConfig): RequestLedger 
         cachedInputTokens,
         outputTokens,
         costIsEstimated: estimated,
+        providerReportedInputSettlements,
+        providerReportedOutputSettlements,
+        fallbackInputSettlements,
+        fallbackOutputSettlements,
+        // DERIVED, never assigned. A caller cannot report PROVIDER_ONLY over a total that carries a
+        // fallback contribution, because nobody sets these.
+        inputUsageProvenance: usageProvenanceOf(
+          providerReportedInputSettlements,
+          fallbackInputSettlements,
+        ),
+        outputUsageProvenance: usageProvenanceOf(
+          providerReportedOutputSettlements,
+          fallbackOutputSettlements,
+        ),
         estimatedCostUsd: currentCost(),
         usageBoundViolated,
       });

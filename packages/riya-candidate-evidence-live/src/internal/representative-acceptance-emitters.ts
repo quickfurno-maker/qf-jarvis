@@ -98,6 +98,10 @@ export function emitRepresentativeReceipt(
     outputTokensTotal: snapshot.outputTokens,
     estimatedCostUsd: snapshot.estimatedCostUsd,
     costIsEstimated: snapshot.costIsEstimated,
+    // WHERE those totals came from, per dimension. A run that mixes an observed smoke with a
+    // fallback-bounded probe reports MIXED, so a bounded figure can never read as a measurement.
+    inputUsageProvenance: snapshot.inputUsageProvenance,
+    outputUsageProvenance: snapshot.outputUsageProvenance,
     usageBoundViolated: snapshot.usageBoundViolated,
     safetyEvaluated: false,
     reviewBundleWritten: false,

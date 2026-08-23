@@ -118,6 +118,8 @@ export type {
 
 // Ceilings and content-free accounting.
 export {
+  usageProvenanceOf,
+  USAGE_PROVENANCES,
   createOperatorLedger,
   createRequestContractDiagnosticLedger,
   createSchemaDifferentialDiagnosticLedger,
@@ -138,6 +140,7 @@ export {
   REQUEST_CONTRACT_DIAGNOSTIC_MAX_PROVIDER_REQUESTS,
 } from './accounting.js';
 export type {
+  UsageProvenance,
   LedgerPhase,
   LedgerRefusal,
   LedgerReservation,

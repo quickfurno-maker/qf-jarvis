@@ -132,6 +132,21 @@ export {
   type GroqResponsesDiagnosticResult,
 } from './providers/groq/index.js';
 
+// POST-RSP20B2 FORENSICS — the DIAGNOSTIC-ONLY Chat Completions reasoning-effort adapter.
+//
+// Exported so the candidate evidence operator can construct ONE future governed probe whose only
+// variable is `reasoning_effort`. Production routing is untouched and still sends no reasoning field.
+// Exactly TWO runtime symbols: the adapter, and the documented default the baseline must be recorded
+// against. The closed effort vocabulary and the body builder stay off the root and are asserted by
+// this package's own specs -- a caller passing `'low'` needs the TYPE, not the array.
+export {
+  createGroqChatReasoningDiagnosticProvider,
+  GROQ_GPT_OSS_DOCUMENTED_DEFAULT_REASONING_EFFORT,
+  type GroqChatReasoningDiagnosticInput,
+  type GroqChatReasoningDiagnosticProvider,
+  type GroqGptOssReasoningEffort,
+} from './providers/groq/index.js';
+
 // MVP-P2A.2 HF4-R7 — the provider-facing strict-schema projection, so the real Riya schemas can be
 // asserted against the documented Groq subset from the one package that can see both.
 export {

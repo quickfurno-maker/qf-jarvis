@@ -518,7 +518,10 @@ describe('(71-77) package API and dependency locks are untouched', () => {
       // CONTRACT. Nothing registers a provider, declares a capability or joins the routing table;
       // the serving path stays Chat Completions and a spec proves no production composition builds
       // either factory.
-      'model-gateway': 77,
+      // POST-RSP20B2 FORENSICS: 77 -> 79. The DIAGNOSTIC-ONLY Chat Completions reasoning-effort
+      // adapter and the documented GPT-OSS default. Production still sends no reasoning field, and
+      // the diagnostic's own spec asserts that before it asserts anything else.
+      'model-gateway': 79,
       'model-gateway-composition': 2,
       // MVP-P2A.2 HF1: 24 -> 27. The semantic approval-digest helper and its two readable parts.
       // Pure functions over an already-parsed SmokeConfig -- no filesystem, no clock, no network, no
