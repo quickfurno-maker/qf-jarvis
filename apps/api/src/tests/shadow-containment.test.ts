@@ -390,6 +390,16 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // QFJ-P08 (ADR-0083): the communication authorization correlation runtime -- Core owns consent,
       // this only proves the paperwork. Still an EXACT set match; it records an authorised addition.
       'communication-authorization-runtime',
+      // QFJ-P09.05 (ADR-0110): the communication lifecycle TRANSITION runtime -- the coordination
+      // policy `communication-state-record.ts` explicitly deferred, where `previousState` stops
+      // being optional evidence and becomes a validated edge. Still an EXACT set match -- this
+      // records an authorised addition, it does not relax the assertion.
+      //
+      // It validates records somebody else produced and produces none: no `setState`, no
+      // `markDelivered`, no persistence, no transport, no migration, and a consistent transition
+      // grants no send or authorization authority. It depends on `@qf-jarvis/contracts` alone and
+      // nothing imports it.
+      'communication-lifecycle-runtime',
       'contracts',
       // QFJ-P08-A (ADR-0074): the conversation control command foundation. Still an EXACT set match
       // -- this records an authorised addition, it does not relax the assertion.

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
+  },
+
+  // The EMITTING build, referenced by the root solution. The vitest specs under src/tests are
+  // EXCLUDED so nothing test-only reaches dist/. Exactly ONE project reference: `contracts`, which
+  // owns the eighteen states, the state-record schema and its evidence rules. There is no reference
+  // to persistence, to a transport, to an adapter or to an application -- a lifecycle policy that
+  // could reach a provider would be a dispatcher, and a dispatcher is not what P09.05 is.
+  "references": [{ "path": "../../packages/contracts" }],
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/tests/**"]
+}

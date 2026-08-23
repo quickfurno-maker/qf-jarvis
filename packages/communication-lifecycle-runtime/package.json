@@ -1,0 +1,22 @@
+{
+  "name": "@qf-jarvis/communication-lifecycle-runtime",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis communication lifecycle transition runtime (QFJ-P09.05, ADR-0110). The coordination-layer policy that communication-state-record.ts explicitly deferred: the canonical record calls previousState evidence and NOT a validated transition edge, so until now nothing in the repository could say whether a lifecycle actually moved legally. One pure function answers that and nothing else: given the record a governed communication currently stands at (or null, for lifecycle start) and the candidate next record, re-parse BOTH with the canonical CommunicationStateRecordV1 schema, prove they describe the same governed communication, prove previousState names the state actually being left, prove time did not run backwards, and prove the edge appears in the eighteen-state graph in docs/architecture/communication-model.md -- reused verbatim, never reinvented, and represented as a total map so a nineteenth state cannot compile until somebody decides its policy. A valid edge means LIFECYCLE_CONSISTENT and nothing more: there is no canSend, canExecute, isAuthorized, consentValid, eligible, sent, delivered, providerSucceeded or permissionGranted, and no setState, advanceTo, markDelivered, authorize, send or execute, because QuickFurno Core remains authoritative and describing a movement correctly is not permission to make it. It creates no record, mutates no input, reads no clock, persists nothing, emits nothing, owns no table, adds no migration and cannot reach Core, n8n, WhatsApp, Meta or any provider. Depends on @qf-jarvis/contracts only.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/contracts": "workspace:*"
+  }
+}
