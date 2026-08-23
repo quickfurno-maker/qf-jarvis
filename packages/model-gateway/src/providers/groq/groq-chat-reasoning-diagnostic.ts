@@ -213,16 +213,30 @@ export function createGroqChatReasoningDiagnosticProvider(
       } catch {
         return { status: 'malformed', latencyMs };
       }
+      // The SAME classification production applies, branch for branch.
+      //
+      // An earlier revision collapsed the schema failure and the choice-count check into one
+      // condition returning `malformed`. Production separates them: a body that does not parse is
+      // `malformed`, while a parsed body carrying anything other than exactly one choice is
+      // `failed`/non-retryable. Collapsing them meant the SAME provider response could normalize
+      // differently here than in production -- so a diagnostic whose only intended variable is
+      // `reasoning_effort` could have reported a difference the reasoning effort did not cause.
       const parsed = groqChatResponseSchema.safeParse(parsedJson);
-      if (!parsed.success || parsed.data.choices.length !== 1) {
+      if (!parsed.success) {
         return { status: 'malformed', latencyMs };
       }
+      if (parsed.data.choices.length !== 1) {
+        return { status: 'failed', retryable: false };
+      }
       const choice = parsed.data.choices[0];
-      const content = choice?.message.content;
+      if (choice === undefined) {
+        return { status: 'failed', retryable: false };
+      }
+      const content = choice.message.content;
       if (typeof content !== 'string') {
         return { status: 'failed', retryable: false };
       }
-      const finishReason = choice?.finish_reason;
+      const finishReason = choice.finish_reason;
       if (
         finishReason !== null &&
         finishReason !== undefined &&

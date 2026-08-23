@@ -19,6 +19,7 @@ import {
   GroqModelProvider,
   GROQ_GPT_OSS_DOCUMENTED_DEFAULT_REASONING_EFFORT,
   createGroqChatReasoningDiagnosticProvider,
+  type GroqChatReasoningDiagnosticProvider,
   type GroqProviderConfig,
   type GroqTransport,
 } from '../index.js';
@@ -333,5 +334,97 @@ describe('provider-reported usage travels onward — the point of this path', ()
     });
     expect(result.status).toBe('cancelled');
     expect(wire.calls).toHaveLength(0);
+  });
+});
+
+describe('RESPONSE CLASSIFICATION PARITY — the diagnostic normalizes exactly as production does', () => {
+  /** Run one synthetic HTTP-200 body through BOTH adapters and return their normalized results. */
+  async function bothAdapters(bodyText: string): Promise<{
+    readonly production: Awaited<ReturnType<GroqModelProvider['invoke']>>;
+    readonly diagnostic: Awaited<ReturnType<GroqChatReasoningDiagnosticProvider['invoke']>>;
+  }> {
+    const productionWire = harness(() => ({ bodyText }));
+    const production = await new GroqModelProvider(
+      configFor(productionWire.transport),
+      createManualClock(0),
+    ).invoke({
+      runId: 'r1',
+      messages: MESSAGES,
+      resultMode: 'STRUCTURED',
+      structuredJsonSchema: SCHEMA,
+      maxCompletionTokens: 4096,
+      timeoutMs: 30_000,
+      signal: new AbortController().signal,
+    });
+    const diagnosticWire = harness(() => ({ bodyText }));
+    const diagnostic = await createGroqChatReasoningDiagnosticProvider(
+      configFor(diagnosticWire.transport),
+      createManualClock(0),
+    ).invoke({
+      messages: MESSAGES,
+      structuredJsonSchema: SCHEMA,
+      maxCompletionTokens: 4096,
+      reasoningEffort: 'low',
+      signal: new AbortController().signal,
+    });
+    return { production, diagnostic };
+  }
+
+  const choice = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
+    index: 0,
+    message: { role: 'assistant', content: '{"kind":"K"}' },
+    finish_reason: 'stop',
+    ...over,
+  });
+  const envelope = (choices: readonly unknown[]): string =>
+    JSON.stringify({ id: 'chatcmpl-1', model: 'openai/gpt-oss-20b', choices });
+
+  it('REGRESSION: a parsed 200 with MULTIPLE choices is failed/non-retryable in BOTH', async () => {
+    // The defect owner review found. An earlier revision collapsed the schema failure and the
+    // choice-count check into one `malformed` return, so this body normalized differently in the
+    // two adapters -- a difference `reasoning_effort` had not caused, in the one diagnostic whose
+    // entire value is that reasoning effort is the only variable.
+    const { production, diagnostic } = await bothAdapters(
+      envelope([choice(), choice({ index: 1 })]),
+    );
+    expect(production.status).toBe('failed');
+    expect(diagnostic.status).toBe('failed');
+    if (production.status === 'failed' && diagnostic.status === 'failed') {
+      expect(production.retryable).toBe(false);
+      expect(diagnostic.retryable).toBe(false);
+    }
+    expect(diagnostic.status).toBe(production.status);
+  });
+
+  it('the shared 200-body classifications agree, case for case', async () => {
+    const cases: readonly { readonly name: string; readonly bodyText: string }[] = [
+      // Not a Groq chat envelope at all.
+      { name: 'unparseable envelope', bodyText: JSON.stringify({ nope: true }) },
+      // Zero choices: parses, but is not one choice.
+      { name: 'zero choices', bodyText: envelope([]) },
+      { name: 'two choices', bodyText: envelope([choice(), choice({ index: 1 })]) },
+      {
+        name: 'non-string content',
+        bodyText: envelope([choice({ message: { role: 'assistant', content: 42 } })]),
+      },
+      {
+        name: 'unaccepted finish reason',
+        bodyText: envelope([choice({ finish_reason: 'content_filter' })]),
+      },
+    ];
+    for (const one of cases) {
+      const { production, diagnostic } = await bothAdapters(one.bodyText);
+      expect(diagnostic.status, one.name).toBe(production.status);
+      if (production.status === 'failed' && diagnostic.status === 'failed') {
+        expect(diagnostic.retryable, one.name).toBe(production.retryable);
+      }
+    }
+  });
+
+  it('a well-formed single-choice 200 completes in both, and only usage differs by design', async () => {
+    // The positive control. If the two disagreed here the parity claim would be vacuous.
+    const { production, diagnostic } = await bothAdapters(okBody);
+    expect(production.status).toBe('completed');
+    expect(diagnostic.status).toBe('completed');
   });
 });
