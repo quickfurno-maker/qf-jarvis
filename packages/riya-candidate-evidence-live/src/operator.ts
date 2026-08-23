@@ -102,6 +102,16 @@ import type {
   ReasoningBudget8192Probe,
   ReasoningBudget8192RunResult,
 } from './reasoning-budget-8192-port.js';
+import {
+  emitStrictFalseDifferentialClassification,
+  emitStrictFalseDifferentialProbeOutcome,
+  emitStrictFalseDifferentialReceipt,
+} from './internal/strict-false-differential-emitters.js';
+import { analyseStrictFalseDifferential } from './internal/strict-false-differential-classification.js';
+import type {
+  StrictFalseDifferentialProbe,
+  StrictFalseDifferentialRunResult,
+} from './strict-false-differential-port.js';
 import type { RepresentativeAcceptanceOutcome } from './internal/representative-acceptance-classification.js';
 import {
   emitOperationalAcceptanceClassification,
@@ -369,6 +379,20 @@ export interface OperatorDeps {
     readonly probe: ReasoningBudget8192Probe;
     readonly run: (probe: ReasoningBudget8192Probe) => Promise<ReasoningBudget8192RunResult>;
   }>;
+  /**
+   * POST-RBD1. Bind the best-effort json_schema (strict=false) runner to the resolved credential.
+   *
+   * Same credential-bound one-probe shape as the seam above, and required only for
+   * POST_RBD1_..._STRICT_FALSE_DIFFERENTIAL. Its probe carries the SAME neutral request RBD1 sent, on
+   * the SAME model and endpoint, at the SAME effort and the SAME 8,192 budget, with the SAME schema
+   * under the SAME name; only response_format.json_schema.strict differs.
+   */
+  readonly openStrictFalseDifferentialRunner?: (credential: unknown) => Promise<{
+    readonly probe: StrictFalseDifferentialProbe;
+    readonly run: (
+      probe: StrictFalseDifferentialProbe,
+    ) => Promise<StrictFalseDifferentialRunResult>;
+  }>;
 }
 
 export interface OperatorResult {
@@ -493,6 +517,75 @@ export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<
   // The second ingress line. In clipboard mode this is where `credentialReuseCount` becomes 2 while
   // `credentialClipboardReads` stays 1 — the pair of numbers that IS the copy-once guarantee.
   emitCredentialIngress(safe, credentialSource, 'CANDIDATE', deps.ingressCounters?.());
+
+  // F'''''''''''. THE best-effort json_schema STRICT-POSTURE DIFFERENTIAL (POST-RBD1) — then STOP.
+  //
+  // ONE probe, like the six gates below it. RLD1 met json_validate_failed at 4,096 and RBD1 met it
+  // again at 8,192, both under json_schema.strict: true. Neither the effort attempt nor the budget
+  // attempt repaired the exact neutral path, and what every one of those requests shares is
+  // CONSTRAINED DECODING. This sends the SAME captured request, on the SAME model and endpoint, at
+  // the SAME effort and budget, with the SAME schema under the SAME name, and turns strict off.
+  //
+  // It is NOT production's non-strict path: buildResponseFormat(schema, false) returns json_object,
+  // which drops the schema entirely and would answer a different question. RBD1's strict request is
+  // NOT replayed -- that answer is recorded.
+  //
+  // A provider 2xx is not the finding, and on this run least of all: turning constrained decoding off
+  // is exactly the change most likely to yield a plausible document production would refuse.
+  if (runGoal === 'POST_RBD1_REASONING_LOW_OUTPUT_BUDGET_8192_STRICT_FALSE_DIFFERENTIAL') {
+    const openRunner = deps.openStrictFalseDifferentialRunner;
+    if (openRunner === undefined) {
+      safe.line({ phase: 'strict-false-differential', status: 'FAILED', reason: 'port-missing' });
+      return { outcome: 'INTERNAL_CLOSED_FAILURE' };
+    }
+    let runner: {
+      readonly probe: StrictFalseDifferentialProbe;
+      readonly run: (
+        probe: StrictFalseDifferentialProbe,
+      ) => Promise<StrictFalseDifferentialRunResult>;
+    };
+    try {
+      runner = await openRunner(candidateCredential);
+    } catch {
+      safe.line({
+        phase: 'strict-false-differential',
+        status: 'FAILED',
+        reason: 'runner-bind-failed',
+      });
+      return { outcome: 'INTERNAL_CLOSED_FAILURE' };
+    }
+
+    let strictFalseResult: StrictFalseDifferentialRunResult | undefined;
+    const strictFalseReservation = ledger.reserve('strict-false-probe');
+    if (!strictFalseReservation.ok) {
+      safe.line({
+        phase: 'strict-false-differential',
+        status: 'REFUSED',
+        stepId: runner.probe.stepId,
+        reason: strictFalseReservation.refusal,
+      });
+    } else {
+      strictFalseResult = await runner.run(runner.probe);
+      // The USAGE the provider reported, when it reported any. `undefined` still means "bound it",
+      // and the per-dimension provenance says which happened -- which is what keeps RLD1's and
+      // RBD1's ceiling-derived totals readable as bounds rather than generation lengths.
+      ledger.settle(strictFalseResult.usage, strictFalseResult.outcome.providerCompleted);
+      emitStrictFalseDifferentialProbeOutcome(safe, runner.probe, strictFalseResult.outcome);
+    }
+
+    emitStrictFalseDifferentialClassification(
+      safe,
+      analyseStrictFalseDifferential(strictFalseResult?.outcome),
+      strictFalseResult === undefined ? 0 : 1,
+    );
+    emitStrictFalseDifferentialReceipt(safe, ledger.snapshot());
+    safe.line({
+      finalStatus: 'POST_RBD1_REASONING_LOW_OUTPUT_BUDGET_8192_STRICT_FALSE_DIFFERENTIAL_COMPLETE',
+    });
+    return {
+      outcome: 'POST_RBD1_REASONING_LOW_OUTPUT_BUDGET_8192_STRICT_FALSE_DIFFERENTIAL_COMPLETE',
+    };
+  }
 
   // F''''''''''. THE low-reasoning 8,192 OUTPUT-BUDGET DIFFERENTIAL (POST-RLD1) — and then STOP.
   //

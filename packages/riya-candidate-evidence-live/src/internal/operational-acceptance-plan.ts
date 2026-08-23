@@ -118,6 +118,21 @@ export const REASONING_BUDGET_8192_STEP_ID =
   'B0_EXACT_NEUTRAL_CLIENT_GPT_OSS_20B_REASONING_LOW_8192' as const;
 export type ReasoningBudget8192StepId = typeof REASONING_BUDGET_8192_STEP_ID;
 
+/**
+ * The POST-RBD1 strict-false differential probe. Its OWN step id, for the sixth time.
+ *
+ * It carries the SAME neutral messages, the SAME projected schema, the SAME production model and
+ * endpoint, the SAME `reasoning_effort='low'` and the SAME 8,192 budget that RBD1 sent. Only
+ * `response_format.json_schema.strict` differs -- `false` against RBD1's `true`.
+ *
+ * A shared identifier would make RBD1's strict `json_validate_failed` and this run's best-effort
+ * result indistinguishable on a receipt, which is the one comparison this run exists to support.
+ * RBD1 is CONSUMED and its evidence is immutable.
+ */
+export const STRICT_FALSE_DIFFERENTIAL_STEP_ID =
+  'S0_EXACT_NEUTRAL_CLIENT_GPT_OSS_20B_REASONING_LOW_8192_STRICT_FALSE' as const;
+export type StrictFalseDifferentialStepId = typeof STRICT_FALSE_DIFFERENTIAL_STEP_ID;
+
 /** The role a probe plays. Only `CONTROL` can invalidate a run; `EXACT_REPRESENTATIVE` is strongest. */
 export const OPERATIONAL_PROBE_KINDS = [
   'CONTROL',
@@ -408,5 +423,30 @@ export function planReasoningBudget8192Probe(input: {
     ...neutral,
     stepId: REASONING_BUDGET_8192_STEP_ID,
     probeDimension: 'FULL_DOCUMENT_WITH_NEUTRAL_CLIENT_MESSAGES_AT_REASONING_LOW_BUDGET_8192',
+  });
+}
+
+/**
+ * Plan the ONE strict-false differential probe (POST-RBD1).
+ *
+ * Delegates to `planNeutralClientProbe` for exactly the reason the four planners above do, and
+ * overwrites the same two fields. The schema and the messages are the objects the neutral planner
+ * produced -- the SAME objects, not copies -- so "identical to RBD1's request except the strict
+ * flag" is a consequence of the code.
+ *
+ * The strict posture is not a property of the probe, exactly as the model, endpoint, effort and
+ * budget were not. It belongs to the response format the adapter builds, which is where it can
+ * actually be asserted on the wire.
+ */
+export function planStrictFalseDifferentialProbe(input: {
+  readonly projectedSchema: unknown;
+  readonly neutralMessages: readonly CanaryMessage[];
+}): DiagnosticProbe<StrictFalseDifferentialStepId> {
+  const neutral = planNeutralClientProbe(input);
+  return Object.freeze({
+    ...neutral,
+    stepId: STRICT_FALSE_DIFFERENTIAL_STEP_ID,
+    probeDimension:
+      'FULL_DOCUMENT_WITH_NEUTRAL_CLIENT_MESSAGES_AT_REASONING_LOW_BUDGET_8192_STRICT_FALSE',
   });
 }

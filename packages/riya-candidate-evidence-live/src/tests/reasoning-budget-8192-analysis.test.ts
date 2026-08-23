@@ -324,9 +324,14 @@ describe('the classifier keeps RLD1’s split and does not touch RLD1’s vocabu
 describe('the goal, exit code and ledger are this run’s own', () => {
   it('adds ONE closed token and moves no earlier goal', () => {
     expect(OPERATOR_RUN_GOALS).toContain('POST_RLD1_REASONING_LOW_OUTPUT_BUDGET_8192_DIFFERENTIAL');
-    expect(OPERATOR_RUN_GOALS.at(-1)).toBe(
-      'POST_RLD1_REASONING_LOW_OUTPUT_BUDGET_8192_DIFFERENTIAL',
-    );
+    // POST-RBD1 appended a successor, so this token is no longer last. What this spec owns is that
+    // ITS goal exists exactly once and did not become the default; the exact ORDER of the closed
+    // vocabulary is locked once, in operator-sequence.test.ts.
+    expect(
+      OPERATOR_RUN_GOALS.filter(
+        (one) => one === 'POST_RLD1_REASONING_LOW_OUTPUT_BUDGET_8192_DIFFERENTIAL',
+      ),
+    ).toHaveLength(1);
     expect(OPERATOR_RUN_GOALS[0]).toBe('FULL_EVIDENCE');
     // RLD1's goal is still present and unmoved.
     expect(OPERATOR_RUN_GOALS).toContain('POST_RSP20B2_REASONING_EFFORT_LOW_DIFFERENTIAL');

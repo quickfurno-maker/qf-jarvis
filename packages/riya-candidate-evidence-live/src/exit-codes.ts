@@ -128,6 +128,17 @@ export const OPERATOR_OUTCOMES = [
    * on an HTTP 400, which is exactly why the exit status is never the finding.
    */
   'POST_RLD1_REASONING_LOW_OUTPUT_BUDGET_8192_DIFFERENTIAL_COMPLETE',
+  /**
+   * POST-RBD1. The best-effort json_schema (strict=false) differential ran its probe and stopped.
+   *
+   * Its OWN code, following the convention every goal above it follows: one integer per goal, which
+   * is why 22-32 are eleven distinct codes. RBD1 is CONSUMED at 32 and RLD1 at 31; both are immutable
+   * evidence of runs under strict true.
+   *
+   * It says the run COMPLETED -- not that the request was accepted, not that the reply was valid, and
+   * emphatically not that production should change its strict posture.
+   */
+  'POST_RBD1_REASONING_LOW_OUTPUT_BUDGET_8192_STRICT_FALSE_DIFFERENTIAL_COMPLETE',
 ] as const;
 export type OperatorOutcome = (typeof OPERATOR_OUTCOMES)[number];
 
@@ -169,4 +180,6 @@ export const OPERATOR_EXIT_CODES: Readonly<Record<OperatorOutcome, number>> = Ob
   POST_RSP20B2_REASONING_EFFORT_LOW_DIFFERENTIAL_COMPLETE: 31,
   // The next unused integer; 0-31 keep meaning exactly what they meant.
   POST_RLD1_REASONING_LOW_OUTPUT_BUDGET_8192_DIFFERENTIAL_COMPLETE: 32,
+  // The next unused integer; 0-32 keep meaning exactly what they meant.
+  POST_RBD1_REASONING_LOW_OUTPUT_BUDGET_8192_STRICT_FALSE_DIFFERENTIAL_COMPLETE: 33,
 });
