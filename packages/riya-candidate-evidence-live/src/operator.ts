@@ -92,6 +92,16 @@ import type {
   ReasoningDifferentialProbe,
   ReasoningDifferentialRunResult,
 } from './reasoning-differential-port.js';
+import {
+  emitReasoningBudget8192Classification,
+  emitReasoningBudget8192ProbeOutcome,
+  emitReasoningBudget8192Receipt,
+} from './internal/reasoning-budget-8192-emitters.js';
+import { analyseReasoningBudget8192 } from './internal/reasoning-budget-8192-classification.js';
+import type {
+  ReasoningBudget8192Probe,
+  ReasoningBudget8192RunResult,
+} from './reasoning-budget-8192-port.js';
 import type { RepresentativeAcceptanceOutcome } from './internal/representative-acceptance-classification.js';
 import {
   emitOperationalAcceptanceClassification,
@@ -344,6 +354,21 @@ export interface OperatorDeps {
     readonly probe: ReasoningDifferentialProbe;
     readonly run: (probe: ReasoningDifferentialProbe) => Promise<ReasoningDifferentialRunResult>;
   }>;
+  /**
+   * POST-RLD1. Bind the low-reasoning 8,192 OUTPUT-BUDGET runner to the resolved credential.
+   *
+   * Same credential-bound one-probe shape as the seam above, and required only for
+   * `POST_RLD1_REASONING_LOW_OUTPUT_BUDGET_8192_DIFFERENTIAL`. Its probe carries the SAME neutral
+   * request RLD1 sent, on the SAME production model and endpoint, at the SAME
+   * `reasoning_effort='low'`; only `max_completion_tokens` differs.
+   *
+   * Its runner returns a RESULT rather than a bare outcome, carrying the provider-reported usage the
+   * ledger settles with -- the same discipline RLD1's seam introduced.
+   */
+  readonly openReasoningBudget8192Runner?: (credential: unknown) => Promise<{
+    readonly probe: ReasoningBudget8192Probe;
+    readonly run: (probe: ReasoningBudget8192Probe) => Promise<ReasoningBudget8192RunResult>;
+  }>;
 }
 
 export interface OperatorResult {
@@ -468,6 +493,69 @@ export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<
   // The second ingress line. In clipboard mode this is where `credentialReuseCount` becomes 2 while
   // `credentialClipboardReads` stays 1 — the pair of numbers that IS the copy-once guarantee.
   emitCredentialIngress(safe, credentialSource, 'CANDIDATE', deps.ingressCounters?.());
+
+  // F''''''''''. THE low-reasoning 8,192 OUTPUT-BUDGET DIFFERENTIAL (POST-RLD1) — and then STOP.
+  //
+  // ONE probe, like the five gates below it. RLD1 used the goal below and met HTTP 400 with
+  // json_validate_failed: explicit low reasoning effort did NOT repair the exact neutral path at
+  // 4,096. That closes the explicit-low-at-4096 REPAIR ATTEMPT and nothing wider -- other
+  // reasoning-effort values remain untested. So this run HOLDS the effort at low, along with the
+  // model and endpoint, and moves only `max_completion_tokens` to 8,192.
+  //
+  // RLD1's 4,096 request is NOT replayed. That answer is recorded, and spending a live request to
+  // re-prove it would answer nothing new.
+  //
+  // Same two structural properties as the gate below: a provider 2xx is not the finding (the runner
+  // also validates against the FULL production projector), and the runner returns provider-reported
+  // USAGE, which is settled into the ledger instead of `undefined`.
+  if (runGoal === 'POST_RLD1_REASONING_LOW_OUTPUT_BUDGET_8192_DIFFERENTIAL') {
+    const openRunner = deps.openReasoningBudget8192Runner;
+    if (openRunner === undefined) {
+      safe.line({ phase: 'reasoning-budget-8192', status: 'FAILED', reason: 'port-missing' });
+      return { outcome: 'INTERNAL_CLOSED_FAILURE' };
+    }
+    let runner: {
+      readonly probe: ReasoningBudget8192Probe;
+      readonly run: (probe: ReasoningBudget8192Probe) => Promise<ReasoningBudget8192RunResult>;
+    };
+    try {
+      runner = await openRunner(candidateCredential);
+    } catch {
+      safe.line({
+        phase: 'reasoning-budget-8192',
+        status: 'FAILED',
+        reason: 'runner-bind-failed',
+      });
+      return { outcome: 'INTERNAL_CLOSED_FAILURE' };
+    }
+
+    let budgetResult: ReasoningBudget8192RunResult | undefined;
+    const budgetReservation = ledger.reserve('reasoning-budget-8192-probe');
+    if (!budgetReservation.ok) {
+      safe.line({
+        phase: 'reasoning-budget-8192',
+        status: 'REFUSED',
+        stepId: runner.probe.stepId,
+        reason: budgetReservation.refusal,
+      });
+    } else {
+      budgetResult = await runner.run(runner.probe);
+      // The USAGE the provider reported, when it reported any. `undefined` still means "bound it",
+      // and the ledger's per-dimension provenance says which of the two happened -- which is what
+      // makes RLD1's 65,593 readable as a bound rather than as a generation length.
+      ledger.settle(budgetResult.usage, budgetResult.outcome.providerCompleted);
+      emitReasoningBudget8192ProbeOutcome(safe, runner.probe, budgetResult.outcome);
+    }
+
+    emitReasoningBudget8192Classification(
+      safe,
+      analyseReasoningBudget8192(budgetResult?.outcome),
+      budgetResult === undefined ? 0 : 1,
+    );
+    emitReasoningBudget8192Receipt(safe, ledger.snapshot());
+    safe.line({ finalStatus: 'POST_RLD1_REASONING_LOW_OUTPUT_BUDGET_8192_DIFFERENTIAL_COMPLETE' });
+    return { outcome: 'POST_RLD1_REASONING_LOW_OUTPUT_BUDGET_8192_DIFFERENTIAL_COMPLETE' };
+  }
 
   // F'''''''''. THE reasoning_effort='low' DIFFERENTIAL (POST-RSP20B2) — and then STOP.
   //

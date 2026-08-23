@@ -102,6 +102,22 @@ export const REASONING_DIFFERENTIAL_STEP_ID =
   'R0_EXACT_NEUTRAL_CLIENT_GPT_OSS_20B_REASONING_LOW' as const;
 export type ReasoningDifferentialStepId = typeof REASONING_DIFFERENTIAL_STEP_ID;
 
+/**
+ * The POST-RLD1 output-budget differential probe. Its OWN step id, for the fifth time.
+ *
+ * It carries the SAME neutral messages, the SAME projected schema, the SAME production model, the
+ * SAME production endpoint and the SAME `reasoning_effort='low'` that RLD1 sent. Only
+ * `max_completion_tokens` differs -- 8,192 against RLD1's 4,096.
+ *
+ * A shared identifier would make RLD1's `json_validate_failed` at 4,096 and this run's result
+ * indistinguishable on a receipt, which is the one comparison this run exists to support. RLD1 is
+ * CONSUMED and its evidence is immutable; a receipt that could not say which budget produced it
+ * would make that evidence unreadable.
+ */
+export const REASONING_BUDGET_8192_STEP_ID =
+  'B0_EXACT_NEUTRAL_CLIENT_GPT_OSS_20B_REASONING_LOW_8192' as const;
+export type ReasoningBudget8192StepId = typeof REASONING_BUDGET_8192_STEP_ID;
+
 /** The role a probe plays. Only `CONTROL` can invalidate a run; `EXACT_REPRESENTATIVE` is strongest. */
 export const OPERATIONAL_PROBE_KINDS = [
   'CONTROL',
@@ -368,5 +384,29 @@ export function planReasoningDifferentialProbe(input: {
     ...neutral,
     stepId: REASONING_DIFFERENTIAL_STEP_ID,
     probeDimension: 'FULL_DOCUMENT_WITH_NEUTRAL_CLIENT_MESSAGES_AT_REASONING_EFFORT_LOW',
+  });
+}
+
+/**
+ * Plan the ONE output-budget differential probe (POST-RLD1).
+ *
+ * Delegates to `planNeutralClientProbe` for exactly the reason the three planners above do, and
+ * overwrites the same two fields: an identifier, and the sentence describing what is being isolated.
+ * The schema and the messages are the objects the neutral planner produced -- the SAME objects, not
+ * copies -- so "identical to RLD1's request except the budget" is a consequence of the code.
+ *
+ * The budget is not a property of the probe, exactly as the model, the endpoint and the effort were
+ * not. It belongs to the request the port builds, which is where it can actually be asserted on the
+ * wire.
+ */
+export function planReasoningBudget8192Probe(input: {
+  readonly projectedSchema: unknown;
+  readonly neutralMessages: readonly CanaryMessage[];
+}): DiagnosticProbe<ReasoningBudget8192StepId> {
+  const neutral = planNeutralClientProbe(input);
+  return Object.freeze({
+    ...neutral,
+    stepId: REASONING_BUDGET_8192_STEP_ID,
+    probeDimension: 'FULL_DOCUMENT_WITH_NEUTRAL_CLIENT_MESSAGES_AT_REASONING_LOW_BUDGET_8192',
   });
 }

@@ -115,6 +115,19 @@ export const OPERATOR_OUTCOMES = [
    * provider OUTPUT failure from a provider REQUEST rejection.
    */
   'POST_RSP20B2_REASONING_EFFORT_LOW_DIFFERENTIAL_COMPLETE',
+  /**
+   * POST-RLD1. The low-reasoning 8,192 output-budget differential ran its one probe and stopped.
+   *
+   * Its OWN code, following the same convention every goal above it follows: one integer per goal,
+   * which is why 22-31 are ten distinct codes rather than one repeated. A shell reading
+   * `$LASTEXITCODE` must be able to tell this run from RLD1's, and RLD1 is CONSUMED -- its exit 31 is
+   * immutable evidence of a run at the 4,096 budget.
+   *
+   * It says the run COMPLETED -- not that the request was accepted, not that the reply was valid, and
+   * emphatically not that the production budget should move. RA1, NRA1, MD120B3 and RLD1 all exited
+   * on an HTTP 400, which is exactly why the exit status is never the finding.
+   */
+  'POST_RLD1_REASONING_LOW_OUTPUT_BUDGET_8192_DIFFERENTIAL_COMPLETE',
 ] as const;
 export type OperatorOutcome = (typeof OPERATOR_OUTCOMES)[number];
 
@@ -154,4 +167,6 @@ export const OPERATOR_EXIT_CODES: Readonly<Record<OperatorOutcome, number>> = Ob
   POST_MD120B3_GROQ_RESPONSES_API_STRICT_DIFFERENTIAL_COMPLETE: 30,
   // The next unused integer; 0-30 keep meaning exactly what they meant.
   POST_RSP20B2_REASONING_EFFORT_LOW_DIFFERENTIAL_COMPLETE: 31,
+  // The next unused integer; 0-31 keep meaning exactly what they meant.
+  POST_RLD1_REASONING_LOW_OUTPUT_BUDGET_8192_DIFFERENTIAL_COMPLETE: 32,
 });
