@@ -147,6 +147,22 @@ export {
   type GroqGptOssReasoningEffort,
 } from './providers/groq/index.js';
 
+// POST-RBD1 FORENSICS — the DIAGNOSTIC-ONLY BEST-EFFORT `json_schema` adapter.
+//
+// Exported so the candidate evidence operator can construct ONE future governed probe whose only
+// wire difference from RBD1 is `response_format.json_schema.strict`. The schema, its name and the
+// response-format type are all held: this is a strict-DECODING experiment, not a schema change.
+//
+// Production routing is untouched. `buildResponseFormat`'s non-strict branch still returns
+// `json_object`, no production path can ask for `strict: false` with a schema, and there is no
+// automatic best-effort fallback. Exactly ONE runtime symbol: the adapter. The body builder stays
+// off the root and is asserted by this package's own specs.
+export {
+  createGroqChatBestEffortDiagnosticProvider,
+  type GroqChatBestEffortDiagnosticInput,
+  type GroqChatBestEffortDiagnosticProvider,
+} from './providers/groq/index.js';
+
 // MVP-P2A.2 HF4-R7 — the provider-facing strict-schema projection, so the real Riya schemas can be
 // asserted against the documented Groq subset from the one package that can see both.
 export {

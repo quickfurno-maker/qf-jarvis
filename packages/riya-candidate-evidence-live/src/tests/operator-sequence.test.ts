@@ -421,6 +421,14 @@ describe('HF3 — the one optional governed run goal', () => {
       // evidence is immutable. Strictly narrower than a bypass: the smoke plus ONE probe, reaching
       // no fixture, no evaluator, no authority, no P10 and no bundle, and it does NOT replay RLD1.
       'POST_RLD1_REASONING_LOW_OUTPUT_BUDGET_8192_DIFFERENTIAL',
+      // POST-RBD1 adds a THIRTEENTH, along the axis RLD1 and RBD1 both left open. Both met
+      // json_validate_failed under json_schema.strict: true -- at 4,096 and at 8,192 -- so
+      // neither the effort attempt nor the budget attempt repaired the exact neutral path, and
+      // what those requests share is CONSTRAINED DECODING. This goal holds the model, endpoint,
+      // messages, schema, schema NAME, effort and budget, and turns strict off. It is not
+      // production's non-strict path, which would drop the schema entirely. Strictly narrower
+      // than a bypass: smoke plus ONE probe, no fixture, evaluator, authority, P10 or bundle.
+      'POST_RBD1_REASONING_LOW_OUTPUT_BUDGET_8192_STRICT_FALSE_DIFFERENTIAL',
     ]);
     // No goal skips a gate or forces a verdict. Both notices are content-free and name no secret.
     for (const goal of OPERATOR_RUN_GOALS) {

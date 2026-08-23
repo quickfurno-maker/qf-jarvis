@@ -614,6 +614,69 @@ export type {
   ReasoningBudget8192RunResult,
   ReasoningBudget8192Runner,
 } from './reasoning-budget-8192-port.js';
+// POST-RBD1 BEST-EFFORT json_schema STRICT-POSTURE DIFFERENTIAL. RLD1 met json_validate_failed at
+// 4,096 and RBD1 met it again at 8,192, both under json_schema.strict: true. Neither the effort
+// attempt nor the budget attempt repaired the exact neutral path, and what every one of those
+// requests shares is CONSTRAINED DECODING.
+//
+// This changes exactly ONE nested wire leaf: response_format.json_schema.strict, true -> false. The
+// model, endpoint, captured messages, projected schema, SCHEMA NAME, reasoning_effort and 8,192
+// budget are all held -- and held by CONSTRUCTION: the gateway's best-effort adapter builds its body
+// by DERIVING from the reasoning adapter's and flipping one leaf, and both run through one shared
+// Chat Completions exchange so a response cannot classify two ways between them.
+//
+// It is emphatically NOT production's non-strict path. buildResponseFormat(schema, false) returns
+// json_object, which drops the schema name and the schema body along with the flag -- that answers
+// "what happens with no schema at all", a different and much weaker question whose result could not
+// be compared with RBD1's. Production is untouched: strict-capable projected schemas still go out
+// with strict: true, there is no automatic best-effort fallback and no retry-on-strict-failure.
+//
+// Groq documents that best-effort mode MAY still return a schema 400, so json_validate_failed here
+// is a legitimate experimental outcome and is classified as an OUTPUT failure, never as a request
+// rejection. RLD1's and RBD1's vocabularies, step ids, exit codes and counters are untouched.
+export {
+  PRIOR_FAILED_PROBE_USAGE_OBSERVED,
+  PRIOR_TRUNCATION_PROVEN,
+  PRODUCTION_NON_STRICT_FALLBACK_MODE,
+  STRICT_FALSE_BASELINE_CLASSIFICATION,
+  STRICT_FALSE_BASELINE_STRICT,
+  STRICT_FALSE_BASELINE_STRUCTURED_MODE,
+  STRICT_FALSE_CANDIDATE_STRICT,
+  STRICT_FALSE_CANDIDATE_STRUCTURED_MODE,
+  STRICT_FALSE_COMPLETION_BUDGET,
+  STRICT_FALSE_ENDPOINT_FAMILY,
+  STRICT_FALSE_MODEL_ID,
+  STRICT_FALSE_REASONING_EFFORT,
+  STRUCTURED_OUTPUT_WIRE_MODES,
+} from './strict-false-differential-identity.js';
+export type { StructuredOutputWireMode } from './strict-false-differential-identity.js';
+export {
+  analyseStrictFalseDifferential,
+  STRICT_FALSE_CLASSIFICATIONS,
+} from './internal/strict-false-differential-classification.js';
+export type {
+  StrictFalseAnalysis,
+  StrictFalseClassification,
+  StrictFalseOutcome,
+} from './internal/strict-false-differential-classification.js';
+export {
+  planStrictFalseDifferentialProbe,
+  STRICT_FALSE_DIFFERENTIAL_STEP_ID,
+} from './internal/operational-acceptance-plan.js';
+export type { StrictFalseDifferentialStepId } from './internal/operational-acceptance-plan.js';
+export {
+  createLiveStrictFalseDifferentialComposition,
+  createStrictFalseDifferentialPort,
+  openLiveStrictFalseDifferentialRunner,
+  STRICT_FALSE_OUTPUT_BUDGET,
+} from './strict-false-differential-port.js';
+export type {
+  LiveStrictFalseDifferentialComposition,
+  LiveStrictFalseDifferentialDeps,
+  StrictFalseDifferentialProbe,
+  StrictFalseDifferentialRunResult,
+  StrictFalseDifferentialRunner,
+} from './strict-false-differential-port.js';
 export type {
   ProjectStructuredResult,
   StructuredWireSchema,

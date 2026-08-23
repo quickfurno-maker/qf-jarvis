@@ -44,6 +44,26 @@ export {
   type GroqGptOssReasoningEffort,
 } from './groq-chat-reasoning-diagnostic.js';
 
+// POST-RBD1 FORENSICS. The DIAGNOSTIC-ONLY BEST-EFFORT `json_schema` adapter.
+//
+// RLD1 and RBD1 both met `json_validate_failed` under `strict: true`, at 4,096 and 8,192. The open
+// axis is the strict decoding posture itself, and production's non-strict branch cannot express it:
+// it returns `json_object`, dropping the schema name, the strict flag and the schema body together.
+//
+// This adapter sends what Groq documents as best-effort JSON Schema -- same mode, same name, same
+// schema, `strict: false` -- and builds it by DERIVING from the strict baseline body and flipping one
+// leaf, so nothing else can differ. `buildResponseFormat` is untouched and still returns
+// `json_object` on its non-strict branch; there is no production switch, no automatic fallback and
+// no retry-on-strict-failure.
+export {
+  buildGroqChatBestEffortDiagnosticBody,
+  createGroqChatBestEffortDiagnosticProvider,
+  GROQ_BEST_EFFORT_JSON_SCHEMA_STRICT,
+  type GroqChatBestEffortDiagnosticInput,
+  type GroqChatBestEffortDiagnosticProvider,
+  type GroqChatBestEffortDiagnosticRequestBody,
+} from './groq-chat-best-effort-diagnostic.js';
+
 export {
   buildGroqResponsesDiagnosticBody,
   createGroqResponsesDiagnosticProvider,

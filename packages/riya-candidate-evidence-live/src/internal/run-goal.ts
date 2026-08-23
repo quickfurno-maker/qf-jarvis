@@ -179,6 +179,26 @@ export const OPERATOR_RUN_GOALS = [
    * this goal does not make.
    */
   'POST_RLD1_REASONING_LOW_OUTPUT_BUDGET_8192_DIFFERENTIAL',
+  /**
+   * POST-RBD1. The best-effort json_schema STRICT-POSTURE differential: smoke, ONE probe, stop.
+   *
+   * RLD1 met json_validate_failed at 4,096 and RBD1 met it again at 8,192, both under
+   * json_schema.strict: true. Neither the effort attempt nor the budget attempt repaired the exact
+   * neutral path, and what every one of those requests shares is CONSTRAINED DECODING.
+   *
+   * This goal holds the model, the endpoint, the captured messages, the projected schema, the schema
+   * name, reasoning_effort='low' and the 8,192 budget, and changes exactly ONE nested wire leaf:
+   * response_format.json_schema.strict, true -> false.
+   *
+   * It is NOT production's non-strict path. buildResponseFormat(schema, false) returns json_object,
+   * which would drop the schema name and the schema body along with the flag and answer a different,
+   * weaker question. This keeps json_schema mode and the schema exactly.
+   *
+   * A separate token again, because a receipt must say which strict posture produced it. It is a
+   * DIAGNOSTIC: production still sends strict: true for a strict-capable projected schema, and
+   * changing that is a separate owner decision this goal does not make.
+   */
+  'POST_RBD1_REASONING_LOW_OUTPUT_BUDGET_8192_STRICT_FALSE_DIFFERENTIAL',
 ] as const;
 export type OperatorRunGoal = (typeof OPERATOR_RUN_GOALS)[number];
 
@@ -217,6 +237,8 @@ export const SECOND_CREDENTIAL_NOTICES: Readonly<Record<OperatorRunGoal, string>
     'Smoke passed. Enter the same Groq credential again for the low reasoning-effort differential probe.',
   POST_RLD1_REASONING_LOW_OUTPUT_BUDGET_8192_DIFFERENTIAL:
     'Smoke passed. Enter the same Groq credential again for the low-reasoning 8192 output-budget differential probe.',
+  POST_RBD1_REASONING_LOW_OUTPUT_BUDGET_8192_STRICT_FALSE_DIFFERENTIAL:
+    'Smoke passed. Enter the same Groq credential again for the best-effort strict-false JSON-schema differential probe.',
 });
 
 /**
@@ -255,4 +277,6 @@ export const REUSED_CREDENTIAL_NOTICES: Readonly<Record<OperatorRunGoal, string>
     'Smoke passed. Reusing the credential already read for the low reasoning-effort differential probe.',
   POST_RLD1_REASONING_LOW_OUTPUT_BUDGET_8192_DIFFERENTIAL:
     'Smoke passed. Reusing the credential already read for the low-reasoning 8192 output-budget differential probe.',
+  POST_RBD1_REASONING_LOW_OUTPUT_BUDGET_8192_STRICT_FALSE_DIFFERENTIAL:
+    'Smoke passed. Reusing the credential already read for the best-effort strict-false JSON-schema differential probe.',
 });

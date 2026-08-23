@@ -44,16 +44,16 @@
  * returns a reasoning trace. This controls how much the model thinks, and never what it thought.
  */
 import type { ProviderInvocationResult } from '../../contracts/provider.js';
-import type { ModelUsage } from '../../contracts/response.js';
 import type { GatewayClock } from '../../reliability/clock.js';
+import { executeGroqChatDiagnosticExchange } from './groq-chat-diagnostic-exchange.js';
 import type { GroqProviderConfig } from './groq-config.js';
-import { GROQ_ACCEPTED_FINISH_REASONS, groqChatResponseSchema } from './groq-contracts.js';
 import type { GroqChatRequestBody } from './groq-contracts.js';
-import { normalizeGroqHttpFailure } from './groq-error-normalization.js';
 import { buildResponseFormat } from './groq-structured-output.js';
-import { GROQ_CHAT_COMPLETIONS_ENDPOINT } from './groq-transport.js';
 
-const HTTP_OK = 200;
+/** Local, because the pre-build cancellation check must not depend on the exchange being reached. */
+function isAborted(signal: AbortSignal): boolean {
+  return signal.aborted;
+}
 
 /**
  * The reasoning efforts Groq documents for GPT-OSS.
@@ -96,29 +96,6 @@ export interface GroqChatReasoningDiagnosticInput {
 
 export interface GroqChatReasoningDiagnosticProvider {
   invoke(input: GroqChatReasoningDiagnosticInput): Promise<ProviderInvocationResult>;
-}
-
-function isAborted(signal: AbortSignal): boolean {
-  return signal.aborted;
-}
-
-function buildUsage(
-  usage:
-    | {
-        prompt_tokens?: number | undefined;
-        completion_tokens?: number | undefined;
-        total_tokens?: number | undefined;
-      }
-    | undefined,
-): ModelUsage {
-  if (usage === undefined) {
-    return {};
-  }
-  return {
-    ...(usage.prompt_tokens === undefined ? {} : { inputTokens: usage.prompt_tokens }),
-    ...(usage.completion_tokens === undefined ? {} : { outputTokens: usage.completion_tokens }),
-    ...(usage.total_tokens === undefined ? {} : { totalTokens: usage.total_tokens }),
-  };
 }
 
 /**
@@ -171,6 +148,13 @@ export function createGroqChatReasoningDiagnosticProvider(
 ): GroqChatReasoningDiagnosticProvider {
   return Object.freeze({
     async invoke(input: GroqChatReasoningDiagnosticInput): Promise<ProviderInvocationResult> {
+      // CANCELLATION OUTRANKS EVERYTHING, and it is checked BEFORE the body is built.
+      //
+      // The order is load-bearing and was nearly lost when the exchange was extracted. The exchange
+      // checks the signal too, but it only runs once a body EXISTS -- so an already-aborted call
+      // whose body also refuses would have reported `failed` instead of `cancelled`. A caller who
+      // cancelled and then asked what happened must be told they cancelled, not handed a verdict
+      // about a request nobody was going to send.
       if (isAborted(input.signal)) {
         return { status: 'cancelled' };
       }
@@ -179,82 +163,10 @@ export function createGroqChatReasoningDiagnosticProvider(
         // An invalid strict schema fails BEFORE any transport call, exactly as production does.
         return { status: 'failed', retryable: false };
       }
-
-      const httpRequest = {
-        url: GROQ_CHAT_COMPLETIONS_ENDPOINT,
-        headers: {
-          'content-type': 'application/json',
-          authorization: config.apiKey.authorizationHeaderValue(),
-        },
-        body: JSON.stringify(body),
-      };
-
-      const start = clock.now();
-      let response;
-      try {
-        response = await config.transport.send(httpRequest, input.signal);
-      } catch {
-        if (isAborted(input.signal)) {
-          return { status: 'cancelled' };
-        }
-        return { status: 'unavailable', retryable: true };
-      }
-      const latencyMs = Math.max(0, clock.now() - start);
-
-      if (response.status !== HTTP_OK) {
-        // The SAME governed normalization production uses. It consults the body for exactly one
-        // closed code and reads nothing else — no message, no failed_generation, no request id.
-        return normalizeGroqHttpFailure(response.status, response.bodyText, latencyMs);
-      }
-
-      let parsedJson: unknown;
-      try {
-        parsedJson = JSON.parse(response.bodyText);
-      } catch {
-        return { status: 'malformed', latencyMs };
-      }
-      // The SAME classification production applies, branch for branch.
-      //
-      // An earlier revision collapsed the schema failure and the choice-count check into one
-      // condition returning `malformed`. Production separates them: a body that does not parse is
-      // `malformed`, while a parsed body carrying anything other than exactly one choice is
-      // `failed`/non-retryable. Collapsing them meant the SAME provider response could normalize
-      // differently here than in production -- so a diagnostic whose only intended variable is
-      // `reasoning_effort` could have reported a difference the reasoning effort did not cause.
-      const parsed = groqChatResponseSchema.safeParse(parsedJson);
-      if (!parsed.success) {
-        return { status: 'malformed', latencyMs };
-      }
-      if (parsed.data.choices.length !== 1) {
-        return { status: 'failed', retryable: false };
-      }
-      const choice = parsed.data.choices[0];
-      if (choice === undefined) {
-        return { status: 'failed', retryable: false };
-      }
-      const content = choice.message.content;
-      if (typeof content !== 'string') {
-        return { status: 'failed', retryable: false };
-      }
-      const finishReason = choice.finish_reason;
-      if (
-        finishReason !== null &&
-        finishReason !== undefined &&
-        !(GROQ_ACCEPTED_FINISH_REASONS as readonly string[]).includes(finishReason)
-      ) {
-        return { status: 'failed', retryable: false };
-      }
-
-      // Provider-reported usage travels onward. That is the point of this path: the historical
-      // diagnostics settled their ledgers with `undefined` and could never say what was generated.
-      const usage = buildUsage(parsed.data.usage);
-      let value: unknown;
-      try {
-        value = JSON.parse(content);
-      } catch {
-        return { status: 'malformed', latencyMs };
-      }
-      return { status: 'completed', output: { mode: 'STRUCTURED', value }, usage, latencyMs };
+      // The SHARED exchange: one request, no retry, no sleep, the governed error normalization and
+      // production's classification branch for branch. This adapter decides only what body to send,
+      // so a second diagnostic cannot classify the same response differently.
+      return executeGroqChatDiagnosticExchange(config, clock, body, input.signal);
     },
   });
 }

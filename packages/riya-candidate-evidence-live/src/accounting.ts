@@ -211,6 +211,20 @@ export const REASONING_BUDGET_8192_MAX_PROVIDER_REQUESTS =
 export const REASONING_BUDGET_8192_MAX_ESTIMATED_COST_USD = 1;
 
 /**
+ * The exact arithmetic of a POST_RBD1 strict-false differential run: smoke plus ONE probe.
+ *
+ * TWO, and its OWN counter. The differential turns constrained decoding off with the model,
+ * endpoint, schema, messages, effort and budget all held, and a receipt that shared RBD1's counter
+ * could not say whether a request was spent under strict true or strict false -- which is the only
+ * thing this run measures. RBD1 is CONSUMED and its evidence is immutable.
+ */
+export const STRICT_FALSE_PROBE_REQUESTS = 1;
+export const STRICT_FALSE_MAX_PROVIDER_REQUESTS = SMOKE_REQUESTS + STRICT_FALSE_PROBE_REQUESTS;
+
+/** The spend ceiling. Same conservative figure as every other bounded diagnostic. */
+export const STRICT_FALSE_MAX_ESTIMATED_COST_USD = 1;
+
+/**
  * Where an aggregate token total came from.
  *
  * ### Why this is per-DIMENSION and not one flag on the run
@@ -286,6 +300,7 @@ export const LEDGER_PHASES = [
   'responses-differential-probe',
   'reasoning-differential-probe',
   'reasoning-budget-8192-probe',
+  'strict-false-probe',
 ] as const;
 export type LedgerPhase = (typeof LEDGER_PHASES)[number];
 
@@ -361,6 +376,13 @@ export interface LedgerSnapshot {
    * receipt must be able to say a request was spent at 8,192 rather than at the 4,096 RLD1 sent.
    */
   readonly reasoningBudget8192ProbeProviderRequests: number;
+  /**
+   * POST-RBD1. Best-effort json_schema (strict=false) differential probe requests.
+   *
+   * A TWELFTH counter. The strict posture is the variable this run exists to change, so the receipt
+   * must be able to say a request was spent with constrained decoding OFF rather than on.
+   */
+  readonly strictFalseProbeProviderRequests: number;
   readonly totalProviderRequests: number;
   readonly successfulProviderResponses: number;
   readonly providerFailures: number;
@@ -455,6 +477,7 @@ export function createRequestLedger(config: RequestLedgerConfig): RequestLedger 
     'responses-differential-probe': 0,
     'reasoning-differential-probe': 0,
     'reasoning-budget-8192-probe': 0,
+    'strict-false-probe': 0,
   };
   let successes = 0;
   let failures = 0;
@@ -564,6 +587,7 @@ export function createRequestLedger(config: RequestLedgerConfig): RequestLedger 
         responsesDifferentialProbeProviderRequests: counts['responses-differential-probe'],
         reasoningDifferentialProbeProviderRequests: counts['reasoning-differential-probe'],
         reasoningBudget8192ProbeProviderRequests: counts['reasoning-budget-8192-probe'],
+        strictFalseProbeProviderRequests: counts['strict-false-probe'],
         totalProviderRequests: total(),
         successfulProviderResponses: successes,
         providerFailures: failures,
@@ -699,6 +723,36 @@ export function createResponsesDifferentialLedger(): RequestLedger {
   return createRequestLedger({
     maxRequests: RESPONSES_DIFFERENTIAL_MAX_PROVIDER_REQUESTS,
     maxCostUsd: RESPONSES_DIFFERENTIAL_MAX_ESTIMATED_COST_USD,
+    // The PRODUCTION tariff. Both requests are the production 20B model.
+    pricePerMillionInputUsd: CANDIDATE_PRICE_PER_M_INPUT_USD,
+    pricePerMillionCachedInputUsd: CANDIDATE_PRICE_PER_M_CACHED_INPUT_USD,
+    pricePerMillionOutputUsd: CANDIDATE_PRICE_PER_M_OUTPUT_USD,
+    fallbackInputTokens: CANDIDATE_MAX_INPUT_TOKENS,
+    fallbackOutputTokens: CANDIDATE_MAX_COMPLETION_TOKENS,
+    hardMaxInputTokens: CANDIDATE_MAX_INPUT_TOKENS,
+    hardMaxOutputTokens: CANDIDATE_MAX_COMPLETION_TOKENS,
+  });
+}
+
+/**
+ * The ledger for a bounded POST_RBD1 strict-false differential run.
+ *
+ * The text smoke plus ONE best-effort probe: TWO requests, one dollar.
+ *
+ * Its own ledger and its own counter, so it can never be confused with RBD1 -- which sent the same
+ * captured request, at the same effort and the same budget, under strict true, and met
+ * json_validate_failed.
+ *
+ * The fallback bounds are the CONFIGURED CEILINGS and are unchanged. RLD1 and RBD1 both settled their
+ * failed probes from them, which is why those receipts carried 131,072 / 65,536 contributions that
+ * were bounds rather than generation lengths. Narrowing them to flatter a receipt would make an
+ * unmeasured probe look measured -- and this lane's port propagates real usage when the provider
+ * reports any, so a completed probe is priced from what was measured.
+ */
+export function createStrictFalseLedger(): RequestLedger {
+  return createRequestLedger({
+    maxRequests: STRICT_FALSE_MAX_PROVIDER_REQUESTS,
+    maxCostUsd: STRICT_FALSE_MAX_ESTIMATED_COST_USD,
     // The PRODUCTION tariff. Both requests are the production 20B model.
     pricePerMillionInputUsd: CANDIDATE_PRICE_PER_M_INPUT_USD,
     pricePerMillionCachedInputUsd: CANDIDATE_PRICE_PER_M_CACHED_INPUT_USD,

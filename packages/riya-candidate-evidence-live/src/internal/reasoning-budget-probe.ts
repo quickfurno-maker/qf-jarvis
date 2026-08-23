@@ -46,7 +46,10 @@ import {
   GroqApiKey,
 } from '@qf-jarvis/model-gateway';
 import type {
+  GroqChatReasoningDiagnosticInput,
+  GroqChatReasoningDiagnosticProvider,
   GroqGptOssReasoningEffort,
+  GroqProviderConfig,
   GroqTransport,
   ModelUsage,
 } from '@qf-jarvis/model-gateway';
@@ -227,6 +230,23 @@ export function createReasoningBudgetProviderFactory(deps: {
   readonly openTransport?: () => GroqTransport;
   /** The error thrown when the credential is not a bound Groq key. Per-run, so it names the run. */
   readonly unboundCredentialError: string;
+  /**
+   * WHICH governed diagnostic adapter speaks the wire. Defaults to the reasoning-effort adapter that
+   * RLD1 and RBD1 used.
+   *
+   * A parameter rather than a constant because POST-RBD1 varies exactly this: the best-effort adapter
+   * builds its body by DERIVING from the reasoning adapter's and flipping one leaf, so the two differ
+   * in `response_format.json_schema.strict` and in nothing else. Both take the same input, return the
+   * same provider-neutral result, and run through the same shared Chat Completions exchange inside
+   * the gateway -- so one response cannot classify two ways between them.
+   *
+   * It is deliberately NOT a production seam: every adapter reachable here is diagnostic-only, and
+   * the config handed to it is built below from the production candidate constants.
+   */
+  readonly createProvider?: (
+    config: GroqProviderConfig,
+    clock: ReturnType<typeof createSystemClock>,
+  ) => GroqChatReasoningDiagnosticProvider;
 }): ReasoningBudgetProviderFactory {
   const apiKey: unknown = deps.credential;
   if (!(apiKey instanceof GroqApiKey)) {
@@ -273,10 +293,14 @@ export function createReasoningBudgetProviderFactory(deps: {
     });
     capabilityCeilingsUsed.push(config.maxCompletionTokens);
     candidateModelsUsed.push(config.modelId);
-    // The MERGED, separately reviewed diagnostic adapter. No lane creates a new one.
-    const provider = createGroqChatReasoningDiagnosticProvider(config, clock);
+    // The governed diagnostic adapter for THIS run. Defaults to the merged reasoning-effort adapter;
+    // POST-RBD1 supplies the best-effort one, whose body is derived from this one's.
+    const provider = (deps.createProvider ?? createGroqChatReasoningDiagnosticProvider)(
+      config,
+      clock,
+    );
     return {
-      invoke: async (input) => {
+      invoke: async (input: GroqChatReasoningDiagnosticInput) => {
         reasoningEffortsUsed.push(input.reasoningEffort);
         const result = await provider.invoke({ ...input, maxCompletionTokens: budget });
         if (result.status !== 'completed') {

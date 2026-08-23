@@ -53,6 +53,7 @@ import {
   createOperationalAcceptanceDiagnosticLedger,
   createModelDifferentialLedger,
   createReasoningBudget8192Ledger,
+  createStrictFalseLedger,
   createReasoningDifferentialLedger,
   createResponsesDifferentialLedger,
   createNeutralRepresentativeLedger,
@@ -74,6 +75,7 @@ import { openLiveModelDifferentialRunner } from './model-differential-port.js';
 import { openLiveResponsesDifferentialRunner } from './responses-differential-port.js';
 import { openLiveReasoningDifferentialRunner } from './reasoning-differential-port.js';
 import { openLiveReasoningBudget8192Runner } from './reasoning-budget-8192-port.js';
+import { openLiveStrictFalseDifferentialRunner } from './strict-false-differential-port.js';
 import { DEFAULT_CREDENTIAL_SOURCE_MODE, isCredentialSourceMode } from './credential-source.js';
 import type { CredentialSourceMode } from './credential-source.js';
 import { DEFAULT_RUN_GOAL } from './internal/run-goal.js';
@@ -191,7 +193,12 @@ export function parseCliArgs(argv: readonly string[]): CliParse {
         // with the reasoning posture held, and a receipt must say which budget produced it. There is
         // deliberately no `--max-completion-tokens` or `--budget` flag -- the owner selects a
         // governed PURPOSE, never a raw provider parameter.
-        value !== 'POST_RLD1_REASONING_LOW_OUTPUT_BUDGET_8192_DIFFERENTIAL'
+        value !== 'POST_RLD1_REASONING_LOW_OUTPUT_BUDGET_8192_DIFFERENTIAL' &&
+        // POST-RBD1. Separate again: this goal sends the same request with CONSTRAINED DECODING OFF
+        // and everything else held, and a receipt must say which strict posture produced it. There
+        // is deliberately no `--strict`, `--strict-json` or `--response-format` flag -- the owner
+        // selects a governed PURPOSE, never a raw provider parameter.
+        value !== 'POST_RBD1_REASONING_LOW_OUTPUT_BUDGET_8192_STRICT_FALSE_DIFFERENTIAL'
       ) {
         return { ok: false, reason: 'invalid-run-goal' };
       }
@@ -233,6 +240,10 @@ export function parseCliArgs(argv: readonly string[]): CliParse {
  * real terminal and a real provider to run. A bounded run whose bound is untested is not bounded.
  */
 export function ledgerForRunGoal(goal: OperatorRunGoal): RequestLedger {
+  if (goal === 'POST_RBD1_REASONING_LOW_OUTPUT_BUDGET_8192_STRICT_FALSE_DIFFERENTIAL') {
+    // Two requests, one dollar: the smoke plus ONE best-effort probe, at the PRODUCTION tariff.
+    return createStrictFalseLedger();
+  }
   if (goal === 'POST_RLD1_REASONING_LOW_OUTPUT_BUDGET_8192_DIFFERENTIAL') {
     // Two requests, one dollar: the smoke plus ONE 8,192-budget probe. Priced at the PRODUCTION
     // tariff -- both requests go to the production 20B model.
@@ -401,6 +412,22 @@ async function main(): Promise<number> {
           const projection = projectGroqStrictJsonSchema(rawSchema);
           if (!projection.ok) {
             throw new Error('QFJ_RESPONSES_DIFFERENTIAL_PROJECTION_FAILED');
+          }
+          return projection.schema;
+        },
+      }),
+    // POST-RBD1. The REAL best-effort strict-false port, bound to the credential just resolved.
+    //
+    // Bound from the day the seam exists, for the reason HF4-R8 taught. The SAME production
+    // projection is injected, and the port reuses NRA1's own neutral capture -- so the only wire
+    // difference from RBD1 is `response_format.json_schema.strict`.
+    openStrictFalseDifferentialRunner: (credential) =>
+      openLiveStrictFalseDifferentialRunner({
+        credential,
+        projectSchema: (rawSchema) => {
+          const projection = projectGroqStrictJsonSchema(rawSchema);
+          if (!projection.ok) {
+            throw new Error('QFJ_STRICT_FALSE_DIFFERENTIAL_PROJECTION_FAILED');
           }
           return projection.schema;
         },

@@ -97,7 +97,21 @@ describe('model-gateway package containment', () => {
    * the imported barrel counts runtime exports only — `export type` produces no runtime binding — so
    * adding a type costs nothing and adding a value is a deliberate, reviewed change.
    */
-  it('freezes the package-root runtime API at exactly 79 symbols', async () => {
+  it('freezes the package-root runtime API at exactly 80 symbols', async () => {
+    // POST-RBD1 FORENSICS: 79 -> 80. `createGroqChatBestEffortDiagnosticProvider` -- the
+    // DIAGNOSTIC-ONLY BEST-EFFORT `json_schema` adapter.
+    //
+    // ONE and no more. RLD1 and RBD1 both met `json_validate_failed` under `strict: true`, at 4,096
+    // and at 8,192, so the open axis is the strict DECODING POSTURE. Production's non-strict branch
+    // cannot express that question -- it returns `json_object`, dropping the schema name, the strict
+    // flag and the schema body together -- and the candidate evidence operator is the only package
+    // that can see both this gateway and the real Riya request.
+    //
+    // The body builder stays off the root and is asserted through a relative import, for the reason
+    // every diagnostic body builder does: a caller that never needs to build one must not be handed
+    // the means to. `buildResponseFormat` is untouched and its non-strict branch still returns
+    // `json_object`; no production path can ask for `strict: false` with a schema, there is no
+    // automatic best-effort fallback, and there is no retry-on-strict-failure.
     // POST-RSP20B2 FORENSICS: 77 -> 79. `createGroqChatReasoningDiagnosticProvider` and
     // `GROQ_GPT_OSS_DOCUMENTED_DEFAULT_REASONING_EFFORT` -- the DIAGNOSTIC-ONLY Chat Completions
     // reasoning-effort adapter, and the documented default the historical baseline is recorded
@@ -139,7 +153,7 @@ describe('model-gateway package containment', () => {
     // schemas, and "the production schema projects into the documented subset" has to be asserted
     // against the real schema rather than a replica.
     const barrel = (await import('../index.js')) as unknown as Record<string, unknown>;
-    expect(Object.keys(barrel)).toHaveLength(79);
+    expect(Object.keys(barrel)).toHaveLength(80);
   });
 
   it('does not export FakeModelProvider from the production root', () => {
