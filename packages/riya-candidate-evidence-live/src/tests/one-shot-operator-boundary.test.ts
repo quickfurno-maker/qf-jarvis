@@ -12,11 +12,13 @@
  * - a goal whose smoke later fails is still spent, because the authorization was for one launch and
  *   "it failed, so try again" is exactly the reasoning a guard has to refuse.
  *
- * POST-SFD1 adds the case this file could not previously express. Every marker-eligible goal used to
- * be statically tombstoned as well, so the marker path could only be reached through a guard double
- * that skipped the tombstone. `POST_SFD1_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE` is genuinely
- * eligible and genuinely NOT tombstoned, so the full lifecycle is now driven on the REAL goal with
- * the REAL guard -- no synthetic cast anywhere in that block.
+ * POST-SFD2 closes the last pending one-shot. `POST_SFD1_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE`
+ * was launched once, returned HTTP 413, and is now tombstoned -- so this file covers two distinct
+ * things and keeps them apart on purpose:
+ *
+ * - the REAL goal on the REAL guard, proving SFD2 is closed by repository history on any workstation;
+ * - the marker lifecycle over a SIMULATED pending one-shot, because there is deliberately no real
+ *   pending goal left and the same-workstation control still has to be covered.
  *
  * The marker directory is a per-test temp directory. No developer staging area is touched.
  */
@@ -43,7 +45,8 @@ import {
 import { ledgerForRunGoal } from '../bin.js';
 import {
   createOneShotConsumptionGuard,
-  oneShotMarkerFileName,
+  ONE_SHOT_DIAGNOSTIC_RUN_GOALS,
+  STATICALLY_CONSUMED_RUN_GOALS,
 } from '../internal/one-shot-consumption.js';
 import { OPERATOR_EXIT_CODES } from '../exit-codes.js';
 import { runCandidateEvidenceOperator } from '../operator.js';
@@ -390,55 +393,140 @@ describe('a second launch of a MARKER-ELIGIBLE goal spends nothing', () => {
   });
 });
 
-describe('THE PENDING GOAL, driven end to end with the REAL guard and NO synthetic cast', () => {
+describe('SFD2 IS CLOSED BY REPOSITORY HISTORY, on the REAL guard and the REAL goal', () => {
   /**
-   * The case PR #150 wrote a future-note about, now expressible.
+   * The closeout.
    *
-   * Every marker-eligible goal used to be statically tombstoned too, so the marker path could only
-   * be reached through a guard double. `POST_SFD1_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE` is
-   * eligible and NOT tombstoned, so this block passes the real goal to the real guard and asserts
-   * the whole lifecycle: claim, spend, refuse.
+   * SFD2 was authorized once, launched once, and returned HTTP 413 -- a request-layer refusal that
+   * localized nothing. It is tombstoned anyway, because the authorization was for one launch and not
+   * for one finding.
+   *
+   * This block passes the REAL goal to the REAL guard, with no double and no cast, and proves the
+   * refusal happens before anything is spent. It is the FRESH-WORKSTATION control: the marker
+   * directory here is empty, exactly as it would be on a machine that has never run SFD2, and the
+   * repository tombstone is what stops it.
    */
-  const PENDING = 'POST_SFD1_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE' as const;
+  const SFD2 = 'POST_SFD1_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE' as const;
 
-  it('FIRST launch claims the marker and reaches the credential, smoke and candidate probe', async () => {
+  it('refuses with exit 34 before credential, smoke, candidate session or probe', async () => {
+    const markerDirectory = externalDir('qfj-one-shot-marker-');
+    const run = await launch({
+      markerDirectory,
+      runGoal: SFD2,
+      // The localization seam IS wired, so `candidateProbes` counts a real absence rather than one
+      // nobody could have observed.
+      wireLocalizationRunner: true,
+    });
+    expect(run.outcome).toBe('RUN_GOAL_STATICALLY_CONSUMED');
+    expect(OPERATOR_EXIT_CODES[run.outcome as 'RUN_GOAL_STATICALLY_CONSUMED']).toBe(34);
+    expect(run.counters.credentialReads).toBe(0);
+    expect(run.counters.smokes).toBe(0);
+    expect(run.counters.candidateSessions).toBe(0);
+    expect(run.counters.candidateProbes).toBe(0);
+  });
+
+  it('writes NO marker: the tombstone refuses before the filesystem is reached', async () => {
+    const markerDirectory = externalDir('qfj-one-shot-marker-');
+    await launch({ markerDirectory, runGoal: SFD2, wireLocalizationRunner: true });
+    expect(readdirSync(markerDirectory)).toStrictEqual([]);
+    // And it stays refused however many times it is attempted -- there is no state to exhaust.
+    const again = await launch({ markerDirectory, runGoal: SFD2, wireLocalizationRunner: true });
+    expect(again.outcome).toBe('RUN_GOAL_STATICALLY_CONSUMED');
+    expect(readdirSync(markerDirectory)).toStrictEqual([]);
+  });
+
+  it('emits a content-free refusal line naming the goal and the reason', async () => {
+    const run = await launch({
+      markerDirectory: externalDir('qfj-one-shot-marker-'),
+      runGoal: SFD2,
+      wireLocalizationRunner: true,
+    });
+    const line = run.lines.find((one) => one.includes('phase=one-shot'));
+    expect(line).toContain('status=REFUSED');
+    expect(line).toContain('reason=statically-consumed-goal');
+    expect(line).toContain(`runGoal=${SFD2}`);
+    expect(run.lines.join('\n')).not.toContain(SENTINEL_KEY);
+  });
+
+  it('leaves NO eligible goal launchable at this head', async () => {
+    // The state this closeout produces, asserted rather than assumed: every eligible goal is now
+    // tombstoned, so none can reach a credential. A future PR that wires a new bounded diagnostic
+    // makes this list non-empty and edits this spec.
+    const pending = ONE_SHOT_DIAGNOSTIC_RUN_GOALS.filter(
+      (goal) => !Object.prototype.hasOwnProperty.call(STATICALLY_CONSUMED_RUN_GOALS, goal),
+    );
+    expect(pending).toStrictEqual([]);
+    const run = await launch({
+      markerDirectory: externalDir('qfj-one-shot-marker-'),
+      runGoal: SFD2,
+      wireLocalizationRunner: true,
+    });
+    expect(run.counters.credentialReads).toBe(0);
+  });
+});
+
+describe('THE MARKER LIFECYCLE, over a SIMULATED pending one-shot', () => {
+  /**
+   * Why this uses a guard double, and why that is the right call now.
+   *
+   * PR #151 drove this lifecycle on `POST_SFD1_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE` because it
+   * was then the one real eligible-but-untombstoned goal. SFD2 ran, so it is tombstoned, and there
+   * are deliberately ZERO real pending one-shot goals on this head.
+   *
+   * The marker mechanism still has to be covered -- it is the SAME-workstation control, and the
+   * incident that created it was two launches seconds apart. So the guard double below skips ONLY
+   * the static tombstone and keeps every other behaviour real: the operator still consults a guard,
+   * still only for eligible goals, at the same boundary, with the same outcome mapping.
+   *
+   * What was NOT done, and must never be: leaving SFD2 untombstoned, adding a fake pending goal to
+   * production, weakening the tombstone list, or adding a `--force` / `--rerun` escape. A test is
+   * not a reason to leave a consumed authorization launchable.
+   */
+  const SIMULATED = 'POST_SFD1_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE' as const;
+
+  it('FIRST launch claims the marker and reaches credential, smoke and candidate probe', async () => {
     const markerDirectory = externalDir('qfj-one-shot-marker-');
     const first = await launch({
       markerDirectory,
-      runGoal: PENDING,
+      runGoal: SIMULATED,
+      markerOnlyGuard: true,
       wireLocalizationRunner: true,
     });
     expect(first.outcome).toBe('POST_SFD1_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE_COMPLETE');
     expect(first.counters.credentialReads).toBe(1);
     expect(first.counters.smokes).toBe(1);
     expect(first.counters.candidateProbes).toBe(1);
-    // The marker exists, and it is the ONE file the digest names for this goal.
-    expect(readdirSync(markerDirectory)).toStrictEqual([oneShotMarkerFileName(PENDING)]);
+    expect(readdirSync(markerDirectory)).toHaveLength(1);
     const claimed = first.lines.find((one) => one.includes('phase=one-shot'));
     expect(claimed).toContain('status=CLAIMED');
-    expect(claimed).toContain(`runGoal=${PENDING}`);
   });
 
   it('SECOND launch refuses before any credential, smoke or candidate request', async () => {
     const markerDirectory = externalDir('qfj-one-shot-marker-');
-    const first = await launch({ markerDirectory, runGoal: PENDING, wireLocalizationRunner: true });
+    const first = await launch({
+      markerDirectory,
+      runGoal: SIMULATED,
+      markerOnlyGuard: true,
+      wireLocalizationRunner: true,
+    });
     expect(first.counters.candidateProbes).toBe(1);
 
-    // THE INCIDENT, on a real pending goal.
+    // THE INCIDENT.
     const second = await launch({
       markerDirectory,
-      runGoal: PENDING,
+      runGoal: SIMULATED,
+      markerOnlyGuard: true,
       wireLocalizationRunner: true,
     });
     expect(second.outcome).toBe('RUN_GOAL_ALREADY_CONSUMED');
+    expect(OPERATOR_EXIT_CODES[second.outcome as 'RUN_GOAL_ALREADY_CONSUMED']).toBe(35);
     expect(second.counters.credentialReads).toBe(0);
     expect(second.counters.smokes).toBe(0);
     expect(second.counters.candidateSessions).toBe(0);
     expect(second.counters.candidateProbes).toBe(0);
-    const line = second.lines.find((one) => one.includes('phase=one-shot'));
-    expect(line).toContain('status=REFUSED');
-    expect(line).toContain('reason=goal-already-consumed');
-    expect(second.lines.join('\n')).not.toContain(SENTINEL_KEY);
+    expect(second.lines.find((one) => one.includes('phase=one-shot'))).toContain(
+      'reason=goal-already-consumed',
+    );
   });
 
   it('a FAILED smoke still consumes the first launch', async () => {
@@ -446,18 +534,19 @@ describe('THE PENDING GOAL, driven end to end with the REAL guard and NO synthet
     const markerDirectory = externalDir('qfj-one-shot-marker-');
     const first = await launch({
       markerDirectory,
-      runGoal: PENDING,
+      runGoal: SIMULATED,
+      markerOnlyGuard: true,
       wireLocalizationRunner: true,
       smokeFails: true,
     });
     expect(first.outcome).toBe('SMOKE_FAILED');
     expect(first.counters.smokes).toBe(1);
     expect(first.counters.candidateProbes).toBe(0);
-    expect(readdirSync(markerDirectory)).toStrictEqual([oneShotMarkerFileName(PENDING)]);
 
     const second = await launch({
       markerDirectory,
-      runGoal: PENDING,
+      runGoal: SIMULATED,
+      markerOnlyGuard: true,
       wireLocalizationRunner: true,
     });
     expect(second.outcome).toBe('RUN_GOAL_ALREADY_CONSUMED');
@@ -468,7 +557,8 @@ describe('THE PENDING GOAL, driven end to end with the REAL guard and NO synthet
     const markerDirectory = externalDir('qfj-one-shot-marker-');
     const failed = await launch({
       markerDirectory,
-      runGoal: PENDING,
+      runGoal: SIMULATED,
+      markerOnlyGuard: true,
       wireLocalizationRunner: true,
       badSmokeConfigPath: true,
     });
@@ -476,15 +566,21 @@ describe('THE PENDING GOAL, driven end to end with the REAL guard and NO synthet
     expect(readdirSync(markerDirectory)).toStrictEqual([]);
     expect(failed.counters.credentialReads).toBe(0);
 
-    const later = await launch({ markerDirectory, runGoal: PENDING, wireLocalizationRunner: true });
+    const later = await launch({
+      markerDirectory,
+      runGoal: SIMULATED,
+      markerOnlyGuard: true,
+      wireLocalizationRunner: true,
+    });
     expect(later.outcome).toBe('POST_SFD1_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE_COMPLETE');
     expect(later.counters.candidateProbes).toBe(1);
   });
 
-  it('an UNWRITABLE marker gives exit 36, never 35 -- with no synthetic cast', async () => {
+  it('an UNWRITABLE marker gives exit 36, never 35', async () => {
     const run = await launch({
       markerDirectory: externalDir('qfj-one-shot-marker-'),
-      runGoal: PENDING,
+      runGoal: SIMULATED,
+      markerOnlyGuard: true,
       wireLocalizationRunner: true,
       markerUnavailable: true,
     });
@@ -492,23 +588,11 @@ describe('THE PENDING GOAL, driven end to end with the REAL guard and NO synthet
     expect(OPERATOR_EXIT_CODES[run.outcome as 'RUN_GOAL_CONSUMPTION_MARKER_UNAVAILABLE']).toBe(36);
     expect(OPERATOR_EXIT_CODES.RUN_GOAL_ALREADY_CONSUMED).toBe(35);
     expect(run.counters.credentialReads).toBe(0);
-    expect(run.counters.smokes).toBe(0);
     expect(run.counters.candidateProbes).toBe(0);
     expect(run.lines.find((one) => one.includes('phase=one-shot'))).toContain(
       'reason=consumption-marker-unavailable',
     );
     expect(run.lines.join('\n')).not.toContain('SECRET-DETAIL-MUST-NOT-APPEAR');
-  });
-
-  it('a statically consumed goal still gives exit 34, on the same real guard', async () => {
-    const markerDirectory = externalDir('qfj-one-shot-marker-');
-    const run = await launch({
-      markerDirectory,
-      runGoal: 'POST_RBD1_REASONING_LOW_OUTPUT_BUDGET_8192_STRICT_FALSE_DIFFERENTIAL',
-    });
-    expect(run.outcome).toBe('RUN_GOAL_STATICALLY_CONSUMED');
-    expect(OPERATOR_EXIT_CODES[run.outcome as 'RUN_GOAL_STATICALLY_CONSUMED']).toBe(34);
-    expect(readdirSync(markerDirectory)).toStrictEqual([]);
   });
 });
 

@@ -674,12 +674,15 @@ describe('run-goal and step identity', () => {
     expect(STRICT_FALSE_LOCALIZATION_STEP_ID.startsWith('S0_')).toBe(false);
   });
 
-  it('is one-shot ELIGIBLE and NOT tombstoned — it has not been run', () => {
+  it('is one-shot ELIGIBLE and now TOMBSTONED — SFD2 consumed it', () => {
+    // This spec asserted the opposite until SFD2 ran. The composition below is unchanged and still
+    // proves what the request was; what changed is that the goal can no longer be launched.
     expect(isOneShotDiagnosticRunGoal(RUN_GOAL)).toBe(true);
     expect(Object.prototype.hasOwnProperty.call(STATICALLY_CONSUMED_RUN_GOALS, RUN_GOAL)).toBe(
-      false,
+      true,
     );
-    expect(Object.keys(STATICALLY_CONSUMED_RUN_GOALS)).toHaveLength(11);
+    expect(STATICALLY_CONSUMED_RUN_GOALS[RUN_GOAL]).toBe('SFD2');
+    expect(Object.keys(STATICALLY_CONSUMED_RUN_GOALS)).toHaveLength(12);
     expect(isOneShotDiagnosticRunGoal('FULL_EVIDENCE')).toBe(false);
     expect(isOneShotDiagnosticRunGoal('SAFETY_REPLICATION')).toBe(false);
   });

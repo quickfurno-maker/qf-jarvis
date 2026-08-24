@@ -49,11 +49,13 @@ function markerDirectory(): string {
  * the "fresh" goal, which both misrepresented production eligibility and asserted the very behaviour
  * that would have taken the main operator offline.
  *
- * Synthetic tokens rather than a real goal, still. `POST_SFD1_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE`
- * is now genuinely eligible-and-untombstoned and IS driven end to end through the operator in
- * `one-shot-operator-boundary.test.ts`; here the synthetic tokens keep the marker MECHANICS
- * (digest naming, exclusive create, durability, unwritable directory) independent of which real
- * goals happen to be pending at this head.
+ * Synthetic tokens rather than a real goal, and now necessarily so. Every eligible goal on this head
+ * is ALSO tombstoned -- SFD2 consumed the last pending one -- so a real goal reaches the tombstone
+ * branch and never touches the marker at all. That is the correct production state, not a gap: the
+ * synthetic tokens keep the marker MECHANICS (digest naming, exclusive create, durability,
+ * unwritable directory) testable without any production goal being left launchable to suit a test.
+ *
+ * They simulate a HYPOTHETICAL pending one-shot. Nothing in the production vocabulary is pending.
  */
 const FRESH_GOAL = 'SYNTHETIC_FUTURE_ONE_SHOT_DIAGNOSTIC' as unknown as Parameters<
   ReturnType<typeof createOneShotConsumptionGuard>['claim']
@@ -101,8 +103,17 @@ describe('the static tombstones', () => {
     expect(Object.keys(STATICALLY_CONSUMED_RUN_GOALS)).not.toContain('SAFETY_REPLICATION');
   });
 
-  it('holds all ELEVEN tombstones', () => {
-    expect(Object.keys(STATICALLY_CONSUMED_RUN_GOALS)).toHaveLength(11);
+  it('holds all TWELVE tombstones', () => {
+    expect(Object.keys(STATICALLY_CONSUMED_RUN_GOALS)).toHaveLength(12);
+  });
+
+  it('records SFD2 as OWNER-LOCKED, by the run label that consumed it', () => {
+    // SFD2 was authorized once, launched once, and returned HTTP 413 --
+    // `STRUCTURED_REPLY_PROVIDER_REQUEST_REJECTED`, with NEITHER local stage run. It is tombstoned
+    // anyway: the authorization was for one launch, not for one finding.
+    expect(
+      STATICALLY_CONSUMED_RUN_GOALS['POST_SFD1_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE'],
+    ).toBe('SFD2');
   });
 
   it('refuses a tombstoned goal before touching the filesystem at all', () => {
@@ -134,9 +145,9 @@ describe('one-shot ELIGIBILITY is a closed set, not a naming rule', () => {
   });
 
   it('is a SUPERSET of the tombstones -- history cannot consume an ungoverned goal', () => {
-    // The durable invariant. The earlier revision asserted EQUALITY, which held only while no
-    // pending diagnostic existed and was merged with a note saying so was a snapshot. It stopped
-    // being true the moment POST-SFD1 was wired, which is exactly the case the note anticipated.
+    // The durable invariant, and the one that does NOT move as diagnostics are wired and consumed.
+    // Equality has held at some heads and failed at others; containment always holds, because a goal
+    // history records as consumed must be one the guard actually governs.
     for (const tombstoned of Object.keys(STATICALLY_CONSUMED_RUN_GOALS)) {
       expect(ONE_SHOT_DIAGNOSTIC_RUN_GOALS, tombstoned).toContain(tombstoned);
       expect(isOneShotDiagnosticRunGoal(tombstoned), tombstoned).toBe(true);
@@ -147,31 +158,51 @@ describe('one-shot ELIGIBILITY is a closed set, not a naming rule', () => {
     }
   });
 
-  it('holds exactly the ONE pending diagnostic at this head, and pins it as a SNAPSHOT', () => {
-    // A SNAPSHOT of this exact head, not a law. It is empty between a diagnostic being wired and its
-    // run being recorded, and it holds one entry now. A PR that wires a second pending diagnostic,
-    // or that tombstones this one after SFD2 runs, edits this assertion -- which is the review
-    // moment where "has this been consumed?" gets asked out loud.
+  it('has NO pending diagnostic at this head, and pins that as a SNAPSHOT', () => {
+    // A SNAPSHOT of this exact head, not a law. This difference has already held three values: empty
+    // before POST-SFD1 was wired, one entry between wiring and SFD2 running, and empty again now.
+    // An empty difference does NOT mean the mechanism is unused -- it means nothing is pending.
+    //
+    // The PR that wires the next bounded one-shot diagnostic makes it non-empty and edits this line;
+    // the PR that records that run's consumption empties it and edits this line again. That edit is
+    // the review moment where "has this been consumed?" gets asked out loud.
     const pending = ONE_SHOT_DIAGNOSTIC_RUN_GOALS.filter(
       (goal) => !Object.prototype.hasOwnProperty.call(STATICALLY_CONSUMED_RUN_GOALS, goal),
     );
-    expect(pending).toStrictEqual(['POST_SFD1_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE']);
+    expect(pending).toStrictEqual([]);
     expect(ONE_SHOT_DIAGNOSTIC_RUN_GOALS).toHaveLength(12);
-    expect(Object.keys(STATICALLY_CONSUMED_RUN_GOALS)).toHaveLength(11);
+    expect(Object.keys(STATICALLY_CONSUMED_RUN_GOALS)).toHaveLength(12);
   });
 
-  it('does NOT tombstone the pending diagnostic -- it has not been run', () => {
-    // Tombstoning it before it runs would block the run it was wired for, on every workstation,
-    // and would be indistinguishable on a receipt from a run that had already happened.
+  it('DOES tombstone SFD2 now that it has run, while keeping it eligible', () => {
+    // Both halves matter. Eligible keeps the guard governing it at all; tombstoned is what refuses
+    // it on a FRESH workstation, where no local marker exists to consult.
     expect(
       Object.prototype.hasOwnProperty.call(
         STATICALLY_CONSUMED_RUN_GOALS,
         'POST_SFD1_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE',
       ),
-    ).toBe(false);
+    ).toBe(true);
     expect(isOneShotDiagnosticRunGoal('POST_SFD1_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE')).toBe(
       true,
     );
+  });
+
+  it('refuses SFD2 on the REAL guard, without touching the filesystem', () => {
+    // The cross-workstation control. A fresh machine has no marker; the tombstone is what stops it,
+    // and it stops it before `mkdirSync` or `openSync` is reached at all.
+    const directory = markerDirectory();
+    const guard = createOneShotConsumptionGuard({
+      markerDirectory: directory,
+      claimExclusive: () => {
+        throw new Error('MARKER-MUST-NOT-BE-TOUCHED-FOR-A-TOMBSTONED-GOAL');
+      },
+    });
+    // No cast: this is a real member of the closed goal vocabulary, unlike the synthetic fixtures.
+    const claim = guard.claim('POST_SFD1_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE');
+    expect(claim.ok).toBe(false);
+    expect(claim.ok ? undefined : claim.reason).toBe('statically-consumed-goal');
+    expect(readdirSync(directory)).toStrictEqual([]);
   });
 
   it('is NOT derived from a name prefix', () => {
