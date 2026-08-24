@@ -429,6 +429,15 @@ describe('HF3 — the one optional governed run goal', () => {
       // production's non-strict path, which would drop the schema entirely. Strictly narrower
       // than a bypass: smoke plus ONE probe, no fixture, evaluator, authority, P10 or bundle.
       'POST_RBD1_REASONING_LOW_OUTPUT_BUDGET_8192_STRICT_FALSE_DIFFERENTIAL',
+      // POST-SFD1 adds a FOURTEENTH, and it is the first that varies NOTHING on the wire. SFD1's
+      // canonical result was HTTP 413 -- a request-layer refusal that produced no local verdict at
+      // all -- and an unauthorized second execution, NONCANONICAL and not evidence about the
+      // authorized run, reached HTTP 200 with the document refused by production. That refusal has
+      // two readings pointing at different investigations, and the receipt could not tell them
+      // apart. This goal sends SFD1's request byte for byte and records BOTH local validation
+      // stages independently. Separate again, because SFD1 is CONSUMED and, since the bodies are
+      // identical, the goal and the step id are the only things that can tell the receipts apart.
+      'POST_SFD1_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE',
     ]);
     // No goal skips a gate or forces a verdict. Both notices are content-free and name no secret.
     for (const goal of OPERATOR_RUN_GOALS) {

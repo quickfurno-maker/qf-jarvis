@@ -133,6 +133,26 @@ export const STRICT_FALSE_DIFFERENTIAL_STEP_ID =
   'S0_EXACT_NEUTRAL_CLIENT_GPT_OSS_20B_REASONING_LOW_8192_STRICT_FALSE' as const;
 export type StrictFalseDifferentialStepId = typeof STRICT_FALSE_DIFFERENTIAL_STEP_ID;
 
+/**
+ * The POST-SFD1 strict-false LOCALIZATION probe. Its OWN step id, for the seventh time -- and here
+ * the separation matters more than anywhere above, because this probe's WIRE REQUEST is identical.
+ *
+ * Every earlier pair of step ids distinguished two different requests. This pair distinguishes two
+ * different READINGS of the same request: `S0` was SFD1, whose canonical result was HTTP 413 and
+ * whose unauthorized duplicate reached HTTP 200 with a refusal nobody could localize. `L0` sends
+ * byte-for-byte that request and records WHICH local stage refused.
+ *
+ * A shared identifier would make those two receipts indistinguishable, and since the bodies are
+ * identical the id is the ONLY thing that could tell them apart. SFD1 is CONSUMED and its evidence
+ * is immutable.
+ *
+ * The step id is RECEIPT metadata. It is not a field of the provider request and never reaches the
+ * wire; a spec asserts that from the recorded body.
+ */
+export const STRICT_FALSE_LOCALIZATION_STEP_ID =
+  'L0_EXACT_NEUTRAL_CLIENT_GPT_OSS_20B_REASONING_LOW_8192_STRICT_FALSE_LOCALIZATION' as const;
+export type StrictFalseLocalizationStepId = typeof STRICT_FALSE_LOCALIZATION_STEP_ID;
+
 /** The role a probe plays. Only `CONTROL` can invalidate a run; `EXACT_REPRESENTATIVE` is strongest. */
 export const OPERATIONAL_PROBE_KINDS = [
   'CONTROL',
@@ -448,5 +468,33 @@ export function planStrictFalseDifferentialProbe(input: {
     stepId: STRICT_FALSE_DIFFERENTIAL_STEP_ID,
     probeDimension:
       'FULL_DOCUMENT_WITH_NEUTRAL_CLIENT_MESSAGES_AT_REASONING_LOW_BUDGET_8192_STRICT_FALSE',
+  });
+}
+
+/**
+ * Plan the ONE strict-false LOCALIZATION probe (POST-SFD1).
+ *
+ * Delegates to {@link planStrictFalseDifferentialProbe} rather than to the neutral planner, which is
+ * the difference from every planner above it. SFD2 is not a new request experiment: it must send the
+ * SFD1 candidate request, so it starts from the SFD1 probe and overwrites only the two fields that
+ * are RECEIPT metadata.
+ *
+ * `schema`, `messages`, `probeKind`, `derivedFromPath` and `messageSource` are carried through by
+ * the spread -- the SAME objects SFD1's planner produced, not copies -- so "identical to SFD1's
+ * request" is a consequence of the code rather than a claim a spec has to re-derive.
+ *
+ * Neither overwritten field enters the provider body: the request the adapter builds reads only
+ * `messages` and `schema` from a probe. A spec asserts the recorded wire body carries no step id.
+ */
+export function planStrictFalseLocalizationProbe(input: {
+  readonly projectedSchema: unknown;
+  readonly neutralMessages: readonly CanaryMessage[];
+}): DiagnosticProbe<StrictFalseLocalizationStepId> {
+  const strictFalse = planStrictFalseDifferentialProbe(input);
+  return Object.freeze({
+    ...strictFalse,
+    stepId: STRICT_FALSE_LOCALIZATION_STEP_ID,
+    probeDimension:
+      'FULL_DOCUMENT_WITH_NEUTRAL_CLIENT_MESSAGES_AT_REASONING_LOW_BUDGET_8192_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE',
   });
 }
