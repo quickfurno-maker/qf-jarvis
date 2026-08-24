@@ -762,3 +762,193 @@ describe('OWNER REVIEW: a profile keeps no reference the caller still holds', ()
     expect(input[0]).toBe(original);
   });
 });
+
+describe('RE-REVIEW: ONE legality rule, shared by schema and builder', () => {
+  /**
+   * The parity this pins.
+   *
+   * Revision two extracted `isValueLegalForAttribute`, pointed the schema at it, and left the builder
+   * branching on its own copies of `PRESENCE_SIGNALS.includes` and `LABEL_TEXT.safeParse`. The two
+   * agreed by accident, and any later edit to one side could have ended that agreement silently.
+   *
+   * This spec drives the whole attribute x value matrix through BOTH paths and requires identical
+   * answers, so a future divergence fails here rather than reaching a caller.
+   */
+  const PROBE_VALUES = [
+    'Pune',
+    'Studio Nine Interiors',
+    'OBSERVED',
+    'NOT_OBSERVED',
+    'https://example.com/profile',
+    'www.example.com',
+    'someone@example.com',
+    'Call 9822012345',
+    'Call 98220 12345',
+    '//example.com',
+  ];
+
+  it('answers identically for every attribute and value, through schema and builder', () => {
+    for (const attribute of ENRICHMENT_ATTRIBUTES) {
+      for (const value of PROBE_VALUES) {
+        const viaBuilder = createEnrichmentClaim(claimInput({ attribute, value })).ok;
+        const viaSchema = enrichmentClaimSchema.safeParse({
+          contractVersion: AAROHI_ENRICHMENT_CONTRACT_VERSION,
+          prospectRef: PROSPECT,
+          attribute,
+          valueKind: ENRICHMENT_ATTRIBUTE_VALUE_KIND[attribute],
+          value,
+          source: { kind: 'PUBLIC_DIRECTORY' },
+          observedAt: INSTANT,
+          evidenceQuality: 'UNVERIFIED_SINGLE_SOURCE',
+        }).success;
+        expect(viaSchema, `${attribute} / ${value}`).toBe(viaBuilder);
+      }
+    }
+  });
+
+  it('keeps the two refusal tokens distinct, chosen by kind and not by rule', () => {
+    // `valueKind` selects which refusal NAMES the mistake. It never decides legality.
+    expect(
+      createEnrichmentClaim(
+        claimInput({ attribute: 'WEBSITE_PRESENCE', value: 'https://example.com' }),
+      ),
+    ).toStrictEqual({ ok: false, refusal: 'PRESENCE_VALUE_INVALID' });
+    expect(
+      createEnrichmentClaim(
+        claimInput({ attribute: 'BUSINESS_DESCRIPTION', value: 'Call 9822012345' }),
+      ),
+    ).toStrictEqual({ ok: false, refusal: 'LABEL_VALUE_REFUSED' });
+  });
+});
+
+describe('RE-REVIEW: the canonical profile parser accepts only BUILT form', () => {
+  /**
+   * The gap this closes.
+   *
+   * `enrichmentProfileSchema` proved every part was well-formed, but well-formed is weaker than
+   * BUILT: `createEnrichmentProfile` also collapses identical claims and orders them canonically, so
+   * valid claims in reversed order — or the same claim twice — satisfied the schema while describing
+   * a profile the builder could never produce. `claimCount` in the consistency summary would then
+   * differ between a parsed and a built profile describing the same evidence.
+   */
+  const first = claim({ attribute: 'BUSINESS_DISPLAY_NAME', value: 'Studio Nine Interiors' });
+  const second = claim({ attribute: 'CITY_LABEL', value: 'Pune' });
+
+  function built() {
+    const result = createEnrichmentProfile(PROSPECT, [first, second]);
+    if (!result.ok) throw new Error('profile must build');
+    return result.profile;
+  }
+
+  it('accepts true builder output', () => {
+    const profile = built();
+    expect(parseEnrichmentProfile(profile)).toBeDefined();
+    expect(enrichmentProfileSchema.safeParse(profile).success).toBe(true);
+  });
+
+  it('REFUSES valid claims in non-canonical order', () => {
+    const profile = built();
+    const reversed = { ...profile, claims: [...profile.claims].reverse() };
+    // Well-formed by the schema, and still not something the builder could have produced.
+    expect(enrichmentProfileSchema.safeParse(reversed).success).toBe(true);
+    expect(parseEnrichmentProfile(reversed)).toBeUndefined();
+  });
+
+  it('REFUSES a profile carrying an exact duplicate claim', () => {
+    const profile = built();
+    const duplicated = { ...profile, claims: [...profile.claims, profile.claims[0]] };
+    expect(enrichmentProfileSchema.safeParse(duplicated).success).toBe(true);
+    expect(parseEnrichmentProfile(duplicated)).toBeUndefined();
+  });
+
+  it('does not silently repair — a refused profile comes back as nothing, not as tidied input', () => {
+    const profile = built();
+    const reversed = { ...profile, claims: [...profile.claims].reverse() };
+    expect(parseEnrichmentProfile(reversed)).toBeUndefined();
+    // And the builder still ACCEPTS the same claims in any order, because building is where
+    // canonicalisation belongs.
+    const rebuilt = createEnrichmentProfile(PROSPECT, [second, first]);
+    expect(rebuilt.ok).toBe(true);
+    expect(rebuilt.ok ? rebuilt.profile.claims : undefined).toStrictEqual(profile.claims);
+  });
+
+  it('returns a deeply frozen profile', () => {
+    const parsed = parseEnrichmentProfile(built());
+    if (parsed === undefined) throw new Error('canonical profile must parse');
+    expect(Object.isFrozen(parsed)).toBe(true);
+    expect(Object.isFrozen(parsed.claims)).toBe(true);
+    for (const one of parsed.claims) {
+      expect(Object.isFrozen(one)).toBe(true);
+      expect(Object.isFrozen(one.source)).toBe(true);
+    }
+  });
+
+  it('refuses a non-canonical profile BEFORE the Core gate', () => {
+    const profile = built();
+    for (const forged of [
+      { ...profile, claims: [...profile.claims].reverse() },
+      { ...profile, claims: [...profile.claims, profile.claims[0]] },
+    ]) {
+      const verdict = evaluateEnrichmentReviewReadiness(forged, observation('NOT_REGISTERED'));
+      expect(verdict.reviewable).toBe(false);
+      expect(verdict.reviewable ? undefined : verdict.refusal).toBe('PROFILE_INVALID');
+    }
+  });
+
+  it('keeps evidence counts identical between parsed and built profiles', () => {
+    const profile = built();
+    const parsed = parseEnrichmentProfile(profile);
+    if (parsed === undefined) throw new Error('canonical profile must parse');
+    expect(summariseEnrichmentConsistency(parsed)).toStrictEqual(
+      summariseEnrichmentConsistency(profile),
+    );
+  });
+});
+
+describe('RE-REVIEW: observedAt is a real calendar instant', () => {
+  /**
+   * JavaScript NORMALISES impossible dates rather than refusing them, so a shape check plus a
+   * not-NaN check certified 31 February as an ISO-8601 UTC instant. A claim carrying it would be
+   * stamped with an observation date nobody made.
+   */
+  it('refuses days that do not exist', () => {
+    for (const observedAt of [
+      '2026-02-31T00:00:00Z',
+      '2026-04-31T00:00:00Z',
+      '2026-02-29T00:00:00Z',
+      '2026-00-10T00:00:00Z',
+      '2026-13-01T00:00:00Z',
+      '2026-01-32T00:00:00Z',
+      '2026-01-10T24:00:00Z',
+      '2026-01-10T00:60:00Z',
+      '2026-01-10T00:00:60Z',
+    ]) {
+      expect(createEnrichmentClaim(claimInput({ observedAt })).ok, observedAt).toBe(false);
+    }
+  });
+
+  it('accepts real days, including a genuine leap day', () => {
+    for (const observedAt of [
+      '2028-02-29T00:00:00Z',
+      '2026-02-28T23:59:59Z',
+      '2026-08-24T00:00:00Z',
+      '2026-08-24T00:00:00.000Z',
+      '2026-12-31T23:59:59.999Z',
+    ]) {
+      expect(createEnrichmentClaim(claimInput({ observedAt })).ok, observedAt).toBe(true);
+    }
+  });
+
+  it('still refuses non-UTC, offset and shape-invalid instants', () => {
+    for (const observedAt of [
+      '2026-08-24',
+      '2026-08-24T00:00:00',
+      '2026-08-24T00:00:00+05:30',
+      '2026-08-24T00:00:00.00Z',
+      'not-an-instant',
+      1,
+    ]) {
+      expect(createEnrichmentClaim(claimInput({ observedAt })).ok, String(observedAt)).toBe(false);
+    }
+  });
+});

@@ -118,10 +118,35 @@ by construction rather than by convention.
 **The exported schema now describes a BUILT value.** The first revision exported an input schema that
 accepted any bounded string, so it certified a social URL under `PUBLIC_SOCIAL_PRESENCE` and a phone
 number under `BUSINESS_DESCRIPTION` that the builder refused a moment later. `enrichmentClaimSchema`
-and `enrichmentProfileSchema` are now the single canonical public schemas for built values, the
-attribute/value rule lives in one function that both the schema and the builder call, and the input
-schema is private. A contract that answers differently depending on which half a reader consults is
-not a contract.
+and `enrichmentProfileSchema` are now the single canonical public schemas for built values, and the
+input schema is private. A contract that answers differently depending on which half a reader
+consults is not a contract.
+
+**One legality rule, and it took two attempts to actually have one.** The second revision extracted
+`isValueLegalForAttribute`, pointed the schema at it — and left the builder branching on its own
+copies of the presence-signal check and the label screen. The ADR and the PR at that point both
+claimed a single shared rule that did not exist; the two sides agreed by accident, and any later edit
+to either could have ended that agreement silently. The builder now calls the same function, and
+`valueKind` selects only which refusal names the mistake. A spec drives the whole attribute x value
+matrix through both paths and requires identical answers, so a future divergence fails a test rather
+than drifting.
+
+**The profile parser verifies canonical form; it does not impose it.** `enrichmentProfileSchema`
+proves every part is well-formed, but well-formed is weaker than BUILT:
+`createEnrichmentProfile` also collapses identical claims and orders them canonically, so a forged
+object carrying valid claims reversed — or the same claim twice — satisfied the schema while
+describing a profile the builder could never have produced, and `claimCount` in the consistency
+summary would then differ between a parsed and a built profile describing the same evidence. One
+`canonicaliseClaims` function is now the single definition of order and multiplicity: the builder
+uses it to produce, and `parseEnrichmentProfile` uses it to CHECK. Silently re-sorting instead would
+accept tampered input and hand back something tidy, which is the opposite of what a canonical-form
+check is for.
+
+**`observedAt` is a real calendar instant.** A shape check plus a not-NaN check is not enough, because
+JavaScript normalises impossible dates rather than refusing them: `2026-02-31T00:00:00Z` silently
+becomes 3 March and parses cleanly, so the contract was certifying a day nobody observed. The
+components are now checked against a UTC round trip, which also settles leap days without a rule
+written by hand. No clock is read.
 
 **Review readiness parses a canonical profile before consulting Core.** The first revision asked only
 whether it had an object with a string `prospectRef` and an array called `claims` — which a forged

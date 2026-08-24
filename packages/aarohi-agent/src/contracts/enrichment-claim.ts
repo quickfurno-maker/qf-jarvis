@@ -203,11 +203,51 @@ export const enrichmentSourceSchema = z
   })
   .strict();
 
+const UTC_INSTANT_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{3}))?Z$/u;
+
+/**
+ * Whether a string is a REAL canonical UTC instant.
+ *
+ * A shape check plus `!Number.isNaN(new Date(x).getTime())` is not enough, and the gap is quiet:
+ * JavaScript NORMALISES impossible calendar dates rather than refusing them, so `2026-02-31T00:00:00Z`
+ * silently becomes 3 March and parses cleanly. A contract that calls itself an ISO-8601 UTC instant
+ * would then be certifying a day that does not exist, and the claim carrying it would be stamped with
+ * an observation date nobody made.
+ *
+ * So the components are read out and checked against a UTC round trip: if the calendar had to move the
+ * date to make it real, the year/month/day that come back differ from the ones supplied, and it is
+ * refused. Leap days are handled by that round trip rather than by a rule written here — 2028-02-29
+ * survives it and 2026-02-29 does not.
+ *
+ * `Date.UTC` performs arithmetic on given components; no clock is read.
+ */
+function isCanonicalUtcInstant(value: string): boolean {
+  const parts = UTC_INSTANT_PATTERN.exec(value);
+  if (parts === null) {
+    return false;
+  }
+  const year = Number(parts[1] ?? '');
+  const month = Number(parts[2] ?? '');
+  const day = Number(parts[3] ?? '');
+  const hour = Number(parts[4] ?? '');
+  const minute = Number(parts[5] ?? '');
+  const second = Number(parts[6] ?? '');
+  if (month < 1 || month > 12 || day < 1 || day > 31) {
+    return false;
+  }
+  if (hour > 23 || minute > 59 || second > 59) {
+    return false;
+  }
+  const roundTrip = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+  return (
+    roundTrip.getUTCFullYear() === year &&
+    roundTrip.getUTCMonth() === month - 1 &&
+    roundTrip.getUTCDate() === day
+  );
+}
+
 /** An ISO-8601 UTC instant, supplied by the caller. No clock is read here, ever. */
-const OBSERVED_AT = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/u)
-  .refine((one) => !Number.isNaN(new Date(one).getTime()));
+const OBSERVED_AT = z.string().refine(isCanonicalUtcInstant);
 
 /**
  * ONE observed claim about ONE prospect.
@@ -230,12 +270,16 @@ export interface EnrichmentClaim {
 /**
  * Whether a value is legal FOR ITS ATTRIBUTE. The one rule, in one place.
  *
- * Both the builder and the canonical schema call this, so they cannot disagree about what a claim
- * is. The first revision of this file expressed the rule only inside the builder and left the
- * exported schema accepting any bounded string -- which meant the public contract certified a social
- * URL under `PUBLIC_SOCIAL_PRESENCE` and a phone number under `BUSINESS_DESCRIPTION` that the
- * builder refused seconds later. A contract that says two things depending on which half you read
- * is not a contract.
+ * `enrichmentClaimSchema` and `createEnrichmentClaim` both CALL this and neither re-implements it, so
+ * a change to the rule reaches both or neither. A spec drives the whole attribute x value matrix
+ * through both paths and requires identical answers, so the day one of them stops calling this, the
+ * parity fails rather than drifting quietly.
+ *
+ * The history is worth keeping: revision one expressed the rule only inside the builder and left the
+ * exported schema accepting any bounded string, so the public contract certified a social URL under
+ * `PUBLIC_SOCIAL_PRESENCE` and a phone number under `BUSINESS_DESCRIPTION` that the builder refused
+ * seconds later. Revision two extracted this helper, pointed the schema at it -- and left the builder
+ * branching on its own copies. Same defect class, one layer down.
  */
 function isValueLegalForAttribute(attribute: EnrichmentAttribute, value: string): boolean {
   return ENRICHMENT_ATTRIBUTE_VALUE_KIND[attribute] === 'PRESENCE_SIGNAL'
@@ -356,15 +400,24 @@ export function createEnrichmentClaim(value: unknown): EnrichmentClaimResult {
   }
 
   const attribute = parsed.data.attribute;
-  const valueKind = ENRICHMENT_ATTRIBUTE_VALUE_KIND[attribute];
 
-  if (valueKind === 'PRESENCE_SIGNAL') {
-    // A presence attribute records THAT something was observed. It has no room for where.
-    if (!(PRESENCE_SIGNALS as readonly string[]).includes(parsed.data.value)) {
-      return Object.freeze({ ok: false as const, refusal: 'PRESENCE_VALUE_INVALID' as const });
-    }
-  } else if (!LABEL_TEXT.safeParse(parsed.data.value).success) {
-    return Object.freeze({ ok: false as const, refusal: 'LABEL_VALUE_REFUSED' as const });
+  // ONE rule decides legality, and it is the SAME call `enrichmentClaimSchema` makes.
+  //
+  // The previous revision claimed this and did not do it: the helper existed and the schema used it,
+  // while the builder still branched on `valueKind` and re-called `PRESENCE_SIGNALS.includes` and
+  // `LABEL_TEXT.safeParse` itself. Two copies of a rule are two rules, and the parity they had was
+  // an accident that the next edit to either side could end.
+  //
+  // `valueKind` now selects only which REFUSAL names the mistake — a presence attribute handed a
+  // destination, or a label carrying a contact shape. It never decides legality.
+  if (!isValueLegalForAttribute(attribute, parsed.data.value)) {
+    return Object.freeze({
+      ok: false as const,
+      refusal:
+        ENRICHMENT_ATTRIBUTE_VALUE_KIND[attribute] === 'PRESENCE_SIGNAL'
+          ? ('PRESENCE_VALUE_INVALID' as const)
+          : ('LABEL_VALUE_REFUSED' as const),
+    });
   }
 
   return Object.freeze({ ok: true as const, claim: freezeClaim(parsed.data) });

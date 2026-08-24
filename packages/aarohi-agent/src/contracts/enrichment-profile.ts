@@ -112,6 +112,30 @@ function compareClaims(a: EnrichmentClaim, b: EnrichmentClaim): number {
 }
 
 /**
+ * The canonical claim sequence for a set of claims: identical claims collapsed, then sorted.
+ *
+ * The ONE definition of "canonical order and multiplicity". `createEnrichmentProfile` uses it to
+ * PRODUCE a profile and `parseEnrichmentProfile` uses it to VERIFY one, so the two cannot disagree
+ * about what a built profile looks like — which is exactly the disagreement the second review found
+ * between them.
+ */
+function canonicaliseClaims(claims: readonly EnrichmentClaim[]): EnrichmentClaim[] {
+  const seen = new Set<string>();
+  const unique: EnrichmentClaim[] = [];
+  for (const claim of claims) {
+    const identity = enrichmentClaimIdentity(claim);
+    if (seen.has(identity)) {
+      continue;
+    }
+    seen.add(identity);
+    unique.push(claim);
+  }
+  // Sorted on a copy; no caller array is ever reordered.
+  unique.sort(compareClaims);
+  return unique;
+}
+
+/**
  * Assemble a frozen profile, or refuse.
  *
  * A claim for another prospect is a refusal rather than a filtered-out row: dropping it would let a
@@ -149,19 +173,9 @@ export function createEnrichmentProfile(
     validated.push(claim);
   }
 
-  // Collapse only claims identical in EVERY field. Same value from a different source survives.
-  const seen = new Set<string>();
-  const unique: EnrichmentClaim[] = [];
-  for (const claim of validated) {
-    const identity = enrichmentClaimIdentity(claim);
-    if (seen.has(identity)) {
-      continue;
-    }
-    seen.add(identity);
-    unique.push(claim);
-  }
-  // Sorted on a copy; the caller's array is never reordered.
-  unique.sort(compareClaims);
+  // Collapse only claims identical in EVERY field, then order canonically. Same value from a
+  // different source survives, because that is corroboration rather than a duplicate submission.
+  const unique = canonicaliseClaims(validated);
 
   return Object.freeze({
     ok: true as const,
@@ -196,9 +210,22 @@ export const enrichmentProfileSchema = z
 /**
  * Re-parse an ALREADY-BUILT profile and return a fresh frozen copy, or `undefined`.
  *
+ * ### It verifies canonical form; it does NOT impose it
+ *
+ * `enrichmentProfileSchema` proves every part is well-formed, but well-formed is weaker than BUILT.
+ * `createEnrichmentProfile` also collapses identical claims and orders them canonically, so a forged
+ * object carrying valid claims in reversed order — or the same claim twice — would satisfy the schema
+ * while being a profile the builder could never have produced. The second review found exactly that
+ * gap between the two, and it matters downstream: `claimCount` in the consistency summary would
+ * differ between a parsed profile and a built one describing the same evidence.
+ *
+ * So the sequence is CHECKED against {@link canonicaliseClaims} rather than passed through it.
+ * Silently re-sorting and de-duplicating would make the parser accept tampered input and hand back
+ * something tidy, which is the opposite of what a canonical-form check is for: a caller who reordered
+ * a profile learns that it was rejected, not that it was quietly repaired.
+ *
  * Claims are rebuilt through {@link parseEnrichmentClaim}, so the returned profile shares no object
- * identity with the input at any level. Ordering is left exactly as parsed: a canonical profile is
- * already canonically ordered, and re-sorting here would hide a caller who had reordered one.
+ * identity with the input at any level.
  */
 export function parseEnrichmentProfile(value: unknown): EnrichmentProfile | undefined {
   const parsed = enrichmentProfileSchema.safeParse(value);
@@ -213,6 +240,23 @@ export function parseEnrichmentProfile(value: unknown): EnrichmentProfile | unde
     }
     claims.push(claim);
   }
+
+  // Exactly the sequence the builder would have produced, or nothing. A shorter canonical form means
+  // duplicates were supplied; a different order at any position means the sequence was reordered.
+  const canonical = canonicaliseClaims(claims);
+  if (canonical.length !== claims.length) {
+    return undefined;
+  }
+  for (const [index, claim] of claims.entries()) {
+    const expected = canonical[index];
+    if (
+      expected === undefined ||
+      enrichmentClaimIdentity(expected) !== enrichmentClaimIdentity(claim)
+    ) {
+      return undefined;
+    }
+  }
+
   return Object.freeze({
     contractVersion: AAROHI_ENRICHMENT_CONTRACT_VERSION,
     prospectRef: parsed.data.prospectRef,
