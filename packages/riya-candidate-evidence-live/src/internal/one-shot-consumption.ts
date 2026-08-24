@@ -100,6 +100,17 @@ export const STATICALLY_CONSUMED_RUN_GOALS: Readonly<Record<string, string>> = O
   // OWNER-LOCKED. `SFD1_CONSUMED=YES` / `SFD1_RERUN=NO`, completed exit 33. This is the goal whose
   // accidental second execution is the reason this module exists.
   POST_RBD1_REASONING_LOW_OUTPUT_BUDGET_8192_STRICT_FALSE_DIFFERENTIAL: 'SFD1',
+  // OWNER-LOCKED. `SFD2_CONSUMED=YES` / `SFD2_RERUN=NO`, completed exit 37.
+  //
+  // Canonical classification `STRUCTURED_REPLY_PROVIDER_REQUEST_REJECTED`, canonical HTTP 413. The
+  // provider judged the REQUEST and refused it, so `providerCompleted=false` and NEITHER local
+  // validation stage ran -- the 413 localized nothing, and nothing here may be read as a wire-schema
+  // or production-projector verdict.
+  //
+  // It is tombstoned anyway, and that is the point: the authorization was for one launch, not for
+  // one finding. Re-running it would spend a second authorization to ask a question the provider has
+  // already declined to accept.
+  POST_SFD1_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE: 'SFD2',
 });
 
 /**
@@ -122,12 +133,7 @@ export const STATICALLY_CONSUMED_RUN_GOALS: Readonly<Record<string, string>> = O
  * Everything here is a BOUNDED ONE-SHOT DIAGNOSTIC: a single governed live question, whose answer is
  * recorded and whose re-execution would spend an authorization to learn nothing.
  *
- * ### Eligible is a SUPERSET of tombstoned, and the gap is where the next run lives
- *
- * The first revision of this list happened to equal the tombstone keys exactly, and it was merged
- * with a note saying so was a snapshot rather than a law. It stopped being true the moment a new
- * bounded diagnostic was wired: `POST_SFD1_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE` is eligible
- * because it is a single governed question, and is NOT tombstoned because nobody has run it.
+ * ### Eligible is a SUPERSET of tombstoned, and the gap is where a pending run lives
  *
  * The durable invariants are these, and a spec asserts each:
  *
@@ -135,11 +141,18 @@ export const STATICALLY_CONSUMED_RUN_GOALS: Readonly<Record<string, string>> = O
  * - `FULL_EVIDENCE` and `SAFETY_REPLICATION` are repeatable and appear in neither list;
  * - every member of the closed goal vocabulary is one or the other, so nothing is unaccounted for.
  *
- * The exact CONTENT of the eligible-minus-tombstoned difference is still a snapshot of this head,
- * not a law: it is empty between a diagnostic being wired and its run being recorded, and it holds
- * one entry now. A future PR that wires a second pending diagnostic, or that tombstones this one
- * after it runs, edits that assertion -- which is exactly the review moment where "has this been
- * consumed?" should be asked.
+ * The CONTENT of the eligible-minus-tombstoned difference is a SNAPSHOT of whichever head you are
+ * reading, never a law. It has held three values already:
+ *
+ * - EMPTY, when every eligible goal had been consumed and none was pending;
+ * - ONE ENTRY, between `POST_SFD1_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE` being wired and SFD2
+ *   running it -- a state that existed on purpose, so a wired-but-unrun diagnostic could be launched;
+ * - EMPTY again, at THIS head, because SFD2 ran and the goal above is now tombstoned.
+ *
+ * So an empty difference does not mean the mechanism is unused, and a non-empty one is not a defect.
+ * The next PR that wires a bounded one-shot diagnostic makes it non-empty again, and the PR that
+ * records that run's consumption empties it -- which is exactly the review moment where "has this
+ * been consumed?" gets asked out loud.
  */
 export const ONE_SHOT_DIAGNOSTIC_RUN_GOALS: readonly string[] = Object.freeze([
   'REQUEST_CONTRACT_DIAGNOSTIC',
@@ -153,7 +166,8 @@ export const ONE_SHOT_DIAGNOSTIC_RUN_GOALS: readonly string[] = Object.freeze([
   'POST_RSP20B2_REASONING_EFFORT_LOW_DIFFERENTIAL',
   'POST_RLD1_REASONING_LOW_OUTPUT_BUDGET_8192_DIFFERENTIAL',
   'POST_RBD1_REASONING_LOW_OUTPUT_BUDGET_8192_STRICT_FALSE_DIFFERENTIAL',
-  // POST-SFD1. The FIRST member that is eligible and NOT tombstoned -- it has not run.
+  // POST-SFD1. Eligible AND tombstoned: SFD2 ran it once, and the tombstone above now refuses it on
+  // every workstation -- including a fresh one, where no local marker exists to consult.
   'POST_SFD1_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE',
 ]);
 
