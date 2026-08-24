@@ -182,8 +182,12 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
   it('exports exactly the reviewed surface', async () => {
     const barrel = (await import('../index.js')) as unknown as Record<string, unknown>;
     // An exact set match, so a symbol cannot join the public surface without a decision.
+    // AVG-2 (ADR-0111) adds the enrichment claim, profile and review-boundary surface. Every
+    // addition is a contract, a closed vocabulary, a bound or a pure function -- there is no new
+    // verb, and nothing here sends, authorizes, scores or mutates anything.
     expect(Object.keys(barrel).sort()).toStrictEqual([
       'AAROHI_AGENT_ID',
+      'AAROHI_ENRICHMENT_CONTRACT_VERSION',
       'AAROHI_PROSPECT_CONTRACT_VERSION',
       'ACQUISITION_CASE_STATES',
       'ACQUISITION_CASE_TRANSITIONS',
@@ -195,9 +199,22 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'CORE_STATUS_ROLE',
       'CORE_STATUS_ROLES',
       'ELIGIBLE_CORE_STATUSES',
+      'ENRICHMENT_ATTRIBUTES',
+      'ENRICHMENT_ATTRIBUTE_VALUE_KIND',
+      'ENRICHMENT_CLAIM_REFUSALS',
+      'ENRICHMENT_CONSISTENCY_VERDICTS',
+      'ENRICHMENT_EVIDENCE_QUALITIES',
+      'ENRICHMENT_PROFILE_REFUSALS',
+      'ENRICHMENT_REVIEW_OUTCOME',
+      'ENRICHMENT_REVIEW_REFUSALS',
+      'ENRICHMENT_SOURCE_KINDS',
+      'ENRICHMENT_VALUE_KINDS',
       'HANDOFF_REFUSAL_REASONS',
       'HANDOFF_REJECTED_AUTHORITIES',
       'HANDOFF_TRUSTED_AUTHORITY',
+      'MAX_ENRICHMENT_LABEL_LENGTH',
+      'MAX_ENRICHMENT_PROFILE_CLAIMS',
+      'PRESENCE_SIGNALS',
       'PROSPECT_DISCOVERY_SOURCES',
       'TERMINAL_ACQUISITION_CASE_STATES',
       'acquisitionCaseSchema',
@@ -205,11 +222,18 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'canTransition',
       'completeCoreActiveHandoff',
       'coreEligibilityObservationSchema',
+      'createEnrichmentClaim',
+      'createEnrichmentProfile',
       'createProspectIdentity',
+      'enrichmentClaimIdentity',
+      'enrichmentClaimSchema',
+      'enrichmentSourceSchema',
       'evaluateAcquisitionEligibility',
+      'evaluateEnrichmentReviewReadiness',
       'isTerminalAcquisitionCaseState',
       'openAcquisitionCase',
       'prospectIdentitySchema',
+      'summariseEnrichmentConsistency',
       'transitionAcquisitionCase',
     ]);
   });
