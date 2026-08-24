@@ -17,19 +17,24 @@ import {
   ELIGIBLE_CORE_STATUSES,
 } from '../contracts/existing-vendor-gate.js';
 import {
+  AAROHI_ENRICHMENT_CONTRACT_VERSION,
   createEnrichmentClaim,
   ENRICHMENT_ATTRIBUTE_VALUE_KIND,
   ENRICHMENT_ATTRIBUTES,
   ENRICHMENT_EVIDENCE_QUALITIES,
   ENRICHMENT_SOURCE_KINDS,
   enrichmentClaimIdentity,
+  enrichmentClaimSchema,
   MAX_ENRICHMENT_LABEL_LENGTH,
+  parseEnrichmentClaim,
   PRESENCE_SIGNALS,
 } from '../contracts/enrichment-claim.js';
 import type { EnrichmentClaim } from '../contracts/enrichment-claim.js';
 import {
   createEnrichmentProfile,
+  enrichmentProfileSchema,
   MAX_ENRICHMENT_PROFILE_CLAIMS,
+  parseEnrichmentProfile,
   summariseEnrichmentConsistency,
 } from '../contracts/enrichment-profile.js';
 import { evaluateEnrichmentReviewReadiness } from '../contracts/enrichment-review.js';
@@ -500,5 +505,260 @@ describe('REVIEWABLE is not permission, and the vocabulary says so', () => {
     expect(JSON.stringify(verdict)).toContain('ENRICHMENT_REVIEWABLE');
     expect(JSON.stringify(verdict)).not.toContain('AUTHORIZED');
     expect(JSON.stringify(verdict)).not.toContain('APPROVED');
+  });
+});
+
+describe('OWNER REVIEW: the public schema certifies exactly what the builder builds', () => {
+  /**
+   * The disagreement this closes.
+   *
+   * The exported claim schema accepted any bounded string as a value, so it certified a social URL
+   * under `PUBLIC_SOCIAL_PRESENCE` and a phone number under `BUSINESS_DESCRIPTION` that the builder
+   * refused a moment later. A contract that answers differently depending on which half you read is
+   * not a contract.
+   */
+  function builtClaim(over: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      contractVersion: AAROHI_ENRICHMENT_CONTRACT_VERSION,
+      prospectRef: PROSPECT,
+      attribute: 'CITY_LABEL',
+      valueKind: 'LABEL_TEXT',
+      value: 'Pune',
+      source: { kind: 'PUBLIC_DIRECTORY' },
+      observedAt: INSTANT,
+      evidenceQuality: 'UNVERIFIED_SINGLE_SOURCE',
+      ...over,
+    };
+  }
+
+  it('refuses a social URL under a presence attribute, in schema AND builder', () => {
+    const forged = builtClaim({
+      attribute: 'PUBLIC_SOCIAL_PRESENCE',
+      valueKind: 'PRESENCE_SIGNAL',
+      value: 'https://example.com/profile',
+    });
+    expect(enrichmentClaimSchema.safeParse(forged).success).toBe(false);
+    expect(parseEnrichmentClaim(forged)).toBeUndefined();
+    expect(
+      createEnrichmentClaim(
+        claimInput({ attribute: 'PUBLIC_SOCIAL_PRESENCE', value: 'https://example.com/profile' }),
+      ).ok,
+    ).toBe(false);
+  });
+
+  it('refuses a dialable run under a description, in schema AND builder', () => {
+    const forged = builtClaim({ attribute: 'BUSINESS_DESCRIPTION', value: 'Call 9822012345' });
+    expect(enrichmentClaimSchema.safeParse(forged).success).toBe(false);
+    expect(parseEnrichmentClaim(forged)).toBeUndefined();
+    expect(
+      createEnrichmentClaim(
+        claimInput({ attribute: 'BUSINESS_DESCRIPTION', value: 'Call 9822012345' }),
+      ).ok,
+    ).toBe(false);
+  });
+
+  it('accepts the legitimate cases in both', () => {
+    expect(enrichmentClaimSchema.safeParse(builtClaim()).success).toBe(true);
+    expect(createEnrichmentClaim(claimInput({ attribute: 'CITY_LABEL', value: 'Pune' })).ok).toBe(
+      true,
+    );
+    const presence = builtClaim({
+      attribute: 'WEBSITE_PRESENCE',
+      valueKind: 'PRESENCE_SIGNAL',
+      value: 'OBSERVED',
+    });
+    expect(enrichmentClaimSchema.safeParse(presence).success).toBe(true);
+    expect(
+      createEnrichmentClaim(claimInput({ attribute: 'WEBSITE_PRESENCE', value: 'OBSERVED' })).ok,
+    ).toBe(true);
+  });
+
+  it('certifies canonical builder output, and refuses a forged valueKind or version', () => {
+    expect(enrichmentClaimSchema.safeParse(claim()).success).toBe(true);
+    // A forged `valueKind` would otherwise unlock the wrong value rules for its attribute.
+    expect(
+      enrichmentClaimSchema.safeParse(
+        builtClaim({ attribute: 'WEBSITE_PRESENCE', valueKind: 'LABEL_TEXT', value: 'OBSERVED' }),
+      ).success,
+    ).toBe(false);
+    for (const contractVersion of [undefined, 0, 2, '1']) {
+      expect(
+        enrichmentClaimSchema.safeParse(builtClaim({ contractVersion })).success,
+        String(contractVersion),
+      ).toBe(false);
+    }
+  });
+});
+
+describe('OWNER REVIEW: a forged profile cannot reach REVIEWABLE', () => {
+  /**
+   * The bypass this closes.
+   *
+   * The review gate used to ask only whether it had an object with a string `prospectRef` and an
+   * array called `claims`. Anything satisfying that reached the Core gate and came back REVIEWABLE
+   * whenever Core said NOT_REGISTERED — regardless of what the claims actually were.
+   */
+  const eligible = observation('NOT_REGISTERED');
+
+  it('refuses the shallow object that used to pass', () => {
+    const verdict = evaluateEnrichmentReviewReadiness(
+      { prospectRef: PROSPECT, claims: [] },
+      eligible,
+    );
+    expect(verdict.reviewable).toBe(false);
+    expect(verdict.reviewable ? undefined : verdict.refusal).toBe('PROFILE_INVALID');
+  });
+
+  it('refuses a forged profile carrying a contact-bearing label', () => {
+    const verdict = evaluateEnrichmentReviewReadiness(
+      {
+        contractVersion: AAROHI_ENRICHMENT_CONTRACT_VERSION,
+        prospectRef: PROSPECT,
+        claims: [
+          {
+            contractVersion: AAROHI_ENRICHMENT_CONTRACT_VERSION,
+            prospectRef: PROSPECT,
+            attribute: 'BUSINESS_DESCRIPTION',
+            valueKind: 'LABEL_TEXT',
+            value: 'Call 9822012345',
+            source: { kind: 'PUBLIC_DIRECTORY' },
+            observedAt: INSTANT,
+            evidenceQuality: 'UNVERIFIED_SINGLE_SOURCE',
+          },
+        ],
+      },
+      eligible,
+    );
+    expect(verdict.reviewable).toBe(false);
+    expect(verdict.reviewable ? undefined : verdict.refusal).toBe('PROFILE_INVALID');
+  });
+
+  it('refuses a forged presence attribute carrying a destination', () => {
+    const verdict = evaluateEnrichmentReviewReadiness(
+      {
+        contractVersion: AAROHI_ENRICHMENT_CONTRACT_VERSION,
+        prospectRef: PROSPECT,
+        claims: [
+          {
+            contractVersion: AAROHI_ENRICHMENT_CONTRACT_VERSION,
+            prospectRef: PROSPECT,
+            attribute: 'PUBLIC_SOCIAL_PRESENCE',
+            valueKind: 'PRESENCE_SIGNAL',
+            value: 'https://example.com/profile',
+            source: { kind: 'PUBLIC_SOCIAL_PROFILE' },
+            observedAt: INSTANT,
+            evidenceQuality: 'UNVERIFIED_SINGLE_SOURCE',
+          },
+        ],
+      },
+      eligible,
+    );
+    expect(verdict.reviewable).toBe(false);
+    expect(verdict.reviewable ? undefined : verdict.refusal).toBe('PROFILE_INVALID');
+  });
+
+  it('refuses a cross-prospect claim before Core can succeed', () => {
+    const foreign = claim({ prospectRef: OTHER_PROSPECT });
+    const verdict = evaluateEnrichmentReviewReadiness(
+      {
+        contractVersion: AAROHI_ENRICHMENT_CONTRACT_VERSION,
+        prospectRef: PROSPECT,
+        claims: [foreign],
+      },
+      eligible,
+    );
+    expect(verdict.reviewable).toBe(false);
+    expect(verdict.reviewable ? undefined : verdict.refusal).toBe('PROFILE_INVALID');
+  });
+
+  it('refuses a missing or unsupported profile contract version', () => {
+    const built = createEnrichmentProfile(PROSPECT, [claim()]);
+    if (!built.ok) throw new Error('profile must build');
+    for (const contractVersion of [undefined, 0, 2, '1']) {
+      const forged = { ...built.profile, contractVersion };
+      expect(parseEnrichmentProfile(forged), String(contractVersion)).toBeUndefined();
+      const verdict = evaluateEnrichmentReviewReadiness(forged, eligible);
+      expect(verdict.reviewable, String(contractVersion)).toBe(false);
+    }
+  });
+
+  it('still passes a CANONICAL profile with an eligible Core status', () => {
+    const built = createEnrichmentProfile(PROSPECT, [claim()]);
+    if (!built.ok) throw new Error('profile must build');
+    expect(enrichmentProfileSchema.safeParse(built.profile).success).toBe(true);
+    const verdict = evaluateEnrichmentReviewReadiness(built.profile, eligible);
+    expect(verdict.reviewable).toBe(true);
+    expect(verdict.reviewable ? verdict.outcome : undefined).toBe('ENRICHMENT_REVIEWABLE');
+  });
+});
+
+describe('OWNER REVIEW: a profile keeps no reference the caller still holds', () => {
+  /** A canonical claim as a MUTABLE plain object — what actually arrives at runtime. */
+  function mutableClaim(): Record<string, unknown> {
+    return {
+      contractVersion: AAROHI_ENRICHMENT_CONTRACT_VERSION,
+      prospectRef: PROSPECT,
+      attribute: 'CITY_LABEL',
+      valueKind: 'LABEL_TEXT',
+      value: 'Pune',
+      source: { kind: 'PUBLIC_DIRECTORY', sourceRef: 'dir.1' },
+      observedAt: INSTANT,
+      evidenceQuality: 'UNVERIFIED_SINGLE_SOURCE',
+    };
+  }
+
+  it('runtime-refuses a plain object that only LOOKS like a claim', () => {
+    const notAClaim = { ...mutableClaim(), value: 'Call 9822012345' };
+    const result = createEnrichmentProfile(PROSPECT, [notAClaim]);
+    expect(result.ok).toBe(false);
+    expect(result.ok ? undefined : result.refusal).toBe('CLAIM_INVALID');
+  });
+
+  it('freezes the returned claims AND their sources', () => {
+    const result = createEnrichmentProfile(PROSPECT, [mutableClaim()]);
+    if (!result.ok) throw new Error('profile must build');
+    const [only] = result.profile.claims;
+    if (only === undefined) throw new Error('one claim expected');
+    expect(Object.isFrozen(only)).toBe(true);
+    expect(Object.isFrozen(only.source)).toBe(true);
+  });
+
+  it('is unaffected when the caller mutates the original claim or its source afterwards', () => {
+    const original = mutableClaim();
+    const result = createEnrichmentProfile(PROSPECT, [original]);
+    if (!result.ok) throw new Error('profile must build');
+    const before = JSON.stringify(result.profile);
+
+    original['value'] = 'Mumbai';
+    (original['source'] as Record<string, unknown>)['kind'] = 'MANUAL_REVIEW';
+    (original['source'] as Record<string, unknown>)['sourceRef'] = 'tampered';
+
+    expect(JSON.stringify(result.profile)).toBe(before);
+    expect(result.profile.claims[0]?.value).toBe('Pune');
+    expect(result.profile.claims[0]?.source.kind).toBe('PUBLIC_DIRECTORY');
+  });
+
+  it('is unaffected when the caller mutates the original array afterwards', () => {
+    const input: unknown[] = [mutableClaim()];
+    const result = createEnrichmentProfile(PROSPECT, input);
+    if (!result.ok) throw new Error('profile must build');
+    const before = JSON.stringify(result.profile);
+
+    input.push(mutableClaim());
+    input.length = 0;
+
+    expect(JSON.stringify(result.profile)).toBe(before);
+    expect(result.profile.claims).toHaveLength(1);
+  });
+
+  it('does not mutate what it was handed', () => {
+    const original = mutableClaim();
+    const snapshot = JSON.stringify(original);
+    const input = [original];
+    const result = createEnrichmentProfile(PROSPECT, input);
+    expect(result.ok).toBe(true);
+    expect(JSON.stringify(original)).toBe(snapshot);
+    expect(input).toHaveLength(1);
+    expect(input[0]).toBe(original);
   });
 });

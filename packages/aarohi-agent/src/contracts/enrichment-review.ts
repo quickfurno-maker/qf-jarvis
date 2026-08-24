@@ -43,7 +43,7 @@
  */
 import { evaluateAcquisitionEligibility } from './existing-vendor-gate.js';
 import type { AcquisitionRefusalReason, CorePartyStatus } from './existing-vendor-gate.js';
-import type { EnrichmentProfile } from './enrichment-profile.js';
+import { parseEnrichmentProfile } from './enrichment-profile.js';
 
 /** The single success token. Named so it cannot be read as permission to contact anyone. */
 export const ENRICHMENT_REVIEW_OUTCOME = 'ENRICHMENT_REVIEWABLE' as const;
@@ -76,14 +76,6 @@ export type EnrichmentReviewVerdict =
       readonly gateReason?: AcquisitionRefusalReason | undefined;
     };
 
-function isUsableProfile(value: unknown): value is EnrichmentProfile {
-  if (typeof value !== 'object' || value === null) {
-    return false;
-  }
-  const candidate = value as { prospectRef?: unknown; claims?: unknown };
-  return typeof candidate.prospectRef === 'string' && Array.isArray(candidate.claims);
-}
-
 /**
  * Decide whether an enrichment profile may move to human review.
  *
@@ -99,12 +91,23 @@ export function evaluateEnrichmentReviewReadiness(
   profile: unknown,
   coreObservation: unknown,
 ): EnrichmentReviewVerdict {
-  if (!isUsableProfile(profile)) {
+  // CANONICAL profile first, and strictly before Core is consulted at all.
+  //
+  // The first revision asked only whether this was an object with a string `prospectRef` and an
+  // array called `claims`. That is not proof of an AVG-2 profile: a forged object carrying
+  // contact-bearing labels, a destination under a presence attribute, cross-prospect claims or no
+  // contract version at all satisfied it, reached the Core gate, and came back REVIEWABLE whenever
+  // Core happened to say NOT_REGISTERED.
+  //
+  // Consulting Core about malformed data would also misrepresent what the gate answered: it would
+  // have decided about a prospect reference that no valid profile stood behind.
+  const parsed = parseEnrichmentProfile(profile);
+  if (parsed === undefined) {
     return Object.freeze({ reviewable: false as const, refusal: 'PROFILE_INVALID' as const });
   }
 
   // The AVG-1 gate, called rather than copied. It owns the status map and the mismatch check.
-  const eligibility = evaluateAcquisitionEligibility(profile.prospectRef, coreObservation);
+  const eligibility = evaluateAcquisitionEligibility(parsed.prospectRef, coreObservation);
   if (!eligibility.eligible) {
     return Object.freeze({
       reviewable: false as const,

@@ -40,6 +40,8 @@ import {
   AAROHI_ENRICHMENT_CONTRACT_VERSION,
   ENRICHMENT_ATTRIBUTES,
   enrichmentClaimIdentity,
+  enrichmentClaimSchema,
+  parseEnrichmentClaim,
 } from './enrichment-claim.js';
 import type {
   AarohiEnrichmentContractVersion,
@@ -73,6 +75,13 @@ export interface EnrichmentProfile {
 export const ENRICHMENT_PROFILE_REFUSALS = [
   /** The prospect reference did not parse. */
   'PROSPECT_REF_INVALID',
+  /**
+   * A supplied claim is not a canonical AVG-2 claim.
+   *
+   * Distinct from the mismatch below because they are different mistakes: this one says the object
+   * was never a claim, that one says it is a real claim about somebody else.
+   */
+  'CLAIM_INVALID',
   /** A claim belongs to a different prospect. Never silently repaired, never dropped. */
   'CLAIM_PROSPECT_MISMATCH',
   /** More claims than one profile may hold. */
@@ -111,7 +120,7 @@ function compareClaims(a: EnrichmentClaim, b: EnrichmentClaim): number {
  */
 export function createEnrichmentProfile(
   prospectRef: unknown,
-  claims: readonly EnrichmentClaim[],
+  claims: readonly unknown[],
 ): EnrichmentProfileResult {
   const parsedRef = OPAQUE_REF.safeParse(prospectRef);
   if (!parsedRef.success) {
@@ -120,16 +129,30 @@ export function createEnrichmentProfile(
   if (claims.length > MAX_ENRICHMENT_PROFILE_CLAIMS) {
     return Object.freeze({ ok: false as const, refusal: 'CLAIM_LIMIT_EXCEEDED' as const });
   }
-  for (const claim of claims) {
+
+  // RE-PARSE every claim rather than trusting the declared type. TypeScript is erased at runtime and
+  // says nothing about what actually arrives, so a plain object that merely LOOKS like a claim --
+  // carrying a contact-bearing label, a forged `valueKind`, a missing contract version or a
+  // destination under a presence attribute -- would otherwise walk straight into a profile.
+  //
+  // Parsing also REBUILDS: the claims kept below share no object identity with the caller's, so a
+  // later mutation of an original claim or its source cannot reach into an assembled profile.
+  const validated: EnrichmentClaim[] = [];
+  for (const candidate of claims) {
+    const claim = parseEnrichmentClaim(candidate);
+    if (claim === undefined) {
+      return Object.freeze({ ok: false as const, refusal: 'CLAIM_INVALID' as const });
+    }
     if (claim.prospectRef !== parsedRef.data) {
       return Object.freeze({ ok: false as const, refusal: 'CLAIM_PROSPECT_MISMATCH' as const });
     }
+    validated.push(claim);
   }
 
   // Collapse only claims identical in EVERY field. Same value from a different source survives.
   const seen = new Set<string>();
   const unique: EnrichmentClaim[] = [];
-  for (const claim of claims) {
+  for (const claim of validated) {
     const identity = enrichmentClaimIdentity(claim);
     if (seen.has(identity)) {
       continue;
@@ -147,6 +170,53 @@ export function createEnrichmentProfile(
       prospectRef: parsedRef.data,
       claims: Object.freeze(unique),
     }),
+  });
+}
+
+/**
+ * The CANONICAL public schema for a BUILT `EnrichmentProfile`.
+ *
+ * This is the boundary that stops a forged object being treated as review material. Before it
+ * existed, the review gate asked only "is this an object with a string `prospectRef` and an array
+ * called `claims`?" — which `{ prospectRef: 'x', claims: [] }` satisfies, and so does the same shape
+ * carrying claims that were never canonical.
+ *
+ * Every part is proved: the contract version literal, the reference, the array bound, each claim
+ * against the canonical claim schema, and the binding that every claim names THIS prospect.
+ */
+export const enrichmentProfileSchema = z
+  .object({
+    contractVersion: z.literal(AAROHI_ENRICHMENT_CONTRACT_VERSION),
+    prospectRef: OPAQUE_REF,
+    claims: z.array(enrichmentClaimSchema).max(MAX_ENRICHMENT_PROFILE_CLAIMS),
+  })
+  .strict()
+  .refine((profile) => profile.claims.every((one) => one.prospectRef === profile.prospectRef));
+
+/**
+ * Re-parse an ALREADY-BUILT profile and return a fresh frozen copy, or `undefined`.
+ *
+ * Claims are rebuilt through {@link parseEnrichmentClaim}, so the returned profile shares no object
+ * identity with the input at any level. Ordering is left exactly as parsed: a canonical profile is
+ * already canonically ordered, and re-sorting here would hide a caller who had reordered one.
+ */
+export function parseEnrichmentProfile(value: unknown): EnrichmentProfile | undefined {
+  const parsed = enrichmentProfileSchema.safeParse(value);
+  if (!parsed.success) {
+    return undefined;
+  }
+  const claims: EnrichmentClaim[] = [];
+  for (const candidate of parsed.data.claims) {
+    const claim = parseEnrichmentClaim(candidate);
+    if (claim === undefined) {
+      return undefined;
+    }
+    claims.push(claim);
+  }
+  return Object.freeze({
+    contractVersion: AAROHI_ENRICHMENT_CONTRACT_VERSION,
+    prospectRef: parsed.data.prospectRef,
+    claims: Object.freeze(claims),
   });
 }
 

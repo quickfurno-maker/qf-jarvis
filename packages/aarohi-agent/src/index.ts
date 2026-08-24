@@ -40,7 +40,14 @@
  * Conflicting claims are REPORTED, never resolved: sources do not vote, confidence does not win, and
  * array order changes nothing. Identity resolution belongs to AVG-6.
  *
- * `evaluateEnrichmentReviewReadiness` reuses the AVG-1 gate and reads nothing else — not claim
+ * There is ONE canonical public schema per shape. `enrichmentClaimSchema` and
+ * `enrichmentProfileSchema` describe BUILT values and certify exactly what the builders produce, so
+ * the contract cannot say two things depending on which half a reader consults. Profile
+ * construction re-parses and REBUILDS every claim rather than trusting a declared type, so a plain
+ * object that merely looks like a claim is refused and a caller keeps no reference into the result.
+ *
+ * `evaluateEnrichmentReviewReadiness` parses the canonical profile BEFORE consulting Core, then
+ * reuses the AVG-1 gate and reads nothing else — not claim
  * count, not evidence quality, not consistency. `ENRICHMENT_REVIEWABLE` means a human may look at
  * the profile. It is not contact authorization, not execution eligibility, not consent, not Core
  * ACTIVE and not a verified vendor. Scoring and outreach eligibility are AVG-3's, not this slice's.
@@ -123,6 +130,7 @@ export {
   enrichmentClaimSchema,
   enrichmentSourceSchema,
   MAX_ENRICHMENT_LABEL_LENGTH,
+  parseEnrichmentClaim,
   PRESENCE_SIGNALS,
 } from './contracts/enrichment-claim.js';
 export type {
@@ -142,7 +150,9 @@ export {
   createEnrichmentProfile,
   ENRICHMENT_CONSISTENCY_VERDICTS,
   ENRICHMENT_PROFILE_REFUSALS,
+  enrichmentProfileSchema,
   MAX_ENRICHMENT_PROFILE_CLAIMS,
+  parseEnrichmentProfile,
   summariseEnrichmentConsistency,
 } from './contracts/enrichment-profile.js';
 export type {

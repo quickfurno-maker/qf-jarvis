@@ -227,7 +227,34 @@ export interface EnrichmentClaim {
   readonly evidenceQuality: EnrichmentEvidenceQuality;
 }
 
-export const enrichmentClaimSchema = z
+/**
+ * Whether a value is legal FOR ITS ATTRIBUTE. The one rule, in one place.
+ *
+ * Both the builder and the canonical schema call this, so they cannot disagree about what a claim
+ * is. The first revision of this file expressed the rule only inside the builder and left the
+ * exported schema accepting any bounded string -- which meant the public contract certified a social
+ * URL under `PUBLIC_SOCIAL_PRESENCE` and a phone number under `BUSINESS_DESCRIPTION` that the
+ * builder refused seconds later. A contract that says two things depending on which half you read
+ * is not a contract.
+ */
+function isValueLegalForAttribute(attribute: EnrichmentAttribute, value: string): boolean {
+  return ENRICHMENT_ATTRIBUTE_VALUE_KIND[attribute] === 'PRESENCE_SIGNAL'
+    ? (PRESENCE_SIGNALS as readonly string[]).includes(value)
+    : LABEL_TEXT.safeParse(value).success;
+}
+
+/**
+ * The INPUT a caller hands to {@link createEnrichmentClaim}.
+ *
+ * PRIVATE on purpose. Exporting an input schema beside a built-claim schema is what produced the
+ * disagreement above: two public shapes, both looking canonical, agreeing on most values and
+ * differing on exactly the dangerous ones. `enrichmentClaimSchema` below is the ONE public canonical
+ * schema, and it describes a BUILT claim.
+ *
+ * `contractVersion` and `valueKind` are absent here because the builder DERIVES them. A caller that
+ * could supply them could supply a claim whose `valueKind` disagreed with its attribute.
+ */
+const claimInputSchema = z
   .object({
     prospectRef: OPAQUE_REF,
     attribute: z.enum(ENRICHMENT_ATTRIBUTES),
@@ -237,6 +264,36 @@ export const enrichmentClaimSchema = z
     evidenceQuality: z.enum(ENRICHMENT_EVIDENCE_QUALITIES),
   })
   .strict();
+
+/**
+ * The CANONICAL public schema for a BUILT `EnrichmentClaim`.
+ *
+ * It certifies exactly what `createEnrichmentClaim` produces and refuses exactly what that builder
+ * refuses:
+ *
+ * - the contract version must be the canonical literal, so an unversioned or foreign object fails;
+ * - `valueKind` must be the kind the attribute actually has, so it cannot be forged to unlock the
+ *   wrong value rules;
+ * - the value must be legal for its attribute -- a presence signal for a presence attribute, a
+ *   bounded contact-screened label otherwise.
+ *
+ * This is what makes a claim reaching the profile parser trustworthy without the profile having to
+ * re-derive any of it.
+ */
+export const enrichmentClaimSchema = z
+  .object({
+    contractVersion: z.literal(AAROHI_ENRICHMENT_CONTRACT_VERSION),
+    prospectRef: OPAQUE_REF,
+    attribute: z.enum(ENRICHMENT_ATTRIBUTES),
+    valueKind: z.enum(ENRICHMENT_VALUE_KINDS),
+    value: z.string().min(1).max(MAX_ENRICHMENT_LABEL_LENGTH),
+    source: enrichmentSourceSchema,
+    observedAt: OBSERVED_AT,
+    evidenceQuality: z.enum(ENRICHMENT_EVIDENCE_QUALITIES),
+  })
+  .strict()
+  .refine((claim) => claim.valueKind === ENRICHMENT_ATTRIBUTE_VALUE_KIND[claim.attribute])
+  .refine((claim) => isValueLegalForAttribute(claim.attribute, claim.value));
 
 /** Why a claim was refused. Closed, and never an echo of the value that failed. */
 export const ENRICHMENT_CLAIM_REFUSALS = [
@@ -254,13 +311,46 @@ export type EnrichmentClaimResult =
   | { readonly ok: false; readonly refusal: EnrichmentClaimRefusal };
 
 /**
- * Build a frozen claim, or refuse.
+ * Assemble the frozen claim from already-validated parts.
+ *
+ * Every field is copied by value and both levels are frozen, so nothing a caller still holds a
+ * reference to can reach into a claim afterwards. Used by the builder AND by
+ * {@link parseEnrichmentClaim}, so a parsed claim and a built claim are the same object shape by
+ * construction rather than by two functions agreeing.
+ */
+function freezeClaim(parts: {
+  readonly prospectRef: string;
+  readonly attribute: EnrichmentAttribute;
+  readonly value: string;
+  readonly source: { readonly kind: EnrichmentSourceKind; readonly sourceRef?: string | undefined };
+  readonly observedAt: string;
+  readonly evidenceQuality: EnrichmentEvidenceQuality;
+}): EnrichmentClaim {
+  return Object.freeze({
+    contractVersion: AAROHI_ENRICHMENT_CONTRACT_VERSION,
+    prospectRef: parts.prospectRef,
+    attribute: parts.attribute,
+    valueKind: ENRICHMENT_ATTRIBUTE_VALUE_KIND[parts.attribute],
+    value: parts.value,
+    source: Object.freeze({
+      kind: parts.source.kind,
+      ...(parts.source.sourceRef === undefined ? {} : { sourceRef: parts.source.sourceRef }),
+    }),
+    observedAt: parts.observedAt,
+    evidenceQuality: parts.evidenceQuality,
+  });
+}
+
+/**
+ * Build a frozen claim from caller INPUT, or refuse.
  *
  * Refusals are closed tokens and carry nothing from the input — a refusal that quoted the value
- * would put the very content this contract screens for into whatever read the refusal.
+ * would put the very content this contract screens for into whatever read the refusal. The two
+ * value refusals stay distinct because they point at different mistakes: a presence attribute given
+ * a destination, and a label carrying a contact shape.
  */
 export function createEnrichmentClaim(value: unknown): EnrichmentClaimResult {
-  const parsed = enrichmentClaimSchema.safeParse(value);
+  const parsed = claimInputSchema.safeParse(value);
   if (!parsed.success) {
     return Object.freeze({ ok: false as const, refusal: 'CLAIM_SHAPE_INVALID' as const });
   }
@@ -277,24 +367,24 @@ export function createEnrichmentClaim(value: unknown): EnrichmentClaimResult {
     return Object.freeze({ ok: false as const, refusal: 'LABEL_VALUE_REFUSED' as const });
   }
 
-  return Object.freeze({
-    ok: true as const,
-    claim: Object.freeze({
-      contractVersion: AAROHI_ENRICHMENT_CONTRACT_VERSION,
-      prospectRef: parsed.data.prospectRef,
-      attribute,
-      valueKind,
-      value: parsed.data.value,
-      source: Object.freeze({
-        kind: parsed.data.source.kind,
-        ...(parsed.data.source.sourceRef === undefined
-          ? {}
-          : { sourceRef: parsed.data.source.sourceRef }),
-      }),
-      observedAt: parsed.data.observedAt,
-      evidenceQuality: parsed.data.evidenceQuality,
-    }),
-  });
+  return Object.freeze({ ok: true as const, claim: freezeClaim(parsed.data) });
+}
+
+/**
+ * Re-parse an ALREADY-BUILT claim and return a fresh frozen copy, or `undefined`.
+ *
+ * This is what lets a profile stop trusting its own TypeScript types. A caller can hand
+ * `createEnrichmentProfile` a plain object that merely LOOKS like a claim — TypeScript is erased at
+ * runtime and says nothing about what actually arrives — so every claim is re-validated here against
+ * the canonical schema and rebuilt from the parsed data.
+ *
+ * The rebuild matters as much as the validation: the returned claim shares no object identity with
+ * the caller's, so mutating the original afterwards cannot reach into a profile that was already
+ * assembled.
+ */
+export function parseEnrichmentClaim(value: unknown): EnrichmentClaim | undefined {
+  const parsed = enrichmentClaimSchema.safeParse(value);
+  return parsed.success ? freezeClaim(parsed.data) : undefined;
 }
 
 /**

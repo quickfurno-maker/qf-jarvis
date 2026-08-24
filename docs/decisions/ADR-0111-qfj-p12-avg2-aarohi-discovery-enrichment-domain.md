@@ -110,6 +110,34 @@ from the public surface. Core re-decides communications eligibility at execution
 phase; a stale reviewable verdict is not a standing permission, which is why the verdict carries the
 Core status it rests on rather than a bare boolean.
 
+### One canonical schema per shape, and validation before the gate
+
+Owner review found three ways the boundaries above could be walked around, and all three are closed
+by construction rather than by convention.
+
+**The exported schema now describes a BUILT value.** The first revision exported an input schema that
+accepted any bounded string, so it certified a social URL under `PUBLIC_SOCIAL_PRESENCE` and a phone
+number under `BUSINESS_DESCRIPTION` that the builder refused a moment later. `enrichmentClaimSchema`
+and `enrichmentProfileSchema` are now the single canonical public schemas for built values, the
+attribute/value rule lives in one function that both the schema and the builder call, and the input
+schema is private. A contract that answers differently depending on which half a reader consults is
+not a contract.
+
+**Review readiness parses a canonical profile before consulting Core.** The first revision asked only
+whether it had an object with a string `prospectRef` and an array called `claims` — which a forged
+object carrying contact-bearing labels, a destination under a presence attribute, cross-prospect
+claims or no contract version at all satisfies. It reached the Core gate and returned REVIEWABLE
+whenever Core said `NOT_REGISTERED`. The order is now profile parse, then gate: consulting Core about
+malformed data would also misrepresent what Core answered, since it would have decided about a
+prospect reference no valid profile stood behind.
+
+**Profile construction re-parses and rebuilds every claim.** TypeScript is erased at runtime and says
+nothing about what actually arrives, so a declared `EnrichmentClaim[]` was no evidence at all. Claims
+are validated against the canonical schema and rebuilt, with both levels frozen, so a caller mutating
+an original claim, its source or the array afterwards cannot reach into an assembled profile.
+
+The seven-or-more-digit contact screen is unchanged; the owner reviewed its conservatism and kept it.
+
 ## Authority
 
 QuickFurno Core remains authoritative for registration, active/inactive/dormant/former status,
