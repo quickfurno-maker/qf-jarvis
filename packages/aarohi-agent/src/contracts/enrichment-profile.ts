@@ -136,6 +136,26 @@ function canonicaliseClaims(claims: readonly EnrichmentClaim[]): EnrichmentClaim
 }
 
 /**
+ * Whether a claim sequence is ALREADY in builder-canonical form.
+ *
+ * Derived from {@link canonicaliseClaims} rather than re-deriving order and multiplicity, so there is
+ * still exactly one definition of what canonical means. A shorter canonical form means a duplicate
+ * was supplied; a different identity at any index means the sequence was reordered.
+ */
+function isCanonicalClaimSequence(claims: readonly EnrichmentClaim[]): boolean {
+  const canonical = canonicaliseClaims(claims);
+  if (canonical.length !== claims.length) {
+    return false;
+  }
+  return claims.every((claim, index) => {
+    const expected = canonical[index];
+    return (
+      expected !== undefined && enrichmentClaimIdentity(expected) === enrichmentClaimIdentity(claim)
+    );
+  });
+}
+
+/**
  * Assemble a frozen profile, or refuse.
  *
  * A claim for another prospect is a refusal rather than a filtered-out row: dropping it would let a
@@ -205,7 +225,15 @@ export const enrichmentProfileSchema = z
     claims: z.array(enrichmentClaimSchema).max(MAX_ENRICHMENT_PROFILE_CLAIMS),
   })
   .strict()
-  .refine((profile) => profile.claims.every((one) => one.prospectRef === profile.prospectRef));
+  .refine((profile) => profile.claims.every((one) => one.prospectRef === profile.prospectRef))
+  // CANONICAL FORM, enforced by the public schema itself.
+  //
+  // The previous revision left this to `parseEnrichmentProfile` alone, so the exported schema said
+  // VALID for a profile the parser then refused -- duplicate claims, or valid claims reordered.
+  // That is the same ambiguity class already fixed for `enrichmentClaimSchema`, and a versioned
+  // public contract cannot carry it: a caller validating against the published schema would have
+  // been told a tampered profile was fine.
+  .refine((profile) => isCanonicalClaimSequence(profile.claims));
 
 /**
  * Re-parse an ALREADY-BUILT profile and return a fresh frozen copy, or `undefined`.
@@ -219,13 +247,18 @@ export const enrichmentProfileSchema = z
  * gap between the two, and it matters downstream: `claimCount` in the consistency summary would
  * differ between a parsed profile and a built one describing the same evidence.
  *
- * So the sequence is CHECKED against {@link canonicaliseClaims} rather than passed through it.
- * Silently re-sorting and de-duplicating would make the parser accept tampered input and hand back
- * something tidy, which is the opposite of what a canonical-form check is for: a caller who reordered
- * a profile learns that it was rejected, not that it was quietly repaired.
+ * So the sequence is CHECKED rather than imposed. Silently re-sorting and de-duplicating would make
+ * the parser accept tampered input and hand back something tidy, which is the opposite of what a
+ * canonical-form check is for: a caller who reordered a profile learns that it was rejected, not that
+ * it was quietly repaired.
  *
- * Claims are rebuilt through {@link parseEnrichmentClaim}, so the returned profile shares no object
- * identity with the input at any level.
+ * The check itself lives in {@link enrichmentProfileSchema}, which this function simply parses
+ * against. There is deliberately no second canonicality test here: two independent definitions of
+ * canonical form is the defect this whole sequence of reviews has been closing, and the published
+ * schema is the one a caller can validate against.
+ *
+ * What remains here is the rebuild: claims come back through {@link parseEnrichmentClaim}, so the
+ * returned profile shares no object identity with the input at any level.
  */
 export function parseEnrichmentProfile(value: unknown): EnrichmentProfile | undefined {
   const parsed = enrichmentProfileSchema.safeParse(value);
@@ -239,22 +272,6 @@ export function parseEnrichmentProfile(value: unknown): EnrichmentProfile | unde
       return undefined;
     }
     claims.push(claim);
-  }
-
-  // Exactly the sequence the builder would have produced, or nothing. A shorter canonical form means
-  // duplicates were supplied; a different order at any position means the sequence was reordered.
-  const canonical = canonicaliseClaims(claims);
-  if (canonical.length !== claims.length) {
-    return undefined;
-  }
-  for (const [index, claim] of claims.entries()) {
-    const expected = canonical[index];
-    if (
-      expected === undefined ||
-      enrichmentClaimIdentity(expected) !== enrichmentClaimIdentity(claim)
-    ) {
-      return undefined;
-    }
   }
 
   return Object.freeze({

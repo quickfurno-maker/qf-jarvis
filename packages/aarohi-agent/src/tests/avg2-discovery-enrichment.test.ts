@@ -846,18 +846,19 @@ describe('RE-REVIEW: the canonical profile parser accepts only BUILT form', () =
     expect(enrichmentProfileSchema.safeParse(profile).success).toBe(true);
   });
 
-  it('REFUSES valid claims in non-canonical order', () => {
+  it('REFUSES valid claims in non-canonical order, in the SCHEMA and the parser', () => {
     const profile = built();
     const reversed = { ...profile, claims: [...profile.claims].reverse() };
-    // Well-formed by the schema, and still not something the builder could have produced.
-    expect(enrichmentProfileSchema.safeParse(reversed).success).toBe(true);
+    // These two assertions used to disagree: the schema said valid, the parser said no. The public
+    // contract now answers the same way whichever half a caller consults.
+    expect(enrichmentProfileSchema.safeParse(reversed).success).toBe(false);
     expect(parseEnrichmentProfile(reversed)).toBeUndefined();
   });
 
-  it('REFUSES a profile carrying an exact duplicate claim', () => {
+  it('REFUSES a profile carrying an exact duplicate claim, in the SCHEMA and the parser', () => {
     const profile = built();
     const duplicated = { ...profile, claims: [...profile.claims, profile.claims[0]] };
-    expect(enrichmentProfileSchema.safeParse(duplicated).success).toBe(true);
+    expect(enrichmentProfileSchema.safeParse(duplicated).success).toBe(false);
     expect(parseEnrichmentProfile(duplicated)).toBeUndefined();
   });
 
@@ -949,6 +950,105 @@ describe('RE-REVIEW: observedAt is a real calendar instant', () => {
       1,
     ]) {
       expect(createEnrichmentClaim(claimInput({ observedAt })).ok, String(observedAt)).toBe(false);
+    }
+  });
+});
+
+describe('FINAL REVIEW: the PUBLIC profile schema is itself canonical', () => {
+  /**
+   * The last contract mismatch.
+   *
+   * `parseEnrichmentProfile` verified builder-canonical form, but the EXPORTED
+   * `enrichmentProfileSchema` did not — so the published schema said VALID for a profile the parser
+   * then refused. A caller validating against the schema alone would have been told a tampered
+   * profile was fine, which is the ambiguity class already closed for `enrichmentClaimSchema`.
+   *
+   * These specs pin the public schema directly, not the parser.
+   */
+  const first = claim({ attribute: 'BUSINESS_DISPLAY_NAME', value: 'Studio Nine Interiors' });
+  const second = claim({ attribute: 'CITY_LABEL', value: 'Pune' });
+  const third = claim({ attribute: 'LOCALITY_LABEL', value: 'Kharadi' });
+
+  function built() {
+    const result = createEnrichmentProfile(PROSPECT, [first, second, third]);
+    if (!result.ok) throw new Error('profile must build');
+    return result.profile;
+  }
+
+  it('accepts canonical builder output', () => {
+    expect(enrichmentProfileSchema.safeParse(built()).success).toBe(true);
+  });
+
+  it('rejects a duplicate canonical claim', () => {
+    const profile = built();
+    expect(
+      enrichmentProfileSchema.safeParse({
+        ...profile,
+        claims: [...profile.claims, profile.claims[0]],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('rejects reordered valid claims, in every non-canonical permutation tried', () => {
+    const profile = built();
+    const [a, b, c] = profile.claims;
+    if (a === undefined || b === undefined || c === undefined) {
+      throw new Error('three claims expected');
+    }
+    for (const permutation of [
+      [a, c, b],
+      [b, a, c],
+      [b, c, a],
+      [c, a, b],
+      [c, b, a],
+    ]) {
+      expect(
+        enrichmentProfileSchema.safeParse({ ...profile, claims: permutation }).success,
+        JSON.stringify(permutation.map((one) => one.attribute)),
+      ).toBe(false);
+    }
+    // And the canonical permutation is the one that passes.
+    expect(enrichmentProfileSchema.safeParse({ ...profile, claims: [a, b, c] }).success).toBe(true);
+  });
+
+  it('agrees with the parser on every case, canonical and not', () => {
+    const profile = built();
+    const [a, b, c] = profile.claims;
+    if (a === undefined || b === undefined || c === undefined) {
+      throw new Error('three claims expected');
+    }
+    for (const candidate of [
+      profile,
+      { ...profile, claims: [a, c, b] },
+      { ...profile, claims: [c, b, a] },
+      { ...profile, claims: [...profile.claims, a] },
+      { ...profile, claims: [a, a] },
+      { ...profile, claims: [] },
+    ]) {
+      const bySchema = enrichmentProfileSchema.safeParse(candidate).success;
+      const byParser = parseEnrichmentProfile(candidate) !== undefined;
+      expect(bySchema, JSON.stringify(candidate.claims.length)).toBe(byParser);
+    }
+  });
+
+  it('closes the three-way loop: builder output passes schema AND parser', () => {
+    const profile = built();
+    expect(enrichmentProfileSchema.safeParse(profile).success).toBe(true);
+    expect(parseEnrichmentProfile(profile)).toBeDefined();
+    expect(
+      evaluateEnrichmentReviewReadiness(profile, observation('NOT_REGISTERED')).reviewable,
+    ).toBe(true);
+  });
+
+  it('keeps a duplicate or reordered profile away from the Core gate', () => {
+    const profile = built();
+    for (const forged of [
+      { ...profile, claims: [...profile.claims].reverse() },
+      { ...profile, claims: [...profile.claims, profile.claims[0]] },
+    ]) {
+      const verdict = evaluateEnrichmentReviewReadiness(forged, observation('NOT_REGISTERED'));
+      expect(verdict.reviewable).toBe(false);
+      expect(verdict.reviewable ? undefined : verdict.refusal).toBe('PROFILE_INVALID');
     }
   });
 });

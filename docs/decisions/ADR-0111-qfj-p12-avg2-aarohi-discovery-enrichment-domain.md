@@ -137,10 +137,17 @@ proves every part is well-formed, but well-formed is weaker than BUILT:
 object carrying valid claims reversed — or the same claim twice — satisfied the schema while
 describing a profile the builder could never have produced, and `claimCount` in the consistency
 summary would then differ between a parsed and a built profile describing the same evidence. One
-`canonicaliseClaims` function is now the single definition of order and multiplicity: the builder
-uses it to produce, and `parseEnrichmentProfile` uses it to CHECK. Silently re-sorting instead would
-accept tampered input and hand back something tidy, which is the opposite of what a canonical-form
-check is for.
+`canonicaliseClaims` function is the single definition of order and multiplicity, and the CHECK
+derived from it lives in the exported `enrichmentProfileSchema` itself — not only in the parser. A
+third review pass found that distinction still open: the published schema said VALID for a duplicate
+or reordered profile the parser then refused, so a caller validating against the schema alone would
+have been told a tampered profile was fine. `parseEnrichmentProfile` now parses against that schema
+and adds no second canonicality test; what it still does is rebuild and freeze.
+
+The division of labour is deliberate and holds across the whole contract: BUILDERS canonicalize,
+SCHEMAS and PARSERS validate canonical form and reject tampering. Silently re-sorting a forged
+profile would accept tampered input and hand back something tidy, which is the opposite of what a
+canonical-form check is for.
 
 **`observedAt` is a real calendar instant.** A shape check plus a not-NaN check is not enough, because
 JavaScript normalises impossible dates rather than refusing them: `2026-02-31T00:00:00Z` silently
