@@ -551,4 +551,35 @@ describe('HF3 — the run goal narrows, and can never widen', () => {
       expect(root, `${internal} must not be root-exported`).not.toContain(internal);
     }
   });
+
+  it('POST-SFD1: the strict-false LOCALIZATION surface stays off the package root', () => {
+    // RIYA_CANDIDATE_EVIDENCE_LIVE_ROOT_RUNTIME_API_EXPANSION=NO. No external consumer exists: the
+    // operator holds the seam, `bin.ts` binds it, and both are inside this package. A root export
+    // would let a caller outside the governed operator build a diagnostic composition and choose
+    // its own budget -- which is exactly the decision a run goal exists to make.
+    const root = codeOnly(readFileSync(join(SRC, 'index.ts'), 'utf8'));
+    for (const internal of [
+      'strict-false-localization-port.js',
+      'strict-false-localization-identity.js',
+      'strict-false-localization-emitters.js',
+      'localized-structured-reply-classification.js',
+      'one-shot-consumption.js',
+      'createLiveStrictFalseLocalizationComposition',
+      'openLiveStrictFalseLocalizationRunner',
+      'createStrictFalseLocalizationPort',
+      'createStrictFalseLocalizationLedger',
+      'STRICT_FALSE_LOCALIZATION_STEP_ID',
+      'analyseLocalizedStructuredReply',
+    ]) {
+      expect(root, `${internal} must not be root-exported`).not.toContain(internal);
+    }
+  });
+
+  it('POST-SFD1: the CLI exposes no localization or validation parameter', () => {
+    const cli = codeOnly(readFileSync(join(SRC, 'bin.ts'), 'utf8'));
+    expect(cli).toContain("value !== 'POST_SFD1_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE'");
+    for (const forbidden of ['--localize', '--wire-schema', '--validate', '--stage', '--strict']) {
+      expect(cli, `the CLI must not accept ${forbidden}`).not.toContain(forbidden);
+    }
+  });
 });

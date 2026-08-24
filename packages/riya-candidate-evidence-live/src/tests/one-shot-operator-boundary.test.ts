@@ -12,6 +12,12 @@
  * - a goal whose smoke later fails is still spent, because the authorization was for one launch and
  *   "it failed, so try again" is exactly the reasoning a guard has to refuse.
  *
+ * POST-SFD1 adds the case this file could not previously express. Every marker-eligible goal used to
+ * be statically tombstoned as well, so the marker path could only be reached through a guard double
+ * that skipped the tombstone. `POST_SFD1_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE` is genuinely
+ * eligible and genuinely NOT tombstoned, so the full lifecycle is now driven on the REAL goal with
+ * the REAL guard -- no synthetic cast anywhere in that block.
+ *
  * The marker directory is a per-test temp directory. No developer staging area is touched.
  */
 import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -34,7 +40,12 @@ import {
   CANDIDATE_RELEASE,
   RIYA_CLIENT_PROMPT_DIGEST,
 } from '../candidate-release.js';
-import { createOneShotConsumptionGuard } from '../internal/one-shot-consumption.js';
+import { ledgerForRunGoal } from '../bin.js';
+import {
+  createOneShotConsumptionGuard,
+  oneShotMarkerFileName,
+} from '../internal/one-shot-consumption.js';
+import { OPERATOR_EXIT_CODES } from '../exit-codes.js';
 import { runCandidateEvidenceOperator } from '../operator.js';
 import type { OperatorDeps } from '../operator.js';
 import type * as ActualPreflightModule from '../preflight.js';
@@ -120,6 +131,8 @@ interface Counters {
   credentialReads: number;
   smokes: number;
   candidateSessions: number;
+  /** Candidate PROVIDER requests the localization runner was asked to make. */
+  candidateProbes: number;
 }
 
 async function launch(options: {
@@ -137,11 +150,23 @@ async function launch(options: {
   readonly markerOnlyGuard?: boolean;
   /** Make the marker unwritable, to prove it reports as its OWN outcome. */
   readonly markerUnavailable?: boolean;
+  /**
+   * Wire the POST-SFD1 localization seam with a COUNTING runner and that goal's real ledger.
+   *
+   * Used only by the pending-goal lifecycle block, so "candidate requests = 0" on a refused second
+   * launch is a counted fact rather than an absence nobody looked for.
+   */
+  readonly wireLocalizationRunner?: boolean;
 }): Promise<{ readonly outcome: string; readonly counters: Counters; readonly lines: string[] }> {
   const lines: string[] = [];
   const { path: smokeConfigPath, digest } = writeSmokeConfig(externalDir('qfj-one-shot-cfg-'));
   harnessState.syntheticDigest = digest;
-  const counters: Counters = { credentialReads: 0, smokes: 0, candidateSessions: 0 };
+  const counters: Counters = {
+    credentialReads: 0,
+    smokes: 0,
+    candidateSessions: 0,
+    candidateProbes: 0,
+  };
 
   const deps: OperatorDeps = {
     console: createSafeConsole((line) => lines.push(line)),
@@ -185,6 +210,46 @@ async function launch(options: {
       };
     })(),
     ...(options.runGoal === undefined ? {} : { runGoal: options.runGoal }),
+    ...(options.wireLocalizationRunner === true && options.runGoal !== undefined
+      ? {
+          ledger: ledgerForRunGoal(options.runGoal),
+          openStrictFalseLocalizationRunner: () =>
+            Promise.resolve({
+              probe: {
+                stepId:
+                  'L0_EXACT_NEUTRAL_CLIENT_GPT_OSS_20B_REASONING_LOW_8192_STRICT_FALSE_LOCALIZATION',
+                probeKind: 'EXACT_REPRESENTATIVE',
+                probeDimension: 'SPEC_ONLY_NEVER_SENT',
+                derivedFromPath: '$',
+                messageSource: 'CAPTURED_NEUTRAL_CLIENT',
+                schema: {},
+                messages: [],
+              },
+              run: () => {
+                counters.candidateProbes += 1;
+                return Promise.resolve({
+                  outcome: {
+                    stepId:
+                      'L0_EXACT_NEUTRAL_CLIENT_GPT_OSS_20B_REASONING_LOW_8192_STRICT_FALSE_LOCALIZATION',
+                    providerTransportStarted: true,
+                    providerHttpStatus: 200,
+                    providerHttpClass: 'SUCCESS_2XX',
+                    providerErrorType: 'NONE',
+                    providerErrorCode: 'NONE',
+                    providerCompleted: true,
+                    localValidationCompleted: true,
+                    localValidationPassed: true,
+                    wireValidationCompleted: true,
+                    wireValidationPassed: true,
+                    productionValidationCompleted: true,
+                    productionValidationPassed: true,
+                  },
+                  usage: { inputTokens: 100, outputTokens: 50 },
+                });
+              },
+            }),
+        }
+      : {}),
     openSmokeCredential: () => {
       counters.credentialReads += 1;
       return Promise.resolve({
@@ -322,6 +387,128 @@ describe('a second launch of a MARKER-ELIGIBLE goal spends nothing', () => {
     expect(run.counters.credentialReads).toBe(0);
     expect(run.counters.smokes).toBe(0);
     expect(run.lines.join('\n')).not.toContain('SECRET-DETAIL-MUST-NOT-APPEAR');
+  });
+});
+
+describe('THE PENDING GOAL, driven end to end with the REAL guard and NO synthetic cast', () => {
+  /**
+   * The case PR #150 wrote a future-note about, now expressible.
+   *
+   * Every marker-eligible goal used to be statically tombstoned too, so the marker path could only
+   * be reached through a guard double. `POST_SFD1_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE` is
+   * eligible and NOT tombstoned, so this block passes the real goal to the real guard and asserts
+   * the whole lifecycle: claim, spend, refuse.
+   */
+  const PENDING = 'POST_SFD1_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE' as const;
+
+  it('FIRST launch claims the marker and reaches the credential, smoke and candidate probe', async () => {
+    const markerDirectory = externalDir('qfj-one-shot-marker-');
+    const first = await launch({
+      markerDirectory,
+      runGoal: PENDING,
+      wireLocalizationRunner: true,
+    });
+    expect(first.outcome).toBe('POST_SFD1_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE_COMPLETE');
+    expect(first.counters.credentialReads).toBe(1);
+    expect(first.counters.smokes).toBe(1);
+    expect(first.counters.candidateProbes).toBe(1);
+    // The marker exists, and it is the ONE file the digest names for this goal.
+    expect(readdirSync(markerDirectory)).toStrictEqual([oneShotMarkerFileName(PENDING)]);
+    const claimed = first.lines.find((one) => one.includes('phase=one-shot'));
+    expect(claimed).toContain('status=CLAIMED');
+    expect(claimed).toContain(`runGoal=${PENDING}`);
+  });
+
+  it('SECOND launch refuses before any credential, smoke or candidate request', async () => {
+    const markerDirectory = externalDir('qfj-one-shot-marker-');
+    const first = await launch({ markerDirectory, runGoal: PENDING, wireLocalizationRunner: true });
+    expect(first.counters.candidateProbes).toBe(1);
+
+    // THE INCIDENT, on a real pending goal.
+    const second = await launch({
+      markerDirectory,
+      runGoal: PENDING,
+      wireLocalizationRunner: true,
+    });
+    expect(second.outcome).toBe('RUN_GOAL_ALREADY_CONSUMED');
+    expect(second.counters.credentialReads).toBe(0);
+    expect(second.counters.smokes).toBe(0);
+    expect(second.counters.candidateSessions).toBe(0);
+    expect(second.counters.candidateProbes).toBe(0);
+    const line = second.lines.find((one) => one.includes('phase=one-shot'));
+    expect(line).toContain('status=REFUSED');
+    expect(line).toContain('reason=goal-already-consumed');
+    expect(second.lines.join('\n')).not.toContain(SENTINEL_KEY);
+  });
+
+  it('a FAILED smoke still consumes the first launch', async () => {
+    // The authorization was for one launch, not for one success.
+    const markerDirectory = externalDir('qfj-one-shot-marker-');
+    const first = await launch({
+      markerDirectory,
+      runGoal: PENDING,
+      wireLocalizationRunner: true,
+      smokeFails: true,
+    });
+    expect(first.outcome).toBe('SMOKE_FAILED');
+    expect(first.counters.smokes).toBe(1);
+    expect(first.counters.candidateProbes).toBe(0);
+    expect(readdirSync(markerDirectory)).toStrictEqual([oneShotMarkerFileName(PENDING)]);
+
+    const second = await launch({
+      markerDirectory,
+      runGoal: PENDING,
+      wireLocalizationRunner: true,
+    });
+    expect(second.outcome).toBe('RUN_GOAL_ALREADY_CONSUMED');
+    expect(second.counters.credentialReads).toBe(0);
+  });
+
+  it('a REFUSED preflight consumes nothing, so the goal stays available', async () => {
+    const markerDirectory = externalDir('qfj-one-shot-marker-');
+    const failed = await launch({
+      markerDirectory,
+      runGoal: PENDING,
+      wireLocalizationRunner: true,
+      badSmokeConfigPath: true,
+    });
+    expect(failed.outcome).toBe('PRECHECK_FAILED');
+    expect(readdirSync(markerDirectory)).toStrictEqual([]);
+    expect(failed.counters.credentialReads).toBe(0);
+
+    const later = await launch({ markerDirectory, runGoal: PENDING, wireLocalizationRunner: true });
+    expect(later.outcome).toBe('POST_SFD1_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE_COMPLETE');
+    expect(later.counters.candidateProbes).toBe(1);
+  });
+
+  it('an UNWRITABLE marker gives exit 36, never 35 -- with no synthetic cast', async () => {
+    const run = await launch({
+      markerDirectory: externalDir('qfj-one-shot-marker-'),
+      runGoal: PENDING,
+      wireLocalizationRunner: true,
+      markerUnavailable: true,
+    });
+    expect(run.outcome).toBe('RUN_GOAL_CONSUMPTION_MARKER_UNAVAILABLE');
+    expect(OPERATOR_EXIT_CODES[run.outcome as 'RUN_GOAL_CONSUMPTION_MARKER_UNAVAILABLE']).toBe(36);
+    expect(OPERATOR_EXIT_CODES.RUN_GOAL_ALREADY_CONSUMED).toBe(35);
+    expect(run.counters.credentialReads).toBe(0);
+    expect(run.counters.smokes).toBe(0);
+    expect(run.counters.candidateProbes).toBe(0);
+    expect(run.lines.find((one) => one.includes('phase=one-shot'))).toContain(
+      'reason=consumption-marker-unavailable',
+    );
+    expect(run.lines.join('\n')).not.toContain('SECRET-DETAIL-MUST-NOT-APPEAR');
+  });
+
+  it('a statically consumed goal still gives exit 34, on the same real guard', async () => {
+    const markerDirectory = externalDir('qfj-one-shot-marker-');
+    const run = await launch({
+      markerDirectory,
+      runGoal: 'POST_RBD1_REASONING_LOW_OUTPUT_BUDGET_8192_STRICT_FALSE_DIFFERENTIAL',
+    });
+    expect(run.outcome).toBe('RUN_GOAL_STATICALLY_CONSUMED');
+    expect(OPERATOR_EXIT_CODES[run.outcome as 'RUN_GOAL_STATICALLY_CONSUMED']).toBe(34);
+    expect(readdirSync(markerDirectory)).toStrictEqual([]);
   });
 });
 

@@ -47,9 +47,13 @@ function markerDirectory(): string {
  *
  * Deliberately NOT `FULL_EVIDENCE` or `SAFETY_REPLICATION`. An earlier revision used the default as
  * the "fresh" goal, which both misrepresented production eligibility and asserted the very behaviour
- * that would have taken the main operator offline. Every real marker-eligible goal is also
- * statically tombstoned, so the marker mechanics are exercised through synthetic tokens -- the
- * production tombstones are never weakened to make a test convenient.
+ * that would have taken the main operator offline.
+ *
+ * Synthetic tokens rather than a real goal, still. `POST_SFD1_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE`
+ * is now genuinely eligible-and-untombstoned and IS driven end to end through the operator in
+ * `one-shot-operator-boundary.test.ts`; here the synthetic tokens keep the marker MECHANICS
+ * (digest naming, exclusive create, durability, unwritable directory) independent of which real
+ * goals happen to be pending at this head.
  */
 const FRESH_GOAL = 'SYNTHETIC_FUTURE_ONE_SHOT_DIAGNOSTIC' as unknown as Parameters<
   ReturnType<typeof createOneShotConsumptionGuard>['claim']
@@ -129,14 +133,45 @@ describe('one-shot ELIGIBILITY is a closed set, not a naming rule', () => {
     expect(ONE_SHOT_DIAGNOSTIC_RUN_GOALS).not.toContain('SAFETY_REPLICATION');
   });
 
-  it('includes every bounded historical one-shot diagnostic', () => {
-    expect([...ONE_SHOT_DIAGNOSTIC_RUN_GOALS].sort()).toStrictEqual(
-      Object.keys(STATICALLY_CONSUMED_RUN_GOALS).sort(),
-    );
+  it('is a SUPERSET of the tombstones -- history cannot consume an ungoverned goal', () => {
+    // The durable invariant. The earlier revision asserted EQUALITY, which held only while no
+    // pending diagnostic existed and was merged with a note saying so was a snapshot. It stopped
+    // being true the moment POST-SFD1 was wired, which is exactly the case the note anticipated.
+    for (const tombstoned of Object.keys(STATICALLY_CONSUMED_RUN_GOALS)) {
+      expect(ONE_SHOT_DIAGNOSTIC_RUN_GOALS, tombstoned).toContain(tombstoned);
+      expect(isOneShotDiagnosticRunGoal(tombstoned), tombstoned).toBe(true);
+    }
     for (const goal of ONE_SHOT_DIAGNOSTIC_RUN_GOALS) {
       expect(isOneShotDiagnosticRunGoal(goal), goal).toBe(true);
       expect(OPERATOR_RUN_GOALS, goal).toContain(goal);
     }
+  });
+
+  it('holds exactly the ONE pending diagnostic at this head, and pins it as a SNAPSHOT', () => {
+    // A SNAPSHOT of this exact head, not a law. It is empty between a diagnostic being wired and its
+    // run being recorded, and it holds one entry now. A PR that wires a second pending diagnostic,
+    // or that tombstones this one after SFD2 runs, edits this assertion -- which is the review
+    // moment where "has this been consumed?" gets asked out loud.
+    const pending = ONE_SHOT_DIAGNOSTIC_RUN_GOALS.filter(
+      (goal) => !Object.prototype.hasOwnProperty.call(STATICALLY_CONSUMED_RUN_GOALS, goal),
+    );
+    expect(pending).toStrictEqual(['POST_SFD1_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE']);
+    expect(ONE_SHOT_DIAGNOSTIC_RUN_GOALS).toHaveLength(12);
+    expect(Object.keys(STATICALLY_CONSUMED_RUN_GOALS)).toHaveLength(11);
+  });
+
+  it('does NOT tombstone the pending diagnostic -- it has not been run', () => {
+    // Tombstoning it before it runs would block the run it was wired for, on every workstation,
+    // and would be indistinguishable on a receipt from a run that had already happened.
+    expect(
+      Object.prototype.hasOwnProperty.call(
+        STATICALLY_CONSUMED_RUN_GOALS,
+        'POST_SFD1_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE',
+      ),
+    ).toBe(false);
+    expect(isOneShotDiagnosticRunGoal('POST_SFD1_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE')).toBe(
+      true,
+    );
   });
 
   it('is NOT derived from a name prefix', () => {
@@ -145,6 +180,12 @@ describe('one-shot ELIGIBILITY is a closed set, not a naming rule', () => {
     // And two eligible members do not share one prefix, so no prefix rule could reproduce the set.
     expect(isOneShotDiagnosticRunGoal('REQUEST_CONTRACT_DIAGNOSTIC')).toBe(true);
     expect(isOneShotDiagnosticRunGoal('POST_RSP20B2_REASONING_EFFORT_LOW_DIFFERENTIAL')).toBe(true);
+    // And a `POST_SFD1_` prefix does not confer eligibility either: this exact token is eligible
+    // because it is listed, and a near neighbour that is not listed is not.
+    expect(isOneShotDiagnosticRunGoal('POST_SFD1_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE')).toBe(
+      true,
+    );
+    expect(isOneShotDiagnosticRunGoal('POST_SFD1_SOMETHING_ELSE')).toBe(false);
   });
 
   it('accounts for every member of the closed goal vocabulary', () => {

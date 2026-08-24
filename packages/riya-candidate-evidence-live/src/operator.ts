@@ -108,6 +108,16 @@ import {
   emitStrictFalseDifferentialReceipt,
 } from './internal/strict-false-differential-emitters.js';
 import { analyseStrictFalseDifferential } from './internal/strict-false-differential-classification.js';
+import { analyseLocalizedStructuredReply } from './internal/localized-structured-reply-classification.js';
+import {
+  emitStrictFalseLocalizationClassification,
+  emitStrictFalseLocalizationProbeOutcome,
+  emitStrictFalseLocalizationReceipt,
+} from './internal/strict-false-localization-emitters.js';
+import type {
+  StrictFalseLocalizationProbe,
+  StrictFalseLocalizationRunResult,
+} from './strict-false-localization-port.js';
 import type {
   StrictFalseDifferentialProbe,
   StrictFalseDifferentialRunResult,
@@ -407,6 +417,21 @@ export interface OperatorDeps {
       probe: StrictFalseDifferentialProbe,
     ) => Promise<StrictFalseDifferentialRunResult>;
   }>;
+  /**
+   * POST-SFD1. Bind the strict-false LOCAL-VALIDATION LOCALIZATION runner to the resolved credential.
+   *
+   * Same credential-bound one-probe shape as every seam above, and required only for
+   * POST_SFD1_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE. Its probe carries the SAME request SFD1 sent
+   * -- same model, endpoint, messages, schema, schema name, json_schema mode, strict=false, effort
+   * and budget -- and changes NO wire field at all. What it adds is local: the runner is given BOTH
+   * validation authorities, so a refusal after a 2xx can be attributed to the stage that produced it.
+   */
+  readonly openStrictFalseLocalizationRunner?: (credential: unknown) => Promise<{
+    readonly probe: StrictFalseLocalizationProbe;
+    readonly run: (
+      probe: StrictFalseLocalizationProbe,
+    ) => Promise<StrictFalseLocalizationRunResult>;
+  }>;
 }
 
 export interface OperatorResult {
@@ -566,6 +591,68 @@ export async function runCandidateEvidenceOperator(deps: OperatorDeps): Promise<
   // The second ingress line. In clipboard mode this is where `credentialReuseCount` becomes 2 while
   // `credentialClipboardReads` stays 1 — the pair of numbers that IS the copy-once guarantee.
   emitCredentialIngress(safe, credentialSource, 'CANDIDATE', deps.ingressCounters?.());
+
+  // F''''''''''''. THE strict-false LOCAL-VALIDATION LOCALIZATION probe (POST-SFD1) — then STOP.
+  //
+  // ONE probe, like the seven gates below it, and the ONLY one that changes nothing on the wire.
+  // SFD1's canonical result was HTTP 413 -- a request-layer refusal that produced no local verdict at
+  // all. An unauthorized second execution of that goal, NONCANONICAL and not evidence about the
+  // authorized run, observed HTTP 200 with the document refused by production; that says production
+  // said no and cannot say which stage said it.
+  //
+  // So this sends SFD1's request byte for byte and records BOTH local stages independently. The
+  // reading is the run-neutral localized classifier, which never infers a wire pass from the
+  // projector: a 413 here would report PROVIDER_REQUEST_REJECTED with both stages incomplete, which
+  // is the truthful statement that nothing was localized.
+  if (runGoal === 'POST_SFD1_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE') {
+    const openRunner = deps.openStrictFalseLocalizationRunner;
+    if (openRunner === undefined) {
+      safe.line({ phase: 'strict-false-localization', status: 'FAILED', reason: 'port-missing' });
+      return { outcome: 'INTERNAL_CLOSED_FAILURE' };
+    }
+    let runner: {
+      readonly probe: StrictFalseLocalizationProbe;
+      readonly run: (
+        probe: StrictFalseLocalizationProbe,
+      ) => Promise<StrictFalseLocalizationRunResult>;
+    };
+    try {
+      runner = await openRunner(candidateCredential);
+    } catch {
+      safe.line({
+        phase: 'strict-false-localization',
+        status: 'FAILED',
+        reason: 'runner-bind-failed',
+      });
+      return { outcome: 'INTERNAL_CLOSED_FAILURE' };
+    }
+
+    let localizationResult: StrictFalseLocalizationRunResult | undefined;
+    const localizationReservation = ledger.reserve('strict-false-localization-probe');
+    if (!localizationReservation.ok) {
+      safe.line({
+        phase: 'strict-false-localization',
+        status: 'REFUSED',
+        stepId: runner.probe.stepId,
+        reason: localizationReservation.refusal,
+      });
+    } else {
+      localizationResult = await runner.run(runner.probe);
+      // The USAGE the provider reported, when it reported any. `undefined` still means "bound it",
+      // and the per-dimension provenance says which happened.
+      ledger.settle(localizationResult.usage, localizationResult.outcome.providerCompleted);
+      emitStrictFalseLocalizationProbeOutcome(safe, runner.probe, localizationResult.outcome);
+    }
+
+    emitStrictFalseLocalizationClassification(
+      safe,
+      analyseLocalizedStructuredReply(localizationResult?.outcome),
+      localizationResult === undefined ? 0 : 1,
+    );
+    emitStrictFalseLocalizationReceipt(safe, ledger.snapshot());
+    safe.line({ finalStatus: 'POST_SFD1_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE_COMPLETE' });
+    return { outcome: 'POST_SFD1_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE_COMPLETE' };
+  }
 
   // F'''''''''''. THE best-effort json_schema STRICT-POSTURE DIFFERENTIAL (POST-RBD1) — then STOP.
   //

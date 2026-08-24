@@ -176,6 +176,19 @@ export const OPERATOR_OUTCOMES = [
    * must not permit the launch it is guarding.
    */
   'RUN_GOAL_CONSUMPTION_MARKER_UNAVAILABLE',
+  /**
+   * POST-SFD1. The strict-false LOCAL-VALIDATION LOCALIZATION probe ran, and the run stopped.
+   *
+   * Its own code, for the same reason every diagnostic above it has one: a shell reading
+   * `$LASTEXITCODE` must be able to say WHICH governed question was asked. Sharing 33 would make
+   * SFD1's canonical HTTP 413 receipt and this run's stage-localized receipt indistinguishable, and
+   * SFD1 is CONSUMED evidence that must stay readable.
+   *
+   * It means the probe was ATTEMPTED and the receipt was written. It does not mean the document was
+   * accepted, does not mean a stage was localized -- a 413 localizes nothing -- and authorizes no
+   * production change of strict mode, output budget or reasoning effort.
+   */
+  'POST_SFD1_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE_COMPLETE',
 ] as const;
 export type OperatorOutcome = (typeof OPERATOR_OUTCOMES)[number];
 
@@ -225,4 +238,7 @@ export const OPERATOR_EXIT_CODES: Readonly<Record<OperatorOutcome, number>> = Ob
   RUN_GOAL_ALREADY_CONSUMED: 35,
   // The next unused integer; 0-35 keep meaning exactly what they meant.
   RUN_GOAL_CONSUMPTION_MARKER_UNAVAILABLE: 36,
+  // The next unused integer; 0-36 keep meaning exactly what they meant. In particular 33 still means
+  // SFD1's best-effort strict-false differential and never this localization run.
+  POST_SFD1_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE_COMPLETE: 37,
 });

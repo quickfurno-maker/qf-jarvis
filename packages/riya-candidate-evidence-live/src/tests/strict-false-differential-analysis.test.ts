@@ -349,8 +349,21 @@ describe('the goal, exit code and ledger are this run’s own', () => {
     expect(OPERATOR_RUN_GOALS).toContain(
       'POST_RBD1_REASONING_LOW_OUTPUT_BUDGET_8192_STRICT_FALSE_DIFFERENTIAL',
     );
-    expect(OPERATOR_RUN_GOALS.at(-1)).toBe(
-      'POST_RBD1_REASONING_LOW_OUTPUT_BUDGET_8192_STRICT_FALSE_DIFFERENTIAL',
+    // EXISTS EXACTLY ONCE, not "is last". SFD1's goal was the newest when this was written; a
+    // later diagnostic appended after it does not move SFD1's token, and asserting a position made
+    // this spec fail for a change that has nothing to do with what it measures. The exact ordering
+    // is locked ONCE, in `operator-sequence.test.ts`.
+    expect(
+      OPERATOR_RUN_GOALS.filter(
+        (one) => one === 'POST_RBD1_REASONING_LOW_OUTPUT_BUDGET_8192_STRICT_FALSE_DIFFERENTIAL',
+      ),
+    ).toHaveLength(1);
+    expect(
+      OPERATOR_RUN_GOALS.indexOf('POST_RLD1_REASONING_LOW_OUTPUT_BUDGET_8192_DIFFERENTIAL'),
+    ).toBeLessThan(
+      OPERATOR_RUN_GOALS.indexOf(
+        'POST_RBD1_REASONING_LOW_OUTPUT_BUDGET_8192_STRICT_FALSE_DIFFERENTIAL',
+      ),
     );
     expect(OPERATOR_RUN_GOALS[0]).toBe('FULL_EVIDENCE');
     // Both prior goals still present.

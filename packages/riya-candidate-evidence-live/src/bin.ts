@@ -56,6 +56,7 @@ import {
   createModelDifferentialLedger,
   createReasoningBudget8192Ledger,
   createStrictFalseLedger,
+  createStrictFalseLocalizationLedger,
   createReasoningDifferentialLedger,
   createResponsesDifferentialLedger,
   createNeutralRepresentativeLedger,
@@ -78,6 +79,7 @@ import { openLiveResponsesDifferentialRunner } from './responses-differential-po
 import { openLiveReasoningDifferentialRunner } from './reasoning-differential-port.js';
 import { openLiveReasoningBudget8192Runner } from './reasoning-budget-8192-port.js';
 import { openLiveStrictFalseDifferentialRunner } from './strict-false-differential-port.js';
+import { openLiveStrictFalseLocalizationRunner } from './strict-false-localization-port.js';
 import { DEFAULT_CREDENTIAL_SOURCE_MODE, isCredentialSourceMode } from './credential-source.js';
 import type { CredentialSourceMode } from './credential-source.js';
 import { DEFAULT_RUN_GOAL } from './internal/run-goal.js';
@@ -201,7 +203,13 @@ export function parseCliArgs(argv: readonly string[]): CliParse {
         // and everything else held, and a receipt must say which strict posture produced it. There
         // is deliberately no `--strict`, `--strict-json` or `--response-format` flag -- the owner
         // selects a governed PURPOSE, never a raw provider parameter.
-        value !== 'POST_RBD1_REASONING_LOW_OUTPUT_BUDGET_8192_STRICT_FALSE_DIFFERENTIAL'
+        value !== 'POST_RBD1_REASONING_LOW_OUTPUT_BUDGET_8192_STRICT_FALSE_DIFFERENTIAL' &&
+        // POST-SFD1. Separate again, and this one changes NO wire field: it sends SFD1's request and
+        // records which LOCAL stage refused. A receipt must say which run produced it, and since the
+        // bodies are identical the goal and the step id are the only things that can. There is
+        // deliberately no `--localize`, `--wire-schema` or `--validate` flag -- the owner selects a
+        // governed PURPOSE, never a raw parameter.
+        value !== 'POST_SFD1_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE'
       ) {
         return { ok: false, reason: 'invalid-run-goal' };
       }
@@ -243,6 +251,12 @@ export function parseCliArgs(argv: readonly string[]): CliParse {
  * real terminal and a real provider to run. A bounded run whose bound is untested is not bounded.
  */
 export function ledgerForRunGoal(goal: OperatorRunGoal): RequestLedger {
+  if (goal === 'POST_SFD1_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE') {
+    // Two requests, one dollar: the smoke plus ONE probe, at the PRODUCTION tariff. The same
+    // arithmetic SFD1 had, because it is the same request -- asking where a refusal came from does
+    // not need more budget than meeting the refusal did.
+    return createStrictFalseLocalizationLedger();
+  }
   if (goal === 'POST_RBD1_REASONING_LOW_OUTPUT_BUDGET_8192_STRICT_FALSE_DIFFERENTIAL') {
     // Two requests, one dollar: the smoke plus ONE best-effort probe, at the PRODUCTION tariff.
     return createStrictFalseLedger();
@@ -440,6 +454,23 @@ async function main(): Promise<number> {
           const projection = projectGroqStrictJsonSchema(rawSchema);
           if (!projection.ok) {
             throw new Error('QFJ_STRICT_FALSE_DIFFERENTIAL_PROJECTION_FAILED');
+          }
+          return projection.schema;
+        },
+      }),
+    // POST-SFD1. The REAL strict-false LOCALIZATION port, bound to the credential just resolved.
+    //
+    // Bound from the day the seam exists, for the reason HF4-R8 taught. The SAME production
+    // projection is injected and the port reuses NRA1's own neutral capture, so the request is
+    // SFD1's byte for byte; the port additionally hands the runner the captured WIRE schema, which
+    // is a local validator and never reaches the provider.
+    openStrictFalseLocalizationRunner: (credential) =>
+      openLiveStrictFalseLocalizationRunner({
+        credential,
+        projectSchema: (rawSchema) => {
+          const projection = projectGroqStrictJsonSchema(rawSchema);
+          if (!projection.ok) {
+            throw new Error('QFJ_STRICT_FALSE_LOCALIZATION_PROJECTION_FAILED');
           }
           return projection.schema;
         },

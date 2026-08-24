@@ -225,6 +225,21 @@ export const STRICT_FALSE_MAX_PROVIDER_REQUESTS = SMOKE_REQUESTS + STRICT_FALSE_
 export const STRICT_FALSE_MAX_ESTIMATED_COST_USD = 1;
 
 /**
+ * The exact arithmetic of a POST_SFD1 strict-false LOCALIZATION run: smoke plus ONE probe.
+ *
+ * TWO, and its OWN counter -- and here the counter carries more weight than usual. This run's wire
+ * request is byte-for-byte SFD1's, so a shared counter would leave the two runs distinguishable by
+ * nothing at all on the receipt. SFD1 is CONSUMED, its canonical result was HTTP 413, and its
+ * evidence is immutable.
+ */
+export const STRICT_FALSE_LOCALIZATION_PROBE_REQUESTS = 1;
+export const STRICT_FALSE_LOCALIZATION_MAX_PROVIDER_REQUESTS =
+  SMOKE_REQUESTS + STRICT_FALSE_LOCALIZATION_PROBE_REQUESTS;
+
+/** The spend ceiling. Same conservative figure as every other bounded diagnostic. */
+export const STRICT_FALSE_LOCALIZATION_MAX_ESTIMATED_COST_USD = 1;
+
+/**
  * Where an aggregate token total came from.
  *
  * ### Why this is per-DIMENSION and not one flag on the run
@@ -301,6 +316,7 @@ export const LEDGER_PHASES = [
   'reasoning-differential-probe',
   'reasoning-budget-8192-probe',
   'strict-false-probe',
+  'strict-false-localization-probe',
 ] as const;
 export type LedgerPhase = (typeof LEDGER_PHASES)[number];
 
@@ -383,6 +399,14 @@ export interface LedgerSnapshot {
    * must be able to say a request was spent with constrained decoding OFF rather than on.
    */
   readonly strictFalseProbeProviderRequests: number;
+  /**
+   * POST-SFD1. Strict-false LOCAL-VALIDATION LOCALIZATION probe requests.
+   *
+   * A THIRTEENTH counter, for the run whose wire request is identical to the twelfth's. Nothing on
+   * the wire distinguishes them, so the counter is what lets a receipt say a request was spent
+   * asking WHICH local stage refused rather than asking what strict=false does.
+   */
+  readonly strictFalseLocalizationProbeProviderRequests: number;
   readonly totalProviderRequests: number;
   readonly successfulProviderResponses: number;
   readonly providerFailures: number;
@@ -478,6 +502,7 @@ export function createRequestLedger(config: RequestLedgerConfig): RequestLedger 
     'reasoning-differential-probe': 0,
     'reasoning-budget-8192-probe': 0,
     'strict-false-probe': 0,
+    'strict-false-localization-probe': 0,
   };
   let successes = 0;
   let failures = 0;
@@ -588,6 +613,7 @@ export function createRequestLedger(config: RequestLedgerConfig): RequestLedger 
         reasoningDifferentialProbeProviderRequests: counts['reasoning-differential-probe'],
         reasoningBudget8192ProbeProviderRequests: counts['reasoning-budget-8192-probe'],
         strictFalseProbeProviderRequests: counts['strict-false-probe'],
+        strictFalseLocalizationProbeProviderRequests: counts['strict-false-localization-probe'],
         totalProviderRequests: total(),
         successfulProviderResponses: successes,
         providerFailures: failures,
@@ -753,6 +779,35 @@ export function createStrictFalseLedger(): RequestLedger {
   return createRequestLedger({
     maxRequests: STRICT_FALSE_MAX_PROVIDER_REQUESTS,
     maxCostUsd: STRICT_FALSE_MAX_ESTIMATED_COST_USD,
+    // The PRODUCTION tariff. Both requests are the production 20B model.
+    pricePerMillionInputUsd: CANDIDATE_PRICE_PER_M_INPUT_USD,
+    pricePerMillionCachedInputUsd: CANDIDATE_PRICE_PER_M_CACHED_INPUT_USD,
+    pricePerMillionOutputUsd: CANDIDATE_PRICE_PER_M_OUTPUT_USD,
+    fallbackInputTokens: CANDIDATE_MAX_INPUT_TOKENS,
+    fallbackOutputTokens: CANDIDATE_MAX_COMPLETION_TOKENS,
+    hardMaxInputTokens: CANDIDATE_MAX_INPUT_TOKENS,
+    hardMaxOutputTokens: CANDIDATE_MAX_COMPLETION_TOKENS,
+  });
+}
+
+/**
+ * The ledger for a bounded POST_SFD1 strict-false LOCALIZATION run.
+ *
+ * The text smoke plus ONE probe: TWO requests, one dollar. The same arithmetic SFD1 had, because it
+ * is the same request -- one smoke, one candidate, no retry, no fallback, no safety, no P10.
+ *
+ * Its own ledger and its own counter, so a receipt can say which QUESTION spent the request. Nothing
+ * about the bounds is widened: a run that asks where a refusal came from does not need more budget
+ * than the run that met the refusal.
+ *
+ * The fallback bounds are the CONFIGURED CEILINGS, unchanged, for the reason the ledger above states
+ * -- and this lane's port propagates provider-reported usage when there is any, so a completed probe
+ * is priced from what was measured rather than from a ceiling.
+ */
+export function createStrictFalseLocalizationLedger(): RequestLedger {
+  return createRequestLedger({
+    maxRequests: STRICT_FALSE_LOCALIZATION_MAX_PROVIDER_REQUESTS,
+    maxCostUsd: STRICT_FALSE_LOCALIZATION_MAX_ESTIMATED_COST_USD,
     // The PRODUCTION tariff. Both requests are the production 20B model.
     pricePerMillionInputUsd: CANDIDATE_PRICE_PER_M_INPUT_USD,
     pricePerMillionCachedInputUsd: CANDIDATE_PRICE_PER_M_CACHED_INPUT_USD,

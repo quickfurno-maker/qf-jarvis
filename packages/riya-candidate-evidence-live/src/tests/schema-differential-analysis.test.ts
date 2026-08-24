@@ -298,21 +298,22 @@ describe('the dedicated ledger', () => {
 
 describe('the historical S11 goal is untouched', () => {
   it('both diagnostic goals exist and are distinct', () => {
-    expect([...OPERATOR_RUN_GOALS]).toEqual([
-      'FULL_EVIDENCE',
-      'SAFETY_REPLICATION',
-      'REQUEST_CONTRACT_DIAGNOSTIC',
-      'SCHEMA_DIFFERENTIAL_DIAGNOSTIC',
-      'POST_SDH4_SCHEMA_REPAIR_VERIFICATION',
-      'POST_SRV1_OPERATIONAL_ACCEPTANCE_DIAGNOSTIC',
-      'POST_OAD3_REPRESENTATIVE_ACCEPTANCE',
-      'POST_RA1_NEUTRAL_REPRESENTATIVE_ACCEPTANCE',
-      'POST_NRA1_GPT_OSS_120B_STRICT_MODEL_DIFFERENTIAL',
-      'POST_MD120B3_GROQ_RESPONSES_API_STRICT_DIFFERENTIAL',
-      'POST_RSP20B2_REASONING_EFFORT_LOW_DIFFERENTIAL',
-      'POST_RLD1_REASONING_LOW_OUTPUT_BUDGET_8192_DIFFERENTIAL',
-      'POST_RBD1_REASONING_LOW_OUTPUT_BUDGET_8192_STRICT_FALSE_DIFFERENTIAL',
-    ]);
+    // What this spec is FOR is that S11's goal and the schema-differential goal are two tokens, in
+    // that order, with the default still first. It used to assert the entire vocabulary as a
+    // literal list, which made every later diagnostic edit this file for no reason S11 cares about
+    // -- and a copied list is a second place the ordering can be wrong. The exact order is locked
+    // ONCE, in `operator-sequence.test.ts`.
+    expect(OPERATOR_RUN_GOALS[0]).toBe('FULL_EVIDENCE');
+    expect(OPERATOR_RUN_GOALS.filter((one) => one === 'REQUEST_CONTRACT_DIAGNOSTIC')).toHaveLength(
+      1,
+    );
+    expect(
+      OPERATOR_RUN_GOALS.filter((one) => one === 'SCHEMA_DIFFERENTIAL_DIAGNOSTIC'),
+    ).toHaveLength(1);
+    expect(OPERATOR_RUN_GOALS.indexOf('REQUEST_CONTRACT_DIAGNOSTIC')).toBeLessThan(
+      OPERATOR_RUN_GOALS.indexOf('SCHEMA_DIFFERENTIAL_DIAGNOSTIC'),
+    );
+    expect(new Set(OPERATOR_RUN_GOALS).size).toBe(OPERATOR_RUN_GOALS.length);
   });
 
   it('the two diagnostics have different exit codes', () => {

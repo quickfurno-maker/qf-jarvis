@@ -199,6 +199,33 @@ export const OPERATOR_RUN_GOALS = [
    * changing that is a separate owner decision this goal does not make.
    */
   'POST_RBD1_REASONING_LOW_OUTPUT_BUDGET_8192_STRICT_FALSE_DIFFERENTIAL',
+  /**
+   * POST-SFD1. The strict-false LOCAL-VALIDATION LOCALIZATION probe: smoke, ONE probe, then stop.
+   *
+   * SFD1 used the goal above and its CANONICAL result was HTTP 413 -- a request-layer refusal that
+   * produced no local verdict at all. An unauthorized second execution of that same goal, which is
+   * NONCANONICAL and does not replace SFD1's record, came back HTTP 200 with the document refused by
+   * production. That says production said no; it cannot say which stage said it.
+   *
+   * Two readings point at completely different investigations. Either the document failed the WIRE
+   * SHAPE the provider was asked for -- a structured-output finding about the provider -- or it
+   * passed the shape and failed a LATER production invariant: grounded citations, the canonical
+   * observation batch, availability refs, the deterministic reducer, the prospective state, the
+   * next-question plan. The receipt could not tell them apart.
+   *
+   * This goal changes NO wire field. The request is byte-for-byte SFD1's candidate request: same
+   * model, same endpoint, same captured neutral messages, same projected schema under the same
+   * schema name, same `json_schema` mode with `strict: false`, same `reasoning_effort='low'`, same
+   * 8,192 budget, same stream/n/sampling/tool posture, same zero-retry and zero-fallback posture.
+   * What changes is entirely LOCAL: both validation stages are recorded independently, and the
+   * verdict is read by the run-neutral stage-localized classifier.
+   *
+   * A separate token again, because SFD1 is CONSUMED and its evidence is immutable -- a receipt must
+   * be able to say which run produced it. It is a DIAGNOSTIC: production still sends
+   * `strict: true` at 4,096 with no reasoning field, and moving any of those is a separate owner
+   * decision this goal does not make.
+   */
+  'POST_SFD1_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE',
 ] as const;
 export type OperatorRunGoal = (typeof OPERATOR_RUN_GOALS)[number];
 
@@ -239,6 +266,8 @@ export const SECOND_CREDENTIAL_NOTICES: Readonly<Record<OperatorRunGoal, string>
     'Smoke passed. Enter the same Groq credential again for the low-reasoning 8192 output-budget differential probe.',
   POST_RBD1_REASONING_LOW_OUTPUT_BUDGET_8192_STRICT_FALSE_DIFFERENTIAL:
     'Smoke passed. Enter the same Groq credential again for the best-effort strict-false JSON-schema differential probe.',
+  POST_SFD1_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE:
+    'Smoke passed. Enter the same Groq credential again for the strict-false local-validation localization probe.',
 });
 
 /**
@@ -279,4 +308,6 @@ export const REUSED_CREDENTIAL_NOTICES: Readonly<Record<OperatorRunGoal, string>
     'Smoke passed. Reusing the credential already read for the low-reasoning 8192 output-budget differential probe.',
   POST_RBD1_REASONING_LOW_OUTPUT_BUDGET_8192_STRICT_FALSE_DIFFERENTIAL:
     'Smoke passed. Reusing the credential already read for the best-effort strict-false JSON-schema differential probe.',
+  POST_SFD1_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE:
+    'Smoke passed. Reusing the credential already read for the strict-false local-validation localization probe.',
 });

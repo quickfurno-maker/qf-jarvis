@@ -121,6 +121,25 @@ export const STATICALLY_CONSUMED_RUN_GOALS: Readonly<Record<string, string>> = O
  *
  * Everything here is a BOUNDED ONE-SHOT DIAGNOSTIC: a single governed live question, whose answer is
  * recorded and whose re-execution would spend an authorization to learn nothing.
+ *
+ * ### Eligible is a SUPERSET of tombstoned, and the gap is where the next run lives
+ *
+ * The first revision of this list happened to equal the tombstone keys exactly, and it was merged
+ * with a note saying so was a snapshot rather than a law. It stopped being true the moment a new
+ * bounded diagnostic was wired: `POST_SFD1_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE` is eligible
+ * because it is a single governed question, and is NOT tombstoned because nobody has run it.
+ *
+ * The durable invariants are these, and a spec asserts each:
+ *
+ * - every tombstone is eligible -- history cannot have consumed a goal the guard does not govern;
+ * - `FULL_EVIDENCE` and `SAFETY_REPLICATION` are repeatable and appear in neither list;
+ * - every member of the closed goal vocabulary is one or the other, so nothing is unaccounted for.
+ *
+ * The exact CONTENT of the eligible-minus-tombstoned difference is still a snapshot of this head,
+ * not a law: it is empty between a diagnostic being wired and its run being recorded, and it holds
+ * one entry now. A future PR that wires a second pending diagnostic, or that tombstones this one
+ * after it runs, edits that assertion -- which is exactly the review moment where "has this been
+ * consumed?" should be asked.
  */
 export const ONE_SHOT_DIAGNOSTIC_RUN_GOALS: readonly string[] = Object.freeze([
   'REQUEST_CONTRACT_DIAGNOSTIC',
@@ -134,6 +153,8 @@ export const ONE_SHOT_DIAGNOSTIC_RUN_GOALS: readonly string[] = Object.freeze([
   'POST_RSP20B2_REASONING_EFFORT_LOW_DIFFERENTIAL',
   'POST_RLD1_REASONING_LOW_OUTPUT_BUDGET_8192_DIFFERENTIAL',
   'POST_RBD1_REASONING_LOW_OUTPUT_BUDGET_8192_STRICT_FALSE_DIFFERENTIAL',
+  // POST-SFD1. The FIRST member that is eligible and NOT tombstoned -- it has not run.
+  'POST_SFD1_STRICT_FALSE_LOCAL_VALIDATION_PROVENANCE',
 ]);
 
 /**
