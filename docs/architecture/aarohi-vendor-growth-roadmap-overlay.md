@@ -84,6 +84,11 @@ Sourcing candidate businesses and enriching them into a reviewable profile. Enri
 **untrusted reference material** — it never establishes consent, never proves identity, and never
 grants eligibility to contact. The existing-vendor gate is checked against Core before a candidate is
 eligible for anything downstream.
+**The offline DOMAIN for this stage is recorded by
+[ADR-0111](../decisions/ADR-0111-qfj-p12-avg2-aarohi-discovery-enrichment-domain.md)** — contracts and
+pure functions only. Recording a capability is not implementing one: there is still no discovery
+adapter, no scraper, no persistence, no scoring and no outreach, and the runtime status above is
+unchanged.
 
 ### AVG-3 — Scoring and Outreach Eligibility
 Ranking prospects, and — separately — deciding whether outreach is permitted at all. **Scoring and

@@ -29,6 +29,28 @@
  * public route into `HANDED_OFF_TO_ANISHA` — the ordinary transition table has no entry for it, so a
  * caller cannot end Aarohi ownership without Core's attestation in hand. Substitute authority tokens
  * are enumerated so their refusal is provable; substitute EVIDENCE has no field to occupy at all.
+ *
+ * ### AVG-2 adds discovery evidence, and adds no authority at all (ADR-0111)
+ *
+ * An enrichment claim is an untrusted, provenance-bound observation about a candidate business. It
+ * never establishes consent, never proves identity and never grants eligibility to contact. The
+ * attribute vocabulary is closed, presence attributes cannot hold a destination, labels are screened
+ * for contact shapes, and every evidence-quality level is spelled `UNVERIFIED_`.
+ *
+ * Conflicting claims are REPORTED, never resolved: sources do not vote, confidence does not win, and
+ * array order changes nothing. Identity resolution belongs to AVG-6.
+ *
+ * There is ONE canonical public schema per shape. `enrichmentClaimSchema` and
+ * `enrichmentProfileSchema` describe BUILT values and certify exactly what the builders produce, so
+ * the contract cannot say two things depending on which half a reader consults. Profile
+ * construction re-parses and REBUILDS every claim rather than trusting a declared type, so a plain
+ * object that merely looks like a claim is refused and a caller keeps no reference into the result.
+ *
+ * `evaluateEnrichmentReviewReadiness` parses the canonical profile BEFORE consulting Core, then
+ * reuses the AVG-1 gate and reads nothing else — not claim
+ * count, not evidence quality, not consistency. `ENRICHMENT_REVIEWABLE` means a human may look at
+ * the profile. It is not contact authorization, not execution eligibility, not consent, not Core
+ * ACTIVE and not a verified vendor. Scoring and outreach eligibility are AVG-3's, not this slice's.
  */
 
 export {
@@ -94,3 +116,61 @@ export type {
   CoreActiveHandoffResult,
   HandoffRefusalReason,
 } from './contracts/active-handoff.js';
+
+export {
+  AAROHI_ENRICHMENT_CONTRACT_VERSION,
+  createEnrichmentClaim,
+  ENRICHMENT_ATTRIBUTE_VALUE_KIND,
+  ENRICHMENT_ATTRIBUTES,
+  ENRICHMENT_CLAIM_REFUSALS,
+  ENRICHMENT_EVIDENCE_QUALITIES,
+  ENRICHMENT_SOURCE_KINDS,
+  ENRICHMENT_VALUE_KINDS,
+  enrichmentClaimIdentity,
+  enrichmentClaimSchema,
+  enrichmentSourceSchema,
+  MAX_ENRICHMENT_LABEL_LENGTH,
+  parseEnrichmentClaim,
+  PRESENCE_SIGNALS,
+} from './contracts/enrichment-claim.js';
+export type {
+  AarohiEnrichmentContractVersion,
+  EnrichmentAttribute,
+  EnrichmentClaim,
+  EnrichmentClaimRefusal,
+  EnrichmentClaimResult,
+  EnrichmentEvidenceQuality,
+  EnrichmentSource,
+  EnrichmentSourceKind,
+  EnrichmentValueKind,
+  PresenceSignal,
+} from './contracts/enrichment-claim.js';
+
+export {
+  createEnrichmentProfile,
+  ENRICHMENT_CONSISTENCY_VERDICTS,
+  ENRICHMENT_PROFILE_REFUSALS,
+  enrichmentProfileSchema,
+  MAX_ENRICHMENT_PROFILE_CLAIMS,
+  parseEnrichmentProfile,
+  summariseEnrichmentConsistency,
+} from './contracts/enrichment-profile.js';
+export type {
+  EnrichmentAttributeSummary,
+  EnrichmentConsistencySummary,
+  EnrichmentConsistencyVerdict,
+  EnrichmentProfile,
+  EnrichmentProfileRefusal,
+  EnrichmentProfileResult,
+} from './contracts/enrichment-profile.js';
+
+export {
+  ENRICHMENT_REVIEW_OUTCOME,
+  ENRICHMENT_REVIEW_REFUSALS,
+  evaluateEnrichmentReviewReadiness,
+} from './contracts/enrichment-review.js';
+export type {
+  EnrichmentReviewOutcome,
+  EnrichmentReviewRefusal,
+  EnrichmentReviewVerdict,
+} from './contracts/enrichment-review.js';
