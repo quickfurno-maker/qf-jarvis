@@ -1,10 +1,10 @@
-# ADR-0112 â€” QFJ-P12 / QVGE AVG-3: Aarohi scoring and outreach-eligibility domain
+# ADR-0112 — QFJ-P12 / QVGE AVG-3: Aarohi scoring and outreach-eligibility domain
 
-**Status:** Accepted â€” offline domain only. No runtime, persistence, discovery adapter, outreach
+**Status:** Accepted — offline domain only. No runtime, persistence, discovery adapter, outreach
 workspace, drafting, provider, channel, credential, execution path, migration or rollout is activated
 by this decision. Aarohi remains **PLANNED / DISABLED**.
 
-**Date:** 2026-08-24
+**Date:** 2026-08-25
 
 **Supersedes:** nothing. ADR-0085 remains the governing Aarohi authority boundary. ADR-0111 remains
 the canonical AVG-2 discovery/enrichment decision.
@@ -30,7 +30,7 @@ quality score. The two decisions therefore need different inputs and different o
 
 Add a deterministic `evaluateProspectPriority` pure function over one canonical AVG-2 profile.
 
-The V1 scale is deliberately **0â€“9: one point per governed enrichment attribute**. It measures how
+The V1 scale is deliberately **0–9: one point per governed enrichment attribute**. It measures how
 much non-conflicting review material is present and does **not** embed city, category, package, price,
 revenue, lead-volume or conversion preferences. AVG-3 has no governed source for business-targeting
 truth, so relative weights would be an undocumented commercial policy.

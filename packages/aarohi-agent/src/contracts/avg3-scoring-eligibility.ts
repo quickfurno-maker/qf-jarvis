@@ -1,5 +1,5 @@
 /**
- * AVG-3 â€” prospect priority scoring and acquisition contact eligibility (ADR-0112).
+ * AVG-3 — prospect priority scoring and acquisition contact eligibility (ADR-0112).
  *
  * These are deliberately two different decisions.
  *

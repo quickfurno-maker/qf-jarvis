@@ -106,7 +106,7 @@ describe('AVG-1 adds a DOMAIN, not a runtime', () => {
     }
   });
 
-  it('persists nothing â€” there is no store, repository or migration', () => {
+  it('persists nothing — there is no store, repository or migration', () => {
     // Durable acquisition-case storage is not governed at implementation level yet, so contracts
     // only and storage stays out.
     for (const { file, code } of productionFiles()) {
@@ -128,7 +128,7 @@ describe('it duplicates no shared Jarvis infrastructure', () => {
     // Deliberately asserted by CONSTRUCTOR name rather than by listing workspace specifiers.
     //
     // Spelling `@qf-jarvis/<package>` literally here would make this file look like an importer to
-    // the sibling containment specs that scan the whole repository for their own specifier â€” which
+    // the sibling containment specs that scan the whole repository for their own specifier — which
     // is a false positive I would then have to weaken THEIR lock to accommodate. The total
     // `@qf-jarvis/` ban below is strictly stronger than any enumeration anyway.
     for (const { file, code } of productionFiles()) {

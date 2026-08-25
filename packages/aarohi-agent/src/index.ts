@@ -1,5 +1,5 @@
 /**
- * `@qf-jarvis/aarohi-agent` â€” the AVG-1 prospect identity and acquisition-case DOMAIN.
+ * `@qf-jarvis/aarohi-agent` — the AVG-1 prospect identity and acquisition-case DOMAIN.
  *
  * ### What this is
  *
@@ -26,7 +26,7 @@
  * ambiguous Core truth is a STOP rather than a gap.
  *
  * The ACTIVE handoff trusts exactly one authority, and `completeCoreActiveHandoff` is the ONLY
- * public route into `HANDED_OFF_TO_ANISHA` â€” the ordinary transition table has no entry for it, so a
+ * public route into `HANDED_OFF_TO_ANISHA` — the ordinary transition table has no entry for it, so a
  * caller cannot end Aarohi ownership without Core's attestation in hand. Substitute authority tokens
  * are enumerated so their refusal is provable; substitute EVIDENCE has no field to occupy at all.
  *
@@ -47,7 +47,7 @@
  * object that merely looks like a claim is refused and a caller keeps no reference into the result.
  *
  * `evaluateEnrichmentReviewReadiness` parses the canonical profile BEFORE consulting Core, then
- * reuses the AVG-1 gate and reads nothing else â€” not claim
+ * reuses the AVG-1 gate and reads nothing else — not claim
  * count, not evidence quality, not consistency. `ENRICHMENT_REVIEWABLE` means a human may look at
  * the profile. It is not contact authorization, not execution eligibility, not consent, not Core
  * ACTIVE and not a verified vendor.
