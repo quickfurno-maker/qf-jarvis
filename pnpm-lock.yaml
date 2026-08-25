@@ -130,6 +130,9 @@ importers:
       '@mastra/core':
         specifier: 1.61.0
         version: 1.61.0(zod@4.4.3)
+      '@qf-jarvis/agent-runtime':
+        specifier: workspace:*
+        version: link:../../packages/agent-runtime
       '@qf-jarvis/control-plane-read-contract':
         specifier: workspace:*
         version: link:../../packages/control-plane-read-contract
@@ -139,6 +142,9 @@ importers:
       '@qf-jarvis/model-gateway':
         specifier: workspace:*
         version: link:../../packages/model-gateway
+      '@qf-jarvis/riya-agent':
+        specifier: workspace:*
+        version: link:../../packages/riya-agent
       zod:
         specifier: 4.4.3
         version: 4.4.3

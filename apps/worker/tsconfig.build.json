@@ -15,7 +15,9 @@
   "references": [
     { "path": "../../packages/event-backbone" },
     { "path": "../../packages/control-plane-read-contract/tsconfig.build.json" },
-    { "path": "../../packages/model-gateway" }
+    { "path": "../../packages/model-gateway" },
+    { "path": "../../packages/agent-runtime/tsconfig.build.json" },
+    { "path": "../../packages/riya-agent/tsconfig.build.json" }
   ],
   "include": ["src/**/*.ts"],
   "exclude": ["src/tests/**"]
