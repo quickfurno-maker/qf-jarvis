@@ -11,8 +11,10 @@ import {
   createWorkspaceDraft,
   evaluateProspectPriority,
   evaluateWorkspaceApprovalReadiness,
+  openAcquisitionCase,
   parseWorkspaceDraft,
   reviseWorkspaceDraft,
+  transitionAcquisitionCase,
   transitionWorkspaceDraft,
   workspaceDraftSchema,
 } from '../index.js';
@@ -502,6 +504,28 @@ describe('AVG-4 readiness stops at the shared Core approval-request boundary', (
       ready: true,
       outcome: WORKSPACE_APPROVAL_READINESS_OUTCOME,
     });
+  });
+
+  it('readiness cannot locally mark the acquisition case CONTACT_APPROVED', () => {
+    const ready = evaluateWorkspaceApprovalReadiness(
+      openDraft(),
+      makeProfile(),
+      observation('NOT_REGISTERED'),
+    );
+    expect(ready.ready).toBe(true);
+
+    const opened = openAcquisitionCase({ caseRef: 'case.avg4.alpha', prospectRef: PROSPECT });
+    if (opened === undefined) throw new Error('case must open');
+    const pending = transitionAcquisitionCase(opened, 'ELIGIBILITY_PENDING');
+    if (!pending.ok) throw new Error('pending transition must succeed');
+    const eligible = transitionAcquisitionCase(pending.next, 'ELIGIBLE_NET_NEW');
+    if (!eligible.ok) throw new Error('eligibility transition must succeed');
+
+    expect(transitionAcquisitionCase(eligible.next, 'CONTACT_APPROVED')).toStrictEqual({
+      ok: false,
+      refusal: 'TRANSITION_NOT_PERMITTED',
+    });
+    expect(eligible.next.state).toBe('ELIGIBLE_NET_NEW');
   });
 
   it('keeps review, draft and readiness APIs structurally separate', () => {

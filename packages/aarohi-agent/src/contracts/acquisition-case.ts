@@ -3,8 +3,9 @@
  *
  * ### A case tracks AAROHI'S WORK, never the party's business state
  *
- * This is the distinction the whole file is built around. `CONTACT_APPROVED` says a human or Core
- * authorized outreach; it does not say a message was sent. `AWAITING_CORE_ACTIVATION` says Aarohi
+ * This is the distinction the whole file is built around. `CONTACT_APPROVED` is a reserved observation that an authoritative Core-bound approval bridge may
+ * record in a future stage; the ordinary transition function cannot create it. It does not say a
+ * message was sent. `AWAITING_CORE_ACTIVATION` says Aarohi
  * has finished what it can do and is waiting; it does not say a payment happened.
  *
  * So there is deliberately no `VERIFIED_VENDOR`, no `PAYMENT_CONFIRMED` and no `ACTIVE_VENDOR` state
@@ -42,7 +43,7 @@ export const ACQUISITION_CASE_STATES = [
   'ELIGIBILITY_PENDING',
   /** Core confirmed genuinely net-new. Aarohi may work the case; it still may not send anything. */
   'ELIGIBLE_NET_NEW',
-  /** Core or a human authorized outreach. Authorization is not delivery. */
+  /** Reserved for a future Core-bound approval bridge. Generic transition cannot create it. */
   'CONTACT_APPROVED',
   /** Aarohi's acquisition work is done and the case waits on Core's authoritative activation. */
   'AWAITING_CORE_ACTIVATION',
@@ -94,8 +95,12 @@ export const ACQUISITION_CASE_TRANSITIONS: Readonly<
 > = Object.freeze({
   DISCOVERED: Object.freeze(['ELIGIBILITY_PENDING', 'REFUSED', 'CLOSED'] as const),
   ELIGIBILITY_PENDING: Object.freeze(['ELIGIBLE_NET_NEW', 'REFUSED', 'CLOSED'] as const),
-  ELIGIBLE_NET_NEW: Object.freeze(['CONTACT_APPROVED', 'REFUSED', 'CLOSED'] as const),
-  CONTACT_APPROVED: Object.freeze(['AWAITING_CORE_ACTIVATION', 'REFUSED', 'CLOSED'] as const),
+  // Approval is authority-shaped. The ordinary lifecycle may refuse/close, but cannot manufacture
+  // CONTACT_APPROVED. A future adapter must bind the shared Core approval result before entering it.
+  ELIGIBLE_NET_NEW: Object.freeze(['REFUSED', 'CLOSED'] as const),
+  // Likewise, a caller holding or forging CONTACT_APPROVED cannot promote itself to the activation
+  // boundary through this generic function. Only safe exits remain until a governed bridge exists.
+  CONTACT_APPROVED: Object.freeze(['REFUSED', 'CLOSED'] as const),
   // NO handoff entry. Reaching `HANDED_OFF_TO_ANISHA` requires a Core ACTIVE attestation, which this
   // table cannot carry — so the only ordinary exits from the boundary are refusal and closure.
   AWAITING_CORE_ACTIVATION: Object.freeze(['REFUSED', 'CLOSED'] as const),
@@ -164,9 +169,10 @@ export type CaseTransitionResult =
  * Returns a NEW frozen case rather than mutating: a case that could be edited in place would make
  * "terminal" advisory. A `REFUSED` transition must carry a reason, and no other transition may.
  *
- * This function CANNOT reach `HANDED_OFF_TO_ANISHA` from any state — the transition table has no
- * entry for it. Handing off requires Core's ACTIVE attestation and lives in
- * `completeCoreActiveHandoff`.
+ * This function CANNOT create `CONTACT_APPROVED`, CANNOT advance it to
+ * `AWAITING_CORE_ACTIVATION`, and CANNOT reach `HANDED_OFF_TO_ANISHA`. Approval-shaped progress is
+ * reserved for a future bridge that binds the repository's shared Core approval result; handoff
+ * requires Core's ACTIVE attestation and lives in `completeCoreActiveHandoff`.
  */
 export function transitionAcquisitionCase(
   current: AcquisitionCase,

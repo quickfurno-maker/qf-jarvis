@@ -128,6 +128,24 @@ It does not add a route, page, API, database table, runtime service or deploymen
 must preserve ADR-0007's rule that no optimistic/local approved state exists and must use the existing
 shared approval boundary rather than reimplementing it.
 
+### 7. Owner review closes the dormant generic CONTACT_APPROVED bypass
+
+AVG-4 owner review exposed a pre-existing AVG-1 weakness: the ordinary acquisition-case transition
+table allowed `ELIGIBLE_NET_NEW -> CONTACT_APPROVED -> AWAITING_CORE_ACTIVATION` with no binding to
+Core's authoritative approval result. The package still had no runtime or execution path, so this had
+not caused an external effect, but leaving the transition in place would create exactly the local
+approval-shaped state ADR-0007 forbids once a channel is introduced.
+
+The correction is fail-closed:
+
+- ordinary `transitionAcquisitionCase` cannot enter `CONTACT_APPROVED`;
+- a `CONTACT_APPROVED` value cannot advance to `AWAITING_CORE_ACTIVATION` through the generic table;
+- both approval-gated states remain reserved vocabulary for a future governed bridge;
+- that future bridge must bind the repository's shared/Core authoritative approval result rather than
+  inventing a second approval contract in Aarohi.
+
+This is an owner-review invariant repair under AVG-4, not a new AVG phase and not runtime activation.
+
 ## Public surface
 
 AVG-4 adds:
@@ -184,6 +202,7 @@ The AVG-4 suite locks:
 - `REJECTED` is terminal;
 - revisions do not move backwards in time;
 - only an OPEN matching draft may become approval-request-ready;
+- generic acquisition-case transition cannot manufacture CONTACT_APPROVED or AWAITING_CORE_ACTIVATION;
 - readiness rechecks Core rather than trusting an earlier review;
 - readiness exposes no approval decision, execution intent, destination or send authority;
 - public exports remain exact;
