@@ -2,7 +2,14 @@
 
 **Document status:** Canonical capability overlay owned by **QFJ-P12 - Advanced Intelligence and Future Agents**. Adopted under [ADR-0114](../decisions/ADR-0114-qfj-p12-jarvis-autonomy-operations-mastra-boundary.md). Read with [qf-jarvis-roadmap-v3.md](./qf-jarvis-roadmap-v3.md), [mvp-post-mvp-delivery-overlay.md](./mvp-post-mvp-delivery-overlay.md), and [ADR-0002](../decisions/ADR-0002-recommend-authorize-execute-model.md).
 
-**Runtime status: PLANNED / DISABLED. JAO-0 is governance only.** No Mastra dependency, supervisor runtime, autonomous loop, capability-broker package, memory store, MCP server, provider route, credential, database access, n8n execution, channel action, deployment, or rollout is activated here.
+**Runtime status: DEFAULT-OFF / SHADOW.** JAO-0 is governance. JAO-1 and JAO-2 have merged
+OFFLINE, default-off proofs: an exact-pinned `@mastra/core` dependency and two supervisor
+compositions now exist in `apps/worker/src/jao/`, and neither is imported or started by any
+production entry point.
+
+Nothing beyond that is activated. There is still no autonomous loop, capability-broker package,
+memory store, MCP server, provider route, credential, database access, n8n execution, channel action,
+deployment or rollout. Implementation is not activation.
 
 ## What this overlay is
 
@@ -113,6 +120,22 @@ execution, deployment or production rollout. JAO-1 remains **SHADOW / DEFAULT-OF
 
 Delegate bounded analysis only to independently governed and active specialists/capabilities. A PLANNED/DISABLED specialist remains unavailable. Delegation never transfers authority.
 
+**The offline SHADOW proof for this stage is recorded by
+[ADR-0116](../decisions/ADR-0116-jao2-governed-specialist-delegation-proof.md).** It lives at
+`apps/worker/src/jao/governed-specialist-delegation/` and is activated by nothing. One synthetic
+delegation envelope reaches a local governed registry; availability is decided before invocation, so
+PLANNED, DISABLED, unknown and wrong-capability requests are refused without the specialist being
+called. The authority ceiling is enforced by rank on parsed data: an `L1_READ` supervisor may
+delegate at most `L0_REASON`, and it may not exceed the specialist's own governed ceiling either.
+
+The first specialist is **Riya, through her pure behaviour surface only** -- `decideRiyaTurn`, which
+calls no model, holds no credential, touches no transport and creates no proposal. Riya's own role,
+pause and takeover guards stay superior and her refusals are preserved rather than overridden.
+`modelReplyEligible` is carried as DATA: JAO-2 makes **zero** model calls whatever its value.
+
+Registry `ACTIVE` means available to this shadow adapter. It is **not** a statement that any
+specialist's production channel is rolled out.
+
 ### JAO-3 - Operational Memory and Resumable Investigations
 
 Add non-authoritative durable investigation memory: evidence references, hypotheses, checkpoints, owner corrections, budgets, workflow state, expiry, and supersession.
@@ -151,7 +174,9 @@ JAO and AVG are sibling overlays under QFJ-P12.
 
 Implementation is not activation. Shadow output authorizes nothing. Passing evaluation does not promote rollout.
 
-**Current posture: JAO-0 governance adopted; JAO-1 through JAO-7 PLANNED / DISABLED.**
+**Current posture:** JAO-0 governance adopted. **JAO-1 and JAO-2 merged as OFFLINE, DEFAULT-OFF,
+SHADOW proofs** -- present in the worker composition, activated by nothing. **JAO-3 through JAO-7
+remain PLANNED / DISABLED.**
 
 ## JAO-0 exit gate
 
