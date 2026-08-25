@@ -133,6 +133,12 @@ importers:
       '@qf-jarvis/agent-runtime':
         specifier: workspace:*
         version: link:../../packages/agent-runtime
+      '@qf-jarvis/approval-runtime':
+        specifier: workspace:*
+        version: link:../../packages/approval-runtime
+      '@qf-jarvis/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@qf-jarvis/control-plane-read-contract':
         specifier: workspace:*
         version: link:../../packages/control-plane-read-contract
@@ -142,6 +148,9 @@ importers:
       '@qf-jarvis/model-gateway':
         specifier: workspace:*
         version: link:../../packages/model-gateway
+      '@qf-jarvis/recommendation-runtime':
+        specifier: workspace:*
+        version: link:../../packages/recommendation-runtime
       '@qf-jarvis/riya-agent':
         specifier: workspace:*
         version: link:../../packages/riya-agent
