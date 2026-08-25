@@ -58,6 +58,13 @@
  * predicted conversion or permission. Contact eligibility accepts no priority input at all: it
  * reuses the existing AVG-1 Core allowlist, so high priority cannot bypass suppression and low
  * priority cannot manufacture a Core refusal. Both remain pure offline-domain decisions.
+ *
+ * ### AVG-4 adds an inert outreach workspace domain (ADR-0113)
+ *
+ * Review items expose evidence, priority and current Core eligibility side by side. Drafts are
+ * immutable OPEN/HELD/REJECTED revisions with no approved or sent state. Approval readiness
+ * rechecks the AVG-3 Core gate and can say only that an OPEN draft is ready to enter the existing
+ * Core approval-request path; this package creates no approval decision, authorization or effect.
  */
 
 export {
@@ -199,3 +206,30 @@ export type {
   ProspectPriorityRefusal,
   ProspectPriorityResult,
 } from './contracts/avg3-scoring-eligibility.js';
+export {
+  AAROHI_AVG4_CONTRACT_VERSION,
+  MAX_WORKSPACE_DRAFT_LENGTH,
+  WORKSPACE_APPROVAL_READINESS_OUTCOME,
+  WORKSPACE_APPROVAL_READINESS_REFUSALS,
+  WORKSPACE_DRAFT_REFUSALS,
+  WORKSPACE_DRAFT_STATES,
+  buildWorkspaceReviewItem,
+  createWorkspaceDraft,
+  evaluateWorkspaceApprovalReadiness,
+  parseWorkspaceDraft,
+  reviseWorkspaceDraft,
+  transitionWorkspaceDraft,
+  workspaceDraftSchema,
+} from './contracts/avg4-outreach-workspace.js';
+export type {
+  AarohiAvg4ContractVersion,
+  WorkspaceApprovalReadiness,
+  WorkspaceApprovalReadinessOutcome,
+  WorkspaceApprovalReadinessRefusal,
+  WorkspaceDraft,
+  WorkspaceDraftRefusal,
+  WorkspaceDraftResult,
+  WorkspaceDraftState,
+  WorkspaceReviewItem,
+  WorkspaceReviewResult,
+} from './contracts/avg4-outreach-workspace.js';

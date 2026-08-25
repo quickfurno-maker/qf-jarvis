@@ -43,7 +43,7 @@ const codeOnly = (text: string): string =>
 const productionFiles = (): readonly { readonly file: string; readonly code: string }[] =>
   walk(SRC, true).map((file) => ({ file, code: codeOnly(readFileSync(file, 'utf8')) }));
 
-describe('AVG-1 adds a DOMAIN, not a runtime', () => {
+describe('Aarohi remains a DOMAIN, not a runtime through AVG-4', () => {
   it('reaches no channel, provider, execution path or credential', () => {
     // Every name the overlay rules out, asserted as absent rather than merely not written.
     for (const { file, code } of productionFiles()) {
@@ -182,12 +182,13 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
   it('exports exactly the reviewed surface', async () => {
     const barrel = (await import('../index.js')) as unknown as Record<string, unknown>;
     // An exact set match, so a symbol cannot join the public surface without a decision.
-    // AVG-2 (ADR-0111) adds enrichment review material. AVG-3 (ADR-0112) adds deterministic
-    // prospect-priority and Core-gated contact-eligibility contracts. Every addition remains a
-    // closed vocabulary, bound or pure function; nothing here sends, executes or mutates anything.
+    // AVG-2 adds enrichment review material; AVG-3 adds deterministic priority and the Core
+    // contact gate; AVG-4 adds inert review/draft/readiness contracts. Every addition remains
+    // a closed vocabulary, bound, schema or pure function; nothing here sends or executes.
     expect(Object.keys(barrel).sort()).toStrictEqual([
       'AAROHI_AGENT_ID',
       'AAROHI_AVG3_CONTRACT_VERSION',
+      'AAROHI_AVG4_CONTRACT_VERSION',
       'AAROHI_ENRICHMENT_CONTRACT_VERSION',
       'AAROHI_PROSPECT_CONTRACT_VERSION',
       'ACQUISITION_CASE_STATES',
@@ -217,19 +218,26 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'HANDOFF_TRUSTED_AUTHORITY',
       'MAX_ENRICHMENT_LABEL_LENGTH',
       'MAX_ENRICHMENT_PROFILE_CLAIMS',
+      'MAX_WORKSPACE_DRAFT_LENGTH',
       'PRESENCE_SIGNALS',
       'PROSPECT_DISCOVERY_SOURCES',
       'PROSPECT_PRIORITY_MAX_POINTS',
       'PROSPECT_PRIORITY_REFUSALS',
       'TERMINAL_ACQUISITION_CASE_STATES',
+      'WORKSPACE_APPROVAL_READINESS_OUTCOME',
+      'WORKSPACE_APPROVAL_READINESS_REFUSALS',
+      'WORKSPACE_DRAFT_REFUSALS',
+      'WORKSPACE_DRAFT_STATES',
       'acquisitionCaseSchema',
       'activationAttestationSchema',
+      'buildWorkspaceReviewItem',
       'canTransition',
       'completeCoreActiveHandoff',
       'coreEligibilityObservationSchema',
       'createEnrichmentClaim',
       'createEnrichmentProfile',
       'createProspectIdentity',
+      'createWorkspaceDraft',
       'enrichmentClaimIdentity',
       'enrichmentClaimSchema',
       'enrichmentProfileSchema',
@@ -238,13 +246,18 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'evaluateAcquisitionEligibility',
       'evaluateEnrichmentReviewReadiness',
       'evaluateProspectPriority',
+      'evaluateWorkspaceApprovalReadiness',
       'isTerminalAcquisitionCaseState',
       'openAcquisitionCase',
       'parseEnrichmentClaim',
       'parseEnrichmentProfile',
+      'parseWorkspaceDraft',
       'prospectIdentitySchema',
+      'reviseWorkspaceDraft',
       'summariseEnrichmentConsistency',
       'transitionAcquisitionCase',
+      'transitionWorkspaceDraft',
+      'workspaceDraftSchema',
     ]);
   });
 
