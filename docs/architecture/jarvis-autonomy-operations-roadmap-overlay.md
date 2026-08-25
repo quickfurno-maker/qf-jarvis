@@ -2,19 +2,25 @@
 
 **Document status:** Canonical capability overlay owned by **QFJ-P12 - Advanced Intelligence and Future Agents**. Adopted under [ADR-0114](../decisions/ADR-0114-qfj-p12-jarvis-autonomy-operations-mastra-boundary.md). Read with [qf-jarvis-roadmap-v3.md](./qf-jarvis-roadmap-v3.md), [mvp-post-mvp-delivery-overlay.md](./mvp-post-mvp-delivery-overlay.md), and [ADR-0002](../decisions/ADR-0002-recommend-authorize-execute-model.md).
 
-**Runtime status: DEFAULT-OFF / SHADOW.** JAO-0 is governance. JAO-1, JAO-2 and JAO-3 have
-merged OFFLINE, default-off proofs: an exact-pinned `@mastra/core` dependency, two supervisor
-compositions and one durable operational-memory composition now exist in `apps/worker/src/jao/`, and
-none of them is imported or started by any production entry point.
+**Runtime status: DEFAULT-OFF / SHADOW.** JAO-0 is governance. JAO-1, JAO-2, JAO-3 and JAO-4
+have merged OFFLINE, default-off proofs: an exact-pinned `@mastra/core` dependency, two supervisor
+compositions, one durable operational-memory composition and one virtual tool sandbox now exist in
+`apps/worker/src/jao/`, and none of them is imported or started by any production entry point.
 
 JAO-3 adds a PostgreSQL schema and adapter, so this document no longer claims there is no memory
 store and no database access. Both exist as source. **The JAO-3 schema is a LOCAL asset applied only
 to a disposable test database; it is NOT in managed migration history, has been applied to no
 managed database, and adopting it requires a separate production-activation review.**
 
+JAO-4 adds a tool sandbox, so this document is explicit about what that sandbox is: a VIRTUAL
+artifact sandbox over an injected bundle. **There is no host filesystem, host shell, command
+execution, container, browser, network access, secret access, environment access or database access
+anywhere in it, and no arbitrary-command isolation is claimed.** A future command-execution tool
+class requires its own threat model and owner review.
+
 Nothing beyond that is activated. There is still no autonomous loop, capability-broker package, MCP
-server, provider route, credential, managed migration, n8n execution, channel action, deployment or
-rollout. Implementation is not activation.
+server, provider route, credential, managed migration, n8n execution, channel action, production
+mutation, deployment or rollout. Implementation is not activation.
 
 ## What this overlay is
 
@@ -176,6 +182,31 @@ managed adoption requires a separate production-activation review.
 
 Add higher-power tools only inside isolated, least-privilege sandboxes and typed QF capability boundaries. Each tool class requires its own threat model, network/secret/filesystem policy, resource ceiling, approval posture, and rollback.
 
+**The offline SHADOW proof for this stage is recorded by
+[ADR-0118](../decisions/ADR-0118-jao4-sandbox-tool-workbench.md).** It lives at
+`apps/worker/src/jao/sandbox-tool-workbench/` and is activated by nothing.
+
+The first tool class is **VIRTUAL_ARTIFACT_READ_ONLY**: a caller injects a bounded bundle of
+synthetic or sanitized diagnostic text, and four static versioned tools -- `artifact.list.v1`,
+`artifact.read.v1`, `artifact.search-literal.v1`, `artifact.sha256.v1` -- answer questions about it
+under hard ceilings.
+
+**It is deliberately NOT a host-shell wrapper, container, command runner, browser, HTTP client or
+VM.** There is no host filesystem in the slice at all -- `node:fs`, `node:os` and `node:path` are not
+imported -- so virtual paths have nothing to traverse into. Network, secrets, environment, process,
+shell, database, business effect and production mutation are all literal DENY on every tool
+descriptor, enforced by parsing rather than by policy. **No arbitrary-command isolation is claimed;
+a future command-execution class needs its own threat model and owner review.**
+
+Registry authorization is bound to the implementation invoked across all security fields, so an
+unknown, planned, disabled, version-mismatched or mismatched tool produces zero invocations. Search
+is a LITERAL substring, never a caller-supplied pattern. Artifact content is untrusted DATA that
+cannot create a call, alter the plan, install a tool, raise a budget or grant authority.
+
+Tool output is bounded evidence marked `untrustedEvidence`, never permission. Zero model calls, zero
+specialist calls, zero JAO-3 memory writes, zero production mutation. Approved remediation remains
+JAO-6 / JAO-7 territory.
+
 ### JAO-5 - Controlled Ambient Operations
 
 Add scheduled/event-triggered investigations over approved operational signals. Every monitor has a named owner, cadence/trigger, scope, budget, deduplication rule, expiry, quieting rule, and kill switch. Observation may create attention; it does not create business authority.
@@ -204,9 +235,10 @@ JAO and AVG are sibling overlays under QFJ-P12.
 
 Implementation is not activation. Shadow output authorizes nothing. Passing evaluation does not promote rollout.
 
-**Current posture:** JAO-0 governance adopted. **JAO-1, JAO-2 and JAO-3 merged as OFFLINE,
+**Current posture:** JAO-0 governance adopted. **JAO-1, JAO-2, JAO-3 and JAO-4 merged as OFFLINE,
 DEFAULT-OFF, SHADOW proofs** -- present in the worker composition, activated by nothing; JAO-3's
-schema is applied to no managed database. **JAO-4 through JAO-7 remain PLANNED / DISABLED.**
+schema is applied to no managed database and JAO-4 reaches no host, network or command.
+**JAO-5 through JAO-7 remain PLANNED / DISABLED.**
 
 ## JAO-0 exit gate
 
