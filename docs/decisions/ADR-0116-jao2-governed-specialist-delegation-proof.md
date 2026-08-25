@@ -72,6 +72,27 @@ different facts.
 There is no nearest match, no substitute, no model-selected alternative, no retry, no dynamic
 registration and no specialist spawning. Registry lookup never consults model output.
 
+**Authorization is bound to the implementation that runs.** Owner re-review of the first
+implementation found that this section's claim was true of a _descriptor_ and not of the _adapter_:
+the registry was consulted with ids from the envelope and returned a governed descriptor, while the
+specialist was invoked through an adapter supplied by the composition, and nothing required the two
+to be the same specialist. A composition could pair a descriptor that passes every availability and
+authority gate with an adapter governed as something else, and the audit record would name the one
+that was checked rather than the one that ran. A registry whose verdict is about a different object
+than the one invoked is decoration.
+
+So `evaluateSpecialistBinding` compares the descriptor the adapter carries to the authorized
+descriptor **in every governed field** -- over a total key map, so a field added to the schema and
+not listed does not compile -- and a mismatch or a descriptor that does not parse **fails closed
+before invocation**, under its own refusal code `SPECIALIST_BINDING_MISMATCH` rather than a vague
+authority error. The candidate is taken as `unknown` because at runtime it is: the adapter arrives
+from a caller, and a type annotation is not a parse.
+
+The binding is also **structural, not procedural**. The adapter is read out of the dependencies
+exactly once, the gate publishes the object it checked, and that published reference is the invoking
+step's only route to a specialist. Skipping the gate does not produce an unchecked call; it produces
+no call.
+
 ### 3. `ACTIVE` means available to THIS adapter, not channel rollout
 
 This is the sentence most likely to be misread later, so it is stated three times - here, in the
@@ -125,6 +146,17 @@ Telemetry carries ids, levels, closed tokens, counters and a duration. There is 
 hold a secret, a credential, a chain of thought, a conversation transcript or unrestricted user text,
 and the signal flags a caller supplied are not echoed back.
 
+### 8. One run identity, or none
+
+The workflow is started with a run id and the delegation envelope carries one. They are one
+provenance identity and must agree; a mismatch is refused as `RUN_ID_MISMATCH` **before any registry
+or specialist work**, which was the second finding of owner re-review.
+
+Neither id is normalised into the other and neither is overwritten. Reconciling them would file the
+delegation under a run that never requested it -- an audit trail that quietly lies, which is worse
+than no record. The refusal deliberately adopts none of the envelope's identity either: attaching its
+delegation id and specialist to the executing run id is precisely the false pairing being refused.
+
 ## Authority
 
 Unchanged, and JAO-2 adds nothing to it. **Recommend -> Authorize -> Execute.** QuickFurno Core
@@ -156,6 +188,12 @@ delegation governance.
 The registry ships exactly one entry. PLANNED and DISABLED refusals are proved with test fixtures
 rather than by shipping fake production specialists nobody governs - so the production table stays
 honest, at the cost of those two paths being exercised through injected descriptors.
+
+Both binding invariants came from owner re-review rather than from the tests, and the run-id defect
+was visible in the fixtures themselves: every one of them paired a descriptive top-level run id with
+an envelope that still named `jao2-run-001`, and nothing objected. A suite can assert a great deal
+about governance while quietly demonstrating the gap it does not check. The run identity is now
+threaded through a single fixture helper so a fixture cannot reintroduce the mismatch by accident.
 
 Rollback is removal or disablement of the JAO-2 directory. Nothing imports it, the existing worker
 projection runtime is unaffected, and JAO-1 is unchanged. Any later expansion - a second specialist,

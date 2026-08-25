@@ -21,12 +21,14 @@ import {
 import { describe, expect, it } from 'vitest';
 
 import {
+  JAO2_BINDING_FIELD_NAMES,
   JAO2_DELEGATION_BOUNDS,
   JAO2_PRODUCTION_SPECIALISTS,
   JAO2_RIYA_SPECIALIST,
   createJao2RiyaSpecialistAdapter,
   createJao2SpecialistRegistry,
   evaluateDelegationAuthority,
+  evaluateSpecialistBinding,
   jao2DelegationEnvelopeSchema,
   jao2RiyaSpecialistInputSchema,
   jao2SpecialistDescriptorSchema,
@@ -36,6 +38,7 @@ import {
   type Jao2SpecialistAdapter,
   type Jao2SpecialistDescriptor,
   type Jao2TelemetryEvent,
+  type Jao2WorkflowInput,
 } from '../jao/governed-specialist-delegation/index.js';
 
 class FixedClock implements Jao2Clock {
@@ -76,6 +79,49 @@ function envelope(over: Record<string, unknown> = {}): Record<string, unknown> {
       ...(over['input'] ?? {}),
     },
     ...Object.fromEntries(Object.entries(over).filter(([key]) => key !== 'input')),
+  };
+}
+
+/**
+ * A workflow input whose two run identities agree.
+ *
+ * Threaded rather than written out at each call site, and the reason is worth recording: before the
+ * run-id binding existed every fixture in this file paired a descriptive top-level run id with an
+ * envelope that still said `jao2-run-001`, and nothing objected. The defect was visible in the tests
+ * that were supposed to be proving the governance.
+ */
+function workflowInput(runId: string, over: Record<string, unknown> = {}): Jao2WorkflowInput {
+  return { runId, envelope: envelope({ runId, ...over }) };
+}
+
+/**
+ * A descriptor as UNTRUSTED RUNTIME DATA.
+ *
+ * `Jao2SpecialistAdapter.descriptor` is typed, so a forged one cannot be written directly -- which
+ * is exactly the confusion under test. A composition can hand the workflow an adapter whose
+ * descriptor was never parsed, and the single narrow assertion here reproduces that without
+ * loosening the production type or reaching for `any`.
+ */
+function forgedDescriptor(raw: Record<string, unknown>): Jao2SpecialistDescriptor {
+  return raw as unknown as Jao2SpecialistDescriptor;
+}
+
+/** An adapter carrying whatever descriptor a composition gave it, counting every invocation. */
+function adapterWithDescriptor(descriptor: Jao2SpecialistDescriptor): {
+  readonly adapter: Jao2SpecialistAdapter;
+  calls: () => number;
+} {
+  const inner = createJao2RiyaSpecialistAdapter();
+  let calls = 0;
+  return {
+    adapter: {
+      descriptor,
+      invoke(input, signal) {
+        calls += 1;
+        return inner.invoke(input, signal);
+      },
+    },
+    calls: () => calls,
   };
 }
 
@@ -139,7 +185,7 @@ describe('JAO-2 governed specialist delegation', () => {
     const events: Jao2TelemetryEvent[] = [];
 
     const result = await runJao2GovernedDelegation(
-      { runId: 'jao2-run-001', envelope: envelope() },
+      workflowInput('jao2-run-001'),
       deps(spy.adapter, JAO2_PRODUCTION_SPECIALISTS, events),
     );
 
@@ -171,7 +217,7 @@ describe('JAO-2 governed specialist delegation', () => {
     // must carry that as a fact about her decision and do nothing with it.
     const spy = countingAdapter();
     const result = await runJao2GovernedDelegation(
-      { runId: 'jao2-run-eligible', envelope: envelope() },
+      workflowInput('jao2-run-eligible'),
       deps(spy.adapter),
     );
 
@@ -189,7 +235,7 @@ describe('JAO-2 governed specialist delegation', () => {
   it('refuses a PLANNED specialist BEFORE invoking it', async () => {
     const spy = countingAdapter();
     const result = await runJao2GovernedDelegation(
-      { runId: 'jao2-run-planned', envelope: envelope() },
+      workflowInput('jao2-run-planned'),
       deps(spy.adapter, [descriptorWith('PLANNED')]),
     );
 
@@ -203,7 +249,7 @@ describe('JAO-2 governed specialist delegation', () => {
   it('refuses a DISABLED specialist BEFORE invoking it', async () => {
     const spy = countingAdapter();
     const result = await runJao2GovernedDelegation(
-      { runId: 'jao2-run-disabled', envelope: envelope() },
+      workflowInput('jao2-run-disabled'),
       deps(spy.adapter, [descriptorWith('DISABLED')]),
     );
 
@@ -216,7 +262,7 @@ describe('JAO-2 governed specialist delegation', () => {
   it('refuses an UNKNOWN specialist and a mismatched capability, with no substitute', async () => {
     const unknown = countingAdapter();
     const unknownResult = await runJao2GovernedDelegation(
-      { runId: 'jao2-run-unknown', envelope: envelope({ specialistId: 'ANISHA' }) },
+      workflowInput('jao2-run-unknown', { specialistId: 'ANISHA' }),
       deps(unknown.adapter),
     );
     expect(unknownResult.outcome).toBe('NO_ELIGIBLE_SPECIALIST');
@@ -226,7 +272,7 @@ describe('JAO-2 governed specialist delegation', () => {
     // Registered, but not governed for what was asked. No nearest match is substituted.
     const mismatch = countingAdapter();
     const mismatchResult = await runJao2GovernedDelegation(
-      { runId: 'jao2-run-capability', envelope: envelope({ capabilityId: 'riya.draft-reply' }) },
+      workflowInput('jao2-run-capability', { capabilityId: 'riya.draft-reply' }),
       deps(mismatch.adapter),
     );
     expect(mismatchResult.outcome).toBe('REFUSED');
@@ -239,10 +285,10 @@ describe('JAO-2 governed specialist delegation', () => {
     // Requesting MORE than the supervisor holds.
     const escalate = countingAdapter();
     const escalated = await runJao2GovernedDelegation(
-      {
-        runId: 'jao2-run-escalate',
-        envelope: envelope({ requestedAutonomyLevel: 'L1_READ', parentAutonomyLevel: 'L0_REASON' }),
-      },
+      workflowInput('jao2-run-escalate', {
+        requestedAutonomyLevel: 'L1_READ',
+        parentAutonomyLevel: 'L0_REASON',
+      }),
       deps(escalate.adapter),
     );
     expect(escalated.refusalReason).toBe('AUTHORITY_ESCALATION');
@@ -251,7 +297,7 @@ describe('JAO-2 governed specialist delegation', () => {
     // Requesting the SUPERVISOR's own level, which still outranks the specialist's governed ceiling.
     const ceiling = countingAdapter();
     const overCeiling = await runJao2GovernedDelegation(
-      { runId: 'jao2-run-ceiling', envelope: envelope({ requestedAutonomyLevel: 'L1_READ' }) },
+      workflowInput('jao2-run-ceiling', { requestedAutonomyLevel: 'L1_READ' }),
       deps(ceiling.adapter),
     );
     expect(overCeiling.refusalReason).toBe('AUTHORITY_ESCALATION');
@@ -268,7 +314,7 @@ describe('JAO-2 governed specialist delegation', () => {
     ]) {
       const spy = countingAdapter();
       const result = await runJao2GovernedDelegation(
-        { runId: 'jao2-run-forbidden', envelope: envelope(forbidden) },
+        workflowInput('jao2-run-forbidden', forbidden),
         deps(spy.adapter),
       );
       expect(result.refusalReason, JSON.stringify(forbidden)).toBe('ENVELOPE_INVALID');
@@ -276,10 +322,198 @@ describe('JAO-2 governed specialist delegation', () => {
     }
   });
 
+  it('refuses an adapter governed for a DIFFERENT capability than the registry authorized', async () => {
+    // THE DEFECT THIS CLOSES. The registry authorizes a descriptor and the composition supplies an
+    // adapter. Nothing previously required them to be the same specialist, so a descriptor that
+    // passed every availability and authority gate could be paired with an adapter governed as
+    // something else -- and the audit record would name the one that was checked, not the one that
+    // ran.
+    const spy = adapterWithDescriptor(
+      forgedDescriptor({ ...JAO2_RIYA_SPECIALIST, capabilityId: 'riya.draft-reply' }),
+    );
+    const events: Jao2TelemetryEvent[] = [];
+    const result = await runJao2GovernedDelegation(
+      workflowInput('jao2-run-binding-capability'),
+      deps(spy.adapter, JAO2_PRODUCTION_SPECIALISTS, events),
+    );
+
+    expect(result.outcome).toBe('REFUSED');
+    expect(result.refusalReason).toBe('SPECIALIST_BINDING_MISMATCH');
+    expect(spy.calls()).toBe(0);
+    expect(result.delegationCalls).toBe(0);
+    expect(result.advisory).toBeNull();
+    expect(result.modelCalls).toBe(0);
+    expect(result.businessEffect).toBe(false);
+    expect(result.specialistsInvoked).toStrictEqual([]);
+    expect(events[0]?.delegationCalls).toBe(0);
+  });
+
+  it('refuses an adapter carrying the same ids under a DIFFERENT governanceRef', async () => {
+    // A legal descriptor, no forgery required: `governanceRef` is a bounded string, so this is a
+    // mismatch no schema can catch and only the field-by-field comparison can.
+    const spy = adapterWithDescriptor(
+      jao2SpecialistDescriptorSchema.parse({
+        ...JAO2_RIYA_SPECIALIST,
+        governanceRef: 'ADR-9999.some-other-governance',
+      }),
+    );
+    const result = await runJao2GovernedDelegation(
+      workflowInput('jao2-run-binding-governance'),
+      deps(spy.adapter),
+    );
+
+    expect(result.refusalReason).toBe('SPECIALIST_BINDING_MISMATCH');
+    expect(spy.calls()).toBe(0);
+    expect(result.advisory).toBeNull();
+    expect(result.governanceRef).toBeNull();
+  });
+
+  it('refuses an adapter descriptor that is malformed or claims widened authority', async () => {
+    for (const forged of [
+      {},
+      { specialistId: 'RIYA' },
+      { ...JAO2_RIYA_SPECIALIST, businessEffect: true },
+      { ...JAO2_RIYA_SPECIALIST, mayCallModel: true },
+      { ...JAO2_RIYA_SPECIALIST, mayCreateProposal: true },
+      { ...JAO2_RIYA_SPECIALIST, mayExecute: true },
+      { ...JAO2_RIYA_SPECIALIST, readOnly: false },
+      { ...JAO2_RIYA_SPECIALIST, maxAutonomyLevel: 'L1_READ' },
+      { ...JAO2_RIYA_SPECIALIST, maxCallsPerRun: 2 },
+      { ...JAO2_RIYA_SPECIALIST, availability: 'PLANNED' },
+    ]) {
+      const spy = adapterWithDescriptor(forgedDescriptor(forged));
+      const result = await runJao2GovernedDelegation(
+        workflowInput('jao2-run-binding-forged'),
+        deps(spy.adapter),
+      );
+      expect(result.refusalReason, JSON.stringify(forged)).toBe('SPECIALIST_BINDING_MISMATCH');
+      expect(spy.calls(), JSON.stringify(forged)).toBe(0);
+      expect(result.advisory, JSON.stringify(forged)).toBeNull();
+      expect(result.businessEffect, JSON.stringify(forged)).toBe(false);
+      expect(result.modelCalls, JSON.stringify(forged)).toBe(0);
+    }
+  });
+
+  it('delegates when the authorized descriptor and the invoked adapter are the same specialist', async () => {
+    const spy = adapterWithDescriptor(JAO2_RIYA_SPECIALIST);
+    const result = await runJao2GovernedDelegation(
+      workflowInput('jao2-run-binding-ok'),
+      deps(spy.adapter),
+    );
+
+    expect(result.outcome).toBe('DELEGATION_COMPLETED');
+    expect(spy.calls()).toBe(1);
+    expect(result.advisory?.advisoryOnly).toBe(true);
+    expect(result.governanceRef).toBe('ADR-0067.riya-client-sales-behaviour');
+    expect(JAO2_DELEGATION_BOUNDS.specialistBindingEnforced).toBe(true);
+  });
+
+  it('decides availability BEFORE the binding gate is reached', async () => {
+    // Order is what an operator reads. A PLANNED specialist must report as unavailable, not as a
+    // wiring mistake, even when the injected adapter happens to be wrong as well.
+    for (const [availability, reason] of [
+      ['PLANNED', 'SPECIALIST_PLANNED'],
+      ['DISABLED', 'SPECIALIST_DISABLED'],
+    ] as const) {
+      const spy = adapterWithDescriptor(
+        forgedDescriptor({ ...JAO2_RIYA_SPECIALIST, capabilityId: 'riya.draft-reply' }),
+      );
+      const result = await runJao2GovernedDelegation(
+        workflowInput('jao2-run-order'),
+        deps(spy.adapter, [descriptorWith(availability)]),
+      );
+      expect(result.refusalReason, availability).toBe(reason);
+      expect(spy.calls(), availability).toBe(0);
+    }
+  });
+
+  it('compares EVERY governed descriptor field when binding authorization to invocation', () => {
+    expect(evaluateSpecialistBinding(JAO2_RIYA_SPECIALIST, JAO2_RIYA_SPECIALIST).ok).toBe(true);
+
+    // A total map, so a descriptor field added without a variant here does not compile: the proof
+    // cannot fall behind the schema it exists to prove.
+    const variants: Readonly<Record<keyof Jao2SpecialistDescriptor, unknown>> = {
+      specialistId: 'ANISHA',
+      capabilityId: 'riya.draft-reply',
+      governanceRef: 'ADR-9999.some-other-governance',
+      availability: 'DISABLED',
+      maxAutonomyLevel: 'L1_READ',
+      dataClass: 'REAL_CLIENT_TRANSCRIPTS',
+      readOnly: false,
+      businessEffect: true,
+      maxCallsPerRun: 2,
+      timeoutMs: 60_000,
+      mayCallModel: true,
+      mayCreateProposal: true,
+      mayExecute: true,
+    };
+    expect([...JAO2_BINDING_FIELD_NAMES]).toStrictEqual(Object.keys(variants).sort());
+
+    for (const [field, value] of Object.entries(variants)) {
+      const verdict = evaluateSpecialistBinding(JAO2_RIYA_SPECIALIST, {
+        ...JAO2_RIYA_SPECIALIST,
+        [field]: value,
+      });
+      expect(verdict.ok, field).toBe(false);
+      expect(verdict.ok ? undefined : verdict.refusal, field).toBe('SPECIALIST_BINDING_MISMATCH');
+    }
+
+    // Not a descriptor at all. Indexed rather than stringified, because two of these cases label
+    // themselves identically and a failure has to say which one.
+    const notDescriptors = [null, undefined, 'RIYA', 42, [], {}, { specialistId: 'RIYA' }];
+    for (const [index, notADescriptor] of notDescriptors.entries()) {
+      expect(
+        evaluateSpecialistBinding(JAO2_RIYA_SPECIALIST, notADescriptor).ok,
+        `not-a-descriptor case ${String(index)}`,
+      ).toBe(false);
+    }
+  });
+
+  it('binds the workflow run identity to the envelope run identity', async () => {
+    const spy = countingAdapter();
+    const events: Jao2TelemetryEvent[] = [];
+    const result = await runJao2GovernedDelegation(
+      workflowInput('jao2-run-provenance'),
+      deps(spy.adapter, JAO2_PRODUCTION_SPECIALISTS, events),
+    );
+
+    expect(result.outcome).toBe('DELEGATION_COMPLETED');
+    // One identity, on the record and in telemetry, and it is the one both sides agreed on.
+    expect(result.runId).toBe('jao2-run-provenance');
+    expect(events[0]?.runId).toBe('jao2-run-provenance');
+    expect(JAO2_DELEGATION_BOUNDS.runIdBindingEnforced).toBe(true);
+  });
+
+  it('refuses an envelope that names a different run than the one executing it', async () => {
+    const spy = countingAdapter();
+    const events: Jao2TelemetryEvent[] = [];
+    const result = await runJao2GovernedDelegation(
+      { runId: 'jao2-run-executing', envelope: envelope({ runId: 'jao2-run-claimed' }) },
+      deps(spy.adapter, JAO2_PRODUCTION_SPECIALISTS, events),
+    );
+
+    expect(result.outcome).toBe('REFUSED');
+    expect(result.refusalReason).toBe('RUN_ID_MISMATCH');
+    expect(spy.calls()).toBe(0);
+    expect(result.delegationCalls).toBe(0);
+    expect(result.advisory).toBeNull();
+    expect(result.modelCalls).toBe(0);
+    expect(result.businessEffect).toBe(false);
+
+    // Neither id is normalised into the other, and the refused envelope lends this run none of its
+    // identity: the record says which run refused, not which delegation it might have been.
+    expect(result.runId).toBe('jao2-run-executing');
+    expect(result.delegationId).toBeNull();
+    expect(result.specialistId).toBeNull();
+    expect(events[0]?.runId).toBe('jao2-run-executing');
+    expect(JSON.stringify(result)).not.toContain('jao2-run-claimed');
+    expect(JSON.stringify(events)).not.toContain('jao2-run-claimed');
+  });
+
   it('leaves Riya own role guard superior: a VENDOR party is refused BY RIYA', async () => {
     const spy = countingAdapter();
     const result = await runJao2GovernedDelegation(
-      { runId: 'jao2-run-vendor', envelope: envelope({ input: { partyType: 'VENDOR' } }) },
+      workflowInput('jao2-run-vendor', { input: { partyType: 'VENDOR' } }),
       deps(spy.adapter),
     );
 
@@ -301,7 +535,7 @@ describe('JAO-2 governed specialist delegation', () => {
     ] as const) {
       const spy = countingAdapter();
       const result = await runJao2GovernedDelegation(
-        { runId: 'jao2-run-pause', envelope: envelope({ input: over }) },
+        workflowInput('jao2-run-pause', { input: over }),
         deps(spy.adapter),
       );
       expect(result.outcome, label).toBe('DELEGATION_COMPLETED');
@@ -336,7 +570,7 @@ describe('JAO-2 governed specialist delegation', () => {
       invoke: () => ({ specialistId: 'RIYA', businessEffect: true, executionRequested: true }),
     };
     const result = await runJao2GovernedDelegation(
-      { runId: 'jao2-run-bad-output', envelope: envelope() },
+      workflowInput('jao2-run-bad-output'),
       deps(rogue),
     );
 
@@ -354,7 +588,7 @@ describe('JAO-2 governed specialist delegation', () => {
     };
     const events: Jao2TelemetryEvent[] = [];
     const result = await runJao2GovernedDelegation(
-      { runId: 'jao2-run-throw', envelope: envelope() },
+      workflowInput('jao2-run-throw'),
       deps(exploding, JAO2_PRODUCTION_SPECIALISTS, events),
     );
 
@@ -370,7 +604,7 @@ describe('JAO-2 governed specialist delegation', () => {
     controller.abort();
 
     const result = await runJao2GovernedDelegation(
-      { runId: 'jao2-run-cancelled', envelope: envelope() },
+      workflowInput('jao2-run-cancelled'),
       deps(spy.adapter),
       controller.signal,
     );

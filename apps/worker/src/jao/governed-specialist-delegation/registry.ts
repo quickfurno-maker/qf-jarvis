@@ -18,6 +18,14 @@
  * that decision. JAO-2 cannot make a specialist safe by listing it; it can only refuse to delegate
  * to one that its own governance has not made available.
  *
+ * ### Authorization is BOUND to the implementation that runs
+ *
+ * A lookup that returns a descriptor answers "may this specialist be delegated to". It does not, on
+ * its own, answer "is the adapter about to run that specialist" -- and a registry whose verdict is
+ * about a different object than the one invoked is decoration. `evaluateSpecialistBinding` closes
+ * that gap: the descriptor the adapter carries must parse, and must equal the authorized descriptor
+ * in every governed field, or the delegation stops before anything is called.
+ *
  * ### ACTIVE is scoped, and the scope matters
  *
  * `ACTIVE` means available to THIS shadow delegation adapter. It says nothing about whether Riya's
@@ -159,5 +167,91 @@ export function evaluateDelegationAuthority(
   if (requested > parent || requested > specialistCeiling) {
     return Object.freeze({ ok: false as const, refusal: 'AUTHORITY_ESCALATION' as const });
   }
+  return Object.freeze({ ok: true as const });
+}
+
+/**
+ * Every governance-relevant descriptor field, as a TOTAL map.
+ *
+ * A field added to the descriptor schema and not listed here does not compile, which is the entire
+ * point. A binding check that silently ignored a new governed property would go on authorizing one
+ * specialist and invoking another the moment the descriptor grew -- and it would keep passing its
+ * own tests while doing it.
+ */
+const JAO2_BINDING_FIELDS: Readonly<Record<keyof Jao2SpecialistDescriptor, true>> = Object.freeze({
+  specialistId: true,
+  capabilityId: true,
+  governanceRef: true,
+  availability: true,
+  maxAutonomyLevel: true,
+  dataClass: true,
+  readOnly: true,
+  businessEffect: true,
+  maxCallsPerRun: true,
+  timeoutMs: true,
+  mayCallModel: true,
+  mayCreateProposal: true,
+  mayExecute: true,
+});
+
+/** The names the binding compares. Derived from the total map so the two cannot disagree. */
+export const JAO2_BINDING_FIELD_NAMES: readonly string[] = Object.freeze(
+  Object.keys(JAO2_BINDING_FIELDS).sort(),
+);
+
+export type Jao2BindingVerdict =
+  { readonly ok: true } | { readonly ok: false; readonly refusal: Jao2RefusalReason };
+
+/**
+ * Bind registry AUTHORIZATION to the adapter that will actually be INVOKED.
+ *
+ * ### The gap this exists to close
+ *
+ * The registry is consulted with ids from the envelope and returns a governed descriptor. The
+ * specialist is invoked through an adapter supplied by the composition. Those are two independent
+ * objects, and nothing about looking one up makes the other the thing it described. A composition
+ * that paired a descriptor which passes every availability and authority gate with an adapter
+ * governed as something else would delegate to the second while the audit record named the first.
+ *
+ * So the descriptor the adapter carries is compared to the authorized one FIELD BY FIELD, over the
+ * total key map above rather than a hand-written list that could fall behind the schema.
+ *
+ * ### Why `invoked` is `unknown`
+ *
+ * Because at runtime it is. `Jao2SpecialistAdapter.descriptor` is typed, but the adapter arrives
+ * from a caller and a type is not a parse -- taking `unknown` here is what forces the value through
+ * `safeParse` instead of trusting the annotation it was handed with. The authorized side is
+ * re-parsed for the same reason: this function must not be the place that assumes the difference
+ * between a type and a guarantee away.
+ *
+ * Values are read back out of maps as `unknown` and compared with `Object.is`, so the comparison is
+ * a genuine runtime equality on data. Comparing the typed fields directly would compare two
+ * single-member literal types, which is dead code -- provably true before it runs, and therefore no
+ * check at all.
+ */
+export function evaluateSpecialistBinding(
+  authorized: Jao2SpecialistDescriptor,
+  invoked: unknown,
+): Jao2BindingVerdict {
+  const mismatch = Object.freeze({
+    ok: false as const,
+    refusal: 'SPECIALIST_BINDING_MISMATCH' as const,
+  });
+
+  const left = jao2SpecialistDescriptorSchema.safeParse(authorized);
+  const right = jao2SpecialistDescriptorSchema.safeParse(invoked);
+  if (!left.success || !right.success) {
+    return mismatch;
+  }
+
+  const authorizedFields = new Map<string, unknown>(Object.entries(left.data));
+  const invokedFields = new Map<string, unknown>(Object.entries(right.data));
+
+  for (const field of JAO2_BINDING_FIELD_NAMES) {
+    if (!Object.is(authorizedFields.get(field), invokedFields.get(field))) {
+      return mismatch;
+    }
+  }
+
   return Object.freeze({ ok: true as const });
 }

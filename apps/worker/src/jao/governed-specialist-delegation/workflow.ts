@@ -13,11 +13,27 @@
  *
  * ### The order of the gates is the governance
  *
- * envelope -> registry availability -> authority ceiling -> specialist.
+ * envelope -> run identity -> registry availability -> authority ceiling -> specialist binding ->
+ * specialist.
  *
  * Availability is decided BEFORE invocation, so a PLANNED or DISABLED specialist is never called and
  * a run that refuses reports `delegationCalls: 0`. Authority is decided before invocation too, so an
  * escalating request never reaches a specialist that might have honoured it.
+ *
+ * ### Authorization and invocation are the same specialist, structurally
+ *
+ * The registry authorizes a DESCRIPTOR; the composition supplies an ADAPTER. Those are two objects,
+ * and a supervisor that checked one and called the other would be keeping an audit trail about a
+ * specialist it did not delegate to. The binding gate proves they are the same governed specialist
+ * in every field, and it publishes the adapter it checked into `boundSpecialist` -- which is the
+ * invoking step's ONLY route to a specialist. Skipping the gate does not produce an unchecked call;
+ * it produces no call.
+ *
+ * ### One run identity
+ *
+ * The workflow is started with a run id and the envelope carries one. They must be the same run. A
+ * mismatch is refused rather than reconciled: normalising either into the other would file the
+ * delegation under a run that never asked for it.
  *
  * ### No fallback, ever
  *
@@ -46,7 +62,11 @@ import {
   type Jao2TelemetryHook,
   type Jao2WorkflowInput,
 } from './contracts.js';
-import { evaluateDelegationAuthority, type Jao2SpecialistRegistry } from './registry.js';
+import {
+  evaluateDelegationAuthority,
+  evaluateSpecialistBinding,
+  type Jao2SpecialistRegistry,
+} from './registry.js';
 import { Jao2SpecialistError, type Jao2SpecialistAdapter } from './riya-adapter.js';
 
 const TASK_TYPE = 'jarvis.operations.governed-specialist-delegation' as const;
@@ -101,6 +121,24 @@ export async function runJao2GovernedDelegation(
   signal?: AbortSignal,
 ): Promise<Jao2RunResult> {
   const startedAt = dependencies.clock.nowMs();
+
+  /**
+   * The adapter, read out of `dependencies` EXACTLY ONCE.
+   *
+   * `readonly` is a compile-time promise about an object this function was handed. Reading
+   * `dependencies.specialist` twice -- once to bind it, once to invoke it -- would leave a window
+   * between the two in which what was authorized stops being what runs. One read closes it.
+   */
+  const specialist = dependencies.specialist;
+
+  /**
+   * Published ONLY by a passing binding gate, and the invoking step's only route to a specialist.
+   *
+   * Structural rather than procedural: the delegate step holds no other reference to an adapter, so
+   * "invoked something the registry never authorized" is not a state this code can reach.
+   */
+  let boundSpecialist: Jao2SpecialistAdapter | null = null;
+
   let delegationCalls = 0;
   let availabilityDecision: Jao2SpecialistAvailability | null = null;
   let governanceRef: string | null = null;
@@ -128,6 +166,13 @@ export async function runJao2GovernedDelegation(
         return refusal(inputData.runId, null, 'ENVELOPE_INVALID', null, null, delegationCalls);
       }
       const envelope = parsed.data;
+
+      // ONE RUN IDENTITY, before any registry work. The refusal deliberately adopts none of the
+      // envelope's identity -- not its delegation id, not its specialist -- because attaching those
+      // to this run id is precisely the false pairing being refused.
+      if (inputData.runId !== envelope.runId) {
+        return refusal(inputData.runId, null, 'RUN_ID_MISMATCH', null, null, delegationCalls);
+      }
 
       // AVAILABILITY FIRST. A PLANNED or DISABLED specialist must never be invoked, so the decision
       // happens here rather than inside an adapter that would already have been reached.
@@ -157,6 +202,23 @@ export async function runJao2GovernedDelegation(
           delegationCalls,
         );
       }
+
+      // THE BINDING. Everything above was decided about the REGISTRY's descriptor; this is what
+      // makes those decisions true of the adapter that actually runs. Checked here, in the governance
+      // step, and published rather than re-derived later -- so the object that passed the gate is
+      // the object that gets called.
+      const binding = evaluateSpecialistBinding(lookup.descriptor, specialist.descriptor);
+      if (!binding.ok) {
+        return refusal(
+          inputData.runId,
+          envelope.delegationId,
+          binding.refusal,
+          envelope.specialistId,
+          envelope.capabilityId,
+          delegationCalls,
+        );
+      }
+      boundSpecialist = specialist;
 
       return {
         runId: inputData.runId,
@@ -203,6 +265,21 @@ export async function runJao2GovernedDelegation(
         );
       }
 
+      // The ONLY specialist reference this step has. Unreachable while the authorize step runs
+      // first -- and kept anyway, because an edit that drops the binding gate should stop delegating
+      // rather than start invoking whatever the composition injected.
+      const bound = boundSpecialist;
+      if (bound === null) {
+        return refusal(
+          inputData.runId,
+          inputData.delegationId,
+          'SPECIALIST_BINDING_MISMATCH',
+          inputData.specialistId,
+          inputData.capabilityId,
+          delegationCalls,
+        );
+      }
+
       // The envelope was parsed in the previous step; re-parse rather than carrying an object
       // across the step boundary, so what reaches the specialist has been validated on this side too.
       const parsed = jao2DelegationEnvelopeSchema.safeParse(input.envelope);
@@ -216,6 +293,18 @@ export async function runJao2GovernedDelegation(
           delegationCalls,
         );
       }
+      // Re-parsing means re-checking what the parse is for: the run identity is proved again on this
+      // side of the boundary rather than inherited from a step that has already returned.
+      if (parsed.data.runId !== inputData.runId) {
+        return refusal(
+          inputData.runId,
+          inputData.delegationId,
+          'RUN_ID_MISMATCH',
+          inputData.specialistId,
+          inputData.capabilityId,
+          delegationCalls,
+        );
+      }
 
       delegationCalls += 1;
 
@@ -223,7 +312,7 @@ export async function runJao2GovernedDelegation(
         // The adapter is synchronous because the governed behaviour it delegates to is; `await`
         // consumes an ordinary value perfectly well and keeps this call site identical in shape to
         // JAO-1's, so a reader comparing the two sees one pattern rather than two.
-        const raw = await dependencies.specialist.invoke(parsed.data.input, signal);
+        const raw = await bound.invoke(parsed.data.input, signal);
         const advisory = jao2AdvisoryResultSchema.safeParse(raw);
         if (!advisory.success) {
           return refusal(
@@ -333,6 +422,8 @@ export const JAO2_DELEGATION_BOUNDS = Object.freeze({
   businessEffect: false,
   dynamicSpecialistSpawning: false,
   fallbackSpecialist: false,
+  specialistBindingEnforced: true,
+  runIdBindingEnforced: true,
 });
 
 export const JAO2_DELEGATION_REFUSALS = Object.freeze([...JAO2_REFUSAL_REASONS]);

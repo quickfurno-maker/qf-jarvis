@@ -1,6 +1,7 @@
 export {
   JAO2_AUTONOMY_LEVELS,
   JAO2_AUTONOMY_RANK,
+  JAO2_BINDING_FIELD_NAMES,
   JAO2_DELEGATION_BOUNDS,
   JAO2_DELEGATION_REFUSALS,
   JAO2_OUTCOMES,
@@ -14,6 +15,7 @@ export {
   createJao2RiyaSpecialistAdapter,
   createJao2SpecialistRegistry,
   evaluateDelegationAuthority,
+  evaluateSpecialistBinding,
   jao2AdvisoryResultSchema,
   jao2ClientSalesSignalsSchema,
   jao2DelegationEnvelopeSchema,
@@ -30,6 +32,7 @@ export type {
   Jao2AdvisoryResult,
   Jao2AuthorityVerdict,
   Jao2AutonomyLevel,
+  Jao2BindingVerdict,
   Jao2Clock,
   Jao2ClientSalesSignals,
   Jao2DelegationEnvelope,

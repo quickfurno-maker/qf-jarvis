@@ -57,6 +57,14 @@ export type Jao2Outcome = (typeof JAO2_OUTCOMES)[number];
 export const JAO2_REFUSAL_REASONS = [
   /** The delegation envelope did not parse. */
   'ENVELOPE_INVALID',
+  /**
+   * The envelope named a different run than the one executing it.
+   *
+   * Two run identities reaching one execution is invalid provenance, not a formatting difference, so
+   * neither is normalised into the other and neither is overwritten. An advisory filed under a run
+   * that never requested it is an audit trail that quietly lies, which is worse than no record.
+   */
+  'RUN_ID_MISMATCH',
   /** No such specialist is registered. Never a nearest match, never a substitute. */
   'SPECIALIST_UNKNOWN',
   /** Registered, but the capability requested is not the one it is governed for. */
@@ -67,6 +75,15 @@ export const JAO2_REFUSAL_REASONS = [
   'SPECIALIST_DISABLED',
   /** The request asked for more authority than the supervisor holds, or for effect/model/execution. */
   'AUTHORITY_ESCALATION',
+  /**
+   * The adapter about to be invoked is not the specialist the registry authorized.
+   *
+   * Deliberately its own code rather than an authority error. An operator reading
+   * `AUTHORITY_ESCALATION` would go looking for a caller that asked for too much, when what actually
+   * happened is that authorization and invocation had drifted apart -- a different fault, found in a
+   * different place.
+   */
+  'SPECIALIST_BINDING_MISMATCH',
   /** The bounded specialist input did not parse. Refused before the specialist is reached. */
   'SPECIALIST_INPUT_INVALID',
   /** The specialist returned something the advisory contract refuses. */

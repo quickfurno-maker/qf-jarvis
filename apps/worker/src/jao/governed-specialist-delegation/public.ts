@@ -33,13 +33,16 @@ export type {
 } from './contracts.js';
 
 export {
+  JAO2_BINDING_FIELD_NAMES,
   JAO2_PRODUCTION_SPECIALISTS,
   JAO2_RIYA_SPECIALIST,
   createJao2SpecialistRegistry,
   evaluateDelegationAuthority,
+  evaluateSpecialistBinding,
 } from './registry.js';
 export type {
   Jao2AuthorityVerdict,
+  Jao2BindingVerdict,
   Jao2RegistryLookup,
   Jao2SpecialistRegistry,
 } from './registry.js';
