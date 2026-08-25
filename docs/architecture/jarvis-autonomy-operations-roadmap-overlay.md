@@ -2,10 +2,11 @@
 
 **Document status:** Canonical capability overlay owned by **QFJ-P12 - Advanced Intelligence and Future Agents**. Adopted under [ADR-0114](../decisions/ADR-0114-qfj-p12-jarvis-autonomy-operations-mastra-boundary.md). Read with [qf-jarvis-roadmap-v3.md](./qf-jarvis-roadmap-v3.md), [mvp-post-mvp-delivery-overlay.md](./mvp-post-mvp-delivery-overlay.md), and [ADR-0002](../decisions/ADR-0002-recommend-authorize-execute-model.md).
 
-**Runtime status: DEFAULT-OFF / SHADOW.** JAO-0 is governance. JAO-1, JAO-2, JAO-3 and JAO-4
-have merged OFFLINE, default-off proofs: an exact-pinned `@mastra/core` dependency, two supervisor
-compositions, one durable operational-memory composition and one virtual tool sandbox now exist in
-`apps/worker/src/jao/`, and none of them is imported or started by any production entry point.
+**Runtime status: DEFAULT-OFF / SHADOW.** JAO-0 is governance. JAO-1 through JAO-5 have merged
+OFFLINE, default-off proofs: an exact-pinned `@mastra/core` dependency, two supervisor compositions,
+one durable operational-memory composition, one virtual tool sandbox and one durable ambient monitor
+governor now exist in `apps/worker/src/jao/`, and none of them is imported or started by any
+production entry point.
 
 JAO-3 adds a PostgreSQL schema and adapter, so this document no longer claims there is no memory
 store and no database access. Both exist as source. **The JAO-3 schema is a LOCAL asset applied only
@@ -17,6 +18,11 @@ artifact sandbox over an injected bundle. **There is no host filesystem, host sh
 execution, container, browser, network access, secret access, environment access or database access
 anywhere in it, and no arbitrary-command isolation is claimed.** A future command-execution tool
 class requires its own threat model and owner review.
+
+JAO-5 adds ambient GOVERNANCE, so this document is explicit about what it does not add: **there is
+no scheduler, cron entry, timer, queue consumer, webhook or event ingress anywhere in it, and none
+is activated.** Ambient eligibility is decided by an explicit function a caller invokes. A production
+scheduler or event ingress requires its own activation review.
 
 Nothing beyond that is activated. There is still no autonomous loop, capability-broker package, MCP
 server, provider route, credential, managed migration, n8n execution, channel action, production
@@ -211,6 +217,34 @@ JAO-6 / JAO-7 territory.
 
 Add scheduled/event-triggered investigations over approved operational signals. Every monitor has a named owner, cadence/trigger, scope, budget, deduplication rule, expiry, quieting rule, and kill switch. Observation may create attention; it does not create business authority.
 
+**The offline SHADOW proof for this stage is recorded by
+[ADR-0119](../decisions/ADR-0119-jao5-controlled-ambient-operations.md).** It lives at
+`apps/worker/src/jao/controlled-ambient-operations/` and is activated by nothing.
+
+**There is no scheduler.** `runJao5AmbientCycle` is an explicit function; no timer, cron, queue,
+webhook or event consumer exists or is started. What it proves is that schedule and event
+eligibility are decided deterministically from DURABLE state -- so a restart cannot reset dedupe,
+budgets, quieting, the last cadence slot, expiry or the kill switch, which is the way ambient
+governance is usually bypassed.
+
+Exactly two static monitors prove both trigger classes -- one 900-second cadence, one approved
+`control-plane.system-health.changed.v1` signal -- and every clause of the requirement above is a
+REQUIRED field on the definition, so a monitor missing an owner, budget, dedupe rule, expiry, quiet
+rule or kill switch cannot be constructed. Scope is `CONTROL_PLANE_SYSTEM_HEALTH` only.
+
+A claim is taken and committed BEFORE any investigation starts, and **no database transaction is
+held across model inference**. Duplicate suppression is a database uniqueness constraint, so one
+cadence slot or one event id can start at most one investigation -- across restart and under
+concurrency. A crash after claim consumes the claim and never silently repeats it; downtime
+collapses to one current slot rather than replaying a backlog. The kill switch is TERMINAL and there
+is no unkill.
+
+JAO-5 reuses the canonical JAO-1 shadow investigation rather than inventing a second engine, the QF
+Model Gateway remains the only model path, and the public runner accepts no investigator callback.
+Output is inert `SHADOW_OPERATIONAL_ATTENTION`: zero business effect, zero Core mutation, zero
+execution intents, zero channel sends, zero n8n, zero JAO-3 writes, zero JAO-4 tool calls and zero
+specialist delegation. The JAO-5 schema is LOCAL and is not managed migration history.
+
 ### JAO-6 - Governed Business-Action Proposals
 
 Permit the supervisor to construct proposals that enter the **existing** recommendation -> Core/human authorization -> execution-intent path. No parallel execution system is introduced. Communication remains subject to execution-time consent/suppression eligibility.
@@ -235,10 +269,10 @@ JAO and AVG are sibling overlays under QFJ-P12.
 
 Implementation is not activation. Shadow output authorizes nothing. Passing evaluation does not promote rollout.
 
-**Current posture:** JAO-0 governance adopted. **JAO-1, JAO-2, JAO-3 and JAO-4 merged as OFFLINE,
-DEFAULT-OFF, SHADOW proofs** -- present in the worker composition, activated by nothing; JAO-3's
-schema is applied to no managed database and JAO-4 reaches no host, network or command.
-**JAO-5 through JAO-7 remain PLANNED / DISABLED.**
+**Current posture:** JAO-0 governance adopted. **JAO-1 through JAO-5 merged as OFFLINE,
+DEFAULT-OFF, SHADOW proofs** -- present in the worker composition, activated by nothing; the JAO-3
+and JAO-5 schemas are applied to no managed database, JAO-4 reaches no host, network or command, and
+JAO-5 starts no scheduler. **JAO-6 and JAO-7 remain PLANNED / DISABLED.**
 
 ## JAO-0 exit gate
 
