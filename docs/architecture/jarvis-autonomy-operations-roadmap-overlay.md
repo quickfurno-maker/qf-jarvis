@@ -99,6 +99,16 @@ It performs **zero external business effect**: no communication send, Core mutat
 
 Exit requires deterministic fixtures for healthy operation, one explainable anomaly, missing evidence, tool failure, model failure, budget exhaustion, human pause, and prompt-injection/tool-abuse attempts, with bounded provenance/cost evidence.
 
+
+**The offline SHADOW proof for this stage is recorded by
+[ADR-0115](../decisions/ADR-0115-jao1-mastra-shadow-operations-supervisor-proof.md).**
+Framework-specific Mastra code is confined to `apps/worker/src/jao/mastra-supervisor/`; the app root
+does not activate it. The proof parses one injected control-plane snapshot, invokes one bounded L1
+read capability, may make at most one provider-neutral call through the existing QF Model Gateway,
+and returns an inert founder-facing shadow operational attention record. It adds no provider
+credential, direct model route, persistence, migration, specialist delegation, Core/n8n/channel
+execution, deployment or production rollout. JAO-1 remains **SHADOW / DEFAULT-OFF** after merge.
+
 ### JAO-2 - Governed Specialist Delegation
 
 Delegate bounded analysis only to independently governed and active specialists/capabilities. A PLANNED/DISABLED specialist remains unavailable. Delegation never transfers authority.

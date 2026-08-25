@@ -12,7 +12,11 @@
   // The project reference makes `tsc --build` compile @qf-jarvis/event-backbone first and resolve the
   // internal `./internal/projection-worker-cli` subpath's declarations. Tests are type-checked, without
   // emit, by tsconfig.json (typecheck:tests).
-  "references": [{ "path": "../../packages/event-backbone" }],
+  "references": [
+    { "path": "../../packages/event-backbone" },
+    { "path": "../../packages/control-plane-read-contract/tsconfig.build.json" },
+    { "path": "../../packages/model-gateway" }
+  ],
   "include": ["src/**/*.ts"],
   "exclude": ["src/tests/**"]
 }
