@@ -2,14 +2,19 @@
 
 **Document status:** Canonical capability overlay owned by **QFJ-P12 - Advanced Intelligence and Future Agents**. Adopted under [ADR-0114](../decisions/ADR-0114-qfj-p12-jarvis-autonomy-operations-mastra-boundary.md). Read with [qf-jarvis-roadmap-v3.md](./qf-jarvis-roadmap-v3.md), [mvp-post-mvp-delivery-overlay.md](./mvp-post-mvp-delivery-overlay.md), and [ADR-0002](../decisions/ADR-0002-recommend-authorize-execute-model.md).
 
-**Runtime status: DEFAULT-OFF / SHADOW.** JAO-0 is governance. JAO-1 and JAO-2 have merged
-OFFLINE, default-off proofs: an exact-pinned `@mastra/core` dependency and two supervisor
-compositions now exist in `apps/worker/src/jao/`, and neither is imported or started by any
-production entry point.
+**Runtime status: DEFAULT-OFF / SHADOW.** JAO-0 is governance. JAO-1, JAO-2 and JAO-3 have
+merged OFFLINE, default-off proofs: an exact-pinned `@mastra/core` dependency, two supervisor
+compositions and one durable operational-memory composition now exist in `apps/worker/src/jao/`, and
+none of them is imported or started by any production entry point.
 
-Nothing beyond that is activated. There is still no autonomous loop, capability-broker package,
-memory store, MCP server, provider route, credential, database access, n8n execution, channel action,
-deployment or rollout. Implementation is not activation.
+JAO-3 adds a PostgreSQL schema and adapter, so this document no longer claims there is no memory
+store and no database access. Both exist as source. **The JAO-3 schema is a LOCAL asset applied only
+to a disposable test database; it is NOT in managed migration history, has been applied to no
+managed database, and adopting it requires a separate production-activation review.**
+
+Nothing beyond that is activated. There is still no autonomous loop, capability-broker package, MCP
+server, provider route, credential, managed migration, n8n execution, channel action, deployment or
+rollout. Implementation is not activation.
 
 ## What this overlay is
 
@@ -142,6 +147,31 @@ Add non-authoritative durable investigation memory: evidence references, hypothe
 
 It must not become a second CRM, consent database, package catalog, payment ledger, vendor registry, assignment table, or activation source. A remembered authorization is not current permission.
 
+**The offline SHADOW proof for this stage is recorded by
+[ADR-0117](../decisions/ADR-0117-jao3-operational-memory-resumable-investigations.md).** It lives at
+`apps/worker/src/jao/operational-memory/` and is activated by nothing. Investigation state is
+durable in PostgreSQL and proved to survive a genuine restart: a checkpoint written through one pool
+is resumed through a NEW pool, adapter and operations layer, and read back through a third.
+
+Writes use optimistic `expectedRevision` compare-and-set with `UNIQUE (investigation_id, revision)`
+underneath, so two resumed processes cannot lose an update. Retryable writes carry an `operationId`:
+an exact replay returns the committed result and writes nothing, while the same id with a different
+payload fails closed. Checkpoints are immutable, owner corrections are append-only, and budgets are
+persisted so a restart cannot reset them.
+
+Expiry is semantic and needs no scheduler -- an expired investigation refuses resume while its row
+remains for audit -- and a superseded or completed investigation cannot be resumed. Resume is always
+explicit; there is no background resume, timer or sweeper anywhere in the slice.
+
+Memory carries `memoryClass: OPERATIONAL_NON_AUTHORITATIVE` on every record. Evidence is stored as
+REFERENCES only, never payloads; no chain-of-thought, transcript or credential can be stored; and no
+field exists anywhere that could express permission. **A remembered authorization is not current
+permission**, and QuickFurno Core remains the only source of current business truth.
+
+The JAO-3 schema is a **LOCAL** asset in its own `qf_jarvis_jao3` schema, applied explicitly by the
+integration harness to a disposable test database. It is **not** managed migration history, and
+managed adoption requires a separate production-activation review.
+
 ### JAO-4 - Sandbox and Tool Workbench
 
 Add higher-power tools only inside isolated, least-privilege sandboxes and typed QF capability boundaries. Each tool class requires its own threat model, network/secret/filesystem policy, resource ceiling, approval posture, and rollback.
@@ -174,9 +204,9 @@ JAO and AVG are sibling overlays under QFJ-P12.
 
 Implementation is not activation. Shadow output authorizes nothing. Passing evaluation does not promote rollout.
 
-**Current posture:** JAO-0 governance adopted. **JAO-1 and JAO-2 merged as OFFLINE, DEFAULT-OFF,
-SHADOW proofs** -- present in the worker composition, activated by nothing. **JAO-3 through JAO-7
-remain PLANNED / DISABLED.**
+**Current posture:** JAO-0 governance adopted. **JAO-1, JAO-2 and JAO-3 merged as OFFLINE,
+DEFAULT-OFF, SHADOW proofs** -- present in the worker composition, activated by nothing; JAO-3's
+schema is applied to no managed database. **JAO-4 through JAO-7 remain PLANNED / DISABLED.**
 
 ## JAO-0 exit gate
 
