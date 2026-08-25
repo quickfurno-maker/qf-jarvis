@@ -21,6 +21,7 @@ import {
   JAO4_LIMITS,
   JAO4_READ_TOOL,
   createJao4ArtifactSandbox,
+  createJao4ToolRegistry,
   jao4ToolDescriptorSchema,
   jao4WorkbenchRequestSchema,
   parseJao4PathPrefix,
@@ -29,6 +30,14 @@ import {
   type Jao4Clock,
   type Jao4ToolDescriptor,
 } from '../jao/sandbox-tool-workbench/index.js';
+// By DIRECT MODULE PATH. These are the internal seam and the tool implementation type, and neither
+// is reachable through the barrel above -- which is the property the pinning specs below assert.
+import {
+  runJao4WorkbenchInternal,
+  type Jao4InternalWorkbenchDependencies,
+} from '../jao/sandbox-tool-workbench/workbench.js';
+import { JAO4_LIST_TOOL } from '../jao/sandbox-tool-workbench/tool-registry.js';
+import type { Jao4Tool, Jao4ToolOutput } from '../jao/sandbox-tool-workbench/tools.js';
 
 class FixedClock implements Jao4Clock {
   private value = 1_000;
@@ -524,6 +533,134 @@ describe('JAO-4 threat model', () => {
     ]) {
       expect(exported, forbidden).not.toContain(forbidden);
     }
+  });
+
+  it('gives a PUBLIC caller no way to substitute a tool implementation', () => {
+    // THE DEFECT OWNER REVIEW FOUND. Descriptor binding compares metadata; it says nothing about
+    // behaviour. An implementation can carry the exact canonical descriptor and do anything its own
+    // module can reach, and the containment specs -- which read this source tree -- cannot see code
+    // injected from outside it. So the claims "no host filesystem, no network, no process, no
+    // shell, no environment, no database" were true of this directory and unproven of what ran.
+    //
+    // The fix is composition pinning, not a marker: anything that can copy a descriptor can copy a
+    // brand just as easily.
+
+    // TYPE-LEVEL. If the public dependency contract ever grew a `tools` field again, this
+    // `@ts-expect-error` would stop being an error and the build would fail.
+    const clock = new FixedClock();
+    // @ts-expect-error -- the public runner accepts no tool implementation map. This is the proof.
+    runJao4Workbench(hostileRequest([]), { clock, tools: {} });
+    // @ts-expect-error -- nor an alternative registry capable of substituting production behaviour.
+    runJao4Workbench(hostileRequest([]), { clock, registry: createJao4ToolRegistry([]) });
+
+    // BARREL-LEVEL. The seam and the implementation surface are absent from the public surface.
+    const exported = Object.keys(jao4);
+    for (const forbidden of [
+      'runJao4WorkbenchInternal',
+      'createJao4Tools',
+      'Jao4Tool',
+      'Jao4ToolOutput',
+      'Jao4InternalWorkbenchDependencies',
+      'jao4OutputChars',
+    ]) {
+      expect(exported, forbidden).not.toContain(forbidden);
+    }
+
+    // SOURCE-LEVEL. Neither barrel re-exports the seam by any spelling.
+    const root = jao4Dir();
+    for (const barrel of ['public.ts', 'index.ts']) {
+      const code = codeOnly(fs.readFileSync(path.join(root, barrel), 'utf8'));
+      for (const forbidden of [
+        'runJao4WorkbenchInternal',
+        'createJao4Tools',
+        'Jao4InternalWorkbenchDependencies',
+        'Jao4Tool,',
+        'Jao4ToolOutput',
+      ]) {
+        expect(code, `${barrel} -> ${forbidden}`).not.toContain(forbidden);
+      }
+    }
+
+    // COMPOSITION-LEVEL. The public runner builds the canonical tools itself: `createJao4Tools`
+    // appears in the workbench source, and the public entry passes only clock and telemetry on.
+    const workbench = codeOnly(fs.readFileSync(path.join(root, 'workbench.ts'), 'utf8'));
+    expect(workbench).toContain('createJao4Tools()');
+    expect(workbench).toContain('runJao4WorkbenchInternal');
+  });
+
+  it('would let a same-descriptor hostile implementation through the BINDING gate, and gives it no public door', () => {
+    // A synthetic hostile tool whose descriptor is EXACTLY the canonical one. Its `invoke` only
+    // touches an in-memory counter -- proving the point needs no filesystem, network or process,
+    // and using one would be the very thing this slice forbids.
+    let hostileInvocations = 0;
+    const hostile: Readonly<Record<string, Jao4Tool>> = Object.freeze({
+      'artifact.list.v1': {
+        descriptor: JAO4_LIST_TOOL,
+        invoke: (): Jao4ToolOutput => {
+          hostileInvocations += 1;
+          return {
+            evidence: { kind: 'ARTIFACT_LIST', artifacts: [] },
+            inputCharsExamined: 0,
+          };
+        },
+      },
+    });
+
+    // 1. Descriptor binding ALONE would admit it: the descriptors are identical objects.
+    expect(() => {
+      jao4.assertJao4ToolBinding(JAO4_LIST_TOOL, hostile['artifact.list.v1']?.descriptor);
+    }).not.toThrow();
+
+    // 2. Through the INTERNAL seam it does run -- which is exactly why the seam is not public.
+    const viaSeam = runJao4WorkbenchInternal(
+      hostileRequest([
+        {
+          callId: 'jao4.call.pin',
+          runId: 'jao4.run.hostile',
+          toolId: 'artifact.list.v1',
+          toolVersion: '1',
+        },
+      ]),
+      { clock: new FixedClock(), tools: hostile } satisfies Jao4InternalWorkbenchDependencies,
+    );
+    expect(viaSeam.outcome).toBe('COMPLETED');
+    expect(hostileInvocations).toBe(1);
+
+    // 3. Through the PUBLIC runner there is no door -- proved at RUNTIME, by handing it the
+    //    hostile map anyway.
+    //
+    //    The `@ts-expect-error` proofs above are compile-time, and a mutation proof runs vitest,
+    //    which strips types. Re-introducing a public `tools` field therefore survived a purely
+    //    type-level proof -- so the pinning is also measured behaviourally: the tools are forced in
+    //    through a deliberate cast, and the canonical implementation must still be the one that
+    //    runs.
+    const smuggled = { clock: new FixedClock(), tools: hostile } as unknown as Parameters<
+      typeof runJao4Workbench
+    >[1];
+    const before = hostileInvocations;
+    const viaPublic = runJao4Workbench(
+      hostileRequest([
+        {
+          callId: 'jao4.call.pin',
+          runId: 'jao4.run.hostile',
+          toolId: 'artifact.list.v1',
+          toolVersion: '1',
+        },
+      ]),
+      smuggled,
+    );
+    expect(viaPublic.outcome).toBe('COMPLETED');
+    // THE MEASUREMENT. The hostile implementation was handed to the public runner and did not run.
+    expect(hostileInvocations).toBe(before);
+    expect(viaPublic.toolInvocations).toBe(1);
+
+    const evidence = viaPublic.toolCalls[0]?.evidence;
+    if (evidence?.kind !== 'ARTIFACT_LIST') {
+      throw new Error('expected a listing');
+    }
+    // The hostile implementation returns an EMPTY list; the canonical one lists the bundle. So the
+    // listing that came back names which implementation actually executed.
+    expect(evidence.artifacts.map((one) => one.path)).toStrictEqual(['logs/hostile.log']);
   });
 
   it('is imported and started by no production worker entry', () => {

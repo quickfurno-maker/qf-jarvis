@@ -13,22 +13,31 @@ import { describe, expect, it } from 'vitest';
 import {
   JAO4_EXPECTED_TOOL_IDS,
   JAO4_LIMITS,
+  JAO4_LIST_TOOL,
   JAO4_PRODUCTION_TOOLS,
   JAO4_READ_TOOL,
   JAO4_WORKBENCH_BOUNDS,
   createJao4ArtifactSandbox,
   createJao4ToolRegistry,
-  createJao4Tools,
   jao4ArtifactBundleSchema,
   jao4RegisteredToolIds,
   jao4ToolDescriptorSchema,
   jao4WorkbenchRequestSchema,
-  runJao4Workbench,
   type Jao4Clock,
   type Jao4TelemetryEvent,
-  type Jao4Tool,
   type Jao4ToolDescriptor,
 } from '../jao/sandbox-tool-workbench/index.js';
+// Imported by DIRECT MODULE PATH, not through the barrel. The barrel deliberately does not carry
+// the injection seam or the tool implementation type, and a threat-model spec asserts that.
+import {
+  runJao4WorkbenchInternal,
+  type Jao4InternalWorkbenchDependencies,
+} from '../jao/sandbox-tool-workbench/workbench.js';
+import {
+  createJao4Tools,
+  type Jao4Tool,
+  type Jao4ToolOutput,
+} from '../jao/sandbox-tool-workbench/tools.js';
 
 class FixedClock implements Jao4Clock {
   private value = 1_000;
@@ -126,7 +135,9 @@ function hashCall(over: Record<string, unknown> = {}): Record<string, unknown> {
   };
 }
 
-function deps(over: Partial<Parameters<typeof runJao4Workbench>[1]> = {}) {
+function deps(
+  over: Partial<Jao4InternalWorkbenchDependencies> = {},
+): Jao4InternalWorkbenchDependencies {
   return { clock: new FixedClock(), ...over };
 }
 
@@ -347,7 +358,7 @@ describe('JAO-4 sandbox tool workbench', () => {
 
   it('lists metadata only, deterministically, and honours a bounded prefix', () => {
     const spy = countingTools();
-    const result = runJao4Workbench(request([listCall()]), deps({ tools: spy.tools }));
+    const result = runJao4WorkbenchInternal(request([listCall()]), deps({ tools: spy.tools }));
 
     expect(result.outcome).toBe('COMPLETED');
     expect(spy.calls()).toBe(1);
@@ -375,7 +386,7 @@ describe('JAO-4 sandbox tool workbench', () => {
     }
     expect(result.toolCalls[0]?.untrustedEvidence).toBe(true);
 
-    const narrowed = runJao4Workbench(request([listCall({ pathPrefix: 'logs/' })]), deps());
+    const narrowed = runJao4WorkbenchInternal(request([listCall({ pathPrefix: 'logs/' })]), deps());
     const narrowedEvidence = narrowed.toolCalls[0]?.evidence;
     if (narrowedEvidence?.kind !== 'ARTIFACT_LIST') {
       throw new Error('expected a listing');
@@ -384,7 +395,7 @@ describe('JAO-4 sandbox tool workbench', () => {
   });
 
   it('reads a bounded excerpt, never the whole artifact', () => {
-    const windowed = runJao4Workbench(
+    const windowed = runJao4WorkbenchInternal(
       request([readCall({ startLine: 2, maxLines: 2, maxChars: 512 })]),
       deps(),
     );
@@ -400,7 +411,7 @@ describe('JAO-4 sandbox tool workbench', () => {
     expect(evidence.excerpt).not.toContain('shutdown ok');
 
     // The character ceiling clips independently of the line window.
-    const clipped = runJao4Workbench(request([readCall({ maxChars: 7 })]), deps());
+    const clipped = runJao4WorkbenchInternal(request([readCall({ maxChars: 7 })]), deps());
     const clippedEvidence = clipped.toolCalls[0]?.evidence;
     if (clippedEvidence?.kind !== 'ARTIFACT_EXCERPT') {
       throw new Error('expected an excerpt');
@@ -421,7 +432,7 @@ describe('JAO-4 sandbox tool workbench', () => {
 
   it('fails closed on a missing artifact, invoking nothing further', () => {
     const spy = countingTools();
-    const result = runJao4Workbench(
+    const result = runJao4WorkbenchInternal(
       request([readCall({ path: 'logs/does-not-exist.log' })]),
       deps({ tools: spy.tools }),
     );
@@ -429,11 +440,16 @@ describe('JAO-4 sandbox tool workbench', () => {
     expect(result.toolCalls[0]?.refusalReason).toBe('ARTIFACT_NOT_FOUND');
     expect(result.toolCalls[0]?.evidence).toBeNull();
     expect(result.toolCalls[0]?.outputChars).toBe(0);
-    expect(result.totalCalls).toBe(0);
+    // One call RECORD was processed, and ONE invocation is counted: a missing artifact is
+    // discovered by the tool, inside `invoke`. The implementation was entered, looked, and
+    // refused -- which is a different fact from a gate refusing before it ran, and the audit
+    // record distinguishes them.
+    expect(result.totalCalls).toBe(1);
+    expect(result.toolInvocations).toBe(1);
   });
 
   it('searches for a LITERAL substring, not a pattern', () => {
-    const found = runJao4Workbench(request([searchCall()]), deps());
+    const found = runJao4WorkbenchInternal(request([searchCall()]), deps());
     const evidence = found.toolCalls[0]?.evidence;
     if (evidence?.kind !== 'LITERAL_SEARCH') {
       throw new Error('expected a search');
@@ -442,7 +458,7 @@ describe('JAO-4 sandbox tool workbench', () => {
     expect(evidence.matches.map((one) => one.line)).toStrictEqual([2, 3]);
 
     // A regex metacharacter is a CHARACTER. `.*` matches nothing here because nothing contains it.
-    const asRegex = runJao4Workbench(request([searchCall({ query: '.*' })]), deps());
+    const asRegex = runJao4WorkbenchInternal(request([searchCall({ query: '.*' })]), deps());
     const regexEvidence = asRegex.toolCalls[0]?.evidence;
     if (regexEvidence?.kind !== 'LITERAL_SEARCH') {
       throw new Error('expected a search');
@@ -450,7 +466,7 @@ describe('JAO-4 sandbox tool workbench', () => {
     expect(regexEvidence.matchCount).toBe(0);
 
     // A literal that DOES appear is found, proving the previous case was not a parse failure.
-    const literalDot = runJao4Workbench(
+    const literalDot = runJao4WorkbenchInternal(
       request([searchCall({ query: 'projection.batch' })]),
       deps(),
     );
@@ -461,7 +477,7 @@ describe('JAO-4 sandbox tool workbench', () => {
     expect(dotEvidence.matchCount).toBe(1);
 
     // Case sensitivity is a boolean, not a flags string that could carry anything else.
-    const insensitive = runJao4Workbench(
+    const insensitive = runJao4WorkbenchInternal(
       request([searchCall({ query: 'PROJECTION LAG', caseSensitive: false })]),
       deps(),
     );
@@ -474,7 +490,7 @@ describe('JAO-4 sandbox tool workbench', () => {
 
   it('bounds the match count and the snippet length', () => {
     const noisy = Array.from({ length: 60 }, () => 'projection lag 42').join('\n');
-    const result = runJao4Workbench(
+    const result = runJao4WorkbenchInternal(
       request([searchCall({ maxMatches: 3 })], {
         artifactBundle: bundle({
           artifacts: [
@@ -509,7 +525,7 @@ describe('JAO-4 sandbox tool workbench', () => {
     ).toBe(false);
 
     const longLine = 'z'.repeat(JAO4_LIMITS.maxSnippetChars + 100);
-    const snipped = runJao4Workbench(
+    const snipped = runJao4WorkbenchInternal(
       request([searchCall({ query: 'zzz' })], {
         artifactBundle: bundle({
           artifacts: [
@@ -532,7 +548,7 @@ describe('JAO-4 sandbox tool workbench', () => {
   });
 
   it('hashes an artifact to a known SHA-256 and returns no content', () => {
-    const result = runJao4Workbench(request([hashCall()]), deps());
+    const result = runJao4WorkbenchInternal(request([hashCall()]), deps());
     const evidence = result.toolCalls[0]?.evidence;
     if (evidence?.kind !== 'ARTIFACT_DIGEST') {
       throw new Error('expected a digest');
@@ -545,7 +561,7 @@ describe('JAO-4 sandbox tool workbench', () => {
     );
 
     // A different artifact hashes differently, so the digest is of THIS artifact.
-    const other = runJao4Workbench(request([hashCall({ path: 'logs/api.log' })]), deps());
+    const other = runJao4WorkbenchInternal(request([hashCall({ path: 'logs/api.log' })]), deps());
     const otherEvidence = other.toolCalls[0]?.evidence;
     if (otherEvidence?.kind !== 'ARTIFACT_DIGEST') {
       throw new Error('expected a digest');
@@ -573,7 +589,7 @@ describe('JAO-4 sandbox tool workbench', () => {
     ).toBe(false);
 
     // Four is the ceiling and it works.
-    const full = runJao4Workbench(
+    const full = runJao4WorkbenchInternal(
       request([listCall(), readCall(), searchCall(), hashCall()]),
       deps(),
     );
@@ -591,7 +607,7 @@ describe('JAO-4 sandbox tool workbench', () => {
       maxCallsPerRun: 1,
     });
     const strict = countingTools(oneCallOnly);
-    const perTool = runJao4Workbench(
+    const perTool = runJao4WorkbenchInternal(
       request([listCall({ callId: 'jao4.call.p1' }), listCall({ callId: 'jao4.call.p2' })]),
       deps({ tools: strict.tools, registry: createJao4ToolRegistry([oneCallOnly]) }),
     );
@@ -602,7 +618,7 @@ describe('JAO-4 sandbox tool workbench', () => {
 
     // A bundle large enough that reads exceed the total output ceiling.
     const wide = 'w'.repeat(JAO4_LIMITS.maxArtifactChars);
-    const heavy = runJao4Workbench(
+    const heavy = runJao4WorkbenchInternal(
       request(
         [
           readCall({
@@ -657,7 +673,7 @@ describe('JAO-4 sandbox tool workbench', () => {
   it('refuses an unknown, planned, disabled or version-mismatched tool before invoking anything', () => {
     // Unknown.
     const unknown = countingTools();
-    const unknownResult = runJao4Workbench(
+    const unknownResult = runJao4WorkbenchInternal(
       request([listCall({ toolId: 'shell.exec.v1' })]),
       deps({ tools: unknown.tools }),
     );
@@ -672,7 +688,7 @@ describe('JAO-4 sandbox tool workbench', () => {
       ['DISABLED', 'TOOL_DISABLED'],
     ] as const) {
       const spy = countingTools();
-      const result = runJao4Workbench(
+      const result = runJao4WorkbenchInternal(
         request([listCall()]),
         deps({
           tools: spy.tools,
@@ -690,7 +706,7 @@ describe('JAO-4 sandbox tool workbench', () => {
 
     // Registered, but not at the version asked for.
     const versioned = countingTools();
-    const versionResult = runJao4Workbench(
+    const versionResult = runJao4WorkbenchInternal(
       request([listCall({ toolVersion: '2' })]),
       deps({ tools: versioned.tools }),
     );
@@ -699,7 +715,7 @@ describe('JAO-4 sandbox tool workbench', () => {
 
     // Registry emptied entirely: no fallback, no nearest match, no dynamic install.
     const empty = countingTools();
-    const emptyResult = runJao4Workbench(
+    const emptyResult = runJao4WorkbenchInternal(
       request([listCall()]),
       deps({ tools: empty.tools, registry: createJao4ToolRegistry([]) }),
     );
@@ -720,7 +736,7 @@ describe('JAO-4 sandbox tool workbench', () => {
       {},
     ]) {
       const spy = countingTools(forgedDescriptor(forged));
-      const result = runJao4Workbench(request([readCall()]), deps({ tools: spy.tools }));
+      const result = runJao4WorkbenchInternal(request([readCall()]), deps({ tools: spy.tools }));
       expect(result.toolCalls[0]?.refusalReason, JSON.stringify(forged)).toBe(
         'TOOL_BINDING_MISMATCH',
       );
@@ -731,7 +747,7 @@ describe('JAO-4 sandbox tool workbench', () => {
 
   it('refuses authority escalation, and a request claiming business effect cannot be parsed', () => {
     const spy = countingTools();
-    const escalated = runJao4Workbench(
+    const escalated = runJao4WorkbenchInternal(
       request([listCall()], {
         parentAutonomyLevel: 'L0_REASON',
         requestedAutonomyLevel: 'L1_READ',
@@ -758,14 +774,14 @@ describe('JAO-4 sandbox tool workbench', () => {
 
   it('binds each call to the run executing it, and the bundle to the id that names it', () => {
     const spy = countingTools();
-    const mismatchedRun = runJao4Workbench(
+    const mismatchedRun = runJao4WorkbenchInternal(
       request([listCall({ runId: 'jao4.run.other' })]),
       deps({ tools: spy.tools }),
     );
     expect(mismatchedRun.toolCalls[0]?.refusalReason).toBe('RUN_ID_MISMATCH');
     expect(spy.calls()).toBe(0);
 
-    const mismatchedBundle = runJao4Workbench(
+    const mismatchedBundle = runJao4WorkbenchInternal(
       request([listCall()], { artifactBundleId: 'jao4.bundle.other' }),
       deps({ tools: spy.tools }),
     );
@@ -779,7 +795,7 @@ describe('JAO-4 sandbox tool workbench', () => {
     const controller = new AbortController();
     controller.abort();
 
-    const result = runJao4Workbench(
+    const result = runJao4WorkbenchInternal(
       request([listCall(), readCall()]),
       deps({ tools: spy.tools }),
       controller.signal,
@@ -787,13 +803,13 @@ describe('JAO-4 sandbox tool workbench', () => {
     expect(result.outcome).toBe('REFUSED');
     expect(result.refusalReason).toBe('CANCELLED');
     expect(spy.calls()).toBe(0);
-    expect(result.totalCalls).toBe(0);
+    expect(result.toolInvocations).toBe(0);
     expect(result.totalOutputChars).toBe(0);
   });
 
   it('reports a security posture that is literal, and evidence that carries no authority', () => {
     const events: Jao4TelemetryEvent[] = [];
-    const result = runJao4Workbench(
+    const result = runJao4WorkbenchInternal(
       request([listCall(), readCall()]),
       deps({ telemetry: { record: (event) => events.push(event) } }),
     );
@@ -839,6 +855,203 @@ describe('JAO-4 sandbox tool workbench', () => {
     expect(telemetry).not.toContain('boot ok');
     expect(events[0]?.modelCalls).toBe(0);
     expect(events[0]?.hostFilesystemAccess).toBe(false);
+  });
+
+  it('counts ZERO tool invocations for every pre-invocation refusal', () => {
+    // The audit point is immediately before `invoke`. Everything decided above it leaves the count
+    // at zero, so an auditor reading a refused run can tell that nothing ran.
+    const refusals: {
+      readonly label: string;
+      readonly result: ReturnType<typeof runJao4WorkbenchInternal>;
+    }[] = [
+      {
+        label: 'unknown tool',
+        result: runJao4WorkbenchInternal(
+          request([listCall()]),
+          deps({ registry: createJao4ToolRegistry([]) }),
+        ),
+      },
+      {
+        label: 'PLANNED tool',
+        result: runJao4WorkbenchInternal(
+          request([listCall()]),
+          deps({
+            registry: createJao4ToolRegistry([
+              jao4ToolDescriptorSchema.parse({
+                ...JAO4_PRODUCTION_TOOLS[0],
+                availability: 'PLANNED',
+              }),
+            ]),
+          }),
+        ),
+      },
+      {
+        label: 'DISABLED tool',
+        result: runJao4WorkbenchInternal(
+          request([listCall()]),
+          deps({
+            registry: createJao4ToolRegistry([
+              jao4ToolDescriptorSchema.parse({
+                ...JAO4_PRODUCTION_TOOLS[0],
+                availability: 'DISABLED',
+              }),
+            ]),
+          }),
+        ),
+      },
+      {
+        label: 'version mismatch',
+        result: runJao4WorkbenchInternal(request([listCall({ toolVersion: '2' })]), deps()),
+      },
+      {
+        label: 'authority escalation',
+        result: runJao4WorkbenchInternal(
+          request([listCall()], {
+            parentAutonomyLevel: 'L0_REASON',
+            requestedAutonomyLevel: 'L1_READ',
+          }),
+          deps(),
+        ),
+      },
+      {
+        label: 'binding mismatch',
+        result: runJao4WorkbenchInternal(
+          request([readCall()]),
+          deps({
+            tools: countingTools(
+              forgedDescriptor({ ...JAO4_READ_TOOL, governanceRef: 'ADR-9999.other' }),
+            ).tools,
+          }),
+        ),
+      },
+      {
+        label: 'run id mismatch',
+        result: runJao4WorkbenchInternal(request([listCall({ runId: 'jao4.run.other' })]), deps()),
+      },
+    ];
+
+    for (const { label, result } of refusals) {
+      expect(result.outcome, label).toBe('REFUSED');
+      expect(result.toolInvocations, label).toBe(0);
+    }
+
+    const controller = new AbortController();
+    controller.abort();
+    const cancelled = runJao4WorkbenchInternal(
+      request([listCall(), readCall()]),
+      deps(),
+      controller.signal,
+    );
+    expect(cancelled.refusalReason).toBe('CANCELLED');
+    expect(cancelled.toolInvocations).toBe(0);
+  });
+
+  it('counts an invocation that happened, whatever became of its output', () => {
+    // The audit gap owner review found: an implementation that ran and then threw, or returned
+    // refused evidence, or produced output the budget rejected, was counted nowhere. What a tool
+    // DID is not undone by what happened to its result.
+    const ok = runJao4WorkbenchInternal(request([listCall()]), deps());
+    expect(ok.outcome).toBe('COMPLETED');
+    expect(ok.toolInvocations).toBe(1);
+    expect(ok.totalCalls).toBe(1);
+
+    // Entered, then threw.
+    const exploding: Readonly<Record<string, Jao4Tool>> = Object.freeze({
+      'artifact.list.v1': {
+        descriptor: JAO4_LIST_TOOL,
+        invoke: (): never => {
+          throw new Error('TOOL-INTERNAL-DETAIL-MUST-NOT-LEAK');
+        },
+      },
+    });
+    const threw = runJao4WorkbenchInternal(request([listCall()]), deps({ tools: exploding }));
+    expect(threw.outcome).toBe('REFUSED');
+    expect(threw.toolCalls[0]?.refusalReason).toBe('TOOL_FAILED');
+    expect(threw.toolInvocations).toBe(1);
+    // Normalised: nothing the thrown object carried reaches the record.
+    expect(JSON.stringify(threw)).not.toContain('TOOL-INTERNAL-DETAIL-MUST-NOT-LEAK');
+
+    // Entered, then returned evidence the contract refuses.
+    const rogue: Readonly<Record<string, Jao4Tool>> = Object.freeze({
+      'artifact.list.v1': {
+        descriptor: JAO4_LIST_TOOL,
+        invoke: (): Jao4ToolOutput =>
+          ({
+            evidence: { kind: 'ARTIFACT_LIST', artifacts: [{ nope: true }] },
+            inputCharsExamined: 0,
+          }) as unknown as Jao4ToolOutput,
+      },
+    });
+    const invalid = runJao4WorkbenchInternal(request([listCall()]), deps({ tools: rogue }));
+    expect(invalid.outcome).toBe('REFUSED');
+    expect(invalid.toolCalls[0]?.refusalReason).toBe('TOOL_OUTPUT_INVALID');
+    expect(invalid.toolCalls[0]?.evidence).toBeNull();
+    expect(invalid.toolInvocations).toBe(1);
+
+    // Valid evidence, rejected by the RUN's total output budget. The invocation still counts.
+    const wide = 'w'.repeat(JAO4_LIMITS.maxArtifactChars);
+    const wideBundle = bundle({
+      artifacts: [
+        {
+          artifactId: 'jao4.artifact.wide',
+          path: 'logs/wide.log',
+          contentClass: 'LOG_EXCERPT',
+          content: wide,
+        },
+      ],
+    });
+    const heavy = runJao4WorkbenchInternal(
+      request(
+        [
+          readCall({
+            callId: 'jao4.call.h1',
+            path: 'logs/wide.log',
+            maxChars: JAO4_LIMITS.maxReadCharsPerCall,
+          }),
+          readCall({
+            callId: 'jao4.call.h2',
+            path: 'logs/wide.log',
+            maxChars: JAO4_LIMITS.maxReadCharsPerCall,
+          }),
+          readCall({
+            callId: 'jao4.call.h3',
+            path: 'logs/wide.log',
+            maxChars: JAO4_LIMITS.maxReadCharsPerCall,
+          }),
+          readCall({
+            callId: 'jao4.call.h4',
+            path: 'logs/wide.log',
+            maxChars: JAO4_LIMITS.maxReadCharsPerCall,
+          }),
+        ],
+        { artifactBundle: wideBundle },
+      ),
+      deps(),
+    );
+    const rejected = heavy.toolCalls.filter(
+      (one) => one.refusalReason === 'OUTPUT_BUDGET_EXHAUSTED',
+    );
+    expect(rejected.length).toBeGreaterThan(0);
+    for (const one of rejected) {
+      expect(one.evidence).toBeNull();
+    }
+    // Every planned call reached the implementation, including those whose output was discarded.
+    expect(heavy.toolInvocations).toBe(heavy.toolCalls.length);
+    expect(heavy.toolInvocations).toBeGreaterThan(
+      heavy.toolCalls.filter((one) => one.outcome === 'COMPLETED').length,
+    );
+  });
+
+  it('reports the same invocation count in telemetry as in the result', () => {
+    const events: Jao4TelemetryEvent[] = [];
+    const result = runJao4WorkbenchInternal(
+      request([listCall(), readCall(), searchCall()]),
+      deps({ telemetry: { record: (event) => events.push(event) } }),
+    );
+    expect(events).toHaveLength(1);
+    expect(events[0]?.toolInvocations).toBe(result.toolInvocations);
+    expect(result.toolInvocations).toBe(3);
+    expect(events[0]?.totalCalls).toBe(result.totalCalls);
   });
 
   it('builds a sandbox that can only be read', () => {

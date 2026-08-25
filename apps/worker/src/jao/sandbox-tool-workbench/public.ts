@@ -87,8 +87,16 @@ export {
 } from './tool-registry.js';
 export type { Jao4RegistryLookup, Jao4ToolRegistry } from './tool-registry.js';
 
-export { createJao4Tools, jao4OutputChars } from './tools.js';
-export type { Jao4Tool, Jao4ToolOutput } from './tools.js';
+// `createJao4Tools`, `Jao4Tool` and `Jao4ToolOutput` are deliberately NOT exported.
+//
+// The public runner constructs the canonical implementations itself and offers no parameter that
+// could replace them, so a public tool TYPE would be a shape with nowhere to go -- and an inviting
+// one. Keeping it internal means "the public surface has no arbitrary tool implementation" is a
+// fact about the barrel rather than a claim about intent.
+//
+// `runJao4WorkbenchInternal` and `Jao4InternalWorkbenchDependencies` are not exported either: the
+// injection seam exists for trusted source-level and test composition only. A spec asserts every
+// one of these names is absent from this barrel.
 
 export { JAO4_WORKBENCH_BOUNDS, runJao4Workbench } from './workbench.js';
 export type { Jao4WorkbenchDependencies } from './workbench.js';

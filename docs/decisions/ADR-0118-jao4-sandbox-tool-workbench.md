@@ -132,6 +132,44 @@ registry availability and version → authority ceiling → tool binding → cal
 Unknown, planned, disabled, version-mismatched, escalating and mismatched all produce **zero tool
 invocations**, each under its own distinct closed code.
 
+**But descriptor binding is defence in depth, not the isolation mechanism.** Owner review found why:
+comparing descriptors proves METADATA IDENTITY and says nothing about behaviour. An implementation
+can carry the exact canonical descriptor while its `invoke` does whatever its own module can reach:
+
+```
+{ descriptor: EXACT_CANONICAL_DESCRIPTOR, invoke() { ...anything... } }
+```
+
+The containment specs read this source tree. They cannot read code injected from outside it, so
+while the public runner accepted a `tools` map, every claim in this ADR about host filesystem,
+network, process, shell, environment and database access was true of this directory and **unproven
+of the thing that actually ran**.
+
+**The public composition now pins the canonical implementations.** `runJao4Workbench` constructs the
+canonical registry and the canonical tools from its own imports and accepts no parameter that could
+replace either -- its dependency contract is a clock and an optional telemetry hook, and nothing
+else. `createJao4Tools`, the `Jao4Tool` type and the internal seam are not exported from `public.ts`
+or `index.ts`, so a public tool implementation is not a shape the barrel can even name.
+
+A runtime brand, marker string, secret field or descriptor flag would not have worked: anything that
+can copy a descriptor can copy a brand exactly as easily. Composition pinning is the only mechanism
+that does not reduce to "the attacker declined to copy one more field".
+
+An **internal seam**, `runJao4WorkbenchInternal`, remains for trusted source-level and test
+composition -- the threat-model suite has to be able to attempt the thing being prevented in order
+to prove it is prevented. It is exported from its module and from no barrel, and a spec asserts its
+absence from the public surface by name, by barrel key and by source scan.
+
+Any future **production** pluggable tool loader or broker is a different thing entirely and requires
+its own separately governed authorization boundary, loading model and threat model. This seam is not
+that, and must not become it by being exported one day.
+
+Proving this took two attempts, which is worth recording: the first pinning proof was type-level
+only, and a mutation reintroducing a public `tools` field survived it, because a mutation proof runs
+Vitest and Vitest strips types. The proof is now behavioural as well -- a hostile implementation is
+forced into the public runner through a deliberate cast, and the canonical implementation must still
+be the one that executes.
+
 ### 7. Prompt injection is data, and there is no mechanism to inject into
 
 The call plan is parsed once from the request and never grows. Nothing in the workbench reads
@@ -164,6 +202,27 @@ reachable input can hit is a comment that happens to compile.
 The output budget is measured on the result a tool **actually produced**, and an over-budget result
 is discarded **whole**. Returning the part that fits would be worse than refusing: a silently
 truncated excerpt is evidence that looks complete and is not, and nothing downstream could tell.
+
+### 8a. Invocations are counted, not inferred from whether the output was liked
+
+`toolInvocations` is incremented **exactly once, immediately before `invoke`**, and is the
+authoritative execution count. `totalCalls` is the number of call RECORDS processed -- the size of
+the audit trail. The two differ exactly when a call was refused, which is the fact an auditor is
+looking for.
+
+Owner review found the gap this closes. The count used to be derived from COMPLETED results, so an
+implementation that ran and then threw, or returned evidence the contract refused, or produced a
+result the run's output budget rejected, was counted nowhere: the run could report zero work while
+an implementation had in fact been entered. **What a tool did is not undone by what happened to its
+output**, and an isolation proof whose execution count depends on whether the result was accepted is
+not an audit record.
+
+Every pre-invocation refusal -- unknown, planned, disabled, version mismatch, authority escalation,
+binding mismatch, run-id mismatch, cancellation, budget -- leaves the count at zero. A refusal raised
+_inside_ a tool, such as an artifact that is not in the bundle, counts as one: the implementation was
+entered, looked, and refused, which is a different fact from a gate refusing before it ran. There is
+no retry and no fallback, so one planned call can produce at most one invocation. Telemetry carries
+the same number, and a spec asserts the two are equal.
 
 ### 9. `containsSecrets: false` is a posture, not a claim about the world
 

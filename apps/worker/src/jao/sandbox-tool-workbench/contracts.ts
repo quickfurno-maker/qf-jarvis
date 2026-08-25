@@ -576,7 +576,27 @@ export const jao4WorkbenchResultSchema = z.strictObject({
   outcome: z.enum(JAO4_OUTCOMES),
   refusalReason: z.enum(JAO4_REFUSAL_REASONS).nullable(),
   toolCalls: z.array(jao4ToolCallResultSchema).max(JAO4_LIMITS.maxToolCallsPerRun),
+  /**
+   * Call RECORDS processed -- one per planned call that was reached, refused or completed.
+   *
+   * This is the size of the audit trail, not a count of work performed. `toolInvocations` below is
+   * the authoritative execution count, and the two differ exactly when a call was refused.
+   */
   totalCalls: z.number().int().min(0).max(JAO4_LIMITS.maxToolCallsPerRun),
+  /**
+   * Implementations ACTUALLY executed, incremented once immediately before each `invoke`.
+   *
+   * Owner review found the audit gap this closes: an implementation that ran and then threw, or
+   * returned evidence the contract refused, or produced a result the output budget rejected, was
+   * counted nowhere -- the run could report zero work while an implementation had in fact been
+   * entered once. What a tool DID is not undone by what happened to its output, and an isolation
+   * proof whose execution count depends on whether the result was liked is not an audit record.
+   *
+   * Every pre-invocation refusal -- unknown, planned, disabled, version mismatch, authority
+   * escalation, binding mismatch, cancellation, budget -- leaves this at zero. There is no retry
+   * and no fallback, so one planned call can produce at most one invocation.
+   */
+  toolInvocations: z.number().int().min(0).max(JAO4_LIMITS.maxToolCallsPerRun),
   totalInputCharsExamined: z.number().int().min(0),
   totalOutputChars: z.number().int().min(0).max(JAO4_LIMITS.maxTotalOutputChars),
   evidenceRefs: z.array(boundedIdSchema).max(JAO4_LIMITS.maxToolCallsPerRun),
@@ -617,6 +637,8 @@ export const jao4TelemetryEventSchema = z.strictObject({
   outcome: z.enum(JAO4_OUTCOMES),
   refusalReason: z.enum(JAO4_REFUSAL_REASONS).nullable(),
   totalCalls: z.number().int().min(0).max(JAO4_LIMITS.maxToolCallsPerRun),
+  /** The same authoritative execution count the result carries, so the two cannot disagree. */
+  toolInvocations: z.number().int().min(0).max(JAO4_LIMITS.maxToolCallsPerRun),
   totalInputCharsExamined: z.number().int().min(0),
   totalOutputChars: z.number().int().min(0),
   durationMs: z.number().int().nonnegative().max(600_000),
