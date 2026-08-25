@@ -108,6 +108,15 @@ The human-facing surface for reviewing prospects, drafting approved outreach, an
 authorization. Drafting is not sending. Nothing leaves the workspace without Core/human authorization
 and an approved execution path.
 
+**The offline DOMAIN for this stage is recorded by
+[ADR-0113](../decisions/ADR-0113-qfj-p12-avg4-aarohi-outreach-workspace-domain.md)**.
+It defines review items that keep evidence, priority and Core eligibility separate; immutable
+OPEN/HELD/REJECTED draft revisions; and a fail-closed boundary that can say only
+`READY_FOR_CORE_APPROVAL_REQUEST`. It creates no approval request or decision itself. Owner review also closes the older generic case
+transition into `CONTACT_APPROVED`; a future entry must be bound to Core's authoritative approval.
+There is still no Control Plane UI, persistence, model generation, channel, provider, credential,
+execution path or rollout, and Aarohi remains **PLANNED / DISABLED**.
+
 ### AVG-5 — Instagram Conversation Integration
 Governed inbound/outbound conversation on Instagram. Delivery remains provider-side and execution
 remains n8n-side; Aarohi holds no provider credential and calls no Meta API. Consent and eligibility

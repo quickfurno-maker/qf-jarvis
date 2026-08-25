@@ -26,7 +26,7 @@ import {
   TERMINAL_ACQUISITION_CASE_STATES,
   transitionAcquisitionCase,
 } from '../contracts/acquisition-case.js';
-import type { AcquisitionCase, AcquisitionCaseState } from '../contracts/acquisition-case.js';
+import type { AcquisitionCase } from '../contracts/acquisition-case.js';
 import {
   ACTIVATION_AUTHORITIES,
   completeCoreActiveHandoff,
@@ -291,6 +291,31 @@ describe('the case lifecycle tracks AAROHI’S WORK, never the party’s busines
     expect([...sources]).toStrictEqual([]);
   });
 
+  it('ordinary transition cannot manufacture approval-gated case states', () => {
+    const opened = openAcquisitionCase({ caseRef: 'case.1', prospectRef: PROSPECT });
+    if (opened === undefined) throw new Error('the case must open');
+
+    const pending = transitionAcquisitionCase(opened, 'ELIGIBILITY_PENDING');
+    if (!pending.ok) throw new Error('pending transition must succeed');
+    const eligible = transitionAcquisitionCase(pending.next, 'ELIGIBLE_NET_NEW');
+    if (!eligible.ok) throw new Error('eligible transition must succeed');
+
+    expect(canTransition(eligible.next.state, 'CONTACT_APPROVED')).toBe(false);
+    expect(transitionAcquisitionCase(eligible.next, 'CONTACT_APPROVED')).toStrictEqual({
+      ok: false,
+      refusal: 'TRANSITION_NOT_PERMITTED',
+    });
+
+    const contactApprovedSources = ACQUISITION_CASE_STATES.filter((one) =>
+      canTransition(one, 'CONTACT_APPROVED'),
+    );
+    const awaitingSources = ACQUISITION_CASE_STATES.filter((one) =>
+      canTransition(one, 'AWAITING_CORE_ACTIVATION'),
+    );
+    expect(contactApprovedSources).toStrictEqual([]);
+    expect(awaitingSources).toStrictEqual([]);
+  });
+
   it('a refusal must name a reason, and nothing else may carry one', () => {
     const opened = openAcquisitionCase({ caseRef: 'case.1', prospectRef: PROSPECT });
     if (opened === undefined) {
@@ -336,27 +361,20 @@ describe('THE HANDOFF — Core ACTIVE is required, and generic transition cannot
     active,
   });
 
-  /** A case sitting exactly at the handoff boundary, built through the ordinary lifecycle. */
-  const atBoundary = (): AcquisitionCase => {
-    const opened = openAcquisitionCase({ caseRef: 'case.1', prospectRef: PROSPECT });
-    if (opened === undefined) {
-      throw new Error('the case must open');
-    }
-    let current: AcquisitionCase = opened;
-    for (const step of [
-      'ELIGIBILITY_PENDING',
-      'ELIGIBLE_NET_NEW',
-      'CONTACT_APPROVED',
-      'AWAITING_CORE_ACTIVATION',
-    ] as AcquisitionCaseState[]) {
-      const result = transitionAcquisitionCase(current, step);
-      if (!result.ok) {
-        throw new Error(`the ordinary lifecycle must reach ${step}`);
-      }
-      current = result.next;
-    }
-    return current;
-  };
+  /**
+   * A synthetic value already sitting at the ACTIVE-handoff boundary.
+   *
+   * AVG-4 owner review deliberately made this boundary unreachable through the ordinary lifecycle:
+   * entering approval-gated states requires a future bridge bound to Core's authoritative approval
+   * result. Constructing the value here isolates completeCoreActiveHandoff; it is not evidence that a
+   * caller may manufacture the boundary through transitionAcquisitionCase.
+   */
+  const atBoundary = (): AcquisitionCase =>
+    Object.freeze({
+      caseRef: 'case.1',
+      prospectRef: PROSPECT,
+      state: 'AWAITING_CORE_ACTIVATION' as const,
+    });
 
   it('REGRESSION: generic transition cannot reach handoff from ANY state', () => {
     // The defect owner review found. `transitionAcquisitionCase` must have no route into the
