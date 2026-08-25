@@ -9,19 +9,31 @@
  * ### What this file is for
  *
  * The vocabularies and the two boundary shapes: what a caller may state (`Jao6ProposalRequest`) and
- * what it gets back (`Jao6ProposalResult`). Both are `z.strictObject`, so an unknown key is a
- * refusal rather than something quietly dropped.
+ * what it gets back (`Jao6ProposalResult`). Both are strict, so an unknown key is a refusal rather
+ * than something quietly dropped.
  *
  * ### The request is deliberately small, and the omissions are the design
  *
- * A caller states a SUBJECT, EVIDENCE, bounded WORDING, bounded PARAMETERS and TIMING. It does not
- * state `risk`, `requiredApproval`, `recommendationType`, `actionType`, `actionContractVersion` or
- * the producing agent, because those come from a static reviewed policy. Risk determines the
- * approval path, so a caller that could state it would be choosing how much human oversight its own
- * proposal receives.
+ * A caller states a SUBJECT, EVIDENCE, bounded WORDING, closed PARAMETERS and TIMING. It does not
+ * state `risk`, `requiredApproval`, `recommendationType`, `actionType` or `actionContractVersion`,
+ * because those come from a static reviewed policy; and it does not state the producing agent,
+ * because that is provenance stamped by the composition. Risk determines the approval path, so a
+ * caller that could state it would be choosing how much human oversight its own proposal receives.
  *
  * `confidence` is accepted and is wired to nothing. It travels onto the recommendation as data and
  * changes no gate. A model score can never reduce an approval requirement.
+ *
+ * ### The result is a DISCRIMINATED UNION over canonical artifacts
+ *
+ * It used to be one weak interface with `unknown` artifacts and independently nullable fields, and
+ * owner review of PR #162 was right that comments claiming "ready implies artifacts, refused
+ * implies none" were doing work the type should do. A shape that permits a REFUSED result carrying
+ * a recommendation is a shape somebody will eventually build.
+ *
+ * So `PROPOSAL_READY` and `REFUSED` are separate members, and the canonical artifacts are the REAL
+ * types -- `RecommendationV1`, `RecommendationActionBinding`, `ApprovalRequestV1` -- imported as
+ * types from the packages that own them. They are never re-declared here: a second definition of a
+ * contract another package owns is a definition that can drift.
  *
  * ### The result says what was produced AND what was not
  *
@@ -34,6 +46,7 @@
  */
 import {
   boundedText,
+  correlationIdSchema,
   entityReferenceSchema,
   evidenceItemSchema,
   machineTokenSchema,
@@ -41,8 +54,9 @@ import {
   prioritySchema,
   TEXT_LIMITS,
   utcTimestampSchema,
-  correlationIdSchema,
 } from '@qf-jarvis/contracts';
+import type { ApprovalRequestV1, RecommendationV1 } from '@qf-jarvis/contracts';
+import type { RecommendationActionBinding } from '@qf-jarvis/recommendation-runtime';
 import { z } from 'zod';
 
 // ---------------------------------------------------------------------------
@@ -60,6 +74,7 @@ export const JAO6_REFUSAL_REASONS = [
   'POLICY_UNKNOWN',
   'POLICY_VERSION_MISMATCH',
   'POLICY_NOT_ACTIVE',
+  'POLICY_INCOMPLETE',
   'SUBJECT_TYPE_NOT_ALLOWED',
   'EVIDENCE_INVALID',
   'PARAMETERS_INVALID',
@@ -68,6 +83,7 @@ export const JAO6_REFUSAL_REASONS = [
   'RECOMMENDATION_REFUSED',
   'BINDING_MISMATCH',
   'APPROVAL_REQUEST_REFUSED',
+  'RESULT_INCONSISTENT',
 ] as const;
 
 export type Jao6RefusalReason = (typeof JAO6_REFUSAL_REASONS)[number];
@@ -78,6 +94,7 @@ const JAO6_MESSAGES: Readonly<Record<Jao6RefusalReason, string>> = Object.freeze
   POLICY_UNKNOWN: 'No such proposal policy is registered.',
   POLICY_VERSION_MISMATCH: 'That proposal policy version is not the registered one.',
   POLICY_NOT_ACTIVE: 'That proposal policy is not active for this proof.',
+  POLICY_INCOMPLETE: 'That proposal policy has no reviewed parameter shape.',
   SUBJECT_TYPE_NOT_ALLOWED: 'The subject entity type is not allowed by the policy.',
   EVIDENCE_INVALID: 'The evidence does not satisfy the policy.',
   PARAMETERS_INVALID: 'The parameters do not satisfy the policy parameter schema.',
@@ -86,6 +103,7 @@ const JAO6_MESSAGES: Readonly<Record<Jao6RefusalReason, string>> = Object.freeze
   RECOMMENDATION_REFUSED: 'The canonical recommendation runtime refused the assembled input.',
   BINDING_MISMATCH: 'The action binding did not match the canonical recommendation.',
   APPROVAL_REQUEST_REFUSED: 'The canonical approval runtime refused the assembled request.',
+  RESULT_INCONSISTENT: 'The assembled result did not satisfy its own contract.',
 });
 
 /** The only outcomes. There is no `APPROVED`, no `AUTHORIZED` and no `EXECUTED`. */
@@ -109,19 +127,40 @@ export class Jao6ProposalError extends Error {
 }
 
 // ---------------------------------------------------------------------------
+// The producer. Provenance, stamped by the composition and by nothing else.
+// ---------------------------------------------------------------------------
+
+/**
+ * Who produced a JAO-6 proposal.
+ *
+ * `jarvis`, because that is what actually happened. This slice proves `specialistCalls = 0`: there
+ * is no Anisha invocation, no JAO-2 delegation result and no bound specialist output anywhere in
+ * it, so stamping a specialist id would claim a provenance that does not exist. The business DOMAIN
+ * of a proposal is not evidence about WHO concluded it.
+ *
+ * A future specialist-attributed proposal needs a separately reviewed binding to exact governed
+ * specialist output. It is not implemented here, and there is no policy field through which a class
+ * could assert it.
+ */
+export const JAO6_PRODUCING_AGENT = 'jarvis' as const;
+
+/** The reviewed producer build. One stable machine token identifying this JAO-6 producer. */
+export const JAO6_PRODUCER_VERSION = 'jarvis.jao6.v1' as const;
+
+// ---------------------------------------------------------------------------
 // The request.
 // ---------------------------------------------------------------------------
 
 /**
  * What a caller may state.
  *
- * Strict. Every field the policy owns is absent, so naming one is an unknown key and therefore
- * `REQUEST_INVALID`. That is what closes the whole policy-smuggling class in one place: `risk`,
- * `requiredApproval`, `recommendationType`, `actionType`, `actionContractVersion`,
- * `producingAgent`, `recommendationId`, `actionId`, `actionFingerprint`, `approvalRequestId`,
- * `approved`, `authorized`, `canExecute`, `canSend`, `approvalDecision`, `executionIntent`,
- * `provider`, `executor`, `n8n`, `webhookUrl`, `recipient`, `phoneNumber` and any credential key
- * are all simply not fields here.
+ * Strict. Every field the policy or the composition owns is absent, so naming one is an unknown key
+ * and therefore `REQUEST_INVALID`. That closes the whole policy-smuggling class in one place:
+ * `risk`, `requiredApproval`, `recommendationType`, `actionType`, `actionContractVersion`,
+ * `producingAgent`, `producingAgentVersion`, `producingSystem`, `recommendationId`, `actionId`,
+ * `actionFingerprint`, `approvalRequestId`, `approved`, `authorized`, `canExecute`, `canSend`,
+ * `approvalDecision`, `executionIntent`, `provider`, `executor`, `n8n`, `webhookUrl`, `recipient`,
+ * `phoneNumber` and any credential key are all simply not fields here.
  *
  * `parameters` is `unknown` on purpose. Its real shape is the POLICY's parameter schema, which is
  * chosen after the policy is resolved -- so validating it here would mean guessing which policy
@@ -138,13 +177,20 @@ export const jao6ProposalRequestSchema = z.strictObject({
   /** Data. Calibration and prioritization only -- never permission, at any value. */
   confidence: z.number().min(0).max(1),
 
+  /**
+   * Human-readable, and human-read.
+   *
+   * These reach the RECOMMENDATION, where a person reads them. They never reach the ACTION: the
+   * action's type, contract version, parameters and summary are all derived from the policy, so no
+   * caller prose is inside the bytes the fingerprint measures.
+   */
   summary: boundedText(TEXT_LIMITS.summary),
   rationale: boundedText(TEXT_LIMITS.rationale),
 
   /** The canonical contract evidence shapes. There is no free-text reasoning blob. */
   evidence: z.array(evidenceItemSchema).min(1).max(MAX_EVIDENCE_ITEMS),
 
-  /** Validated against the resolved POLICY's exact schema, not here. */
+  /** Validated against the resolved POLICY's exact closed schema, not here. */
   parameters: z.unknown(),
 
   createdAt: utcTimestampSchema,
@@ -222,35 +268,12 @@ export const JAO6_POSTURE: Jao6Posture = Object.freeze(
   }),
 );
 
-/**
- * One proposal attempt.
- *
- * The canonical artifacts are carried by reference -- `RecommendationV1`, the runtime's own
- * `RecommendationActionBinding` triple, and `ApprovalRequestV1` -- because re-declaring their shapes
- * here would create a second definition of contracts `@qf-jarvis/contracts` already owns, and a
- * second definition is a definition that can drift. They are typed, not re-validated into a local
- * copy.
- *
- * The cross-field rules below are what make the two states honest: a ready proposal has all three
- * artifacts and no refusal; a refusal has none of them and a code.
- */
-export interface Jao6ProposalResult {
-  readonly outcome: Jao6Outcome;
-  readonly refusalReason: Jao6RefusalReason | null;
-
+/** What both members carry, whatever happened. */
+export interface Jao6ProposalResultCommon {
   readonly proposalPolicyId: string;
   readonly proposalPolicyVersion: number;
   readonly correlationId: string;
-
-  /** The canonical inert artifact, or null. Produced by `@qf-jarvis/recommendation-runtime`. */
-  readonly recommendation: unknown;
-  /** The canonical `{ recommendationId, proposedActionId, actionFingerprint }` triples. */
-  readonly actionBindings: readonly unknown[];
-  /** The canonical POWERLESS ask, or null. Produced by `@qf-jarvis/approval-runtime`. */
-  readonly approvalRequest: unknown;
-
   readonly posture: Jao6Posture;
-
   /**
    * True when this proposal class reaches a client or a vendor.
    *
@@ -260,3 +283,79 @@ export interface Jao6ProposalResult {
   /** The literal notice, or null when the class is not communication-facing. */
   readonly executionEligibilityNotice: string | null;
 }
+
+/**
+ * A proposal that is ready to ENTER the existing path.
+ *
+ * All three canonical artifacts, at their real types, and `refusalReason: null` as a literal rather
+ * than as a possibility. `actionBindings` is an exact ONE-tuple: this first proof produces exactly
+ * one non-informational action, and saying so in the type means a reader never has to wonder
+ * whether the array could be empty.
+ */
+export interface Jao6ProposalReadyResult extends Jao6ProposalResultCommon {
+  readonly outcome: 'PROPOSAL_READY';
+  readonly refusalReason: null;
+  readonly recommendation: RecommendationV1;
+  readonly actionBindings: readonly [RecommendationActionBinding];
+  readonly approvalRequest: ApprovalRequestV1;
+}
+
+/**
+ * A proposal that was refused.
+ *
+ * No artifact, and a code. `recommendation: null` and `approvalRequest: null` are literal types, so
+ * a refusal carrying a recommendation does not type-check -- which is the property the old
+ * single-interface shape only claimed in a comment.
+ */
+export interface Jao6ProposalRefusedResult extends Jao6ProposalResultCommon {
+  readonly outcome: 'REFUSED';
+  readonly refusalReason: Jao6RefusalReason;
+  readonly recommendation: null;
+  readonly actionBindings: readonly [];
+  readonly approvalRequest: null;
+}
+
+export type Jao6ProposalResult = Jao6ProposalReadyResult | Jao6ProposalRefusedResult;
+
+/**
+ * The RUNTIME half of the same guarantee.
+ *
+ * A discriminated union, so the cross-state rules hold at run time as well as at compile time and a
+ * cast cannot manufacture a contradictory result.
+ *
+ * The canonical artifacts are checked for PRESENCE, not re-validated: they were produced and deeply
+ * frozen by the runtimes that own their contracts, and re-declaring `RecommendationV1` here would
+ * create the second definition this file exists to avoid. What is enforced is exactly what belongs
+ * to JAO-6 -- which member this is, and that its fields agree with it.
+ */
+const presentObjectSchema = z.custom<Record<string, unknown>>(
+  (value) => typeof value === 'object' && value !== null,
+);
+
+const commonResultShape = {
+  proposalPolicyId: z.string().min(1).max(128),
+  proposalPolicyVersion: z.number().int().min(0).max(1_000),
+  correlationId: z.string().min(1).max(128),
+  posture: jao6PostureSchema,
+  communicationExecutionEligibilityRequired: z.boolean(),
+  executionEligibilityNotice: z.literal(JAO6_EXECUTION_ELIGIBILITY_NOTICE).nullable(),
+};
+
+export const jao6ProposalResultSchema = z.discriminatedUnion('outcome', [
+  z.strictObject({
+    ...commonResultShape,
+    outcome: z.literal('PROPOSAL_READY'),
+    refusalReason: z.null(),
+    recommendation: presentObjectSchema,
+    actionBindings: z.tuple([presentObjectSchema]),
+    approvalRequest: presentObjectSchema,
+  }),
+  z.strictObject({
+    ...commonResultShape,
+    outcome: z.literal('REFUSED'),
+    refusalReason: z.enum(JAO6_REFUSAL_REASONS),
+    recommendation: z.null(),
+    actionBindings: z.tuple([]),
+    approvalRequest: z.null(),
+  }),
+]);

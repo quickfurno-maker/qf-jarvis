@@ -277,6 +277,17 @@ boundaries:
   refuses and returns no artifact.
 - **Public composition is pinned by having no dependency parameter at all.** The internal seam is
   exported from no barrel.
+- **The canonical policy and registry are PRIVATE governance state.** No barrel exports a policy
+  object, the registry creator, a registry type or a parameter schema; policy records are deeply
+  immutable by construction; introspection returns a fresh, detached, primitive-only copy.
+- **The producer is Jarvis, not a specialist.** `producingAgent` is `jarvis` and
+  `producingAgentVersion` is `jarvis.jao6.v1`, stamped by the composition. There is no policy field
+  for a producer, so no class can claim a specialist it never called; specialist calls stay zero.
+- **Caller free text never enters `ProposedAction.parameters`.** Action parameters are closed
+  structured values only, so changing review prose cannot change the action or its fingerprint.
+- **The result is a discriminated union over canonical artifacts**, enforced at compile time and by
+  a runtime schema, so a refusal cannot carry an artifact and a ready proposal cannot carry a
+  refusal code.
 - **A proposal is not send permission.** Consent, opt-out, suppression and STOP eligibility are
   re-read at execution time by Core and the communications path. JAO-6 resolves no recipient, reads
   no consent state and caches none.

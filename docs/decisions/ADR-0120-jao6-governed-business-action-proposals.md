@@ -81,7 +81,6 @@ The first-proof class:
 | ------------------------------- | ------------------------------------------------ |
 | `proposalPolicyId` / version    | `jao6.vendor-follow-up` / `1`                    |
 | availability                    | `ACTIVE_FOR_OFFLINE_SHADOW_PROOF_ONLY`           |
-| producing agent                 | `anisha` / `anisha.v1`                           |
 | allowed subject types           | `vendor`                                         |
 | `recommendationType`            | `vendor.follow-up`                               |
 | `actionType` / contract version | `schedule.follow-up` / `1`                       |
@@ -100,6 +99,37 @@ nobody would confuse.
 A second class, `jao6.vendor-quotation-escalation`, is declared `PLANNED` and refused **before
 either runtime is invoked**, so "planned" cannot quietly become "produced but unused". Adding a
 class is visibly an act of review rather than an act of code.
+
+### 2a. The canonical policy and registry are PRIVATE governance state
+
+Owner review of PR #162 found the first version publicly mutable, and it was right. The records were
+built with `Object.freeze(...)`, the registry creator and the policy objects were on the public
+barrel, and **`Object.freeze` is shallow**. `allowedSubjectEntityTypes`, `allowedEvidenceTypes` and
+`policyReference` were live references on a frozen object, and the canonical registry returned that
+same object, so one line rewrote reviewed governance:
+
+    (JAO6_VENDOR_FOLLOW_UP_POLICY.allowedSubjectEntityTypes as string[]).push('client');
+
+No `register`, `add` or `extend` was needed. TypeScript's `readonly` is erased at runtime and
+prevented none of it.
+
+Two independent closures now hold, and either alone would fix the finding:
+
+1. **No public reference.** No barrel exports a policy object, the policy array, the registry
+   creator, the registry type, the policy type, the policy schema or a parameter schema. They are
+   module-private and reachable only by direct module path.
+2. **Immutable by construction.** `freezeJao6Policy` rebuilds every nested array and object as a
+   fresh frozen value before freezing the record, so nothing the parser produced remains writable.
+
+Introspection is served by `describeJao6ProposalPolicies()`, which returns a **fresh, detached,
+primitive-only** copy on every call. It shares no reference with canonical execution, so mutating
+what it returns changes nothing anywhere — a stronger promise than asking a caller not to, and the
+only kind worth making across a barrel.
+
+Zod parameter schemas are deliberately **not** on the policy record. A `ZodType` is a framework
+object with mutable internals: storing one would make the record un-freezable in any honest sense,
+and deep-freezing Zod's internals would break the library. They live in a private lookup keyed by
+policy id and version, and the governance record stays JSON-like.
 
 ### 3. Confidence is not authority, at either extreme
 
@@ -121,17 +151,55 @@ Identity is never caller-chosen. `recommendationId`, each `actionId` and `approv
 from the canonical runtimes, because an identifier a caller chose is an identifier a caller can
 reuse - and two recommendations sharing an approval decision is the failure that buys.
 
+### 4a. The producer is Jarvis, because Jarvis is what produced it
+
+The first version put `producingAgent: 'anisha'` on the policy and stamped it onto the artifact.
+Owner review called that provenance laundering, and it was: this slice proves `specialistCalls = 0`.
+There is no Anisha invocation, no JAO-2 delegation result and no bound specialist output anywhere in
+it, so the recommendation claimed a specialist had produced something Jarvis assembled.
+
+**The business domain of a proposal is not evidence about who concluded it.** A vendor follow-up is
+about a vendor; that says nothing about which agent reasoned over it.
+
+So the producer is a constant of the composition -
+
+    producingAgent        = 'jarvis'
+    producingAgentVersion = 'jarvis.jao6.v1'
+
+- and `producingAgent` is **not a policy field at all**. That removes the shape of the mistake rather
+  than the instance of it: a future class cannot name `riya`, `anisha`, `kabir` or `jitin`, because
+  there is nowhere to write it. `composite` is false and `contributingAgents` is absent, which is what
+  the contract requires of a non-composite item and what is honestly true here.
+
+A specialist-attributed proposal requires a separately reviewed binding to **exact governed
+specialist output** - a real delegation result, correlated. It is not implemented here.
+
 ### 5. Parameters are a closed schema, not a governed free-form object
 
 The canonical `actionParametersSchema` scans at any depth for credentials, contact details, raw
 payloads and model internals, and it would catch the obvious smuggling. But it permits keys it has
 never heard of, and `canExecute`, `executor`, `n8n` and `webhookUrl` are keys it has never heard of.
 
-So the policy owns an **exact, strict, closed** parameter schema. For this class every field is
-deliberately non-transport - a reason code, a topic code, a follow-up window and a bounded note for
-the approver. There is no channel, no template body, no recipient and no phone number: **who** is
+So the policy owns an **exact, strict, closed** parameter schema. For this class every field is a
+closed structured value and deliberately non-transport - a reason code, a topic code and a follow-up
+window. There is no channel, no template body, no recipient and no phone number: **who** is
 contacted and **how** is Core's to resolve from its own records, against consent it owns, at
 execution time.
+
+**And no free text.** The first version carried a bounded `approverNote`, and owner review was right
+to remove it. The parsed parameter object becomes `proposedActions[0].parameters` VERBATIM, so it is
+part of the final action bytes, part of the canonical fingerprint, and part of the exact action a
+human is later asked to approve. A free-text field there meant caller prose was inside the
+executable action - which contradicted the boundary this slice claims.
+
+The reviewed key set is therefore exactly:
+
+    followUpReasonCode, topicCode, earliestFollowUpAt, latestFollowUpAt
+
+A note for the approver belongs on the recommendation's own `summary`, `rationale` and `evidence`,
+which a human reads and nothing parses. The consequence is measurable and is measured: changing only
+the human-readable prose, with identical closed parameters, produces an **identical action and an
+identical fingerprint**.
 
 ### 6. Nothing is compiled from free text
 
@@ -167,6 +235,33 @@ recommended" a measured fact rather than a property of a package that happened t
 The authority check on the request is the anti-laundering check: a perfectly valid
 `client-or-vendor-facing-communication` recommendation behind a request that asks a
 `delegated-approver` to say yes is refused.
+
+### 7a. The result is a discriminated union over canonical artifacts
+
+`Jao6ProposalResult` was one weak interface: `unknown` artifacts, independently nullable fields, and
+a comment promising that ready implied artifacts and refused implied none. A shape that permits a
+`REFUSED` result carrying a recommendation is a shape somebody will eventually build.
+
+It is now two members discriminated on `outcome`:
+
+- `Jao6ProposalReadyResult` - `refusalReason: null`, `recommendation: RecommendationV1`,
+  `actionBindings: readonly [RecommendationActionBinding]`, `approvalRequest: ApprovalRequestV1`.
+- `Jao6ProposalRefusedResult` - `refusalReason: Jao6RefusalReason`, `recommendation: null`,
+  `actionBindings: readonly []`, `approvalRequest: null`.
+
+The artifact types are **imported as types** from the packages that own them -
+`@qf-jarvis/contracts` for `RecommendationV1` and `ApprovalRequestV1`,
+`@qf-jarvis/recommendation-runtime` for `RecommendationActionBinding`. They are never re-declared
+here: a second definition of a contract another package owns is a definition that can drift. The
+exact one-tuple is what lets `actionBindings[0]` narrow without `| undefined` under
+`noUncheckedIndexedAccess`, and it states the exactly-one invariant in the type rather than in prose.
+
+A compile-time union is erased by the time anything runs, and the states it forbids are exactly the
+states a reader would trust without checking. So the same rules are also a runtime discriminated
+union, `jao6ProposalResultSchema`, and the composition parses its own result before returning it: a
+result that does not satisfy its own contract is refused, not returned. The canonical artifacts are
+checked there for PRESENCE, not re-validated - they were produced and deeply frozen by the runtimes
+that own their contracts.
 
 ### 8. Public composition is pinned by having no parameter at all
 
@@ -257,5 +352,13 @@ are `workspace:*` links to packages this repository already builds and already g
 
 What this buys is narrow and worth stating plainly: when a Core submission path is eventually built,
 it will submit an artifact that was already produced under a reviewed policy, already bound to the
-exact action it describes, and already unable to claim it was approved. The submission is the easy
-part.
+exact action it describes, honestly attributed to the thing that produced it, and already unable to
+claim it was approved. The submission is the easy part.
+
+### What owner review changed, and what it did not
+
+Four findings on PR #162 were closed on the same branch: the publicly mutable policy, the false
+specialist provenance, caller free text inside the action parameters, and the untyped result. None
+of them changed the ARCHITECTURE - the pipeline, the reuse of the two canonical runtimes, the
+binding invariant and the stop before Core are exactly as first proposed. All four were the same
+kind of defect: a governance claim that documentation made and structure did not.

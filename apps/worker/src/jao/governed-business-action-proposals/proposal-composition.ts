@@ -28,13 +28,21 @@
  * The internal seam below exists so tests can be deterministic about identity and can count
  * invocations. It is exported from this module and from NO barrel.
  *
- * ### Nothing is compiled from free text
+ * ### Provenance is stamped HERE, and it says `jarvis`
+ *
+ * It used to come from the policy, and it used to say `anisha`. Owner review of PR #162 called that
+ * provenance laundering, and it was: this slice proves `specialistCalls = 0`, so no specialist
+ * produced anything. The producer is now a constant of the composition, and there is no policy
+ * field through which a future class could claim a specialist it never called.
+ *
+ * ### Nothing is compiled from free text, and nothing free-text is IN the action
  *
  * The caller's `summary` and `rationale` are carried onto the recommendation for a human to read.
  * They never reach the ACTION. The action's type, contract version and summary come from the
- * policy, and its parameters come from the policy's own closed schema -- so evidence prose saying
- * "lower the approval to none" or "send immediately", or containing a fabricated JSON action, is
- * read by a person and parsed by nothing.
+ * policy, and its parameters come from the policy's own closed schema of enum codes and timestamps
+ * -- so evidence prose saying "lower the approval to none" or "send immediately", or containing a
+ * fabricated JSON action, is read by a person and parsed by nothing, and changing any of that prose
+ * cannot change the canonical action fingerprint.
  */
 import { isStrictlyBefore } from '@qf-jarvis/contracts';
 import { createApprovalRuntime } from '@qf-jarvis/approval-runtime';
@@ -48,8 +56,13 @@ import type { RecommendationRuntime } from '@qf-jarvis/recommendation-runtime';
 import {
   JAO6_EXECUTION_ELIGIBILITY_NOTICE,
   JAO6_POSTURE,
+  JAO6_PRODUCER_VERSION,
+  JAO6_PRODUCING_AGENT,
   Jao6ProposalError,
   jao6ProposalRequestSchema,
+  jao6ProposalResultSchema,
+  type Jao6ProposalReadyResult,
+  type Jao6ProposalRefusedResult,
   type Jao6ProposalRequest,
   type Jao6ProposalResult,
   type Jao6RefusalReason,
@@ -57,7 +70,7 @@ import {
 import { jao6VendorFollowUpParametersSchema, type Jao6ProposalPolicy } from './proposal-policy.js';
 import {
   createJao6ProposalRegistry,
-  JAO6_PROPOSAL_POLICY_IDS,
+  jao6ParameterSchemaFor,
   type Jao6ProposalRegistry,
 } from './proposal-registry.js';
 
@@ -93,13 +106,15 @@ const JAO6_ACTION_SUMMARY_BUILDERS: Readonly<
 });
 
 function actionSummaryFor(policy: Jao6ProposalPolicy, parameters: unknown): string {
-  const builder = JAO6_ACTION_SUMMARY_BUILDERS[
-    policy.proposalPolicyId as keyof typeof JAO6_ACTION_SUMMARY_BUILDERS
-  ] as ((parameters: unknown) => string) | undefined;
+  const builder = (
+    JAO6_ACTION_SUMMARY_BUILDERS as Readonly<
+      Record<string, ((parameters: unknown) => string) | undefined>
+    >
+  )[policy.proposalPolicyId];
   if (builder === undefined) {
     // Unreachable through the registry, which only holds the ids above. Fail closed anyway: a
     // policy whose wording nobody wrote is a policy nobody reviewed.
-    throw new Jao6ProposalError('POLICY_UNKNOWN');
+    throw new Jao6ProposalError('POLICY_INCOMPLETE');
   }
   return builder(parameters);
 }
@@ -131,7 +146,7 @@ function refused(
   proposalPolicyVersion: number,
   correlationId: string,
   communicationRequired: boolean,
-): Jao6ProposalResult {
+): Jao6ProposalRefusedResult {
   return Object.freeze({
     outcome: 'REFUSED' as const,
     refusalReason: reason,
@@ -139,7 +154,7 @@ function refused(
     proposalPolicyVersion,
     correlationId,
     recommendation: null,
-    actionBindings: Object.freeze([]),
+    actionBindings: Object.freeze([] as const),
     approvalRequest: null,
     posture: JAO6_POSTURE,
     communicationExecutionEligibilityRequired: communicationRequired,
@@ -174,18 +189,19 @@ export function proposeJao6BusinessAction(request: unknown): Jao6ProposalResult 
  * The internal variant. Same governance; a trusted source-level caller may supply the composition.
  *
  * The policy registry supplied here still governs: `risk`, `requiredApproval`, `actionType`,
- * `actionContractVersion`, `recommendationType` and the producing agent are read from the policy
- * record, never from the request, on this path exactly as on the public one.
+ * `actionContractVersion` and `recommendationType` are read from the policy record, never from the
+ * request, on this path exactly as on the public one -- and the producer is stamped from this
+ * module's own constants on both.
  */
 export function proposeJao6BusinessActionInternal(
   request: unknown,
   composition: Jao6InternalComposition,
 ): Jao6ProposalResult {
-  // 1. Strict request. An unknown key -- `risk`, `requiredApproval`, `actionType`, `approved`,
-  //    `authorized`, `canExecute`, `canSend`, `approvalDecision`, `executionIntent`, `provider`,
-  //    `executor`, `n8n`, `webhookUrl`, `recipient`, `phoneNumber`, any credential -- is a refusal.
-  //    The Zod issue tree is discarded: it can quote the very values the governed schemas exist to
-  //    keep out of a log line.
+  // 1. Strict request. An unknown key -- `risk`, `requiredApproval`, `actionType`, `producingAgent`,
+  //    `approved`, `authorized`, `canExecute`, `canSend`, `approvalDecision`, `executionIntent`,
+  //    `provider`, `executor`, `n8n`, `webhookUrl`, `recipient`, `phoneNumber`, any credential -- is
+  //    a refusal. The Zod issue tree is discarded: it can quote the very values the governed schemas
+  //    exist to keep out of a log line.
   const parsedRequest = jao6ProposalRequestSchema.safeParse(request);
   if (!parsedRequest.success) {
     return refused('REQUEST_INVALID', 'unknown', 0, 'unknown', false);
@@ -216,7 +232,7 @@ export function proposeJao6BusinessActionInternal(
   const policy = lookup.policy;
   const communicationRequired = policy.communicationExecutionEligibilityRequired;
 
-  const refuse = (reason: Jao6RefusalReason): Jao6ProposalResult =>
+  const refuse = (reason: Jao6RefusalReason): Jao6ProposalRefusedResult =>
     refused(
       reason,
       policy.proposalPolicyId,
@@ -259,11 +275,19 @@ export function proposeJao6BusinessActionInternal(
     return refuse('LIFETIME_EXCEEDED');
   }
 
-  // 7. Parameters, against the POLICY's own closed schema. Unknown keys are refused here, which is
-  //    what stops `canExecute`, `executor`, `n8n` or `webhookUrl` arriving as data instead of as a
-  //    field -- the canonical governed scan catches credentials and contact details, but it permits
-  //    keys it has never heard of, and those are keys it has never heard of.
-  const parsedParameters = policy.parameterSchema.safeParse(stated.parameters);
+  // 7. Parameters, against the POLICY's own closed schema -- resolved from a PRIVATE lookup keyed by
+  //    policy identity, because a Zod object on a governance record would make that record
+  //    un-freezable. Unknown keys are refused here, which is what stops `canExecute`, `executor`,
+  //    `n8n` or `webhookUrl` arriving as data instead of as a field: the canonical governed scan
+  //    catches credentials and contact details, but it permits keys it has never heard of.
+  //
+  //    Every field in that schema is a closed enum code or a timestamp. No caller prose survives
+  //    into `parameters`, so no caller prose is inside the bytes the fingerprint measures.
+  const parameterSchema = jao6ParameterSchemaFor(policy);
+  if (parameterSchema === null) {
+    return refuse('POLICY_INCOMPLETE');
+  }
+  const parsedParameters = parameterSchema.safeParse(stated.parameters);
   if (!parsedParameters.success) {
     return refuse('PARAMETERS_INVALID');
   }
@@ -276,16 +300,21 @@ export function proposeJao6BusinessActionInternal(
     return refuse(toRefusal(error));
   }
 
-  // 8. The canonical producer. Every governance-bearing field comes from `policy`; every
-  //    descriptive field comes from `stated`. `confidence` crosses as data and touches no gate.
+  // 8. The canonical producer. Governance-bearing fields come from `policy`; descriptive fields come
+  //    from `stated`; PROVENANCE comes from this module's own constants. `confidence` crosses as
+  //    data and touches no gate.
+  //
+  //    `producingAgent` is `jarvis` because Jarvis is what assembled this. `composite` is false and
+  //    `contributingAgents` is absent, which the contract requires of a non-composite item -- and
+  //    which is the honest statement here, since no specialist contributed anything.
   let created;
   try {
     created = composition.recommendation.create({
       recommendationType: policy.recommendationType,
       createdAt: stated.createdAt,
       expiresAt: stated.expiresAt,
-      producingAgent: policy.producingAgent,
-      producingAgentVersion: policy.producingAgentVersion,
+      producingAgent: JAO6_PRODUCING_AGENT,
+      producingAgentVersion: JAO6_PRODUCER_VERSION,
       subject: stated.subject,
       priority: stated.priority,
       confidence: stated.confidence,
@@ -310,11 +339,6 @@ export function proposeJao6BusinessActionInternal(
   }
 
   // 9. THE BINDING INVARIANT, re-proved here rather than assumed.
-  //
-  //    The producer already computed the fingerprint, and this recomputes it from the FINAL action
-  //    bytes with the same canonical function and compares. That is not redundancy: it is the one
-  //    check that would catch a binding drifting from the artifact it claims to describe, and it is
-  //    what makes "the human approves the action that was recommended" a measured fact.
   const action = created.recommendation.proposedActions[0];
   const binding = created.actionBindings[0];
 
@@ -330,7 +354,10 @@ export function proposeJao6BusinessActionInternal(
     return refuse('BINDING_MISMATCH');
   }
 
-  // And that one binding describes exactly that one action.
+  // And that one binding describes exactly that one action. The fingerprint is RECOMPUTED from the
+  // final action bytes with the canonical function: not redundancy, but the one check that would
+  // catch a binding drifting from the artifact it claims to describe, and what makes "the human
+  // approves the action that was recommended" a measured fact.
   if (
     binding.recommendationId !== created.recommendation.recommendationId ||
     binding.proposedActionId !== action.actionId ||
@@ -357,8 +384,9 @@ export function proposeJao6BusinessActionInternal(
   }
 
   // 11. The ask must be about EXACTLY the action that was recommended, at exactly the governance the
-  //     recommendation was created under. An approval request that names a different action, or the
-  //     same action at a weaker authority, is the substitution this whole slice exists to prevent.
+  //     recommendation was created under. An approval request that names a different recommendation
+  //     or action, or the same action at a weaker authority, is the substitution this slice exists
+  //     to prevent.
   if (
     approvalRequest.recommendationId !== created.recommendation.recommendationId ||
     approvalRequest.proposedActionId !== action.actionId ||
@@ -372,20 +400,26 @@ export function proposeJao6BusinessActionInternal(
   // 12. STOP. What exists now is an inert recommendation, its content binding, and a powerless ask.
   //     Only QuickFurno Core issues an `ApprovalDecisionV1`; only Core issues an `ExecutionIntentV1`;
   //     only n8n executes one. None of those happens here, and none of them can.
-  return Object.freeze({
+  const ready: Jao6ProposalReadyResult = Object.freeze({
     outcome: 'PROPOSAL_READY' as const,
     refusalReason: null,
     proposalPolicyId: policy.proposalPolicyId,
     proposalPolicyVersion: policy.proposalPolicyVersion,
     correlationId: stated.correlationId,
     recommendation: created.recommendation,
-    actionBindings: Object.freeze([...created.actionBindings]),
+    actionBindings: Object.freeze([binding] as const),
     approvalRequest,
     posture: JAO6_POSTURE,
     communicationExecutionEligibilityRequired: communicationRequired,
     executionEligibilityNotice: communicationRequired ? JAO6_EXECUTION_ELIGIBILITY_NOTICE : null,
   });
-}
 
-/** The declared policy ids, re-exported for an operator surface that wants to list them. */
-export { JAO6_PROPOSAL_POLICY_IDS };
+  // The runtime half of the discriminated union: a result that does not satisfy its own contract is
+  // refused rather than returned. A compile-time union is erased by the time anything runs, and the
+  // states this forbids -- a ready result with a refusal code, a refusal carrying an artifact -- are
+  // exactly the states a reader would trust without checking.
+  if (!jao6ProposalResultSchema.safeParse(ready).success) {
+    return refuse('RESULT_INCONSISTENT');
+  }
+  return ready;
+}
