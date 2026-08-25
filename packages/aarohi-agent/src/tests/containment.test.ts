@@ -182,11 +182,12 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
   it('exports exactly the reviewed surface', async () => {
     const barrel = (await import('../index.js')) as unknown as Record<string, unknown>;
     // An exact set match, so a symbol cannot join the public surface without a decision.
-    // AVG-2 (ADR-0111) adds the enrichment claim, profile and review-boundary surface. Every
-    // addition is a contract, a closed vocabulary, a bound or a pure function -- there is no new
-    // verb, and nothing here sends, authorizes, scores or mutates anything.
+    // AVG-2 (ADR-0111) adds enrichment review material. AVG-3 (ADR-0112) adds deterministic
+    // prospect-priority and Core-gated contact-eligibility contracts. Every addition remains a
+    // closed vocabulary, bound or pure function; nothing here sends, executes or mutates anything.
     expect(Object.keys(barrel).sort()).toStrictEqual([
       'AAROHI_AGENT_ID',
+      'AAROHI_AVG3_CONTRACT_VERSION',
       'AAROHI_ENRICHMENT_CONTRACT_VERSION',
       'AAROHI_PROSPECT_CONTRACT_VERSION',
       'ACQUISITION_CASE_STATES',
@@ -195,6 +196,8 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'ACTIVATION_AUTHORITIES',
       'BLOCKED_CORE_STATUSES',
       'CASE_TRANSITION_REFUSALS',
+      'CONTACT_ELIGIBILITY_OUTCOME',
+      'CONTACT_ELIGIBILITY_REFUSALS',
       'CORE_PARTY_STATUSES',
       'CORE_STATUS_ROLE',
       'CORE_STATUS_ROLES',
@@ -216,6 +219,8 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'MAX_ENRICHMENT_PROFILE_CLAIMS',
       'PRESENCE_SIGNALS',
       'PROSPECT_DISCOVERY_SOURCES',
+      'PROSPECT_PRIORITY_MAX_POINTS',
+      'PROSPECT_PRIORITY_REFUSALS',
       'TERMINAL_ACQUISITION_CASE_STATES',
       'acquisitionCaseSchema',
       'activationAttestationSchema',
@@ -229,8 +234,10 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'enrichmentClaimSchema',
       'enrichmentProfileSchema',
       'enrichmentSourceSchema',
+      'evaluateAcquisitionContactEligibility',
       'evaluateAcquisitionEligibility',
       'evaluateEnrichmentReviewReadiness',
+      'evaluateProspectPriority',
       'isTerminalAcquisitionCaseState',
       'openAcquisitionCase',
       'parseEnrichmentClaim',

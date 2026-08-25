@@ -50,7 +50,14 @@
  * reuses the AVG-1 gate and reads nothing else — not claim
  * count, not evidence quality, not consistency. `ENRICHMENT_REVIEWABLE` means a human may look at
  * the profile. It is not contact authorization, not execution eligibility, not consent, not Core
- * ACTIVE and not a verified vendor. Scoring and outreach eligibility are AVG-3's, not this slice's.
+ * ACTIVE and not a verified vendor.
+ *
+ * ### AVG-3 adds priority scoring and Core-gated contact eligibility (ADR-0112)
+ *
+ * Priority is deterministic evidence readiness over the canonical AVG-2 profile. It is not truth,
+ * predicted conversion or permission. Contact eligibility accepts no priority input at all: it
+ * reuses the existing AVG-1 Core allowlist, so high priority cannot bypass suppression and low
+ * priority cannot manufacture a Core refusal. Both remain pure offline-domain decisions.
  */
 
 export {
@@ -174,3 +181,21 @@ export type {
   EnrichmentReviewRefusal,
   EnrichmentReviewVerdict,
 } from './contracts/enrichment-review.js';
+export {
+  AAROHI_AVG3_CONTRACT_VERSION,
+  CONTACT_ELIGIBILITY_OUTCOME,
+  CONTACT_ELIGIBILITY_REFUSALS,
+  evaluateAcquisitionContactEligibility,
+  evaluateProspectPriority,
+  PROSPECT_PRIORITY_MAX_POINTS,
+  PROSPECT_PRIORITY_REFUSALS,
+} from './contracts/avg3-scoring-eligibility.js';
+export type {
+  AarohiAvg3ContractVersion,
+  AcquisitionContactEligibilityVerdict,
+  ContactEligibilityOutcome,
+  ContactEligibilityRefusal,
+  ProspectPriorityAssessment,
+  ProspectPriorityRefusal,
+  ProspectPriorityResult,
+} from './contracts/avg3-scoring-eligibility.js';

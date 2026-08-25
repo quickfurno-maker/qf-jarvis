@@ -96,6 +96,13 @@ eligibility are deliberately different things:** a high score never implies perm
 fail-closed and Core-gated; do-not-contact, prior rejection, duplication and existing registration all
 resolve to "no".
 
+**The offline DOMAIN for this stage is recorded by
+[ADR-0112](../decisions/ADR-0112-qfj-p12-avg3-aarohi-scoring-outreach-eligibility-domain.md)**.
+V1 priority is deterministic evidence-readiness scoring over canonical AVG-2 material; contact
+eligibility is a separate point-in-time reuse of the AVG-1 Core gate and accepts no score input.
+There is still no runtime, persistence, workspace, drafting, channel, provider, credential, execution
+or rollout, and Aarohi remains **PLANNED / DISABLED**.
+
 ### AVG-4 — Outreach Workspace
 The human-facing surface for reviewing prospects, drafting approved outreach, and requesting
 authorization. Drafting is not sending. Nothing leaves the workspace without Core/human authorization
