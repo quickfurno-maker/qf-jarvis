@@ -53,6 +53,7 @@ import {
   countJao5RowsFor,
   createJao5TestPool,
   forceJao5RawUpdate,
+  readJao5SchemaSql,
   resetJao5Schema,
   type DatabasePool,
 } from './jao5-database-harness.js';
@@ -882,18 +883,48 @@ describe('JAO-5 durable ambient governance', () => {
     expect(dump).toContain('true');
   });
 
-  it('touches only its own schema, and needs no managed migration', async () => {
+  it('creates and names only its own schema, and needs no managed migration', async () => {
+    // The honest property is NOT "no other schema exists". Other integration suites share this
+    // database and create their own, so asserting their absence would pass when JAO-5 runs alone
+    // and fail in a full run -- a test about execution order rather than about JAO-5.
+    //
+    // What JAO-5 actually claims is that it CREATED only its own schema, put every table it owns
+    // inside it, and never ran a managed migration to get there.
     const { withClient } = await import('@qf-jarvis/event-backbone');
-    const schemas = await withClient(admin, async (client) => {
-      const found = await client.query<{ readonly schema_name: string }>(
-        `SELECT schema_name FROM information_schema.schemata WHERE schema_name LIKE 'qf_jarvis%' ORDER BY schema_name`,
+
+    const mine = await withClient(admin, async (client) => {
+      const found = await client.query<{ readonly table_name: string }>(
+        `SELECT table_name FROM information_schema.tables WHERE table_schema = $1 ORDER BY table_name`,
+        [JAO5_TEST_SCHEMA],
       );
-      return found.rows.map((row) => row.schema_name);
+      return found.rows.map((row) => row.table_name);
     });
-    // JAO-5 created its own schema. It did not create, need or touch the managed one.
-    expect(schemas).toContain(JAO5_TEST_SCHEMA);
-    expect(schemas).not.toContain('qf_jarvis');
-    expect(schemas).not.toContain('qf_jarvis_jao3');
+    expect(mine).toStrictEqual([
+      'ambient_budget_window',
+      'ambient_investigation_run',
+      'ambient_monitor_instance',
+      'ambient_operation_replay',
+    ]);
+
+    // No JAO-5 table exists anywhere else -- the schema asset put nothing in `public`, in the
+    // managed `qf_jarvis` schema, or in any other slice's.
+    const elsewhere = await withClient(admin, async (client) => {
+      const found = await client.query<{
+        readonly table_schema: string;
+        readonly table_name: string;
+      }>(
+        `SELECT table_schema, table_name FROM information_schema.tables
+         WHERE table_name LIKE 'ambient%' AND table_schema <> $1`,
+        [JAO5_TEST_SCHEMA],
+      );
+      return found.rows;
+    });
+    expect(elsewhere).toStrictEqual([]);
+
+    // The harness applied the local asset directly. No managed migration was needed to reach this
+    // state, and none was run: the migration history table is not consulted by anything here.
+    expect(readJao5SchemaSql()).toContain('CREATE SCHEMA IF NOT EXISTS qf_jarvis_jao5');
+    expect(readJao5SchemaSql()).not.toMatch(/qf_jarvis\.[a-z_]/u);
   });
 
   it('refuses a persisted row that no longer satisfies the contract', async () => {
