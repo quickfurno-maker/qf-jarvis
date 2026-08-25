@@ -27,6 +27,7 @@ export {
   jao3EvidenceRefSchema,
   jao3HypothesisSchema,
   jao3InstantSchema,
+  jao3InvestigationIdSchema,
   jao3InvestigationSchema,
   jao3InvestigationViewSchema,
   jao3OwnerCorrectionSchema,
@@ -75,6 +76,7 @@ export {
   jao3HasExpired,
   jao3InstantFromMs,
   jao3SemanticDigest,
+  parseJao3InvestigationId,
 } from './policy.js';
 
 export type {

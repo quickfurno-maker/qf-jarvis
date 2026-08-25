@@ -111,6 +111,20 @@ export interface Jao3MemoryOperations {
   supersedeInvestigation(input: Jao3SupersedeInvestigationInput): Promise<Jao3Investigation>;
 }
 
+/**
+ * What telemetry can say about a completed operation.
+ *
+ * `revision` is always known -- for an append it is the revision that write COMMITTED at, which is
+ * the number a reader of the audit trail actually wants. `header` is present only for operations
+ * that legitimately return current state: an append no longer returns the mutable header, and
+ * telemetry does not go and fetch one, because a second read to enrich a log would report state
+ * from a different instant than the operation it describes.
+ */
+interface Jao3OperationOutcome {
+  readonly revision: number;
+  readonly header: Jao3Investigation | null;
+}
+
 /** The closed error code for anything that escaped, without reading what it carried. */
 function toErrorCode(error: unknown): Jao3ErrorCode {
   return error instanceof Jao3MemoryError ? error.code : 'DATABASE_UNAVAILABLE';
@@ -131,13 +145,12 @@ export function createJao3MemoryOperations(
     operation: Jao3Operation,
     identity: { readonly investigationId: string; readonly runId: string },
     work: (nowMs: number) => Promise<T>,
-    headerOf: (value: T) => Jao3Investigation,
+    outcomeOf: (value: T) => Jao3OperationOutcome,
   ): Promise<T> {
     const startedAt = clock.nowMs();
     try {
       const value = await work(startedAt);
-      const header = headerOf(value);
-      emit(operation, identity, clock.nowMs() - startedAt, header, null);
+      emit(operation, identity, clock.nowMs() - startedAt, outcomeOf(value), null);
       return value;
     } catch (error) {
       emit(operation, identity, clock.nowMs() - startedAt, null, toErrorCode(error));
@@ -149,7 +162,7 @@ export function createJao3MemoryOperations(
     operation: Jao3Operation,
     identity: { readonly investigationId: string; readonly runId: string },
     elapsedMs: number,
-    header: Jao3Investigation | null,
+    outcome: Jao3OperationOutcome | null,
     errorCode: Jao3ErrorCode | null,
   ): void {
     if (telemetry === undefined) {
@@ -159,11 +172,11 @@ export function createJao3MemoryOperations(
       investigationId: identity.investigationId,
       runId: identity.runId,
       operation,
-      revision: header?.revision ?? 0,
-      status: header?.status ?? null,
-      checkpointCount: header?.checkpointCount ?? 0,
-      ownerCorrectionCount: header?.ownerCorrectionCount ?? 0,
-      resumeCount: header?.resumeCount ?? 0,
+      revision: outcome?.revision ?? 0,
+      status: outcome?.header?.status ?? null,
+      checkpointCount: outcome?.header?.checkpointCount ?? 0,
+      ownerCorrectionCount: outcome?.header?.ownerCorrectionCount ?? 0,
+      resumeCount: outcome?.header?.resumeCount ?? 0,
       durationMs: Math.max(0, Math.min(600_000, Math.trunc(elapsedMs))),
       outcome: errorCode === null ? 'COMPLETED' : 'REFUSED',
       errorCode,
@@ -186,7 +199,7 @@ export function createJao3MemoryOperations(
         'CREATE',
         { investigationId: input.investigationId, runId: input.rootRunId },
         async (nowMs) => store.createInvestigation(input, nowMs),
-        (value) => value,
+        (value) => ({ revision: value.revision, header: value }),
       );
     },
 
@@ -195,7 +208,7 @@ export function createJao3MemoryOperations(
         'READ',
         input,
         async () => store.readInvestigation(input.investigationId),
-        (value) => value,
+        (value) => ({ revision: value.revision, header: value }),
       );
     },
 
@@ -204,7 +217,7 @@ export function createJao3MemoryOperations(
         'READ',
         input,
         async () => store.readInvestigationView(input.investigationId),
-        (value) => value.investigation,
+        (value) => ({ revision: value.investigation.revision, header: value.investigation }),
       );
     },
 
@@ -213,7 +226,7 @@ export function createJao3MemoryOperations(
         'APPEND_CHECKPOINT',
         input,
         async (nowMs) => store.appendCheckpoint(input, nowMs),
-        (value) => value.investigation,
+        (value) => ({ revision: value.committedRevision, header: null }),
       );
     },
 
@@ -224,7 +237,7 @@ export function createJao3MemoryOperations(
         'APPEND_OWNER_CORRECTION',
         input,
         async (nowMs) => store.appendOwnerCorrection(input, nowMs),
-        (value) => value.investigation,
+        (value) => ({ revision: value.committedRevision, header: null }),
       );
     },
 
@@ -233,7 +246,7 @@ export function createJao3MemoryOperations(
         'RESUME',
         { investigationId: input.investigationId, runId: input.nextRunId },
         async (nowMs) => store.resumeInvestigation(input, nowMs),
-        (value) => value,
+        (value) => ({ revision: value.revision, header: value }),
       );
     },
 
@@ -242,7 +255,7 @@ export function createJao3MemoryOperations(
         'PAUSE',
         input,
         async (nowMs) => store.pauseInvestigation(input, nowMs),
-        (value) => value,
+        (value) => ({ revision: value.revision, header: value }),
       );
     },
 
@@ -251,7 +264,7 @@ export function createJao3MemoryOperations(
         'COMPLETE',
         input,
         async (nowMs) => store.completeInvestigation(input, nowMs),
-        (value) => value,
+        (value) => ({ revision: value.revision, header: value }),
       );
     },
 
@@ -262,7 +275,7 @@ export function createJao3MemoryOperations(
         'SUPERSEDE',
         input,
         async (nowMs) => store.supersedeInvestigation(input, nowMs),
-        (value) => value,
+        (value) => ({ revision: value.revision, header: value }),
       );
     },
   });

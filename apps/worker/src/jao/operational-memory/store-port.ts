@@ -37,24 +37,40 @@ import type {
   Jao3TransitionInput,
 } from './contracts.js';
 
-/** What an append returns: the new header, and the immutable row it created. */
+/**
+ * What an append returns: the IMMUTABLE row it created, and the revision it committed at.
+ *
+ * ### Why the current investigation header is deliberately not here
+ *
+ * It used to be, and owner review found that it broke the exact-replay contract in a way no
+ * immediate-replay test could see. The header is MUTABLE: append A at revision 4, let a later legal
+ * write move the investigation to revision 7, then retry A. The checkpoint returned is the original
+ * one, but the header returned is today's -- so "the same operation id returns the prior result
+ * unchanged" was true of half the result and false of the other half, and the halves disagreed
+ * about what revision this was.
+ *
+ * A durable result has to be intrinsically immutable, so it now carries only things that cannot
+ * change: the row that was written, and `committedRevision` -- the revision the write actually
+ * committed at, read back from the replay record rather than from the header. A caller that wants
+ * current state calls `readInvestigation`, which is honest about being a separate question.
+ *
+ * `replayed` is CALL METADATA, not part of the durable result: it describes what this particular
+ * call found, so it legitimately differs between the first write (`false`) and a retry (`true`)
+ * while the durable fields are identical. That distinction is the whole point of surfacing it -- a
+ * resuming caller genuinely does not know whether its previous attempt committed, and "this was
+ * already done" is a different fact from "this has now been done" even though both are success.
+ */
 export interface Jao3CheckpointAppendResult {
-  readonly investigation: Jao3Investigation;
   readonly checkpoint: Jao3Checkpoint;
-  /**
-   * True when this call found its own operation id already committed and returned that result
-   * unchanged -- no new row, no revision increment.
-   *
-   * Surfaced rather than hidden because a resuming caller genuinely does not know whether its
-   * previous attempt committed before the connection dropped, and "this was already done" is a
-   * different fact from "this has now been done" even though both are success.
-   */
+  /** The revision this write committed at. Immutable, and unchanged by any later write. */
+  readonly committedRevision: number;
+  /** Call metadata: whether this call found the operation already committed. */
   readonly replayed: boolean;
 }
 
 export interface Jao3CorrectionAppendResult {
-  readonly investigation: Jao3Investigation;
   readonly correction: Jao3OwnerCorrection;
+  readonly committedRevision: number;
   readonly replayed: boolean;
 }
 

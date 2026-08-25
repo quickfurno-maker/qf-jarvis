@@ -134,6 +134,21 @@ is an **injected label in an offline proof and is not authentication** -- JAO-3 
 identity, and a correction changes what the investigation remembers and nothing else. It cannot set
 approved, authorised or executable, because no such field exists to set.
 
+**A correction's target must belong to the investigation being corrected.** Owner review found that
+the input bounded `targetType` and `targetId` but proved nothing about ownership, so a correction
+could be filed against one investigation while naming a checkpoint or hypothesis belonging to
+another -- a cross-investigation write that every bound in the contract would have accepted.
+
+The check runs inside the transaction that already holds the investigation's `FOR UPDATE` lock, so
+the target cannot appear, move or vanish between the check and the write. A hypothesis carries a
+`hypothesisId` for this reason: it was previously addressable only as (checkpoint, ordinal), and a
+target whose owner cannot be established is an integrity gap rather than a convenience gap.
+
+Missing and cross-investigation both fail as **one** code, `CORRECTION_TARGET_NOT_FOUND`. Separating
+them would answer a question the caller has no business asking: a caller able to distinguish "there
+is no such checkpoint" from "that checkpoint is someone else's" could enumerate ids it has no other
+way of seeing, one refusal at a time.
+
 ### 6. Idempotency, because a resuming caller does not know what committed
 
 Retryable writes carry a bounded `operationId`. The same id with the same semantic payload returns
@@ -146,7 +161,27 @@ it would be the copy nobody remembered to check for transcripts.
 
 The replay check runs deliberately **before** the writability guards: a caller asking "did this
 already happen" gets the truth, and re-refusing a write that is already durable would leave it
-retrying forever.
+retrying forever. An exact replay therefore succeeds even against an investigation that has since
+been paused, completed or expired -- because it did happen, whatever has become of the investigation
+since.
+
+**The replay result is intrinsically immutable, and it did not start that way.** Owner review found
+that the append result carried the current investigation header alongside the immutable child row.
+The header is mutable, so: append A at revision 2, let later legal writes move the investigation to
+revision 6, then retry A. The checkpoint returned was the original one and the header returned was
+today's -- half the result was the prior result and half was not, and the two halves disagreed about
+what revision the operation had committed at. Every test in the suite passed, because they all
+replayed immediately.
+
+The durable result now carries only things that cannot change: the row that was written, and
+`committedRevision` -- read back from `operation_replay.result_revision`, the revision the write
+actually committed at, rather than from a header that has moved on. The mutable header is gone from
+append results entirely; a caller wanting current state calls `readInvestigation`, which is honest
+about being a separate question.
+
+`replayed` is **call metadata, not part of the durable result**: it describes what this particular
+call found, so it legitimately differs between the first write and a retry while every durable field
+is identical. That is the one thing a retry is entitled to learn.
 
 ### 7. Budgets survive restart and cannot be widened
 
@@ -206,6 +241,14 @@ SQLSTATE alone and discards the rest.
 and "it is not there" are different facts, and a caller acting on the wrong one would create a
 duplicate investigation or conclude that durable work never happened. A malformed persisted row
 fails closed as `PERSISTED_STATE_INVALID` rather than being coerced into a plausible-looking result.
+
+**Every entry point parses its input before any SQL runs**, including the two read methods. They
+take an identifier rather than a request object, so nothing parsed it: parameterized statements made
+a malformed or oversized id _safe_, which is not the same as the adapter having checked its own
+domain boundary. Both reads now share one canonical id parser and refuse with the same
+`INPUT_INVALID` every other malformed input gets -- no Zod issue, no offending value and no database
+detail reaches the caller -- and a spec proves it with a pool that throws if it is ever borrowed
+from, so "no query ran" is counted rather than assumed.
 
 ### 12. The schema is LOCAL. Managed migration is NOT adopted
 
@@ -277,6 +320,14 @@ correct without a sweeper, so the scheduler it introduces has one less thing to 
 The cost is a schema that exists in the repository and in CI but in no managed database. That gap
 is deliberate and must stay visible: anyone reading "JAO-3 is durable" should read it as "durable
 where it has been applied", and the only place it has been applied is a disposable test database.
+
+Three of the invariants above exist because owner review asked for them rather than because a test
+found them, and all three shared a shape worth recording: each was true of the code path anyone
+would think to test, and false of the path nobody had. Immediate replay was correct while temporal
+replay was not; bounded target identifiers were checked while target ownership was not; the write
+paths validated their input while the read paths did not. A suite that exercises the obvious case
+and a suite that establishes the invariant are different things, and only the second one survives
+the next edit.
 
 Rollback is removal or disablement of the JAO-3 directory. Nothing imports it, no worker entry
 starts it, the existing projection runtime is unaffected, and JAO-1 and JAO-2 are unchanged. Any

@@ -13,6 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import type { DatabasePool } from '@qf-jarvis/event-backbone';
 import { describe, expect, it } from 'vitest';
 
 import * as jao3 from '../jao/operational-memory/index.js';
@@ -47,11 +48,33 @@ import {
   jao3OwnerCorrectionSchema,
   jao3SemanticDigest,
   jao3TelemetryEventSchema,
+  createJao3PostgresStore,
+  parseJao3InvestigationId,
   type Jao3Investigation,
   type Jao3InvestigationStatus,
 } from '../jao/operational-memory/index.js';
 
 const T0 = Date.parse('2026-08-25T09:00:00.000Z');
+
+/**
+ * A pool that refuses to be used, and counts the attempts.
+ *
+ * The single assertion is the point: `DatabasePool` is `pg.Pool`, a class with a large surface,
+ * and constructing a real one would open sockets. What is under test is whether the adapter
+ * borrows a connection at all, and `connect` is the only method it can borrow through.
+ */
+function explodingPool(): { readonly pool: DatabasePool; connects: () => number } {
+  let connects = 0;
+  const pool = {
+    connect(): Promise<never> {
+      connects += 1;
+      return Promise.reject(new Error('SPY-POOL-MUST-NOT-BE-REACHED'));
+    },
+  };
+  return { pool: pool as unknown as DatabasePool, connects: () => connects };
+}
+
+const exploding = explodingPool();
 
 /**
  * Source with comments stripped.
@@ -120,6 +143,7 @@ const EVIDENCE = {
 };
 
 const HYPOTHESIS = {
+  hypothesisId: 'jao3.hypothesis.1',
   statement: 'The lag is confined to one partition.',
   epistemicStatus: 'HYPOTHESIS',
   authority: 'NONE',
@@ -416,7 +440,16 @@ describe('JAO-3 operational memory', () => {
       { ...HYPOTHESIS, epistemicStatus: 'APPROVED_TO_EXECUTE' },
       { ...HYPOTHESIS, statement: '' },
       { ...HYPOTHESIS, statement: 'x'.repeat(241) },
-      { statement: 'No authority field at all.', epistemicStatus: 'HYPOTHESIS' },
+      {
+        hypothesisId: HYPOTHESIS.hypothesisId,
+        statement: 'No authority field at all.',
+        epistemicStatus: 'HYPOTHESIS',
+      },
+      // Unaddressable: a hypothesis a correction could not name, and therefore one whose owning
+      // investigation could never be proved.
+      { statement: 'No id at all.', epistemicStatus: 'HYPOTHESIS', authority: 'NONE' },
+      { ...HYPOTHESIS, hypothesisId: 'has space' },
+      { ...HYPOTHESIS, hypothesisId: '' },
     ]) {
       expect(jao3HypothesisSchema.safeParse(bad).success, JSON.stringify(bad)).toBe(false);
     }
@@ -864,6 +897,53 @@ describe('JAO-3 operational memory', () => {
     ]) {
       expect(code, forbidden).not.toContain(forbidden);
     }
+  });
+
+  it('validates an investigation id BEFORE reaching the database', async () => {
+    // Owner-review correction. The two read methods take an id rather than a request object, so
+    // nothing parsed it: parameterized SQL made a malformed id SAFE, which is not the same as the
+    // adapter having checked its own domain boundary.
+    //
+    // The pool throws if it is ever borrowed from, so "no query ran" is a measured fact rather
+    // than an inference from a passing assertion.
+    const store = createJao3PostgresStore(exploding.pool);
+
+    for (const malformed of [
+      '',
+      '   ',
+      'has space',
+      'has/slash',
+      'has;semicolon',
+      "quote'injection",
+      'x'.repeat(129),
+      '\u0000null-byte',
+      'unicode-\u00e9',
+    ]) {
+      await expect(store.readInvestigation(malformed), malformed).rejects.toMatchObject({
+        code: 'INPUT_INVALID',
+      });
+      await expect(store.readInvestigationView(malformed), malformed).rejects.toMatchObject({
+        code: 'INPUT_INVALID',
+      });
+    }
+
+    // Both entry points share the parse, and neither reached the database even once.
+    expect(exploding.connects()).toBe(0);
+
+    // The same parser both methods use, exercised directly.
+    expect(parseJao3InvestigationId('jao3.investigation.000001')).toBe('jao3.investigation.000001');
+    for (const malformed of [undefined, null, 42, {}, [], '', 'has space', 'y'.repeat(129)]) {
+      expect(() => parseJao3InvestigationId(malformed)).toThrow(
+        expect.objectContaining({ code: 'INPUT_INVALID' }),
+      );
+    }
+
+    // A well-formed id DOES reach the pool -- otherwise the proof above would hold for a store
+    // that never queries at all.
+    await expect(store.readInvestigation('jao3.investigation.000001')).rejects.toMatchObject({
+      code: 'DATABASE_UNAVAILABLE',
+    });
+    expect(exploding.connects()).toBe(1);
   });
 
   it('is imported and started by no production worker entry', () => {

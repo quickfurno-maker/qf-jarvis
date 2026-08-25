@@ -64,6 +64,7 @@ import {
   type Jao3TransitionInput,
 } from './contracts.js';
 import {
+  parseJao3InvestigationId,
   assertJao3CheckpointBudget,
   assertJao3CorrectionBudget,
   assertJao3EvidenceAndHypothesisBudget,
@@ -210,8 +211,30 @@ const INSERT_EVIDENCE_REF = `
 
 const INSERT_HYPOTHESIS = `
   INSERT INTO qf_jarvis_jao3.hypothesis
-    (checkpoint_id, ordinal, statement, epistemic_status, authority)
-  VALUES ($1, $2, $3, $4, 'NONE')
+    (hypothesis_id, checkpoint_id, ordinal, statement, epistemic_status, authority)
+  VALUES ($1, $2, $3, $4, $5, 'NONE')
+`;
+
+/**
+ * Does this checkpoint belong to THIS investigation?
+ *
+ * One statement answering one question, with the investigation bound as a parameter rather than
+ * checked afterwards -- so "no such checkpoint" and "someone else's checkpoint" produce the same
+ * empty result and therefore the same refusal. A caller that could tell them apart could enumerate
+ * which checkpoint ids exist elsewhere, one refusal at a time.
+ */
+const SELECT_CHECKPOINT_TARGET = `
+  SELECT 1 AS present
+  FROM qf_jarvis_jao3.checkpoint
+  WHERE checkpoint_id = $1 AND investigation_id = $2
+`;
+
+/** The same question for a hypothesis, resolved through the checkpoint that owns it. */
+const SELECT_HYPOTHESIS_TARGET = `
+  SELECT 1 AS present
+  FROM qf_jarvis_jao3.hypothesis AS h
+  JOIN qf_jarvis_jao3.checkpoint AS c ON c.checkpoint_id = h.checkpoint_id
+  WHERE h.hypothesis_id = $1 AND c.investigation_id = $2
 `;
 
 const INSERT_OWNER_CORRECTION = `
@@ -260,7 +283,7 @@ const SELECT_EVIDENCE_REFS = `
 `;
 
 const SELECT_HYPOTHESES = `
-  SELECT checkpoint_id, ordinal, statement, epistemic_status, authority
+  SELECT hypothesis_id, checkpoint_id, ordinal, statement, epistemic_status, authority
   FROM qf_jarvis_jao3.hypothesis
   WHERE checkpoint_id = ANY($1::text[])
   ORDER BY checkpoint_id ASC, ordinal ASC
@@ -392,6 +415,7 @@ interface EvidenceRefRow {
 }
 
 interface HypothesisRow {
+  readonly hypothesis_id: string;
   readonly checkpoint_id: string;
   readonly ordinal: number;
   readonly statement: string;
@@ -548,6 +572,7 @@ function toEvidenceRef(row: EvidenceRefRow): Jao3EvidenceRef {
 
 function toHypothesis(row: HypothesisRow): Jao3Hypothesis {
   return {
+    hypothesisId: row.hypothesis_id,
     statement: row.statement,
     epistemicStatus: row.epistemic_status,
     authority: row.authority,
@@ -573,7 +598,12 @@ function checkpointDigest(input: Jao3AppendCheckpointInput): string {
       one.sourceClass,
       one.observedAt,
     ]),
-    ...input.hypotheses.flatMap((one) => [one.statement, one.epistemicStatus, one.authority]),
+    ...input.hypotheses.flatMap((one) => [
+      one.hypothesisId,
+      one.statement,
+      one.epistemicStatus,
+      one.authority,
+    ]),
   ]);
 }
 
@@ -588,6 +618,39 @@ function correctionDigest(input: Jao3AppendOwnerCorrectionInput): string {
     input.correctionStatement,
     input.actor,
   ]);
+}
+
+/**
+ * Prove the correction target belongs to the investigation being corrected.
+ *
+ * Runs inside the transaction that already holds the investigation's `FOR UPDATE` lock, so the
+ * target cannot be created, moved or removed between the check and the write.
+ *
+ * Missing and cross-investigation both refuse as `CORRECTION_TARGET_NOT_FOUND` -- one
+ * non-enumerating code, because the difference between "no such checkpoint" and "that checkpoint is
+ * someone else's" is exactly the fact a prober would use to map ids they cannot otherwise see.
+ */
+async function assertCorrectionTarget(
+  client: DatabaseClient,
+  input: Jao3AppendOwnerCorrectionInput,
+): Promise<void> {
+  if (input.targetType === 'INVESTIGATION') {
+    // The only investigation a correction may name is the one it is correcting.
+    if (input.targetId !== input.investigationId) {
+      throw new Jao3MemoryError('CORRECTION_TARGET_NOT_FOUND');
+    }
+    return;
+  }
+
+  const statement =
+    input.targetType === 'CHECKPOINT' ? SELECT_CHECKPOINT_TARGET : SELECT_HYPOTHESIS_TARGET;
+  const found = await client.query<{ readonly present: number }>(statement, [
+    input.targetId,
+    input.investigationId,
+  ]);
+  if (found.rows.length === 0) {
+    throw new Jao3MemoryError('CORRECTION_TARGET_NOT_FOUND');
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -682,11 +745,13 @@ export function createJao3PostgresStore(pool: DatabasePool): Jao3InvestigationSt
     },
 
     async readInvestigation(investigationId: string): Promise<Jao3Investigation> {
+      // BEFORE any connection is borrowed. A read takes an id rather than a request object, so
+      // this is the only thing that checks it -- and `withClient` would otherwise have opened a
+      // connection for a value the adapter never agreed to accept.
+      const id = parseJao3InvestigationId(investigationId);
       try {
         return await withClient(pool, async (client) => {
-          const found = await client.query<InvestigationRow>(SELECT_INVESTIGATION, [
-            investigationId,
-          ]);
+          const found = await client.query<InvestigationRow>(SELECT_INVESTIGATION, [id]);
           const row = found.rows[0];
           if (row === undefined) {
             throw new Jao3MemoryError('INVESTIGATION_NOT_FOUND');
@@ -699,20 +764,19 @@ export function createJao3PostgresStore(pool: DatabasePool): Jao3InvestigationSt
     },
 
     async readInvestigationView(investigationId: string): Promise<Jao3InvestigationView> {
+      // The same parse, on the same grammar, before the same borrow. Both read entry points share
+      // it; neither has its own idea of what an investigation id is.
+      const id = parseJao3InvestigationId(investigationId);
       try {
         return await withClient(pool, async (client) => {
-          const found = await client.query<InvestigationRow>(SELECT_INVESTIGATION, [
-            investigationId,
-          ]);
+          const found = await client.query<InvestigationRow>(SELECT_INVESTIGATION, [id]);
           const headerRow = found.rows[0];
           if (headerRow === undefined) {
             throw new Jao3MemoryError('INVESTIGATION_NOT_FOUND');
           }
           const investigation = toInvestigation(headerRow);
 
-          const checkpointRows = await client.query<CheckpointRow>(SELECT_CHECKPOINTS, [
-            investigationId,
-          ]);
+          const checkpointRows = await client.query<CheckpointRow>(SELECT_CHECKPOINTS, [id]);
           const checkpointIds = checkpointRows.rows.map((row) => row.checkpoint_id);
           // One at a time, on one client. See `loadCheckpointById`.
           const evidenceRows = await client.query<EvidenceRefRow>(SELECT_EVIDENCE_REFS, [
@@ -722,7 +786,7 @@ export function createJao3PostgresStore(pool: DatabasePool): Jao3InvestigationSt
             checkpointIds,
           ]);
           const correctionRows = await client.query<OwnerCorrectionRow>(SELECT_OWNER_CORRECTIONS, [
-            investigationId,
+            id,
           ]);
           const evidenceByCheckpoint = groupByCheckpoint(evidenceRows.rows, toEvidenceRef);
           const hypothesesByCheckpoint = groupByCheckpoint(hypothesisRows.rows, toHypothesis);
@@ -778,9 +842,13 @@ export function createJao3PostgresStore(pool: DatabasePool): Jao3InvestigationSt
               // things in the history.
               throw new Jao3MemoryError('CHECKPOINT_CONFLICT');
             }
+            // `result_revision` is the revision this operation ACTUALLY committed at, recorded
+            // when it committed. The header's current revision is a different number as soon as
+            // anything else has been written, and returning that would make an exact replay report
+            // a revision the operation never had.
             return Object.freeze({
-              investigation,
               checkpoint: await loadCheckpointById(client, priorRow.result_child_id),
+              committedRevision: priorRow.result_revision,
               replayed: true,
             });
           }
@@ -828,6 +896,7 @@ export function createJao3PostgresStore(pool: DatabasePool): Jao3InvestigationSt
           }
           for (const [ordinal, hypothesis] of input.hypotheses.entries()) {
             await client.query(INSERT_HYPOTHESIS, [
+              hypothesis.hypothesisId,
               input.checkpointId,
               ordinal,
               hypothesis.statement,
@@ -846,9 +915,12 @@ export function createJao3PostgresStore(pool: DatabasePool): Jao3InvestigationSt
 
           // Read back what was actually stored rather than returning what was sent. A write that
           // reports the caller's own input has proved nothing about the database.
+          //
+          // The mutable header is deliberately NOT returned: a durable result has to mean the same
+          // thing on the first call and on a retry six writes later, and the header does not.
           return Object.freeze({
-            investigation: nextInvestigation,
             checkpoint: await loadCheckpointById(client, input.checkpointId),
+            committedRevision: nextInvestigation.revision,
             replayed: false,
           });
         });
@@ -891,8 +963,8 @@ export function createJao3PostgresStore(pool: DatabasePool): Jao3InvestigationSt
               throw new Jao3MemoryError('PERSISTED_STATE_INVALID');
             }
             return Object.freeze({
-              investigation,
               correction: toOwnerCorrection(prior),
+              committedRevision: priorRow.result_revision,
               replayed: true,
             });
           }
@@ -904,6 +976,11 @@ export function createJao3PostgresStore(pool: DatabasePool): Jao3InvestigationSt
           });
           assertJao3ExpectedRevision(investigation, input.expectedRevision);
           assertJao3CorrectionBudget(investigation);
+
+          // TARGET INTEGRITY, inside the transaction that already holds the investigation lock, so
+          // the target cannot appear or move between this check and the write. A correction whose
+          // target belongs to another investigation is not a correction of this one.
+          await assertCorrectionTarget(client, input);
 
           const updated = await client.query<InvestigationRow>(UPDATE_FOR_CORRECTION, [
             input.investigationId,
@@ -939,8 +1016,8 @@ export function createJao3PostgresStore(pool: DatabasePool): Jao3InvestigationSt
             throw new Jao3MemoryError('PERSISTED_STATE_INVALID');
           }
           return Object.freeze({
-            investigation: nextInvestigation,
             correction: toOwnerCorrection(persisted),
+            committedRevision: nextInvestigation.revision,
             replayed: false,
           });
         });

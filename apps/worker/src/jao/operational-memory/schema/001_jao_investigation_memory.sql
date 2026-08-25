@@ -195,6 +195,7 @@ CREATE TABLE IF NOT EXISTS qf_jarvis_jao3.evidence_ref (
 -- Hypotheses. Bounded, and never business truth.
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS qf_jarvis_jao3.hypothesis (
+  hypothesis_id    text    NOT NULL,
   checkpoint_id    text    NOT NULL,
   ordinal          integer NOT NULL,
   statement        text    NOT NULL,
@@ -204,6 +205,11 @@ CREATE TABLE IF NOT EXISTS qf_jarvis_jao3.hypothesis (
   CONSTRAINT hypothesis_pk PRIMARY KEY (checkpoint_id, ordinal),
   CONSTRAINT hypothesis_checkpoint_fk
     FOREIGN KEY (checkpoint_id) REFERENCES qf_jarvis_jao3.checkpoint (checkpoint_id),
+
+  -- Addressable, so an owner correction can name exactly one hypothesis and the adapter can prove
+  -- the investigation that owns it. An unverifiable target is an integrity gap.
+  CONSTRAINT hypothesis_id_unique UNIQUE (hypothesis_id),
+  CONSTRAINT hypothesis_id_bounded CHECK (hypothesis_id ~ '^[A-Za-z0-9._:-]{1,128}$'),
 
   CONSTRAINT hypothesis_ordinal_bounded CHECK (ordinal BETWEEN 0 AND 3),
   CONSTRAINT hypothesis_statement_bounded CHECK (char_length(statement) BETWEEN 1 AND 240),

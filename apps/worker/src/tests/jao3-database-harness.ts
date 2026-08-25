@@ -154,6 +154,21 @@ export async function countJao3Rows(pool: DatabasePool, table: string): Promise<
   });
 }
 
+/** Rows in one table for one investigation, so "zero duplicates" is counted rather than inferred. */
+export async function countJao3RowsFor(
+  pool: DatabasePool,
+  table: 'checkpoint' | 'owner_correction' | 'operation_replay',
+  investigationId: string,
+): Promise<number> {
+  return withClient(pool, async (client) => {
+    const result = await client.query<{ readonly total: string }>(
+      `SELECT count(*)::text AS total FROM ${JAO3_TEST_SCHEMA}.${table} WHERE investigation_id = $1`,
+      [investigationId],
+    );
+    return Number(result.rows[0]?.total ?? '0');
+  });
+}
+
 /** Corrupt one persisted value, so "fails closed on a malformed row" can be measured. */
 export async function forceJao3RawUpdate(
   pool: DatabasePool,

@@ -29,6 +29,7 @@ import {
   JAO3_TEST_SCHEMA,
   closeDatabasePool,
   countJao3Rows,
+  countJao3RowsFor,
   createJao3TestPool,
   forceJao3RawUpdate,
   resetJao3Schema,
@@ -123,6 +124,7 @@ function aCheckpoint(
     ],
     hypotheses: [
       {
+        hypothesisId: `${over.checkpointId}.h0`,
         statement: 'The lag is confined to one partition rather than the whole projection.',
         epistemicStatus: 'HYPOTHESIS',
         authority: 'NONE',
@@ -231,8 +233,14 @@ describe('JAO-3 durable operational memory', () => {
       }),
     );
     expect(first.replayed).toBe(false);
-    expect(first.investigation.revision).toBe(2);
-    expect(first.investigation.checkpointCount).toBe(1);
+    // The append result carries the revision it COMMITTED at, and nothing mutable.
+    expect(first.committedRevision).toBe(2);
+    const afterFirst = await a.memory.readInvestigation({
+      investigationId,
+      runId: 'jao3.run.root',
+    });
+    expect(afterFirst.revision).toBe(2);
+    expect(afterFirst.checkpointCount).toBe(1);
     await a.close();
 
     // The pool is ended. Process A cannot reach the database again even if something tried.
@@ -244,7 +252,7 @@ describe('JAO-3 durable operational memory', () => {
     const b = startProcess('b');
     const resumed = await b.memory.resumeInvestigation({
       investigationId,
-      expectedRevision: first.investigation.revision,
+      expectedRevision: first.committedRevision,
       nextRunId: 'jao3.run.second',
     });
     expect(resumed.revision).toBe(3);
@@ -275,8 +283,12 @@ describe('JAO-3 durable operational memory', () => {
         summary: 'Second partition confirmed clean.',
       }),
     );
-    expect(second.investigation.revision).toBe(4);
-    expect(second.investigation.checkpointCount).toBe(2);
+    expect(second.committedRevision).toBe(4);
+    const afterSecond = await b.memory.readInvestigation({
+      investigationId,
+      runId: 'jao3.run.second',
+    });
+    expect(afterSecond.checkpointCount).toBe(2);
     await b.close();
 
     // ---- process C: a third pool reads the whole history -------------------------------------
@@ -325,7 +337,8 @@ describe('JAO-3 durable operational memory', () => {
       ),
     ).rejects.toMatchObject({ code: 'RUN_ID_MISMATCH' });
 
-    expect((await countJao3RowsFor('checkpoint')) >= 0).toBe(true);
+    // The refused write left no checkpoint behind for this investigation.
+    expect(await countJao3RowsFor(admin, 'checkpoint', investigationId)).toBe(0);
     const view = await a.memory.readInvestigationView({
       investigationId,
       runId: 'jao3.run.second',
@@ -354,7 +367,7 @@ describe('JAO-3 durable operational memory', () => {
       }),
     );
     expect(created.revision).toBe(1);
-    expect(first.investigation.revision).toBe(2);
+    expect(first.committedRevision).toBe(2);
 
     // A writer still holding revision 1 -- exactly the state a resumed process would be in if it
     // had loaded before someone else wrote.
@@ -454,7 +467,7 @@ describe('JAO-3 durable operational memory', () => {
 
     const first = await a.memory.appendCheckpoint(input);
     expect(first.replayed).toBe(false);
-    expect(first.investigation.revision).toBe(2);
+    expect(first.committedRevision).toBe(2);
     await a.close();
 
     // A different process retries the SAME operation -- the situation a caller is in when it does
@@ -463,7 +476,7 @@ describe('JAO-3 durable operational memory', () => {
     const replay = await b.memory.appendCheckpoint(input);
     expect(replay.replayed).toBe(true);
     expect(replay.checkpoint).toStrictEqual(first.checkpoint);
-    expect(replay.investigation.revision).toBe(2);
+    expect(replay.committedRevision).toBe(2);
 
     const view = await b.memory.readInvestigationView({ investigationId, runId: 'jao3.run.root' });
     expect(view.checkpoints).toHaveLength(1);
@@ -520,15 +533,19 @@ describe('JAO-3 durable operational memory', () => {
       correctionStatement: 'The lag predates the deploy; re-scope the investigation.',
       actor: 'FOUNDER',
     });
-    expect(first.investigation.ownerCorrectionCount).toBe(1);
-    expect(first.investigation.revision).toBe(2);
+    expect(first.committedRevision).toBe(2);
+    const afterFirst = await a.memory.readInvestigation({
+      investigationId,
+      runId: 'jao3.run.root',
+    });
+    expect(afterFirst.ownerCorrectionCount).toBe(1);
     await a.close();
 
     const b = startProcess('b');
     const second = await b.memory.appendOwnerCorrection({
       investigationId,
       runId: 'jao3.run.root',
-      expectedRevision: first.investigation.revision,
+      expectedRevision: first.committedRevision,
       operationId: 'jao3.op.correction.2',
       correctionId: 'jao3.correction.2',
       targetType: 'INVESTIGATION',
@@ -536,9 +553,10 @@ describe('JAO-3 durable operational memory', () => {
       correctionStatement: 'Second correction, superseding the first.',
       actor: 'FOUNDER',
     });
-    expect(second.investigation.ownerCorrectionCount).toBe(2);
+    expect(second.committedRevision).toBe(3);
 
     const view = await b.memory.readInvestigationView({ investigationId, runId: 'jao3.run.root' });
+    expect(view.investigation.ownerCorrectionCount).toBe(2);
     // BOTH survive. A correction supersedes what it targets; it does not erase the record of what
     // was believed before, which is the entire value of an auditable correction.
     expect(view.ownerCorrections).toHaveLength(2);
@@ -559,6 +577,283 @@ describe('JAO-3 durable operational memory', () => {
       expect(serialised, forbidden).not.toContain(forbidden);
     }
     await b.close();
+  });
+
+  it('returns an exact replay UNCHANGED after later legal writes have moved the header', async () => {
+    // The defect owner review found. The append result used to carry the mutable investigation
+    // header, so an exact replay returned the original checkpoint beside TODAY'S header -- half
+    // the result was the prior result and half was not, and the two disagreed about what revision
+    // the operation had committed at. Immediate-replay tests could never see it.
+    const a = startProcess('a');
+    const created = await a.memory.createInvestigation({
+      investigationId,
+      rootRunId: 'jao3.run.root',
+      objective: 'Temporal replay.',
+      workflowState: 'DISCOVERY',
+      lifetimeMs: HOUR,
+    });
+    const input = aCheckpoint({
+      investigationId,
+      runId: 'jao3.run.root',
+      expectedRevision: created.revision,
+      operationId: 'jao3.op.temporal',
+      checkpointId: 'jao3.checkpoint.temporal',
+    });
+    const original = await a.memory.appendCheckpoint(input);
+    expect(original.replayed).toBe(false);
+    expect(original.committedRevision).toBe(2);
+
+    // ---- later LEGAL writes, so the header is demonstrably somewhere else -------------------
+    await a.memory.appendCheckpoint(
+      aCheckpoint({
+        investigationId,
+        runId: 'jao3.run.root',
+        expectedRevision: 2,
+        operationId: 'jao3.op.temporal.later',
+        checkpointId: 'jao3.checkpoint.temporal.later',
+        summary: 'A later, unrelated finding.',
+      }),
+    );
+    await a.memory.appendOwnerCorrection({
+      investigationId,
+      runId: 'jao3.run.root',
+      expectedRevision: 3,
+      operationId: 'jao3.op.temporal.correction',
+      correctionId: 'jao3.correction.temporal',
+      targetType: 'INVESTIGATION',
+      targetId: investigationId,
+      correctionStatement: 'Re-scope after the second finding.',
+      actor: 'FOUNDER',
+    });
+    await a.memory.resumeInvestigation({
+      investigationId,
+      expectedRevision: 4,
+      nextRunId: 'jao3.run.second',
+    });
+    const moved = await a.memory.pauseInvestigation({
+      investigationId,
+      runId: 'jao3.run.second',
+      expectedRevision: 5,
+    });
+    // Revision, status, run and counters have ALL moved since the operation committed.
+    expect(moved.revision).toBe(6);
+    expect(moved.status).toBe('PAUSED');
+    expect(moved.currentRunId).toBe('jao3.run.second');
+    await a.close();
+
+    const b = startProcess('b');
+    const before = await b.memory.readInvestigation({ investigationId, runId: 'jao3.run.second' });
+
+    const replay = await b.memory.appendCheckpoint(input);
+
+    expect(replay.replayed).toBe(true);
+    // The durable result is IDENTICAL. `replayed` is call metadata and is the only field that may
+    // differ between the first call and a retry.
+    expect({ ...replay, replayed: false }).toStrictEqual({ ...original, replayed: false });
+    expect(replay.checkpoint).toStrictEqual(original.checkpoint);
+    // The revision it committed at, not the revision the investigation happens to be on now.
+    expect(replay.committedRevision).toBe(2);
+    expect(replay.committedRevision).not.toBe(before.revision);
+
+    // The replay itself wrote nothing: no duplicate child, no revision increment, no change of any
+    // kind to the investigation it replayed against.
+    const after = await b.memory.readInvestigation({ investigationId, runId: 'jao3.run.second' });
+    expect(after).toStrictEqual(before);
+    expect(await countJao3RowsFor(admin, 'checkpoint', investigationId)).toBe(2);
+    expect(await countJao3RowsFor(admin, 'operation_replay', investigationId)).toBe(3);
+
+    // Same operation id, DIFFERENT semantic payload -> closed conflict, still zero writes.
+    await expect(
+      b.memory.appendCheckpoint({ ...input, summary: 'A materially different finding.' }),
+    ).rejects.toMatchObject({ code: 'CHECKPOINT_CONFLICT' });
+    expect(
+      await b.memory.readInvestigation({ investigationId, runId: 'jao3.run.second' }),
+    ).toStrictEqual(before);
+    expect(await countJao3RowsFor(admin, 'checkpoint', investigationId)).toBe(2);
+    await b.close();
+  });
+
+  it('returns an exact CORRECTION replay unchanged after later legal writes', async () => {
+    // The correction path has its own replay branch, so it gets its own proof.
+    const a = startProcess('a');
+    const created = await a.memory.createInvestigation({
+      investigationId,
+      rootRunId: 'jao3.run.root',
+      objective: 'Temporal correction replay.',
+      workflowState: 'ANALYSIS',
+      lifetimeMs: HOUR,
+    });
+    const input = {
+      investigationId,
+      runId: 'jao3.run.root',
+      expectedRevision: created.revision,
+      operationId: 'jao3.op.temporal.corr',
+      correctionId: 'jao3.correction.temporal.1',
+      targetType: 'INVESTIGATION' as const,
+      targetId: investigationId,
+      correctionStatement: 'The lag predates the deploy.',
+      actor: 'FOUNDER' as const,
+    };
+    const original = await a.memory.appendOwnerCorrection(input);
+    expect(original.committedRevision).toBe(2);
+
+    await a.memory.appendCheckpoint(
+      aCheckpoint({
+        investigationId,
+        runId: 'jao3.run.root',
+        expectedRevision: 2,
+        operationId: 'jao3.op.temporal.corr.cp',
+        checkpointId: 'jao3.checkpoint.temporal.corr',
+      }),
+    );
+    const moved = await a.memory.completeInvestigation({
+      investigationId,
+      runId: 'jao3.run.root',
+      expectedRevision: 3,
+    });
+    // COMPLETED accepts no further work -- and an exact replay is not further work.
+    expect(moved.status).toBe('COMPLETED');
+    expect(moved.revision).toBe(4);
+    await a.close();
+
+    const b = startProcess('b');
+    const before = await b.memory.readInvestigation({ investigationId, runId: 'jao3.run.root' });
+    const replay = await b.memory.appendOwnerCorrection(input);
+
+    expect(replay.replayed).toBe(true);
+    expect({ ...replay, replayed: false }).toStrictEqual({ ...original, replayed: false });
+    expect(replay.committedRevision).toBe(2);
+    expect(
+      await b.memory.readInvestigation({ investigationId, runId: 'jao3.run.root' }),
+    ).toStrictEqual(before);
+    expect(await countJao3RowsFor(admin, 'owner_correction', investigationId)).toBe(1);
+
+    await expect(
+      b.memory.appendOwnerCorrection({ ...input, correctionStatement: 'Something else entirely.' }),
+    ).rejects.toMatchObject({ code: 'CORRECTION_CONFLICT' });
+    expect(await countJao3RowsFor(admin, 'owner_correction', investigationId)).toBe(1);
+    await b.close();
+  });
+
+  it('refuses an owner correction whose target belongs to another investigation, or to none', async () => {
+    // Owner-review correction. The input bounded targetType and targetId but proved nothing about
+    // ownership, so a correction could be filed against this investigation while naming a
+    // checkpoint or hypothesis belonging to a different one.
+    const a = startProcess('a');
+    const otherId = anInvestigationId();
+    const mineHeader = await a.memory.createInvestigation({
+      investigationId,
+      rootRunId: 'jao3.run.root',
+      objective: 'Target integrity, mine.',
+      workflowState: 'ANALYSIS',
+      lifetimeMs: HOUR,
+    });
+    const otherHeader = await a.memory.createInvestigation({
+      investigationId: otherId,
+      rootRunId: 'jao3.run.other',
+      objective: 'Target integrity, theirs.',
+      workflowState: 'ANALYSIS',
+      lifetimeMs: HOUR,
+    });
+
+    const mine = await a.memory.appendCheckpoint(
+      aCheckpoint({
+        investigationId,
+        runId: 'jao3.run.root',
+        expectedRevision: mineHeader.revision,
+        operationId: 'jao3.op.target.mine',
+        checkpointId: 'jao3.checkpoint.target.mine',
+      }),
+    );
+    const theirs = await a.memory.appendCheckpoint(
+      aCheckpoint({
+        investigationId: otherId,
+        runId: 'jao3.run.other',
+        expectedRevision: otherHeader.revision,
+        operationId: 'jao3.op.target.theirs',
+        checkpointId: 'jao3.checkpoint.target.theirs',
+      }),
+    );
+    const myHypothesis = mine.checkpoint.hypotheses[0]?.hypothesisId ?? '';
+    const theirHypothesis = theirs.checkpoint.hypotheses[0]?.hypothesisId ?? '';
+    expect(myHypothesis).not.toBe('');
+    expect(theirHypothesis).not.toBe('');
+    expect(myHypothesis).not.toBe(theirHypothesis);
+
+    const before = await a.memory.readInvestigation({ investigationId, runId: 'jao3.run.root' });
+
+    const refused = [
+      ['missing checkpoint', 'CHECKPOINT', 'jao3.checkpoint.no-such-thing'],
+      ['another investigation checkpoint', 'CHECKPOINT', 'jao3.checkpoint.target.theirs'],
+      ['missing hypothesis', 'HYPOTHESIS', 'jao3.hypothesis.no-such-thing'],
+      ['another investigation hypothesis', 'HYPOTHESIS', theirHypothesis],
+      ['another investigation itself', 'INVESTIGATION', otherId],
+    ] as const;
+
+    for (const [label, targetType, targetId] of refused) {
+      await expect(
+        a.memory.appendOwnerCorrection({
+          investigationId,
+          runId: 'jao3.run.root',
+          expectedRevision: before.revision,
+          operationId: 'jao3.op.target.reused',
+          correctionId: 'jao3.correction.target.reused',
+          targetType,
+          targetId,
+          correctionStatement: 'A correction that must not land.',
+          actor: 'FOUNDER',
+        }),
+        label,
+        // ONE non-enumerating code for both "no such target" and "someone else's target": a caller
+        // able to tell them apart could map ids it has no other way of seeing.
+      ).rejects.toMatchObject({ code: 'CORRECTION_TARGET_NOT_FOUND' });
+    }
+
+    // Zero writes of any kind: no revision increment, no correction row, no replay row.
+    expect(
+      await a.memory.readInvestigation({ investigationId, runId: 'jao3.run.root' }),
+    ).toStrictEqual(before);
+    expect(await countJao3RowsFor(admin, 'owner_correction', investigationId)).toBe(0);
+    expect(await countJao3RowsFor(admin, 'operation_replay', investigationId)).toBe(1);
+
+    // The refused attempts left no replay record behind either -- the SAME operation id now
+    // succeeds against a valid target, which it could not do if a replay row had been written.
+    const okCheckpoint = await a.memory.appendOwnerCorrection({
+      investigationId,
+      runId: 'jao3.run.root',
+      expectedRevision: before.revision,
+      operationId: 'jao3.op.target.reused',
+      correctionId: 'jao3.correction.target.reused',
+      targetType: 'CHECKPOINT',
+      targetId: 'jao3.checkpoint.target.mine',
+      correctionStatement: 'A correction that must not land.',
+      actor: 'FOUNDER',
+    });
+    expect(okCheckpoint.replayed).toBe(false);
+    expect(okCheckpoint.correction.targetId).toBe('jao3.checkpoint.target.mine');
+
+    // A same-investigation HYPOTHESIS target passes too.
+    const okHypothesis = await a.memory.appendOwnerCorrection({
+      investigationId,
+      runId: 'jao3.run.root',
+      expectedRevision: okCheckpoint.committedRevision,
+      operationId: 'jao3.op.target.hypothesis',
+      correctionId: 'jao3.correction.target.hypothesis',
+      targetType: 'HYPOTHESIS',
+      targetId: myHypothesis,
+      correctionStatement: 'That hypothesis is disproved.',
+      actor: 'FOUNDER',
+    });
+    expect(okHypothesis.correction.targetId).toBe(myHypothesis);
+    expect(await countJao3RowsFor(admin, 'owner_correction', investigationId)).toBe(2);
+
+    // The other investigation was never touched by any of it.
+    const other = await a.memory.readInvestigation({
+      investigationId: otherId,
+      runId: 'jao3.run.other',
+    });
+    expect(other.ownerCorrectionCount).toBe(0);
+    await a.close();
   });
 
   it('blocks resume after expiry, with no cleanup job and the row still present', async () => {
@@ -837,8 +1132,4 @@ async function inspectTables(): Promise<string[]> {
     );
     return found.rows.map((row) => row.table_name);
   });
-}
-
-async function countJao3RowsFor(table: string): Promise<number> {
-  return countJao3Rows(admin, table);
 }

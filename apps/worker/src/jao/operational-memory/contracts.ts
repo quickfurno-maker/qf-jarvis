@@ -59,6 +59,16 @@ const boundedIdSchema = z
   .max(128)
   .regex(/^[A-Za-z0-9._:-]+$/u);
 
+/**
+ * The canonical investigation identifier, exported so every entry point parses the SAME grammar.
+ *
+ * The two read methods take an id rather than a request object, so without this they would reach
+ * SQL with whatever a caller passed. Parameterized statements make that safe from injection, which
+ * is not the same as the adapter having checked its own domain boundary -- an unbounded or
+ * malformed id should be refused by JAO-3, not merely survived by PostgreSQL.
+ */
+export const jao3InvestigationIdSchema = boundedIdSchema;
+
 /** A short auditable statement. Bounded because this is a note, never a transcript. */
 const shortStatementSchema = z.string().min(1).max(240);
 
@@ -167,6 +177,15 @@ export const JAO3_ERROR_CODES = [
   'BUDGET_EXHAUSTED',
   'CHECKPOINT_CONFLICT',
   'CORRECTION_CONFLICT',
+  /**
+   * The correction names a target that does not belong to this investigation.
+   *
+   * Deliberately ONE code for "there is no such target" and "it belongs to a different
+   * investigation". Separating them would answer a question the caller has no business asking: a
+   * caller able to distinguish the two could enumerate which checkpoint and hypothesis ids exist
+   * elsewhere, one refusal at a time.
+   */
+  'CORRECTION_TARGET_NOT_FOUND',
   'SUPERSESSION_INVALID',
   'INPUT_INVALID',
   'PERSISTED_STATE_INVALID',
@@ -191,6 +210,7 @@ const JAO3_ERROR_MESSAGES: Readonly<Record<Jao3ErrorCode, string>> = Object.free
   BUDGET_EXHAUSTED: 'The investigation has reached a persisted budget.',
   CHECKPOINT_CONFLICT: 'That operation id was already used for a different checkpoint.',
   CORRECTION_CONFLICT: 'That operation id was already used for a different owner correction.',
+  CORRECTION_TARGET_NOT_FOUND: 'The correction target does not belong to this investigation.',
   SUPERSESSION_INVALID: 'The supersession target is not a valid replacement.',
   INPUT_INVALID: 'The operation input is invalid.',
   PERSISTED_STATE_INVALID: 'A stored investigation record is inconsistent.',
@@ -282,6 +302,15 @@ export type Jao3EvidenceRef = z.infer<typeof jao3EvidenceRefSchema>;
  * claiming any other authority cannot be constructed, cannot be persisted, and cannot be read back.
  */
 export const jao3HypothesisSchema = z.strictObject({
+  /**
+   * A bounded identity, so an owner correction can name exactly one hypothesis.
+   *
+   * Added by owner-review correction. Without it a hypothesis was addressable only as
+   * (checkpoint, ordinal), so a correction targeting one could not be checked against the
+   * investigation that owns it -- and an unverifiable target is an integrity gap, not a
+   * convenience gap.
+   */
+  hypothesisId: boundedIdSchema,
   statement: shortStatementSchema,
   epistemicStatus: z.enum(JAO3_EPISTEMIC_STATUSES),
   authority: z.literal('NONE'),

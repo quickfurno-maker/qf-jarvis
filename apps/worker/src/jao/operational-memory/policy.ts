@@ -28,9 +28,29 @@ import {
   JAO3_STATUS_ACCEPTS_WRITES,
   Jao3MemoryError,
   jao3InstantSchema,
+  jao3InvestigationIdSchema,
   type Jao3Instant,
   type Jao3Investigation,
 } from './contracts.js';
+
+/**
+ * Parse an investigation identifier, or refuse before anything else happens.
+ *
+ * The two read methods take an id rather than a request object, so this is the only thing standing
+ * between a caller's string and a query. Added by owner-review correction: parameterized SQL made
+ * an unbounded id SAFE, which is not the same as the adapter having checked it -- a domain boundary
+ * that validates only what happens to be convenient is not a boundary.
+ *
+ * Refused as `INPUT_INVALID`, the same closed code every other malformed input gets. No Zod issue,
+ * no offending value and no database detail reaches the caller.
+ */
+export function parseJao3InvestigationId(value: unknown): string {
+  const parsed = jao3InvestigationIdSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new Jao3MemoryError('INPUT_INVALID');
+  }
+  return parsed.data;
+}
 
 /** The canonical instant for a millisecond value. Validated, so an impossible clock cannot leak in. */
 export function jao3InstantFromMs(nowMs: number): Jao3Instant {
