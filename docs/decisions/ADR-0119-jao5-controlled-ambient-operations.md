@@ -169,21 +169,78 @@ Malformed events and invalid snapshots are pre-validated with the CANONICAL pars
 uses, before a durable claim is taken, so a malformed signal cannot exhaust a monitor's budget --
 and no diagnostic logic is duplicated to do it.
 
-### 10. No public investigator injection
+### 10. No public injection of the investigator OR of persistence
 
-The JAO-4 owner-review lesson, applied before it could be repeated. A public investigator callback
-would let a caller replace the thing every gate exists to govern, and the containment specs read
-this source tree -- they cannot read a function supplied from outside it.
+The JAO-4 owner-review lesson, applied twice -- the second time because owner review of PR #161
+found the half that had been missed.
 
-The public runner therefore CONSTRUCTS the canonical composition itself and offers no parameter that
-could replace it. Its dependencies are outer boundaries only: a store, the QF Model Gateway seam, a
-clock and optional telemetry. An internal seam, `runJao5AmbientCycleInternal`, exists for trusted
-source-level and test composition and is exported from no barrel.
+A public investigator callback would let a caller replace the thing every gate exists to govern, and
+the containment specs read this source tree; they cannot read a function supplied from outside it.
+That much was pinned from the start.
 
-Proved **behaviourally**, not just by type: a hostile investigator is forced into the public runner
-through a deliberate cast and must still not run. A type-level proof alone would survive a mutation,
-because a mutation proof runs Vitest and Vitest strips types -- which is exactly what happened on
-the first attempt here.
+**A public `Jao5AmbientStore` parameter was the same defect wearing different clothes.** The store is
+not a passive substrate. `claimAmbientRun` receives the trigger kind, trigger reference, dedupe key,
+scheduled slot, event id, definition digest, budget window and per-window limit AS CALLER-SUPPLIED
+VALUES. The adapter re-checks each against the locked row -- but it cannot reconstruct canonical
+monitor policy, so it cannot know whether the slot was genuinely due, whether the event matched the
+monitor's own type and scope, or whether those budget numbers are the reviewed ones. A public caller
+holding a store could therefore bypass `runJao5AmbientCycle` entirely and claim under bounds of its
+own choosing, or hand in a store implementation that recorded whatever it liked. The public surface
+would have stopped being the governance boundary it claims to be.
+
+The correction is **composition pinning, not a brand**: a brand can be copied as easily as a
+descriptor (the JAO-4 lesson). The public surface now takes a `DatabasePool` -- the trusted
+persistence INFRASTRUCTURE boundary, exactly as `ModelGateway` is the trusted inference boundary --
+and CONSTRUCTS the canonical Postgres store itself. There is no parameter left to displace, and the
+raw seam (`Jao5AmbientStore`, `Jao5Claim`, `Jao5ClaimRequest`, `Jao5FinalizeRequest`,
+`createJao5PostgresStore`, `enrollJao5MonitorInternal`, `killJao5MonitorInternal`) is exported from
+no barrel. `Jao5AmbientRunRecord` remains public: it is a strictly-decoded, read-only audit record
+with no way to write anything.
+
+Internal seams -- `runJao5AmbientCycleInternal`, `Jao5InternalMonitorOperationDependencies` and the
+raw store -- exist for trusted source-level and test composition, reachable only by direct module
+path.
+
+Proved **behaviourally**, not just by type: a hostile investigator AND a hostile store are forced
+into the public runner through a deliberate cast, and neither is ever consulted. A type-level proof
+alone would survive a mutation, because a mutation proof runs Vitest and Vitest strips types --
+which is exactly what happened on the first attempt here.
+
+### 10a. The kill switch is compare-and-set on every path, including the terminal one
+
+The reviewed kill returned early when the row was already `KILLED`. That early return sat ABOVE the
+compare-and-set and ABOVE the replay insert, so on the one path the kill switch exists for it had
+NEITHER declared property: any `expectedRevision` was accepted, and no replay record was written --
+which meant the same operation id could be resubmitted later carrying a different revision and be
+accepted a second time.
+
+Now the order is fixed and unconditional. The replay guard runs before the row lock and again after
+it (an honest retry that lost the lock must replay, not fail as a false conflict). The
+compare-and-set then runs ALWAYS, terminal row or not. If the instance is already `KILLED` the
+operation is a durable **terminal no-op**: `killed_at` is not overwritten -- it records when the kill
+actually happened -- and a replay record IS written, so that operation id is idempotent from then on
+exactly like a kill that changed something.
+
+There is still no `unkill`.
+
+### 10b. Run history is decoded, and identifiers are checked before any SQL runs
+
+`listAmbientRuns` used to cast rows to the record type. A cast is not a check: a row the database can
+still hold -- a refusal code outside the closed vocabulary, a negative cadence slot, an event id no
+bounded identifier would accept -- would come back typed as governed history and be read as though
+JAO-5 had asserted it. The audit trail is the only thing an owner has after the fact, so **a record
+that reads correctly and is wrong is worse than one that refuses to be read**. Every row is now
+parsed by `jao5AmbientRunRecordSchema`; a row that no longer satisfies the contract is a
+`STORE_FAILED` refusal.
+
+Two consistency rules the database CAN express were added to the schema as defence in depth: a
+refusal code belongs to a `REFUSED` outcome and to nothing else, and the attention flag must agree
+with the outcome.
+
+Both read paths (`listAmbientRuns`, `countClaimedInWindow`) now parse their identifier and window
+BEFORE borrowing a connection. Parameterized SQL made those calls safe; it did not make them
+checked, and an adapter that never states its own domain boundary is one refactor away from a query
+builder that interpolates.
 
 ### 11. Attention is not authority
 
@@ -196,6 +253,36 @@ The `sourcePosture` literal on an injected event is a CLOSED FIRST-PROOF POSTURE
 production authentication**. A caller supplying it has not been authenticated by anything. A
 production event ingress needs source authentication, authorization, replay control, redaction and
 its own rollout review.
+
+**Attention is surfaced, not merely counted.** The reviewed cycle incremented `attentionCreated` and
+discarded the attention itself, which told a caller that something needed a human and refused to say
+what. `Jao5AmbientRunResult` now carries JAO-1's own bounded inert attention IN MEMORY, and the
+contract enforces the correspondence: `attentionPresent` is true exactly when `attention` is
+non-null, and both hold exactly for an `ATTENTION_CREATED` outcome. JAO-1's schema permits a
+`REFUSED` result that still carries an attention object; JAO-5 does not surface one, because
+"attention was created" and "the investigation refused" must not both be true of a single run.
+
+Surfacing is not persisting. The attention body still never reaches the store (the finalize request
+carries only `attentionPresent`) and never reaches telemetry (which carries only the count). A spec
+dumps the run table and asserts the attention text is absent, and a second spec reads the telemetry
+emit site and the telemetry contract for any field a body could travel in.
+
+### 12. A failed durable write does not erase work that happened
+
+Phase C -- the finalize -- catches its own failure. It used to fall through to the generic refusal
+handler, which returned a null ambient run id and a null JAO-1 run id while the cycle counters still
+said one claim was made and one investigation started: a record contradicting itself and losing the
+identity of work that demonstrably occurred.
+
+`Jao5AmbientRunResult` now states persistence as its own fact. `persistenceStatus` is
+`FINALIZED`, `FINALIZE_FAILED` or `NOT_CLAIMED`, with `persistenceRefusalReason` non-null exactly
+when the finalize failed, and the contract requires claim identity to be present exactly when the
+status is not `NOT_CLAIMED`. An unclassified throw in that phase is reported as `STORE_FAILED`, not
+`WORKFLOW_FAILED`: the phase that failed was persistence, and blaming the workflow would misattribute
+a write failure to an investigation that had already finished.
+
+The durable row stays `CLAIMED` and the budget unit stays spent. A model call that already happened
+cannot be un-spent by a write that did not land, and the same trigger identity does not re-open.
 
 ## Authority
 

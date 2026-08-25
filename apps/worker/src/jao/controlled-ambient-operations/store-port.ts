@@ -21,6 +21,7 @@
  */
 import type {
   Jao5AmbientOutcome,
+  Jao5AmbientRunRecord,
   Jao5EnrollMonitorInput,
   Jao5KillMonitorInput,
   Jao5MonitorInstance,
@@ -129,24 +130,11 @@ export interface Jao5AmbientStore {
   /** Read-only, for proving durability across a restart. */
   countClaimedInWindow(monitorInstanceId: string, windowStartEpoch: number): Promise<number>;
 
-  /** Read-only run history for one instance, oldest first. Governance metadata only. */
+  /**
+   * Read-only run history for one instance, oldest first. Governance metadata only.
+   *
+   * Every row is decoded STRICTLY: a durable value outside the closed vocabulary is a
+   * `STORE_FAILED` refusal, never a plausible substitute. The persisted refusal code is preserved.
+   */
   listAmbientRuns(monitorInstanceId: string): Promise<readonly Jao5AmbientRunRecord[]>;
-}
-
-/** A persisted ambient run, as governance metadata. No content of any kind. */
-export interface Jao5AmbientRunRecord {
-  readonly ambientRunId: string;
-  readonly monitorInstanceId: string;
-  readonly triggerKind: Jao5TriggerType;
-  readonly triggerRef: string;
-  readonly dedupeKey: string;
-  readonly scheduledSlot: number | null;
-  readonly eventId: string | null;
-  readonly jao1RunId: string;
-  readonly status: 'CLAIMED' | 'FINALIZED';
-  readonly outcome: Jao5AmbientOutcome | null;
-  readonly refusalCode: Jao5RefusalReason | null;
-  readonly attentionPresent: boolean | null;
-  readonly capabilityCalls: number;
-  readonly modelCalls: number;
 }

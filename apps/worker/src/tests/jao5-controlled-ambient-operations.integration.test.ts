@@ -32,20 +32,23 @@ import { jao1RunResultSchema } from '../jao/mastra-supervisor/index.js';
 import {
   JAO5_EVENT_HEALTH_MONITOR,
   JAO5_SCHEDULED_HEALTH_MONITOR,
-  createJao5PostgresStore,
   runJao5AmbientCycle,
-  enrollJao5Monitor,
   jao5BudgetWindowStart,
   jao5DefinitionDigest,
-  killJao5Monitor,
-  type Jao5AmbientStore,
   type Jao5Clock,
 } from '../jao/controlled-ambient-operations/index.js';
-// By DIRECT MODULE PATH. The internal seam is not reachable through the barrel above.
+// By DIRECT MODULE PATH. Neither the internal cycle seam nor the raw persistence seam is reachable
+// through the barrel above -- which is the property the public-pinning specs assert.
 import {
   runJao5AmbientCycleInternal,
   type Jao5Investigator,
 } from '../jao/controlled-ambient-operations/ambient-cycle.js';
+import { createJao5PostgresStore } from '../jao/controlled-ambient-operations/postgres-store.js';
+import {
+  enrollJao5MonitorInternal,
+  killJao5MonitorInternal,
+} from '../jao/controlled-ambient-operations/operations.js';
+import type { Jao5AmbientStore } from '../jao/controlled-ambient-operations/store-port.js';
 import {
   JAO5_TEST_SCHEMA,
   applyJao5Schema,
@@ -325,7 +328,7 @@ async function enroll(
   monitorId = JAO5_SCHEDULED_HEALTH_MONITOR.monitorId,
   enrollmentSeconds = 24 * 60 * 60,
 ): Promise<void> {
-  await enrollJao5Monitor(
+  await enrollJao5MonitorInternal(
     {
       operationId: `${monitorInstanceId}.enroll`,
       monitorInstanceId,
@@ -397,7 +400,7 @@ describe('JAO-5 durable ambient governance', () => {
       monitorVersion: '1' as const,
       enrollmentSeconds: 3600,
     };
-    const first = await enrollJao5Monitor(input, { store: a.store, clock: a.clock });
+    const first = await enrollJao5MonitorInternal(input, { store: a.store, clock: a.clock });
     expect(first.replayed).toBe(false);
     await a.close();
 
@@ -406,12 +409,15 @@ describe('JAO-5 durable ambient governance', () => {
     // has moved on since.
     const b = startProcess('b');
     b.clock.advance(HOUR);
-    const replay = await enrollJao5Monitor(input, { store: b.store, clock: b.clock });
+    const replay = await enrollJao5MonitorInternal(input, { store: b.store, clock: b.clock });
     expect(replay.replayed).toBe(true);
     expect({ ...replay, replayed: false }).toStrictEqual({ ...first, replayed: false });
 
     await expect(
-      enrollJao5Monitor({ ...input, enrollmentSeconds: 7200 }, { store: b.store, clock: b.clock }),
+      enrollJao5MonitorInternal(
+        { ...input, enrollmentSeconds: 7200 },
+        { store: b.store, clock: b.clock },
+      ),
     ).rejects.toMatchObject({ code: 'OPERATION_CONFLICT' });
     await b.close();
   });
@@ -629,7 +635,7 @@ describe('JAO-5 durable ambient governance', () => {
     await enroll(a, instanceId);
     const enrolled = await a.store.readMonitorInstance(instanceId);
 
-    const killed = await killJao5Monitor(
+    const killed = await killJao5MonitorInternal(
       {
         operationId: `${instanceId}.kill`,
         monitorInstanceId: instanceId,
@@ -666,7 +672,7 @@ describe('JAO-5 durable ambient governance', () => {
     expect(claimed.runs[0]?.outcome).toBe('NO_ANOMALY');
 
     const current = await a.store.readMonitorInstance(instanceId);
-    await killJao5Monitor(
+    await killJao5MonitorInternal(
       {
         operationId: `${instanceId}.kill.after`,
         monitorInstanceId: instanceId,
@@ -684,7 +690,21 @@ describe('JAO-5 durable ambient governance', () => {
     await a.close();
   });
 
-  it('replays an identical kill and refuses a stale revision', async () => {
+  /**
+   * ------------------------------------------------------------------------------------------
+   * FINDING 2: the kill switch is compare-and-set AND operation-id idempotent, on every path.
+   * ------------------------------------------------------------------------------------------
+   *
+   * The reviewed version returned early when the row was already KILLED. That early return sat
+   * ABOVE the compare-and-set and ABOVE the replay insert, so an already-terminal instance had
+   * neither property: any revision was accepted, and no replay record was written -- which meant
+   * the SAME operation id could be replayed later with a DIFFERENT expected revision and be
+   * accepted a second time. Both declared guarantees failed together, and only on the path the
+   * kill switch exists for.
+   *
+   * These nine specs pin the corrected semantics against a real database.
+   */
+  it('F2.1 replays an identical kill across a restart, byte-for-byte', async () => {
     const a = startProcess('a');
     await enroll(a, instanceId);
     const enrolled = await a.store.readMonitorInstance(instanceId);
@@ -693,25 +713,245 @@ describe('JAO-5 durable ambient governance', () => {
       monitorInstanceId: instanceId,
       expectedRevision: enrolled.revision,
     };
-    const first = await killJao5Monitor(input, { store: a.store, clock: a.clock });
+    const first = await killJao5MonitorInternal(input, { store: a.store, clock: a.clock });
     await a.close();
 
+    // A NEW process, an hour later. Nothing but the database survives.
     const b = startProcess('b');
     b.clock.advance(HOUR);
-    const replay = await killJao5Monitor(input, { store: b.store, clock: b.clock });
+    const replay = await killJao5MonitorInternal(input, { store: b.store, clock: b.clock });
     expect(replay.replayed).toBe(true);
+    // The committed identity is read back from the replay record, not from the live header.
     expect({ ...replay, replayed: false }).toStrictEqual({ ...first, replayed: false });
+    await b.close();
+  });
+
+  it('F2.2 refuses a NEW operation id carrying a stale revision against a KILLED instance', async () => {
+    // THE REGRESSION. Before the correction this resolved to KILLED and reported success.
+    const a = startProcess('a');
+    await enroll(a, instanceId);
+    const enrolled = await a.store.readMonitorInstance(instanceId);
+    await killJao5MonitorInternal(
+      {
+        operationId: `${instanceId}.kill`,
+        monitorInstanceId: instanceId,
+        expectedRevision: enrolled.revision,
+      },
+      { store: a.store, clock: a.clock },
+    );
+    const killed = await a.store.readMonitorInstance(instanceId);
+    expect(killed.status).toBe('KILLED');
+    expect(killed.revision).toBeGreaterThan(enrolled.revision);
 
     await expect(
-      killJao5Monitor(
+      killJao5MonitorInternal(
         {
-          operationId: `${instanceId}.kill.other`,
+          operationId: `${instanceId}.kill.stale`,
           monitorInstanceId: instanceId,
-          expectedRevision: 1,
+          expectedRevision: enrolled.revision,
         },
-        { store: b.store, clock: b.clock },
+        { store: a.store, clock: a.clock },
       ),
-    ).resolves.toMatchObject({ committedStatus: 'KILLED' });
+    ).rejects.toMatchObject({ code: 'REVISION_CONFLICT' });
+
+    // And it wrote nothing: a refused operation leaves no replay record to be replayed later.
+    expect(await countJao5RowsFor(a.pool, 'ambient_operation_replay', instanceId)).toBe(2);
+    await a.close();
+  });
+
+  it('F2.3 treats a NEW operation id at the CURRENT revision as a durable terminal no-op', async () => {
+    const a = startProcess('a');
+    await enroll(a, instanceId);
+    const enrolled = await a.store.readMonitorInstance(instanceId);
+    const first = await killJao5MonitorInternal(
+      {
+        operationId: `${instanceId}.kill`,
+        monitorInstanceId: instanceId,
+        expectedRevision: enrolled.revision,
+      },
+      { store: a.store, clock: a.clock },
+    );
+
+    a.clock.advance(HOUR);
+    const noop = await killJao5MonitorInternal(
+      {
+        operationId: `${instanceId}.kill.second`,
+        monitorInstanceId: instanceId,
+        expectedRevision: first.committedRevision,
+      },
+      { store: a.store, clock: a.clock },
+    );
+    // Not a replay -- a distinct operation that found nothing left to do.
+    expect(noop.replayed).toBe(false);
+    expect(noop.committedStatus).toBe('KILLED');
+    expect(noop.committedRevision).toBe(first.committedRevision);
+    await a.close();
+  });
+
+  it('F2.4 does not overwrite killedAt when a later kill is a no-op', async () => {
+    const a = startProcess('a');
+    await enroll(a, instanceId);
+    const enrolled = await a.store.readMonitorInstance(instanceId);
+    const first = await killJao5MonitorInternal(
+      {
+        operationId: `${instanceId}.kill`,
+        monitorInstanceId: instanceId,
+        expectedRevision: enrolled.revision,
+      },
+      { store: a.store, clock: a.clock },
+    );
+    const killedAt = (await a.store.readMonitorInstance(instanceId)).killedAt;
+    expect(killedAt).not.toBeNull();
+
+    a.clock.advance(6 * HOUR);
+    await killJao5MonitorInternal(
+      {
+        operationId: `${instanceId}.kill.later`,
+        monitorInstanceId: instanceId,
+        expectedRevision: first.committedRevision,
+      },
+      { store: a.store, clock: a.clock },
+    );
+    // killedAt records WHEN THE KILL HAPPENED. A no-op six hours later must not restate it.
+    expect((await a.store.readMonitorInstance(instanceId)).killedAt).toBe(killedAt);
+    await a.close();
+  });
+
+  it('F2.5 makes the terminal no-op itself idempotent by writing a replay record', async () => {
+    const a = startProcess('a');
+    await enroll(a, instanceId);
+    const enrolled = await a.store.readMonitorInstance(instanceId);
+    const first = await killJao5MonitorInternal(
+      {
+        operationId: `${instanceId}.kill`,
+        monitorInstanceId: instanceId,
+        expectedRevision: enrolled.revision,
+      },
+      { store: a.store, clock: a.clock },
+    );
+    const input = {
+      operationId: `${instanceId}.kill.noop`,
+      monitorInstanceId: instanceId,
+      expectedRevision: first.committedRevision,
+    };
+    const noop = await killJao5MonitorInternal(input, { store: a.store, clock: a.clock });
+    expect(noop.replayed).toBe(false);
+    await a.close();
+
+    // A restart, and the same no-op operation id. It REPLAYS -- it does not re-evaluate.
+    const b = startProcess('b');
+    b.clock.advance(HOUR);
+    const replayed = await killJao5MonitorInternal(input, { store: b.store, clock: b.clock });
+    expect(replayed.replayed).toBe(true);
+    expect({ ...replayed, replayed: false }).toStrictEqual({ ...noop, replayed: false });
+    await b.close();
+  });
+
+  it('F2.6 refuses one operation id resubmitted with a different expected revision', async () => {
+    // The second half of the same defect: no replay record meant no semantic digest to compare,
+    // so the same id could be reused to mean something else.
+    const a = startProcess('a');
+    await enroll(a, instanceId);
+    const enrolled = await a.store.readMonitorInstance(instanceId);
+    const operationId = `${instanceId}.kill`;
+    const first = await killJao5MonitorInternal(
+      { operationId, monitorInstanceId: instanceId, expectedRevision: enrolled.revision },
+      { store: a.store, clock: a.clock },
+    );
+    expect(first.committedStatus).toBe('KILLED');
+
+    await expect(
+      killJao5MonitorInternal(
+        {
+          operationId,
+          monitorInstanceId: instanceId,
+          expectedRevision: first.committedRevision,
+        },
+        { store: a.store, clock: a.clock },
+      ),
+    ).rejects.toMatchObject({ code: 'OPERATION_CONFLICT' });
+    await a.close();
+  });
+
+  it('F2.7 refuses a stale revision against a LIVE instance too', async () => {
+    // The compare-and-set is not special-cased by status in either direction.
+    const a = startProcess('a');
+    await enroll(a, instanceId);
+    const enrolled = await a.store.readMonitorInstance(instanceId);
+    await expect(
+      killJao5MonitorInternal(
+        {
+          operationId: `${instanceId}.kill.stale`,
+          monitorInstanceId: instanceId,
+          expectedRevision: enrolled.revision + 5,
+        },
+        { store: a.store, clock: a.clock },
+      ),
+    ).rejects.toMatchObject({ code: 'REVISION_CONFLICT' });
+    expect((await a.store.readMonitorInstance(instanceId)).status).toBe('ACTIVE');
+    await a.close();
+  });
+
+  it('F2.8 writes exactly one replay record per distinct kill operation id', async () => {
+    const a = startProcess('a');
+    await enroll(a, instanceId);
+    const enrolled = await a.store.readMonitorInstance(instanceId);
+    const first = await killJao5MonitorInternal(
+      {
+        operationId: `${instanceId}.kill`,
+        monitorInstanceId: instanceId,
+        expectedRevision: enrolled.revision,
+      },
+      { store: a.store, clock: a.clock },
+    );
+    // Three no-ops under three distinct ids, plus four replays of the first id.
+    for (const suffix of ['x', 'y', 'z']) {
+      await killJao5MonitorInternal(
+        {
+          operationId: `${instanceId}.kill.${suffix}`,
+          monitorInstanceId: instanceId,
+          expectedRevision: first.committedRevision,
+        },
+        { store: a.store, clock: a.clock },
+      );
+    }
+    for (const _ of [0, 1, 2, 3]) {
+      await killJao5MonitorInternal(
+        {
+          operationId: `${instanceId}.kill`,
+          monitorInstanceId: instanceId,
+          expectedRevision: enrolled.revision,
+        },
+        { store: a.store, clock: a.clock },
+      );
+    }
+    // enroll + kill + three no-ops = five. The four replays added nothing.
+    expect(await countJao5RowsFor(a.pool, 'ambient_operation_replay', instanceId)).toBe(5);
+    await a.close();
+  });
+
+  it('F2.9 commits exactly one kill when two processes submit the same operation concurrently', async () => {
+    const a = startProcess('a');
+    await enroll(a, instanceId);
+    const enrolled = await a.store.readMonitorInstance(instanceId);
+    const input = {
+      operationId: `${instanceId}.kill`,
+      monitorInstanceId: instanceId,
+      expectedRevision: enrolled.revision,
+    };
+    const b = startProcess('b');
+
+    // Two independent pools, one operation id, released together. Whichever loses the row lock
+    // must find the winner's replay record AFTER acquiring it -- not fail as a false conflict.
+    const [left, right] = await Promise.all([
+      killJao5MonitorInternal(input, { store: a.store, clock: a.clock }),
+      killJao5MonitorInternal(input, { store: b.store, clock: b.clock }),
+    ]);
+    expect({ ...left, replayed: false }).toStrictEqual({ ...right, replayed: false });
+    expect([left.replayed, right.replayed].filter(Boolean)).toHaveLength(1);
+    expect((await a.store.readMonitorInstance(instanceId)).status).toBe('KILLED');
+    expect(await countJao5RowsFor(a.pool, 'ambient_operation_replay', instanceId)).toBe(2);
+    await a.close();
     await b.close();
   });
 
@@ -996,8 +1236,49 @@ describe('JAO-5 durable ambient governance', () => {
     };
 
     const gateway = new CountingGateway();
+    // BOTH forbidden shapes at once: a hostile investigator AND a hostile store, forced through a
+    // cast. The public runner constructs the canonical composition itself, so neither reaches it.
+    let hostileStoreCalls = 0;
+    const hostileStore: Jao5AmbientStore = {
+      enrollMonitor: async () => {
+        hostileStoreCalls += 1;
+        await Promise.resolve();
+        throw new Error('hostile store must not be reached');
+      },
+      readMonitorInstance: async () => {
+        hostileStoreCalls += 1;
+        await Promise.resolve();
+        throw new Error('hostile store must not be reached');
+      },
+      killMonitor: async () => {
+        hostileStoreCalls += 1;
+        await Promise.resolve();
+        throw new Error('hostile store must not be reached');
+      },
+      claimAmbientRun: async () => {
+        hostileStoreCalls += 1;
+        await Promise.resolve();
+        throw new Error('hostile store must not be reached');
+      },
+      finalizeAmbientRun: async () => {
+        hostileStoreCalls += 1;
+        await Promise.resolve();
+        throw new Error('hostile store must not be reached');
+      },
+      countClaimedInWindow: async () => {
+        hostileStoreCalls += 1;
+        await Promise.resolve();
+        return 0;
+      },
+      listAmbientRuns: async () => {
+        hostileStoreCalls += 1;
+        await Promise.resolve();
+        return [];
+      },
+    };
     const smuggled = {
-      store: a.store,
+      pool: a.pool,
+      store: hostileStore,
       clock: a.clock,
       gateway,
       investigate: hostile,
@@ -1014,8 +1295,9 @@ describe('JAO-5 durable ambient governance', () => {
       smuggled,
     );
 
-    // THE MEASUREMENT. The hostile investigator was handed to the public runner and did not run.
+    // THE MEASUREMENT. Both hostile collaborators were handed to the public runner; neither ran.
     expect(hostileInvocations).toBe(0);
+    expect(hostileStoreCalls).toBe(0);
     // The CANONICAL JAO-1 path ran instead: one capability call, one governed model call, and the
     // model call went through the QF Model Gateway -- the only model path JAO-5 has.
     expect(result.claimsMade).toBe(1);
@@ -1042,7 +1324,7 @@ describe('JAO-5 durable ambient governance', () => {
     const beforeKill = await a.store.readMonitorInstance(instanceId);
     expect(beforeKill.status).toBe('ACTIVE');
 
-    await killJao5Monitor(
+    await killJao5MonitorInternal(
       {
         operationId: `${instanceId}.kill.toctou`,
         monitorInstanceId: instanceId,
@@ -1100,6 +1382,406 @@ describe('JAO-5 durable ambient governance', () => {
       ),
     ).rejects.toMatchObject({ code: 'MONITOR_EXPIRED' });
     await a.close();
+  });
+
+  /**
+   * ------------------------------------------------------------------------------------------
+   * FINDING 3: run history is DECODED, and identifiers are validated before any SQL runs.
+   * ------------------------------------------------------------------------------------------
+   *
+   * `listAmbientRuns` used to hand back whatever the row happened to contain, cast to the record
+   * type. A cast is not a check: a row the database could still hold -- a refusal code outside the
+   * vocabulary, a negative slot, an event id no bounded identifier would accept -- would come back
+   * typed as governed history and be read as though JAO-5 had asserted it. The audit trail is the
+   * only thing an owner has after the fact, so it must refuse to be read rather than read wrongly.
+   *
+   * And the two read paths took identifiers straight into SQL. Parameterized SQL made that SAFE;
+   * it did not make it CHECKED. An adapter that never states its own domain boundary is one
+   * refactor away from a query builder that interpolates.
+   */
+  it('F3.1 decodes a finalized run into the exact governed record', async () => {
+    const a = startProcess('a', T0, 'ATTENTION');
+    await enroll(a, instanceId);
+    await cycle(a, [instanceId]);
+    const runs = await a.store.listAmbientRuns(instanceId);
+    expect(runs).toHaveLength(1);
+    expect(runs[0]).toStrictEqual({
+      ambientRunId: runs[0]?.ambientRunId,
+      monitorInstanceId: instanceId,
+      triggerKind: 'SCHEDULED_INTERVAL',
+      triggerRef: runs[0]?.triggerRef,
+      dedupeKey: runs[0]?.dedupeKey,
+      scheduledSlot: runs[0]?.scheduledSlot,
+      eventId: null,
+      jao1RunId: runs[0]?.jao1RunId,
+      status: 'FINALIZED',
+      outcome: 'ATTENTION_CREATED',
+      refusalCode: null,
+      attentionPresent: true,
+      capabilityCalls: 1,
+      modelCalls: 1,
+    });
+    await a.close();
+  });
+
+  it('F3.2 returns frozen records, so history cannot be edited by a reader', async () => {
+    const a = startProcess('a');
+    await enroll(a, instanceId);
+    await cycle(a, [instanceId]);
+    const runs = await a.store.listAmbientRuns(instanceId);
+    expect(Object.isFrozen(runs)).toBe(true);
+    expect(Object.isFrozen(runs[0])).toBe(true);
+    await a.close();
+  });
+
+  it('F3.3 refuses a run row whose refusal code is outside the closed vocabulary', async () => {
+    const a = startProcess('a');
+    await enroll(a, instanceId);
+    await cycle(a, [instanceId]);
+    const runs = await a.store.listAmbientRuns(instanceId);
+    const runId = runs[0]?.ambientRunId ?? '';
+
+    // Forced past the adapter, and past the constraints the database CAN express: the row is
+    // REFUSED and does carry a refusal code, so both CHECKs are satisfied. Only the closed
+    // vocabulary rejects it -- and that vocabulary lives here.
+    await forceJao5RawUpdate(
+      admin,
+      `UPDATE ${JAO5_TEST_SCHEMA}.ambient_investigation_run
+          SET outcome = 'REFUSED', attention_present = false, refusal_code = $2
+        WHERE ambient_run_id = $1`,
+      [runId, 'NOT_A_GOVERNED_REFUSAL_REASON'],
+    );
+
+    await expect(a.store.listAmbientRuns(instanceId)).rejects.toMatchObject({
+      code: 'STORE_FAILED',
+    });
+    await a.close();
+  });
+
+  it('F3.4 refuses a run row carrying a negative scheduled slot', async () => {
+    const a = startProcess('a');
+    await enroll(a, instanceId);
+    await cycle(a, [instanceId]);
+    const runId = (await a.store.listAmbientRuns(instanceId))[0]?.ambientRunId ?? '';
+
+    await forceJao5RawUpdate(
+      admin,
+      `UPDATE ${JAO5_TEST_SCHEMA}.ambient_investigation_run
+          SET scheduled_slot = -1 WHERE ambient_run_id = $1`,
+      [runId],
+    );
+
+    // A negative slot is a bigint the column accepts and a cadence slot that cannot exist.
+    await expect(a.store.listAmbientRuns(instanceId)).rejects.toMatchObject({
+      code: 'STORE_FAILED',
+    });
+    await a.close();
+  });
+
+  it('F3.5 refuses a run row whose event id is not a bounded identifier', async () => {
+    const a = startProcess('a');
+    await enroll(a, instanceId, JAO5_EVENT_HEALTH_MONITOR.monitorId);
+    await cycle(a, [instanceId], {
+      event: {
+        eventId: 'jao5.event.decode',
+        eventType: 'control-plane.system-health.changed.v1',
+        occurredAt: '2026-08-25T09:05:00.000Z',
+        sourcePosture: 'INJECTED_APPROVED_SHADOW_SIGNAL',
+        scope: 'CONTROL_PLANE_SYSTEM_HEALTH',
+        snapshot: SNAPSHOT,
+      },
+    });
+    const runId = (await a.store.listAmbientRuns(instanceId))[0]?.ambientRunId ?? '';
+
+    await forceJao5RawUpdate(
+      admin,
+      `UPDATE ${JAO5_TEST_SCHEMA}.ambient_investigation_run
+          SET event_id = $2 WHERE ambient_run_id = $1`,
+      [runId, 'event id with spaces and <angle brackets>'],
+    );
+
+    await expect(a.store.listAmbientRuns(instanceId)).rejects.toMatchObject({
+      code: 'STORE_FAILED',
+    });
+    await a.close();
+  });
+
+  it('F3.6 decodes a still-CLAIMED run with null finalize metadata', async () => {
+    // The nullable branch has to survive decoding too, or a crash between claim and finalize would
+    // become unreadable history rather than visible incomplete history.
+    const a = startProcess('a');
+    await enroll(a, instanceId, JAO5_EVENT_HEALTH_MONITOR.monitorId);
+    await a.store.claimAmbientRun(
+      {
+        monitorInstanceId: instanceId,
+        ambientRunId: `${instanceId}.open`,
+        jao1RunId: `${instanceId}.open.jao1`,
+        cycleRunId: `${instanceId}.open.cycle`,
+        triggerKind: 'APPROVED_EVENT',
+        triggerRef: 'jao5.event.open',
+        dedupeKey: `event:${instanceId}:jao5.event.open`,
+        scheduledSlot: null,
+        eventId: 'jao5.event.open',
+        definitionDigest: jao5DefinitionDigest(JAO5_EVENT_HEALTH_MONITOR),
+        budgetWindowSeconds: 3600,
+        maxInvestigationsPerWindow: 6,
+      },
+      a.clock.nowMs(),
+    );
+    const runs = await a.store.listAmbientRuns(instanceId);
+    expect(runs[0]).toMatchObject({
+      status: 'CLAIMED',
+      outcome: null,
+      refusalCode: null,
+      attentionPresent: null,
+      scheduledSlot: null,
+      eventId: 'jao5.event.open',
+    });
+    await a.close();
+  });
+
+  it('F3.7 refuses a malformed monitor instance id on the run-history read', async () => {
+    const a = startProcess('a');
+    for (const bad of ['', 'has space', 'semi;colon', "quote'", 'x'.repeat(129)]) {
+      await expect(a.store.listAmbientRuns(bad)).rejects.toMatchObject({
+        code: 'REQUEST_INVALID',
+      });
+    }
+    await a.close();
+  });
+
+  it('F3.8 validates the run-history id BEFORE it borrows a connection', async () => {
+    // Against a CLOSED pool. If the identifier reached SQL, this would surface as a store failure
+    // from a dead pool; because it is checked first, it is a domain refusal.
+    const dead = startProcess('dead');
+    await dead.close();
+    await expect(dead.store.listAmbientRuns('not a valid id')).rejects.toMatchObject({
+      code: 'REQUEST_INVALID',
+    });
+    // The control: a WELL-FORMED id on the same dead pool does reach the connection and fails there.
+    await expect(dead.store.listAmbientRuns('jao5.instance.000001')).rejects.toMatchObject({
+      code: 'STORE_FAILED',
+    });
+  });
+
+  it('F3.9 refuses a malformed id or an impossible window on the budget read', async () => {
+    const a = startProcess('a');
+    await expect(a.store.countClaimedInWindow('has space', 0)).rejects.toMatchObject({
+      code: 'REQUEST_INVALID',
+    });
+    for (const badWindow of [-1, 1.5, Number.NaN, 4_102_444_801]) {
+      await expect(a.store.countClaimedInWindow(instanceId, badWindow)).rejects.toMatchObject({
+        code: 'REQUEST_INVALID',
+      });
+    }
+    await a.close();
+  });
+
+  it('F3.10 validates the budget read BEFORE it borrows a connection', async () => {
+    const dead = startProcess('dead');
+    await dead.close();
+    await expect(dead.store.countClaimedInWindow('not a valid id', 0)).rejects.toMatchObject({
+      code: 'REQUEST_INVALID',
+    });
+    await expect(dead.store.countClaimedInWindow('jao5.instance.000001', -7)).rejects.toMatchObject(
+      {
+        code: 'REQUEST_INVALID',
+      },
+    );
+    await expect(
+      dead.store.countClaimedInWindow('jao5.instance.000001', jao5BudgetWindowStart(T0, 3600)),
+    ).rejects.toMatchObject({ code: 'STORE_FAILED' });
+  });
+
+  /**
+   * ------------------------------------------------------------------------------------------
+   * FINDING 4: attention is surfaced, and a finalize failure keeps the identity of real work.
+   * ------------------------------------------------------------------------------------------
+   *
+   * The reviewed cycle counted attention and threw the attention away, so a caller was told
+   * something needed a human and refused to say what. And a finalize failure fell to the generic
+   * refusal handler, which returned a null ambient run id and a null JAO-1 run id -- erasing an
+   * investigation that had demonstrably run, while the cycle counters still said a claim was made.
+   */
+  it('F4.1 surfaces the JAO-1 attention object on an ATTENTION_CREATED run', async () => {
+    const a = startProcess('a', T0, 'ATTENTION');
+    await enroll(a, instanceId);
+    const result = await cycle(a, [instanceId]);
+    const run = result.runs[0];
+    expect(run?.outcome).toBe('ATTENTION_CREATED');
+    expect(run?.attentionPresent).toBe(true);
+    // The attention itself, in memory. Not a boolean standing in for it.
+    expect(run?.attention).toMatchObject({
+      kind: 'SHADOW_OPERATIONAL_ATTENTION',
+      title: 'Jarvis API degraded',
+      severity: 'warning',
+      recommendedNextStep: 'Inspect the Jarvis API health evidence.',
+    });
+    expect(run?.persistenceStatus).toBe('FINALIZED');
+    expect(run?.persistenceRefusalReason).toBeNull();
+    await a.close();
+  });
+
+  it('F4.2 surfaces no attention on a NO_ANOMALY run', async () => {
+    const a = startProcess('a');
+    await enroll(a, instanceId);
+    const result = await cycle(a, [instanceId]);
+    expect(result.runs[0]?.outcome).toBe('NO_ANOMALY');
+    expect(result.runs[0]?.attentionPresent).toBe(false);
+    expect(result.runs[0]?.attention).toBeNull();
+    await a.close();
+  });
+
+  it('F4.3 never surfaces attention alongside a refusal', async () => {
+    // JAO-1's own schema permits a REFUSED result that still carries an attention object. JAO-5
+    // must not report "attention was created" and "the investigation refused" about one run.
+    const a = startProcess('a');
+    await enroll(a, instanceId);
+    const refusingWithAttention: Jao5Investigator = async (input) =>
+      Promise.resolve(
+        jao1RunResultSchema.parse({
+          runId: input.runId,
+          outcome: 'REFUSED' as const,
+          refusalReason: 'MODEL_RESULT_INVALID' as const,
+          snapshotRef: 'control-plane:2026-08-25T05:00:00.000Z',
+          evidenceRefs: [],
+          anomaly: null,
+          attention: {
+            kind: 'SHADOW_OPERATIONAL_ATTENTION' as const,
+            title: 'Should never be surfaced',
+            context: 'A refusal must not carry attention.',
+            severity: 'warning' as const,
+            recommendedNextStep: 'Nothing.',
+            confidence: 0.5,
+            evidenceRefs: ['component_id=jarvis-api'],
+          },
+          modelProvenance: null,
+          capabilityCalls: 1,
+          modelCalls: 1,
+          taskType: 'jarvis.operations.shadow-health-investigation' as const,
+          autonomyLevel: 'L1_READ' as const,
+          capabilitiesInvoked: ['read.system-health-from-snapshot' as const],
+          durationMs: 5,
+        }),
+      );
+
+    counter += 1;
+    const result = await runJao5AmbientCycleInternal(
+      { store: a.store, clock: a.clock, investigate: refusingWithAttention },
+      {
+        cycleId: `jao5.cycle.${String(counter).padStart(6, '0')}`,
+        runId: `jao5.run.${String(counter).padStart(6, '0')}`,
+        mode: 'SHADOW',
+        monitorInstanceIds: [instanceId],
+        snapshot: SNAPSHOT,
+      },
+    );
+    const run = result.runs[0];
+    expect(run?.outcome).toBe('REFUSED');
+    // The refusal came from the INVESTIGATION, not from a fixture the cycle could not parse --
+    // otherwise this spec would pass for the wrong reason and prove nothing about the gate.
+    expect(run?.refusalReason).toBe('INVESTIGATION_REFUSED');
+    expect(run?.attentionPresent).toBe(false);
+    expect(run?.attention).toBeNull();
+    expect(result.attentionCreated).toBe(0);
+    expect(run?.persistenceStatus).toBe('FINALIZED');
+    // And the durable row agrees with the reported result.
+    expect((await a.store.listAmbientRuns(instanceId))[0]?.attentionPresent).toBe(false);
+    await a.close();
+  });
+
+  it('F4.4 keeps run identity and the investigation outcome when the finalize fails', async () => {
+    const a = startProcess('a', T0, 'ATTENTION');
+    await enroll(a, instanceId);
+
+    // A store whose finalize -- and ONLY whose finalize -- fails. The claim commits, the
+    // investigation runs, and the durable write of the result does not land.
+    const brokenFinalize: Jao5AmbientStore = {
+      enrollMonitor: a.store.enrollMonitor.bind(a.store),
+      readMonitorInstance: a.store.readMonitorInstance.bind(a.store),
+      killMonitor: a.store.killMonitor.bind(a.store),
+      claimAmbientRun: a.store.claimAmbientRun.bind(a.store),
+      countClaimedInWindow: a.store.countClaimedInWindow.bind(a.store),
+      listAmbientRuns: a.store.listAmbientRuns.bind(a.store),
+      finalizeAmbientRun: async () => {
+        await Promise.resolve();
+        throw new Error('finalize could not reach the database');
+      },
+    };
+
+    counter += 1;
+    const result = await runJao5AmbientCycleInternal(
+      { store: brokenFinalize, clock: a.clock, investigate: a.investigate },
+      {
+        cycleId: `jao5.cycle.${String(counter).padStart(6, '0')}`,
+        runId: `jao5.run.${String(counter).padStart(6, '0')}`,
+        mode: 'SHADOW',
+        monitorInstanceIds: [instanceId],
+        snapshot: SNAPSHOT,
+      },
+    );
+    const run = result.runs[0];
+
+    // The identity of work that actually happened is NOT erased.
+    expect(run?.ambientRunId).not.toBeNull();
+    expect(run?.jao1RunId).not.toBeNull();
+    expect(run?.monitorInstanceId).toBe(instanceId);
+    // The investigation's own finding is still reported, with its attention.
+    expect(run?.outcome).toBe('ATTENTION_CREATED');
+    expect(run?.attentionPresent).toBe(true);
+    expect(run?.attention).not.toBeNull();
+    // The persistence failure is stated as its own fact, not folded into the outcome.
+    expect(run?.persistenceStatus).toBe('FINALIZE_FAILED');
+    expect(run?.persistenceRefusalReason).toBe('STORE_FAILED');
+    // And the counters agree with the record: one claim, one investigation.
+    expect(result.claimsMade).toBe(1);
+    expect(a.investigations()).toBe(1);
+    await a.close();
+  });
+
+  it('F4.5 leaves the failed finalize CLAIMED and the budget consumed, with no re-run', async () => {
+    const a = startProcess('a');
+    await enroll(a, instanceId);
+    const brokenFinalize: Jao5AmbientStore = {
+      enrollMonitor: a.store.enrollMonitor.bind(a.store),
+      readMonitorInstance: a.store.readMonitorInstance.bind(a.store),
+      killMonitor: a.store.killMonitor.bind(a.store),
+      claimAmbientRun: a.store.claimAmbientRun.bind(a.store),
+      countClaimedInWindow: a.store.countClaimedInWindow.bind(a.store),
+      listAmbientRuns: a.store.listAmbientRuns.bind(a.store),
+      finalizeAmbientRun: async () => {
+        await Promise.resolve();
+        throw new Error('finalize could not reach the database');
+      },
+    };
+    counter += 1;
+    const failed = await runJao5AmbientCycleInternal(
+      { store: brokenFinalize, clock: a.clock, investigate: a.investigate },
+      {
+        cycleId: `jao5.cycle.${String(counter).padStart(6, '0')}`,
+        runId: `jao5.run.${String(counter).padStart(6, '0')}`,
+        mode: 'SHADOW',
+        monitorInstanceIds: [instanceId],
+        snapshot: SNAPSHOT,
+      },
+    );
+    expect(failed.runs[0]?.persistenceStatus).toBe('FINALIZE_FAILED');
+    await a.close();
+
+    // A NEW process. The claim is durable and still open; the budget unit stays spent, because a
+    // model call that already happened cannot be un-spent by a write that did not land.
+    const b = startProcess('b');
+    const runs = await b.store.listAmbientRuns(instanceId);
+    expect(runs).toHaveLength(1);
+    expect(runs[0]?.status).toBe('CLAIMED');
+    expect(await b.store.countClaimedInWindow(instanceId, jao5BudgetWindowStart(T0, 3600))).toBe(1);
+
+    // And the same cadence slot does not re-open.
+    const retry = await cycle(b, [instanceId]);
+    expect(retry.claimsMade).toBe(0);
+    expect(retry.runs[0]?.refusalReason).toBe('TRIGGER_NOT_DUE');
+    expect(b.investigations()).toBe(0);
+    await b.close();
   });
 
   it('reports store uncertainty as a store failure, never as a governance refusal', async () => {

@@ -96,15 +96,19 @@ export {
   jao5SemanticDigest,
 } from './policy.js';
 
-export type {
-  Jao5AmbientRunRecord,
-  Jao5AmbientStore,
-  Jao5Claim,
-  Jao5ClaimRequest,
-  Jao5FinalizeRequest,
-} from './store-port.js';
-
-export { classifyJao5DatabaseError, createJao5PostgresStore } from './postgres-store.js';
+// The raw persistence seam is deliberately NOT exported: not `Jao5AmbientStore`, `Jao5Claim`,
+// `Jao5ClaimRequest`, `Jao5FinalizeRequest`, `createJao5PostgresStore`, nor the internal operation
+// variants.
+//
+// `claimAmbientRun` takes the trigger kind, dedupe key, scheduled slot, event id, definition
+// digest, budget window and per-window limit as caller-supplied values. The adapter re-checks them
+// against the locked row, but it cannot reconstruct canonical monitor policy -- so a public holder
+// of a store could claim with whatever policy it liked, or supply its own store, and bypass the
+// governance this barrel exists to be. A spec asserts every one of those names is absent here.
+//
+// `Jao5AmbientRunRecord` IS exported: it is a read-only, strictly-decoded audit record with no way
+// to write anything.
+export type { Jao5AmbientRunRecord } from './contracts.js';
 
 export {
   enrollJao5Monitor,

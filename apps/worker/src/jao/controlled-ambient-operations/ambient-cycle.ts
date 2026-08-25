@@ -44,6 +44,7 @@
  * and no n8n run -- and the result schema has literal zeros where those counts would go.
  */
 import { parseControlPlaneSnapshotV1 } from '@qf-jarvis/control-plane-read-contract';
+import type { DatabasePool } from '@qf-jarvis/event-backbone';
 import type { ModelGateway } from '@qf-jarvis/model-gateway';
 
 import {
@@ -83,6 +84,7 @@ import {
   jao5QuietUntilMs,
   jao5ScheduledDedupeKey,
 } from './policy.js';
+import { createJao5PostgresStore } from './postgres-store.js';
 import type { Jao5AmbientStore } from './store-port.js';
 
 /**
@@ -104,7 +106,19 @@ import type { Jao5AmbientStore } from './store-port.js';
  * seam JAO-1 already requires, and JAO-5 never sees a provider credential.
  */
 export interface Jao5AmbientDependencies {
-  readonly store: Jao5AmbientStore;
+  /**
+   * The trusted PERSISTENCE INFRASTRUCTURE boundary -- not a store.
+   *
+   * A `Jao5AmbientStore` would hand a public caller `claimAmbientRun`, whose trigger kind, trigger
+   * reference, dedupe key, scheduled slot, event id, definition digest, budget window and
+   * per-window limit are all caller-supplied. The adapter re-checks them against the locked row,
+   * but it cannot reconstruct canonical monitor policy -- so it cannot know whether the slot was
+   * due, whether the event matched the monitor's own type and scope, or whether those budget
+   * numbers are the reviewed ones. A caller could therefore skip this function entirely, or
+   * substitute a store of its own, and the public surface would stop being the governance boundary
+   * it claims to be.
+   */
+  readonly pool: DatabasePool;
   readonly gateway: ModelGateway;
   readonly clock: Jao5Clock;
   readonly telemetry?: Jao5TelemetryHook;
@@ -179,7 +193,11 @@ function refusedRun(
     jao1RunId: null,
     outcome: 'REFUSED',
     refusalReason: reason,
+    attention: null,
     attentionPresent: false,
+    // Nothing was claimed, so there is no durable record to have failed to write.
+    persistenceStatus: 'NOT_CLAIMED',
+    persistenceRefusalReason: null,
     capabilityCalls: 0,
     modelCalls: 0,
     businessEffect: false,
@@ -190,6 +208,18 @@ function refusedRun(
 /** The closed code for anything that escaped, without reading what it carried. */
 function toRefusal(error: unknown): Jao5RefusalReason {
   return error instanceof Jao5AmbientError ? error.code : 'WORKFLOW_FAILED';
+}
+
+/**
+ * The refusal reason for a failure in the DURABLE WRITE phase.
+ *
+ * A classified store error keeps its own code, so `CLAIM_ALREADY_FINALIZED` and `CLAIM_NOT_FOUND`
+ * still say what they mean. Anything unclassified becomes `STORE_FAILED` rather than
+ * `WORKFLOW_FAILED`, because the phase that failed was persistence: reporting it as a workflow
+ * failure would blame the investigation for a write it had already finished.
+ */
+function toPersistenceRefusal(error: unknown): Jao5RefusalReason {
+  return error instanceof Jao5AmbientError ? error.code : 'STORE_FAILED';
 }
 
 /** JAO-1's outcome, mapped into JAO-5's. `RECOMMENDATION_READY` is attention, never approval. */
@@ -213,10 +243,11 @@ export async function runJao5AmbientCycle(
   signal?: AbortSignal,
 ): Promise<Jao5AmbientCycleResult> {
   // Pinned, not defaulted. `??` on a caller-supplied field is only a pin until somebody passes a
-  // value, which is exactly how JAO-4 acquired its injection defect.
+  // value, which is exactly how JAO-4 acquired its injection defect. The canonical Postgres store
+  // is CONSTRUCTED here from the pool, so there is no store parameter to displace.
   return runJao5AmbientCycleInternal(
     {
-      store: dependencies.store,
+      store: createJao5PostgresStore(dependencies.pool),
       gateway: dependencies.gateway,
       clock: dependencies.clock,
       ...(dependencies.telemetry === undefined ? {} : { telemetry: dependencies.telemetry }),
@@ -349,25 +380,44 @@ export async function runJao5AmbientCycleInternal(
       }
 
       const outcome: Jao5AmbientOutcome = jao1 === null ? 'REFUSED' : toAmbientOutcome(jao1);
-      const attentionPresent = jao1?.attention != null;
+      // Only an ATTENTION_CREATED outcome carries attention. JAO-1 can in principle return an
+      // attention object alongside a refusal; JAO-5 does not surface one, because "attention was
+      // created" and "the investigation refused" should not both be true of a single run.
+      const attentionPresent = outcome === 'ATTENTION_CREATED' && jao1?.attention != null;
       if (outcome === 'ATTENTION_CREATED') {
         attentionCreated += 1;
       }
 
       // ---- PHASE C: the durable finalize. Bounded, exactly once, quieting applied. ------------
+      //
+      // Its failure is caught HERE rather than by the outer handler. Once Phase A commits a claim
+      // exists and an investigation may have run; reporting that through the generic refusal path
+      // would return a null ambient run id and a null JAO-1 run id while the cycle counters still
+      // said one claim was made and one investigation started -- a record contradicting itself and
+      // losing the identity of work that demonstrably happened.
       const finalizedAt = dependencies.clock.nowMs();
-      await dependencies.store.finalizeAmbientRun(
-        {
-          ambientRunId: claim.ambientRunId,
-          outcome,
-          refusalCode: outcome === 'REFUSED' ? (refusal ?? 'INVESTIGATION_REFUSED') : null,
-          attentionPresent,
-          capabilityCalls: jao1?.capabilityCalls ?? 0,
-          modelCalls: jao1?.modelCalls ?? 0,
-          quietUntilMs: jao5QuietUntilMs(definition, outcome, finalizedAt),
-        },
-        finalizedAt,
-      );
+      let persistenceStatus: 'FINALIZED' | 'FINALIZE_FAILED' = 'FINALIZED';
+      let persistenceRefusal: Jao5RefusalReason | null = null;
+      try {
+        await dependencies.store.finalizeAmbientRun(
+          {
+            ambientRunId: claim.ambientRunId,
+            outcome,
+            refusalCode: outcome === 'REFUSED' ? (refusal ?? 'INVESTIGATION_REFUSED') : null,
+            attentionPresent,
+            capabilityCalls: jao1?.capabilityCalls ?? 0,
+            modelCalls: jao1?.modelCalls ?? 0,
+            quietUntilMs: jao5QuietUntilMs(definition, outcome, finalizedAt),
+          },
+          finalizedAt,
+        );
+      } catch (error) {
+        // The durable row stays CLAIMED, because the finalize did not commit. What the
+        // investigation actually found is still reported, and the persistence failure is stated as
+        // its own fact rather than folded into the investigation's outcome.
+        persistenceStatus = 'FINALIZE_FAILED';
+        persistenceRefusal = toPersistenceRefusal(error);
+      }
 
       runs.push(
         jao5AmbientRunResultSchema.parse({
@@ -381,7 +431,13 @@ export async function runJao5AmbientCycleInternal(
           jao1RunId,
           outcome,
           refusalReason: outcome === 'REFUSED' ? (refusal ?? 'INVESTIGATION_REFUSED') : null,
+          // JAO-1's own bounded inert attention, returned IN MEMORY. It is never handed to the
+          // store and never copied into telemetry -- only the boolean is. Counting attention
+          // without surfacing it told a caller something happened and refused to say what.
+          attention: attentionPresent ? (jao1?.attention ?? null) : null,
           attentionPresent,
+          persistenceStatus,
+          persistenceRefusalReason: persistenceRefusal,
           capabilityCalls: jao1?.capabilityCalls ?? 0,
           modelCalls: jao1?.modelCalls ?? 0,
           businessEffect: false,

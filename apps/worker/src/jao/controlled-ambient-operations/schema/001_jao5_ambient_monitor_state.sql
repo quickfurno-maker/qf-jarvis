@@ -182,6 +182,21 @@ CREATE TABLE IF NOT EXISTS qf_jarvis_jao5.ambient_investigation_run (
        AND attention_present IS NOT NULL)
     ),
 
+  -- A refusal code belongs to a REFUSED outcome and to nothing else. Without this the database
+  -- would happily hold a NO_ANOMALY run carrying a refusal reason, or a REFUSED run carrying none,
+  -- and the audit history would be answering "why did it refuse?" with a row that never refused.
+  CONSTRAINT ambient_investigation_run_refusal_consistent
+    CHECK ((refusal_code IS NOT NULL) = (outcome IS NOT NULL AND outcome = 'REFUSED')),
+
+  -- The attention flag and the outcome are the same fact stated twice, so they must agree. A run
+  -- recorded as ATTENTION_CREATED with attention_present false claims attention was created and
+  -- that none exists.
+  CONSTRAINT ambient_investigation_run_attention_consistent
+    CHECK (
+      attention_present IS NULL
+      OR (attention_present = (outcome IS NOT NULL AND outcome = 'ATTENTION_CREATED'))
+    ),
+
   -- The trigger and its reference agree: a scheduled run has a slot, an event run has an event id.
   CONSTRAINT ambient_investigation_run_trigger_ref_consistent
     CHECK (

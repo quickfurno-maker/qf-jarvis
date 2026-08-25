@@ -30,6 +30,10 @@
  */
 import { z } from 'zod';
 
+// JAO-1's OWN attention schema, reused rather than re-declared. A second attention type would be a
+// second thing to keep inert, and the two would drift the first time either changed.
+import { jao1FounderAttentionSchema } from '../mastra-supervisor/index.js';
+
 /** A bounded identifier. The grammar every JAO slice uses. */
 const boundedIdSchema = z
   .string()
@@ -108,6 +112,16 @@ export type Jao5AmbientOutcome = (typeof JAO5_AMBIENT_OUTCOMES)[number];
 
 export const JAO5_RUN_STATUSES = ['CLAIMED', 'FINALIZED'] as const;
 export type Jao5RunStatus = (typeof JAO5_RUN_STATUSES)[number];
+
+/**
+ * Whether the durable record of a run was written.
+ *
+ * Separate from the investigation's own outcome, because they are different facts. A claim can
+ * commit, an investigation can run, and the finalize transaction can still fail -- and reporting
+ * that as "no claim happened" would erase work that demonstrably did.
+ */
+export const JAO5_PERSISTENCE_STATUSES = ['FINALIZED', 'FINALIZE_FAILED', 'NOT_CLAIMED'] as const;
+export type Jao5PersistenceStatus = (typeof JAO5_PERSISTENCE_STATUSES)[number];
 
 /**
  * Why a monitor did not start an investigation. Closed, content-free, and never free text.
@@ -420,24 +434,58 @@ export type Jao5AmbientCycleRequest = z.infer<typeof jao5AmbientCycleRequestSche
  * is no `approved`, `authorized`, `canExecute`, `executed` or `remediated` field, and
  * `businessEffect` and `productionMutation` are literals.
  */
-export const jao5AmbientRunResultSchema = z.strictObject({
-  ambientRunId: boundedIdSchema.nullable(),
-  monitorInstanceId: jao5MonitorInstanceIdSchema,
-  monitorId: boundedIdSchema,
-  monitorVersion: z.literal('1'),
-  triggerKind: z.enum(JAO5_TRIGGER_TYPES),
-  triggerRef: z.string().min(1).max(160).nullable(),
-  dedupeKey: z.string().min(1).max(200).nullable(),
-  jao1RunId: boundedIdSchema.nullable(),
-  outcome: z.enum(JAO5_AMBIENT_OUTCOMES),
-  refusalReason: z.enum(JAO5_REFUSAL_REASONS).nullable(),
-  /** JAO-1's own inert attention, passed through unchanged. Never persisted. */
-  attentionPresent: z.boolean(),
-  capabilityCalls: z.number().int().min(0).max(1),
-  modelCalls: z.number().int().min(0).max(1),
-  businessEffect: z.literal(false),
-  productionMutation: z.literal(false),
-});
+export const jao5AmbientRunResultSchema = z
+  .strictObject({
+    ambientRunId: boundedIdSchema.nullable(),
+    monitorInstanceId: jao5MonitorInstanceIdSchema,
+    monitorId: boundedIdSchema,
+    monitorVersion: z.literal('1'),
+    triggerKind: z.enum(JAO5_TRIGGER_TYPES),
+    triggerRef: z.string().min(1).max(160).nullable(),
+    dedupeKey: z.string().min(1).max(200).nullable(),
+    jao1RunId: boundedIdSchema.nullable(),
+    outcome: z.enum(JAO5_AMBIENT_OUTCOMES),
+    refusalReason: z.enum(JAO5_REFUSAL_REASONS).nullable(),
+    /**
+     * JAO-1's OWN bounded inert attention, returned IN MEMORY and never persisted.
+     *
+     * Counting attention without surfacing it made a degraded monitor report
+     * `attentionCreated: 1` while handing the caller nothing to look at -- an operator signal that
+     * says something happened and refuses to say what. The object stays inert:
+     * `SHADOW_OPERATIONAL_ATTENTION`, no authority field, and a spec proves none of its text
+     * reaches the database or telemetry.
+     */
+    attention: jao1FounderAttentionSchema.nullable(),
+    attentionPresent: z.boolean(),
+    /** Whether the durable record was written. Distinct from what the investigation found. */
+    persistenceStatus: z.enum(JAO5_PERSISTENCE_STATUSES),
+    persistenceRefusalReason: z.enum(JAO5_REFUSAL_REASONS).nullable(),
+    capabilityCalls: z.number().int().min(0).max(1),
+    modelCalls: z.number().int().min(0).max(1),
+    businessEffect: z.literal(false),
+    productionMutation: z.literal(false),
+  })
+  .superRefine((run, ctx) => {
+    // `attentionPresent` is a claim about `attention`, so they cannot disagree -- a boolean that
+    // can be true beside a null object is how "attention was created" becomes unfalsifiable.
+    if (run.attentionPresent !== (run.attention !== null)) {
+      ctx.addIssue({ code: 'custom', message: 'attentionPresent must describe attention' });
+    }
+    if (run.outcome === 'ATTENTION_CREATED' && run.attention === null) {
+      ctx.addIssue({ code: 'custom', message: 'ATTENTION_CREATED requires attention' });
+    }
+    if (run.outcome !== 'ATTENTION_CREATED' && run.attention !== null) {
+      ctx.addIssue({ code: 'custom', message: 'only ATTENTION_CREATED carries attention' });
+    }
+    // A run that was never claimed has no identity to report; one that was claimed always has one.
+    const claimed = run.ambientRunId !== null;
+    if (claimed === (run.persistenceStatus === 'NOT_CLAIMED')) {
+      ctx.addIssue({ code: 'custom', message: 'persistenceStatus must match claim identity' });
+    }
+    if ((run.persistenceRefusalReason !== null) !== (run.persistenceStatus === 'FINALIZE_FAILED')) {
+      ctx.addIssue({ code: 'custom', message: 'a persistence refusal needs FINALIZE_FAILED' });
+    }
+  });
 
 export type Jao5AmbientRunResult = z.infer<typeof jao5AmbientRunResultSchema>;
 
@@ -465,6 +513,65 @@ export const jao5AmbientCycleResultSchema = z.strictObject({
 });
 
 export type Jao5AmbientCycleResult = z.infer<typeof jao5AmbientCycleResultSchema>;
+
+/**
+ * A persisted ambient run, decoded STRICTLY.
+ *
+ * The previous decoder mapped anything that was not `APPROVED_EVENT` to `SCHEDULED_INTERVAL`,
+ * anything that was not `FINALIZED` to `CLAIMED`, and threw the persisted refusal code away. So a
+ * durable row reading `trigger_kind = CORRUPT` came back as a plausible, valid, wrong record -- and
+ * the one field explaining why a run refused was silently dropped.
+ *
+ * Coercing unknown durable state into a valid value is the opposite of fail-closed decoding: it
+ * produces an audit trail that reads correctly and is not. Every field is checked, the refusal code
+ * is preserved, and anything that does not parse is a `STORE_FAILED` refusal.
+ */
+export const jao5AmbientRunRecordSchema = z
+  .strictObject({
+    ambientRunId: boundedIdSchema,
+    monitorInstanceId: jao5MonitorInstanceIdSchema,
+    triggerKind: z.enum(JAO5_TRIGGER_TYPES),
+    triggerRef: z.string().min(1).max(160),
+    dedupeKey: z.string().min(1).max(200),
+    scheduledSlot: z.number().int().min(0).nullable(),
+    eventId: boundedIdSchema.nullable(),
+    jao1RunId: boundedIdSchema,
+    status: z.enum(JAO5_RUN_STATUSES),
+    outcome: z.enum(JAO5_AMBIENT_OUTCOMES).nullable(),
+    refusalCode: z.enum(JAO5_REFUSAL_REASONS).nullable(),
+    attentionPresent: z.boolean().nullable(),
+    capabilityCalls: z.number().int().min(0).max(1),
+    modelCalls: z.number().int().min(0).max(1),
+  })
+  .superRefine((record, ctx) => {
+    // The trigger and its reference are one fact.
+    const scheduled = record.triggerKind === 'SCHEDULED_INTERVAL';
+    if (scheduled !== (record.scheduledSlot !== null) || scheduled === (record.eventId !== null)) {
+      ctx.addIssue({ code: 'custom', message: 'trigger reference does not match trigger kind' });
+    }
+    // FINALIZED and its metadata are one fact.
+    const finalized = record.status === 'FINALIZED';
+    if (
+      finalized !== (record.outcome !== null) ||
+      finalized !== (record.attentionPresent !== null)
+    ) {
+      ctx.addIssue({ code: 'custom', message: 'finalized metadata does not match status' });
+    }
+    // A refusal code belongs to a REFUSED outcome and to nothing else.
+    if ((record.refusalCode !== null) !== (record.outcome === 'REFUSED')) {
+      ctx.addIssue({ code: 'custom', message: 'refusal code does not match outcome' });
+    }
+    if (record.outcome !== null && record.attentionPresent !== null) {
+      if ((record.outcome === 'ATTENTION_CREATED') !== record.attentionPresent) {
+        ctx.addIssue({ code: 'custom', message: 'attention flag does not match outcome' });
+      }
+    }
+  });
+
+export type Jao5AmbientRunRecord = z.infer<typeof jao5AmbientRunRecordSchema>;
+
+/** An epoch-second budget window start. Validated before any query is issued. */
+export const jao5WindowStartSchema = z.number().int().min(0).max(4_102_444_800);
 
 // ---------------------------------------------------------------------------
 // Operations.

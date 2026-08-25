@@ -37,10 +37,13 @@ import type { DatabaseClient, DatabasePool } from '@qf-jarvis/event-backbone';
 
 import {
   Jao5AmbientError,
+  jao5AmbientRunRecordSchema,
   jao5EnrollMonitorInputSchema,
   jao5KillMonitorInputSchema,
   jao5MonitorInstanceIdSchema,
   jao5MonitorInstanceSchema,
+  jao5WindowStartSchema,
+  type Jao5AmbientRunRecord,
   type Jao5EnrollMonitorInput,
   type Jao5KillMonitorInput,
   type Jao5MonitorInstance,
@@ -55,7 +58,6 @@ import {
   jao5SemanticDigest,
 } from './policy.js';
 import type {
-  Jao5AmbientRunRecord,
   Jao5AmbientStore,
   Jao5Claim,
   Jao5ClaimRequest,
@@ -353,6 +355,41 @@ function toInstance(row: InstanceRow): Jao5MonitorInstance {
   return Object.freeze(parsed.data);
 }
 
+/**
+ * Decode one persisted run STRICTLY, or refuse.
+ *
+ * Nothing is coerced. A `trigger_kind` outside the closed vocabulary is not quietly turned into
+ * `SCHEDULED_INTERVAL`, a `status` that is not `FINALIZED` is not assumed to be `CLAIMED`, and the
+ * persisted `refusal_code` is carried through rather than dropped.
+ *
+ * The previous decoder did all three, which meant a corrupt durable row came back as a plausible,
+ * valid, wrong record and the one field explaining why a run refused was silently discarded. An
+ * audit record that reads correctly and is not is worse than one that refuses to be read, so a row
+ * that no longer satisfies the contract is a `STORE_FAILED` refusal.
+ */
+function toRunRecord(row: RunRow): Jao5AmbientRunRecord {
+  const parsed = jao5AmbientRunRecordSchema.safeParse({
+    ambientRunId: row.ambient_run_id,
+    monitorInstanceId: row.monitor_instance_id,
+    triggerKind: row.trigger_kind,
+    triggerRef: row.trigger_ref,
+    dedupeKey: row.dedupe_key,
+    scheduledSlot: toSlot(row.scheduled_slot),
+    eventId: row.event_id,
+    jao1RunId: row.jao1_run_id,
+    status: row.status,
+    outcome: row.outcome,
+    refusalCode: row.refusal_code,
+    attentionPresent: row.attention_present,
+    capabilityCalls: row.capability_calls,
+    modelCalls: row.model_calls,
+  });
+  if (!parsed.success) {
+    throw new Jao5AmbientError('STORE_FAILED');
+  }
+  return Object.freeze(parsed.data);
+}
+
 async function loadForUpdate(
   client: DatabaseClient,
   monitorInstanceId: string,
@@ -538,12 +575,43 @@ export function createJao5PostgresStore(pool: DatabasePool): Jao5AmbientStore {
           }
 
           const instance = await loadForUpdate(client, input.monitorInstanceId);
+
+          // Re-checked AFTER the lock. Two callers retrying the same operation id can both pass the
+          // pre-lock guard; without this the second serialises behind the first and then fails as a
+          // REVISION_CONFLICT, turning an honest retry into a false conflict.
+          const raced = await replayGuard(
+            client,
+            input.operationId,
+            'KILL_MONITOR',
+            input.monitorInstanceId,
+            digest,
+          );
+          if (raced !== null) {
+            return raced;
+          }
+
+          // The compare-and-set runs FIRST and ALWAYS, including against an already-terminal row.
+          // Returning early on KILLED skipped it: a NEW operation id could report success without
+          // matching the revision and without writing a replay record, so the same id could then be
+          // retried with a different expectedRevision and succeed again -- which broke both
+          // declared properties, compare-and-set and idempotency, at once.
+          assertJao5ExpectedRevision(instance, input.expectedRevision);
+
           if (instance.status === 'KILLED') {
-            // Already terminal. Killing again is not an error and must not overwrite the instant
-            // that records when it actually happened.
+            // Already terminal: a durable TERMINAL NO-OP. `killed_at` is not overwritten -- it
+            // records when the kill actually happened -- and the replay row makes this operation id
+            // idempotent from here on, exactly like a kill that did change something.
+            await client.query(INSERT_REPLAY, [
+              input.operationId,
+              instance.monitorInstanceId,
+              'KILL_MONITOR',
+              digest,
+              instance.revision,
+              instance.status,
+              instance.updatedAt,
+            ]);
             return toOperationResult(instance, false);
           }
-          assertJao5ExpectedRevision(instance, input.expectedRevision);
 
           const killed = await client.query<InstanceRow>(KILL_INSTANCE, [
             input.monitorInstanceId,
@@ -715,11 +783,18 @@ export function createJao5PostgresStore(pool: DatabasePool): Jao5AmbientStore {
       monitorInstanceId: string,
       windowStartEpoch: number,
     ): Promise<number> {
+      // Parsed BEFORE a connection is borrowed. Parameterized SQL makes a malformed id safe,
+      // which is not the same as the adapter having checked its own domain boundary.
+      const id = jao5MonitorInstanceIdSchema.safeParse(monitorInstanceId);
+      const window = jao5WindowStartSchema.safeParse(windowStartEpoch);
+      if (!id.success || !window.success) {
+        throw new Jao5AmbientError('REQUEST_INVALID');
+      }
       try {
         return await withClient(pool, async (client) => {
           const found = await client.query<{ readonly investigations_claimed: number }>(
             COUNT_BUDGET_WINDOW,
-            [monitorInstanceId, windowStartEpoch],
+            [id.data, window.data],
           );
           return found.rows[0]?.investigations_claimed ?? 0;
         });
@@ -729,35 +804,14 @@ export function createJao5PostgresStore(pool: DatabasePool): Jao5AmbientStore {
     },
 
     async listAmbientRuns(monitorInstanceId: string): Promise<readonly Jao5AmbientRunRecord[]> {
+      const id = jao5MonitorInstanceIdSchema.safeParse(monitorInstanceId);
+      if (!id.success) {
+        throw new Jao5AmbientError('REQUEST_INVALID');
+      }
       try {
         return await withClient(pool, async (client) => {
-          const found = await client.query<RunRow>(SELECT_RUNS, [monitorInstanceId]);
-          return Object.freeze(
-            found.rows.map((row) =>
-              Object.freeze({
-                ambientRunId: row.ambient_run_id,
-                monitorInstanceId: row.monitor_instance_id,
-                triggerKind:
-                  row.trigger_kind === 'APPROVED_EVENT' ? 'APPROVED_EVENT' : 'SCHEDULED_INTERVAL',
-                triggerRef: row.trigger_ref,
-                dedupeKey: row.dedupe_key,
-                scheduledSlot: toSlot(row.scheduled_slot),
-                eventId: row.event_id,
-                jao1RunId: row.jao1_run_id,
-                status: row.status === 'FINALIZED' ? 'FINALIZED' : 'CLAIMED',
-                outcome:
-                  row.outcome === 'NO_ANOMALY' ||
-                  row.outcome === 'ATTENTION_CREATED' ||
-                  row.outcome === 'REFUSED'
-                    ? row.outcome
-                    : null,
-                refusalCode: null,
-                attentionPresent: row.attention_present,
-                capabilityCalls: row.capability_calls,
-                modelCalls: row.model_calls,
-              } satisfies Jao5AmbientRunRecord),
-            ),
-          );
+          const found = await client.query<RunRow>(SELECT_RUNS, [id.data]);
+          return Object.freeze(found.rows.map(toRunRecord));
         });
       } catch (error) {
         throw classifyJao5DatabaseError(error);

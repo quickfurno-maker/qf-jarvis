@@ -12,6 +12,8 @@
  *
  * Pure apart from the store it is handed: no clock, no network, no filesystem, no environment.
  */
+import type { DatabasePool } from '@qf-jarvis/event-backbone';
+
 import {
   Jao5AmbientError,
   type Jao5Clock,
@@ -25,17 +27,50 @@ import {
   jao5DefinitionDigest,
   type Jao5MonitorRegistry,
 } from './monitor-registry.js';
+import { createJao5PostgresStore } from './postgres-store.js';
 import type { Jao5AmbientStore } from './store-port.js';
 
 /**
- * What a JAO-5 operation needs. Outer boundaries only.
+ * What a PUBLIC JAO-5 operation needs. Trusted infrastructure boundaries only.
  *
- * A store, a clock, and somewhere to send telemetry. There is no policy callback, no registry
- * override and no investigator: a caller supplies the durable substrate, not the governance.
+ * ### Why this is a `DatabasePool` and not a `Jao5AmbientStore`
+ *
+ * It used to be a store, and owner review found the bypass. `Jao5AmbientStore` exposes
+ * `claimAmbientRun`, which takes the trigger kind, trigger reference, dedupe key, scheduled slot,
+ * event id, definition digest, budget window and per-window limit as CALLER-SUPPLIED VALUES. The
+ * adapter re-checks them against the locked row -- but it cannot reconstruct canonical monitor
+ * policy, so it cannot know whether the slot was actually due, whether the event matched the
+ * monitor's own type and scope, or whether the budget numbers are the reviewed ones.
+ *
+ * So a public caller holding a store could skip `runJao5AmbientCycle` entirely and claim with
+ * whatever policy it liked -- or supply a store implementation of its own. Either defeats the
+ * statement that the public surface IS the ambient governance boundary.
+ *
+ * A `DatabasePool` is the trusted persistence infrastructure boundary, the way `ModelGateway` is
+ * the trusted inference boundary. The canonical store is constructed from it HERE, and the raw
+ * store, claim and finalize contracts are not exported from any barrel.
  */
 export interface Jao5MonitorOperationDependencies {
+  readonly pool: DatabasePool;
+  readonly clock: Jao5Clock;
+}
+
+/**
+ * The INTERNAL variant. Trusted, source-level, and not public.
+ *
+ * Adapter implementations and direct-path tests need to exercise the raw store; the public surface
+ * must not be able to reach it. Exported from this module and from no barrel.
+ */
+export interface Jao5InternalMonitorOperationDependencies {
   readonly store: Jao5AmbientStore;
   readonly clock: Jao5Clock;
+}
+
+/** The canonical store, built from the pool. Not a default a caller could displace. */
+function canonicalStore(
+  dependencies: Jao5MonitorOperationDependencies,
+): Jao5InternalMonitorOperationDependencies {
+  return { store: createJao5PostgresStore(dependencies.pool), clock: dependencies.clock };
 }
 
 /**
@@ -49,6 +84,14 @@ export interface Jao5MonitorOperationDependencies {
 export async function enrollJao5Monitor(
   input: Jao5EnrollMonitorInput,
   dependencies: Jao5MonitorOperationDependencies,
+): Promise<Jao5OperationResult> {
+  return enrollJao5MonitorInternal(input, canonicalStore(dependencies));
+}
+
+/** The internal enrollment. Same governance; a trusted caller may supply the store. */
+export async function enrollJao5MonitorInternal(
+  input: Jao5EnrollMonitorInput,
+  dependencies: Jao5InternalMonitorOperationDependencies,
 ): Promise<Jao5OperationResult> {
   const registry = createJao5MonitorRegistry();
   const definition = registry.lookup(input.monitorId, input.monitorVersion);
@@ -72,6 +115,14 @@ export async function killJao5Monitor(
   input: Jao5KillMonitorInput,
   dependencies: Jao5MonitorOperationDependencies,
 ): Promise<Jao5OperationResult> {
+  return killJao5MonitorInternal(input, canonicalStore(dependencies));
+}
+
+/** The internal kill. Same governance; a trusted caller may supply the store. */
+export async function killJao5MonitorInternal(
+  input: Jao5KillMonitorInput,
+  dependencies: Jao5InternalMonitorOperationDependencies,
+): Promise<Jao5OperationResult> {
   return dependencies.store.killMonitor(input, dependencies.clock.nowMs());
 }
 
@@ -80,7 +131,7 @@ export async function readJao5MonitorInstance(
   monitorInstanceId: string,
   dependencies: Jao5MonitorOperationDependencies,
 ): Promise<Jao5MonitorInstance> {
-  return dependencies.store.readMonitorInstance(monitorInstanceId);
+  return canonicalStore(dependencies).store.readMonitorInstance(monitorInstanceId);
 }
 
 /**

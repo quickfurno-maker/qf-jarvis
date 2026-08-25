@@ -17,6 +17,15 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import * as jao5 from '../jao/controlled-ambient-operations/index.js';
+import * as jao5Public from '../jao/controlled-ambient-operations/public.js';
+// By DIRECT MODULE PATH, which is the only way the raw persistence seam can be reached at all.
+// That these imports resolve while the barrel keys below do not IS the boundary being asserted.
+import { createJao5PostgresStore } from '../jao/controlled-ambient-operations/postgres-store.js';
+import {
+  enrollJao5MonitorInternal,
+  killJao5MonitorInternal,
+} from '../jao/controlled-ambient-operations/operations.js';
+import type { Jao5AmbientStore } from '../jao/controlled-ambient-operations/store-port.js';
 import {
   JAO5_AMBIENT_BOUNDS,
   JAO5_EVENT_HEALTH_MONITOR,
@@ -589,5 +598,261 @@ describe('JAO-5 controlled ambient operations', () => {
         expect(code, `${barrel} -> ${forbidden}`).not.toContain(forbidden);
       }
     }
+  });
+
+  /**
+   * ------------------------------------------------------------------------------------------
+   * FINDING 1: the public surface pins its own persistence composition.
+   * ------------------------------------------------------------------------------------------
+   *
+   * The reviewed public surface took a `Jao5AmbientStore`. That is an injection point, and JAO-4
+   * taught what an injection point on a public surface becomes.
+   *
+   * The store is not a passive substrate. `claimAmbientRun` receives the trigger kind, trigger
+   * reference, dedupe key, scheduled slot, event id, definition digest, budget window and
+   * per-window limit AS CALLER-SUPPLIED VALUES. The adapter re-checks each against the locked row,
+   * but it cannot reconstruct canonical monitor policy -- so it cannot know whether the slot was
+   * genuinely due, whether the event matched the monitor's own type and scope, or whether those
+   * budget numbers are the reviewed ones. A public caller holding a store could therefore skip
+   * `runJao5AmbientCycle` entirely and claim under bounds of its own choosing, or hand in a store
+   * implementation that recorded whatever it liked.
+   *
+   * The fix is composition pinning, not a brand: the public surface takes a `DatabasePool` -- the
+   * trusted persistence INFRASTRUCTURE boundary, as `ModelGateway` is the trusted inference
+   * boundary -- and constructs the canonical store itself. There is no parameter left to displace.
+   */
+  it('F1.1 gives the public cycle no store implementation to override', () => {
+    const source = codeOnly(fs.readFileSync(path.join(jao5Dir(), 'ambient-cycle.ts'), 'utf8'));
+    // The PUBLIC dependency interface names a pool and never a store.
+    const publicDeps = /export interface Jao5AmbientDependencies \{[\s\S]*?\n\}/u.exec(source);
+    expect(publicDeps).not.toBeNull();
+    const declared = publicDeps?.[0] ?? '';
+    expect(declared).toContain('readonly pool: DatabasePool;');
+    expect(declared).not.toContain('Jao5AmbientStore');
+    expect(declared).not.toContain('investigate');
+    expect(declared).not.toContain('registry');
+  });
+
+  it('F1.2 gives the public monitor operations no store implementation to override', () => {
+    const source = codeOnly(fs.readFileSync(path.join(jao5Dir(), 'operations.ts'), 'utf8'));
+    const publicDeps = /export interface Jao5MonitorOperationDependencies \{[\s\S]*?\n\}/u.exec(
+      source,
+    );
+    expect(publicDeps).not.toBeNull();
+    const declared = publicDeps?.[0] ?? '';
+    expect(declared).toContain('readonly pool: DatabasePool;');
+    expect(declared).not.toContain('Jao5AmbientStore');
+  });
+
+  it('F1.3 keeps every raw persistence type off both barrels', () => {
+    const exported = Object.keys(jao5);
+    const publicExported = Object.keys(jao5Public);
+    const root = jao5Dir();
+    for (const forbidden of [
+      'Jao5AmbientStore',
+      'Jao5Claim',
+      'Jao5ClaimRequest',
+      'Jao5FinalizeRequest',
+      'Jao5InternalMonitorOperationDependencies',
+      'enrollJao5MonitorInternal',
+      'killJao5MonitorInternal',
+    ]) {
+      // Types erase at runtime, so the barrel KEYS cannot see them -- the source scan is what
+      // actually proves a type-only re-export is absent.
+      expect(exported, forbidden).not.toContain(forbidden);
+      expect(publicExported, forbidden).not.toContain(forbidden);
+      // As a WHOLE IDENTIFIER. A bare substring scan flags `assertJao5Claimable` for containing
+      // `Jao5Claim`, and a scan that cries wolf is one somebody eventually weakens.
+      const identifier = new RegExp(`\\b${forbidden}\\b`, 'u');
+      for (const barrel of ['public.ts', 'index.ts']) {
+        const code = codeOnly(fs.readFileSync(path.join(root, barrel), 'utf8'));
+        expect(identifier.test(code), `${barrel} -> ${forbidden}`).toBe(false);
+      }
+    }
+  });
+
+  it('F1.4 keeps the store CONSTRUCTOR off both barrels', () => {
+    const root = jao5Dir();
+    for (const forbidden of ['createJao5PostgresStore', 'classifyJao5DatabaseError']) {
+      expect(Object.keys(jao5), forbidden).not.toContain(forbidden);
+      expect(Object.keys(jao5Public), forbidden).not.toContain(forbidden);
+      for (const barrel of ['public.ts', 'index.ts']) {
+        const code = codeOnly(fs.readFileSync(path.join(root, barrel), 'utf8'));
+        expect(code, `${barrel} -> ${forbidden}`).not.toContain(forbidden);
+      }
+    }
+    // The read-only audit record IS public: it is strictly decoded and cannot write anything.
+    const publicSource = codeOnly(fs.readFileSync(path.join(root, 'public.ts'), 'utf8'));
+    expect(publicSource).toContain('Jao5AmbientRunRecord');
+  });
+
+  it('F1.5 has the public cycle construct the canonical store from the pool', () => {
+    const source = codeOnly(fs.readFileSync(path.join(jao5Dir(), 'ambient-cycle.ts'), 'utf8'));
+    // Constructed from this module's own import, not read off the dependency object.
+    expect(source).toContain('store: createJao5PostgresStore(dependencies.pool)');
+    // And never defaulted, which is only a pin until somebody passes a value.
+    expect(source).not.toContain('dependencies.store ??');
+    expect(source).not.toContain('store: dependencies.store');
+  });
+
+  it('F1.6 has every public monitor operation go through the canonical pool-backed store', () => {
+    const source = codeOnly(fs.readFileSync(path.join(jao5Dir(), 'operations.ts'), 'utf8'));
+    expect(source).toContain('return { store: createJao5PostgresStore(dependencies.pool)');
+    // Each public entry point delegates through `canonicalStore`, so none of them can be handed one.
+    for (const call of [
+      'return enrollJao5MonitorInternal(input, canonicalStore(dependencies));',
+      'return killJao5MonitorInternal(input, canonicalStore(dependencies));',
+      'return canonicalStore(dependencies).store.readMonitorInstance(monitorInstanceId);',
+    ]) {
+      expect(source, call).toContain(call);
+    }
+  });
+
+  it('F1.7 still lets a DIRECT-PATH caller compose the raw store, which is what the seam is for', () => {
+    // These are the internal seams, imported by module path at the top of this file. Their being
+    // reachable HERE and unreachable through the barrel is precisely the boundary.
+    expect(typeof createJao5PostgresStore).toBe('function');
+    expect(typeof enrollJao5MonitorInternal).toBe('function');
+    expect(typeof killJao5MonitorInternal).toBe('function');
+    expect(typeof jao5.runJao5AmbientCycle).toBe('function');
+  });
+
+  it('F1.8 cannot have its canonical persistence replaced by a hostile store forced through a cast', async () => {
+    // THE BEHAVIOURAL PROOF, and the one that matters: a type-level guarantee is stripped by the
+    // test compiler, so structure alone would not catch a regression here.
+    let hostileCalls = 0;
+    const hostile: Jao5AmbientStore = {
+      enrollMonitor: async () => {
+        hostileCalls += 1;
+        await Promise.resolve();
+        throw new Error('unreachable');
+      },
+      readMonitorInstance: async () => {
+        hostileCalls += 1;
+        await Promise.resolve();
+        throw new Error('unreachable');
+      },
+      killMonitor: async () => {
+        hostileCalls += 1;
+        await Promise.resolve();
+        throw new Error('unreachable');
+      },
+      claimAmbientRun: async () => {
+        hostileCalls += 1;
+        await Promise.resolve();
+        throw new Error('unreachable');
+      },
+      finalizeAmbientRun: async () => {
+        hostileCalls += 1;
+        await Promise.resolve();
+      },
+      countClaimedInWindow: async () => {
+        hostileCalls += 1;
+        await Promise.resolve();
+        return 0;
+      },
+      listAmbientRuns: async () => {
+        hostileCalls += 1;
+        await Promise.resolve();
+        return [];
+      },
+    };
+
+    // A pool that cannot connect. If the hostile store were reachable, the cycle would succeed
+    // through it; because the canonical store is built from THIS pool, the cycle can only refuse.
+    let poolUses = 0;
+    const deadPool = {
+      connect: async (): Promise<never> => {
+        poolUses += 1;
+        await Promise.resolve();
+        throw new Error('pool is not connected');
+      },
+      end: async (): Promise<void> => Promise.resolve(),
+      query: async (): Promise<never> => {
+        poolUses += 1;
+        await Promise.resolve();
+        throw new Error('pool is not connected');
+      },
+    };
+
+    const smuggled = {
+      pool: deadPool,
+      store: hostile,
+      gateway: { invoke: async (): Promise<never> => Promise.reject(new Error('unreachable')) },
+      clock: { nowMs: (): number => T0 },
+      investigate: async (): Promise<never> => Promise.reject(new Error('unreachable')),
+    } as unknown as Parameters<typeof jao5.runJao5AmbientCycle>[1];
+
+    const result = await jao5.runJao5AmbientCycle(
+      {
+        cycleId: 'jao5.cycle.pinning',
+        runId: 'jao5.run.pinning',
+        mode: 'SHADOW',
+        monitorInstanceIds: ['jao5.instance.pinning'],
+        snapshot: { any: 'value' },
+      },
+      smuggled,
+    );
+
+    // THE MEASUREMENT. The hostile store was never consulted; the canonical one was built and used.
+    expect(hostileCalls).toBe(0);
+    expect(poolUses).toBeGreaterThan(0);
+    expect(result.claimsMade).toBe(0);
+    expect(result.runs[0]?.refusalReason).toBe('STORE_FAILED');
+    expect(result.runs[0]?.ambientRunId).toBeNull();
+  });
+
+  it('F1.9 shows why the seam must stay internal: a raw claim carries its own policy numbers', () => {
+    // `claimAmbientRun`'s request is where the bypass lived. Every one of these fields is supplied
+    // BY THE CALLER, and the adapter cannot reconstruct canonical policy to second-guess them.
+    const port = codeOnly(fs.readFileSync(path.join(jao5Dir(), 'store-port.ts'), 'utf8'));
+    const request = /export interface Jao5ClaimRequest \{[\s\S]*?\n\}/u.exec(port);
+    expect(request).not.toBeNull();
+    const declared = request?.[0] ?? '';
+    for (const callerSupplied of [
+      'triggerKind',
+      'triggerRef',
+      'dedupeKey',
+      'scheduledSlot',
+      'eventId',
+      'definitionDigest',
+      'budgetWindowSeconds',
+      'maxInvestigationsPerWindow',
+    ]) {
+      expect(declared, callerSupplied).toContain(callerSupplied);
+    }
+    // Which is exactly why that interface is not on a barrel.
+    for (const barrel of ['public.ts', 'index.ts']) {
+      const code = codeOnly(fs.readFileSync(path.join(jao5Dir(), barrel), 'utf8'));
+      expect(/\bJao5ClaimRequest\b/u.test(code), barrel).toBe(false);
+    }
+  });
+
+  it('F4.6 keeps surfaced attention out of telemetry, which stays content-free', () => {
+    // Finding 4 surfaced the attention object IN MEMORY. Telemetry must still carry only the flag,
+    // or "surfacing" would have quietly become "persisting and emitting".
+    const source = codeOnly(fs.readFileSync(path.join(jao5Dir(), 'ambient-cycle.ts'), 'utf8'));
+    const emitted = /dependencies\.telemetry\.record\(\{[\s\S]*?\n {4}\}\);/u.exec(source);
+    expect(emitted).not.toBeNull();
+    const record = emitted?.[0] ?? '';
+    // A COUNT of attention created, and nothing that could carry its body.
+    expect(record).toContain('attentionCreated: result.attentionCreated,');
+    for (const forbidden of ['attention:', 'title', 'context', 'recommendedNextStep', 'snapshot']) {
+      expect(record, forbidden).not.toContain(forbidden);
+    }
+
+    // And the telemetry contract itself has no field an attention body could travel in.
+    const contract = codeOnly(fs.readFileSync(path.join(jao5Dir(), 'contracts.ts'), 'utf8'));
+    const event = /jao5TelemetryEventSchema = z[\s\S]*?\n\}\);/u.exec(contract);
+    expect(event).not.toBeNull();
+    for (const forbidden of ['title', 'context', 'recommendedNextStep', 'attention:']) {
+      expect(event?.[0] ?? '', forbidden).not.toContain(forbidden);
+    }
+
+    // The store is never handed the attention either -- only the boolean.
+    const port = codeOnly(fs.readFileSync(path.join(jao5Dir(), 'store-port.ts'), 'utf8'));
+    const finalize = /export interface Jao5FinalizeRequest \{[\s\S]*?\n\}/u.exec(port);
+    expect(finalize?.[0] ?? '').toContain('attentionPresent');
+    expect(finalize?.[0] ?? '').not.toContain('attention:');
   });
 });

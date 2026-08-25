@@ -160,7 +160,7 @@ export async function countJao5Rows(pool: DatabasePool, table: string): Promise<
 /** Rows for one monitor instance, so "exactly one claim" is counted rather than inferred. */
 export async function countJao5RowsFor(
   pool: DatabasePool,
-  table: 'ambient_investigation_run' | 'ambient_budget_window',
+  table: 'ambient_investigation_run' | 'ambient_budget_window' | 'ambient_operation_replay',
   monitorInstanceId: string,
 ): Promise<number> {
   return withClient(pool, async (client) => {
