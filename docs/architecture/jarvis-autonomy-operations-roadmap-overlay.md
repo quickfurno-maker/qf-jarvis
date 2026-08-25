@@ -8,6 +8,13 @@ one durable operational-memory composition, one virtual tool sandbox and one dur
 governor now exist in `apps/worker/src/jao/`, and none of them is imported or started by any
 production entry point.
 
+**A JAO-6 implementation proof is PROPOSED IN THIS BRANCH and is not merged.** It adds one governed
+business-action proposal composition over the EXISTING recommendation and approval runtimes. It
+submits nothing to Core, creates no approval decision and no execution intent, calls no n8n,
+provider or channel, persists nothing, and is imported by no production entry point. This paragraph
+is written to be true on the branch; it must be updated to say "merged" only after the pull request
+actually merges.
+
 JAO-3 adds a PostgreSQL schema and adapter, so this document no longer claims there is no memory
 store and no database access. Both exist as source. **The JAO-3 schema is a LOCAL asset applied only
 to a disposable test database; it is NOT in managed migration history, has been applied to no
@@ -249,6 +256,45 @@ specialist delegation. The JAO-5 schema is LOCAL and is not managed migration hi
 
 Permit the supervisor to construct proposals that enter the **existing** recommendation -> Core/human authorization -> execution-intent path. No parallel execution system is introduced. Communication remains subject to execution-time consent/suppression eligibility.
 
+**Implementation proof PROPOSED in `qfj-jao6-governed-business-action-proposals`, not merged**
+([ADR-0120](../decisions/ADR-0120-jao6-governed-business-action-proposals.md)). Exact first-proof
+boundaries:
+
+- The pipeline is `bounded candidate + static reviewed policy -> canonical RecommendationV1 ->
+  canonical action fingerprint binding -> canonical powerless ApprovalRequestV1 -> STOP`.
+- `@qf-jarvis/recommendation-runtime` and `@qf-jarvis/approval-runtime` are REUSED. No second
+  recommendation format, approval-request format, fingerprint algorithm or execution path is
+  created.
+- One ACTIVE proposal class, `jao6.vendor-follow-up` v1: subject `vendor`, recommendation type
+  `vendor.follow-up`, action `schedule.follow-up` v1, risk
+  `client-or-vendor-facing-communication`, required approval `authorized-team-human`, lifetime
+  ceiling 3 days. One `PLANNED` class is declared and refused before either runtime is invoked.
+- **Risk and required approval come from the static reviewed policy only.** The request schema is
+  strict and has no field for either, nor for action type, contract version, recommendation type,
+  producing agent or any identity. Confidence is data and touches no gate at any value.
+- The action binding is re-proved against a recomputed canonical fingerprint, and the approval
+  request must name the same recommendation, action, fingerprint, risk and authority. Any mismatch
+  refuses and returns no artifact.
+- **Public composition is pinned by having no dependency parameter at all.** The internal seam is
+  exported from no barrel.
+- **The canonical policy and registry are PRIVATE governance state.** No barrel exports a policy
+  object, the registry creator, a registry type or a parameter schema; policy records are deeply
+  immutable by construction; introspection returns a fresh, detached, primitive-only copy.
+- **The producer is Jarvis, not a specialist.** `producingAgent` is `jarvis` and
+  `producingAgentVersion` is `jarvis.jao6.v1`, stamped by the composition. There is no policy field
+  for a producer, so no class can claim a specialist it never called; specialist calls stay zero.
+- **Caller free text never enters `ProposedAction.parameters`.** Action parameters are closed
+  structured values only, so changing review prose cannot change the action or its fingerprint.
+- **The result is a discriminated union over canonical artifacts**, enforced at compile time and by
+  a runtime schema, so a refusal cannot carry an artifact and a ready proposal cannot carry a
+  refusal code.
+- **A proposal is not send permission.** Consent, opt-out, suppression and STOP eligibility are
+  re-read at execution time by Core and the communications path. JAO-6 resolves no recipient, reads
+  no consent state and caches none.
+- Zero Core calls, zero approval decisions, zero execution intents, zero n8n executions, zero
+  channel sends, zero provider calls, zero persistence, zero JAO-3 writes, zero JAO-4 tool calls,
+  zero JAO-5 scheduler activation, zero new third-party dependencies.
+
 ### JAO-7 - Advanced Governed Autonomy
 
 Policy-bounded multi-agent planning, long-running operations, capacity optimization, incident-remediation proposals, continuous evaluation, and carefully expanded reversible autonomy.
@@ -272,7 +318,12 @@ Implementation is not activation. Shadow output authorizes nothing. Passing eval
 **Current posture:** JAO-0 governance adopted. **JAO-1 through JAO-5 merged as OFFLINE,
 DEFAULT-OFF, SHADOW proofs** -- present in the worker composition, activated by nothing; the JAO-3
 and JAO-5 schemas are applied to no managed database, JAO-4 reaches no host, network or command, and
-JAO-5 starts no scheduler. **JAO-6 and JAO-7 remain PLANNED / DISABLED.**
+JAO-5 starts no scheduler.
+
+**A JAO-6 OFFLINE, DEFAULT-OFF, SHADOW proof is PROPOSED and awaiting owner review; it is NOT
+merged and NOT activated.** It reaches no Core, n8n, provider or channel, creates no approval
+decision and no execution intent, and is imported by no production entry point. **JAO-7 remains
+PLANNED / DISABLED.**
 
 ## JAO-0 exit gate
 

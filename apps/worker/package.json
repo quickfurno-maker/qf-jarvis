@@ -19,9 +19,12 @@
   "dependencies": {
     "@mastra/core": "1.61.0",
     "@qf-jarvis/agent-runtime": "workspace:*",
+    "@qf-jarvis/approval-runtime": "workspace:*",
+    "@qf-jarvis/contracts": "workspace:*",
     "@qf-jarvis/control-plane-read-contract": "workspace:*",
     "@qf-jarvis/event-backbone": "workspace:*",
     "@qf-jarvis/model-gateway": "workspace:*",
+    "@qf-jarvis/recommendation-runtime": "workspace:*",
     "@qf-jarvis/riya-agent": "workspace:*",
     "zod": "4.4.3"
   }

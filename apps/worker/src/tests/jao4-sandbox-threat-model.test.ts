@@ -689,17 +689,38 @@ describe('JAO-4 threat model', () => {
     const manifest = JSON.parse(
       fs.readFileSync(path.resolve(jao4Dir(), '..', '..', '..', 'package.json'), 'utf8'),
     ) as { dependencies?: Record<string, string> };
-    // Exactly the dependencies JAO-1 through JAO-3 already required.
+    // THE SUPPLY-CHAIN INVARIANT, stated directly rather than implied by a snapshot.
+    //
+    // This used to pin the whole dependency list, workspace links included, which made it a
+    // snapshot every later slice had to edit -- and a spec that has to be edited routinely is a
+    // spec that stops being read. What JAO-4 actually claims is that its sandbox added no
+    // third-party package, so that is what is asserted: the third-party set is exactly these two,
+    // and `@mastra/core` is still the exact pin.
     expect(manifest.dependencies?.['@mastra/core']).toBe('1.61.0');
-    expect(Object.keys(manifest.dependencies ?? {}).sort()).toStrictEqual([
-      '@mastra/core',
+    const thirdParty = Object.keys(manifest.dependencies ?? {})
+      .filter((name) => !name.startsWith('@qf-jarvis/'))
+      .sort();
+    expect(thirdParty).toStrictEqual(['@mastra/core', 'zod']);
+
+    // Workspace links are reviewed, not arbitrary: every one resolves inside this repository and
+    // is declared as a workspace protocol, so none of them can be a registry package in disguise.
+    const workspace = Object.entries(manifest.dependencies ?? {}).filter(([name]) =>
+      name.startsWith('@qf-jarvis/'),
+    );
+    expect(workspace.length).toBeGreaterThan(0);
+    for (const [name, specifier] of workspace) {
+      expect(specifier, name).toBe('workspace:*');
+    }
+    // JAO-1 through JAO-4's own links are still present and unchanged.
+    for (const required of [
       '@qf-jarvis/agent-runtime',
       '@qf-jarvis/control-plane-read-contract',
       '@qf-jarvis/event-backbone',
       '@qf-jarvis/model-gateway',
       '@qf-jarvis/riya-agent',
-      'zod',
-    ]);
+    ]) {
+      expect(Object.keys(manifest.dependencies ?? {}), required).toContain(required);
+    }
     // No sandbox, container, browser, shell, MCP or provider package was added for this slice.
     for (const forbidden of [
       'execa',
