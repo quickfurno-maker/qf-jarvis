@@ -17,6 +17,10 @@
     "start": "node ./dist/index.js"
   },
   "dependencies": {
-    "@qf-jarvis/event-backbone": "workspace:*"
+    "@mastra/core": "1.61.0",
+    "@qf-jarvis/control-plane-read-contract": "workspace:*",
+    "@qf-jarvis/event-backbone": "workspace:*",
+    "@qf-jarvis/model-gateway": "workspace:*",
+    "zod": "4.4.3"
   }
 }
