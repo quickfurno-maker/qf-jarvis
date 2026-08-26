@@ -1060,3 +1060,178 @@ describe('the candidate’s stated instants are consistent with one another', ()
     if (later.ok) expect(later.candidate.preparedAt).toBe(LATER);
   });
 });
+
+// ===========================================================================
+// Canonical order is by the INSTANT, not by the spelling of the instant.
+// ===========================================================================
+
+/**
+ * The canonical UTC grammar makes milliseconds optional, so one moment has more than one canonical
+ * spelling — and lexicographic order is not chronological order across those spellings. The
+ * character after the seconds is `.` in one form and `Z` in the other, and `.` sorts first, so a raw
+ * string comparison puts `09:00:00.500Z` before `09:00:00Z`: half a second earlier than a moment it
+ * actually follows.
+ *
+ * Every assertion below fails under a string comparator and passes under an instant comparator.
+ */
+/**
+ * Widened to `string` rather than left as singleton literal types.
+ *
+ * Two literal types with no overlap are a comparison TypeScript answers without running anything,
+ * and the point of the assertions below is what the VALUES do at runtime. Going through this
+ * function says that in one place instead of annotating three.
+ */
+function canonicalInstant(value: string): string {
+  return value;
+}
+
+const WHOLE_SECOND = canonicalInstant('2026-08-26T09:00:00Z');
+const HALF_SECOND_LATER = canonicalInstant('2026-08-26T09:00:00.500Z');
+const SAME_INSTANT_WITH_MILLIS = canonicalInstant('2026-08-26T09:00:00.000Z');
+
+function appendAll(turns: readonly InstagramInboundObservation[]): InstagramConversationSnapshot {
+  let snapshot = conversation();
+  for (const turn of turns) {
+    const result = appendInstagramInboundObservation(snapshot, turn);
+    if (!result.ok) throw new Error(`append refused: ${result.refusal}`);
+    snapshot = result.conversation;
+  }
+  return snapshot;
+}
+
+describe('canonical order follows the UTC instant, whatever precision it was written with', () => {
+  it('proves the two orderings genuinely disagree', () => {
+    // Stated as a fact about the data rather than left as an assumption about string collation, so
+    // that a reader can see the tests below are not testing nothing.
+    expect(WHOLE_SECOND < HALF_SECOND_LATER).toBe(false);
+    expect(Date.parse(WHOLE_SECOND) < Date.parse(HALF_SECOND_LATER)).toBe(true);
+    expect(Date.parse(WHOLE_SECOND)).toBe(Date.parse(SAME_INSTANT_WITH_MILLIS));
+    expect(WHOLE_SECOND === SAME_INSTANT_WITH_MILLIS).toBe(false);
+    // Both spellings are canonical, which is why this matters at all.
+    for (const instant of [WHOLE_SECOND, HALF_SECOND_LATER, SAME_INSTANT_WITH_MILLIS]) {
+      expect(
+        parseInstagramInboundObservation({ ...bodyInput('Hello'), observedAt: instant }).ok,
+        instant,
+      ).toBe(true);
+    }
+  });
+
+  it('builds chronological order from either arrival order', () => {
+    const earlier = inbound({ instagramMessageRef: 'ig.message.a', observedAt: WHOLE_SECOND });
+    const later = inbound({ instagramMessageRef: 'ig.message.b', observedAt: HALF_SECOND_LATER });
+
+    // Later message first: the builder must still put the earlier instant first.
+    expect(
+      appendAll([later, earlier]).inboundTurns.map((t) => t.instagramMessageRef),
+    ).toStrictEqual(['ig.message.a', 'ig.message.b']);
+    // And in arrival order, unchanged.
+    expect(
+      appendAll([earlier, later]).inboundTurns.map((t) => t.instagramMessageRef),
+    ).toStrictEqual(['ig.message.a', 'ig.message.b']);
+  });
+
+  it('certifies the chronological arrangement and refuses the reversed one', () => {
+    const earlier = inbound({ instagramMessageRef: 'ig.message.a', observedAt: WHOLE_SECOND });
+    const later = inbound({ instagramMessageRef: 'ig.message.b', observedAt: HALF_SECOND_LATER });
+
+    const chronological = forgedSnapshot([earlier, later]);
+    expect(instagramConversationSnapshotSchema.safeParse(chronological).success).toBe(true);
+    expect(parseInstagramConversation(chronological)).toBeDefined();
+
+    // A raw string comparator would have accepted exactly this one and refused the one above.
+    const reversed = forgedSnapshot([later, earlier]);
+    expect(instagramConversationSnapshotSchema.safeParse(reversed).success).toBe(false);
+    expect(parseInstagramConversation(reversed)).toBeUndefined();
+  });
+
+  it('treats two spellings of one instant as one instant, and ties on the message reference', () => {
+    // `...00Z` and `...00.000Z` are the same moment, so nothing about the timestamps decides the
+    // order between them. The reference does, and only the reference.
+    const wholeSecondZ = inbound({ instagramMessageRef: 'ig.message.z', observedAt: WHOLE_SECOND });
+    const millisA = inbound({
+      instagramMessageRef: 'ig.message.a',
+      observedAt: SAME_INSTANT_WITH_MILLIS,
+    });
+
+    for (const arrival of [
+      [wholeSecondZ, millisA],
+      [millisA, wholeSecondZ],
+    ]) {
+      expect(appendAll(arrival).inboundTurns.map((t) => t.instagramMessageRef)).toStrictEqual([
+        'ig.message.a',
+        'ig.message.z',
+      ]);
+    }
+
+    expect(
+      instagramConversationSnapshotSchema.safeParse(forgedSnapshot([millisA, wholeSecondZ]))
+        .success,
+    ).toBe(true);
+    expect(
+      instagramConversationSnapshotSchema.safeParse(forgedSnapshot([wholeSecondZ, millisA]))
+        .success,
+    ).toBe(false);
+    expect(parseInstagramConversation(forgedSnapshot([millisA, wholeSecondZ]))).toBeDefined();
+    expect(parseInstagramConversation(forgedSnapshot([wholeSecondZ, millisA]))).toBeUndefined();
+
+    // THE OTHER DIRECTION, and the one that actually pins the rule.
+    //
+    // Above, the reference order and the spelling order happen to agree -- `ig.message.a` sorts
+    // first and so does `...00.000Z` -- so a comparator that consulted the spelling would have
+    // produced the same answer and gone unnoticed. Here they disagree: by reference the whole-second
+    // turn comes first, by spelling the millisecond one does. Only the reference may decide.
+    const wholeSecondA = inbound({
+      instagramMessageRef: 'ig.message.a',
+      observedAt: WHOLE_SECOND,
+    });
+    const millisZ = inbound({
+      instagramMessageRef: 'ig.message.z',
+      observedAt: SAME_INSTANT_WITH_MILLIS,
+    });
+    expect(millisZ.observedAt < wholeSecondA.observedAt).toBe(true);
+    expect(millisZ.instagramMessageRef < wholeSecondA.instagramMessageRef).toBe(false);
+
+    for (const arrival of [
+      [wholeSecondA, millisZ],
+      [millisZ, wholeSecondA],
+    ]) {
+      expect(appendAll(arrival).inboundTurns.map((t) => t.instagramMessageRef)).toStrictEqual([
+        'ig.message.a',
+        'ig.message.z',
+      ]);
+    }
+    expect(
+      instagramConversationSnapshotSchema.safeParse(forgedSnapshot([wholeSecondA, millisZ]))
+        .success,
+    ).toBe(true);
+    expect(
+      instagramConversationSnapshotSchema.safeParse(forgedSnapshot([millisZ, wholeSecondA]))
+        .success,
+    ).toBe(false);
+    expect(parseInstagramConversation(forgedSnapshot([wholeSecondA, millisZ]))).toBeDefined();
+    expect(parseInstagramConversation(forgedSnapshot([millisZ, wholeSecondA]))).toBeUndefined();
+  });
+
+  it('still refuses a repeated reference across equivalent timestamp spellings', () => {
+    // Uniqueness is a property of the reference, not of how its instant was written down.
+    const asSeconds = inbound({ instagramMessageRef: 'ig.message.a', observedAt: WHOLE_SECOND });
+    const asMillis = inbound({
+      instagramMessageRef: 'ig.message.a',
+      observedAt: SAME_INSTANT_WITH_MILLIS,
+    });
+
+    const appended = appendInstagramInboundObservation(appendAll([asSeconds]), asMillis);
+    expect(appended.ok).toBe(false);
+    if (!appended.ok) expect(appended.refusal).toBe('MESSAGE_DUPLICATE');
+
+    const forged = forgedSnapshot([asSeconds, asMillis]);
+    expect(instagramConversationSnapshotSchema.safeParse(forged).success).toBe(false);
+    expect(parseInstagramConversation(forged)).toBeUndefined();
+
+    // And across a genuinely different instant, which the ordering check alone would have admitted.
+    const later = inbound({ instagramMessageRef: 'ig.message.a', observedAt: HALF_SECOND_LATER });
+    expect(
+      instagramConversationSnapshotSchema.safeParse(forgedSnapshot([asSeconds, later])).success,
+    ).toBe(false);
+  });
+});

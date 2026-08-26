@@ -335,19 +335,48 @@ interface InstagramConversationBinding {
 }
 
 /**
+ * The UTC instant an `observedAt` REPRESENTS, in epoch milliseconds.
+ *
+ * `UTC_INSTANT` has already validated the string against a fixed grammar and round-tripped it, so
+ * this is not asking `Date.parse` to interpret arbitrary date syntax -- it is asking it to read one
+ * shape that has already been proved to be that shape. No clock is read.
+ */
+function canonicalInstantEpochMs(instant: string): number {
+  return Date.parse(instant);
+}
+
+/**
  * THE canonical order of two turns. Total, and the only definition of that order in this file.
  *
  * Returns -1, 0 or +1 rather than a boolean because it serves two callers with different questions:
  * the builder sorts with it, and the aggregate check below requires STRICTLY increasing pairs. Two
  * subtly different orderings -- one to sort by and one to validate against -- is exactly how a
  * builder and a parser come to disagree about what canonical means.
+ *
+ * ### Why the INSTANT is compared and not the string
+ *
+ * The canonical UTC grammar makes milliseconds OPTIONAL, so `2026-08-26T09:00:00Z` and
+ * `2026-08-26T09:00:00.000Z` are both canonical and both name the same moment. Lexicographic order
+ * is therefore not chronological order, and the two disagree in a way that is easy to miss: the
+ * character after the seconds is `.` in one form and `Z` in the other, and `.` sorts first. So a raw
+ * string comparison puts `09:00:00.500Z` BEFORE `09:00:00Z` -- half a second earlier than a moment
+ * it actually follows -- and treats two spellings of one instant as different times.
+ *
+ * The public contract says order is by `observedAt`, and `observedAt` is a UTC instant rather than a
+ * piece of formatting. So the instant is what is compared, and the message reference breaks a
+ * genuine tie: equivalent representations of one moment are ordered by reference alone.
+ *
+ * The builder and the parser agreeing with each other was never the whole property. They have to
+ * agree on the right answer.
  */
 function compareCanonicalTurnOrder(
   left: InstagramInboundObservation,
   right: InstagramInboundObservation,
 ): -1 | 0 | 1 {
-  if (left.observedAt < right.observedAt) return -1;
-  if (left.observedAt > right.observedAt) return 1;
+  const leftMs = canonicalInstantEpochMs(left.observedAt);
+  const rightMs = canonicalInstantEpochMs(right.observedAt);
+  if (leftMs < rightMs) return -1;
+  if (leftMs > rightMs) return 1;
   if (left.instagramMessageRef < right.instagramMessageRef) return -1;
   if (left.instagramMessageRef > right.instagramMessageRef) return 1;
   return 0;

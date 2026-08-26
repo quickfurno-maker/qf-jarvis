@@ -108,8 +108,13 @@ because provider redelivery is normal and counting one message twice makes a con
 than it was to a human reading the count. The snapshot holds at most
 `MAX_INSTAGRAM_CONVERSATION_TURNS` turns.
 
-**Ordering policy, chosen explicitly:** turns are held sorted by `observedAt`, then by
-`instagramMessageRef` to break ties. The alternative — strict append-order refusal — was rejected
+**Ordering policy, chosen explicitly:** turns are held sorted by the **semantic UTC instant** that
+`observedAt` represents, then by `instagramMessageRef` to break ties. The precision matters because
+the canonical grammar makes milliseconds optional, so one moment has more than one canonical
+spelling: `2026-08-26T09:00:00Z` and `2026-08-26T09:00:00.000Z` are the same instant and compare
+equal, ordered by reference alone. Lexicographic order is not chronological order across those
+spellings — the character after the seconds is `.` in one form and `Z` in the other, and `.` sorts
+first — so comparing the strings would place `09:00:00.500Z` before `09:00:00Z`. The alternative — strict append-order refusal — was rejected
 because provider events genuinely arrive out of order and refusing a late one would discard a real
 observation rather than record it. The consequence is stated rather than left implicit: **array
 position carries no chronological claim of its own.** What a reader may rely on is `observedAt`,
