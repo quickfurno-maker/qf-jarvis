@@ -2,9 +2,27 @@
 
 **Document status:** Canonical for the QuickFurno Vendor Growth Engine capability overlay. Adopted under [ADR-0085](../decisions/ADR-0085-qfj-p12-aarohi-vendor-growth-and-roadmap-reconciliation.md). Read with [qf-jarvis-roadmap-v3.md](./qf-jarvis-roadmap-v3.md), [agent-constitution.md](../governance/agent-constitution.md) and [authority-routing-data-access-matrix.md](../governance/authority-routing-data-access-matrix.md).
 
-**Runtime status: PLANNED / DISABLED. Nothing here is implemented.** There is no Aarohi runtime, no
-prospect store, no enrichment pipeline, no outreach, no channel, no credential, and no Instagram,
-WhatsApp, n8n or Meta integration in this repository. Production rollout remains **OFF**.
+**Runtime status: PLANNED / DISABLED.** There is no Aarohi runtime, no prospect store, no enrichment
+pipeline, no outreach, no provider or channel credential, no Meta API call, no Instagram transport, no
+WhatsApp integration, no n8n execution and no managed persistence in this repository. Production
+rollout remains **OFF**, and no package or application imports the Aarohi package at all.
+
+**Offline DOMAIN status.** The sentence above used to read "nothing here is implemented", and that
+stopped being true at AVG-1. What exists is contracts and pure functions over frozen values:
+
+- **AVG-0 through AVG-4 — implemented and merged** as offline domains
+  ([ADR-0085](../decisions/ADR-0085-qfj-p12-aarohi-vendor-growth-and-roadmap-reconciliation.md),
+  [ADR-0111](../decisions/ADR-0111-qfj-p12-avg2-aarohi-discovery-enrichment-domain.md),
+  [ADR-0112](../decisions/ADR-0112-qfj-p12-avg3-aarohi-scoring-outreach-eligibility-domain.md),
+  [ADR-0113](../decisions/ADR-0113-qfj-p12-avg4-aarohi-outreach-workspace-domain.md)).
+- **AVG-5 — implementation proof PROPOSED IN THIS BRANCH, and NOT MERGED**
+  ([ADR-0122](../decisions/ADR-0122-qfj-p12-avg5-aarohi-instagram-conversation-offline-domain.md)).
+  This line is written to be true on the branch; it must be updated to say "merged" only after the
+  pull request actually merges.
+- **AVG-6 through AVG-12 — planned and unimplemented.**
+
+Recording a capability is still not implementing one, and implementing an offline domain is still not
+activating anything.
 
 ---
 
@@ -121,6 +139,42 @@ execution path or rollout, and Aarohi remains **PLANNED / DISABLED**.
 Governed inbound/outbound conversation on Instagram. Delivery remains provider-side and execution
 remains n8n-side; Aarohi holds no provider credential and calls no Meta API. Consent and eligibility
 are Core's, revalidated at execution time.
+
+**The offline DOMAIN for this stage is PROPOSED in `qfj-avg5-instagram-conversation-integration` and
+is NOT merged**
+([ADR-0122](../decisions/ADR-0122-qfj-p12-avg5-aarohi-instagram-conversation-offline-domain.md)).
+Exact first-proof boundaries:
+
+- **The shared executable channel vocabulary is deliberately NOT widened.**
+  `COMMUNICATION_CHANNELS` remains `whatsapp`, `sms`, `email`, `voice`, and AVG-5 adds no member.
+  Membership there is the set of channels a `CommunicationRequestV1` may name, which pulls a channel
+  into the delivery lifecycle's `provider-accepted` and `delivered` states — states nothing here
+  could honestly assert for Instagram. AVG-5 uses an Aarohi-LOCAL token instead. **Adopting a real,
+  executable Instagram channel is QFJ-P09's separately reviewed work**, in line with the sequencing
+  decision to finish AVG-5..AVG-12 before the live QuickFurno execution integration.
+- **Inbound is an untrusted OBSERVATION.** Bounded, normalized, never interpreted, and stamped
+  `INJECTED_OFFLINE_INSTAGRAM_OBSERVATION` — a caller's offline report, not authenticated provider
+  output. It has no field for consent, opt-out, STOP, identity, registration or delivery, and nothing
+  reads the message text to conclude one.
+- **The conversation snapshot is immutable, finite, deduplicated by message reference and canonically
+  ordered** by `observedAt` then message reference. Array position carries no chronological claim.
+  There is no OUTBOUND turn direction, so an outbound candidate can never be recorded as though it
+  had been said.
+- **Channel-local identity is not identity.** A participant reference is a handle on one channel,
+  never a Core vendor id and never a cross-channel identity; the binding is labelled
+  `CALLER_ASSERTED_OFFLINE_INSTAGRAM_BINDING`. Resolution and the WhatsApp transition remain AVG-6's.
+- **Continuation reuses the AVG-1 Core gate** and restates none of it. Exactly `NOT_REGISTERED`
+  continues review; every other status stops, including `ACTIVE`, and continuation is not contact or
+  send eligibility.
+- **Outbound is a CANDIDATE built from a canonical AVG-4 OPEN draft**, carrying that draft's own
+  words and exact revision — there is no body field on the builder's input. The CURRENT Core gate is
+  re-run every time, so a stale eligible review and a high priority both decide nothing.
+- **The single positive outcome is `READY_FOR_FUTURE_CORE_INSTAGRAM_COMMUNICATION_PATH`**, and every
+  candidate states as a machine-checked literal `false` that no communication request, approval
+  request, approval decision, communication authorization or execution intent was created, that no
+  provider, Meta API or n8n was asked for anything, and that nothing was sent or delivered.
+- Zero Meta API calls, n8n executions, provider sends, channel sends, model calls, persistence,
+  managed migrations, production entries and new third-party dependencies.
 
 ### AVG-6 — Omnichannel Identity and WhatsApp Handoff
 Resolving one prospect across channels, and the transition from Instagram to WhatsApp. Identity
