@@ -13,7 +13,7 @@
  *
  * Scans read CODE, not documentation: these modules describe at length what they refuse to do.
  */
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -162,7 +162,15 @@ describe('dependencies', () => {
     }
   });
 
-  it('is imported by no other package and wired into no application', () => {
+  it('is imported by no package it could confuse, and by no production entry point', () => {
+    // NARROWED, and made truthful, when QFJ-P12's JAO-7 slice took a workspace link on this package.
+    //
+    // The original assertion was "nobody imports this at all", which was true when it shipped and
+    // stopped being true the moment a governed consumer legitimately reused it. That is the weaker
+    // claim anyway. What this package actually guarantees is that IT CANNOT CREATE AN INTENT and
+    // cannot dispatch one -- `validate` is its only method -- so being imported does not hand a
+    // consumer anything. What must stay true is that no package it could be CONFUSED with takes a
+    // dependency on it, and that no production application entry point wires it into anything.
     for (const relative of [
       'packages/contracts/package.json',
       'packages/approval-runtime/package.json',
@@ -172,10 +180,22 @@ describe('dependencies', () => {
       'packages/postgres-approval-queue/package.json',
       'packages/jarvis-runtime/package.json',
       'apps/api/package.json',
-      'apps/worker/package.json',
     ]) {
       const text = readFileSync(fileURLToPath(new URL(relative, REPO_ROOT)), 'utf8');
       expect(text, relative).not.toContain('@qf-jarvis/execution-intent-runtime');
+    }
+
+    // The worker MAY depend on it -- and its production entries still must not reach it. A
+    // dependency is a build-graph fact; an import from `index.ts` would be an activation.
+    for (const relative of ['apps/worker/src/index.ts', 'apps/worker/src/worker-entry.ts']) {
+      const entry = new URL(relative, REPO_ROOT);
+      const path = fileURLToPath(entry);
+      if (!existsSync(path)) {
+        continue;
+      }
+      expect(readFileSync(path, 'utf8'), relative).not.toContain(
+        '@qf-jarvis/execution-intent-runtime',
+      );
     }
   });
 

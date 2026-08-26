@@ -2,18 +2,26 @@
 
 **Document status:** Canonical capability overlay owned by **QFJ-P12 - Advanced Intelligence and Future Agents**. Adopted under [ADR-0114](../decisions/ADR-0114-qfj-p12-jarvis-autonomy-operations-mastra-boundary.md). Read with [qf-jarvis-roadmap-v3.md](./qf-jarvis-roadmap-v3.md), [mvp-post-mvp-delivery-overlay.md](./mvp-post-mvp-delivery-overlay.md), and [ADR-0002](../decisions/ADR-0002-recommend-authorize-execute-model.md).
 
-**Runtime status: DEFAULT-OFF / SHADOW.** JAO-0 is governance. JAO-1 through JAO-5 have merged
-OFFLINE, default-off proofs: an exact-pinned `@mastra/core` dependency, two supervisor compositions,
-one durable operational-memory composition, one virtual tool sandbox and one durable ambient monitor
-governor now exist in `apps/worker/src/jao/`, and none of them is imported or started by any
-production entry point.
+**Runtime status: DEFAULT-OFF / SHADOW.** JAO-0 is governance. **JAO-1 through JAO-6 have merged
+OFFLINE, default-off proofs**: an exact-pinned `@mastra/core` dependency, two supervisor
+compositions, one durable operational-memory composition, one virtual tool sandbox, one durable
+ambient monitor governor and one governed business-action proposal composition now exist in
+`apps/worker/src/jao/`, and none of them is imported or started by any production entry point.
 
-**A JAO-6 implementation proof is PROPOSED IN THIS BRANCH and is not merged.** It adds one governed
-business-action proposal composition over the EXISTING recommendation and approval runtimes. It
-submits nothing to Core, creates no approval decision and no execution intent, calls no n8n,
-provider or channel, persists nothing, and is imported by no production entry point. This paragraph
-is written to be true on the branch; it must be updated to say "merged" only after the pull request
-actually merges.
+JAO-6 is merged and certified (PR #162). It still submits nothing to Core, creates no approval
+decision and no execution intent, calls no n8n, provider or channel, and persists nothing.
+
+**A JAO-7 implementation proof is PROPOSED IN THIS BRANCH and is not merged.** It adds one durable
+advanced-autonomy coordinator: policy-bounded planning over two static missions, one governed Riya
+delegation, deterministic capacity optimisation, continuous evaluation, durable run state with
+pause/resume/kill/expiry, correlation of EXTERNALLY SUPPLIED Core artifacts, and a VIRTUAL REVERSIBLE
+REHEARSAL with verification and rollback.
+
+**No live Core -> n8n execution transport is adopted by JAO-7.** It creates no approval decision and
+no execution intent, and it does not execute a Core-issued intent -- the executor named on an
+`ExecutionIntentV1` is n8n, and correlating one does not make Jarvis its executor. The only reversible
+effect is a local synthetic integer. This paragraph is written to be true on the branch; it must be
+updated to say "merged" only after the pull request actually merges.
 
 JAO-3 adds a PostgreSQL schema and adapter, so this document no longer claims there is no memory
 store and no database access. Both exist as source. **The JAO-3 schema is a LOCAL asset applied only
@@ -301,6 +309,43 @@ Policy-bounded multi-agent planning, long-running operations, capacity optimizat
 
 Advanced autonomy does not relax the permanent authority ceiling. Irreversible, financial, identity, consent, entitlement, destructive, or externally binding actions remain behind their governed authority class.
 
+**Implementation proof PROPOSED in `qfj-jao7-advanced-governed-autonomy`, not merged**
+([ADR-0121](../decisions/ADR-0121-jao7-advanced-governed-autonomy.md)). Exact first-proof boundaries:
+
+- The loop is `bounded mission -> static policy-bounded plan -> bounded evidence / governed
+  specialist work -> continuous evaluation -> canonical RecommendationV1 -> canonical powerless
+  ApprovalRequestV1 -> PAUSE -> externally supplied Core artifacts -> exact correlation -> OFFLINE
+  REVERSIBLE REHEARSAL -> verify -> success or automatic virtual rollback -> terminal audited state`.
+- **Two static missions, both `low-risk-reversible` / `delegated-approver`.**
+  `jao7.client-sales-stall-remediation` v1 proposes an INTERNAL `operator.task.create` and includes
+  exactly ONE Riya delegation through the certified JAO-2 boundary, scoped to CLIENT SALES signals
+  only. `jao7.synthetic-capacity-remediation` v1 proposes a bounded
+  `capacity.concurrency-adjustment` on a synthetic pool. A communication, voice, money or high-risk
+  mission cannot be declared: the policy schema literals refuse to load one.
+- **Plans are reviewed data, not generated.** A fixed sequence from a closed step vocabulary, finite,
+  non-recursive, digest-pinned and re-checked on every claim. No caller may supply a plan, a step, a
+  budget, a risk, an approval or an autonomy ceiling. Zero model calls anywhere in the slice.
+- **The capacity target is COMPUTED** from closed metric bands: never below 1, never above 32, never
+  more than ±2 per step, and a high error rate never buys an increase. There is no
+  `targetConcurrency` field on any request.
+- **Durable control state** in a LOCAL `qf_jarvis_jao7` schema -- run, steps, evaluations, operation
+  replay, one authority observation, one virtual sandbox row. Budgets, kill, expiry, plan digest and
+  sandbox survive a restart. Not managed migration history; applied to no managed database.
+- **Every transition is an explicit call.** No scheduler, cron, timer, queue, webhook or ambient
+  subscription. Kill is terminal with no unkill; expiry blocks forward work; pause resumes only
+  explicitly. Safety rollback of already-applied synthetic state is superior to kill and expiry, and
+  can only restore the captured BEFORE value.
+- **JAO-7 creates no `ApprovalDecisionV1` and no `ExecutionIntentV1`, and executes neither.** Both
+  arrive from outside and are validated by the canonical approval and execution-intent runtimes. The
+  authority source posture is `INJECTED_OFFLINE_CORE_FIXTURE`: correlation proves the artifacts
+  describe this exact action, NOT that Core authenticated them.
+- **Persisted authority is history, not permission** -- digests and identities only, with no state or
+  column meaning `AUTHORIZED`, `CAN_EXECUTE` or `SEND_ALLOWED`.
+- **The reversible effect is a VIRTUAL REHEARSAL**, never an execution: two integers in a JAO-7 row,
+  no host, network, provider, channel, n8n, Core or business reach, and no `ExecutionResultV1`.
+- Zero Core calls, n8n executions, provider calls, channel sends, production mutations, managed
+  migrations, worker-entry changes and new third-party dependencies.
+
 ## Relation to Aarohi AVG
 
 JAO and AVG are sibling overlays under QFJ-P12.
@@ -315,15 +360,19 @@ JAO and AVG are sibling overlays under QFJ-P12.
 
 Implementation is not activation. Shadow output authorizes nothing. Passing evaluation does not promote rollout.
 
-**Current posture:** JAO-0 governance adopted. **JAO-1 through JAO-5 merged as OFFLINE,
+**Current posture:** JAO-0 governance adopted. **JAO-1 through JAO-6 merged as OFFLINE,
 DEFAULT-OFF, SHADOW proofs** -- present in the worker composition, activated by nothing; the JAO-3
-and JAO-5 schemas are applied to no managed database, JAO-4 reaches no host, network or command, and
-JAO-5 starts no scheduler.
+and JAO-5 schemas are applied to no managed database, JAO-4 reaches no host, network or command,
+JAO-5 starts no scheduler, and JAO-6 reaches no Core, n8n, provider or channel and creates no
+approval decision or execution intent.
 
-**A JAO-6 OFFLINE, DEFAULT-OFF, SHADOW proof is PROPOSED and awaiting owner review; it is NOT
-merged and NOT activated.** It reaches no Core, n8n, provider or channel, creates no approval
-decision and no execution intent, and is imported by no production entry point. **JAO-7 remains
-PLANNED / DISABLED.**
+**A JAO-7 OFFLINE, DEFAULT-OFF, SHADOW proof is PROPOSED and awaiting owner review; it is NOT merged
+and NOT activated.** No live Core -> n8n transport is adopted, no approval decision or execution
+intent is created, no Core-issued intent is executed, the only reversible effect is a virtual
+rehearsal over local synthetic integers, its schema is applied to no managed database, and it is
+imported by no production entry point.
+
+JAO-7 is the FINAL canonical JAO overlay stage. There is no JAO-8, and there is no `QFJ-P13`.
 
 ## JAO-0 exit gate
 
