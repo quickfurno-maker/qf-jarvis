@@ -7,22 +7,27 @@ pipeline, no outreach, no provider or channel credential, no Meta API call, no I
 WhatsApp integration, no n8n execution and no managed persistence in this repository. Production
 rollout remains **OFF**, and no package or application imports the Aarohi package at all.
 
-**Offline DOMAIN status.** The sentence above used to read "nothing here is implemented", and that
-stopped being true at AVG-1. What exists is contracts and pure functions over frozen values:
+**Offline DOMAIN status.** This overlay once said "nothing here is implemented", which stopped being
+true at AVG-1. What exists is contracts and pure functions over frozen values:
 
-- **AVG-0 through AVG-4 — implemented and merged** as offline domains
+- **AVG-0 through AVG-4 — implemented as certified offline domains**
   ([ADR-0085](../decisions/ADR-0085-qfj-p12-aarohi-vendor-growth-and-roadmap-reconciliation.md),
   [ADR-0111](../decisions/ADR-0111-qfj-p12-avg2-aarohi-discovery-enrichment-domain.md),
   [ADR-0112](../decisions/ADR-0112-qfj-p12-avg3-aarohi-scoring-outreach-eligibility-domain.md),
   [ADR-0113](../decisions/ADR-0113-qfj-p12-avg4-aarohi-outreach-workspace-domain.md)).
-- **AVG-5 — implementation proof PROPOSED IN THIS BRANCH, and NOT MERGED**
-  ([ADR-0122](../decisions/ADR-0122-qfj-p12-avg5-aarohi-instagram-conversation-offline-domain.md)).
-  This line is written to be true on the branch; it must be updated to say "merged" only after the
-  pull request actually merges.
+- **AVG-5 — offline implementation proof defined by
+  [ADR-0122](../decisions/ADR-0122-qfj-p12-avg5-aarohi-instagram-conversation-offline-domain.md) and
+  carried by PR #164.** It adds no runtime, provider, channel, transport or execution activation.
 - **AVG-6 through AVG-12 — planned and unimplemented.**
 
 Recording a capability is still not implementing one, and implementing an offline domain is still not
 activating anything.
+
+**Merge and certification state is tracked by repository history and owner review, not written down
+here.** A canonical architecture document that encodes the state of a branch is a document that
+becomes false the moment that branch lands, and then needs repairing by somebody who remembers it
+exists. What belongs here is architecture, runtime posture and capability boundaries — all of which
+read the same before and after any particular merge.
 
 ---
 
@@ -140,10 +145,10 @@ Governed inbound/outbound conversation on Instagram. Delivery remains provider-s
 remains n8n-side; Aarohi holds no provider credential and calls no Meta API. Consent and eligibility
 are Core's, revalidated at execution time.
 
-**The offline DOMAIN for this stage is PROPOSED in `qfj-avg5-instagram-conversation-integration` and
-is NOT merged**
-([ADR-0122](../decisions/ADR-0122-qfj-p12-avg5-aarohi-instagram-conversation-offline-domain.md)).
-Exact first-proof boundaries:
+**The offline DOMAIN for this stage is defined by
+[ADR-0122](../decisions/ADR-0122-qfj-p12-avg5-aarohi-instagram-conversation-offline-domain.md) and
+carried by PR #164.** Runtime remains PLANNED / DISABLED; this capability description claims no
+deployment and no production activation. Exact first-proof boundaries:
 
 - **The shared executable channel vocabulary is deliberately NOT widened.**
   `COMMUNICATION_CHANNELS` remains `whatsapp`, `sms`, `email`, `voice`, and AVG-5 adds no member.

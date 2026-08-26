@@ -119,6 +119,24 @@ which is itself only what a caller asserted about an offline injected report.
 never be recorded as though it had been said. Real outbound turns become observable when something
 actually sends one, which requires an execution path that does not exist.
 
+**The PUBLIC canonical parser certifies the whole aggregate, not a bag of canonical parts.** Owner
+review found that the builder checked every one of these properties as it added a turn while
+`instagramConversationSnapshotSchema` and `parseInstagramConversation` checked none of them — so a
+hand-assembled snapshot whose top-level binding named one prospect and whose turns named another
+parsed, rebuilt and came back canonical. The builder's invariant and the parser's invariant were two
+different invariants, and both continuation and candidate preparation trust the parser as their
+conversation gate.
+
+The invariant now lives in one source-private helper, over one total comparator that the builder
+sorts with and the schema validates against, so the two cannot drift. A snapshot passes only if every
+turn matches the top-level binding, no message reference repeats, and the turns are STRICTLY
+increasing in canonical order. Ordering and uniqueness are both asked because neither implies the
+other.
+
+**An unsorted array is refused rather than reordered.** A public canonical parser certifies the value
+it was shown; silently repairing a producer's contract violation would hide the fact that a producer
+is violating it. Producing canonical order is the builder's job, and it does it.
+
 ### 5. Channel-local identity is not identity, and AVG-6 is not started early
 
 An `instagramParticipantRef` is a handle on one channel. It is not a Core vendor id, not a

@@ -13,6 +13,7 @@ import {
   AAROHI_AVG5_CONTRACT_VERSION,
   CORE_PARTY_STATUSES,
   INSTAGRAM_BINDING_POSTURE,
+  parseInstagramConversation,
   INSTAGRAM_CONTINUATION_OUTCOMES,
   INSTAGRAM_OBSERVATION_SOURCE_POSTURE,
   INSTAGRAM_OUTBOUND_CANDIDATE_OUTCOME,
@@ -855,5 +856,207 @@ describe('AVG-5 restates AVG-4’s grammars without drifting from them', () => {
         JSON.stringify(control),
       ).toBe(false);
     }
+  });
+});
+
+// ===========================================================================
+// The AGGREGATE invariant. A bag of canonical turns is not a canonical conversation.
+// ===========================================================================
+
+/**
+ * A hand-assembled snapshot, built the way a caller would rather than by the builder.
+ *
+ * This is the whole point of these specs. `appendInstagramInboundObservation` checked every
+ * aggregate property as it added a turn, and the PUBLIC schema and parser checked none of them --
+ * so a forged snapshot went in one door and came out canonical. These tests come in that door.
+ */
+function forgedSnapshot(
+  turns: readonly InstagramInboundObservation[],
+  over: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    contractVersion: AAROHI_AVG5_CONTRACT_VERSION,
+    channel: AAROHI_AVG5_CHANNEL,
+    bindingPosture: INSTAGRAM_BINDING_POSTURE,
+    prospectRef: PROSPECT,
+    instagramConversationRef: CONVERSATION,
+    instagramThreadRef: THREAD,
+    instagramParticipantRef: PARTICIPANT,
+    inboundTurns: [...turns],
+    ...over,
+  };
+}
+
+describe('a canonical conversation binds every turn it contains', () => {
+  it('refuses a turn belonging to another prospect, conversation, thread or participant', () => {
+    // Each of these forged snapshots contains ONE turn that is itself perfectly canonical. The
+    // aggregate is what is wrong, and nothing but an aggregate check can see it.
+    for (const [field, value] of [
+      ['prospectRef', OTHER_PROSPECT],
+      ['instagramConversationRef', 'ig.conversation.beta'],
+      ['instagramThreadRef', 'ig.thread.beta'],
+      ['instagramParticipantRef', 'ig.participant.beta'],
+    ] as const) {
+      const stranger = inbound({ [field]: value });
+      // The turn on its own is canonical...
+      expect(instagramInboundObservationSchema.safeParse(stranger).success, field).toBe(true);
+      // ...and the conversation containing it is not.
+      const snapshot = forgedSnapshot([stranger]);
+      expect(instagramConversationSnapshotSchema.safeParse(snapshot).success, field).toBe(false);
+      expect(parseInstagramConversation(snapshot), field).toBeUndefined();
+    }
+  });
+
+  it('refuses a repeated message reference already sitting in the array', () => {
+    const twice = [
+      inbound({ instagramMessageRef: 'ig.message.a', observedAt: '2026-08-26T09:00:01Z' }),
+      inbound({ instagramMessageRef: 'ig.message.a', observedAt: '2026-08-26T09:00:02Z' }),
+    ];
+    for (const turn of twice) {
+      expect(instagramInboundObservationSchema.safeParse(turn).success).toBe(true);
+    }
+    // Strictly increasing by instant, so ordering alone would have admitted this pair. Uniqueness
+    // is a separate question and is asked separately.
+    const snapshot = forgedSnapshot(twice);
+    expect(instagramConversationSnapshotSchema.safeParse(snapshot).success).toBe(false);
+    expect(parseInstagramConversation(snapshot)).toBeUndefined();
+  });
+
+  it('refuses valid turns supplied out of canonical order rather than reordering them', () => {
+    // The owner's preference, and the right one: a public canonical parser certifies the value it
+    // was shown. Silently repairing a producer's contract violation would hide the violation.
+    const unsorted = [
+      inbound({ instagramMessageRef: 'ig.message.b', observedAt: '2026-08-26T09:00:02Z' }),
+      inbound({ instagramMessageRef: 'ig.message.a', observedAt: '2026-08-26T09:00:01Z' }),
+    ];
+    const snapshot = forgedSnapshot(unsorted);
+    expect(instagramConversationSnapshotSchema.safeParse(snapshot).success).toBe(false);
+    expect(parseInstagramConversation(snapshot)).toBeUndefined();
+
+    // Same instant, tie broken by message reference the wrong way round.
+    const tied = forgedSnapshot([
+      inbound({ instagramMessageRef: 'ig.message.z', observedAt: AT }),
+      inbound({ instagramMessageRef: 'ig.message.m', observedAt: AT }),
+    ]);
+    expect(instagramConversationSnapshotSchema.safeParse(tied).success).toBe(false);
+    expect(parseInstagramConversation(tied)).toBeUndefined();
+  });
+
+  it('accepts what the builder produces, including out-of-arrival-order observations', () => {
+    let snapshot = conversation();
+    for (const [ref, at] of [
+      ['ig.message.c', '2026-08-26T09:00:03Z'],
+      ['ig.message.a', '2026-08-26T09:00:01Z'],
+      ['ig.message.b', '2026-08-26T09:00:02Z'],
+    ] as const) {
+      const result = appendInstagramInboundObservation(
+        snapshot,
+        inbound({ instagramMessageRef: ref, observedAt: at }),
+      );
+      if (!result.ok) throw new Error(`append refused: ${result.refusal}`);
+      snapshot = result.conversation;
+    }
+    // The builder ACCEPTS them in any arrival order and stores canonical order, so what it produces
+    // is by construction what the parser certifies.
+    expect(instagramConversationSnapshotSchema.safeParse(snapshot).success).toBe(true);
+    const parsed = parseInstagramConversation(snapshot);
+    expect(parsed?.inboundTurns.map((turn) => turn.instagramMessageRef)).toStrictEqual([
+      'ig.message.a',
+      'ig.message.b',
+      'ig.message.c',
+    ]);
+    expect(parseInstagramConversation(conversation())).toBeDefined();
+  });
+
+  it('still detaches and freezes what it returns', () => {
+    const turns = [inbound()];
+    const snapshot = forgedSnapshot(turns);
+    const parsed = parseInstagramConversation(snapshot);
+    if (parsed === undefined) throw new Error('expected a canonical snapshot to parse');
+    expect(Object.isFrozen(parsed)).toBe(true);
+    expect(Object.isFrozen(parsed.inboundTurns)).toBe(true);
+    expect(Object.isFrozen(parsed.inboundTurns[0])).toBe(true);
+    turns.length = 0;
+    expect(parsed.inboundTurns).toHaveLength(1);
+  });
+
+  it('refuses to append to a snapshot that was never canonical', () => {
+    // The builder reads its input through the same parser, so a forged snapshot is not a base a
+    // caller can extend into a real-looking one.
+    const forged = forgedSnapshot([inbound({ prospectRef: OTHER_PROSPECT })]);
+    const result = appendInstagramInboundObservation(
+      forged,
+      inbound({ instagramMessageRef: 'ig.message.002' }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.refusal).toBe('CONVERSATION_INVALID');
+  });
+});
+
+describe('every consumer of a conversation inherits the aggregate gate', () => {
+  const FORGED = {
+    'a turn from another prospect': () =>
+      forgedSnapshot([inbound({ prospectRef: OTHER_PROSPECT })]),
+    'a turn from another thread': () =>
+      forgedSnapshot([inbound({ instagramThreadRef: 'ig.thread.beta' })]),
+    'a repeated message reference': () =>
+      forgedSnapshot([
+        inbound({ instagramMessageRef: 'ig.message.a', observedAt: '2026-08-26T09:00:01Z' }),
+        inbound({ instagramMessageRef: 'ig.message.a', observedAt: '2026-08-26T09:00:02Z' }),
+      ]),
+    'turns out of canonical order': () =>
+      forgedSnapshot([
+        inbound({ instagramMessageRef: 'ig.message.b', observedAt: '2026-08-26T09:00:02Z' }),
+        inbound({ instagramMessageRef: 'ig.message.a', observedAt: '2026-08-26T09:00:01Z' }),
+      ]),
+  };
+
+  it('stops acquisition continuation, even on the one Core status that would continue', () => {
+    for (const [label, build] of Object.entries(FORGED)) {
+      const verdict = evaluateInstagramAcquisitionContinuation(
+        build(),
+        observation('NOT_REGISTERED'),
+      );
+      expect(verdict.outcome, label).toBe('STOP_AAROHI_ACQUISITION');
+      if (verdict.outcome === 'STOP_AAROHI_ACQUISITION') {
+        expect(verdict.refusal, label).toBe('CONVERSATION_INVALID');
+      }
+    }
+  });
+
+  it('refuses an outbound candidate, even with an OPEN draft and NOT_REGISTERED truth', () => {
+    for (const [label, build] of Object.entries(FORGED)) {
+      const built = prepareInstagramOutboundCandidate(candidateInput({ conversation: build() }));
+      expect(built.ok, label).toBe(false);
+      if (!built.ok) expect(built.refusal, label).toBe('CONVERSATION_INVALID');
+    }
+    // And the honest snapshot in the same position still prepares one, so the refusals above are
+    // the aggregate gate rather than the candidate builder having stopped working.
+    expect(prepareInstagramOutboundCandidate(candidateInput()).ok).toBe(true);
+  });
+});
+
+// ===========================================================================
+// A candidate cannot predate the revision it quotes.
+// ===========================================================================
+
+describe('the candidate’s stated instants are consistent with one another', () => {
+  it('refuses a candidate prepared before the draft revision whose words it carries', () => {
+    const draft = openDraft();
+    expect(draft.changedAt).toBe(AT);
+
+    // Earlier than the revision: refused. Nothing can have quoted words that did not yet exist.
+    const earlier = prepareInstagramOutboundCandidate(
+      candidateInput({ preparedAt: '2026-08-26T08:59:59Z' }),
+    );
+    expect(earlier.ok).toBe(false);
+    if (!earlier.ok) expect(earlier.refusal).toBe('PREPARED_BEFORE_DRAFT_REVISION');
+
+    // The same instant is coherent, and later is the ordinary case.
+    const same = prepareInstagramOutboundCandidate(candidateInput({ preparedAt: AT }));
+    expect(same.ok).toBe(true);
+    const later = prepareInstagramOutboundCandidate(candidateInput({ preparedAt: LATER }));
+    expect(later.ok).toBe(true);
+    if (later.ok) expect(later.candidate.preparedAt).toBe(LATER);
   });
 });

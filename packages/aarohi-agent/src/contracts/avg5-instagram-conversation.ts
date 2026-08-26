@@ -326,6 +326,97 @@ export interface InstagramConversationSnapshot {
   readonly inboundTurns: readonly InstagramInboundObservation[];
 }
 
+/** The four references every turn in a conversation must agree with. */
+interface InstagramConversationBinding {
+  readonly prospectRef: string;
+  readonly instagramConversationRef: string;
+  readonly instagramThreadRef: string;
+  readonly instagramParticipantRef: string;
+}
+
+/**
+ * THE canonical order of two turns. Total, and the only definition of that order in this file.
+ *
+ * Returns -1, 0 or +1 rather than a boolean because it serves two callers with different questions:
+ * the builder sorts with it, and the aggregate check below requires STRICTLY increasing pairs. Two
+ * subtly different orderings -- one to sort by and one to validate against -- is exactly how a
+ * builder and a parser come to disagree about what canonical means.
+ */
+function compareCanonicalTurnOrder(
+  left: InstagramInboundObservation,
+  right: InstagramInboundObservation,
+): -1 | 0 | 1 {
+  if (left.observedAt < right.observedAt) return -1;
+  if (left.observedAt > right.observedAt) return 1;
+  if (left.instagramMessageRef < right.instagramMessageRef) return -1;
+  if (left.instagramMessageRef > right.instagramMessageRef) return 1;
+  return 0;
+}
+
+function turnMatchesBinding(
+  turn: InstagramConversationBinding,
+  binding: InstagramConversationBinding,
+): boolean {
+  return (
+    turn.prospectRef === binding.prospectRef &&
+    turn.instagramConversationRef === binding.instagramConversationRef &&
+    turn.instagramThreadRef === binding.instagramThreadRef &&
+    turn.instagramParticipantRef === binding.instagramParticipantRef
+  );
+}
+
+/**
+ * Is this whole conversation canonical, and not merely a bag of individually canonical turns?
+ *
+ * ### The gap this closes
+ *
+ * `appendInstagramInboundObservation` checked every one of these properties as it added a turn --
+ * and the PUBLIC schema and parser checked none of them. Each object parsed, so a hand-assembled
+ * snapshot whose top-level binding named one prospect and whose turns named another was accepted and
+ * rebuilt as canonical. Duplicate message references and arbitrary turn order got through the same
+ * way. The builder's invariant and the public parser's invariant were two different invariants.
+ *
+ * That matters because `evaluateInstagramAcquisitionContinuation` and
+ * `prepareInstagramOutboundCandidate` both treat `parseInstagramConversation` as their canonical
+ * conversation gate, and because AVG-7 will later read conversation CONTENT. A snapshot mixing two
+ * prospects' messages must never exist, whichever door it came in through.
+ *
+ * ### Why both the ordering check and the uniqueness check are needed
+ *
+ * Neither implies the other. Two turns sharing a message reference at DIFFERENT instants are still
+ * strictly increasing by `observedAt`, so ordering alone would admit them; two turns at the same
+ * instant with the same reference compare equal, so uniqueness alone would not tell them apart from
+ * a mis-sorted pair. Both are asked.
+ */
+function conversationAggregateIsCanonical(
+  binding: InstagramConversationBinding,
+  turns: readonly InstagramInboundObservation[],
+): boolean {
+  if (turns.length > MAX_INSTAGRAM_CONVERSATION_TURNS) {
+    return false;
+  }
+
+  const seen = new Set<string>();
+  let previous: InstagramInboundObservation | undefined;
+  for (const turn of turns) {
+    if (!turnMatchesBinding(turn, binding)) {
+      return false;
+    }
+    if (seen.has(turn.instagramMessageRef)) {
+      return false;
+    }
+    seen.add(turn.instagramMessageRef);
+    // STRICTLY increasing. An unsorted array is REFUSED rather than quietly reordered: a public
+    // canonical parser certifies the value it was shown, and silently repairing a producer's
+    // contract violation would hide the fact that a producer is violating it.
+    if (previous !== undefined && compareCanonicalTurnOrder(previous, turn) !== -1) {
+      return false;
+    }
+    previous = turn;
+  }
+  return true;
+}
+
 export const instagramConversationSnapshotSchema = z
   .object({
     contractVersion: z.literal(AAROHI_AVG5_CONTRACT_VERSION),
@@ -337,7 +428,11 @@ export const instagramConversationSnapshotSchema = z
     instagramParticipantRef: OPAQUE_REF,
     inboundTurns: z.array(instagramInboundObservationSchema).max(MAX_INSTAGRAM_CONVERSATION_TURNS),
   })
-  .strict();
+  .strict()
+  .refine(
+    (value) => conversationAggregateIsCanonical(value, value.inboundTurns),
+    'the conversation turns do not form a canonical aggregate for this binding',
+  );
 
 export const INSTAGRAM_CONVERSATION_REFUSALS = [
   'CONVERSATION_INPUT_INVALID',
@@ -368,6 +463,11 @@ const conversationInputSchema = z
  * A declared TypeScript type is erased before any of this runs, so trusting one would be trusting
  * the caller. Every turn is re-parsed through the canonical observation schema and rebuilt, which is
  * also what detaches the result from any array the caller still holds a reference to.
+ *
+ * The schema now certifies the whole AGGREGATE and not just the parts, so this returns `undefined`
+ * for a snapshot whose turns belong to another prospect, conversation, thread or participant, whose
+ * message references repeat, or whose turns are not in canonical order. Rebuilding happens only
+ * after that, because rebuilding a value that failed its own contract would be laundering it.
  */
 export function parseInstagramConversation(
   value: unknown,
@@ -408,16 +508,6 @@ export function createInstagramConversation(value: unknown): InstagramConversati
       inboundTurns: Object.freeze([] as readonly InstagramInboundObservation[]),
     }),
   });
-}
-
-function canonicalTurnOrder(
-  left: InstagramInboundObservation,
-  right: InstagramInboundObservation,
-): number {
-  if (left.observedAt !== right.observedAt) {
-    return left.observedAt < right.observedAt ? -1 : 1;
-  }
-  return left.instagramMessageRef < right.instagramMessageRef ? -1 : 1;
 }
 
 /**
@@ -465,8 +555,10 @@ export function appendInstagramInboundObservation(
     return Object.freeze({ ok: false as const, refusal: 'TURN_LIMIT_REACHED' as const });
   }
 
+  // Sorted with the SAME comparator the aggregate check validates against, so what the builder
+  // produces is by construction what the parser will accept.
   const turns = [...conversation.inboundTurns, Object.freeze({ ...observation })].sort(
-    canonicalTurnOrder,
+    compareCanonicalTurnOrder,
   );
 
   return Object.freeze({
@@ -701,6 +793,8 @@ export const INSTAGRAM_OUTBOUND_CANDIDATE_REFUSALS = [
   'PROSPECT_MISMATCH',
   'WORKSPACE_DRAFT_NOT_OPEN',
   'CORE_GATE_REFUSED',
+  /** The candidate claims to predate the exact draft revision whose words it carries. */
+  'PREPARED_BEFORE_DRAFT_REVISION',
   'OUTBOUND_CANDIDATE_INVALID',
 ] as const;
 export type InstagramOutboundCandidateRefusal =
@@ -822,6 +916,17 @@ export function prepareInstagramOutboundCandidate(
       ok: false as const,
       refusal: 'CORE_GATE_REFUSED' as const,
       coreReason: 'OBSERVATION_INVALID' as const,
+    });
+  }
+
+  // A candidate cannot truthfully have been prepared before the revision it quotes existed. Both
+  // instants are caller-asserted canonical UTC and no clock is read here, so this is a consistency
+  // check between two stated facts rather than a claim about when anything really happened.
+  // Equality passes: preparing a candidate in the same instant the draft was revised is coherent.
+  if (Date.parse(parsed.data.preparedAt) < Date.parse(draft.changedAt)) {
+    return Object.freeze({
+      ok: false as const,
+      refusal: 'PREPARED_BEFORE_DRAFT_REVISION' as const,
     });
   }
 
