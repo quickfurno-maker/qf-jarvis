@@ -58,7 +58,9 @@ import { runJao4Workbench, type Jao4WorkbenchResult } from '../sandbox-tool-work
 import {
   JAO7_POSTURE,
   Jao7AutonomyError,
+  jao7IsTerminalState,
   type Jao7EvaluationVerdict,
+  type Jao7RehearsalRecord,
   type Jao7RunState,
   type Jao7StepType,
 } from './contracts.js';
@@ -172,9 +174,24 @@ function toRefusal(error: unknown): Jao7AutonomyError {
   return error instanceof Jao7AutonomyError ? error : new Jao7AutonomyError('STORE_FAILED');
 }
 
-/** The terminal outcome a run's durable state implies. Derived, never stored as a claim. */
-function outcomeFor(view: Jao7RunView): Jao7AutonomyResult['outcome'] {
-  switch (view.run.state) {
+/**
+ * The terminal outcome a run's durable state implies. Derived, never stored as a claim.
+ *
+ * ### Why the completed branch refuses rather than defaulting
+ *
+ * There are exactly two ways a JAO-7 run completes: its rehearsal VERIFIED, or its rehearsal was
+ * ROLLED_BACK cleanly. The branch used to read "rolled back, or else completed" -- so a durable view
+ * that was COMPLETED beside a CAPTURED, APPLIED, ROLLBACK_REQUIRED, ROLLBACK_FAILED or missing
+ * sandbox reported `COMPLETED_REHEARSAL`. Every one of those combinations is a contradiction between
+ * two tables, and the one thing a reader must be able to trust is that a result saying the rehearsal
+ * completed means a rehearsal completed. A cross-table state nobody can explain is refused, not
+ * summarised.
+ */
+function outcomeFor(
+  state: Jao7RunState,
+  rehearsal: Jao7RehearsalRecord | null,
+): Jao7AutonomyResult['outcome'] {
+  switch (state) {
     case 'KILLED':
       return 'KILLED';
     case 'EXPIRED':
@@ -186,9 +203,14 @@ function outcomeFor(view: Jao7RunView): Jao7AutonomyResult['outcome'] {
     case 'FAILED_SAFE':
       return 'FAILED_SAFE';
     case 'COMPLETED':
-      return view.rehearsal?.state === 'ROLLED_BACK'
-        ? 'ROLLED_BACK_REHEARSAL'
-        : 'COMPLETED_REHEARSAL';
+      switch (rehearsal?.state) {
+        case 'VERIFIED':
+          return 'COMPLETED_REHEARSAL';
+        case 'ROLLED_BACK':
+          return 'ROLLED_BACK_REHEARSAL';
+        default:
+          throw new Jao7AutonomyError('RESULT_INVALID');
+      }
     default:
       return 'IN_PROGRESS';
   }
@@ -223,7 +245,7 @@ function buildResult(
     missionPolicyDigest: view.run.missionPolicyDigest,
     planDigest: view.run.planDigest,
     state: view.run.state,
-    outcome: refusalReason === null ? outcomeFor(view) : 'REFUSED',
+    outcome: refusalReason === null ? outcomeFor(view.run.state, view.rehearsal) : 'REFUSED',
     refusalReason,
     currentStepIndex: view.run.currentStepIndex,
     revision: view.run.revision,
@@ -540,6 +562,29 @@ export async function rollbackJao7AutonomyRehearsalInternal(
     view.run.missionPolicyVersion,
   );
 
+  // ---- THE SAFETY CONDITION, checked before anything else. -------------------------------------
+  //
+  // This verb used to require only that the sandbox was APPLIED, which meant a caller could invoke
+  // it against a perfectly healthy run that was simply between its rehearsal and its verification.
+  // A successful cleanup there left the run ROLLING_BACK and still forward-eligible, so the public
+  // safety verb had become a second way to steer the happy path -- exactly what "cleanup must not
+  // reopen normal plan execution" was meant to rule out.
+  //
+  // It is now an EMERGENCY capability. A run qualifies when it is already over, or when its lifetime
+  // has passed and nobody has written that down yet. Wall-clock expiry counts because the run IS
+  // expired at that moment whether or not a call has materialised it, and refusing cleanup until
+  // somebody else materialises it would strand the sandbox on a technicality.
+  //
+  // The run condition is checked BEFORE the sandbox condition deliberately: "this run is still live"
+  // is the stronger and more actionable fact, and a live run should learn nothing about its sandbox
+  // from a verb it is not entitled to call.
+  if (
+    !jao7IsTerminalState(view.run.state) &&
+    composition.clock.nowMs() < Date.parse(view.run.expiresAt)
+  ) {
+    throw new Jao7AutonomyError('STATE_CONFLICT');
+  }
+
   // Only APPLIED synthetic state can be restored. The store enforces this again under its own lock;
   // refusing here as well means a caller asking about a sandbox that never applied gets the honest
   // answer rather than a rollback that silently did nothing.
@@ -787,7 +832,14 @@ function nextStateFor(verdict: Jao7EvaluationVerdict, stepType: Jao7StepType): J
   }
 }
 
-export { runOneStep as runJao7StepInternal, performStep as performJao7StepInternal };
+export {
+  runOneStep as runJao7StepInternal,
+  performStep as performJao7StepInternal,
+  // INTERNAL, and exported so the derivation can be proved ON ITS OWN. The result schema refuses
+  // the same contradictions, which is deliberate belt-and-braces -- and it also means a defect in
+  // the derivation alone would be invisible from outside. Both layers are proved separately.
+  outcomeFor as jao7OutcomeForInternal,
+};
 
 // ---------------------------------------------------------------------------
 // The work each step does. Bounded, and never inside a transaction.

@@ -247,6 +247,60 @@ function capacityPolicy(): Jao7MissionPolicy {
   return lookup.policy;
 }
 
+/**
+ * The canonical store, with a claim that ABORTS the caller's signal the moment it commits.
+ *
+ * This is how a FAILED_SAFE run with a dirty sandbox is produced without fabricating database rows:
+ * the claim commits, the coordinator's work phase sees the cancellation, and the step finalises
+ * `CANCELLED` / `FAIL_SAFE` while the rehearsal applied by an earlier step is still sitting there.
+ * That is a real sequence, not a contrived one -- it is exactly what a cancelled or crashed
+ * verification looks like from the database's point of view.
+ */
+function storeAbortingAfterClaim(
+  store: Jao7AutonomyStore,
+  controller: AbortController,
+): Jao7AutonomyStore {
+  return Object.freeze({
+    ...store,
+    async claimStep(request: Parameters<Jao7AutonomyStore['claimStep']>[0], nowMs: number) {
+      const claimed = await store.claimStep(request, nowMs);
+      controller.abort();
+      return claimed;
+    },
+  });
+}
+
+/**
+ * Drive a capacity mission to a FAILED_SAFE run whose virtual sandbox is still APPLIED.
+ *
+ * Returns the run id. The caller owns the process.
+ */
+async function driveToDirtyFailSafe(process: Process, runId: string): Promise<void> {
+  await createRun(process, runId, MISSION_B);
+  const { proposal } = await driveToGate(process, runId, MISSION_B);
+  await correlateAuthority(process, runId, MISSION_B, proposal);
+  const applied = await advanceJao7AutonomyRunInternal(
+    capacityRequest(runId, `${runId}.rehearse`, { proposal: carriedProposal(proposal) }),
+    process.composition,
+  );
+  expect(applied.rehearsal?.state).toBe('APPLIED');
+
+  const controller = new AbortController();
+  const cancelling: Jao7InternalComposition = {
+    ...process.composition,
+    store: storeAbortingAfterClaim(process.composition.store, controller),
+  };
+  const cancelled = await advanceJao7AutonomyRunInternal(
+    capacityRequest(runId, `${runId}.verify`, { proposal: carriedProposal(proposal) }),
+    cancelling,
+    controller.signal,
+  );
+  expect(cancelled.refusalReason).toBe('CANCELLED');
+  expect(cancelled.state).toBe('FAILED_SAFE');
+  // THE DIRTY SANDBOX. Applied, unverified, and belonging to a run that is over.
+  expect(cancelled.rehearsal?.state).toBe('APPLIED');
+}
+
 /** The action parameters a run actually proposed. */
 function proposedParameters(proposal: Jao7ResultProposal): Record<string, unknown> {
   return { ...(proposal.recommendation.proposedActions[0]?.parameters ?? {}) };
@@ -856,6 +910,10 @@ describe('JAO-7 durable advanced autonomy', () => {
       a.composition,
     );
 
+    // The public safety verb is an EMERGENCY capability, so the run has to be over before it is
+    // entitled to call it. Killing first is what a real operator would have done.
+    await killJao7AutonomyRunInternal(capacityRequest(runId, `${runId}.kill`), a.composition);
+
     const broken = startProcess('broken', { corruptRollback: true });
     const failed = await rollbackJao7AutonomyRehearsalInternal(
       { runId, operationId: `${runId}.broken-rollback` },
@@ -869,7 +927,8 @@ describe('JAO-7 durable advanced autonomy', () => {
     expect(failed.rehearsal?.rolledBackAt).toBeNull();
     expect(failed.rehearsal?.rollbackIntegerA).toBeNull();
     expect(failed.rehearsal?.rollbackAttempts).toBe(1);
-    expect(failed.state).toBe('FAILED_SAFE');
+    // The run stays KILLED. A failed cleanup does not downgrade a terminal state to another one.
+    expect(failed.state).toBe('KILLED');
 
     // And a NEW process reads exactly that back. The failure survives the restart.
     const b = startProcess('b');
@@ -888,8 +947,12 @@ describe('JAO-7 durable advanced autonomy', () => {
   });
 
   it('K7 refuses a safety rollback when nothing was ever applied', async () => {
+    // The run is over, so the caller IS entitled to the verb -- and there is still nothing to clean.
+    // The two refusals are deliberately distinguishable: an operator needs to tell "you may not ask
+    // that of a live run" from "there is nothing here to undo".
     const a = startProcess('a');
     await createRun(a, runId, MISSION_B);
+    await killJao7AutonomyRunInternal(capacityRequest(runId, `${runId}.kill`), a.composition);
     await expect(
       rollbackJao7AutonomyRehearsalInternal(
         { runId, operationId: `${runId}.nothing-to-undo` },
@@ -1616,6 +1679,316 @@ describe('JAO-7 durable advanced autonomy', () => {
     );
     expect(result.refusalReason).toBe('REQUEST_INVALID');
     expect(result.authorityObservation).toBeNull();
+    await a.close();
+  });
+
+  // =========================================================================
+  // TC. Terminal safety cleanup. It cleans; it resurrects nothing.
+  // =========================================================================
+
+  it('TC1 cleans a FAILED_SAFE run’s sandbox and leaves it FAILED_SAFE', async () => {
+    // THE RESURRECTION. `mutateRehearsal` decided whether to preserve a terminal run state by
+    // comparing against KILLED, EXPIRED and COMPLETED -- three of the four members of the closed
+    // terminal vocabulary. FAILED_SAFE was missing, so a successful safety rollback moved a
+    // failed-safe run to ROLLING_BACK and made it forward-eligible again.
+    const a = startProcess('a');
+    await driveToDirtyFailSafe(a, runId);
+
+    const cleaned = await rollbackJao7AutonomyRehearsalInternal(
+      { runId, operationId: `${runId}.safety-cleanup` },
+      a.composition,
+    );
+    expect(cleaned.rehearsal?.state).toBe('ROLLED_BACK');
+    expect(cleaned.rehearsal?.rollbackIntegerA).toBe(8);
+    expect(cleaned.rehearsal?.rollbackAttempts).toBe(1);
+    // STILL FAILED_SAFE. Not ROLLING_BACK, not IN_PROGRESS, not anything a plan could continue from.
+    expect(cleaned.state).toBe('FAILED_SAFE');
+    expect(cleaned.outcome).toBe('FAILED_SAFE');
+
+    // And the plan is not reopened: forward work is refused exactly as it was before the cleanup.
+    await expect(
+      advanceJao7AutonomyRunInternal(capacityRequest(runId, `${runId}.after`), a.composition),
+    ).rejects.toMatchObject({ code: 'STATE_CONFLICT' });
+    await expect(
+      resumeJao7AutonomyRunInternal(capacityRequest(runId, `${runId}.revive`), a.composition),
+    ).rejects.toMatchObject({ code: 'STATE_CONFLICT' });
+
+    // A second attempt remains impossible, and no caller may aim the first one.
+    await expect(
+      rollbackJao7AutonomyRehearsalInternal(
+        { runId, operationId: `${runId}.again` },
+        a.composition,
+      ),
+    ).rejects.toMatchObject({ code: 'ROLLBACK_NOT_ELIGIBLE' });
+    await a.close();
+
+    // A NEW process reads back exactly that. The terminal state survives the restart.
+    const b = startProcess('b');
+    const persisted = await readJao7AutonomyRunInternal(runId, b.composition);
+    expect(persisted.state).toBe('FAILED_SAFE');
+    expect(persisted.outcome).toBe('FAILED_SAFE');
+    expect(persisted.rehearsal?.state).toBe('ROLLED_BACK');
+    await b.close();
+  });
+
+  it('TC2 keeps a FAILED_SAFE run FAILED_SAFE when the cleanup itself fails', async () => {
+    const a = startProcess('a');
+    await driveToDirtyFailSafe(a, runId);
+
+    const broken = startProcess('broken', { corruptRollback: true });
+    const failed = await rollbackJao7AutonomyRehearsalInternal(
+      { runId, operationId: `${runId}.broken-cleanup` },
+      broken.composition,
+    );
+    await broken.close();
+
+    expect(failed.rehearsal?.state).toBe('ROLLBACK_FAILED');
+    expect(failed.rehearsal?.rollbackAttemptedAt).not.toBeNull();
+    expect(failed.rehearsal?.rolledBackAt).toBeNull();
+    expect(failed.rehearsal?.rollbackAttempts).toBe(1);
+    // A failed cleanup does not move a terminal run to a DIFFERENT terminal state either.
+    expect(failed.state).toBe('FAILED_SAFE');
+    await a.close();
+  });
+
+  it('TC3 refuses the PUBLIC safety verb on a healthy active run', async () => {
+    // The public safety verb used to require only that the sandbox was APPLIED, so a caller could
+    // invoke it against a run that was simply between its rehearsal and its verification -- and the
+    // successful cleanup left that run ROLLING_BACK and still forward-eligible. That is a second way
+    // to steer the happy path, which is what "cleanup must not reopen plan execution" rules out.
+    const a = startProcess('a');
+    await createRun(a, runId, MISSION_B);
+    const { proposal } = await driveToGate(a, runId, MISSION_B);
+    await correlateAuthority(a, runId, MISSION_B, proposal);
+    const applied = await advanceJao7AutonomyRunInternal(
+      capacityRequest(runId, `${runId}.rehearse`, { proposal: carriedProposal(proposal) }),
+      a.composition,
+    );
+    expect(applied.state).toBe('REHEARSAL_APPLIED');
+
+    await expect(
+      rollbackJao7AutonomyRehearsalInternal(
+        { runId, operationId: `${runId}.premature` },
+        a.composition,
+      ),
+    ).rejects.toMatchObject({ code: 'STATE_CONFLICT' });
+
+    // Nothing moved. The sandbox is exactly as the rehearsal left it.
+    const untouched = await readJao7AutonomyRunInternal(runId, a.composition);
+    expect(untouched.state).toBe('REHEARSAL_APPLIED');
+    expect(untouched.rehearsal?.state).toBe('APPLIED');
+    expect(untouched.rehearsal?.rollbackAttempts).toBe(0);
+
+    // And the NORMAL path still works: verification completes the run as it always did.
+    const verified = await advanceJao7AutonomyRunInternal(
+      capacityRequest(runId, `${runId}.verify`, { proposal: carriedProposal(proposal) }),
+      a.composition,
+    );
+    expect(verified.rehearsal?.state).toBe('VERIFIED');
+    await a.close();
+  });
+
+  it('TC4 cleans up after wall-clock expiry and reports the run as EXPIRED', async () => {
+    // Expiry that nobody has written down yet is still expiry. Refusing cleanup until some other
+    // call materialises EXPIRED would strand the sandbox on a technicality -- and returning
+    // afterwards without materialising it would describe an expired run as live.
+    const a = startProcess('a');
+    await createRun(a, runId, MISSION_B);
+    const { proposal } = await driveToGate(a, runId, MISSION_B);
+    await correlateAuthority(a, runId, MISSION_B, proposal);
+    await advanceJao7AutonomyRunInternal(
+      capacityRequest(runId, `${runId}.rehearse`, { proposal: carriedProposal(proposal) }),
+      a.composition,
+    );
+
+    // The capacity mission lives 24 hours. One hour past that, nothing has materialised EXPIRED.
+    a.clock.advance(25 * 60 * 60 * 1_000);
+    expect((await readJao7AutonomyRunInternal(runId, a.composition)).state).toBe(
+      'REHEARSAL_APPLIED',
+    );
+
+    const cleaned = await rollbackJao7AutonomyRehearsalInternal(
+      { runId, operationId: `${runId}.expired-cleanup` },
+      a.composition,
+    );
+    expect(cleaned.rehearsal?.state).toBe('ROLLED_BACK');
+    expect(cleaned.rehearsal?.rollbackIntegerA).toBe(8);
+    // MATERIALISED, in the transaction that observed it. Not IN_PROGRESS, not ROLLING_BACK.
+    expect(cleaned.state).toBe('EXPIRED');
+    expect(cleaned.outcome).toBe('EXPIRED');
+
+    const b = startProcess('b');
+    b.clock.advance(25 * 60 * 60 * 1_000);
+    const persisted = await readJao7AutonomyRunInternal(runId, b.composition);
+    expect(persisted.state).toBe('EXPIRED');
+    expect(persisted.rehearsal?.state).toBe('ROLLED_BACK');
+    await b.close();
+    await a.close();
+  });
+
+  it('TC5 leaves the evaluator-driven rollback branch working exactly as before', async () => {
+    // The INTERNAL recovery path is untouched. A failed verification still takes the run to
+    // ROLLING_BACK, the next advance still claims the rollback step, and the run still completes.
+    const a = startProcess('a');
+    await createRun(a, runId, MISSION_B);
+    const { proposal } = await driveToGate(a, runId, MISSION_B);
+    await correlateAuthority(a, runId, MISSION_B, proposal);
+    await advanceJao7AutonomyRunInternal(
+      capacityRequest(runId, `${runId}.rehearse`, { proposal: carriedProposal(proposal) }),
+      a.composition,
+    );
+
+    const faulty = startProcess('faulty', { corruptRehearsalObservation: true });
+    const failed = await advanceJao7AutonomyRunInternal(
+      capacityRequest(runId, `${runId}.verify`, { proposal: carriedProposal(proposal) }),
+      faulty.composition,
+    );
+    await faulty.close();
+    expect(failed.state).toBe('ROLLING_BACK');
+
+    const rolledBack = await advanceJao7AutonomyRunInternal(
+      capacityRequest(runId, `${runId}.rollback`, { proposal: carriedProposal(proposal) }),
+      a.composition,
+    );
+    expect(rolledBack.state).toBe('COMPLETED');
+    expect(rolledBack.rehearsal?.state).toBe('ROLLED_BACK');
+    expect(rolledBack.outcome).toBe('ROLLED_BACK_REHEARSAL');
+    await a.close();
+  });
+
+  // =========================================================================
+  // RI. The result must not describe a run it cannot explain.
+  // =========================================================================
+
+  it('RI1 refuses to report a COMPLETED run whose sandbox contradicts it', async () => {
+    // The completed branch used to read "rolled back, or else completed", so a COMPLETED run beside
+    // an APPLIED sandbox was reported as COMPLETED_REHEARSAL. That is a contradiction between two
+    // tables, and a result that reads correctly and is wrong is worse than one that refuses.
+    const a = startProcess('a');
+    await createRun(a, runId, MISSION_B);
+    const { proposal } = await driveToGate(a, runId, MISSION_B);
+    await correlateAuthority(a, runId, MISSION_B, proposal);
+    for (const step of ['rehearse', 'verify', 'complete']) {
+      await advanceJao7AutonomyRunInternal(
+        capacityRequest(runId, `${runId}.${step}`, { proposal: carriedProposal(proposal) }),
+        a.composition,
+      );
+    }
+    const completed = await readJao7AutonomyRunInternal(runId, a.composition);
+    expect(completed.state).toBe('COMPLETED');
+    expect(completed.rehearsal?.state).toBe('VERIFIED');
+    expect(completed.outcome).toBe('COMPLETED_REHEARSAL');
+
+    // Corrupt ONE durable fact, leaving every per-row constraint satisfied. The contradiction is
+    // between the run and its sandbox, which is precisely what no single row can catch.
+    await jao7RawStatement(
+      a.pool,
+      "UPDATE $SCHEMA.virtual_rehearsal_state SET state = 'APPLIED' WHERE run_id = $1",
+      [runId],
+    );
+    await expect(readJao7AutonomyRunInternal(runId, a.composition)).rejects.toMatchObject({
+      code: 'RESULT_INVALID',
+    });
+    await a.close();
+  });
+
+  // =========================================================================
+  // RP. Replay identifies the exact attempt it created.
+  // =========================================================================
+
+  it('RP1 replays the attempt THIS operation id created, not the latest one', async () => {
+    // A retained plan position is attempted again, so "the latest attempt at this step index" and
+    // "the attempt this operation id created" stop being the same row. Replaying an old claim would
+    // then have described somebody else's attempt under the old attempt's own operation id.
+    const a = startProcess('a');
+    await createRun(a, runId, MISSION_B);
+    const { latest, proposal } = await driveToGate(a, runId, MISSION_B);
+    const gateIndex = latest.currentStepIndex;
+
+    // Attempt 0: an approved action with no Core-issued intent. The plan position is RETAINED.
+    await resumeJao7AutonomyRunInternal(
+      capacityRequest(runId, `${runId}.first`, {
+        proposal: carriedProposal(proposal),
+        authority: { approvalDecision: approvalDecision(proposal) },
+      }),
+      a.composition,
+    );
+    // Attempt 1: the same, again.
+    await resumeJao7AutonomyRunInternal(
+      capacityRequest(runId, `${runId}.second`, {
+        proposal: carriedProposal(proposal),
+        authority: { approvalDecision: approvalDecision(proposal) },
+      }),
+      a.composition,
+    );
+    const view = await a.composition.store.readRun(runId);
+    expect(view.steps.filter((step) => step.stepIndex === gateIndex)).toHaveLength(2);
+
+    // THE OLD CLAIM, replayed. Its operation id is the one the FIRST attempt was claimed under.
+    const claim = {
+      runId,
+      operationId: `${runId}.first.claim`,
+      // The revision has moved on twice since. It is deliberately not part of the claim digest.
+      expectedRevision: view.run.revision,
+      planDigest: view.run.planDigest,
+      stepIndex: gateIndex,
+      stepType: 'VALIDATE_AUTHORITY_EVIDENCE' as const,
+      charge: 'NONE' as const,
+      toolCallCount: 0,
+      maxSpecialistCalls: 0,
+      maxToolCalls: 2,
+      maxSteps: 12,
+    };
+    const replayed = await a.composition.store.claimStep(claim, a.clock.nowMs());
+    expect(replayed.replayed).toBe(true);
+    expect(replayed.step.attemptIndex).toBe(0);
+    expect(replayed.step.stepStatus).toBe('COMPLETED');
+
+    // The second attempt's own id still identifies the second attempt.
+    const second = await a.composition.store.claimStep(
+      { ...claim, operationId: `${runId}.second.claim` },
+      a.clock.nowMs(),
+    );
+    expect(second.replayed).toBe(true);
+    expect(second.step.attemptIndex).toBe(1);
+
+    // And nothing was written by either replay.
+    expect(await countJao7RowsFor(a.pool, 'autonomy_step', runId)).toBe(
+      (await a.composition.store.readRun(runId)).steps.length,
+    );
+    await a.close();
+  });
+
+  it('RP2 refuses a replay whose claimed attempt no longer exists', async () => {
+    const a = startProcess('a');
+    await createRun(a, runId, MISSION_B);
+    const view = await a.composition.store.readRun(runId);
+    const claim = {
+      runId,
+      operationId: `${runId}.claim`,
+      expectedRevision: view.run.revision,
+      planDigest: view.run.planDigest,
+      stepIndex: 0,
+      stepType: 'VALIDATE_INPUT' as const,
+      charge: 'NONE' as const,
+      toolCallCount: 0,
+      maxSpecialistCalls: 0,
+      maxToolCalls: 2,
+      maxSteps: 12,
+    };
+    await a.composition.store.claimStep(claim, a.clock.nowMs());
+
+    // The replay record survives; the attempt it names does not. The claim wrote both in ONE
+    // transaction, so this state is impossible to reach honestly -- and describing a neighbouring
+    // attempt as though it were this one would be worse than refusing.
+    await jao7RawStatement(
+      a.pool,
+      'DELETE FROM $SCHEMA.autonomy_step WHERE run_id = $1 AND step_index = 0',
+      [runId],
+    );
+    await expect(a.composition.store.claimStep(claim, a.clock.nowMs())).rejects.toMatchObject({
+      code: 'PERSISTED_STATE_INVALID',
+    });
     await a.close();
   });
 });

@@ -27,6 +27,7 @@ import type { DatabaseClient, DatabasePool } from '@qf-jarvis/event-backbone';
 
 import {
   Jao7AutonomyError,
+  jao7IsTerminalState,
   type Jao7OperationKind,
   jao7AuthorityObservationRecordSchema,
   jao7EvaluationRecordSchema,
@@ -316,8 +317,12 @@ function decodeRehearsal(row: RehearsalRow): Jao7RehearsalRecord {
  * excluded because it is the KEY the digest is stored under: hashing the key into the value would
  * make every lookup match itself and prove nothing.
  *
- * `expectedRevision` is INCLUDED. The same id used at a different revision is the same id meaning a
- * different change to a different state of the run, and that is exactly what a conflict is.
+ * `expectedRevision` is INCLUDED by every mutation EXCEPT `CLAIM_STEP`. The same id used at a
+ * different revision is the same id meaning a different change to a different state of the run, and
+ * that is exactly what a conflict is. The claim is the single documented exception, for the reason
+ * written above `jao7ClaimStepDigest`: it commits separately from the work it authorises and bumps
+ * the revision itself, so an exact crash replay necessarily observes the post-claim revision. That
+ * exception was reviewed and accepted.
  *
  * Field NAMES are hashed alongside their values and the pairs are sorted, so adding a field changes
  * the digest even when its value is empty, and reordering the call site changes nothing.
@@ -505,7 +510,25 @@ const INSERT_STEP = `
          outcome_code
 `;
 
-/** The latest attempt at one plan position, whatever became of it. */
+/**
+ * The attempt one OPERATION ID created at one plan position.
+ *
+ * A replay must return the row that operation actually wrote. The lookup used to be "the latest
+ * attempt at this step index", which is the same row only until a retained plan position is
+ * attempted again -- after that, replaying an old claim would have described somebody else's
+ * attempt, under the old attempt's own operation id, in an audit trail.
+ *
+ * `operation_id` is written by the claim and never changed, and the replay table's primary key makes
+ * it unique across the schema, so `(run_id, step_index, operation_id)` identifies exactly one row.
+ */
+const SELECT_ATTEMPT_BY_OPERATION = `
+  SELECT step_index, attempt_index, step_type, step_status, started_at, completed_at,
+         outcome_code
+    FROM ${SCHEMA}.autonomy_step
+   WHERE run_id = $1 AND step_index = $2 AND operation_id = $3
+`;
+
+/** The latest attempt at one plan position, whatever became of it. Used to ALLOCATE the next one. */
 const SELECT_LATEST_ATTEMPT = `
   SELECT step_index, attempt_index, step_type, step_status, started_at, completed_at,
          outcome_code
@@ -663,9 +686,17 @@ async function replayGuard(
  * DIFFERENT operation id is another caller's in-flight work and must be refused, and a record whose
  * digest disagrees is the same id being reused to mean something else.
  *
- * The run is returned as it stood when the claim committed -- read back through the replay record's
- * revision, never from a header that has moved on -- and `priorState` reports the state the claim
- * moved the run OUT of, which is what a later eligibility check needs.
+ * ### What is returned, stated accurately
+ *
+ * The run header is read LIVE, not reconstructed as it stood when the claim committed -- JAO-7 stores
+ * no historical header, and this function used to say otherwise. What IS exact is the step: the
+ * attempt row is fetched by the claiming operation id, so a replay describes the attempt that
+ * operation actually created even after the same plan position has been attempted again.
+ *
+ * `priorState` is reported as `IN_PROGRESS` rather than read: the claim committed that state, the
+ * state it moved the run OUT of is not stored, and the coordinator stops before the work phase on a
+ * replay anyway. Reporting the live header there would let a replayed claim inherit an eligibility
+ * it never had.
  */
 async function replayedClaim(
   client: DatabaseClient,
@@ -690,15 +721,16 @@ async function replayedClaim(
     ? await loadRunForUpdate(client, request.runId)
     : await loadRun(client, request.runId);
 
-  // The attempt this id claimed is the one whose revision the replay record names. The claim bumped
-  // the run by exactly one, so the attempt that existed before it is the one below that.
-  const attempt = await client.query<StepRow>(SELECT_LATEST_ATTEMPT, [
+  // THE EXACT ATTEMPT THIS OPERATION ID CREATED, by its own durable key.
+  const attempt = await client.query<StepRow>(SELECT_ATTEMPT_BY_OPERATION, [
     request.runId,
     request.stepIndex,
+    request.operationId,
   ]);
   const row = attempt.rows[0];
-  if (row === undefined) {
-    // A replay record without its step is a contradiction the same transaction wrote atomically.
+  if (attempt.rows.length !== 1 || row === undefined) {
+    // A replay record without exactly one matching step is a contradiction: the claim wrote both in
+    // one transaction. Refuse rather than describe a neighbouring attempt as though it were this one.
     throw new Jao7AutonomyError('PERSISTED_STATE_INVALID');
   }
 
@@ -962,7 +994,10 @@ export function createJao7PostgresStore(pool: DatabasePool): Jao7AutonomyStore {
 
           // The claim writes a replay record like every other mutation. That record is what makes
           // the operation id a promise about THIS step: a retry replays it, and the same id used for
-          // a different step, revision or budget is `OPERATION_CONFLICT` with zero further writes.
+          // a different step, plan, charge or budget is `OPERATION_CONFLICT` with zero further
+          // writes. Not a different REVISION -- the claim moves the revision itself, so an honest
+          // retry after a lost process always sees a different one, and treating that as a conflict
+          // would make the replay above unreachable.
           await writeReplay(
             client,
             request.operationId,
@@ -1559,21 +1594,40 @@ export function createJao7PostgresStore(pool: DatabasePool): Jao7AutonomyStore {
           }
 
           // A TERMINAL run keeps its terminal state. A safety rollback cleans the sandbox up; it
-          // does not resurrect the run, and moving a killed run to ROLLING_BACK would contradict
-          // the kill-consistency constraint as well as the meaning of the word.
-          const terminal =
-            run.state === 'KILLED' || run.state === 'EXPIRED' || run.state === 'COMPLETED';
+          // does not resurrect the run, and moving a terminal run to ROLLING_BACK would contradict
+          // both the meaning of the word and the gate that treats those states as final.
+          //
+          // This used to be an inline comparison against KILLED, EXPIRED and COMPLETED. FAILED_SAFE
+          // -- the fourth member of the closed terminal vocabulary, and the one a cancelled step
+          // actually produces -- was missing, so a successful safety rollback of a failed-safe run
+          // moved it to ROLLING_BACK and made it forward-eligible again. `jao7IsTerminalState` is an
+          // exhaustive switch, so a run state added later cannot be omitted from this decision
+          // without failing to compile.
+          const terminal = jao7IsTerminalState(run.state);
+
+          // WALL-CLOCK EXPIRY, MATERIALISED DURING THE CLEANUP THAT OBSERVED IT.
+          //
+          // A run whose lifetime has passed is expired whether or not any call has written that down
+          // yet, and safety cleanup is deliberately permitted after expiry. Leaving the row saying
+          // REHEARSAL_APPLIED or ROLLING_BACK afterwards would report a run as live when it is not,
+          // which is the same class of untruth as an audit trail naming the wrong mutation. Forward
+          // work never reaches here -- `assertForwardEligible` refuses an expired run before an
+          // apply or a verify -- so this can only be the cleanup path.
+          const wallClockExpired = nowMs >= Date.parse(run.expiresAt);
+
           const nextRunState =
             request.operationKind === 'APPLY_REHEARSAL'
               ? 'REHEARSAL_APPLIED'
               : request.operationKind === 'VERIFY_REHEARSAL'
                 ? 'VERIFYING'
-                : request.nextRehearsalState === 'ROLLED_BACK'
-                  ? 'ROLLING_BACK'
-                  : // A rollback that did NOT restore the captured state is terminal and safe. There
-                    // is no second attempt to schedule, and leaving the run mid-rollback would
-                    // describe a cleanup that is still in progress when nothing further will happen.
-                    'FAILED_SAFE';
+                : wallClockExpired
+                  ? 'EXPIRED'
+                  : request.nextRehearsalState === 'ROLLED_BACK'
+                    ? 'ROLLING_BACK'
+                    : // A rollback that did NOT restore the captured state is terminal and safe.
+                      // There is no second attempt to schedule, and leaving the run mid-rollback
+                      // would describe a cleanup still in progress when nothing further will happen.
+                      'FAILED_SAFE';
           const runSets = terminal
             ? request.operationKind === 'APPLY_REHEARSAL'
               ? 'rehearsal_applies = rehearsal_applies + 1'

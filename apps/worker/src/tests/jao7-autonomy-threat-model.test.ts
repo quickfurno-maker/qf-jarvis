@@ -220,6 +220,7 @@ describe('JAO-7 autonomy threat model', () => {
       'readJao7AutonomyRunInternal',
       'runJao7StepInternal',
       'performJao7StepInternal',
+      'jao7OutcomeForInternal',
       'Jao7ClaimStepRequest',
       'Jao7FinalizeStepRequest',
       'Jao7RehearsalMutationRequest',

@@ -239,6 +239,32 @@ takes a run id and an operation id, and there is no target, value, state or forc
 public because the guarantee is: the previous proof reached through the raw store, which no public
 caller has, and a guarantee only an internal test can exercise is not a guarantee.
 
+**It is an EMERGENCY capability, and the re-review narrowed it to one.** As first written it required
+only that the sandbox was `APPLIED`, so a caller could invoke it against a perfectly healthy run that
+was simply between its rehearsal and its verification - and a successful cleanup there left that run
+`ROLLING_BACK` and still forward-eligible, which is a second way to steer the happy path. The public
+verb now requires the run to be over: `KILLED`, `FAILED_SAFE`, `EXPIRED`, or past its `expiresAt`
+with nobody having written that down yet. An active run is refused with `STATE_CONFLICT`; a terminal
+run with nothing applied is refused with `ROLLBACK_NOT_ELIGIBLE`. The two are deliberately
+distinguishable, because an operator needs to tell "you may not ask that of a live run" from "there
+is nothing here to undo". The INTERNAL evaluator-driven rollback branch is untouched.
+
+Wall-clock expiry counts because the run IS expired at that moment whether or not a call has
+materialised it, and refusing cleanup until somebody else materialises it would strand the sandbox on
+a technicality. So the cleanup transaction materialises `EXPIRED` itself. Returning afterwards with a
+row still saying `REHEARSAL_APPLIED` would describe an expired run as live, which is the same class
+of untruth as an audit trail naming the wrong mutation.
+
+**And cleanup preserves every terminal state, including `FAILED_SAFE`.** The adapter decided whether
+to preserve one by comparing against `KILLED`, `EXPIRED` and `COMPLETED` - three of the four members
+of the closed terminal vocabulary. `FAILED_SAFE` was missing, and it is the state a cancelled or
+crashed step actually produces, so a successful safety rollback of a failed-safe run moved it to
+`ROLLING_BACK` and made it forward-eligible again. The array beside the comparison said four; the
+comparison said three; nothing objected. That decision is now `jao7IsTerminalState`, an exhaustive
+switch over the closed vocabulary: a run state added later fails to compile until somebody decides
+whether it ends the run, and a spec asserts the function and `JAO7_TERMINAL_STATES` agree member for
+member.
+
 A failed rollback is now DURABLE. `rollback_attempted_at` and `rolled_back_at` used to be one column,
 and the consistency check then made a `ROLLBACK_FAILED` row unwritable - a failure state that cannot
 be persisted is a failure state that does not exist, which is the opposite of failing safe. The
@@ -337,7 +363,19 @@ They remain one-way SHA-256 over a canonical serialisation: nothing reusable is 
 artifact cannot be recovered from them.
 
 Every mutation's replay digest covers every field that governs it, with `nowMs` and the operation id
-excluded for reasons that are stated where they are excluded. `RECORD_AUTHORITY` is its own operation
+excluded for reasons that are stated where they are excluded. `expectedRevision` is included by every
+mutation except `CLAIM_STEP`, which is the single documented exception: the claim commits separately
+from the work it authorises and bumps the revision itself, so an exact crash replay necessarily
+observes the post-claim revision, and hashing the pre-claim value would make an honest replay
+conflict with its own committed claim. That exception was put to owner review and accepted; safety
+comes from the exact semantic binding plus the coordinator stopping before the work phase.
+
+A replay identifies the attempt that operation id actually created, by `(run_id, step_index,
+operation_id)`. Looking up "the latest attempt at this step index" was the same row only until a
+retained plan position was attempted again - after which an old claim's replay would have described
+somebody else's attempt under the old attempt's own operation id. A replay record without exactly one
+matching step is `PERSISTED_STATE_INVALID`: the claim wrote both in one transaction, so that state is
+unreachable honestly, and describing a neighbouring attempt would be worse than refusing. `RECORD_AUTHORITY` is its own operation
 kind; it used to replay under `FINALIZE_STEP`, so the audit trail named the wrong mutation - and a
 trail that misnames what happened is worse than one that says nothing, because a reader trusts it.
 
@@ -405,7 +443,22 @@ what took seven slices.
 The result contract is declared rather than `unknown`, and it is parsed before it is returned: the
 schema that exists to prove a result is well-formed used to prove nothing about the five fields
 carrying every durable fact, and nothing ever ran it. It now also refuses a result whose outcome
-contradicts its state. The two failure fixtures that used to be optional booleans on the PUBLIC
+contradicts its state - and, since the re-review, one whose COMPLETED outcome contradicts the sandbox
+that produced it.
+
+There are exactly two ways a JAO-7 run completes: its rehearsal `VERIFIED`, or its rehearsal was
+`ROLLED_BACK` cleanly. The derivation read "rolled back, or else completed", and the schema permitted
+either completed outcome without looking at the rehearsal at all - so a COMPLETED run beside a
+`CAPTURED`, `APPLIED`, `ROLLBACK_REQUIRED`, `ROLLBACK_FAILED` or missing sandbox reported
+`COMPLETED_REHEARSAL`. Every one of those is a contradiction between two tables, and no single-row
+constraint can catch it. Both the derivation and the schema now require the completed outcome to name
+the sandbox state that produced it, and refuse the result otherwise. A rolled-back sandbox on a
+`KILLED` or `FAILED_SAFE` run is not a contradiction - it is terminal cleanup, and the outcome stays
+terminal.
+
+The two layers are deliberate belt-and-braces, and they are proved separately: a defect in the
+derivation alone is invisible from outside, because the schema would refuse the same result. So the
+derivation is exercised directly by its own spec. The two failure fixtures that used to be optional booleans on the PUBLIC
 request schema live in the internal composition beside the store and the clock - neither could ever
 grant anything, but a public knob that exists to break a safety check is a public knob somebody
 eventually flips.

@@ -27,6 +27,7 @@ import {
   JAO7_PRODUCING_AGENT,
   JAO7_REFUSAL_REASONS,
   JAO7_RUN_STATES,
+  JAO7_TERMINAL_STATES,
   JAO7_STEP_TYPES,
   Jao7AutonomyError,
   describeJao7Missions,
@@ -34,7 +35,10 @@ import {
 } from '../jao/advanced-governed-autonomy/index.js';
 // By DIRECT MODULE PATH. None of these is reachable through the barrel above, which is the property
 // the threat-model suite asserts.
-import { JAO7_OPERATION_KINDS } from '../jao/advanced-governed-autonomy/contracts.js';
+import {
+  JAO7_OPERATION_KINDS,
+  jao7IsTerminalState,
+} from '../jao/advanced-governed-autonomy/contracts.js';
 import { decideJao7Capacity } from '../jao/advanced-governed-autonomy/capacity.js';
 import {
   evaluateJao7Step,
@@ -65,6 +69,7 @@ import { jao7ValidateCarriedProposal } from '../jao/advanced-governed-autonomy/p
 import {
   jao7AutonomyRequestSchema,
   jao7AutonomyResultSchema,
+  jao7SafetyRollbackRequestSchema,
 } from '../jao/advanced-governed-autonomy/public-contracts.js';
 import type {
   Jao7ClaimStepRequest,
@@ -79,6 +84,8 @@ import {
   jao7PlanDigest,
   jao7PlanFor,
 } from '../jao/advanced-governed-autonomy/mission-registry.js';
+import { jao7OutcomeForInternal } from '../jao/advanced-governed-autonomy/coordinator.js';
+import { jao7RehearsalRecordSchema } from '../jao/advanced-governed-autonomy/contracts.js';
 import { buildJao7Proposal } from '../jao/advanced-governed-autonomy/proposal.js';
 import { correlateJao7Authority } from '../jao/advanced-governed-autonomy/authority.js';
 import {
@@ -1082,8 +1089,14 @@ describe('JAO-7 advanced governed autonomy', () => {
         base,
       );
     }
-    // The revision is the precondition, not the promise. A retry after a lost process re-reads a
-    // moved-on revision, and refusing it as a conflict would make an honest replay impossible.
+    // THE ONE ACCEPTED EXCEPTION, reviewed and confirmed in the PR #163 re-review.
+    //
+    // Every other mutation's digest covers `expectedRevision`, because the same id used against a
+    // different run state is the same id meaning a different change. The claim cannot: it commits
+    // separately from the work it authorises and bumps the revision ITSELF, so a retry after a lost
+    // process necessarily re-reads a moved-on revision. Hashing it would make an honest replay
+    // conflict with its own committed claim, and the replay is the whole point. Safety comes from
+    // the exact semantic binding above plus the coordinator stopping before the work phase.
     expect(jao7ClaimStepDigest({ ...CLAIM_BASE, expectedRevision: 4 })).toBe(base);
   });
 
@@ -1567,6 +1580,254 @@ describe('JAO-7 advanced governed autonomy', () => {
         }).success,
         JSON.stringify(forbidden),
       ).toBe(false);
+    }
+  });
+
+  // =========================================================================
+  // TS. The terminal vocabulary, asked exhaustively.
+  // =========================================================================
+
+  it('TS1 agrees with JAO7_TERMINAL_STATES member for member', () => {
+    // Safety cleanup decides whether to preserve a run's state by asking `jao7IsTerminalState`, and
+    // the version it replaced was an inline comparison against THREE of the four terminal states.
+    // FAILED_SAFE was missing. The array said four; the comparison said three; nothing objected.
+    const byHelper = JAO7_RUN_STATES.filter((state) => jao7IsTerminalState(state));
+    expect([...byHelper].sort()).toStrictEqual([...JAO7_TERMINAL_STATES].sort());
+    expect([...JAO7_TERMINAL_STATES].sort()).toStrictEqual([
+      'COMPLETED',
+      'EXPIRED',
+      'FAILED_SAFE',
+      'KILLED',
+    ]);
+    // FAILED_SAFE explicitly, because it is the member that was missing and the one a cancelled
+    // step actually produces.
+    expect(jao7IsTerminalState('FAILED_SAFE')).toBe(true);
+    // And every other state is a state a run can still move forward from.
+    for (const state of JAO7_RUN_STATES) {
+      expect(jao7IsTerminalState(state), state).toBe(
+        (JAO7_TERMINAL_STATES as readonly string[]).includes(state),
+      );
+    }
+  });
+
+  it('TS2 gives the safety-cleanup request no field through which to aim it', () => {
+    // A rollback that could be aimed somewhere new would be a second apply wearing a safer word.
+    expect(
+      jao7SafetyRollbackRequestSchema.safeParse({
+        runId: 'jao7.run.cleanup',
+        operationId: 'jao7.run.cleanup.op',
+      }).success,
+    ).toBe(true);
+    for (const injected of [
+      { rollbackTarget: 8 },
+      { rollbackIntegerA: 8 },
+      { nextRehearsalState: 'ROLLED_BACK' },
+      { state: 'IN_PROGRESS' },
+      { force: true },
+      { expectedRevision: 4 },
+      { maxRollbackAttempts: 4 },
+    ]) {
+      expect(
+        jao7SafetyRollbackRequestSchema.safeParse({
+          runId: 'jao7.run.cleanup',
+          operationId: 'jao7.run.cleanup.op',
+          ...injected,
+        }).success,
+        JSON.stringify(injected),
+      ).toBe(false);
+    }
+  });
+
+  // =========================================================================
+  // RC. The completed outcome names the sandbox state that produced it.
+  // =========================================================================
+
+  const RESULT_BASE = {
+    runId: 'jao7.run.result',
+    missionPolicyId: 'jao7.synthetic-capacity-remediation',
+    missionPolicyVersion: 1,
+    missionPolicyDigest: 'a'.repeat(64),
+    planDigest: 'b'.repeat(64),
+    state: 'COMPLETED',
+    outcome: 'COMPLETED_REHEARSAL',
+    refusalReason: null,
+    currentStepIndex: 8,
+    revision: 12,
+    stepsCompleted: 8,
+    specialistCalls: 0,
+    toolCalls: 1,
+    modelCalls: 0,
+    rehearsalApplies: 1,
+    steps: [],
+    evaluations: [],
+    authorityObservation: null,
+    proposal: null,
+    authoritySourcePosture: 'INJECTED_OFFLINE_CORE_FIXTURE',
+    posture: JAO7_POSTURE,
+  };
+
+  function rehearsalRecord(over: Record<string, unknown>): Record<string, unknown> {
+    return {
+      rehearsalClass: 'VIRTUAL_CAPACITY_POOL',
+      beforeIntegerA: 8,
+      beforeIntegerB: null,
+      afterIntegerA: 9,
+      afterIntegerB: null,
+      rollbackIntegerA: null,
+      rollbackIntegerB: null,
+      state: 'VERIFIED',
+      appliedAt: '2026-08-26T09:00:00.000Z',
+      verifiedAt: '2026-08-26T09:01:00.000Z',
+      rollbackAttemptedAt: null,
+      rolledBackAt: null,
+      rollbackAttempts: 0,
+      revision: 3,
+      ...over,
+    };
+  }
+
+  it('RC1 accepts only the two ways a JAO-7 run actually completes', () => {
+    expect(
+      jao7AutonomyResultSchema.safeParse({ ...RESULT_BASE, rehearsal: rehearsalRecord({}) })
+        .success,
+    ).toBe(true);
+    expect(
+      jao7AutonomyResultSchema.safeParse({
+        ...RESULT_BASE,
+        outcome: 'ROLLED_BACK_REHEARSAL',
+        rehearsal: rehearsalRecord({
+          state: 'ROLLED_BACK',
+          rollbackAttemptedAt: '2026-08-26T09:02:00.000Z',
+          rolledBackAt: '2026-08-26T09:02:00.000Z',
+          rollbackIntegerA: 8,
+          rollbackAttempts: 1,
+        }),
+      }).success,
+    ).toBe(true);
+  });
+
+  it('RC2 refuses a completed outcome that names the wrong sandbox state', () => {
+    // Each of these is a contradiction between two tables. The schema used to permit both completed
+    // outcomes for a COMPLETED run without looking at the rehearsal at all.
+    const rolledBack = rehearsalRecord({
+      state: 'ROLLED_BACK',
+      rollbackAttemptedAt: '2026-08-26T09:02:00.000Z',
+      rolledBackAt: '2026-08-26T09:02:00.000Z',
+      rollbackIntegerA: 8,
+      rollbackAttempts: 1,
+    });
+    // COMPLETED_REHEARSAL beside a rolled-back sandbox.
+    expect(
+      jao7AutonomyResultSchema.safeParse({ ...RESULT_BASE, rehearsal: rolledBack }).success,
+    ).toBe(false);
+    // ROLLED_BACK_REHEARSAL beside a verified one.
+    expect(
+      jao7AutonomyResultSchema.safeParse({
+        ...RESULT_BASE,
+        outcome: 'ROLLED_BACK_REHEARSAL',
+        rehearsal: rehearsalRecord({}),
+      }).success,
+    ).toBe(false);
+    // And every sandbox state that cannot have produced a completed run at all.
+    for (const state of ['CAPTURED', 'APPLIED', 'ROLLBACK_REQUIRED', 'ROLLBACK_FAILED']) {
+      const over: Record<string, unknown> =
+        state === 'ROLLBACK_FAILED'
+          ? { state, rollbackAttemptedAt: '2026-08-26T09:02:00.000Z', rollbackAttempts: 1 }
+          : state === 'CAPTURED'
+            ? { state, appliedAt: null, verifiedAt: null, afterIntegerA: null }
+            : { state };
+      for (const outcome of ['COMPLETED_REHEARSAL', 'ROLLED_BACK_REHEARSAL']) {
+        expect(
+          jao7AutonomyResultSchema.safeParse({
+            ...RESULT_BASE,
+            outcome,
+            rehearsal: rehearsalRecord(over),
+          }).success,
+          `${state}/${outcome}`,
+        ).toBe(false);
+      }
+    }
+    // A completed run with no sandbox at all is the same contradiction.
+    expect(jao7AutonomyResultSchema.safeParse({ ...RESULT_BASE, rehearsal: null }).success).toBe(
+      false,
+    );
+  });
+
+  it('RC2b derives the completed outcome from the sandbox, and refuses when it cannot', () => {
+    // The DERIVATION on its own. The result schema refuses the same contradictions, which is
+    // deliberate -- and it also means a defect here alone would never surface from outside, so the
+    // two layers are proved separately.
+    const verified = jao7RehearsalRecordSchema.parse(rehearsalRecord({}));
+    const rolledBack = jao7RehearsalRecordSchema.parse(
+      rehearsalRecord({
+        state: 'ROLLED_BACK',
+        rollbackAttemptedAt: '2026-08-26T09:02:00.000Z',
+        rolledBackAt: '2026-08-26T09:02:00.000Z',
+        rollbackIntegerA: 8,
+        rollbackAttempts: 1,
+      }),
+    );
+    expect(jao7OutcomeForInternal('COMPLETED', verified)).toBe('COMPLETED_REHEARSAL');
+    expect(jao7OutcomeForInternal('COMPLETED', rolledBack)).toBe('ROLLED_BACK_REHEARSAL');
+
+    // Every sandbox state that cannot have produced a completed run, and a missing one. The branch
+    // this replaces read "rolled back, or else completed", so all of these reported success.
+    for (const over of [
+      { state: 'APPLIED' as const },
+      { state: 'ROLLBACK_REQUIRED' as const },
+      {
+        state: 'ROLLBACK_FAILED' as const,
+        rollbackAttemptedAt: '2026-08-26T09:02:00.000Z',
+        rollbackAttempts: 1,
+      },
+      { state: 'CAPTURED' as const, appliedAt: null, verifiedAt: null, afterIntegerA: null },
+    ]) {
+      const record = jao7RehearsalRecordSchema.parse(rehearsalRecord(over));
+      expect(() => jao7OutcomeForInternal('COMPLETED', record), over.state).toThrow(
+        Jao7AutonomyError,
+      );
+    }
+    expect(() => jao7OutcomeForInternal('COMPLETED', null)).toThrow(Jao7AutonomyError);
+
+    // Cleanup leaves a rolled-back sandbox on a terminal run, and the outcome stays terminal.
+    expect(jao7OutcomeForInternal('KILLED', rolledBack)).toBe('KILLED');
+    expect(jao7OutcomeForInternal('FAILED_SAFE', rolledBack)).toBe('FAILED_SAFE');
+    expect(jao7OutcomeForInternal('EXPIRED', rolledBack)).toBe('EXPIRED');
+  });
+
+  it('RC3 keeps a completed outcome off every other state, and cleanup honest', () => {
+    for (const state of ['KILLED', 'FAILED_SAFE', 'EXPIRED', 'PAUSED', 'IN_PROGRESS']) {
+      for (const outcome of ['COMPLETED_REHEARSAL', 'ROLLED_BACK_REHEARSAL']) {
+        expect(
+          jao7AutonomyResultSchema.safeParse({
+            ...RESULT_BASE,
+            state,
+            outcome,
+            rehearsal: rehearsalRecord({}),
+          }).success,
+          `${state}/${outcome}`,
+        ).toBe(false);
+      }
+    }
+    // Terminal safety cleanup leaves a ROLLED_BACK sandbox on a run that is KILLED or FAILED_SAFE,
+    // and the outcome stays the terminal one. That is not a contradiction -- it is the whole point.
+    const cleaned = rehearsalRecord({
+      state: 'ROLLED_BACK',
+      rollbackAttemptedAt: '2026-08-26T09:02:00.000Z',
+      rolledBackAt: '2026-08-26T09:02:00.000Z',
+      rollbackIntegerA: 8,
+      rollbackAttempts: 1,
+    });
+    for (const state of ['KILLED', 'FAILED_SAFE', 'EXPIRED']) {
+      expect(
+        jao7AutonomyResultSchema.safeParse({
+          ...RESULT_BASE,
+          state,
+          outcome: state,
+          rehearsal: cleaned,
+        }).success,
+        state,
+      ).toBe(true);
     }
   });
 });

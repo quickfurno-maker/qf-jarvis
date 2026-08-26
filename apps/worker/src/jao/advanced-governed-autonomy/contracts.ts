@@ -84,13 +84,48 @@ export const JAO7_RUN_STATES = Object.freeze([
 
 export type Jao7RunState = (typeof JAO7_RUN_STATES)[number];
 
-/** States from which no forward step may ever be claimed again. */
+/** States from which no forward step may ever be claimed again. Frozen; a reader cannot grow it. */
 export const JAO7_TERMINAL_STATES: readonly Jao7RunState[] = Object.freeze([
   'COMPLETED',
   'KILLED',
   'EXPIRED',
   'FAILED_SAFE',
 ]);
+
+/**
+ * Is this run over?
+ *
+ * ### Why this is a switch rather than a lookup in the array above
+ *
+ * Safety cleanup decides whether to preserve a run's state by asking this question, and it used to
+ * ask it with an inline comparison against three of the four terminal states. `FAILED_SAFE` was
+ * missing, so a successful safety rollback of a failed-safe run moved it to `ROLLING_BACK` -- a
+ * terminal run made forward-eligible again by a cleanup whose whole promise is that it resurrects
+ * nothing. The array beside it said four. The comparison said three. Nothing objected.
+ *
+ * An exhaustive switch over the closed vocabulary is the version that cannot drift: a run state
+ * added later fails to COMPILE here until somebody decides whether it ends the run. A spec asserts
+ * this function and `JAO7_TERMINAL_STATES` agree member for member, so the two cannot disagree
+ * silently either.
+ */
+export function jao7IsTerminalState(state: Jao7RunState): boolean {
+  switch (state) {
+    case 'COMPLETED':
+    case 'KILLED':
+    case 'EXPIRED':
+    case 'FAILED_SAFE':
+      return true;
+    case 'PLANNED':
+    case 'IN_PROGRESS':
+    case 'AWAITING_AUTHORITY':
+    case 'AUTHORITY_EVIDENCE_VALIDATED_FOR_REHEARSAL':
+    case 'REHEARSAL_APPLIED':
+    case 'VERIFYING':
+    case 'ROLLING_BACK':
+    case 'PAUSED':
+      return false;
+  }
+}
 
 /**
  * The closed step vocabulary.

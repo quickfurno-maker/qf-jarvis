@@ -340,8 +340,9 @@ Advanced autonomy does not relax the permanent authority ceiling. Irreversible, 
   subscription. Kill is terminal with no unkill; expiry blocks forward work; pause resumes only
   explicitly, and a pause that would strand applied, unverified synthetic state is refused. Safety
   rollback of already-applied synthetic state is superior to kill and expiry, is reachable from the
-  PUBLIC surface, is bounded to one attempt by a durable counter and a database CHECK, and can only
-  restore the captured BEFORE value.
+  PUBLIC surface as an EMERGENCY verb only -- a killed, failed-safe or expired run, never a healthy
+  active one -- is bounded to one attempt by a durable counter and a database CHECK, can only restore
+  the captured BEFORE value, and leaves every terminal state exactly as it found it.
 - **The authority gate is made of plan position as well as run state.** An incomplete or rejected
   correlation retains its plan position and is attempted again under the reviewed step budget; a
   rehearsal is ineligible without a just-proven exact chain bound to this run's own proposal.

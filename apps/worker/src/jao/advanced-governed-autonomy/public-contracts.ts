@@ -328,10 +328,35 @@ export const jao7AutonomyResultSchema = z
     if (value.outcome === 'REFUSED') {
       return;
     }
-    const implied = JAO7_STATE_OUTCOMES[value.state];
-    const permitted =
-      value.state === 'COMPLETED' ? ['COMPLETED_REHEARSAL', 'ROLLED_BACK_REHEARSAL'] : [implied];
-    if (!permitted.includes(value.outcome)) {
+
+    // THE COMPLETED BRANCH IS BOUND TO THE SANDBOX THAT PRODUCED IT.
+    //
+    // It used to permit either completed outcome for a COMPLETED run without looking at the
+    // rehearsal at all -- so a result could say `COMPLETED_REHEARSAL` beside a ROLLED_BACK sandbox,
+    // or `ROLLED_BACK_REHEARSAL` beside a VERIFIED one, or either beside a sandbox that had never
+    // been applied. Each of those is a contradiction between two tables, and the schema exists to
+    // refuse exactly the results that read correctly and are wrong.
+    //
+    // There are two ways a JAO-7 run completes, and each names the sandbox state that produced it.
+    if (value.state === 'COMPLETED') {
+      const required =
+        value.outcome === 'COMPLETED_REHEARSAL'
+          ? 'VERIFIED'
+          : value.outcome === 'ROLLED_BACK_REHEARSAL'
+            ? 'ROLLED_BACK'
+            : null;
+      if (required === null || value.rehearsal?.state !== required) {
+        context.addIssue({
+          code: 'custom',
+          message: 'a completed outcome must name the rehearsal state that produced it',
+        });
+      }
+      return;
+    }
+
+    // Every other state implies exactly one outcome, so neither completed outcome can appear
+    // anywhere else -- a rolled-back sandbox on a KILLED run still reports KILLED.
+    if (value.outcome !== JAO7_STATE_OUTCOMES[value.state]) {
       context.addIssue({ code: 'custom', message: 'the outcome contradicts the run state' });
     }
   });
