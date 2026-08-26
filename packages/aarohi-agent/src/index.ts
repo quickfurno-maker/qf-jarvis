@@ -65,6 +65,25 @@
  * immutable OPEN/HELD/REJECTED revisions with no approved or sent state. Approval readiness
  * rechecks the AVG-3 Core gate and can say only that an OPEN draft is ready to enter the existing
  * Core approval-request path; this package creates no approval decision, authorization or effect.
+ *
+ * ### AVG-5 adds an offline Instagram conversation domain (ADR-0122)
+ *
+ * Inbound is an OBSERVATION: bounded, normalized, never interpreted, and stamped with a source
+ * posture that says injected and offline rather than provider-authenticated. A conversation snapshot
+ * is immutable, finite, deduplicated by message reference and canonically ordered, and it has no
+ * OUTBOUND direction to append a candidate to.
+ *
+ * Outbound is a CANDIDATE assembled from an existing canonical AVG-4 OPEN draft after the CURRENT
+ * Core gate has been re-run through AVG-4's own readiness function. It carries the draft's own words
+ * -- there is no body field on the builder's input -- and it states as literal `false` that no
+ * communication request, approval request, approval decision, communication authorization or
+ * execution intent was created, that no provider or n8n was asked to do anything, and that nothing
+ * was sent or delivered.
+ *
+ * The channel token is AAROHI-LOCAL. The repository's shared governed channel vocabulary is
+ * unchanged and still excludes Instagram: naming a channel there is a promise that a transport
+ * exists, and adopting the real Instagram execution path is QFJ-P09's work, not an offline domain
+ * slice's.
  */
 
 export {
@@ -233,3 +252,49 @@ export type {
   WorkspaceReviewItem,
   WorkspaceReviewResult,
 } from './contracts/avg4-outreach-workspace.js';
+
+export {
+  AAROHI_AVG5_CHANNEL,
+  AAROHI_AVG5_CONTRACT_VERSION,
+  INSTAGRAM_BINDING_POSTURE,
+  INSTAGRAM_CONTINUATION_OUTCOMES,
+  INSTAGRAM_CONVERSATION_REFUSALS,
+  INSTAGRAM_OBSERVATION_REFUSALS,
+  INSTAGRAM_OBSERVATION_SOURCE_POSTURE,
+  INSTAGRAM_OUTBOUND_CANDIDATE_OUTCOME,
+  INSTAGRAM_OUTBOUND_CANDIDATE_POSTURE,
+  INSTAGRAM_OUTBOUND_CANDIDATE_REFUSALS,
+  INSTAGRAM_TURN_DIRECTIONS,
+  MAX_INSTAGRAM_CONVERSATION_TURNS,
+  MAX_INSTAGRAM_MESSAGE_LENGTH,
+  appendInstagramInboundObservation,
+  createInstagramConversation,
+  evaluateInstagramAcquisitionContinuation,
+  instagramConversationSnapshotSchema,
+  instagramInboundObservationSchema,
+  instagramOutboundCandidatePostureSchema,
+  instagramOutboundCandidateSchema,
+  parseInstagramConversation,
+  parseInstagramInboundObservation,
+  prepareInstagramOutboundCandidate,
+} from './contracts/avg5-instagram-conversation.js';
+export type {
+  AarohiAvg5Channel,
+  AarohiAvg5ContractVersion,
+  InstagramBindingPosture,
+  InstagramContinuationOutcome,
+  InstagramContinuationVerdict,
+  InstagramConversationRefusal,
+  InstagramConversationResult,
+  InstagramConversationSnapshot,
+  InstagramInboundObservation,
+  InstagramInboundObservationResult,
+  InstagramObservationRefusal,
+  InstagramObservationSourcePosture,
+  InstagramOutboundCandidate,
+  InstagramOutboundCandidateOutcome,
+  InstagramOutboundCandidatePosture,
+  InstagramOutboundCandidateRefusal,
+  InstagramOutboundCandidateResult,
+  InstagramTurnDirection,
+} from './contracts/avg5-instagram-conversation.js';
