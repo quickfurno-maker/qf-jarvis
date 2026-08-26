@@ -27,7 +27,12 @@
  */
 import { z } from 'zod';
 
-import { JAO7_STEP_TYPES, type Jao7EvaluationVerdict, type Jao7StepType } from './contracts.js';
+import {
+  JAO7_STEP_TYPES,
+  type Jao7EvaluationVerdict,
+  type Jao7PlanProgression,
+  type Jao7StepType,
+} from './contracts.js';
 
 /**
  * Everything the evaluator may see. Bounded, structured, and closed.
@@ -166,6 +171,49 @@ export function evaluateJao7Step(input: unknown): Jao7Evaluation {
       return state.isLastStep
         ? verdict('COMPLETE', 'PLAN_COMPLETE')
         : verdict('CONTINUE', 'STEP_COMPLETED');
+  }
+}
+
+/**
+ * Whether a finalised step's outcome MOVES the run's position in the reviewed plan.
+ *
+ * ### The defect this replaces
+ *
+ * Every completed step used to advance the plan index unconditionally, including a completed
+ * `VALIDATE_AUTHORITY_EVIDENCE` that had correlated NOTHING. A run reported as `AWAITING_AUTHORITY`
+ * was therefore already pointing at `REHEARSE_REVERSIBLE_EFFECT`: the gate it was waiting behind had
+ * been walked past, and only the run STATE stood between that position and a rehearsal. An
+ * incomplete or rejected authority validation must not consume plan progression, because plan
+ * progression is the thing the gate is made of.
+ *
+ * ### Why the switch is exhaustive rather than a lookup with a default
+ *
+ * A `default` branch is how a verdict added next year inherits `ADVANCE` from verdicts nobody
+ * compared it to. This switch covers the closed vocabulary member by member, so a new verdict fails
+ * to compile until somebody decides what it does to the plan.
+ *
+ * `AWAIT_AUTHORITY` is the one step whose entire job is to stop, and stopping IS its completed work
+ * -- so its `REQUIRE_AUTHORITY` verdict moves the plan on to the validation step. Every other step
+ * that requires authority has failed to prove it, and retains its position for another attempt.
+ */
+export function jao7PlanProgressionFor(
+  stepType: Jao7StepType,
+  verdict: Jao7EvaluationVerdict,
+): Jao7PlanProgression {
+  switch (verdict) {
+    case 'REQUIRE_AUTHORITY':
+      return stepType === 'AWAIT_AUTHORITY' ? 'ADVANCE' : 'RETAIN';
+    case 'ROLLBACK':
+    case 'FAIL_SAFE':
+      // Recovery and terminal safety are not progress through the reviewed plan. The rollback branch
+      // is claimed off the run STATE, not off the plan position, so the position is left where the
+      // failure happened -- which is also what an auditor wants to read.
+      return 'RETAIN';
+    case 'CONTINUE':
+    case 'PAUSE':
+    case 'VERIFY':
+    case 'COMPLETE':
+      return 'ADVANCE';
   }
 }
 

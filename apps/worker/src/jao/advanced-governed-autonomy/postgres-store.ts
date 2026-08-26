@@ -27,6 +27,7 @@ import type { DatabaseClient, DatabasePool } from '@qf-jarvis/event-backbone';
 
 import {
   Jao7AutonomyError,
+  type Jao7OperationKind,
   jao7AuthorityObservationRecordSchema,
   jao7EvaluationRecordSchema,
   jao7IdSchema,
@@ -107,12 +108,18 @@ interface RunRow {
   readonly proposal_recommendation_id: string | null;
   readonly proposal_action_id: string | null;
   readonly proposal_action_fingerprint: string | null;
+  readonly specialist_task_reason_code: string | null;
+  readonly specialist_task_class: string | null;
+  readonly specialist_due_window_code: string | null;
+  readonly specialist_priority_band: string | null;
+  readonly specialist_advisory_digest: string | null;
   readonly created_at: string;
   readonly updated_at: string;
 }
 
 interface StepRow {
   readonly step_index: number;
+  readonly attempt_index: number;
   readonly step_type: string;
   readonly step_status: string;
   readonly started_at: string;
@@ -129,6 +136,7 @@ interface EvaluationRow {
 }
 
 interface AuthorityRow {
+  readonly attempt_index: number;
   readonly approval_decision_digest: string;
   readonly execution_intent_digest: string | null;
   readonly recommendation_id: string;
@@ -149,7 +157,9 @@ interface RehearsalRow {
   readonly state: string;
   readonly applied_at: string | null;
   readonly verified_at: string | null;
+  readonly rollback_attempted_at: string | null;
   readonly rolled_back_at: string | null;
+  readonly rollback_attempts: number;
   readonly revision: number;
 }
 
@@ -198,6 +208,11 @@ function decodeRun(row: RunRow): Jao7RunRecord {
     proposalRecommendationId: row.proposal_recommendation_id,
     proposalActionId: row.proposal_action_id,
     proposalActionFingerprint: row.proposal_action_fingerprint,
+    specialistTaskReasonCode: row.specialist_task_reason_code,
+    specialistTaskClass: row.specialist_task_class,
+    specialistDueWindowCode: row.specialist_due_window_code,
+    specialistPriorityBand: row.specialist_priority_band,
+    specialistAdvisoryDigest: row.specialist_advisory_digest,
     createdAt: toInstant(row.created_at),
     updatedAt: toInstant(row.updated_at),
   });
@@ -210,6 +225,7 @@ function decodeRun(row: RunRow): Jao7RunRecord {
 function decodeStep(row: StepRow): Jao7StepRecord {
   const parsed = jao7StepRecordSchema.safeParse({
     stepIndex: row.step_index,
+    attemptIndex: row.attempt_index,
     stepType: row.step_type,
     stepStatus: row.step_status,
     startedAt: toInstant(row.started_at),
@@ -238,6 +254,7 @@ function decodeEvaluation(row: EvaluationRow): Jao7EvaluationRecord {
 
 function decodeAuthority(row: AuthorityRow): Jao7AuthorityObservationRecord {
   const parsed = jao7AuthorityObservationRecordSchema.safeParse({
+    attemptIndex: row.attempt_index,
     approvalDecisionDigest: row.approval_decision_digest,
     executionIntentDigest: row.execution_intent_digest,
     recommendationId: row.recommendation_id,
@@ -264,13 +281,179 @@ function decodeRehearsal(row: RehearsalRow): Jao7RehearsalRecord {
     state: row.state,
     appliedAt: toNullableInstant(row.applied_at),
     verifiedAt: toNullableInstant(row.verified_at),
+    rollbackAttemptedAt: toNullableInstant(row.rollback_attempted_at),
     rolledBackAt: toNullableInstant(row.rolled_back_at),
+    rollbackAttempts: row.rollback_attempts,
     revision: row.revision,
   });
   if (!parsed.success) {
     throw new Jao7AutonomyError('PERSISTED_STATE_INVALID');
   }
   return Object.freeze(parsed.data);
+}
+
+// ---------------------------------------------------------------------------
+// Semantic digests.
+// ---------------------------------------------------------------------------
+
+/**
+ * THE canonical semantic digest of one mutation.
+ *
+ * ### What it is for
+ *
+ * An operation id is a PROMISE: "this id means this exact change". The replay guard keeps that
+ * promise by comparing a digest, so the digest has to cover everything the change is made of. The
+ * digests it replaced covered a subset -- `CREATE_RUN` omitted the lifetime, the rehearsal class and
+ * the captured before-state; `FINALIZE_STEP` omitted the expected revision, the evaluator code, the
+ * plan progression and the proposal binding; `RESUME_RUN` omitted the resume bound; `CLAIM_STEP` had
+ * no digest at all. Every omitted field was a field an operation id could be reused to change while
+ * the guard reported an exact replay and returned the FIRST call's committed result.
+ *
+ * ### The two deliberate exclusions
+ *
+ * `nowMs` is excluded because a retry legitimately happens at a different instant, and a digest that
+ * moved with the clock would turn every honest replay into a conflict. The operation id itself is
+ * excluded because it is the KEY the digest is stored under: hashing the key into the value would
+ * make every lookup match itself and prove nothing.
+ *
+ * `expectedRevision` is INCLUDED. The same id used at a different revision is the same id meaning a
+ * different change to a different state of the run, and that is exactly what a conflict is.
+ *
+ * Field NAMES are hashed alongside their values and the pairs are sorted, so adding a field changes
+ * the digest even when its value is empty, and reordering the call site changes nothing.
+ */
+function semanticDigest(
+  kind: Jao7OperationKind,
+  runId: string,
+  fields: readonly (readonly [string, string])[],
+): string {
+  const sorted = [...fields].sort((left, right) => (left[0] < right[0] ? -1 : 1));
+  const parts: string[] = ['JAO7_SEMANTIC_V1', kind, runId];
+  for (const [name, value] of sorted) {
+    parts.push(name, value);
+  }
+  return jao7Digest(parts);
+}
+
+function optional(value: string | null | undefined): string {
+  return value === null || value === undefined ? 'ABSENT' : `PRESENT:${value}`;
+}
+
+function integer(value: number | null | undefined): string {
+  return value === null || value === undefined ? 'ABSENT' : `PRESENT:${String(value)}`;
+}
+
+/** INTERNAL, and exported so a spec can prove every governing field is actually covered. */
+export function jao7CreateRunDigest(request: Jao7CreateRunRequest): string {
+  return semanticDigest('CREATE_RUN', request.runId, [
+    ['missionPolicyId', request.missionPolicyId],
+    ['missionPolicyVersion', String(request.missionPolicyVersion)],
+    ['missionPolicyDigest', request.missionPolicyDigest],
+    ['planDigest', request.planDigest],
+    ['subjectType', request.subjectType],
+    ['subjectId', request.subjectId],
+    ['lifetimeSeconds', String(request.lifetimeSeconds)],
+    ['rehearsalClass', request.rehearsalClass],
+    ['beforeIntegerA', String(request.beforeIntegerA)],
+    ['beforeIntegerB', integer(request.beforeIntegerB)],
+  ]);
+}
+
+/**
+ * The claim is the ONE mutation whose digest omits `expectedRevision`, and it omits it deliberately.
+ *
+ * A claim is committed separately from the work it authorises -- that is the whole three-phase
+ * design -- so a process lost between the two leaves a claim that DID commit and a revision that DID
+ * move. A retry under the same operation id re-reads the run, sees the higher revision, and would
+ * compute a different digest: an honest retry would be refused as a conflict, and the replay this
+ * finding exists to make possible could never be served. The revision is the precondition that
+ * decides whether a claim may proceed, and it is still checked under the lock; it is not part of
+ * what the operation id promises.
+ *
+ * What the id promises is fully covered: this run, this plan position, this step type, this plan
+ * digest, this charge and these bounds. There is no field left through which the same id could be
+ * made to claim something else.
+ */
+export function jao7ClaimStepDigest(request: Jao7ClaimStepRequest): string {
+  return semanticDigest('CLAIM_STEP', request.runId, [
+    ['planDigest', request.planDigest],
+    ['stepIndex', String(request.stepIndex)],
+    ['stepType', request.stepType],
+    ['charge', request.charge],
+    ['toolCallCount', String(request.toolCallCount)],
+    ['maxSpecialistCalls', String(request.maxSpecialistCalls)],
+    ['maxToolCalls', String(request.maxToolCalls)],
+    ['maxSteps', String(request.maxSteps)],
+  ]);
+}
+
+export function jao7FinalizeStepDigest(request: Jao7FinalizeStepRequest): string {
+  const binding = request.proposalBinding;
+  const observation = request.specialistObservation;
+  return semanticDigest('FINALIZE_STEP', request.runId, [
+    ['expectedRevision', String(request.expectedRevision)],
+    ['stepIndex', String(request.stepIndex)],
+    ['stepStatus', request.stepStatus],
+    ['outcomeCode', request.outcomeCode],
+    ['evaluatorCode', request.evaluatorCode],
+    ['verdict', request.verdict],
+    ['nextState', request.nextState],
+    ['planProgression', request.planProgression],
+    ['bindingRecommendationId', optional(binding?.recommendationId)],
+    ['bindingProposedActionId', optional(binding?.proposedActionId)],
+    ['bindingActionFingerprint', optional(binding?.actionFingerprint)],
+    ['specialistTaskReasonCode', optional(observation?.taskReasonCode)],
+    ['specialistTaskClass', optional(observation?.taskClass)],
+    ['specialistDueWindowCode', optional(observation?.dueWindowCode)],
+    ['specialistPriorityBand', optional(observation?.priorityBand)],
+    ['specialistAdvisoryDigest', optional(observation?.advisoryDigest)],
+  ]);
+}
+
+export function jao7RecordAuthorityDigest(request: Jao7RecordAuthorityRequest): string {
+  return semanticDigest('RECORD_AUTHORITY', request.runId, [
+    ['expectedRevision', String(request.expectedRevision)],
+    ['approvalDecisionDigest', request.approvalDecisionDigest],
+    ['executionIntentDigest', optional(request.executionIntentDigest)],
+    ['recommendationId', request.recommendationId],
+    ['proposedActionId', request.proposedActionId],
+    ['actionFingerprint', request.actionFingerprint],
+    ['observationCode', request.observationCode],
+  ]);
+}
+
+export function jao7PauseRunDigest(request: Jao7OperationEnvelope & { runId: string }): string {
+  return semanticDigest('PAUSE_RUN', request.runId, [
+    ['expectedRevision', String(request.expectedRevision)],
+  ]);
+}
+
+export function jao7ResumeRunDigest(
+  request: Jao7OperationEnvelope & { runId: string; maxResumes: number },
+): string {
+  return semanticDigest('RESUME_RUN', request.runId, [
+    ['expectedRevision', String(request.expectedRevision)],
+    ['maxResumes', String(request.maxResumes)],
+  ]);
+}
+
+export function jao7KillRunDigest(request: Jao7OperationEnvelope & { runId: string }): string {
+  return semanticDigest('KILL_RUN', request.runId, [
+    ['expectedRevision', String(request.expectedRevision)],
+  ]);
+}
+
+export function jao7RehearsalDigest(request: Jao7RehearsalMutationRequest): string {
+  return semanticDigest(request.operationKind, request.runId, [
+    ['expectedRevision', String(request.expectedRevision)],
+    ['nextRehearsalState', request.nextRehearsalState],
+    ['afterIntegerA', integer(request.afterIntegerA)],
+    ['afterIntegerB', integer(request.afterIntegerB)],
+    ['rollbackIntegerA', integer(request.rollbackIntegerA)],
+    ['rollbackIntegerB', integer(request.rollbackIntegerB)],
+    ['maxRehearsalApplies', String(request.maxRehearsalApplies)],
+    ['maxRollbackAttempts', String(request.maxRollbackAttempts)],
+  ]);
 }
 
 // ---------------------------------------------------------------------------
@@ -315,15 +498,21 @@ const INSERT_REHEARSAL = `
 
 const INSERT_STEP = `
   INSERT INTO ${SCHEMA}.autonomy_step
-    (run_id, step_index, step_type, step_status, operation_id, started_at)
-  VALUES ($1, $2, $3, 'CLAIMED', $4, $5::timestamptz)
-  ON CONFLICT (run_id, step_index) DO NOTHING
-  RETURNING step_index, step_type, step_status, started_at, completed_at, outcome_code
+    (run_id, step_index, attempt_index, step_type, step_status, operation_id, started_at)
+  VALUES ($1, $2, $3, $4, 'CLAIMED', $5, $6::timestamptz)
+  ON CONFLICT DO NOTHING
+  RETURNING step_index, attempt_index, step_type, step_status, started_at, completed_at,
+         outcome_code
 `;
 
-const SELECT_STEP = `
-  SELECT step_index, step_type, step_status, started_at, completed_at, outcome_code
-    FROM ${SCHEMA}.autonomy_step WHERE run_id = $1 AND step_index = $2
+/** The latest attempt at one plan position, whatever became of it. */
+const SELECT_LATEST_ATTEMPT = `
+  SELECT step_index, attempt_index, step_type, step_status, started_at, completed_at,
+         outcome_code
+    FROM ${SCHEMA}.autonomy_step
+   WHERE run_id = $1 AND step_index = $2
+   ORDER BY attempt_index DESC
+   LIMIT 1
 `;
 
 const FINALIZE_STEP = `
@@ -342,8 +531,9 @@ const INSERT_EVALUATION = `
 `;
 
 const SELECT_STEPS = `
-  SELECT step_index, step_type, step_status, started_at, completed_at, outcome_code
-    FROM ${SCHEMA}.autonomy_step WHERE run_id = $1 ORDER BY step_index
+  SELECT step_index, attempt_index, step_type, step_status, started_at, completed_at,
+         outcome_code
+    FROM ${SCHEMA}.autonomy_step WHERE run_id = $1 ORDER BY step_index, attempt_index
 `;
 
 const SELECT_EVALUATIONS = `
@@ -351,27 +541,52 @@ const SELECT_EVALUATIONS = `
     FROM ${SCHEMA}.autonomy_evaluation WHERE run_id = $1 ORDER BY evaluation_index
 `;
 
+/**
+ * The AUTHORITATIVE observation for a run.
+ *
+ * A successful chain if one was ever recorded, otherwise the most recent attempt. Ordering the
+ * success first is not cosmetic: at most one can exist, by a partial unique index, and it is the row
+ * every eligibility decision is made against. Reporting a later failed attempt as the run's
+ * observation would hide the fact that the chain HAD been proven.
+ */
 const SELECT_AUTHORITY = `
-  SELECT approval_decision_digest, execution_intent_digest, recommendation_id, proposed_action_id,
-         action_fingerprint, observation_code, observed_at
+  SELECT attempt_index, approval_decision_digest, execution_intent_digest, recommendation_id,
+         proposed_action_id, action_fingerprint, observation_code, observed_at
+    FROM ${SCHEMA}.authority_observation
+   WHERE run_id = $1
+   ORDER BY (observation_code = 'CORRELATED_APPROVED_ACTION_AND_INTENT') DESC, attempt_index DESC
+   LIMIT 1
+`;
+
+const SELECT_NEXT_AUTHORITY_ATTEMPT = `
+  SELECT coalesce(max(attempt_index) + 1, 0) AS next_attempt
     FROM ${SCHEMA}.authority_observation WHERE run_id = $1
 `;
 
 const SELECT_REHEARSAL = `
   SELECT rehearsal_class, before_integer_a, before_integer_b, after_integer_a, after_integer_b,
-         rollback_integer_a, rollback_integer_b, state, applied_at, verified_at, rolled_back_at,
-         revision
+         rollback_integer_a, rollback_integer_b, state, applied_at, verified_at,
+         rollback_attempted_at, rolled_back_at, rollback_attempts, revision
     FROM ${SCHEMA}.virtual_rehearsal_state WHERE run_id = $1
 `;
 
 const SELECT_REHEARSAL_FOR_UPDATE = `${SELECT_REHEARSAL} FOR UPDATE`;
 
+/**
+ * One row per attempt.
+ *
+ * `ON CONFLICT DO NOTHING` now catches BOTH arbitration constraints: the per-attempt primary key,
+ * and the partial unique index that permits at most one successful chain per run. A second success
+ * therefore writes nothing and is refused, while a second INCOMPLETE attempt is recorded -- which is
+ * the whole point, because the first incomplete attempt used to consume the only slot and lock the
+ * run out of ever recording the exact chain it was waiting for.
+ */
 const INSERT_AUTHORITY = `
   INSERT INTO ${SCHEMA}.authority_observation
-    (run_id, approval_decision_digest, execution_intent_digest, recommendation_id,
+    (run_id, attempt_index, approval_decision_digest, execution_intent_digest, recommendation_id,
      proposed_action_id, action_fingerprint, observation_code, observed_at)
-  VALUES ($1, $2, $3::text, $4, $5, $6, $7, $8::timestamptz)
-  ON CONFLICT (run_id) DO NOTHING
+  VALUES ($1, $2, $3, $4::text, $5, $6, $7, $8, $9::timestamptz)
+  ON CONFLICT DO NOTHING
 `;
 
 // ---------------------------------------------------------------------------
@@ -380,6 +595,18 @@ const INSERT_AUTHORITY = `
 
 async function loadRunForUpdate(client: DatabaseClient, runId: string): Promise<Jao7RunRecord> {
   const found = await client.query<RunRow>(SELECT_RUN_FOR_UPDATE, [runId]);
+  const row = found.rows[0];
+  if (row === undefined) {
+    throw new Jao7AutonomyError('RUN_NOT_FOUND');
+  }
+  return decodeRun(row);
+}
+
+async function loadRun(client: DatabaseClient, runId: string): Promise<Jao7RunRecord> {
+  const found = await client.query<RunRow>(
+    `SELECT * FROM ${SCHEMA}.autonomy_run WHERE run_id = $1`,
+    [runId],
+  );
   const row = found.rows[0];
   if (row === undefined) {
     throw new Jao7AutonomyError('RUN_NOT_FOUND');
@@ -425,6 +652,63 @@ async function replayGuard(
     committedRevision: prior.committed_run_revision,
     committedState: state.success ? state.data : 'FAILED_SAFE',
     resultCode: prior.result_code,
+    replayed: true,
+  });
+}
+
+/**
+ * Serve a claim that THIS operation id already committed.
+ *
+ * The replay record is the authority, not the presence of a step row. A `CLAIMED` row created by a
+ * DIFFERENT operation id is another caller's in-flight work and must be refused, and a record whose
+ * digest disagrees is the same id being reused to mean something else.
+ *
+ * The run is returned as it stood when the claim committed -- read back through the replay record's
+ * revision, never from a header that has moved on -- and `priorState` reports the state the claim
+ * moved the run OUT of, which is what a later eligibility check needs.
+ */
+async function replayedClaim(
+  client: DatabaseClient,
+  request: Jao7ClaimStepRequest,
+  digest: string,
+  locked: boolean,
+): Promise<Jao7ClaimedStep | null> {
+  const found = await client.query<ReplayRow>(SELECT_REPLAY, [request.operationId]);
+  const prior = found.rows[0];
+  if (prior === undefined) {
+    return null;
+  }
+  if (
+    prior.operation_kind !== 'CLAIM_STEP' ||
+    prior.run_id !== request.runId ||
+    prior.semantic_digest !== digest
+  ) {
+    throw new Jao7AutonomyError('OPERATION_CONFLICT');
+  }
+
+  const run = locked
+    ? await loadRunForUpdate(client, request.runId)
+    : await loadRun(client, request.runId);
+
+  // The attempt this id claimed is the one whose revision the replay record names. The claim bumped
+  // the run by exactly one, so the attempt that existed before it is the one below that.
+  const attempt = await client.query<StepRow>(SELECT_LATEST_ATTEMPT, [
+    request.runId,
+    request.stepIndex,
+  ]);
+  const row = attempt.rows[0];
+  if (row === undefined) {
+    // A replay record without its step is a contradiction the same transaction wrote atomically.
+    throw new Jao7AutonomyError('PERSISTED_STATE_INVALID');
+  }
+
+  return Object.freeze({
+    run,
+    step: decodeStep(row),
+    // The claim commits `IN_PROGRESS`, so the state the run was moved out of is not readable from
+    // the header any more. `PLANNED` is never the answer for a replay -- the claim already ran --
+    // and reporting the live state would let a replayed claim inherit an eligibility it never had.
+    priorState: 'IN_PROGRESS' as const,
     replayed: true,
   });
 }
@@ -519,16 +803,7 @@ export function createJao7PostgresStore(pool: DatabasePool): Jao7AutonomyStore {
     async createRun(request: Jao7CreateRunRequest, nowMs: number): Promise<Jao7OperationResult> {
       const at = jao7InstantFromMs(nowMs);
       const expiresAt = jao7InstantFromMs(nowMs + request.lifetimeSeconds * 1_000);
-      const digest = jao7Digest([
-        'CREATE_RUN',
-        request.runId,
-        request.missionPolicyId,
-        String(request.missionPolicyVersion),
-        request.missionPolicyDigest,
-        request.planDigest,
-        request.subjectType,
-        request.subjectId,
-      ]);
+      const digest = jao7CreateRunDigest(request);
 
       try {
         return await withTransaction(pool, async (client) => {
@@ -589,28 +864,31 @@ export function createJao7PostgresStore(pool: DatabasePool): Jao7AutonomyStore {
 
     async claimStep(request: Jao7ClaimStepRequest, nowMs: number): Promise<Jao7ClaimedStep> {
       const at = jao7InstantFromMs(nowMs);
+      const digest = jao7ClaimStepDigest(request);
 
       try {
         return await withTransaction(pool, async (client) => {
+          // The replay guard runs BEFORE the lock, as it does for every other mutation: two callers
+          // retrying the same claim can both pass here, and without the re-check below the loser
+          // would serialise behind the winner and then fail as a false `REVISION_CONFLICT`.
+          const early = await replayedClaim(client, request, digest, false);
+          if (early !== null) {
+            return early;
+          }
+
           // THE LOCK. Everything below happens with the run row held, so a concurrent claim, kill or
           // finalize for the same run serialises here rather than racing.
           const run = await loadRunForUpdate(client, request.runId);
 
-          // An already-claimed step is a REPLAY, not a conflict: the same operation id retrying the
-          // same step must be able to pick the work back up after a crash.
-          const existing = await client.query<StepRow>(SELECT_STEP, [
-            request.runId,
-            request.stepIndex,
-          ]);
-          const existingRow = existing.rows[0];
-          if (existingRow !== undefined) {
-            const step = decodeStep(existingRow);
-            if (step.stepStatus !== 'CLAIMED') {
-              throw new Jao7AutonomyError('STEP_NOT_ELIGIBLE');
-            }
-            return Object.freeze({ run, step, replayed: true });
+          const raced = await replayedClaim(client, request, digest, true);
+          if (raced !== null) {
+            return raced;
           }
 
+          // Governance FIRST, and all of it. This is the ordering that was wrong: an existing
+          // `CLAIMED` row used to return `replayed: true` before any of these ran, whatever
+          // operation id had created it -- so a killed, expired, superseded or plan-drifted run
+          // handed back a claim, and the coordinator went on to do the step's work again.
           assertRevision(run, request.expectedRevision);
           assertForwardEligible(run, nowMs);
 
@@ -625,6 +903,20 @@ export function createJao7PostgresStore(pool: DatabasePool): Jao7AutonomyStore {
           if (run.stepsCompleted >= request.maxSteps) {
             throw new Jao7AutonomyError('BUDGET_EXHAUSTED');
           }
+
+          // WHICH ATTEMPT THIS IS, decided from what the table actually contains rather than from
+          // anything the caller believes. A plan position is re-attemptable only when the previous
+          // attempt FINISHED and the finalize deliberately RETAINED the position -- an unfinished
+          // attempt belongs to somebody else's operation id, and this one is not it.
+          const latest = await client.query<StepRow>(SELECT_LATEST_ATTEMPT, [
+            request.runId,
+            request.stepIndex,
+          ]);
+          const latestRow = latest.rows[0];
+          if (latestRow?.step_status === 'CLAIMED') {
+            throw new Jao7AutonomyError('STEP_ALREADY_CLAIMED');
+          }
+          const attemptIndex = latestRow === undefined ? 0 : latestRow.attempt_index + 1;
 
           // Budgets are charged INSIDE the claim transaction, so a crash between charge and work
           // leaves the budget spent. That is the conservative direction: a spent budget costs a
@@ -647,13 +939,15 @@ export function createJao7PostgresStore(pool: DatabasePool): Jao7AutonomyStore {
           const claimed = await client.query<StepRow>(INSERT_STEP, [
             request.runId,
             request.stepIndex,
+            attemptIndex,
             request.stepType,
             request.operationId,
             at,
           ]);
           const claimedRow = claimed.rows[0];
           if (claimedRow === undefined) {
-            // The unique constraint arbitrated: another transaction claimed it first.
+            // An arbitration constraint decided: either the per-attempt primary key, or the partial
+            // unique index that permits at most one unfinished attempt per plan position.
             throw new Jao7AutonomyError('STEP_ALREADY_CLAIMED');
           }
 
@@ -666,7 +960,25 @@ export function createJao7PostgresStore(pool: DatabasePool): Jao7AutonomyStore {
             at,
           );
 
-          return Object.freeze({ run: moved, step: decodeStep(claimedRow), replayed: false });
+          // The claim writes a replay record like every other mutation. That record is what makes
+          // the operation id a promise about THIS step: a retry replays it, and the same id used for
+          // a different step, revision or budget is `OPERATION_CONFLICT` with zero further writes.
+          await writeReplay(
+            client,
+            request.operationId,
+            'CLAIM_STEP',
+            request.runId,
+            digest,
+            moved,
+            at,
+          );
+
+          return Object.freeze({
+            run: moved,
+            step: decodeStep(claimedRow),
+            priorState: run.state,
+            replayed: false,
+          });
         });
       } catch (error) {
         throw classifyJao7DatabaseError(error);
@@ -678,15 +990,7 @@ export function createJao7PostgresStore(pool: DatabasePool): Jao7AutonomyStore {
       nowMs: number,
     ): Promise<Jao7OperationResult> {
       const at = jao7InstantFromMs(nowMs);
-      const digest = jao7Digest([
-        'FINALIZE_STEP',
-        request.runId,
-        String(request.stepIndex),
-        request.stepStatus,
-        request.outcomeCode,
-        request.verdict,
-        request.nextState,
-      ]);
+      const digest = jao7FinalizeStepDigest(request);
 
       try {
         return await withTransaction(pool, async (client) => {
@@ -743,7 +1047,7 @@ export function createJao7PostgresStore(pool: DatabasePool): Jao7AutonomyStore {
           if (request.stepStatus === 'COMPLETED') {
             parts.push('steps_completed = steps_completed + 1');
           }
-          if (request.advanceStepIndex) {
+          if (request.planProgression === 'ADVANCE') {
             parts.push('current_step_index = current_step_index + 1');
           }
           if (request.nextState === 'PAUSED') {
@@ -751,6 +1055,31 @@ export function createJao7PostgresStore(pool: DatabasePool): Jao7AutonomyStore {
           } else {
             parts.push('paused_at = NULL');
           }
+          // THE DERIVED SPECIALIST OBSERVATION, written exactly once with the step that produced
+          // it. Writing it here rather than in its own mutation is what makes it atomic with the
+          // step: a run cannot end up with a committed specialist step and no conclusion, or a
+          // conclusion attributed to a step that was rolled back.
+          const observation = request.specialistObservation;
+          if (observation !== undefined) {
+            if (run.specialistAdvisoryDigest !== null) {
+              throw new Jao7AutonomyError('AUTHORITY_BINDING_MISMATCH');
+            }
+            parts.push(
+              `specialist_task_reason_code = $${String(params.length + 4)}`,
+              `specialist_task_class = $${String(params.length + 5)}`,
+              `specialist_due_window_code = $${String(params.length + 6)}`,
+              `specialist_priority_band = $${String(params.length + 7)}`,
+              `specialist_advisory_digest = $${String(params.length + 8)}`,
+            );
+            params.push(
+              observation.taskReasonCode,
+              observation.taskClass,
+              observation.dueWindowCode,
+              observation.priorityBand,
+              observation.advisoryDigest,
+            );
+          }
+
           const binding = request.proposalBinding;
           if (binding !== undefined) {
             // Written once. The run row already refuses a half-written binding, and the coordinator
@@ -799,7 +1128,7 @@ export function createJao7PostgresStore(pool: DatabasePool): Jao7AutonomyStore {
       nowMs: number,
     ): Promise<Jao7OperationResult> {
       const at = jao7InstantFromMs(nowMs);
-      const digest = jao7Digest(['PAUSE_RUN', request.runId, String(request.expectedRevision)]);
+      const digest = jao7PauseRunDigest(request);
 
       try {
         return await withTransaction(pool, async (client) => {
@@ -827,6 +1156,22 @@ export function createJao7PostgresStore(pool: DatabasePool): Jao7AutonomyStore {
 
           assertRevision(run, request.expectedRevision);
           assertForwardEligible(run, nowMs);
+
+          // A PAUSE MAY NOT STRAND APPLIED SYNTHETIC STATE.
+          //
+          // The evaluator already refuses a cooperative pause between an apply and its verification,
+          // but `pauseRun` is a separate public entry point that did not consult the sandbox at all
+          // -- so a caller could pause a run whose virtual state was applied and unverified, and
+          // leave it that way indefinitely. A control that strands the state it created is not a
+          // control. Verify it or roll it back; both are explicit calls, and both are available.
+          const sandbox = await client.query<RehearsalRow>(SELECT_REHEARSAL, [request.runId]);
+          const sandboxRow = sandbox.rows[0];
+          if (
+            sandboxRow !== undefined &&
+            (sandboxRow.state === 'APPLIED' || sandboxRow.state === 'ROLLBACK_REQUIRED')
+          ) {
+            throw new Jao7AutonomyError('STATE_CONFLICT');
+          }
 
           const moved = await bumpRun(
             client,
@@ -856,7 +1201,7 @@ export function createJao7PostgresStore(pool: DatabasePool): Jao7AutonomyStore {
       nowMs: number,
     ): Promise<Jao7OperationResult> {
       const at = jao7InstantFromMs(nowMs);
-      const digest = jao7Digest(['RESUME_RUN', request.runId, String(request.expectedRevision)]);
+      const digest = jao7ResumeRunDigest(request);
 
       try {
         return await withTransaction(pool, async (client) => {
@@ -925,7 +1270,7 @@ export function createJao7PostgresStore(pool: DatabasePool): Jao7AutonomyStore {
       nowMs: number,
     ): Promise<Jao7OperationResult> {
       const at = jao7InstantFromMs(nowMs);
-      const digest = jao7Digest(['KILL_RUN', request.runId, String(request.expectedRevision)]);
+      const digest = jao7KillRunDigest(request);
 
       try {
         return await withTransaction(pool, async (client) => {
@@ -999,23 +1344,14 @@ export function createJao7PostgresStore(pool: DatabasePool): Jao7AutonomyStore {
       nowMs: number,
     ): Promise<Jao7OperationResult> {
       const at = jao7InstantFromMs(nowMs);
-      const digest = jao7Digest([
-        'RECORD_AUTHORITY',
-        request.runId,
-        request.approvalDecisionDigest,
-        request.executionIntentDigest ?? '',
-        request.recommendationId,
-        request.proposedActionId,
-        request.actionFingerprint,
-        request.observationCode,
-      ]);
+      const digest = jao7RecordAuthorityDigest(request);
 
       try {
         return await withTransaction(pool, async (client) => {
           const replayed = await replayGuard(
             client,
             request.operationId,
-            'FINALIZE_STEP',
+            'RECORD_AUTHORITY',
             request.runId,
             digest,
           );
@@ -1026,7 +1362,7 @@ export function createJao7PostgresStore(pool: DatabasePool): Jao7AutonomyStore {
           const raced = await replayGuard(
             client,
             request.operationId,
-            'FINALIZE_STEP',
+            'RECORD_AUTHORITY',
             request.runId,
             digest,
           );
@@ -1037,11 +1373,23 @@ export function createJao7PostgresStore(pool: DatabasePool): Jao7AutonomyStore {
           assertRevision(run, request.expectedRevision);
           assertForwardEligible(run, nowMs);
 
-          // ON CONFLICT DO NOTHING plus a primary key on run_id: one observation per run, ever. A
-          // second correlation binding a DIFFERENT action to the same run is exactly the
-          // substitution this whole slice exists to prevent, and the database refuses it.
+          // ONE ROW PER ATTEMPT, and at most ONE successful chain per run.
+          //
+          // The table used to be keyed by `run_id` alone, so the FIRST attempt -- incomplete,
+          // rejected, whatever it was -- consumed the only slot, and a run still legitimately
+          // awaiting authority could never record the exact chain when it finally arrived. The
+          // arbitration that actually matters is narrower and now lives in a partial unique index:
+          // a second correlation binding a DIFFERENT action to the same run as a SUCCESS is the
+          // substitution this whole slice exists to prevent, and the database refuses that.
+          const nextAttempt = await client.query<{ readonly next_attempt: number }>(
+            SELECT_NEXT_AUTHORITY_ATTEMPT,
+            [request.runId],
+          );
+          const attemptIndex = nextAttempt.rows[0]?.next_attempt ?? 0;
+
           const inserted = await client.query(INSERT_AUTHORITY, [
             request.runId,
+            attemptIndex,
             request.approvalDecisionDigest,
             request.executionIntentDigest,
             request.recommendationId,
@@ -1069,7 +1417,7 @@ export function createJao7PostgresStore(pool: DatabasePool): Jao7AutonomyStore {
           return await writeReplay(
             client,
             request.operationId,
-            'FINALIZE_STEP',
+            'RECORD_AUTHORITY',
             request.runId,
             digest,
             moved,
@@ -1086,15 +1434,7 @@ export function createJao7PostgresStore(pool: DatabasePool): Jao7AutonomyStore {
       nowMs: number,
     ): Promise<Jao7OperationResult> {
       const at = jao7InstantFromMs(nowMs);
-      const digest = jao7Digest([
-        request.operationKind,
-        request.runId,
-        request.nextRehearsalState,
-        String(request.afterIntegerA ?? -1),
-        String(request.afterIntegerB ?? -1),
-        String(request.rollbackIntegerA ?? -1),
-        String(request.rollbackIntegerB ?? -1),
-      ]);
+      const digest = jao7RehearsalDigest(request);
 
       try {
         return await withTransaction(pool, async (client) => {
@@ -1154,12 +1494,19 @@ export function createJao7PostgresStore(pool: DatabasePool): Jao7AutonomyStore {
           if (request.operationKind === 'VERIFY_REHEARSAL' && rehearsal.state !== 'APPLIED') {
             throw new Jao7AutonomyError('STATE_CONFLICT');
           }
-          if (
-            request.operationKind === 'ROLLBACK_REHEARSAL' &&
-            rehearsal.state !== 'APPLIED' &&
-            rehearsal.state !== 'ROLLBACK_REQUIRED'
-          ) {
-            throw new Jao7AutonomyError('STATE_CONFLICT');
+          if (request.operationKind === 'ROLLBACK_REHEARSAL') {
+            // Only applied synthetic state can be restored. A sandbox that was never applied, or was
+            // already rolled back, or whose one attempt already failed, has nothing to restore --
+            // and a rollback that ran anyway would be a write dressed as a cleanup.
+            if (rehearsal.state !== 'APPLIED' && rehearsal.state !== 'ROLLBACK_REQUIRED') {
+              throw new Jao7AutonomyError('ROLLBACK_NOT_ELIGIBLE');
+            }
+            // ONE ATTEMPT, counted in the row and bounded by the reviewed policy AND by a database
+            // CHECK. `maxRollbackAttempts` used to live on the policy and nowhere else, which made
+            // it a documented number rather than a control: a restart forgot it entirely.
+            if (rehearsal.rollbackAttempts + 1 > request.maxRollbackAttempts) {
+              throw new Jao7AutonomyError('BUDGET_EXHAUSTED');
+            }
           }
 
           const sets = ['state = $2', 'revision = revision + 1'];
@@ -1180,15 +1527,25 @@ export function createJao7PostgresStore(pool: DatabasePool): Jao7AutonomyStore {
             params.push(at);
             index += 1;
           } else {
-            sets.push(`rollback_integer_a = $${String(index)}::integer`);
-            params.push(request.rollbackIntegerA);
-            index += 1;
-            sets.push(`rollback_integer_b = $${String(index)}::integer`);
-            params.push(request.rollbackIntegerB);
-            index += 1;
-            sets.push(`rolled_back_at = $${String(index)}::timestamptz`);
+            // ATTEMPTED and SUCCEEDED are separate facts, and only a SUCCESSFUL rollback records a
+            // restored value. Writing the observed value on a failure would say the captured state
+            // had been restored when it had not -- and the row would then violate its own CHECK,
+            // which is how `ROLLBACK_FAILED` came to be a state that could not be persisted at all.
+            sets.push(`rollback_attempted_at = $${String(index)}::timestamptz`);
             params.push(at);
             index += 1;
+            sets.push('rollback_attempts = rollback_attempts + 1');
+            if (request.nextRehearsalState === 'ROLLED_BACK') {
+              sets.push(`rollback_integer_a = $${String(index)}::integer`);
+              params.push(request.rollbackIntegerA);
+              index += 1;
+              sets.push(`rollback_integer_b = $${String(index)}::integer`);
+              params.push(request.rollbackIntegerB);
+              index += 1;
+              sets.push(`rolled_back_at = $${String(index)}::timestamptz`);
+              params.push(at);
+              index += 1;
+            }
           }
 
           const mutated = await client.query(
@@ -1211,7 +1568,12 @@ export function createJao7PostgresStore(pool: DatabasePool): Jao7AutonomyStore {
               ? 'REHEARSAL_APPLIED'
               : request.operationKind === 'VERIFY_REHEARSAL'
                 ? 'VERIFYING'
-                : 'ROLLING_BACK';
+                : request.nextRehearsalState === 'ROLLED_BACK'
+                  ? 'ROLLING_BACK'
+                  : // A rollback that did NOT restore the captured state is terminal and safe. There
+                    // is no second attempt to schedule, and leaving the run mid-rollback would
+                    // describe a cleanup that is still in progress when nothing further will happen.
+                    'FAILED_SAFE';
           const runSets = terminal
             ? request.operationKind === 'APPLY_REHEARSAL'
               ? 'rehearsal_applies = rehearsal_applies + 1'

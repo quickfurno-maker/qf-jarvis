@@ -14,9 +14,12 @@
 import { describe, expect, it } from 'vitest';
 
 import { fingerprintProposedAction } from '@qf-jarvis/recommendation-runtime';
+import { CLIENT_SALES_INTENTS_FROZEN, RIYA_DISPOSITIONS_FROZEN } from '@qf-jarvis/riya-agent';
+import { RUNTIME_REASONS } from '@qf-jarvis/agent-runtime';
 
 import {
   JAO7_CAPACITY_BOUNDS,
+  JAO7_EVALUATION_VERDICTS,
   JAO7_MISSION_POLICY_IDS,
   JAO7_OUTCOMES,
   JAO7_POSTURE,
@@ -31,8 +34,45 @@ import {
 } from '../jao/advanced-governed-autonomy/index.js';
 // By DIRECT MODULE PATH. None of these is reachable through the barrel above, which is the property
 // the threat-model suite asserts.
+import { JAO7_OPERATION_KINDS } from '../jao/advanced-governed-autonomy/contracts.js';
 import { decideJao7Capacity } from '../jao/advanced-governed-autonomy/capacity.js';
-import { evaluateJao7Step } from '../jao/advanced-governed-autonomy/evaluator.js';
+import {
+  evaluateJao7Step,
+  jao7PlanProgressionFor,
+} from '../jao/advanced-governed-autonomy/evaluator.js';
+import {
+  JAO7_DISPOSITION_REMEDIATION,
+  JAO7_INTENT_TASK_REASON,
+  JAO7_REASON_ADMITS_REMEDIATION,
+  JAO7_REVIEWED_ADVISORY_DISPOSITIONS,
+  JAO7_REVIEWED_ADVISORY_INTENTS,
+  JAO7_REVIEWED_ADVISORY_REASONS,
+  jao7CapacityParametersSchema,
+  jao7OperatorTaskParametersSchema,
+  jao7RemediationFor,
+} from '../jao/advanced-governed-autonomy/mission-policy.js';
+import {
+  jao7ClaimStepDigest,
+  jao7CreateRunDigest,
+  jao7FinalizeStepDigest,
+  jao7KillRunDigest,
+  jao7PauseRunDigest,
+  jao7RecordAuthorityDigest,
+  jao7RehearsalDigest,
+  jao7ResumeRunDigest,
+} from '../jao/advanced-governed-autonomy/postgres-store.js';
+import { jao7ValidateCarriedProposal } from '../jao/advanced-governed-autonomy/proposal.js';
+import {
+  jao7AutonomyRequestSchema,
+  jao7AutonomyResultSchema,
+} from '../jao/advanced-governed-autonomy/public-contracts.js';
+import type {
+  Jao7ClaimStepRequest,
+  Jao7CreateRunRequest,
+  Jao7FinalizeStepRequest,
+  Jao7RecordAuthorityRequest,
+  Jao7RehearsalMutationRequest,
+} from '../jao/advanced-governed-autonomy/store-port.js';
 import {
   createJao7MissionRegistry,
   jao7MissionDigest,
@@ -235,6 +275,81 @@ describe('JAO-7 advanced governed autonomy', () => {
         SATURATED_OBSERVATION.currentConcurrency,
       );
     }
+  });
+
+  it('C2b states the TRUE reason for a backoff, and for holding steady', () => {
+    // The high-error branch used to report `over-provisioned-idle`. That is a statement about a
+    // different world -- a pool erroring under load is not an idle pool -- and it is the token a
+    // human approves against, so the recommendation said the right thing for the wrong reason.
+    for (const queueDepthBand of ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const) {
+      for (const saturationBand of ['NORMAL', 'SATURATED'] as const) {
+        const decision = decideJao7Capacity({
+          ...SATURATED_OBSERVATION,
+          errorRateBand: 'HIGH',
+          queueDepthBand,
+          saturationBand,
+        });
+        expect(decision.adjustmentReasonCode, `${queueDepthBand}/${saturationBand}`).toBe(
+          'high-error-rate-backoff',
+        );
+      }
+    }
+
+    // And `over-provisioned-idle` is now reserved for the pool that actually IS idle.
+    const idle = decideJao7Capacity({
+      ...SATURATED_OBSERVATION,
+      errorRateBand: 'LOW',
+      saturationBand: 'NORMAL',
+      queueDepthBand: 'LOW',
+    });
+    expect(idle.adjustmentReasonCode).toBe('over-provisioned-idle');
+    expect(idle.targetConcurrency).toBe(SATURATED_OBSERVATION.currentConcurrency - 1);
+
+    // Holding steady is its own fact too, and it used to borrow the idle token as well.
+    const steady = decideJao7Capacity({
+      ...SATURATED_OBSERVATION,
+      errorRateBand: 'LOW',
+      saturationBand: 'NORMAL',
+      queueDepthBand: 'MEDIUM',
+    });
+    expect(steady.adjustmentReasonCode).toBe('steady-state-no-adjustment');
+    expect(steady.noAdjustmentWarranted).toBe(true);
+
+    // Every token the optimiser can emit is a member of the governed action parameter enum, so a
+    // truthful reason cannot be one the proposal would refuse.
+    const emitted = new Set<string>();
+    for (const errorRateBand of ['LOW', 'HIGH'] as const) {
+      for (const saturationBand of ['NORMAL', 'SATURATED'] as const) {
+        for (const queueDepthBand of ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const) {
+          const decision = decideJao7Capacity({
+            poolCode: 'synthetic-pool-alpha',
+            currentConcurrency: 8,
+            queueDepthBand,
+            errorRateBand,
+            saturationBand,
+          });
+          emitted.add(decision.adjustmentReasonCode);
+          expect(
+            jao7CapacityParametersSchema.safeParse({
+              poolCode: decision.poolCode,
+              currentConcurrency: decision.currentConcurrency,
+              targetConcurrency: decision.targetConcurrency,
+              adjustmentReasonCode: decision.adjustmentReasonCode,
+            }).success,
+            decision.adjustmentReasonCode,
+          ).toBe(true);
+        }
+      }
+    }
+    expect(emitted).toStrictEqual(
+      new Set([
+        'saturated-with-low-error-rate',
+        'queue-depth-sustained-high',
+        'over-provisioned-idle',
+        'high-error-rate-backoff',
+        'steady-state-no-adjustment',
+      ]),
+    );
   });
 
   it('C3 never scales to zero and never exceeds the ceiling', () => {
@@ -797,6 +912,661 @@ describe('JAO-7 advanced governed autonomy', () => {
       expect(error.message.length).toBeGreaterThan(0);
       // The message is chosen BY the code, never built FROM an input.
       expect(error.message).not.toContain(reason);
+    }
+  });
+
+  // =========================================================================
+  // PG. The plan-progression gate.
+  // =========================================================================
+
+  it('PG1 never advances the plan past an authority validation that proved nothing', () => {
+    // The defect: every completed step advanced the index, so a VALIDATE_AUTHORITY_EVIDENCE that
+    // correlated nothing left the run pointing at REHEARSE_REVERSIBLE_EFFECT while reporting that it
+    // was still AWAITING_AUTHORITY.
+    expect(jao7PlanProgressionFor('VALIDATE_AUTHORITY_EVIDENCE', 'REQUIRE_AUTHORITY')).toBe(
+      'RETAIN',
+    );
+    // The one step whose job is to stop. Stopping IS its completed work.
+    expect(jao7PlanProgressionFor('AWAIT_AUTHORITY', 'REQUIRE_AUTHORITY')).toBe('ADVANCE');
+    // And no OTHER step type inherits that exception.
+    for (const stepType of JAO7_STEP_TYPES) {
+      if (stepType === 'AWAIT_AUTHORITY') {
+        continue;
+      }
+      expect(jao7PlanProgressionFor(stepType, 'REQUIRE_AUTHORITY'), stepType).toBe('RETAIN');
+    }
+  });
+
+  it('PG2 keeps the plan position on every recovery and terminal verdict', () => {
+    for (const stepType of JAO7_STEP_TYPES) {
+      expect(jao7PlanProgressionFor(stepType, 'ROLLBACK'), stepType).toBe('RETAIN');
+      expect(jao7PlanProgressionFor(stepType, 'FAIL_SAFE'), stepType).toBe('RETAIN');
+      for (const verdict of ['CONTINUE', 'PAUSE', 'VERIFY', 'COMPLETE'] as const) {
+        expect(jao7PlanProgressionFor(stepType, verdict), `${stepType}/${verdict}`).toBe('ADVANCE');
+      }
+    }
+    // Every verdict in the closed vocabulary is covered above, so a new one cannot slip through
+    // untested: the count is asserted rather than assumed.
+    expect(
+      new Set([
+        'CONTINUE',
+        'PAUSE',
+        'VERIFY',
+        'COMPLETE',
+        'ROLLBACK',
+        'FAIL_SAFE',
+        'REQUIRE_AUTHORITY',
+      ]),
+    ).toStrictEqual(new Set(JAO7_EVALUATION_VERDICTS));
+  });
+
+  // =========================================================================
+  // SD. Semantic digests: complete, and blind to nothing that governs.
+  // =========================================================================
+
+  const CREATE_RUN_BASE: Jao7CreateRunRequest = Object.freeze({
+    runId: 'jao7.run.digest',
+    operationId: 'jao7.run.digest.create',
+    missionPolicyId: 'jao7.synthetic-capacity-remediation',
+    missionPolicyVersion: 1,
+    missionPolicyDigest: 'a'.repeat(64),
+    planDigest: 'b'.repeat(64),
+    subjectType: 'capacity-pool',
+    subjectId: 'synthetic-pool-alpha',
+    lifetimeSeconds: 86_400,
+    rehearsalClass: 'VIRTUAL_CAPACITY_POOL',
+    beforeIntegerA: 8,
+    beforeIntegerB: null,
+  });
+
+  const CLAIM_BASE: Jao7ClaimStepRequest = Object.freeze({
+    runId: 'jao7.run.digest',
+    operationId: 'jao7.run.digest.claim',
+    expectedRevision: 3,
+    planDigest: 'b'.repeat(64),
+    stepIndex: 2,
+    stepType: 'ANALYZE_CAPACITY',
+    charge: 'TOOL',
+    toolCallCount: 1,
+    maxSpecialistCalls: 0,
+    maxToolCalls: 2,
+    maxSteps: 12,
+  });
+
+  const FINALIZE_BASE: Jao7FinalizeStepRequest = Object.freeze({
+    runId: 'jao7.run.digest',
+    operationId: 'jao7.run.digest.finalize',
+    expectedRevision: 4,
+    stepIndex: 2,
+    stepStatus: 'COMPLETED',
+    outcomeCode: 'CAPACITY_ANALYZED',
+    evaluatorCode: 'STEP_COMPLETED',
+    verdict: 'CONTINUE',
+    nextState: 'IN_PROGRESS',
+    planProgression: 'ADVANCE',
+  });
+
+  const AUTHORITY_BASE: Jao7RecordAuthorityRequest = Object.freeze({
+    runId: 'jao7.run.digest',
+    operationId: 'jao7.run.digest.authority',
+    expectedRevision: 9,
+    approvalDecisionDigest: 'c'.repeat(64),
+    executionIntentDigest: 'd'.repeat(64),
+    recommendationId: '4b2f0f6c-6a1e-4a2a-9d21-8f0c9c6a1111',
+    proposedActionId: '4b2f0f6c-6a1e-4a2a-9d21-8f0c9c6a2222',
+    actionFingerprint: 'e'.repeat(64),
+    observationCode: 'CORRELATED_APPROVED_ACTION_AND_INTENT',
+  });
+
+  const REHEARSAL_BASE: Jao7RehearsalMutationRequest = Object.freeze({
+    runId: 'jao7.run.digest',
+    operationId: 'jao7.run.digest.apply',
+    expectedRevision: 11,
+    operationKind: 'APPLY_REHEARSAL',
+    nextRehearsalState: 'APPLIED',
+    afterIntegerA: 9,
+    afterIntegerB: null,
+    rollbackIntegerA: null,
+    rollbackIntegerB: null,
+    maxRehearsalApplies: 1,
+    maxRollbackAttempts: 1,
+  });
+
+  it('SD1 changes the CREATE_RUN digest for every governing field', () => {
+    // The old digest hashed eight fields. The lifetime, the rehearsal class and the captured before
+    // state were all absent -- so one operation id could be reused to create a run with a different
+    // lifetime, a different sandbox and a different rollback target, and the guard would report an
+    // exact replay and hand back the FIRST call's committed result.
+    const base = jao7CreateRunDigest(CREATE_RUN_BASE);
+    const changes: readonly Partial<Jao7CreateRunRequest>[] = [
+      { missionPolicyId: 'jao7.client-sales-stall-remediation' },
+      { missionPolicyVersion: 2 },
+      { missionPolicyDigest: 'f'.repeat(64) },
+      { planDigest: 'f'.repeat(64) },
+      { subjectType: 'client' },
+      { subjectId: 'synthetic-pool-beta' },
+      { lifetimeSeconds: 3_600 },
+      { rehearsalClass: 'VIRTUAL_OPERATOR_TASK_LEDGER' },
+      { beforeIntegerA: 7 },
+      { beforeIntegerB: 1 },
+    ];
+    for (const change of changes) {
+      expect(
+        jao7CreateRunDigest({ ...CREATE_RUN_BASE, ...change }),
+        JSON.stringify(change),
+      ).not.toBe(base);
+    }
+    // The operation id is the KEY the digest is stored under. Hashing it into the value would make
+    // every lookup match itself and prove nothing.
+    expect(jao7CreateRunDigest({ ...CREATE_RUN_BASE, operationId: 'jao7.run.digest.other' })).toBe(
+      base,
+    );
+  });
+
+  it('SD2 changes the CLAIM_STEP digest for every governing field', () => {
+    // There was no CLAIM_STEP digest at all: the claim wrote no replay record, so an operation id
+    // promised nothing about which step it had claimed.
+    const base = jao7ClaimStepDigest(CLAIM_BASE);
+    const changes: readonly Partial<Jao7ClaimStepRequest>[] = [
+      { planDigest: 'f'.repeat(64) },
+      { stepIndex: 3 },
+      { stepType: 'VALIDATE_INPUT' },
+      { charge: 'SPECIALIST' },
+      { toolCallCount: 2 },
+      { maxSpecialistCalls: 1 },
+      { maxToolCalls: 8 },
+      { maxSteps: 64 },
+    ];
+    for (const change of changes) {
+      expect(jao7ClaimStepDigest({ ...CLAIM_BASE, ...change }), JSON.stringify(change)).not.toBe(
+        base,
+      );
+    }
+    // The revision is the precondition, not the promise. A retry after a lost process re-reads a
+    // moved-on revision, and refusing it as a conflict would make an honest replay impossible.
+    expect(jao7ClaimStepDigest({ ...CLAIM_BASE, expectedRevision: 4 })).toBe(base);
+  });
+
+  it('SD3 changes the FINALIZE_STEP digest for every governing field', () => {
+    // The old digest omitted the expected revision, the evaluator code, the plan progression and the
+    // whole proposal binding -- so an id could be reused to advance the plan, or to bind a DIFFERENT
+    // action to the run, and the guard would call it an exact replay.
+    const base = jao7FinalizeStepDigest(FINALIZE_BASE);
+    const binding = {
+      recommendationId: '4b2f0f6c-6a1e-4a2a-9d21-8f0c9c6a1111',
+      proposedActionId: '4b2f0f6c-6a1e-4a2a-9d21-8f0c9c6a2222',
+      actionFingerprint: 'e'.repeat(64),
+    };
+    const observation = {
+      taskReasonCode: 'client-readiness-unclear',
+      taskClass: 'sales-followup-review',
+      dueWindowCode: 'within-1-business-day',
+      priorityBand: 'routine',
+      advisoryDigest: 'c'.repeat(64),
+    };
+    const changes: readonly Partial<Jao7FinalizeStepRequest>[] = [
+      { expectedRevision: 5 },
+      { stepIndex: 3 },
+      { stepStatus: 'REFUSED' },
+      { outcomeCode: 'INPUT_VALIDATED' },
+      { evaluatorCode: 'PROPOSAL_READY' },
+      { verdict: 'COMPLETE' },
+      { nextState: 'COMPLETED' },
+      { planProgression: 'RETAIN' },
+      { proposalBinding: binding },
+      { proposalBinding: { ...binding, actionFingerprint: 'f'.repeat(64) } },
+      { specialistObservation: observation },
+      { specialistObservation: { ...observation, priorityBand: 'elevated' } },
+    ];
+    const digests = new Set([base]);
+    for (const change of changes) {
+      const digest = jao7FinalizeStepDigest({ ...FINALIZE_BASE, ...change });
+      expect(digest, JSON.stringify(change)).not.toBe(base);
+      digests.add(digest);
+    }
+    // Every change produced a DISTINCT digest, so no two meanings collide.
+    expect(digests.size).toBe(changes.length + 1);
+  });
+
+  it('SD4 changes the RECORD_AUTHORITY, PAUSE, RESUME, KILL and rehearsal digests likewise', () => {
+    const authorityBase = jao7RecordAuthorityDigest(AUTHORITY_BASE);
+    const authorityChanges: readonly Partial<Jao7RecordAuthorityRequest>[] = [
+      { expectedRevision: 10 },
+      { approvalDecisionDigest: 'f'.repeat(64) },
+      { executionIntentDigest: null },
+      { recommendationId: 'other' },
+      { proposedActionId: 'other' },
+      { actionFingerprint: 'f'.repeat(64) },
+      { observationCode: 'CORRELATED_APPROVED_ACTION_WITHOUT_INTENT' },
+    ];
+    for (const change of authorityChanges) {
+      expect(
+        jao7RecordAuthorityDigest({ ...AUTHORITY_BASE, ...change }),
+        JSON.stringify(change),
+      ).not.toBe(authorityBase);
+    }
+
+    // The resume bound was absent from the old digest, so one id could be reused to resume under a
+    // different budget.
+    const resume = { runId: 'jao7.run.digest', operationId: 'op', expectedRevision: 2 };
+    expect(jao7ResumeRunDigest({ ...resume, maxResumes: 8 })).not.toBe(
+      jao7ResumeRunDigest({ ...resume, maxResumes: 64 }),
+    );
+    expect(jao7PauseRunDigest(resume)).not.toBe(
+      jao7PauseRunDigest({ ...resume, expectedRevision: 3 }),
+    );
+    expect(jao7KillRunDigest(resume)).not.toBe(
+      jao7KillRunDigest({ ...resume, expectedRevision: 3 }),
+    );
+    // A pause and a kill at the same revision are DIFFERENT operations, and their digests say so.
+    expect(jao7PauseRunDigest(resume)).not.toBe(jao7KillRunDigest(resume));
+
+    const rehearsalBase = jao7RehearsalDigest(REHEARSAL_BASE);
+    const rehearsalChanges: readonly Partial<Jao7RehearsalMutationRequest>[] = [
+      { expectedRevision: 12 },
+      { operationKind: 'VERIFY_REHEARSAL' },
+      { nextRehearsalState: 'VERIFIED' },
+      { afterIntegerA: 10 },
+      { afterIntegerB: 4 },
+      { rollbackIntegerA: 8 },
+      { rollbackIntegerB: 0 },
+      { maxRehearsalApplies: 1, maxRollbackAttempts: 0 },
+    ];
+    for (const change of rehearsalChanges) {
+      expect(
+        jao7RehearsalDigest({ ...REHEARSAL_BASE, ...change }),
+        JSON.stringify(change),
+      ).not.toBe(rehearsalBase);
+    }
+    // `null` and a real value are distinguishable, so an absent field cannot impersonate one.
+    expect(jao7RehearsalDigest({ ...REHEARSAL_BASE, afterIntegerB: null })).toBe(rehearsalBase);
+  });
+
+  it('SD5 gives RECORD_AUTHORITY its own operation kind', () => {
+    // It used to replay under FINALIZE_STEP, so the audit trail named the wrong mutation -- and a
+    // trail that misnames what happened is worse than one that says nothing.
+    expect(JAO7_OPERATION_KINDS).toContain('RECORD_AUTHORITY');
+    // Two operations differing ONLY in kind must not share a digest.
+    const shared = { runId: 'jao7.run.digest', operationId: 'op', expectedRevision: 2 };
+    expect(jao7RecordAuthorityDigest(AUTHORITY_BASE)).not.toBe(
+      jao7FinalizeStepDigest({ ...FINALIZE_BASE, ...shared }),
+    );
+  });
+
+  // =========================================================================
+  // RM. The reviewed advisory mapping.
+  // =========================================================================
+
+  it('RM1 covers Riya’s ENTIRE closed vocabulary, and drifts loudly if it grows', () => {
+    // If Riya gains a disposition or an intent, this fails -- which is the point. A specialist
+    // conclusion nobody has reviewed must reach a human, not a default.
+    expect([...JAO7_REVIEWED_ADVISORY_DISPOSITIONS].sort()).toStrictEqual(
+      [...RIYA_DISPOSITIONS_FROZEN].sort(),
+    );
+    expect([...JAO7_REVIEWED_ADVISORY_INTENTS].sort()).toStrictEqual(
+      [...CLIENT_SALES_INTENTS_FROZEN].sort(),
+    );
+    for (const reason of JAO7_REVIEWED_ADVISORY_REASONS) {
+      expect(RUNTIME_REASONS, reason).toContain(reason);
+    }
+  });
+
+  it('RM2 is TOTAL, and every mapped value is a governed action token', () => {
+    for (const disposition of JAO7_REVIEWED_ADVISORY_DISPOSITIONS) {
+      expect(JAO7_DISPOSITION_REMEDIATION[disposition], disposition).toBeDefined();
+    }
+    for (const intent of JAO7_REVIEWED_ADVISORY_INTENTS) {
+      expect(JAO7_INTENT_TASK_REASON[intent], intent).toBeDefined();
+    }
+    for (const reason of JAO7_REVIEWED_ADVISORY_REASONS) {
+      expect(typeof JAO7_REASON_ADMITS_REMEDIATION[reason], reason).toBe('boolean');
+    }
+    // Every combination the maps admit produces parameters the GOVERNED action schema accepts, so
+    // the mapping cannot introduce a token the proposal would have to refuse later.
+    for (const disposition of JAO7_REVIEWED_ADVISORY_DISPOSITIONS) {
+      for (const intent of JAO7_REVIEWED_ADVISORY_INTENTS) {
+        for (const reason of JAO7_REVIEWED_ADVISORY_REASONS) {
+          const lookup = jao7RemediationFor({ disposition, intent, reason });
+          expect(lookup.found).toBe('REMEDIATION');
+          if (lookup.found === 'REMEDIATION' && lookup.decision !== 'NO_GOVERNED_REMEDIATION') {
+            expect(
+              jao7OperatorTaskParametersSchema.safeParse(lookup.decision).success,
+              `${disposition}/${intent}/${reason}`,
+            ).toBe(true);
+          }
+        }
+      }
+    }
+  });
+
+  it('RM3 fails closed on a conclusion nobody reviewed', () => {
+    expect(
+      jao7RemediationFor({
+        disposition: 'ESCALATE_TO_LEGAL',
+        intent: 'SALES_FOLLOW_UP',
+        reason: 'runtime-assigned',
+      }).found,
+    ).toBe('UNREVIEWED');
+    expect(
+      jao7RemediationFor({
+        disposition: 'DRAFT_REPLY',
+        intent: 'REFUND_REQUEST',
+        reason: 'runtime-assigned',
+      }).found,
+    ).toBe('UNREVIEWED');
+    expect(
+      jao7RemediationFor({
+        disposition: 'DRAFT_REPLY',
+        intent: 'SALES_FOLLOW_UP',
+        reason: 'runtime-invariant',
+      }).found,
+    ).toBe('UNREVIEWED');
+  });
+
+  it('RM4 derives NOTHING from a refusal or from an analysis that did not happen', () => {
+    // A refusal is an answer, and the answer is "not mine to conclude". Proposing an internal task
+    // off one would be JAO-7 inventing a conclusion the specialist declined to reach.
+    expect(
+      jao7RemediationFor({
+        disposition: 'REFUSE',
+        intent: 'UNSUPPORTED_NON_SALES_REQUEST',
+        reason: 'runtime-escalation-required',
+      }),
+    ).toStrictEqual({ found: 'REMEDIATION', decision: 'NO_GOVERNED_REMEDIATION' });
+    for (const reason of [
+      'runtime-human-takeover',
+      'runtime-ai-paused',
+      'runtime-scope-violation',
+    ]) {
+      expect(
+        jao7RemediationFor({ disposition: 'DRAFT_REPLY', intent: 'SALES_FOLLOW_UP', reason }),
+        reason,
+      ).toStrictEqual({ found: 'REMEDIATION', decision: 'NO_GOVERNED_REMEDIATION' });
+    }
+  });
+
+  it('RM5 lets BOTH halves of the advisory move the remediation', () => {
+    const base = { intent: 'SALES_FOLLOW_UP', reason: 'runtime-assigned' } as const;
+    const draft = jao7RemediationFor({ ...base, disposition: 'DRAFT_REPLY' });
+    const discovery = jao7RemediationFor({ ...base, disposition: 'CONTINUE_DISCOVERY' });
+    const handover = jao7RemediationFor({ ...base, disposition: 'REQUEST_HUMAN_SALES_CONTACT' });
+    expect(draft).not.toStrictEqual(discovery);
+    expect(draft).not.toStrictEqual(handover);
+
+    // And the intent moves the reason code independently of the disposition.
+    const readiness = jao7RemediationFor({
+      disposition: 'DRAFT_REPLY',
+      intent: 'PROJECT_READINESS_CLARIFICATION',
+      reason: 'runtime-assigned',
+    });
+    expect(readiness).not.toStrictEqual(draft);
+    if (readiness.found === 'REMEDIATION' && readiness.decision !== 'NO_GOVERNED_REMEDIATION') {
+      expect(readiness.decision.taskReasonCode).toBe('client-readiness-unclear');
+    }
+  });
+
+  // =========================================================================
+  // CP. The carried proposal.
+  // =========================================================================
+
+  it('CP1 refuses a carried action whose CONTENT changed under an unchanged identity', () => {
+    const proposal = taskProposal();
+    const binding = proposal.actionBindings[0];
+    const policy = policyFor('jao7.client-sales-stall-remediation');
+    const action = proposal.recommendation.proposedActions[0];
+
+    // The honest artifact re-proves itself.
+    expect(
+      jao7ValidateCarriedProposal(
+        {
+          recommendation: proposal.recommendation,
+          actionBindings: [{ ...binding }],
+          approvalRequest: proposal.approvalRequest,
+        },
+        policy,
+        binding,
+      ).recommendation.recommendationId,
+    ).toBe(proposal.recommendation.recommendationId);
+
+    // A REWRITTEN ACTION at the same identity, carrying the same fingerprint STRING. The old check
+    // compared that string to the stored one and let this through.
+    expect(() =>
+      jao7ValidateCarriedProposal(
+        {
+          recommendation: {
+            ...proposal.recommendation,
+            proposedActions: [
+              {
+                ...action,
+                parameters: { ...OPERATOR_TASK, priorityBand: 'elevated' },
+              },
+            ],
+          },
+          actionBindings: [{ ...binding }],
+          approvalRequest: proposal.approvalRequest,
+        },
+        policy,
+        binding,
+      ),
+    ).toThrow(Jao7AutonomyError);
+  });
+
+  it('CP2 refuses an artifact from a DIFFERENT mission, however well-formed', () => {
+    const capacity = capacityProposal();
+    expect(() =>
+      jao7ValidateCarriedProposal(
+        {
+          recommendation: capacity.recommendation,
+          actionBindings: [{ ...capacity.actionBindings[0] }],
+          approvalRequest: capacity.approvalRequest,
+        },
+        // The CLIENT SALES policy, asked about a CAPACITY proposal.
+        policyFor('jao7.client-sales-stall-remediation'),
+        capacity.actionBindings[0],
+      ),
+    ).toThrow(Jao7AutonomyError);
+  });
+
+  it('CP3 refuses the hollow shape the old check would have accepted', () => {
+    const proposal = taskProposal();
+    const binding = proposal.actionBindings[0];
+    expect(() =>
+      jao7ValidateCarriedProposal(
+        {
+          recommendation: { recommendationId: binding.recommendationId },
+          actionBindings: [{ ...binding }],
+          approvalRequest: { recommendationId: binding.recommendationId },
+        },
+        policyFor('jao7.client-sales-stall-remediation'),
+        binding,
+      ),
+    ).toThrow(Jao7AutonomyError);
+  });
+
+  it('CP4 refuses when the run has no durable binding to check against', () => {
+    const proposal = taskProposal();
+    expect(() =>
+      jao7ValidateCarriedProposal(
+        {
+          recommendation: proposal.recommendation,
+          actionBindings: [{ ...proposal.actionBindings[0] }],
+          approvalRequest: proposal.approvalRequest,
+        },
+        policyFor('jao7.client-sales-stall-remediation'),
+        { recommendationId: null, proposedActionId: null, actionFingerprint: null },
+      ),
+    ).toThrow(Jao7AutonomyError);
+  });
+
+  it('CP5 refuses a carried proposal whose approval request describes something else', () => {
+    // Three artifacts that are each individually valid and do not describe one another. The request
+    // is what a human said yes to; a proposal whose parts disagree is not a proposal, and the
+    // per-artifact parse alone would let this through.
+    const task = taskProposal();
+    const capacity = capacityProposal();
+    expect(() =>
+      jao7ValidateCarriedProposal(
+        {
+          recommendation: task.recommendation,
+          actionBindings: [{ ...task.actionBindings[0] }],
+          // A REAL ApprovalRequestV1, for a different recommendation and a different action.
+          approvalRequest: capacity.approvalRequest,
+        },
+        policyFor('jao7.client-sales-stall-remediation'),
+        task.actionBindings[0],
+      ),
+    ).toThrow(Jao7AutonomyError);
+  });
+
+  it('CP6 refuses a carried artifact that is not this mission’s KIND of recommendation', () => {
+    // A well-formed proposal, built under a policy that differs from the reviewed one in exactly one
+    // governing field. Every other check passes -- the fingerprint recomputes, the identities match,
+    // the parameters satisfy the governed schema -- so this is the clause on its own.
+    const policy = policyFor('jao7.client-sales-stall-remediation');
+    const impostor = taskProposal({
+      policy: { ...policy, recommendationType: 'client.some-other-remediation' },
+    });
+    expect(impostor.recommendation.recommendationType).not.toBe(policy.recommendationType);
+    expect(() =>
+      jao7ValidateCarriedProposal(
+        {
+          recommendation: impostor.recommendation,
+          actionBindings: [{ ...impostor.actionBindings[0] }],
+          approvalRequest: impostor.approvalRequest,
+        },
+        policy,
+        impostor.actionBindings[0],
+      ),
+    ).toThrow(Jao7AutonomyError);
+  });
+
+  // =========================================================================
+  // AD. The authority digests.
+  // =========================================================================
+
+  it('AD1 gives two decisions that differ in ANY governed field two different digests', () => {
+    const proposal = capacityProposal();
+    const decision = approvalDecision(proposal);
+    const base = correlateJao7Authority(proposal, { approvalDecision: decision });
+
+    // The old digest hashed six identity fields, so a decision differing only in its PER-ACTION
+    // verdicts, its approver, its contract version or its correlation recorded exactly the same
+    // digest -- and the per-action verdicts are what a partial approval turns on.
+    // WHO APPROVED is a governed field, and the old digest could not see it: a human decision and a
+    // Core policy-automation decision over the same action recorded the same audit key.
+    const otherApprover = correlateJao7Authority(proposal, {
+      approvalDecision: { ...decision, decidedBy: { ...POLICY_APPROVER } },
+    });
+    expect(otherApprover.approvalDecisionDigest).not.toBe(base.approvalDecisionDigest);
+
+    // Property order is not content. The same decision written differently digests the same.
+    const reordered = correlateJao7Authority(proposal, {
+      approvalDecision: {
+        correlationId: decision.correlationId,
+        reasonCode: decision.reasonCode,
+        actionDecisions: [...decision.actionDecisions],
+        outcome: decision.outcome,
+        decidedAt: decision.decidedAt,
+        decidedBy: { ...decision.decidedBy },
+        issuer: decision.issuer,
+        contractVersion: decision.contractVersion,
+        recommendationId: decision.recommendationId,
+        decisionId: decision.decisionId,
+      },
+    });
+    expect(reordered.approvalDecisionDigest).toBe(base.approvalDecisionDigest);
+    expect(base.approvalDecisionDigest).toMatch(/^[0-9a-f]{64}$/u);
+  });
+
+  it('AD2 gives two intents that differ in ANY governed field two different digests', () => {
+    const proposal = capacityProposal();
+    const decision = approvalDecision(proposal);
+    const intent = executionIntent(proposal, decision);
+    const base = correlateJao7Authority(proposal, {
+      approvalDecision: decision,
+      executionIntent: intent,
+    });
+    const rekeyed = correlateJao7Authority(proposal, {
+      approvalDecision: decision,
+      executionIntent: { ...intent, idempotencyKey: `jao7-intent-${'0'.repeat(8)}` },
+    });
+    expect(rekeyed.executionIntentDigest).not.toBe(base.executionIntentDigest);
+    expect(base.executionIntentDigest).toMatch(/^[0-9a-f]{64}$/u);
+  });
+
+  // =========================================================================
+  // RS. The result contract, and the request surface.
+  // =========================================================================
+
+  it('RS1 refuses a result whose outcome contradicts its state', () => {
+    const base = {
+      runId: 'jao7.run.result',
+      missionPolicyId: 'jao7.synthetic-capacity-remediation',
+      missionPolicyVersion: 1,
+      missionPolicyDigest: 'a'.repeat(64),
+      planDigest: 'b'.repeat(64),
+      state: 'FAILED_SAFE',
+      outcome: 'FAILED_SAFE',
+      refusalReason: null,
+      currentStepIndex: 3,
+      revision: 4,
+      stepsCompleted: 3,
+      specialistCalls: 0,
+      toolCalls: 1,
+      modelCalls: 0,
+      rehearsalApplies: 0,
+      steps: [],
+      evaluations: [],
+      authorityObservation: null,
+      rehearsal: null,
+      proposal: null,
+      authoritySourcePosture: 'INJECTED_OFFLINE_CORE_FIXTURE',
+      posture: JAO7_POSTURE,
+    };
+    expect(jao7AutonomyResultSchema.safeParse(base).success).toBe(true);
+    // A completed rehearsal beside a failed-safe run is a contradiction, and the schema says so.
+    expect(
+      jao7AutonomyResultSchema.safeParse({ ...base, outcome: 'COMPLETED_REHEARSAL' }).success,
+    ).toBe(false);
+    // A refusal without a reason, and a reason without a refusal, are both contradictions.
+    expect(jao7AutonomyResultSchema.safeParse({ ...base, outcome: 'REFUSED' }).success).toBe(false);
+    expect(
+      jao7AutonomyResultSchema.safeParse({ ...base, refusalReason: 'STORE_FAILED' }).success,
+    ).toBe(false);
+    // And the five fields that used to be `unknown` are now checked.
+    expect(
+      jao7AutonomyResultSchema.safeParse({ ...base, steps: [{ nonsense: true }] }).success,
+    ).toBe(false);
+    expect(
+      jao7AutonomyResultSchema.safeParse({ ...base, rehearsal: { state: 'APPLIED' } }).success,
+    ).toBe(false);
+    expect(jao7AutonomyResultSchema.safeParse({ ...base, proposal: { anything: 1 } }).success).toBe(
+      false,
+    );
+  });
+
+  it('RS2 has no request field for an operator task or a failure fixture', () => {
+    // The remediation is DERIVED from the specialist's conclusion; the failure fixtures live in the
+    // internal composition. Both used to be caller-supplied, and the request schema is strict, so
+    // naming either is a refusal rather than something quietly consulted.
+    for (const forbidden of [
+      { operatorTask: { ...OPERATOR_TASK } },
+      { corruptRehearsalObservation: true },
+      { corruptRollback: true },
+    ]) {
+      expect(
+        jao7AutonomyRequestSchema.safeParse({
+          runId: 'jao7.run.request',
+          operationId: 'jao7.run.request.step',
+          correlationId: CORRELATION_ID,
+          summary: 'A stalled client-sales conversation needs an internal follow-up task.',
+          rationale: 'Riya observed a stall; an operator should review.',
+          evidence: [...EVIDENCE],
+          confidence: 0.5,
+          ...forbidden,
+        }).success,
+        JSON.stringify(forbidden),
+      ).toBe(false);
     }
   });
 });

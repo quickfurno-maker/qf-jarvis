@@ -223,6 +223,19 @@ describe('JAO-7 autonomy threat model', () => {
       'Jao7ClaimStepRequest',
       'Jao7FinalizeStepRequest',
       'Jao7RehearsalMutationRequest',
+      'rollbackJao7AutonomyRehearsalInternal',
+      // FINDING 6. The failure fixtures moved into the internal composition; the public surface must
+      // not carry a name that could be mistaken for a way to reach them.
+      'faultInjection',
+      'corruptRehearsalObservation',
+      'corruptRollback',
+      // FINDING 7. The remediation is derived from the specialist's conclusion, so there is no
+      // caller-supplied task shape on the public surface at all.
+      'jao7OperatorTaskParametersSchema',
+      'Jao7OperatorTaskParameters',
+      'jao7RemediationFor',
+      'JAO7_DISPOSITION_REMEDIATION',
+      'JAO7_INTENT_TASK_REASON',
     ]) {
       expect(Object.keys(jao7), forbidden).not.toContain(forbidden);
       expect(Object.keys(jao7Public), forbidden).not.toContain(forbidden);
@@ -280,6 +293,42 @@ describe('JAO-7 autonomy threat model', () => {
     for (const descriptor of describeJao7Missions()) {
       expect(descriptor.requiredRisk).toBe('low-risk-reversible');
       expect(descriptor.requiredApproval).toBe('delegated-approver');
+    }
+  });
+
+  it('T4b exposes exactly the reviewed verbs, and safety cleanup is one of them', () => {
+    // The public surface gained ONE verb in the correction: `rollbackJao7AutonomyRehearsal`. It is
+    // there because the guarantee it backs is public -- safety rollback is superior to kill and
+    // expiry, which is only true if somebody outside the slice can ask for it. The proof of that
+    // used to reach through the raw store, which no public caller has.
+    const surface: Readonly<Record<string, unknown>> = jao7Public;
+    const verbs = Object.keys(surface).filter((key) => typeof surface[key] === 'function');
+    expect(verbs.sort()).toStrictEqual([
+      // The error CLASS, not a verb. It is a function because that is what a class is.
+      'Jao7AutonomyError',
+      'advanceJao7AutonomyRun',
+      'createJao7AutonomyRun',
+      'describeJao7Missions',
+      'killJao7AutonomyRun',
+      'pauseJao7AutonomyRun',
+      'readJao7AutonomyRun',
+      'resumeJao7AutonomyRun',
+      'rollbackJao7AutonomyRehearsal',
+    ]);
+    // And it is still not an authority verb. None of these words appears on the surface.
+    for (const forbidden of [
+      'approve',
+      'authorize',
+      'decide',
+      'submit',
+      'execute',
+      'send',
+      'dispatch',
+      'remediate',
+    ]) {
+      for (const key of Object.keys(jao7Public)) {
+        expect(key.toLowerCase(), `${key} -> ${forbidden}`).not.toContain(forbidden);
+      }
     }
   });
 
@@ -409,6 +458,55 @@ describe('JAO-7 autonomy threat model', () => {
       expect(
         jao7AutonomyRequestSchema.safeParse({ ...valid, ...smuggled }).success,
         JSON.stringify(smuggled),
+      ).toBe(false);
+    }
+  });
+
+  it('I2b refuses a caller-supplied remediation and a caller-supplied failure fixture', () => {
+    // FINDING 6 and FINDING 7 together, on the request surface.
+    //
+    // `operatorTask` decided what the proposal asked a human to approve, which made the mandatory
+    // Riya delegation ceremonial: the advisory was required and then discarded. `corruptRehearsal-
+    // Observation` and `corruptRollback` were shipped switches whose only purpose was to make a
+    // verification fail and a rollback not restore. All three are gone, and the schema is strict,
+    // so naming one is a refusal rather than something quietly consulted.
+    const base = {
+      runId: 'jao7.run.injection',
+      operationId: 'jao7.run.injection.step',
+      correlationId: '3f2c1a44-0d1e-4a7b-9c2e-1b0a5d6e7f80',
+      summary: 'A stalled client-sales conversation needs an internal follow-up task.',
+      rationale: 'Riya observed a stall; an operator should review.',
+      evidence: [
+        {
+          evidenceType: 'canonical-event' as const,
+          eventId: '9a1b2c3d-4e5f-4a6b-8c7d-0e1f2a3b4c5d',
+          eventType: 'client.conversation-stalled',
+          description: 'A stalled client-sales conversation was recorded in Core.',
+        },
+      ],
+      confidence: 0.5,
+    };
+    expect(jao7AutonomyRequestSchema.safeParse(base).success).toBe(true);
+
+    for (const injected of [
+      { operatorTask: { taskReasonCode: 'client-requested-human-assistance' } },
+      { taskReasonCode: 'client-requested-human-assistance' },
+      { taskClass: 'human-handover-review' },
+      { dueWindowCode: 'within-4-hours' },
+      { priorityBand: 'elevated' },
+      { corruptRehearsalObservation: true },
+      { corruptRollback: true },
+      { specialistObservation: { taskClass: 'human-handover-review' } },
+      { advisory: { disposition: 'REQUEST_HUMAN_SALES_CONTACT' } },
+      { disposition: 'REQUEST_HUMAN_SALES_CONTACT' },
+      { planProgression: 'ADVANCE' },
+      { advanceStepIndex: true },
+      { attemptIndex: 0 },
+      { maxRollbackAttempts: 4 },
+    ]) {
+      expect(
+        jao7AutonomyRequestSchema.safeParse({ ...base, ...injected }).success,
+        JSON.stringify(injected),
       ).toBe(false);
     }
   });

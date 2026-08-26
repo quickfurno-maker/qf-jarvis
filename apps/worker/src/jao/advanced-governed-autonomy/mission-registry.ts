@@ -226,6 +226,41 @@ export function jao7Digest(parts: readonly string[]): string {
 }
 
 /**
+ * A canonical serialisation of data that has ALREADY been parsed by a governed schema.
+ *
+ * Object keys are emitted in sorted order, arrays keep their order, and `undefined` members are
+ * dropped -- so two structurally identical values serialise identically whatever order their
+ * properties happened to be written in, and any difference in content is a difference in bytes.
+ *
+ * It terminates without a cycle guard because what reaches it is the OUTPUT of a Zod parse of a
+ * JSON-shaped contract: primitives, arrays and plain objects, no framework object, no function and
+ * no self-reference. It is never handed unparsed input, and it refuses anything else rather than
+ * hashing a placeholder -- a digest standing for "some value I could not serialise" is worthless as
+ * an audit key.
+ *
+ * INTERNAL. Exported from this module and from no barrel.
+ */
+export function jao7CanonicalJson(value: unknown): string {
+  if (value === null || typeof value === 'boolean' || typeof value === 'number') {
+    return JSON.stringify(value);
+  }
+  if (typeof value === 'string') {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => jao7CanonicalJson(item)).join(',')}]`;
+  }
+  if (typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, item]) => item !== undefined)
+      .sort((left, right) => (left[0] < right[0] ? -1 : 1))
+      .map(([key, item]) => `${JSON.stringify(key)}:${jao7CanonicalJson(item)}`);
+    return `{${entries.join(',')}}`;
+  }
+  throw new Jao7AutonomyError('PERSISTED_STATE_INVALID');
+}
+
+/**
  * The digest of a mission policy, over its governance-bearing fields in a fixed order.
  *
  * A run stores this at creation. If the reviewed policy is later edited, an in-flight run stops

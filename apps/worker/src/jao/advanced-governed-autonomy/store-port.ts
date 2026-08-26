@@ -21,6 +21,7 @@ import type {
   Jao7EvaluationRecord,
   Jao7EvaluationVerdict,
   Jao7OperationKind,
+  Jao7PlanProgression,
   Jao7RehearsalClass,
   Jao7RehearsalRecord,
   Jao7RehearsalState,
@@ -53,7 +54,15 @@ export interface Jao7CreateRunRequest {
   readonly beforeIntegerB: number | null;
 }
 
-/** Claiming the next step. The plan digest and budgets are re-checked under the row lock. */
+/**
+ * Claiming the next step. The plan digest and budgets are re-checked under the row lock.
+ *
+ * There is deliberately NO `attemptIndex` here. The attempt is allocated by the adapter under the
+ * lock, from what the step table actually contains, because a caller-supplied attempt number would
+ * be a caller deciding whether it is starting a new attempt or resuming one -- and it would also
+ * change with every crash, so an honest retry with the same operation id would compute a different
+ * semantic digest and be refused as a conflict instead of replayed.
+ */
 export interface Jao7ClaimStepRequest extends Jao7OperationEnvelope {
   readonly runId: string;
   readonly planDigest: string;
@@ -76,7 +85,28 @@ export interface Jao7FinalizeStepRequest extends Jao7OperationEnvelope {
   readonly evaluatorCode: string;
   readonly verdict: Jao7EvaluationVerdict;
   readonly nextState: Jao7RunState;
-  readonly advanceStepIndex: boolean;
+  /**
+   * Whether this step's outcome moves the run's position in the reviewed plan.
+   *
+   * It used to be `advanceStepIndex: true` on every completed step, which is how the authority gate
+   * came to be walked past. `RETAIN` leaves the position claimable again, so a validation that
+   * proved nothing is attempted again rather than counted as progress.
+   */
+  readonly planProgression: Jao7PlanProgression;
+  /**
+   * The DERIVED SPECIALIST OBSERVATION, written exactly once, when the specialist step commits.
+   *
+   * Closed codes and one digest of the bounded advisory they were mapped from. The proposal is
+   * built from these columns rather than from anything a caller supplies, so a derivation that
+   * vanished on restart would be no derivation at all.
+   */
+  readonly specialistObservation?: {
+    readonly taskReasonCode: string;
+    readonly taskClass: string;
+    readonly dueWindowCode: string;
+    readonly priorityBand: string;
+    readonly advisoryDigest: string;
+  };
   /**
    * Written exactly once, when the proposal step commits.
    *
@@ -95,7 +125,23 @@ export interface Jao7FinalizeStepRequest extends Jao7OperationEnvelope {
 export interface Jao7ClaimedStep {
   readonly run: Jao7RunRecord;
   readonly step: Jao7StepRecord;
-  /** True when this operation id had already claimed this exact step. */
+  /**
+   * The run state AS IT WAS when the claim took the lock.
+   *
+   * The claim moves a run to `IN_PROGRESS`, so by the time the work runs the state that authorised
+   * that work is gone. A rehearsal is only eligible off a JUST-PROVEN exact authority chain, and
+   * this is the field that makes "just" checkable: it is read under the same lock that the
+   * compare-and-set protects, so it is the state the claimed revision actually had.
+   */
+  readonly priorState: Jao7RunState;
+  /**
+   * True when THIS operation id had already committed this exact claim.
+   *
+   * It used to be set for any pre-existing `CLAIMED` row whatever operation id created it, which
+   * made a replay indistinguishable from another caller's in-flight work -- and the coordinator then
+   * did the step's work again regardless. A replay must be served, never re-performed: the budget
+   * was already charged, and the specialist call it would repeat is one nobody authorised twice.
+   */
   readonly replayed: boolean;
 }
 
@@ -132,6 +178,14 @@ export interface Jao7RehearsalMutationRequest extends Jao7OperationEnvelope {
   readonly rollbackIntegerA: number | null;
   readonly rollbackIntegerB: number | null;
   readonly maxRehearsalApplies: number;
+  /**
+   * The reviewed rollback attempt bound, enforced against a DURABLE counter.
+   *
+   * `maxRollbackAttempts` used to appear on the policy and nowhere else, which made it a documented
+   * number rather than a control. A restart resets nothing now: the attempt is counted in the row,
+   * and the database bounds the column as well.
+   */
+  readonly maxRollbackAttempts: number;
 }
 
 /** A whole run, as a reader sees it. Strictly decoded; no artifact and no permission in sight. */

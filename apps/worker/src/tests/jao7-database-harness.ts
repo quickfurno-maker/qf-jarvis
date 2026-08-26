@@ -160,7 +160,8 @@ export async function countJao7Rows(pool: DatabasePool, table: string): Promise<
 /** Rows for one run, so "exactly one claim" is counted rather than inferred. */
 export async function countJao7RowsFor(
   pool: DatabasePool,
-  table: 'autonomy_step' | 'autonomy_evaluation' | 'autonomy_operation_replay',
+  table:
+    'autonomy_step' | 'autonomy_evaluation' | 'autonomy_operation_replay' | 'authority_observation',
   runId: string,
 ): Promise<number> {
   return withClient(pool, async (client) => {
@@ -188,6 +189,43 @@ export async function dumpJao7Run(pool: DatabasePool, runId: string): Promise<st
       [runId],
     );
     return JSON.stringify({ run: rows.rows, authority: authority.rows, rehearsal: rehearsal.rows });
+  });
+}
+
+/**
+ * The operation kinds a run's replay records were written under, in order.
+ *
+ * An audit trail that misnames what happened is worse than one that says nothing, because a reader
+ * trusts it -- so the kind is asserted rather than assumed. Recording an authority correlation used
+ * to replay under `FINALIZE_STEP`.
+ */
+export async function jao7ReplayKindsFor(
+  pool: DatabasePool,
+  runId: string,
+): Promise<readonly string[]> {
+  return withClient(pool, async (client) => {
+    const rows = await client.query<{ readonly operation_kind: string }>(
+      `SELECT operation_kind FROM ${JAO7_TEST_SCHEMA}.autonomy_operation_replay
+        WHERE run_id = $1 ORDER BY created_at, operation_id`,
+      [runId],
+    );
+    return rows.rows.map((row) => row.operation_kind);
+  });
+}
+
+/**
+ * Run one raw statement, so a DATABASE CONSTRAINT can be proved by trying to break it.
+ *
+ * Used only to attack an invariant from outside the adapter. A constraint nobody has tried to
+ * violate is a constraint nobody has tested.
+ */
+export async function jao7RawStatement(
+  pool: DatabasePool,
+  sql: string,
+  params: readonly unknown[] = [],
+): Promise<void> {
+  await withClient(pool, async (client) => {
+    await client.query(sql.replace(/\$SCHEMA/gu, JAO7_TEST_SCHEMA), [...params]);
   });
 }
 

@@ -264,9 +264,11 @@ specialist delegation. The JAO-5 schema is LOCAL and is not managed migration hi
 
 Permit the supervisor to construct proposals that enter the **existing** recommendation -> Core/human authorization -> execution-intent path. No parallel execution system is introduced. Communication remains subject to execution-time consent/suppression eligibility.
 
-**Implementation proof PROPOSED in `qfj-jao6-governed-business-action-proposals`, not merged**
-([ADR-0120](../decisions/ADR-0120-jao6-governed-business-action-proposals.md)). Exact first-proof
-boundaries:
+**Implementation proof MERGED (PR #162)**
+([ADR-0120](../decisions/ADR-0120-jao6-governed-business-action-proposals.md)). It remains OFFLINE
+and DEFAULT-OFF: it submits nothing to Core, creates no approval decision and no execution intent,
+calls no n8n, provider or channel, persists nothing, and is imported by no production entry point.
+Exact first-proof boundaries:
 
 - The pipeline is `bounded candidate + static reviewed policy -> canonical RecommendationV1 ->
   canonical action fingerprint binding -> canonical powerless ApprovalRequestV1 -> STOP`.
@@ -319,7 +321,10 @@ Advanced autonomy does not relax the permanent authority ceiling. Irreversible, 
 - **Two static missions, both `low-risk-reversible` / `delegated-approver`.**
   `jao7.client-sales-stall-remediation` v1 proposes an INTERNAL `operator.task.create` and includes
   exactly ONE Riya delegation through the certified JAO-2 boundary, scoped to CLIENT SALES signals
-  only. `jao7.synthetic-capacity-remediation` v1 proposes a bounded
+  only. **The advisory DECIDES the remediation**, through total reviewed maps from its bounded
+  disposition, intent and reason to one closed set of task codes; a conclusion outside the reviewed
+  vocabulary, and a refusal, both fail closed. Riya still cannot propose, approve, execute or send,
+  and no caller may state the task: there is no request field for one. `jao7.synthetic-capacity-remediation` v1 proposes a bounded
   `capacity.concurrency-adjustment` on a synthetic pool. A communication, voice, money or high-risk
   mission cannot be declared: the policy schema literals refuse to load one.
 - **Plans are reviewed data, not generated.** A fixed sequence from a closed step vocabulary, finite,
@@ -333,8 +338,13 @@ Advanced autonomy does not relax the permanent authority ceiling. Irreversible, 
   sandbox survive a restart. Not managed migration history; applied to no managed database.
 - **Every transition is an explicit call.** No scheduler, cron, timer, queue, webhook or ambient
   subscription. Kill is terminal with no unkill; expiry blocks forward work; pause resumes only
-  explicitly. Safety rollback of already-applied synthetic state is superior to kill and expiry, and
-  can only restore the captured BEFORE value.
+  explicitly, and a pause that would strand applied, unverified synthetic state is refused. Safety
+  rollback of already-applied synthetic state is superior to kill and expiry, is reachable from the
+  PUBLIC surface, is bounded to one attempt by a durable counter and a database CHECK, and can only
+  restore the captured BEFORE value.
+- **The authority gate is made of plan position as well as run state.** An incomplete or rejected
+  correlation retains its plan position and is attempted again under the reviewed step budget; a
+  rehearsal is ineligible without a just-proven exact chain bound to this run's own proposal.
 - **JAO-7 creates no `ApprovalDecisionV1` and no `ExecutionIntentV1`, and executes neither.** Both
   arrive from outside and are validated by the canonical approval and execution-intent runtimes. The
   authority source posture is `INJECTED_OFFLINE_CORE_FIXTURE`: correlation proves the artifacts

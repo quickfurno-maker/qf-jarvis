@@ -73,11 +73,14 @@ export {
   jao7AutonomyRequestSchema,
   jao7AutonomyResultSchema,
   jao7CreateRunRequestSchema,
+  jao7SafetyRollbackRequestSchema,
 } from './public-contracts.js';
 export type {
   Jao7AdvanceRequest,
   Jao7AutonomyResult,
   Jao7CreateRunRequest,
+  Jao7ResultProposal,
+  Jao7SafetyRollbackRequest,
   Jao7TelemetryEvent,
   Jao7TelemetryHook,
 } from './public-contracts.js';
@@ -89,5 +92,10 @@ export {
   pauseJao7AutonomyRun,
   readJao7AutonomyRun,
   resumeJao7AutonomyRun,
+  // SAFETY CLEANUP, and the only new verb on this surface. It restores the captured BEFORE state of
+  // a virtual sandbox and nothing else -- no target, no value, no resurrection of the run. It is
+  // public because the guarantee it backs is: safety rollback is superior to kill and expiry, which
+  // is only true if somebody outside the slice can actually ask for it.
+  rollbackJao7AutonomyRehearsal,
 } from './coordinator.js';
 export type { Jao7AutonomyDependencies, Jao7Clock } from './coordinator.js';

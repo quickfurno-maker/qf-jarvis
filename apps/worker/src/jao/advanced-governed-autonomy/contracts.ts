@@ -143,6 +143,21 @@ export const JAO7_EVALUATION_VERDICTS = Object.freeze([
 
 export type Jao7EvaluationVerdict = (typeof JAO7_EVALUATION_VERDICTS)[number];
 
+/**
+ * What a finalised step does to the run's position in the reviewed plan.
+ *
+ * It used to be an unconditional `advanceStepIndex: true` on every completed step, and that is how
+ * the authority gate came to be walked past: a VALIDATE_AUTHORITY_EVIDENCE step that correlated
+ * NOTHING still counted as progress, so a run reported as `AWAITING_AUTHORITY` was already pointing
+ * at `REHEARSE_REVERSIBLE_EFFECT`. Only the run STATE stood between that position and a rehearsal.
+ *
+ * Progress is now a decision with a name, derived from the verdict by a total function, so a new
+ * verdict cannot inherit "advance" by being added.
+ */
+export const JAO7_PLAN_PROGRESSIONS = Object.freeze(['ADVANCE', 'RETAIN'] as const);
+
+export type Jao7PlanProgression = (typeof JAO7_PLAN_PROGRESSIONS)[number];
+
 /** The terminal shapes a run can be reported as. None of them says the effect happened. */
 export const JAO7_OUTCOMES = Object.freeze([
   'COMPLETED_REHEARSAL',
@@ -157,6 +172,29 @@ export const JAO7_OUTCOMES = Object.freeze([
 ] as const);
 
 export type Jao7Outcome = (typeof JAO7_OUTCOMES)[number];
+
+/**
+ * The outcome each run state implies.
+ *
+ * A TOTAL map, so a new run state cannot inherit another's reported outcome: the map fails to
+ * compile until somebody says what the new state means to a reader. `COMPLETED` is the one entry a
+ * reader must refine further -- a completed run whose sandbox was rolled back reports
+ * `ROLLED_BACK_REHEARSAL`, and the result schema permits exactly those two for that state.
+ */
+export const JAO7_STATE_OUTCOMES: Readonly<Record<Jao7RunState, Jao7Outcome>> = Object.freeze({
+  PLANNED: 'IN_PROGRESS',
+  IN_PROGRESS: 'IN_PROGRESS',
+  AWAITING_AUTHORITY: 'AWAITING_AUTHORITY',
+  AUTHORITY_EVIDENCE_VALIDATED_FOR_REHEARSAL: 'IN_PROGRESS',
+  REHEARSAL_APPLIED: 'IN_PROGRESS',
+  VERIFYING: 'IN_PROGRESS',
+  ROLLING_BACK: 'IN_PROGRESS',
+  COMPLETED: 'COMPLETED_REHEARSAL',
+  PAUSED: 'PAUSED',
+  KILLED: 'KILLED',
+  EXPIRED: 'EXPIRED',
+  FAILED_SAFE: 'FAILED_SAFE',
+});
 
 /**
  * The authority source posture.
@@ -203,6 +241,10 @@ export const JAO7_OPERATION_KINDS = Object.freeze([
   'CREATE_RUN',
   'CLAIM_STEP',
   'FINALIZE_STEP',
+  // Its OWN kind. Recording an authority correlation used to replay under `FINALIZE_STEP`, which
+  // meant the audit trail named the wrong mutation -- and an audit trail that misnames what happened
+  // is worse than one that says nothing, because a reader trusts it.
+  'RECORD_AUTHORITY',
   'PAUSE_RUN',
   'RESUME_RUN',
   'KILL_RUN',
@@ -237,18 +279,24 @@ export const JAO7_REFUSAL_REASONS = Object.freeze([
   'STEP_ALREADY_CLAIMED',
   'BUDGET_EXHAUSTED',
   'SPECIALIST_REFUSED',
+  'SPECIALIST_ADVISORY_UNREVIEWED',
+  'SPECIALIST_ADVISORY_WITHOUT_REMEDIATION',
+  'SPECIALIST_OBSERVATION_MISSING',
   'TOOL_REFUSED',
   'PROPOSAL_REFUSED',
   'APPROVAL_DECISION_INVALID',
   'APPROVAL_NOT_APPROVED',
   'EXECUTION_INTENT_INVALID',
   'AUTHORITY_BINDING_MISMATCH',
+  'REHEARSAL_NOT_ELIGIBLE',
   'REHEARSAL_APPLY_FAILED',
   'REHEARSAL_VERIFY_FAILED',
   'ROLLBACK_FAILED',
+  'ROLLBACK_NOT_ELIGIBLE',
   'CANCELLED',
   'STORE_FAILED',
   'PERSISTED_STATE_INVALID',
+  'RESULT_INVALID',
 ] as const);
 
 export type Jao7RefusalReason = (typeof JAO7_REFUSAL_REASONS)[number];
@@ -278,18 +326,25 @@ const JAO7_MESSAGES: Readonly<Record<Jao7RefusalReason, string>> = Object.freeze
   STEP_ALREADY_CLAIMED: 'That step has already been claimed.',
   BUDGET_EXHAUSTED: 'A mission policy budget is exhausted.',
   SPECIALIST_REFUSED: 'The governed specialist delegation refused.',
+  SPECIALIST_ADVISORY_UNREVIEWED: 'The advisory conclusion is outside the reviewed JAO-7 mapping.',
+  SPECIALIST_ADVISORY_WITHOUT_REMEDIATION:
+    'The reviewed mapping concluded that advisory warrants no governed remediation.',
+  SPECIALIST_OBSERVATION_MISSING: 'No durable specialist observation exists for this run.',
   TOOL_REFUSED: 'The virtual workbench refused.',
   PROPOSAL_REFUSED: 'The canonical proposal runtimes refused the assembled input.',
   APPROVAL_DECISION_INVALID: 'The supplied approval decision did not correlate.',
   APPROVAL_NOT_APPROVED: 'The supplied decision does not approve this exact action.',
   EXECUTION_INTENT_INVALID: 'The supplied execution intent did not correlate.',
   AUTHORITY_BINDING_MISMATCH: 'The authority evidence does not describe this run.',
+  REHEARSAL_NOT_ELIGIBLE: 'No just-proven exact authority chain permits a rehearsal here.',
   REHEARSAL_APPLY_FAILED: 'The virtual rehearsal could not be applied.',
   REHEARSAL_VERIFY_FAILED: 'The virtual rehearsal did not verify.',
   ROLLBACK_FAILED: 'The virtual rollback did not restore the captured state.',
+  ROLLBACK_NOT_ELIGIBLE: 'There is no applied virtual state for a rollback to restore.',
   CANCELLED: 'The operation was cancelled before it committed.',
   STORE_FAILED: 'The durable store could not be reached or answered unusably.',
   PERSISTED_STATE_INVALID: 'A persisted row no longer satisfies its contract.',
+  RESULT_INVALID: 'The assembled result did not satisfy its own contract.',
 });
 
 /** The refusal, carrying a code and nothing else. A thrown object is never read for its message. */
@@ -387,6 +442,8 @@ export type Jao7EvaluationRecord = z.infer<typeof jao7EvaluationRecordSchema>;
 /** One recorded step. */
 export const jao7StepRecordSchema = z.strictObject({
   stepIndex: z.number().int().min(0).max(64),
+  /** Which attempt at that plan position this row is. Retained positions are attempted again. */
+  attemptIndex: z.number().int().min(0).max(63),
   stepType: z.enum(JAO7_STEP_TYPES),
   stepStatus: z.enum(JAO7_STEP_STATUSES),
   startedAt: jao7InstantSchema,
@@ -404,6 +461,16 @@ export type Jao7StepRecord = z.infer<typeof jao7StepRecordSchema>;
  * will eventually read as a grant, months later, with the artifact long expired.
  */
 export const jao7AuthorityObservationRecordSchema = z.strictObject({
+  /**
+   * Which correlation attempt this row records.
+   *
+   * The table used to be keyed by `run_id` alone with `ON CONFLICT DO NOTHING`, so the FIRST
+   * incomplete or rejected attempt consumed the only slot -- and a run still legitimately awaiting
+   * authority could never record the exact chain when it finally arrived. A failed attempt must not
+   * poison later valid evidence. At most one SUCCESSFUL chain per run is still enforced, by a
+   * partial unique index rather than by whichever guard ran first.
+   */
+  attemptIndex: z.number().int().min(0).max(64),
   approvalDecisionDigest: jao7DigestSchema,
   executionIntentDigest: jao7DigestSchema.nullable(),
   recommendationId: z.string().min(1).max(128),
@@ -427,7 +494,18 @@ export const jao7RehearsalRecordSchema = z.strictObject({
   state: z.enum(JAO7_REHEARSAL_STATES),
   appliedAt: jao7InstantSchema.nullable(),
   verifiedAt: jao7InstantSchema.nullable(),
+  /**
+   * When a rollback was ATTEMPTED, and separately when one SUCCEEDED.
+   *
+   * They used to be one column, and the SQL check then read `state = ROLLED_BACK` if and only if a
+   * rollback instant existed -- so a `ROLLBACK_FAILED` row carrying its attempted values violated
+   * its own constraint and could not be written at all. A failure state that cannot be persisted is
+   * a failure state that does not exist, which is the opposite of failing safe.
+   */
+  rollbackAttemptedAt: jao7InstantSchema.nullable(),
   rolledBackAt: jao7InstantSchema.nullable(),
+  /** Bounded by the reviewed policy, and by a database CHECK. There is no retry storm. */
+  rollbackAttempts: z.number().int().min(0).max(1),
   revision: z.number().int().min(1),
 });
 
@@ -459,6 +537,22 @@ export const jao7RunRecordSchema = z.strictObject({
   proposalRecommendationId: z.string().min(1).max(128).nullable(),
   proposalActionId: z.string().min(1).max(128).nullable(),
   proposalActionFingerprint: jao7DigestSchema.nullable(),
+  /**
+   * THE DERIVED SPECIALIST OBSERVATION, written when the Riya step commits.
+   *
+   * Closed codes only -- the mapped remediation decision and a digest of the bounded advisory it
+   * came from. No conversation, no prose, no reasoning: what is durable is WHAT WAS CONCLUDED and
+   * WHICH advisory concluded it, which is what a restart needs and all a reader is owed.
+   *
+   * It exists because the proposal must be derived from the specialist's conclusion rather than
+   * from anything a caller supplies, and a derivation that vanished on restart would be no
+   * derivation at all.
+   */
+  specialistTaskReasonCode: z.string().min(1).max(64).nullable(),
+  specialistTaskClass: z.string().min(1).max(64).nullable(),
+  specialistDueWindowCode: z.string().min(1).max(64).nullable(),
+  specialistPriorityBand: z.string().min(1).max(64).nullable(),
+  specialistAdvisoryDigest: jao7DigestSchema.nullable(),
   createdAt: jao7InstantSchema,
   updatedAt: jao7InstantSchema,
 });

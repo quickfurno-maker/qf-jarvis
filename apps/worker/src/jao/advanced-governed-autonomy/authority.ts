@@ -39,7 +39,7 @@ import { approvalDecisionV1Schema, executionIntentV1Schema } from '@qf-jarvis/co
 import type { ApprovalDecisionV1, ExecutionIntentV1 } from '@qf-jarvis/contracts';
 
 import { Jao7AutonomyError, type Jao7AuthorityObservation } from './contracts.js';
-import { jao7Digest } from './mission-registry.js';
+import { jao7CanonicalJson, jao7Digest } from './mission-registry.js';
 import type { Jao7Proposal } from './proposal.js';
 
 /**
@@ -67,36 +67,24 @@ export interface Jao7AuthorityCorrelation {
 }
 
 /**
- * A stable digest over an artifact's IDENTITY fields.
+ * A FULL SEMANTIC DIGEST of the decision, over every field the governed contract admits.
  *
- * Deliberately not a hash of the whole artifact. What is worth recording is which decision and which
- * intent correlated; a digest that changed when an unrelated optional field changed would be a worse
- * audit key, and one that could be inverted back into the artifact would defeat the point of not
- * storing it.
+ * It used to hash six identity fields, which meant two decisions differing ONLY in their action
+ * decisions, their approver, their correlation or any other governed field recorded the same digest.
+ * The digest is the audit record of WHICH decision correlated; one that cannot tell two decisions
+ * apart is not that record, and the difference it was blind to -- the per-action verdict -- is
+ * precisely the field a partial approval turns on.
+ *
+ * It remains a one-way SHA-256 over a canonical serialisation, so nothing reusable is persisted:
+ * the artifact cannot be recovered from it, and it grants nothing.
  */
 function decisionDigest(decision: ApprovalDecisionV1): string {
-  return jao7Digest([
-    'APPROVAL_DECISION',
-    decision.decisionId,
-    decision.recommendationId,
-    decision.issuer,
-    decision.outcome,
-    decision.decidedAt,
-    decision.reasonCode,
-  ]);
+  return jao7Digest(['APPROVAL_DECISION_V1', jao7CanonicalJson(decision)]);
 }
 
+/** The same, for the Core-issued execution intent. Same reasoning, same construction. */
 function intentDigest(intent: ExecutionIntentV1): string {
-  return jao7Digest([
-    'EXECUTION_INTENT',
-    intent.executionIntentId,
-    intent.recommendationId,
-    intent.approvalDecisionId,
-    intent.approvedActionId,
-    intent.issuer,
-    intent.executor,
-    intent.issuedAt,
-  ]);
+  return jao7Digest(['EXECUTION_INTENT_V1', jao7CanonicalJson(intent)]);
 }
 
 /**

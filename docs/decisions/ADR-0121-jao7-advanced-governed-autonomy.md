@@ -112,7 +112,7 @@ callback.
 edited mid-flight stops an in-flight run rather than silently re-scoping it. A caller cannot supply a
 plan because the request schema has no field for one.
 
-### 4. Multi-agent planning is a reviewed step, not dynamic agent creation
+### 4. Multi-agent planning is a reviewed step, and the specialist actually decides something
 
 Mission A includes exactly one delegation through the canonical JAO-2 boundary - registry, adapter
 and workflow all constructed inside this slice from its own imports. There is no public parameter for
@@ -120,12 +120,46 @@ a specialist registry, adapter or delegate callback. Riya's input is built from 
 only; the request schema is strict and has no field for vendor or capacity data, so contamination is
 a refusal rather than a convention.
 
+**Owner review of PR #163 found the delegation ceremonial, and it was.** The advisory was required,
+then discarded, and the proposal was built from `operatorTask` parameters the CALLER supplied:
+changing what Riya concluded changed nothing about what was proposed. JAO-2 had already proved a
+specialist can be CALLED; what JAO-7 has to prove is that one CONTRIBUTES inside a larger governed
+plan.
+
+So the advisory now DECIDES the remediation, through TOTAL reviewed maps:
+
+- the **disposition** decides the task class, the due window and the priority band - how urgent this
+  is, and who should look at it;
+- the **intent** decides the reason code - what a reader is told the task is about;
+- the **reason** decides whether a remediation may be derived at all: a pause, a takeover and a scope
+  violation all mean "Riya did not analyse this", and a remediation derived from an analysis that did
+  not happen would be a fabrication.
+
+Both maps are total over JAO-7's own reviewed vocabulary, and a spec asserts those vocabularies are
+exactly Riya's - so if Riya grows a disposition, the spec fails and a human reviews the new one. A
+conclusion outside them **fails closed**, as does a refusal: proposing an internal sales task off a
+`REFUSE` would be JAO-7 inventing a conclusion the specialist explicitly declined to reach.
+
+Riya gains no authority whatsoever by this. She still cannot propose, approve, execute or send, and
+every value she can cause to appear in the action is a member of a closed enum somebody reviewed.
+What she can do is be the REASON a particular internal task is the one proposed - which is exactly,
+and only, what advice is. The derived decision is persisted as five closed columns plus a digest of
+the bounded advisory it came from, because a derivation that vanished on restart would be no
+derivation at all. There is no `operatorTask` field on the request any more.
+
 ### 5. Capacity optimisation is deterministic, and the target is never supplied
 
 `decideJao7Capacity` is a pure function of closed metric bands. The request schema has **no
 `targetConcurrency` field**, so there is nothing to smuggle, and the reviewed bounds are literal:
 never below 1, never above 32, never more than ±2 in one step, and **a high error rate never buys an
 increase** - adding concurrency to an unhealthy dependency is how a degradation becomes an incident.
+
+The reason code says what is true. Two branches used to report `over-provisioned-idle`: the
+high-error backoff, and the steady-state hold. Neither is an idle pool, and that token is what a
+human approves against - an audit trail that records the right action for the wrong stated reason is
+a trail somebody will one day reason from. They are now `high-error-rate-backoff` and
+`steady-state-no-adjustment`, and `over-provisioned-idle` is reserved for the pool that actually is
+idle.
 
 ### 6. Continuous evaluation is deterministic, and it cannot be talked round
 
@@ -164,16 +198,54 @@ exactly once with its evaluation. A crash between claim and work leaves a visibl
 a spent budget - the conservative direction, because a spent budget costs an explicit resume while an
 unspent one costs a second specialist call nobody authorised.
 
+**The claim is bound to its operation id, and a replay is served rather than re-performed.** It used
+to return `replayed: true` for ANY pre-existing `CLAIMED` row, whatever id had created it, before the
+revision, kill, expiry, plan and budget checks ran - and the coordinator ignored the flag and did the
+work again. One charged specialist call, two invocations of Riya. Governance now runs first and all
+of it; the claim writes a replay record like every other mutation; a different operation id gets
+`STEP_ALREADY_CLAIMED`; the same id with a changed payload gets `OPERATION_CONFLICT`; and a replay
+returns the state its claim committed without entering the work phase at all. A step stranded by a
+lost process therefore stays claimed until somebody decides explicitly what to do about it, which is
+the conservative direction and the reason the budget is charged where it is.
+
+**The plan position moves only when the verdict says it may.** Every completed step used to advance
+the index, including a `VALIDATE_AUTHORITY_EVIDENCE` step that had correlated NOTHING - so a run
+reported as `AWAITING_AUTHORITY` was already pointing at `REHEARSE_REVERSIBLE_EFFECT`, and only the
+run state stood between that position and a rehearsal. Progression is now a closed decision derived
+from the verdict by a total function, an incomplete or rejected validation RETAINS its position, and
+the step table is keyed per attempt so a retained position can be attempted again under the reviewed
+`maxSteps` bound. A rehearsal is additionally ineligible without a JUST-PROVEN exact chain: the state
+the claim moved the run out of, a recorded successful correlation, and that correlation bound to this
+run's own proposal identity.
+
+Authority observations are recorded per attempt, with at most one SUCCESSFUL chain per run enforced
+by a partial unique index. The table used to be keyed by run alone, so the first incomplete attempt
+consumed the only slot and locked the run out of ever recording the chain it was waiting for.
+
 ### 9. Kill, pause and expiry are superior - with one deliberate exception
 
 Kill is terminal, durable and has no `unkill`. The compare-and-set runs **first and always**, terminal
 row included: JAO-5's owner review found an early return above the CAS on exactly this path, and
 JAO-7 does not repeat it. Expiry blocks forward work. Pause resumes only explicitly.
 
-**Safety rollback is superior to both.** Refusing to roll back synthetic state that was already
-applied would leave the sandbox dirty with no path back, and a control that strands the state it
-created is not a control. Rollback can only ever restore the captured BEFORE value, so being superior
-costs nothing - and a terminal run stays terminal while its sandbox is cleaned.
+**Safety rollback is superior to both, and it is on the PUBLIC surface.** Refusing to roll back
+synthetic state that was already applied would leave the sandbox dirty with no path back, and a
+control that strands the state it created is not a control. Rollback can only ever restore the
+captured BEFORE value, so being superior costs nothing - and a terminal run stays terminal while its
+sandbox is cleaned.
+
+`rollbackJao7AutonomyRehearsal` is the one verb this surface gained in the PR #163 correction. It
+takes a run id and an operation id, and there is no target, value, state or force flag on it. It is
+public because the guarantee is: the previous proof reached through the raw store, which no public
+caller has, and a guarantee only an internal test can exercise is not a guarantee.
+
+A failed rollback is now DURABLE. `rollback_attempted_at` and `rolled_back_at` used to be one column,
+and the consistency check then made a `ROLLBACK_FAILED` row unwritable - a failure state that cannot
+be persisted is a failure state that does not exist, which is the opposite of failing safe. The
+attempt is counted in the row and bounded by the reviewed policy AND by a database CHECK, and a
+second database constraint records a restored value if and only if a rollback actually restored
+something. A pause that would strand applied, unverified synthetic state is refused outright: verify
+it or roll it back, both of which are explicit calls and both of which are available.
 
 ### 10. The authority gate, and the honest label on it
 
@@ -238,6 +310,37 @@ Verification is `EXACT_MATCH_AGAINST_TARGET` and nothing looser, because a verif
 one apply, at most one rollback attempt, rollback restores **only** the captured BEFORE state, and a
 failed rollback is terminal `FAILED_SAFE` rather than a retry storm.
 
+### 13b. The carried proposal is re-proved from its own bytes
+
+JAO-7 persists no `RecommendationV1`: a stored copy is a second copy, free to drift from the one a
+human saw. What it persists is the proposal BINDING - recommendation id, action id and fingerprint -
+and a caller returning to the authority gate carries the artifacts back.
+
+The check used to be three string comparisons over an object cast into place after a single `typeof`
+test. The canonical schemas were never run, and the fingerprint was READ OUT of the carried object
+rather than recomputed from it - so the value under test was supplied by the same caller as the value
+it was tested against. A caller could carry back a recommendation whose action had been rewritten
+entirely, keep the three identity strings, and have that action rehearsed.
+
+The artifacts are now parsed by their canonical contracts, required to describe one another, and the
+fingerprint is RECOMPUTED from the final action bytes with the same canonical function that produced
+the stored one. That is what makes the binding a binding: the stored digest measures action CONTENT,
+so an action whose content changed cannot reproduce it, whatever identity it wears. The reviewed
+policy is re-applied on top - recommendation type, action type, contract version, risk, approval
+level and the governed parameter shape - so a well-formed artifact from a different mission is
+refused too, and the rehearsal consumes the PARSED object.
+
+The authority digests are full canonical semantic digests over the parsed artifacts, not six identity
+fields. The old digest could not tell two decisions apart when they differed only in their per-action
+verdicts or their approver - and the per-action verdict is exactly what a partial approval turns on.
+They remain one-way SHA-256 over a canonical serialisation: nothing reusable is stored, and the
+artifact cannot be recovered from them.
+
+Every mutation's replay digest covers every field that governs it, with `nowMs` and the operation id
+excluded for reasons that are stated where they are excluded. `RECORD_AUTHORITY` is its own operation
+kind; it used to replay under `FINALIZE_STEP`, so the audit trail named the wrong mutation - and a
+trail that misnames what happened is worse than one that says nothing, because a reader trusts it.
+
 ### 14. Public composition is pinned by having no parameter at all
 
 The public entry points take a `DatabasePool`, a clock and optional content-free telemetry. There is
@@ -298,5 +401,13 @@ Core -> n8n transport are eventually built, they will be attached to a coordinat
 plans finitely, evaluates every step, survives restart, refuses to move without externally issued
 authority, and can undo what it rehearsed. The transport is the easy part; the controls around it are
 what took seven slices.
+
+The result contract is declared rather than `unknown`, and it is parsed before it is returned: the
+schema that exists to prove a result is well-formed used to prove nothing about the five fields
+carrying every durable fact, and nothing ever ran it. It now also refuses a result whose outcome
+contradicts its state. The two failure fixtures that used to be optional booleans on the PUBLIC
+request schema live in the internal composition beside the store and the clock - neither could ever
+grant anything, but a public knob that exists to break a safety check is a public knob somebody
+eventually flips.
 
 **Production transport and adoption remain a separate, later, separately reviewed integration.**

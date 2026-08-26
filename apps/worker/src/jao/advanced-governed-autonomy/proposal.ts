@@ -39,6 +39,7 @@ import type {
 import { JAO7_PRODUCER_VERSION, JAO7_PRODUCING_AGENT, Jao7AutonomyError } from './contracts.js';
 import { jao7ParameterSchemaFor } from './mission-registry.js';
 import type { Jao7MissionPolicy } from './mission-policy.js';
+import { jao7ResultProposalSchema } from './public-contracts.js';
 
 /** What the coordinator hands in. Descriptive fields only; every gate comes from the policy. */
 export interface Jao7ProposalInput {
@@ -189,5 +190,118 @@ export function buildJao7Proposal(input: Jao7ProposalInput): Jao7Proposal {
     actionBindings: Object.freeze([binding] as const),
     approvalRequest,
     source: created,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// FINDING 4: re-validating the proposal a caller carried back.
+// ---------------------------------------------------------------------------
+
+/** The durable identity a run recorded when its proposal step committed. */
+export interface Jao7ProposalBinding {
+  readonly recommendationId: string | null;
+  readonly proposedActionId: string | null;
+  readonly actionFingerprint: string | null;
+}
+
+/**
+ * Re-prove a carried-back proposal from its own bytes.
+ *
+ * ### What the previous check actually checked
+ *
+ * Three string comparisons against the run's durable binding, over an object that had been CAST to
+ * `Jao7Proposal` after one `typeof === 'object'` test. The canonical schemas were never run, and the
+ * fingerprint was never recomputed -- it was read out of the carried object and compared to the
+ * stored one, so the value under test was supplied by the same caller as the value it was tested
+ * against. A caller could therefore carry back a recommendation whose action had been rewritten
+ * entirely -- different type, different parameters, different summary -- keep the three identity
+ * strings, and have that action rehearsed. The identity matched; the ACTION was somebody else's.
+ *
+ * ### What it checks now
+ *
+ * The artifacts are PARSED by their canonical contracts, and then the fingerprint is RECOMPUTED from
+ * the final action bytes with the same canonical function that produced the stored one. That is what
+ * makes the binding a binding: the stored digest measures action CONTENT, so an action whose content
+ * changed cannot reproduce it, whatever identity it wears.
+ *
+ * The reviewed policy is re-applied on top -- action type, contract version, risk, approval level and
+ * the governed parameter shape -- so a well-formed artifact from a DIFFERENT mission is refused too.
+ *
+ * `source` is reconstructed rather than carried. It is exactly `{ recommendation, actionBindings }`,
+ * and accepting a caller's copy of two fields already present would be accepting a third opinion
+ * about them.
+ */
+export function jao7ValidateCarriedProposal(
+  supplied: unknown,
+  policy: Jao7MissionPolicy,
+  binding: Jao7ProposalBinding,
+): Jao7Proposal {
+  if (
+    binding.recommendationId === null ||
+    binding.proposedActionId === null ||
+    binding.actionFingerprint === null
+  ) {
+    // No durable binding means no proposal step has committed for this run, so there is nothing a
+    // carried artifact could be checked against and nothing it could legitimately be.
+    throw new Jao7AutonomyError('AUTHORITY_BINDING_MISMATCH');
+  }
+
+  // UNKNOWN until the canonical contracts have spoken. A cast here would be this function deciding
+  // the caller supplied a `RecommendationV1` because the caller said so.
+  const parsed = jao7ResultProposalSchema.safeParse(supplied);
+  if (!parsed.success) {
+    throw new Jao7AutonomyError('REQUEST_INVALID');
+  }
+  const carried = parsed.data;
+
+  const action = carried.recommendation.proposedActions[0];
+  const carriedBinding = carried.actionBindings[0];
+  if (action === undefined || carriedBinding === undefined) {
+    throw new Jao7AutonomyError('REQUEST_INVALID');
+  }
+
+  // THE RECOMPUTED FINGERPRINT. Not the one the caller carried: that one is under test.
+  if (fingerprintProposedAction(action) !== binding.actionFingerprint) {
+    throw new Jao7AutonomyError('AUTHORITY_BINDING_MISMATCH');
+  }
+  if (
+    carriedBinding.actionFingerprint !== binding.actionFingerprint ||
+    carriedBinding.recommendationId !== binding.recommendationId ||
+    carriedBinding.proposedActionId !== binding.proposedActionId ||
+    carried.recommendation.recommendationId !== binding.recommendationId ||
+    action.actionId !== binding.proposedActionId
+  ) {
+    throw new Jao7AutonomyError('AUTHORITY_BINDING_MISMATCH');
+  }
+
+  // The REVIEWED POLICY, re-applied. A perfectly valid proposal from another mission is still not
+  // this run's proposal, and this is where that is decided rather than assumed.
+  if (
+    carried.recommendation.recommendationType !== policy.recommendationType ||
+    carried.recommendation.risk !== policy.requiredRisk ||
+    carried.recommendation.requiredApproval !== policy.requiredApproval ||
+    carried.recommendation.producingAgent !== JAO7_PRODUCING_AGENT ||
+    action.actionType !== policy.actionType ||
+    action.actionContractVersion !== policy.actionContractVersion ||
+    carried.approvalRequest.risk !== policy.requiredRisk ||
+    carried.approvalRequest.requestedAuthority !== policy.requiredApproval
+  ) {
+    throw new Jao7AutonomyError('AUTHORITY_BINDING_MISMATCH');
+  }
+
+  // The governed parameter shape, so the values a rehearsal will read are the closed ones the
+  // mission declared rather than whatever survived a JSON round trip.
+  if (!jao7ParameterSchemaFor(policy).safeParse(action.parameters).success) {
+    throw new Jao7AutonomyError('AUTHORITY_BINDING_MISMATCH');
+  }
+
+  return Object.freeze({
+    recommendation: carried.recommendation,
+    actionBindings: Object.freeze([carriedBinding] as const),
+    approvalRequest: carried.approvalRequest,
+    source: Object.freeze({
+      recommendation: carried.recommendation,
+      actionBindings: Object.freeze([carriedBinding] as const),
+    }),
   });
 }

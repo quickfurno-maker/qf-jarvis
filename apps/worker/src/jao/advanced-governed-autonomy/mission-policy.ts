@@ -74,6 +74,14 @@ export const jao7OperatorTaskParametersSchema = z.strictObject({
   priorityBand: z.enum(['routine', 'elevated']),
 });
 
+/**
+ * The governed action parameters, as a TYPE.
+ *
+ * The reviewed advisory mapping below is typed against this, so a mapping entry that named a token
+ * the action schema would refuse fails to compile rather than failing at the first run.
+ */
+export type Jao7OperatorTaskParameters = z.infer<typeof jao7OperatorTaskParametersSchema>;
+
 /** Mission B's action parameters: a bounded concurrency adjustment on a synthetic pool. */
 export const jao7CapacityParametersSchema = z.strictObject({
   poolCode: z.enum(['synthetic-pool-alpha', 'synthetic-pool-beta']),
@@ -83,8 +91,241 @@ export const jao7CapacityParametersSchema = z.strictObject({
     'saturated-with-low-error-rate',
     'queue-depth-sustained-high',
     'over-provisioned-idle',
+    // Backing off a failing dependency is not the same fact as reclaiming an idle one, and neither
+    // is holding steady. The recommendation a human approves carries this token.
+    'high-error-rate-backoff',
+    'steady-state-no-adjustment',
   ]),
 });
+
+// ---------------------------------------------------------------------------
+// The reviewed mapping from a governed Riya advisory to ONE closed remediation decision.
+// ---------------------------------------------------------------------------
+
+/**
+ * ### Why this exists at all
+ *
+ * Owner review of PR #163 found Mission A's specialist step ceremonial. It called Riya through the
+ * certified JAO-2 boundary, required an advisory, DISCARDED its content, and then built the proposal
+ * from `operatorTask` parameters the CALLER supplied. Changing what Riya concluded changed nothing
+ * about what was proposed. JAO-2 had already proved a specialist can be CALLED; what JAO-7 is
+ * supposed to prove is that a specialist CONTRIBUTES inside a larger governed plan.
+ *
+ * So the advisory now decides the remediation, and it decides it through TOTAL reviewed maps. Riya
+ * gains no authority whatsoever by this: she still cannot propose, approve, execute or send, and
+ * every value she can cause to appear in the action is a member of a closed enum somebody reviewed.
+ * What she can do is be the REASON a particular internal task is the one proposed -- which is
+ * exactly, and only, what advice is.
+ *
+ * ### Why the mapping is split in two
+ *
+ * A Riya decision carries a DISPOSITION (what should happen next) and an INTENT (what kind of turn
+ * this is). They answer different questions, so they decide different fields:
+ *
+ * - the disposition decides the task CLASS, the due WINDOW and the priority BAND -- how urgent this
+ *   is and who should look at it;
+ * - the intent decides the task REASON CODE -- what a reader is told the task is about.
+ *
+ * Both maps are total over JAO-7's own reviewed vocabulary, so neither can silently acquire a
+ * default, and a conclusion outside those vocabularies FAILS CLOSED. A remediation nobody reviewed
+ * is not a remediation.
+ *
+ * ### Why the raw client-sales signals are not read here
+ *
+ * They reach this mapping THROUGH the intent, which is Riya's own reviewed classification of them.
+ * A second classifier inside JAO-7 would be free to drift from the one Riya's governed behaviour
+ * actually uses, and then the proposal would cite an advisory that concluded something else.
+ */
+
+/** The advisory dispositions JAO-7 has reviewed. A spec proves this is Riya's whole vocabulary. */
+export const JAO7_REVIEWED_ADVISORY_DISPOSITIONS = Object.freeze([
+  'DRAFT_REPLY',
+  'CONTINUE_DISCOVERY',
+  'PROPOSE_SALES_FOLLOW_UP',
+  'REQUEST_HUMAN_SALES_CONTACT',
+  'REFUSE',
+] as const);
+
+export type Jao7ReviewedAdvisoryDisposition = (typeof JAO7_REVIEWED_ADVISORY_DISPOSITIONS)[number];
+
+/** The advisory intents JAO-7 has reviewed. A spec proves this is Riya's whole vocabulary too. */
+export const JAO7_REVIEWED_ADVISORY_INTENTS = Object.freeze([
+  'INITIAL_SERVICE_DISCOVERY',
+  'REQUIREMENT_DISCOVERY',
+  'QUOTE_OR_CONSULTATION_INTEREST',
+  'SALES_FOLLOW_UP',
+  'PROJECT_READINESS_CLARIFICATION',
+  'HUMAN_SALES_ASSISTANCE_REQUEST',
+  'UNSUPPORTED_NON_SALES_REQUEST',
+  'INSUFFICIENT_CONTEXT',
+] as const);
+
+export type Jao7ReviewedAdvisoryIntent = (typeof JAO7_REVIEWED_ADVISORY_INTENTS)[number];
+
+/**
+ * The advisory reasons JAO-7 has reviewed.
+ *
+ * A subset of the canonical runtime reason vocabulary: these are the ones Riya's governed behaviour
+ * can actually return, and a reason outside them is a reason nobody here has thought about.
+ */
+export const JAO7_REVIEWED_ADVISORY_REASONS = Object.freeze([
+  'runtime-assigned',
+  'runtime-escalation-required',
+  'runtime-human-takeover',
+  'runtime-ai-paused',
+  'runtime-scope-violation',
+] as const);
+
+export type Jao7ReviewedAdvisoryReason = (typeof JAO7_REVIEWED_ADVISORY_REASONS)[number];
+
+/** The closed remediation decision, or the reviewed conclusion that there is not one. */
+export type Jao7RemediationDecision =
+  | {
+      readonly taskReasonCode: Jao7OperatorTaskParameters['taskReasonCode'];
+      readonly taskClass: Jao7OperatorTaskParameters['taskClass'];
+      readonly dueWindowCode: Jao7OperatorTaskParameters['dueWindowCode'];
+      readonly priorityBand: Jao7OperatorTaskParameters['priorityBand'];
+    }
+  | 'NO_GOVERNED_REMEDIATION';
+
+/** What the disposition decides: how urgent this is, and who should look at it. */
+interface Jao7RemediationShape {
+  readonly taskClass: Jao7OperatorTaskParameters['taskClass'];
+  readonly dueWindowCode: Jao7OperatorTaskParameters['dueWindowCode'];
+  readonly priorityBand: Jao7OperatorTaskParameters['priorityBand'];
+}
+
+/**
+ * DISPOSITION -> urgency, or no remediation at all.
+ *
+ * Total over the reviewed vocabulary: a `Record` keyed by the closed union, so a disposition added
+ * later fails to compile until somebody writes what it means.
+ */
+export const JAO7_DISPOSITION_REMEDIATION: Readonly<
+  Record<Jao7ReviewedAdvisoryDisposition, Jao7RemediationShape | 'NO_GOVERNED_REMEDIATION'>
+> = Object.freeze({
+  // Riya asked for a person. That is the strongest signal in her vocabulary, so it earns the
+  // shortest window and the raised band.
+  REQUEST_HUMAN_SALES_CONTACT: Object.freeze({
+    taskClass: 'human-handover-review',
+    dueWindowCode: 'within-4-hours',
+    priorityBand: 'elevated',
+  }),
+  // Discovery is complete enough that Riya would ask Core to review a follow-up. That is the
+  // commercially live case, and a person should see it promptly.
+  PROPOSE_SALES_FOLLOW_UP: Object.freeze({
+    taskClass: 'sales-followup-review',
+    dueWindowCode: 'within-4-hours',
+    priorityBand: 'elevated',
+  }),
+  // A reply would move the conversation. JAO-7 may not send one -- a client-facing message is a
+  // communication, and no active mission may carry that risk class -- so what it proposes is that a
+  // person reviews the stalled conversation.
+  DRAFT_REPLY: Object.freeze({
+    taskClass: 'sales-followup-review',
+    dueWindowCode: 'within-1-business-day',
+    priorityBand: 'routine',
+  }),
+  // Not enough is known yet. Worth a person's time; not urgent.
+  CONTINUE_DISCOVERY: Object.freeze({
+    taskClass: 'discovery-completion',
+    dueWindowCode: 'within-1-business-day',
+    priorityBand: 'routine',
+  }),
+  // Riya declined the turn: out of scope, paused, taken over, or not hers to answer. Proposing an
+  // internal sales task off a refusal would be JAO-7 inventing a conclusion the specialist
+  // explicitly declined to reach, which is worse than the ceremonial version it replaces.
+  REFUSE: 'NO_GOVERNED_REMEDIATION',
+});
+
+/**
+ * INTENT -> the reason code a reader is shown.
+ *
+ * Total for the same reason, and every value is a member of the closed action-parameter enum, so
+ * the mapping cannot introduce a token the governed action schema would refuse.
+ */
+export const JAO7_INTENT_TASK_REASON: Readonly<
+  Record<Jao7ReviewedAdvisoryIntent, Jao7OperatorTaskParameters['taskReasonCode']>
+> = Object.freeze({
+  HUMAN_SALES_ASSISTANCE_REQUEST: 'client-requested-human-assistance',
+  PROJECT_READINESS_CLARIFICATION: 'client-readiness-unclear',
+  INITIAL_SERVICE_DISCOVERY: 'client-discovery-incomplete',
+  REQUIREMENT_DISCOVERY: 'client-discovery-incomplete',
+  INSUFFICIENT_CONTEXT: 'client-discovery-incomplete',
+  QUOTE_OR_CONSULTATION_INTEREST: 'client-sales-conversation-stalled',
+  SALES_FOLLOW_UP: 'client-sales-conversation-stalled',
+  // Reachable only alongside a REFUSE disposition, which already yields no remediation. It is
+  // written out anyway: a cell nobody filled in is a cell somebody later fills in carelessly.
+  UNSUPPORTED_NON_SALES_REQUEST: 'client-sales-conversation-stalled',
+});
+
+/**
+ * REASON -> whether a remediation may be derived at all.
+ *
+ * Riya's reason says whether she engaged with the turn or was structurally prevented from doing so.
+ * A pause, a human takeover and a scope violation are all "Riya did not analyse this", and a
+ * remediation derived from an analysis that did not happen would be a fabrication.
+ */
+export const JAO7_REASON_ADMITS_REMEDIATION: Readonly<Record<Jao7ReviewedAdvisoryReason, boolean>> =
+  Object.freeze({
+    'runtime-assigned': true,
+    'runtime-escalation-required': true,
+    'runtime-human-takeover': false,
+    'runtime-ai-paused': false,
+    'runtime-scope-violation': false,
+  });
+
+/** What the reviewed maps were asked about. Closed tokens, checked before they are used as keys. */
+export interface Jao7AdvisoryConclusion {
+  readonly disposition: string;
+  readonly intent: string;
+  readonly reason: string;
+}
+
+/** The outcome of asking the reviewed maps. `UNREVIEWED` is a refusal, never a default. */
+export type Jao7RemediationLookup =
+  | { readonly found: 'REMEDIATION'; readonly decision: Jao7RemediationDecision }
+  | { readonly found: 'UNREVIEWED' };
+
+function isReviewed<T extends string>(vocabulary: readonly T[], value: string): value is T {
+  return (vocabulary as readonly string[]).includes(value);
+}
+
+/**
+ * Map one bounded advisory conclusion to one closed remediation decision.
+ *
+ * Pure, total over the reviewed vocabularies, and FAILS CLOSED outside them. It reads three closed
+ * tokens and returns four closed tokens; there is no path by which specialist prose, a reasoning
+ * trace or a caller-supplied value could travel through it.
+ */
+export function jao7RemediationFor(conclusion: Jao7AdvisoryConclusion): Jao7RemediationLookup {
+  if (
+    !isReviewed(JAO7_REVIEWED_ADVISORY_DISPOSITIONS, conclusion.disposition) ||
+    !isReviewed(JAO7_REVIEWED_ADVISORY_INTENTS, conclusion.intent) ||
+    !isReviewed(JAO7_REVIEWED_ADVISORY_REASONS, conclusion.reason)
+  ) {
+    return { found: 'UNREVIEWED' };
+  }
+
+  if (!JAO7_REASON_ADMITS_REMEDIATION[conclusion.reason]) {
+    return { found: 'REMEDIATION', decision: 'NO_GOVERNED_REMEDIATION' };
+  }
+
+  const shape = JAO7_DISPOSITION_REMEDIATION[conclusion.disposition];
+  if (shape === 'NO_GOVERNED_REMEDIATION') {
+    return { found: 'REMEDIATION', decision: 'NO_GOVERNED_REMEDIATION' };
+  }
+
+  return {
+    found: 'REMEDIATION',
+    decision: Object.freeze({
+      taskReasonCode: JAO7_INTENT_TASK_REASON[conclusion.intent],
+      taskClass: shape.taskClass,
+      dueWindowCode: shape.dueWindowCode,
+      priorityBand: shape.priorityBand,
+    }),
+  };
+}
 
 /** The exact reviewed key sets, asserted by spec rather than merely documented. */
 export const JAO7_OPERATOR_TASK_PARAMETER_KEYS: readonly string[] = Object.freeze([

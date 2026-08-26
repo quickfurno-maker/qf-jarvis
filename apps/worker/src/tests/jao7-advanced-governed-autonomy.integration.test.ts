@@ -26,19 +26,31 @@ import {
   killJao7AutonomyRunInternal,
   pauseJao7AutonomyRunInternal,
   readJao7AutonomyRunInternal,
+  performJao7StepInternal,
   resumeJao7AutonomyRunInternal,
+  rollbackJao7AutonomyRehearsalInternal,
   type Jao7InternalComposition,
 } from '../jao/advanced-governed-autonomy/coordinator.js';
 import { createJao7PostgresStore } from '../jao/advanced-governed-autonomy/postgres-store.js';
 import { createJao7MissionRegistry } from '../jao/advanced-governed-autonomy/mission-registry.js';
-import type { Jao7Proposal } from '../jao/advanced-governed-autonomy/proposal.js';
+import { runJao2GovernedDelegation } from '../jao/governed-specialist-delegation/index.js';
+import type { Jao7AutonomyStore } from '../jao/advanced-governed-autonomy/store-port.js';
+import type { Jao7MissionPolicy } from '../jao/advanced-governed-autonomy/mission-policy.js';
 import type { Jao7AutonomyResult } from '../jao/advanced-governed-autonomy/index.js';
+import type { Jao7ResultProposal } from '../jao/advanced-governed-autonomy/public-contracts.js';
 
 import {
+  DERIVED_HUMAN_HANDOVER_TASK,
+  DERIVED_READINESS_TASK,
+  DERIVED_STALLED_TASK,
+  OUT_OF_SCOPE_SALES_SIGNALS,
+  READINESS_SALES_SIGNALS,
+  STALLED_SALES_SIGNALS,
   SteppableClock,
   advanceRequest,
   approvalDecision,
   capacityRequest,
+  carriedProposal,
   executionIntent,
 } from './jao7-fixtures.js';
 import {
@@ -49,6 +61,8 @@ import {
   createJao7TestPool,
   dumpJao7Run,
   jao7ColumnNames,
+  jao7RawStatement,
+  jao7ReplayKindsFor,
   readJao7SchemaSql,
   resetJao7Schema,
   type DatabasePool,
@@ -70,8 +84,17 @@ interface Process {
   close: () => Promise<void>;
 }
 
-/** A whole new "process": pool, store, clock, composition. Nothing survives the boundary. */
-function startProcess(name: string): Process {
+/**
+ * A whole new "process": pool, store, clock, composition. Nothing survives the boundary.
+ *
+ * `faultInjection` is part of the INTERNAL composition, beside the store and the clock. It used to
+ * be two optional booleans on the PUBLIC request schema -- a shipped surface carrying switches whose
+ * only purpose was to make a verification fail and a rollback not restore.
+ */
+function startProcess(
+  name: string,
+  faultInjection?: Jao7InternalComposition['faultInjection'],
+): Process {
   const pool = createJao7TestPool(`qf-jarvis-jao7-${name}`);
   const clock = new SteppableClock();
   return {
@@ -81,6 +104,7 @@ function startProcess(name: string): Process {
       store: createJao7PostgresStore(pool),
       clock,
       registry: createJao7MissionRegistry(),
+      ...(faultInjection === undefined ? {} : { faultInjection }),
     },
     close: async (): Promise<void> => {
       await closeDatabasePool(pool);
@@ -132,17 +156,19 @@ async function driveToGate(
   process: Process,
   runId: string,
   mission: string,
-): Promise<{ readonly latest: Jao7AutonomyResult; readonly proposal: Jao7Proposal }> {
+  over: Record<string, unknown> = {},
+): Promise<{ readonly latest: Jao7AutonomyResult; readonly proposal: Jao7ResultProposal }> {
   const build = builderFor(mission, runId);
   let latest: Jao7AutonomyResult | undefined;
-  let proposal: Jao7Proposal | undefined;
+  let proposal: Jao7ResultProposal | undefined;
   for (let step = 0; step < (STEPS_TO_GATE[mission] ?? 0); step += 1) {
     latest = await advanceJao7AutonomyRunInternal(
-      build(`${runId}.step${String(step)}`),
+      build(`${runId}.step${String(step)}`, over),
       process.composition,
     );
-    if (latest.proposal !== null && latest.proposal !== undefined) {
-      proposal = latest.proposal as Jao7Proposal;
+    // No cast. The result declares its proposal now, so what comes back is already checked.
+    if (latest.proposal !== null) {
+      proposal = latest.proposal;
     }
   }
   if (latest === undefined || proposal === undefined) {
@@ -156,13 +182,14 @@ async function correlateAuthority(
   process: Process,
   runId: string,
   mission: string,
-  proposal: Jao7Proposal,
+  proposal: Jao7ResultProposal,
   over: Record<string, unknown> = {},
+  operationId = `${runId}.authority`,
 ): Promise<Jao7AutonomyResult> {
   const decision = approvalDecision(proposal);
   return resumeJao7AutonomyRunInternal(
-    builderFor(mission, runId)(`${runId}.authority`, {
-      proposal,
+    builderFor(mission, runId)(operationId, {
+      proposal: carriedProposal(proposal),
       authority: {
         approvalDecision: decision,
         executionIntent: executionIntent(proposal, decision),
@@ -171,6 +198,58 @@ async function correlateAuthority(
     }),
     process.composition,
   );
+}
+
+/**
+ * A delegate that COUNTS INVOCATIONS.
+ *
+ * Counting rows would not have caught the defect this exists for: a replayed claim re-ran Phase B,
+ * so Riya was invoked a second time on a single charged specialist call, and the step table still
+ * held exactly one row. What has to be counted is the call.
+ */
+function countingDelegate(counter: {
+  calls: number;
+}): NonNullable<Jao7InternalComposition['delegate']> {
+  return async (input, dependencies, signal) => {
+    counter.calls += 1;
+    return runJao2GovernedDelegation(input, dependencies, signal);
+  };
+}
+
+/**
+ * The canonical store, with a finalize that CRASHES at one named plan position.
+ *
+ * A crash, not a refusal: the point is a process that vanishes between a committed claim and its
+ * finalize, leaving a charged budget and a CLAIMED row behind.
+ */
+function storeCrashingOnFinalize(
+  store: Jao7AutonomyStore,
+  remaining: { stepIndex: number; crashes: number },
+): Jao7AutonomyStore {
+  return Object.freeze({
+    ...store,
+    async finalizeStep(request: Parameters<Jao7AutonomyStore['finalizeStep']>[0], nowMs: number) {
+      if (remaining.crashes > 0 && request.stepIndex === remaining.stepIndex) {
+        remaining.crashes -= 1;
+        throw new Error('simulated process loss between claim and finalize');
+      }
+      return store.finalizeStep(request, nowMs);
+    },
+  });
+}
+
+/** The reviewed capacity mission, for the direct-path proofs that need a policy. */
+function capacityPolicy(): Jao7MissionPolicy {
+  const lookup = createJao7MissionRegistry().lookup(MISSION_B, 1);
+  if (lookup.found !== 'MISSION') {
+    throw new Error('expected the capacity mission');
+  }
+  return lookup.policy;
+}
+
+/** The action parameters a run actually proposed. */
+function proposedParameters(proposal: Jao7ResultProposal): Record<string, unknown> {
+  return { ...(proposal.recommendation.proposedActions[0]?.parameters ?? {}) };
 }
 
 let admin: DatabasePool;
@@ -392,7 +471,7 @@ describe('JAO-7 durable advanced autonomy', () => {
     );
 
     const applied = await advanceJao7AutonomyRunInternal(
-      capacityRequest(runId, `${runId}.rehearse`, { proposal }),
+      capacityRequest(runId, `${runId}.rehearse`, { proposal: carriedProposal(proposal) }),
       b.composition,
     );
     expect(applied.state).toBe('REHEARSAL_APPLIED');
@@ -408,12 +487,12 @@ describe('JAO-7 durable advanced autonomy', () => {
     // ---- PROCESS C: a NEW process verifies and completes. ---------------------------------------
     const c = startProcess('c');
     const verified = await advanceJao7AutonomyRunInternal(
-      capacityRequest(runId, `${runId}.verify`, { proposal }),
+      capacityRequest(runId, `${runId}.verify`, { proposal: carriedProposal(proposal) }),
       c.composition,
     );
     expect(verified.rehearsal?.state).toBe('VERIFIED');
     const completed = await advanceJao7AutonomyRunInternal(
-      capacityRequest(runId, `${runId}.complete`, { proposal }),
+      capacityRequest(runId, `${runId}.complete`, { proposal: carriedProposal(proposal) }),
       c.composition,
     );
     expect(completed.state).toBe('COMPLETED');
@@ -460,7 +539,7 @@ describe('JAO-7 durable advanced autonomy', () => {
     );
 
     const applied = await advanceJao7AutonomyRunInternal(
-      advanceRequest(runId, `${runId}.rehearse`, { proposal }),
+      advanceRequest(runId, `${runId}.rehearse`, { proposal: carriedProposal(proposal) }),
       a.composition,
     );
     // The virtual task ledger: present, and BOUND to the exact approved action.
@@ -470,12 +549,12 @@ describe('JAO-7 durable advanced autonomy', () => {
     );
 
     const verified = await advanceJao7AutonomyRunInternal(
-      advanceRequest(runId, `${runId}.verify`, { proposal }),
+      advanceRequest(runId, `${runId}.verify`, { proposal: carriedProposal(proposal) }),
       a.composition,
     );
     expect(verified.rehearsal?.state).toBe('VERIFIED');
     const completed = await advanceJao7AutonomyRunInternal(
-      advanceRequest(runId, `${runId}.complete`, { proposal }),
+      advanceRequest(runId, `${runId}.complete`, { proposal: carriedProposal(proposal) }),
       a.composition,
     );
     expect(completed.outcome).toBe('COMPLETED_REHEARSAL');
@@ -494,22 +573,25 @@ describe('JAO-7 durable advanced autonomy', () => {
     await correlateAuthority(a, runId, MISSION_B, proposal);
 
     const applied = await advanceJao7AutonomyRunInternal(
-      capacityRequest(runId, `${runId}.rehearse`, { proposal }),
+      capacityRequest(runId, `${runId}.rehearse`, { proposal: carriedProposal(proposal) }),
       a.composition,
     );
     expect(applied.rehearsal?.afterIntegerA).toBe(9);
 
-    // THE FAILURE FIXTURE. The observation is corrupted exactly as a partial failure would corrupt
-    // it, and the verification cannot be talked into passing.
+    // THE FAILURE FIXTURE, injected into a process's COMPOSITION rather than into a request. The
+    // observation is corrupted exactly as a partial failure would corrupt it, and the verification
+    // cannot be talked into passing.
+    const faulty = startProcess('faulty', { corruptRehearsalObservation: true });
     const failed = await advanceJao7AutonomyRunInternal(
-      capacityRequest(runId, `${runId}.verify`, { proposal, corruptRehearsalObservation: true }),
-      a.composition,
+      capacityRequest(runId, `${runId}.verify`, { proposal: carriedProposal(proposal) }),
+      faulty.composition,
     );
+    await faulty.close();
     expect(failed.rehearsal?.state).toBe('ROLLBACK_REQUIRED');
     expect(failed.state).toBe('ROLLING_BACK');
 
     const rolledBack = await advanceJao7AutonomyRunInternal(
-      capacityRequest(runId, `${runId}.rollback`, { proposal }),
+      capacityRequest(runId, `${runId}.rollback`, { proposal: carriedProposal(proposal) }),
       a.composition,
     );
     expect(rolledBack.rehearsal?.state).toBe('ROLLED_BACK');
@@ -528,7 +610,7 @@ describe('JAO-7 durable advanced autonomy', () => {
     const { proposal } = await driveToGate(a, runId, MISSION_B);
     await correlateAuthority(a, runId, MISSION_B, proposal);
     await advanceJao7AutonomyRunInternal(
-      capacityRequest(runId, `${runId}.rehearse`, { proposal }),
+      capacityRequest(runId, `${runId}.rehearse`, { proposal: carriedProposal(proposal) }),
       a.composition,
     );
 
@@ -548,6 +630,7 @@ describe('JAO-7 durable advanced autonomy', () => {
           rollbackIntegerA: null,
           rollbackIntegerB: null,
           maxRehearsalApplies: 1,
+          maxRollbackAttempts: 1,
         },
         a.clock.nowMs(),
       ),
@@ -563,7 +646,7 @@ describe('JAO-7 durable advanced autonomy', () => {
     const { proposal } = await driveToGate(a, runId, MISSION_B);
     await correlateAuthority(a, runId, MISSION_B, proposal);
     await advanceJao7AutonomyRunInternal(
-      capacityRequest(runId, `${runId}.rehearse`, { proposal }),
+      capacityRequest(runId, `${runId}.rehearse`, { proposal: carriedProposal(proposal) }),
       a.composition,
     );
     await a.close();
@@ -577,7 +660,7 @@ describe('JAO-7 durable advanced autonomy', () => {
     expect(resumedView.rehearsalApplies).toBe(1);
 
     const verified = await advanceJao7AutonomyRunInternal(
-      capacityRequest(runId, `${runId}.verify`, { proposal }),
+      capacityRequest(runId, `${runId}.verify`, { proposal: carriedProposal(proposal) }),
       b.composition,
     );
     expect(verified.rehearsal?.state).toBe('VERIFIED');
@@ -689,7 +772,7 @@ describe('JAO-7 durable advanced autonomy', () => {
     const { proposal } = await driveToGate(a, runId, MISSION_B);
     await correlateAuthority(a, runId, MISSION_B, proposal);
     await advanceJao7AutonomyRunInternal(
-      capacityRequest(runId, `${runId}.rehearse`, { proposal }),
+      capacityRequest(runId, `${runId}.rehearse`, { proposal: carriedProposal(proposal) }),
       a.composition,
     );
     await killJao7AutonomyRunInternal(capacityRequest(runId, `${runId}.kill`), a.composition);
@@ -697,32 +780,125 @@ describe('JAO-7 durable advanced autonomy', () => {
     // Forward work is refused...
     await expect(
       advanceJao7AutonomyRunInternal(
-        capacityRequest(runId, `${runId}.forward`, { proposal }),
+        capacityRequest(runId, `${runId}.forward`, { proposal: carriedProposal(proposal) }),
         a.composition,
       ),
     ).rejects.toMatchObject({ code: 'RUN_KILLED' });
 
-    // ...and the safety rollback is still available.
-    const view = await a.composition.store.readRun(runId);
-    const rollback = await a.composition.store.mutateRehearsal(
-      {
-        runId,
-        operationId: `${runId}.safety-rollback`,
-        expectedRevision: view.run.revision,
-        operationKind: 'ROLLBACK_REHEARSAL',
-        nextRehearsalState: 'ROLLED_BACK',
-        afterIntegerA: null,
-        afterIntegerB: null,
-        rollbackIntegerA: view.rehearsal?.beforeIntegerA ?? 0,
-        rollbackIntegerB: null,
-        maxRehearsalApplies: 1,
-      },
-      a.clock.nowMs(),
+    // ...and the safety rollback is still available THROUGH THE COORDINATOR.
+    //
+    // This used to reach through the raw store, which no public caller has -- so the guarantee was
+    // proved only for callers who could not exercise it. `rollbackJao7AutonomyRehearsal` is the
+    // public entry point, and this internal variant is the same function with the composition
+    // supplied.
+    const cleaned = await rollbackJao7AutonomyRehearsalInternal(
+      { runId, operationId: `${runId}.safety-rollback` },
+      a.composition,
     );
-    expect(rollback.replayed).toBe(false);
-    const after = await a.composition.store.readRun(runId);
-    expect(after.rehearsal?.state).toBe('ROLLED_BACK');
-    expect(after.rehearsal?.rollbackIntegerA).toBe(8);
+    expect(cleaned.rehearsal?.state).toBe('ROLLED_BACK');
+    expect(cleaned.rehearsal?.rollbackIntegerA).toBe(8);
+    // The run stays terminal. Cleaning the sandbox does not resurrect it.
+    expect(cleaned.state).toBe('KILLED');
+    expect(cleaned.outcome).toBe('KILLED');
+
+    // ONE attempt, durably. A second is refused by the row rather than by a variable.
+    expect(cleaned.rehearsal?.rollbackAttempts).toBe(1);
+    await expect(
+      rollbackJao7AutonomyRehearsalInternal(
+        { runId, operationId: `${runId}.safety-rollback-again` },
+        a.composition,
+      ),
+    ).rejects.toMatchObject({ code: 'ROLLBACK_NOT_ELIGIBLE' });
+    await a.close();
+  });
+
+  it('K5 refuses a pause that would strand applied synthetic state', async () => {
+    // A pause is a public entry point of its own, and it used to consult the run and not the
+    // sandbox -- so a caller could pause a run whose virtual state was applied and unverified, and
+    // leave it that way indefinitely. A control that strands the state it created is not a control.
+    const a = startProcess('a');
+    await createRun(a, runId, MISSION_B);
+    const { proposal } = await driveToGate(a, runId, MISSION_B);
+    await correlateAuthority(a, runId, MISSION_B, proposal);
+    const applied = await advanceJao7AutonomyRunInternal(
+      capacityRequest(runId, `${runId}.rehearse`, { proposal: carriedProposal(proposal) }),
+      a.composition,
+    );
+    expect(applied.rehearsal?.state).toBe('APPLIED');
+
+    await expect(
+      pauseJao7AutonomyRunInternal(capacityRequest(runId, `${runId}.pause`), a.composition),
+    ).rejects.toMatchObject({ code: 'STATE_CONFLICT' });
+    expect((await readJao7AutonomyRunInternal(runId, a.composition)).state).toBe(
+      'REHEARSAL_APPLIED',
+    );
+
+    // The two ways out are both explicit, and both available. Verifying is one of them.
+    const verified = await advanceJao7AutonomyRunInternal(
+      capacityRequest(runId, `${runId}.verify`, { proposal: carriedProposal(proposal) }),
+      a.composition,
+    );
+    expect(verified.rehearsal?.state).toBe('VERIFIED');
+    await a.close();
+  });
+
+  it('K6 durably records a rollback that did NOT restore the captured state', async () => {
+    // `ROLLBACK_FAILED` used to be unwritable. `rolled_back_at` served as both "attempted" and
+    // "succeeded", and the consistency CHECK then read `state = ROLLED_BACK` if and only if that
+    // instant existed -- so a failed rollback carrying its attempted values violated its own
+    // constraint. A failure state that cannot be persisted is a failure state that does not exist.
+    const a = startProcess('a');
+    await createRun(a, runId, MISSION_B);
+    const { proposal } = await driveToGate(a, runId, MISSION_B);
+    await correlateAuthority(a, runId, MISSION_B, proposal);
+    await advanceJao7AutonomyRunInternal(
+      capacityRequest(runId, `${runId}.rehearse`, { proposal: carriedProposal(proposal) }),
+      a.composition,
+    );
+
+    const broken = startProcess('broken', { corruptRollback: true });
+    const failed = await rollbackJao7AutonomyRehearsalInternal(
+      { runId, operationId: `${runId}.broken-rollback` },
+      broken.composition,
+    );
+    await broken.close();
+
+    expect(failed.rehearsal?.state).toBe('ROLLBACK_FAILED');
+    // ATTEMPTED, and not succeeded. The two facts are separate columns, and only one of them is set.
+    expect(failed.rehearsal?.rollbackAttemptedAt).not.toBeNull();
+    expect(failed.rehearsal?.rolledBackAt).toBeNull();
+    expect(failed.rehearsal?.rollbackIntegerA).toBeNull();
+    expect(failed.rehearsal?.rollbackAttempts).toBe(1);
+    expect(failed.state).toBe('FAILED_SAFE');
+
+    // And a NEW process reads exactly that back. The failure survives the restart.
+    const b = startProcess('b');
+    const persisted = await readJao7AutonomyRunInternal(runId, b.composition);
+    expect(persisted.rehearsal?.state).toBe('ROLLBACK_FAILED');
+    expect(persisted.rehearsal?.rollbackAttempts).toBe(1);
+    // There is no second attempt to schedule. The bound is durable, not a retry policy.
+    await expect(
+      rollbackJao7AutonomyRehearsalInternal(
+        { runId, operationId: `${runId}.retry-rollback` },
+        b.composition,
+      ),
+    ).rejects.toMatchObject({ code: 'ROLLBACK_NOT_ELIGIBLE' });
+    await b.close();
+    await a.close();
+  });
+
+  it('K7 refuses a safety rollback when nothing was ever applied', async () => {
+    const a = startProcess('a');
+    await createRun(a, runId, MISSION_B);
+    await expect(
+      rollbackJao7AutonomyRehearsalInternal(
+        { runId, operationId: `${runId}.nothing-to-undo` },
+        a.composition,
+      ),
+    ).rejects.toMatchObject({ code: 'ROLLBACK_NOT_ELIGIBLE' });
+    expect((await readJao7AutonomyRunInternal(runId, a.composition)).rehearsal?.state).toBe(
+      'CAPTURED',
+    );
     await a.close();
   });
 
@@ -832,7 +1008,7 @@ describe('JAO-7 durable advanced autonomy', () => {
 
     // Resuming with NO artifacts leaves the run exactly where it was. Silence is never consent.
     const still = await resumeJao7AutonomyRunInternal(
-      capacityRequest(runId, `${runId}.empty`, { proposal }),
+      capacityRequest(runId, `${runId}.empty`, { proposal: carriedProposal(proposal) }),
       a.composition,
     );
     expect(still.state).toBe('AWAITING_AUTHORITY');
@@ -849,7 +1025,7 @@ describe('JAO-7 durable advanced autonomy', () => {
 
     const result = await resumeJao7AutonomyRunInternal(
       capacityRequest(runId, `${runId}.rejected`, {
-        proposal,
+        proposal: carriedProposal(proposal),
         authority: {
           approvalDecision: approvalDecision(proposal, {
             outcome: 'rejected',
@@ -905,7 +1081,7 @@ describe('JAO-7 durable advanced autonomy', () => {
     const intent = executionIntent(proposal, decision);
     await resumeJao7AutonomyRunInternal(
       capacityRequest(runId, `${runId}.authority`, {
-        proposal,
+        proposal: carriedProposal(proposal),
         authority: { approvalDecision: decision, executionIntent: intent },
       }),
       a.composition,
@@ -932,6 +1108,514 @@ describe('JAO-7 durable advanced autonomy', () => {
     const observation = await readJao7AutonomyRunInternal(runId, a.composition);
     expect(observation.authorityObservation?.approvalDecisionDigest).toMatch(/^[0-9a-f]{64}$/u);
     expect(observation.authorityObservation?.executionIntentDigest).toMatch(/^[0-9a-f]{64}$/u);
+    await a.close();
+  });
+
+  // =========================================================================
+  // C. The claim binds an operation id, and a replay is SERVED, never re-performed.
+  // =========================================================================
+
+  it('C1 serves a replayed claim without performing the step again', async () => {
+    // THE CRASH THAT MATTERS. The claim commits -- charging the specialist budget -- and the process
+    // is lost before the finalize. A retry under the SAME operation id used to be handed
+    // `replayed: true` and then have its work done all over again, because the coordinator ignored
+    // the flag: one charged call, two invocations of Riya.
+    const calls = { calls: 0 };
+    // Plan position 1 of Mission A is the Riya delegation.
+    const crashing = { stepIndex: 1, crashes: 1 };
+    const a = startProcess('a');
+    const composition: Jao7InternalComposition = {
+      ...a.composition,
+      store: storeCrashingOnFinalize(a.composition.store, crashing),
+      delegate: countingDelegate(calls),
+    };
+
+    await createRun(a, runId, MISSION_A);
+    await advanceJao7AutonomyRunInternal(advanceRequest(runId, `${runId}.step0`), composition);
+
+    // The specialist step: claimed and charged, then the process is lost.
+    await expect(
+      advanceJao7AutonomyRunInternal(advanceRequest(runId, `${runId}.riya`), composition),
+    ).rejects.toThrow();
+    expect(calls.calls).toBe(1);
+    const stranded = await readJao7AutonomyRunInternal(runId, a.composition);
+    expect(stranded.specialistCalls).toBe(1);
+    expect(stranded.steps.filter((step) => step.stepStatus === 'CLAIMED')).toHaveLength(1);
+
+    // THE RETRY, under the same operation id. It is served, not re-performed.
+    const replayed = await advanceJao7AutonomyRunInternal(
+      advanceRequest(runId, `${runId}.riya`),
+      composition,
+    );
+    expect(calls.calls).toBe(1);
+    expect(replayed.specialistCalls).toBe(1);
+    expect(await countJao7RowsFor(a.pool, 'autonomy_step', runId)).toBe(2);
+    await a.close();
+  });
+
+  it('C2 refuses a claim by a DIFFERENT operation id, and a reused id meaning something else', async () => {
+    const a = startProcess('a');
+    await createRun(a, runId, MISSION_B);
+    const view = await a.composition.store.readRun(runId);
+    const claim = {
+      runId,
+      operationId: `${runId}.claim`,
+      expectedRevision: view.run.revision,
+      planDigest: view.run.planDigest,
+      stepIndex: 0,
+      stepType: 'VALIDATE_INPUT' as const,
+      charge: 'NONE' as const,
+      toolCallCount: 0,
+      maxSpecialistCalls: 0,
+      maxToolCalls: 2,
+      maxSteps: 12,
+    };
+    const claimed = await a.composition.store.claimStep(claim, a.clock.nowMs());
+    expect(claimed.replayed).toBe(false);
+    expect(claimed.step.attemptIndex).toBe(0);
+    expect(claimed.priorState).toBe('PLANNED');
+
+    // The SAME id, the SAME meaning: a replay.
+    const again = await a.composition.store.claimStep(claim, a.clock.nowMs());
+    expect(again.replayed).toBe(true);
+    expect(await countJao7RowsFor(a.pool, 'autonomy_step', runId)).toBe(1);
+
+    // A DIFFERENT id for a step already in flight: refused. It used to be handed `replayed: true`.
+    const current = await a.composition.store.readRun(runId);
+    await expect(
+      a.composition.store.claimStep(
+        { ...claim, operationId: `${runId}.other`, expectedRevision: current.run.revision },
+        a.clock.nowMs(),
+      ),
+    ).rejects.toMatchObject({ code: 'STEP_ALREADY_CLAIMED' });
+
+    // The SAME id meaning something else -- a different budget, here -- is a conflict, not a replay.
+    await expect(
+      a.composition.store.claimStep({ ...claim, maxSteps: 64 }, a.clock.nowMs()),
+    ).rejects.toMatchObject({ code: 'OPERATION_CONFLICT' });
+    expect(await countJao7RowsFor(a.pool, 'autonomy_step', runId)).toBe(1);
+    await a.close();
+  });
+
+  it('C3 refuses a replayed claim on a run that was killed after the claim committed', async () => {
+    // The ordering that was wrong. An existing CLAIMED row returned before the kill, expiry, plan
+    // and budget checks ran, so a killed run handed a claim back -- and the work went ahead.
+    // Governance runs first now, and the replay is served only because this exact id already
+    // committed it. What it must NOT do is let new work start.
+    const calls = { calls: 0 };
+    // Plan position 1 of Mission A is the Riya delegation.
+    const crashing = { stepIndex: 1, crashes: 1 };
+    const a = startProcess('a');
+    const composition: Jao7InternalComposition = {
+      ...a.composition,
+      store: storeCrashingOnFinalize(a.composition.store, crashing),
+      delegate: countingDelegate(calls),
+    };
+    await createRun(a, runId, MISSION_A);
+    await advanceJao7AutonomyRunInternal(advanceRequest(runId, `${runId}.step0`), composition);
+    await expect(
+      advanceJao7AutonomyRunInternal(advanceRequest(runId, `${runId}.riya`), composition),
+    ).rejects.toThrow();
+
+    await killJao7AutonomyRunInternal(advanceRequest(runId, `${runId}.kill`), a.composition);
+
+    // A NEW operation id gets nowhere at all.
+    await expect(
+      advanceJao7AutonomyRunInternal(advanceRequest(runId, `${runId}.fresh`), a.composition),
+    ).rejects.toMatchObject({ code: 'RUN_KILLED' });
+    expect(calls.calls).toBe(1);
+    await a.close();
+  });
+
+  // =========================================================================
+  // GA. The authority gate, and the plan position it is made of.
+  // =========================================================================
+
+  it('GA1 does not advance the plan past an authority validation that proved nothing', async () => {
+    const a = startProcess('a');
+    await createRun(a, runId, MISSION_B);
+    const { latest, proposal } = await driveToGate(a, runId, MISSION_B);
+    const atGate = latest.currentStepIndex;
+
+    // An approved action WITHOUT a Core-issued intent. A real state, and it stops here.
+    const decision = approvalDecision(proposal);
+    const incomplete = await resumeJao7AutonomyRunInternal(
+      capacityRequest(runId, `${runId}.partial`, {
+        proposal: carriedProposal(proposal),
+        authority: { approvalDecision: decision },
+      }),
+      a.composition,
+    );
+    expect(incomplete.authorityObservation?.observationCode).toBe(
+      'CORRELATED_APPROVED_ACTION_WITHOUT_INTENT',
+    );
+    expect(incomplete.state).toBe('AWAITING_AUTHORITY');
+    // THE FIX. The plan position is RETAINED: the run is not pointing at the rehearsal it is
+    // supposed to be waiting in front of.
+    expect(incomplete.currentStepIndex).toBe(atGate);
+
+    // A second incomplete attempt records a SECOND row rather than being swallowed by the first.
+    const stillIncomplete = await resumeJao7AutonomyRunInternal(
+      capacityRequest(runId, `${runId}.partial-again`, {
+        proposal: carriedProposal(proposal),
+        authority: { approvalDecision: approvalDecision(proposal) },
+      }),
+      a.composition,
+    );
+    expect(stillIncomplete.currentStepIndex).toBe(atGate);
+    expect(await countJao7RowsFor(a.pool, 'authority_observation', runId)).toBe(2);
+
+    // And the exact chain, when it finally arrives, is recorded and DOES move the plan on. The
+    // first failed attempt used to consume the only slot and lock the run out of ever recording it.
+    const correlated = await correlateAuthority(
+      a,
+      runId,
+      MISSION_B,
+      proposal,
+      {},
+      `${runId}.complete-chain`,
+    );
+    expect(correlated.authorityObservation?.observationCode).toBe(
+      'CORRELATED_APPROVED_ACTION_AND_INTENT',
+    );
+    expect(correlated.state).toBe('AUTHORITY_EVIDENCE_VALIDATED_FOR_REHEARSAL');
+    expect(correlated.currentStepIndex).toBe(atGate + 1);
+    expect(await countJao7RowsFor(a.pool, 'authority_observation', runId)).toBe(3);
+
+    // Every attempt is in the audit trail, under its own attempt index at the same plan position.
+    const attempts = correlated.steps.filter((step) => step.stepIndex === atGate);
+    expect(attempts.map((step) => step.attemptIndex)).toStrictEqual([0, 1, 2]);
+    for (const step of attempts) {
+      expect(step.stepType).toBe('VALIDATE_AUTHORITY_EVIDENCE');
+    }
+
+    // And the trail NAMES the mutation correctly. Recording an authority correlation used to replay
+    // under `FINALIZE_STEP`, so the audit trail said a step had been finalised when what had
+    // happened was that Core evidence had been correlated.
+    const kinds = await jao7ReplayKindsFor(a.pool, runId);
+    expect(kinds).toContain('RECORD_AUTHORITY');
+    expect(kinds).toContain('CLAIM_STEP');
+    expect(kinds.filter((kind) => kind === 'RECORD_AUTHORITY')).toHaveLength(3);
+    await a.close();
+  });
+
+  it('GA2 refuses a rehearsal that is not off a just-proven exact chain', async () => {
+    // Defence in depth, checked directly. Even handed the plan position and a run to work with, the
+    // rehearsal step refuses unless the claim moved the run OUT of the state a successful validation
+    // produces -- which is what makes the proof "just" rather than "at some point".
+    const a = startProcess('a');
+    await createRun(a, runId, MISSION_B);
+    const { proposal } = await driveToGate(a, runId, MISSION_B);
+    await correlateAuthority(a, runId, MISSION_B, proposal);
+    const view = await a.composition.store.readRun(runId);
+
+    await expect(
+      performJao7StepInternal(
+        'REHEARSE_REVERSIBLE_EFFECT',
+        capacityRequest(runId, `${runId}.sneak`, {
+          proposal: carriedProposal(proposal),
+        }) as never,
+        capacityPolicy(),
+        a.composition,
+        view.run,
+        'IN_PROGRESS',
+        undefined,
+        undefined,
+      ),
+    ).rejects.toMatchObject({ code: 'REHEARSAL_NOT_ELIGIBLE' });
+    expect((await readJao7AutonomyRunInternal(runId, a.composition)).rehearsal?.state).toBe(
+      'CAPTURED',
+    );
+    await a.close();
+  });
+
+  it('GA3 refuses a rehearsal off an authority observation that is not the exact chain', async () => {
+    // The correlation happened, and concluded that Core approved the action WITHOUT issuing an
+    // execution intent. That is a real state and it is not an execution chain: rehearsing it would
+    // rehearse a step Core has not taken.
+    const a = startProcess('a');
+    await createRun(a, runId, MISSION_B);
+    const { proposal } = await driveToGate(a, runId, MISSION_B);
+    await resumeJao7AutonomyRunInternal(
+      capacityRequest(runId, `${runId}.partial`, {
+        proposal: carriedProposal(proposal),
+        authority: { approvalDecision: approvalDecision(proposal) },
+      }),
+      a.composition,
+    );
+    const view = await a.composition.store.readRun(runId);
+    expect(view.authority?.observationCode).toBe('CORRELATED_APPROVED_ACTION_WITHOUT_INTENT');
+
+    await expect(
+      performJao7StepInternal(
+        'REHEARSE_REVERSIBLE_EFFECT',
+        capacityRequest(runId, `${runId}.sneak`, {
+          proposal: carriedProposal(proposal),
+        }) as never,
+        capacityPolicy(),
+        a.composition,
+        view.run,
+        // Even handed the state a SUCCESSFUL validation produces, the recorded observation decides.
+        'AUTHORITY_EVIDENCE_VALIDATED_FOR_REHEARSAL',
+        undefined,
+        undefined,
+      ),
+    ).rejects.toMatchObject({ code: 'REHEARSAL_NOT_ELIGIBLE' });
+    expect((await readJao7AutonomyRunInternal(runId, a.composition)).rehearsal?.state).toBe(
+      'CAPTURED',
+    );
+    await a.close();
+  });
+
+  it('GA4 refuses a rehearsal whose proven chain describes another run’s proposal', async () => {
+    // The chain was proven -- for something else. Two runs proposing the same adjustment share an
+    // action fingerprint, because the canonical fingerprint measures CONTENT, so the recommendation
+    // and action ids are what separate them.
+    const a = startProcess('a');
+    await createRun(a, runId, MISSION_B);
+    const mine = await driveToGate(a, runId, MISSION_B);
+    await correlateAuthority(a, runId, MISSION_B, mine.proposal);
+    const proven = await a.composition.store.readRun(runId);
+
+    const otherRunId = aRunId();
+    await createRun(a, otherRunId, MISSION_B);
+    const theirs = await driveToGate(a, otherRunId, MISSION_B);
+    const other = await a.composition.store.readRun(otherRunId);
+    expect(other.run.proposalRecommendationId).not.toBe(proven.run.proposalRecommendationId);
+
+    await expect(
+      performJao7StepInternal(
+        'REHEARSE_REVERSIBLE_EFFECT',
+        capacityRequest(runId, `${runId}.crossed`, {
+          proposal: carriedProposal(theirs.proposal),
+        }) as never,
+        capacityPolicy(),
+        a.composition,
+        // THIS run's proven observation, asked to authorise ANOTHER run's proposal identity.
+        other.run,
+        'AUTHORITY_EVIDENCE_VALIDATED_FOR_REHEARSAL',
+        undefined,
+        undefined,
+      ),
+    ).rejects.toMatchObject({ code: 'AUTHORITY_BINDING_MISMATCH' });
+    await a.close();
+  });
+
+  it('GA5 bounds a rollback attempt in the adapter AND in the database', async () => {
+    const a = startProcess('a');
+    await createRun(a, runId, MISSION_B);
+    const { proposal } = await driveToGate(a, runId, MISSION_B);
+    await correlateAuthority(a, runId, MISSION_B, proposal);
+    await advanceJao7AutonomyRunInternal(
+      capacityRequest(runId, `${runId}.rehearse`, { proposal: carriedProposal(proposal) }),
+      a.composition,
+    );
+
+    // A policy that permits NO attempt refuses one, against the durable counter rather than a
+    // variable. `maxRollbackAttempts` used to appear on the policy and nowhere else.
+    const view = await a.composition.store.readRun(runId);
+    await expect(
+      a.composition.store.mutateRehearsal(
+        {
+          runId,
+          operationId: `${runId}.unbudgeted-rollback`,
+          expectedRevision: view.run.revision,
+          operationKind: 'ROLLBACK_REHEARSAL',
+          nextRehearsalState: 'ROLLED_BACK',
+          afterIntegerA: null,
+          afterIntegerB: null,
+          rollbackIntegerA: view.rehearsal?.beforeIntegerA ?? 0,
+          rollbackIntegerB: null,
+          maxRehearsalApplies: 1,
+          maxRollbackAttempts: 0,
+        },
+        a.clock.nowMs(),
+      ),
+    ).rejects.toMatchObject({ code: 'BUDGET_EXHAUSTED' });
+    expect((await a.composition.store.readRun(runId)).rehearsal?.state).toBe('APPLIED');
+
+    // And the DATABASE refuses a counter outside the reviewed bound, whatever wrote it.
+    await expect(
+      jao7RawStatement(
+        a.pool,
+        'UPDATE $SCHEMA.virtual_rehearsal_state SET rollback_attempts = 2 WHERE run_id = $1',
+        [runId],
+      ),
+    ).rejects.toThrow();
+    await a.close();
+  });
+
+  it('GA6 refuses a rollback of a sandbox that was never applied, in the adapter', async () => {
+    const a = startProcess('a');
+    await createRun(a, runId, MISSION_B);
+    const view = await a.composition.store.readRun(runId);
+    expect(view.rehearsal?.state).toBe('CAPTURED');
+    await expect(
+      a.composition.store.mutateRehearsal(
+        {
+          runId,
+          operationId: `${runId}.phantom-rollback`,
+          expectedRevision: view.run.revision,
+          operationKind: 'ROLLBACK_REHEARSAL',
+          nextRehearsalState: 'ROLLED_BACK',
+          afterIntegerA: null,
+          afterIntegerB: null,
+          rollbackIntegerA: 8,
+          rollbackIntegerB: null,
+          maxRehearsalApplies: 1,
+          maxRollbackAttempts: 1,
+        },
+        a.clock.nowMs(),
+      ),
+    ).rejects.toMatchObject({ code: 'ROLLBACK_NOT_ELIGIBLE' });
+    expect((await a.composition.store.readRun(runId)).rehearsal?.state).toBe('CAPTURED');
+    await a.close();
+  });
+
+  // =========================================================================
+  // SP. The specialist CONTRIBUTES.
+  // =========================================================================
+
+  it('SP1 derives a different remediation from a different Riya conclusion', async () => {
+    // The proof that the delegation is not ceremonial. Nothing in the request names a task any
+    // more; the only input that differs between these three runs is the closed client-sales
+    // signals, and each drives Riya to a different disposition and therefore a different reviewed
+    // remediation -- a different action, and a different fingerprint a human would approve.
+    const a = startProcess('a');
+
+    const handoverId = aRunId();
+    await createRun(a, handoverId, MISSION_A);
+    const handover = await driveToGate(a, handoverId, MISSION_A);
+    expect(proposedParameters(handover.proposal)).toStrictEqual({
+      ...DERIVED_HUMAN_HANDOVER_TASK,
+    });
+
+    const stalledId = aRunId();
+    await createRun(a, stalledId, MISSION_A);
+    const stalled = await driveToGate(a, stalledId, MISSION_A, {
+      clientSalesSignals: { ...STALLED_SALES_SIGNALS },
+    });
+    expect(proposedParameters(stalled.proposal)).toStrictEqual({ ...DERIVED_STALLED_TASK });
+
+    const readinessId = aRunId();
+    await createRun(a, readinessId, MISSION_A);
+    const readiness = await driveToGate(a, readinessId, MISSION_A, {
+      clientSalesSignals: { ...READINESS_SALES_SIGNALS },
+    });
+    expect(proposedParameters(readiness.proposal)).toStrictEqual({ ...DERIVED_READINESS_TASK });
+
+    // Three different actions, three different fingerprints.
+    const fingerprints = new Set([
+      handover.proposal.actionBindings[0].actionFingerprint,
+      stalled.proposal.actionBindings[0].actionFingerprint,
+      readiness.proposal.actionBindings[0].actionFingerprint,
+    ]);
+    expect(fingerprints.size).toBe(3);
+
+    // The conclusion is DURABLE, and the advisory it came from is recorded as a digest.
+    const dumped = await dumpJao7Run(a.pool, handoverId);
+    expect(dumped).toContain('client-requested-human-assistance');
+    expect(dumped).toContain('human-handover-review');
+    await a.close();
+  });
+
+  it('SP2 fails closed when the advisory warrants no reviewed remediation', async () => {
+    // Riya refuses an out-of-scope turn. Proposing an internal sales task anyway would be JAO-7
+    // inventing a conclusion the specialist explicitly declined to reach.
+    const a = startProcess('a');
+    await createRun(a, runId, MISSION_A);
+    await advanceJao7AutonomyRunInternal(
+      advanceRequest(runId, `${runId}.validate`, {
+        clientSalesSignals: { ...OUT_OF_SCOPE_SALES_SIGNALS },
+      }),
+      a.composition,
+    );
+    const refused = await advanceJao7AutonomyRunInternal(
+      advanceRequest(runId, `${runId}.riya`, {
+        clientSalesSignals: { ...OUT_OF_SCOPE_SALES_SIGNALS },
+      }),
+      a.composition,
+    );
+    expect(refused.refusalReason).toBe('SPECIALIST_ADVISORY_WITHOUT_REMEDIATION');
+    expect(refused.outcome).toBe('REFUSED');
+    expect(refused.state).toBe('FAILED_SAFE');
+    // The specialist call was still charged -- it happened -- and no proposal exists.
+    expect(refused.specialistCalls).toBe(1);
+    const view = await a.composition.store.readRun(runId);
+    expect(view.run.specialistAdvisoryDigest).toBeNull();
+    expect(view.run.proposalActionFingerprint).toBeNull();
+    await a.close();
+  });
+
+  // =========================================================================
+  // SU. Action substitution.
+  // =========================================================================
+
+  it('SU1 refuses a carried proposal whose ACTION was rewritten under the same identity', async () => {
+    // The identity strings used to be the whole check, and the fingerprint was read out of the
+    // carried object rather than recomputed from it -- so a caller could rewrite the action
+    // entirely, keep the three ids, and have that action rehearsed.
+    const a = startProcess('a');
+    await createRun(a, runId, MISSION_B);
+    const { proposal } = await driveToGate(a, runId, MISSION_B);
+
+    const original = carriedProposal(proposal);
+    const action = proposal.recommendation.proposedActions[0];
+    const substituted = {
+      ...original,
+      recommendation: {
+        ...proposal.recommendation,
+        proposedActions: [
+          {
+            ...action,
+            // A DIFFERENT ADJUSTMENT, at the same identity, wearing the same fingerprint string.
+            parameters: { ...(action?.parameters ?? {}), targetConcurrency: 32 },
+          },
+        ],
+      },
+    };
+
+    const decision = approvalDecision(proposal);
+    const result = await resumeJao7AutonomyRunInternal(
+      capacityRequest(runId, `${runId}.substituted`, {
+        proposal: substituted,
+        authority: {
+          approvalDecision: decision,
+          executionIntent: executionIntent(proposal, decision),
+        },
+      }),
+      a.composition,
+    );
+    expect(result.refusalReason).toBe('AUTHORITY_BINDING_MISMATCH');
+    expect(result.authorityObservation).toBeNull();
+    expect(result.rehearsal?.state).toBe('CAPTURED');
+    await a.close();
+  });
+
+  it('SU2 refuses a carried proposal that is not a canonical artifact at all', async () => {
+    const a = startProcess('a');
+    await createRun(a, runId, MISSION_B);
+    const { proposal } = await driveToGate(a, runId, MISSION_B);
+    const binding = proposal.actionBindings[0];
+
+    // The shape the old check would have accepted: the three identity strings, and nothing else.
+    const decision = approvalDecision(proposal);
+    const result = await resumeJao7AutonomyRunInternal(
+      capacityRequest(runId, `${runId}.hollow`, {
+        proposal: {
+          recommendation: { recommendationId: binding.recommendationId },
+          actionBindings: [{ ...binding }],
+          approvalRequest: { recommendationId: binding.recommendationId },
+        },
+        authority: {
+          approvalDecision: decision,
+          executionIntent: executionIntent(proposal, decision),
+        },
+      }),
+      a.composition,
+    );
+    expect(result.refusalReason).toBe('REQUEST_INVALID');
+    expect(result.authorityObservation).toBeNull();
     await a.close();
   });
 });

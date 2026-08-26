@@ -66,10 +66,36 @@ CREATE TABLE IF NOT EXISTS qf_jarvis_jao7.autonomy_run (
   proposal_action_id           text,
   proposal_action_fingerprint  text,
 
+  -- THE DERIVED SPECIALIST OBSERVATION, written when the Riya step commits.
+  --
+  -- Closed codes and one digest. No conversation, no prose, no reasoning trace: what is durable is
+  -- WHAT WAS CONCLUDED and WHICH bounded advisory concluded it. The proposal is derived from these
+  -- columns rather than from anything a caller supplies, so a derivation that vanished on restart
+  -- would be no derivation at all.
+  specialist_task_reason_code  text,
+  specialist_task_class        text,
+  specialist_due_window_code   text,
+  specialist_priority_band     text,
+  specialist_advisory_digest   text,
+
   created_at              timestamptz NOT NULL,
   updated_at              timestamptz NOT NULL,
 
   CONSTRAINT autonomy_run_pk PRIMARY KEY (run_id),
+
+  -- All five, or none. A half-written specialist observation is one nobody could derive from.
+  CONSTRAINT autonomy_run_specialist_observation_consistent
+    CHECK (
+      (specialist_task_reason_code IS NULL AND specialist_task_class IS NULL
+        AND specialist_due_window_code IS NULL AND specialist_priority_band IS NULL
+        AND specialist_advisory_digest IS NULL)
+      OR
+      (specialist_task_reason_code ~ '^[a-z0-9-]{1,64}$'
+        AND specialist_task_class ~ '^[a-z0-9-]{1,64}$'
+        AND specialist_due_window_code ~ '^[a-z0-9-]{1,64}$'
+        AND specialist_priority_band ~ '^[a-z0-9-]{1,64}$'
+        AND specialist_advisory_digest ~ '^[0-9a-f]{64}$')
+    ),
 
   -- All three, or none. A half-written binding would be a binding nobody could check.
   CONSTRAINT autonomy_run_proposal_binding_consistent
@@ -146,6 +172,16 @@ CREATE TABLE IF NOT EXISTS qf_jarvis_jao7.autonomy_run (
 CREATE TABLE IF NOT EXISTS qf_jarvis_jao7.autonomy_step (
   run_id        text        NOT NULL,
   step_index    integer     NOT NULL,
+
+  -- WHICH ATTEMPT AT THAT PLAN POSITION THIS IS.
+  --
+  -- The plan index used to advance after every completed step, including a completed
+  -- VALIDATE_AUTHORITY_EVIDENCE that had proved NOTHING -- so a run left AWAITING_AUTHORITY was
+  -- already pointing at REHEARSE_REVERSIBLE_EFFECT, and the gate it was waiting behind had already
+  -- been walked past. The fix is that an incomplete or rejected validation RETAINS the plan
+  -- position, which means that position has to be claimable again. One row per attempt keeps the
+  -- audit trail honest about how many times it was tried, and `max_steps` bounds the total.
+  attempt_index integer     NOT NULL,
   step_type     text        NOT NULL,
   step_status   text        NOT NULL,
   operation_id  text        NOT NULL,
@@ -156,13 +192,15 @@ CREATE TABLE IF NOT EXISTS qf_jarvis_jao7.autonomy_step (
   CONSTRAINT autonomy_step_run_fk
     FOREIGN KEY (run_id) REFERENCES qf_jarvis_jao7.autonomy_run (run_id),
 
-  -- THE ARBITRATION CONSTRAINT for step claiming. At most one row per (run, step), whatever two
-  -- concurrent processes each believe they won. This is what makes "a step runs at most once" a
-  -- property of the database rather than of whichever guard happened to execute first.
-  CONSTRAINT autonomy_step_pk PRIMARY KEY (run_id, step_index),
+  -- THE ARBITRATION CONSTRAINT for step claiming. At most one row per (run, step, attempt),
+  -- whatever two concurrent processes each believe they won. This is what makes "an attempt runs at
+  -- most once" a property of the database rather than of whichever guard happened to execute first.
+  CONSTRAINT autonomy_step_pk PRIMARY KEY (run_id, step_index, attempt_index),
 
   CONSTRAINT autonomy_step_index_bounded
     CHECK (step_index BETWEEN 0 AND 64),
+  CONSTRAINT autonomy_step_attempt_bounded
+    CHECK (attempt_index BETWEEN 0 AND 63),
   CONSTRAINT autonomy_step_operation_bounded
     CHECK (operation_id ~ '^[A-Za-z0-9._:-]{1,128}$'),
   CONSTRAINT autonomy_step_type_closed
@@ -193,6 +231,14 @@ CREATE TABLE IF NOT EXISTS qf_jarvis_jao7.autonomy_step (
   CONSTRAINT autonomy_step_outcome_bounded
     CHECK (outcome_code IS NULL OR outcome_code ~ '^[A-Z0-9_]{1,64}$')
 );
+
+-- THE SECOND ARBITRATION CONSTRAINT for step claiming. At most ONE unfinished attempt per plan
+-- position, ever. Without it, allowing a retained position to be re-claimed would also allow a
+-- second caller to open a parallel attempt beside one already in flight -- which is the concurrency
+-- hole the single-row primary key used to close by accident.
+CREATE UNIQUE INDEX IF NOT EXISTS autonomy_step_single_claim_idx
+  ON qf_jarvis_jao7.autonomy_step (run_id, step_index)
+  WHERE step_status = 'CLAIMED';
 
 -- ---------------------------------------------------------------------------
 -- The evaluations. One per significant step, and never overwritten.
@@ -242,10 +288,13 @@ CREATE TABLE IF NOT EXISTS qf_jarvis_jao7.autonomy_operation_replay (
     CHECK (operation_id ~ '^[A-Za-z0-9._:-]{1,128}$'),
   CONSTRAINT autonomy_operation_replay_digest_bounded
     CHECK (semantic_digest ~ '^[0-9a-f]{64}$'),
+  -- RECORD_AUTHORITY is its OWN kind. It used to replay under `FINALIZE_STEP`, which meant the
+  -- audit trail named the wrong mutation -- and a trail that misnames what happened is worse than
+  -- one that says nothing, because a reader trusts it.
   CONSTRAINT autonomy_operation_replay_kind_closed
     CHECK (operation_kind IN (
-      'CREATE_RUN', 'CLAIM_STEP', 'FINALIZE_STEP', 'PAUSE_RUN', 'RESUME_RUN', 'KILL_RUN',
-      'APPLY_REHEARSAL', 'VERIFY_REHEARSAL', 'ROLLBACK_REHEARSAL'
+      'CREATE_RUN', 'CLAIM_STEP', 'FINALIZE_STEP', 'RECORD_AUTHORITY', 'PAUSE_RUN', 'RESUME_RUN',
+      'KILL_RUN', 'APPLY_REHEARSAL', 'VERIFY_REHEARSAL', 'ROLLBACK_REHEARSAL'
     )),
   CONSTRAINT autonomy_operation_replay_result_bounded
     CHECK (result_code ~ '^[A-Z0-9_]{1,64}$'),
@@ -258,6 +307,14 @@ CREATE TABLE IF NOT EXISTS qf_jarvis_jao7.autonomy_operation_replay (
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS qf_jarvis_jao7.authority_observation (
   run_id                    text        NOT NULL,
+
+  -- ONE ROW PER ATTEMPT, and at most one successful chain per run.
+  --
+  -- This used to be `PRIMARY KEY (run_id)` with every observation inserted, so the FIRST incomplete
+  -- or rejected attempt consumed the only slot -- and a run that was still legitimately awaiting
+  -- authority could never record the exact chain when it finally arrived. A failed attempt must not
+  -- poison later valid evidence, and every attempt is worth keeping.
+  attempt_index             integer     NOT NULL,
 
   -- DIGESTS AND IDENTITIES ONLY. There is deliberately no column in which a raw ApprovalDecisionV1
   -- or a raw ExecutionIntentV1 could be stored, and no boolean named approved, can_execute,
@@ -272,9 +329,12 @@ CREATE TABLE IF NOT EXISTS qf_jarvis_jao7.authority_observation (
   observation_code          text        NOT NULL,
   observed_at               timestamptz NOT NULL,
 
-  CONSTRAINT authority_observation_pk PRIMARY KEY (run_id),
+  CONSTRAINT authority_observation_pk PRIMARY KEY (run_id, attempt_index),
   CONSTRAINT authority_observation_run_fk
     FOREIGN KEY (run_id) REFERENCES qf_jarvis_jao7.autonomy_run (run_id),
+
+  CONSTRAINT authority_observation_attempt_bounded
+    CHECK (attempt_index BETWEEN 0 AND 64),
 
   CONSTRAINT authority_observation_digests_bounded
     CHECK (
@@ -305,6 +365,13 @@ CREATE TABLE IF NOT EXISTS qf_jarvis_jao7.authority_observation (
 -- ---------------------------------------------------------------------------
 -- The virtual sandbox. Local synthetic integers, and nothing else.
 -- ---------------------------------------------------------------------------
+-- THE ARBITRATION CONSTRAINT for the authority gate. At most ONE successful chain per run,
+-- whatever any number of failed attempts believed. This is what makes "the rehearsal ran because an
+-- exact chain correlated" a property of the database rather than of whichever guard executed first.
+CREATE UNIQUE INDEX IF NOT EXISTS authority_observation_single_success_idx
+  ON qf_jarvis_jao7.authority_observation (run_id)
+  WHERE observation_code = 'CORRELATED_APPROVED_ACTION_AND_INTENT';
+
 CREATE TABLE IF NOT EXISTS qf_jarvis_jao7.virtual_rehearsal_state (
   run_id                text        NOT NULL,
   rehearsal_class       text        NOT NULL,
@@ -322,7 +389,17 @@ CREATE TABLE IF NOT EXISTS qf_jarvis_jao7.virtual_rehearsal_state (
   state                 text        NOT NULL,
   applied_at            timestamptz,
   verified_at           timestamptz,
+
+  -- ATTEMPTED and SUCCEEDED are separate facts.
+  --
+  -- They used to be one column, and the check below then read `state = ROLLED_BACK` if and only if a
+  -- rollback instant existed -- so a ROLLBACK_FAILED row carrying its attempted values violated its
+  -- own constraint and could not be written. A failure state that cannot be persisted is a failure
+  -- state that does not exist, which is the opposite of failing safe.
+  rollback_attempted_at timestamptz,
   rolled_back_at        timestamptz,
+  rollback_attempts     integer     NOT NULL DEFAULT 0,
+
   revision              integer     NOT NULL,
 
   CONSTRAINT virtual_rehearsal_state_pk PRIMARY KEY (run_id),
@@ -350,12 +427,27 @@ CREATE TABLE IF NOT EXISTS qf_jarvis_jao7.virtual_rehearsal_state (
   -- An applied instant exists exactly when the rehearsal has moved past capture.
   CONSTRAINT virtual_rehearsal_applied_consistent
     CHECK ((state = 'CAPTURED') = (applied_at IS NULL)),
-  -- A rolled-back rehearsal has a rollback instant and a restored value.
+  -- A SUCCESSFUL rollback has a success instant and a restored value; a FAILED one has NEITHER,
+  -- and both have an attempt instant. The two states are separately representable, and a restored
+  -- value exists if and only if a rollback actually restored something: a row saying the captured
+  -- state came back when it did not is the one thing a recovery audit must never be able to say.
   CONSTRAINT virtual_rehearsal_rollback_consistent
     CHECK (
       (state = 'ROLLED_BACK')
       = (rolled_back_at IS NOT NULL AND rollback_integer_a IS NOT NULL)
-    )
+    ),
+  CONSTRAINT virtual_rehearsal_rollback_value_only_on_success
+    CHECK (
+      state = 'ROLLED_BACK'
+      OR (rolled_back_at IS NULL AND rollback_integer_a IS NULL AND rollback_integer_b IS NULL)
+    ),
+  CONSTRAINT virtual_rehearsal_rollback_attempt_consistent
+    CHECK (
+      (state IN ('ROLLED_BACK', 'ROLLBACK_FAILED')) = (rollback_attempted_at IS NOT NULL)
+    ),
+  -- ONE attempt, enforced by the database. There is no retry storm to configure away.
+  CONSTRAINT virtual_rehearsal_rollback_attempts_bounded
+    CHECK (rollback_attempts BETWEEN 0 AND 1)
 );
 
 CREATE INDEX IF NOT EXISTS autonomy_step_run_idx

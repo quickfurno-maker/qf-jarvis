@@ -15,12 +15,23 @@ import { randomUUID } from 'node:crypto';
 
 import type { ApprovalDecisionV1, ExecutionIntentV1, RecommendationV1 } from '@qf-jarvis/contracts';
 
-import type { Jao7Proposal } from '../jao/advanced-governed-autonomy/proposal.js';
+import type { Jao7ResultProposal } from '../jao/advanced-governed-autonomy/public-contracts.js';
 
 export const CORRELATION_ID = '3f2c1a44-0d1e-4a7b-9c2e-1b0a5d6e7f80';
 export const EVENT_ID = '9a1b2c3d-4e5f-4a6b-8c7d-0e1f2a3b4c5d';
 export const T0 = Date.parse('2026-08-26T09:00:00.000Z');
 
+/**
+ * ### The signal sets, and why there are four of them
+ *
+ * Mission A's remediation is DERIVED from what Riya concludes, through a total reviewed mapping.
+ * There is no `operatorTask` field on the request any more, so the only way to change what gets
+ * proposed is to change what the client-sales signals make Riya conclude -- which is what these four
+ * sets are for. Each drives the certified JAO-2 boundary to a different disposition, and therefore
+ * to a different reviewed remediation; the fourth reaches a refusal, and no proposal at all.
+ */
+
+/** Asks for a person. -> HUMAN_SALES_ASSISTANCE_REQUEST / REQUEST_HUMAN_SALES_CONTACT. */
 export const CLIENT_SALES_SIGNALS = Object.freeze({
   hasPriorSalesContext: true,
   requestedHumanAssistance: true,
@@ -31,6 +42,68 @@ export const CLIENT_SALES_SIGNALS = Object.freeze({
   missingDiscoveryFieldCount: 2,
 });
 
+/** A stalled conversation with nothing sharper in it. -> SALES_FOLLOW_UP / CONTINUE_DISCOVERY. */
+export const STALLED_SALES_SIGNALS = Object.freeze({
+  hasPriorSalesContext: true,
+  requestedHumanAssistance: false,
+  requestedQuoteOrConsultation: false,
+  providedRequirementDetail: false,
+  askedAboutReadiness: false,
+  outOfSalesScope: false,
+  missingDiscoveryFieldCount: 0,
+});
+
+/** Asks about readiness. -> PROJECT_READINESS_CLARIFICATION / DRAFT_REPLY. */
+export const READINESS_SALES_SIGNALS = Object.freeze({
+  hasPriorSalesContext: true,
+  requestedHumanAssistance: false,
+  requestedQuoteOrConsultation: false,
+  providedRequirementDetail: false,
+  askedAboutReadiness: true,
+  outOfSalesScope: false,
+  missingDiscoveryFieldCount: 1,
+});
+
+/** Not client sales at all. -> UNSUPPORTED_NON_SALES_REQUEST / REFUSE, and no remediation. */
+export const OUT_OF_SCOPE_SALES_SIGNALS = Object.freeze({
+  hasPriorSalesContext: false,
+  requestedHumanAssistance: false,
+  requestedQuoteOrConsultation: false,
+  providedRequirementDetail: false,
+  askedAboutReadiness: false,
+  outOfSalesScope: true,
+  missingDiscoveryFieldCount: 0,
+});
+
+/** What the reviewed mapping derives from each set. Asserted, never supplied. */
+export const DERIVED_HUMAN_HANDOVER_TASK = Object.freeze({
+  taskReasonCode: 'client-requested-human-assistance',
+  taskClass: 'human-handover-review',
+  dueWindowCode: 'within-4-hours',
+  priorityBand: 'elevated',
+});
+
+export const DERIVED_STALLED_TASK = Object.freeze({
+  taskReasonCode: 'client-sales-conversation-stalled',
+  taskClass: 'discovery-completion',
+  dueWindowCode: 'within-1-business-day',
+  priorityBand: 'routine',
+});
+
+export const DERIVED_READINESS_TASK = Object.freeze({
+  taskReasonCode: 'client-readiness-unclear',
+  taskClass: 'sales-followup-review',
+  dueWindowCode: 'within-1-business-day',
+  priorityBand: 'routine',
+});
+
+/**
+ * Closed action parameters for tests that build a proposal DIRECTLY.
+ *
+ * Only the direct-construction specs use this. Nothing that runs a mission may: on that path the
+ * parameters come from the run's durable specialist observation, and supplying them would be the
+ * thing owner review removed.
+ */
 export const OPERATOR_TASK = Object.freeze({
   taskReasonCode: 'client-sales-conversation-stalled' as const,
   taskClass: 'sales-followup-review' as const,
@@ -102,7 +175,6 @@ export function advanceRequest(
     evidence: [...EVIDENCE],
     confidence: 0.6,
     clientSalesSignals: { ...CLIENT_SALES_SIGNALS },
-    operatorTask: { ...OPERATOR_TASK },
     ...over,
   };
 }
@@ -152,7 +224,7 @@ export const POLICY_APPROVER = Object.freeze({
 });
 
 export function approvalDecision(
-  proposal: Jao7Proposal,
+  proposal: Jao7ResultProposal,
   over: Record<string, unknown> = {},
 ): ApprovalDecisionV1 {
   const recommendation: RecommendationV1 = proposal.recommendation;
@@ -173,7 +245,7 @@ export function approvalDecision(
 }
 
 export function executionIntent(
-  proposal: Jao7Proposal,
+  proposal: Jao7ResultProposal,
   decision: ApprovalDecisionV1,
   over: Record<string, unknown> = {},
 ): ExecutionIntentV1 {
@@ -215,4 +287,19 @@ export class SteppableClock {
   advance(ms: number): void {
     this.value += ms;
   }
+}
+
+/**
+ * The proposal exactly as a caller carries it back.
+ *
+ * A result hands back three canonical artifacts and no `source`, and this is what a caller has to
+ * return to move past the authority gate. Rebuilding a `Jao7Proposal` in a test would be the test
+ * carrying something the caller never had.
+ */
+export function carriedProposal(proposal: Jao7ResultProposal): Record<string, unknown> {
+  return {
+    recommendation: proposal.recommendation,
+    actionBindings: [...proposal.actionBindings],
+    approvalRequest: proposal.approvalRequest,
+  };
 }

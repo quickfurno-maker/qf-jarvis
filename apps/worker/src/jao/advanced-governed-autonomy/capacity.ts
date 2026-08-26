@@ -58,8 +58,20 @@ export interface Jao7CapacityDecision {
   readonly poolCode: string;
   readonly currentConcurrency: number;
   readonly targetConcurrency: number;
+  /**
+   * WHY this adjustment, in a closed token a human approver reads.
+   *
+   * Two of these are new because two branches used to borrow `over-provisioned-idle`, which is a
+   * statement about a different world: a pool erroring under load is not idle, and a pool at steady
+   * state with a medium queue is not idle either. An audit trail that records the right action for
+   * the wrong stated reason is a trail somebody will one day reason from.
+   */
   readonly adjustmentReasonCode:
-    'saturated-with-low-error-rate' | 'queue-depth-sustained-high' | 'over-provisioned-idle';
+    | 'saturated-with-low-error-rate'
+    | 'queue-depth-sustained-high'
+    | 'over-provisioned-idle'
+    | 'high-error-rate-backoff'
+    | 'steady-state-no-adjustment';
   /** True when the computed target equals the current value, so nothing is worth proposing. */
   readonly noAdjustmentWarranted: boolean;
 }
@@ -92,13 +104,18 @@ export function decideJao7Capacity(observation: Jao7CapacityObservation): Jao7Ca
 
   // A high error rate never buys an increase. It may buy a decrease, because backing off a failing
   // dependency is the conservative move and is trivially reversible.
+  //
+  // The reason code says BACKOFF, not idle. It used to say `over-provisioned-idle`, which is a
+  // different fact about a different world: a pool erroring under load is not an idle pool, and the
+  // recommendation a human approves carries this token. An audit trail that records the right action
+  // for the wrong stated reason is a trail somebody will one day reason from.
   if (errorRateBand === 'HIGH') {
     const target = clamp(current - 1, current);
     return Object.freeze({
       poolCode: observation.poolCode,
       currentConcurrency: current,
       targetConcurrency: target,
-      adjustmentReasonCode: 'over-provisioned-idle' as const,
+      adjustmentReasonCode: 'high-error-rate-backoff' as const,
       noAdjustmentWarranted: target === current,
     });
   }
@@ -141,11 +158,13 @@ export function decideJao7Capacity(observation: Jao7CapacityObservation): Jao7Ca
     });
   }
 
+  // Healthy, unsaturated, and the queue is neither deep nor empty. Nothing is warranted, and the
+  // token says exactly that rather than borrowing the one that means "reclaim an idle pool".
   return Object.freeze({
     poolCode: observation.poolCode,
     currentConcurrency: current,
     targetConcurrency: current,
-    adjustmentReasonCode: 'over-provisioned-idle' as const,
+    adjustmentReasonCode: 'steady-state-no-adjustment' as const,
     noAdjustmentWarranted: true,
   });
 }
