@@ -145,6 +145,9 @@ importers:
       '@qf-jarvis/event-backbone':
         specifier: workspace:*
         version: link:../../packages/event-backbone
+      '@qf-jarvis/execution-intent-runtime':
+        specifier: workspace:*
+        version: link:../../packages/execution-intent-runtime
       '@qf-jarvis/model-gateway':
         specifier: workspace:*
         version: link:../../packages/model-gateway

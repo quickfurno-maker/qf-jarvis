@@ -23,6 +23,7 @@
     "@qf-jarvis/contracts": "workspace:*",
     "@qf-jarvis/control-plane-read-contract": "workspace:*",
     "@qf-jarvis/event-backbone": "workspace:*",
+    "@qf-jarvis/execution-intent-runtime": "workspace:*",
     "@qf-jarvis/model-gateway": "workspace:*",
     "@qf-jarvis/recommendation-runtime": "workspace:*",
     "@qf-jarvis/riya-agent": "workspace:*",

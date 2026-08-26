@@ -838,9 +838,16 @@ describe('JAO-6 proposal threat model', () => {
     expect(manifest.dependencies['@qf-jarvis/recommendation-runtime']).toBe('workspace:*');
     expect(manifest.dependencies['@qf-jarvis/approval-runtime']).toBe('workspace:*');
 
-    // Nothing that could dispatch, authorize a communication, or reach Core.
+    // NARROWED, and strengthened, when JAO-7 legitimately took a workspace link on the
+    // execution-intent runtime.
+    //
+    // JAO-6's real claim was never "no slice in this worker may depend on that package" -- it was
+    // that JAO-6 ITSELF cannot reach it, and could not create an execution intent even if it did,
+    // because the package only VALIDATES a Core-issued intent and has no constructor. The manifest
+    // was standing in for that, and a stand-in that another slice can invalidate is a weaker test
+    // than the thing it stood for. `G1` above already scans JAO-6's own source for the import; this
+    // keeps the manifest assertion for the packages that could genuinely DISPATCH.
     for (const forbidden of [
-      'execution-intent-runtime',
       'execution-dispatch-runtime',
       'execution-dispatch-composition',
       'communication-authorization-runtime',
