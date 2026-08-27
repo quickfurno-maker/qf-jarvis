@@ -404,3 +404,34 @@ export type {
   AarohiSalesTurnPlanResult,
   AarohiSalesTurnRefusal,
 } from './contracts/avg7-sales-brain.js';
+
+export {
+  AAROHI_AVG8_COMMERCIAL_SCOPES,
+  AAROHI_AVG8_COMMERCIAL_SOURCE_POSTURE,
+  AAROHI_AVG8_CONTRACT_VERSION,
+  AAROHI_COMMERCIAL_FACTS_POSTURE,
+  COMMERCIAL_REFUSALS,
+  CORE_COMMERCIAL_FACTS_OUTCOME,
+  MAX_COMMERCIAL_PACKAGES,
+  aarohiCommercialFactsBriefSchema,
+  aarohiCommercialFactsPostureSchema,
+  coreCommercialCatalogSnapshotSchema,
+  coreCommercialPackageOptionSchema,
+  createCoreCommercialCatalogSnapshot,
+  parseAarohiCommercialFactsBrief,
+  parseCoreCommercialCatalogSnapshot,
+  prepareAarohiCommercialFactsBrief,
+} from './contracts/avg8-commercial-truth.js';
+export type {
+  AarohiAvg8ContractVersion,
+  AarohiCommercialFactsBrief,
+  AarohiCommercialFactsBriefResult,
+  AarohiCommercialFactsPosture,
+  AarohiCommercialRefusal,
+  AarohiCommercialScope,
+  AarohiCommercialSourcePosture,
+  CoreCommercialCatalogSnapshot,
+  CoreCommercialCatalogSnapshotResult,
+  CoreCommercialFactsOutcome,
+  CoreCommercialPackageOption,
+} from './contracts/avg8-commercial-truth.js';

@@ -10,18 +10,19 @@ rollout remains **OFF**, and no package or application imports the Aarohi packag
 **Offline DOMAIN status.** This overlay once said "nothing here is implemented", which stopped being
 true at AVG-1. What exists is contracts and pure functions over frozen values:
 
-- **AVG-0 through AVG-6 — implemented as certified offline domains**
+- **AVG-0 through AVG-7 — implemented as certified offline domains**
   ([ADR-0085](../decisions/ADR-0085-qfj-p12-aarohi-vendor-growth-and-roadmap-reconciliation.md),
   [ADR-0111](../decisions/ADR-0111-qfj-p12-avg2-aarohi-discovery-enrichment-domain.md),
   [ADR-0112](../decisions/ADR-0112-qfj-p12-avg3-aarohi-scoring-outreach-eligibility-domain.md),
   [ADR-0113](../decisions/ADR-0113-qfj-p12-avg4-aarohi-outreach-workspace-domain.md),
   [ADR-0122](../decisions/ADR-0122-qfj-p12-avg5-aarohi-instagram-conversation-offline-domain.md),
-  [ADR-0123](../decisions/ADR-0123-qfj-p12-avg6-aarohi-omnichannel-identity-whatsapp-handoff-offline-domain.md)).
-- **AVG-7 — offline implementation proof defined by
-  [ADR-0124](../decisions/ADR-0124-qfj-p12-avg7-aarohi-sales-brain-offline-domain.md).**
-  It adds no runtime, model call, prompt resolution, retrieval, provider, channel, transport or
-  execution activation, and originates no commercial commitment.
-- **AVG-8 through AVG-12 — planned and unimplemented.**
+  [ADR-0123](../decisions/ADR-0123-qfj-p12-avg6-aarohi-omnichannel-identity-whatsapp-handoff-offline-domain.md),
+  [ADR-0124](../decisions/ADR-0124-qfj-p12-avg7-aarohi-sales-brain-offline-domain.md)).
+- **AVG-8 — offline implementation proof defined by
+  [ADR-0125](../decisions/ADR-0125-qfj-p12-avg8-aarohi-commercial-truth-package-engine-offline-domain.md).**
+  It adds no live Core read, runtime, model call, prompt resolution, retrieval, provider, channel,
+  transport or execution activation, and originates no commercial value of any kind.
+- **AVG-9 through AVG-12 — planned and unimplemented.**
 
 Recording a capability is still not implementing one, and implementing an offline domain is still not
 activating anything.
@@ -294,6 +295,46 @@ activation. Exact first-proof boundaries:
 Packages, entitlements and pricing presented during acquisition, **sourced from Core**. The engine
 selects and explains what Core already holds; it does not invent, adjust, discount or interpret price.
 Model and RAG output is never a commercial source.
+
+**The offline DOMAIN for this stage is defined by
+[ADR-0125](../decisions/ADR-0125-qfj-p12-avg8-aarohi-commercial-truth-package-engine-offline-domain.md).**
+Runtime remains PLANNED / DISABLED; this capability description claims no deployment, no live Core
+read and no production activation. Exact first-proof boundaries:
+
+- **The READ surface is mirrored, not the table behind it.** QuickFurno's `packages` table has nine
+  columns; its available-package read service exposes seven, omitting `created_at` and
+  `price_per_lead`. This contract models those seven exactly, in Core's own field names, because
+  renaming `display_price` into something like a list price would be the first act of interpretation.
+  `price_per_lead` is absent twice over: not read, and never calculated from the two prices that are
+  present.
+- **Both prices are preserved and neither is explained.** `total_price` and `display_price` are
+  copied exactly and independently, in all three directions. Nothing subtracts them, divides them, or
+  names the difference — calling it a discount would invent a promotion Core never authorised.
+- **Selection is identifier lookup, never a choice.** Two scopes: the whole available catalog, or one
+  exact package id. There is no cheapest, best-value, most-suitable or recommended, and no input for a
+  budget, a desired lead count or an optimisation target. An unknown id is refused with no fallback.
+- **Canonical order is by package id, and that is serialization rather than ranking.** A spec asserts
+  it disagrees with lead-count order and with both price orders, because the first row of a
+  price-sorted list is a recommendation whether or not anybody calls it one.
+- **The AVG-7 plan is RE-DERIVED, never believed.** A commercial brief re-runs AVG-7's own public
+  evaluator over the same conversation, interpretation and CURRENT Core observation, and requires an
+  exact field-for-field reproduction — which carries AVG-7's latest-turn binding, causal chain and
+  fresh Core gate across for free. Only an honestly re-derived `REQUEST_CORE_COMMERCIAL_CONTEXT`
+  proceeds.
+- **The facts must answer the request, not predate it.** `plan.plannedAt ≤ catalog.observedAt ≤
+  brief.preparedAt`, by semantic UTC instant. A catalog observed before the request is not standing
+  commercial permission.
+- **A closed fact BRIEF, and no sentence anywhere.** No explanation, summary, pitch or reply field.
+  The explaining belongs to a later governed composition grounded in these facts.
+- **A snapshot is an observation, not an offer.** `snapshotSourceAuthenticated: false` and
+  `requiresCoreCommercialRevalidationBeforeFutureOutboundUse: true` on every brief, and the AVG-7
+  plan it rested on is not rewritten.
+- **`lead_count` is a Core entitlement fact, never a delivery promise.** AVG-7's lead-volume, revenue
+  and conversion guarantees stay pinned false.
+- Zero live Core reads, Supabase clients, QuickFurno imports, model calls, prompt resolutions,
+  retrievals, package orders, payments, credit grants, activations, communication requests,
+  approvals, authorizations, execution intents, provider or channel sends, persistence, managed
+  migrations, production entries and new third-party dependencies.
 
 ### AVG-9 — Registration Integration
 Guiding a converted prospect into QuickFurno registration. Registration is performed by Core; Aarohi

@@ -17,10 +17,12 @@ import { describe, expect, it } from 'vitest';
 
 import {
   AAROHI_AVG5_CHANNEL,
+  AAROHI_COMMERCIAL_FACTS_POSTURE,
   AAROHI_SALES_BRAIN_POSTURE,
   IDENTITY_LINK_POSTURE,
   INSTAGRAM_OUTBOUND_CANDIDATE_POSTURE,
   WHATSAPP_CHANNEL_HANDOFF_POSTURE,
+  aarohiCommercialFactsPostureSchema,
   identityLinkPostureSchema,
   instagramOutboundCandidatePostureSchema,
   salesBrainPostureSchema,
@@ -55,7 +57,7 @@ const codeOnly = (text: string): string =>
 const productionFiles = (): readonly { readonly file: string; readonly code: string }[] =>
   walk(SRC, true).map((file) => ({ file, code: codeOnly(readFileSync(file, 'utf8')) }));
 
-describe('Aarohi remains a DOMAIN, not a runtime through AVG-7', () => {
+describe('Aarohi remains a DOMAIN, not a runtime through AVG-8', () => {
   it('reaches no channel, provider, execution path or credential', () => {
     // ### Why these are SHAPES rather than bare words, from AVG-5 onward
     //
@@ -401,6 +403,152 @@ describe('Aarohi remains a DOMAIN, not a runtime through AVG-7', () => {
     }
   });
 
+  it('reaches no QuickFurno service, database client or commercial write path', () => {
+    // AVG-8 mirrors a Core READ CONTRACT and imports nothing from the marketplace repository. The
+    // bans are in three groups because they fail three different ways.
+    //
+    // A database client would make the offline posture a lie -- `snapshotSourceAuthenticated: false`
+    // is only honest while there is no way to authenticate one.
+    //
+    // A QuickFurno service import would make Jarvis depend on a repository it does not build or
+    // version, and would turn a contract mirror into a coupling.
+    //
+    // And the WRITE verbs are the ones that would quietly turn "a prospect asked about a package"
+    // into an order. Those are AVG-9's, AVG-10's, and Core's.
+    for (const { file, code } of productionFiles()) {
+      for (const forbidden of [
+        // Database clients and query builders.
+        'adminClient',
+        'servicerole',
+        'service_role',
+        'createclient',
+        '.from(',
+        '.select(',
+        '.rpc(',
+        'sql`',
+        // The QuickFurno marketplace, by repository, service or function.
+        'quickfurno-marketplace',
+        'vendorpackageorderservice',
+        'packageservice',
+        'listavailablevendorpackages',
+        'getvendorcurrentpackagesummary',
+        // Commercial WRITE paths, every one of which belongs to Core.
+        'createvendorpackageorder',
+        'createmanualpayment',
+        'markpaymentpaid',
+        'assignpackagetovendor',
+        'assignpackageafterpayment',
+        'grantcredits',
+        'creditwallet',
+        'vendor_packages',
+        // Derived commercial values nothing here may compute.
+        'price_per_lead',
+        'pricepertlead',
+        'priceperlead',
+        'effectiveprice',
+        'discountpercent',
+      ]) {
+        expect(code.toLowerCase(), `${file} must not name ${forbidden}`).not.toContain(forbidden);
+      }
+    }
+  });
+
+  it('declares the AVG-8 commercial ceiling as literal falsehoods, not as prose', () => {
+    const commercial = AAROHI_COMMERCIAL_FACTS_POSTURE as unknown as Readonly<
+      Record<string, unknown>
+    >;
+    const DECLARED_FALSE = [
+      // The observation is injected. Saying so is what keeps the rest of the file honest.
+      'snapshotSourceAuthenticated',
+      // Forming a commercial opinion, in each of the four ways it could be formed.
+      'packageRecommended',
+      'bestPackageClaimed',
+      'packageRanked',
+      'packageEligibilityGranted',
+      // Originating a commercial VALUE. `priceInterpreted` and `derivedPriceCalculated` are separate
+      // failures: one assigns meaning to two Core numbers, the other makes a third out of them.
+      'commercialTruthMutated',
+      'commercialCommitmentCreated',
+      'priceAdjusted',
+      'priceInterpreted',
+      'derivedPriceCalculated',
+      'discountCreated',
+      'savingsCalculated',
+      'currencyInvented',
+      'offerCreated',
+      'materialPackageLimitationHidden',
+      // The Core write paths, none of which starts here.
+      'registrationMutated',
+      'paymentMutated',
+      'packageOrderCreated',
+      'packageAssigned',
+      'creditsMutated',
+      'activationMutated',
+      'acquisitionCaseMutated',
+      'anishaHandoffExecuted',
+      // The model waist, the prompt waist and retrieval.
+      'modelCallExecuted',
+      'promptResolved',
+      'retrievalExecuted',
+      // The governed execution chain.
+      'communicationRequestCreated',
+      'approvalRequestCreated',
+      'approvalDecisionCreated',
+      'communicationAuthorizationCreated',
+      'executionIntentCreated',
+      'n8nExecutionRequested',
+      'providerSendRequested',
+      'channelSendRequested',
+      'sent',
+      'delivered',
+      'productionMutation',
+      'businessEffect',
+    ] as const;
+    const DECLARED_TRUE = [
+      'referenceFactsOnly',
+      'commercialFactsReadyForFutureGovernedDraft',
+      'requiresCoreCommercialRevalidationBeforeFutureOutboundUse',
+    ] as const;
+
+    for (const declared of DECLARED_FALSE) {
+      expect(commercial[declared], declared).toBe(false);
+    }
+    for (const declared of DECLARED_TRUE) {
+      expect(commercial[declared], declared).toBe(true);
+    }
+
+    // Complete in both directions, for the reason ADR-0124 records: a governance list that can
+    // quietly lose a member is a list that eventually will.
+    expect([...DECLARED_FALSE].sort()).toStrictEqual(
+      Object.entries(commercial)
+        .filter(([, value]) => value === false)
+        .map(([key]) => key)
+        .sort(),
+    );
+    expect([...DECLARED_TRUE].sort()).toStrictEqual(
+      Object.entries(commercial)
+        .filter(([, value]) => value === true)
+        .map(([key]) => key)
+        .sort(),
+    );
+
+    for (const forged of [
+      { snapshotSourceAuthenticated: true },
+      { packageRecommended: true },
+      { priceInterpreted: true },
+      { derivedPriceCalculated: true },
+      { discountCreated: true },
+      { packageOrderCreated: true },
+      { referenceFactsOnly: false },
+      { requiresCoreCommercialRevalidationBeforeFutureOutboundUse: false },
+    ]) {
+      expect(
+        aarohiCommercialFactsPostureSchema.safeParse({ ...commercial, ...forged }).success,
+        JSON.stringify(forged),
+      ).toBe(false);
+    }
+  });
+
   it('never reaches the OTHER handoff — Aarohi ownership stays where it was', () => {
     // `completeCoreActiveHandoff` is the only route to Anisha ownership and it requires a Core
     // ACTIVE attestation. AVG-6's handoff is a CHANNEL transition, and the two must not be
@@ -524,7 +672,19 @@ describe('Aarohi remains a DOMAIN, not a runtime through AVG-7', () => {
         'baseprice',
         'amountdue',
         'amountpaid',
-        'currency',
+        // A currency CODE, and a currency FIELD. Not the bare word: AVG-8 writes
+        // `currencyInvented: false`, which is the fourth declaration of absence this list has had to
+        // make room for (after `metaApiCalled`, `whatsappSendRequested` and
+        // `priceOriginatedByBrain`). The declaration is asserted present and false further down,
+        // which is a stronger check than the substring was -- and the ban that matters is the one on
+        // an actual currency, because QuickFurno's ORDER-write path hard-codes INR and this read
+        // contract deliberately does not inherit it.
+        'currencycode',
+        'currency_code',
+        "'inr'",
+        '"inr"',
+        "'usd'",
+        '"usd"',
         'discountpercent',
         'discountamount',
         'discountcode',
@@ -537,10 +697,21 @@ describe('Aarohi remains a DOMAIN, not a runtime through AVG-7', () => {
       ]) {
         expect(code.toLowerCase(), `${file} must not name ${forbidden}`).not.toContain(forbidden);
       }
-      // And no field may simply BE a price, a discount or an amount. The match is on the token
-      // immediately followed by a colon, so `unitPrice:` and `price?:` are caught while
-      // `priceOriginatedByBrain:` -- a declaration that no price was invented -- is not.
-      for (const shape of [/price\??:/iu, /discount\??:/iu, /amount\??:/iu]) {
+      // And no field may simply BE a price, a discount, an amount or a currency.
+      //
+      // The lookbehind matters. AVG-8 mirrors Core's available-package read surface field for field,
+      // and two of those fields are `total_price` and `display_price` -- Core's names, copied rather
+      // than chosen, and renaming them would be the first act of interpretation. So the ban is on a
+      // field that IS one of these tokens, not one that ends with it: `price:` is caught,
+      // `total_price:` is Core's data, and `priceOriginatedByBrain:` / `currencyInvented:` are
+      // declarations that no price and no currency were invented. `unitPrice` and `listPrice` stay
+      // covered by the substring list above.
+      for (const shape of [
+        /(?<![A-Za-z0-9_])price\??:/iu,
+        /(?<![A-Za-z0-9_])discount\??:/iu,
+        /(?<![A-Za-z0-9_])amount\??:/iu,
+        /(?<![A-Za-z0-9_])currency\??:/iu,
+      ]) {
         expect(code, `${file} must not declare ${String(shape)}`).not.toMatch(shape);
       }
     }
@@ -639,6 +810,10 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'AAROHI_AVG6_IDENTITY_CHANNELS',
       'AAROHI_AVG7_CONTRACT_VERSION',
       'AAROHI_AVG7_INTERPRETATION_SOURCE_POSTURE',
+      'AAROHI_AVG8_COMMERCIAL_SCOPES',
+      'AAROHI_AVG8_COMMERCIAL_SOURCE_POSTURE',
+      'AAROHI_AVG8_CONTRACT_VERSION',
+      'AAROHI_COMMERCIAL_FACTS_POSTURE',
       'AAROHI_ENRICHMENT_CONTRACT_VERSION',
       'AAROHI_PROSPECT_CONTRACT_VERSION',
       'AAROHI_SALES_BRAIN_POSTURE',
@@ -651,8 +826,10 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'ACTIVATION_AUTHORITIES',
       'BLOCKED_CORE_STATUSES',
       'CASE_TRANSITION_REFUSALS',
+      'COMMERCIAL_REFUSALS',
       'CONTACT_ELIGIBILITY_OUTCOME',
       'CONTACT_ELIGIBILITY_REFUSALS',
+      'CORE_COMMERCIAL_FACTS_OUTCOME',
       'CORE_PARTY_STATUSES',
       'CORE_STATUS_ROLE',
       'CORE_STATUS_ROLES',
@@ -688,6 +865,7 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'INSTAGRAM_OUTBOUND_CANDIDATE_POSTURE',
       'INSTAGRAM_OUTBOUND_CANDIDATE_REFUSALS',
       'INSTAGRAM_TURN_DIRECTIONS',
+      'MAX_COMMERCIAL_PACKAGES',
       'MAX_ENRICHMENT_LABEL_LENGTH',
       'MAX_ENRICHMENT_PROFILE_CLAIMS',
       'MAX_IDENTITY_EVIDENCE_CLAIMS',
@@ -707,6 +885,8 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'WORKSPACE_APPROVAL_READINESS_REFUSALS',
       'WORKSPACE_DRAFT_REFUSALS',
       'WORKSPACE_DRAFT_STATES',
+      'aarohiCommercialFactsBriefSchema',
+      'aarohiCommercialFactsPostureSchema',
       'acquisitionCaseSchema',
       'activationAttestationSchema',
       'appendCrossChannelIdentityEvidence',
@@ -714,8 +894,11 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'buildWorkspaceReviewItem',
       'canTransition',
       'completeCoreActiveHandoff',
+      'coreCommercialCatalogSnapshotSchema',
+      'coreCommercialPackageOptionSchema',
       'coreEligibilityObservationSchema',
       'createAarohiSalesBrainInterpretation',
+      'createCoreCommercialCatalogSnapshot',
       'createCrossChannelIdentityEvidenceBundle',
       'createCrossChannelIdentityEvidenceClaim',
       'createEnrichmentClaim',
@@ -745,8 +928,10 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'instagramOutboundCandidateSchema',
       'isTerminalAcquisitionCaseState',
       'openAcquisitionCase',
+      'parseAarohiCommercialFactsBrief',
       'parseAarohiSalesBrainInterpretation',
       'parseAarohiSalesTurnPlan',
+      'parseCoreCommercialCatalogSnapshot',
       'parseCrossChannelIdentityEvidenceBundle',
       'parseCrossChannelIdentityLinkRecommendation',
       'parseEnrichmentClaim',
@@ -754,6 +939,7 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'parseInstagramConversation',
       'parseInstagramInboundObservation',
       'parseWorkspaceDraft',
+      'prepareAarohiCommercialFactsBrief',
       'prepareInstagramOutboundCandidate',
       'prepareWhatsAppChannelHandoffCandidate',
       'prospectIdentitySchema',

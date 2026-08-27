@@ -1822,8 +1822,15 @@ describe('the roadmap overlay stays true on both sides of a merge', () => {
     'utf8',
   );
 
-  it('records AVG-0 through AVG-6 as certified and AVG-7 as a defined proof', () => {
-    expect(overlay).toContain('AVG-0 through AVG-6 — implemented as certified offline domains');
+  it('records a certified range reaching AVG-7, and AVG-7 as a defined proof', () => {
+    // The range is matched rather than named, for the reason AVG-6's equivalent spec records: it
+    // advances by one every time a stage is certified, and a spec that pinned the number would fail
+    // on the next slice for being right about the previous one.
+    const certified = /AVG-0 through AVG-(\d+) — implemented as certified offline domains/u.exec(
+      overlay,
+    );
+    expect(certified).not.toBeNull();
+    expect(Number(certified?.[1] ?? '0')).toBeGreaterThanOrEqual(7);
     expect(overlay).toContain('ADR-0124');
     expect(overlay).not.toContain('everything after it is planned and unimplemented');
   });
