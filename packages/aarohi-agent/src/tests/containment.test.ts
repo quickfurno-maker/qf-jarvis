@@ -17,8 +17,12 @@ import { describe, expect, it } from 'vitest';
 
 import {
   AAROHI_AVG5_CHANNEL,
+  IDENTITY_LINK_POSTURE,
   INSTAGRAM_OUTBOUND_CANDIDATE_POSTURE,
+  WHATSAPP_CHANNEL_HANDOFF_POSTURE,
+  identityLinkPostureSchema,
   instagramOutboundCandidatePostureSchema,
+  whatsappChannelHandoffPostureSchema,
 } from '../index.js';
 
 const SRC = fileURLToPath(new URL('../', import.meta.url));
@@ -49,7 +53,7 @@ const codeOnly = (text: string): string =>
 const productionFiles = (): readonly { readonly file: string; readonly code: string }[] =>
   walk(SRC, true).map((file) => ({ file, code: codeOnly(readFileSync(file, 'utf8')) }));
 
-describe('Aarohi remains a DOMAIN, not a runtime through AVG-5', () => {
+describe('Aarohi remains a DOMAIN, not a runtime through AVG-6', () => {
   it('reaches no channel, provider, execution path or credential', () => {
     // ### Why these are SHAPES rather than bare words, from AVG-5 onward
     //
@@ -65,11 +69,17 @@ describe('Aarohi remains a DOMAIN, not a runtime through AVG-5', () => {
     // separately asserted to be present and false further down, which is a stronger check than the
     // substring ever was.
     //
-    // `whatsapp` stays a bare ban: AVG-5 must not do WhatsApp identity or handoff, and AVG-6 owns
-    // that question.
+    // AVG-6 is the same story again, for the same reason. It models the Instagram-to-WhatsApp
+    // channel transition, so it writes `whatsapp` -- as an identity channel token, as
+    // `whatsappParticipantRef`, and as `whatsappSendRequested: false`. The last of those is another
+    // declaration of absence, and the same argument applies: the ban moves to the shapes that would
+    // constitute reaching WhatsApp, and the declaration is asserted false further down.
+    //
+    // What is NOT relaxed is the destination screen. A WhatsApp participant reference is checked
+    // against the same contact shapes AVG-2 uses, so a phone number cannot enter the package under
+    // any name -- which is the thing the bare `whatsapp` ban was really standing in for.
     for (const { file, code } of productionFiles()) {
       for (const forbidden of [
-        'whatsapp',
         'linkedin',
         'twilio',
         'credential',
@@ -88,13 +98,30 @@ describe('Aarohi remains a DOMAIN, not a runtime through AVG-5', () => {
         'metagraph',
         'callmetaapi',
         'instagram-private-api',
+        'whatsappclient',
+        'sendwhatsapp',
+        'whatsapp-web',
+        'whatsapp-business',
+        'wa.me',
+        'whatsapp.com',
         'n8nclient',
         'calln8n',
         'n8n_',
-        // Secrets.
+        // Secrets and provider account identity.
         'accesstoken',
         'appsecret',
         'authorizationheader',
+        'wabaid',
+        'waba_id',
+        'phonenumberid',
+        'phone_number_id',
+        // Destinations, under any name. AVG-6 stores an opaque channel-local handle and nothing
+        // that could be dialled or delivered to.
+        'phonenumber',
+        'phone_number',
+        'e164',
+        'msisdn',
+        'dialablenumber',
       ]) {
         expect(code.toLowerCase(), `${file} must not name ${forbidden}`).not.toContain(forbidden);
       }
@@ -143,6 +170,93 @@ describe('Aarohi remains a DOMAIN, not a runtime through AVG-5', () => {
     }
   });
 
+  it('declares the AVG-6 non-effects as literal falsehoods, not as prose', () => {
+    // Identity is the one a reader should check first. There is no field anywhere that could say a
+    // merge happened, and the two that a careless refactor might add are pinned false here.
+    const link = IDENTITY_LINK_POSTURE as unknown as Readonly<Record<string, unknown>>;
+    for (const declared of [
+      'identityMerged',
+      'coreIdentityMutated',
+      'identityVerified',
+      'consentEstablished',
+      'communicationAuthorized',
+    ]) {
+      expect(link[declared], declared).toBe(false);
+    }
+    expect(link['recommendationOnly']).toBe(true);
+    expect(identityLinkPostureSchema.safeParse({ ...link, identityMerged: true }).success).toBe(
+      false,
+    );
+
+    const handoff = WHATSAPP_CHANNEL_HANDOFF_POSTURE as unknown as Readonly<
+      Record<string, unknown>
+    >;
+    for (const declared of [
+      'identityMergeExecuted',
+      'coreIdentityMutated',
+      'recipientResolvedByCore',
+      'consentEstablished',
+      'communicationRequestCreated',
+      'approvalRequestCreated',
+      'approvalDecisionCreated',
+      'communicationAuthorizationCreated',
+      'executionIntentCreated',
+      'n8nExecutionRequested',
+      'providerSendRequested',
+      'whatsappSendRequested',
+      'sent',
+      'delivered',
+      // The two that separate a CHANNEL transition from the Anisha OWNERSHIP handoff.
+      'acquisitionCaseMutated',
+      'anishaHandoffExecuted',
+      'productionMutation',
+      'businessEffect',
+    ]) {
+      expect(handoff[declared], declared).toBe(false);
+    }
+    for (const required of [
+      'candidateOnly',
+      'identityRecommendationOnly',
+      'requiresCoreRecipientResolution',
+      'requiresCoreConsentRevalidation',
+      'requiresCoreExecutionTimeEligibilityRevalidation',
+    ]) {
+      expect(handoff[required], required).toBe(true);
+    }
+    expect(
+      whatsappChannelHandoffPostureSchema.safeParse({ ...handoff, whatsappSendRequested: true })
+        .success,
+    ).toBe(false);
+    expect(
+      whatsappChannelHandoffPostureSchema.safeParse({
+        ...handoff,
+        requiresCoreConsentRevalidation: false,
+      }).success,
+    ).toBe(false);
+  });
+
+  it('never reaches the OTHER handoff — Aarohi ownership stays where it was', () => {
+    // `completeCoreActiveHandoff` is the only route to Anisha ownership and it requires a Core
+    // ACTIVE attestation. AVG-6's handoff is a CHANNEL transition, and the two must not be
+    // confusable: the name is checked, and so is every acquisition-case verb.
+    const avg6 = readFileSync(join(SRC, 'contracts', 'avg6-omnichannel-identity.ts'), 'utf8');
+    const code = codeOnly(avg6);
+    for (const forbidden of [
+      'completeCoreActiveHandoff',
+      'transitionAcquisitionCase',
+      'openAcquisitionCase',
+      'HANDED_OFF_TO_ANISHA',
+      'AWAITING_CORE_ACTIVATION',
+      'CONTACT_APPROVED',
+      'activationAttestation',
+      'mergeIdentit',
+      'mergeProspect',
+      'resolveIdentity',
+    ]) {
+      expect(code, `AVG-6 must not name ${forbidden}`).not.toContain(forbidden);
+    }
+  });
+
   it('declares the AVG-5 non-effects as literal falsehoods, not as prose', () => {
     // The replacement for the substring ban above, and a much better proof: the tokens a reader
     // might worry about appear in exactly one place, and in that place they are pinned to `false`.
@@ -188,6 +302,20 @@ describe('Aarohi remains a DOMAIN, not a runtime through AVG-5', () => {
     expect(declared).toContain("'email'");
     expect(declared).toContain("'voice'");
     expect(declared).not.toContain('instagram');
+  });
+
+  it('leaves the shared WhatsApp delivery channel exactly where it found it', () => {
+    // `whatsapp` has been a governed delivery channel since long before AVG-6, and AVG-6 changes
+    // nothing about that. Naming the destination channel of a transition is not activating it: this
+    // package still imports no shared contract, creates no communication request and sends nothing.
+    const shared = readFileSync(
+      join(REPO_ROOT, 'packages', 'contracts', 'src', 'communications', 'communication-channel.ts'),
+      'utf8',
+    );
+    const declared = /COMMUNICATION_CHANNELS = \[([^\]]*)\]/u.exec(shared)?.[1] ?? '';
+    expect(declared).toContain("'whatsapp'");
+    // Four members, and still exactly four.
+    expect(declared.split(',').filter((one) => one.trim() !== '')).toHaveLength(4);
   });
 
   it('generates nothing and prices nothing', () => {
@@ -297,14 +425,19 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
     // An exact set match, so a symbol cannot join the public surface without a decision.
     // AVG-2 adds enrichment review material; AVG-3 adds deterministic priority and the Core
     // contact gate; AVG-4 adds inert review/draft/readiness contracts; AVG-5 adds the offline
-    // Instagram conversation domain. Every addition remains a closed vocabulary, bound, schema or
-    // pure function; nothing here sends or executes.
+    // Instagram conversation domain; AVG-6 adds cross-channel identity evidence, a recommendation
+    // that never merges anything, and an inert WhatsApp CHANNEL handoff candidate. Every addition
+    // remains a closed vocabulary, bound, schema or pure function; nothing here sends or executes.
     expect(Object.keys(barrel).sort()).toStrictEqual([
       'AAROHI_AGENT_ID',
       'AAROHI_AVG3_CONTRACT_VERSION',
       'AAROHI_AVG4_CONTRACT_VERSION',
       'AAROHI_AVG5_CHANNEL',
       'AAROHI_AVG5_CONTRACT_VERSION',
+      'AAROHI_AVG6_CONTRACT_VERSION',
+      'AAROHI_AVG6_HANDOFF_SOURCE_CHANNEL',
+      'AAROHI_AVG6_HANDOFF_TARGET_CHANNEL',
+      'AAROHI_AVG6_IDENTITY_CHANNELS',
       'AAROHI_ENRICHMENT_CONTRACT_VERSION',
       'AAROHI_PROSPECT_CONTRACT_VERSION',
       'ACQUISITION_CASE_STATES',
@@ -332,6 +465,15 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'HANDOFF_REFUSAL_REASONS',
       'HANDOFF_REJECTED_AUTHORITIES',
       'HANDOFF_TRUSTED_AUTHORITY',
+      'IDENTITY_EVIDENCE_REFUSALS',
+      'IDENTITY_EVIDENCE_RELATIONS',
+      'IDENTITY_EVIDENCE_SOURCE_KINDS',
+      'IDENTITY_EVIDENCE_SOURCE_POSTURE',
+      'IDENTITY_LINK_OUTCOMES',
+      'IDENTITY_LINK_POSTURE',
+      'IDENTITY_LINK_REASON_CODES',
+      'IDENTITY_SOURCE_ROLE',
+      'IDENTITY_SOURCE_ROLES',
       'INSTAGRAM_BINDING_POSTURE',
       'INSTAGRAM_CONTINUATION_OUTCOMES',
       'INSTAGRAM_CONVERSATION_REFUSALS',
@@ -343,6 +485,7 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'INSTAGRAM_TURN_DIRECTIONS',
       'MAX_ENRICHMENT_LABEL_LENGTH',
       'MAX_ENRICHMENT_PROFILE_CLAIMS',
+      'MAX_IDENTITY_EVIDENCE_CLAIMS',
       'MAX_INSTAGRAM_CONVERSATION_TURNS',
       'MAX_INSTAGRAM_MESSAGE_LENGTH',
       'MAX_WORKSPACE_DRAFT_LENGTH',
@@ -351,17 +494,23 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'PROSPECT_PRIORITY_MAX_POINTS',
       'PROSPECT_PRIORITY_REFUSALS',
       'TERMINAL_ACQUISITION_CASE_STATES',
+      'WHATSAPP_CHANNEL_HANDOFF_OUTCOME',
+      'WHATSAPP_CHANNEL_HANDOFF_POSTURE',
+      'WHATSAPP_CHANNEL_HANDOFF_REFUSALS',
       'WORKSPACE_APPROVAL_READINESS_OUTCOME',
       'WORKSPACE_APPROVAL_READINESS_REFUSALS',
       'WORKSPACE_DRAFT_REFUSALS',
       'WORKSPACE_DRAFT_STATES',
       'acquisitionCaseSchema',
       'activationAttestationSchema',
+      'appendCrossChannelIdentityEvidence',
       'appendInstagramInboundObservation',
       'buildWorkspaceReviewItem',
       'canTransition',
       'completeCoreActiveHandoff',
       'coreEligibilityObservationSchema',
+      'createCrossChannelIdentityEvidenceBundle',
+      'createCrossChannelIdentityEvidenceClaim',
       'createEnrichmentClaim',
       'createEnrichmentProfile',
       'createInstagramConversation',
@@ -373,27 +522,37 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'enrichmentSourceSchema',
       'evaluateAcquisitionContactEligibility',
       'evaluateAcquisitionEligibility',
+      'evaluateCrossChannelIdentityLink',
       'evaluateEnrichmentReviewReadiness',
       'evaluateInstagramAcquisitionContinuation',
       'evaluateProspectPriority',
       'evaluateWorkspaceApprovalReadiness',
+      'identityEvidenceBundleSchema',
+      'identityEvidenceClaimSchema',
+      'identityLinkPostureSchema',
+      'identityLinkRecommendationSchema',
       'instagramConversationSnapshotSchema',
       'instagramInboundObservationSchema',
       'instagramOutboundCandidatePostureSchema',
       'instagramOutboundCandidateSchema',
       'isTerminalAcquisitionCaseState',
       'openAcquisitionCase',
+      'parseCrossChannelIdentityEvidenceBundle',
+      'parseCrossChannelIdentityLinkRecommendation',
       'parseEnrichmentClaim',
       'parseEnrichmentProfile',
       'parseInstagramConversation',
       'parseInstagramInboundObservation',
       'parseWorkspaceDraft',
       'prepareInstagramOutboundCandidate',
+      'prepareWhatsAppChannelHandoffCandidate',
       'prospectIdentitySchema',
       'reviseWorkspaceDraft',
       'summariseEnrichmentConsistency',
       'transitionAcquisitionCase',
       'transitionWorkspaceDraft',
+      'whatsappChannelHandoffCandidateSchema',
+      'whatsappChannelHandoffPostureSchema',
       'workspaceDraftSchema',
     ]);
   });

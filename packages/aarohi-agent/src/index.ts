@@ -84,6 +84,23 @@
  * unchanged and still excludes Instagram: naming a channel there is a promise that a transport
  * exists, and adopting the real Instagram execution path is QFJ-P09's work, not an offline domain
  * slice's.
+ *
+ * ### AVG-6 adds omnichannel identity and the WhatsApp channel handoff (ADR-0123)
+ *
+ * Two channel-local handles, and evidence about whether they belong to one prospect. The evidence is
+ * untrusted, bounded, deduplicated and canonically ordered by the semantic UTC instant; the bundle
+ * parser certifies the whole aggregate rather than a bag of valid claims.
+ *
+ * What comes out is a RECOMMENDATION carrying the exact evidence references it rests on. There is no
+ * `mergeIdentities`, no function that takes two identities and returns one, and no field that could
+ * say a merge happened: `identityMerged`, `coreIdentityMutated`, `identityVerified` and
+ * `consentEstablished` are pinned `false`. A positive recommendation is deterministic and needs two
+ * independent corroborating legs with no contradiction; everything else is a person looking.
+ *
+ * The WhatsApp CHANNEL handoff candidate is not the Anisha OWNERSHIP handoff, and the names say so.
+ * It binds a canonical AVG-5 conversation and a positive recommendation, re-runs the CURRENT Core
+ * gate, and states that Core must still resolve a recipient, revalidate consent and revalidate
+ * eligibility at execution time. No number, no template, no body, no acquisition-case transition.
  */
 
 export {
@@ -298,3 +315,60 @@ export type {
   InstagramOutboundCandidateResult,
   InstagramTurnDirection,
 } from './contracts/avg5-instagram-conversation.js';
+
+export {
+  AAROHI_AVG6_CONTRACT_VERSION,
+  AAROHI_AVG6_HANDOFF_SOURCE_CHANNEL,
+  AAROHI_AVG6_HANDOFF_TARGET_CHANNEL,
+  AAROHI_AVG6_IDENTITY_CHANNELS,
+  IDENTITY_EVIDENCE_REFUSALS,
+  IDENTITY_EVIDENCE_RELATIONS,
+  IDENTITY_EVIDENCE_SOURCE_KINDS,
+  IDENTITY_EVIDENCE_SOURCE_POSTURE,
+  IDENTITY_LINK_OUTCOMES,
+  IDENTITY_LINK_POSTURE,
+  IDENTITY_LINK_REASON_CODES,
+  IDENTITY_SOURCE_ROLE,
+  IDENTITY_SOURCE_ROLES,
+  MAX_IDENTITY_EVIDENCE_CLAIMS,
+  WHATSAPP_CHANNEL_HANDOFF_OUTCOME,
+  WHATSAPP_CHANNEL_HANDOFF_POSTURE,
+  WHATSAPP_CHANNEL_HANDOFF_REFUSALS,
+  appendCrossChannelIdentityEvidence,
+  createCrossChannelIdentityEvidenceBundle,
+  createCrossChannelIdentityEvidenceClaim,
+  evaluateCrossChannelIdentityLink,
+  identityEvidenceBundleSchema,
+  identityEvidenceClaimSchema,
+  identityLinkPostureSchema,
+  identityLinkRecommendationSchema,
+  parseCrossChannelIdentityEvidenceBundle,
+  parseCrossChannelIdentityLinkRecommendation,
+  prepareWhatsAppChannelHandoffCandidate,
+  whatsappChannelHandoffCandidateSchema,
+  whatsappChannelHandoffPostureSchema,
+} from './contracts/avg6-omnichannel-identity.js';
+export type {
+  AarohiAvg6ContractVersion,
+  AarohiAvg6HandoffSourceChannel,
+  AarohiAvg6HandoffTargetChannel,
+  AarohiAvg6IdentityChannel,
+  CrossChannelIdentityEvidenceBundle,
+  CrossChannelIdentityEvidenceBundleResult,
+  CrossChannelIdentityEvidenceClaim,
+  CrossChannelIdentityEvidenceClaimResult,
+  CrossChannelIdentityLinkRecommendation,
+  IdentityEvidenceRefusal,
+  IdentityEvidenceRelation,
+  IdentityEvidenceSourceKind,
+  IdentityEvidenceSourcePosture,
+  IdentityLinkOutcome,
+  IdentityLinkPosture,
+  IdentityLinkReasonCode,
+  IdentitySourceRole,
+  WhatsAppChannelHandoffCandidate,
+  WhatsAppChannelHandoffCandidateResult,
+  WhatsAppChannelHandoffOutcome,
+  WhatsAppChannelHandoffPosture,
+  WhatsAppChannelHandoffRefusal,
+} from './contracts/avg6-omnichannel-identity.js';
