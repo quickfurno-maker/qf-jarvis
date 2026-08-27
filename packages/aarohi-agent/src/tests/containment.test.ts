@@ -302,7 +302,7 @@ describe('Aarohi remains a DOMAIN, not a runtime through AVG-7', () => {
     // The roadmap says AVG-7 is bounded by the same sales-ethics prohibitions as Anisha. Prose in a
     // file nobody re-reads is not a bound; these are.
     const brain = AAROHI_SALES_BRAIN_POSTURE as unknown as Readonly<Record<string, unknown>>;
-    for (const declared of [
+    const DECLARED_FALSE = [
       // Commercial commitment, which is Core's and AVG-8's.
       'commercialCommitmentCreated',
       'commercialTruthOriginatedByBrain',
@@ -313,10 +313,13 @@ describe('Aarohi remains a DOMAIN, not a runtime through AVG-7', () => {
       'guaranteeRevenue',
       'guaranteeConversion',
       'contractualCommitmentCreated',
-      // The three pressure tactics.
+      // The three pressure tactics, and the omission that is a fourth.
       'inventedUrgency',
       'inventedScarcity',
       'unsupportedSocialProof',
+      // The canonical ceiling names this one too, and the first AVG-7 head omitted it. Hiding the
+      // inconvenient half of an offer is the quietest of these failures and the easiest to reach.
+      'materialPackageLimitationHidden',
       // Authority that belongs to Core, in every direction.
       'consentEstablished',
       'suppressionMutated',
@@ -343,14 +346,30 @@ describe('Aarohi remains a DOMAIN, not a runtime through AVG-7', () => {
       'retrievalExecuted',
       'productionMutation',
       'businessEffect',
-    ]) {
+    ] as const;
+
+    for (const declared of DECLARED_FALSE) {
       expect(brain[declared], declared).toBe(false);
     }
     expect(brain['planOnly']).toBe(true);
+
+    // And the list must be COMPLETE, in both directions.
+    //
+    // A governance list that can quietly lose a member is a list that eventually will: deleting one
+    // entry above leaves a passing test that checks one fewer prohibition, and nothing says so. So
+    // the list is asserted against the posture itself rather than against somebody's memory —
+    // every `false` field must be named here, and every name here must be a `false` field. Adding a
+    // prohibition to the posture without listing it fails here too, which is the direction that
+    // matters as AVG-8 onward extend the ceiling.
+    const falseFields = Object.entries(brain)
+      .filter(([, value]) => value === false)
+      .map(([key]) => key);
+    expect([...DECLARED_FALSE].sort()).toStrictEqual(falseFields.sort());
     for (const forged of [
       { modelCallExecuted: true },
       { priceOriginatedByBrain: true },
       { guaranteeLeadVolume: true },
+      { materialPackageLimitationHidden: true },
       { consentEstablished: true },
       { anishaHandoffExecuted: true },
       { planOnly: false },

@@ -34,9 +34,9 @@
  * No price, package, discount, offer, entitlement or amount — those are AVG-8's, and Core's. No
  * registration, payment or activation claim — those are AVG-9's and AVG-10's, and Core's. No
  * consent, suppression or identity truth — Core's, always. No guarantee of lead volume, revenue or
- * conversion; no invented urgency or scarcity; no unsupported social proof; no contractual
- * commitment. Every one of those is a `z.literal(false)` on the plan's posture, so the module fails
- * to load if somebody constructs a plan that says otherwise.
+ * conversion; no invented urgency or scarcity; no unsupported social proof; no hidden material
+ * package limitation; no contractual commitment. Every one of those is a `z.literal(false)` on the
+ * plan's posture, so the module fails to load if somebody constructs a plan that says otherwise.
  *
  * ### And a rejection outranks everything
  *
@@ -74,15 +74,44 @@ export type AarohiSalesInterpretationSourcePosture =
   typeof AAROHI_AVG7_INTERPRETATION_SOURCE_POSTURE;
 
 // ---------------------------------------------------------------------------
-// Shared primitives.
+// Shared primitives, and the two reference ROLES this file distinguishes.
 //
-// Restated rather than imported from AVG-2, AVG-5 or AVG-6. Reaching into a certified sibling to
+// Restated rather than imported from AVG-1, AVG-2 or AVG-5. Reaching into a certified sibling to
 // borrow a private regex would widen that file's surface for this file's convenience; the grammars
-// are restated and specs assert every one of them still agrees with its neighbours, so the
-// duplication cannot drift without a test failing.
+// are restated and specs assert they still agree, so the duplication cannot drift unnoticed.
+//
+// ### Why there are two roles and not one grammar
+//
+// The first AVG-7 head screened EVERY reference with the same contact-safe grammar, and the owner
+// review found that this is two mistakes wearing one coat.
+//
+// AVG-1 and AVG-5 already certify their own opaque identifier grammars, and neither applies a
+// contact screen. `919812345678` is a perfectly canonical `instagramMessageRef` — provider-native
+// identifiers are frequently numeric — and `www.example.com` is a canonical opaque token too. When
+// AVG-7 re-screened those on rebuild, a value the upstream stage OWNS and had already certified came
+// back INVALID from the downstream stage. That is a cross-stage incompatibility, and it is a
+// downstream package silently narrowing a governed identity grammar it does not own.
+//
+// The safety argument for screening does not apply to those fields either. An inherited token is an
+// IDENTIFIER; treating it as a destination because it happens to be digits is precisely the
+// reinterpretation the architecture forbids, and nothing in this repository may dial one.
+//
+// Meanwhile the two references AVG-7 genuinely introduces — its own artifact identities, supplied
+// by a caller and named by nobody upstream — were screened by contact SHAPES alone, so
+// `9_1_9_8_1_2_3_4_5_6_7_8` walked through a field whose comment promised it carried no
+// destination. That is the separator-drift class AVG-6 corrected, and the fix is the same: count
+// digits rather than enumerate separators. Applying it HERE rather than to the inherited fields is
+// what keeps the AVG-6 lesson from becoming the AVG-1/AVG-5 incompatibility above.
 // ---------------------------------------------------------------------------
 
-const OPAQUE_REF = z
+/**
+ * The certified upstream opaque identifier grammar, restated exactly.
+ *
+ * Byte-for-byte the grammar AVG-1's `coreEligibilityObservationSchema` and AVG-5's conversation and
+ * observation schemas use. Deliberately NO contact screen: this file consumes artifacts those stages
+ * have already certified, and re-judging their identity tokens is not AVG-7's to do.
+ */
+const UPSTREAM_OPAQUE_REF = z
   .string()
   .min(1)
   .max(128)
@@ -91,9 +120,9 @@ const OPAQUE_REF = z
 /**
  * Shapes a reference may not contain, named by SHAPE rather than by platform.
  *
- * The character class already refuses `@`, `/`, `+` and whitespace. What it does not refuse is a
- * bare run of digits, and a bare run of digits is exactly what a phone number is once somebody
- * strips the punctuation.
+ * Applied only to AVG-7's OWN artifact references. The character class already refuses `@`, `/`, `+`
+ * and whitespace; what it does not refuse is a bare run of digits, and a bare run of digits is
+ * exactly what a phone number is once somebody strips the punctuation.
  */
 const CONTACT_SHAPES: readonly RegExp[] = Object.freeze([
   // An address.
@@ -109,8 +138,38 @@ function hasContactShape(text: string): boolean {
   return CONTACT_SHAPES.some((one) => one.test(text));
 }
 
-/** An opaque reference that carries no destination. Both screens apply. */
-const SAFE_REF = OPAQUE_REF.refine((one: string) => !hasContactShape(one));
+/**
+ * The most digits an AVG-7-local artifact reference may contain before it is a destination.
+ *
+ * Six, because the shortest dialable number anyone would recognise is seven. A COUNT rather than a
+ * pattern: the dialable shape above only recognises the separators it was told about, while the
+ * opaque character class independently permits `_` and `:`. A separator allowlist has to be right
+ * about every character the surrounding grammar permits today AND after the next edit to it; a count
+ * does not care what is in between.
+ */
+const MAX_NON_DESTINATION_DIGITS = 6;
+
+function hasTooManyDestinationDigits(text: string): boolean {
+  let digits = 0;
+  for (const character of text) {
+    if (character >= '0' && character <= '9') {
+      digits += 1;
+      if (digits > MAX_NON_DESTINATION_DIGITS) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * An identity AVG-7 itself introduces: `interpretationRef` and `planRef`.
+ *
+ * These are the only two references in this file that no upstream stage has certified, and the only
+ * two a caller invents. All three screens apply, because a field nobody upstream governs is the one
+ * place a destination could be smuggled into an artifact that claims to carry none.
+ */
+const AVG7_LOCAL_ARTIFACT_REF = UPSTREAM_OPAQUE_REF.refine(
+  (one: string) => !hasContactShape(one) && !hasTooManyDestinationDigits(one),
+);
 
 const UTC_INSTANT_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{3}))?Z$/u;
 
@@ -256,12 +315,14 @@ export interface AarohiSalesBrainInterpretation {
 export const salesBrainInterpretationSchema = z
   .object({
     contractVersion: z.literal(AAROHI_AVG7_CONTRACT_VERSION),
-    interpretationRef: SAFE_REF,
-    prospectRef: SAFE_REF,
-    instagramConversationRef: SAFE_REF,
-    instagramThreadRef: SAFE_REF,
-    instagramParticipantRef: SAFE_REF,
-    instagramMessageRef: SAFE_REF,
+    // AVG-7's own artifact identity: contact-safe, digit-counted.
+    interpretationRef: AVG7_LOCAL_ARTIFACT_REF,
+    // Inherited from certified upstream artifacts. Their grammar is not AVG-7's to narrow.
+    prospectRef: UPSTREAM_OPAQUE_REF,
+    instagramConversationRef: UPSTREAM_OPAQUE_REF,
+    instagramThreadRef: UPSTREAM_OPAQUE_REF,
+    instagramParticipantRef: UPSTREAM_OPAQUE_REF,
+    instagramMessageRef: UPSTREAM_OPAQUE_REF,
     intent: z.enum(AAROHI_SALES_CONVERSATION_INTENTS),
     objectionKind: z.enum(AAROHI_SALES_OBJECTION_KINDS),
     interpretedAt: UTC_INSTANT,
@@ -279,7 +340,7 @@ export const salesBrainInterpretationSchema = z
  */
 const interpretationInputSchema = z
   .object({
-    interpretationRef: SAFE_REF,
+    interpretationRef: AVG7_LOCAL_ARTIFACT_REF,
     conversation: z.unknown(),
     intent: z.enum(AAROHI_SALES_CONVERSATION_INTENTS),
     objectionKind: z.enum(AAROHI_SALES_OBJECTION_KINDS),
@@ -677,6 +738,19 @@ export interface AarohiSalesBrainPosture {
   readonly inventedUrgency: false;
   readonly inventedScarcity: false;
   readonly unsupportedSocialProof: false;
+  /**
+   * The brain did not hide a material package limitation.
+   *
+   * The canonical ceiling lists this alongside the guarantees and the invented urgency, and the
+   * first AVG-7 head machine-represented every prohibition except this one. It is an ETHICS
+   * declaration, not a commercial data field: it does not mean AVG-7 knows what the limitations are,
+   * may describe a package, or holds commercial context. It cannot, and a commercial question is
+   * still `REQUEST_CORE_COMMERCIAL_CONTEXT` with no draft eligibility until AVG-8 supplies
+   * Core-sourced truth. What it says is that nothing here selected which parts of an offer to leave
+   * out — which is the form this particular dishonesty takes, and the one a fluent drafter reaches
+   * for when the limitation is the inconvenient half of the answer.
+   */
+  readonly materialPackageLimitationHidden: false;
   readonly contractualCommitmentCreated: false;
 
   readonly consentEstablished: false;
@@ -721,6 +795,7 @@ export const salesBrainPostureSchema = z
     inventedUrgency: z.literal(false),
     inventedScarcity: z.literal(false),
     unsupportedSocialProof: z.literal(false),
+    materialPackageLimitationHidden: z.literal(false),
     contractualCommitmentCreated: z.literal(false),
 
     consentEstablished: z.literal(false),
@@ -767,6 +842,7 @@ export const AAROHI_SALES_BRAIN_POSTURE: AarohiSalesBrainPosture = Object.freeze
     inventedUrgency: false,
     inventedScarcity: false,
     unsupportedSocialProof: false,
+    materialPackageLimitationHidden: false,
     contractualCommitmentCreated: false,
 
     consentEstablished: false,
@@ -832,15 +908,17 @@ export interface AarohiSalesTurnPlan {
 export const salesTurnPlanSchema = z
   .object({
     contractVersion: z.literal(AAROHI_AVG7_CONTRACT_VERSION),
-    planRef: SAFE_REF,
-    prospectRef: SAFE_REF,
-    instagramConversationRef: SAFE_REF,
-    instagramThreadRef: SAFE_REF,
-    instagramParticipantRef: SAFE_REF,
-    instagramMessageRef: SAFE_REF,
-    interpretationRef: SAFE_REF,
+    // AVG-7's own artifact identities.
+    planRef: AVG7_LOCAL_ARTIFACT_REF,
+    interpretationRef: AVG7_LOCAL_ARTIFACT_REF,
+    // Inherited: AVG-5's conversation bindings and AVG-1's Core lookup token.
+    prospectRef: UPSTREAM_OPAQUE_REF,
+    instagramConversationRef: UPSTREAM_OPAQUE_REF,
+    instagramThreadRef: UPSTREAM_OPAQUE_REF,
+    instagramParticipantRef: UPSTREAM_OPAQUE_REF,
+    instagramMessageRef: UPSTREAM_OPAQUE_REF,
     coreStatus: z.literal('NOT_REGISTERED'),
-    coreLookupRef: SAFE_REF,
+    coreLookupRef: UPSTREAM_OPAQUE_REF,
     plannedAt: UTC_INSTANT,
     brief: salesReplyBriefSchema,
     posture: salesBrainPostureSchema,
@@ -891,7 +969,7 @@ export type AarohiSalesTurnPlanResult =
  */
 const salesTurnInputSchema = z
   .object({
-    planRef: SAFE_REF,
+    planRef: AVG7_LOCAL_ARTIFACT_REF,
     conversation: z.unknown(),
     interpretation: z.unknown(),
     coreObservation: z.unknown(),

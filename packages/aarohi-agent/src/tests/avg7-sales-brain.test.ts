@@ -113,6 +113,38 @@ function inboundTurn(over: Record<string, unknown> = {}): unknown {
   return built.observation;
 }
 
+/**
+ * A canonical AVG-5 conversation whose bindings are whatever the caller says.
+ *
+ * The conversation binding and the turn binding must agree, so the override is applied to both —
+ * which is also how AVG-5 itself is used, and why a single override object is the honest fixture.
+ */
+function upstreamConversation(over: Record<string, unknown>): InstagramConversationSnapshot {
+  const { instagramMessageRef = MESSAGE, ...binding } = over;
+  const built = createInstagramConversation({
+    prospectRef: PROSPECT,
+    instagramConversationRef: CONVERSATION,
+    instagramThreadRef: THREAD,
+    instagramParticipantRef: IG_PARTICIPANT,
+    ...binding,
+  });
+  if (!built.ok) throw new Error(`AVG-5 refused the conversation binding: ${built.refusal}`);
+  const turn = parseInstagramInboundObservation({
+    prospectRef: PROSPECT,
+    instagramConversationRef: CONVERSATION,
+    instagramThreadRef: THREAD,
+    instagramParticipantRef: IG_PARTICIPANT,
+    ...binding,
+    instagramMessageRef,
+    body: 'Hello',
+    observedAt: AT,
+  });
+  if (!turn.ok) throw new Error(`AVG-5 refused the turn: ${turn.refusal}`);
+  const appended = appendInstagramInboundObservation(built.conversation, turn.observation);
+  if (!appended.ok) throw new Error(`append refused: ${appended.refusal}`);
+  return appended.conversation;
+}
+
 /** A conversation carrying the given turns, appended through AVG-5's own builder. */
 function conversationWith(
   turns: readonly unknown[],
@@ -1104,6 +1136,8 @@ describe('every plan states the sales-ethics prohibitions as literals', () => {
     'inventedUrgency',
     'inventedScarcity',
     'unsupportedSocialProof',
+    // The canonical ceiling's own wording: no HIDDEN material package limitation.
+    'materialPackageLimitationHidden',
     'contractualCommitmentCreated',
     'consentEstablished',
     'suppressionMutated',
@@ -1143,6 +1177,49 @@ describe('every plan states the sales-ethics prohibitions as literals', () => {
         }
       }
     }
+  });
+
+  it('machine-represents every prohibition the canonical ceiling names', () => {
+    // The ceiling in ADR-0085 binds Aarohi to Anisha's sales ethics. This slice's value is making
+    // those prohibitions machine-visible, so the list is asserted against the ceiling rather than
+    // against whatever the posture happens to contain.
+    const posture = AAROHI_SALES_BRAIN_POSTURE as unknown as Readonly<Record<string, unknown>>;
+    for (const [prohibition, field] of [
+      ['guaranteed lead volume', 'guaranteeLeadVolume'],
+      ['guaranteed revenue', 'guaranteeRevenue'],
+      ['guaranteed conversion', 'guaranteeConversion'],
+      ['invented discount', 'discountOriginatedByBrain'],
+      ['invented price change', 'priceOriginatedByBrain'],
+      ['invented urgency', 'inventedUrgency'],
+      ['invented scarcity', 'inventedScarcity'],
+      ['hidden material package limitation', 'materialPackageLimitationHidden'],
+      ['unsupported social proof', 'unsupportedSocialProof'],
+      ['binding contractual commitment', 'contractualCommitmentCreated'],
+    ] as const) {
+      expect(Object.hasOwn(posture, field), `${prohibition} -> ${field}`).toBe(true);
+      expect(posture[field], `${prohibition} -> ${field}`).toBe(false);
+    }
+    // "No contact after rejection/opt-out" is the one the ceiling names that is enforced by
+    // PRECEDENCE rather than by a literal, because it is a decision about what happens next rather
+    // than a claim about what was done. It is asserted in the precedence specs above.
+    expect(
+      planFor('REJECTION_OR_STOP', 'NONE').ok &&
+        strategyFor('REJECTION_OR_STOP', 'NONE') === 'REQUEST_CORE_CONTACT_POLICY_REVIEW',
+    ).toBe(true);
+  });
+
+  it('does not turn the package-limitation declaration into commercial knowledge', () => {
+    // `materialPackageLimitationHidden: false` is an ethics declaration, not a commercial fact. It
+    // does not mean AVG-7 knows the limitations or may describe a package, and the commercial branch
+    // is still undraftable without Core.
+    const built = planFor('COMMERCIAL_TERMS', 'PRICE_OR_PACKAGE');
+    expect(built.ok).toBe(true);
+    if (!built.ok) return;
+    expect(built.plan.posture.materialPackageLimitationHidden).toBe(false);
+    expect(built.plan.brief.strategy).toBe('REQUEST_CORE_COMMERCIAL_CONTEXT');
+    expect(built.plan.brief.requiresCoreCommercialContext).toBe(true);
+    expect(built.plan.brief.futureModelDraftEligible).toBe(false);
+    expect(walkValues(built.plan).filter((one) => typeof one === 'number')).toStrictEqual([1]);
   });
 
   it('fails to construct a posture that says otherwise', () => {
@@ -1496,54 +1573,111 @@ describe('AVG-7 stops at the plan', () => {
 });
 
 // ===========================================================================
-// The restated grammars must agree with the siblings they were restated from.
+// AVG-7 preserves certified upstream opaque bindings while separately protecting
+// its own new local artifact refs.
+//
+// Two roles, two grammars, and the specs below are about the difference between them.
 // ===========================================================================
 
-describe('AVG-7 restates AVG-2 and AVG-5 grammars without drifting from them', () => {
-  it('agrees with AVG-2 on what a contact shape is', () => {
-    for (const destination of [
-      'someone@example.com',
-      'https://example.com/x',
-      'www.example.com',
-      '919812345678',
-      '98 1234 5678',
-    ]) {
-      expect(
-        createEnrichmentClaim({
-          prospectRef: PROSPECT,
-          attribute: 'BUSINESS_DISPLAY_NAME',
-          value: destination,
-          source: { kind: 'MANUAL_REVIEW', sourceRef: 'avg7-drift' },
-          observedAt: AT,
-          evidenceQuality: 'UNVERIFIED_OPERATOR_ENTERED',
-        }).ok,
-        destination,
-      ).toBe(false);
-      expect(
-        createAarohiSalesBrainInterpretation(
-          interpretationInput({ interpretationRef: destination }),
-        ).ok,
-        destination,
-      ).toBe(false);
+describe('an inherited binding stays whatever the upstream stage certified', () => {
+  /** Opaque identifiers AVG-1 and AVG-5 accept today, and which look alarming out of context. */
+  const UPSTREAM_TOKENS = ['919812345678', '1234567', 'www.example.com'] as const;
+
+  it('accepts a canonical AVG-5 conversation whose bindings are numeric', () => {
+    // Provider-native identifiers are frequently numeric. A numeric `instagramMessageRef` is an ID,
+    // not a phone number, and AVG-5 -- which owns that grammar -- has already said so.
+    for (const token of UPSTREAM_TOKENS) {
+      for (const field of [
+        'instagramMessageRef',
+        'instagramParticipantRef',
+        'instagramConversationRef',
+        'instagramThreadRef',
+        'prospectRef',
+      ] as const) {
+        const conversation = upstreamConversation({ [field]: token });
+        const built = createAarohiSalesBrainInterpretation(interpretationInput({ conversation }));
+        expect(built.ok, `${field}=${token}`).toBe(true);
+        if (built.ok) {
+          expect(built.interpretation[field], `${field}=${token}`).toBe(token);
+        }
+      }
     }
   });
 
-  it('agrees with AVG-5 on the opaque reference and the canonical instant', () => {
-    for (const value of ['ok.ref-1', 'A:B_c', 'x'.repeat(128)]) {
-      expect(
-        parseInstagramInboundObservation({
+  it('accepts a canonical Core observation whose lookup reference is numeric', () => {
+    for (const token of UPSTREAM_TOKENS) {
+      const built = evaluateAarohiSalesTurn(
+        turnInput({
+          coreObservation: {
+            prospectRef: PROSPECT,
+            coreLookupRef: token,
+            status: 'NOT_REGISTERED',
+          },
+        }),
+      );
+      expect(built.ok, token).toBe(true);
+      if (built.ok) expect(built.plan.coreLookupRef, token).toBe(token);
+    }
+  });
+
+  it('carries a numeric upstream binding end to end, into a plan', () => {
+    const conversation = upstreamConversation({
+      instagramParticipantRef: '919812345678',
+      instagramMessageRef: '1234567',
+    });
+    const built = evaluateAarohiSalesTurn(
+      turnInput({
+        conversation,
+        interpretation: interpretation({ conversation }),
+        coreObservation: {
           prospectRef: PROSPECT,
-          instagramConversationRef: CONVERSATION,
-          instagramThreadRef: THREAD,
-          instagramParticipantRef: IG_PARTICIPANT,
-          instagramMessageRef: value,
-          body: 'Hello',
-          observedAt: AT,
-        }).ok,
-        value,
-      ).toBe(true);
+          coreLookupRef: '919812345678',
+          status: 'NOT_REGISTERED',
+        },
+      }),
+    );
+    expect(built.ok).toBe(true);
+    if (!built.ok) return;
+    expect(built.plan.instagramParticipantRef).toBe('919812345678');
+    expect(built.plan.instagramMessageRef).toBe('1234567');
+    expect(parseAarohiSalesTurnPlan(built.plan)).toBeDefined();
+  });
+
+  it('does not re-judge a destination-LOOKING upstream token as a destination', () => {
+    // `www.example.com` is a canonical opaque identifier under the upstream grammar. AVG-7 does not
+    // own that grammar and may not reinterpret the token; nothing here could dial or fetch it, and
+    // narrowing it would mean a conversation AVG-5 calls canonical is refused downstream.
+    const conversation = upstreamConversation({ instagramParticipantRef: 'www.example.com' });
+    expect(createAarohiSalesBrainInterpretation(interpretationInput({ conversation })).ok).toBe(
+      true,
+    );
+    // And the same string as AVG-7's OWN artifact identity is refused, which is the whole point of
+    // there being two roles.
+    expect(
+      createAarohiSalesBrainInterpretation(
+        interpretationInput({ interpretationRef: 'www.example.com' }),
+      ).ok,
+    ).toBe(false);
+  });
+
+  it('agrees with AVG-5 on the opaque grammar itself and on the canonical instant', () => {
+    for (const value of ['ok.ref-1', 'A:B_c', 'x'.repeat(128)]) {
+      const accepted = parseInstagramInboundObservation({
+        prospectRef: PROSPECT,
+        instagramConversationRef: CONVERSATION,
+        instagramThreadRef: THREAD,
+        instagramParticipantRef: IG_PARTICIPANT,
+        instagramMessageRef: value,
+        body: 'Hello',
+        observedAt: AT,
+      }).ok;
+      expect(accepted, value).toBe(true);
       expect(
-        createAarohiSalesBrainInterpretation(interpretationInput({ interpretationRef: value })).ok,
+        createAarohiSalesBrainInterpretation(
+          interpretationInput({
+            conversation: upstreamConversation({ instagramMessageRef: value }),
+          }),
+        ).ok,
         value,
       ).toBe(true);
     }
@@ -1570,6 +1704,105 @@ describe('AVG-7 restates AVG-2 and AVG-5 grammars without drifting from them', (
         createAarohiSalesBrainInterpretation(interpretationInput({ interpretedAt: instant })).ok,
         instant,
       ).toBe(true);
+    }
+  });
+});
+
+describe("AVG-7's own artifact identities carry no destination", () => {
+  /** Every separator the opaque class permits, and the bare form. */
+  const SMUGGLED = [
+    '919812345678',
+    '9_1_9_8_1_2_3_4_5_6_7_8',
+    '91:98:12:34:56:78',
+    'avg7:91_9812_345678',
+    'plan.91.98.12.34.56.78',
+    'ref9x1y9z8a1b2c3d4e5f6g7h8',
+    'someone@example.com',
+    'https://example.com/x',
+    'www.example.com',
+  ] as const;
+
+  it('refuses a destination in interpretationRef, however it is punctuated', () => {
+    for (const ref of SMUGGLED) {
+      const built = createAarohiSalesBrainInterpretation(
+        interpretationInput({ interpretationRef: ref }),
+      );
+      expect(built.ok, ref).toBe(false);
+      if (!built.ok) expect(built.refusal, ref).toBe('SALES_INPUT_INVALID');
+    }
+  });
+
+  it('refuses a destination in planRef, however it is punctuated', () => {
+    for (const ref of SMUGGLED) {
+      const built = evaluateAarohiSalesTurn(turnInput({ planRef: ref }));
+      expect(built.ok, ref).toBe(false);
+      if (!built.ok) expect(built.refusal, ref).toBe('SALES_INPUT_INVALID');
+    }
+  });
+
+  it('stops at seven digits, not at digits', () => {
+    // Six is the boundary: the shortest number anybody would recognise as dialable is seven.
+    for (const ref of [
+      'interp.001',
+      'plan.alpha',
+      'avg7.ref-A1',
+      'interp.123456',
+      'a1b2c3d4e5f6',
+    ]) {
+      expect(
+        createAarohiSalesBrainInterpretation(interpretationInput({ interpretationRef: ref })).ok,
+        ref,
+      ).toBe(true);
+      expect(evaluateAarohiSalesTurn(turnInput({ planRef: ref })).ok, ref).toBe(true);
+    }
+  });
+
+  it('refuses them at the public parser boundary too', () => {
+    const plan = evaluateAarohiSalesTurn(turnInput());
+    expect(plan.ok).toBe(true);
+    if (!plan.ok) return;
+    for (const ref of SMUGGLED) {
+      expect(
+        parseAarohiSalesBrainInterpretation(forgedInterpretation({ interpretationRef: ref })),
+        ref,
+      ).toBeUndefined();
+      expect(salesTurnPlanSchema.safeParse({ ...plan.plan, planRef: ref }).success, ref).toBe(
+        false,
+      );
+      expect(
+        salesTurnPlanSchema.safeParse({ ...plan.plan, interpretationRef: ref }).success,
+        ref,
+      ).toBe(false);
+    }
+  });
+
+  it('agrees with AVG-2 on what a contact shape is, for its own refs', () => {
+    // AVG-2 screens enrichment labels for the same shapes. If the two disagreed, a destination
+    // refused by one package could enter through the other -- as an AVG-7 artifact identity.
+    for (const destination of [
+      'someone@example.com',
+      'https://example.com/x',
+      'www.example.com',
+      '919812345678',
+      '98 1234 5678',
+    ]) {
+      expect(
+        createEnrichmentClaim({
+          prospectRef: PROSPECT,
+          attribute: 'BUSINESS_DISPLAY_NAME',
+          value: destination,
+          source: { kind: 'MANUAL_REVIEW', sourceRef: 'avg7-drift' },
+          observedAt: AT,
+          evidenceQuality: 'UNVERIFIED_OPERATOR_ENTERED',
+        }).ok,
+        destination,
+      ).toBe(false);
+      expect(
+        createAarohiSalesBrainInterpretation(
+          interpretationInput({ interpretationRef: destination }),
+        ).ok,
+        destination,
+      ).toBe(false);
     }
   });
 });

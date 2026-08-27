@@ -249,7 +249,91 @@ same time for the two waists and for retrieval: `model-gateway`, `model-gateway-
 `model-reply-adapter`, `prompt-registry`, Mastra, provider SDK names, `renderPrompt`, `systemPrompt`,
 `embedding` and `vectorStore`.
 
-### 15. Three mutation findings worth recording
+### 15. Two reference ROLES, because a downstream stage may not narrow an upstream grammar
+
+An owner-review correction, and the more consequential of the two.
+
+The first AVG-7 head screened **every** reference — inherited and local alike — with one contact-safe
+grammar. That is two mistakes wearing one coat.
+
+**AVG-1 and AVG-5 already certify their own opaque identifier grammars, and neither applies a contact
+screen.** Both are exactly `min(1).max(128).regex(/^[A-Za-z0-9._:-]+$/)`. So `919812345678` is a
+perfectly canonical `instagramMessageRef` — provider-native identifiers are frequently numeric — and
+`www.example.com` is a canonical opaque token too. When AVG-7 re-screened those on rebuild, a value
+the upstream stage OWNS and had already certified came back INVALID from the downstream stage. A
+canonical AVG-5 conversation could not produce an AVG-7 interpretation, and a canonical AVG-1 Core
+observation with a numeric `coreLookupRef` could not produce a plan.
+
+That is a cross-stage incompatibility, and underneath it is a governance error: a downstream package
+silently narrowing an identity grammar it does not own. The safety argument does not rescue it
+either. An inherited token is an **identifier**; treating it as a destination because it happens to
+be digits is precisely the reinterpretation this architecture forbids, and nothing in this repository
+can dial one.
+
+**Meanwhile the two references AVG-7 genuinely introduces were under-screened.**
+`interpretationRef` and `planRef` are AVG-7's own artifact identities, invented by a caller and named
+by nobody upstream — and they were screened by contact SHAPES alone, so `9_1_9_8_1_2_3_4_5_6_7_8`,
+`91:98:12:34:56:78` and `avg7:91_9812_345678` walked straight through a field whose comment promised
+it carried no destination. That is the separator-drift class AVG-6 corrected.
+
+So the grammars are split by ROLE:
+
+| Role                              | Fields                                                                                                                             | Grammar                                                                                            |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| **Inherited upstream binding**    | `prospectRef`, `instagramConversationRef`, `instagramThreadRef`, `instagramParticipantRef`, `instagramMessageRef`, `coreLookupRef` | `UPSTREAM_OPAQUE_REF` — the certified grammar, restated exactly, with **no** added screen          |
+| **AVG-7-local artifact identity** | `interpretationRef`, `planRef`                                                                                                     | `AVG7_LOCAL_ARTIFACT_REF` — opaque class **and** contact shapes **and** a count of digits anywhere |
+
+Both are private. The same split applies to the interpretation input schema, the public
+interpretation schema, the turn input schema and the public plan schema, so the builder and the
+parser agree about which role each field plays.
+
+**This is the AVG-6 lesson applied WITHOUT changing AVG-5.** AVG-6 solved its own separator drift by
+adding a digit count to the fields IT owns — the WhatsApp participant reference and `sourceRef` —
+and explicitly declined to tighten the Instagram participant reference for the same
+cross-stage reason recorded in ADR-0123. AVG-7 does the same thing one stage further along: the
+count goes on the two references AVG-7 introduces, and nowhere near the ones it inherits. No AVG-1,
+AVG-5 or AVG-6 source changed.
+
+### 16. The sales-ethics ceiling was one prohibition short
+
+The second owner-review correction. ADR-0085's permanent ceiling binds Aarohi to Anisha's sales
+ethics, and lists — among the guarantees, the invented urgency and the invented scarcity — **no
+hidden material package limitation.** The first AVG-7 head machine-represented every member of that
+list except this one, while the containment spec described its list as "the AVG-7 sales-ethics
+prohibitions as literal falsehoods". A ceiling with a member missing is not a ceiling, and this
+stage's entire value is making those prohibitions machine-visible.
+
+`materialPackageLimitationHidden: false` is now on the interface, the schema, the frozen constant,
+every reachable-plan assertion, the forged-posture refusals and the containment list. A spec now
+walks the canonical ceiling member by member and asserts each has a literal — except "no contact
+after rejection/opt-out", which is enforced by PRECEDENCE rather than by a literal, because it is a
+decision about what happens next rather than a claim about what was done.
+
+**It is an ethics declaration, not a commercial data field.** `false` means the brain did not select
+which parts of an offer to leave out. It does **not** mean AVG-7 knows what the limitations are, may
+describe a package, or holds commercial context — it cannot, and a commercial question is still
+`REQUEST_CORE_COMMERCIAL_CONTEXT` with `futureModelDraftEligible: false` until AVG-8 supplies
+Core-sourced truth. A spec asserts exactly that pairing, so the declaration cannot later be read as
+permission.
+
+Hiding the inconvenient half of an answer is the quietest failure on the ceiling and the easiest for
+a fluent drafter to reach for, which is a reason to write it down rather than a reason it was
+reasonable to omit.
+
+### 17. A fourth mutation finding, from the owner-review round
+
+Adding the missing prohibition exposed a second-order gap. The containment spec's ethics list is a
+list somebody wrote down, and **nothing asserted it was complete** — a mutation deleting one entry
+left a passing test that silently checked one fewer prohibition. That is precisely how the
+package-limitation omission survived the first head in the first place: the list described itself as
+"the AVG-7 sales-ethics prohibitions" while being short one.
+
+The list is now asserted against the POSTURE, in both directions: every field the posture pins
+`false` must be named in the list, and every name in the list must be such a field. Deleting an
+entry fails; adding a prohibition to the posture without listing it fails too, which is the direction
+that matters as AVG-8 onward extend the ceiling.
+
+### 18. Three mutation findings from the initial proof
 
 Eighty-three negative mutations were applied, and three initially SURVIVED. Each was a real gap in
 the assertions rather than a weak mutation, and each was closed by strengthening the boundary.

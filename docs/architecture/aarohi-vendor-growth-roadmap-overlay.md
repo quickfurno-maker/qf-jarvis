@@ -276,7 +276,15 @@ activation. Exact first-proof boundaries:
   a draft. It is false for every strategy still waiting on a fact Core has not supplied.
 - **Every sales-ethics prohibition is a `z.literal(false)` on the plan** — commitment, commercial
   truth, price, discount, lead-volume/revenue/conversion guarantees, invented urgency, invented
-  scarcity, unsupported social proof, contractual commitment.
+  scarcity, unsupported social proof, **hidden material package limitation**, contractual
+  commitment. The one ceiling member without a literal is "no contact after rejection/opt-out",
+  which the strategy precedence enforces instead.
+- **References carry two roles, and only one of them is AVG-7's to screen.** Bindings inherited from
+  certified AVG-1 and AVG-5 artifacts keep the upstream opaque grammar untouched — a numeric
+  provider identifier is an identifier, and a downstream stage may not narrow a grammar it does not
+  own. AVG-7's own `interpretationRef` and `planRef` additionally carry the contact shapes and a
+  count of digits anywhere, so a destination cannot be smuggled into the two references AVG-7
+  invents.
 - Zero model calls, prompt resolutions, retrievals, Meta API calls, n8n executions, provider sends,
   channel sends, communication requests, approvals, authorizations, execution intents, acquisition
   case transitions, persistence, managed migrations, production entries and new third-party
