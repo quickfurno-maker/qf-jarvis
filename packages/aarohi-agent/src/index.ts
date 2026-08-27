@@ -435,3 +435,31 @@ export type {
   CoreCommercialFactsOutcome,
   CoreCommercialPackageOption,
 } from './contracts/avg8-commercial-truth.js';
+
+export {
+  AAROHI_AVG9_CONTRACT_VERSION,
+  AAROHI_AVG9_REGISTRATION_PROCESS_SOURCE_POSTURE,
+  AAROHI_REGISTRATION_ASSISTANCE_POSTURE,
+  CORE_REGISTRATION_ASSISTANCE_OUTCOME,
+  CORE_REGISTRATION_PROCESS_AVAILABILITIES,
+  REGISTRATION_ASSISTANCE_REFUSALS,
+  aarohiRegistrationAssistanceBriefSchema,
+  aarohiRegistrationAssistancePostureSchema,
+  coreRegistrationProcessContextSchema,
+  createCoreRegistrationProcessContext,
+  parseAarohiRegistrationAssistanceBrief,
+  parseCoreRegistrationProcessContext,
+  prepareAarohiRegistrationAssistanceBrief,
+} from './contracts/avg9-registration-integration.js';
+export type {
+  AarohiAvg9ContractVersion,
+  AarohiRegistrationAssistanceBrief,
+  AarohiRegistrationAssistanceBriefResult,
+  AarohiRegistrationAssistancePosture,
+  AarohiRegistrationAssistanceRefusal,
+  AarohiRegistrationProcessSourcePosture,
+  CoreRegistrationAssistanceOutcome,
+  CoreRegistrationProcessAvailability,
+  CoreRegistrationProcessContext,
+  CoreRegistrationProcessContextResult,
+} from './contracts/avg9-registration-integration.js';

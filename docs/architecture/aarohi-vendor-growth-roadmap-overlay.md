@@ -10,19 +10,21 @@ rollout remains **OFF**, and no package or application imports the Aarohi packag
 **Offline DOMAIN status.** This overlay once said "nothing here is implemented", which stopped being
 true at AVG-1. What exists is contracts and pure functions over frozen values:
 
-- **AVG-0 through AVG-7 — implemented as certified offline domains**
+- **AVG-0 through AVG-8 — implemented as certified offline domains**
   ([ADR-0085](../decisions/ADR-0085-qfj-p12-aarohi-vendor-growth-and-roadmap-reconciliation.md),
   [ADR-0111](../decisions/ADR-0111-qfj-p12-avg2-aarohi-discovery-enrichment-domain.md),
   [ADR-0112](../decisions/ADR-0112-qfj-p12-avg3-aarohi-scoring-outreach-eligibility-domain.md),
   [ADR-0113](../decisions/ADR-0113-qfj-p12-avg4-aarohi-outreach-workspace-domain.md),
   [ADR-0122](../decisions/ADR-0122-qfj-p12-avg5-aarohi-instagram-conversation-offline-domain.md),
   [ADR-0123](../decisions/ADR-0123-qfj-p12-avg6-aarohi-omnichannel-identity-whatsapp-handoff-offline-domain.md),
-  [ADR-0124](../decisions/ADR-0124-qfj-p12-avg7-aarohi-sales-brain-offline-domain.md)).
-- **AVG-8 — offline implementation proof defined by
-  [ADR-0125](../decisions/ADR-0125-qfj-p12-avg8-aarohi-commercial-truth-package-engine-offline-domain.md).**
+  [ADR-0124](../decisions/ADR-0124-qfj-p12-avg7-aarohi-sales-brain-offline-domain.md),
+  [ADR-0125](../decisions/ADR-0125-qfj-p12-avg8-aarohi-commercial-truth-package-engine-offline-domain.md)).
+- **AVG-9 — offline implementation proof defined by
+  [ADR-0126](../decisions/ADR-0126-qfj-p12-avg9-aarohi-registration-integration-offline-domain.md).**
   It adds no live Core read, runtime, model call, prompt resolution, retrieval, provider, channel,
-  transport or execution activation, and originates no commercial value of any kind.
-- **AVG-9 through AVG-12 — planned and unimplemented.**
+  transport or execution activation, performs no registration, describes no registration workflow
+  and mutates no marketplace state.
+- **AVG-10 through AVG-12 — planned and unimplemented.**
 
 Recording a capability is still not implementing one, and implementing an offline domain is still not
 activating anything.
@@ -339,6 +341,50 @@ read and no production activation. Exact first-proof boundaries:
 ### AVG-9 — Registration Integration
 Guiding a converted prospect into QuickFurno registration. Registration is performed by Core; Aarohi
 assists and observes. No marketplace mutation occurs from this side.
+
+**The offline DOMAIN for this stage is defined by
+[ADR-0126](../decisions/ADR-0126-qfj-p12-avg9-aarohi-registration-integration-offline-domain.md).**
+Runtime remains PLANNED / DISABLED; this capability description claims no deployment, no live Core
+read, no registration and no production activation. Exact first-proof boundaries:
+
+- **Core owns registration, and this side has no route to it.** QuickFurno's registration surface is
+  a WRITE — one service function taking a business name, a phone number, an email address and a GST
+  number. It is named in the containment scan so it cannot be called, its input type is banned by
+  name, and no field anywhere in the domain could hold what it takes.
+- **There is no Core registration-process READ contract, so none is mirrored — and none is
+  invented.** AVG-8 could mirror seven fields because Core exposed seven fields. At the inspected
+  commit Core exposes no service, route or API answering "what does registering involve", so this
+  stage carries a closed AVAILABILITY token and an OPAQUE reference to Core-authored material, and
+  holds no step, requirement, document list, verification flag, endpoint or duration. The honest
+  answer to an absent contract is a reference, not a plausible five-step wizard.
+- **Only a registration question is admitted, and the strategy alone does not settle that.** AVG-7
+  routes both `REGISTRATION_PROCESS` and `PAYMENT_OR_ACTIVATION` to `REQUEST_CORE_PROCESS_CONTEXT`,
+  so the re-derived INTENT is checked as well and a payment or activation plan is refused by name.
+  Payment and activation remain AVG-10's.
+- **The AVG-7 plan is RE-DERIVED, never believed, and compared structurally.** The comparison walks
+  the recomputed artifact's own keys rather than an enumerated field list, so a governed field added
+  to AVG-7 later is compared rather than silently ignored. Re-derivation carries AVG-7's latest-turn
+  binding, its causal chain and the CURRENT AVG-1 existing-vendor gate across, and AVG-7's own
+  refusal is surfaced rather than flattened, so a stale reading and a suppressed prospect stay
+  distinguishable.
+- **Exactly `NOT_REGISTERED` proceeds.** A prospect Core now reports as registered, active,
+  suppressed or unresolved yields no brief, however interested the conversation sounds — and
+  interest, priority and identity evidence are not inputs to the gate in the first place.
+- **The context must answer the request, and belong to it.** The observation is bound to the
+  prospect and to the Core lookup the gate ran under, and `plan.plannedAt ≤ context.observedAt ≤
+  brief.preparedAt` by semantic UTC instant. When Core holds no process context there is no
+  fallback, no default and no guess.
+- **A closed BRIEF, and no sentence anywhere.** No explanation, instruction, guidance, script,
+  summary or reply field. The guiding belongs to a later governed composition grounded in Core's own
+  material; in a registration conversation the un-grounded half is a signup process nobody wrote.
+- **The acquisition case is not advanced as a substitute for Core evidence.**
+  `acquisitionCaseMutated: false` and `registrationMutated: false` on every brief, alongside
+  `registrationConfirmed: false`, `vendorRecordCreated: false`, `marketplaceMutated: false` and
+  `requiresCoreRegistrationExecution: true`. A local state is not proof of a Core business state.
+- Zero registrations, live Core reads, Supabase clients, QuickFurno imports, model calls, prompt
+  resolutions, retrievals, payments, activations, Anisha handoffs, acquisition-case transitions,
+  communication requests, approvals, authorizations, execution intents, provider or channel sends,
+  persistence, managed migrations, production entries and new third-party dependencies.
 
 ### AVG-10 — Payment, Activation and Anisha Handoff
 Payment follow-up during acquisition, and the moment the relationship changes hands. Payment and

@@ -18,11 +18,13 @@ import { describe, expect, it } from 'vitest';
 import {
   AAROHI_AVG5_CHANNEL,
   AAROHI_COMMERCIAL_FACTS_POSTURE,
+  AAROHI_REGISTRATION_ASSISTANCE_POSTURE,
   AAROHI_SALES_BRAIN_POSTURE,
   IDENTITY_LINK_POSTURE,
   INSTAGRAM_OUTBOUND_CANDIDATE_POSTURE,
   WHATSAPP_CHANNEL_HANDOFF_POSTURE,
   aarohiCommercialFactsPostureSchema,
+  aarohiRegistrationAssistancePostureSchema,
   identityLinkPostureSchema,
   instagramOutboundCandidatePostureSchema,
   salesBrainPostureSchema,
@@ -57,7 +59,7 @@ const codeOnly = (text: string): string =>
 const productionFiles = (): readonly { readonly file: string; readonly code: string }[] =>
   walk(SRC, true).map((file) => ({ file, code: codeOnly(readFileSync(file, 'utf8')) }));
 
-describe('Aarohi remains a DOMAIN, not a runtime through AVG-8', () => {
+describe('Aarohi remains a DOMAIN, not a runtime through AVG-9', () => {
   it('reaches no channel, provider, execution path or credential', () => {
     // ### Why these are SHAPES rather than bare words, from AVG-5 onward
     //
@@ -549,6 +551,182 @@ describe('Aarohi remains a DOMAIN, not a runtime through AVG-8', () => {
     }
   });
 
+  it('reaches no registration write path, and stores no registration secret or destination', () => {
+    // AVG-9's risk surface is different in kind from AVG-8's, and worth naming separately.
+    //
+    // QuickFurno's registration surface is a WRITE. `registerVendor` takes a business name, a phone
+    // number, an email address, a WhatsApp number and a GST number and inserts a row; there is no
+    // registration-process READ contract to mirror. So the first group bans the write path by name
+    // and the second bans its INPUT — because a registration domain that acquired somewhere to put
+    // a phone number would be one edit from calling it, whatever the field was called.
+    //
+    // The third group is the failure this stage is really designed against: a plausible signup
+    // process. Nothing here may name a step, a requirement, a document, an identity artefact or a
+    // one-time code, because every one of those would be Aarohi describing a workflow QuickFurno
+    // never published to it.
+    for (const { file, code } of productionFiles()) {
+      for (const forbidden of [
+        // The registration write path, by service, function and input type.
+        'registervendor',
+        'vendorregistrationinput',
+        'vendorservice',
+        'vendorauthservice',
+        'vendoraccessservice',
+        'publicvendorservice',
+        // Secrets and one-time codes, none of which this package may hold.
+        'password',
+        'otp',
+        'secret',
+        'sessiontoken',
+        'refreshtoken',
+        // An invented signup workflow, in the shapes it would actually arrive in.
+        'signup',
+        'registrationstep',
+        'registration_step',
+        'onboardingstep',
+        'onboarding_step',
+        'registrationurl',
+        'registrationendpoint',
+        'registrationform',
+        // Identity artefacts a registration wizard collects. Core's to ask for, never Aarohi's.
+        'gst',
+        'kyc',
+        'aadhaar',
+        'pan_number',
+        'bankaccount',
+        'verifymobile',
+        'documentupload',
+        'uploaddocument',
+      ]) {
+        expect(code.toLowerCase(), `${file} must not name ${forbidden}`).not.toContain(forbidden);
+      }
+    }
+  });
+
+  it('declares the AVG-9 registration ceiling as literal falsehoods, not as prose', () => {
+    const registration = AAROHI_REGISTRATION_ASSISTANCE_POSTURE as unknown as Readonly<
+      Record<string, unknown>
+    >;
+    const DECLARED_FALSE = [
+      // The observation is injected. Saying so is what keeps the rest of the file honest.
+      'processContextSourceAuthenticated',
+      // The four ways this stage could claim an authority it does not have. They are separate
+      // failures: one invents a workflow, one announces an outcome, one implies a record exists,
+      // and one would be Core's state actually moving.
+      'registrationProcessInvented',
+      'registrationConfirmed',
+      'vendorRecordCreated',
+      'registrationMutated',
+      // The overlay's own sentence — no marketplace mutation occurs from this side — and the
+      // acquisition case, which is not a substitute for Core registration evidence.
+      'marketplaceMutated',
+      'acquisitionCaseMutated',
+      // AVG-10's territory, kept out by name.
+      'paymentMutated',
+      'activationMutated',
+      'anishaHandoffExecuted',
+      // The model waist, the prompt waist and retrieval.
+      'modelCallExecuted',
+      'promptResolved',
+      'retrievalExecuted',
+      // The governed execution chain, none of which starts here.
+      'communicationRequestCreated',
+      'approvalRequestCreated',
+      'approvalDecisionCreated',
+      'communicationAuthorizationCreated',
+      'executionIntentCreated',
+      'n8nExecutionRequested',
+      'providerSendRequested',
+      'channelSendRequested',
+      'sent',
+      'delivered',
+      'productionMutation',
+      'businessEffect',
+    ] as const;
+    const DECLARED_TRUE = [
+      'assistanceContextOnly',
+      'requiresCoreRegistrationExecution',
+      'registrationProcessContextReadyForFutureGovernedAssistance',
+      'requiresCoreStatusRevalidationBeforeFutureOutboundUse',
+    ] as const;
+
+    for (const declared of DECLARED_FALSE) {
+      expect(registration[declared], declared).toBe(false);
+    }
+    for (const declared of DECLARED_TRUE) {
+      expect(registration[declared], declared).toBe(true);
+    }
+
+    // Complete in both directions, for the reason ADR-0124 records: a governance list that can
+    // quietly lose a member is a list that eventually will.
+    expect([...DECLARED_FALSE].sort()).toStrictEqual(
+      Object.entries(registration)
+        .filter(([, value]) => value === false)
+        .map(([key]) => key)
+        .sort(),
+    );
+    expect([...DECLARED_TRUE].sort()).toStrictEqual(
+      Object.entries(registration)
+        .filter(([, value]) => value === true)
+        .map(([key]) => key)
+        .sort(),
+    );
+
+    for (const forged of [
+      { registrationMutated: true },
+      { registrationConfirmed: true },
+      { registrationProcessInvented: true },
+      { vendorRecordCreated: true },
+      { marketplaceMutated: true },
+      { acquisitionCaseMutated: true },
+      { paymentMutated: true },
+      { activationMutated: true },
+      { anishaHandoffExecuted: true },
+      { processContextSourceAuthenticated: true },
+      { assistanceContextOnly: false },
+      { requiresCoreRegistrationExecution: false },
+      { requiresCoreStatusRevalidationBeforeFutureOutboundUse: false },
+    ]) {
+      expect(
+        aarohiRegistrationAssistancePostureSchema.safeParse({ ...registration, ...forged }).success,
+        JSON.stringify(forged),
+      ).toBe(false);
+    }
+  });
+
+  it('keeps AVG-9 clear of acquisition ownership and of AVG-10 entirely', () => {
+    const avg9 = codeOnly(
+      readFileSync(join(SRC, 'contracts', 'avg9-registration-integration.ts'), 'utf8'),
+    );
+    for (const forbidden of [
+      // Acquisition-case ownership. A local state cannot become proof of a Core business state, so
+      // AVG-9 does not reach the transition function at all rather than reaching it carefully.
+      'completeCoreActiveHandoff',
+      'transitionAcquisitionCase',
+      'openAcquisitionCase',
+      'REGISTRATION_STARTED',
+      'PAYMENT_PENDING',
+      'HANDED_OFF_TO_ANISHA',
+      'AWAITING_CORE_ACTIVATION',
+      'activationAttestation',
+      // AVG-10, which begins where this stage stops.
+      'purchasePackage',
+      'createVendorPackageOrder',
+      'createManualPayment',
+      'markPaymentPaid',
+      'assignPackageToVendor',
+      'grantCredits',
+      // The downstream builders a registration domain would be tempted to call next. Composition
+      // is a later, separately reviewed decision.
+      'createOutreachDraft',
+      'prepareInstagramOutboundCandidate',
+      'prepareWhatsAppChannelHandoffCandidate',
+      'prepareAarohiCommercialFactsBrief',
+    ]) {
+      expect(avg9, `AVG-9 must not name ${forbidden}`).not.toContain(forbidden);
+    }
+  });
+
   it('never reaches the OTHER handoff — Aarohi ownership stays where it was', () => {
     // `completeCoreActiveHandoff` is the only route to Anisha ownership and it requires a Core
     // ACTIVE attestation. AVG-6's handoff is a CHANNEL transition, and the two must not be
@@ -813,9 +991,12 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'AAROHI_AVG8_COMMERCIAL_SCOPES',
       'AAROHI_AVG8_COMMERCIAL_SOURCE_POSTURE',
       'AAROHI_AVG8_CONTRACT_VERSION',
+      'AAROHI_AVG9_CONTRACT_VERSION',
+      'AAROHI_AVG9_REGISTRATION_PROCESS_SOURCE_POSTURE',
       'AAROHI_COMMERCIAL_FACTS_POSTURE',
       'AAROHI_ENRICHMENT_CONTRACT_VERSION',
       'AAROHI_PROSPECT_CONTRACT_VERSION',
+      'AAROHI_REGISTRATION_ASSISTANCE_POSTURE',
       'AAROHI_SALES_BRAIN_POSTURE',
       'AAROHI_SALES_CONVERSATION_INTENTS',
       'AAROHI_SALES_OBJECTION_KINDS',
@@ -831,6 +1012,8 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'CONTACT_ELIGIBILITY_REFUSALS',
       'CORE_COMMERCIAL_FACTS_OUTCOME',
       'CORE_PARTY_STATUSES',
+      'CORE_REGISTRATION_ASSISTANCE_OUTCOME',
+      'CORE_REGISTRATION_PROCESS_AVAILABILITIES',
       'CORE_STATUS_ROLE',
       'CORE_STATUS_ROLES',
       'ELIGIBLE_CORE_STATUSES',
@@ -876,6 +1059,7 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'PROSPECT_DISCOVERY_SOURCES',
       'PROSPECT_PRIORITY_MAX_POINTS',
       'PROSPECT_PRIORITY_REFUSALS',
+      'REGISTRATION_ASSISTANCE_REFUSALS',
       'SALES_TURN_REFUSALS',
       'TERMINAL_ACQUISITION_CASE_STATES',
       'WHATSAPP_CHANNEL_HANDOFF_OUTCOME',
@@ -887,6 +1071,8 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'WORKSPACE_DRAFT_STATES',
       'aarohiCommercialFactsBriefSchema',
       'aarohiCommercialFactsPostureSchema',
+      'aarohiRegistrationAssistanceBriefSchema',
+      'aarohiRegistrationAssistancePostureSchema',
       'acquisitionCaseSchema',
       'activationAttestationSchema',
       'appendCrossChannelIdentityEvidence',
@@ -897,8 +1083,10 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'coreCommercialCatalogSnapshotSchema',
       'coreCommercialPackageOptionSchema',
       'coreEligibilityObservationSchema',
+      'coreRegistrationProcessContextSchema',
       'createAarohiSalesBrainInterpretation',
       'createCoreCommercialCatalogSnapshot',
+      'createCoreRegistrationProcessContext',
       'createCrossChannelIdentityEvidenceBundle',
       'createCrossChannelIdentityEvidenceClaim',
       'createEnrichmentClaim',
@@ -929,9 +1117,11 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'isTerminalAcquisitionCaseState',
       'openAcquisitionCase',
       'parseAarohiCommercialFactsBrief',
+      'parseAarohiRegistrationAssistanceBrief',
       'parseAarohiSalesBrainInterpretation',
       'parseAarohiSalesTurnPlan',
       'parseCoreCommercialCatalogSnapshot',
+      'parseCoreRegistrationProcessContext',
       'parseCrossChannelIdentityEvidenceBundle',
       'parseCrossChannelIdentityLinkRecommendation',
       'parseEnrichmentClaim',
@@ -940,6 +1130,7 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'parseInstagramInboundObservation',
       'parseWorkspaceDraft',
       'prepareAarohiCommercialFactsBrief',
+      'prepareAarohiRegistrationAssistanceBrief',
       'prepareInstagramOutboundCandidate',
       'prepareWhatsAppChannelHandoffCandidate',
       'prospectIdentitySchema',
