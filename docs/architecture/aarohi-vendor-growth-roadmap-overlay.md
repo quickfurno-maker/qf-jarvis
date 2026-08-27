@@ -10,15 +10,16 @@ rollout remains **OFF**, and no package or application imports the Aarohi packag
 **Offline DOMAIN status.** This overlay once said "nothing here is implemented", which stopped being
 true at AVG-1. What exists is contracts and pure functions over frozen values:
 
-- **AVG-0 through AVG-4 — implemented as certified offline domains**
+- **AVG-0 through AVG-5 — implemented as certified offline domains**
   ([ADR-0085](../decisions/ADR-0085-qfj-p12-aarohi-vendor-growth-and-roadmap-reconciliation.md),
   [ADR-0111](../decisions/ADR-0111-qfj-p12-avg2-aarohi-discovery-enrichment-domain.md),
   [ADR-0112](../decisions/ADR-0112-qfj-p12-avg3-aarohi-scoring-outreach-eligibility-domain.md),
-  [ADR-0113](../decisions/ADR-0113-qfj-p12-avg4-aarohi-outreach-workspace-domain.md)).
-- **AVG-5 — offline implementation proof defined by
-  [ADR-0122](../decisions/ADR-0122-qfj-p12-avg5-aarohi-instagram-conversation-offline-domain.md) and
-  carried by PR #164.** It adds no runtime, provider, channel, transport or execution activation.
-- **AVG-6 through AVG-12 — planned and unimplemented.**
+  [ADR-0113](../decisions/ADR-0113-qfj-p12-avg4-aarohi-outreach-workspace-domain.md),
+  [ADR-0122](../decisions/ADR-0122-qfj-p12-avg5-aarohi-instagram-conversation-offline-domain.md)).
+- **AVG-6 — offline implementation proof defined by
+  [ADR-0123](../decisions/ADR-0123-qfj-p12-avg6-aarohi-omnichannel-identity-whatsapp-handoff-offline-domain.md).**
+  It adds no runtime, provider, channel, transport or execution activation, and merges no identity.
+- **AVG-7 through AVG-12 — planned and unimplemented.**
 
 Recording a capability is still not implementing one, and implementing an offline domain is still not
 activating anything.
@@ -186,6 +187,43 @@ Resolving one prospect across channels, and the transition from Instagram to Wha
 resolution is evidence-based and reviewable; a merge is a recommendation, never a silent rewrite of
 who someone is. WhatsApp remains QuickFurno's existing approved infrastructure and is not activated
 here.
+
+**The offline DOMAIN for this stage is defined by
+[ADR-0123](../decisions/ADR-0123-qfj-p12-avg6-aarohi-omnichannel-identity-whatsapp-handoff-offline-domain.md).**
+Runtime remains PLANNED / DISABLED; this capability description claims no deployment and no
+production activation. Exact first-proof boundaries:
+
+- **A merge is a RECOMMENDATION, and there is no function that merges anything.** No
+  `mergeIdentities`, no `resolveIdentity`, no field that could record that a merge happened:
+  `identityMerged`, `coreIdentityMutated`, `identityVerified` and `consentEstablished` are pinned
+  `false` by a strict schema. A recommendation carries the exact evidence references it rests on, so
+  a human can read the same evidence and disagree.
+- **No destination is stored, under any name.** A WhatsApp participant reference is an opaque
+  channel-local handle screened by both an opaque character class and the same contact shapes AVG-2
+  uses — so a phone number, an E.164 string, a `wa.me` link, an address or a bare run of digits
+  cannot enter the package. Resolving a recipient stays Core's, at execution time.
+- **Identity evidence is untrusted, bounded and reviewable.** Claims say only SUPPORTS or
+  CONTRADICTS, carry the posture `INJECTED_OFFLINE_IDENTITY_EVIDENCE`, and hold no message text, no
+  consent, no Core identity and no confidence number. The bundle is immutable, capped, deduplicated
+  and canonically ordered by the semantic UTC instant; its public parser certifies the whole
+  aggregate rather than a bag of valid claims.
+- **The recommendation policy is deterministic and closed.** A positive link needs two independent
+  corroborating legs from distinct sources, at least one stronger than public corroboration, and no
+  contradiction at all. Unrecorded provenance contributes nothing. There is no threshold, no score
+  and no model. Everything else is `REVIEW_REQUIRED` — a person looking.
+- **The WhatsApp CHANNEL handoff is not the Anisha OWNERSHIP handoff**, and the names say so. AVG-6
+  transitions no acquisition case, never calls `completeCoreActiveHandoff`, and states
+  `acquisitionCaseMutated: false` and `anishaHandoffExecuted: false`.
+- **The candidate binds a canonical AVG-5 conversation and a positive recommendation**, carries no
+  message, template or number, and re-runs the CURRENT Core gate — so identity evidence never becomes
+  acquisition permission and a stale eligible observation decides nothing.
+- **What is still owed is stated:** Core must resolve the recipient, revalidate consent and
+  revalidate eligibility at execution time, all three as literals on the candidate.
+- **The shared governed channel vocabulary is unchanged.** `whatsapp` was already a member and stays
+  one; naming the destination channel of a transition is not activating it, and adopting the real
+  execution path remains QFJ-P09's separately reviewed work.
+- Zero Meta API calls, WhatsApp sends, n8n executions, provider sends, channel sends, model calls,
+  persistence, managed migrations, production entries and new third-party dependencies.
 
 ### AVG-7 — Aarohi Sales Brain
 The conversation and objection-handling behaviour for acquisition. Bounded by the same sales-ethics
