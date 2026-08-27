@@ -95,8 +95,10 @@ a **stop**, not a proceed.
 ### AVG-0 — Architecture and Governance
 The governing decision, agent identity, the permanent split against Riya/Anisha/Jarvis, the ACTIVE
 handoff, the existing-vendor gate, and the authority ceiling above. **This stage is what
-[ADR-0085](../decisions/ADR-0085-qfj-p12-aarohi-vendor-growth-and-roadmap-reconciliation.md) records;
-everything after it is planned and unimplemented.**
+[ADR-0085](../decisions/ADR-0085-qfj-p12-aarohi-vendor-growth-and-roadmap-reconciliation.md)
+records.** Later AVG stages may have certified offline-domain implementations, as tracked in the
+Offline DOMAIN status above; runtime activation remains PLANNED / DISABLED for every stage unless
+separately authorized.
 
 ### AVG-1 — Prospect Identity and Acquisition Case Domain
 A prospect identity distinct from a Core vendor identity, and a durable acquisition case. A prospect
@@ -199,9 +201,11 @@ production activation. Exact first-proof boundaries:
   `false` by a strict schema. A recommendation carries the exact evidence references it rests on, so
   a human can read the same evidence and disagree.
 - **No destination is stored, under any name.** A WhatsApp participant reference is an opaque
-  channel-local handle screened by both an opaque character class and the same contact shapes AVG-2
-  uses — so a phone number, an E.164 string, a `wa.me` link, an address or a bare run of digits
-  cannot enter the package. Resolving a recipient stays Core's, at execution time.
+  channel-local handle screened three ways: an opaque character class, the same contact shapes AVG-2
+  uses, and a count of digits anywhere in the reference — so a phone number, an E.164 string, a
+  `wa.me` link, an address, a bare run of digits or a run split by `_` or `:` cannot enter the
+  package. The same three screens apply to `sourceRef`, so provenance is not a side channel.
+  Resolving a recipient stays Core's, at execution time.
 - **Identity evidence is untrusted, bounded and reviewable.** Claims say only SUPPORTS or
   CONTRADICTS, carry the posture `INJECTED_OFFLINE_IDENTITY_EVIDENCE`, and hold no message text, no
   consent, no Core identity and no confidence number. The bundle is immutable, capped, deduplicated
@@ -210,13 +214,17 @@ production activation. Exact first-proof boundaries:
 - **The recommendation policy is deterministic and closed.** A positive link needs two independent
   corroborating legs from distinct sources, at least one stronger than public corroboration, and no
   contradiction at all. Unrecorded provenance contributes nothing. There is no threshold, no score
-  and no model. Everything else is `REVIEW_REQUIRED` — a person looking.
+  and no model. Everything else is `REVIEW_REQUIRED` — a person looking. A recommendation whose own
+  instant precedes the latest evidence it names is refused outright rather than filed as a judgement.
 - **The WhatsApp CHANNEL handoff is not the Anisha OWNERSHIP handoff**, and the names say so. AVG-6
   transitions no acquisition case, never calls `completeCoreActiveHandoff`, and states
   `acquisitionCaseMutated: false` and `anishaHandoffExecuted: false`.
-- **The candidate binds a canonical AVG-5 conversation and a positive recommendation**, carries no
-  message, template or number, and re-runs the CURRENT Core gate — so identity evidence never becomes
-  acquisition permission and a stale eligible observation decides nothing.
+- **The candidate binds a canonical AVG-5 conversation, the canonical evidence bundle and a positive
+  recommendation it re-derives from that bundle.** A parsed artifact is not a policy proof, so the
+  deterministic policy is re-run and must reproduce the supplied recommendation exactly, evidence
+  references included; a forged positive naming invented evidence builds nothing. The candidate
+  carries no message, template or number, and re-runs the CURRENT Core gate — so identity evidence
+  never becomes acquisition permission and a stale eligible observation decides nothing.
 - **What is still owed is stated:** Core must resolve the recipient, revalidate consent and
   revalidate eligibility at execution time, all three as literals on the candidate.
 - **The shared governed channel vocabulary is unchanged.** `whatsapp` was already a member and stays

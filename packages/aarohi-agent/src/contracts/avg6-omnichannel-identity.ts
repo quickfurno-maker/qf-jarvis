@@ -34,7 +34,10 @@
  * an E.164 string, not a `wa.me` link, not a WABA or phone-number id. The character class refuses
  * most of those outright, and a conservative contact-shape screen — the same shapes AVG-2 uses,
  * named by shape rather than by platform — refuses a bare dialable run of digits that the character
- * class alone would admit.
+ * class alone would admit. A third screen simply COUNTS digits, because the owner review found that
+ * the shape screen only recognises the separators it was told about while `_` and `:` are legal
+ * opaque characters, so `9_1_9_8_1_2_3_4_5_6_7_8` was a phone number the file was claiming it could
+ * not hold.
  *
  * Resolving an actual recipient is Core's, at execution time, on the far side of a boundary that
  * does not exist yet. That is why the shared `CommunicationRequestV1` names an opaque Core recipient
@@ -131,12 +134,58 @@ function hasContactShape(text: string): boolean {
 }
 
 /**
+ * The most digits a reference may contain before it is treated as a destination.
+ *
+ * Six, because the shortest dialable number anyone would recognise is seven. This is a count, not a
+ * pattern: the owner review found that the dialable SHAPE above only recognises the separators it
+ * was told about, and `_` and `:` are both legal in the opaque character class. So
+ * `9_1_9_8_1_2_3_4_5_6_7_8` and `91:98:12:34:56:78` walked straight through a screen whose stated
+ * promise was that no destination is stored under any name.
+ */
+const MAX_NON_DESTINATION_DIGITS = 6;
+
+/**
+ * Does this reference carry enough digits to be a destination, however they are separated?
+ *
+ * Counting digits rather than enumerating separators is the conservative choice, and deliberately
+ * so. A separator allowlist has to be right about every character the surrounding grammar happens
+ * to permit, today and after the next edit to that grammar; a digit count does not care what is in
+ * between, and stays correct when the character class changes underneath it.
+ */
+function hasTooManyDestinationDigits(text: string): boolean {
+  let digits = 0;
+  for (const character of text) {
+    if (character >= '0' && character <= '9') {
+      digits += 1;
+      if (digits > MAX_NON_DESTINATION_DIGITS) return true;
+    }
+  }
+  return false;
+}
+
+/**
  * An opaque channel-local reference that carries no destination.
  *
  * Both screens apply. Neither alone is enough: the character class admits `919812345678`, and the
  * contact shapes admit `some ref` that the character class refuses.
  */
 const CHANNEL_LOCAL_REF = OPAQUE_REF.refine((one: string) => !hasContactShape(one));
+
+/**
+ * A channel-local reference that additionally cannot be a phone number in disguise.
+ *
+ * SCOPE, stated exactly, because it is narrower than the digit rule itself: this applies to the
+ * WhatsApp participant reference and to `sourceRef`. It deliberately does NOT apply to the Instagram
+ * participant reference, which is AVG-5's certified channel-local grammar — tightening it here would
+ * mean a conversation AVG-5 certifies as canonical could be refused by AVG-6, which is a
+ * cross-stage incompatibility rather than a containment improvement. The WhatsApp handle is the one
+ * a destination would actually be smuggled into, because it is the one that names the channel a
+ * message would eventually leave by; `sourceRef` gets the same screen because provenance is the
+ * natural second place to hide one, and a provenance field must not become a side channel.
+ */
+const CONTACT_SAFE_REF = CHANNEL_LOCAL_REF.refine(
+  (one: string) => !hasTooManyDestinationDigits(one),
+);
 
 const UTC_INSTANT_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{3}))?Z$/u;
 
@@ -265,10 +314,10 @@ export const identityEvidenceClaimSchema = z
     evidenceRef: OPAQUE_REF,
     prospectRef: OPAQUE_REF,
     instagramParticipantRef: CHANNEL_LOCAL_REF,
-    whatsappParticipantRef: CHANNEL_LOCAL_REF,
+    whatsappParticipantRef: CONTACT_SAFE_REF,
     relation: z.enum(IDENTITY_EVIDENCE_RELATIONS),
     sourceKind: z.enum(IDENTITY_EVIDENCE_SOURCE_KINDS),
-    sourceRef: CHANNEL_LOCAL_REF,
+    sourceRef: CONTACT_SAFE_REF,
     observedAt: UTC_INSTANT,
     sourcePosture: z.literal(IDENTITY_EVIDENCE_SOURCE_POSTURE),
   })
@@ -280,10 +329,10 @@ const identityEvidenceInputSchema = z
     evidenceRef: OPAQUE_REF,
     prospectRef: OPAQUE_REF,
     instagramParticipantRef: CHANNEL_LOCAL_REF,
-    whatsappParticipantRef: CHANNEL_LOCAL_REF,
+    whatsappParticipantRef: CONTACT_SAFE_REF,
     relation: z.enum(IDENTITY_EVIDENCE_RELATIONS),
     sourceKind: z.enum(IDENTITY_EVIDENCE_SOURCE_KINDS),
-    sourceRef: CHANNEL_LOCAL_REF,
+    sourceRef: CONTACT_SAFE_REF,
     observedAt: UTC_INSTANT,
   })
   .strict();
@@ -437,7 +486,7 @@ export const identityEvidenceBundleSchema = z
     contractVersion: z.literal(AAROHI_AVG6_CONTRACT_VERSION),
     prospectRef: OPAQUE_REF,
     instagramParticipantRef: CHANNEL_LOCAL_REF,
-    whatsappParticipantRef: CHANNEL_LOCAL_REF,
+    whatsappParticipantRef: CONTACT_SAFE_REF,
     claims: z.array(identityEvidenceClaimSchema).max(MAX_IDENTITY_EVIDENCE_CLAIMS),
   })
   .strict()
@@ -454,7 +503,7 @@ const bundleInputSchema = z
   .object({
     prospectRef: OPAQUE_REF,
     instagramParticipantRef: CHANNEL_LOCAL_REF,
-    whatsappParticipantRef: CHANNEL_LOCAL_REF,
+    whatsappParticipantRef: CONTACT_SAFE_REF,
   })
   .strict();
 
@@ -639,6 +688,19 @@ export interface CrossChannelIdentityLinkRecommendation {
   readonly posture: IdentityLinkPosture;
 }
 
+/**
+ * The fewest supporting references a `LINK_RECOMMENDED` recommendation may name.
+ *
+ * This is a LOCAL semantic invariant and nothing more. It stops a positive recommendation literally
+ * claiming `SUFFICIENT_INDEPENDENT_SUPPORT` while naming zero or one piece of evidence, which is a
+ * self-contradiction a strict schema should not have been accepting. It does NOT prove the policy
+ * was applied: a schema is shown one object, and independence is a property of the SOURCES behind
+ * the referenced claims, which live in a bundle the schema was never given. Two invented references
+ * satisfy this check. Only re-evaluating the canonical bundle proves the policy, which is what
+ * `prepareWhatsAppChannelHandoffCandidate` does before it will build anything.
+ */
+const MIN_POSITIVE_SUPPORTING_EVIDENCE_REFS = 2;
+
 const SORTED_UNIQUE_REFS = z
   .array(OPAQUE_REF)
   .max(MAX_IDENTITY_EVIDENCE_CLAIMS)
@@ -653,7 +715,7 @@ export const identityLinkRecommendationSchema = z
     recommendationRef: OPAQUE_REF,
     prospectRef: OPAQUE_REF,
     instagramParticipantRef: CHANNEL_LOCAL_REF,
-    whatsappParticipantRef: CHANNEL_LOCAL_REF,
+    whatsappParticipantRef: CONTACT_SAFE_REF,
     outcome: z.enum(IDENTITY_LINK_OUTCOMES),
     reasonCode: z.enum(IDENTITY_LINK_REASON_CODES),
     supportingEvidenceRefs: SORTED_UNIQUE_REFS,
@@ -663,13 +725,15 @@ export const identityLinkRecommendationSchema = z
   })
   .strict()
   .refine(
-    // A positive recommendation names exactly one reason, and a contradiction is never one of them.
+    // A positive recommendation names exactly one reason, a contradiction is never one of them, and
+    // it cannot claim independent support while naming fewer than two supporting references.
     (value) =>
       value.outcome === 'LINK_RECOMMENDED'
         ? value.reasonCode === 'SUFFICIENT_INDEPENDENT_SUPPORT' &&
-          value.contradictingEvidenceRefs.length === 0
+          value.contradictingEvidenceRefs.length === 0 &&
+          value.supportingEvidenceRefs.length >= MIN_POSITIVE_SUPPORTING_EVIDENCE_REFS
         : value.reasonCode !== 'SUFFICIENT_INDEPENDENT_SUPPORT',
-    'the recommendation outcome and reason code contradict one another',
+    'the recommendation outcome, reason code and evidence contradict one another',
   );
 
 /** Re-parse and REBUILD a recommendation. Detaches every array from whatever the caller holds. */
@@ -731,6 +795,13 @@ function sortedUnique(refs: readonly string[]): readonly string[] {
  * up beyond the two independent legs. Everything else is `REVIEW_REQUIRED`, which is not a failure
  * state — it is a person looking, which is the correct outcome for a question this domain cannot
  * settle.
+ *
+ * ### And it must be possible for the recommendation to have rested on the evidence
+ *
+ * Before any of the above, the recommendation's own `createdAt` must not precede the latest evidence
+ * it names. Anything else is a recommendation claiming to have considered something that had not
+ * happened yet, which is not a weak recommendation but an incoherent one, and it is refused
+ * outright rather than reported as a judgement.
  */
 export function evaluateCrossChannelIdentityLink(
   value: unknown,
@@ -743,6 +814,25 @@ export function evaluateCrossChannelIdentityLink(
   const bundle = parseCrossChannelIdentityEvidenceBundle(parsed.data.bundle);
   if (bundle === undefined) {
     return undefined;
+  }
+
+  // CAUSALITY. A recommendation cannot truthfully rest on evidence that did not yet exist when it
+  // was made, and the later `preparedAt >= createdAt` check on the handoff candidate does not
+  // repair this one: it constrains a different pair of instants. Both of these are caller-asserted
+  // canonical UTC and no clock is read here, so this compares two stated facts.
+  //
+  // Semantic INSTANTS, never spellings — `09:00:00.500Z` sorts before `09:00:00Z` as a string while
+  // being half a second later, and `09:00:00Z` and `09:00:00.000Z` are one moment written twice.
+  //
+  // `undefined`, not `REVIEW_REQUIRED`. A review outcome is an identity JUDGEMENT about evidence
+  // somebody can go and read; this input is internally impossible, and filing an impossibility as
+  // an opinion would put it in front of a reviewer as though it were one. An empty bundle has no
+  // evidence instant at all, so any `createdAt` remains coherent.
+  const createdAtMs = canonicalInstantEpochMs(parsed.data.createdAt);
+  for (const claim of bundle.claims) {
+    if (canonicalInstantEpochMs(claim.observedAt) > createdAtMs) {
+      return undefined;
+    }
   }
 
   const contradicting = bundle.claims.filter(
@@ -961,7 +1051,7 @@ export const whatsappChannelHandoffCandidateSchema = z
     instagramConversationRef: OPAQUE_REF,
     instagramThreadRef: OPAQUE_REF,
     instagramParticipantRef: CHANNEL_LOCAL_REF,
-    whatsappParticipantRef: CHANNEL_LOCAL_REF,
+    whatsappParticipantRef: CONTACT_SAFE_REF,
     identityRecommendationRef: OPAQUE_REF,
     coreStatus: z.literal('NOT_REGISTERED'),
     coreLookupRef: OPAQUE_REF,
@@ -973,7 +1063,18 @@ export const whatsappChannelHandoffCandidateSchema = z
 export const WHATSAPP_CHANNEL_HANDOFF_REFUSALS = [
   'HANDOFF_INPUT_INVALID',
   'INSTAGRAM_CONVERSATION_INVALID',
+  /** The evidence bundle is not a canonical bundle. A shape failure, before any policy runs. */
+  'IDENTITY_EVIDENCE_BUNDLE_INVALID',
+  /** The recommendation is malformed. Also a shape failure. */
   'IDENTITY_RECOMMENDATION_INVALID',
+  /**
+   * Both parse, and re-running the canonical policy over the canonical bundle does not reproduce
+   * this recommendation. Kept separate from the two above and from the one below on purpose: a
+   * malformed object, an honestly-evaluated `REVIEW_REQUIRED`, and a well-formed object whose
+   * PROVENANCE does not hold up are three different things a reviewer would want to tell apart, and
+   * one vague code for all three would lose exactly the distinction this refusal exists to make.
+   */
+  'IDENTITY_RECOMMENDATION_POLICY_MISMATCH',
   'IDENTITY_LINK_NOT_RECOMMENDED',
   'IDENTITY_BINDING_MISMATCH',
   'CORE_GATE_REFUSED',
@@ -996,17 +1097,79 @@ export type WhatsAppChannelHandoffCandidateResult =
     };
 
 /**
+ * Are these two recommendations the same recommendation, field for field?
+ *
+ * Value equality, never object identity: the whole point is to compare something a caller handed in
+ * against something this file computed, so they are necessarily different objects. Every field
+ * counts, and the evidence references count MOST — they are the part a forger would change while
+ * leaving everything else looking impeccable.
+ */
+function sameEvidenceRefs(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((one, index) => one === right[index]);
+}
+
+/**
+ * Value equality for a field the PARSER stamps from a constant.
+ *
+ * `contractVersion` and every posture field are pinned by `z.literal`, so both sides of those
+ * comparisons are the same constant and neither term can fail today. They are compared anyway,
+ * because "every field" is the invariant this helper exists to enforce and a term omitted now is a
+ * term nobody adds back on the day the parser stops stamping it. Routed through a generic so the
+ * comparison is a real runtime one rather than something the type system folds away — and so that
+ * this note, rather than a silently deleted line, is what a reader finds.
+ */
+function sameStampedValue<T>(left: T, right: T): boolean {
+  return left === right;
+}
+
+/**
+ * Every field of the canonical posture, compared.
+ *
+ * The keys come from the canonical posture VALUE rather than from a list written out here, so a
+ * posture field added later is compared without anyone remembering to add it.
+ */
+function sameIdentityLinkPosture(left: IdentityLinkPosture, right: IdentityLinkPosture): boolean {
+  const keys = Object.keys(IDENTITY_LINK_POSTURE) as readonly (keyof IdentityLinkPosture)[];
+  return keys.every((key) => sameStampedValue(left[key], right[key]));
+}
+
+function sameIdentityLinkRecommendation(
+  left: CrossChannelIdentityLinkRecommendation,
+  right: CrossChannelIdentityLinkRecommendation,
+): boolean {
+  return (
+    sameStampedValue(left.contractVersion, right.contractVersion) &&
+    left.recommendationRef === right.recommendationRef &&
+    left.prospectRef === right.prospectRef &&
+    left.instagramParticipantRef === right.instagramParticipantRef &&
+    left.whatsappParticipantRef === right.whatsappParticipantRef &&
+    left.outcome === right.outcome &&
+    left.reasonCode === right.reasonCode &&
+    sameEvidenceRefs(left.supportingEvidenceRefs, right.supportingEvidenceRefs) &&
+    sameEvidenceRefs(left.contradictingEvidenceRefs, right.contradictingEvidenceRefs) &&
+    left.createdAt === right.createdAt &&
+    sameIdentityLinkPosture(left.posture, right.posture)
+  );
+}
+
+/**
  * What a caller may state when preparing a candidate.
  *
  * Note what is absent: no message, no body, no template, no phone number, no target participant of
  * its own — the WhatsApp handle comes from the recommendation, and the Instagram identity comes from
  * the conversation. There is also no field for the channels, the outcome, the posture, the Core
  * status or the contract version.
+ *
+ * `evidenceBundle` is REQUIRED, and it is the evidence itself rather than anything derived from it.
+ * There is no field for a verdict, a confidence, a merge state, a "verified" flag or a separate list
+ * of supporting references, because every one of those would be the caller telling this function
+ * what the evidence means instead of showing it the evidence.
  */
 const handoffInputSchema = z
   .object({
     candidateRef: OPAQUE_REF,
     conversation: z.unknown(),
+    evidenceBundle: z.unknown(),
     recommendation: z.unknown(),
     coreObservation: z.unknown(),
     preparedAt: UTC_INSTANT,
@@ -1015,6 +1178,27 @@ const handoffInputSchema = z
 
 /**
  * Prepare an inert Instagram-to-WhatsApp channel handoff candidate.
+ *
+ * ### A parsed artifact is not a policy proof
+ *
+ * The owner review of the first AVG-6 head found this function trusting a recommendation because it
+ * SAID `LINK_RECOMMENDED`. Everything about that object was certified — strict schema, closed
+ * outcome, closed reason code, pinned posture, canonical references, matching bindings — and none of
+ * it was evidence. A caller could hand-write a positive recommendation naming two references that
+ * existed nowhere, and this function had nothing to check it against, because the evidence was not
+ * one of its arguments.
+ *
+ * That is the general failure the whole architecture is arranged against: a typed, parsed artifact
+ * standing in for the provenance it merely describes. A recommendation on its own is powerless, so
+ * the defect is not in producing one. The defect is HERE, at the first point where a recommendation
+ * turns into downstream semantic state.
+ *
+ * So the canonical bundle is required, and the policy is RE-RUN over it. The supplied recommendation
+ * must be reproduced EXACTLY — every field, evidence references included — by
+ * `evaluateCrossChannelIdentityLink` applied to that bundle. Not "does it agree about the outcome":
+ * a forged positive whose references are invented agrees about the outcome. The question this
+ * function asks is whether this exact evidence, under the canonical policy, produces this exact
+ * recommendation, and nothing short of that will build a candidate.
  *
  * ### Identity evidence is not acquisition permission
  *
@@ -1050,6 +1234,16 @@ export function prepareWhatsAppChannelHandoffCandidate(
     });
   }
 
+  // The canonical evidence bundle, parsed by the same public parser everything else uses, so its
+  // aggregate invariant — binding, uniqueness, bound, canonical order — is certified here too.
+  const bundle = parseCrossChannelIdentityEvidenceBundle(parsed.data.evidenceBundle);
+  if (bundle === undefined) {
+    return Object.freeze({
+      ok: false as const,
+      refusal: 'IDENTITY_EVIDENCE_BUNDLE_INVALID' as const,
+    });
+  }
+
   const recommendation = parseCrossChannelIdentityLinkRecommendation(parsed.data.recommendation);
   if (recommendation === undefined) {
     return Object.freeze({
@@ -1058,21 +1252,44 @@ export function prepareWhatsAppChannelHandoffCandidate(
     });
   }
 
-  if (recommendation.outcome !== 'LINK_RECOMMENDED') {
+  // Everything must be about the same person and the same two handles. A recommendation about
+  // somebody else is not weak evidence about this prospect; it is a different question entirely,
+  // and a bundle about a different pair is evidence for a different question again.
+  if (
+    recommendation.prospectRef !== conversation.prospectRef ||
+    recommendation.instagramParticipantRef !== conversation.instagramParticipantRef ||
+    bundle.prospectRef !== recommendation.prospectRef ||
+    bundle.instagramParticipantRef !== recommendation.instagramParticipantRef ||
+    bundle.whatsappParticipantRef !== recommendation.whatsappParticipantRef
+  ) {
+    return Object.freeze({ ok: false as const, refusal: 'IDENTITY_BINDING_MISMATCH' as const });
+  }
+
+  // THE POLICY, RE-RUN. Seeded with the supplied recommendation's own reference and instant, so the
+  // only thing that can differ is what the canonical policy concludes from the canonical evidence.
+  // `undefined` here means the pairing is not merely wrong but impossible — the recommendation
+  // predates its own evidence — which is a provenance failure like any other.
+  const reEvaluated = evaluateCrossChannelIdentityLink({
+    recommendationRef: recommendation.recommendationRef,
+    bundle,
+    createdAt: recommendation.createdAt,
+  });
+  if (reEvaluated === undefined || !sameIdentityLinkRecommendation(reEvaluated, recommendation)) {
+    return Object.freeze({
+      ok: false as const,
+      refusal: 'IDENTITY_RECOMMENDATION_POLICY_MISMATCH' as const,
+    });
+  }
+
+  // Only now is the outcome worth reading, because only now is it known to have been earned. Note
+  // that this reads the RE-EVALUATED outcome: the supplied one is by this point proven identical,
+  // and reading the derived value is the honest way to say which of the two is authoritative.
+  if (reEvaluated.outcome !== 'LINK_RECOMMENDED') {
     // `REVIEW_REQUIRED` is a person looking, not a slower yes.
     return Object.freeze({
       ok: false as const,
       refusal: 'IDENTITY_LINK_NOT_RECOMMENDED' as const,
     });
-  }
-
-  // The recommendation must be about the conversation in hand. A recommendation about somebody else
-  // is not weak evidence about this prospect; it is a different question entirely.
-  if (
-    recommendation.prospectRef !== conversation.prospectRef ||
-    recommendation.instagramParticipantRef !== conversation.instagramParticipantRef
-  ) {
-    return Object.freeze({ ok: false as const, refusal: 'IDENTITY_BINDING_MISMATCH' as const });
   }
 
   // THE CURRENT CORE GATE, delegated to AVG-1 and not restated. The status map lives in one place.

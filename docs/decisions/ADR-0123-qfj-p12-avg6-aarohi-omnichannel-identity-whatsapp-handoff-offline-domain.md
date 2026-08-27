@@ -77,16 +77,48 @@ A containment spec reads the AVG-6 source and asserts every one of those names a
 
 ### 3. No destination is stored, under any name
 
-A WhatsApp participant reference is an OPAQUE channel-local handle. Two screens apply and neither
-alone is enough: the opaque character class refuses `@`, `/`, `+` and whitespace, which rules out an
-address, a link and most written numbers; and a conservative contact-shape screen — the same shapes
-AVG-2 uses, named by SHAPE rather than by platform — refuses a bare run of seven or more digits,
-which is exactly what a phone number is once somebody strips the punctuation. The same screen applies
-to `sourceRef`, because provenance is a natural place to hide one.
+A WhatsApp participant reference is an OPAQUE channel-local handle. Three screens apply and no one
+of them is enough: the opaque character class refuses `@`, `/`, `+` and whitespace, which rules out
+an address, a link and most written numbers; a conservative contact-shape screen — the same shapes
+AVG-2 uses, named by SHAPE rather than by platform — refuses a dialable run of seven or more digits;
+and a digit COUNT refuses seven or more digits anywhere in the reference, whatever separates them.
+The same three screens apply to `sourceRef`, because provenance is a natural place to hide one.
+
+**The third screen is an owner-review correction, and the reason it exists is worth keeping.** The
+shape screen recognises the separators it was told about — whitespace, brackets, `.`, `+` and `-` —
+and the opaque character class independently permits `_` and `:`. So `9_1_9_8_1_2_3_4_5_6_7_8` and
+`91:98:12:34:56:78` were phone numbers walking through a screen whose stated promise was that no
+destination is stored under any name. The fix counts digits rather than enumerating separators,
+because a separator allowlist has to be right about every character the surrounding grammar permits
+today AND after the next edit to that grammar, while a count does not care what is in between and
+stays correct when the character class changes underneath it. Six digits is the threshold: the
+shortest number anybody would recognise as dialable is seven.
+
+**Its scope is narrower than the rule, deliberately.** The digit count applies to the WhatsApp
+participant reference and to `sourceRef`. It does NOT apply to the Instagram participant reference,
+which is AVG-5's certified channel-local grammar: AVG-5 accepts `ig.participant.9_1_9_8_1_2_3_4_5_6_7_8`
+today, and tightening the same field here would mean a conversation AVG-5 certifies as canonical
+could be refused by AVG-6 — a cross-stage incompatibility rather than a containment improvement, and
+a silent change to a certified contract. The WhatsApp handle is the field a destination would
+actually be going into, because it is the one that names the channel a message would eventually
+leave by. A spec asserts both halves: the separated form is accepted as an Instagram handle and
+refused as a WhatsApp handle and as a `sourceRef`, in the same test, so the asymmetry is a recorded
+decision rather than an oversight.
 
 The shared `CommunicationRequestV1` is built on the same principle: it names an opaque Core recipient
 and carries no number either, because resolving an actual recipient is Core's job at execution time.
 AVG-6 does not import it.
+
+**A second mutation finding, from the owner-review round.** Adding the digit count MASKED the
+dialable-run shape for the two fields that now carry both screens, and the mutation that drops the
+shape stopped failing. The shape is not redundant: the Instagram participant reference keeps AVG-5's
+grammar and has no digit count, so there the shape is the only thing between a bare phone number and
+the package. The specs now assert that directly, and the mutation fails again. The same round masked
+two more: the new bundle-versus-recommendation binding checks took over the refusal in the existing
+cross-prospect specs, so the conversation binding stopped being exercised. The case that separates
+them is a bundle and a recommendation that agree with each OTHER and disagree with the conversation,
+and it is now a spec. All three were closed by strengthening the assertion, never by weakening the
+mutation.
 
 **A mutation review finding worth recording.** Two of the contact shapes — the address shape and the
 fetchable-location shape — are unreachable through the character class alone, so removing either
@@ -142,17 +174,72 @@ There is no threshold to tune, no score, no model, and nothing that gets easier 
 beyond the two independent legs. Everything else is `REVIEW_REQUIRED` — which is not a failure state.
 It is a person looking, which is the correct outcome for a question this domain cannot settle.
 
-### 6. The handoff candidate binds a real conversation and a real recommendation
+### 5b. A recommendation cannot predate the evidence it names
+
+Also an owner-review correction. The evaluator accepted a `createdAt` without ever comparing it to
+the `observedAt` of the claims it was reading, so it would happily issue a recommendation stamped
+09:00 resting on evidence observed at 09:05. The `preparedAt >= createdAt` check on the candidate
+does not repair this: it constrains a different pair of instants entirely.
+
+The evaluator now requires `createdAt` to be at or after the latest evidence instant in the bundle,
+compared as semantic UTC instants rather than as strings — optional milliseconds mean `09:00:00.500Z`
+sorts before `09:00:00Z` lexicographically while being half a second later, and `09:00:00Z` and
+`09:00:00.000Z` are one moment written twice. Both directions are asserted by specs.
+
+It returns `undefined` rather than a `REVIEW_REQUIRED` recommendation. That is a deliberate choice
+between two refusals: a review outcome is an identity JUDGEMENT about evidence somebody can go and
+read, and filing an impossibility as a judgement would put it in front of a reviewer as though it
+were one. An empty bundle names no evidence at all, so any `createdAt` remains coherent.
+
+### 6. The handoff candidate is bound to the EVIDENCE, not to an object that describes it
 
 `prepareWhatsAppChannelHandoffCandidate` requires a canonical AVG-5 conversation (through AVG-5's own
-public parser, so a forged mixed-prospect snapshot is refused there and the refusal is inherited), a
-recommendation whose outcome is `LINK_RECOMMENDED`, and a recommendation whose prospect and Instagram
-participant match that conversation.
+public parser, so a forged mixed-prospect snapshot is refused there and the refusal is inherited),
+the canonical evidence BUNDLE, and a recommendation — and it re-runs the deterministic policy over
+that bundle before it will read the recommendation's outcome.
+
+**This is an owner-review correction, and it is the most important one in this ADR.** The first
+AVG-6 head trusted a recommendation because it SAID `LINK_RECOMMENDED`. Everything about that object
+was certified — strict schema, closed outcome, closed reason code, pinned posture, sorted unique
+references, matching bindings — and none of it was evidence. A caller could hand-write a positive
+recommendation naming two references that existed nowhere, and the builder had nothing to check it
+against, because the evidence was not one of its arguments.
+
+That is the general failure this whole architecture is arranged against: **a typed, parsed artifact
+standing in for the provenance it merely describes.** A recommendation on its own is powerless, so
+the defect was never in producing one; it was here, at the first point where a recommendation turns
+into downstream semantic state.
+
+So the bundle is a required input, it is parsed by the same public parser everything else uses, and
+`evaluateCrossChannelIdentityLink` is re-run over it — seeded with the supplied recommendation's own
+reference and instant, so the only thing that can differ is what the canonical policy concludes from
+the canonical evidence. The result must reproduce the supplied recommendation EXACTLY: every field,
+evidence references included, compared by value and never by object identity. Not "does it agree
+about the outcome" — a forged positive with invented references agrees about the outcome. The
+question is whether this exact evidence, under the canonical policy, produces this exact
+recommendation. Only then is the outcome read, and it is the RE-EVALUATED outcome that is read,
+because the derived value is the honest one to treat as authoritative.
+
+**Three failure classes, three codes, kept apart on purpose.**
+`IDENTITY_EVIDENCE_BUNDLE_INVALID` and `IDENTITY_RECOMMENDATION_INVALID` are shape failures.
+`IDENTITY_LINK_NOT_RECOMMENDED` is an honestly evaluated `REVIEW_REQUIRED` — a person looking.
+`IDENTITY_RECOMMENDATION_POLICY_MISMATCH` is a well-formed object whose provenance does not hold up.
+A reviewer wants to tell those apart, and one vague code for all three would lose exactly the
+distinction the new refusal exists to make.
+
+The public recommendation schema was tightened alongside it: a `LINK_RECOMMENDED` recommendation must
+name at least two supporting references. That is a LOCAL self-consistency floor and nothing more —
+it stops an object literally claiming `SUFFICIENT_INDEPENDENT_SUPPORT` while naming zero or one piece
+of evidence. It does not prove the policy was applied, and the ADR says so plainly: a schema is shown
+one object, independence is a property of the SOURCES behind the referenced claims, and those live in
+a bundle the schema was never given. Two invented references satisfy it. Only the re-evaluation above
+proves anything.
 
 There is no `body`, `message`, `template`, `prospectRef` or `whatsappParticipantRef` on the builder's
-input, and the schema is strict — so a caller cannot re-point a candidate at somebody else or attach
-content to it. A candidate is also refused if its `preparedAt` precedes the `createdAt` of the
-recommendation it rests on; both are caller-asserted canonical instants and no clock is read.
+input, no verdict, no confidence and no "verified" flag — every one of those would be the caller
+telling the function what the evidence means instead of showing it the evidence. A candidate is also
+refused if its `preparedAt` precedes the `createdAt` of the recommendation it rests on; both are
+caller-asserted canonical instants and no clock is read.
 
 ### 7. Identity evidence is not acquisition permission
 
@@ -222,8 +309,10 @@ cannot act on it.
 The value is narrow and worth stating plainly. When QFJ-P09 builds the real governed execution
 highway, it will attach to a domain that already treats identity evidence as untrusted, refuses to
 merge anything, keeps a bounded deduplicated bundle whose parser certifies the whole aggregate,
-re-runs the Core gate on every preparation, stores no destination at any point, and states every
-non-effect as a machine-checked literal. The transport is the part that does not exist. The controls
+re-derives every identity recommendation from that exact bundle before acting on it, refuses a
+recommendation that could not have rested on the evidence it names, re-runs the Core gate on every
+preparation, stores no destination at any point — counted digit by digit, not merely pattern-matched
+— and states every non-effect as a machine-checked literal. The transport is the part that does not exist. The controls
 around it are what this slice is.
 
 **Runtime status is unchanged: PLANNED / DISABLED.** No package or application imports

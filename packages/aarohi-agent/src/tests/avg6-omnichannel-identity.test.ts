@@ -6,6 +6,9 @@
  * prepare an inert channel-transition candidate — and can do none of the things a reader might
  * assume follow. Nothing here merges an identity, learns a phone number, or sends.
  */
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -18,6 +21,7 @@ import {
   IDENTITY_EVIDENCE_SOURCE_KINDS,
   IDENTITY_EVIDENCE_SOURCE_POSTURE,
   IDENTITY_LINK_OUTCOMES,
+  IDENTITY_LINK_POSTURE,
   IDENTITY_LINK_REASON_CODES,
   IDENTITY_SOURCE_ROLE,
   MAX_IDENTITY_EVIDENCE_CLAIMS,
@@ -183,10 +187,35 @@ function observation(status: CorePartyStatus, prospectRef = PROSPECT): unknown {
   };
 }
 
+/**
+ * A hand-written recommendation that rests on nothing.
+ *
+ * Schema-valid in every respect a schema can see: canonical version, closed outcome, closed reason
+ * code, sorted unique references, the canonical posture copied verbatim from the public constant,
+ * and bindings that match the conversation. Its evidence references name claims that exist nowhere.
+ */
+function forgedPositiveRecommendation(over: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    contractVersion: AAROHI_AVG6_CONTRACT_VERSION,
+    recommendationRef: 'rec.001',
+    prospectRef: PROSPECT,
+    instagramParticipantRef: IG_PARTICIPANT,
+    whatsappParticipantRef: WA_PARTICIPANT,
+    outcome: 'LINK_RECOMMENDED',
+    reasonCode: 'SUFFICIENT_INDEPENDENT_SUPPORT',
+    supportingEvidenceRefs: ['ev.fake.a', 'ev.fake.b'],
+    contradictingEvidenceRefs: [],
+    createdAt: LATER,
+    posture: { ...IDENTITY_LINK_POSTURE },
+    ...over,
+  };
+}
+
 function handoffInput(over: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     candidateRef: 'wa.candidate.alpha',
     conversation: conversation(),
+    evidenceBundle: bundleOf(sufficientEvidence()),
     recommendation: recommendationFor(sufficientEvidence()),
     coreObservation: observation('NOT_REGISTERED'),
     preparedAt: LATER,
@@ -629,25 +658,28 @@ describe('the identity link is a recommendation, and the policy is deterministic
 
   it('refuses to recommend on public coincidence alone, however much of it there is', () => {
     // Public data repeats itself. Two listings quoting the same directory are one observation.
-    const publicOnly = recommendationFor([
-      claim({
-        evidenceRef: 'ev.001',
-        sourceKind: 'PUBLIC_REFERENCE_CORROBORATION',
-        sourceRef: 'src.a',
-      }),
-      claim({
-        evidenceRef: 'ev.002',
-        sourceKind: 'PUBLIC_REFERENCE_CORROBORATION',
-        sourceRef: 'src.b',
-        observedAt: LATER,
-      }),
-      claim({
-        evidenceRef: 'ev.003',
-        sourceKind: 'PUBLIC_REFERENCE_CORROBORATION',
-        sourceRef: 'src.c',
-        observedAt: '2026-08-27T09:10:00Z',
-      }),
-    ]);
+    const publicOnly = recommendationFor(
+      [
+        claim({
+          evidenceRef: 'ev.001',
+          sourceKind: 'PUBLIC_REFERENCE_CORROBORATION',
+          sourceRef: 'src.a',
+        }),
+        claim({
+          evidenceRef: 'ev.002',
+          sourceKind: 'PUBLIC_REFERENCE_CORROBORATION',
+          sourceRef: 'src.b',
+          observedAt: LATER,
+        }),
+        claim({
+          evidenceRef: 'ev.003',
+          sourceKind: 'PUBLIC_REFERENCE_CORROBORATION',
+          sourceRef: 'src.c',
+          observedAt: '2026-08-27T09:10:00Z',
+        }),
+      ],
+      { createdAt: '2026-08-27T09:10:00Z' },
+    );
     expect(publicOnly.outcome).toBe('REVIEW_REQUIRED');
     expect(publicOnly.reasonCode).toBe('NON_CORROBORATING_EVIDENCE_ONLY');
 
@@ -669,16 +701,19 @@ describe('the identity link is a recommendation, and the policy is deterministic
   });
 
   it('lets one denial outweigh any amount of agreement', () => {
-    const contradicted = recommendationFor([
-      ...sufficientEvidence(),
-      claim({
-        evidenceRef: 'ev.003',
-        relation: 'CONTRADICTS_SAME_PARTY',
-        sourceKind: 'OPERATOR_REVIEWED',
-        sourceRef: 'src.c',
-        observedAt: '2026-08-27T09:10:00Z',
-      }),
-    ]);
+    const contradicted = recommendationFor(
+      [
+        ...sufficientEvidence(),
+        claim({
+          evidenceRef: 'ev.003',
+          relation: 'CONTRADICTS_SAME_PARTY',
+          sourceKind: 'OPERATOR_REVIEWED',
+          sourceRef: 'src.c',
+          observedAt: '2026-08-27T09:10:00Z',
+        }),
+      ],
+      { createdAt: '2026-08-27T09:10:00Z' },
+    );
     expect(contradicted.outcome).toBe('REVIEW_REQUIRED');
     expect(contradicted.reasonCode).toBe('CONFLICTING_EVIDENCE');
     expect([...contradicted.contradictingEvidenceRefs]).toStrictEqual(['ev.003']);
@@ -872,7 +907,10 @@ describe('the WhatsApp channel handoff candidate is inert, and is not the other 
   it('refuses anything short of a positive, matching recommendation', () => {
     // REVIEW_REQUIRED is a person looking, not a slower yes.
     const review = prepareWhatsAppChannelHandoffCandidate(
-      handoffInput({ recommendation: recommendationFor([claim()]) }),
+      handoffInput({
+        recommendation: recommendationFor([claim()]),
+        evidenceBundle: bundleOf([claim()]),
+      }),
     );
     expect(review.ok).toBe(false);
     if (!review.ok) expect(review.refusal).toBe('IDENTITY_LINK_NOT_RECOMMENDED');
@@ -1043,13 +1081,730 @@ describe('the WhatsApp channel handoff candidate is inert, and is not the other 
         }),
       );
     }
-    const strong = recommendationFor(rich, { recommendationRef: 'rec.strong' });
+    const strong = recommendationFor(rich, {
+      recommendationRef: 'rec.strong',
+      createdAt: '2026-08-27T09:10:00Z',
+    });
     expect(strong.outcome).toBe('LINK_RECOMMENDED');
+    const strongInput = {
+      recommendation: strong,
+      evidenceBundle: bundleOf(rich),
+      preparedAt: '2026-08-27T09:10:00Z',
+    };
+    // Honest, fully evidenced, and eligible: this is the shape the loop below suppresses, proved
+    // here so the refusals below are the Core gate rather than the new provenance check.
+    expect(prepareWhatsAppChannelHandoffCandidate(handoffInput(strongInput)).ok).toBe(true);
     for (const status of ['DO_NOT_CONTACT', 'REGISTERED', 'ACTIVE', 'UNKNOWN'] as const) {
       const built = prepareWhatsAppChannelHandoffCandidate(
-        handoffInput({ recommendation: strong, coreObservation: observation(status) }),
+        handoffInput({ ...strongInput, coreObservation: observation(status) }),
       );
       expect(built.ok, status).toBe(false);
+      if (!built.ok) expect(built.refusal, status).toBe('CORE_GATE_REFUSED');
+    }
+  });
+});
+
+// ===========================================================================
+// OWNER REVIEW, finding 1 — a parsed recommendation is not a policy proof.
+//
+// Everything in this section describes the same defect from two sides: a schema can certify what an
+// object SAYS, and only the evidence can certify what it RESTS ON.
+// ===========================================================================
+
+describe('a positive recommendation cannot claim support it does not name', () => {
+  it('refuses LINK_RECOMMENDED naming fewer than two supporting references', () => {
+    for (const refs of [[], ['ev.001']]) {
+      const forged = forgedPositiveRecommendation({ supportingEvidenceRefs: refs });
+      expect(identityLinkRecommendationSchema.safeParse(forged).success, JSON.stringify(refs)).toBe(
+        false,
+      );
+      // The public parser is the same invariant, because it is the same schema.
+      expect(
+        parseCrossChannelIdentityLinkRecommendation(forged),
+        JSON.stringify(refs),
+      ).toBeUndefined();
+    }
+  });
+
+  it('accepts two, because this is a floor on self-consistency and not a policy proof', () => {
+    // Two INVENTED references satisfy it. That is the point of the next section: the schema is shown
+    // one object, and independence is a property of the sources behind claims it was never given.
+    const forged = forgedPositiveRecommendation();
+    expect(identityLinkRecommendationSchema.safeParse(forged).success).toBe(true);
+    expect(parseCrossChannelIdentityLinkRecommendation(forged)?.outcome).toBe('LINK_RECOMMENDED');
+  });
+});
+
+describe('the WhatsApp handoff re-runs the policy over the evidence it was shown', () => {
+  it('requires the evidence bundle, and refuses a caller who omits it', () => {
+    const { evidenceBundle: _omitted, ...withoutBundle } = handoffInput();
+    const built = prepareWhatsAppChannelHandoffCandidate(withoutBundle);
+    expect(built.ok).toBe(false);
+    if (!built.ok) expect(built.refusal).toBe('HANDOFF_INPUT_INVALID');
+
+    // And a bundle it cannot certify is a shape failure, told apart from a policy failure.
+    for (const bad of [undefined, null, {}, forgedBundle([claim(), claim()])]) {
+      const result = prepareWhatsAppChannelHandoffCandidate(handoffInput({ evidenceBundle: bad }));
+      expect(result.ok, JSON.stringify(bad)).toBe(false);
+      if (!result.ok) expect(result.refusal).toBe('IDENTITY_EVIDENCE_BUNDLE_INVALID');
+    }
+  });
+
+  it('refuses a forged positive recommendation against every bundle that does not earn it', () => {
+    // Each of these bundles is canonical and each fails the policy for a different reason. The
+    // recommendation is byte-for-byte the same forgery every time.
+    const cases: readonly (readonly [string, CrossChannelIdentityEvidenceBundle])[] = [
+      ['empty', bundleOf([])],
+      ['one claim only', bundleOf([claim({ evidenceRef: 'ev.001', sourceRef: 'src.a' })])],
+      [
+        'two claims from one source',
+        bundleOf([
+          claim({ evidenceRef: 'ev.001', sourceRef: 'src.a' }),
+          claim({ evidenceRef: 'ev.002', sourceRef: 'src.a', observedAt: LATER }),
+        ]),
+      ],
+      [
+        'public corroboration only',
+        bundleOf([
+          claim({
+            evidenceRef: 'ev.001',
+            sourceKind: 'PUBLIC_REFERENCE_CORROBORATION',
+            sourceRef: 'src.a',
+          }),
+          claim({
+            evidenceRef: 'ev.002',
+            sourceKind: 'PUBLIC_REFERENCE_CORROBORATION',
+            sourceRef: 'src.b',
+            observedAt: LATER,
+          }),
+        ]),
+      ],
+      [
+        'unrecorded provenance only',
+        bundleOf([
+          claim({ evidenceRef: 'ev.001', sourceKind: 'UNKNOWN', sourceRef: 'src.a' }),
+          claim({
+            evidenceRef: 'ev.002',
+            sourceKind: 'UNKNOWN',
+            sourceRef: 'src.b',
+            observedAt: LATER,
+          }),
+        ]),
+      ],
+      [
+        'sufficient support, and a denial',
+        bundleOf([
+          ...sufficientEvidence(),
+          claim({
+            evidenceRef: 'ev.003',
+            relation: 'CONTRADICTS_SAME_PARTY',
+            sourceKind: 'OPERATOR_REVIEWED',
+            sourceRef: 'src.c',
+            observedAt: LATER,
+          }),
+        ]),
+      ],
+    ];
+
+    for (const [label, evidenceBundle] of cases) {
+      const built = prepareWhatsAppChannelHandoffCandidate(
+        handoffInput({ recommendation: forgedPositiveRecommendation(), evidenceBundle }),
+      );
+      expect(built.ok, label).toBe(false);
+      if (!built.ok) {
+        expect(built.refusal, label).toBe('IDENTITY_RECOMMENDATION_POLICY_MISMATCH');
+      }
+    }
+  });
+
+  it('compares the exact evidence references, not merely the outcome', () => {
+    // Three genuine, independent, corroborating supports. The policy really does recommend a link.
+    const honest = [
+      claim({ evidenceRef: 'ev.001', sourceKind: 'PROSPECT_SELF_ASSERTED', sourceRef: 'src.a' }),
+      claim({
+        evidenceRef: 'ev.002',
+        sourceKind: 'OPERATOR_REVIEWED',
+        sourceRef: 'src.b',
+        observedAt: '2026-08-27T09:01:00Z',
+      }),
+      claim({
+        evidenceRef: 'ev.003',
+        sourceKind: 'OPERATOR_REVIEWED',
+        sourceRef: 'src.c',
+        observedAt: '2026-08-27T09:02:00Z',
+      }),
+    ];
+    const evidenceBundle = bundleOf(honest);
+    expect(recommendationFor(honest).outcome).toBe('LINK_RECOMMENDED');
+
+    // Same outcome, same reason, same bindings, same instant — different evidence.
+    for (const [label, supportingEvidenceRefs] of [
+      ['invented', ['ev.fake.a', 'ev.fake.b']],
+      ['one real support omitted', ['ev.001', 'ev.002']],
+      ['one invented support added', ['ev.001', 'ev.002', 'ev.003', 'ev.zzz']],
+      ['one real support swapped out', ['ev.001', 'ev.002', 'ev.zzz']],
+    ] as const) {
+      const built = prepareWhatsAppChannelHandoffCandidate(
+        handoffInput({
+          recommendation: forgedPositiveRecommendation({ supportingEvidenceRefs }),
+          evidenceBundle,
+        }),
+      );
+      expect(built.ok, label).toBe(false);
+      if (!built.ok) {
+        expect(built.refusal, label).toBe('IDENTITY_RECOMMENDATION_POLICY_MISMATCH');
+      }
+    }
+
+    // The honestly evaluated recommendation over the same bundle still builds a candidate, so the
+    // refusals above are the evidence comparison rather than the builder having stopped working.
+    expect(
+      prepareWhatsAppChannelHandoffCandidate(
+        handoffInput({ recommendation: recommendationFor(honest), evidenceBundle }),
+      ).ok,
+    ).toBe(true);
+  });
+
+  it('refuses a recommendation whose reason code re-evaluation does not reproduce', () => {
+    // A denial is present, so the canonical policy says CONFLICTING_EVIDENCE. This recommendation is
+    // honest about its outcome, its references and its bindings, and wrong about WHY — which is the
+    // difference between a reviewer reading "somebody denied this" and "we found little".
+    const claims = [
+      ...sufficientEvidence(),
+      claim({
+        evidenceRef: 'ev.003',
+        relation: 'CONTRADICTS_SAME_PARTY',
+        sourceKind: 'OPERATOR_REVIEWED',
+        sourceRef: 'src.c',
+        observedAt: LATER,
+      }),
+    ];
+    const canonical = recommendationFor(claims);
+    expect(canonical.reasonCode).toBe('CONFLICTING_EVIDENCE');
+
+    const built = prepareWhatsAppChannelHandoffCandidate(
+      handoffInput({
+        evidenceBundle: bundleOf(claims),
+        recommendation: {
+          ...canonical,
+          reasonCode: 'INSUFFICIENT_EVIDENCE',
+          supportingEvidenceRefs: [...canonical.supportingEvidenceRefs],
+          contradictingEvidenceRefs: [...canonical.contradictingEvidenceRefs],
+        },
+      }),
+    );
+    expect(built.ok).toBe(false);
+    // Emphatically NOT the same refusal as an honest REVIEW_REQUIRED: this object misdescribes its
+    // own evidence, and collapsing the two codes would lose exactly that.
+    if (!built.ok) expect(built.refusal).toBe('IDENTITY_RECOMMENDATION_POLICY_MISMATCH');
+
+    // The same again for the denial itself: naming a contradiction that is not the one in the
+    // bundle misdescribes the evidence, and a reviewer following the reference would find nothing.
+    const misnamedDenial = prepareWhatsAppChannelHandoffCandidate(
+      handoffInput({
+        evidenceBundle: bundleOf(claims),
+        recommendation: {
+          ...canonical,
+          supportingEvidenceRefs: [...canonical.supportingEvidenceRefs],
+          contradictingEvidenceRefs: ['ev.somebody.else'],
+        },
+      }),
+    );
+    expect(misnamedDenial.ok).toBe(false);
+    if (!misnamedDenial.ok) {
+      expect(misnamedDenial.refusal).toBe('IDENTITY_RECOMMENDATION_POLICY_MISMATCH');
+    }
+
+    const honest = prepareWhatsAppChannelHandoffCandidate(
+      handoffInput({ evidenceBundle: bundleOf(claims), recommendation: canonical }),
+    );
+    expect(honest.ok).toBe(false);
+    if (!honest.ok) expect(honest.refusal).toBe('IDENTITY_LINK_NOT_RECOMMENDED');
+  });
+
+  it('refuses a self-consistent bundle and recommendation about the wrong conversation', () => {
+    // Everything here agrees with everything else EXCEPT the conversation: the bundle and the
+    // recommendation are about one person, and the conversation whose turns the candidate would
+    // carry is about another. This is the case the conversation binding exists for, and no amount
+    // of internal consistency between the evidence and the recommendation substitutes for it.
+    const elsewhere = (
+      over: Record<string, unknown>,
+    ): { bundle: CrossChannelIdentityEvidenceBundle; recommendation: unknown } => {
+      const opened = createCrossChannelIdentityEvidenceBundle({
+        prospectRef: PROSPECT,
+        instagramParticipantRef: IG_PARTICIPANT,
+        whatsappParticipantRef: WA_PARTICIPANT,
+        ...over,
+      });
+      if (!opened.ok) throw new Error(`bundle fixture refused: ${opened.refusal}`);
+      let bundle = opened.bundle;
+      for (const one of [
+        claim({ evidenceRef: 'ev.001', sourceRef: 'src.a', ...over }),
+        claim({
+          evidenceRef: 'ev.002',
+          sourceKind: 'OPERATOR_REVIEWED',
+          sourceRef: 'src.b',
+          observedAt: LATER,
+          ...over,
+        }),
+      ]) {
+        const appended = appendCrossChannelIdentityEvidence(bundle, one);
+        if (!appended.ok) throw new Error(`append refused: ${appended.refusal}`);
+        bundle = appended.bundle;
+      }
+      const recommendation = evaluateCrossChannelIdentityLink({
+        recommendationRef: 'rec.elsewhere',
+        bundle,
+        createdAt: LATER,
+      });
+      expect(recommendation?.outcome).toBe('LINK_RECOMMENDED');
+      return { bundle, recommendation };
+    };
+
+    for (const [label, over] of [
+      ['another prospect', { prospectRef: OTHER_PROSPECT }],
+      ['another Instagram handle', { instagramParticipantRef: OTHER_IG_PARTICIPANT }],
+    ] as const) {
+      const { bundle, recommendation } = elsewhere(over);
+      const built = prepareWhatsAppChannelHandoffCandidate(
+        handoffInput({ evidenceBundle: bundle, recommendation }),
+      );
+      expect(built.ok, label).toBe(false);
+      if (!built.ok) expect(built.refusal, label).toBe('IDENTITY_BINDING_MISMATCH');
+    }
+  });
+
+  it('refuses a bundle about a different person or a different pair of handles', () => {
+    const recommendation = recommendationFor(sufficientEvidence());
+
+    const elsewhereBundle = (
+      binding: Record<string, unknown>,
+      over: Record<string, unknown>,
+    ): CrossChannelIdentityEvidenceBundle => {
+      const opened = createCrossChannelIdentityEvidenceBundle({
+        prospectRef: PROSPECT,
+        instagramParticipantRef: IG_PARTICIPANT,
+        whatsappParticipantRef: WA_PARTICIPANT,
+        ...binding,
+      });
+      if (!opened.ok) throw new Error(`bundle fixture refused: ${opened.refusal}`);
+      let current = opened.bundle;
+      for (const one of [
+        claim({ evidenceRef: 'ev.001', sourceRef: 'src.a', ...over }),
+        claim({
+          evidenceRef: 'ev.002',
+          sourceKind: 'OPERATOR_REVIEWED',
+          sourceRef: 'src.b',
+          observedAt: LATER,
+          ...over,
+        }),
+      ]) {
+        const appended = appendCrossChannelIdentityEvidence(current, one);
+        if (!appended.ok) throw new Error(`append refused: ${appended.refusal}`);
+        current = appended.bundle;
+      }
+      return current;
+    };
+
+    for (const [label, evidenceBundle] of [
+      [
+        'another prospect',
+        elsewhereBundle({ prospectRef: OTHER_PROSPECT }, { prospectRef: OTHER_PROSPECT }),
+      ],
+      [
+        'another Instagram handle',
+        elsewhereBundle(
+          { instagramParticipantRef: OTHER_IG_PARTICIPANT },
+          { instagramParticipantRef: OTHER_IG_PARTICIPANT },
+        ),
+      ],
+      [
+        'another WhatsApp handle',
+        elsewhereBundle(
+          { whatsappParticipantRef: OTHER_WA_PARTICIPANT },
+          { whatsappParticipantRef: OTHER_WA_PARTICIPANT },
+        ),
+      ],
+    ] as const) {
+      const built = prepareWhatsAppChannelHandoffCandidate(
+        handoffInput({ recommendation, evidenceBundle }),
+      );
+      expect(built.ok, label).toBe(false);
+      if (!built.ok) expect(built.refusal, label).toBe('IDENTITY_BINDING_MISMATCH');
+    }
+  });
+});
+
+// ===========================================================================
+// OWNER REVIEW, finding 2 — a recommendation cannot predate its own evidence.
+// ===========================================================================
+
+describe('a recommendation must have been possible when it says it was made', () => {
+  it('refuses a recommendation made before the evidence it names existed', () => {
+    // The supports are at 09:00 and 09:05. A recommendation stamped 09:00 could not have read the
+    // second one, so it is not a weak recommendation — it is an impossible one.
+    expect(
+      evaluateCrossChannelIdentityLink({
+        recommendationRef: 'rec.001',
+        bundle: bundleOf(sufficientEvidence()),
+        createdAt: AT,
+      }),
+    ).toBeUndefined();
+  });
+
+  it('allows the same instant, and any instant after it', () => {
+    for (const createdAt of [LATER, '2026-08-27T09:05:00.000Z', '2026-08-27T10:00:00Z']) {
+      expect(
+        evaluateCrossChannelIdentityLink({
+          recommendationRef: 'rec.001',
+          bundle: bundleOf(sufficientEvidence()),
+          createdAt,
+        })?.outcome,
+        createdAt,
+      ).toBe('LINK_RECOMMENDED');
+    }
+  });
+
+  it('compares the instant a timestamp means, not the way it is spelled', () => {
+    const halfPast = canonicalInstant('2026-08-27T09:00:00.500Z');
+    const wholeSecond = canonicalInstant('2026-08-27T09:00:00Z');
+    // As STRINGS `.500Z` sorts before `Z`, so a lexicographic check reaches both of these answers
+    // backwards. Each direction is asserted, because only one of them is wrong per comparison.
+    expect(halfPast < wholeSecond).toBe(true);
+
+    const evidenceAtHalfPast = bundleOf([
+      claim({ evidenceRef: 'ev.001', sourceRef: 'src.a', observedAt: halfPast }),
+      claim({
+        evidenceRef: 'ev.002',
+        sourceKind: 'OPERATOR_REVIEWED',
+        sourceRef: 'src.b',
+        observedAt: halfPast,
+      }),
+    ]);
+    // Half a second AFTER the recommendation: refused, though the strings say otherwise.
+    expect(
+      evaluateCrossChannelIdentityLink({
+        recommendationRef: 'rec.001',
+        bundle: evidenceAtHalfPast,
+        createdAt: wholeSecond,
+      }),
+    ).toBeUndefined();
+
+    // And the mirror: evidence on the whole second, recommendation half a second later. Coherent,
+    // though a lexicographic check would refuse it.
+    const evidenceAtWholeSecond = bundleOf([
+      claim({ evidenceRef: 'ev.001', sourceRef: 'src.a', observedAt: wholeSecond }),
+      claim({
+        evidenceRef: 'ev.002',
+        sourceKind: 'OPERATOR_REVIEWED',
+        sourceRef: 'src.b',
+        observedAt: wholeSecond,
+      }),
+    ]);
+    expect(
+      evaluateCrossChannelIdentityLink({
+        recommendationRef: 'rec.001',
+        bundle: evidenceAtWholeSecond,
+        createdAt: halfPast,
+      })?.outcome,
+    ).toBe('LINK_RECOMMENDED');
+
+    // Two spellings of one moment are one moment.
+    expect(
+      evaluateCrossChannelIdentityLink({
+        recommendationRef: 'rec.001',
+        bundle: evidenceAtWholeSecond,
+        createdAt: canonicalInstant('2026-08-27T09:00:00.000Z'),
+      })?.outcome,
+    ).toBe('LINK_RECOMMENDED');
+  });
+
+  it('reads the latest claim, not the first, and asks nothing at all of an empty bundle', () => {
+    const spread = [
+      claim({ evidenceRef: 'ev.001', sourceRef: 'src.a', observedAt: AT }),
+      claim({
+        evidenceRef: 'ev.002',
+        sourceKind: 'OPERATOR_REVIEWED',
+        sourceRef: 'src.b',
+        observedAt: '2026-08-27T09:10:00Z',
+      }),
+    ];
+    // After the FIRST claim but before the last: still impossible.
+    expect(
+      evaluateCrossChannelIdentityLink({
+        recommendationRef: 'rec.001',
+        bundle: bundleOf(spread),
+        createdAt: LATER,
+      }),
+    ).toBeUndefined();
+    expect(
+      evaluateCrossChannelIdentityLink({
+        recommendationRef: 'rec.001',
+        bundle: bundleOf(spread),
+        createdAt: '2026-08-27T09:10:00Z',
+      })?.outcome,
+    ).toBe('LINK_RECOMMENDED');
+
+    // An empty bundle names no evidence, so no instant can be impossible.
+    expect(
+      evaluateCrossChannelIdentityLink({
+        recommendationRef: 'rec.001',
+        bundle: emptyBundle(),
+        createdAt: '2020-01-01T00:00:00Z',
+      })?.reasonCode,
+    ).toBe('INSUFFICIENT_EVIDENCE');
+  });
+
+  it('carries the refusal into the handoff, because the pairing cannot be re-evaluated', () => {
+    // The recommendation is canonical on its own: it was evaluated against evidence at 09:00 and is
+    // stamped 09:05. Paired with LATER evidence it becomes an impossible pairing, and the handoff
+    // finds that out by re-running the policy rather than by trusting the object.
+    const early = recommendationFor(sufficientEvidence());
+    expect(early.outcome).toBe('LINK_RECOMMENDED');
+
+    const lateEvidence = bundleOf([
+      claim({ evidenceRef: 'ev.001', sourceRef: 'src.a', observedAt: '2026-08-27T09:10:00Z' }),
+      claim({
+        evidenceRef: 'ev.002',
+        sourceKind: 'OPERATOR_REVIEWED',
+        sourceRef: 'src.b',
+        observedAt: '2026-08-27T09:11:00Z',
+      }),
+    ]);
+    const built = prepareWhatsAppChannelHandoffCandidate(
+      handoffInput({ recommendation: early, evidenceBundle: lateEvidence }),
+    );
+    expect(built.ok).toBe(false);
+    if (!built.ok) expect(built.refusal).toBe('IDENTITY_RECOMMENDATION_POLICY_MISMATCH');
+  });
+});
+
+// ===========================================================================
+// OWNER REVIEW, finding 3 — a destination is a destination however it is punctuated.
+// ===========================================================================
+
+describe('a reference cannot carry a destination past a separator', () => {
+  const SPLIT_DESTINATIONS = [
+    '919812345678',
+    '9_1_9_8_1_2_3_4_5_6_7_8',
+    '91:98:12:34:56:78',
+    'wa:91_9812_345678',
+    'tel:91_98_12_34_56_78',
+    'wa.91.98.12.34.56.78',
+    'wa-9198-1234-5678',
+    'ref9x1y9z8a1b2c3d4e5f6g7h8',
+  ] as const;
+
+  it('refuses a WhatsApp handle carrying seven or more digits, however they are separated', () => {
+    for (const destination of SPLIT_DESTINATIONS) {
+      expect(
+        createCrossChannelIdentityEvidenceClaim(claimInput({ whatsappParticipantRef: destination }))
+          .ok,
+        destination,
+      ).toBe(false);
+    }
+  });
+
+  it('refuses a bare dialable run as an Instagram handle, where the shape is the only screen', () => {
+    // The digit COUNT deliberately does not reach this field — that is the documented scope. The
+    // dialable-run SHAPE does, and it is the whole reason a bare number cannot enter here.
+    for (const destination of [
+      '919812345678',
+      '9812345678',
+      '91-98-1234-5678',
+      '91 98 1234 5678',
+      '(91) 98 1234 5678',
+    ]) {
+      expect(
+        createCrossChannelIdentityEvidenceClaim(
+          claimInput({ instagramParticipantRef: destination }),
+        ).ok,
+        destination,
+      ).toBe(false);
+      expect(
+        createCrossChannelIdentityEvidenceBundle({
+          prospectRef: PROSPECT,
+          instagramParticipantRef: destination,
+          whatsappParticipantRef: WA_PARTICIPANT,
+        }).ok,
+        destination,
+      ).toBe(false);
+    }
+  });
+
+  it('refuses the same forms in sourceRef, so provenance is not a side channel', () => {
+    for (const destination of SPLIT_DESTINATIONS) {
+      expect(
+        createCrossChannelIdentityEvidenceClaim(claimInput({ sourceRef: destination })).ok,
+        destination,
+      ).toBe(false);
+    }
+  });
+
+  it('still accepts an ordinary opaque handle, and stops short of banning digits', () => {
+    // Six digits is the boundary: the shortest number anybody would recognise as dialable is seven.
+    for (const ref of ['wa.participant.abc123', 'WA:participant-1', 'wa_p_9', 'wa.123456']) {
+      expect(
+        createCrossChannelIdentityEvidenceClaim(claimInput({ whatsappParticipantRef: ref })).ok,
+        ref,
+      ).toBe(true);
+      expect(createCrossChannelIdentityEvidenceClaim(claimInput({ sourceRef: ref })).ok, ref).toBe(
+        true,
+      );
+    }
+  });
+
+  it('refuses them at every public parser boundary, not only in the claim builder', () => {
+    for (const destination of SPLIT_DESTINATIONS) {
+      expect(
+        parseCrossChannelIdentityEvidenceBundle(
+          forgedBundle([], { whatsappParticipantRef: destination }),
+        ),
+        destination,
+      ).toBeUndefined();
+      expect(
+        parseCrossChannelIdentityLinkRecommendation(
+          forgedPositiveRecommendation({ whatsappParticipantRef: destination }),
+        ),
+        destination,
+      ).toBeUndefined();
+      expect(
+        createCrossChannelIdentityEvidenceBundle({
+          prospectRef: PROSPECT,
+          instagramParticipantRef: IG_PARTICIPANT,
+          whatsappParticipantRef: destination,
+        }).ok,
+        destination,
+      ).toBe(false);
+    }
+  });
+
+  it('refuses a candidate that would carry one', () => {
+    const built = prepareWhatsAppChannelHandoffCandidate(handoffInput());
+    expect(built.ok).toBe(true);
+    if (!built.ok) return;
+    for (const destination of SPLIT_DESTINATIONS) {
+      expect(
+        whatsappChannelHandoffCandidateSchema.safeParse({
+          ...built.candidate,
+          whatsappParticipantRef: destination,
+        }).success,
+        destination,
+      ).toBe(false);
+    }
+  });
+
+  it('leaves the AVG-5 Instagram grammar exactly where it found it', () => {
+    // SCOPE, asserted rather than described. The stricter digit count deliberately does not reach
+    // the Instagram handle: that grammar is AVG-5's certified contract, and tightening it here would
+    // mean a conversation AVG-5 calls canonical could be refused by AVG-6 — a cross-stage
+    // incompatibility rather than a containment improvement.
+    //
+    // The handle below is exactly the shape finding 3 was about: twelve digits, split by a character
+    // the opaque class permits. AVG-5 certifies it, so AVG-6 must too — and the SAME string is
+    // refused as a WhatsApp handle and as a sourceRef, which is where a destination would actually
+    // be going.
+    const digitHeavy = 'ig.participant.9_1_9_8_1_2_3_4_5_6_7_8';
+    expect(
+      createCrossChannelIdentityEvidenceClaim(claimInput({ whatsappParticipantRef: digitHeavy }))
+        .ok,
+    ).toBe(false);
+    expect(createCrossChannelIdentityEvidenceClaim(claimInput({ sourceRef: digitHeavy })).ok).toBe(
+      false,
+    );
+
+    const conversationBuilt = createInstagramConversation({
+      prospectRef: PROSPECT,
+      instagramConversationRef: CONVERSATION,
+      instagramThreadRef: THREAD,
+      instagramParticipantRef: digitHeavy,
+    });
+    expect(conversationBuilt.ok).toBe(true);
+    expect(
+      createCrossChannelIdentityEvidenceClaim(claimInput({ instagramParticipantRef: digitHeavy }))
+        .ok,
+    ).toBe(true);
+
+    // A conversation AVG-5 certifies still reaches a candidate end to end.
+    if (!conversationBuilt.ok) return;
+    const claims = [
+      claim({
+        evidenceRef: 'ev.001',
+        instagramParticipantRef: digitHeavy,
+        sourceKind: 'PROSPECT_SELF_ASSERTED',
+        sourceRef: 'src.a',
+      }),
+      claim({
+        evidenceRef: 'ev.002',
+        instagramParticipantRef: digitHeavy,
+        sourceKind: 'OPERATOR_REVIEWED',
+        sourceRef: 'src.b',
+        observedAt: LATER,
+      }),
+    ];
+    const opened = createCrossChannelIdentityEvidenceBundle({
+      prospectRef: PROSPECT,
+      instagramParticipantRef: digitHeavy,
+      whatsappParticipantRef: WA_PARTICIPANT,
+    });
+    if (!opened.ok) throw new Error(`bundle fixture refused: ${opened.refusal}`);
+    let bundle = opened.bundle;
+    for (const one of claims) {
+      const appended = appendCrossChannelIdentityEvidence(bundle, one);
+      if (!appended.ok) throw new Error(`append refused: ${appended.refusal}`);
+      bundle = appended.bundle;
+    }
+    const recommendation = evaluateCrossChannelIdentityLink({
+      recommendationRef: 'rec.001',
+      bundle,
+      createdAt: LATER,
+    });
+    expect(recommendation?.outcome).toBe('LINK_RECOMMENDED');
+    expect(
+      prepareWhatsAppChannelHandoffCandidate(
+        handoffInput({
+          conversation: conversationBuilt.conversation,
+          evidenceBundle: bundle,
+          recommendation,
+        }),
+      ).ok,
+    ).toBe(true);
+  });
+});
+
+// ===========================================================================
+// OWNER REVIEW, finding 4 — the canonical roadmap must not contradict itself.
+// ===========================================================================
+
+describe('the roadmap overlay stays true on both sides of a merge', () => {
+  const overlay = readFileSync(
+    fileURLToPath(
+      new URL(
+        '../../../../docs/architecture/aarohi-vendor-growth-roadmap-overlay.md',
+        import.meta.url,
+      ),
+    ),
+    'utf8',
+  );
+
+  it('no longer says everything after AVG-0 is unimplemented', () => {
+    // The document's own status block records AVG-0..AVG-5 as certified offline domains, so the
+    // AVG-0 section saying the opposite was the same file contradicting itself.
+    expect(overlay).toContain('AVG-0 through AVG-5 — implemented as certified offline domains');
+    expect(overlay).not.toContain('everything after it is planned and unimplemented');
+    expect(overlay).toContain('ADR-0123');
+  });
+
+  it('encodes no branch state, so landing it cannot turn it into a lie', () => {
+    const lowered = overlay.toLowerCase();
+    for (const forbidden of [
+      'not merged',
+      'proposed in this branch',
+      'current branch',
+      'after merge',
+      'this pr',
+    ]) {
+      expect(lowered, forbidden).not.toContain(forbidden);
     }
   });
 });
