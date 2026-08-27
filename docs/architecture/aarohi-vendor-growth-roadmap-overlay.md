@@ -10,16 +10,18 @@ rollout remains **OFF**, and no package or application imports the Aarohi packag
 **Offline DOMAIN status.** This overlay once said "nothing here is implemented", which stopped being
 true at AVG-1. What exists is contracts and pure functions over frozen values:
 
-- **AVG-0 through AVG-5 — implemented as certified offline domains**
+- **AVG-0 through AVG-6 — implemented as certified offline domains**
   ([ADR-0085](../decisions/ADR-0085-qfj-p12-aarohi-vendor-growth-and-roadmap-reconciliation.md),
   [ADR-0111](../decisions/ADR-0111-qfj-p12-avg2-aarohi-discovery-enrichment-domain.md),
   [ADR-0112](../decisions/ADR-0112-qfj-p12-avg3-aarohi-scoring-outreach-eligibility-domain.md),
   [ADR-0113](../decisions/ADR-0113-qfj-p12-avg4-aarohi-outreach-workspace-domain.md),
-  [ADR-0122](../decisions/ADR-0122-qfj-p12-avg5-aarohi-instagram-conversation-offline-domain.md)).
-- **AVG-6 — offline implementation proof defined by
-  [ADR-0123](../decisions/ADR-0123-qfj-p12-avg6-aarohi-omnichannel-identity-whatsapp-handoff-offline-domain.md).**
-  It adds no runtime, provider, channel, transport or execution activation, and merges no identity.
-- **AVG-7 through AVG-12 — planned and unimplemented.**
+  [ADR-0122](../decisions/ADR-0122-qfj-p12-avg5-aarohi-instagram-conversation-offline-domain.md),
+  [ADR-0123](../decisions/ADR-0123-qfj-p12-avg6-aarohi-omnichannel-identity-whatsapp-handoff-offline-domain.md)).
+- **AVG-7 — offline implementation proof defined by
+  [ADR-0124](../decisions/ADR-0124-qfj-p12-avg7-aarohi-sales-brain-offline-domain.md).**
+  It adds no runtime, model call, prompt resolution, retrieval, provider, channel, transport or
+  execution activation, and originates no commercial commitment.
+- **AVG-8 through AVG-12 — planned and unimplemented.**
 
 Recording a capability is still not implementing one, and implementing an offline domain is still not
 activating anything.
@@ -237,6 +239,56 @@ production activation. Exact first-proof boundaries:
 The conversation and objection-handling behaviour for acquisition. Bounded by the same sales-ethics
 prohibitions as Anisha, and by the rule that **the brain proposes and Core disposes** — no commercial
 commitment originates in the model.
+
+**The offline DOMAIN for this stage is defined by
+[ADR-0124](../decisions/ADR-0124-qfj-p12-avg7-aarohi-sales-brain-offline-domain.md).** Runtime
+remains PLANNED / DISABLED; this capability description claims no deployment and no production
+activation. Exact first-proof boundaries:
+
+- **A "sales brain" that makes no model call.** The precedent is Anisha's and Riya's: a deterministic
+  behaviour package decides whether a model boundary may later be used, and calls no model itself.
+  QF Model Gateway remains the sole future model waist and Prompt Registry the sole future governed
+  prompt mechanism; AVG-7 imports neither, depends on neither and names no provider. The boundary is
+  proved before the model is attached, because a boundary proved afterwards is proved too late.
+- **The interpretation is INJECTED, model-shaped and untrusted.** A strict, closed structure a future
+  gateway response could be parsed into, stamped
+  `INJECTED_OFFLINE_SALES_BRAIN_INTERPRETATION` — never provider-authenticated, Core-verified,
+  commercial, consent, identity, registration, payment or activation truth.
+- **It is bound to the CURRENT canonical inbound turn.** All four conversation references plus the
+  exact message reference of the latest turn of an AVG-5-certified snapshot, which the caller cannot
+  name: no message field, no index, no "latest" flag. Appending a newer turn makes an existing
+  reading stale by construction, and a stale reading is refused rather than replayed.
+- **Time causality is semantic UTC**, in both links of the chain: message `observedAt` ≤ reading
+  `interpretedAt` ≤ plan `plannedAt`. No wall clock is read.
+- **The CURRENT Core gate is re-run**, exactly `NOT_REGISTERED` proceeds, and no interpretation,
+  objection or priority bypasses it.
+- **A rejection or contact-privacy signal outranks selling**, from either vocabulary, including on a
+  mixed commercial signal. The brain stops locally and asks Core to re-decide contact policy — it
+  claims nothing about consent or suppression, which stay Core's.
+- **Commercial questions stop at "Core facts required."** Price, package, discount, offer and
+  entitlement are AVG-8's and Core's; the plan carries none and is not draftable without them.
+- **Registration, payment and activation stop at "Core process truth required"** — AVG-9's and
+  AVG-10's. No registration, payment or activation is claimed or mutated, and no Anisha handoff.
+- **Ordinary objections become a reply BRIEF, never a reply.** Closed strategy and obligation tokens
+  only. There is no field anywhere that can hold a sentence, so no price, guarantee, invented
+  deadline or unsupported claim has anywhere to appear.
+- **`futureModelDraftEligible` is explicit and powerless**: a later governed composition MAY ask for
+  a draft. It is false for every strategy still waiting on a fact Core has not supplied.
+- **Every sales-ethics prohibition is a `z.literal(false)` on the plan** — commitment, commercial
+  truth, price, discount, lead-volume/revenue/conversion guarantees, invented urgency, invented
+  scarcity, unsupported social proof, **hidden material package limitation**, contractual
+  commitment. The one ceiling member without a literal is "no contact after rejection/opt-out",
+  which the strategy precedence enforces instead.
+- **References carry two roles, and only one of them is AVG-7's to screen.** Bindings inherited from
+  certified AVG-1 and AVG-5 artifacts keep the upstream opaque grammar untouched — a numeric
+  provider identifier is an identifier, and a downstream stage may not narrow a grammar it does not
+  own. AVG-7's own `interpretationRef` and `planRef` additionally carry the contact shapes and a
+  count of digits anywhere, so a destination cannot be smuggled into the two references AVG-7
+  invents.
+- Zero model calls, prompt resolutions, retrievals, Meta API calls, n8n executions, provider sends,
+  channel sends, communication requests, approvals, authorizations, execution intents, acquisition
+  case transitions, persistence, managed migrations, production entries and new third-party
+  dependencies.
 
 ### AVG-8 — Commercial Truth and Package Engine
 Packages, entitlements and pricing presented during acquisition, **sourced from Core**. The engine

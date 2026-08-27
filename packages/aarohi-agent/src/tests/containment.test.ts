@@ -17,11 +17,13 @@ import { describe, expect, it } from 'vitest';
 
 import {
   AAROHI_AVG5_CHANNEL,
+  AAROHI_SALES_BRAIN_POSTURE,
   IDENTITY_LINK_POSTURE,
   INSTAGRAM_OUTBOUND_CANDIDATE_POSTURE,
   WHATSAPP_CHANNEL_HANDOFF_POSTURE,
   identityLinkPostureSchema,
   instagramOutboundCandidatePostureSchema,
+  salesBrainPostureSchema,
   whatsappChannelHandoffPostureSchema,
 } from '../index.js';
 
@@ -53,7 +55,7 @@ const codeOnly = (text: string): string =>
 const productionFiles = (): readonly { readonly file: string; readonly code: string }[] =>
   walk(SRC, true).map((file) => ({ file, code: codeOnly(readFileSync(file, 'utf8')) }));
 
-describe('Aarohi remains a DOMAIN, not a runtime through AVG-6', () => {
+describe('Aarohi remains a DOMAIN, not a runtime through AVG-7', () => {
   it('reaches no channel, provider, execution path or credential', () => {
     // ### Why these are SHAPES rather than bare words, from AVG-5 onward
     //
@@ -147,6 +149,25 @@ describe('Aarohi remains a DOMAIN, not a runtime through AVG-6', () => {
         expect(code.toLowerCase(), `${file} must not name ${forbidden}`).not.toContain(forbidden);
       }
       expect(code, `${file} must not call fetch`).not.toMatch(/[^a-zA-Z]fetch\(/u);
+      // And no SQL, in any direction. Banning the database CLIENTS above leaves the statements
+      // themselves, and a `CREATE TABLE` sitting in a pure domain package is one import away from
+      // being run by something that does have a connection.
+      for (const statement of [
+        'create table',
+        'alter table',
+        'drop table',
+        'create index',
+        'insert into',
+        'update set',
+        'delete from',
+        'primary key',
+        'migration',
+        '.sql',
+      ]) {
+        expect(code.toLowerCase(), `${file} must not contain ${statement}`).not.toContain(
+          statement,
+        );
+      }
     }
   });
 
@@ -235,6 +256,151 @@ describe('Aarohi remains a DOMAIN, not a runtime through AVG-6', () => {
     ).toBe(false);
   });
 
+  it('reaches neither the model waist nor the prompt waist, and retrieves nothing', () => {
+    // AVG-7 is called a SALES BRAIN, which is the name most likely to attract a model client. The
+    // repository already has the governed places for that: `@qf-jarvis/model-gateway` is the single
+    // model waist and `@qf-jarvis/prompt-registry` the governed prompt mechanism. A future
+    // composition goes through both. This package reaches neither, and holds no prompt text of its
+    // own -- a prompt string here would be un-governed content in a package with no governance for
+    // content.
+    //
+    // Retrieval is banned for a different reason. RAG output is not commercial authority, and
+    // commercial truth is AVG-8's; a retrieval hook in a sales brain is the shortest path from
+    // "something was written down once" to "Aarohi quoted it".
+    const scope = ['@qf-jarvis', ''].join('/');
+    for (const { file, code } of productionFiles()) {
+      for (const forbidden of [
+        `${scope}model-gateway`,
+        `${scope}model-gateway-composition`,
+        `${scope}model-reply-adapter`,
+        `${scope}prompt-registry`,
+        '@mastra',
+        'groq',
+        'openai',
+        'anthropic',
+        'ModelReplyPort',
+        'modelClient',
+        'callModel',
+        'completions',
+        'renderPrompt',
+        'resolvePrompt',
+        'promptTemplate',
+        'systemPrompt',
+        'embedding',
+        'vectorstore',
+        'vector_store',
+        'retrievegoverned',
+      ]) {
+        expect(code.toLowerCase(), `${file} must not name ${forbidden}`).not.toContain(
+          forbidden.toLowerCase(),
+        );
+      }
+    }
+  });
+
+  it('declares the AVG-7 sales-ethics prohibitions as literal falsehoods, not as prose', () => {
+    // The roadmap says AVG-7 is bounded by the same sales-ethics prohibitions as Anisha. Prose in a
+    // file nobody re-reads is not a bound; these are.
+    const brain = AAROHI_SALES_BRAIN_POSTURE as unknown as Readonly<Record<string, unknown>>;
+    const DECLARED_FALSE = [
+      // Commercial commitment, which is Core's and AVG-8's.
+      'commercialCommitmentCreated',
+      'commercialTruthOriginatedByBrain',
+      'priceOriginatedByBrain',
+      'discountOriginatedByBrain',
+      // The four a fluent system offers without being asked.
+      'guaranteeLeadVolume',
+      'guaranteeRevenue',
+      'guaranteeConversion',
+      'contractualCommitmentCreated',
+      // The three pressure tactics, and the omission that is a fourth.
+      'inventedUrgency',
+      'inventedScarcity',
+      'unsupportedSocialProof',
+      // The canonical ceiling names this one too, and the first AVG-7 head omitted it. Hiding the
+      // inconvenient half of an offer is the quietest of these failures and the easiest to reach.
+      'materialPackageLimitationHidden',
+      // Authority that belongs to Core, in every direction.
+      'consentEstablished',
+      'suppressionMutated',
+      'identityMutated',
+      'registrationMutated',
+      'paymentMutated',
+      'activationMutated',
+      'acquisitionCaseMutated',
+      'anishaHandoffExecuted',
+      // The governed execution chain, none of which starts here.
+      'communicationRequestCreated',
+      'approvalRequestCreated',
+      'approvalDecisionCreated',
+      'communicationAuthorizationCreated',
+      'executionIntentCreated',
+      'n8nExecutionRequested',
+      'providerSendRequested',
+      'channelSendRequested',
+      'sent',
+      'delivered',
+      // The model waist, the prompt waist and retrieval.
+      'modelCallExecuted',
+      'promptResolved',
+      'retrievalExecuted',
+      'productionMutation',
+      'businessEffect',
+    ] as const;
+
+    for (const declared of DECLARED_FALSE) {
+      expect(brain[declared], declared).toBe(false);
+    }
+    expect(brain['planOnly']).toBe(true);
+
+    // And the list must be COMPLETE, in both directions.
+    //
+    // A governance list that can quietly lose a member is a list that eventually will: deleting one
+    // entry above leaves a passing test that checks one fewer prohibition, and nothing says so. So
+    // the list is asserted against the posture itself rather than against somebody's memory —
+    // every `false` field must be named here, and every name here must be a `false` field. Adding a
+    // prohibition to the posture without listing it fails here too, which is the direction that
+    // matters as AVG-8 onward extend the ceiling.
+    const falseFields = Object.entries(brain)
+      .filter(([, value]) => value === false)
+      .map(([key]) => key);
+    expect([...DECLARED_FALSE].sort()).toStrictEqual(falseFields.sort());
+    for (const forged of [
+      { modelCallExecuted: true },
+      { priceOriginatedByBrain: true },
+      { guaranteeLeadVolume: true },
+      { materialPackageLimitationHidden: true },
+      { consentEstablished: true },
+      { anishaHandoffExecuted: true },
+      { planOnly: false },
+    ]) {
+      expect(
+        salesBrainPostureSchema.safeParse({ ...brain, ...forged }).success,
+        JSON.stringify(forged),
+      ).toBe(false);
+    }
+  });
+
+  it('keeps AVG-7 clear of acquisition ownership and of every downstream builder', () => {
+    const avg7 = codeOnly(readFileSync(join(SRC, 'contracts', 'avg7-sales-brain.ts'), 'utf8'));
+    for (const forbidden of [
+      'completeCoreActiveHandoff',
+      'transitionAcquisitionCase',
+      'openAcquisitionCase',
+      'HANDED_OFF_TO_ANISHA',
+      'AWAITING_CORE_ACTIVATION',
+      'CONTACT_APPROVED',
+      'activationAttestation',
+      // The three builders a "sales brain" would be tempted to call next. Composition is a later,
+      // separately reviewed decision; AVG-4 already owns the outreach workspace.
+      'createOutreachDraft',
+      'prepareInstagramOutboundCandidate',
+      'prepareWhatsAppChannelHandoffCandidate',
+    ]) {
+      expect(avg7, `AVG-7 must not name ${forbidden}`).not.toContain(forbidden);
+    }
+  });
+
   it('never reaches the OTHER handoff — Aarohi ownership stays where it was', () => {
     // `completeCoreActiveHandoff` is the only route to Anisha ownership and it requires a Core
     // ACTIVE attestation. AVG-6's handoff is a CHANNEL transition, and the two must not be
@@ -321,6 +487,21 @@ describe('Aarohi remains a DOMAIN, not a runtime through AVG-6', () => {
   it('generates nothing and prices nothing', () => {
     // AVG-7 owns the sales brain and AVG-8 owns commercial truth. AVG-5 normalizes inbound text and
     // carries an AVG-4 draft's words; it must not acquire a reply generator or a price on the way.
+    //
+    // ### Why `price` and `discount` are now SHAPES rather than bare words
+    //
+    // Through AVG-6 this list banned both outright, which worked because no file had cause to write
+    // them. AVG-7 does: the roadmap makes it "bounded by the same sales-ethics prohibitions as
+    // Anisha", and the only way to bound something a machine can check is to write the prohibition
+    // down -- as `priceOriginatedByBrain: false` and `discountOriginatedByBrain: false`.
+    //
+    // Those are DECLARATIONS OF ABSENCE, and this is the third time the same argument has applied
+    // (AVG-5's `metaApiCalled`, AVG-6's `whatsappSendRequested`). A scan that reads them as presence
+    // would force the contract to be renamed around a grep, making the prohibition less legible in
+    // order to keep a test quiet. So the ban moves to the shapes a commercial VALUE would actually
+    // arrive in -- a field literally called `price` or `discount`, a currency, a unit price, an
+    // amount due -- and the declarations are separately asserted present and false further down,
+    // which is a stronger check than the substring ever was.
     for (const { file, code } of productionFiles()) {
       for (const forbidden of [
         'modelgateway',
@@ -333,9 +514,21 @@ describe('Aarohi remains a DOMAIN, not a runtime through AVG-6', () => {
         'openai',
         'anthropic',
         'embedding',
-        'price',
+        // Commercial VALUES, under the names one would actually arrive in.
         'pricing',
-        'discount',
+        'priceinr',
+        'priceusd',
+        'pricecents',
+        'unitprice',
+        'listprice',
+        'baseprice',
+        'amountdue',
+        'amountpaid',
+        'currency',
+        'discountpercent',
+        'discountamount',
+        'discountcode',
+        'discountrate',
         'entitlement',
         'invoice',
         'razorpay',
@@ -343,6 +536,12 @@ describe('Aarohi remains a DOMAIN, not a runtime through AVG-6', () => {
         'quota',
       ]) {
         expect(code.toLowerCase(), `${file} must not name ${forbidden}`).not.toContain(forbidden);
+      }
+      // And no field may simply BE a price, a discount or an amount. The match is on the token
+      // immediately followed by a colon, so `unitPrice:` and `price?:` are caught while
+      // `priceOriginatedByBrain:` -- a declaration that no price was invented -- is not.
+      for (const shape of [/price\??:/iu, /discount\??:/iu, /amount\??:/iu]) {
+        expect(code, `${file} must not declare ${String(shape)}`).not.toMatch(shape);
       }
     }
   });
@@ -438,8 +637,14 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'AAROHI_AVG6_HANDOFF_SOURCE_CHANNEL',
       'AAROHI_AVG6_HANDOFF_TARGET_CHANNEL',
       'AAROHI_AVG6_IDENTITY_CHANNELS',
+      'AAROHI_AVG7_CONTRACT_VERSION',
+      'AAROHI_AVG7_INTERPRETATION_SOURCE_POSTURE',
       'AAROHI_ENRICHMENT_CONTRACT_VERSION',
       'AAROHI_PROSPECT_CONTRACT_VERSION',
+      'AAROHI_SALES_BRAIN_POSTURE',
+      'AAROHI_SALES_CONVERSATION_INTENTS',
+      'AAROHI_SALES_OBJECTION_KINDS',
+      'AAROHI_SALES_STRATEGIES',
       'ACQUISITION_CASE_STATES',
       'ACQUISITION_CASE_TRANSITIONS',
       'ACQUISITION_REFUSAL_REASONS',
@@ -493,6 +698,7 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'PROSPECT_DISCOVERY_SOURCES',
       'PROSPECT_PRIORITY_MAX_POINTS',
       'PROSPECT_PRIORITY_REFUSALS',
+      'SALES_TURN_REFUSALS',
       'TERMINAL_ACQUISITION_CASE_STATES',
       'WHATSAPP_CHANNEL_HANDOFF_OUTCOME',
       'WHATSAPP_CHANNEL_HANDOFF_POSTURE',
@@ -509,6 +715,7 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'canTransition',
       'completeCoreActiveHandoff',
       'coreEligibilityObservationSchema',
+      'createAarohiSalesBrainInterpretation',
       'createCrossChannelIdentityEvidenceBundle',
       'createCrossChannelIdentityEvidenceClaim',
       'createEnrichmentClaim',
@@ -520,6 +727,7 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'enrichmentClaimSchema',
       'enrichmentProfileSchema',
       'enrichmentSourceSchema',
+      'evaluateAarohiSalesTurn',
       'evaluateAcquisitionContactEligibility',
       'evaluateAcquisitionEligibility',
       'evaluateCrossChannelIdentityLink',
@@ -537,6 +745,8 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'instagramOutboundCandidateSchema',
       'isTerminalAcquisitionCaseState',
       'openAcquisitionCase',
+      'parseAarohiSalesBrainInterpretation',
+      'parseAarohiSalesTurnPlan',
       'parseCrossChannelIdentityEvidenceBundle',
       'parseCrossChannelIdentityLinkRecommendation',
       'parseEnrichmentClaim',
@@ -548,6 +758,10 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'prepareWhatsAppChannelHandoffCandidate',
       'prospectIdentitySchema',
       'reviseWorkspaceDraft',
+      'salesBrainInterpretationSchema',
+      'salesBrainPostureSchema',
+      'salesReplyBriefSchema',
+      'salesTurnPlanSchema',
       'summariseEnrichmentConsistency',
       'transitionAcquisitionCase',
       'transitionWorkspaceDraft',
