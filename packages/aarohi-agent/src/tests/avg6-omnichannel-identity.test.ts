@@ -1788,9 +1788,19 @@ describe('the roadmap overlay stays true on both sides of a merge', () => {
   );
 
   it('no longer says everything after AVG-0 is unimplemented', () => {
-    // The document's own status block records AVG-0..AVG-5 as certified offline domains, so the
+    // The document's own status block records a RANGE of stages as certified offline domains, so the
     // AVG-0 section saying the opposite was the same file contradicting itself.
-    expect(overlay).toContain('AVG-0 through AVG-5 — implemented as certified offline domains');
+    //
+    // The range is matched rather than named. It advances by one every time a stage is certified,
+    // and a spec that pinned the number would fail on the next slice for being right about the
+    // previous one -- which teaches whoever hits it to edit the assertion, and that is the habit a
+    // governance spec should least encourage. What must stay true is that the range starts at AVG-0,
+    // that it reaches at least AVG-6, and that the stale sentence is gone.
+    const certified = /AVG-0 through AVG-(\d+) — implemented as certified offline domains/u.exec(
+      overlay,
+    );
+    expect(certified).not.toBeNull();
+    expect(Number(certified?.[1] ?? '0')).toBeGreaterThanOrEqual(6);
     expect(overlay).not.toContain('everything after it is planned and unimplemented');
     expect(overlay).toContain('ADR-0123');
   });

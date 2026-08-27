@@ -372,3 +372,35 @@ export type {
   WhatsAppChannelHandoffPosture,
   WhatsAppChannelHandoffRefusal,
 } from './contracts/avg6-omnichannel-identity.js';
+
+export {
+  AAROHI_AVG7_CONTRACT_VERSION,
+  AAROHI_AVG7_INTERPRETATION_SOURCE_POSTURE,
+  AAROHI_SALES_BRAIN_POSTURE,
+  AAROHI_SALES_CONVERSATION_INTENTS,
+  AAROHI_SALES_OBJECTION_KINDS,
+  AAROHI_SALES_STRATEGIES,
+  SALES_TURN_REFUSALS,
+  createAarohiSalesBrainInterpretation,
+  evaluateAarohiSalesTurn,
+  parseAarohiSalesBrainInterpretation,
+  parseAarohiSalesTurnPlan,
+  salesBrainInterpretationSchema,
+  salesBrainPostureSchema,
+  salesReplyBriefSchema,
+  salesTurnPlanSchema,
+} from './contracts/avg7-sales-brain.js';
+export type {
+  AarohiAvg7ContractVersion,
+  AarohiSalesBrainInterpretation,
+  AarohiSalesBrainInterpretationResult,
+  AarohiSalesBrainPosture,
+  AarohiSalesConversationIntent,
+  AarohiSalesInterpretationSourcePosture,
+  AarohiSalesObjectionKind,
+  AarohiSalesReplyBrief,
+  AarohiSalesStrategy,
+  AarohiSalesTurnPlan,
+  AarohiSalesTurnPlanResult,
+  AarohiSalesTurnRefusal,
+} from './contracts/avg7-sales-brain.js';
