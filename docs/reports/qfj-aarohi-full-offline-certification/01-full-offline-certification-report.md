@@ -182,7 +182,7 @@ Runtime remains **PLANNED / DISABLED**. Production rollout remains **OFF**.
 | Suite                                | Result         |
 | ------------------------------------ | -------------- |
 | Cross-stage certification (new)      | **32 passed**  |
-| Aarohi package total                 | **676 passed** |
+| Aarohi package total                 | **678 passed** |
 | Aarohi containment / public-API lock | **48 passed**  |
 | Control-plane V1/V2 + Jarvis OS      | **292 passed** |
 | Repository unit suite                | see §N-2       |

@@ -1,7 +1,7 @@
 # ADR-0131 — QFJ-P12 / Aarohi full offline certification closeout
 
 **Status:** Accepted
-**Date:** 2026-08-29
+**Date:** 2026-08-28
 **Phase:** QFJ-P12 — Advanced Intelligence and Future Agents (QVGE overlay, AVG-0 … AVG-12)
 **Baseline:** `d3c2d7c597eaf553c59f2f8f9a767deab353bb0d` (merge of PR #171 / AVG-12)
 **Supersedes:** nothing. **Superseded by:** nothing.
