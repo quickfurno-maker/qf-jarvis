@@ -76,7 +76,7 @@
  * ### Fail-closed, in one direction only
  *
  * Unknown restricts. Conflict restricts. Stale restricts. Suppression refuses. A missing Core fact
- * asks Core. A failed offline evaluation asks a person. Nothing here turns an absence into a higher
+ * asks Core. Offline evaluation is separate governance evidence and is not consumed as per-prospect autonomy evidence. Nothing here turns an absence into a higher
  * level, and the reason precedence that decides which restriction applies is a DECLARED ORDER rather
  * than the shape of an `if` chain.
  *
