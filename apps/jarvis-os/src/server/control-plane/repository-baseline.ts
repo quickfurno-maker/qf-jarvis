@@ -464,6 +464,14 @@ export const BASELINE_AAROHI_READINESS: {
         'AVG-11 merged (ADR-0128). Aggregate counts with an authority class each. Read-only, and no evidence source is connected.',
     },
     {
+      id: 'avg-12-offline-evaluation-and-controlled-autonomy',
+      label: 'Offline evaluation and controlled autonomy',
+      kind: 'offline-domain',
+      state: 'PLANNED',
+      detail:
+        'AVG-12 merged (ADR-0130). An offline evaluation and red-team corpus, plus autonomy that adds offline decision freedom and no business authority.',
+    },
+    {
       id: 'core-active-handoff-boundary',
       label: 'QuickFurno Core ACTIVE handoff',
       kind: 'boundary',

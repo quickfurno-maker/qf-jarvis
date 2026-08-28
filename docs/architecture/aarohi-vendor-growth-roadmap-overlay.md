@@ -28,7 +28,20 @@ true at AVG-1. What exists is contracts and pure functions over frozen values:
   no evidence source of any kind is connected. The wire additions are versioned as control-plane
   **V2** ([ADR-0129](../decisions/ADR-0129-avg11-control-plane-read-contract-v2.md)) with V1 left
   unchanged. The Jarvis OS Aarohi section stays `PLANNED`.
-- **AVG-12 — planned and unimplemented.**
+- **AVG-12 — offline implementation proof defined by
+  [ADR-0130](../decisions/ADR-0130-qfj-p12-avg12-aarohi-scale-evaluation-controlled-autonomy-offline-domain.md).**
+  It adds an offline evaluation and red-team corpus, a bounded-volume proof at maxima the sibling
+  contracts already declare, and controlled autonomy that increases OFFLINE decision freedom and no
+  business authority. No live Core read, runtime, model call, prompt resolution, retrieval, provider,
+  channel, transport, persistence, migration, rollout or execution activation, and no control-plane
+  wire change: V1 and V2 are both untouched.
+
+**The AVG-0 through AVG-12 OFFLINE IMPLEMENTATION sequence is complete. The full Aarohi
+certification is a SEPARATE owner closeout and has not happened.** Every stage above is an offline
+domain — contracts and pure functions over frozen values. A separate certification across
+AVG-0 … AVG-12 is what would weigh them together, and until that happens no part of this overlay may
+be read as certifying Aarohi, authorizing a live QuickFurno execution integration, or permitting a
+staged activation.
 
 Recording a capability is still not implementing one, and implementing an offline domain is still not
 activating anything.
@@ -505,6 +518,69 @@ read, no evidence source and no production activation. Exact first-proof boundar
 ### AVG-12 — Scale, Evaluation and Controlled Autonomy
 Volume, evaluation suites, red-team coverage and any increase in autonomy — each governed by the
 existing rollout controls, each fail-closed, and none of it a route around approval.
+
+**The offline DOMAIN for this stage is defined by
+[ADR-0130](../decisions/ADR-0130-qfj-p12-avg12-aarohi-scale-evaluation-controlled-autonomy-offline-domain.md).**
+This is the LAST offline implementation stage and it is not the Aarohi certification. Runtime remains
+PLANNED / DISABLED; this capability description claims no deployment, no live Core read, no evidence
+source and no production activation. Exact first-proof boundaries:
+
+- **Evaluation is not authority, and that is a shape rather than a rule.** A probe that held, a bound
+  that was exercised and an autonomy level that was granted establish that this offline
+  implementation behaved as its contracts require, and nothing else. No field is spelled `approved`,
+  `authorized`, `canSend`, `canExecute`, `consentValid`, `paymentConfirmed` or `productionReady`, and
+  the one positive token is `OFFLINE_EVALUATION_PASSED`.
+- **The caller cannot label a failure as a pass.** It names probes and supplies no expectation, no
+  severity and no result: each probe's dimension and severity are TOTAL maps in the contract, and
+  each verdict comes from driving a certified sibling function and reading what it returned. Every
+  probe is mandatory, so a subset, a duplicate and an unknown token are each a named refusal.
+- **A critical failure cannot be averaged away, because there is no arithmetic to average with.** No
+  score, weight, percentage or grade exists. The report schema requires the whole corpus to be
+  accounted for and refuses a passing outcome beside any failure at all, so even a hand-built report
+  cannot claim one.
+- **Red-team coverage is named, not counted.** Substitute activation authority (provider receipt,
+  model inference, conversation claim, agent case state), identity binding, stale and pre-causal
+  evidence, sales ethics under instruction-shaped inbound text, suppression outranking commercial
+  interest, the registration boundary, the payment and activation boundaries, the handoff boundary
+  and its two absent bridges, unknown-is-not-zero, determinism, data minimization, execution
+  containment and rollout containment each carry at least one CRITICAL probe.
+- **Scale means bounded algorithmic behaviour, never capacity.** The maxima exercised are the ones
+  SIBLING contracts declare, so the claim cannot drift by AVG-12 choosing a friendlier number:
+  accepted at the bound, refused WHOLE above it with nothing truncated or sampled, and the whole
+  input validated rather than a prefix. No database, queue, worker, scheduler, load harness or
+  benchmark was added, and no throughput, concurrency, capacity or latency figure is produced or
+  claimed. What is reported is offline evaluation VOLUME, named so it cannot read as a vendor funnel.
+- **Controlled autonomy reuses the repository's own ladder.** `L0_REASON` and `L1_READ` are spelled
+  as JAO-1 (ADR-0115), JAO-2 (ADR-0116) and JAO-4 (ADR-0118) spell them; the one rung AVG-12 adds
+  permits NAMING which already-certified offline preparation applies. Naming is not running, and
+  every preparation named re-runs its own gate when it is called. There is no rung above it, and no
+  `AUTO_SEND`, `FULL_AUTO` or `UNSUPERVISED_EXECUTION` token anywhere.
+- **No authority delta between the floor and the ceiling.** Every level carries the SAME frozen
+  posture, so the ceiling cannot vary by level, by evaluation result or by anything a caller
+  supplies. Business, contact, consent, suppression, approval, execution, send, Core-mutation,
+  registration, payment, activation and rollout authority are each a schema-pinned literal `false`.
+- **Fail-closed in one direction only.** Suppression, an existing relationship, unresolved Core truth
+  and a failed corpus each RESTRICT by a declared reason precedence; a malformed envelope, an
+  observation about another party, a non-canonical evaluation and a decision that predates its own
+  evidence each REFUSE outright. Nothing anywhere raises a level.
+- **Another channel and a later attempt are unrepresentable, not merely forbidden.** A decision has
+  no channel, destination, recipient, body, template, approval, execution-intent, case-transition or
+  schedule field, and the reason is derived from the current supplied evidence alone.
+- **Deterministic and replayable.** No clock, no randomness, no seed, no persistence and no
+  migration: the same injected input replays to byte-identical bytes, and reordering the probes or
+  the evidence changes nothing.
+- **No control-plane wire change.** V1 stays frozen under ADR-0086 and V2 stays intact under
+  ADR-0129; the Jarvis OS Aarohi readiness surface gains one row using the existing vocabulary, and
+  the section stays `PLANNED` with no action control.
+- **The AVG-10 gaps remain gaps.** The post-registration continuation boundary and the bridge into
+  `AWAITING_CORE_ACTIVATION` are still absent, and autonomy does not manufacture either: a CRITICAL
+  probe drives every ordinary transition and proves neither is reachable. The cold gate remains
+  exactly `NOT_REGISTERED`.
+- Zero live Core reads or writes, Supabase clients, QuickFurno imports, SQL statements, migrations,
+  model calls, prompt resolutions, retrievals, registrations, payments, activations, Anisha handoffs,
+  acquisition-case transitions, communication requests, approvals, authorizations, execution intents,
+  provider or channel sends, workers, queues, schedulers, persistence, production entries, rollout
+  activations and new third-party dependencies.
 
 ---
 
