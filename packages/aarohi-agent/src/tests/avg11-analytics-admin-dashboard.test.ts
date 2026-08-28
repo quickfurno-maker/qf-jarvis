@@ -917,10 +917,15 @@ describe('the roadmap overlay stays true on both sides of a merge', () => {
     expect(overlay).toContain('### AVG-11 — Analytics, Admin APIs and Full Dashboard');
   });
 
-  it('keeps AVG-12 planned and unimplemented, and the runtime PLANNED / DISABLED', () => {
-    expect(overlay).toMatch(/AVG-12 — planned and unimplemented/u);
-    expect(overlay).not.toMatch(/AVG-12 — offline implementation proof/u);
+  it('keeps the runtime PLANNED / DISABLED however far the overlay has advanced', () => {
+    // This spec used to assert that AVG-12 was still unimplemented, which was a fact about the
+    // frontier rather than about AVG-11. AVG-12 has since merged its own offline proof under
+    // ADR-0130 and there is no stage after it, so the frontier assertion has nothing left to
+    // point at. What it was really protecting is the enduring half, and that is asserted instead:
+    // the sequence advancing never turns into a runtime, and never turns into a certification.
     expect(overlay).toContain('PLANNED / DISABLED');
+    expect(overlay).toMatch(/full Aarohi\s+certification is a SEPARATE owner closeout/u);
+    expect(overlay.toLowerCase()).not.toContain('aarohi is certified');
     for (const forbidden of ['autonomy increase', 'auto outreach', 'self-optimis']) {
       expect(overlay.toLowerCase(), forbidden).not.toContain(`avg-11 ${forbidden}`);
     }

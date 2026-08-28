@@ -1654,12 +1654,17 @@ describe('the roadmap overlay stays true on both sides of a merge', () => {
     expect(overlay).toMatch(/offline DOMAIN for this stage is defined by\s+\[ADR-0127\]/u);
   });
 
-  it('keeps the stage after the certified range planned and unimplemented', () => {
-    // The guard is "the next stage has not been started", not a particular stage number. AVG-11
-    // merged its own offline proof under ADR-0128, which moved the frontier by exactly one; the
-    // assertion moves with it rather than being deleted.
-    expect(overlay).toMatch(/AVG-12 — planned and unimplemented/u);
-    expect(overlay).not.toMatch(/AVG-12 — offline implementation proof/u);
+  it('never lets the advancing frontier become a certification claim', () => {
+    // The guard used to be "the next stage has not been started", which held while there was a
+    // next stage. AVG-12 was the last one (ADR-0130), so that phrasing now points at nothing.
+    // The reason the guard existed survives intact and is asserted directly: finishing the offline
+    // sequence is not certifying Aarohi, and the overlay has to keep saying so.
+    expect(overlay).toMatch(/OFFLINE IMPLEMENTATION sequence is complete/u);
+    expect(overlay).toMatch(/full Aarohi\s+certification is a SEPARATE owner closeout/u);
+    expect(overlay).toContain('PLANNED / DISABLED');
+    for (const forbidden of ['aarohi is certified', 'production certified', 'go live']) {
+      expect(overlay.toLowerCase(), forbidden).not.toContain(forbidden);
+    }
   });
 
   it('encodes no branch state, and claims no runtime activation', () => {

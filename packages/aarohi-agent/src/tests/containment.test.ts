@@ -17,6 +17,13 @@ import { describe, expect, it } from 'vitest';
 
 import {
   AAROHI_AVG5_CHANNEL,
+  AAROHI_AVG12_POSTURE,
+  AAROHI_OFFLINE_PROBES,
+  ACQUISITION_CASE_STATES,
+  ACQUISITION_CASE_TRANSITIONS,
+  ELIGIBLE_CORE_STATUSES,
+  aarohiAvg12PostureSchema,
+  evaluateAarohiOfflineSuite,
   AAROHI_COMMERCIAL_FACTS_POSTURE,
   AAROHI_PAYMENT_FOLLOWUP_POSTURE,
   AAROHI_REGISTRATION_ASSISTANCE_POSTURE,
@@ -1178,16 +1185,42 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
     // AVG-11 adds aggregate acquisition analytics: a closed funnel vocabulary, a metric AUTHORITY
     // distinction, and one pure builder that counts distinct prospects and refuses to name a
     // business outcome. It exposes no rate, no admin write and no route into any transition.
+    // AVG-12 adds the offline evaluation corpus, the bounded-volume proof and controlled autonomy:
+    // closed probe, dimension and severity vocabularies whose maps a caller never supplies, one
+    // pure suite evaluator whose outcome is derived, and one pure autonomy decision that grants
+    // OFFLINE decision freedom over a single frozen posture. It exposes no activation, rollout,
+    // send, approve or execute function, and no level changes the authority ceiling.
+    //
+    // Note the two names that are NOT here. `parseAarohiOfflineEvaluationReport` and
+    // `parseAarohiControlledAutonomyDecision` were exported in an earlier revision and are now
+    // internal: each proves a SHAPE, neither can prove that the corpus ran or that a decision was
+    // derived, and a public `parse*` returning a certified-looking artifact reads as if it could.
+    // The SCHEMAS remain exported, because a schema is unambiguously a shape description.
     expect(Object.keys(barrel).sort()).toStrictEqual([
       'AAROHI_ACQUISITION_FUNNEL_OUTCOME',
       'AAROHI_AGENT_ID',
       'AAROHI_ANALYTICS_EVIDENCE_KINDS',
       'AAROHI_ANALYTICS_POSTURE',
       'AAROHI_ANALYTICS_REFUSALS',
+      'AAROHI_AUTONOMY_CEILING',
+      'AAROHI_AUTONOMY_FLOOR',
+      'AAROHI_AUTONOMY_LEVELS',
+      'AAROHI_AUTONOMY_LEVEL_PREPARATIONS',
+      'AAROHI_AUTONOMY_NEXT_STEPS',
+      'AAROHI_AUTONOMY_RANK',
+      'AAROHI_AUTONOMY_REASONS',
+      'AAROHI_AUTONOMY_REASON_MAX_LEVEL',
+      'AAROHI_AUTONOMY_REASON_NEXT_STEP',
+      'AAROHI_AUTONOMY_REASON_PRECEDENCE',
+      'AAROHI_AUTONOMY_REFUSALS',
       'AAROHI_AVG10_CONTRACT_VERSION',
       'AAROHI_AVG10_PAYMENT_SOURCE_POSTURE',
       'AAROHI_AVG11_CONTRACT_VERSION',
       'AAROHI_AVG11_EVIDENCE_SOURCE_POSTURE',
+      'AAROHI_AVG12_AUTONOMY_SOURCE_POSTURE',
+      'AAROHI_AVG12_CONTRACT_VERSION',
+      'AAROHI_AVG12_EVALUATION_SOURCE_POSTURE',
+      'AAROHI_AVG12_POSTURE',
       'AAROHI_AVG3_CONTRACT_VERSION',
       'AAROHI_AVG4_CONTRACT_VERSION',
       'AAROHI_AVG5_CHANNEL',
@@ -1205,11 +1238,20 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'AAROHI_AVG9_REGISTRATION_PROCESS_SOURCE_POSTURE',
       'AAROHI_COMMERCIAL_FACTS_POSTURE',
       'AAROHI_ENRICHMENT_CONTRACT_VERSION',
+      'AAROHI_EVALUATION_DIMENSIONS',
+      'AAROHI_EVALUATION_REFUSALS',
+      'AAROHI_EVALUATION_SEVERITIES',
       'AAROHI_EVIDENCE_SOURCE_STATES',
       'AAROHI_FUNNEL_STAGES',
       'AAROHI_METRIC_AUTHORITIES',
       'AAROHI_METRIC_UNAVAILABLE_REASONS',
+      'AAROHI_OFFLINE_EVALUATION_OUTCOMES',
+      'AAROHI_OFFLINE_PREPARATIONS',
+      'AAROHI_OFFLINE_PROBES',
+      'AAROHI_OFFLINE_PROBE_COUNT',
       'AAROHI_PAYMENT_FOLLOWUP_POSTURE',
+      'AAROHI_PROBE_DIMENSION',
+      'AAROHI_PROBE_SEVERITY',
       'AAROHI_PROSPECT_CONTRACT_VERSION',
       'AAROHI_REGISTRATION_ASSISTANCE_POSTURE',
       'AAROHI_SALES_BRAIN_POSTURE',
@@ -1291,10 +1333,15 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'WORKSPACE_DRAFT_STATES',
       'aarohiAcquisitionFunnelReportSchema',
       'aarohiAnalyticsPostureSchema',
+      'aarohiAvg12PostureSchema',
       'aarohiCommercialFactsBriefSchema',
       'aarohiCommercialFactsPostureSchema',
+      'aarohiControlledAutonomyDecisionSchema',
+      'aarohiEvaluationDimensionResultSchema',
       'aarohiEvidenceSourcesSchema',
       'aarohiFunnelMetricSchema',
+      'aarohiOfflineEvaluationReportSchema',
+      'aarohiOfflineScaleSummarySchema',
       'aarohiPaymentFollowupBriefSchema',
       'aarohiPaymentFollowupPostureSchema',
       'aarohiRegistrationAssistanceBriefSchema',
@@ -1323,10 +1370,12 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'createInstagramConversation',
       'createProspectIdentity',
       'createWorkspaceDraft',
+      'decideAarohiControlledAutonomy',
       'enrichmentClaimIdentity',
       'enrichmentClaimSchema',
       'enrichmentProfileSchema',
       'enrichmentSourceSchema',
+      'evaluateAarohiOfflineSuite',
       'evaluateAarohiSalesTurn',
       'evaluateAcquisitionContactEligibility',
       'evaluateAcquisitionEligibility',
@@ -1690,5 +1739,404 @@ describe('AVG-11 observes, and adds no authority of any kind', () => {
     }
     expect(v1).not.toContain('aarohiAcquisitionReadiness');
     expect(v1).not.toContain('expectedAuthority');
+  });
+});
+
+/**
+ * AVG-12 containment (ADR-0130).
+ *
+ * The scans here differ from every earlier stage's in one way worth naming. AVG-12 legitimately
+ * DRIVES the canonical functions adversarially: it calls `completeCoreActiveHandoff`, it names
+ * `HANDED_OFF_TO_ANISHA` and `AWAITING_CORE_ACTIVATION`, and it reads `ELIGIBLE_CORE_STATUSES` —
+ * because proving those boundaries hold is the entire point of a red-team corpus. So a token ban
+ * would be the wrong instrument, and what is asserted instead is that every one of those calls is
+ * a REFUSAL being demonstrated, that nothing certified is mutated by running the corpus, and that
+ * the module acquires no capability of its own.
+ */
+describe('AVG-12 evaluates, and adds no capability of any kind', () => {
+  const avg12 = (): string =>
+    codeOnly(
+      readFileSync(join(SRC, 'contracts', 'avg12-scale-evaluation-controlled-autonomy.ts'), 'utf8'),
+    );
+
+  it('adds no scale infrastructure — this stage measures bounds, it does not build capacity', () => {
+    // "Scale" is the word most likely to attract a queue. The overlay sentence is about bounded
+    // volume and fail-closed behaviour; a worker, a scheduler or a benchmark harness would be a
+    // different stage entirely, and one this ADR does not authorize.
+    const code = avg12();
+    for (const forbidden of [
+      'worker_threads',
+      'node:cluster',
+      'node:perf_hooks',
+      'setTimeout',
+      'setInterval',
+      'setImmediate',
+      'queueMicrotask',
+      'BullMQ',
+      'bullmq',
+      'ioredis',
+      'redis',
+      'kafka',
+      'rabbit',
+      'autocannon',
+      'benchmark(',
+      'bench(',
+      'loadTest',
+      'stressTest',
+      'concurrency',
+      'throughput',
+      'poolSize',
+      'maxSockets',
+      'horizontalScale',
+      'autoscal',
+      'loadBalancer',
+    ]) {
+      expect(code, 'AVG-12 must not name ' + forbidden).not.toContain(forbidden);
+    }
+  });
+
+  it('reads no clock and rolls no dice, so a replay is a replay', () => {
+    // Determinism is a load-bearing AVG-12 property and it is cheap to lose: one `Date.now()` in a
+    // builder makes every report unrepeatable, and one `Math.random()` makes the corpus a sample.
+    // `new Date(...)` WITH an argument is arithmetic over an injected instant and stays allowed;
+    // the no-argument form reads the system clock and does not.
+    const code = avg12();
+    for (const forbidden of ['Date.now', 'Math.random', 'performance.now', 'hrtime', 'crypto.']) {
+      expect(code, 'AVG-12 must not name ' + forbidden).not.toContain(forbidden);
+    }
+    expect(code, 'AVG-12 must not construct a Date from the clock').not.toMatch(
+      /new\s+Date\s*\(\s*\)/u,
+    );
+  });
+
+  it('pins the whole AVG-12 ceiling in the SCHEMA, not merely in the value', () => {
+    // Asserted against the schema rather than a built value, because a value can be rebuilt and a
+    // schema cannot be talked around. Every authority a controlled-autonomy stage might be thought
+    // to confer is a `z.literal(false)` here.
+    const code = avg12();
+    for (const pinned of [
+      'businessAuthorityExpanded: z.literal(false)',
+      'contactAuthorityGranted: z.literal(false)',
+      'consentAuthorityGranted: z.literal(false)',
+      'suppressionAuthorityGranted: z.literal(false)',
+      'approvalAuthorityGranted: z.literal(false)',
+      'executionAuthorityGranted: z.literal(false)',
+      'sendAuthorityGranted: z.literal(false)',
+      'coreMutationAuthorityGranted: z.literal(false)',
+      'registrationAuthorityGranted: z.literal(false)',
+      'paymentAuthorityGranted: z.literal(false)',
+      'activationAuthorityGranted: z.literal(false)',
+      'rolloutAuthorityGranted: z.literal(false)',
+      'coreWriteExecuted: z.literal(false)',
+      'coldGateWidened: z.literal(false)',
+      'acquisitionCaseMutated: z.literal(false)',
+      'anishaHandoffExecuted: z.literal(false)',
+      'communicationAuthorizationCreated: z.literal(false)',
+      'executionIntentCreated: z.literal(false)',
+      'n8nExecutionRequested: z.literal(false)',
+      'providerSendRequested: z.literal(false)',
+      'channelSendRequested: z.literal(false)',
+      'modelCallExecuted: z.literal(false)',
+      'promptResolved: z.literal(false)',
+      'retrievalExecuted: z.literal(false)',
+      'persisted: z.literal(false)',
+      'liveCoreConnected: z.literal(false)',
+      'productionActivated: z.literal(false)',
+      'productionMutation: z.literal(false)',
+      'businessEffect: z.literal(false)',
+      'fullAarohiCertificationClaimed: z.literal(false)',
+      'offlineOnly: z.literal(true)',
+      'failClosed: z.literal(true)',
+    ]) {
+      expect(code, 'AVG-12 must pin ' + pinned).toContain(pinned);
+    }
+  });
+
+  it('drives the canonical handoff only to be REFUSED, and adds no second route', () => {
+    const code = avg12();
+    // It calls AVG-1's own function, which is the point. What it must not do is add a route.
+    expect(code).toContain('completeCoreActiveHandoff(');
+    for (const forbidden of [
+      'completeAvg12Handoff',
+      'forceHandoff',
+      'handoffToAnisha',
+      'transitionToAnisha',
+      'markHandedOff',
+      'openAcquisitionCase',
+      'grantHandoff',
+      'promoteCase',
+      'bridgeToActivation',
+      'enterActivationBoundary',
+      'continueAfterRegistration',
+    ]) {
+      expect(code, 'AVG-12 must not name ' + forbidden).not.toContain(forbidden);
+    }
+    // And a SUCCESSFUL handoff inside a red-team corpus would be the one fixture that must not
+    // exist. It would leave a trace, so the assertion is behavioural rather than textual: nothing
+    // the corpus produces may carry an acquisition-case state of any kind, terminal or otherwise.
+    const produced = evaluateAarohiOfflineSuite({
+      suiteRef: 'AVG12-CONTAINMENT',
+      preparedAt: '2026-03-01T09:00:00.000Z',
+      probes: [...AAROHI_OFFLINE_PROBES],
+    });
+    expect(produced.ok).toBe(true);
+    if (produced.ok) {
+      const serialized = JSON.stringify(produced.report);
+      for (const state of ACQUISITION_CASE_STATES) {
+        expect(serialized, state).not.toContain(state);
+      }
+    }
+  });
+
+  it('reads the cold gate and never writes it', () => {
+    const code = avg12();
+    // Reading `ELIGIBLE_CORE_STATUSES` is how the corpus proves the gate is one status wide.
+    expect(code).toContain('ELIGIBLE_CORE_STATUSES');
+    for (const forbidden of [
+      'ELIGIBLE_CORE_STATUSES =',
+      'ELIGIBLE_CORE_STATUSES.push',
+      'CORE_STATUS_ROLE =',
+      'ACQUISITION_CASE_TRANSITIONS =',
+      'widenGate',
+      'allowRegistered',
+      'admitRegistered',
+    ]) {
+      expect(code, 'AVG-12 must not name ' + forbidden).not.toContain(forbidden);
+    }
+    // Reading a certified table is how the handoff-boundary probes prove the two bridges are
+    // absent, so the ban is on ASSIGNING into one rather than on naming one. The tables are frozen,
+    // and a spec below re-reads them after a full corpus run to prove nothing moved.
+    for (const write of [
+      /ELIGIBLE_CORE_STATUSES\s*\[[^\]]*\]\s*=[^=]/u,
+      /CORE_STATUS_ROLE\s*\[[^\]]*\]\s*=[^=]/u,
+      /ACQUISITION_CASE_TRANSITIONS\s*\[[^\]]*\]\s*=[^=]/u,
+      /AAROHI_STAGE_AUTHORITY\s*\[[^\]]*\]\s*=[^=]/u,
+    ]) {
+      expect(code, 'AVG-12 must not write ' + String(write)).not.toMatch(write);
+    }
+  });
+
+  it('leaves every certified constant exactly as it found it after a full corpus run', () => {
+    // The strongest version of the claim above: run the whole corpus, then re-read the constants it
+    // touched. A probe that mutated a frozen sibling value would be caught here rather than by
+    // whichever spec happened to run afterwards.
+    const before = JSON.stringify({
+      eligible: ELIGIBLE_CORE_STATUSES,
+      transitions: ACQUISITION_CASE_TRANSITIONS,
+      stages: AAROHI_FUNNEL_STAGES,
+      authority: AAROHI_STAGE_AUTHORITY,
+      posture: AAROHI_AVG12_POSTURE,
+    });
+    const result = evaluateAarohiOfflineSuite({
+      suiteRef: 'AVG12-CONTAINMENT',
+      preparedAt: '2026-03-01T09:00:00.000Z',
+      probes: [...AAROHI_OFFLINE_PROBES],
+    });
+    expect(result.ok).toBe(true);
+    expect(
+      JSON.stringify({
+        eligible: ELIGIBLE_CORE_STATUSES,
+        transitions: ACQUISITION_CASE_TRANSITIONS,
+        stages: AAROHI_FUNNEL_STAGES,
+        authority: AAROHI_STAGE_AUTHORITY,
+        posture: AAROHI_AVG12_POSTURE,
+      }),
+    ).toBe(before);
+    expect([...ELIGIBLE_CORE_STATUSES]).toStrictEqual(['NOT_REGISTERED']);
+  });
+
+  it('takes no evaluation result and no decision as INPUT, which is the whole correction', () => {
+    // The defect an owner review found: `decideAarohiControlledAutonomy` used to accept an offline
+    // evaluation report and let a passing one unlock the top rung. A report is a value, so a caller
+    // who had never run the corpus could write a consistent PASS and raise its own ceiling.
+    //
+    // Shape validity is not derivation and a parser is not an authority, so the fix is not a better
+    // parser -- it is that NOTHING here accepts one. Asserted against the INPUT SCHEMAS, because
+    // that is where an input would have to reappear.
+    const code = avg12();
+    const inputSchemas = [
+      ...code.matchAll(/const (\w*InputSchema) = z\s*\n?\s*\.object\(\{([^}]*)\}/gu),
+    ];
+    expect(inputSchemas.length, 'AVG-12 must declare its input schemas as strict objects').toBe(2);
+    for (const [, name, body] of inputSchemas) {
+      for (const forbidden of [
+        'offlineEvaluation',
+        'evaluation:',
+        'evaluationReport',
+        'evaluationPassed',
+        'readiness',
+        'report:',
+        'decision:',
+        'priorDecision',
+        'grantedLevel',
+        'outcome',
+      ]) {
+        expect(body, `${String(name)} must not accept ${forbidden}`).not.toContain(forbidden);
+      }
+    }
+    // Both are strict, so an extra key is a refusal rather than a silently ignored field.
+    expect(code.match(/\.strict\(\)/gu)?.length ?? 0).toBeGreaterThanOrEqual(2);
+  });
+
+  it('keeps both shape parsers internal, and exports neither', () => {
+    const code = avg12();
+    // They exist, and the deriving functions use them to validate their OWN output.
+    expect(code).toContain('function parseAarohiOfflineEvaluationReport(');
+    expect(code).toContain('function parseAarohiControlledAutonomyDecision(');
+    // But neither is exported, because a public `parse*` returning a certified-looking artifact
+    // reads as provenance and can only prove a shape.
+    expect(code).not.toContain('export function parseAarohiOfflineEvaluationReport');
+    expect(code).not.toContain('export function parseAarohiControlledAutonomyDecision');
+    const barrel = codeOnly(readFileSync(join(SRC, 'index.ts'), 'utf8'));
+    expect(barrel).not.toContain('parseAarohiOfflineEvaluationReport');
+    expect(barrel).not.toContain('parseAarohiControlledAutonomyDecision');
+  });
+
+  it('states the outcome rule as an EQUIVALENCE, not an implication', () => {
+    // The one-way rule admitted a report saying FAILED while carrying no failure -- a state the
+    // evaluator cannot produce, and one an earlier spec used as a convenience fixture.
+    const code = avg12();
+    expect(code).toContain("(value.outcome === 'OFFLINE_EVALUATION_PASSED') ===");
+    expect(code).toContain('(value.probesFailed === 0 && value.criticalFailures === 0)');
+  });
+
+  it('builds no complete passing report of its own anywhere in production source', () => {
+    // An earlier revision carried a private `passingEvaluationValue(...)` helper that hand-built a
+    // whole `OFFLINE_EVALUATION_PASSED` report and fed it to the decision path without running the
+    // suite. It was a demonstration of the exact weakness, sitting inside the module that had it.
+    const code = avg12();
+    for (const forbidden of [
+      'passingEvaluationValue',
+      'fabricatedReport',
+      'syntheticReport',
+      'assumePassed',
+      "outcome: 'OFFLINE_EVALUATION_PASSED'",
+    ]) {
+      expect(code, 'AVG-12 must not name ' + forbidden).not.toContain(forbidden);
+    }
+    // The token exists in exactly one shape: DERIVED from the probe tallies.
+    expect(code).toContain("? 'OFFLINE_EVALUATION_PASSED'");
+  });
+
+  it('restates the shared grammars rather than narrowing them', () => {
+    // AVG-12 restates the opaque-reference grammar and the canonical-instant grammar, for the reason
+    // ADR-0124 records. Restating means they can DRIFT, so the two are compared as text against the
+    // sibling that owns the same restatement — the trade AVG-11 already makes.
+    const twelve = avg12();
+    const eleven = codeOnly(
+      readFileSync(join(SRC, 'contracts', 'avg11-analytics-admin-dashboard.ts'), 'utf8'),
+    );
+    for (const grammar of [
+      'const UTC_INSTANT_PATTERN = /^(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2}):(\\d{2})(?:\\.(\\d{3}))?Z$/u;',
+      'const MAX_NON_DESTINATION_DIGITS = 6;',
+    ]) {
+      expect(twelve, 'AVG-12 grammar').toContain(grammar);
+      expect(eleven, 'AVG-11 grammar').toContain(grammar);
+    }
+  });
+
+  it('declares the AVG-12 ceiling as literal falsehoods, complete in both directions', () => {
+    const posture = AAROHI_AVG12_POSTURE as unknown as Readonly<Record<string, unknown>>;
+    const DECLARED_TRUE = [
+      'offlineOnly',
+      'failClosed',
+      'requiresExistingGovernedAuthorityForAnyFutureAction',
+      'requiresCoreAuthorityForAnyBusinessOutcome',
+      'requiresSeparateCertificationBeforeIntegration',
+      'requiresSeparateActivatingAdrBeforeRuntimeUse',
+    ];
+    expect(
+      Object.entries(posture)
+        .filter(([, value]) => value === true)
+        .map(([key]) => key)
+        .sort(),
+    ).toStrictEqual([...DECLARED_TRUE].sort());
+    // Everything else is false, and there is nothing in the posture that is neither.
+    expect(
+      Object.entries(posture).filter(([, value]) => value !== true && value !== false),
+    ).toStrictEqual([]);
+    for (const forged of [
+      { businessAuthorityExpanded: true },
+      { sendAuthorityGranted: true },
+      { rolloutAuthorityGranted: true },
+      { productionActivated: true },
+      { fullAarohiCertificationClaimed: true },
+      { coldGateWidened: true },
+      { offlineOnly: false },
+      { failClosed: false },
+      { requiresSeparateCertificationBeforeIntegration: false },
+    ]) {
+      expect(
+        aarohiAvg12PostureSchema.safeParse({ ...posture, ...forged }).success,
+        JSON.stringify(forged),
+      ).toBe(false);
+    }
+  });
+});
+
+/**
+ * The capability ban, applied to the WHOLE package rather than to one stage.
+ *
+ * AVG-11's owner review moved this scanner from case-sensitive to case-insensitive after a mutation
+ * survived by spelling `AUTONOMY_LEVEL` in capitals. That strength is preserved and extended: the
+ * words `autonomy`, `evaluation` and `scale` are now legitimate here and are NOT banned — what is
+ * banned is the CAPABILITY a phrase would describe, matched across whatever separator somebody
+ * reaches for. A ban that only catches one spelling is a ban on a naming convention.
+ */
+describe('no file in this package names a capability the architecture forbids', () => {
+  /** `['auto','send']` matches autoSend, auto_send, auto-send, auto.send and "auto send". */
+  const capability = (words: readonly string[]): RegExp =>
+    new RegExp(words.join('[\\s_.\\-]*'), 'iu');
+
+  const FORBIDDEN_CAPABILITIES: readonly (readonly string[])[] = Object.freeze([
+    ['auto', 'send'],
+    ['auto', 'approve'],
+    ['auto', 'execute'],
+    ['auto', 'outreach'],
+    ['auto', 'promote'],
+    ['autonomous', 'send'],
+    ['autonomous', 'execution'],
+    ['unsupervised', 'send'],
+    ['unsupervised', 'execution'],
+    ['full', 'auto'],
+    ['enable', 'rollout'],
+    ['activate', 'production'],
+    ['promote', 'to', 'production'],
+    ['go', 'live'],
+    ['bypass', 'approval'],
+    ['bypass', 'consent'],
+    ['skip', 'approval'],
+    ['override', 'stop'],
+    ['ignore', 'stop'],
+    ['ignore', 'suppression'],
+    ['infer', 'active'],
+    ['assume', 'active'],
+    ['self', 'approve'],
+    ['force', 'handoff'],
+    ['learned', 'policy'],
+    ['scale', 'out'],
+  ]);
+
+  it('names none of them, in any casing and under any separator', () => {
+    for (const { file, code } of productionFiles()) {
+      for (const words of FORBIDDEN_CAPABILITIES) {
+        expect(code, `${file} must not name ${words.join(' ')}`).not.toMatch(capability(words));
+      }
+    }
+  });
+
+  it('does not ban the legitimate AVG-12 words, which would be the wrong lesson', () => {
+    // A regression guard on the guard. `autonomy`, `evaluation` and `scale` are this stage's
+    // subject matter; banning them would force the contract to be renamed around a grep, which is
+    // exactly the trade the AVG-5 review rejected.
+    const code = codeOnly(
+      readFileSync(join(SRC, 'contracts', 'avg12-scale-evaluation-controlled-autonomy.ts'), 'utf8'),
+    );
+    for (const legitimate of ['autonomy', 'evaluation', 'scale', 'probe']) {
+      expect(code.toLowerCase(), legitimate).toContain(legitimate);
+    }
+    for (const words of FORBIDDEN_CAPABILITIES) {
+      expect(code, words.join(' ')).not.toMatch(capability(words));
+    }
   });
 });

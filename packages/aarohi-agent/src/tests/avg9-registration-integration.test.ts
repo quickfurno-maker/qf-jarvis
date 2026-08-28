@@ -1646,7 +1646,10 @@ describe('the roadmap overlay stays true on both sides of a merge', () => {
     // the enduring half keeps this spec honest after AVG-10 lands instead of one merge later.
     expect(overlay).toContain('### AVG-10 — Payment, Activation and Anisha Handoff');
     expect(overlay).toContain("activation authority are **Core's alone**");
-    expect(overlay).toMatch(/— planned and unimplemented/u);
+    // The overlay used to carry an unimplemented tail and this spec asserted one existed. AVG-12
+    // closed the sequence (ADR-0130), so the enduring half is asserted instead: the offline work
+    // being finished is not the same thing as Aarohi being certified.
+    expect(overlay).toMatch(/full Aarohi\s+certification is a SEPARATE owner closeout/u);
   });
 
   it('encodes no branch state, and claims no runtime activation', () => {
