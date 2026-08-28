@@ -463,3 +463,31 @@ export type {
   CoreRegistrationProcessContext,
   CoreRegistrationProcessContextResult,
 } from './contracts/avg9-registration-integration.js';
+
+export {
+  AAROHI_AVG10_CONTRACT_VERSION,
+  AAROHI_AVG10_PAYMENT_SOURCE_POSTURE,
+  AAROHI_PAYMENT_FOLLOWUP_POSTURE,
+  CORE_PAYMENT_CONTEXT_AVAILABILITIES,
+  CORE_PAYMENT_FOLLOWUP_OUTCOME,
+  PAYMENT_FOLLOWUP_REFUSALS,
+  aarohiPaymentFollowupBriefSchema,
+  aarohiPaymentFollowupPostureSchema,
+  corePaymentFollowupContextSchema,
+  createCorePaymentFollowupContext,
+  parseAarohiPaymentFollowupBrief,
+  parseCorePaymentFollowupContext,
+  prepareAarohiPaymentFollowupBrief,
+} from './contracts/avg10-payment-activation-handoff.js';
+export type {
+  AarohiAvg10ContractVersion,
+  AarohiPaymentFollowupBrief,
+  AarohiPaymentFollowupBriefResult,
+  AarohiPaymentFollowupPosture,
+  AarohiPaymentFollowupRefusal,
+  AarohiPaymentSourcePosture,
+  CorePaymentContextAvailability,
+  CorePaymentFollowupContext,
+  CorePaymentFollowupContextResult,
+  CorePaymentFollowupOutcome,
+} from './contracts/avg10-payment-activation-handoff.js';

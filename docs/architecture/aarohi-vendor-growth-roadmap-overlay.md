@@ -10,7 +10,7 @@ rollout remains **OFF**, and no package or application imports the Aarohi packag
 **Offline DOMAIN status.** This overlay once said "nothing here is implemented", which stopped being
 true at AVG-1. What exists is contracts and pure functions over frozen values:
 
-- **AVG-0 through AVG-8 — implemented as certified offline domains**
+- **AVG-0 through AVG-9 — implemented as certified offline domains**
   ([ADR-0085](../decisions/ADR-0085-qfj-p12-aarohi-vendor-growth-and-roadmap-reconciliation.md),
   [ADR-0111](../decisions/ADR-0111-qfj-p12-avg2-aarohi-discovery-enrichment-domain.md),
   [ADR-0112](../decisions/ADR-0112-qfj-p12-avg3-aarohi-scoring-outreach-eligibility-domain.md),
@@ -18,13 +18,14 @@ true at AVG-1. What exists is contracts and pure functions over frozen values:
   [ADR-0122](../decisions/ADR-0122-qfj-p12-avg5-aarohi-instagram-conversation-offline-domain.md),
   [ADR-0123](../decisions/ADR-0123-qfj-p12-avg6-aarohi-omnichannel-identity-whatsapp-handoff-offline-domain.md),
   [ADR-0124](../decisions/ADR-0124-qfj-p12-avg7-aarohi-sales-brain-offline-domain.md),
-  [ADR-0125](../decisions/ADR-0125-qfj-p12-avg8-aarohi-commercial-truth-package-engine-offline-domain.md)).
-- **AVG-9 — offline implementation proof defined by
-  [ADR-0126](../decisions/ADR-0126-qfj-p12-avg9-aarohi-registration-integration-offline-domain.md).**
+  [ADR-0125](../decisions/ADR-0125-qfj-p12-avg8-aarohi-commercial-truth-package-engine-offline-domain.md),
+  [ADR-0126](../decisions/ADR-0126-qfj-p12-avg9-aarohi-registration-integration-offline-domain.md)).
+- **AVG-10 — offline implementation proof defined by
+  [ADR-0127](../decisions/ADR-0127-qfj-p12-avg10-aarohi-payment-activation-handoff-offline-domain.md).**
   It adds no live Core read, runtime, model call, prompt resolution, retrieval, provider, channel,
-  transport or execution activation, performs no registration, describes no registration workflow
-  and mutates no marketplace state.
-- **AVG-10 through AVG-12 — planned and unimplemented.**
+  transport or execution activation, takes or confirms no payment, activates nobody, and moves
+  ownership only where Core's authoritative ACTIVE confirmation already moved it.
+- **AVG-11 through AVG-12 — planned and unimplemented.**
 
 Recording a capability is still not implementing one, and implementing an offline domain is still not
 activating anything.
@@ -390,6 +391,53 @@ read, no registration and no production activation. Exact first-proof boundaries
 Payment follow-up during acquisition, and the moment the relationship changes hands. Payment and
 activation authority are **Core's alone**. On Core's authoritative ACTIVE confirmation, Aarohi's
 acquisition mandate ends and Anisha becomes the vendor relationship owner.
+
+**The offline DOMAIN for this stage is defined by
+[ADR-0127](../decisions/ADR-0127-qfj-p12-avg10-aarohi-payment-activation-handoff-offline-domain.md).**
+Runtime remains PLANNED / DISABLED; this capability description claims no deployment, no live Core
+read, no payment, no activation and no production activation. Exact first-proof boundaries:
+
+- **Payment is not activation, and that is a shape rather than a rule.** The payment-follow-up brief
+  has no `authority`, no `active`, no attestation reference and no acquisition case. It does not
+  parse as an `ActivationAttestation`, no function turns one into the other, and a spec hands the
+  brief to the canonical handoff and watches it be refused.
+- **Nothing is mirrored, because Core exposes no prospect-facing payment or activation READ.** Every
+  per-party payment or activation read QuickFurno offers is keyed by a Core VENDOR ID, which Aarohi
+  structurally does not hold — a prospect is explicitly not a vendor. The order lifecycle columns are
+  unconstrained free text whose only writer sets them to `not_started` and `not_activated`, over a
+  provider the same row records as `not_connected`, and Core's vendor status vocabulary contains no
+  ACTIVE at all. So there is no `PAYMENT_PENDING`, `PAYMENT_COMPLETED`, `PAYMENT_FAILED`,
+  `ACTIVATION_READY` or `ACTIVATION_PENDING` here: a closed AVAILABILITY token and an OPAQUE
+  reference to Core's own material, and no invented lifecycle.
+- **Core's payment and activation WRITE paths are banned by their real names**, discovered by audit
+  rather than guessed at: the manual-payment path, the order path, the credit path and the vendor
+  activation path.
+- **`completeCoreActiveHandoff` remains the ONLY route into `HANDED_OFF_TO_ANISHA`.** This stage does
+  not import, wrap, compose or name it, and adds no second terminal route. Only `QUICKFURNO_CORE`
+  with `active: true`, for the same prospect, on a case already at `AWAITING_CORE_ACTIVATION`,
+  succeeds; `PROVIDER_RECEIPT`, `MODEL_INFERENCE`, `CONVERSATION_CLAIM` and `AGENT_CASE_STATE` are
+  each driven and refused.
+- **Only `PAYMENT_OR_ACTIVATION` is admitted.** AVG-7 routes registration and payment/activation to
+  one `REQUEST_CORE_PROCESS_CONTEXT`; AVG-9 and AVG-10 hold that door from opposite sides and each
+  checks the re-derived INTENT. `REGISTRATION_PROCESS` remains AVG-9's.
+- **The AVG-7 plan is RE-DERIVED and compared structurally**, carrying the latest-turn binding, the
+  causal chain and the CURRENT AVG-1 gate across. `plan.plannedAt ≤ context.observedAt ≤
+  brief.preparedAt`, by semantic UTC instant.
+- **The cold-acquisition gate is unchanged and unwidened.** `ELIGIBLE_CORE_STATUSES` is still exactly
+  `NOT_REGISTERED`; this stage does not make `REGISTERED` cold-acquirable to reach a
+  post-registration conversation, and a spec asserts the allowlist.
+- **The pre-handoff bridge into `AWAITING_CORE_ACTIVATION` was deliberately NOT added.** Core exposes
+  no prospect-facing fact that could justify entering the boundary, and inventing a readiness signal
+  to fill the gap is the failure this overlay keeps refusing. The state stays unreachable by ordinary
+  transition, and the bridge remains future work.
+- **A closed BRIEF, and no money anywhere.** No amount, currency, order, transaction, provider,
+  method, status, paid-at or activated-at, and no explanation, reminder or reply field. The only
+  number in the artifact is its contract version.
+- Zero payments, activations, live Core reads, Supabase clients, QuickFurno imports, payment-gateway
+  SDKs, model calls, prompt resolutions, retrievals, package orders, credit grants, Anisha runtime
+  calls, acquisition-case transitions, communication requests, approvals, authorizations, execution
+  intents, provider or channel sends, persistence, managed migrations, production entries and new
+  third-party dependencies.
 
 ### AVG-11 — Analytics, Admin APIs and Full Dashboard
 Funnel analytics, administrative read APIs and the complete Jarvis OS Aarohi surface. Read-oriented;

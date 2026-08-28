@@ -1628,19 +1628,25 @@ describe('the roadmap overlay stays true on both sides of a merge', () => {
       overlay,
     );
     expect(certified).not.toBeNull();
-    expect(Number(certified?.[1] ?? '0')).toBeGreaterThanOrEqual(8);
-    expect(overlay).toContain('ADR-0126');
+    // AVG-9's own line moves from "the defined proof" into the certified list as later stages
+    // land, which is the roadmap working rather than breaking. What ENDURES is that the certified
+    // range has reached AVG-9 and that ADR-0126 is the document defining it — both of which stay
+    // true for every future stage, and both of which are false if somebody reverts the stage to
+    // "planned and unimplemented".
+    expect(Number(certified?.[1] ?? '0')).toBeGreaterThanOrEqual(9);
+    expect(overlay).toContain(
+      'ADR-0126-qfj-p12-avg9-aarohi-registration-integration-offline-domain.md',
+    );
     expect(overlay).toContain('PLANNED / DISABLED');
-    // Naming the ADR somewhere is not the same as describing the stage. The header must say AVG-9
-    // is a defined offline proof — which is true before and after any particular merge, and is
-    // false if somebody reverts the line to "planned and unimplemented".
-    expect(overlay).toMatch(/AVG-9 — offline implementation proof defined by\s+\[ADR-0126\]/u);
   });
 
-  it('keeps AVG-10 through AVG-12 planned and unimplemented', () => {
-    expect(overlay).toMatch(/AVG-10 through AVG-12 — planned and unimplemented/u);
-    // Payment, activation and the Anisha handoff stay where they were.
+  it('keeps payment and activation authority with Core, wherever AVG-10 has reached', () => {
+    // Which stages are still unimplemented changes as the overlay advances; that AVG-10's authority
+    // belongs to Core does not, and neither does the existence of an unimplemented tail. Asserting
+    // the enduring half keeps this spec honest after AVG-10 lands instead of one merge later.
     expect(overlay).toContain('### AVG-10 — Payment, Activation and Anisha Handoff');
+    expect(overlay).toContain("activation authority are **Core's alone**");
+    expect(overlay).toMatch(/— planned and unimplemented/u);
   });
 
   it('encodes no branch state, and claims no runtime activation', () => {

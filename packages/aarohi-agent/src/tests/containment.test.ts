@@ -18,12 +18,14 @@ import { describe, expect, it } from 'vitest';
 import {
   AAROHI_AVG5_CHANNEL,
   AAROHI_COMMERCIAL_FACTS_POSTURE,
+  AAROHI_PAYMENT_FOLLOWUP_POSTURE,
   AAROHI_REGISTRATION_ASSISTANCE_POSTURE,
   AAROHI_SALES_BRAIN_POSTURE,
   IDENTITY_LINK_POSTURE,
   INSTAGRAM_OUTBOUND_CANDIDATE_POSTURE,
   WHATSAPP_CHANNEL_HANDOFF_POSTURE,
   aarohiCommercialFactsPostureSchema,
+  aarohiPaymentFollowupPostureSchema,
   aarohiRegistrationAssistancePostureSchema,
   identityLinkPostureSchema,
   instagramOutboundCandidatePostureSchema,
@@ -59,7 +61,7 @@ const codeOnly = (text: string): string =>
 const productionFiles = (): readonly { readonly file: string; readonly code: string }[] =>
   walk(SRC, true).map((file) => ({ file, code: codeOnly(readFileSync(file, 'utf8')) }));
 
-describe('Aarohi remains a DOMAIN, not a runtime through AVG-9', () => {
+describe('Aarohi remains a DOMAIN, not a runtime through AVG-10', () => {
   it('reaches no channel, provider, execution path or credential', () => {
     // ### Why these are SHAPES rather than bare words, from AVG-5 onward
     //
@@ -727,6 +729,200 @@ describe('Aarohi remains a DOMAIN, not a runtime through AVG-9', () => {
     }
   });
 
+  it('reaches no QuickFurno payment or activation write path, and holds no payment instrument', () => {
+    // AVG-10's risk surface, named from the read-only Core audit ADR-0127 records rather than
+    // guessed at. The first group is every WRITE QuickFurno actually exposes for money and for going
+    // live; a generic word ban is the one that quietly stops matching when somebody renames a
+    // service, so these are the real function and RPC names.
+    //
+    // The second group is the payment INSTRUMENT surface. A domain that acquired somewhere to put a
+    // card, an account or a UPI handle would be one edit from being a payment form, whatever the
+    // field was called — and QuickFurno's own order rows record the provider as `not_connected`,
+    // which is a fact about Core rather than a licence for Jarvis to connect one.
+    for (const { file, code } of productionFiles()) {
+      for (const forbidden of [
+        // The manual-payment path (packageService).
+        'createmanualpayment',
+        'markpaymentpaid',
+        'assignpackagetovendor',
+        'assignpackageafterpayment',
+        'assign_package_to_vendor',
+        // The order path (vendorPackageOrderService).
+        'createvendorpackageorder',
+        'listvendorpackageorders',
+        'vendor_package_orders',
+        // The credit path (vendorCreditWalletService).
+        'applyvendorcreditdelta',
+        'grantvendorcredits',
+        'grantcreditsforconfirmedpackagepurchase',
+        'refundcreditforinvalidlead',
+        // The activation path (vendorAdminService).
+        'setvendorstatusaction',
+        'updatevendorvisibility',
+        'update_vendor_visibility',
+        'updatevendorcredits',
+        'updatevendorpackage',
+        'vendoradminservice',
+        // Core columns nothing here mirrors. Their values are unconstrained free text that only
+        // Core writes, and copying a status string is how an invented lifecycle begins.
+        'payment_status',
+        'activation_status',
+        'provider_payment_id',
+        'provider_order_id',
+        // Payment providers, none of which this repository integrates. QuickFurno records its own
+        // provider as not connected; naming one here would be a promise that a transport exists.
+        'razorpay',
+        'stripe',
+        'cashfree',
+        'payu',
+        'paytm',
+        'phonepe',
+        'ccavenue',
+        'billdesk',
+        'paymentgateway',
+        // Payment instruments and bank identity, under any name.
+        'cardnumber',
+        'card_number',
+        'cvv',
+        'ifsc',
+        'upi',
+        'bankaccount',
+        'bank_account',
+      ]) {
+        expect(code.toLowerCase(), `${file} must not name ${forbidden}`).not.toContain(forbidden);
+      }
+    }
+  });
+
+  it('declares the AVG-10 payment and activation ceiling as literal falsehoods, not as prose', () => {
+    const payment = AAROHI_PAYMENT_FOLLOWUP_POSTURE as unknown as Readonly<Record<string, unknown>>;
+    const DECLARED_FALSE = [
+      // The observation is injected. Saying so is what keeps the rest of the file honest.
+      'paymentContextSourceAuthenticated',
+      // The four ways this stage could claim money moved. They are separate failures: one is Core's
+      // state actually changing, one is Aarohi deciding a payment succeeded, one is imagining a
+      // lifecycle Core does not own, and one is an order existing because of this.
+      'paymentMutated',
+      'paymentConfirmedByAarohi',
+      'paymentLifecycleInvented',
+      'packageOrderCreated',
+      'creditsMutated',
+      // The four ways this stage could claim somebody went live. `activationInferred` is the one to
+      // read twice: concluding ACTIVE from a payment is the most natural mistake in this domain,
+      // and it is the mistake the whole stage is shaped to prevent.
+      'activationMutated',
+      'activationInferred',
+      'vendorActivated',
+      'anishaHandoffExecuted',
+      // Neighbouring authority, none of which moves here.
+      'registrationMutated',
+      'acquisitionCaseMutated',
+      'marketplaceMutated',
+      // The model waist, the prompt waist and retrieval.
+      'modelCallExecuted',
+      'promptResolved',
+      'retrievalExecuted',
+      // The governed execution chain, none of which starts here.
+      'communicationRequestCreated',
+      'approvalRequestCreated',
+      'approvalDecisionCreated',
+      'communicationAuthorizationCreated',
+      'executionIntentCreated',
+      'n8nExecutionRequested',
+      'providerSendRequested',
+      'channelSendRequested',
+      'sent',
+      'delivered',
+      'productionMutation',
+      'businessEffect',
+    ] as const;
+    const DECLARED_TRUE = [
+      'assistanceContextOnly',
+      // Two truths, declared separately. An authoritative payment fact would still not be an
+      // activation fact, and folding them into one field would be the conflation this stage exists
+      // to refuse.
+      'requiresCorePaymentTruth',
+      'requiresCoreActivationTruth',
+      'requiresCoreStatusRevalidationBeforeFutureOutboundUse',
+    ] as const;
+
+    for (const declared of DECLARED_FALSE) {
+      expect(payment[declared], declared).toBe(false);
+    }
+    for (const declared of DECLARED_TRUE) {
+      expect(payment[declared], declared).toBe(true);
+    }
+
+    // Complete in both directions, for the reason ADR-0124 records.
+    expect([...DECLARED_FALSE].sort()).toStrictEqual(
+      Object.entries(payment)
+        .filter(([, value]) => value === false)
+        .map(([key]) => key)
+        .sort(),
+    );
+    expect([...DECLARED_TRUE].sort()).toStrictEqual(
+      Object.entries(payment)
+        .filter(([, value]) => value === true)
+        .map(([key]) => key)
+        .sort(),
+    );
+
+    for (const forged of [
+      { paymentMutated: true },
+      { paymentConfirmedByAarohi: true },
+      { paymentLifecycleInvented: true },
+      { activationMutated: true },
+      { activationInferred: true },
+      { vendorActivated: true },
+      { anishaHandoffExecuted: true },
+      { acquisitionCaseMutated: true },
+      { paymentContextSourceAuthenticated: true },
+      { assistanceContextOnly: false },
+      { requiresCorePaymentTruth: false },
+      { requiresCoreActivationTruth: false },
+    ]) {
+      expect(
+        aarohiPaymentFollowupPostureSchema.safeParse({ ...payment, ...forged }).success,
+        JSON.stringify(forged),
+      ).toBe(false);
+    }
+  });
+
+  it('keeps AVG-10 clear of the handoff it must not duplicate', () => {
+    // `completeCoreActiveHandoff` is the ONLY public route into `HANDED_OFF_TO_ANISHA`. AVG-10 does
+    // not import, wrap, compose or name it — which is a stronger statement than composing it
+    // carefully, because a second entrance to a terminal state cannot be safer than one.
+    const avg10 = codeOnly(
+      readFileSync(join(SRC, 'contracts', 'avg10-payment-activation-handoff.ts'), 'utf8'),
+    );
+    for (const forbidden of [
+      'completeCoreActiveHandoff',
+      'completeAvg10Handoff',
+      'forceHandoff',
+      'handoffToAnisha',
+      'transitionToAnisha',
+      'HANDED_OFF_TO_ANISHA',
+      'AWAITING_CORE_ACTIVATION',
+      'CONTACT_APPROVED',
+      'activationAttestation',
+      'ACTIVATION_AUTHORITIES',
+      'QUICKFURNO_CORE',
+      'transitionAcquisitionCase',
+      'openAcquisitionCase',
+      // And the cold gate, which AVG-10 may not widen and does not touch.
+      'ELIGIBLE_CORE_STATUSES',
+      'CORE_STATUS_ROLE',
+      'evaluateAcquisitionEligibility',
+      // The sibling builders. Composition is a later, separately reviewed decision.
+      'prepareAarohiRegistrationAssistanceBrief',
+      'prepareAarohiCommercialFactsBrief',
+      'prepareInstagramOutboundCandidate',
+      'prepareWhatsAppChannelHandoffCandidate',
+    ]) {
+      expect(avg10, `AVG-10 must not name ${forbidden}`).not.toContain(forbidden);
+    }
+  });
+
   it('never reaches the OTHER handoff — Aarohi ownership stays where it was', () => {
     // `completeCoreActiveHandoff` is the only route to Anisha ownership and it requires a Core
     // ACTIVE attestation. AVG-6's handoff is a CHANNEL transition, and the two must not be
@@ -978,6 +1174,8 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
     // remains a closed vocabulary, bound, schema or pure function; nothing here sends or executes.
     expect(Object.keys(barrel).sort()).toStrictEqual([
       'AAROHI_AGENT_ID',
+      'AAROHI_AVG10_CONTRACT_VERSION',
+      'AAROHI_AVG10_PAYMENT_SOURCE_POSTURE',
       'AAROHI_AVG3_CONTRACT_VERSION',
       'AAROHI_AVG4_CONTRACT_VERSION',
       'AAROHI_AVG5_CHANNEL',
@@ -995,6 +1193,7 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'AAROHI_AVG9_REGISTRATION_PROCESS_SOURCE_POSTURE',
       'AAROHI_COMMERCIAL_FACTS_POSTURE',
       'AAROHI_ENRICHMENT_CONTRACT_VERSION',
+      'AAROHI_PAYMENT_FOLLOWUP_POSTURE',
       'AAROHI_PROSPECT_CONTRACT_VERSION',
       'AAROHI_REGISTRATION_ASSISTANCE_POSTURE',
       'AAROHI_SALES_BRAIN_POSTURE',
@@ -1012,6 +1211,8 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'CONTACT_ELIGIBILITY_REFUSALS',
       'CORE_COMMERCIAL_FACTS_OUTCOME',
       'CORE_PARTY_STATUSES',
+      'CORE_PAYMENT_CONTEXT_AVAILABILITIES',
+      'CORE_PAYMENT_FOLLOWUP_OUTCOME',
       'CORE_REGISTRATION_ASSISTANCE_OUTCOME',
       'CORE_REGISTRATION_PROCESS_AVAILABILITIES',
       'CORE_STATUS_ROLE',
@@ -1055,6 +1256,7 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'MAX_INSTAGRAM_CONVERSATION_TURNS',
       'MAX_INSTAGRAM_MESSAGE_LENGTH',
       'MAX_WORKSPACE_DRAFT_LENGTH',
+      'PAYMENT_FOLLOWUP_REFUSALS',
       'PRESENCE_SIGNALS',
       'PROSPECT_DISCOVERY_SOURCES',
       'PROSPECT_PRIORITY_MAX_POINTS',
@@ -1071,6 +1273,8 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'WORKSPACE_DRAFT_STATES',
       'aarohiCommercialFactsBriefSchema',
       'aarohiCommercialFactsPostureSchema',
+      'aarohiPaymentFollowupBriefSchema',
+      'aarohiPaymentFollowupPostureSchema',
       'aarohiRegistrationAssistanceBriefSchema',
       'aarohiRegistrationAssistancePostureSchema',
       'acquisitionCaseSchema',
@@ -1083,9 +1287,11 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'coreCommercialCatalogSnapshotSchema',
       'coreCommercialPackageOptionSchema',
       'coreEligibilityObservationSchema',
+      'corePaymentFollowupContextSchema',
       'coreRegistrationProcessContextSchema',
       'createAarohiSalesBrainInterpretation',
       'createCoreCommercialCatalogSnapshot',
+      'createCorePaymentFollowupContext',
       'createCoreRegistrationProcessContext',
       'createCrossChannelIdentityEvidenceBundle',
       'createCrossChannelIdentityEvidenceClaim',
@@ -1117,10 +1323,12 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'isTerminalAcquisitionCaseState',
       'openAcquisitionCase',
       'parseAarohiCommercialFactsBrief',
+      'parseAarohiPaymentFollowupBrief',
       'parseAarohiRegistrationAssistanceBrief',
       'parseAarohiSalesBrainInterpretation',
       'parseAarohiSalesTurnPlan',
       'parseCoreCommercialCatalogSnapshot',
+      'parseCorePaymentFollowupContext',
       'parseCoreRegistrationProcessContext',
       'parseCrossChannelIdentityEvidenceBundle',
       'parseCrossChannelIdentityLinkRecommendation',
@@ -1130,6 +1338,7 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'parseInstagramInboundObservation',
       'parseWorkspaceDraft',
       'prepareAarohiCommercialFactsBrief',
+      'prepareAarohiPaymentFollowupBrief',
       'prepareAarohiRegistrationAssistanceBrief',
       'prepareInstagramOutboundCandidate',
       'prepareWhatsAppChannelHandoffCandidate',
