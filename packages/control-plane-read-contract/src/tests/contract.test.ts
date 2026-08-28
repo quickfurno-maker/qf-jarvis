@@ -390,13 +390,21 @@ describe('immutability', () => {
 });
 
 describe('the package root API', () => {
-  it('exports exactly four runtime symbols', async () => {
+  it('exports exactly six runtime symbols', async () => {
+    // Four until AVG-11 (ADR-0129) added a SECOND CONTRACT VERSION rather than editing this one in
+    // place, as ADR-0086's change-control rule requires. The two symbols that joined are a version
+    // literal and its parser; neither is a schema, a builder or anything that can act.
+    //
+    // The count stays asserted so that growing it is a decision somebody made rather than something
+    // that happened. `contract-v2.test.ts` asserts the same set from the V2 side.
     const barrel = (await import('../index.js')) as unknown as Record<string, unknown>;
     expect(Object.keys(barrel).sort()).toEqual([
       'CONTROL_PLANE_READ_CONTRACT_ERROR_CODES',
+      'CONTROL_PLANE_READ_CONTRACT_V2_VERSION',
       'CONTROL_PLANE_READ_CONTRACT_VERSION',
       'ControlPlaneReadContractError',
       'parseControlPlaneSnapshotV1',
+      'parseControlPlaneSnapshotV2',
     ]);
   });
 });

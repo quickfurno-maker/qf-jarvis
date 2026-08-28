@@ -250,8 +250,14 @@ describe('Aarohi and Anisha are separate agents', () => {
     const funnel = (await controlPlane()).vendorGrowthFunnel();
     expect(funnel.availability).toBe('PLANNED');
     expect(funnel.items).toHaveLength(0);
+    // AVG-11 merged the certified funnel CONTRACT, not a reading of one. Any stage that did appear
+    // would have to carry an authority, and none may carry a count it has not earned.
     for (const stage of funnel.items) {
-      expect(stage.value, stage.id).toBe(0);
+      if (stage.authority === 'AUTHORITY_UNAVAILABLE') {
+        expect(Object.hasOwn(stage, 'value'), stage.id).toBe(false);
+      } else {
+        expect(stage.value, stage.id).toBe(0);
+      }
     }
     // Workload is unreadable, so it reports no Aarohi share rather than a zero share.
     const workload = (await controlPlane()).agentWorkload();
@@ -580,5 +586,137 @@ describe('no live action capability is exposed', () => {
         expect(button, `${label}: ${button.slice(0, 60)}`).toContain('disabled');
       }
     }
+  });
+});
+
+/**
+ * The Aarohi acquisition surface (AVG-11, ADR-0128).
+ *
+ * Two properties are being defended here, and they pull in opposite directions on purpose. The
+ * surface must be COMPLETE — an operator should be able to see the whole acquisition domain,
+ * including the bridges that were deliberately not built — and it must stay POWERLESS, with no
+ * control, no live figure and no zero standing in for something nobody read.
+ */
+describe('the Aarohi acquisition surface stays a read surface', () => {
+  const aarohiPage = () =>
+    readFileSync(join(SRC, 'app', '(protected)', 'agents', 'aarohi', 'page.tsx'), 'utf8');
+
+  it('reads readiness through the control-plane seam, with real provenance', async () => {
+    const readiness = (await controlPlane()).aarohiReadiness();
+    // STATIC_BASELINE, because every row is merged governance rather than an observation.
+    expect(readiness.availability).toBe('STATIC_BASELINE');
+    expect(readiness.items.length).toBeGreaterThan(0);
+    expect(readiness.reason.length).toBeGreaterThan(0);
+    expect(readiness.expectedSource.length).toBeGreaterThan(0);
+    for (const row of readiness.items) {
+      expect(row.detail.length, row.id).toBeGreaterThan(20);
+      // Readiness says what EXISTS. A number here would be a metric wearing a status's clothes.
+      expect(Object.keys(row).sort(), row.id).toStrictEqual([
+        'detail',
+        'id',
+        'kind',
+        'label',
+        'state',
+      ]);
+    }
+  });
+
+  it('states the two bridges that were deliberately NOT built', async () => {
+    const readiness = (await controlPlane()).aarohiReadiness();
+    const blockers = readiness.items.filter((row) => row.kind === 'blocker');
+    const ids = blockers.map((row) => row.id);
+    // ADR-0127 refused both. A surface that simply omitted them would read as complete.
+    expect(ids).toContain('blocker-post-registration-continuation');
+    expect(ids).toContain('blocker-awaiting-core-activation-bridge');
+    expect(ids).toContain('blocker-core-read-protocol');
+    for (const blocker of blockers) {
+      expect(blocker.state, blocker.id).not.toBe('AVAILABLE');
+      expect(blocker.state, blocker.id).not.toBe('HEALTHY');
+    }
+  });
+
+  it('never marks Aarohi AVAILABLE anywhere in the read model', async () => {
+    const plane = await controlPlane();
+    expect(plane.agent('aarohi')?.lifecycle).toBe('PLANNED');
+    expect(plane.agent('aarohi')?.state).toBe('PLANNED');
+    for (const row of plane.aarohiReadiness().items) {
+      expect(row.state, row.id).not.toBe('AVAILABLE');
+      expect(row.state, row.id).not.toBe('HEALTHY');
+      expect(row.state, row.id).not.toBe('CONNECTED');
+    }
+  });
+
+  it('exposes no action control on the Aarohi page', () => {
+    const code = codeOnly(aarohiPage());
+    // Named by the thing they would DO, not by a stray word: a page that could do any of these
+    // would be a second business authority.
+    for (const forbidden of [
+      '<button',
+      '<form',
+      '<input',
+      'onClick',
+      'onSubmit',
+      'useState',
+      "'use client'",
+      'Mark Registered',
+      'Mark Paid',
+      'Activate',
+      'Grant Credits',
+      'Assign Package',
+      'Retry Payment',
+      'Send WhatsApp',
+    ]) {
+      expect(code, forbidden).not.toContain(forbidden);
+    }
+  });
+
+  it('keeps the workflow-versus-business-outcome boundary visible on the page', () => {
+    const text = aarohiPage();
+    expect(text).toContain('not a registration');
+    expect(text).toContain('not a payment');
+    expect(text).toContain('not an activation');
+    expect(text).toContain('Aarohi is not Anisha');
+    expect(text).toContain('never zero');
+  });
+});
+
+describe('the funnel contract cannot publish a business outcome', () => {
+  it('offers no stage id naming a registration, payment, activation or conversion', () => {
+    // The vocabulary is closed at the type level, so this scans the one place a stage is written
+    // down in this app: the demo fixture. A `registered` stage would not compile, and would not
+    // pass here either.
+    const fixture = codeOnly(readFileSync(join(SRC, 'lib', 'demo-data', 'snapshot.ts'), 'utf8'));
+    const funnel = fixture.slice(
+      fixture.indexOf('VENDOR_GROWTH_FUNNEL'),
+      fixture.indexOf('AAROHI_READINESS'),
+    );
+    for (const forbidden of [
+      "id: 'registered'",
+      "id: 'paid-active'",
+      "id: 'active'",
+      "id: 'converted'",
+      "id: 'contacted'",
+      "id: 'paid'",
+    ]) {
+      expect(funnel, forbidden).not.toContain(forbidden);
+    }
+  });
+
+  it('renders an unavailable stage without a bar and without a number', () => {
+    const charts = readFileSync(join(SRC, 'components', 'charts', 'Charts.tsx'), 'utf8');
+    // The guard has to exist in the component, not only in the type: a chart that divided by `max`
+    // for an unavailable stage would draw a zero-length bar, which reads as "none".
+    expect(charts).toContain("stage.authority === 'AUTHORITY_UNAVAILABLE'");
+    expect(charts).toContain('Unknown');
+    // And the old conflation is gone: a genuine zero must print as a zero.
+    expect(codeOnly(charts)).not.toContain("stage.value === 0 ? '—'");
+  });
+
+  it('never lets the UI mapper default a missing count to zero', () => {
+    const mapper = codeOnly(
+      readFileSync(join(SRC, 'server', 'control-plane', 'map-to-ui-model.ts'), 'utf8'),
+    );
+    expect(mapper).not.toContain('stage.value ?? 0');
+    expect(mapper).not.toContain('value: 0');
   });
 });

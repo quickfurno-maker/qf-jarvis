@@ -10,7 +10,7 @@ rollout remains **OFF**, and no package or application imports the Aarohi packag
 **Offline DOMAIN status.** This overlay once said "nothing here is implemented", which stopped being
 true at AVG-1. What exists is contracts and pure functions over frozen values:
 
-- **AVG-0 through AVG-9 — implemented as certified offline domains**
+- **AVG-0 through AVG-10 — implemented as certified offline domains**
   ([ADR-0085](../decisions/ADR-0085-qfj-p12-aarohi-vendor-growth-and-roadmap-reconciliation.md),
   [ADR-0111](../decisions/ADR-0111-qfj-p12-avg2-aarohi-discovery-enrichment-domain.md),
   [ADR-0112](../decisions/ADR-0112-qfj-p12-avg3-aarohi-scoring-outreach-eligibility-domain.md),
@@ -19,13 +19,16 @@ true at AVG-1. What exists is contracts and pure functions over frozen values:
   [ADR-0123](../decisions/ADR-0123-qfj-p12-avg6-aarohi-omnichannel-identity-whatsapp-handoff-offline-domain.md),
   [ADR-0124](../decisions/ADR-0124-qfj-p12-avg7-aarohi-sales-brain-offline-domain.md),
   [ADR-0125](../decisions/ADR-0125-qfj-p12-avg8-aarohi-commercial-truth-package-engine-offline-domain.md),
-  [ADR-0126](../decisions/ADR-0126-qfj-p12-avg9-aarohi-registration-integration-offline-domain.md)).
-- **AVG-10 — offline implementation proof defined by
-  [ADR-0127](../decisions/ADR-0127-qfj-p12-avg10-aarohi-payment-activation-handoff-offline-domain.md).**
-  It adds no live Core read, runtime, model call, prompt resolution, retrieval, provider, channel,
-  transport or execution activation, takes or confirms no payment, activates nobody, and moves
-  ownership only where Core's authoritative ACTIVE confirmation already moved it.
-- **AVG-11 through AVG-12 — planned and unimplemented.**
+  [ADR-0126](../decisions/ADR-0126-qfj-p12-avg9-aarohi-registration-integration-offline-domain.md),
+  [ADR-0127](../decisions/ADR-0127-qfj-p12-avg10-aarohi-payment-activation-handoff-offline-domain.md)).
+- **AVG-11 — offline implementation proof defined by
+  [ADR-0128](../decisions/ADR-0128-qfj-p12-avg11-aarohi-analytics-admin-dashboard-offline-domain.md).**
+  It adds a READ surface and no reading: no live Core read, runtime, model call, prompt resolution,
+  retrieval, provider, channel, transport, persistence or execution activation, no admin write, and
+  no evidence source of any kind is connected. The wire additions are versioned as control-plane
+  **V2** ([ADR-0129](../decisions/ADR-0129-avg11-control-plane-read-contract-v2.md)) with V1 left
+  unchanged. The Jarvis OS Aarohi section stays `PLANNED`.
+- **AVG-12 — planned and unimplemented.**
 
 Recording a capability is still not implementing one, and implementing an offline domain is still not
 activating anything.
@@ -442,6 +445,62 @@ read, no payment, no activation and no production activation. Exact first-proof 
 ### AVG-11 — Analytics, Admin APIs and Full Dashboard
 Funnel analytics, administrative read APIs and the complete Jarvis OS Aarohi surface. Read-oriented;
 the Jarvis OS section stays `PLANNED` until an activating ADR says otherwise.
+
+**The offline DOMAIN for this stage is defined by
+[ADR-0128](../decisions/ADR-0128-qfj-p12-avg11-aarohi-analytics-admin-dashboard-offline-domain.md).**
+Runtime remains PLANNED / DISABLED; this capability description claims no deployment, no live Core
+read, no evidence source and no production activation. Exact first-proof boundaries:
+
+- **A workflow step is not a business outcome, and that is a shape rather than a rule.** The funnel
+  vocabulary is CLOSED and contains no `REGISTERED`, `PAID`, `ACTIVE`, `CONVERTED` or `CONTACTED`
+  stage for a figure to reach. The stage an artifact counts for is DERIVED from which certified
+  sibling parser accepts it, so an AVG-9 brief can only ever reach `REGISTRATION_ASSISTANCE_PREPARED`
+  and an AVG-10 brief `PAYMENT_FOLLOWUP_ASSISTANCE_PREPARED`. There is no input field in which a
+  caller could say otherwise.
+- **A count is never separable from its authority.** A closed distinction —
+  `JARVIS_WORKFLOW_DERIVED`, `CORE_AUTHORITATIVE`, `AUTHORITY_UNAVAILABLE` — is carried on every
+  metric, and stage-to-authority is a TOTAL map, so a caller supplies neither. Exactly one stage is
+  Core-authoritative, and it is the terminal handoff.
+- **The terminal metric re-runs `completeCoreActiveHandoff`.** AVG-1's own function is called
+  unchanged and unwrapped, and only what it confirms is counted; a caller-supplied case already at
+  `HANDED_OFF_TO_ANISHA` is refused because that function refuses it, as are a provider receipt, a
+  model inference, a conversation claim and Aarohi's own case state. No case is transitioned, no
+  second route into the terminal state is added, and the cold gate is neither restated nor widened.
+- **UNKNOWN is not ZERO, and the unavailable metric has no field to hold a zero in.** The metric is a
+  discriminated union whose unavailable variant carries no count key at all — in the domain, on the
+  wire and in the read model. Whether a source was read is declared per authority CLASS by the
+  boundary that read it, and supplying evidence of a class declared unobserved is a refusal.
+- **No rate, and that is a decision.** No rate, ratio, percentage, conversion or trend field exists
+  and no function computes one: across an authority boundary a numerator and a denominator are never
+  known, compatible and same-cohort at once. Counts and availability are the whole safe answer.
+- **No time, no cohorts, no series.** No durable event source exists for any of this evidence, so
+  there is nothing to bucket and no honest way to say a stage grew. A report carries one instant of
+  its own, checked against the evidence it rests on.
+- **Deterministic counting.** A stage counts DISTINCT PROSPECTS, so duplicate evidence cannot inflate
+  it; every check scans the whole input in a fixed order, so shuffling the evidence cannot change a
+  refusal or a figure; and one evidence identity presented for two prospects is refused rather than
+  merged.
+- **Aggregate only.** A report carries stage tokens, an authority class and integers — no prospect
+  reference, case, draft, conversation, message, brief reference, Core lookup, package, amount, name,
+  handle or destination.
+- **The canonical Jarvis OS seam is REUSED at a new contract VERSION, not duplicated.** The wire
+  additions are breaking snapshot-shape changes, so under ADR-0086's change-control rule they live
+  behind contract **V2**
+  ([ADR-0129](../decisions/ADR-0129-avg11-control-plane-read-contract-v2.md)) rather than being
+  edited into V1. V1 is untouched and `GET /api/control-plane/v1/snapshot` serves exactly what it
+  served before; `GET /api/control-plane/v2/snapshot` serves the AVG-11 shape. V2 is a version
+  successor in the same package and the same API family — it imports V1's row schemas and is shaped
+  from one shared build over one shared source composition. No second dashboard, no second API
+  namespace, no standalone Aarohi server, no parallel control-plane stack, and no `POST`, `PUT`,
+  `PATCH` or `DELETE` anywhere.
+- **The AVG-10 gaps remain gaps, and are DISPLAYED as gaps.** The post-registration continuation
+  boundary and the bridge into `AWAITING_CORE_ACTIVATION` are still absent, and the surface names
+  both as blockers rather than omitting them.
+- Zero live Core reads, Supabase clients, QuickFurno imports, SQL statements, migrations, analytics
+  tables, model calls, prompt resolutions, retrievals, admin writes, registrations, payments,
+  activations, Anisha handoffs, acquisition-case transitions, communication requests, approvals,
+  authorizations, execution intents, provider or channel sends, workers, queues, persistence,
+  production entries and new third-party dependencies.
 
 ### AVG-12 — Scale, Evaluation and Controlled Autonomy
 Volume, evaluation suites, red-team coverage and any increase in autonomy — each governed by the

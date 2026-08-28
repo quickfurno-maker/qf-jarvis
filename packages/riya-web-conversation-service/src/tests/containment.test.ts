@@ -576,7 +576,7 @@ describe('(50, 53-57) the repository invariants this slice must not move', () =>
     expect(offenders).toStrictEqual([]);
   });
 
-  it('(51) the only HTTP routes remain the three operator-plane routes', () => {
+  it('(51) the only HTTP routes remain the operator-plane read routes', () => {
     const routes = walk(join(REPO_ROOT, 'apps', 'jarvis-os', 'src', 'app'), false)
       .map((file) => file.replace(/\\/gu, '/'))
       .filter((file) => /\/route\.tsx?$/u.test(file))
@@ -586,6 +586,11 @@ describe('(50, 53-57) the repository invariants this slice must not move', () =>
       'api/auth/login/route.ts',
       'api/auth/logout/route.ts',
       'api/control-plane/v1/snapshot/route.ts',
+      // AVG-11 / ADR-0129: a second CONTRACT VERSION of the same read-only snapshot, not a second
+      // capability. GET only, the same session check, the same loader, the same composed core --
+      // and V1 is served unchanged beside it, because ADR-0086 forbids editing a shipped shape in
+      // place. Four operator-plane routes; still no route that can write anything.
+      'api/control-plane/v2/snapshot/route.ts',
     ]);
     // And apps/api still runs no server.
     const apiIndex = readFileSync(join(REPO_ROOT, 'apps', 'api', 'src', 'index.ts'), 'utf8');

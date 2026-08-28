@@ -20,6 +20,7 @@
  * worse than one that shows nothing.
  */
 import type {
+  AarohiReadinessRow,
   ActivityEntry,
   AgentSummary,
   ApprovalQueueRow,
@@ -193,13 +194,88 @@ export const APPROVAL_BREAKDOWN: readonly DistributionSlice[] = Object.freeze<
   { id: 'rejected', label: 'Rejected (24h)', value: 9, tone: 'critical' },
 ]);
 
+/**
+ * The acquisition funnel fixture (AVG-11, ADR-0128).
+ *
+ * This used to carry `registered` and `paid-active` stages at zero, and both were wrong in the same
+ * way: they named QuickFurno business outcomes as things an Aarohi funnel measures, and a zero next
+ * to `Registered` reads as "nobody registered" rather than "Jarvis cannot see registrations". The
+ * certified vocabulary has no such stage to name any more, so the fixture could not reintroduce them
+ * without failing to compile.
+ *
+ * The terminal stage is Core-authoritative and Core is not connected, so it carries no number at
+ * all — which is the shape a real snapshot would take too.
+ */
 export const VENDOR_GROWTH_FUNNEL: readonly FunnelStage[] = Object.freeze<readonly FunnelStage[]>([
-  { id: 'sourced', label: 'Sourced', value: 0, caption: 'Prospect discovery — planned' },
-  { id: 'researched', label: 'Researched', value: 0, caption: 'Enrichment queue — planned' },
-  { id: 'approved', label: 'Outreach approved', value: 0, caption: 'Requires Core authorization' },
-  { id: 'contacted', label: 'Contacted', value: 0, caption: 'No channel is attached' },
-  { id: 'registered', label: 'Registered', value: 0, caption: 'Core owns registration' },
-  { id: 'paid-active', label: 'Paid active', value: 0, caption: 'Core owns commercial outcome' },
+  {
+    id: 'prospect-identified',
+    label: 'Prospect identified',
+    authority: 'JARVIS_WORKFLOW_DERIVED',
+    value: 0,
+    caption: 'A prospect is not a vendor. Core owns vendor identity.',
+  },
+  {
+    id: 'eligible-net-new',
+    label: 'Eligible net-new',
+    authority: 'JARVIS_WORKFLOW_DERIVED',
+    value: 0,
+    caption: 'The Core gate permits exactly one status, and Core is not connected.',
+  },
+  {
+    id: 'outreach-workspace-prepared',
+    label: 'Outreach workspace prepared',
+    authority: 'JARVIS_WORKFLOW_DERIVED',
+    value: 0,
+    caption: 'A draft is not an approval, and nothing may be sent.',
+  },
+  {
+    id: 'conversation-observed',
+    label: 'Conversation observed',
+    authority: 'JARVIS_WORKFLOW_DERIVED',
+    value: 0,
+    caption: 'Inbound observations only. No channel is attached.',
+  },
+  {
+    id: 'registration-assistance-prepared',
+    label: 'Registration assistance prepared',
+    authority: 'JARVIS_WORKFLOW_DERIVED',
+    value: 0,
+    caption: 'Assistance prepared, never a registration. Core registers.',
+  },
+  {
+    id: 'payment-followup-assistance-prepared',
+    label: 'Payment follow-up prepared',
+    authority: 'JARVIS_WORKFLOW_DERIVED',
+    value: 0,
+    caption: 'Assistance prepared, never a payment. Payment is not activation.',
+  },
+  {
+    id: 'core-active-handoff-confirmed',
+    label: 'Core ACTIVE handoff confirmed',
+    authority: 'AUTHORITY_UNAVAILABLE',
+    expectedAuthority: 'CORE_AUTHORITATIVE',
+    caption: 'QuickFurno Core is not connected, so this is unknown rather than none.',
+  },
+]);
+
+/** The Aarohi readiness fixture. Mirrors the shape of the baseline, with no figure anywhere. */
+export const AAROHI_READINESS: readonly AarohiReadinessRow[] = Object.freeze<
+  readonly AarohiReadinessRow[]
+>([
+  {
+    id: 'avg-11-analytics-read-surface',
+    label: 'Acquisition analytics read surface',
+    kind: 'offline-domain',
+    state: 'PLANNED',
+    detail: 'Offline contract only. No evidence source is connected.',
+  },
+  {
+    id: 'blocker-core-read-protocol',
+    label: 'Live Core read protocol',
+    kind: 'blocker',
+    state: 'NOT_CONNECTED',
+    detail: 'No Jarvis-to-Core read protocol is adopted.',
+  },
 ]);
 
 export const ATTENTION: readonly AttentionItem[] = Object.freeze<readonly AttentionItem[]>([

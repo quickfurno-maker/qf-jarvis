@@ -1639,19 +1639,27 @@ describe('the roadmap overlay stays true on both sides of a merge', () => {
     'utf8',
   );
 
-  it('records the certified range and AVG-10 as a defined proof', () => {
+  it('records the certified range with AVG-10 inside it, still defined by ADR-0127', () => {
     const certified = /AVG-0 through AVG-(\d+) — implemented as certified offline domains/u.exec(
       overlay,
     );
     expect(certified).not.toBeNull();
-    expect(Number(certified?.[1] ?? '0')).toBeGreaterThanOrEqual(9);
+    // AVG-11 merged its own offline proof, which moved AVG-10 from the frontier into the certified
+    // range. The claim being guarded -- AVG-10's proof is DEFINED by ADR-0127 -- is unchanged, and
+    // is now asserted against AVG-10's own overlay section, where it cannot drift with the frontier.
+    expect(Number(certified?.[1] ?? '0')).toBeGreaterThanOrEqual(10);
     expect(overlay).toContain('ADR-0127');
     expect(overlay).toContain('PLANNED / DISABLED');
-    expect(overlay).toMatch(/AVG-10 — offline implementation proof defined by\s+\[ADR-0127\]/u);
+    expect(overlay).toContain('### AVG-10 — Payment, Activation and Anisha Handoff');
+    expect(overlay).toMatch(/offline DOMAIN for this stage is defined by\s+\[ADR-0127\]/u);
   });
 
-  it('keeps AVG-11 and AVG-12 planned and unimplemented', () => {
-    expect(overlay).toMatch(/AVG-11 (?:through AVG-12|and AVG-12) — planned and unimplemented/u);
+  it('keeps the stage after the certified range planned and unimplemented', () => {
+    // The guard is "the next stage has not been started", not a particular stage number. AVG-11
+    // merged its own offline proof under ADR-0128, which moved the frontier by exactly one; the
+    // assertion moves with it rather than being deleted.
+    expect(overlay).toMatch(/AVG-12 — planned and unimplemented/u);
+    expect(overlay).not.toMatch(/AVG-12 — offline implementation proof/u);
   });
 
   it('encodes no branch state, and claims no runtime activation', () => {

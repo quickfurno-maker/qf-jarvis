@@ -1,7 +1,25 @@
 import { toneDot, toneText } from '@/components/primitives/Panel';
 import type { Tone } from '@/components/primitives/Panel';
-import type { DistributionSlice, FunnelStage, NamedSeries } from '@/lib/control-plane/types';
+import type {
+  DistributionSlice,
+  FunnelStage,
+  NamedSeries,
+  ResolvedMetricAuthority,
+} from '@/lib/control-plane/types';
 import { formatCount, formatShare } from '@/lib/formatting/number';
+
+/**
+ * Who is entitled to be believed about a figure, in words (AVG-11, ADR-0128).
+ *
+ * Printed on every funnel stage rather than only on the unavailable ones. An operator who has to
+ * remember which stages Core owns will eventually stop remembering, and a Jarvis-derived count
+ * standing unlabelled beside a Core-authoritative one is how the two get read as the same kind of
+ * fact.
+ */
+const AUTHORITY_LABEL: Readonly<Record<ResolvedMetricAuthority, string>> = Object.freeze({
+  JARVIS_WORKFLOW_DERIVED: 'Jarvis workflow',
+  CORE_AUTHORITATIVE: 'QuickFurno Core',
+});
 
 /**
  * Code-native charts (JOS-01A).
@@ -202,8 +220,23 @@ export function StackedShare({ slices }: { readonly slices: readonly Distributio
  * zero stage would look broken rather than planned, so each stage keeps its rail and states
  * its caption — the emptiness is the information.
  */
+/**
+ * The acquisition funnel (AVG-11, ADR-0128).
+ *
+ * Two corrections live in this component, and both are about zero.
+ *
+ * An earlier version rendered `stage.value === 0 ? '—'`, which made a genuine zero look like a
+ * missing reading. A count of zero is a real answer and now prints as `0`.
+ *
+ * A stage whose authority nobody has read carries no `value` at all — the type has no such key on
+ * that branch — so it prints `Unknown` with the class that would own it, and draws no bar. A bar of
+ * length zero beside "Core ACTIVE handoff" is the exact picture this phase exists to prevent.
+ */
 export function FunnelPreview({ stages }: { readonly stages: readonly FunnelStage[] }) {
-  const max = Math.max(...stages.map((stage) => stage.value), 1);
+  const max = Math.max(
+    ...stages.map((stage) => (stage.authority === 'AUTHORITY_UNAVAILABLE' ? 0 : stage.value)),
+    1,
+  );
   return (
     <ol className="space-y-2.5">
       {stages.map((stage, index) => (
@@ -219,16 +252,25 @@ export function FunnelPreview({ stages }: { readonly stages: readonly FunnelStag
               <span className="truncate text-[12px] text-[var(--color-ink)]">{stage.label}</span>
             </span>
             <span className="tabular shrink-0 text-[12px] text-[var(--color-ink-muted)]">
-              {stage.value === 0 ? '—' : formatCount(stage.value)}
+              {stage.authority === 'AUTHORITY_UNAVAILABLE' ? 'Unknown' : formatCount(stage.value)}
             </span>
           </div>
-          <div className="mt-2 h-1 overflow-hidden rounded-[var(--radius-pill)] bg-[var(--color-base-800)]">
-            <div
-              className="h-full rounded-[var(--radius-pill)] bg-[var(--color-planned)]"
-              style={{ width: `${String((stage.value / max) * 100)}%` }}
-            />
-          </div>
-          <p className="mt-1.5 text-[11px] text-[var(--color-ink-faint)]">{stage.caption}</p>
+          {stage.authority === 'AUTHORITY_UNAVAILABLE' ? null : (
+            <div className="mt-2 h-1 overflow-hidden rounded-[var(--radius-pill)] bg-[var(--color-base-800)]">
+              <div
+                className="h-full rounded-[var(--radius-pill)] bg-[var(--color-planned)]"
+                style={{ width: `${String((stage.value / max) * 100)}%` }}
+              />
+            </div>
+          )}
+          <p className="mt-1.5 text-[11px] text-[var(--color-ink-faint)]">
+            <span className="text-[var(--color-ink-muted)]">
+              {stage.authority === 'AUTHORITY_UNAVAILABLE'
+                ? `${AUTHORITY_LABEL[stage.expectedAuthority]} · not read`
+                : AUTHORITY_LABEL[stage.authority]}
+            </span>{' '}
+            · {stage.caption}
+          </p>
         </li>
       ))}
     </ol>

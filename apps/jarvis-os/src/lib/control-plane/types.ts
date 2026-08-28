@@ -107,12 +107,77 @@ export interface DistributionSlice {
   readonly tone: CapabilityTone;
 }
 
-/** One stage of a funnel preview. */
-export interface FunnelStage {
+/**
+ * The certified Aarohi acquisition funnel stages (AVG-11, ADR-0128).
+ *
+ * Closed, and mirrored by value from the wire contract rather than imported, for the same reason
+ * `SectionAvailability` below is: a presentation component should never need the contract package
+ * to render a state. What matters is what the union CANNOT hold — there is no `registered`, `paid`,
+ * `active`, `converted` or `contacted` id, so no page can display a QuickFurno business outcome as
+ * an acquisition stage, and no fixture can invent one without failing to compile.
+ */
+export type FunnelStageId =
+  | 'prospect-identified'
+  | 'eligibility-evaluated'
+  | 'eligible-net-new'
+  | 'outreach-workspace-prepared'
+  | 'conversation-observed'
+  | 'commercial-context-prepared'
+  | 'registration-assistance-prepared'
+  | 'payment-followup-assistance-prepared'
+  | 'core-active-handoff-confirmed';
+
+/**
+ * Who is entitled to be believed about one figure (AVG-11, ADR-0128).
+ *
+ * A third concept, beside `SectionAvailability` (can this panel be read?) and `Provenance` (where
+ * did this snapshot come from?). Those describe a transport; this describes authority over a single
+ * number.
+ */
+export type MetricAuthority =
+  'JARVIS_WORKFLOW_DERIVED' | 'CORE_AUTHORITATIVE' | 'AUTHORITY_UNAVAILABLE';
+
+export type ResolvedMetricAuthority = Exclude<MetricAuthority, 'AUTHORITY_UNAVAILABLE'>;
+
+/**
+ * One stage of the acquisition funnel.
+ *
+ * A discriminated union, and the discrimination is what stops a component rendering a zero for a
+ * source nobody read: the unavailable variant has no `value` key, so `stage.value` does not compile
+ * without narrowing and there is no number for a chart to plot at the bottom of an axis.
+ */
+export type FunnelStage =
+  | {
+      readonly id: FunnelStageId;
+      readonly label: string;
+      readonly authority: ResolvedMetricAuthority;
+      readonly value: number;
+      readonly caption: string;
+    }
+  | {
+      readonly id: FunnelStageId;
+      readonly label: string;
+      readonly authority: 'AUTHORITY_UNAVAILABLE';
+      /** The class that WOULD own this number, so the gap can be explained rather than invented. */
+      readonly expectedAuthority: ResolvedMetricAuthority;
+      readonly caption: string;
+    };
+
+/** What an Aarohi readiness row describes. A `blocker` is a bridge deliberately not built. */
+export type AarohiReadinessKind = 'offline-domain' | 'boundary' | 'blocker';
+
+/**
+ * One row of the Aarohi acquisition readiness surface (AVG-11, ADR-0128).
+ *
+ * Readiness carries no number and no authority: it says what merged governance establishes and what
+ * it does not, and `HealthState` already spells both.
+ */
+export interface AarohiReadinessRow {
   readonly id: string;
   readonly label: string;
-  readonly value: number;
-  readonly caption: string;
+  readonly kind: AarohiReadinessKind;
+  readonly state: HealthState;
+  readonly detail: string;
 }
 
 /** The four agents, as product surfaces. */
@@ -308,6 +373,8 @@ export interface ControlPlaneReadModel {
   agentWorkload(): Section<DistributionSlice>;
   approvalBreakdown(): Section<DistributionSlice>;
   vendorGrowthFunnel(): Section<FunnelStage>;
+  /** The complete Aarohi acquisition readiness surface, including the bridges that do not exist. */
+  aarohiReadiness(): Section<AarohiReadinessRow>;
   attention(): Section<AttentionItem>;
   activity(): Section<ActivityEntry>;
   agents(): readonly AgentSummary[];

@@ -1,5 +1,5 @@
 import type {
-  ControlPlaneSnapshotV1,
+  ControlPlaneSnapshotV2,
   SeriesSection as WireSeriesSection,
 } from '@qf-jarvis/control-plane-read-contract';
 
@@ -20,8 +20,14 @@ import type { CapabilityId, CapabilityTone } from '../../lib/capabilities/catalo
  * The one adapter (JOS-01B, ADR-0086).
  *
  * Wire snapshot in, presentation read model out — once, here, rather than eighteen times across
- * the pages. Components keep receiving the DTOs they already render, so JOS-01A's surface work
- * survives intact, and no React component acquires a decision about what the data means.
+ * the pages.
+ *
+ * Components keep receiving the DTOs they already render, so JOS-01A's surface work survives
+ * intact, and no React component acquires a decision about what the data means.
+ *
+ * It maps the **V2** wire contract (AVG-11, ADR-0129), because the operator surface renders the
+ * Aarohi readiness section and the authority-carrying funnel, and neither exists at V1. V1 remains
+ * served, unchanged, by its own route; it simply has no page that needs it.
  *
  * The mapping is mechanical on purpose. It adds no field the contract does not carry, computes no
  * total the server did not state, and infers nothing from an absence. Where the contract says a
@@ -71,7 +77,7 @@ function series(wire: WireSeriesSection, tone: CapabilityTone): SeriesSection {
 }
 
 function slices(
-  wire: ControlPlaneSnapshotV1['sections']['agentWorkload'],
+  wire: ControlPlaneSnapshotV2['sections']['agentWorkload'],
 ): Section<DistributionSlice> {
   return section(wire, (slice, index) => ({
     id: slice.id,
@@ -87,7 +93,7 @@ function slices(
  * `kind` is `'baseline'`, not `'demo'`. That distinction is asserted by the test suite: the
  * default operator surface must never be the synthetic fixture again.
  */
-export function mapSnapshotToReadModel(snapshot: ControlPlaneSnapshotV1): ControlPlaneReadModel {
+export function mapSnapshotToReadModel(snapshot: ControlPlaneSnapshotV2): ControlPlaneReadModel {
   const agents: readonly AgentSummary[] = Object.freeze(
     snapshot.agents.map((agent) => ({
       id: agent.id,
@@ -124,11 +130,33 @@ export function mapSnapshotToReadModel(snapshot: ControlPlaneSnapshotV1): Contro
   const approvalBreakdown = slices(sections.approvalBreakdown);
   const businessAnalytics = slices(sections.businessAnalytics);
   const n8nExecution = slices(sections.n8nExecution);
-  const vendorGrowthFunnel = section(sections.vendorGrowthFunnel, (stage) => ({
-    id: stage.id,
-    label: stage.label,
-    value: stage.value,
-    caption: stage.caption,
+  // The union is carried across BRANCH BY BRANCH rather than spread, so the unavailable variant
+  // arrives at the UI with no `value` key at all. A `value: stage.value ?? 0` here would have been
+  // the exact defect AVG-11 exists to prevent, and there is deliberately no shape in which to write
+  // it: `stage.value` does not compile without narrowing.
+  const vendorGrowthFunnel = section(sections.vendorGrowthFunnel, (stage) =>
+    stage.authority === 'AUTHORITY_UNAVAILABLE'
+      ? {
+          id: stage.id,
+          label: stage.label,
+          authority: stage.authority,
+          expectedAuthority: stage.expectedAuthority,
+          caption: stage.caption,
+        }
+      : {
+          id: stage.id,
+          label: stage.label,
+          authority: stage.authority,
+          value: stage.value,
+          caption: stage.caption,
+        },
+  );
+  const aarohiReadiness = section(sections.aarohiAcquisitionReadiness, (row) => ({
+    id: row.id,
+    label: row.label,
+    kind: row.kind,
+    state: row.state,
+    detail: row.detail,
   }));
   const attention = section(sections.attention, (item) => ({
     id: item.id,
@@ -243,6 +271,7 @@ export function mapSnapshotToReadModel(snapshot: ControlPlaneSnapshotV1): Contro
     businessAnalytics: () => businessAnalytics,
     n8nExecution: () => n8nExecution,
     vendorGrowthFunnel: () => vendorGrowthFunnel,
+    aarohiReadiness: () => aarohiReadiness,
     attention: () => attention,
     activity: () => activity,
     agents: () => agents,

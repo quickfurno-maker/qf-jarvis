@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { buildControlPlaneSnapshot } from '../build-snapshot';
-import { loadControlPlaneSnapshot } from '../load-snapshot';
+import { loadControlPlaneSnapshot, loadControlPlaneSnapshotV2 } from '../load-snapshot';
 import { mapSnapshotToReadModel } from '../map-to-ui-model';
 import { baselineSections } from '../repository-baseline';
 
@@ -538,16 +538,29 @@ describe('the request-scoped path shared by pages and the API', () => {
   it('gives the read model and the API payload the same observation set', async () => {
     const { source } = counting();
     const apiSnapshot = await loadControlPlaneSnapshot({ sources: [source] });
-    const pageSnapshot = await loadControlPlaneSnapshot({ sources: [source] });
+    const pageSnapshot = await loadControlPlaneSnapshotV2({ sources: [source] });
 
-    // Same loader, same composer: the two differ only in their envelope instants, never in what a
-    // section says or where it came from.
+    // Same collection, same composer, same core -- ACROSS the version boundary (ADR-0129). The V1
+    // route, the V2 route and the pages differ in their envelope instants and in the final wire
+    // shape, never in what a section says or where it came from.
     expect(mapSnapshotToReadModel(pageSnapshot).headlineMetrics().availability).toBe(
       apiSnapshot.sections.headlineMetrics.availability,
     );
     expect(pageSnapshot.sections.headlineMetrics.expectedSource).toBe(
       apiSnapshot.sections.headlineMetrics.expectedSource,
     );
+    // The shared core is genuinely shared. Compared by SHAPE rather than by value: `counting()`
+    // hands out a new id per acquisition on purpose -- the very property the next spec asserts --
+    // so a deep-equal here would be testing that the fixture is broken.
+    expect(pageSnapshot.sections.headlineMetrics.items).toHaveLength(
+      apiSnapshot.sections.headlineMetrics.items.length,
+    );
+    expect(Object.keys(pageSnapshot.sections.headlineMetrics.items[0] ?? {}).sort()).toStrictEqual(
+      Object.keys(apiSnapshot.sections.headlineMetrics.items[0] ?? {}).sort(),
+    );
+    expect(pageSnapshot.source).toStrictEqual(apiSnapshot.source);
+    expect(pageSnapshot.contractVersion).toBe('2');
+    expect(apiSnapshot.contractVersion).toBe('1');
   });
 
   it('lets a LATER request observe something newer, with no process-lifetime cache', async () => {

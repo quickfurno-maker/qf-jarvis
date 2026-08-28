@@ -31,6 +31,7 @@ import {
   OWNERSHIP,
   ROADMAP,
   SYSTEM_HEALTH,
+  AAROHI_READINESS,
   VENDOR_GROWTH_FUNNEL,
   WORKERS,
 } from '../demo-data/snapshot';
@@ -82,6 +83,7 @@ export function createDemoControlPlane(): ControlPlaneReadModel {
     businessAnalytics: () => fixtureSection(AGENT_WORKLOAD),
     n8nExecution: () => fixtureSection(APPROVAL_BREAKDOWN),
     vendorGrowthFunnel: () => fixtureSection(VENDOR_GROWTH_FUNNEL),
+    aarohiReadiness: () => fixtureSection(AAROHI_READINESS),
     attention: () => fixtureSection(ATTENTION),
     activity: () => fixtureSection(ACTIVITY_LOG),
     agents: () => AGENTS,

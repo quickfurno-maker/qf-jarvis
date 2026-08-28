@@ -605,9 +605,14 @@ describe('(71-77) package API and dependency locks are untouched', () => {
       // all internal, and the returned object is exactly an ExecutionReplayGuard -- one method.
       'postgres-execution-replay-store': 3,
       // JOS-01B (ADR-0086): the read-only control-plane snapshot contract, locked from the day it
-      // lands. A version constant, an error-code list, one error class and one parse function --
-      // the schemas are deliberately NOT exported, so every payload goes through one entry point.
-      'control-plane-read-contract': 4,
+      // lands. The schemas are deliberately NOT exported, so every payload goes through one entry
+      // point.
+      //
+      // 4 -> 6 at AVG-11 (ADR-0129), and the two that joined are a second version literal and its
+      // parser. ADR-0086's change-control rule says a breaking snapshot-shape change requires a new
+      // VERSION rather than an edit in place, so V2 was added beside V1 and V1 was left byte for
+      // byte. Nothing that can act joined the surface: still no schema, no builder, no mutator.
+      'control-plane-read-contract': 6,
       // QFJ-P08-A (ADR-0075): agent-runtime 45 -> 46 (the operations snapshot constructor) and
       // jarvis-runtime unchanged at 6. Both are named here so the composition phase that touched
       // them is locked centrally, not only in their own packages.

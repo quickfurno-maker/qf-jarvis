@@ -285,6 +285,56 @@ describe('GET /api/control-plane/v1/snapshot requires a session', () => {
   });
 });
 
+/**
+ * The V2 snapshot route (AVG-11, ADR-0129).
+ *
+ * A new contract VERSION inherits none of V1's protection by being nearby — it has its own handler,
+ * so it needs its own proof. Everything asserted for V1 above is asserted here against the V2
+ * export: unauthenticated is 401 with no payload leak, authenticated is 200 at version `"2"`, an
+ * expired session is refused exactly like an absent one, and no mutating verb exists.
+ */
+describe('GET /api/control-plane/v2/snapshot requires a session', () => {
+  it('returns 401 and NO snapshot when unauthenticated', async () => {
+    const { GET } = await import('../../app/api/control-plane/v2/snapshot/route');
+    const response = await GET(new Request('http://127.0.0.1/api/control-plane/v2/snapshot'));
+    expect(response.status).toBe(401);
+    const body = (await response.json()) as { readonly error?: string };
+    expect(body.error).toBe('unauthenticated');
+    // Not a single field of the real payload leaks.
+    expect(JSON.stringify(body)).not.toContain('contractVersion');
+    expect(JSON.stringify(body)).not.toContain('aarohiAcquisitionReadiness');
+  });
+
+  it('returns the AVG-11 contract payload when authenticated', async () => {
+    cookieValue = validSessionCookie();
+    const { GET } = await import('../../app/api/control-plane/v2/snapshot/route');
+    const response = await GET(new Request('http://127.0.0.1/api/control-plane/v2/snapshot'));
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as Record<string, unknown>;
+    expect(body['contractVersion']).toBe('2');
+    expect(body['mode']).toBe('READ_ONLY');
+    expect(response.headers.get('cache-control')).toContain('no-store');
+    expect(response.headers.get('access-control-allow-origin')).toBeNull();
+  });
+
+  it('rejects an expired session exactly like an absent one', async () => {
+    cookieValue = validSessionCookie(-5400);
+    const { GET } = await import('../../app/api/control-plane/v2/snapshot/route');
+    const response = await GET(new Request('http://127.0.0.1/api/control-plane/v2/snapshot'));
+    expect(response.status).toBe(401);
+  });
+
+  it('exports no mutating verb', async () => {
+    const route = (await import('../../app/api/control-plane/v2/snapshot/route')) as Record<
+      string,
+      unknown
+    >;
+    for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
+      expect(route[method], method).toBeUndefined();
+    }
+  });
+});
+
 describe('an invalid cookie can never lock the operator out of /login', () => {
   /**
    * The defect this replaces.
