@@ -1660,7 +1660,11 @@ describe('the roadmap overlay stays true on both sides of a merge', () => {
     // The reason the guard existed survives intact and is asserted directly: finishing the offline
     // sequence is not certifying Aarohi, and the overlay has to keep saying so.
     expect(overlay).toMatch(/OFFLINE IMPLEMENTATION sequence is complete/u);
-    expect(overlay).toMatch(/full Aarohi\s+certification is a SEPARATE owner closeout/u);
+    // The offline closeout has since happened (ADR-0131), so the sentence this used to look for is
+    // gone. What it was protecting is not: finishing, and then certifying, the OFFLINE work is
+    // still not activation, and the overlay has to keep saying so.
+    expect(overlay).toMatch(/OFFLINE certification closeout/u);
+    expect(overlay).toMatch(/remain a later, separately governed owner\s+decision/u);
     expect(overlay).toContain('PLANNED / DISABLED');
     for (const forbidden of ['aarohi is certified', 'production certified', 'go live']) {
       expect(overlay.toLowerCase(), forbidden).not.toContain(forbidden);

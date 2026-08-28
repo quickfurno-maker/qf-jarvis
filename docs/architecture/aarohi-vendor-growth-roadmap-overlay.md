@@ -36,12 +36,21 @@ true at AVG-1. What exists is contracts and pure functions over frozen values:
   channel, transport, persistence, migration, rollout or execution activation, and no control-plane
   wire change: V1 and V2 are both untouched.
 
-**The AVG-0 through AVG-12 OFFLINE IMPLEMENTATION sequence is complete. The full Aarohi
-certification is a SEPARATE owner closeout and has not happened.** Every stage above is an offline
-domain — contracts and pure functions over frozen values. A separate certification across
-AVG-0 … AVG-12 is what would weigh them together, and until that happens no part of this overlay may
-be read as certifying Aarohi, authorizing a live QuickFurno execution integration, or permitting a
-staged activation.
+**The AVG-0 through AVG-12 OFFLINE IMPLEMENTATION sequence is complete, and the separate full
+Aarohi OFFLINE certification closeout has been performed under
+[ADR-0131](../decisions/ADR-0131-qfj-p12-aarohi-full-offline-certification-closeout.md).** Every
+stage above is an offline domain — contracts and pure functions over frozen values — and the closeout
+is what weighed them TOGETHER: a cross-stage adversarial suite proving that no artifact gains
+authority by crossing a stage boundary, that unknown never becomes zero, and that shape validity is
+never mistaken for provenance.
+
+**That certification establishes exactly one sentence, and nothing beyond it:** Aarohi AVG-0…AVG-12
+is internally coherent and contained as an OFFLINE domain implementation. It is not
+production-readiness, runtime enablement, rollout, contact permission, consent, a live QuickFurno
+connection, a provider connection, payment, activation, or any throughput or capacity claim. **The
+real execution integration and the staged activation each remain a later, separately governed owner
+decision, and neither may cite the offline certification as authority.** The two deliberate AVG-10
+gaps remain unresolved and remain blockers for that live-integration decision.
 
 Recording a capability is still not implementing one, and implementing an offline domain is still not
 activating anything.
