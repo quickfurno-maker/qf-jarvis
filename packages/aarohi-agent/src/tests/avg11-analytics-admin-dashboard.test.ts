@@ -924,7 +924,10 @@ describe('the roadmap overlay stays true on both sides of a merge', () => {
     // point at. What it was really protecting is the enduring half, and that is asserted instead:
     // the sequence advancing never turns into a runtime, and never turns into a certification.
     expect(overlay).toContain('PLANNED / DISABLED');
-    expect(overlay).toMatch(/full Aarohi\s+certification is a SEPARATE owner closeout/u);
+    // ADR-0131 performed the offline closeout, so the pre-certification sentence is gone. The
+    // enduring half is asserted instead: an OFFLINE certification is not an activation.
+    expect(overlay).toMatch(/OFFLINE certification closeout/u);
+    expect(overlay).toMatch(/not\s+production-readiness/u);
     expect(overlay.toLowerCase()).not.toContain('aarohi is certified');
     for (const forbidden of ['autonomy increase', 'auto outreach', 'self-optimis']) {
       expect(overlay.toLowerCase(), forbidden).not.toContain(`avg-11 ${forbidden}`);

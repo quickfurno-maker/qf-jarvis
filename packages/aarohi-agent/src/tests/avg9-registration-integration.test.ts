@@ -1647,9 +1647,11 @@ describe('the roadmap overlay stays true on both sides of a merge', () => {
     expect(overlay).toContain('### AVG-10 — Payment, Activation and Anisha Handoff');
     expect(overlay).toContain("activation authority are **Core's alone**");
     // The overlay used to carry an unimplemented tail and this spec asserted one existed. AVG-12
-    // closed the sequence (ADR-0130), so the enduring half is asserted instead: the offline work
-    // being finished is not the same thing as Aarohi being certified.
-    expect(overlay).toMatch(/full Aarohi\s+certification is a SEPARATE owner closeout/u);
+    // closed the sequence (ADR-0130) and ADR-0131 then certified it OFFLINE, so both earlier
+    // phrasings are gone. The enduring half survives and is asserted directly: an offline
+    // certification is not a licence to integrate or activate.
+    expect(overlay).toMatch(/OFFLINE certification closeout/u);
+    expect(overlay).toMatch(/neither may cite the offline certification as authority/u);
   });
 
   it('encodes no branch state, and claims no runtime activation', () => {
