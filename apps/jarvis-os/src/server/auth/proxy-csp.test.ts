@@ -56,6 +56,7 @@ describe('proxy route classification', () => {
       '/governance',
       '/settings',
       '/api/control-plane/v1/snapshot',
+      '/api/control-plane/v2/snapshot',
       '/api/auth/logout',
       // A route nobody has written yet is protected because the allowlist is explicit.
       '/some/future/surface',
@@ -67,6 +68,7 @@ describe('proxy route classification', () => {
 
   it('classifies API paths so an unauthenticated call gets JSON, not a redirect', () => {
     expect(isApiPath('/api/control-plane/v1/snapshot')).toBe(true);
+    expect(isApiPath('/api/control-plane/v2/snapshot')).toBe(true);
     expect(isApiPath('/api/auth/logout')).toBe(true);
     expect(isApiPath('/approvals')).toBe(false);
   });
@@ -156,6 +158,7 @@ describe('protected pages are never prerendered', () => {
       'app/api/auth/login/route.ts',
       'app/api/auth/logout/route.ts',
       'app/api/control-plane/v1/snapshot/route.ts',
+      'app/api/control-plane/v2/snapshot/route.ts',
     ]) {
       const code = readFileSync(join(SRC, relative), 'utf8');
       expect(code, relative).toContain("export const dynamic = 'force-dynamic'");

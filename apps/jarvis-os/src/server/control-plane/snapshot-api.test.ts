@@ -6,10 +6,14 @@ import { argon2, randomBytes } from 'node:crypto';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 
-import { parseControlPlaneSnapshotV1 } from '@qf-jarvis/control-plane-read-contract';
+import {
+  parseControlPlaneSnapshotV1,
+  parseControlPlaneSnapshotV2,
+} from '@qf-jarvis/control-plane-read-contract';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { GET } from '../../app/api/control-plane/v1/snapshot/route';
+import { GET as GET_V2 } from '../../app/api/control-plane/v2/snapshot/route';
 import { AUTH_CONFIG_PATH_VAR } from '../auth/config/loader';
 import { authConfigV1Schema } from '../auth/config/schema';
 import { newSessionClaims, sealSession } from '../auth/session/token';
@@ -115,6 +119,11 @@ afterAll(() => {
 
 const call = async (url: string = URL_BASE): Promise<Response> =>
   GET(new Request(url, { method: 'GET' }));
+
+/** The V2 route (ADR-0129). A separate handler, deliberately exercised through its own export. */
+const callV2 = async (
+  url = 'https://jarvis.invalid/api/control-plane/v2/snapshot',
+): Promise<Response> => GET_V2(new Request(url, { method: 'GET' }));
 
 function walk(dir: string): string[] {
   const out: string[] = [];
@@ -385,21 +394,80 @@ describe('the route file itself', () => {
       'api/auth/login/route.ts', // POST only: the sole unauthenticated mutation
       'api/auth/logout/route.ts', // POST only: session-bound CSRF required
       'api/control-plane/v1/snapshot/route.ts', // GET only: requires a verified session
+      // ADR-0129. A new contract VERSION, not a new capability: GET only, same session check, same
+      // loader, same composed core. The count moved from three to four because a version was added
+      // -- which is exactly the kind of change this lock exists to make somebody state out loud.
+      'api/control-plane/v2/snapshot/route.ts',
     ]);
   });
 });
 
 /**
- * The Aarohi acquisition surface on the wire (AVG-11, ADR-0128).
+ * The Aarohi acquisition surface on the wire (AVG-11, ADR-0128; versioned by ADR-0129).
  *
- * The domain, the snapshot and the UI each carry the same three facts — availability, authority and
- * the absence of a count where nothing was read. These cases prove the middle link: what the route
- * actually serves, parsed by the same contract a future Android client would use.
+ * Everything AVG-11 added lives at **V2**. The first block below proves V1 did not acquire any of
+ * it, which is the half ADR-0086's change-control rule is actually about.
  */
-describe('GET /api/control-plane/v1/snapshot — the Aarohi acquisition surface', () => {
-  it('serves the readiness section as a governance baseline with no figure in it', async () => {
+describe('GET /api/control-plane/v1/snapshot — unchanged by AVG-11', () => {
+  it('still serves contract version 1, and no Aarohi readiness section', async () => {
     const response = await call();
     const body = parseControlPlaneSnapshotV1(await response.json());
+    expect(body.contractVersion).toBe('1');
+    expect('aarohiAcquisitionReadiness' in body.sections).toBe(false);
+  });
+
+  it('still serves the V1 funnel shape, with no authority discriminant', async () => {
+    const response = await call();
+    const payload: unknown = await response.json();
+    const body = parseControlPlaneSnapshotV1(payload);
+    expect(body.sections.vendorGrowthFunnel.availability).toBe('PLANNED');
+    expect(body.sections.vendorGrowthFunnel.items).toHaveLength(0);
+    // The V1 payload carries none of the V2 vocabulary anywhere.
+    for (const token of [
+      'AUTHORITY_UNAVAILABLE',
+      'JARVIS_WORKFLOW_DERIVED',
+      'CORE_AUTHORITATIVE',
+      'aarohiAcquisitionReadiness',
+    ]) {
+      expect(JSON.stringify(payload), token).not.toContain(token);
+    }
+  });
+
+  it('emits V1 only — the V2 parser refuses what this route serves', async () => {
+    const payload: unknown = await (await call()).json();
+    expect(() => parseControlPlaneSnapshotV2(payload)).toThrow();
+  });
+});
+
+describe('GET /api/control-plane/v2/snapshot — the Aarohi acquisition surface', () => {
+  it('authenticates itself, close to the data, exactly as V1 does', () => {
+    // This suite supplies a session, so the 401 path is proved against the real handler in
+    // `auth-http.test.ts` -- the same split V1 already uses. What belongs here is that the V2 route
+    // calls the session check ITSELF rather than trusting the proxy in front of it.
+    const code = readFileSync(
+      join(SRC, 'app', 'api', 'control-plane', 'v2', 'snapshot', 'route.ts'),
+      'utf8',
+    );
+    expect(code).toContain('requireApiOperatorSession');
+    expect(code).toContain('UNAUTHENTICATED_BODY');
+  });
+
+  it('rejects an unsupported query parameter rather than ignoring it', async () => {
+    const response = await callV2(
+      'https://jarvis.invalid/api/control-plane/v2/snapshot?section=funnel',
+    );
+    expect(response.status).toBe(400);
+  });
+
+  it('serves contract version 2', async () => {
+    const body = parseControlPlaneSnapshotV2(await (await callV2()).json());
+    expect(body.contractVersion).toBe('2');
+    // And the V1 parser refuses it, so the two versions cannot be confused by a client.
+    expect(() => parseControlPlaneSnapshotV1(body)).toThrow();
+  });
+
+  it('serves the readiness section as a governance baseline with no figure in it', async () => {
+    const body = parseControlPlaneSnapshotV2(await (await callV2()).json());
 
     const readiness = body.sections.aarohiAcquisitionReadiness;
     expect(readiness.availability).toBe('STATIC_BASELINE');
@@ -416,8 +484,7 @@ describe('GET /api/control-plane/v1/snapshot — the Aarohi acquisition surface'
   });
 
   it('keeps the funnel PLANNED with no stages, and says the read surface exists', async () => {
-    const response = await call();
-    const body = parseControlPlaneSnapshotV1(await response.json());
+    const body = parseControlPlaneSnapshotV2(await (await callV2()).json());
 
     const funnel = body.sections.vendorGrowthFunnel;
     expect(funnel.availability).toBe('PLANNED');
@@ -428,8 +495,7 @@ describe('GET /api/control-plane/v1/snapshot — the Aarohi acquisition surface'
   });
 
   it('serves no business outcome and no fabricated zero for Aarohi', async () => {
-    const response = await call();
-    const payload = JSON.stringify(await response.json());
+    const payload = JSON.stringify(await (await callV2()).json());
 
     // The wire vocabulary has no such stage, so this can only fail if one was added.
     for (const forbidden of [
@@ -446,8 +512,7 @@ describe('GET /api/control-plane/v1/snapshot — the Aarohi acquisition surface'
   });
 
   it('states the deliberately-unbuilt bridges rather than omitting them', async () => {
-    const response = await call();
-    const body = parseControlPlaneSnapshotV1(await response.json());
+    const body = parseControlPlaneSnapshotV2(await (await callV2()).json());
     const ids = body.sections.aarohiAcquisitionReadiness.items
       .filter((row) => row.kind === 'blocker')
       .map((row) => row.id);
@@ -455,10 +520,8 @@ describe('GET /api/control-plane/v1/snapshot — the Aarohi acquisition surface'
     expect(ids).toContain('blocker-awaiting-core-activation-bridge');
   });
 
-  it('exposes no mutating verb for the acquisition surface', async () => {
-    // The route file exports GET alone; this asserts the SERVED payload cannot act either.
-    const response = await call();
-    const payload = JSON.stringify(await response.json());
+  it('exposes no mutating verb, and exports no mutating method', async () => {
+    const payload = JSON.stringify(await (await callV2()).json());
     for (const forbidden of [
       'canSend',
       'canExecute',
@@ -473,6 +536,17 @@ describe('GET /api/control-plane/v1/snapshot — the Aarohi acquisition surface'
     ]) {
       expect(payload, forbidden).not.toContain(forbidden);
     }
-    expect(response.headers.get('cache-control')).toBeDefined();
+
+    // A new VERSION is a new shape, never new authority: the V2 route file exports GET alone.
+    const code = readFileSync(
+      join(SRC, 'app', 'api', 'control-plane', 'v2', 'snapshot', 'route.ts'),
+      'utf8',
+    );
+    expect(code).toMatch(/export async function GET\b/);
+    for (const method of ['POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']) {
+      expect(code, method).not.toMatch(
+        new RegExp(`export\\s+(async\\s+)?function\\s+${method}\\b`),
+      );
+    }
   });
 });

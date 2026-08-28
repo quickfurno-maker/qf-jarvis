@@ -1641,7 +1641,17 @@ describe('AVG-11 observes, and adds no authority of any kind', () => {
     // can. The two lists are compared as TEXT, which is the same trade `compose.ts` already makes
     // for the canonical-instant grammar.
     const wire = readFileSync(
-      join(REPO_ROOT, 'packages', 'control-plane-read-contract', 'src', 'contract', 'snapshot.ts'),
+      join(
+        REPO_ROOT,
+        'packages',
+        'control-plane-read-contract',
+        'src',
+        'contract',
+        // V2 (ADR-0129). The AVG-11 vocabulary lives behind a contract VERSION rather than inside
+        // V1, so this is the file to compare against -- and a spec below asserts V1 never acquired
+        // any of it.
+        'snapshot-v2.ts',
+      ),
       'utf8',
     );
 
@@ -1662,5 +1672,23 @@ describe('AVG-11 observes, and adds no authority of any kind', () => {
       (stage) => AAROHI_STAGE_AUTHORITY[stage] === 'CORE_AUTHORITATIVE',
     );
     expect(coreOwned).toStrictEqual(['CORE_ACTIVE_HANDOFF_CONFIRMED']);
+  });
+
+  it('left contract V1 entirely alone', () => {
+    // ADR-0086's change-control rule, asserted from the domain side: a breaking snapshot-shape
+    // change gets a new VERSION, never an edit in place. None of AVG-11's vocabulary may appear in
+    // the V1 contract file, in either the funnel stages or the authority classes.
+    const v1 = readFileSync(
+      join(REPO_ROOT, 'packages', 'control-plane-read-contract', 'src', 'contract', 'snapshot.ts'),
+      'utf8',
+    );
+    for (const stage of AAROHI_FUNNEL_STAGES) {
+      expect(v1, stage).not.toContain(stage.toLowerCase().replaceAll('_', '-'));
+    }
+    for (const authority of AAROHI_METRIC_AUTHORITIES) {
+      expect(v1, authority).not.toContain(authority);
+    }
+    expect(v1).not.toContain('aarohiAcquisitionReadiness');
+    expect(v1).not.toContain('expectedAuthority');
   });
 });

@@ -14,6 +14,8 @@
   [ADR-0086](ADR-0086-jos-01b-read-only-control-plane-contract-and-snapshot-api.md) (the read-only control-plane
   contract and snapshot API this stage extends),
   [ADR-0089](ADR-0089-jos-01e-progressive-backend-read-source-composition-boundary.md) (progressive read sources),
+  [ADR-0129](ADR-0129-avg11-control-plane-read-contract-v2.md) (**the contract V2 this stage's wire
+  additions live behind**),
   [ADR-0126](ADR-0126-qfj-p12-avg9-aarohi-registration-integration-offline-domain.md),
   [ADR-0127](ADR-0127-qfj-p12-avg10-aarohi-payment-activation-handoff-offline-domain.md)
 
@@ -138,7 +140,7 @@ mapper can forget, a client can default around and a `?? 0` can quietly break. T
 present is a shape: `stage.value` does not compile without narrowing, `Object.hasOwn(metric,
 'distinctProspects')` is `false`, and a serialized unavailable report contains no zero to misread.
 
-The same union is carried on the wire (`funnelStageSchema`) and in the Jarvis OS read model
+The same union is carried on the wire (`funnelStageV2Schema`, ADR-0129) and in the Jarvis OS read model
 (`FunnelStage`), and the UI mapper carries it across branch by branch rather than spreading it — a
 spec asserts the mapper contains no `stage.value ?? 0` and no `value: 0`.
 
@@ -204,27 +206,33 @@ body and the AVG-5 message bodies are parsed by their owners and never touched b
 `reportRef` is the one identity AVG-11 introduces, and it carries the local screen every stage since
 AVG-7 has applied: no address, no fetchable location, and no run of seven or more digits.
 
-### 10. The canonical Jarvis OS seam is REUSED
+### 10. The canonical Jarvis OS seam is REUSED, at a new contract VERSION
 
-The existing versioned read-only snapshot API is extended. Specifically:
+The wire additions above are breaking changes to the snapshot shape, so under ADR-0086's
+change-control rule they belong behind a version. **They are governed by
+[ADR-0129](ADR-0129-avg11-control-plane-read-contract-v2.md), which is where the versioning decision
+and its consequences are recorded.** In short:
 
-- `packages/control-plane-read-contract` gains the closed funnel-stage vocabulary, the metric
-  authority distinction, the discriminated `funnelStageSchema`, an `AAROHI_FUNNEL_STAGE_AUTHORITY`
-  map enforced centrally in the snapshot parser, and one new section,
-  `sections.aarohiAcquisitionReadiness`.
-- `apps/jarvis-os` gains the matching read-model types, one baseline section, one mapper branch, and
-  the readiness panel on the existing `/agents/aarohi` page.
+- **V1 is untouched, byte for byte.** `CONTROL_PLANE_READ_CONTRACT_VERSION` is still `'1'`, the V1
+  schema file is unchanged, and `GET /api/control-plane/v1/snapshot` serves exactly what it served
+  before AVG-11. A golden pre-AVG-11 payload is kept as a frozen literal and must go on parsing.
+- **V2 carries every AVG-11 guarantee**: the closed nine-stage funnel vocabulary, the metric
+  AUTHORITY distinction, the total stage-to-authority map, an unavailable metric with no numeric
+  field, and `sections.aarohiAcquisitionReadiness`.
+- `apps/jarvis-os` gains the matching read-model types, the V2 baseline sections, one mapper branch,
+  the readiness panel on the existing `/agents/aarohi` page, and `GET /api/control-plane/v2/snapshot`.
 
 **No second dashboard. No second API namespace. No standalone Aarohi server. No parallel
-control-plane or DTO stack.** The route set is still exactly three files and the snapshot route still
-exports `GET` alone — in the Next.js App Router an unexported method is answered `405` by the
-framework, so the absence is the enforcement.
+control-plane or DTO stack.** V2 is a version successor inside the same API family and the same
+package: it imports V1's row schemas rather than restating them, and both versions are shaped from
+one shared build over one shared source composition. Both snapshot routes export `GET` alone — in the
+Next.js App Router an unexported method is answered `405` by the framework, so the absence is the
+enforcement.
 
-`CONTROL_PLANE_READ_CONTRACT_VERSION` stays `'1'`. The change TIGHTENS V1 rather than widening it: a
-funnel stage must now name a certified stage and carry an authority, which is a constraint no
-existing producer violates because the only producer in the repository emits no funnel stages at all.
-The package root still exports exactly four runtime symbols; everything added is a type or an
-internal schema.
+An earlier revision of this ADR argued that the change merely TIGHTENED V1 and could therefore stay
+at `'1'`. That reasoning was wrong and has been removed: tightening is still a breaking change for
+whoever is already producing or parsing the old shape, and ADR-0086 makes the rule about the SHAPE
+rather than about whether a repository-local producer happens to violate it today.
 
 ### 11. The Aarohi surface is completed as a READ surface, and stays PLANNED
 
@@ -265,7 +273,13 @@ truthfully states that the READ SURFACE exists while live funnel data remains `P
 
 Every mutation below was applied to the working tree, the affected suite was actually executed, and
 the file was restored byte-identically (verified by SHA-256 against the pre-mutation digest, not by
-git). Twenty-one mutations; **one survived the first pass**, and the gap it exposed was closed.
+git).
+
+The campaign has been run twice. Twenty-one mutations against the first implementation, of which
+**one survived** and the gap it exposed was closed; then **thirty-one** against the corrected head —
+the original twenty-one plus ten that attack the version boundary itself, listed in
+[ADR-0129](ADR-0129-avg11-control-plane-read-contract-v2.md). Final survivors across both:
+**0**.
 
 ### The survivor, and what it was really about
 
@@ -295,7 +309,7 @@ re-driven in four casings — `AUTONOMY_LEVEL`, `auto_outreach`, `learnedPolicy`
 | 13  | `metrics` accepted from the caller                                  | envelope-strictness specs                                                 |
 | 14  | `.strict()` dropped from the report schema                          | unknown-field specs                                                       |
 | 15  | A `prospectRefs` array added to the report                          | aggregate-only and key-set specs                                          |
-| 16  | A `POST` handler added to the snapshot route                        | the route-set lock                                                        |
+| 16  | A `POST` handler added to a snapshot route                          | the route-set lock                                                        |
 | 17  | A `fetch(` added to the AVG-11 contract                             | containment scans                                                         |
 | 18  | A case-transition helper added to AVG-11                            | containment scans                                                         |
 | 19  | Aarohi marked `AVAILABLE` in the baseline                           | lifecycle and readiness specs                                             |

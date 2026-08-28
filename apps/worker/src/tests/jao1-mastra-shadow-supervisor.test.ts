@@ -95,9 +95,6 @@ function snapshot(state: 'HEALTHY' | 'DEGRADED' | 'OFFLINE' = 'DEGRADED', detail
       modelLatency: series('model-latency', 'Model latency'),
       agentWorkload: section('NOT_CONNECTED'),
       vendorGrowthFunnel: section('PLANNED'),
-      // AVG-11 (ADR-0128) added the Aarohi readiness section to the strict wire contract, so a
-      // snapshot fixture that omits it is no longer a valid snapshot.
-      aarohiAcquisitionReadiness: section('STATIC_BASELINE'),
       workers: section('PLANNED'),
       models: section('NOT_CONNECTED'),
       knowledge: section('NOT_CONNECTED'),

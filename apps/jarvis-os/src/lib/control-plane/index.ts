@@ -1,6 +1,6 @@
 import { cache } from 'react';
 
-import { loadControlPlaneSnapshot } from '../../server/control-plane/load-snapshot';
+import { loadControlPlaneSnapshotV2 } from '../../server/control-plane/load-snapshot';
 import { mapSnapshotToReadModel } from '../../server/control-plane/map-to-ui-model';
 
 import type { ControlPlaneReadModel } from './types';
@@ -37,9 +37,16 @@ import type { ControlPlaneReadModel } from './types';
  *
  * A server component calling its own HTTP route would add a network hop, a failure mode and a second
  * source of truth for no benefit. The page and the route are two callers of one loader.
+ *
+ * ### It reads V2 (AVG-11, ADR-0129)
+ *
+ * The pages render the Aarohi readiness section and a funnel whose stages carry a metric authority,
+ * and neither exists at V1. V1 is unchanged and still served by its own route — the version split
+ * did not fork this boundary, it only chose which wire shape the pages consume. The `/v1` route and
+ * the `/v2` route and this function all reach the same collection and the same composed core.
  */
 export const controlPlane = cache(async (): Promise<ControlPlaneReadModel> =>
-  mapSnapshotToReadModel(await loadControlPlaneSnapshot()),
+  mapSnapshotToReadModel(await loadControlPlaneSnapshotV2()),
 );
 
 export type * from './types';

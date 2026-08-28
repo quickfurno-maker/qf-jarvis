@@ -25,7 +25,9 @@ true at AVG-1. What exists is contracts and pure functions over frozen values:
   [ADR-0128](../decisions/ADR-0128-qfj-p12-avg11-aarohi-analytics-admin-dashboard-offline-domain.md).**
   It adds a READ surface and no reading: no live Core read, runtime, model call, prompt resolution,
   retrieval, provider, channel, transport, persistence or execution activation, no admin write, and
-  no evidence source of any kind is connected. The Jarvis OS Aarohi section stays `PLANNED`.
+  no evidence source of any kind is connected. The wire additions are versioned as control-plane
+  **V2** ([ADR-0129](../decisions/ADR-0129-avg11-control-plane-read-contract-v2.md)) with V1 left
+  unchanged. The Jarvis OS Aarohi section stays `PLANNED`.
 - **AVG-12 — planned and unimplemented.**
 
 Recording a capability is still not implementing one, and implementing an offline domain is still not
@@ -481,9 +483,15 @@ read, no evidence source and no production activation. Exact first-proof boundar
 - **Aggregate only.** A report carries stage tokens, an authority class and integers — no prospect
   reference, case, draft, conversation, message, brief reference, Core lookup, package, amount, name,
   handle or destination.
-- **The canonical Jarvis OS seam is REUSED, not duplicated.** The existing versioned read-only
-  snapshot API and the existing `/agents/aarohi` page are extended. No second dashboard, no second
-  API namespace, no standalone Aarohi server, no parallel control-plane stack, and no `POST`, `PUT`,
+- **The canonical Jarvis OS seam is REUSED at a new contract VERSION, not duplicated.** The wire
+  additions are breaking snapshot-shape changes, so under ADR-0086's change-control rule they live
+  behind contract **V2**
+  ([ADR-0129](../decisions/ADR-0129-avg11-control-plane-read-contract-v2.md)) rather than being
+  edited into V1. V1 is untouched and `GET /api/control-plane/v1/snapshot` serves exactly what it
+  served before; `GET /api/control-plane/v2/snapshot` serves the AVG-11 shape. V2 is a version
+  successor in the same package and the same API family — it imports V1's row schemas and is shaped
+  from one shared build over one shared source composition. No second dashboard, no second API
+  namespace, no standalone Aarohi server, no parallel control-plane stack, and no `POST`, `PUT`,
   `PATCH` or `DELETE` anywhere.
 - **The AVG-10 gaps remain gaps, and are DISPLAYED as gaps.** The post-registration continuation
   boundary and the bridge into `AWAITING_CORE_ACTIVATION` are still absent, and the surface names

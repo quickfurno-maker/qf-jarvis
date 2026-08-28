@@ -1,15 +1,15 @@
-import type { ControlPlaneSnapshotV1 } from '../contract/snapshot.js';
+import type { ControlPlaneSnapshotV2 } from '../contract/snapshot-v2.js';
 
 /**
- * A minimal VALID snapshot, used as the base for negative cases.
+ * A minimal VALID V2 snapshot, used as the base for negative cases (AVG-11, ADR-0129).
  *
- * Every test below mutates one field of a clone of this and asserts the parse fails. That only
- * proves anything if the base itself parses, so the first test in the suite checks exactly that —
- * otherwise a typo here would make every negative test pass for the wrong reason.
+ * Deliberately a sibling of `fixtures.ts` rather than a transformation of it. A V2 fixture derived
+ * from the V1 one by patching two sections would silently inherit whatever V1 does next, and the
+ * point of a version boundary is that the two are allowed to diverge.
  */
-export function validSnapshot(): ControlPlaneSnapshotV1 {
+export function validSnapshotV2(): ControlPlaneSnapshotV2 {
   return {
-    contractVersion: '1',
+    contractVersion: '2',
     generatedAt: '2026-08-03T12:00:00.000Z',
     mode: 'READ_ONLY',
     source: {
@@ -34,10 +34,10 @@ export function validSnapshot(): ControlPlaneSnapshotV1 {
     ],
     capabilities: [
       {
-        id: 'execution.intent.validate',
-        label: 'Execution intent correlation',
-        lifecycle: 'AVAILABLE',
-        note: 'QFJ-P09.01 merged. Validates a Core-issued intent; issues none.',
+        id: 'aarohi.vendor-growth',
+        label: 'Aarohi vendor growth',
+        lifecycle: 'PLANNED',
+        note: 'Owner-locked PLANNED surface under ADR-0085. No outreach, no channel, no credential.',
       },
     ],
     agents: [
@@ -48,32 +48,20 @@ export function validSnapshot(): ControlPlaneSnapshotV1 {
         capabilityId: 'aarohi.vendor-growth',
         lifecycle: 'PLANNED',
         state: 'PLANNED',
-        notes: ['Owner-locked product surface. The runtime is PLANNED and DISABLED.'],
+        notes: ['Owner-locked product surface. The runtime is PLANNED and DISABLED (ADR-0085).'],
       },
     ],
     roadmap: [
       {
-        id: 'qfj-p09-02',
-        label: 'QFJ-P09.02',
+        id: 'qfj-p12-aarohi',
+        label: 'QFJ-P12 - Aarohi / QVGE overlay AVG-0 to AVG-12',
         track: 'QFJ',
-        state: 'next',
-        detail: 'Test-only authorized dispatch envelope and n8n bridge validation.',
+        state: 'planned',
+        detail: 'Owner-locked governance merged (ADR-0085). Runtime is PLANNED and DISABLED.',
       },
     ],
     sections: {
-      headlineMetrics: {
-        availability: 'STATIC_BASELINE',
-        reason: 'Declared by merged repository governance.',
-        expectedSource: 'Repository and governance declarations.',
-        items: [
-          {
-            id: 'governed-agents',
-            label: 'Governed agents',
-            value: '4',
-            caption: 'Jarvis, Riya, Aarohi and Anisha (ADR-0085).',
-          },
-        ],
-      },
+      headlineMetrics: emptySection('STATIC_BASELINE'),
       attention: emptySection('STATIC_BASELINE'),
       activity: emptySection('STATIC_BASELINE'),
       approvalQueue: emptySection('NOT_CONNECTED'),
@@ -83,6 +71,7 @@ export function validSnapshot(): ControlPlaneSnapshotV1 {
       modelLatency: emptySeries('model-latency', 'Model latency'),
       agentWorkload: emptySection('NOT_CONNECTED'),
       vendorGrowthFunnel: emptySection('PLANNED'),
+      aarohiAcquisitionReadiness: emptySection('STATIC_BASELINE'),
       workers: emptySection('PLANNED'),
       models: emptySection('NOT_CONNECTED'),
       knowledge: emptySection('NOT_CONNECTED'),
@@ -97,18 +86,18 @@ export function validSnapshot(): ControlPlaneSnapshotV1 {
 /**
  * An unreadable section, generic in its item type.
  *
- * The wire types are mutable (zod infers them that way), so the arrays here are mutable too --
- * a `readonly never[]` will not satisfy `T[]`, and widening the fixture is the wrong direction.
+ * The wire types are mutable (zod infers them that way), so the arrays here are mutable too -- a
+ * fixture is a value under construction, not a published contract.
  */
 function emptySection(availability: 'STATIC_BASELINE' | 'NOT_CONNECTED' | 'PLANNED'): {
-  availability: 'STATIC_BASELINE' | 'NOT_CONNECTED' | 'PLANNED';
+  availability: typeof availability;
   reason: string;
   expectedSource: string;
   items: never[];
 } {
   return {
     availability,
-    reason: 'No adopted read protocol exists in this release.',
+    reason: 'Declared by merged repository governance; not read from a running system.',
     expectedSource: 'A governed control-plane adapter, in a later JOS phase.',
     items: [],
   };
@@ -117,17 +106,10 @@ function emptySection(availability: 'STATIC_BASELINE' | 'NOT_CONNECTED' | 'PLANN
 function emptySeries(
   id: string,
   label: string,
-): {
-  availability: 'NOT_CONNECTED';
-  reason: string;
-  expectedSource: string;
-  id: string;
-  label: string;
-  points: { label: string; value: number }[];
-} {
+): ControlPlaneSnapshotV2['sections']['conversationActivity'] {
   return {
     availability: 'NOT_CONNECTED',
-    reason: 'No adopted read protocol exists in this release.',
+    reason: 'No source is connected, so there is nothing to plot.',
     expectedSource: 'A governed control-plane adapter, in a later JOS phase.',
     id,
     label,
@@ -135,9 +117,7 @@ function emptySeries(
   };
 }
 
-/** A structural clone that tests may mutate freely. */
-export function mutableSnapshot(): Record<string, unknown> {
-  // JSON round-trip rather than structuredClone: it produces a plain `any`, so the assertion to a
-  // mutable record is meaningful rather than a no-op the linter rejects.
-  return JSON.parse(JSON.stringify(validSnapshot())) as Record<string, unknown>;
+/** A mutable clone, for tests that break exactly one thing. */
+export function mutableSnapshotV2(): Record<string, unknown> {
+  return structuredClone(validSnapshotV2());
 }

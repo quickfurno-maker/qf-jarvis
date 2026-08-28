@@ -1,4 +1,7 @@
-import type { ControlPlaneSnapshotV1 } from '@qf-jarvis/control-plane-read-contract';
+import type {
+  ControlPlaneSectionsV2,
+  ControlPlaneSnapshotV1,
+} from '@qf-jarvis/control-plane-read-contract';
 
 /**
  * The repository baseline (JOS-01B, ADR-0086).
@@ -67,7 +70,7 @@ type SystemComponent = ControlPlaneSnapshotV1['system'][number];
 type BaselineAgent = ControlPlaneSnapshotV1['agents'][number];
 type BaselineRoadmap = ControlPlaneSnapshotV1['roadmap'][number];
 type OwnershipItem = Sections['coreSync']['items'][number];
-type AarohiReadinessItem = Sections['aarohiAcquisitionReadiness']['items'][number];
+type AarohiReadinessItem = ControlPlaneSectionsV2['aarohiAcquisitionReadiness']['items'][number];
 
 /** A section that cannot be read, stated as such. */
 function unreadable(
@@ -358,6 +361,32 @@ export const BASELINE_CORE_SYNC: {
  * built (ADR-0127), and a surface that simply omitted them would read as complete. Stating an
  * absence is the only way an operator can tell a missing feature from a missing panel.
  */
+/**
+ * The V2 funnel section (AVG-11, ADR-0128; versioned by ADR-0129).
+ *
+ * Still `PLANNED` with no stages, exactly as V1's is. What differs is the SENTENCE: at V2 a reader
+ * needs both halves of the truth -- the AVG-11 read surface is merged, AND no evidence source is
+ * connected. Saying only the first would imply data; saying only the second would hide that a
+ * contract now exists and is closed against publishing a business outcome as an acquisition stage.
+ *
+ * V1's own wording is left exactly as it shipped. A frozen contract's prose is part of what a
+ * shipped client renders.
+ */
+export const BASELINE_V2_VENDOR_GROWTH_FUNNEL: {
+  readonly availability: 'PLANNED';
+  readonly reason: string;
+  readonly expectedSource: string;
+  readonly items: readonly ControlPlaneSectionsV2['vendorGrowthFunnel']['items'][number][];
+} = Object.freeze({
+  availability: 'PLANNED',
+  reason:
+    'The AVG-11 read surface is merged and no evidence source is connected. Nothing has been ' +
+    'sourced, researched, approved or contacted.',
+  expectedSource:
+    'The AVG-11 acquisition analytics domain (ADR-0128), whose runtime is PLANNED and DISABLED.',
+  items: Object.freeze([]),
+});
+
 export const BASELINE_AAROHI_READINESS: {
   readonly availability: 'STATIC_BASELINE';
   readonly reason: string;
@@ -648,17 +677,9 @@ export function baselineSections(): Sections {
     ),
     vendorGrowthFunnel: unreadable(
       'PLANNED',
-      // AVG-11 merged the READ SURFACE, not a reading. Both halves belong in this sentence: saying
-      // only the first would imply data, and saying only the second would hide that a contract now
-      // exists and is closed against publishing a business outcome as an acquisition stage.
-      'The AVG-11 read surface is merged and no evidence source is connected. Nothing has been ' +
-        'sourced, researched, approved or contacted.',
-      'The AVG-11 acquisition analytics domain (ADR-0128), whose runtime is PLANNED and DISABLED.',
+      'Aarohi has no runtime. Nothing has been sourced, researched, approved or contacted.',
+      'The QVGE acquisition domain (AVG-1 onward), which is PLANNED and DISABLED.',
     ),
-    aarohiAcquisitionReadiness: {
-      ...BASELINE_AAROHI_READINESS,
-      items: [...BASELINE_AAROHI_READINESS.items],
-    },
     workers: unreadable(
       'PLANNED',
       'Local and GPU node topology is a future slice. No discovery runs.',

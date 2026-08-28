@@ -976,5 +976,27 @@ describe('the roadmap overlay stays true on both sides of a merge', () => {
     // The two decisions a later reader will most want the reasoning for.
     expect(adr.toLowerCase()).toContain('no rate');
     expect(adr.toLowerCase()).toContain('unknown is not zero');
+    // The wire additions are versioned, not edited into V1 (ADR-0086's change-control rule).
+    expect(adr).toContain('ADR-0129');
+    expect(adr).not.toContain('TIGHTENS V1');
+  });
+
+  it('records the contract V2 decision in its own ADR', () => {
+    const v2 = readFileSync(
+      fileURLToPath(
+        new URL(
+          '../../../../docs/decisions/ADR-0129-avg11-control-plane-read-contract-v2.md',
+          import.meta.url,
+        ),
+      ),
+      'utf8',
+    );
+    expect(v2).toContain('ADR-0086');
+    expect(v2).toContain('7bb65d785d8d7b81d87df91ab913500737e1dd56');
+    // The two claims a reviewer of a version bump most needs to find.
+    expect(v2).toContain('V1 is frozen');
+    expect(v2.toLowerCase()).toContain('golden');
+    expect(v2).toContain('/api/control-plane/v2/snapshot');
+    expect(v2).toContain('PLANNED / DISABLED');
   });
 });

@@ -2,12 +2,26 @@
  * `@qf-jarvis/control-plane-read-contract` — the governed read-only control-plane snapshot
  * contract (JOS-01B, ADR-0086).
  *
- * ### Four runtime symbols, and that is the whole surface
+ * ### Six runtime symbols, and that is the whole surface
  *
- * A version constant, an error-code list, one error class and one parse function. The schemas
+ * Two version constants, an error-code list, one error class and two parse functions. The schemas
  * themselves are intentionally NOT exported at the root: if callers could compose sub-schemas they
  * would build their own half-validated shapes, and the single-entry guarantee — everything that
- * reaches a surface went through `parseControlPlaneSnapshotV1` — would quietly stop being true.
+ * reaches a surface went through one of the parse functions — would quietly stop being true.
+ *
+ * It was four until AVG-11 added V2 (ADR-0129). The count is asserted by a spec precisely so that
+ * growing it is a decision somebody made rather than something that happened, and the two symbols
+ * that joined are a version literal and its parser — neither of which can act.
+ *
+ * ### Two versions, two parsers, and no dispatcher
+ *
+ * V1 (ADR-0086) is unchanged and still the contract `GET /api/control-plane/v1/snapshot` serves.
+ * V2 (ADR-0129) adds the Aarohi acquisition funnel's closed stage vocabulary, the metric AUTHORITY
+ * distinction and the readiness section — two breaking shape changes, which is exactly why they are
+ * behind a version rather than edited into V1.
+ *
+ * There is deliberately no `parseControlPlaneSnapshot(version)`: one entry point taking a version is
+ * one `??` away from validating a payload against the wrong contract and calling it valid.
  *
  * Types are exported freely. A type cannot be used to bypass a check.
  *
@@ -26,11 +40,12 @@
  * every object is strict, `rollout.enabled` is the literal `false`, and there are no methods.
  */
 export { CONTROL_PLANE_READ_CONTRACT_VERSION } from './contract/primitives.js';
+export { CONTROL_PLANE_READ_CONTRACT_V2_VERSION } from './contract/snapshot-v2.js';
 export {
   CONTROL_PLANE_READ_CONTRACT_ERROR_CODES,
   ControlPlaneReadContractError,
 } from './errors.js';
-export { parseControlPlaneSnapshotV1 } from './parse.js';
+export { parseControlPlaneSnapshotV1, parseControlPlaneSnapshotV2 } from './parse.js';
 
 export type {
   AgentId,
@@ -41,8 +56,6 @@ export type {
 } from './contract/primitives.js';
 
 export type {
-  AarohiReadinessKind,
-  AarohiReadinessRow,
   ActivityEntry,
   ApprovalRow,
   AttentionItem,
@@ -53,9 +66,7 @@ export type {
   DistributionSlice,
   EvaluationDimension,
   FunnelStage,
-  FunnelStageId,
   KnowledgeNamespace,
-  MetricAuthority,
   ModelProfile,
   OwnershipRow,
   RoadmapMarker,
@@ -65,10 +76,20 @@ export type {
   SnapshotAgent,
   SnapshotCapability,
   SnapshotMetric,
-  ResolvedMetricAuthority,
   SnapshotSource,
   SystemComponent,
   WorkerNode,
 } from './contract/snapshot.js';
+
+export type {
+  AarohiReadinessKind,
+  AarohiReadinessRow,
+  ControlPlaneSectionsV2,
+  ControlPlaneSnapshotV2,
+  FunnelStageId,
+  FunnelStageV2,
+  MetricAuthority,
+  ResolvedMetricAuthority,
+} from './contract/snapshot-v2.js';
 
 export type { ControlPlaneReadContractErrorCode, ControlPlaneReadContractIssue } from './errors.js';

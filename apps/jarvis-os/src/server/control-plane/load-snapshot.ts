@@ -1,6 +1,9 @@
-import type { ControlPlaneSnapshotV1 } from '@qf-jarvis/control-plane-read-contract';
+import type {
+  ControlPlaneSnapshotV1,
+  ControlPlaneSnapshotV2,
+} from '@qf-jarvis/control-plane-read-contract';
 
-import { buildControlPlaneSnapshot } from './build-snapshot';
+import { buildControlPlaneSnapshot, buildControlPlaneSnapshotV2 } from './build-snapshot';
 import { baselineSections } from './repository-baseline';
 import { assertOwnershipIsWellFormed } from './sources/compose';
 import { normalizeResult } from './sources/normalize';
@@ -128,9 +131,27 @@ async function acquireBounded(descriptor: ReadSourceDescriptor): Promise<unknown
  * A reading from before the request started, or stamped after the envelope, is refused rather than
  * quietly relabelled — so `REQUEST_TIME` remains true of everything the snapshot actually contains.
  */
-export async function loadControlPlaneSnapshot(
-  options: LoadSnapshotOptions = {},
-): Promise<ControlPlaneSnapshotV1> {
+/**
+ * Acquire every adopted source for ONE request, inside the governed observation window.
+ *
+ * The ordering is the window and is not incidental:
+ *
+ * 1. `requestStartedAt` is recorded BEFORE any acquisition begins;
+ * 2. every adopted source is acquired;
+ * 3. `generatedAt` is recorded AFTER acquisition completes.
+ *
+ * Composition then admits an observation as request-time evidence only if it falls between the two.
+ * A reading from before the request started, or stamped after the envelope, is refused rather than
+ * quietly relabelled — so `REQUEST_TIME` remains true of everything the snapshot actually contains.
+ *
+ * Shared by both wire versions (ADR-0129). A version decides the final shape of a payload; it does
+ * not get its own idea of when a source was read.
+ */
+async function collectForRequest(options: LoadSnapshotOptions): Promise<{
+  readonly requestStartedAt: string;
+  readonly generatedAt: string;
+  readonly collected: readonly CollectedObservation[];
+}> {
   const sources = options.sources ?? ADOPTED_READ_SOURCES;
 
   // Checked before any acquisition, so a governance mistake is reported even on a day when every
@@ -156,7 +177,38 @@ export async function loadControlPlaneSnapshot(
           })),
         );
 
-  const generatedAt = nowInstant();
+  return { requestStartedAt, generatedAt: nowInstant(), collected };
+}
 
+/**
+ * Produce ONE validated V1 snapshot for ONE request (JOS-01B, ADR-0086).
+ *
+ * Unchanged by AVG-11. This is what `GET /api/control-plane/v1/snapshot` serves, and what a client
+ * built against V1 keeps receiving.
+ */
+export async function loadControlPlaneSnapshot(
+  options: LoadSnapshotOptions = {},
+): Promise<ControlPlaneSnapshotV1> {
+  const { requestStartedAt, generatedAt, collected } = await collectForRequest(options);
   return buildControlPlaneSnapshot({ generatedAt, requestStartedAt, collected });
+}
+
+/**
+ * Produce ONE validated V2 snapshot for ONE request (AVG-11, ADR-0129).
+ *
+ * The SAME acquisition, the same window, the same composed core — a different final wire shape. This
+ * is what `GET /api/control-plane/v2/snapshot` serves and what the server-rendered pages read.
+ *
+ * ### It still does not self-fetch
+ *
+ * A page reads this function directly. It does not call its own HTTP route: that would add a network
+ * hop, a failure mode and a second source of truth for no benefit, and the property JOS-01E
+ * established — the page and the route cannot drift, because they are two callers of one path —
+ * survives the version split intact.
+ */
+export async function loadControlPlaneSnapshotV2(
+  options: LoadSnapshotOptions = {},
+): Promise<ControlPlaneSnapshotV2> {
+  const { requestStartedAt, generatedAt, collected } = await collectForRequest(options);
+  return buildControlPlaneSnapshotV2({ generatedAt, requestStartedAt, collected });
 }
