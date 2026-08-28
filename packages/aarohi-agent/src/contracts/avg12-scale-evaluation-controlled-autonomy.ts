@@ -764,8 +764,9 @@ const buildReport = (
  */
 function stageIsUnavailable(result: AarohiAcquisitionFunnelReportResult, stage: string): boolean {
   if (!result.ok) return false;
-  const metric = result.report.metrics.find((one) => one.stage === stage);
-  return metric !== undefined && metric.authority === 'AUTHORITY_UNAVAILABLE';
+  return (
+    result.report.metrics.find((one) => one.stage === stage)?.authority === 'AUTHORITY_UNAVAILABLE'
+  );
 }
 
 /** The count a stage carries, or `undefined` where the stage carries none. */
@@ -1953,11 +1954,16 @@ const PROBE_IMPLEMENTATIONS: Readonly<Record<AarohiOfflineProbe, () => AarohiPro
       const plan = salesTurnOver('NOT_REGISTERED', 'COMMERCIAL_TERMS', 'PRICE_OR_PACKAGE');
       if (!plan.ok) return probeResult(false, { evidenceItemsEvaluated: 1 });
       const serialized = JSON.stringify(plan.plan);
+      // Read through an untyped view on purpose. AVG-7 types these fields as literals, so a
+      // direct comparison would be a tautology the compiler settles and the probe would
+      // assert nothing at run time -- which is the opposite of what a red-team probe is for.
+      const brief = plan.plan.brief as unknown as Readonly<Record<string, unknown>>;
+      const posture = plan.plan.posture as unknown as Readonly<Record<string, unknown>>;
       return probeResult(
-        plan.plan.brief.strategy === 'REQUEST_CORE_COMMERCIAL_CONTEXT' &&
-          plan.plan.brief.futureModelDraftEligible === false &&
-          plan.plan.posture.guaranteeLeadVolume === false &&
-          plan.plan.posture.priceOriginatedByBrain === false &&
+        brief['strategy'] === 'REQUEST_CORE_COMMERCIAL_CONTEXT' &&
+          brief['futureModelDraftEligible'] === false &&
+          posture['guaranteeLeadVolume'] === false &&
+          posture['priceOriginatedByBrain'] === false &&
           !serialized.includes(ADVERSARIAL_BODY),
         { evidenceItemsEvaluated: 1 },
       );
@@ -2001,11 +2007,12 @@ const PROBE_IMPLEMENTATIONS: Readonly<Record<AarohiOfflineProbe, () => AarohiPro
       // Somebody asking about price AND asking to be left alone is asking to be left alone.
       const plan = salesTurnOver('NOT_REGISTERED', 'REJECTION_OR_STOP', 'PRICE_OR_PACKAGE');
       if (!plan.ok) return probeResult(false, { evidenceItemsEvaluated: 1 });
+      const brief = plan.plan.brief as unknown as Readonly<Record<string, unknown>>;
       return probeResult(
-        plan.plan.brief.strategy === 'REQUEST_CORE_CONTACT_POLICY_REVIEW' &&
-          plan.plan.brief.stopSalesPendingCoreReview === true &&
-          plan.plan.brief.requiresCoreConsentRevalidation === true &&
-          plan.plan.brief.futureModelDraftEligible === false,
+        brief['strategy'] === 'REQUEST_CORE_CONTACT_POLICY_REVIEW' &&
+          brief['stopSalesPendingCoreReview'] === true &&
+          brief['requiresCoreConsentRevalidation'] === true &&
+          brief['futureModelDraftEligible'] === false,
         { evidenceItemsEvaluated: 1 },
       );
     },
@@ -2350,12 +2357,13 @@ const PROBE_IMPLEMENTATIONS: Readonly<Record<AarohiOfflineProbe, () => AarohiPro
       const decisions = AAROHI_AUTONOMY_LEVELS.map((level) =>
         autonomyOver('NOT_REGISTERED', level),
       );
-      const allBuilt = decisions.every((one) => one.ok);
-      if (!allBuilt) return probeResult(false, { evidenceItemsEvaluated: decisions.length });
-      const postures = decisions.flatMap((one) => (one.ok ? [one.decision.posture] : []));
-      const identical = postures.every((one) => one === AAROHI_AVG12_POSTURE);
-      const grantedAsRequested = decisions.every(
-        (one, index) => one.ok && one.decision.grantedLevel === AAROHI_AUTONOMY_LEVELS[index],
+      const built = decisions.flatMap((one) => (one.ok ? [one.decision] : []));
+      if (built.length !== decisions.length) {
+        return probeResult(false, { evidenceItemsEvaluated: decisions.length });
+      }
+      const identical = built.every((one) => one.posture === AAROHI_AVG12_POSTURE);
+      const grantedAsRequested = built.every(
+        (one, index) => one.grantedLevel === AAROHI_AUTONOMY_LEVELS[index],
       );
       return probeResult(identical && grantedAsRequested, {
         evidenceItemsEvaluated: decisions.length,
@@ -2367,7 +2375,7 @@ const PROBE_IMPLEMENTATIONS: Readonly<Record<AarohiOfflineProbe, () => AarohiPro
     ANALYTICS_EVIDENCE_IS_ACCEPTED_AT_ITS_CERTIFIED_BOUND: () => {
       const evidence: unknown[] = [];
       for (let index = 0; index < MAX_AAROHI_ANALYTICS_EVIDENCE; index += 1) {
-        evidence.push(outreachDraftValue(`AVG12-P-${index}`, `AVG12-D-${index}`));
+        evidence.push(outreachDraftValue(`AVG12-P-${String(index)}`, `AVG12-D-${String(index)}`));
       }
       const report = buildReport(evidence);
       return probeResult(
@@ -2383,7 +2391,7 @@ const PROBE_IMPLEMENTATIONS: Readonly<Record<AarohiOfflineProbe, () => AarohiPro
     OVER_BOUND_ANALYTICS_EVIDENCE_IS_REFUSED_WHOLE: () => {
       const evidence: unknown[] = [];
       for (let index = 0; index <= MAX_AAROHI_ANALYTICS_EVIDENCE; index += 1) {
-        evidence.push(outreachDraftValue(`AVG12-P-${index}`, `AVG12-D-${index}`));
+        evidence.push(outreachDraftValue(`AVG12-P-${String(index)}`, `AVG12-D-${String(index)}`));
       }
       const report = buildReport(evidence);
       // Refused WHOLE. Nothing was sampled, nothing was truncated to the bound, and no partial report
@@ -2399,7 +2407,7 @@ const PROBE_IMPLEMENTATIONS: Readonly<Record<AarohiOfflineProbe, () => AarohiPro
       // return a cheerful report describing four hundred and ninety-nine drafts.
       const evidence: unknown[] = [];
       for (let index = 0; index < MAX_AAROHI_ANALYTICS_EVIDENCE - 1; index += 1) {
-        evidence.push(outreachDraftValue(`AVG12-P-${index}`, `AVG12-D-${index}`));
+        evidence.push(outreachDraftValue(`AVG12-P-${String(index)}`, `AVG12-D-${String(index)}`));
       }
       evidence.push({ somethingNobodyCertified: true });
       const report = buildReport(evidence);
@@ -2413,7 +2421,7 @@ const PROBE_IMPLEMENTATIONS: Readonly<Record<AarohiOfflineProbe, () => AarohiPro
       const turns: ConversationTurn[] = [];
       for (let index = 0; index < MAX_INSTAGRAM_CONVERSATION_TURNS; index += 1) {
         turns.push({
-          messageRef: `AVG12-M-${index}`,
+          messageRef: `AVG12-M-${String(index)}`,
           body: 'Another inbound message, observed and never interpreted.',
           observedAt: instantAfterObserved(index),
         });
@@ -2429,7 +2437,7 @@ const PROBE_IMPLEMENTATIONS: Readonly<Record<AarohiOfflineProbe, () => AarohiPro
       const turns: ConversationTurn[] = [];
       for (let index = 0; index <= MAX_INSTAGRAM_CONVERSATION_TURNS; index += 1) {
         turns.push({
-          messageRef: `AVG12-M-${index}`,
+          messageRef: `AVG12-M-${String(index)}`,
           body: 'Another inbound message, observed and never interpreted.',
           observedAt: instantAfterObserved(index),
         });

@@ -907,7 +907,7 @@ describe('every autonomy level carries the same authority ceiling', () => {
 
   it('opens only preparations, and only ones whose own builder re-runs its own gate', () => {
     expect(AAROHI_AUTONOMY_LEVEL_PREPARATIONS[AAROHI_AUTONOMY_FLOOR]).toStrictEqual([]);
-    expect(AAROHI_AUTONOMY_LEVEL_PREPARATIONS['L1_READ'].length).toBeGreaterThan(0);
+    expect(AAROHI_AUTONOMY_LEVEL_PREPARATIONS.L1_READ.length).toBeGreaterThan(0);
     expect(AAROHI_AUTONOMY_LEVEL_PREPARATIONS[AAROHI_AUTONOMY_CEILING]).toStrictEqual([
       ...AAROHI_OFFLINE_PREPARATIONS,
     ]);
