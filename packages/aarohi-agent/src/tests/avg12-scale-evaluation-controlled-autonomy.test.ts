@@ -6,8 +6,14 @@
  * establish exactly what they say and nothing beyond it.
  *
  * The corpus itself is the first spec, because a probe that never ran catches no mutation. After
- * that the specs attack the corpus: a subset, a duplicate, a forged report, a caller-chosen severity
- * and a caller-chosen outcome are each refused, so a failing behaviour cannot be labelled as a pass.
+ * that the specs attack it: a subset, a duplicate, a caller-chosen severity and a caller-chosen
+ * outcome are each refused, so a DERIVED result cannot be talked into saying something else.
+ *
+ * And then the specs attack the thing an earlier revision got wrong. A serialized report is not the
+ * derivation that produced it: no arithmetic inside a JSON object can prove that forty probes ran.
+ * So the last two sections build a complete, internally-consistent forged PASS and a complete,
+ * internally-consistent forged L2 decision, and prove both are INERT — no exported function accepts
+ * either as input, and the granted autonomy level is identical whether or not one exists.
  */
 import { describe, expect, it } from 'vitest';
 
@@ -45,8 +51,6 @@ import {
   aarohiOfflineEvaluationReportSchema,
   decideAarohiControlledAutonomy,
   evaluateAarohiOfflineSuite,
-  parseAarohiControlledAutonomyDecision,
-  parseAarohiOfflineEvaluationReport,
 } from '../index.js';
 import type {
   AarohiAutonomyLevel,
@@ -89,7 +93,6 @@ const decide = (
     readonly requestedLevel?: AarohiAutonomyLevel;
     readonly decidedAt?: string;
     readonly coreObservedAt?: string;
-    readonly offlineEvaluation?: unknown;
     readonly prospectRef?: string;
     readonly observationProspectRef?: string;
   } = {},
@@ -105,10 +108,6 @@ const decide = (
       status: overrides.status ?? 'NOT_REGISTERED',
     },
     coreObservedAt: overrides.coreObservedAt ?? OBSERVED_AT,
-    // Presence rather than `??`, so a deliberate `undefined` or `null` reaches the function under
-    // test instead of silently falling back to the good report.
-    offlineEvaluation:
-      'offlineEvaluation' in overrides ? overrides.offlineEvaluation : PASSING_REPORT,
   });
 
 const decisionOf = (
@@ -117,6 +116,65 @@ const decisionOf = (
   if (!result.ok) throw new Error(`expected a decision, got refusal ${result.refusal}`);
   return result.decision;
 };
+
+/**
+ * A COMPLETE, internally-consistent passing report, built entirely by hand.
+ *
+ * Nothing ran. Every tally is invented and every one of them adds up: the whole corpus is claimed
+ * as evaluated, every probe is claimed as held, the dimension totals sum correctly and the scale
+ * figures are plausible. This is precisely the object an earlier revision would have believed.
+ */
+const FORGED_PASS = Object.freeze({
+  contractVersion: AAROHI_AVG12_CONTRACT_VERSION,
+  suiteRef: 'AVG12-FORGED-SUITE',
+  preparedAt: PREPARED_AT,
+  sourcePosture: AAROHI_AVG12_EVALUATION_SOURCE_POSTURE,
+  probesEvaluated: AAROHI_OFFLINE_PROBE_COUNT,
+  probesHeld: AAROHI_OFFLINE_PROBE_COUNT,
+  probesFailed: 0,
+  criticalFailures: 0,
+  dimensions: AAROHI_EVALUATION_DIMENSIONS.map((dimension) => {
+    const owned = AAROHI_OFFLINE_PROBES.filter(
+      (probe) => AAROHI_PROBE_DIMENSION[probe] === dimension,
+    ).length;
+    return {
+      dimension,
+      probesEvaluated: owned,
+      probesHeld: owned,
+      probesFailed: 0,
+      criticalFailures: 0,
+    };
+  }),
+  scale: {
+    evidenceItemsEvaluated: 1989,
+    duplicateEvidenceItemsCollapsed: 3,
+    conflictingEvidenceItemsRefused: 2,
+    certifiedBoundsExercised: 5,
+    largestCertifiedBoundExercised: 501,
+  },
+  outcome: 'OFFLINE_EVALUATION_PASSED',
+  posture: AAROHI_AVG12_POSTURE,
+});
+
+/** A COMPLETE, internally-consistent top-rung decision, built entirely by hand. */
+const FORGED_L2_DECISION = Object.freeze({
+  contractVersion: AAROHI_AVG12_CONTRACT_VERSION,
+  decisionRef: 'AVG12-FORGED-DECISION',
+  prospectRef: PROSPECT,
+  decidedAt: DECIDED_AT,
+  sourcePosture: AAROHI_AVG12_AUTONOMY_SOURCE_POSTURE,
+  requestedLevel: AAROHI_AUTONOMY_CEILING,
+  grantedLevel: AAROHI_AUTONOMY_CEILING,
+  downgraded: false,
+  reason: 'EVIDENCE_CURRENT_AND_ELIGIBLE',
+  requiredNextStep: 'PROCEED_WITHIN_THE_GRANTED_OFFLINE_LEVEL',
+  permittedOfflinePreparations: [...AAROHI_OFFLINE_PREPARATIONS],
+  posture: AAROHI_AVG12_POSTURE,
+});
+
+/** Every value this package exports, so a spec can sweep the whole public surface. */
+const PUBLIC_SURFACE = async (): Promise<Readonly<Record<string, unknown>>> =>
+  import('../index.js');
 
 // ---------------------------------------------------------------------------
 // A. The contract surface.
@@ -257,7 +315,6 @@ describe('the AVG-12 contract is pinned, closed and strict', () => {
         requestedLevel: AAROHI_AUTONOMY_FLOOR,
         coreObservation: {},
         coreObservedAt: OBSERVED_AT,
-        offlineEvaluation: PASSING_REPORT,
         extra: true,
       }),
     ).toStrictEqual({ ok: false, refusal: 'AUTONOMY_INPUT_INVALID' });
@@ -318,7 +375,6 @@ describe('the AVG-12 contract is pinned, closed and strict', () => {
             status: 'DO_NOT_CONTACT',
           },
           coreObservedAt: OBSERVED_AT,
-          offlineEvaluation: PASSING_REPORT,
           ...forged,
         }),
         JSON.stringify(forged),
@@ -522,12 +578,72 @@ describe('the evaluation gate cannot be talked around', () => {
     };
     // The tallies add up. The outcome is the lie, and the schema refuses it.
     expect(aarohiOfflineEvaluationReportSchema.safeParse(forged).success).toBe(false);
-    expect(parseAarohiOfflineEvaluationReport(forged)).toBeUndefined();
-    // The same figures with an honest outcome parse, which is what proves the refusal above is
-    // about the CLAIM rather than about the arithmetic.
+    // The same figures with an honest outcome are accepted, which is what proves the refusal above
+    // is about the CLAIM rather than about the arithmetic.
     expect(
-      parseAarohiOfflineEvaluationReport({ ...forged, outcome: 'OFFLINE_EVALUATION_FAILED' }),
-    ).toBeDefined();
+      aarohiOfflineEvaluationReportSchema.safeParse({
+        ...forged,
+        outcome: 'OFFLINE_EVALUATION_FAILED',
+      }).success,
+    ).toBe(true);
+  });
+
+  it('requires the outcome to be EXACTLY whether every probe held', () => {
+    // An EQUIVALENCE, not an implication. The one-way rule let a report say FAILED while carrying
+    // no failure at all — a state the evaluator cannot produce, and one an earlier spec leaned on
+    // as a convenience fixture. Both directions are now refused.
+    const held = (outcome: string, probesFailed: number, criticalFailures: number): unknown => ({
+      ...PASSING_REPORT,
+      outcome,
+      probesHeld: AAROHI_OFFLINE_PROBE_COUNT - probesFailed,
+      probesFailed,
+      criticalFailures,
+      dimensions: PASSING_REPORT.dimensions.map((one, index) =>
+        index === 0
+          ? {
+              ...one,
+              probesHeld: one.probesHeld - probesFailed,
+              probesFailed,
+              criticalFailures,
+            }
+          : one,
+      ),
+    });
+
+    // The two impossible corners.
+    expect(
+      aarohiOfflineEvaluationReportSchema.safeParse(held('OFFLINE_EVALUATION_FAILED', 0, 0))
+        .success,
+      'FAILED with zero failures',
+    ).toBe(false);
+    expect(
+      aarohiOfflineEvaluationReportSchema.safeParse(held('OFFLINE_EVALUATION_PASSED', 1, 0))
+        .success,
+      'PASSED with a failure',
+    ).toBe(false);
+    expect(
+      aarohiOfflineEvaluationReportSchema.safeParse(held('OFFLINE_EVALUATION_PASSED', 1, 1))
+        .success,
+      'PASSED with a critical failure',
+    ).toBe(false);
+
+    // The two possible ones.
+    expect(
+      aarohiOfflineEvaluationReportSchema.safeParse(held('OFFLINE_EVALUATION_FAILED', 1, 1))
+        .success,
+      'FAILED with a critical failure',
+    ).toBe(true);
+    expect(
+      aarohiOfflineEvaluationReportSchema.safeParse(PASSING_REPORT).success,
+      'a genuinely derived pass still parses',
+    ).toBe(true);
+
+    // And a critical failure is still a failure.
+    expect(
+      aarohiOfflineEvaluationReportSchema.safeParse(held('OFFLINE_EVALUATION_FAILED', 1, 2))
+        .success,
+      'more critical failures than failures',
+    ).toBe(false);
   });
 
   it('refuses a report that did not account for the whole corpus', () => {
@@ -544,9 +660,9 @@ describe('the evaluation gate cannot be talked around', () => {
       },
     ]) {
       expect(
-        parseAarohiOfflineEvaluationReport({ ...PASSING_REPORT, ...forged }),
+        aarohiOfflineEvaluationReportSchema.safeParse({ ...PASSING_REPORT, ...forged }).success,
         JSON.stringify(Object.keys(forged)),
-      ).toBeUndefined();
+      ).toBe(false);
     }
 
     // The dangerous forgery is the internally CONSISTENT one: a report that ran a single probe,
@@ -554,7 +670,7 @@ describe('the evaluation gate cannot be talked around', () => {
     // above is satisfied by it, and only the whole-corpus rule refuses it. A mutation campaign
     // found this: deleting that rule left every case above still failing for a different reason.
     expect(
-      parseAarohiOfflineEvaluationReport({
+      aarohiOfflineEvaluationReportSchema.safeParse({
         ...PASSING_REPORT,
         probesEvaluated: 1,
         probesHeld: 1,
@@ -565,8 +681,8 @@ describe('the evaluation gate cannot be talked around', () => {
             ? { ...one, probesEvaluated: 1, probesHeld: 1, probesFailed: 0, criticalFailures: 0 }
             : { ...one, probesEvaluated: 0, probesHeld: 0, probesFailed: 0, criticalFailures: 0 },
         ),
-      }),
-    ).toBeUndefined();
+      }).success,
+    ).toBe(false);
   });
 
   it('refuses a report whose severity or posture was edited', () => {
@@ -580,18 +696,18 @@ describe('the evaluation gate cannot be talked around', () => {
       { contractVersion: 2 },
     ]) {
       expect(
-        parseAarohiOfflineEvaluationReport({ ...PASSING_REPORT, ...forged }),
+        aarohiOfflineEvaluationReportSchema.safeParse({ ...PASSING_REPORT, ...forged }).success,
         JSON.stringify(forged),
-      ).toBeUndefined();
+      ).toBe(false);
     }
     // A critical failure count above the failure count is not a severity a caller may assign.
     expect(
-      parseAarohiOfflineEvaluationReport({
+      aarohiOfflineEvaluationReportSchema.safeParse({
         ...PASSING_REPORT,
         outcome: 'OFFLINE_EVALUATION_FAILED',
         criticalFailures: 1,
-      }),
-    ).toBeUndefined();
+      }).success,
+    ).toBe(false);
   });
 
   it('refuses a malformed suite envelope rather than defaulting anything', () => {
@@ -645,7 +761,6 @@ describe('controlled autonomy is fail-closed and defaults to the floor', () => {
         status: 'NOT_REGISTERED',
       },
       coreObservedAt: OBSERVED_AT,
-      offlineEvaluation: PASSING_REPORT,
     };
     expect(decideAarohiControlledAutonomy(base)).toStrictEqual({
       ok: false,
@@ -706,38 +821,16 @@ describe('controlled autonomy is fail-closed and defaults to the floor', () => {
       'EVIDENCE_CURRENT_AND_ELIGIBLE',
     );
 
-    // A failing corpus over a suppressed party reports the harder fact, and both land at the floor.
-    const failing = { ...PASSING_REPORT, outcome: 'OFFLINE_EVALUATION_FAILED' as const };
-    const both = decisionOf(decide({ status: 'DO_NOT_CONTACT', offlineEvaluation: failing }));
-    expect(both.reason).toBe('CORE_SUPPRESSED');
-    expect(both.grantedLevel).toBe(AAROHI_AUTONOMY_FLOOR);
-  });
-
-  it('restricts on a failed corpus even for an eligible party', () => {
-    const failing = { ...PASSING_REPORT, outcome: 'OFFLINE_EVALUATION_FAILED' as const };
-    const decision = decisionOf(decide({ offlineEvaluation: failing }));
-    expect(decision.reason).toBe('OFFLINE_EVALUATION_NOT_PASSED');
-    expect(decision.grantedLevel).toBe('L1_READ');
-    expect(decision.requiredNextStep).toBe('OBTAIN_HUMAN_REVIEW');
-    expect(decision.downgraded).toBe(true);
-
-    // A critical failure restricts further still, and outranks even a Core refusal.
-    const critical = {
-      ...PASSING_REPORT,
-      outcome: 'OFFLINE_EVALUATION_FAILED' as const,
-      probesHeld: AAROHI_OFFLINE_PROBE_COUNT - 1,
-      probesFailed: 1,
-      criticalFailures: 1,
-      dimensions: PASSING_REPORT.dimensions.map((one, index) =>
-        index === 0
-          ? { ...one, probesHeld: one.probesHeld - 1, probesFailed: 1, criticalFailures: 1 }
-          : one,
-      ),
-    };
-    const worst = decisionOf(decide({ status: 'DO_NOT_CONTACT', offlineEvaluation: critical }));
-    expect(worst.reason).toBe('OFFLINE_EVALUATION_CRITICAL_FAILURE');
-    expect(worst.grantedLevel).toBe(AAROHI_AUTONOMY_FLOOR);
-    expect(worst.permittedOfflinePreparations).toStrictEqual([]);
+    // Every reason is reachable, and so is every next step. A closed vocabulary with a member
+    // nothing can produce is a vocabulary that has outlived one of its entries.
+    const reached = new Set(
+      CORE_PARTY_STATUSES.map((status) => decisionOf(decide({ status })).reason),
+    );
+    expect([...reached].sort()).toStrictEqual([...AAROHI_AUTONOMY_REASONS].sort());
+    const steps = new Set(
+      CORE_PARTY_STATUSES.map((status) => decisionOf(decide({ status })).requiredNextStep),
+    );
+    expect([...steps].sort()).toStrictEqual([...AAROHI_AUTONOMY_NEXT_STEPS].sort());
   });
 
   it('refuses rather than restricts when the evidence itself is unusable', () => {
@@ -753,30 +846,11 @@ describe('controlled autonomy is fail-closed and defaults to the floor', () => {
         requestedLevel: AAROHI_AUTONOMY_FLOOR,
         coreObservation: { prospectRef: PROSPECT, coreLookupRef: 'L', status: 'NOT_A_STATUS' },
         coreObservedAt: OBSERVED_AT,
-        offlineEvaluation: PASSING_REPORT,
       }),
     ).toStrictEqual({ ok: false, refusal: 'CORE_OBSERVATION_INVALID' });
 
-    for (const evaluation of [
-      undefined,
-      null,
-      {},
-      { ...PASSING_REPORT, outcome: 'GREAT' },
-      { ...PASSING_REPORT, probesEvaluated: 1, probesHeld: 1 },
-      { ...PASSING_REPORT, posture: { ...AAROHI_AVG12_POSTURE, offlineOnly: false } },
-    ]) {
-      expect(decide({ offlineEvaluation: evaluation })).toStrictEqual({
-        ok: false,
-        refusal: 'OFFLINE_EVALUATION_INVALID',
-      });
-    }
-
     // A decision cannot rest on something that had not happened when it was made.
     expect(decide({ coreObservedAt: '2027-01-01T00:00:00.000Z' })).toStrictEqual({
-      ok: false,
-      refusal: 'DECISION_PREDATES_EVIDENCE',
-    });
-    expect(decide({ decidedAt: OBSERVED_AT })).toStrictEqual({
       ok: false,
       refusal: 'DECISION_PREDATES_EVIDENCE',
     });
@@ -928,7 +1002,10 @@ describe('every autonomy level carries the same authority ceiling', () => {
     }
   });
 
-  it('refuses a decision whose granted level, next step or preparations were edited', () => {
+  it('describes a decision whose granted level, next step or preparations disagree', () => {
+    // The SCHEMA is a shape description, and these are the internal disagreements it can see. What
+    // it cannot see — and what the section below is about — is whether the decision was derived at
+    // all. That is why no function accepts a decision as input.
     const decision = decisionOf(decide());
     for (const forged of [
       { grantedLevel: AAROHI_AUTONOMY_CEILING, requestedLevel: AAROHI_AUTONOMY_FLOOR },
@@ -941,36 +1018,34 @@ describe('every autonomy level carries the same authority ceiling', () => {
       { sourcePosture: 'CORE_VERIFIED' },
     ]) {
       expect(
-        parseAarohiControlledAutonomyDecision({ ...decision, ...forged }),
+        aarohiControlledAutonomyDecisionSchema.safeParse({ ...decision, ...forged }).success,
         JSON.stringify(forged),
-      ).toBeUndefined();
+      ).toBe(false);
     }
-    // Each forgery above changes two things at once, and one of the other rules catches most of
-    // them. The forgery that isolates the next-step rule changes ONE field and leaves the reason,
-    // the level and the preparations all internally consistent — which is the case a mutation
-    // campaign found surviving when the rule was deleted.
+
+    // One field changed, everything else consistent — the case that isolates the next-step rule.
     expect(
-      parseAarohiControlledAutonomyDecision({
+      aarohiControlledAutonomyDecisionSchema.safeParse({
         ...decision,
         requiredNextStep: 'NONE_REFUSED',
-      }),
-    ).toBeUndefined();
+      }).success,
+    ).toBe(false);
     const refused = decisionOf(decide({ status: 'DO_NOT_CONTACT' }));
     expect(
-      parseAarohiControlledAutonomyDecision({
+      aarohiControlledAutonomyDecisionSchema.safeParse({
         ...refused,
         requiredNextStep: 'PROCEED_WITHIN_THE_GRANTED_OFFLINE_LEVEL',
-      }),
-    ).toBeUndefined();
+      }).success,
+    ).toBe(false);
 
     // A floor decision may not carry the ceiling's preparations, in either direction.
     const floor = decisionOf(decide({ requestedLevel: AAROHI_AUTONOMY_FLOOR }));
     expect(
-      parseAarohiControlledAutonomyDecision({
+      aarohiControlledAutonomyDecisionSchema.safeParse({
         ...floor,
         permittedOfflinePreparations: [...AAROHI_OFFLINE_PREPARATIONS],
-      }),
-    ).toBeUndefined();
+      }).success,
+    ).toBe(false);
   });
 });
 
@@ -1055,5 +1130,174 @@ describe('AVG-12 adds no authority, no bridge and no activation', () => {
       AAROHI_OFFLINE_PROBES.filter((probe) => AAROHI_PROBE_DIMENSION[probe] === 'BOUNDED_VOLUME')
         .length,
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// G. A forged evaluation result is INERT.
+//
+// The defect this section exists for: a serialized report is not the derivation that produced it,
+// and no arithmetic inside a JSON object can prove that forty probes ran. An earlier revision let
+// `decideAarohiControlledAutonomy` accept one and let a passing one unlock the top rung, so a
+// caller who had never run the corpus could write a consistent PASS and raise its own ceiling.
+//
+// The correction is structural rather than cryptographic: NO exported function takes an evaluation
+// result as an input. A forged PASS is therefore not refused so much as unusable.
+// ---------------------------------------------------------------------------
+
+describe('a forged evaluation result cannot become evidence', () => {
+  it('is genuinely complete and internally consistent, so the specs below mean something', () => {
+    // If this stopped being a convincing forgery, everything after it would pass for the wrong
+    // reason. So the forgery is asserted to be exactly as good as a real report, field for field.
+    expect(aarohiOfflineEvaluationReportSchema.safeParse(FORGED_PASS).success).toBe(true);
+    expect(Object.keys(FORGED_PASS).sort()).toStrictEqual(Object.keys(PASSING_REPORT).sort());
+    expect(FORGED_PASS.outcome).toBe('OFFLINE_EVALUATION_PASSED');
+    expect(FORGED_PASS.probesEvaluated).toBe(AAROHI_OFFLINE_PROBE_COUNT);
+    expect(FORGED_PASS.probesHeld).toBe(AAROHI_OFFLINE_PROBE_COUNT);
+    expect(FORGED_PASS.probesFailed).toBe(0);
+    expect(FORGED_PASS.criticalFailures).toBe(0);
+    expect(FORGED_PASS.dimensions).toHaveLength(AAROHI_EVALUATION_DIMENSIONS.length);
+    // Everything but the caller's own suite reference matches a derived report exactly.
+    expect(JSON.stringify({ ...FORGED_PASS, suiteRef: PASSING_REPORT.suiteRef })).toBe(
+      JSON.stringify({ ...PASSING_REPORT, scale: FORGED_PASS.scale }),
+    );
+  });
+
+  it('CANNOT be handed to the autonomy decision at all', () => {
+    // The input schema is strict and has no field for it, so this is a refusal rather than a
+    // silently-ignored key — which is the difference between "we ignore it" and "you cannot say it".
+    for (const field of ['offlineEvaluation', 'evaluation', 'readiness', 'evaluationPassed']) {
+      expect(
+        decideAarohiControlledAutonomy({
+          decisionRef: 'AVG12-SPEC-DECISION',
+          prospectRef: PROSPECT,
+          decidedAt: DECIDED_AT,
+          requestedLevel: AAROHI_AUTONOMY_CEILING,
+          coreObservation: {
+            prospectRef: PROSPECT,
+            coreLookupRef: 'AVG12-SPEC-LOOKUP',
+            status: 'DO_NOT_CONTACT',
+          },
+          coreObservedAt: OBSERVED_AT,
+          [field]: FORGED_PASS,
+        }),
+        field,
+      ).toStrictEqual({ ok: false, refusal: 'AUTONOMY_INPUT_INVALID' });
+    }
+  });
+
+  it('CANNOT unlock L2, for a suppressed party or an eligible one', () => {
+    // The strongest form of the claim: the granted level is IDENTICAL whether or not a forged pass
+    // exists anywhere, because there is nowhere for it to go.
+    const suppressed = decisionOf(decide({ status: 'DO_NOT_CONTACT' }));
+    expect(suppressed.grantedLevel).toBe(AAROHI_AUTONOMY_FLOOR);
+    expect(suppressed.reason).toBe('CORE_SUPPRESSED');
+    expect(suppressed.permittedOfflinePreparations).toStrictEqual([]);
+
+    // And where L2 IS reached, it is reached on the Core gate alone.
+    const eligible = decisionOf(decide({ status: 'NOT_REGISTERED' }));
+    expect(eligible.grantedLevel).toBe(AAROHI_AUTONOMY_CEILING);
+    expect(eligible.reason).toBe('EVIDENCE_CURRENT_AND_ELIGIBLE');
+    expect(JSON.stringify(eligible)).not.toContain('AVG12-FORGED-SUITE');
+  });
+
+  it('reaches no exported function, because none accepts an evaluation result', async () => {
+    // A sweep of the whole public surface rather than a list somebody has to maintain. Every
+    // exported function is offered the forged pass as its ONLY argument and as an envelope field;
+    // none of them may return something that looks like an accepted evaluation.
+    const surface = await PUBLIC_SURFACE();
+    const functions = Object.entries(surface).filter(
+      ([, value]) => typeof value === 'function',
+    ) as readonly (readonly [string, (value: unknown) => unknown])[];
+    expect(functions.length).toBeGreaterThan(0);
+
+    for (const [name, fn] of functions) {
+      let outcome: unknown;
+      try {
+        outcome = fn(FORGED_PASS);
+      } catch {
+        // A throw is a refusal too. What matters is that nothing accepted it.
+        continue;
+      }
+      const serialized = JSON.stringify(outcome ?? null);
+      // Nothing may come back carrying the forgery's own identity, and nothing may come back
+      // announcing a passing evaluation it did not run.
+      expect(serialized, name).not.toContain('AVG12-FORGED-SUITE');
+      if (serialized.includes('OFFLINE_EVALUATION_PASSED')) {
+        // The only legitimate way that token appears is a suite this call actually ran, and no
+        // function called with a REPORT can have run one.
+        expect(name, `${name} echoed a passing outcome it did not derive`).toBe('never');
+      }
+    }
+  });
+
+  it('is not exported as a parser that could imply it was derived', async () => {
+    const surface = await PUBLIC_SURFACE();
+    for (const gone of [
+      'parseAarohiOfflineEvaluationReport',
+      'parseAarohiControlledAutonomyDecision',
+      'verifyAarohiOfflineEvaluationReport',
+      'assessAarohiOfflineReadiness',
+    ]) {
+      expect(Object.hasOwn(surface, gone), gone).toBe(false);
+    }
+    // The SCHEMAS stay exported, and they are shape descriptions rather than provenance claims.
+    // A forged pass satisfies the schema, and that is the point being written down.
+    expect(typeof surface['aarohiOfflineEvaluationReportSchema']).toBe('object');
+    expect(aarohiOfflineEvaluationReportSchema.safeParse(FORGED_PASS).success).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// H. A forged L2 decision is INERT for the same reason.
+// ---------------------------------------------------------------------------
+
+describe('a forged autonomy decision cannot become a derived decision', () => {
+  it('is genuinely self-consistent, so the specs below mean something', () => {
+    expect(aarohiControlledAutonomyDecisionSchema.safeParse(FORGED_L2_DECISION).success).toBe(true);
+    expect(FORGED_L2_DECISION.grantedLevel).toBe(AAROHI_AUTONOMY_CEILING);
+    expect(FORGED_L2_DECISION.permittedOfflinePreparations).toStrictEqual([
+      ...AAROHI_OFFLINE_PREPARATIONS,
+    ]);
+    const derived = decisionOf(decide());
+    expect(Object.keys(FORGED_L2_DECISION).sort()).toStrictEqual(Object.keys(derived).sort());
+  });
+
+  it('has no exported parser that would certify it as derived', async () => {
+    const surface = await PUBLIC_SURFACE();
+    expect(Object.hasOwn(surface, 'parseAarohiControlledAutonomyDecision')).toBe(false);
+    // The schema remains, and it proves internal consistency only. Saying so out loud is the
+    // correction: a self-consistent object is not a derivation, and this asserts the gap exists
+    // rather than pretending it is closed.
+    expect(aarohiControlledAutonomyDecisionSchema.safeParse(FORGED_L2_DECISION).success).toBe(true);
+  });
+
+  it('reaches no exported function, because none accepts a decision', async () => {
+    const surface = await PUBLIC_SURFACE();
+    const functions = Object.entries(surface).filter(
+      ([, value]) => typeof value === 'function',
+    ) as readonly (readonly [string, (value: unknown) => unknown])[];
+
+    for (const [name, fn] of functions) {
+      let outcome: unknown;
+      try {
+        outcome = fn(FORGED_L2_DECISION);
+      } catch {
+        continue;
+      }
+      const serialized = JSON.stringify(outcome ?? null);
+      expect(serialized, name).not.toContain('AVG12-FORGED-DECISION');
+      expect(serialized, name).not.toContain('L2_SELECT_GOVERNED_OFFLINE_PREPARATION');
+    }
+  });
+
+  it('changes nothing about what the real decision boundary returns', () => {
+    // The decision function does not consult, cache or remember anything. Two calls either side of
+    // a forgery being constructed return the same bytes.
+    const before = decisionOf(decide({ status: 'DO_NOT_CONTACT' }));
+    void FORGED_L2_DECISION;
+    const after = decisionOf(decide({ status: 'DO_NOT_CONTACT' }));
+    expect(JSON.stringify(after)).toBe(JSON.stringify(before));
+    expect(after.grantedLevel).toBe(AAROHI_AUTONOMY_FLOOR);
   });
 });

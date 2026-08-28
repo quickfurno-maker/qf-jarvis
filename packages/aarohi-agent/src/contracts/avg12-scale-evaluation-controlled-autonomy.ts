@@ -29,13 +29,31 @@
  *
  * EVALUATION is a closed corpus of adversarial PROBES over the certified AVG-1..AVG-11 functions. A
  * caller supplies no expectation, no severity and no result: it names probes, and each probe's
- * dimension, severity and required behaviour belong to this file. That is what makes a failing
- * behaviour unlabellable as a pass.
+ * dimension, severity and required behaviour belong to this file. {@link evaluateAarohiOfflineSuite}
+ * DERIVES its outcome by running them.
+ *
+ * A serialized report is a different thing from that derivation, and an earlier revision of this
+ * file confused the two. `aarohiOfflineEvaluationReportSchema` proves a SHAPE and an internal
+ * arithmetic — it cannot prove that forty probes ran, because nothing about a JSON object can. So
+ * the rule is structural rather than cryptographic:
+ *
+ * **NO FUNCTION IN THIS FILE ACCEPTS AN EVALUATION RESULT AS INPUT.**
+ *
+ * An evaluation report is offline GOVERNANCE EVIDENCE for a human and for a later, separately
+ * governed certification boundary. It is not a credential, nothing consumes it, and forging one
+ * therefore achieves nothing.
  *
  * CONTROLLED AUTONOMY is an increase in OFFLINE DECISION FREEDOM and in nothing else. Every level
  * carries the same {@link AAROHI_AVG12_POSTURE}, so the authority ceiling is one frozen value rather
  * than a per-level promise, and a table-driven spec proves the delta between the floor and the
  * ceiling is empty.
+ *
+ * Its only positive evidence is a CURRENT QuickFurno Core observation, re-derived every time through
+ * AVG-1's own gate. An earlier revision also accepted an offline evaluation report and let a passing
+ * one unlock the top rung — which meant a caller who had never run the corpus could hand-build a
+ * consistent PASS and raise its own ceiling. Shape validity is not derivation, internal arithmetic
+ * is not provenance, and a parser is not an authority; the input field is gone rather than
+ * defended.
  *
  * Passing a scale probe is not a safety result. Passing the safety corpus is not production
  * authorization. Being granted the top autonomy level is not execution authority.
@@ -1100,18 +1118,28 @@ export const aarohiOfflineEvaluationReportSchema = z
     'the dimension tallies must sum to the report totals',
   )
   .refine(
-    // THE gate rule, structural rather than procedural. A report claiming a pass while carrying any
-    // failure at all does not parse, and one carrying a critical failure cannot pass under any
-    // arithmetic. There is no weighting anywhere that could average this away.
+    // THE gate rule, structural rather than procedural, and an EQUIVALENCE rather than an
+    // implication. A report claiming a pass while carrying any failure does not parse; neither does
+    // one claiming a failure it does not carry. The one-way version admitted a report that said
+    // FAILED with every probe held, which is not a state the evaluator can produce and which an
+    // earlier spec used as a convenience fixture — a fixture is a bad reason to widen a contract.
+    // There is no weighting anywhere that could average either direction away.
     (value) =>
-      value.outcome === 'OFFLINE_EVALUATION_PASSED'
-        ? value.probesFailed === 0 && value.criticalFailures === 0
-        : true,
-    'a passing offline evaluation may carry no failure of any kind',
+      (value.outcome === 'OFFLINE_EVALUATION_PASSED') ===
+      (value.probesFailed === 0 && value.criticalFailures === 0),
+    'the offline outcome must be exactly whether every probe held',
   );
 
-/** Re-parse and REBUILD a report. Detaches it from whatever the caller holds. */
-export function parseAarohiOfflineEvaluationReport(
+/**
+ * Re-parse and REBUILD a report. INTERNAL, and deliberately not exported.
+ *
+ * It proves a shape and an arithmetic, and it cannot prove that the corpus ran — so exporting it
+ * under a name that reads like certification would be the whole defect this file was corrected for.
+ * {@link evaluateAarohiOfflineSuite} uses it to validate its OWN output before returning it, which
+ * is the one use that is honest. `aarohiOfflineEvaluationReportSchema` stays exported for review,
+ * and is a shape description rather than a claim about provenance.
+ */
+function parseAarohiOfflineEvaluationReport(
   value: unknown,
 ): AarohiOfflineEvaluationReport | undefined {
   const parsed = aarohiOfflineEvaluationReportSchema.safeParse(value);
@@ -1253,17 +1281,19 @@ export const AAROHI_AUTONOMY_LEVEL_PREPARATIONS: Readonly<
  * It does not mean anybody may be contacted.
  */
 export const AAROHI_AUTONOMY_REASONS = [
-  /** The offline corpus itself reported a critical failure. Nothing else may be concluded. */
-  'OFFLINE_EVALUATION_CRITICAL_FAILURE',
   /** QuickFurno Core has suppressed contact with this party. */
   'CORE_SUPPRESSED',
   /** Core already knows this party. Relationship ownership is not Aarohi's to create. */
   'EXISTING_CORE_RELATIONSHIP',
   /** Core truth is absent, ambiguous or unavailable. A stop, never a proceed. */
   'CORE_TRUTH_UNRESOLVED',
-  /** The offline corpus reported a non-critical failure. A person should look before more happens. */
-  'OFFLINE_EVALUATION_NOT_PASSED',
-  /** The gate admitted this party and the offline corpus passed. Still not contact permission. */
+  /**
+   * AVG-1's own gate admitted this party on the CURRENT observation. Still not contact permission.
+   *
+   * The only positive reason, and it rests on one thing: a Core observation re-derived through
+   * {@link evaluateAcquisitionEligibility} every time. It does not rest on an evaluation result,
+   * because an evaluation result is a value a caller could write down.
+   */
   'EVIDENCE_CURRENT_AND_ELIGIBLE',
 ] as const;
 export type AarohiAutonomyReason = (typeof AAROHI_AUTONOMY_REASONS)[number];
@@ -1275,9 +1305,7 @@ export type AarohiAutonomyReason = (typeof AAROHI_AUTONOMY_REASONS)[number];
  * first applicable member. Two facts being true at once therefore has one answer that a reader can
  * find by reading a list, and reordering the checks in the function body cannot change it.
  *
- * A critical evaluation failure outranks even a Core refusal, because a corpus reporting that a
- * load-bearing invariant did not hold is a corpus saying this module's own judgement is unsafe to
- * act on — including its reading of the gate.
+ * Every member below is derived from the CURRENT Core observation and from nothing else.
  */
 export const AAROHI_AUTONOMY_REASON_PRECEDENCE: readonly AarohiAutonomyReason[] =
   AAROHI_AUTONOMY_REASONS;
@@ -1291,11 +1319,9 @@ export const AAROHI_AUTONOMY_REASON_PRECEDENCE: readonly AarohiAutonomyReason[] 
 export const AAROHI_AUTONOMY_REASON_MAX_LEVEL: Readonly<
   Record<AarohiAutonomyReason, AarohiAutonomyLevel>
 > = Object.freeze({
-  OFFLINE_EVALUATION_CRITICAL_FAILURE: 'L0_REASON',
   CORE_SUPPRESSED: 'L0_REASON',
   EXISTING_CORE_RELATIONSHIP: 'L0_REASON',
   CORE_TRUTH_UNRESOLVED: 'L0_REASON',
-  OFFLINE_EVALUATION_NOT_PASSED: 'L1_READ',
   EVIDENCE_CURRENT_AND_ELIGIBLE: 'L2_SELECT_GOVERNED_OFFLINE_PREPARATION',
 });
 
@@ -1312,8 +1338,6 @@ export const AAROHI_AUTONOMY_NEXT_STEPS = [
   'NONE_REFUSED',
   /** Ask QuickFurno Core for the fact this decision is missing. */
   'OBTAIN_CORE_CONTEXT',
-  /** A person should look before anything else happens. */
-  'OBTAIN_HUMAN_REVIEW',
   /** Continue within the granted offline level, and no further. */
   'PROCEED_WITHIN_THE_GRANTED_OFFLINE_LEVEL',
 ] as const;
@@ -1323,11 +1347,9 @@ export type AarohiAutonomyNextStep = (typeof AAROHI_AUTONOMY_NEXT_STEPS)[number]
 export const AAROHI_AUTONOMY_REASON_NEXT_STEP: Readonly<
   Record<AarohiAutonomyReason, AarohiAutonomyNextStep>
 > = Object.freeze({
-  OFFLINE_EVALUATION_CRITICAL_FAILURE: 'OBTAIN_HUMAN_REVIEW',
   CORE_SUPPRESSED: 'NONE_REFUSED',
   EXISTING_CORE_RELATIONSHIP: 'NONE_REFUSED',
   CORE_TRUTH_UNRESOLVED: 'OBTAIN_CORE_CONTEXT',
-  OFFLINE_EVALUATION_NOT_PASSED: 'OBTAIN_HUMAN_REVIEW',
   EVIDENCE_CURRENT_AND_ELIGIBLE: 'PROCEED_WITHIN_THE_GRANTED_OFFLINE_LEVEL',
 });
 
@@ -1337,8 +1359,6 @@ export const AAROHI_AUTONOMY_REFUSALS = [
   'AUTONOMY_INPUT_INVALID',
   /** The Core observation did not parse, or described a different prospect. */
   'CORE_OBSERVATION_INVALID',
-  /** The supplied offline evaluation is not a canonical AVG-12 report. */
-  'OFFLINE_EVALUATION_INVALID',
   /** The decision claims to predate evidence it rests on. */
   'DECISION_PREDATES_EVIDENCE',
   /** The builder produced a decision its own schema refuses. Fails here rather than downstream. */
@@ -1420,8 +1440,15 @@ export const aarohiControlledAutonomyDecisionSchema = z
     'the permitted preparations belong to the granted level, and are not separately choosable',
   );
 
-/** Re-parse and REBUILD a decision. Detaches it from whatever the caller holds. */
-export function parseAarohiControlledAutonomyDecision(
+/**
+ * Re-parse and REBUILD a decision. INTERNAL, and deliberately not exported, for the same reason.
+ *
+ * It checks that a decision is internally consistent. It does NOT re-derive the Core gate, the
+ * reason or the granted level, so it can certify only that an object has the right shape — and a
+ * self-consistent hand-built L2 object has exactly that. {@link decideAarohiControlledAutonomy}
+ * uses it to validate its OWN output. No function here accepts a decision as input.
+ */
+function parseAarohiControlledAutonomyDecision(
   value: unknown,
 ): AarohiControlledAutonomyDecision | undefined {
   const parsed = aarohiControlledAutonomyDecisionSchema.safeParse(value);
@@ -1450,10 +1477,19 @@ export type AarohiControlledAutonomyResult =
 /**
  * What a caller may state when asking for autonomy.
  *
- * Seven fields, and note what is absent: no level to grant, no reason, no next step, no preparation,
+ * Six fields, and note what is absent: no level to grant, no reason, no next step, no preparation,
  * no posture, no outcome, no override, no channel and no destination. `requestedLevel` is a CEILING
  * REQUEST and is required — there is no default, so a missing level is a parse refusal rather than a
  * silent maximum, and a supplied one can only ever be lowered.
+ *
+ * And note the field that USED to be here: `offlineEvaluation`. An earlier revision accepted an
+ * evaluation report and let a passing one unlock the top rung. Because a report is just a value, a
+ * caller who had never run the corpus could write a consistent PASS and raise its own ceiling —
+ * exactly the escalation this stage exists to make impossible. The schema is `.strict()`, so
+ * supplying one now is a refusal rather than a silently ignored key.
+ *
+ * The only positive evidence left is the Core observation, and it is re-derived through AVG-1's own
+ * gate rather than believed.
  */
 const autonomyDecisionInputSchema = z
   .object({
@@ -1463,12 +1499,19 @@ const autonomyDecisionInputSchema = z
     requestedLevel: z.enum(AAROHI_AUTONOMY_LEVELS),
     coreObservation: z.unknown(),
     coreObservedAt: UTC_INSTANT,
-    offlineEvaluation: z.unknown(),
   })
   .strict();
 
 /**
  * Decide how much OFFLINE freedom this situation permits, or refuse.
+ *
+ * ### Its only positive evidence is a Core observation, re-derived every time
+ *
+ * There is no evaluation input and no readiness input, because a result is a value and a value can
+ * be written down by whoever wants the answer. What raises the ceiling is
+ * {@link evaluateAcquisitionEligibility} — AVG-1's own gate — run here, now, over the observation
+ * actually supplied. A caller can lie about what Core said; it cannot lie about what the gate does
+ * with that, and every non-`NOT_REGISTERED` status lands on the floor.
  *
  * ### It grants freedom, never authority
  *
@@ -1507,22 +1550,10 @@ export function decideAarohiControlledAutonomy(value: unknown): AarohiControlled
 
   const { decisionRef, prospectRef, decidedAt, requestedLevel, coreObservedAt } = input.data;
 
-  // The evaluation must be a canonical AVG-12 report. A hand-built envelope claiming a pass cannot
-  // parse: the schema requires the WHOLE corpus to have been accounted for and refuses a passing
-  // outcome beside any failure at all. It still grants nothing on its own — the gate below is asked
-  // independently, and a passing corpus over a suppressed party reaches the floor.
-  const evaluation = parseAarohiOfflineEvaluationReport(input.data.offlineEvaluation);
-  if (evaluation === undefined) {
-    return Object.freeze({ ok: false as const, refusal: 'OFFLINE_EVALUATION_INVALID' as const });
-  }
-
-  // Causality, over both pieces of evidence, before either is weighed. A decision cannot rest on
-  // something that had not happened when it was made.
+  // Causality, before the evidence is weighed. A decision cannot rest on something that had not
+  // happened when it was made.
   const decidedMs = canonicalInstantEpochMs(decidedAt);
-  if (
-    canonicalInstantEpochMs(coreObservedAt) > decidedMs ||
-    canonicalInstantEpochMs(evaluation.preparedAt) > decidedMs
-  ) {
+  if (canonicalInstantEpochMs(coreObservedAt) > decidedMs) {
     return Object.freeze({ ok: false as const, refusal: 'DECISION_PREDATES_EVIDENCE' as const });
   }
 
@@ -1536,26 +1567,26 @@ export function decideAarohiControlledAutonomy(value: unknown): AarohiControlled
   // Which reasons APPLY, gathered before any of them is chosen, so the choice is made by the
   // declared precedence rather than by the order the checks happen to sit in.
   const applicable = new Set<AarohiAutonomyReason>();
-  if (evaluation.criticalFailures > 0) {
-    applicable.add('OFFLINE_EVALUATION_CRITICAL_FAILURE');
-  }
   if (!gate.eligible) {
     if (gate.reason === 'CORE_SUPPRESSED') applicable.add('CORE_SUPPRESSED');
     if (gate.reason === 'EXISTING_CORE_RELATIONSHIP') applicable.add('EXISTING_CORE_RELATIONSHIP');
     if (gate.reason === 'CORE_TRUTH_UNRESOLVED') applicable.add('CORE_TRUTH_UNRESOLVED');
   }
-  if (evaluation.outcome !== 'OFFLINE_EVALUATION_PASSED') {
-    applicable.add('OFFLINE_EVALUATION_NOT_PASSED');
-  }
   if (applicable.size === 0) {
     applicable.add('EVIDENCE_CURRENT_AND_ELIGIBLE');
   }
 
-  const reason =
-    AAROHI_AUTONOMY_REASON_PRECEDENCE.find((one) => applicable.has(one)) ??
-    // Unreachable: the set is non-empty and every member is in the precedence list. Fail closed
-    // anyway, because "unreachable" is a claim about today's call graph.
-    'OFFLINE_EVALUATION_CRITICAL_FAILURE';
+  // The first APPLICABLE member of the declared order, and no fallback literal.
+  //
+  // An earlier revision ended this with `?? 'CORE_SUPPRESSED'`. The branch is unreachable -- the
+  // gate is total, so either it refused with one of the three reasons above or the positive one was
+  // added -- which meant no spec could reach it and a mutation swapping that literal for the
+  // POSITIVE reason survived. An unreachable line that can still name a reason is an escalation
+  // nobody can test, so there is no longer a reason to name: the impossible case refuses.
+  const reason = AAROHI_AUTONOMY_REASON_PRECEDENCE.find((one) => applicable.has(one));
+  if (reason === undefined) {
+    return Object.freeze({ ok: false as const, refusal: 'AUTONOMY_DECISION_INVALID' as const });
+  }
 
   const permitted = AAROHI_AUTONOMY_REASON_MAX_LEVEL[reason];
   const grantedLevel =
@@ -1639,51 +1670,6 @@ function substituteAuthorityIsRefused(authority: string): AarohiProbeObservation
   });
 }
 
-/**
- * A canonical PASSING evaluation report VALUE, for the probes that exercise autonomy.
- *
- * Built as a value and handed to this file's own parser rather than produced by running the suite,
- * because a suite that ran itself inside one of its own probes would not terminate. It grants
- * nothing on its own: the autonomy function asks AVG-1's gate independently, so a passing corpus
- * over a suppressed party still reaches the floor — which is what two of the probes below prove.
- */
-function passingEvaluationValue(preparedAt: string): unknown {
-  const perDimension = new Map<AarohiEvaluationDimension, number>();
-  for (const dimension of AAROHI_EVALUATION_DIMENSIONS) {
-    perDimension.set(dimension, 0);
-  }
-  for (const probe of AAROHI_OFFLINE_PROBES) {
-    const dimension = AAROHI_PROBE_DIMENSION[probe];
-    perDimension.set(dimension, (perDimension.get(dimension) ?? 0) + 1);
-  }
-  return {
-    contractVersion: AAROHI_AVG12_CONTRACT_VERSION,
-    suiteRef: 'AVG12-CORPUS-FIXTURE',
-    preparedAt,
-    sourcePosture: AAROHI_AVG12_EVALUATION_SOURCE_POSTURE,
-    probesEvaluated: AAROHI_OFFLINE_PROBE_COUNT,
-    probesHeld: AAROHI_OFFLINE_PROBE_COUNT,
-    probesFailed: 0,
-    criticalFailures: 0,
-    dimensions: AAROHI_EVALUATION_DIMENSIONS.map((dimension) => ({
-      dimension,
-      probesEvaluated: perDimension.get(dimension) ?? 0,
-      probesHeld: perDimension.get(dimension) ?? 0,
-      probesFailed: 0,
-      criticalFailures: 0,
-    })),
-    scale: {
-      evidenceItemsEvaluated: 0,
-      duplicateEvidenceItemsCollapsed: 0,
-      conflictingEvidenceItemsRefused: 0,
-      certifiedBoundsExercised: 0,
-      largestCertifiedBoundExercised: 0,
-    },
-    outcome: 'OFFLINE_EVALUATION_PASSED',
-    posture: AAROHI_AVG12_POSTURE,
-  };
-}
-
 /** One autonomy decision over a supplied Core status, at a supplied requested level. */
 function autonomyOver(
   status: CorePartyStatus,
@@ -1697,7 +1683,6 @@ function autonomyOver(
     requestedLevel,
     coreObservation: eligibilityObservation(PROSPECT_A, 'LOOKUP-ONE', status),
     coreObservedAt: OBSERVED_AT,
-    offlineEvaluation: passingEvaluationValue(PREPARED_AT),
   });
 }
 
@@ -2481,12 +2466,16 @@ function isOfflineProbe(value: string): value is AarohiOfflineProbe {
 /**
  * Run the offline evaluation corpus, or refuse.
  *
- * ### The caller cannot label a failure as a pass
+ * ### The DERIVATION cannot be talked into labelling a failure as a pass
  *
- * It supplies no expectation and no result. Each probe's dimension and severity come from a total
- * map in this file; each probe's verdict comes from driving certified sibling functions and reading
- * what they returned. The outcome is then derived — and the report SCHEMA independently refuses a
- * passing outcome beside any failure at all, so even a hand-built report cannot claim one.
+ * A caller supplies no expectation and no result. Each probe's dimension and severity come from a
+ * total map in this file; each probe's verdict comes from driving certified sibling functions and
+ * reading what they returned. The outcome is derived from those verdicts, and the report schema
+ * independently refuses an outcome that is not exactly whether every probe held.
+ *
+ * That is a claim about THIS FUNCTION, and not about a report somebody hands around afterwards. No
+ * schema can prove that forty probes ran, so nothing here relies on one having: the report this
+ * returns is governance evidence for a human, and no function in this module accepts one as input.
  *
  * ### Every probe is mandatory
  *

@@ -530,10 +530,13 @@ source and no production activation. Exact first-proof boundaries:
   implementation behaved as its contracts require, and nothing else. No field is spelled `approved`,
   `authorized`, `canSend`, `canExecute`, `consentValid`, `paymentConfirmed` or `productionReady`, and
   the one positive token is `OFFLINE_EVALUATION_PASSED`.
-- **The caller cannot label a failure as a pass.** It names probes and supplies no expectation, no
-  severity and no result: each probe's dimension and severity are TOTAL maps in the contract, and
-  each verdict comes from driving a certified sibling function and reading what it returned. Every
-  probe is mandatory, so a subset, a duplicate and an unknown token are each a named refusal.
+- **The evaluator derives the outcome; a serialized report is only a shape.** A suite names probes
+  and supplies no expectation, no severity and no result: each probe's dimension and severity are
+  TOTAL maps in the contract, and each verdict comes from driving a certified sibling function and
+  reading what it returned. Every probe is mandatory, so a subset, a duplicate and an unknown token
+  are each a named refusal. What no schema can prove is that the corpus RAN, so the rule is
+  structural instead: **no function in this stage accepts an evaluation result or a decision as
+  input**, and a hand-built passing report is therefore inert rather than merely refused.
 - **A critical failure cannot be averaged away, because there is no arithmetic to average with.** No
   score, weight, percentage or grade exists. The report schema requires the whole corpus to be
   accounted for and refuses a passing outcome beside any failure at all, so even a hand-built report
@@ -559,16 +562,21 @@ source and no production activation. Exact first-proof boundaries:
   posture, so the ceiling cannot vary by level, by evaluation result or by anything a caller
   supplies. Business, contact, consent, suppression, approval, execution, send, Core-mutation,
   registration, payment, activation and rollout authority are each a schema-pinned literal `false`.
-- **Fail-closed in one direction only.** Suppression, an existing relationship, unresolved Core truth
-  and a failed corpus each RESTRICT by a declared reason precedence; a malformed envelope, an
-  observation about another party, a non-canonical evaluation and a decision that predates its own
-  evidence each REFUSE outright. Nothing anywhere raises a level.
+- **Fail-closed in one direction only.** Suppression, an existing relationship and unresolved Core
+  truth each RESTRICT by a declared reason precedence; a malformed envelope, an observation about
+  another party and a decision that predates its own evidence each REFUSE outright. Nothing anywhere
+  raises a level, and the only positive evidence is a CURRENT Core observation re-derived through
+  AVG-1's own gate — never a result a caller could write down.
 - **Another channel and a later attempt are unrepresentable, not merely forbidden.** A decision has
   no channel, destination, recipient, body, template, approval, execution-intent, case-transition or
   schedule field, and the reason is derived from the current supplied evidence alone.
 - **Deterministic and replayable.** No clock, no randomness, no seed, no persistence and no
   migration: the same injected input replays to byte-identical bytes, and reordering the probes or
   the evidence changes nothing.
+- **Evaluation is governance evidence, not a credential.** A derived report records that the
+  certified stages still refuse what they must. Nothing consumes it, no autonomy level rests on it,
+  and the later, separately governed certification and activation boundary is where genuine
+  evaluation evidence must be required before any runtime use.
 - **No control-plane wire change.** V1 stays frozen under ADR-0086 and V2 stays intact under
   ADR-0129; the Jarvis OS Aarohi readiness surface gains one row using the existing vocabulary, and
   the section stays `PLANNED` with no action control.

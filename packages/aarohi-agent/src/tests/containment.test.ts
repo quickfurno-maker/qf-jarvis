@@ -1190,6 +1190,12 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
     // pure suite evaluator whose outcome is derived, and one pure autonomy decision that grants
     // OFFLINE decision freedom over a single frozen posture. It exposes no activation, rollout,
     // send, approve or execute function, and no level changes the authority ceiling.
+    //
+    // Note the two names that are NOT here. `parseAarohiOfflineEvaluationReport` and
+    // `parseAarohiControlledAutonomyDecision` were exported in an earlier revision and are now
+    // internal: each proves a SHAPE, neither can prove that the corpus ran or that a decision was
+    // derived, and a public `parse*` returning a certified-looking artifact reads as if it could.
+    // The SCHEMAS remain exported, because a schema is unambiguously a shape description.
     expect(Object.keys(barrel).sort()).toStrictEqual([
       'AAROHI_ACQUISITION_FUNNEL_OUTCOME',
       'AAROHI_AGENT_ID',
@@ -1390,8 +1396,6 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'openAcquisitionCase',
       'parseAarohiAcquisitionFunnelReport',
       'parseAarohiCommercialFactsBrief',
-      'parseAarohiControlledAutonomyDecision',
-      'parseAarohiOfflineEvaluationReport',
       'parseAarohiPaymentFollowupBrief',
       'parseAarohiRegistrationAssistanceBrief',
       'parseAarohiSalesBrainInterpretation',
@@ -1939,6 +1943,79 @@ describe('AVG-12 evaluates, and adds no capability of any kind', () => {
       }),
     ).toBe(before);
     expect([...ELIGIBLE_CORE_STATUSES]).toStrictEqual(['NOT_REGISTERED']);
+  });
+
+  it('takes no evaluation result and no decision as INPUT, which is the whole correction', () => {
+    // The defect an owner review found: `decideAarohiControlledAutonomy` used to accept an offline
+    // evaluation report and let a passing one unlock the top rung. A report is a value, so a caller
+    // who had never run the corpus could write a consistent PASS and raise its own ceiling.
+    //
+    // Shape validity is not derivation and a parser is not an authority, so the fix is not a better
+    // parser -- it is that NOTHING here accepts one. Asserted against the INPUT SCHEMAS, because
+    // that is where an input would have to reappear.
+    const code = avg12();
+    const inputSchemas = [
+      ...code.matchAll(/const (\w*InputSchema) = z\s*\n?\s*\.object\(\{([^}]*)\}/gu),
+    ];
+    expect(inputSchemas.length, 'AVG-12 must declare its input schemas as strict objects').toBe(2);
+    for (const [, name, body] of inputSchemas) {
+      for (const forbidden of [
+        'offlineEvaluation',
+        'evaluation:',
+        'evaluationReport',
+        'evaluationPassed',
+        'readiness',
+        'report:',
+        'decision:',
+        'priorDecision',
+        'grantedLevel',
+        'outcome',
+      ]) {
+        expect(body, `${String(name)} must not accept ${forbidden}`).not.toContain(forbidden);
+      }
+    }
+    // Both are strict, so an extra key is a refusal rather than a silently ignored field.
+    expect(code.match(/\.strict\(\)/gu)?.length ?? 0).toBeGreaterThanOrEqual(2);
+  });
+
+  it('keeps both shape parsers internal, and exports neither', () => {
+    const code = avg12();
+    // They exist, and the deriving functions use them to validate their OWN output.
+    expect(code).toContain('function parseAarohiOfflineEvaluationReport(');
+    expect(code).toContain('function parseAarohiControlledAutonomyDecision(');
+    // But neither is exported, because a public `parse*` returning a certified-looking artifact
+    // reads as provenance and can only prove a shape.
+    expect(code).not.toContain('export function parseAarohiOfflineEvaluationReport');
+    expect(code).not.toContain('export function parseAarohiControlledAutonomyDecision');
+    const barrel = codeOnly(readFileSync(join(SRC, 'index.ts'), 'utf8'));
+    expect(barrel).not.toContain('parseAarohiOfflineEvaluationReport');
+    expect(barrel).not.toContain('parseAarohiControlledAutonomyDecision');
+  });
+
+  it('states the outcome rule as an EQUIVALENCE, not an implication', () => {
+    // The one-way rule admitted a report saying FAILED while carrying no failure -- a state the
+    // evaluator cannot produce, and one an earlier spec used as a convenience fixture.
+    const code = avg12();
+    expect(code).toContain("(value.outcome === 'OFFLINE_EVALUATION_PASSED') ===");
+    expect(code).toContain('(value.probesFailed === 0 && value.criticalFailures === 0)');
+  });
+
+  it('builds no complete passing report of its own anywhere in production source', () => {
+    // An earlier revision carried a private `passingEvaluationValue(...)` helper that hand-built a
+    // whole `OFFLINE_EVALUATION_PASSED` report and fed it to the decision path without running the
+    // suite. It was a demonstration of the exact weakness, sitting inside the module that had it.
+    const code = avg12();
+    for (const forbidden of [
+      'passingEvaluationValue',
+      'fabricatedReport',
+      'syntheticReport',
+      'assumePassed',
+      "outcome: 'OFFLINE_EVALUATION_PASSED'",
+    ]) {
+      expect(code, 'AVG-12 must not name ' + forbidden).not.toContain(forbidden);
+    }
+    // The token exists in exactly one shape: DERIVED from the probe tallies.
+    expect(code).toContain("? 'OFFLINE_EVALUATION_PASSED'");
   });
 
   it('restates the shared grammars rather than narrowing them', () => {

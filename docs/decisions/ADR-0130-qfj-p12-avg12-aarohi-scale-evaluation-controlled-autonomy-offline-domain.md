@@ -45,8 +45,12 @@ The one positive outcome token is `OFFLINE_EVALUATION_PASSED`, and there is no f
 **The caller supplies no expectation, no severity and no result.** A suite names PROBES. Each probe's
 dimension and severity come from `AAROHI_PROBE_DIMENSION` and `AAROHI_PROBE_SEVERITY`, which are
 total maps in the contract; each probe's verdict comes from driving certified AVG-1..AVG-11 functions
-over fixtures built inside the module and reading what those functions returned. There is no input
-through which a failing behaviour could be described as a pass.
+over fixtures built inside the module and reading what those functions returned.
+`evaluateAarohiOfflineSuite` DERIVES its outcome, and there is no input through which that
+derivation could be talked into saying something else.
+
+**A serialized report is not that derivation, and the two must not be confused.** See section 8a —
+this ADR originally claimed more than the code could support.
 
 **Every probe is mandatory.** A suite that names a subset is refused (`PROBE_SET_INCOMPLETE`) rather
 than run, because a corpus somebody may prune is a corpus that will eventually be pruned down to the
@@ -62,10 +66,17 @@ failure at all fails the suite. On top of that, the report SCHEMA independently 
 - a report whose `probesEvaluated` is not the whole corpus;
 - a report whose dimension tallies do not sum to its totals;
 - a report whose `criticalFailures` exceeds its `probesFailed`;
-- a report whose dimensions are missing, reordered or duplicated.
+- a report whose dimensions are missing, reordered or duplicated;
+- a report whose outcome is not EXACTLY whether every probe held. The rule is an equivalence, so
+  `FAILED` with zero failures is refused as well as `PASSED` with one — the one-way version admitted
+  a state the evaluator cannot produce, and a spec had leaned on it as a convenience fixture.
 
-So a hand-built report cannot claim a pass, and the builder's own derivation and the schema's rule
-would both have to be wrong at once for one to exist.
+So the DERIVED outcome and the schema's rule would both have to be wrong at once for
+`evaluateAarohiOfflineSuite` to return a report claiming a pass it did not earn.
+
+What the schema cannot do — and what an earlier revision of this ADR wrongly claimed it did — is
+prove that the corpus ran at all. It sees an object. Section 8a is the correction, and it is
+structural rather than cryptographic.
 
 Severity is `CRITICAL` or `STANDARD` and belongs to the probe DEFINITION. An invariant does not
 become less critical because whoever ran the suite would prefer it that way.
@@ -183,15 +194,15 @@ one cannot be added without being listed.
 
 `AAROHI_AUTONOMY_REASONS` IS the precedence order, most restricting first, and the decision picks the
 first applicable member. Two facts being true at once therefore has one answer a reader can find by
-reading a list, and reordering the checks in the function body cannot change it. A critical
-evaluation failure outranks even a Core refusal, because a corpus reporting that a load-bearing
-invariant did not hold is a corpus saying this module's own judgement is unsafe to act on.
+reading a list, and reordering the checks in the function body cannot change it. There is no
+fallback literal: the impossible case — no applicable reason at all — REFUSES rather than naming
+one, because an unreachable line that can still name a reason is an escalation no spec can reach.
 
 RESTRICT (a decision is produced, at a lower level): suppression, an existing Core relationship,
-unresolved Core truth, a failed corpus, a critical corpus failure.
+unresolved Core truth.
 REFUSE (no decision at all): a malformed envelope, a missing or malformed requested level, an
-observation about another party or one that does not parse, a non-canonical evaluation report, and a
-decision that claims to predate its own evidence.
+observation about another party or one that does not parse, and a decision that claims to predate
+its own evidence.
 
 Nothing anywhere raises a level. `requestedLevel` is required with no default, so a missing level is
 a parse refusal rather than a silent maximum.
@@ -208,6 +219,62 @@ Pure over already-supplied values. Every instant is injected; a containment spec
 seed because there is no randomness. Reports and decisions are frozen, aggregate and inert; a spec
 asserts byte-identical replay on the same input and byte-identical results under reordered probes and
 reordered evidence. **No autonomous state is persisted, because none needs to be.**
+
+### 8a. The provenance correction
+
+An owner review of PR #171 found that the design above had a hole, and that this ADR overstated what
+closed it.
+
+**What was wrong.** `decideAarohiControlledAutonomy` accepted `offlineEvaluation: unknown`, ran it
+through `parseAarohiOfflineEvaluationReport`, and treated a parsed `OFFLINE_EVALUATION_PASSED` as
+positive evidence that could unlock `L2`. But that parser proves a SHAPE and an internal arithmetic;
+no property of a JSON object can establish that forty probes ran. A caller who had never run the
+corpus could hand-build an internally-consistent PASS — every tally invented, every sum correct —
+and raise its own ceiling. The module even contained a private helper, `passingEvaluationValue`,
+that did exactly this and fed the result to the decision path.
+
+**Why a better parser was the wrong fix.** Shape validity is not derivation, internal arithmetic is
+not provenance, and a parser is not an authority. Closing this with signatures, tokens, a registry,
+a `WeakSet`, object identity or a hidden `Symbol` would be fake provenance in an offline domain, and
+is explicitly out of scope.
+
+**The correction, structurally.**
+
+- `offlineEvaluation` is REMOVED from the autonomy decision input. The schema is `.strict()`, so
+  supplying one is now a refusal rather than a silently ignored key. The rule is a sentence a reader
+  can check: **no function in this module accepts an evaluation result or a decision as input.** A
+  forged PASS is therefore not defended against — it is unusable.
+- The decision's only positive evidence is a CURRENT Core observation, re-derived every time through
+  `evaluateAcquisitionEligibility`. A caller can lie about what Core said; it cannot lie about what
+  AVG-1's own gate does with that, and every status but `NOT_REGISTERED` lands on the floor.
+- `OFFLINE_EVALUATION_NOT_PASSED` and `OFFLINE_EVALUATION_CRITICAL_FAILURE` are gone from the reason
+  vocabulary, and `OBTAIN_HUMAN_REVIEW` with them — a closed vocabulary should not keep a member
+  nothing can produce. A spec asserts every reason and every next step is reachable.
+- The reason has no fallback literal. The impossible case — no applicable reason at all — REFUSES
+  rather than naming one, because an unreachable line that can still name a reason is an escalation
+  no spec can reach and a mutation found exactly that.
+- `parseAarohiOfflineEvaluationReport` and `parseAarohiControlledAutonomyDecision` are now INTERNAL.
+  Each is used by its own deriving function to validate that function's OWN output; neither is
+  exported, because a public `parse*` returning a certified-looking artifact reads as provenance and
+  can only prove a shape. The SCHEMAS remain exported — a schema is unambiguously a shape
+  description — and a spec states out loud that a forged PASS satisfies one.
+- The outcome rule became an EQUIVALENCE. `FAILED` with zero failures is refused as well as `PASSED`
+  with one; the one-way version admitted a state the evaluator cannot produce, and a spec had leaned
+  on it as a convenience fixture.
+- `passingEvaluationValue` is deleted, and a containment spec forbids any production source from
+  building a whole passing report.
+
+**What the evaluation report IS, now that nothing consumes it.** Offline GOVERNANCE EVIDENCE: a
+derived record, for a human and for the later, separately governed certification and activation
+boundary, that the eleven certified stages still refuse what they are supposed to refuse. That
+boundary is where genuine evaluation evidence must be required before any runtime use. It is not a
+credential, and AVG-12 grants nothing on the strength of one.
+
+**What this costs.** The master prompt asked that a critical evaluation failure force a minimum
+autonomy result. That coupling is gone, deliberately: the only way to have it safely would be for
+each decision to re-run the corpus, which mixes development evaluation into per-prospect logic and
+recurses (the corpus contains autonomy probes). Restricting on a value a caller writes is worse than
+not restricting at all, because it looks like a control.
 
 ### 9. Rollout, lifecycle and certification
 
@@ -279,6 +346,18 @@ opens, and every rung carries the same ceiling.
 
 **A caller-supplied expected outcome per case.** Rejected. It is precisely the field through which a
 failing behaviour becomes a passing case.
+
+**Keeping the evaluation input and hardening the parser.** Rejected — see section 8a. No amount of
+schema strength turns a value into evidence that work was done.
+
+**Signing or otherwise stamping the report so the decision could trust it.** Rejected. It would be
+fake provenance: any secret this module could hold, a caller could hold too, and an offline domain
+with no persistence has nowhere to anchor one.
+
+**A readiness composition that runs the corpus and gates per-prospect decisions.** Rejected as
+over-engineering for this stage. It would either recurse (the corpus probes autonomy) or re-run 40
+probes, 500 evidence items and 100 conversation turns per prospect. Readiness belongs to the later
+certification boundary, which is not this ADR's to build.
 
 **Control-plane V3.** Rejected. Nothing in the AVG-12 surface breaks the V2 shape.
 

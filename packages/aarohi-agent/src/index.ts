@@ -563,8 +563,6 @@ export {
   aarohiOfflineScaleSummarySchema,
   decideAarohiControlledAutonomy,
   evaluateAarohiOfflineSuite,
-  parseAarohiControlledAutonomyDecision,
-  parseAarohiOfflineEvaluationReport,
 } from './contracts/avg12-scale-evaluation-controlled-autonomy.js';
 export type {
   AarohiAutonomyLevel,
