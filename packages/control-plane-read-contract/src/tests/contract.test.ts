@@ -400,3 +400,162 @@ describe('the package root API', () => {
     ]);
   });
 });
+
+/**
+ * The Aarohi funnel and readiness surface (AVG-11, ADR-0128).
+ *
+ * The rule these cases exist for is one sentence: a read contract must not be able to publish a
+ * QuickFurno business outcome, and must not be able to render an unread source as a zero.
+ */
+describe('the Aarohi acquisition funnel', () => {
+  /** A readable funnel section carrying the supplied stages. */
+  const withFunnel = (stages: readonly unknown[]): Record<string, unknown> => {
+    const payload = mutableSnapshot();
+    const sections = payload['sections'] as Record<string, Record<string, unknown>>;
+    const funnel = sectionAt(sections, 'vendorGrowthFunnel');
+    funnel['availability'] = 'STATIC_BASELINE';
+    funnel['items'] = [...stages];
+    return payload;
+  };
+
+  const workflowStage = {
+    id: 'registration-assistance-prepared',
+    label: 'Registration assistance prepared',
+    authority: 'JARVIS_WORKFLOW_DERIVED',
+    value: 3,
+    caption: 'A brief was prepared. Nobody registered.',
+  };
+
+  const unavailableStage = {
+    id: 'core-active-handoff-confirmed',
+    label: 'Core ACTIVE handoff confirmed',
+    authority: 'AUTHORITY_UNAVAILABLE',
+    expectedAuthority: 'CORE_AUTHORITATIVE',
+    caption: 'QuickFurno Core is not connected, so this is unknown rather than none.',
+  };
+
+  it('accepts a workflow-derived count and an unavailable stage side by side', () => {
+    const parsed = parseControlPlaneSnapshotV1(withFunnel([workflowStage, unavailableStage]));
+    const stages = parsed.sections.vendorGrowthFunnel.items;
+    expect(stages).toHaveLength(2);
+    const terminal = stages[1];
+    expect(terminal?.authority).toBe('AUTHORITY_UNAVAILABLE');
+    // The property the whole union exists for: there is no value to be misread as zero.
+    expect(terminal !== undefined && 'value' in terminal).toBe(false);
+  });
+
+  it('refuses a stage id that names a business outcome', () => {
+    for (const id of ['registered', 'paid-active', 'active', 'converted', 'contacted']) {
+      const payload = withFunnel([{ ...workflowStage, id }]);
+      expect(
+        codeOf(() => parseControlPlaneSnapshotV1(payload)),
+        id,
+      ).toBe('snapshot-invalid');
+    }
+  });
+
+  it('refuses an unavailable stage that smuggles a value back in', () => {
+    const payload = withFunnel([{ ...unavailableStage, value: 0 }]);
+    expect(codeOf(() => parseControlPlaneSnapshotV1(payload))).toBe('snapshot-invalid');
+  });
+
+  it('refuses a readable stage with no value, so a count cannot go missing either', () => {
+    const { value: _removed, ...noValue } = workflowStage;
+    const payload = withFunnel([noValue]);
+    expect(codeOf(() => parseControlPlaneSnapshotV1(payload))).toBe('snapshot-invalid');
+  });
+
+  it('refuses a stage claiming an authority its stage does not own', () => {
+    // The one that matters: a confirmed Core handoff published as a Jarvis-derived figure.
+    const payload = withFunnel([
+      {
+        id: 'core-active-handoff-confirmed',
+        label: 'Core ACTIVE handoff confirmed',
+        authority: 'JARVIS_WORKFLOW_DERIVED',
+        value: 12,
+        caption: 'Claimed by Jarvis, which does not own it.',
+      },
+    ]);
+    expect(codeOf(() => parseControlPlaneSnapshotV1(payload))).toBe('snapshot-invalid');
+
+    // And the reverse: a Jarvis workflow step published as Core-authoritative.
+    const reverse = withFunnel([{ ...workflowStage, authority: 'CORE_AUTHORITATIVE' }]);
+    expect(codeOf(() => parseControlPlaneSnapshotV1(reverse))).toBe('snapshot-invalid');
+  });
+
+  it('refuses an unavailable stage that names the wrong expected authority', () => {
+    const payload = withFunnel([
+      { ...unavailableStage, expectedAuthority: 'JARVIS_WORKFLOW_DERIVED' },
+    ]);
+    expect(codeOf(() => parseControlPlaneSnapshotV1(payload))).toBe('snapshot-invalid');
+  });
+
+  it('refuses a duplicate stage id, which would hide one of them', () => {
+    const payload = withFunnel([workflowStage, { ...workflowStage, value: 99 }]);
+    expect(codeOf(() => parseControlPlaneSnapshotV1(payload))).toBe('snapshot-invalid');
+  });
+
+  it('refuses a fractional or negative count', () => {
+    for (const value of [1.5, -1]) {
+      const payload = withFunnel([{ ...workflowStage, value }]);
+      expect(
+        codeOf(() => parseControlPlaneSnapshotV1(payload)),
+        String(value),
+      ).toBe('snapshot-invalid');
+    }
+  });
+
+  it('keeps a PLANNED funnel carrying no stages at all', () => {
+    const payload = mutableSnapshot();
+    const sections = payload['sections'] as Record<string, Record<string, unknown>>;
+    sectionAt(sections, 'vendorGrowthFunnel')['items'] = [workflowStage];
+    // Availability stays PLANNED: "unreadable is not empty" still governs the section itself.
+    expect(codeOf(() => parseControlPlaneSnapshotV1(payload))).toBe('snapshot-invalid');
+  });
+});
+
+describe('the Aarohi readiness section', () => {
+  const readinessRow = {
+    id: 'avg-9-registration-assistance',
+    label: 'Registration assistance domain',
+    kind: 'offline-domain',
+    state: 'PLANNED',
+    detail: 'Offline contract merged under ADR-0126. There is no runtime.',
+  };
+
+  const withReadiness = (rows: readonly unknown[]): Record<string, unknown> => {
+    const payload = mutableSnapshot();
+    const sections = payload['sections'] as Record<string, Record<string, unknown>>;
+    sectionAt(sections, 'aarohiAcquisitionReadiness')['items'] = [...rows];
+    return payload;
+  };
+
+  it('accepts a governance-declared readiness row', () => {
+    const parsed = parseControlPlaneSnapshotV1(withReadiness([readinessRow]));
+    expect(parsed.sections.aarohiAcquisitionReadiness.items[0]?.kind).toBe('offline-domain');
+  });
+
+  it('refuses an unknown readiness kind and an unknown field', () => {
+    expect(
+      codeOf(() =>
+        parseControlPlaneSnapshotV1(withReadiness([{ ...readinessRow, kind: 'metric' }])),
+      ),
+    ).toBe('snapshot-invalid');
+    expect(
+      codeOf(() => parseControlPlaneSnapshotV1(withReadiness([{ ...readinessRow, value: 4 }]))),
+    ).toBe('snapshot-invalid');
+  });
+
+  it('carries no count, so a readiness row can never be read as a figure', () => {
+    const parsed = parseControlPlaneSnapshotV1(withReadiness([readinessRow]));
+    const row = parsed.sections.aarohiAcquisitionReadiness.items[0];
+    expect(Object.keys(row ?? {}).sort()).toStrictEqual(['detail', 'id', 'kind', 'label', 'state']);
+  });
+
+  it('obeys "unreadable is not empty" like every other section', () => {
+    const payload = withReadiness([readinessRow]);
+    const sections = payload['sections'] as Record<string, Record<string, unknown>>;
+    sectionAt(sections, 'aarohiAcquisitionReadiness')['availability'] = 'NOT_CONNECTED';
+    expect(codeOf(() => parseControlPlaneSnapshotV1(payload))).toBe('snapshot-invalid');
+  });
+});

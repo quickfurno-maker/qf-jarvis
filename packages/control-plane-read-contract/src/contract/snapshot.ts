@@ -213,12 +213,142 @@ export const distributionSliceSchema = z
   })
   .strict();
 
-export const funnelStageSchema = z
+/**
+ * The certified Aarohi acquisition funnel stages (AVG-11, ADR-0128).
+ *
+ * A CLOSED vocabulary, restated here in the contract's own lowercase identifier spelling. The
+ * domain package that derives these counts is framework-neutral and deliberately unimported by any
+ * app, so the wire cannot import it either; a spec in that package compares the two lists token for
+ * token, which is the same trade `compose.ts` makes for the canonical-instant grammar.
+ *
+ * The point of closing it is what the vocabulary CANNOT say. There is no `registered`, `paid`,
+ * `active`, `converted` or `contacted` stage, so no adapter — present or future, in this repository
+ * or in an Android client — can publish a QuickFurno business outcome through this section. The two
+ * stages that come closest each say ASSISTANCE, in their own token.
+ */
+export const AAROHI_FUNNEL_STAGE_IDS = [
+  'prospect-identified',
+  'eligibility-evaluated',
+  'eligible-net-new',
+  'outreach-workspace-prepared',
+  'conversation-observed',
+  'commercial-context-prepared',
+  'registration-assistance-prepared',
+  'payment-followup-assistance-prepared',
+  'core-active-handoff-confirmed',
+] as const;
+
+export const funnelStageIdSchema = z.enum(AAROHI_FUNNEL_STAGE_IDS);
+export type FunnelStageId = (typeof AAROHI_FUNNEL_STAGE_IDS)[number];
+
+/**
+ * Who is entitled to be believed about one figure (AVG-11, ADR-0128).
+ *
+ * Deliberately a THIRD concept, beside `SectionAvailability` (can this panel be read?) and
+ * `SnapshotSource` (where did this payload come from?). Those two describe a transport; this
+ * describes authority over a single number, and collapsing them is how "Core is not connected"
+ * comes to render as "none".
+ */
+export const METRIC_AUTHORITIES = [
+  /** Counted from Jarvis-side artifacts. True about Aarohi's own work and about nothing else. */
+  'JARVIS_WORKFLOW_DERIVED',
+  /** Established by canonical QuickFurno Core evidence. The only class a business outcome may carry. */
+  'CORE_AUTHORITATIVE',
+  /** No source was read. NOT zero — and this variant carries no `value` at all. */
+  'AUTHORITY_UNAVAILABLE',
+] as const;
+
+export const metricAuthoritySchema = z.enum(METRIC_AUTHORITIES);
+export type MetricAuthority = (typeof METRIC_AUTHORITIES)[number];
+
+export const resolvedMetricAuthoritySchema = z.enum([
+  'JARVIS_WORKFLOW_DERIVED',
+  'CORE_AUTHORITATIVE',
+]);
+export type ResolvedMetricAuthority = z.infer<typeof resolvedMetricAuthoritySchema>;
+
+/**
+ * One funnel stage, and the reason an unavailable one cannot be rendered as zero.
+ *
+ * A discriminated union on `authority`, and the discrimination IS the guarantee. The readable
+ * variants carry `value`; the unavailable variant has no `value` key at all, so a client, a mapper,
+ * a default or a `?? 0` has nothing to read. `expectedAuthority` names the class that would have
+ * owned the number, which is what a surface needs to explain the gap without inventing one.
+ *
+ * `SectionAvailability` still governs the section as a whole. This is finer: a funnel can be
+ * readable, and still have one stage whose authority nobody has connected.
+ */
+export const funnelStageSchema = z.discriminatedUnion('authority', [
+  z
+    .object({
+      id: funnelStageIdSchema,
+      label: labelSchema,
+      authority: z.literal('JARVIS_WORKFLOW_DERIVED'),
+      value: z.number().int().nonnegative().max(1_000_000_000),
+      caption: sentenceSchema,
+    })
+    .strict(),
+  z
+    .object({
+      id: funnelStageIdSchema,
+      label: labelSchema,
+      authority: z.literal('CORE_AUTHORITATIVE'),
+      value: z.number().int().nonnegative().max(1_000_000_000),
+      caption: sentenceSchema,
+    })
+    .strict(),
+  z
+    .object({
+      id: funnelStageIdSchema,
+      label: labelSchema,
+      authority: z.literal('AUTHORITY_UNAVAILABLE'),
+      expectedAuthority: resolvedMetricAuthoritySchema,
+      caption: sentenceSchema,
+    })
+    .strict(),
+]);
+
+/**
+ * One row of the Aarohi acquisition readiness surface (AVG-11, ADR-0128).
+ *
+ * Readiness is not a metric and carries no number, which is why it has no authority field: it says
+ * what exists in merged governance and what does not, and `HealthState` already spells both. A
+ * `blocker` row is the honest name for a bridge this repository decided NOT to build — the
+ * post-registration continuation boundary and the entry into `AWAITING_CORE_ACTIVATION` are both
+ * absent on purpose (ADR-0127), and a surface that quietly omitted them would read as complete.
+ */
+export const AAROHI_READINESS_KINDS = ['offline-domain', 'boundary', 'blocker'] as const;
+export const aarohiReadinessKindSchema = z.enum(AAROHI_READINESS_KINDS);
+export type AarohiReadinessKind = (typeof AAROHI_READINESS_KINDS)[number];
+
+/**
+ * Stage to authority, TOTAL over the wire vocabulary and mirroring the domain's own map.
+ *
+ * Checked centrally in the snapshot parser rather than per-variant, so a violation names the
+ * offending stage. The single `CORE_AUTHORITATIVE` entry is the whole reason this map exists: a
+ * confirmed handoff is Core's fact, and no adapter may publish it under any other class.
+ */
+export const AAROHI_FUNNEL_STAGE_AUTHORITY: Readonly<
+  Record<FunnelStageId, ResolvedMetricAuthority>
+> = Object.freeze({
+  'prospect-identified': 'JARVIS_WORKFLOW_DERIVED',
+  'eligibility-evaluated': 'JARVIS_WORKFLOW_DERIVED',
+  'eligible-net-new': 'JARVIS_WORKFLOW_DERIVED',
+  'outreach-workspace-prepared': 'JARVIS_WORKFLOW_DERIVED',
+  'conversation-observed': 'JARVIS_WORKFLOW_DERIVED',
+  'commercial-context-prepared': 'JARVIS_WORKFLOW_DERIVED',
+  'registration-assistance-prepared': 'JARVIS_WORKFLOW_DERIVED',
+  'payment-followup-assistance-prepared': 'JARVIS_WORKFLOW_DERIVED',
+  'core-active-handoff-confirmed': 'CORE_AUTHORITATIVE',
+});
+
+export const aarohiReadinessRowSchema = z
   .object({
     id: identifierSchema,
     label: labelSchema,
-    value: z.number().nonnegative().max(1_000_000_000),
-    caption: sentenceSchema,
+    kind: aarohiReadinessKindSchema,
+    state: healthStateSchema,
+    detail: sentenceSchema,
   })
   .strict();
 
@@ -340,6 +470,7 @@ export const sectionsSchema = z
     modelLatency: seriesSectionSchema,
     agentWorkload: sectionSchema(distributionSliceSchema, 12),
     vendorGrowthFunnel: sectionSchema(funnelStageSchema, 12),
+    aarohiAcquisitionReadiness: sectionSchema(aarohiReadinessRowSchema, 24),
     workers: sectionSchema(workerNodeSchema, 64),
     models: sectionSchema(modelProfileSchema, 32),
     knowledge: sectionSchema(knowledgeNamespaceSchema, 32),
@@ -423,6 +554,31 @@ export const controlPlaneSnapshotV1Schema = z
       });
     }
 
+    // A funnel stage may not claim an authority its stage does not own, and may not appear twice.
+    //
+    // Checked here for the same reason "unreadable is not empty" is: the rule belongs in exactly one
+    // place, and a violation should name the section rather than surface as a generic union error.
+    const funnelIds = snapshot.sections.vendorGrowthFunnel.items.map((stage) => stage.id);
+    if (new Set(funnelIds).size !== funnelIds.length) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['sections', 'vendorGrowthFunnel'],
+        message: 'funnel stage ids must be unique',
+      });
+    }
+    for (const stage of snapshot.sections.vendorGrowthFunnel.items) {
+      const owned = AAROHI_FUNNEL_STAGE_AUTHORITY[stage.id];
+      const claimed =
+        stage.authority === 'AUTHORITY_UNAVAILABLE' ? stage.expectedAuthority : stage.authority;
+      if (claimed !== owned) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['sections', 'vendorGrowthFunnel', stage.id],
+          message: `stage ${stage.id} is ${owned}: a metric may not claim an authority its stage does not own`,
+        });
+      }
+    }
+
     // Agent ids are the primary key of the agent list; a duplicate would silently hide one.
     const agentIds = snapshot.agents.map((agent) => agent.id);
     if (new Set(agentIds).size !== agentIds.length) {
@@ -443,6 +599,7 @@ export type SeriesPoint = z.infer<typeof seriesPointSchema>;
 export type SeriesSection = z.infer<typeof seriesSectionSchema>;
 export type DistributionSlice = z.infer<typeof distributionSliceSchema>;
 export type FunnelStage = z.infer<typeof funnelStageSchema>;
+export type AarohiReadinessRow = z.infer<typeof aarohiReadinessRowSchema>;
 export type AttentionItem = z.infer<typeof attentionItemSchema>;
 export type ActivityEntry = z.infer<typeof activityEntrySchema>;
 export type OwnershipRow = z.infer<typeof ownershipRowSchema>;

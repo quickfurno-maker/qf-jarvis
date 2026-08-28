@@ -41,6 +41,8 @@ export type {
 } from './contract/primitives.js';
 
 export type {
+  AarohiReadinessKind,
+  AarohiReadinessRow,
   ActivityEntry,
   ApprovalRow,
   AttentionItem,
@@ -51,7 +53,9 @@ export type {
   DistributionSlice,
   EvaluationDimension,
   FunnelStage,
+  FunnelStageId,
   KnowledgeNamespace,
+  MetricAuthority,
   ModelProfile,
   OwnershipRow,
   RoadmapMarker,
@@ -61,6 +65,7 @@ export type {
   SnapshotAgent,
   SnapshotCapability,
   SnapshotMetric,
+  ResolvedMetricAuthority,
   SnapshotSource,
   SystemComponent,
   WorkerNode,

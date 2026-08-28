@@ -27,6 +27,9 @@ import {
   aarohiCommercialFactsPostureSchema,
   aarohiPaymentFollowupPostureSchema,
   aarohiRegistrationAssistancePostureSchema,
+  AAROHI_FUNNEL_STAGES,
+  AAROHI_METRIC_AUTHORITIES,
+  AAROHI_STAGE_AUTHORITY,
   identityLinkPostureSchema,
   instagramOutboundCandidatePostureSchema,
   salesBrainPostureSchema,
@@ -1172,10 +1175,19 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
     // Instagram conversation domain; AVG-6 adds cross-channel identity evidence, a recommendation
     // that never merges anything, and an inert WhatsApp CHANNEL handoff candidate. Every addition
     // remains a closed vocabulary, bound, schema or pure function; nothing here sends or executes.
+    // AVG-11 adds aggregate acquisition analytics: a closed funnel vocabulary, a metric AUTHORITY
+    // distinction, and one pure builder that counts distinct prospects and refuses to name a
+    // business outcome. It exposes no rate, no admin write and no route into any transition.
     expect(Object.keys(barrel).sort()).toStrictEqual([
+      'AAROHI_ACQUISITION_FUNNEL_OUTCOME',
       'AAROHI_AGENT_ID',
+      'AAROHI_ANALYTICS_EVIDENCE_KINDS',
+      'AAROHI_ANALYTICS_POSTURE',
+      'AAROHI_ANALYTICS_REFUSALS',
       'AAROHI_AVG10_CONTRACT_VERSION',
       'AAROHI_AVG10_PAYMENT_SOURCE_POSTURE',
+      'AAROHI_AVG11_CONTRACT_VERSION',
+      'AAROHI_AVG11_EVIDENCE_SOURCE_POSTURE',
       'AAROHI_AVG3_CONTRACT_VERSION',
       'AAROHI_AVG4_CONTRACT_VERSION',
       'AAROHI_AVG5_CHANNEL',
@@ -1193,6 +1205,10 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'AAROHI_AVG9_REGISTRATION_PROCESS_SOURCE_POSTURE',
       'AAROHI_COMMERCIAL_FACTS_POSTURE',
       'AAROHI_ENRICHMENT_CONTRACT_VERSION',
+      'AAROHI_EVIDENCE_SOURCE_STATES',
+      'AAROHI_FUNNEL_STAGES',
+      'AAROHI_METRIC_AUTHORITIES',
+      'AAROHI_METRIC_UNAVAILABLE_REASONS',
       'AAROHI_PAYMENT_FOLLOWUP_POSTURE',
       'AAROHI_PROSPECT_CONTRACT_VERSION',
       'AAROHI_REGISTRATION_ASSISTANCE_POSTURE',
@@ -1200,6 +1216,7 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'AAROHI_SALES_CONVERSATION_INTENTS',
       'AAROHI_SALES_OBJECTION_KINDS',
       'AAROHI_SALES_STRATEGIES',
+      'AAROHI_STAGE_AUTHORITY',
       'ACQUISITION_CASE_STATES',
       'ACQUISITION_CASE_TRANSITIONS',
       'ACQUISITION_REFUSAL_REASONS',
@@ -1249,6 +1266,7 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'INSTAGRAM_OUTBOUND_CANDIDATE_POSTURE',
       'INSTAGRAM_OUTBOUND_CANDIDATE_REFUSALS',
       'INSTAGRAM_TURN_DIRECTIONS',
+      'MAX_AAROHI_ANALYTICS_EVIDENCE',
       'MAX_COMMERCIAL_PACKAGES',
       'MAX_ENRICHMENT_LABEL_LENGTH',
       'MAX_ENRICHMENT_PROFILE_CLAIMS',
@@ -1271,8 +1289,12 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'WORKSPACE_APPROVAL_READINESS_REFUSALS',
       'WORKSPACE_DRAFT_REFUSALS',
       'WORKSPACE_DRAFT_STATES',
+      'aarohiAcquisitionFunnelReportSchema',
+      'aarohiAnalyticsPostureSchema',
       'aarohiCommercialFactsBriefSchema',
       'aarohiCommercialFactsPostureSchema',
+      'aarohiEvidenceSourcesSchema',
+      'aarohiFunnelMetricSchema',
       'aarohiPaymentFollowupBriefSchema',
       'aarohiPaymentFollowupPostureSchema',
       'aarohiRegistrationAssistanceBriefSchema',
@@ -1281,6 +1303,7 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'activationAttestationSchema',
       'appendCrossChannelIdentityEvidence',
       'appendInstagramInboundObservation',
+      'buildAarohiAcquisitionFunnelReport',
       'buildWorkspaceReviewItem',
       'canTransition',
       'completeCoreActiveHandoff',
@@ -1322,6 +1345,7 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       'instagramOutboundCandidateSchema',
       'isTerminalAcquisitionCaseState',
       'openAcquisitionCase',
+      'parseAarohiAcquisitionFunnelReport',
       'parseAarohiCommercialFactsBrief',
       'parseAarohiPaymentFollowupBrief',
       'parseAarohiRegistrationAssistanceBrief',
@@ -1377,5 +1401,266 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       }
     }
     expect(importers).toStrictEqual([]);
+  });
+});
+
+/**
+ * AVG-11 containment (ADR-0128).
+ *
+ * Analytics is the stage where every earlier separation could be quietly undone, so the scans here
+ * are about two things: the module must reach nothing new, and it must not be able to STATE
+ * anything a workflow artifact cannot support.
+ */
+describe('AVG-11 observes, and adds no authority of any kind', () => {
+  const avg11 = (): string =>
+    codeOnly(readFileSync(join(SRC, 'contracts', 'avg11-analytics-admin-dashboard.ts'), 'utf8'));
+
+  it('reaches no store, no Core write path and no analytics infrastructure', () => {
+    const code = avg11();
+    for (const forbidden of [
+      // A dashboard is the most natural place to grow a database, so the scan is explicit.
+      'supabase',
+      'createClient',
+      'postgres',
+      'Pool(',
+      'SELECT ',
+      'INSERT ',
+      'UPDATE ',
+      'DELETE ',
+      'GROUP BY',
+      'migration',
+      'warehouse',
+      'clickhouse',
+      'prometheus',
+      'opentelemetry',
+      // Transport and credentials.
+      'fetch(',
+      'axios',
+      'http://',
+      'https://',
+      'process.env',
+      'service_role',
+      'SERVICE_ROLE',
+      // The model, prompt and retrieval waists.
+      'modelGateway',
+      'model-gateway',
+      'promptRegistry',
+      'prompt-registry',
+      // Spelled as CALLS rather than as the word: the posture legitimately pins
+      // `retrievalExecuted: false`, and a scan that had to be weakened to pass proves nothing.
+      'retrieve(',
+      'vectorSearch',
+      'ragQuery',
+      'knowledgeBase',
+      'embedding',
+      'mastra',
+      // n8n, providers and channels. Named as CALLS, because the posture pins
+      // `n8nExecutionRequested: false` and a bare token would fire on the ceiling itself.
+      'n8nClient',
+      'callN8n',
+      'dispatchToN8n',
+      'webhook',
+      'whatsapp',
+      'graph.facebook',
+      'razorpay',
+      'stripe',
+      // Governed effect objects, none of which analytics may create.
+      'CommunicationRequest',
+      'ApprovalRequest',
+      'ApprovalDecision',
+      'CommunicationAuthorization',
+      'ExecutionIntent',
+      // Scheduling. A report is computed on demand, never on a timer.
+      'setTimeout',
+      'setInterval',
+      'cron',
+      'queue',
+      'worker',
+    ]) {
+      expect(code, 'AVG-11 must not name ' + forbidden).not.toContain(forbidden);
+    }
+  });
+
+  it('names no write, admin-mutation or business-outcome verb', () => {
+    const code = avg11();
+    for (const forbidden of [
+      'registerVendor',
+      'confirmRegistration',
+      'confirmPayment',
+      'activateVendor',
+      'assignPackage',
+      'grantCredits',
+      'retryPayment',
+      'markRegistered',
+      'markPaid',
+      'createOrder',
+      'refund',
+      'payout',
+      // The admin WRITE surface. AVG-11 is a read stage and names no verb that could change a
+      // thing. Quoted, because `POSTURE` contains `POST` and a bare scan would fire on the very
+      // field that pins the ceiling.
+      "'POST'",
+      "'PATCH'",
+      "'PUT'",
+      "'DELETE'",
+      'mutate',
+      'persist(',
+      'persistTo',
+      'repository',
+      'upsert',
+    ]) {
+      expect(code, 'AVG-11 must not name ' + forbidden).not.toContain(forbidden);
+    }
+  });
+
+  it('computes no rate, and holds no commercial or personal field', () => {
+    const code = avg11();
+    for (const forbidden of [
+      // The rate decision, enforced rather than documented. Spelled with the punctuation of a
+      // FIELD or an ASSIGNMENT, so the posture's `conversionRateCalculated: false` — which exists
+      // precisely to pin this — is not mistaken for the thing it forbids.
+      'conversionRate:',
+      'conversionRate =',
+      'percentage',
+      'numerator',
+      'denominator',
+      // Commercial figures analytics must never originate.
+      'revenue:',
+      'revenue =',
+      'totalRevenue',
+      'arpu',
+      'CAC',
+      'LTV',
+      'ROI',
+      'amount',
+      'currency',
+      'discount',
+      // Personal and destination data. None of it has a field to occupy.
+      'phone',
+      'email',
+      'msisdn',
+      'gstin',
+      'address',
+      'latitude',
+      'longitude',
+      'cardNumber',
+      'accountNumber',
+      'upiId',
+    ]) {
+      expect(code, 'AVG-11 must not name ' + forbidden).not.toContain(forbidden);
+    }
+  });
+
+  it('declares the AVG-11 analytics ceiling as literal falsehoods, not as prose', () => {
+    // Every non-effect is a `z.literal(false)` in the posture SCHEMA, so a report claiming otherwise
+    // does not parse. Asserted against the schema rather than a built value, because a value can be
+    // rebuilt and a schema cannot be talked around.
+    const code = avg11();
+    for (const pinned of [
+      'unknownReportedAsZero: z.literal(false)',
+      'conversionRateCalculated: z.literal(false)',
+      'revenueReported: z.literal(false)',
+      'businessOutcomeClaimed: z.literal(false)',
+      'registrationConfirmed: z.literal(false)',
+      'paymentConfirmed: z.literal(false)',
+      'activationConfirmed: z.literal(false)',
+      'vendorActivated: z.literal(false)',
+      'anishaHandoffExecuted: z.literal(false)',
+      'acquisitionCaseMutated: z.literal(false)',
+      'marketplaceMutated: z.literal(false)',
+      'packageOrderCreated: z.literal(false)',
+      'creditsMutated: z.literal(false)',
+      'modelCallExecuted: z.literal(false)',
+      'promptResolved: z.literal(false)',
+      'retrievalExecuted: z.literal(false)',
+      'communicationAuthorizationCreated: z.literal(false)',
+      'executionIntentCreated: z.literal(false)',
+      'n8nExecutionRequested: z.literal(false)',
+      'providerSendRequested: z.literal(false)',
+      'channelSendRequested: z.literal(false)',
+      'persisted: z.literal(false)',
+      'adminWriteExposed: z.literal(false)',
+      'productionMutation: z.literal(false)',
+      'businessEffect: z.literal(false)',
+    ]) {
+      expect(code, 'AVG-11 must pin ' + pinned).toContain(pinned);
+    }
+  });
+
+  it('reuses the canonical handoff rather than duplicating or widening it', () => {
+    const code = avg11();
+    // AVG-11 DOES name `completeCoreActiveHandoff`, and that is the point: the terminal metric is
+    // counted by re-running AVG-1's own function, not by reading a case state. What it must not do
+    // is add a second route, transition anything, or widen the cold gate.
+    expect(code).toContain('completeCoreActiveHandoff(current, value.activationAttestation)');
+    for (const forbidden of [
+      'transitionAcquisitionCase',
+      'openAcquisitionCase',
+      'HANDED_OFF_TO_ANISHA',
+      'AWAITING_CORE_ACTIVATION',
+      'CONTACT_APPROVED',
+      'handoffToAnisha',
+      'forceHandoff',
+      'markHandedOff',
+      // The cold gate stays exactly one status wide, and AVG-11 does not restate or reweigh it.
+      'ELIGIBLE_CORE_STATUSES',
+      'CORE_STATUS_ROLE',
+      'NOT_REGISTERED',
+      'CORE_PARTY_STATUSES',
+    ]) {
+      expect(code, 'AVG-11 must not name ' + forbidden).not.toContain(forbidden);
+    }
+
+    // AVG-12 autonomy, which this stage does not begin.
+    //
+    // Case-INSENSITIVE, and it is here because a mutation slipped past the case-sensitive version:
+    // `const AUTONOMY_LEVEL = 1` survived a scan that forbade `autonomy`. A vocabulary ban that only
+    // catches one casing is a ban on a naming convention, not on a capability.
+    for (const forbidden of [
+      'autonomy',
+      'autonomous',
+      'selfOptimis',
+      'selfTuning',
+      'autoOutreach',
+      'autoPromote',
+      'promoteAutomatically',
+      'rollout',
+      'scaleOut',
+      'learnedPolicy',
+    ]) {
+      expect(code, 'AVG-11 must not name ' + forbidden).not.toMatch(
+        new RegExp(forbidden.replaceAll(/(?=[A-Z])/gu, '_?'), 'iu'),
+      );
+    }
+  });
+
+  it('agrees token for token with the wire contract it can never import', () => {
+    // The control-plane read contract is framework-neutral and this package is imported by nothing,
+    // so neither can reach the other. Both therefore state the funnel vocabulary independently, and
+    // a divergence would let the wire publish a stage the domain cannot produce -- or refuse one it
+    // can. The two lists are compared as TEXT, which is the same trade `compose.ts` already makes
+    // for the canonical-instant grammar.
+    const wire = readFileSync(
+      join(REPO_ROOT, 'packages', 'control-plane-read-contract', 'src', 'contract', 'snapshot.ts'),
+      'utf8',
+    );
+
+    const expected = AAROHI_FUNNEL_STAGES.map((stage) => stage.toLowerCase().replaceAll('_', '-'));
+    for (const stage of expected) {
+      expect(wire, 'the wire contract must carry the ' + stage + ' stage').toContain(
+        "'" + stage + "',",
+      );
+    }
+
+    // The authority classes agree, and the wire owns the same single Core-authoritative stage.
+    for (const authority of AAROHI_METRIC_AUTHORITIES) {
+      expect(wire, authority).toContain("'" + authority + "'");
+    }
+    expect(wire).toContain("'core-active-handoff-confirmed': 'CORE_AUTHORITATIVE'");
+
+    const coreOwned = AAROHI_FUNNEL_STAGES.filter(
+      (stage) => AAROHI_STAGE_AUTHORITY[stage] === 'CORE_AUTHORITATIVE',
+    );
+    expect(coreOwned).toStrictEqual(['CORE_ACTIVE_HANDOFF_CONFIRMED']);
   });
 });

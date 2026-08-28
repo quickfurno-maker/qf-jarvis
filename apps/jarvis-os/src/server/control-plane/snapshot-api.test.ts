@@ -388,3 +388,91 @@ describe('the route file itself', () => {
     ]);
   });
 });
+
+/**
+ * The Aarohi acquisition surface on the wire (AVG-11, ADR-0128).
+ *
+ * The domain, the snapshot and the UI each carry the same three facts — availability, authority and
+ * the absence of a count where nothing was read. These cases prove the middle link: what the route
+ * actually serves, parsed by the same contract a future Android client would use.
+ */
+describe('GET /api/control-plane/v1/snapshot — the Aarohi acquisition surface', () => {
+  it('serves the readiness section as a governance baseline with no figure in it', async () => {
+    const response = await call();
+    const body = parseControlPlaneSnapshotV1(await response.json());
+
+    const readiness = body.sections.aarohiAcquisitionReadiness;
+    expect(readiness.availability).toBe('STATIC_BASELINE');
+    expect(readiness.items.length).toBeGreaterThan(0);
+    for (const row of readiness.items) {
+      expect(Object.keys(row).sort(), row.id).toStrictEqual([
+        'detail',
+        'id',
+        'kind',
+        'label',
+        'state',
+      ]);
+    }
+  });
+
+  it('keeps the funnel PLANNED with no stages, and says the read surface exists', async () => {
+    const response = await call();
+    const body = parseControlPlaneSnapshotV1(await response.json());
+
+    const funnel = body.sections.vendorGrowthFunnel;
+    expect(funnel.availability).toBe('PLANNED');
+    // Unreadable is not empty: the section explains itself rather than reading as "none".
+    expect(funnel.items).toHaveLength(0);
+    expect(funnel.reason).toContain('no evidence source is connected');
+    expect(funnel.expectedSource).toContain('PLANNED');
+  });
+
+  it('serves no business outcome and no fabricated zero for Aarohi', async () => {
+    const response = await call();
+    const payload = JSON.stringify(await response.json());
+
+    // The wire vocabulary has no such stage, so this can only fail if one was added.
+    for (const forbidden of [
+      '"registered"',
+      '"paid-active"',
+      '"converted"',
+      '"paid"',
+      'activeVendors',
+      'conversionRate',
+      'revenue',
+    ]) {
+      expect(payload, forbidden).not.toContain(forbidden);
+    }
+  });
+
+  it('states the deliberately-unbuilt bridges rather than omitting them', async () => {
+    const response = await call();
+    const body = parseControlPlaneSnapshotV1(await response.json());
+    const ids = body.sections.aarohiAcquisitionReadiness.items
+      .filter((row) => row.kind === 'blocker')
+      .map((row) => row.id);
+    expect(ids).toContain('blocker-post-registration-continuation');
+    expect(ids).toContain('blocker-awaiting-core-activation-bridge');
+  });
+
+  it('exposes no mutating verb for the acquisition surface', async () => {
+    // The route file exports GET alone; this asserts the SERVED payload cannot act either.
+    const response = await call();
+    const payload = JSON.stringify(await response.json());
+    for (const forbidden of [
+      'canSend',
+      'canExecute',
+      'isAuthorized',
+      'approvalGranted',
+      'dispatchAllowed',
+      'markRegistered',
+      'markPaid',
+      'activate',
+      'grantCredits',
+      'assignPackage',
+    ]) {
+      expect(payload, forbidden).not.toContain(forbidden);
+    }
+    expect(response.headers.get('cache-control')).toBeDefined();
+  });
+});

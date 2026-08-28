@@ -67,6 +67,7 @@ type SystemComponent = ControlPlaneSnapshotV1['system'][number];
 type BaselineAgent = ControlPlaneSnapshotV1['agents'][number];
 type BaselineRoadmap = ControlPlaneSnapshotV1['roadmap'][number];
 type OwnershipItem = Sections['coreSync']['items'][number];
+type AarohiReadinessItem = Sections['aarohiAcquisitionReadiness']['items'][number];
 
 /** A section that cannot be read, stated as such. */
 function unreadable(
@@ -346,6 +347,144 @@ export const BASELINE_CORE_SYNC: {
   ]),
 });
 
+/**
+ * The complete Aarohi acquisition readiness surface (AVG-11, ADR-0128).
+ *
+ * `STATIC_BASELINE`, because every row is a fact merged governance already establishes and none is
+ * an observation of anything running. No row carries a number: readiness says what EXISTS, and the
+ * funnel — which stays `PLANNED` with no stages — is the only thing that would carry a count.
+ *
+ * The `blocker` rows are the reason this section is worth having. Two bridges were deliberately NOT
+ * built (ADR-0127), and a surface that simply omitted them would read as complete. Stating an
+ * absence is the only way an operator can tell a missing feature from a missing panel.
+ */
+export const BASELINE_AAROHI_READINESS: {
+  readonly availability: 'STATIC_BASELINE';
+  readonly reason: string;
+  readonly expectedSource: string;
+  readonly items: readonly AarohiReadinessItem[];
+} = Object.freeze({
+  availability: 'STATIC_BASELINE',
+  reason:
+    'Declared by merged Aarohi governance and merged offline contracts, not read from a runtime.',
+  expectedSource:
+    'The QVGE offline domains (ADR-0085 and ADR-0111 onward), all PLANNED and DISABLED.',
+  items: Object.freeze<readonly AarohiReadinessItem[]>([
+    {
+      id: 'avg-1-prospect-and-gate',
+      label: 'Prospect identity and existing-vendor gate',
+      kind: 'offline-domain',
+      state: 'PLANNED',
+      detail:
+        'AVG-1 to AVG-3 merged as contracts (ADR-0085, ADR-0111, ADR-0112). A prospect is not a vendor, and the gate permits one Core status.',
+    },
+    {
+      id: 'avg-4-outreach-workspace',
+      label: 'Outreach workspace',
+      kind: 'offline-domain',
+      state: 'PLANNED',
+      detail:
+        'AVG-4 merged (ADR-0113). Drafts are inert revisions with no approved or sent state, and no channel is attached.',
+    },
+    {
+      id: 'avg-5-conversation-and-identity',
+      label: 'Conversation and cross-channel identity',
+      kind: 'offline-domain',
+      state: 'PLANNED',
+      detail:
+        'AVG-5 and AVG-6 merged (ADR-0122, ADR-0123). Inbound observations only; identity is evidence, and no merge function exists.',
+    },
+    {
+      id: 'avg-7-sales-brain',
+      label: 'Sales brain',
+      kind: 'offline-domain',
+      state: 'PLANNED',
+      detail:
+        'AVG-7 merged (ADR-0124). A deterministic policy returns a reply BRIEF, never a reply. No model call, prompt or retrieval.',
+    },
+    {
+      id: 'avg-8-commercial-truth',
+      label: 'Commercial truth',
+      kind: 'offline-domain',
+      state: 'PLANNED',
+      detail:
+        'AVG-8 merged (ADR-0125). Core reference data, mirrored exactly. No price, discount or offer originates in Jarvis.',
+    },
+    {
+      id: 'avg-9-registration-assistance',
+      label: 'Registration assistance',
+      kind: 'offline-domain',
+      state: 'PLANNED',
+      detail:
+        'AVG-9 merged (ADR-0126). A prepared brief is assistance, never a registration. Core executes registration.',
+    },
+    {
+      id: 'avg-10-payment-followup',
+      label: 'Payment follow-up',
+      kind: 'offline-domain',
+      state: 'PLANNED',
+      detail:
+        'AVG-10 merged (ADR-0127). A prepared brief is assistance, never a payment — and payment is not activation.',
+    },
+    {
+      id: 'avg-11-analytics-read-surface',
+      label: 'Acquisition analytics read surface',
+      kind: 'offline-domain',
+      state: 'PLANNED',
+      detail:
+        'AVG-11 merged (ADR-0128). Aggregate counts with an authority class each. Read-only, and no evidence source is connected.',
+    },
+    {
+      id: 'core-active-handoff-boundary',
+      label: 'QuickFurno Core ACTIVE handoff',
+      kind: 'boundary',
+      state: 'NOT_CONNECTED',
+      detail:
+        'Core attestation is the only route out of Aarohi ownership. Core is not connected, so no handoff figure is readable.',
+    },
+    {
+      id: 'aarohi-anisha-boundary',
+      label: 'Aarohi and Anisha ownership boundary',
+      kind: 'boundary',
+      state: 'PLANNED',
+      detail:
+        'Aarohi acquires unregistered parties; Anisha owns registered ones. Ownership moves only on Core confirming ACTIVE.',
+    },
+    {
+      id: 'blocker-post-registration-continuation',
+      label: 'Post-registration continuation boundary',
+      kind: 'blocker',
+      state: 'PLANNED',
+      detail:
+        'Deliberately not built (ADR-0127). Core exposes no prospect-facing fact that could justify continuing after registration.',
+    },
+    {
+      id: 'blocker-awaiting-core-activation-bridge',
+      label: 'Bridge into AWAITING_CORE_ACTIVATION',
+      kind: 'blocker',
+      state: 'PLANNED',
+      detail:
+        'Deliberately not built (ADR-0127). No ordinary transition reaches the boundary, and inventing a readiness signal was refused.',
+    },
+    {
+      id: 'blocker-core-read-protocol',
+      label: 'Live Core read protocol',
+      kind: 'blocker',
+      state: 'NOT_CONNECTED',
+      detail:
+        'No Jarvis-to-Core read protocol is adopted. Every Core-authoritative figure is therefore unknown rather than zero.',
+    },
+    {
+      id: 'blocker-runtime-and-channel',
+      label: 'Aarohi runtime and channel',
+      kind: 'blocker',
+      state: 'DISABLED',
+      detail:
+        'No runtime, no channel, no credential. Live communication send is gated behind a rollout that is off (ADR-0085).',
+    },
+  ]),
+});
+
 /** Every operational section, stated at the availability it has actually earned. */
 export function baselineSections(): Sections {
   return {
@@ -509,9 +648,17 @@ export function baselineSections(): Sections {
     ),
     vendorGrowthFunnel: unreadable(
       'PLANNED',
-      'Aarohi has no runtime. Nothing has been sourced, researched, approved or contacted.',
-      'The QVGE acquisition domain (AVG-1 onward), which is PLANNED and DISABLED.',
+      // AVG-11 merged the READ SURFACE, not a reading. Both halves belong in this sentence: saying
+      // only the first would imply data, and saying only the second would hide that a contract now
+      // exists and is closed against publishing a business outcome as an acquisition stage.
+      'The AVG-11 read surface is merged and no evidence source is connected. Nothing has been ' +
+        'sourced, researched, approved or contacted.',
+      'The AVG-11 acquisition analytics domain (ADR-0128), whose runtime is PLANNED and DISABLED.',
     ),
+    aarohiAcquisitionReadiness: {
+      ...BASELINE_AAROHI_READINESS,
+      items: [...BASELINE_AAROHI_READINESS.items],
+    },
     workers: unreadable(
       'PLANNED',
       'Local and GPU node topology is a future slice. No discovery runs.',

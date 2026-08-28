@@ -83,6 +83,7 @@ export function validSnapshot(): ControlPlaneSnapshotV1 {
       modelLatency: emptySeries('model-latency', 'Model latency'),
       agentWorkload: emptySection('NOT_CONNECTED'),
       vendorGrowthFunnel: emptySection('PLANNED'),
+      aarohiAcquisitionReadiness: emptySection('STATIC_BASELINE'),
       workers: emptySection('PLANNED'),
       models: emptySection('NOT_CONNECTED'),
       knowledge: emptySection('NOT_CONNECTED'),

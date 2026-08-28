@@ -124,11 +124,33 @@ export function mapSnapshotToReadModel(snapshot: ControlPlaneSnapshotV1): Contro
   const approvalBreakdown = slices(sections.approvalBreakdown);
   const businessAnalytics = slices(sections.businessAnalytics);
   const n8nExecution = slices(sections.n8nExecution);
-  const vendorGrowthFunnel = section(sections.vendorGrowthFunnel, (stage) => ({
-    id: stage.id,
-    label: stage.label,
-    value: stage.value,
-    caption: stage.caption,
+  // The union is carried across BRANCH BY BRANCH rather than spread, so the unavailable variant
+  // arrives at the UI with no `value` key at all. A `value: stage.value ?? 0` here would have been
+  // the exact defect AVG-11 exists to prevent, and there is deliberately no shape in which to write
+  // it: `stage.value` does not compile without narrowing.
+  const vendorGrowthFunnel = section(sections.vendorGrowthFunnel, (stage) =>
+    stage.authority === 'AUTHORITY_UNAVAILABLE'
+      ? {
+          id: stage.id,
+          label: stage.label,
+          authority: stage.authority,
+          expectedAuthority: stage.expectedAuthority,
+          caption: stage.caption,
+        }
+      : {
+          id: stage.id,
+          label: stage.label,
+          authority: stage.authority,
+          value: stage.value,
+          caption: stage.caption,
+        },
+  );
+  const aarohiReadiness = section(sections.aarohiAcquisitionReadiness, (row) => ({
+    id: row.id,
+    label: row.label,
+    kind: row.kind,
+    state: row.state,
+    detail: row.detail,
   }));
   const attention = section(sections.attention, (item) => ({
     id: item.id,
@@ -243,6 +265,7 @@ export function mapSnapshotToReadModel(snapshot: ControlPlaneSnapshotV1): Contro
     businessAnalytics: () => businessAnalytics,
     n8nExecution: () => n8nExecution,
     vendorGrowthFunnel: () => vendorGrowthFunnel,
+    aarohiReadiness: () => aarohiReadiness,
     attention: () => attention,
     activity: () => activity,
     agents: () => agents,
