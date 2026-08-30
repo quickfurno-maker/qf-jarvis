@@ -204,11 +204,12 @@ as authority for it.
 > [ADR-0133](./ADR-0133-qfj-p08-powerless-communication-request-producer.md) (PR #174). **S2 is
 > BLOCKED** under
 > [ADR-0134](./ADR-0134-qfj-p09-s2-communication-state-evidence-alignment.md): this ADR's statement
-> that S2 has _"no Core dependency"_ was proved to hold for only three of the eighteen lifecycle
-> states. `rejected` and `cancelled` are unrepresentable by any canonical artifact, four further
-> states are producible with insufficient or no evidence, and every Core-owned state needs an
-> authenticated Core event. **S2 is split into S2a (Jarvis coordination states) and S2b (a
-> projection over authenticated Core events), and S2b depends on S3.** Nothing else in this ADR
+> that S2 has _"no Core dependency"_ was proved to hold for **one** of the eighteen lifecycle states
+> (`draft`). `rejected`, `cancelled` and `expired` have no lawful representation; five further states
+> parse on insufficient or no evidence; and two cite a human approval rather than Core's
+> communication authorization. **S2 is split by fact ownership into S2a (Jarvis-local), S2b (Jarvis
+> coordination over trusted Core authority) and S2c (Core-authoritative states projected from
+> authenticated Core events); only S2a is free of a Core prerequisite.** Nothing else in this ADR
 > changes, and no activation posture changes.
 
 **What this buys.** A dependency-ordered sequence in which each step is small, reviewable and

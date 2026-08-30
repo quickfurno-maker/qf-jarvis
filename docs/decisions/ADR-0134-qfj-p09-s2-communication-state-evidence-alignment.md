@@ -39,158 +39,234 @@ hold.** The full audit is linked above; the load-bearing findings are:
 
 1. **`rejected` is unrepresentable.** `CommunicationStateRecordV1` requires `approvalDecisionId` for
    `rejected`. `CommunicationAuthorizationV1` **forbids** `approvalDecisionId` when
-   `outcome === 'rejected'`. The two schemas are disjoint, so a lawful Core refusal — the opt-out
-   case the architecture cares most about — cannot become a `rejected` state record without
-   attaching a human approval id to a decision no human made. `communication-model.md` explicitly
-   backs the authorization: a rejection _"must **not** name an approval decision."_
+   `outcome === 'rejected'`. The two schemas are disjoint, so a lawful Core refusal — the opt-out case
+   the architecture cares most about — cannot become a `rejected` state record without attaching a
+   human approval id to a decision no human made. `communication-model.md` explicitly backs the
+   authorization: a rejection _"must **not** name an approval decision."_
 2. **The repository's own fixture already makes that forbidden move.**
    `validCommunicationRejectedOptOut` attaches `FIXTURE_IDS.decision` to a record whose explanation
    reads _"QuickFurno Core refused: the recipient is on do-not-contact."_ It is also the payload of a
    shipped canonical-event fixture. No producer could do better.
 3. **`CommunicationResultV1` cannot report a pre-execution `rejected` or `cancelled`** either: it
    offers both states and mandates `executionIntentId` and `executionResultId`, which cannot exist
-   before dispatch. So **no canonical artifact anywhere can evidence a pre-execution refusal or
-   cancellation.**
-4. **`CommunicationStateRecordV1` cannot cite four of the seven relevant artifacts.** It has slots
-   for an approval decision, an execution intent and an execution result — and none for a
-   communication request, a communication authorization, a communication result or a human handoff.
-   `approvalDecisionId` is serving as a general-purpose "Core decided" slot it was never typed for.
-5. **`CommunicationAuthorizationV1` has no identity field at all**, so it cannot be cited by id even
-   if a slot existed.
-6. **Four states are producible with no evidence whatsoever** — `completed`, `cancelled`, `expired`,
-   `human-handoff-required` — and `provider-accepted` is producible from an execution intent alone,
-   which is precisely the _"submission is not acceptance"_ defect the state vocabulary exists to
-   prevent.
-7. **`STATES_JARVIS_MAY_NOT_ORIGINATE` is enforced by nothing** and omits eleven states that are
-   equally not Jarvis's to originate.
+   before dispatch. The same gap reaches **`expired` on the `scheduled → expired` path**, where an
+   intent may exist but an execution result never can. So **no canonical artifact can evidence a
+   pre-execution refusal, a pre-execution cancellation, or a pre-dispatch expiry.**
+4. **`CommunicationStateRecordV1` cannot cite four of the seven relevant artifacts.** It has slots for
+   an approval decision, an execution intent and an execution result — and none for a communication
+   request, a communication authorization, a communication result or a human handoff, nor for the
+   identity of an authenticated canonical event. `approvalDecisionId` is serving as a general-purpose
+   "Core decided" slot it was never typed for.
+5. **Seven states are producible with no evidence whatsoever**, of which only `draft` legitimately
+   should be; and **`provider-accepted` is producible from an execution intent alone**, which is
+   precisely the _"submission is not acceptance"_ defect the state vocabulary exists to prevent.
+6. **`authorized` and `scheduled` cite the wrong artifact** — a human `ApprovalDecisionV1` rather than
+   Core's `CommunicationAuthorizationV1`, collapsing the two gates the model insists stay separate.
+7. **`STATES_JARVIS_MAY_NOT_ORIGINATE` is enforced by nothing** and names three of the thirteen states
+   that are not Jarvis's to originate.
 8. **`source: 'quickfurno-core'` is a schema literal, not provenance.** Any caller can write it. The
-   only mechanism in this repository that authenticates a Core fact is
-   `createEventIngestor` — Ed25519 signature verification over exact raw bytes, then contract
-   validation _behind_ it, then durable storage.
+   only mechanism in this repository that authenticates a Core fact is `createEventIngestor` — Ed25519
+   signature verification over exact raw bytes, then contract validation _behind_ it, then durable
+   storage.
 
 A producer built on point 8's fallacy, or one that resolved point 1 by inventing an id, would
-manufacture authorization and delivery truth. That is the failure this architecture exists to
-prevent, so it is worth a deliberate stop.
+manufacture authorization and delivery truth. That is the failure this architecture exists to prevent,
+so it is worth a deliberate stop.
+
+### What owner review corrected in the first revision
+
+The first revision of this ADR proved the defects correctly and then over-reached on the replacement
+design. Four corrections, each carried into §4 and §6:
+
+- It treated **`authorization-requested`** as buildable from the existence of a
+  `CommunicationRequestV1`. The model defines that state as _"a communication request has been
+  **submitted to Core**"_, and S1 only **constructs** one. **Construction is not submission.**
+- It called **`follow-up-requested`** independently pre-Core. The graph permits it only from `read`,
+  `no-answer` or `busy` — all Core-recorded provider outcomes.
+- It filed **`human-handoff-required`** as a Core-owned fact. `HumanHandoffRequestV1` is
+  `producingSystem: qf-jarvis` (enforced) and `HumanHandoffRecordV1` is `issuer: quickfurno-core`
+  (enforced). The **state is the Jarvis-side escalation**, gated on a trusted prior `answered`.
+- It proposed **`CommunicationAuthorizationV2`** merely to obtain an id, and pre-committed to
+  **`qf.communication.state-recorded@3`**. Neither is justified — see §4 and §5.
 
 ## Decision
 
 ### 1. S2 is BLOCKED as specified. No producer is written.
 
 The `CommunicationStateRecordV1` producer described by ADR-0132 is **not implemented**, and must not
-be until the evidence model is repaired. This ADR records the reason and the design; it ships no
+be until the evidence model is repaired. This ADR records the reason and the design space; it ships no
 production code, no contract change and no activation.
 
 ### 2. The forbidden repairs, named so they are not reached for later
 
 None of the following may be used to unblock S2:
 
-- inventing an `approvalDecisionId` for a Core communication refusal, or copying an unrelated
-  human approval id onto one;
+- inventing an `approvalDecisionId` for a Core communication refusal, or copying an unrelated human
+  approval id onto one;
 - weakening `CommunicationAuthorizationV1`'s rejection rules so a refusal may carry an approval;
 - letting founder or human approval override a consent refusal in any direction;
 - re-mapping `rejected` to a different lifecycle state, or adding an `opted-out` nineteenth state;
 - treating `reasonCode`, `previousState`, an `issuer`/`source` literal, or a lifecycle-runtime
   `consistent` verdict as authority;
+- **asserting `authorization-requested` from a constructed request** — construction is not submission;
 - letting `provider-accepted`, `delivered`, `read` or `answered` be asserted from an execution intent
   or a provider report that Core has not recorded;
 - editing a published contract or event version in place.
 
-### 3. The trust boundary is stated, once
+### 3. Fact ownership has three tiers, not two
+
+The binary "Jarvis states vs everything else" split produced the errors listed above. The
+authoritative model supports three tiers, distinguished by _what must already be true_:
+
+| Tier                                               | States                                                                                                                                                                    | Precondition                                                |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| **A — Jarvis-local**                               | `draft`                                                                                                                                                                   | none                                                        |
+| **B — Jarvis coordination over trusted authority** | `authorization-requested`, `scheduled`, `follow-up-requested`, `human-handoff-required`                                                                                   | a real submission, or a trusted prior Core/provider outcome |
+| **C — Core-authoritative / provider outcome**      | `rejected`, `authorized`, `execution-submitted`, `provider-accepted`, `delivered`, `read`, `answered`, `no-answer`, `busy`, `failed`, `completed`, `cancelled`, `expired` | an authenticated, accepted Core event                       |
+
+**A = 1, B = 4, C = 13.** Jarvis owns the _act_ in Tier B; it never owns the _precondition_, and a
+lifecycle-consistent shape is not evidence that the precondition holds.
+
+### 4. The trust boundary, and the identity that already exists
 
 **A literal is not provenance.** S2 may treat as an authenticated Core fact **only** an event that
 passed `verifySignature` → `prepareValidatedEvent` → `storeValidatedEvent`. Everything else —
-including a bare `CommunicationAuthorizationV1` or `CommunicationResultV1` object carrying
-`issuer: 'quickfurno-core'` — is **untrusted structural input**, valid in shape and unproven in
-origin.
+including a bare `CommunicationAuthorizationV1` or `CommunicationResultV1` carrying
+`issuer: 'quickfurno-core'` — is **untrusted structural input**, valid in shape and unproven in origin.
 
-Consequently: Jarvis-side artifacts may justify **Jarvis-side states only**. Every Core-owned state
-requires an authenticated, stored canonical event.
+**Use the identity that already exists.** Every canonical event carries `eventId` in its **envelope**,
+independent of its payload; verified for the authorization, result, handoff, intent and execution-result
+events. So the addressable handle for "the authorization that refused this" is the `eventId` of the
+accepted event that carried it — a handle that also _proves_ provenance, whereas a payload id would
+prove only that somebody wrote a UUID.
 
-### 4. The recommended path: Option B, scoped by Option D, staged as Option A
+**Therefore `CommunicationAuthorizationV2` is NOT required and is NOT proposed.** The absence of a
+`communicationAuthorizationId` is a real observation, not a reason to version a published contract.
+**Prefer existing authenticated event identity over adding ids to payloads.** A payload id may be
+proposed later only if a _separate semantic_ need is proved; none is proved here.
 
-The audit evaluated five options. The recommendation is a `CommunicationStateRecordV2` that carries
-explicit provenance and the missing citations:
+### 5. The record repair, designed but not authorized
 
-- **`evidenceEventId`** — the envelope `eventId` of the authenticated, stored Core event that carried
-  the fact. This single field is what turns _"the object says Core"_ into _"Core said it, and here is
-  the accepted event."_
-- **Per-artifact citation slots** so each state names its own evidence instead of borrowing
+The likely destination for the record is a versioned repair carrying explicit provenance:
+
+- **Two distinct notions, which the first revision conflated under one `evidenceEventId`:**
+  - **envelope provenance** — the identity of the event transporting _this record_. Already supplied
+    by the canonical envelope; **not a payload field**, and self-referential if written as one.
+  - **source evidence** — the identity of the _prior_ accepted Core event (authorization, result,
+    intent, handoff) that **justifies** this state. `sourceEventId`, or a discriminated reference
+    naming both artifact kind and event id, is more accurate. **The name and shape are deliberately
+    not fixed here.**
+- **Per-artifact citation slots**, so each state names its own evidence instead of borrowing
   `approvalDecisionId`.
 - **`rejected` requires communication-authorization evidence, never an approval decision.**
-- **`provider-accepted` and `completed` require a result; `expired` requires an intent.**
+- **`provider-accepted` and `completed` require a result.**
+- **`expired` requires authoritative evidence whose exact artifact is UNRESOLVED** — see §7.
 
-Scoped by Option D's principle: for Core-owned states Jarvis **projects authenticated events and
-originates nothing**. Staged by Option A: the Jarvis-coordination states may land first.
+**This ADR does not implement the repair.** Its exact shape depends on §6, which is an owner decision.
 
-**This ADR does not implement V2.** Doing so is a wire-contract change requiring owner authorization
-(see §5), and smuggling one into a readiness task is exactly what this gate exists to prevent.
+### 6. The authorship question is OPEN, and `@3` is not pre-committed
 
-### 5. Versioning consequences, recorded not taken
+The first revision proposed a record repair **and** `qf.communication.state-recorded@3` together,
+without noticing they belong to different architectures.
 
-`CommunicationStateRecordV1` is the payload of `qf.communication.state-recorded@2`. Under ADR-0013 a
-type+version is permanent, so repairing the record is **not** an edit in place:
+**Model 1 — Core-authored state event.** Core emits `@3`; the envelope authenticates the record;
+Jarvis projects it. _For:_ one authoritative statement of where a communication stands; no Jarvis
+derivation logic to disagree with Core. _Against:_ Core would have to author Tier A and Tier B facts
+that are Jarvis's, having first been told them; and it needs new Core-side work on top of S3.
 
-| Change                                                    | Consequence                                                           |
-| --------------------------------------------------------- | --------------------------------------------------------------------- |
-| `CommunicationStateRecordV2`                              | new contract version; V1 retained, never widened                      |
-| `qf.communication.state-recorded@3`                       | new event version; registry entry, fixtures, catalog                  |
-| `CommunicationAuthorizationV2` (or a composite reference) | needed because V1 has **no id** to cite                               |
-| `communication-lifecycle-runtime`                         | must handle both record versions with **no tolerant fallback**        |
-| Core adoption                                             | Core must eventually emit `@3`; this is **partly an S3 conversation** |
+**Model 2 — Jarvis projection over authenticated primitives.** Core emits the primitives it already
+has (`authorization-recorded`, `result-recorded`, `human-handoff-recorded`, `intent-issued`,
+`execution.result-recorded`); Jarvis derives a **local** projection anchored to accepted `eventId`s and
+authors only its Tier A/B facts. _For:_ no new Core event type for Tier C; matches
+`communication-lifecycle-runtime`, already a validator over records rather than an authority.
+_Against:_ Jarvis holds derivation logic; `cancelled` and `expired` still have no primitive to project
+from; the projection is Jarvis-local truth and must never be presented as Core history.
 
-### 6. S2 is split, and Core becomes a prerequisite earlier than ADR-0132 says
+**Audit of the existing `qf.communication.state-recorded@2`.** It is an original Phase-2
+architecture-lifecycle event. **`@2` was not a communication-specific redesign** — `canonical-events-v2.ts`
+records that all 41 inherited events were bumped uniformly for privacy hardening under ADR-0026 §5, and
+its payload is still `communicationStateRecordV1Schema`. The communication-specific events arrived
+later as governance events, and `governance-events.ts` says of the authorization event: **_"This is the
+event that proves a refusal happened."_** That names the authorization event, not `state-recorded`, as
+the proof of a refusal — evidence that the newer primitives may have absorbed part of what
+`state-recorded` was for.
 
-- **S2a — Jarvis coordination states** (`draft`, `authorization-requested`, `follow-up-requested`).
-  Jarvis's own facts; no Core event needed. Today blocked only by the missing request citation.
-- **S2b — Core-owned states.** A **projection over authenticated Core events**, not a producer.
-  Requires V2 **and** an adopted Core transport, so **S2b depends on S3.**
+**Verdict: `qf.communication.state-recorded@3` is UNRESOLVED — required under Model 1, plausibly
+unnecessary under Model 2. `@2`'s intended authorship was never explicitly decided and may be partly
+redundant; whether it remains, versions, retires or becomes historical-only follows from the model
+choice.** **Nothing is registered or retired here, and no model is chosen here.**
 
-ADR-0132's claim that S2 has "no Core dependency" holds for three of eighteen states and fails for
-the other fifteen. The plan is updated to say so. **ADR-0132's S1 decision, and the merged S1
-implementation, are unaffected.**
+### 7. `expired` evidence is left OPEN, deliberately
 
-### 7. S1 status reconciliation
+The first revision's "`expired` must require an execution intent" is **withdrawn**. The authoritative
+document is ambiguous about whether an `ExecutionIntentV1` exists at `scheduled`: the state table and
+the scheduling section imply it does, while the execution-flow sequence diagram issues the intent to
+n8n only in the branch the vocabulary calls `execution-submitted`. And even where an intent does
+exist, `CommunicationResultV1` cannot report the expiry, because it also demands an `executionResultId`
+that a never-dispatched intent never produces.
+
+**`expired` requires authoritative evidence whose exact artifact is unresolved.** Settling it depends
+on when Core issues an intent — a Core fact this repository cannot determine, and therefore an **S3
+audit question**. No expiry contract is invented here.
+
+### 8. S2 splits by tier, and Core is a prerequisite far earlier than ADR-0132 says
+
+- **S2a — Tier A.** `draft` only. No Core dependency; buildable once the record can cite the S1
+  request.
+- **S2b — Tier B.** `authorization-requested` (needs the **S4** transport and a real submission),
+  `scheduled`, `follow-up-requested`, `human-handoff-required` (each needs trusted prior Core or
+  provider outcomes — **S3**, then **S5/S7**).
+- **S2c — Tier C.** Thirteen states projected from authenticated Core events. Needs the chosen
+  authorship model, the record repair, **S3**, and for provider outcomes **S5** and **S7**.
+
+ADR-0132's "no Core dependency" claim holds for **one** of eighteen states. The plan is updated to say
+so. **ADR-0132's S1 decision, and the merged S1 implementation, are unaffected.**
+
+### 9. S1 status reconciliation
 
 PR #174 merged at `eefe32cc75d05b22bc112bf8c60093087b78758b`. ADR-0133 and the two canonical status
 documents said "implemented on a feature branch / PR, not merged"; they are corrected to Accepted /
-Merged with the PR number and merge SHA. **No S1 design or production code is altered.**
+Merged with the PR number and merge SHA. **No S1 design or production code is altered.** Note that S1
+constructs a request and submits nothing — see §3, Tier B.
 
 ## Consequences
 
 - **The safety property is preserved by stopping.** No component in the repository can manufacture a
   communication authorization, delivery or completion fact.
-- Two safety-critical states (`rejected`, `cancelled`) are now known to be unrepresentable, and the
-  gap is written down rather than coded around.
-- The `provider-accepted`-from-intent hole and the four unevidenced states are recorded as defects in
-  the **existing merged contract**, not as producer risks. They exist on `main` today.
-- The owner has a decision to make — approve the V2 design, or direct a different path — before any
-  S2 code is written.
+- Three safety-critical states (`rejected`, `cancelled`, `expired`) are now known to be unrepresentable
+  on at least one lawful path, and the gaps are written down rather than coded around.
+- The `provider-accepted`-from-intent hole and the six inadequately-evidenced states are recorded as
+  defects in the **existing merged contract**, not as producer risks. They exist on `main` today.
+- The owner has two decisions to make — the authorship model (§6), then the record repair (§5) — before
+  any S2 code is written.
 - Nothing is activated. Production rollout remains **OFF**; Aarohi's runtime remains
   **PLANNED / DISABLED**.
 
 ## Alternatives considered
 
-- **Implement S2 for the safe subset only.** The producible set is `draft` and
-  `follow-up-requested`. A "state producer" missing refusal, delivery, cancellation and completion
-  would imply coverage that does not exist. Retained only as S2a.
-- **Narrowly repair `STATES_REQUIRING_DECISION`.** Fixes the one reported symptom and leaves five
-  documented defects, while still changing what a published payload accepts. Rejected as worse than
-  one deliberate version.
+- **Implement S2 for the safe subset only.** The subset is `draft` alone. A "state producer" that can
+  express only the start state is not S2. Retained as the first piece of S2a.
+- **Narrowly repair `STATES_REQUIRING_DECISION`.** Fixes the one reported symptom and leaves six
+  documented defects, while still changing what a published payload accepts. Rejected as worse than one
+  deliberate version.
 - **Consume authenticated events without changing the record.** Fixes provenance, not
   representability — `rejected` stays impossible. Necessary, insufficient.
-- **Make Core the sole author and have Jarvis never produce a record.** Correct for the twelve
-  Core-owned states and wrong for the three that are genuinely Jarvis's, and unadoptable today
-  because Core emits none of these events yet.
+- **Add `communicationAuthorizationId` to the authorization contract.** Rejected: the accepted event's
+  envelope `eventId` already provides an addressable _and_ authenticated handle (§4).
+- **Make Core the sole author and have Jarvis never produce a record.** This is Model 1; correct for
+  Tier C and wrong for Tiers A and B, which are genuinely Jarvis's.
 - **Add an `opted-out` nineteenth state.** Explicitly forbidden: it forks the lifecycle and lets a
   consumer handle `rejected` while ignoring the one refusal that must never be ignored.
 
 ## Compliance
 
-Every finding was reproduced by parsing fixtures through the **built** schemas, not read from
-comments. The reproductions are pinned as characterization tests in
+Every finding was reproduced by parsing fixtures through the **built** schemas, not read from comments.
+The reproductions are pinned as characterization tests in
 `packages/contracts/src/tests/communication-state-evidence-characterization.test.ts`, which passes
 against the contracts exactly as they stand and asserts current behaviour — including the
-contradictions — so that a future one-sided "fix" fails loudly instead of silently.
+contradictions — so that a future one-sided "fix" fails loudly instead of silently. Those tests pin
+**current V1 behaviour only**; they encode no position on the open authorship model.
 
-**No production code changed. No contract changed. No Core access, no n8n, no provider, no message
-sent, no persistence, no migration. Production rollout OFF. Runtime activation unchanged.**
+**No production code changed. No contract changed. No registry changed. No Core access, no n8n, no
+provider, no message sent, no persistence, no migration. Production rollout OFF. Runtime activation
+unchanged.**

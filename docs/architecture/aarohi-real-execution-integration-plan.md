@@ -14,8 +14,9 @@
 commit `eefe32cc75d05b22bc112bf8c60093087b78758b`); it composes with nothing and activates nothing.
 **S2 is BLOCKED** — a readiness audit under
 [ADR-0134](../decisions/ADR-0134-qfj-p09-s2-communication-state-evidence-alignment.md) proved that
-`CommunicationStateRecordV1` cannot represent a lawful Core refusal or a pre-execution cancellation,
-and that four further states are producible with no evidence at all. Nothing else here is
+`CommunicationStateRecordV1` cannot represent a lawful Core refusal, a pre-execution cancellation or
+a pre-dispatch expiry, that six further states parse on insufficient or no evidence, and that only
+`draft` is buildable without a Core prerequisite. Nothing else here is
 implemented, adopted, connected or activated. Aarohi's runtime is **PLANNED / DISABLED** and
 production rollout is **OFF**. Every edge marked *proposed* or *blocked* below does not exist.
 
@@ -145,8 +146,11 @@ flowchart TD
     S11 -.owner decision, not a dependency.-> S12
 ```
 
-**S1 — `CommunicationRequestV1` producer (QFJ-P08). IMPLEMENTED ON A FEATURE BRANCH / PR under
-[ADR-0133](../decisions/ADR-0133-qfj-p08-powerless-communication-request-producer.md); NOT MERGED.**
+**S1 — `CommunicationRequestV1` producer (QFJ-P08). MERGED** under
+[ADR-0133](../decisions/ADR-0133-qfj-p08-powerless-communication-request-producer.md) (PR #174, merge
+commit `eefe32cc75d05b22bc112bf8c60093087b78758b`). **It constructs a request; it does not submit
+one** — the package is composed by nothing and no Core transport exists, so no communication has
+been requested of Core.
 `@qf-jarvis/communication-request-runtime` constructs a canonical `CommunicationRequestV1` from
 already-governed communication action context. It is
 **POWERLESS**: it establishes no consent, no contact eligibility and no authorization; it creates no
@@ -161,13 +165,19 @@ nothing to consume.
 
 **S2 — `CommunicationStateRecordV1` producer (QFJ-P09). BLOCKED by
 [ADR-0134](../decisions/ADR-0134-qfj-p09-s2-communication-state-evidence-alignment.md); NOT
-IMPLEMENTED.** The claim below that S2 has *"no Core dependency"* holds for only three of the
-eighteen states (`draft`, `authorization-requested`, `follow-up-requested`). `rejected` and
-`cancelled` are unrepresentable by any canonical artifact; `provider-accepted`, `completed`, `expired`
-and `human-handoff-required` are producible with insufficient or no evidence; and every Core-owned
-state needs an authenticated Core event that no adopted transport delivers. **S2 is therefore split —
-S2a (Jarvis coordination states) and S2b (a projection over authenticated Core events) — and S2b
-depends on S3.** The original text follows, retained for the record. Build the producer of
+IMPLEMENTED.** The claim below that S2 has *"no Core dependency"* holds for **one** of the eighteen
+states — `draft`. `rejected`, `cancelled` and `expired` (on the `scheduled` path) have no lawful
+representation; `authorization-requested`, `provider-accepted`, `follow-up-requested`,
+`human-handoff-required` and `completed` parse on insufficient or no evidence; and `authorized` and
+`scheduled` cite a human approval rather than Core's communication authorization. In particular,
+**constructing a `CommunicationRequestV1` is not submitting one to Core**, so
+`authorization-requested` needs the S4 transport; and `follow-up-requested` and
+`human-handoff-required` are reachable only from Core-recorded provider outcomes. **S2 is therefore
+split by fact ownership — S2a (Jarvis-local: `draft`), S2b (Jarvis coordination over trusted Core
+authority), S2c (thirteen Core-authoritative states projected from authenticated Core events) — and
+only S2a is free of a Core prerequisite.** Whether a new `qf.communication.state-recorded@3` is
+needed depends on an unresolved authorship-model decision. The original text follows, retained for
+the record. Build the producer of
 communication state records and validate every movement through the merged `communication-lifecycle-runtime`, which stays
 a validator and never becomes authoritative. **No Core dependency:** the early states are
 constructible from Jarvis-side evidence, and the later ones are structurally blocked by the existing
@@ -324,8 +334,8 @@ slices.**
 
 | PR | Owner | Purpose | Prerequisites | Code vs docs | Migration | External systems | Live send | Owner gate | Disable posture |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| **1** | **QFJ-P08** | **`CommunicationRequestV1` producer** — POWERLESS — **open as a PR (ADR-0133), not merged** | none | production code + tests | **proved: NONE required** | none | no | design review | not composed by any app |
-| **2** | QFJ-P09 | `CommunicationStateRecordV1` producer — **BLOCKED (ADR-0134); split into S2a/S2b, S2b depends on PR 4** | PR 1 | production code + tests | must be proved; none foreseen | none | no | design review | not composed by any app |
+| **1** | **QFJ-P08** | **`CommunicationRequestV1` producer** — POWERLESS — **MERGED (ADR-0133, PR #174)** | none | production code + tests | **proved: NONE required** | none | no | design review | not composed by any app |
+| **2** | QFJ-P09 | `CommunicationStateRecordV1` producer — **BLOCKED (ADR-0134); split into S2a/S2b/S2c; only S2a is Core-free** | PR 1 | production code + tests | must be proved; none foreseen | none | no | design review | not composed by any app |
 | **3** | QFJ-P10 | **Fresh read-only Core audit** at a current pinned commit | none | docs | none | read-only inspection | no | owner sign-off on findings | n/a |
 | **4** | QFJ-P10 | Core protocol **adoption** — identity, registration, payment, activation, reconciliation | PR 3 + Core-side work | contracts + docs | must be proved | **Core change required** | no | bilateral adoption | contracts unused until composed |
 | **5** | **QFJ-P08** | **Live Core transport for communication authorization** | PRs 1, 4 | production code | must be proved | Core | no | transport adoption | not composed |

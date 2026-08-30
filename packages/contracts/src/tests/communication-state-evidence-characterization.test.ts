@@ -24,6 +24,9 @@ import {
   communicationAuthorizationV1Schema,
   communicationResultV1Schema,
   communicationStateRecordV1Schema,
+  humanHandoffRecordV1Schema,
+  humanHandoffRequestV1Schema,
+  safeParseCanonicalEvent,
   STATES_JARVIS_MAY_NOT_ORIGINATE,
 } from '../index.js';
 
@@ -168,7 +171,7 @@ describe('ADR-0134 §3.1 — CommunicationResultV1 cannot report a pre-execution
   });
 });
 
-describe('ADR-0134 §3.3 — the record cannot cite four of the seven evidence artifacts', () => {
+describe('ADR-0134 §3.4 — the record cannot cite four of the seven evidence artifacts', () => {
   const cite = (key: string): boolean =>
     communicationStateRecordV1Schema.safeParse(
       stateRecord({ approvalDecisionId: DECISION, [key]: ID(9) }),
@@ -192,7 +195,10 @@ describe('ADR-0134 §3.3 — the record cannot cite four of the seven evidence a
     }
   });
 
-  it('CommunicationAuthorizationV1 has no identity field to be cited by (DEFECT)', () => {
+  it('CommunicationAuthorizationV1 has no identity field of its own', () => {
+    // An observation, NOT an argument for versioning the contract: ADR-0134 section 4 uses the
+    // accepted canonical event's envelope `eventId` as the addressable handle instead, because that
+    // handle also proves provenance where a payload id would prove only that somebody wrote a UUID.
     const parsed = communicationAuthorizationV1Schema.safeParse(
       rejectedAuthorization({ communicationAuthorizationId: ID(9) }),
     );
@@ -200,14 +206,14 @@ describe('ADR-0134 §3.3 — the record cannot cite four of the seven evidence a
   });
 });
 
-describe('ADR-0134 §3.5, §3.6 — the evidence table per state', () => {
+describe('ADR-0134 §3.5–§3.8 — the evidence table per state', () => {
   /** What the schema demands for each state, with every evidence id withheld. */
   function requirementsFor(state: string): readonly string[] {
     const parsed = communicationStateRecordV1Schema.safeParse(stateRecord({ state }));
     return parsed.success ? [] : parsed.error.issues.map((issue) => issue.path.join('.'));
   }
 
-  it('requires no evidence at all for seven states, four of which are NOT Jarvis facts (DEFECT)', () => {
+  it('requires no evidence at all for seven states, only ONE of which is legitimately unevidenced', () => {
     const unevidenced = COMMUNICATION_STATES.filter((s) => requirementsFor(s).length === 0);
     expect([...unevidenced].sort()).toEqual([
       'authorization-requested',
@@ -218,8 +224,11 @@ describe('ADR-0134 §3.5, §3.6 — the evidence table per state', () => {
       'follow-up-requested',
       'human-handoff-required',
     ]);
-    // `draft`, `authorization-requested` and `follow-up-requested` are legitimately Jarvis's own
-    // coordination facts. The other four are Core outcomes that anyone may currently mint.
+    // Only `draft` is a Jarvis-local fact with no precondition (ADR-0134 section 3, Tier A). The
+    // other six each depend on something outside Jarvis that the record cannot express:
+    // `authorization-requested` on a real SUBMISSION to Core (constructing a request is not
+    // submitting one); `follow-up-requested` and `human-handoff-required` on a trusted prior
+    // provider outcome; and `cancelled`, `completed` and `expired` on a Core recording.
   });
 
   it('lets provider-accepted rest on an execution INTENT, not a recorded result (DEFECT)', () => {
@@ -233,7 +242,10 @@ describe('ADR-0134 §3.5, §3.6 — the evidence table per state', () => {
     ).toBe(true);
   });
 
-  it('cites an APPROVAL decision for authorized, not a communication authorization (DEFECT)', () => {
+  it('cites an APPROVAL decision for authorized and scheduled, not a communication authorization (DEFECT)', () => {
+    // Both collapse the two gates communication-model.md keeps separate. `scheduled` is additionally
+    // mixed provenance: the model calls scheduling a Jarvis responsibility, but only over an already
+    // AUTHORIZED communication -- so the trusted precondition is Core's and the act is Jarvis's.
     expect(requirementsFor('authorized')).toEqual(['approvalDecisionId']);
     expect(requirementsFor('scheduled')).toEqual(['approvalDecisionId']);
   });
@@ -250,7 +262,7 @@ describe('ADR-0134 §3.5, §3.6 — the evidence table per state', () => {
   });
 });
 
-describe('ADR-0134 §4 — STATES_JARVIS_MAY_NOT_ORIGINATE is inert and under-inclusive', () => {
+describe('ADR-0134 §5 — STATES_JARVIS_MAY_NOT_ORIGINATE is inert and under-inclusive', () => {
   it('names only three of the states Jarvis must not originate', () => {
     expect([...STATES_JARVIS_MAY_NOT_ORIGINATE].sort()).toEqual([
       'authorized',
@@ -284,7 +296,7 @@ describe('ADR-0134 §4 — STATES_JARVIS_MAY_NOT_ORIGINATE is inert and under-in
   });
 });
 
-describe('ADR-0134 §3.8 — two published refusal vocabularies for the same refusals', () => {
+describe('ADR-0134 §3.9 — two published refusal vocabularies for the same refusals', () => {
   it('spells quiet hours and unverified identity differently in each list (DEFECT)', () => {
     const stateSide: readonly string[] = Object.values(COMMUNICATION_REJECTION_REASONS);
     const authorizationSide: readonly string[] = COMMUNICATION_REFUSAL_REASONS;
@@ -312,7 +324,7 @@ describe('ADR-0134 §3.8 — two published refusal vocabularies for the same ref
   });
 });
 
-describe('ADR-0134 §6 — the issuer literal is a constraint, not provenance', () => {
+describe('ADR-0134 §6.1 — the issuer literal is a constraint, not provenance', () => {
   it('a hand-constructed object carrying the Core literal parses exactly as well as a real one', () => {
     // No signature, no ingestion, no storage — just a string somebody typed. This is why S2 may not
     // treat a bare contract artifact as a Core fact.
@@ -320,5 +332,123 @@ describe('ADR-0134 §6 — the issuer literal is a constraint, not provenance', 
       rejectedAuthorization({ reasonCode: 'anything-at-all' }),
     );
     expect(fabricated.success).toBe(true);
+  });
+});
+
+describe('ADR-0134 §3.2 — the pre-execution gap also reaches expired', () => {
+  it('cannot report a scheduled communication that expired before dispatch', () => {
+    // `scheduled -> expired` is a lawful edge. Nothing was dispatched, so no execution result can
+    // exist — yet CommunicationResultV1 demands one even when an intent id is supplied. This is why
+    // ADR-0134 §7 leaves the artifact for `expired` UNRESOLVED rather than requiring an intent.
+    const parsed = communicationResultV1Schema.safeParse({
+      communicationResultId: ID(7),
+      contractVersion: 1,
+      communicationId: COMMUNICATION,
+      executionIntentId: INTENT,
+      issuer: 'quickfurno-core',
+      lifecycleState: 'expired',
+      outcome: 'failed',
+      recordedAt: '2026-08-30T10:00:01Z',
+      reasonCode: 'intent-expired',
+      correlationId: CORRELATION,
+      failure: {
+        failureCode: 'intent-expired',
+        failureCategory: 'policy',
+        retryClassification: 'not-retryable',
+      },
+    });
+    expect(parsed.success).toBe(false);
+    const missing = parsed.success ? [] : parsed.error.issues.map((issue) => issue.path.join('.'));
+    expect(missing).toContain('executionResultId');
+  });
+});
+
+describe('ADR-0134 §4.5 — the two human-handoff artifacts have different producers', () => {
+  const request = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
+    contractVersion: 1,
+    communicationId: COMMUNICATION,
+    producingSystem: 'qf-jarvis',
+    requestingAgent: 'jarvis',
+    requestingAgentVersion: 'jarvis.v1',
+    requestedAt: '2026-08-30T10:00:00Z',
+    reasonCode: 'needs-a-human',
+    priority: 'high',
+    summary: 'A person must take this conversation over.',
+    correlationId: CORRELATION,
+    ...over,
+  });
+
+  const record = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
+    contractVersion: 1,
+    communicationId: COMMUNICATION,
+    issuer: 'quickfurno-core',
+    handledBy: {
+      actorType: 'human',
+      actor: { entityType: 'operator', entityId: 'human.operator.1' },
+    },
+    recordedAt: '2026-08-30T10:05:00Z',
+    outcome: 'accepted',
+    reasonCode: 'human-took-over',
+    correlationId: CORRELATION,
+    ...over,
+  });
+
+  it('HumanHandoffRequestV1 is qf-jarvis-produced, and refuses Core as its producer', () => {
+    // "Jarvis asks for a human. It does not appoint one." So `human-handoff-required` is the
+    // REQUEST side — a Jarvis escalation — not the completed Core handoff.
+    expect(humanHandoffRequestV1Schema.safeParse(request()).success).toBe(true);
+    expect(
+      humanHandoffRequestV1Schema.safeParse(request({ producingSystem: 'quickfurno-core' }))
+        .success,
+    ).toBe(false);
+  });
+
+  it('HumanHandoffRecordV1 is Core-issued, and refuses Jarvis as its issuer', () => {
+    expect(humanHandoffRecordV1Schema.safeParse(record()).success).toBe(true);
+    expect(humanHandoffRecordV1Schema.safeParse(record({ issuer: 'qf-jarvis' })).success).toBe(
+      false,
+    );
+  });
+
+  it('neither artifact carries an id the state record could cite (DEFECT)', () => {
+    expect(
+      humanHandoffRequestV1Schema.safeParse(request({ handoffRequestId: ID(9) })).success,
+    ).toBe(false);
+    expect(humanHandoffRecordV1Schema.safeParse(record({ handoffRecordId: ID(9) })).success).toBe(
+      false,
+    );
+  });
+});
+
+describe('ADR-0134 §6.3 — the canonical envelope already supplies an identity', () => {
+  function envelope(eventType: string, payload: unknown): Record<string, unknown> {
+    return {
+      eventId: ID(8),
+      eventType,
+      eventVersion: 2,
+      occurredAt: '2026-08-30T10:00:00Z',
+      emittedAt: '2026-08-30T10:00:00Z',
+      source: 'quickfurno-core',
+      subject: { entityType: 'vendor', entityId: 'vendor.42' },
+      correlationId: CORRELATION,
+      payload,
+    };
+  }
+
+  it('an authorization-recorded event carries an envelope eventId, independent of its payload', () => {
+    // This is the addressable handle ADR-0134 §4 uses instead of adding a
+    // `communicationAuthorizationId` to the payload — and unlike a payload id, an ACCEPTED event's
+    // id also proves provenance.
+    const event = envelope('qf.communication.authorization-recorded', {
+      authorization: rejectedAuthorization(),
+    });
+    const parsed = safeParseCanonicalEvent(event);
+    expect(parsed.success).toBe(true);
+    expect(event['eventId']).toBe(ID(8));
+  });
+
+  it('the payload itself has no identity, so the envelope is the only handle', () => {
+    const authorization = rejectedAuthorization();
+    expect(authorization['communicationAuthorizationId']).toBeUndefined();
   });
 });
