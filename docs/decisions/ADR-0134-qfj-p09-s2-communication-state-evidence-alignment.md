@@ -1,6 +1,6 @@
 # ADR-0134 — QFJ-P09 S2 communication-state evidence alignment prerequisite
 
-**Status:** Proposed (readiness audit; implemented on a feature branch / PR, **not merged**)
+**Status:** Accepted. **MERGED** as PR #175, merge commit `c6b21dcf921e350f33477d3b18fd4413b8a8aa00`. Its findings are locked input to [ADR-0135](./ADR-0135-qfj-p09-s2-local-communication-state-projection-architecture.md), which resolves the authorship model this ADR left open.
 **Date:** 2026-08-30
 **Phase ownership:** **QFJ-P09** (execution gateway and communication lifecycle). A bounded
 prerequisite to **slice S2** of

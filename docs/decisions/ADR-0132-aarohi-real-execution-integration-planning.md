@@ -209,8 +209,16 @@ as authority for it.
 > parse on insufficient or no evidence; and two cite a human approval rather than Core's
 > communication authorization. **S2 is split by fact ownership into S2a (Jarvis-local), S2b (Jarvis
 > coordination over trusted Core authority) and S2c (Core-authoritative states projected from
-> authenticated Core events); only S2a is free of a Core prerequisite.** Nothing else in this ADR
-> changes, and no activation posture changes.
+> authenticated Core events); only S2a is free of a Core prerequisite.**
+>
+> **Authorship decision (2026-08-30).**
+> [ADR-0135](./ADR-0135-qfj-p09-s2-local-communication-state-projection-architecture.md)
+> adopts **Model 2**: Jarvis derives a LOCAL communication-state projection from the
+> authenticated primitive Core events that already exist, and authors only its own
+> coordination facts. **No `qf.communication.state-recorded@3` is required.** The next
+> execution step is **S3 — a fresh read-only Core audit** at a current pinned commit, because
+> `cancelled` and `expired` evidence remain unresolved. Nothing else in this ADR changes, and
+> no activation posture changes.
 
 **What this buys.** A dependency-ordered sequence in which each step is small, reviewable and
 fail-closed, with the Core-dependent steps clearly separated from the ones implementable entirely
