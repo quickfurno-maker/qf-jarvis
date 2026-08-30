@@ -200,6 +200,17 @@ as authority for it.
 
 ## Consequences
 
+> **Status correction (2026-08-30).** **S1 is MERGED** under
+> [ADR-0133](./ADR-0133-qfj-p08-powerless-communication-request-producer.md) (PR #174). **S2 is
+> BLOCKED** under
+> [ADR-0134](./ADR-0134-qfj-p09-s2-communication-state-evidence-alignment.md): this ADR's statement
+> that S2 has _"no Core dependency"_ was proved to hold for only three of the eighteen lifecycle
+> states. `rejected` and `cancelled` are unrepresentable by any canonical artifact, four further
+> states are producible with insufficient or no evidence, and every Core-owned state needs an
+> authenticated Core event. **S2 is split into S2a (Jarvis coordination states) and S2b (a
+> projection over authenticated Core events), and S2b depends on S3.** Nothing else in this ADR
+> changes, and no activation posture changes.
+
 **What this buys.** A dependency-ordered sequence in which each step is small, reviewable and
 fail-closed, with the Core-dependent steps clearly separated from the ones implementable entirely
 inside qf-jarvis — so work can start immediately on the latter without waiting on Core.

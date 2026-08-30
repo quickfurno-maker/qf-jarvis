@@ -9,11 +9,15 @@
 [agent-constitution.md](../governance/agent-constitution.md) and
 [authority-routing-data-access-matrix.md](../governance/authority-routing-data-access-matrix.md).
 
-**This is a plan.** Its first slice, **S1**, is now implemented on a feature branch / PR under
-[ADR-0133](../decisions/ADR-0133-qfj-p08-powerless-communication-request-producer.md) and is **not
-merged**; nothing else here is implemented, adopted, connected or activated. Aarohi's runtime is
-**PLANNED / DISABLED** and production rollout is **OFF**. Every edge marked *proposed* or *blocked*
-below does not exist, and S1 composes with nothing.
+**This is a plan.** Its first slice, **S1**, is **MERGED** under
+[ADR-0133](../decisions/ADR-0133-qfj-p08-powerless-communication-request-producer.md) (PR #174, merge
+commit `eefe32cc75d05b22bc112bf8c60093087b78758b`); it composes with nothing and activates nothing.
+**S2 is BLOCKED** — a readiness audit under
+[ADR-0134](../decisions/ADR-0134-qfj-p09-s2-communication-state-evidence-alignment.md) proved that
+`CommunicationStateRecordV1` cannot represent a lawful Core refusal or a pre-execution cancellation,
+and that four further states are producible with no evidence at all. Nothing else here is
+implemented, adopted, connected or activated. Aarohi's runtime is **PLANNED / DISABLED** and
+production rollout is **OFF**. Every edge marked *proposed* or *blocked* below does not exist.
 
 ---
 
@@ -42,8 +46,7 @@ new phase is created. The execution chain has accumulated validators without a p
 **QFJ-P08 remains INCOMPLETE**, with three items outstanding verbatim:
 
 1. the **live Core transport** for communication authorization;
-2. a **producer** for `CommunicationRequestV1` — **now implemented on a feature branch / PR
-   (ADR-0133), not merged, and composed by nothing**;
+2. a **producer** for `CommunicationRequestV1` — **MERGED (ADR-0133, PR #174), composed by nothing**;
 3. the operator surface's HTTP, UI and authentication provider.
 
 **QFJ-P09 remains INCOMPLETE**, confirmed against the import graph:
@@ -156,8 +159,16 @@ stays with Core and the QF Communications Runtime. **No Core dependency:** produ
 asking, and the merged `communication-authorization-runtime` already consumes one and currently has
 nothing to consume.
 
-**S2 — `CommunicationStateRecordV1` producer (QFJ-P09).** Build the producer of communication state
-records and validate every movement through the merged `communication-lifecycle-runtime`, which stays
+**S2 — `CommunicationStateRecordV1` producer (QFJ-P09). BLOCKED by
+[ADR-0134](../decisions/ADR-0134-qfj-p09-s2-communication-state-evidence-alignment.md); NOT
+IMPLEMENTED.** The claim below that S2 has *"no Core dependency"* holds for only three of the
+eighteen states (`draft`, `authorization-requested`, `follow-up-requested`). `rejected` and
+`cancelled` are unrepresentable by any canonical artifact; `provider-accepted`, `completed`, `expired`
+and `human-handoff-required` are producible with insufficient or no evidence; and every Core-owned
+state needs an authenticated Core event that no adopted transport delivers. **S2 is therefore split —
+S2a (Jarvis coordination states) and S2b (a projection over authenticated Core events) — and S2b
+depends on S3.** The original text follows, retained for the record. Build the producer of
+communication state records and validate every movement through the merged `communication-lifecycle-runtime`, which stays
 a validator and never becomes authoritative. **No Core dependency:** the early states are
 constructible from Jarvis-side evidence, and the later ones are structurally blocked by the existing
 schema, which requires Core-issued `approvalDecisionId`, `executionIntentId` and `executionResultId`.
@@ -314,7 +325,7 @@ slices.**
 | PR | Owner | Purpose | Prerequisites | Code vs docs | Migration | External systems | Live send | Owner gate | Disable posture |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | **1** | **QFJ-P08** | **`CommunicationRequestV1` producer** — POWERLESS — **open as a PR (ADR-0133), not merged** | none | production code + tests | **proved: NONE required** | none | no | design review | not composed by any app |
-| **2** | QFJ-P09 | `CommunicationStateRecordV1` producer | PR 1 | production code + tests | must be proved; none foreseen | none | no | design review | not composed by any app |
+| **2** | QFJ-P09 | `CommunicationStateRecordV1` producer — **BLOCKED (ADR-0134); split into S2a/S2b, S2b depends on PR 4** | PR 1 | production code + tests | must be proved; none foreseen | none | no | design review | not composed by any app |
 | **3** | QFJ-P10 | **Fresh read-only Core audit** at a current pinned commit | none | docs | none | read-only inspection | no | owner sign-off on findings | n/a |
 | **4** | QFJ-P10 | Core protocol **adoption** — identity, registration, payment, activation, reconciliation | PR 3 + Core-side work | contracts + docs | must be proved | **Core change required** | no | bilateral adoption | contracts unused until composed |
 | **5** | **QFJ-P08** | **Live Core transport for communication authorization** | PRs 1, 4 | production code | must be proved | Core | no | transport adoption | not composed |
