@@ -18,9 +18,11 @@ commit `eefe32cc75d05b22bc112bf8c60093087b78758b`); it composes with nothing and
 a pre-dispatch expiry, that six further states parse on insufficient or no evidence, and that only
 `draft` is buildable without a Core prerequisite. The authorship question that audit left open is
 now decided: [ADR-0135](../decisions/ADR-0135-qfj-p09-s2-local-communication-state-projection-architecture.md)
-adopts **Model 2** — a LOCAL Jarvis projection over authenticated primitive Core events, needing
-**no new Core state event** — and makes **S3, the fresh read-only Core audit, the next execution
-step**. That decision is **on a feature branch / PR, not merged**. Nothing else here is
+adopts **Model 2** — a LOCAL Jarvis projection over authenticated, **adopted** primitive Core
+events, needing **no new Core state event**, though it may still require targeted Core primitive
+adoption for facts S3 finds absent. Trusting that projection additionally requires **write-path
+hardening (`D2a`)**, because a narrow reader is a data-access boundary and cannot authenticate an
+event's origin. It makes **S3, the fresh read-only Core audit, the next execution step**. That decision is **on a feature branch / PR, not merged**. Nothing else here is
 implemented, adopted, connected or activated. Aarohi's runtime is **PLANNED / DISABLED** and
 production rollout is **OFF**. Every edge marked *proposed* or *blocked* below does not exist.
 

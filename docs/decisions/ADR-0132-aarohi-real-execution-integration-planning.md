@@ -213,11 +213,13 @@ as authority for it.
 >
 > **Authorship decision (2026-08-30).**
 > [ADR-0135](./ADR-0135-qfj-p09-s2-local-communication-state-projection-architecture.md)
-> adopts **Model 2**: Jarvis derives a LOCAL communication-state projection from the
-> authenticated primitive Core events that already exist, and authors only its own
-> coordination facts. **No `qf.communication.state-recorded@3` is required.** The next
-> execution step is **S3 — a fresh read-only Core audit** at a current pinned commit, because
-> `cancelled` and `expired` evidence remain unresolved. Nothing else in this ADR changes, and
+> adopts **Model 2**: Jarvis derives a LOCAL communication-state projection from authenticated,
+> **adopted** primitive Core events, and authors only its own coordination facts. **No
+> `qf.communication.state-recorded@3` is required**, though targeted Core primitive adoption may
+> still be needed for facts S3 finds absent, and trusting the projection additionally requires
+> write-path hardening (`D2a`). The next execution step is **S3 — a fresh read-only Core audit**
+> at a current pinned commit, because `cancelled`, `expired` and `execution-submitted` evidence
+> remain unresolved. Nothing else in this ADR changes, and
 > no activation posture changes.
 
 **What this buys.** A dependency-ordered sequence in which each step is small, reviewable and
