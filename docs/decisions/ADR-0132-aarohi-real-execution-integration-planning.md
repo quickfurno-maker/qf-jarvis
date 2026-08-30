@@ -1,10 +1,11 @@
 # ADR-0132 — Aarohi real execution integration: planning and sequencing
 
 **Status:** Accepted (planning only)
-**Date:** 2026-08-29
-**Phase ownership:** **QFJ-P09** (execution gateway and communication lifecycle), **QFJ-P10** (Core
-integration and reconciliation) and **QFJ-P12** (Aarohi/QVGE composition). **No new phase is
-created. There is no QFJ-P13 and no AVG-13.**
+**Date:** 2026-08-28
+**Phase ownership:** **QFJ-P08** (consent, approval and human control), **QFJ-P09** (execution
+gateway and communication lifecycle), **QFJ-P10** (Core integration and reconciliation) and
+**QFJ-P12** (Aarohi/QVGE composition). **No new phase is created. There is no QFJ-P13 and no
+AVG-13.**
 **Baseline:** `fbdaf00ccd98cf9b31d7dd1e177cf0ffbc4edd77` (merge of PR #172 / Aarohi offline
 certification)
 **Supersedes:** nothing. **Superseded by:** nothing.
@@ -14,6 +15,7 @@ Read with [ADR-0001](./ADR-0001-source-of-truth-boundary.md),
 [ADR-0005](./ADR-0005-human-and-policy-approval.md),
 [ADR-0006](./ADR-0006-agent-responsibility-boundaries.md),
 [ADR-0008](./ADR-0008-controlled-communication-capability.md),
+[ADR-0080](./ADR-0080-qfj-p08-approval-runtime-foundation.md),
 [ADR-0082](./ADR-0082-qfj-p08-core-approval-submission-and-authenticated-operator-boundary.md),
 [ADR-0083](./ADR-0083-qfj-p08-communication-authorization-correlation-runtime.md),
 [ADR-0084](./ADR-0084-qfj-p09-01-execution-intent-correlation-runtime.md),
@@ -56,13 +58,28 @@ Five execution and approval foundations are merged and none of them is composed 
 | `@qf-jarvis/communication-lifecycle-runtime`     | ADR-0110      | **no importer at all**                 |
 | `@qf-jarvis/aarohi-agent`                        | ADR-0085…0131 | **no importer at all**, by assertion   |
 
-The roadmap's own list of what remains absent after P09.05 is confirmed by the import graph:
+The roadmap lists outstanding work under **two** phases, and both lists matter here.
+
+**QFJ-P08 remains INCOMPLETE**, with three items outstanding verbatim: the live Core transport for
+communication authorization, **a producer for `CommunicationRequestV1`**, and the operator surface's
+HTTP, UI and authentication provider.
+
+**QFJ-P09 remains INCOMPLETE**, with these outstanding, confirmed against the import graph:
 
 1. an **adopted** Core → n8n transport and its composition (the B4 wire protocol is **PROPOSED**);
 2. execution-time communications **eligibility** integration;
 3. a **producer** of `CommunicationStateRecordV1`;
 4. provider dispatch, provider results and **reconciliation**;
 5. production rollout.
+
+**The two producers are different concerns and this ADR keeps them apart.** An earlier revision of
+this planning package named only the P09 state-record producer and left the P08 request producer
+unowned — an owner review caught it. They are not interchangeable: `CommunicationRequestV1` is what
+Jarvis ASKS Core for, and `CommunicationStateRecordV1` is what records where a communication got to.
+The dependency runs one way and is visible in the contracts — the request carries `communicationId`,
+`recipient` and `purposeCode`, three of the five identity fields the state record requires for
+continuity, and `channel` is settled only by Core's authorization, which may name a channel Jarvis
+did not propose (ADR-0083).
 
 The gap is therefore not "Aarohi needs more domain work". Aarohi is done. The gap is that the
 execution chain has every validator and no adopted protocol, no producer and no composition.
@@ -72,12 +89,18 @@ execution chain has every validator and no adopted protocol, no producer and no 
 **No QuickFurno Core checkout exists in this environment.** A new read-only audit was therefore not
 possible, and no Core fact has been invented to fill the space.
 
-The governed Core-fact source used by this ADR is the read-only audit already recorded inside this
+The governed Core-fact source used by this ADR is the read-only audit already recorded in this
 repository by ADR-0125, ADR-0126 and ADR-0127, taken at
 `quickfurno-maker/quickfurno-marketplace` commit `06b1e22cfa866cd3840c7ecb065b9d0c4acb8bca`. Every
-Core fact below is quoted from that recorded audit and is marked as requiring **re-verification at a
-current commit before any implementation slice that depends on it**. That re-verification is itself
-a prerequisite task in the plan, not an assumption.
+Core fact below is quoted from that recorded audit and is **historical evidence**, not a current
+certification.
+
+**Core has moved since.** Owner review observed current marketplace `main` at
+`c70ae7da8f59f03cbb099ae390e9aec98d2c3b06`, and **none of the historical findings has been
+re-certified against it here.** A fresh read-only audit at a current pinned commit is therefore a
+hard prerequisite of Core protocol adoption and of every slice downstream of it. Nothing in this ADR
+may proceed on the historical audit alone, and no fact has been carried forward as though it had
+been re-proved.
 
 ## Decision
 
@@ -91,7 +114,9 @@ n8n call, no Core read or write, no live send, and no change to production rollo
 
 | Capability                                                                           | Canonical owner                           |
 | ------------------------------------------------------------------------------------ | ----------------------------------------- |
-| Communication state record producer                                                  | **QFJ-P09**                               |
+| `CommunicationRequestV1` producer                                                    | **QFJ-P08**                               |
+| Live Core transport for communication authorization                                  | **QFJ-P08**, blocked on Core adoption     |
+| `CommunicationStateRecordV1` producer                                                | **QFJ-P09**                               |
 | Adopted Core → n8n transport and composition                                         | **QFJ-P09**, blocked on Core/n8n adoption |
 | Execution-time eligibility integration                                               | **QFJ-P09**, authority is Core's          |
 | Core protocol adoption (identity, registration, payment, activation, reconciliation) | **QFJ-P10**                               |
@@ -101,6 +126,29 @@ n8n call, no Core read or write, no live send, and no change to production rollo
 | Aarohi runtime composition                                                           | **QFJ-P12**, default OFF                  |
 | Real-integration certification                                                       | **QFJ-P12**                               |
 | Staged activation                                                                    | **out of scope**, separately governed     |
+
+### 2a. The QFJ-P08 `CommunicationRequestV1` producer slice
+
+A bounded future **QFJ-P08 communication-request-producer slice**. No subphase id is invented: P08's
+merged slices are named (`P08-A`, `P08-B`, and the ADR-named approval and authorization runtimes),
+and no numeric id is canonically allocated for this one.
+
+It **builds a canonical `CommunicationRequestV1` from already-governed communication action
+context**, and it is POWERLESS. It:
+
+- does **not** establish consent;
+- does **not** establish contact eligibility;
+- does **not** establish authorization;
+- does **not** create an `ExecutionIntentV1`;
+- does **not** send and does **not** execute;
+- does **not** persist a consent, STOP, opt-out, DNC, suppression or eligibility cache;
+- does **not** let founder or human approval override Core communication authority;
+- **feeds** the later Core communication-authorization interaction rather than replacing it;
+- preserves that **an approval is not permission to contact anyone**;
+- preserves that **a prior communication authorization is not a reusable future permission slip**;
+- leaves execution-time eligibility revalidation to Core and the QF Communications Runtime.
+
+Producing a request is asking. It is the first half of a question whose answer is Core's.
 
 ### 3. The permanent flow is unchanged
 
@@ -160,11 +208,23 @@ inside qf-jarvis — so work can start immediately on the latter without waiting
 to the activation boundary — are formally blocked on Core protocol adoption. That is the honest
 state, and recording it as a blocker is more useful than a design that assumes a fact.
 
-**The first implementation PR is `QFJ-P09.06` — the communication state record producer.** It is the
-only canonical absent capability with no Core dependency: it composes two already-merged packages,
-creates no transport and no authority, and its later lifecycle states are structurally blocked on
-Core-issued artifact ids by the existing schema — which makes the Core dependency visible in code
-rather than assumed in prose.
+**Migration governance.** **This ADR allocates no migration and justifies none.** It does not and
+may not pre-decide the persistence needs of slices that have not been designed: an adopted Core
+protocol, a reconciliation path or a runtime composition may each reveal one. **Every implementation
+slice must independently prove whether schema work is required**, and a migration may be allocated
+only under the canonical migration-ledger policy. No number is pre-reserved here. A prerequisite for
+any future allocation: the ledger's prose is stale — migrations `0010`, `0011` and `0012` exist on
+disk with no ledger rows — and that drift must be reconciled first. **Reconciling it is outside this
+planning ADR's scope**, and is recorded as governance debt rather than as permission to allocate.
+
+**The first implementation PR is the QFJ-P08 `CommunicationRequestV1` producer.** This corrects an
+earlier revision of this ADR, which recommended the P09 state-record producer first. Both are
+implementable entirely inside qf-jarvis, so the tie is broken by dependency direction: the state
+record's identity fields originate in the request, and the merged
+`communication-authorization-runtime` already consumes a `CommunicationRequestV1` and has nothing to
+consume. The state-record producer follows immediately, and its later lifecycle states remain
+structurally blocked on Core-issued artifact ids by the existing schema — which makes the Core
+dependency visible in code rather than assumed in prose.
 
 ## Alternatives considered
 
