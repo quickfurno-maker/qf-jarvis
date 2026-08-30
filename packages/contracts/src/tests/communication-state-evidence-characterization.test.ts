@@ -196,9 +196,10 @@ describe('ADR-0134 §3.4 — the record cannot cite four of the seven evidence a
   });
 
   it('CommunicationAuthorizationV1 has no identity field of its own', () => {
-    // An observation, NOT an argument for versioning the contract: ADR-0134 section 4 uses the
-    // accepted canonical event's envelope `eventId` as the addressable handle instead, because that
-    // handle also proves provenance where a payload id would prove only that somebody wrote a UUID.
+    // An observation, NOT an argument for versioning the contract: an ACCEPTED canonical event
+    // already gives the authorization a citable name through its envelope `eventId`, so a payload id
+    // would add a second name and no new guarantee (ADR-0134 section 4). That is an argument against
+    // a redundant identifier -- NOT a claim that any id authenticates anything.
     const parsed = communicationAuthorizationV1Schema.safeParse(
       rejectedAuthorization({ communicationAuthorizationId: ID(9) }),
     );
@@ -420,7 +421,7 @@ describe('ADR-0134 §4.5 — the two human-handoff artifacts have different prod
   });
 });
 
-describe('ADR-0134 §6.3 — the canonical envelope already supplies an identity', () => {
+describe('ADR-0134 §6.3 — envelope IDENTITY, which is not provenance', () => {
   function envelope(eventType: string, payload: unknown): Record<string, unknown> {
     return {
       eventId: ID(8),
@@ -436,9 +437,14 @@ describe('ADR-0134 §6.3 — the canonical envelope already supplies an identity
   }
 
   it('an authorization-recorded event carries an envelope eventId, independent of its payload', () => {
-    // This is the addressable handle ADR-0134 §4 uses instead of adding a
-    // `communicationAuthorizationId` to the payload — and unlike a payload id, an ACCEPTED event's
-    // id also proves provenance.
+    // Why this matters: the authorization is citable by the event that carried it, so no
+    // `communicationAuthorizationId` needs adding to the payload (ADR-0134 section 4).
+    //
+    // What this does NOT prove, and must never be read as proving: that the event was signed,
+    // accepted or stored. `safeParseCanonicalEvent` is SHAPE VALIDATION ONLY -- the object below was
+    // hand-built in this file. Provenance comes from the verify -> prepare -> persist path in
+    // `createEventIngestor`, never from an identifier. A source-event id is a REFERENCE to
+    // provenance, not provenance itself.
     const event = envelope('qf.communication.authorization-recorded', {
       authorization: rejectedAuthorization(),
     });
@@ -447,7 +453,17 @@ describe('ADR-0134 §6.3 — the canonical envelope already supplies an identity
     expect(event['eventId']).toBe(ID(8));
   });
 
-  it('the payload itself has no identity, so the envelope is the only handle', () => {
+  it('shape validation says nothing about origin: a hand-built envelope parses identically', () => {
+    // The same fabrication argument as section 6.1, one level up. Nothing here is signed, ingested or
+    // stored, and the schema cannot tell the difference -- which is exactly why S2 must not accept a
+    // caller-supplied `sourceEventId` as authority merely because the UUID names a Core event.
+    const fabricated = envelope('qf.communication.authorization-recorded', {
+      authorization: rejectedAuthorization({ reasonCode: 'anything-at-all' }),
+    });
+    expect(safeParseCanonicalEvent(fabricated).success).toBe(true);
+  });
+
+  it('the payload itself has no identity, so the envelope carries the only name', () => {
     const authorization = rejectedAuthorization();
     expect(authorization['communicationAuthorizationId']).toBeUndefined();
   });

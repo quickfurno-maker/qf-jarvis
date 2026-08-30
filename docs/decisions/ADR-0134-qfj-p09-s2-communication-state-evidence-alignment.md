@@ -127,23 +127,47 @@ authoritative model supports three tiers, distinguished by _what must already be
 **A = 1, B = 4, C = 13.** Jarvis owns the _act_ in Tier B; it never owns the _precondition_, and a
 lifecycle-consistent shape is not evidence that the precondition holds.
 
-### 4. The trust boundary, and the identity that already exists
+### 4. Identity, provenance, and the reference between them
 
-**A literal is not provenance.** S2 may treat as an authenticated Core fact **only** an event that
-passed `verifySignature` → `prepareValidatedEvent` → `storeValidatedEvent`. Everything else —
-including a bare `CommunicationAuthorizationV1` or `CommunicationResultV1` carrying
-`issuer: 'quickfurno-core'` — is **untrusted structural input**, valid in shape and unproven in origin.
+Three concepts, deliberately separated. The previous revision of this ADR collapsed the first two,
+and that collapse is unsafe.
 
-**Use the identity that already exists.** Every canonical event carries `eventId` in its **envelope**,
-independent of its payload; verified for the authorization, result, handoff, intent and execution-result
-events. So the addressable handle for "the authorization that refused this" is the `eventId` of the
-accepted event that carried it — a handle that also _proves_ provenance, whereas a payload id would
-prove only that somebody wrote a UUID.
+**4.1 Canonical event identity.** Every canonical event carries `eventId` in its **envelope**,
+independent of its payload; confirmed for the authorization, result, handoff, intent and
+execution-result events. `eventId` is the event's stable canonical identity and idempotency key.
+**It is a name, not a credential.** Any caller can hand-construct the same string, exactly as any
+caller can hand-construct `issuer: 'quickfurno-core'`.
 
-**Therefore `CommunicationAuthorizationV2` is NOT required and is NOT proposed.** The absence of a
-`communicationAuthorizationId` is a real observation, not a reason to version a published contract.
-**Prefer existing authenticated event identity over adding ids to payloads.** A payload id may be
-proposed later only if a _separate semantic_ need is proved; none is proved here.
+**4.2 Accepted-event provenance.** Provenance is established by the **trusted path**, never by an
+identifier:
+
+> An event accepted through `createEventIngestor`'s **verify → prepare → persist** composition is
+> trusted Core evidence. A bare contract artifact, a bare event envelope, a bare `eventId`, or a
+> direct `@qf-jarvis/event-backbone` persistence record is **not sufficient by itself**.
+
+That last exclusion is deliberate and load-bearing. `event-store.ts` states plainly that
+`storeValidatedEvent` is a **trusted low-level primitive that verifies nothing** — no signature
+verification, no contract parsing — and that _"that trust is a caller obligation, not a structural
+guarantee this package can enforce"_. A row in the event table is therefore evidence of the caller's
+discipline, not of Core's authorship; the guarantee lives in the ingestor composition above it.
+
+**4.3 A source-event reference is a pointer to provenance, not provenance itself.** A future state
+projection may retain a source event's `eventId` as an **audit and correlation pointer** — but only
+where that reference arrived from a trusted accepted-event or trusted-projection input, or can be
+resolved and verified against the accepted-event store.
+
+> **A source-event id is a reference to provenance, not provenance itself.**
+
+**S2 must therefore never accept a caller-supplied `sourceEventId` and treat it as authority merely
+because the UUID claims to name a Core event.** Doing so would replace the signature check with a
+naming convention.
+
+**Consequences for the record repair.** `CommunicationAuthorizationV2` is **NOT required and is NOT
+proposed**: the absence of a `communicationAuthorizationId` is a real observation, not a reason to
+version a published contract, because an accepted event already gives the authorization a citable
+name. That is a reason **not to add a payload id**; it is **not** a claim that the name authenticates
+anything. A payload id may be proposed later only if a _separate semantic_ need is proved; none is
+proved here.
 
 ### 5. The record repair, designed but not authorized
 
@@ -152,10 +176,11 @@ The likely destination for the record is a versioned repair carrying explicit pr
 - **Two distinct notions, which the first revision conflated under one `evidenceEventId`:**
   - **envelope provenance** — the identity of the event transporting _this record_. Already supplied
     by the canonical envelope; **not a payload field**, and self-referential if written as one.
-  - **source evidence** — the identity of the _prior_ accepted Core event (authorization, result,
+  - **source evidence** — a **reference to** the _prior_ accepted Core event (authorization, result,
     intent, handoff) that **justifies** this state. `sourceEventId`, or a discriminated reference
-    naming both artifact kind and event id, is more accurate. **The name and shape are deliberately
-    not fixed here.**
+    naming both artifact kind and event id, is more accurate. Per §4.3 such a reference is a pointer
+    that must be **obtained from, or resolved against, a trusted accepted-event input** — it is never
+    self-authenticating. **The name, shape and resolution rule are deliberately not fixed here.**
 - **Per-artifact citation slots**, so each state names its own evidence instead of borrowing
   `approvalDecisionId`.
 - **`rejected` requires communication-authorization evidence, never an approval decision.**
@@ -176,11 +201,28 @@ that are Jarvis's, having first been told them; and it needs new Core-side work 
 
 **Model 2 — Jarvis projection over authenticated primitives.** Core emits the primitives it already
 has (`authorization-recorded`, `result-recorded`, `human-handoff-recorded`, `intent-issued`,
-`execution.result-recorded`); Jarvis derives a **local** projection anchored to accepted `eventId`s and
+`execution.result-recorded`); Jarvis derives a **local** projection over **accepted** events and
 authors only its Tier A/B facts. _For:_ no new Core event type for Tier C; matches
 `communication-lifecycle-runtime`, already a validator over records rather than an authority.
 _Against:_ Jarvis holds derivation logic; `cancelled` and `expired` still have no primitive to project
-from; the projection is Jarvis-local truth and must never be presented as Core history.
+from; the projection is Jarvis-local truth and must never be presented as Core history — **and it is
+blocked today by the read surface, below.**
+
+**Model 2 has an unmet prerequisite in this repository.** It cannot simply be said that "the
+projection already carries the source event id". `packages/event-backbone/src/projections/projection-event-reader.ts`
+deliberately returns **metadata only** — its `SELECT` lists exactly `position`, `event_type`,
+`event_version` and `accepted_at`, and its own comment states it _"never reads a payload, event id,
+subject, correlation id, causation id, source, signature, or any digest"_. So:
+
+- the accepted-event store **does** hold `event_id`, and `eventId` is the canonical identity (§4.1);
+- but the **current projection-handler input exposes neither `eventId` nor payload**;
+- therefore a future Model-2 implementation **requires an owner-approved, provenance-bearing
+  event-read / projection input surface before S2c can consume source evidence at all.**
+
+That surface must **preserve the existing trust boundary** — it may widen what an accepted event
+exposes to a handler, and it must **not** become a general arbitrary event-store lookup that lets a
+caller fetch and cite any row while bypassing verify → prepare → persist. **It is not designed,
+authorized or implemented here, and `projection-event-reader.ts` is not modified by this PR.**
 
 **Audit of the existing `qf.communication.state-recorded@2`.** It is an original Phase-2
 architecture-lifecycle event. **`@2` was not a communication-specific redesign** — `canonical-events-v2.ts`
@@ -217,7 +259,9 @@ audit question**. No expiry contract is invented here.
   `scheduled`, `follow-up-requested`, `human-handoff-required` (each needs trusted prior Core or
   provider outcomes — **S3**, then **S5/S7**).
 - **S2c — Tier C.** Thirteen states projected from authenticated Core events. Needs the chosen
-  authorship model, the record repair, **S3**, and for provider outcomes **S5** and **S7**.
+  authorship model, the record repair, **S3**, and for provider outcomes **S5** and **S7** — and, under
+  Model 2, an owner-approved provenance-bearing event-read surface, because today's projection input
+  exposes neither `eventId` nor payload (§6).
 
 ADR-0132's "no Core dependency" claim holds for **one** of eighteen states. The plan is updated to say
 so. **ADR-0132's S1 decision, and the merged S1 implementation, are unaffected.**
@@ -251,8 +295,10 @@ constructs a request and submits nothing — see §3, Tier B.
   deliberate version.
 - **Consume authenticated events without changing the record.** Fixes provenance, not
   representability — `rejected` stays impossible. Necessary, insufficient.
-- **Add `communicationAuthorizationId` to the authorization contract.** Rejected: the accepted event's
-  envelope `eventId` already provides an addressable _and_ authenticated handle (§4).
+- **Add `communicationAuthorizationId` to the authorization contract.** Rejected: an accepted event
+  already gives the authorization a citable name through its envelope `eventId`, so a payload id adds
+  nothing. Note this is an argument against a redundant identifier, **not** a claim that the id
+  authenticates the artifact — see §4.
 - **Make Core the sole author and have Jarvis never produce a record.** This is Model 1; correct for
   Tier C and wrong for Tiers A and B, which are genuinely Jarvis's.
 - **Add an `opted-out` nineteenth state.** Explicitly forbidden: it forks the lifecycle and lets a

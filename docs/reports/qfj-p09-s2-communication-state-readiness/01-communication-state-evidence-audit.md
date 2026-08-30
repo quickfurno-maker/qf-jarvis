@@ -146,7 +146,8 @@ Its fields are `contractVersion`, `communicationId`, `communicationRequestId`, `
 returns nothing.
 
 **This is a real observation, but §6.3 shows it is not by itself a reason to version the contract.**
-The authenticated canonical event that carries an authorization already has an addressable identity.
+An accepted canonical event already gives the authorization a citable name — which is a reason not to
+add a redundant one, not a claim that a name authenticates anything.
 
 ### 3.4 The state record has no slot for four of the seven evidence artifacts
 
@@ -393,10 +394,19 @@ composition is `createEventIngestor` — **verify → prepare → persist**, in 
 3. **`storeValidatedEvent`** — durable, transactional persistence with idempotency and conflict
    handling (ADR-0032).
 
-**An accepted, stored canonical event is the repository's only existing proof that Core said
-something.**
+**The order is the guarantee, and step 3 alone is not.** `packages/event-backbone/src/persistence/event-store.ts`
+says so in its own heading — _"This is a TRUSTED low-level primitive. It verifies nothing."_ — and
+continues: `storeValidatedEvent` performs no signature verification and no contract parsing, and
+_"that trust is a caller obligation, not a structural guarantee this package can enforce"_. A row in
+`qf_jarvis.event` is therefore evidence of the **caller's** discipline, not of Core's authorship.
 
-### 6.3 The existing envelope already supplies the identity — no payload ids needed
+So the approved statement is:
+
+> An event accepted through `createEventIngestor`'s **verify → prepare → persist** composition is
+> trusted Core evidence. A bare contract artifact, a bare event envelope, a bare `eventId`, or a
+> direct `@qf-jarvis/event-backbone` persistence record is **not sufficient by itself**.
+
+### 6.3 Event identity is a name; provenance is the path. They are different things.
 
 Every canonical event carries `eventId` in its **envelope**, independent of its payload. Verified: a
 `qf.communication.authorization-recorded@2` envelope wrapping a lawful rejection parses through
@@ -404,15 +414,53 @@ Every canonical event carries `eventId` in its **envelope**, independent of its 
 `qf.communication.result-recorded@2`, `qf.communication.human-handoff-recorded@2`,
 `qf.execution.intent-issued@2` and `qf.execution.result-recorded@2`.
 
-**So §3.3's "the authorization has no id" does not require `CommunicationAuthorizationV2`.** The
-addressable handle for "the authorization that refused this" is the `eventId` of the accepted event
-that carried it — which is also the handle that proves provenance, whereas a payload id would prove
-only that somebody wrote a UUID.
+**That is an observation about identity, and nothing more.** Three concepts must stay separate:
 
-**Design consequence: prefer existing authenticated event identity over adding an id to every
-payload.** A payload id should be proposed only if a _separate semantic_ need is proved — for example
-if an authorization must be citable where no event exists. No such need is proved here, so
-**`CommunicationAuthorizationV2` is not required and is not proposed.**
+| Concept                       | What it is                                                              | What it is NOT                                               |
+| ----------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------ |
+| **Canonical event identity**  | `eventId` — the event's stable identity and idempotency key             | a credential. Any caller can type the same UUID.             |
+| **Accepted-event provenance** | established by the trusted path in §6.2, and by nothing else            | a property of any field inside the event                     |
+| **Source-evidence reference** | a **pointer** a future projection may retain, for audit and correlation | proof, on its own, that the event it names was ever accepted |
+
+`safeParseCanonicalEvent` is **shape validation only** — it proves an envelope is well-formed, never
+that it was signed, accepted or stored. A schema containing an `eventId` establishes only that the
+event **has** an identity.
+
+> **A source-event id is a reference to provenance, not provenance itself.**
+
+**A future S2 component must therefore never accept an arbitrary caller-supplied `sourceEventId` and
+treat it as authority merely because that UUID claims to name a Core event.** A retained reference is
+legitimate only when it arrived from a trusted accepted-event or trusted-projection input, or can be
+resolved and verified against the accepted-event store.
+
+**Consequence for §3.3.** "The authorization has no id" still does not require
+`CommunicationAuthorizationV2`, because an accepted event already gives the authorization a **citable
+name**, so a payload id would add a second name and no new guarantee. That is an argument against a
+**redundant identifier** — it is **not** a claim that the name authenticates the artifact. A payload
+id should be proposed only if a _separate semantic_ need is proved — for example if an authorization
+must be citable where no event exists. None is proved here, so **`CommunicationAuthorizationV2` is
+not required and is not proposed.**
+
+### 6.5 Model 2 has an unmet prerequisite: the current projection input carries no identity
+
+It cannot be said that "the projection already has the source event id".
+`packages/event-backbone/src/projections/projection-event-reader.ts` deliberately returns **metadata
+only**: its `SELECT` lists exactly `position`, `event_type`, `event_version` and `accepted_at`, and
+its own comment states it _"never reads a payload, event id, subject, correlation id, causation id,
+source, signature, or any digest"_.
+
+Recorded precisely:
+
+- the accepted-event store **does** hold `event_id`, and `eventId` is the canonical identity;
+- but the **current projection-handler input exposes neither `eventId` nor payload**;
+- therefore a future Model-2 implementation **requires an owner-approved, provenance-bearing
+  event-read / projection input surface before S2c can consume source evidence at all**;
+- that surface must **preserve the existing trust boundary** — it may widen what an accepted event
+  exposes to a handler, and it must **not** become a general arbitrary event-store lookup that lets a
+  caller fetch and cite any row while bypassing verify → prepare → persist.
+
+**It is not designed, authorized or implemented here, and `projection-event-reader.ts` is not
+modified by this PR.**
 
 ### 6.4 What S2 may trust
 
@@ -589,10 +637,11 @@ Add the missing citations and an anchor to authenticated evidence:
   useless. The two ideas must be separated:
   - **envelope provenance** — the identity of the event that transports _this record_, already
     supplied by the canonical envelope and **not** a payload field;
-  - **source evidence** — the identity of the _prior_ accepted Core event (authorization, result,
+  - **source evidence** — a **reference to** the _prior_ accepted Core event (authorization, result,
     intent, handoff) that **justifies** this state. A name like `sourceEventId`, or a discriminated
-    reference naming both the artifact kind and the event id, is more accurate. **The field name and
-    shape are not fixed here.**
+    reference naming both the artifact kind and the event id, is more accurate. Per §6.3 the reference
+    is a **pointer** that must come from, or be resolved against, a trusted accepted-event input — it
+    never authenticates itself. **The field name, shape and resolution rule are not fixed here.**
 - **Per-artifact citation slots** so each state names its own evidence rather than borrowing
   `approvalDecisionId`.
 - **`rejected` requires communication-authorization evidence, never an approval decision.**
