@@ -9,9 +9,11 @@
 [agent-constitution.md](../governance/agent-constitution.md) and
 [authority-routing-data-access-matrix.md](../governance/authority-routing-data-access-matrix.md).
 
-**This is a plan. Nothing here is implemented, adopted, connected or activated.** Aarohi's runtime
-is **PLANNED / DISABLED** and production rollout is **OFF**. Every edge marked *proposed* or
-*blocked* below does not exist.
+**This is a plan.** Its first slice, **S1**, is now implemented on a feature branch / PR under
+[ADR-0133](../decisions/ADR-0133-qfj-p08-powerless-communication-request-producer.md) and is **not
+merged**; nothing else here is implemented, adopted, connected or activated. Aarohi's runtime is
+**PLANNED / DISABLED** and production rollout is **OFF**. Every edge marked *proposed* or *blocked*
+below does not exist, and S1 composes with nothing.
 
 ---
 
@@ -40,7 +42,8 @@ new phase is created. The execution chain has accumulated validators without a p
 **QFJ-P08 remains INCOMPLETE**, with three items outstanding verbatim:
 
 1. the **live Core transport** for communication authorization;
-2. a **producer** for `CommunicationRequestV1`;
+2. a **producer** for `CommunicationRequestV1` — **now implemented on a feature branch / PR
+   (ADR-0133), not merged, and composed by nothing**;
 3. the operator surface's HTTP, UI and authentication provider.
 
 **QFJ-P09 remains INCOMPLETE**, confirmed against the import graph:
@@ -139,8 +142,10 @@ flowchart TD
     S11 -.owner decision, not a dependency.-> S12
 ```
 
-**S1 — `CommunicationRequestV1` producer (QFJ-P08).** Build the missing producer that constructs a
-canonical `CommunicationRequestV1` from already-governed communication action context. It is
+**S1 — `CommunicationRequestV1` producer (QFJ-P08). IMPLEMENTED ON A FEATURE BRANCH / PR under
+[ADR-0133](../decisions/ADR-0133-qfj-p08-powerless-communication-request-producer.md); NOT MERGED.**
+`@qf-jarvis/communication-request-runtime` constructs a canonical `CommunicationRequestV1` from
+already-governed communication action context. It is
 **POWERLESS**: it establishes no consent, no contact eligibility and no authorization; it creates no
 `ExecutionIntentV1`; it sends and executes nothing; it persists no consent, STOP, opt-out, DNC,
 suppression or eligibility cache; and it does not let founder or human approval override Core
@@ -308,7 +313,7 @@ slices.**
 
 | PR | Owner | Purpose | Prerequisites | Code vs docs | Migration | External systems | Live send | Owner gate | Disable posture |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| **1** | **QFJ-P08** | **`CommunicationRequestV1` producer** — POWERLESS | none | production code + tests | must be proved; none foreseen | none | no | design review | not composed by any app |
+| **1** | **QFJ-P08** | **`CommunicationRequestV1` producer** — POWERLESS — **open as a PR (ADR-0133), not merged** | none | production code + tests | **proved: NONE required** | none | no | design review | not composed by any app |
 | **2** | QFJ-P09 | `CommunicationStateRecordV1` producer | PR 1 | production code + tests | must be proved; none foreseen | none | no | design review | not composed by any app |
 | **3** | QFJ-P10 | **Fresh read-only Core audit** at a current pinned commit | none | docs | none | read-only inspection | no | owner sign-off on findings | n/a |
 | **4** | QFJ-P10 | Core protocol **adoption** — identity, registration, payment, activation, reconciliation | PR 3 + Core-side work | contracts + docs | must be proved | **Core change required** | no | bilateral adoption | contracts unused until composed |

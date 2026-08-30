@@ -1,0 +1,24 @@
+{
+  "name": "@qf-jarvis/communication-request-runtime",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis CommunicationRequestV1 producer (QFJ-P08, ADR-0133). One responsibility and no second: construct a POWERLESS CommunicationRequestV1 that ASKS QuickFurno Core whether one communication may proceed, from one exact proposed action of an already-governed recommendation. Governance metadata is DERIVED from that recommendation and never restated by the caller, and the request may not outlive it. It establishes no consent, no contact eligibility and no authorization; it names no phone number, email address, provider or destination; it carries no message body; it creates no approval, no communication authorization and no execution intent; and it sends, executes, persists, queues and emits nothing. A request is an ASK. Jarvis asks; QuickFurno Core decides. Depends on @qf-jarvis/contracts, @qf-jarvis/recommendation-runtime, zod, and node:crypto randomUUID only.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/contracts": "workspace:*",
+    "@qf-jarvis/recommendation-runtime": "workspace:*",
+    "zod": "4.4.3"
+  }
+}

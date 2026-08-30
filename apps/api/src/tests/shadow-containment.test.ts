@@ -400,6 +400,10 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // grants no send or authorization authority. It depends on `@qf-jarvis/contracts` alone and
       // nothing imports it.
       'communication-lifecycle-runtime',
+      // QFJ-P08 (ADR-0133): the powerless CommunicationRequestV1 PRODUCER -- slice S1 of ADR-0132,
+      // the missing counterpart to the correlation runtime above. Still an EXACT set match; it
+      // records an authorised addition, it does not relax the assertion.
+      'communication-request-runtime',
       'contracts',
       // QFJ-P08-A (ADR-0074): the conversation control command foundation. Still an EXACT set match
       // -- this records an authorised addition, it does not relax the assertion.
@@ -700,6 +704,9 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // QFJ-P08 (ADR-0083): the communication authorization correlation runtime, locked from the
       // day it lands.
       'communication-authorization-runtime': 3,
+      // QFJ-P08 (ADR-0133): the powerless CommunicationRequestV1 producer, locked from the day it
+      // lands. It ASKS; it authorizes nothing.
+      'communication-request-runtime': 3,
       // QFJ-P09.01 (ADR-0084): the execution intent correlation runtime, locked from the day it
       // lands. It validates Core's intent; it issues none.
       'execution-intent-runtime': 3,
