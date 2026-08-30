@@ -1,6 +1,6 @@
 # ADR-0133 — QFJ-P08 powerless `CommunicationRequestV1` producer
 
-**Status:** Proposed (implemented on a feature branch / PR; **not merged**)
+**Status:** Accepted. **MERGED** as PR #174, merge commit `eefe32cc75d05b22bc112bf8c60093087b78758b`.
 **Date:** 2026-08-30
 **Phase ownership:** **QFJ-P08** (consent, approval and human control). **Slice S1 of
 [ADR-0132](./ADR-0132-aarohi-real-execution-integration-planning.md).** No new phase is created;
@@ -8,6 +8,8 @@ there is no QFJ-P13 and no AVG-13.
 **Baseline:** `a52e7e18dd1a95c69599c2dcfde1c4d4742d6628` (merge of PR #173 / real-execution
 integration planning)
 **Supersedes:** nothing. **Superseded by:** nothing.
+**Next slice:** S2 is **BLOCKED** pending
+[ADR-0134](./ADR-0134-qfj-p09-s2-communication-state-evidence-alignment.md). S1 itself is unaffected.
 
 Read with [ADR-0001](./ADR-0001-source-of-truth-boundary.md),
 [ADR-0002](./ADR-0002-recommend-authorize-execute-model.md),
