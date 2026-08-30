@@ -19,87 +19,93 @@ one question open: **who authors communication state?**
 
 This document answers that question and designs the boundary the answer requires. It designs; it does
 not build. **No production code, no `CommunicationStateRecordV2`, no `qf.communication.state-recorded@3`,
-no event reader, no write-path hardening, no migration, no activation.**
-`projection-event-reader.ts`, `event-store.ts`, `create-event-ingestor.ts` and every contract are
-read-only references here.
+no event reader, no write-path hardening, no coordination store, no migration, no activation.**
+`projection-event-reader.ts`, `event-store.ts`, `create-event-ingestor.ts`, the event catalog and every
+contract are read-only references here.
 
 ---
 
 ## 2. The decision: Model 2
 
-> **Jarvis maintains a LOCAL communication-state projection derived from authenticated, ADOPTED
-> primitive QuickFurno Core events, and authors only its own coordination facts.**
-
-Concretely:
+> **Jarvis maintains a LOCAL communication-state view using authenticated, ADOPTED primitive Core
+> evidence for Core-owned facts, while Jarvis remains the ORIGINATOR of its own coordination facts.**
 
 - **QuickFurno Core stays authoritative** for consent, eligibility, authorization, provider outcomes
   and every Tier-C fact.
 - **Jarvis consumes only trusted, accepted evidence**, never an arbitrary shape-valid payload.
-- **Jarvis derives a LOCAL lifecycle projection** for orchestration and observability, and **never
-  presents it as QuickFurno Core's authoritative business history.**
-- **Jarvis authors Tier A and Tier B facts only when their prerequisites are lawfully proven.**
-- `communication-lifecycle-runtime` stays a **consistency validator, never an authority**. A
-  transition gains no authority by being graph-valid.
+- **Jarvis derives a LOCAL view** for orchestration and observability, and **never presents it as
+  Core's authoritative business history.**
+- **Jarvis authors Tier A and Tier B facts only when their prerequisites are lawfully proven** — and,
+  per §6, only where a durable ordered evidence source for that fact exists.
+- `communication-lifecycle-runtime` stays a **consistency validator, never an authority**.
 
-### 2.1 Candidate contracts are not adopted Core emissions
+### 2.1 Artifact author and canonical-event authority are different questions
 
-Three different things must not be conflated:
+`event-catalog.ts` states the rule the whole design rests on:
+
+> ### Every event is sourced from QuickFurno Core
+>
+> Including `qf.recommendation.created`. Jarvis _produces_ the recommendation — the payload says so,
+> with `producingSystem: "qf-jarvis"` — but the canonical _event_ is emitted by Core once Core has
+> recorded the submission. **The artifact's author and the event's authority are different questions,
+> and the envelope answers only the second.**
+
+So **Core RECORDING a Jarvis-produced primitive artifact is NOT Core AUTHORING the Jarvis decision.**
+The repository already does this twice: `qf.recommendation.created` carries a Jarvis-produced
+`RecommendationV1`, and `qf.communication.human-handoff-requested` carries a Jarvis-produced
+`HumanHandoffRequestV1` (`producingSystem: qf-jarvis`, enforced). Both envelopes are Core-sourced.
+
+### 2.2 Candidate contracts are not adopted Core emissions
 
 | | |
 | --- | --- |
-| **A. Repository-defined candidate canonical contracts** | `qf.communication.authorization-recorded`, `result-recorded`, `human-handoff-recorded`, `qf.execution.intent-issued`, `execution.result-recorded` — all defined **here**, in `@qf-jarvis/contracts` |
-| **B. Live / adopted Core emission capability** | **Not established.** No fresh audit; no adopted transport |
-| **C. Core protocol/event gaps** | To be discovered by **S3** |
+| **A. Repository-defined candidate canonical contracts** | defined **here**, in `@qf-jarvis/contracts` |
+| **B. Live / adopted Core emission capability** | **not established** |
+| **C. Core protocol/event gaps** | to be discovered by **S3** |
 
-**qf-jarvis already defines candidate canonical contracts for several required facts. S3 must verify
-which of those facts the current pinned Core can actually expose or adopt before D2 freezes the
-integration contract.** This document does not assert that Core emits any of them today — the whole
-reason S3 is the next step is that this has not been re-audited.
+**S3 must verify which of those facts the current pinned Core can actually expose or adopt before D2
+freezes the integration contract.** This document does not assert Core emits any of them today.
 
-### 2.2 Why this is the smallest safe MVP
+### 2.3 Why Model 2, and why Model 1 stays deferred
 
 | | Model 1 (Core-authored state event) | **Model 2 (chosen)** |
 | --- | --- | --- |
 | New Core **state** event | **`qf.communication.state-recorded@3` required** | **not required** |
-| Duplicated truth | state facts restated beside the primitives | primitives are the only Core statement |
-| Jarvis coordination facts | Core must author or echo `draft`, `scheduled`, `follow-up-requested`, `human-handoff-required` — facts it does not own and must first be told | stay Jarvis's, where they belong |
-| Core-side work | a new state event **plus** whatever primitive adoption S3 finds missing | **avoids the mandatory new state event and the Tier A/B echo. It MAY still require targeted Core protocol/event adoption** for primitive facts S3 finds absent — cancellation, expiry, dispatch/submission, or candidate emissions not yet adopted |
+| What crosses the boundary | one **generic Core-authored state record** spanning the whole lifecycle | only the **primitive facts that actually cross it** |
+| Jarvis coordination facts | Core would **author or echo** them | stay Jarvis's; Core may **record** the primitive artifact without authoring the decision (§2.1) |
+| Core-side work | a new state event **plus** whatever primitive adoption S3 finds missing | **avoids the mandatory state event and the Tier A/B echo. MAY still require targeted Core protocol/event adoption** for primitives S3 finds absent |
 | Incrementality | all-or-nothing | tier by tier |
 
-**Model 1 is REJECTED for the current MVP** — not on principle, but because it is strictly larger:
-every Core cost Model 2 may incur, Model 1 incurs too, plus a new state event and the Tier A/B echo.
-If a future external consumer genuinely needs one authoritative Core-published state fact, that is its
-own adoption decision, taken then.
-
-**No canonical contradiction was found that blocks Model 2.**
+**Model 1 is REJECTED for the current MVP** — not on principle, but because it introduces **one
+generic Core-authored state record across the lifecycle instead of recording only the primitive facts
+that genuinely cross the boundary**, and incurs every Core cost Model 2 might, plus that event and the
+echo. **No canonical contradiction blocks Model 2.**
 
 ---
 
 ## 3. Identity, provenance, and what may be trusted
-
-ADR-0134 locked these and this design does not re-open them. Restated as the table the implementation
-will be held to:
 
 | Capability / object | Proves | Does **not** prove | Who can construct it today | May S2 treat it as authority? |
 | --- | --- | --- | --- | --- |
 | A shape-valid communication artifact | it satisfies its schema | that Core wrote it | **anyone** | **NO** |
 | A shape-valid canonical event envelope | the envelope is well-formed | that it was signed, accepted or stored | **anyone** | **NO** |
 | An `eventId` | an event has that identity | anything about origin | **anyone** — it is a UUID | **NO** |
-| An event **actually carried through** `createEventIngestor` (**verify → prepare → persist**) | Core signed the exact bytes, the contract validated behind the signature, and the row was committed | that any *later* copy of it is faithful | only the ingestion composition | **YES** — this is the trust anchor |
-| An `EventPersistenceRecord` | the caller assembled a record | that it was verified — `storeValidatedEvent` verifies **nothing** | **any caller holding the type** | **NO** |
-| A row in `qf_jarvis.event` | a row exists | **that it arrived through ingestion** (§6) | anything with the write role, and today any package that imports the root-exported primitive | **NO, by itself** |
+| An event **actually carried through** `createEventIngestor` (**verify → prepare → persist**) | Core signed the exact bytes, the contract validated behind the signature, and the row was committed | that any *later* copy is faithful | only the ingestion composition | **YES** — the trust anchor |
+| An `EventPersistenceRecord` | the caller assembled a record | that it was verified — the primitive verifies **nothing** | **any caller holding the type** | **NO** |
+| A row in `qf_jarvis.event` | a row exists | **that it arrived through ingestion** (§7) | anything with the write role, and today any package importing the root-exported primitive | **NO, by itself** |
 | A positioned row reached by a projection reader | a row exists at that position | that the row is Core-originated | as above | **NO, by itself** |
 | Re-parsing a stored payload | **schema shape** | **origin** | anyone with the row | **NO** |
-| A `ProjectionEvent` metadata object | position, type, version, acceptedAt | nothing about payload, subject or identity — it carries none | the projection runner | metadata only |
+| A `ProjectionEvent` metadata object | position, type, version, acceptedAt | nothing about payload, subject or identity | the projection runner | metadata only |
 | **A future communication evidence object** (§5) | see the rule below | anything outside its allowlist | only the designated reader | **conditional — see below** |
+| **A row written directly into the V2 read model** | that something wrote it | **that any fact occurred** | any code with the write path | **NO — §6.2** |
 | A `sourceEventId` stored in a future V2 record | which event was cited | that the citer ever saw that event | **anyone**, if accepted as naked input | **NO** |
 
 ### 3.1 The authority rule for a future evidence object
 
 > A future evidence object **MAY** be treated as authoritative only after **BOTH**:
 >
-> 1. the source event is **bound to the governed accepted-event trust path** (which requires the
->    **D2a** hardening in §6); **AND**
+> 1. the source event is **bound to the governed accepted-event trust path** (requires **D2a**, §7);
+>    **AND**
 > 2. the purpose-specific reader has **re-parsed and minimised** it.
 >
 > **The designated reader alone is not enough.**
@@ -110,6 +116,8 @@ will be held to:
 identity              !=  provenance
 shape                 !=  origin
 data-access boundary  !=  authentication boundary
+read model            !=  source of fact
+derived state         !=  evidence
 lifecycle consistency !=  truth
 request               !=  submission
 issuance              !=  dispatch
@@ -117,25 +125,14 @@ approval              !=  communication authorization
 prior authorization   !=  execution-time permission
 ```
 
-**A future S2 projector must never accept `{ sourceEventId, payload }` from a caller and treat it as
-trusted.** It must receive evidence objects produced by the governed reader **over a hardened write
-path**, and a `sourceEventId` it stores is an audit and correlation pointer that came *out of* that
-evidence — never an input that stood in for it.
-
 ---
 
 ## 4. The generic projection boundary stays metadata-only
 
 `ProjectionEvent` exposes `position`, `eventType`, `eventVersion`, `acceptedAt` and nothing else. Its
-own doc-comment states the rule:
-
-> Adding a payload, subject reference, correlation id, or free-text field to this interface would
-> silently widen what every projection can write into a read model, so it is a deliberate, ADR-gated
-> decision — not a convenience edit.
-
-**This design does not widen it, and recommends that it never be widened for this purpose.** Widening
-the shared type to serve one projection would hand payload access to `event-type-activity`,
-`daily-event-acceptance` and every future projection, permanently, to avoid writing one narrow module.
+own doc-comment calls widening _"a deliberate, ADR-gated decision — not a convenience edit."_ **This
+design does not widen it**, and recommends it never be widened for this purpose: that would hand
+payload access to every present and future projection to avoid writing one narrow module.
 
 ---
 
@@ -143,274 +140,331 @@ the shared type to serve one projection would hand payload access to `event-type
 
 ### 5.1 What ADR-0044 is, and is not, a precedent for
 
-`projection-subject-reader.ts` (QFJ-P03.09, ADR-0044) resolves *only* `subject_type` and `subject_id`
-for *one* projection, is **not** part of `ProjectionEvent`, is **not** exported from the package root,
-and is restricted by a `no-restricted-imports` rule so that **only the `subject-activity` reducer may
-import it**.
+`projection-subject-reader.ts` (ADR-0044) resolves only `subject_type`/`subject_id` for one
+projection, is not part of `ProjectionEvent`, is not root-exported, and is lint-restricted to the
+`subject-activity` reducer.
 
-**It is a valid precedent for:** purpose-bounded read access · position-keyed lookup ·
-a root-unexported module · restricted import · field minimisation.
+**Valid precedent for:** purpose-bounded read access · position-keyed lookup · root-unexported module ·
+restricted import · field minimisation.
 
-**It is NOT a precedent for:** authenticating event origin · proving an event passed
-`createEventIngestor` · granting authority to payload content.
+**NOT a precedent for:** authenticating event origin · proving an event passed `createEventIngestor` ·
+granting authority to payload content.
 
-> **A narrow projection reader is a least-privilege DATA ACCESS pattern, not an authentication
-> boundary.** A designated reader cannot "upgrade" an unauthenticated row into provenance merely
-> because only one handler imports it. Joining to `qf_jarvis.event` and re-parsing the payload proves
-> **reachability and shape** — never origin.
+> **Joining `projection_event_position → qf_jarvis.event` and re-parsing proves REACHABILITY and
+> SHAPE — never ORIGIN.** A designated reader cannot "upgrade" an unauthenticated row into provenance
+> merely because only one handler imports it.
 
 ### 5.2 Required properties
 
 | # | Property | How it is met |
 | --- | --- | --- |
-| A | **Not arbitrary caller input** | the reader resolves evidence **by projection position**, as both existing readers do. A caller cannot hand it a payload. |
-| B | **No raw event-store bypass** | no "read any event by id" entry point. Position-keyed only, through `projection_event_position`. |
-| C | **Positioned rows only — and, after D2a, governed accepted-event evidence** | the join reaches **only positioned rows**. That alone does not make them authenticated. **After the §6 D2a hardening, those rows may be relied upon as governed accepted-event evidence within the application trust model** (§6.3 states the limit). |
-| D | **Identity is reference only** | `eventId` may be returned for audit and correlation. It authenticates nothing. |
-| E | **Allowlisted semantics** | evidence **only** for the event types in §5.3; any other type yields "not applicable", never a raw payload. |
-| F | **Narrow payload** | a re-parsed, minimised evidence object per §5.4 — never the whole canonical payload. |
-| G | **Re-parse, fail closed** | stored `jsonb` is runtime-untrusted. It is parsed with the canonical payload schema for that exact `event_type@event_version` before anything is derived; a malformed row fails closed with a typed, fixed-message error carrying no stored value. **This proves shape, not origin.** |
+| A | **Not arbitrary caller input** | resolves evidence **by projection position**. A caller cannot hand it a payload. |
+| B | **No raw event-store bypass** | no "read any event by id" entry point. |
+| C | **Positioned rows only — and, after D2a, governed accepted-event evidence** | the join reaches **only positioned rows**; that alone does not make them authenticated. After **D2a**, they may be relied upon as governed accepted-event evidence **within the application trust model** (§7.3 states the limit). |
+| D | **Identity is reference only** | `eventId` may be returned for audit. It authenticates nothing. |
+| E | **Allowlisted semantics** | evidence only for §5.3; any other type yields "not applicable". |
+| F | **Narrow payload** | a re-parsed, minimised evidence object per §5.4. |
+| G | **Re-parse, fail closed** | stored `jsonb` parsed with the canonical schema for that exact `event_type@event_version`; typed fixed-message errors carrying no stored value. **Proves shape, not origin.** |
 | H | **Replay order** | position-keyed, so the runner's gap-free `last_position + 1` traversal is the ordering, unchanged. |
-| I | **Trust assumption stated** | §6. |
+| I | **Trust assumption stated** | §7. |
 
 ### 5.3 Allowlist — re-audited, each entry justified
 
 Necessity must be proved before payload access is granted. **Nothing is carried "just in case."**
 
-| Event type | State(s) it justifies | Status | Why |
-| --- | --- | --- | --- |
-| `qf.communication.authorization-recorded` | `rejected`, `authorized` | **LOCKED** | `CommunicationAuthorizationV1.outcome` **is** the fact. `rejected` needs exactly this artifact (ADR-0134 §2.1); `authorized` needs Core's communication authorization, not a human approval (§3.5). Nothing else carries either. |
-| `qf.communication.result-recorded` | `provider-accepted`, `delivered`, `read`, `answered`, `no-answer`, `busy`, `failed`, `completed` | **LOCKED** | `CommunicationResultV1.lifecycleState` is the Core-recorded lifecycle outcome, and its `outcome` field already refuses `succeeded` for `provider-accepted`. This is the artifact ADR-0134 requires for every provider outcome and for `completed`. |
-| `qf.execution.intent-issued` | ~~`execution-submitted`~~ | **CONDITIONAL — UNRESOLVED** | See §5.5. An issued intent is **not** proof of dispatch. Not in the pre-S3 allowlist. |
-| `qf.execution.result-recorded` | — | **CONDITIONAL — removed pre-S3** | `CommunicationResultV1` already carries `lifecycleState`, `outcome`, `failure` **and** both execution ids, so no communication-state derivation needs the execution-side twin. Re-admit only if a concrete derivation is shown to need it. |
-| `qf.communication.human-handoff-recorded` | — | **CONDITIONAL — removed pre-S3** | It records that a human took over. It does **not** justify `human-handoff-required` (that is Jarvis's *request*, ADR-0134 §4.5), and it does not justify `completed`, which requires a Core-recorded `CommunicationResultV1`. **No lifecycle state is currently derivable from it**, so it gets no payload access. Re-admit only if S3 identifies the exact fact it justifies. |
-| *a Core cancellation primitive* | `cancelled` | **DOES NOT EXIST** | ADR-0134 §3.1. S3 must find or adopt one. |
-| *a Core expiry primitive* | `expired` | **UNRESOLVED** | ADR-0134 §7. |
-| *a dispatch/submission fact* | `execution-submitted` | **UNRESOLVED** | §5.5. |
+#### Tier-C authority events
 
-**The pre-S3 allowlist is therefore exactly two event types.** Everything else is a conditional
-candidate that must earn its place.
+| Event type | State(s) | Status | Why |
+| --- | --- | --- | --- |
+| `qf.communication.authorization-recorded` | `rejected`, `authorized` | **LOCKED** | `CommunicationAuthorizationV1.outcome` **is** the fact. Nothing else carries either state (ADR-0134 §2.1, §3.5). |
+| `qf.communication.result-recorded` | `provider-accepted`, `delivered`, `read`, `answered`, `no-answer`, `busy`, `failed`, `completed` | **LOCKED** | `lifecycleState` is the Core-recorded outcome, and the contract already refuses `succeeded` for `provider-accepted`. |
+| `qf.execution.intent-issued` | ~~`execution-submitted`~~ | **CONDITIONAL — UNRESOLVED** | §5.5. An issued intent is not proof of dispatch. |
+| `qf.execution.result-recorded` | — | **removed pre-S3** | `CommunicationResultV1` already carries `lifecycleState`, `outcome`, `failure` **and** both execution ids. |
+| `qf.communication.human-handoff-recorded` | — | **removed pre-S3** | Justifies neither `human-handoff-required` (Jarvis's *request*) nor `completed` (needs a Core-recorded result). **No lifecycle state is currently derivable from it.** |
+
+**The pre-S3 Tier-C locked allowlist is exactly two event types.**
+
+#### Tier-B coordination candidate — a different list, for a different purpose
+
+**Do not confuse the Tier-C authority allowlist with every input the hybrid local view needs.** A
+Tier-B fact is Jarvis's decision; what it needs is a **durable, ordered record** that the decision
+happened.
+
+| Event type | State | Status | Notes |
+| --- | --- | --- | --- |
+| `qf.communication.human-handoff-requested` | `human-handoff-required` | **CONDITIONAL candidate** | Payload is `HumanHandoffRequestV1`; **Jarvis is the artifact producer** (`producingSystem: qf-jarvis`, enforced); the **canonical event is Core-recorded** (§2.1). **Not** `human-handoff-recorded`. **Live/adopted availability requires S3/D2; trusted use requires D2a + D4.** |
 
 ### 5.4 Field minimisation
 
-For the two locked entries only. A conditional candidate gets a minimisation row when it is admitted.
+For the two locked Tier-C entries only. A conditional candidate earns a minimisation row when admitted.
 
 | Event | Minimal fields needed | Why needed | Must **NOT** cross |
 | --- | --- | --- | --- |
-| `authorization-recorded` | `communicationId` (which lifecycle), `communicationRequestId` (which ask), `outcome` (the fact), `authorizedChannel?` (settles §7.3), `reasonCode` (countable refusal), `decidedAt` (ordering/audit), `correlationId` (thread) | each maps to a named derivation input | **`explanation`** (free text), `policy` internals, **`approvalDecisionId`** — the human approval, never the communication decision (ADR-0134 §3.5) |
-| `result-recorded` | `communicationId`, `communicationResultId` (citation), `lifecycleState` (the fact), `outcome` (succeeded/failed/indeterminate), `recordedAt` (ordering), `reasonCode`, `failure.failureCode`, `failure.retryClassification` | the state, its qualification, and a countable reason | **`explanation`**, **`providerEvidence.providerReference`** (a provider handle; no derivation needs it), `providerOccurredAt` unless a later spec proves it needed |
+| `authorization-recorded` | `communicationId`, `communicationRequestId`, `outcome`, `authorizedChannel?`, `reasonCode`, `decidedAt`, `correlationId` | each maps to a named derivation input | **`explanation`** (free text), `policy` internals, **`approvalDecisionId`** — the human approval, never the communication decision |
+| `result-recorded` | `communicationId`, `communicationResultId`, `lifecycleState`, `outcome`, `recordedAt`, `reasonCode`, `failure.failureCode`, `failure.retryClassification` | the state, its qualification, and a countable reason | **`explanation`**, **`providerEvidence.providerReference`**, `providerOccurredAt` unless later proved needed |
 
-**Categorically excluded, on every path:** free-text `explanation`; raw provider payloads and provider
+**Categorically excluded, on every path:** free-text `explanation`; raw provider payloads and
 references; recipient contact details; credentials; model output; template or message body content;
-governed `parameters` / `metadata` containers; a named human actor unless a later slice proves a
-specific need and re-approves it.
-
-The projection operates on **machine tokens, opaque references, canonical timestamps and structured
-enumerations** — never prose.
+governed `parameters`/`metadata` containers; a named human actor unless separately re-approved.
 
 ### 5.5 `execution-submitted` — evidence UNRESOLVED
 
 `communication-model.md` defines the state as **"Core dispatched an authorized execution intent to
-n8n."** `qf.execution.intent-issued` carries an `ExecutionIntentV1` and is documented as *"QuickFurno
-Core issued a bounded, expiring execution intent to n8n."*
+n8n."** `qf.execution.intent-issued` is documented as *"QuickFurno Core issued a bounded, expiring
+execution intent to n8n."*
 
-**Issuance is not dispatch.** The repository does not prove the event is emitted only after a
+**Issuance is not dispatch**, and the repository does not prove the event is emitted only after a
 successful n8n submission:
 
-- the event is named `intent-issued`, not `intent-dispatched`, and `event-catalog.ts` contains no
-  dispatch vocabulary at all;
+- the event is named `intent-issued`, not `intent-dispatched`; `event-catalog.ts` carries no dispatch
+  vocabulary;
 - `ExecutionIntentV1.executor` is a **literal naming n8n as the intended executor** — an address, not
   a delivery receipt;
-- **`execution-dispatch-runtime` states the Core → n8n edge is not built:** *"The wire protocol is
-  PROPOSED. Core does not sign this way yet and the execution side does not verify this way yet."*
+- **ADR-0090 / `execution-dispatch-runtime`:** *"The wire protocol is PROPOSED. Core does not sign
+  this way yet and the execution side does not verify this way yet."*
 
-This is the same correction already applied to `authorization-requested`: **construction/issuance ≠
-submission.**
-
-**Therefore:** `qf.execution.intent-issued` proves a Core-issued intent exists. `execution-submitted`
-requires evidence that Core actually **dispatched** that intent to n8n. Whether the existing event is
-emitted only after successful dispatch, or whether a distinct transport receipt or dispatch event is
-needed, must be settled by **S3 / D2** and the **S5** transport design. **Until then the source
-evidence for `execution-submitted` is UNRESOLVED**, and no dispatch event name, receipt schema, n8n
-endpoint or delivery acknowledgement is invented here.
+Same shape as `authorization-requested`: **construction/issuance ≠ submission.** **The source evidence
+for `execution-submitted` is UNRESOLVED**, pending S3/D2 and S5. No dispatch event name, receipt
+schema, endpoint or acknowledgement is invented here.
 
 ### 5.6 Where the boundary should live
 
-**`packages/event-backbone/src/projections/`, beside the two existing readers, internal and
-root-unexported**, with a `no-restricted-imports` rule naming the one communication-state handler.
+**`packages/event-backbone/src/projections/`**, beside the two existing readers, internal and
+root-unexported, with a `no-restricted-imports` rule naming the one communication-state handler.
+Rejected: a new package; `@qf-jarvis/contracts` (data-only); a general query API (violates B).
 
-Rejected alternatives: a new package (a second event-reading capability outside the backbone);
-`@qf-jarvis/contracts` (data-only, no I/O); a general query API (violates B).
-
-The **derivation logic** — evidence → lifecycle state — belongs in a separate pure module that takes
-evidence objects and returns state, so it is testable without a database and cannot reach one. Only
-the thin handler binds the two.
-
-### 5.7 Rebuild determinism and privacy
-
-The existing rebuild proof (ADR-0043) — digest → destroy → rebuild → digest → compare — applies
-unchanged, because the derivation is a pure function of the accepted event log traversed in position
-order. Two constraints keep it true: the derivation reads **no clock and no external state**, and the
-read model stores only canonicalisable values.
-
-Erasure: because no free text, contact detail or provider payload crosses the boundary (§5.4), the
-read model holds opaque references and machine tokens, and an erasure reaching the event log does not
-leave prose behind in this projection.
+The **derivation logic** belongs in a separate pure module taking evidence objects and returning
+state, testable without a database.
 
 ---
 
-## 6. Write-path trust: D2a is a PREREQUISITE, not an option
+## 6. Tier A/B facts need a durable, ordered replay source
 
-### 6.1 What the repository currently proves
+### 6.1 The audit
+
+The complete communication canonical-event surface is five events —
+`authorization-recorded`, `result-recorded`, `human-handoff-requested`, `human-handoff-recorded`,
+`state-recorded`. No canonical event records a communication draft, a submission, or a schedule, and
+no durable Jarvis-local store holds communication coordination state (migrations `0008`/`0009` are
+conversation-control and the approval queue).
+
+| # | State | A. Artifact proving the Jarvis act | B. Durable today? | C. Canonical Core-recorded event today? | D. Other replayable Jarvis store? | E. Ordering vs Core events | F. Rebuildable after read-model loss? | G. Status |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | `draft` (Tier A) | S1 can construct a `CommunicationRequestV1` — **construction is not durable recording** | **NO** | **NO** — no draft/request-created event exists | **NO** | undefined | **NO** | **UNRESOLVED** |
+| 2 | `authorization-requested` (B) | an S4 submission receipt | **NO** — the S4 artifact is itself unresolved | **NO** | **NO** | undefined | **NO** | **UNRESOLVED** |
+| 3 | `scheduled` (B) | a Jarvis scheduling act and instant | **NO** | **NO** | **NO** | undefined | **NO** | **UNRESOLVED** |
+| 4 | `follow-up-requested` (B) | a Jarvis follow-up decision | **NO** | **NO** | **NO** | undefined | **NO** | **UNRESOLVED** |
+| 5 | `human-handoff-required` (B) | **`HumanHandoffRequestV1`** — Jarvis-produced, enforced | **not yet** | **`qf.communication.human-handoff-requested` exists as a candidate contract** | n/a | Core event position, **if adopted** | **yes, if adopted + D2a/D4** | **CONDITIONAL** |
+
+Two derivations are explicitly forbidden:
+
+- **`scheduled` must NOT be inferred from `requestedTiming`** in `CommunicationRequestV1` — that field
+  is a *request*, not a record that Jarvis scheduled anything.
+- **`follow-up-requested` must NOT be inferred merely because a later `CommunicationRequestV1`
+  exists**, unless a canonical causation/correlation contract proves the mapping. A later attempt is a
+  **new request, not a retry**.
+
+### 6.2 Read model ≠ source of fact
+
+Explicitly forbidden:
+
+> "Jarvis decides `scheduled` / `follow-up-requested` / `human-handoff-required`, writes the
+> projection row, therefore it is durable."
+
+A projection is **derived** state. **Direct write without an independent replayable source turns a
+cache into authority and makes rebuild impossible.** If a Tier A/B fact is persisted, its source
+evidence must exist **independently of the read model**.
+
+Also forbidden: a **process-memory** fact becoming durable state truth, and reconstructing any state
+from **timestamps or heuristics alone**.
+
+### 6.3 Ordering
+
+Core event positions give gap-free ordering for Core-recorded canonical events. If Jarvis-local
+coordination evidence ever lives outside that stream, its ordering relative to Core evidence must be
+made deterministic by a mechanism decided later.
+
+**Ordering must NOT be solved by:** wall-clock timestamp sorting · `createdAt` comparison · UUID
+ordering · last-writer-wins · non-durable process arrival order.
+
+**The final mechanism is not invented here.**
+
+### 6.4 Options for the Tier A/B evidence source — evaluated, not chosen
+
+**Option A — Core records Jarvis-produced primitive coordination artifacts.** Already a repository
+pattern (§2.1): `qf.recommendation.created` and `qf.communication.human-handoff-requested`.
+*Advantages:* one gap-free canonical ordering; the existing backbone and rebuild pattern; Core records
+occurrence without authoring the decision; no second Jarvis event log. *Costs:* targeted Core
+protocol/event adoption may be required, and **an unsubmitted `draft` cannot naturally be
+Core-recorded**. **No event names are invented here — S3/D2 decides what Core can expose or adopt.**
+
+**Option B — a separate durable Jarvis coordination evidence log/store.** Possible but larger: new
+durable persistence, independent replay semantics, deterministic ordering against Core events, likely
+schema/migration work, separate authority boundaries. **Fallback only. Not selected. No migration
+allocated.**
+
+**Option C — some states stay ephemeral/runtime-only and are excluded from the durable view.** For
+example `draft` until something is durably submitted. A possible MVP simplification, but if later
+chosen it must document exactly which states are durable, must not claim full lifecycle rebuild, and
+must make the runtime/UI semantics explicit. **Not chosen now.**
+
+**No A/B/C choice is forced before S3.** That is **D2b**.
+
+### 6.5 The rebuild rule
+
+> **A durable/rebuildable `CommunicationStateRecordV2` view may contain a state only when every fact
+> used to derive that state has a durable, replayable, deterministically ordered evidence source.**
+
+- **Tier C:** the intended source is authenticated/adopted Core events, through **D2a + D4**.
+- **Tier A/B:** the durable evidence source is **not fully decided** (§6.1).
+
+Until those sources are settled: **D5 cannot claim full 18-state deterministic rebuild**; no direct
+imperative read-model write is sufficient; no process-memory fact becomes durable truth; no state is
+reconstructed from timestamps or heuristics.
+
+**ADR-0043-style deterministic rebuild is a REQUIREMENT, not yet a proved property of the full
+communication view.** Tier-C reconstruction can use ordered accepted Core events once D2a/D4 exist.
+Tier A/B reconstruction additionally requires durable ordered coordination evidence; **until those
+sources are resolved, full 18-state rebuild is not certified.** The rebuildable subset today is
+**none** — Tier C awaits D2a/D4 and adoption, Tier A/B awaits D2b.
+
+### 6.6 Privacy under rebuild
+
+Because no free text, contact detail or provider payload crosses the boundary (§5.4), the read model
+holds opaque references and machine tokens, and an erasure reaching the event log leaves no prose
+behind in this view. Any Tier A/B source chosen at D2b must preserve the same minimisation.
+
+---
+
+## 7. Write-path trust: D2a is a PREREQUISITE, not an option
+
+### 7.1 What the repository currently proves
 
 1. `storeValidatedEvent` is exported from `@qf-jarvis/event-backbone`'s **root barrel**.
 2. `EventPersistenceRecord` is **caller-constructible**.
-3. `storeValidatedEvent` performs **no signature verification and no contract parsing**.
-4. `event-store.ts` states trust is a **caller obligation**: *"This is a TRUSTED low-level primitive.
-   It verifies nothing."*
-5. **No repository-wide containment rule** restricts it to `event-ingestion`. Nine packages/apps
-   already depend on the package; only `event-ingestion` calls it, by convention.
-6. Direct SQL writes under a role holding the grant are possible.
-7. **A row in `qf_jarvis.event` therefore does not, by itself, prove Core origin.**
-8. **Re-parsing a stored payload proves schema shape, not origin.**
-9. **A narrow projection reader is a least-privilege data-access pattern, not an authentication
-   boundary.**
+3. It performs **no signature verification and no contract parsing**.
+4. `event-store.ts`: *"This is a TRUSTED low-level primitive. It verifies nothing"*, and trust *"is a
+   caller obligation, not a structural guarantee this package can enforce."*
+5. **No repository-wide containment rule** confines it to `event-ingestion`; nine packages/apps
+   already depend on the package.
+6. Direct SQL writes under a granted role are possible.
+7. **A row in `qf_jarvis.event` does not, by itself, prove Core origin.**
+8. **Re-parsing proves schema shape, not origin.**
+9. **A narrow reader is a least-privilege data-access pattern, not an authentication boundary.**
 
-### 6.2 The consequence, stated plainly
+### 7.2 The consequence
 
 > **Joining to `qf_jarvis.event` and re-parsing ≠ trusted Core evidence.**
 
-So **write-path/capability hardening is NOT optional if Model 2 will treat reader output as
-authoritative Core evidence.** It is locked as a bounded prerequisite:
+**D2a — accepted-event write-path / provenance-capability hardening** is locked as a bounded
+prerequisite. **D4 MUST depend on D2a**; **D5 may not consume reader output as authority before
+D2a + D4.**
 
-**D2a — accepted-event write-path / provenance-capability hardening.**
-
-**D4 (the evidence reader) MUST depend on D2a**, and **D5 Tier B/C projection may not consume reader
-output as authority before D2a + D4.**
-
-The minimum repository-level invariant D2a must establish:
+Minimum invariant:
 
 - **A.** Only the governed event-ingestion composition may use the supported event-write primitive.
-- **B.** Repository code has **no supported bypass** around that primitive for `qf_jarvis.event`
-  writes.
-- **C.** The evidence reader's trusted type/capability is produced **only** from that governed path.
+- **B.** Repository code has **no supported bypass** for `qf_jarvis.event` writes.
+- **C.** The reader's trusted capability is produced **only** from that governed path.
 - **D.** **A direct database administrator or infrastructure actor remains OUTSIDE the
   application-code trust guarantee** unless a DB-level capability boundary is separately adopted.
 
-### 6.3 What code containment can and cannot claim
+### 7.3 What code containment can and cannot claim
 
-**It can:** make the invariant **structural within the reviewed application code**.
-
-**It cannot:** defend against an already-privileged database operator. The current database role and
-grant posture may still permit a privileged direct SQL write. ADR-0044's own boundary already concedes
-the analogous point — its control holds *"even though the shared projection DB role technically holds
-the column grant."*
+**It can** make the invariant **structural within the reviewed application code**. **It cannot**
+defend against an already-privileged database operator; ADR-0044's boundary already concedes the
+analogous point — its control holds *"even though the shared projection DB role technically holds the
+column grant."*
 
 **Whether separate DB role/grant hardening is required must be proved by the future hardening slice
-against the actual migration and grant model. This document allocates NO migration.** If grant
-separation turns out to be required, that slice must justify it under migration governance — and the
-`0010`–`0012` ledger drift remains separate governance debt to reconcile first.
+against the actual migration and grant model. This document allocates NO migration.**
 
-### 6.4 The minimum D2a hardening to design (not implement)
+### 7.4 The minimum D2a hardening to design (not implement)
 
 1. **Repository-wide import/API containment** — only `event-ingestion` may call or name
    `storeValidatedEvent`.
-2. **Narrow `storeValidatedEvent` off the root public barrel** if repository compatibility allows.
-   This is a **public-API change**; if it is breaking, it needs its own slice and review.
-3. **Repository-wide direct-write containment** — no other package or app may issue
-   `INSERT`/`UPDATE`/`DELETE` against `qf_jarvis.event`. The existing `event-store` implementation is
-   the one supported write location.
-4. **A purpose-owned accepted-event evidence/read capability** whose construction is **not available
-   to arbitrary projection code**.
-5. **Negative containment tests** proving a sibling package cannot gain authority by: importing
-   `storeValidatedEvent`; deep-importing it; writing `qf_jarvis.event` directly through normal
-   repository code; or constructing a naked evidence object.
+2. **Narrow it off the root public barrel** if compatibility allows — a **public-API change**; if
+   breaking, its own slice.
+3. **Repository-wide direct-write containment** on `qf_jarvis.event`.
+4. **A purpose-owned evidence capability** not constructible by arbitrary projection code.
+5. **Negative containment tests** — a sibling package cannot gain authority by importing the
+   primitive, deep-importing it, writing the table directly, or constructing a naked evidence object.
 
-### 6.5 Post-hoc re-verification — the honest limit
+### 7.5 Post-hoc re-verification — the honest limit
 
 The signature commits to `"qf-jarvis-event-v1" ‖ keyId ‖ signedAt ‖ hex(sha256(rawBody))`, and every
-component is persisted (`signature`, `signature_key_id`, `signature_signed_at`, `body_digest`), so the
-Ed25519 check **is** arithmetically re-runnable from a stored row given the public-key registry.
-
-**But the exact raw signed bytes are not stored** — only their digest. Re-verification proves *"a body
-whose SHA-256 is D was signed by that key"*; it does **not** prove the stored `payload` and envelope
-columns are that body, because the body cannot be reconstructed from the row. That link rests on
-`prepare-validated-event` at ingest time and on the row being unaltered. `semantic_event_digest`
-detects post-ingest mutation but is computed by Jarvis and is **not a Core attestation**. **No
-cryptographic fact is invented here.**
+component is persisted, so the Ed25519 check **is** re-runnable from a stored row. **But the exact raw
+signed bytes are not stored** — only their digest — so it proves *"a body with this digest was
+signed"*, not that the stored payload **is** that body. `semantic_event_digest` detects later mutation
+but is Jarvis-computed and is **not a Core attestation**. **No cryptographic fact is invented.**
 
 ---
 
-## 7. `CommunicationStateRecordV2` — semantics only
+## 8. `CommunicationStateRecordV2` — semantics only
 
 Under Model 2, **V2 is a Jarvis-local projection/read-model contract**, not automatically a Core wire
-payload. It is **not implemented here**, and no Zod or TypeScript is written.
+payload. **Not implemented here**; no Zod or TypeScript is written.
 
-### 7.1 Locked semantics
+### 8.1 Locked semantics
 
-1. **V1 stays immutable and published.** No edit in place.
-2. **`ApprovalDecisionV1` is never again used as generic "Core decided" evidence.**
-3. V2 **structurally distinguishes** Jarvis-local (Tier A), Jarvis coordination over a trusted
-   prerequisite (Tier B), and Core/provider facts projected from trusted accepted evidence (Tier C).
-4. **A caller-provided event id is never authority.** The runtime accepts **evidence objects from the
-   governed reader over a D2a-hardened write path**; a record may *retain* the source event identity
+1. **V1 stays immutable and published.**
+2. **`ApprovalDecisionV1` is never again generic "Core decided" evidence.**
+3. V2 **structurally distinguishes** Tier A, Tier B and Tier C evidence.
+4. **A caller-provided event id is never authority.** The runtime accepts evidence objects from the
+   governed reader **over a D2a-hardened write path**; a record may *retain* the source event identity
    for audit once it came from trusted evidence.
-5. It carries **no** consent snapshot, DNC flag, suppression cache, `canSend`, `canExecute`,
-   `authorizedUntil` or reusable permission.
-6. `previousState` stays evidence and context, never authority. `reasonCode` stays an open Core
-   machine token.
-7. **No nineteenth state. No invented cancellation, expiry or dispatch contract.**
+5. No consent snapshot, DNC flag, suppression cache, `canSend`, `canExecute`, `authorizedUntil` or
+   reusable permission.
+6. `previousState` stays evidence and context. `reasonCode` stays an open Core machine token.
+7. **No nineteenth state. No invented cancellation, expiry, dispatch or submission contract.**
+8. **D3 may not freeze an evidence variant for any Tier A/B state whose durable source is unresolved**
+   (§6.1). **D5 may not implement a state until its durable source and ordering are decided.**
 
-### 7.2 Per-state requirements
+### 8.2 Per-state requirements and durable-source status
 
-| State | Tier | V2 requirement |
-| --- | --- | --- |
-| `draft` | A | Jarvis-local; may cite the S1 `CommunicationRequestV1` it was built from |
-| `authorization-requested` | B | **actual submission**, not construction. The S4 receipt shape is **UNRESOLVED** |
-| `rejected` | C | communication-**authorization** refusal evidence. **Never** a human approval id |
-| `authorized` | C | Core communication-authorization evidence |
-| `scheduled` | B | **both** a trusted `authorized` prerequisite **and** Jarvis's scheduling act and instant |
-| `execution-submitted` | C | evidence that Core **dispatched** the intent to n8n. **UNRESOLVED** — an issued intent is not a dispatch (§5.5) |
-| `provider-accepted` | C | **Core-recorded result** evidence. An intent is never sufficient |
-| `delivered` / `read` / `answered` / `no-answer` / `busy` / `failed` | C | Core-recorded provider/result evidence |
-| `follow-up-requested` | B | trusted prior outcome **plus** Jarvis's follow-up decision. The follow-up itself starts a **new** lifecycle at `draft` |
-| `human-handoff-required` | B | the Jarvis handoff request **plus** its trusted prior outcome |
-| `completed` | C | authoritative completion/result evidence |
-| `cancelled` | C | **UNRESOLVED** — no Core cancellation fact exists (ADR-0134 §3.1) |
-| `expired` | C | **UNRESOLVED** — the authoritative expiry fact is undetermined (ADR-0134 §7) |
+| State | Tier | Evidence requirement | Durable source status |
+| --- | --- | --- | --- |
+| `draft` | A | Jarvis-local | **UNRESOLVED** |
+| `authorization-requested` | B | **actual submission**, not construction | **UNRESOLVED** (S4 receipt undefined) |
+| `rejected` | C | communication-**authorization** refusal evidence; never a human approval id | Tier-C locked event; needs D2a + D4 + adoption |
+| `authorized` | C | Core communication-authorization evidence | as above |
+| `scheduled` | B | trusted `authorized` prerequisite **and** Jarvis's scheduling act | **UNRESOLVED** — never inferred from `requestedTiming` |
+| `execution-submitted` | C | evidence Core **dispatched** to n8n | **UNRESOLVED** (§5.5) |
+| `provider-accepted` | C | **Core-recorded result**; an intent is never sufficient | Tier-C locked event; needs D2a + D4 + adoption |
+| `delivered` / `read` / `answered` / `no-answer` / `busy` / `failed` | C | Core-recorded provider/result evidence | as above |
+| `follow-up-requested` | B | trusted prior outcome **and** Jarvis's follow-up decision | **UNRESOLVED** — never inferred from a later request alone |
+| `human-handoff-required` | B | the Jarvis handoff request **and** its trusted prior outcome | **CONDITIONAL** — `qf.communication.human-handoff-requested` / `HumanHandoffRequestV1`, subject to S3/D2 adoption + D2a/D4 |
+| `completed` | C | authoritative completion/result evidence | Tier-C locked event; needs D2a + D4 + adoption |
+| `cancelled` | C | — | **UNRESOLVED** — no Core cancellation fact exists |
+| `expired` | C | — | **UNRESOLVED** — the authoritative expiry fact is undetermined |
 
-### 7.3 `channel`, deliberately open
+State meaning and ownership are unchanged from ADR-0134.
+
+### 8.3 `channel`, deliberately open
 
 V1 makes `channel` mandatory, so a `rejected` record must name a channel Core never authorized. Three
-candidate repairs — optional `channel`; an explicit *proposed* vs *authorized* distinction; or a
-state-sensitive rule — are all defensible. **This is not guessed.** It is settled when S3 establishes
-whether Core's authorization always names a channel.
+candidate repairs — optional `channel`; a *proposed* vs *authorized* distinction; or a state-sensitive
+rule — are all defensible. Settled when S3 establishes whether Core's authorization always names one.
 
-### 7.4 Intentionally unresolved until S3 / D2
+### 8.4 Intentionally unresolved until S3 / D2 / D2b
 
-`cancelled` evidence · `expired` evidence · **`execution-submitted` dispatch evidence** · the S4
-submission receipt · `channel` semantics · which candidate contracts the current Core can actually
-expose or adopt · whether any additional Core primitive must be adopted. **Freezing V2 before S3
-would encode assumptions about a system this repository has not re-audited.**
+`cancelled` · `expired` · **`execution-submitted` dispatch evidence** · the S4 submission receipt ·
+`channel` semantics · which candidate contracts the current Core can expose or adopt · **and the
+durable ordered evidence source for `draft`, `authorization-requested`, `scheduled` and
+`follow-up-requested`.**
 
 ---
 
-## 8. Versioning consequences
+## 9. Versioning consequences
 
 - **`qf.communication.state-recorded@3` is NOT required under Model 2, and is not scheduled.**
-- **`qf.communication.state-recorded@2` stays as published compatibility and history.** It is **not**
-  the source of truth for Model-2 work. It is **not retired here**: retirement or versioning is a
-  separate compatibility decision. Its `@2` was a uniform privacy-hardening bump across all 41
-  inherited events (ADR-0026 §5), not a communication-specific redesign.
-- **`CommunicationAuthorizationV2` is NOT required.** An accepted event already gives the
-  authorization a citable name; that argues against a redundant identifier, and is not a claim that a
-  name authenticates anything.
-- **V2 is not added to the canonical Core event registry** merely because it is a contract. If a
-  future external interface must expose it, that is its own adoption decision.
+- **`@2` stays published compatibility and history**; not the Model-2 source of truth, and **not
+  retired here**.
+- **`CommunicationAuthorizationV2` is NOT required.**
+- **V2 is not added to the canonical Core event registry** merely because it is a contract.
 
 ---
 
-## 9. Sequence
+## 10. Sequence
 
 ```mermaid
 flowchart TD
@@ -418,49 +472,49 @@ flowchart TD
     D1["D1 · S3 FRESH read-only Core audit<br/>at a current pinned commit"]
     D2["D2 · Core protocol/event gap decision<br/>planning + adoption only"]
     D2a["D2a · accepted-event write-path /<br/>provenance-capability hardening"]
-    D3["D3 · CommunicationStateRecordV2<br/>after D2 freezes evidence semantics"]
+    D2b["D2b · Tier A/B durable coordination-evidence<br/>+ ordering decision"]
+    D3["D3 · CommunicationStateRecordV2 contract"]
     D4["D4 · purpose-specific trusted<br/>evidence-read capability"]
-    D5["D5 · tiered local projection<br/>Tier A → B → C"]
-    D6["D6 · S4/S5/S7 transport &amp; result integration<br/>per ADR-0132"]
+    D5["D5 · tiered local projection"]
+    D6["D6 · S4/S5/S7 transport &amp; result integration"]
     D7["D7 · real-integration certification"]
     D8["D8 · staged activation<br/>separately governed"]
 
     D0 --> D1 --> D2
     D2 --> D2a
-    D2 --> D3
+    D2 --> D2b
+    D2b --> D3
     D2a --> D4
     D3 --> D5
     D4 --> D5
+    D2b --> D5
     D5 --> D6 --> D7
     D7 -.owner decision, not a dependency.-> D8
 ```
 
-**Dependency requirements — load-bearing:**
+**Dependencies — load-bearing:**
 
-- **D4 MUST depend on D2a.** A reader over an unhardened write path produces reachable rows, not
-  trusted evidence.
-- **D5 MUST depend on D3 + D4.** **No trusted Model-2 projection may ship before D2a + D4.**
-- **Tier B facts with real transport prerequisites cannot become live** before their corresponding
-  S4/S5/S7 evidence exists.
-- **`execution-submitted` cannot become a valid projected fact until its real dispatch evidence is
-  settled** (§5.5).
-- **D3 and D2a may be developed in either order after D2** if genuinely independent.
+- **D3 depends on D2 + D2b** for any Tier A/B evidence variant it freezes.
+- **D4 depends on D2a.** A reader over an unhardened write path produces reachable rows, not trusted
+  evidence.
+- **D5 depends on D3 + D4 + D2b.**
+- Transport-dependent states still wait for **S4/S5/S7** evidence; `execution-submitted` cannot become
+  a valid projected fact until §5.5 is settled.
+- **If D2b chooses Core-recorded primitive coordination events (Option A), D4 may serve both Tier B
+  and Tier C.** If D2b requires a separate local evidence store (Option B), its implementation and
+  ordering proof must be inserted **before D5** under separate owner review.
 
-These are **architecture-step labels inside this decision**, not new QFJ phases. The canonical phase
-and slice numbering in ADR-0132 is unchanged.
+Architecture-step labels inside this decision — **not new QFJ phases**. **No migration now.**
 
-**S2a (`draft` alone) is deliberately not scheduled before D1.** It would be one state, unable to
-advance to any successor, composed by nothing — ceremonial code that claims S2 has started while the
-evidence model it must eventually satisfy is still open.
+**S2a (`draft` alone) is deliberately not scheduled before D1** — and §6.1 now gives a second reason:
+`draft` has no durable replay source at all.
 
 ---
 
-## 10. Posture
+## 11. Posture
 
-No production code. No contract. No event registry change. No projection-runtime, event-backbone or
-ingestion change. No Core access, no n8n, no provider, no message sent. No persistence and **no
-migration** — `0013` is not allocated, and the `0010`–`0012` ledger drift remains separate governance
-debt to be reconciled before any future allocation.
+No production code. No contract. No event registry, event-backbone, projection-runtime or ingestion
+change. No Core access, no n8n, no provider, no message sent. No persistence and **no migration** —
+`0013` is not allocated, and the `0010`–`0012` ledger drift remains separate governance debt.
 
-**Production rollout remains OFF. Aarohi's runtime remains PLANNED / DISABLED. Staged activation
-remains a later, separately governed owner decision.**
+**Production rollout remains OFF. Aarohi's runtime remains PLANNED / DISABLED.**

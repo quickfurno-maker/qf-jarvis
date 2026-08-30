@@ -216,10 +216,12 @@ as authority for it.
 > adopts **Model 2**: Jarvis derives a LOCAL communication-state projection from authenticated,
 > **adopted** primitive Core events, and authors only its own coordination facts. **No
 > `qf.communication.state-recorded@3` is required**, though targeted Core primitive adoption may
-> still be needed for facts S3 finds absent, and trusting the projection additionally requires
-> write-path hardening (`D2a`). The next execution step is **S3 — a fresh read-only Core audit**
-> at a current pinned commit, because `cancelled`, `expired` and `execution-submitted` evidence
-> remain unresolved. Nothing else in this ADR changes, and
+> still be needed for facts S3 finds absent. Trusting the projection additionally requires
+> write-path hardening (`D2a`) and a Tier A/B durable coordination-evidence decision (`D2b`) —
+> four of the five Jarvis-owned coordination states have no durable, ordered replay source today,
+> so full 18-state rebuild is **not certified**. The next execution step is **S3 — a fresh
+> read-only Core audit** at a current pinned commit, because `cancelled`, `expired` and
+> `execution-submitted` evidence remain unresolved. Nothing else in this ADR changes, and
 > no activation posture changes.
 
 **What this buys.** A dependency-ordered sequence in which each step is small, reviewable and

@@ -164,8 +164,15 @@ Necessity must be proved before payload access is granted; nothing is carried "j
 | `qf.execution.result-recorded`            | —                                                                                                | **removed pre-S3** — `CommunicationResultV1` already carries `lifecycleState`, `outcome`, `failure` and both execution ids, so no state derivation needs the execution-side twin                                                   |
 | `qf.communication.human-handoff-recorded` | —                                                                                                | **removed pre-S3** — it does not justify `human-handoff-required` (Jarvis's _request_, ADR-0134 §4.5) and does not justify `completed` (which needs a Core-recorded result). **No lifecycle state is currently derivable from it** |
 
-Field minimisation (design §5.4) applies to the two locked entries; a conditional candidate earns a
-minimisation row only when it is admitted.
+**Separately, a Tier-B coordination candidate — NOT part of the Tier-C authority allowlist.** Do not
+confuse the Tier-C authority events with every input the hybrid local view needs:
+
+| Event type                                 | State                    | Status                                                                                                                                                                                                                                                                                                |
+| ------------------------------------------ | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `qf.communication.human-handoff-requested` | `human-handoff-required` | **CONDITIONAL candidate.** Payload `HumanHandoffRequestV1`; **Jarvis is the artifact producer** (`producingSystem: qf-jarvis`, enforced); the **canonical event is Core-recorded**. **Not** `human-handoff-recorded`. Live/adopted availability requires **S3/D2**; trusted use requires **D2a + D4** |
+
+Field minimisation (design §5.4) applies to the two locked Tier-C entries; a conditional candidate
+earns a minimisation row only when it is admitted.
 
 ### 8. `execution-submitted` evidence is UNRESOLVED
 
@@ -192,6 +199,64 @@ must be verified during **S3 / D2** and the **S5** transport design. **Until the
 for `execution-submitted` is UNRESOLVED**, and no dispatch event name, receipt schema, n8n endpoint or
 delivery acknowledgement is invented here.
 
+### 8a. Tier A/B facts need a durable, ordered replay source — D2b
+
+The complete communication canonical-event surface is **five** events (`authorization-recorded`,
+`result-recorded`, `human-handoff-requested`, `human-handoff-recorded`, `state-recorded`). **No
+canonical event records a communication draft, a submission, or a schedule**, and no durable
+Jarvis-local store holds communication coordination state — migrations `0008`/`0009` are
+conversation-control and the approval queue.
+
+| State                         | Jarvis artifact                                                                      | Durable today                       | Core-recorded event today                                                     | Other replayable store | Ordering                      | Rebuildable              | Status          |
+| ----------------------------- | ------------------------------------------------------------------------------------ | ----------------------------------- | ----------------------------------------------------------------------------- | ---------------------- | ----------------------------- | ------------------------ | --------------- |
+| `draft` (A)                   | S1 constructs a `CommunicationRequestV1` — **construction is not durable recording** | **NO**                              | **NO**                                                                        | **NO**                 | undefined                     | **NO**                   | **UNRESOLVED**  |
+| `authorization-requested` (B) | an S4 submission receipt                                                             | **NO** — artifact itself unresolved | **NO**                                                                        | **NO**                 | undefined                     | **NO**                   | **UNRESOLVED**  |
+| `scheduled` (B)               | a Jarvis scheduling act and instant                                                  | **NO**                              | **NO**                                                                        | **NO**                 | undefined                     | **NO**                   | **UNRESOLVED**  |
+| `follow-up-requested` (B)     | a Jarvis follow-up decision                                                          | **NO**                              | **NO**                                                                        | **NO**                 | undefined                     | **NO**                   | **UNRESOLVED**  |
+| `human-handoff-required` (B)  | **`HumanHandoffRequestV1`**, Jarvis-produced (enforced)                              | not yet                             | **`qf.communication.human-handoff-requested` exists as a candidate contract** | n/a                    | Core position, **if adopted** | yes, if adopted + D2a/D4 | **CONDITIONAL** |
+
+**Two inferences are forbidden.** `scheduled` must **not** be inferred from `requestedTiming` in
+`CommunicationRequestV1` — that is a _request_, not a record that Jarvis scheduled anything. And
+`follow-up-requested` must **not** be inferred merely because a later `CommunicationRequestV1` exists,
+unless a canonical causation/correlation contract proves the mapping; a later attempt is a **new
+request, not a retry**.
+
+**Read model ≠ source of fact.** Explicitly forbidden: _"Jarvis decides the state, writes the
+projection row, therefore it is durable."_ A projection is **derived** state; **a direct write without
+an independent replayable source turns a cache into authority and makes rebuild impossible.** If a
+Tier A/B fact is persisted, its source evidence must exist independently of the read model. A
+process-memory fact never becomes durable truth, and no state is reconstructed from timestamps or
+heuristics alone.
+
+**Ordering.** Core positions give gap-free ordering for Core-recorded events. If Jarvis-local
+coordination evidence ever lives outside that stream, its order relative to Core evidence must be made
+deterministic by a mechanism decided later. **Not by** wall-clock sorting, `createdAt` comparison, UUID
+ordering, last-writer-wins, or process arrival order. **The mechanism is not invented here.**
+
+**The rebuild rule.**
+
+> A durable/rebuildable `CommunicationStateRecordV2` view may contain a state **only when every fact
+> used to derive that state has a durable, replayable, deterministically ordered evidence source.**
+
+**ADR-0043-style deterministic rebuild is a REQUIREMENT, not yet a proved property of the full
+communication view.** Tier-C reconstruction can use ordered accepted Core events once D2a/D4 exist;
+Tier A/B additionally requires durable ordered coordination evidence. **Until those sources are
+resolved, full 18-state rebuild is NOT certified**, and the currently rebuildable subset is **none**.
+
+**Options — evaluated, not chosen (this is D2b).** **A:** Core records Jarvis-produced primitive
+coordination artifacts — already the pattern behind `qf.recommendation.created` and
+`qf.communication.human-handoff-requested`; one gap-free ordering, existing rebuild machinery, no
+second Jarvis log; costs targeted Core adoption, and **an unsubmitted `draft` cannot naturally be
+Core-recorded**. **B:** a separate durable Jarvis coordination log — new persistence, independent
+replay, its own ordering proof, likely schema work; **fallback only**. **C:** some states stay
+ephemeral/runtime-only and are excluded from the durable view — a possible MVP simplification that
+would have to name exactly which states are durable and stop claiming full rebuild. **No A/B/C choice
+is forced before S3.**
+
+**D2b — Tier A/B durable coordination-evidence + ordering decision** is added to the sequence (§11).
+**D3 may not freeze an evidence variant for an unresolved Tier A/B state, and D5 may not implement a
+state until its durable source and ordering are decided.**
+
 ### 9. `CommunicationStateRecordV2` — semantics decided, implementation not
 
 Under Model 2, V2 is a **Jarvis-local projection/read-model contract**, not automatically a Core wire
@@ -205,9 +270,17 @@ cites communication-**authorization** refusal evidence, never a human approval i
 `authorization-requested` proves **submission**, not construction; `provider-accepted` and the provider
 outcomes require Core-recorded result evidence.
 
-**Deliberately unresolved until S3 / D2:** `cancelled` evidence · `expired` evidence ·
+**Tier A/B durable-source status (§8a):** `draft` **UNRESOLVED** · `authorization-requested`
+**UNRESOLVED** · `scheduled` **UNRESOLVED** · `follow-up-requested` **UNRESOLVED** ·
+`human-handoff-required` **CONDITIONAL** on `qf.communication.human-handoff-requested` /
+`HumanHandoffRequestV1`, subject to S3/D2 adoption and D2a/D4 trust. State meaning and ownership are
+unchanged from ADR-0134.
+
+**Deliberately unresolved until S3 / D2 / D2b:** `cancelled` evidence · `expired` evidence ·
 **`execution-submitted` dispatch evidence** · the S4 submission receipt · `channel` semantics · which
-candidate contracts the current Core can expose or adopt. **No Zod or TypeScript is written here.**
+candidate contracts the current Core can expose or adopt · **and the durable ordered evidence source
+for `draft`, `authorization-requested`, `scheduled` and `follow-up-requested`.** **No Zod or
+TypeScript is written here.**
 
 ### 10. Versioning
 
@@ -220,15 +293,19 @@ candidate contracts the current Core can expose or adopt. **No Zod or TypeScript
 ### 11. Sequence, with trust hardening as an explicit dependency
 
 **D0** this decision → **D1** S3 fresh read-only Core audit → **D2** Core protocol/event gap decision →
-**D2a** accepted-event write-path / provenance-capability hardening · **D3** V2 contract →
-**D4** trusted evidence-read capability → **D5** tiered Tier A/B/C projection →
-**D6** S4/S5/S7 integration per ADR-0132 → **D7** certification → **D8** staged activation.
+**D2a** write-path / provenance-capability hardening · **D2b** Tier A/B durable coordination-evidence
 
-**D4 MUST depend on D2a. D5 MUST depend on D3 + D4. No trusted Model-2 projection may ship before
-D2a + D4.** Tier B facts with transport prerequisites cannot become live before their S4/S5/S7
-evidence exists, and `execution-submitted` cannot become a valid projected fact until §8 is settled.
-D3 and D2a may proceed in either order after D2 if genuinely independent. Architecture-step labels
-only — **no new QFJ phases**.
+- ordering decision → **D3** V2 contract → **D4** trusted evidence-read capability →
+  **D5** tiered projection → **D6** S4/S5/S7 integration per ADR-0132 → **D7** certification →
+  **D8** staged activation.
+
+**Dependencies:** **D3 depends on D2 + D2b** for any Tier A/B evidence variant it freezes · **D4
+depends on D2a** · **D5 depends on D3 + D4 + D2b** · transport-dependent states still wait for
+S4/S5/S7 evidence · `execution-submitted` cannot become a valid projected fact until §8 is settled.
+**If D2b chooses Core-recorded primitive coordination events, D4 may serve both Tier B and Tier C; if
+it requires a separate local evidence store, that implementation and its ordering proof must be
+inserted before D5 under separate owner review.** Architecture-step labels only — **no new QFJ
+phases. No migration now.**
 
 **S2a (`draft` alone) is deliberately not scheduled before D1**: one state, unable to advance to any
 successor, composed by nothing.
@@ -249,7 +326,8 @@ S2 implementation still **BLOCKED**, and **this decision on a feature branch / P
 - **Model 2's trust now has an explicit, sequenced prerequisite (D2a)** instead of resting on a
   data-access boundary that cannot authenticate.
 - `cancelled`, `expired` and `execution-submitted` remain openly unresolved rather than closed by
-  assumption.
+  assumption, and **full 18-state deterministic rebuild is explicitly NOT certified** — four of the
+  five Tier A/B states have no durable replay source today.
 - Nothing is activated. Production rollout remains **OFF**; Aarohi's runtime remains
   **PLANNED / DISABLED**.
 

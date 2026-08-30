@@ -22,7 +22,9 @@ adopts **Model 2** — a LOCAL Jarvis projection over authenticated, **adopted**
 events, needing **no new Core state event**, though it may still require targeted Core primitive
 adoption for facts S3 finds absent. Trusting that projection additionally requires **write-path
 hardening (`D2a`)**, because a narrow reader is a data-access boundary and cannot authenticate an
-event's origin. It makes **S3, the fresh read-only Core audit, the next execution step**. That decision is **on a feature branch / PR, not merged**. Nothing else here is
+event's origin — and **`D2b`**, because four of the five Jarvis-owned coordination states have no
+durable, ordered replay source today, so **full 18-state rebuild is not certified**. It makes
+**S3, the fresh read-only Core audit, the next execution step**. That decision is **on a feature branch / PR, not merged**. Nothing else here is
 implemented, adopted, connected or activated. Aarohi's runtime is **PLANNED / DISABLED** and
 production rollout is **OFF**. Every edge marked *proposed* or *blocked* below does not exist.
 
