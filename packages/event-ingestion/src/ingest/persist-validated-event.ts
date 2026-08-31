@@ -6,10 +6,9 @@
  * ### Only proven inputs reach persistence THROUGH THIS BRIDGE
  *
  * The `storeValidatedEvent` primitive in `@qf-jarvis/event-backbone` is a trusted low-level write
- * that verifies nothing — a package boundary cannot stop some other caller handing it a forged
- * record. **This bridge is where that trust is earned on the ingestion path.** The only way to build
- * a record *here* is {@link buildEventPersistenceRecord}, and it takes exactly two things, both
- * produced by *this package* during ingestion:
+ * that verifies nothing. **This bridge is where that trust is earned on the ingestion path.** The
+ * only way to build a record *here* is {@link buildEventPersistenceRecord}, and it takes exactly two
+ * things, both produced by *this package* during ingestion:
  *
  * - a {@link PreparedValidatedEvent} — an already **contract-validated**, deeply-frozen canonical
  *   event with its semantic digest (Stage 3.3 slice 2); and
@@ -22,19 +21,41 @@
  * cannot be paired with a prepared event for another. A mismatch throws
  * {@link EvidencePreparationMismatchError}; it never silently stores a mispaired record.
  *
+ * ### D2a — the bridge is now the ONLY path, structurally (ADR-0138)
+ *
+ * Before D2a this file's guarantee stopped at its own path: some *other* caller could still import
+ * `storeValidatedEvent` from the `@qf-jarvis/event-backbone` root and store a forged record. That
+ * export is gone, the low-level primitive is itself import-restricted so no other `event-backbone`
+ * module may call it, and lint permits **only this file** to import the governed writer. A
+ * repository-wide scan asserts exactly one production importer and exactly one call to the mint --
+ * a scan being necessary because an `eslint-disable` comment can silence a lint rule but not a
+ * source scan.
+ *
+ * The `AuthenticatedEventWrite` wrapper stops structural substitution reaching the INSERT. It does
+ * **not** by itself prove a signature was verified: its mint takes a plain record, so any code that
+ * could import the module could mint from a hand-built one. **That proof is this file's job** — the
+ * binding above is what makes a minted record trustworthy, which is exactly why the mint has one
+ * permitted call site.
+ *
  * ### Internal
  *
  * Neither function is exported from the package barrel. They are the ingest composition, reached
- * only by a future authenticated ingest caller inside this package. The public Stage 3.2 surface
+ * only by the `createEventIngestor` composition inside this package. The public Stage 3.2 surface
  * is unchanged and still exposes no raw body, no key, and no signature bytes.
  */
 
+import { type DatabasePool } from '@qf-jarvis/event-backbone';
+// D2a (ADR-0138): the accepted-event write authority is NOT on the package root. It lives on this
+// narrow internal subpath, and lint permits exactly this file to import it. `storeAuthenticatedEvent`
+// takes an `AuthenticatedEventWrite`, a nominal wrapper no object literal can substitute for — which
+// is substitution protection, not authentication. The record it wraps is trustworthy because of the
+// binding below, and because this is the only production file allowed to mint one.
 import {
-  storeValidatedEvent,
-  type DatabasePool,
+  AuthenticatedEventWrite,
+  storeAuthenticatedEvent,
   type EventPersistenceOutcome,
   type EventPersistenceRecord,
-} from '@qf-jarvis/event-backbone';
+} from '@qf-jarvis/event-backbone/internal/event-write';
 
 import { type VerifiedSignatureEvidence } from '../signature/verify.js';
 import { type PreparedValidatedEvent } from './prepare-validated-event.js';
@@ -125,14 +146,17 @@ export function buildEventPersistenceRecord(
 /**
  * Persist a prepared, verified event atomically and idempotently.
  *
- * Builds the record (binding evidence to prepared event) and delegates to `storeValidatedEvent`.
- * Returns `stored` on first delivery and `duplicate` for a same-digest redelivery; a conflicting
- * redelivery throws `ConflictingEventDigestError` from the store. It performs no UPDATE or DELETE.
+ * Builds the record (binding evidence to prepared event), mints the D2a write capability from it,
+ * and delegates to `storeAuthenticatedEvent`. Returns `stored` on first delivery and `duplicate` for
+ * a same-digest redelivery; a conflicting redelivery throws `ConflictingEventDigestError` from the
+ * store. It performs no UPDATE or DELETE. **The capability is minted only after the record has been
+ * built from bound evidence — a mismatch throws before any token exists.**
  */
 export async function persistPreparedEvent(
   pool: DatabasePool,
   prepared: PreparedValidatedEvent,
   evidence: VerifiedSignatureEvidence,
 ): Promise<EventPersistenceOutcome> {
-  return storeValidatedEvent(pool, buildEventPersistenceRecord(prepared, evidence));
+  const record = buildEventPersistenceRecord(prepared, evidence);
+  return storeAuthenticatedEvent(pool, AuthenticatedEventWrite.fromVerifiedIngestion(record));
 }

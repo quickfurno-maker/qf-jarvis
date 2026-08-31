@@ -11,11 +11,19 @@ import { describe, expect, it, vi } from 'vitest';
 
 // The store primitive is mocked so `persistPreparedEvent` can be tested without a database.
 // `buildEventPersistenceRecord` uses no runtime import from this package, so it is unaffected.
-import * as EventBackbone from '@qf-jarvis/event-backbone';
+//
+// D2a (ADR-0138): the bridge no longer reaches the package root for its write. It calls
+// `storeAuthenticatedEvent` on the governed `internal/event-write` subpath, so that is what is
+// mocked here. `AuthenticatedEventWrite` is deliberately NOT mocked — the real class is what makes
+// the wrapper resistant to structural substitution, and this test asserts the bridge mints a
+// genuine one rather than passing a look-alike.
+// Only the pool TYPE is needed from the root now; the write moved to the governed subpath (D2a).
+import type * as EventBackbone from '@qf-jarvis/event-backbone';
+import * as EventWrite from '@qf-jarvis/event-backbone/internal/event-write';
 
-vi.mock('@qf-jarvis/event-backbone', async (importOriginal) => {
-  const actual = await importOriginal<typeof EventBackbone>();
-  return { ...actual, storeValidatedEvent: vi.fn() };
+vi.mock('@qf-jarvis/event-backbone/internal/event-write', async (importOriginal) => {
+  const actual = await importOriginal<typeof EventWrite>();
+  return { ...actual, storeAuthenticatedEvent: vi.fn() };
 });
 
 import { verifySignature } from '../index.js';
@@ -37,6 +45,7 @@ import { testPrivateKey } from './fixtures/test-keys.js';
 import { testRegistry, TEST_KEY_ID } from './fixtures/registry.js';
 import { VALID_CANONICAL_EVENT } from './fixtures/canonical-event.js';
 
+const MISPAIRED_EVENT_ID = '0f1e2d3c-4b5a-4c9d-8e7f-a1b2c3d4e5f6';
 const SIGNED_AT = '2026-07-11T09:00:05.000Z';
 const NOW = new Date('2026-07-11T09:00:10.000Z');
 const registry = testRegistry();
@@ -160,10 +169,10 @@ describe('buildEventPersistenceRecord — the evidence must match the prepared e
   });
 });
 
-describe('persistPreparedEvent — delegates the built record to the store', () => {
-  it('builds the record and calls storeValidatedEvent, returning its outcome', async () => {
+describe('persistPreparedEvent — delegates the built record to the governed store', () => {
+  it('builds the record, mints the D2a capability, and returns the store outcome', async () => {
     const { prepared, evidence } = verifiedFor(VALID_CANONICAL_EVENT);
-    const mocked = vi.mocked(EventBackbone.storeValidatedEvent);
+    const mocked = vi.mocked(EventWrite.storeAuthenticatedEvent);
     mocked.mockReset();
     const acceptedAt = new Date('2026-07-11T09:00:11.000Z');
     mocked.mockResolvedValue({ outcome: 'stored', sequence: '7', acceptedAt });
@@ -172,7 +181,31 @@ describe('persistPreparedEvent — delegates the built record to the store', () 
     const outcome = await persistPreparedEvent(pool, prepared, evidence);
 
     expect(mocked).toHaveBeenCalledTimes(1);
-    expect(mocked).toHaveBeenCalledWith(pool, buildEventPersistenceRecord(prepared, evidence));
     expect(outcome).toStrictEqual({ outcome: 'stored', sequence: '7', acceptedAt });
+
+    // The second argument is a REAL AuthenticatedEventWrite — not a record, and not a
+    // structural look-alike. This is the D2a control-flow guarantee at the call site: the
+    // bridge cannot reach persistence without minting the capability first.
+    const [passedPool, passedWrite] = mocked.mock.calls[0] ?? [];
+    expect(passedPool).toBe(pool);
+    expect(passedWrite).toBeInstanceOf(EventWrite.AuthenticatedEventWrite);
+    // And it wraps exactly the record the bridge built from the bound evidence.
+    expect(passedWrite?.record).toStrictEqual(buildEventPersistenceRecord(prepared, evidence));
+  });
+
+  it('never mints a capability when the evidence and prepared event are mispaired', async () => {
+    const a = verifiedFor(VALID_CANONICAL_EVENT);
+    const b = verifiedFor({ ...VALID_CANONICAL_EVENT, eventId: MISPAIRED_EVENT_ID });
+    const mocked = vi.mocked(EventWrite.storeAuthenticatedEvent);
+    mocked.mockReset();
+
+    const pool = {} as unknown as EventBackbone.DatabasePool;
+    await expect(persistPreparedEvent(pool, a.prepared, b.evidence)).rejects.toBeInstanceOf(
+      EvidencePreparationMismatchError,
+    );
+
+    // Fail closed: the binding guard throws while building the record, so no capability is ever
+    // minted and the store is never reached.
+    expect(mocked).not.toHaveBeenCalled();
   });
 });

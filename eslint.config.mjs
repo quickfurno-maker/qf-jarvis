@@ -9,6 +9,67 @@ import tseslint from 'typescript-eslint';
  * QFJ-P03.08). Shared so the subject-reader-boundary block can re-state it without drift when it
  * additionally restricts the subject reader for the metadata reducers.
  */
+/**
+ * D2a (ADR-0138): the accepted-event WRITE AUTHORITY patterns.
+ *
+ * Two layers, both banned for ordinary production code:
+ *   - the governed cross-package writer (`internal/event-write`), and
+ *   - the low-level primitive `storeValidatedEvent` itself, wherever it is imported from. Banning
+ *     only the first left a same-package bypass: another `event-backbone` module could import
+ *     `storeValidatedEvent` from `persistence/event-store.js`, hand-build a record and write a row
+ *     while adding no second SQL INSERT and no second `event-write` importer.
+ *
+ * The second entry is keyed by `importNames`, NOT by module path, because the barrel legitimately
+ * re-exports the READ-side outcome types and errors from that same module. Write authority is
+ * restricted; read types are not.
+ *
+ * MUST be re-stated by every narrower block that defines its own `no-restricted-imports`: under
+ * flat config a later value REPLACES an earlier one rather than merging with it. That is the same
+ * hazard the subject-reader block below already documents, and composing through this constant is
+ * how D2a avoids silently deleting an older boundary.
+ */
+const GOVERNED_EVENT_WRITER_FORBIDDEN_IMPORT_PATTERN = {
+  group: [
+    '@qf-jarvis/event-backbone/internal/event-write',
+    '**/persistence/event-write.js',
+    '**/persistence/event-write',
+  ],
+  message:
+    'Accepted-event write authority is governed (D2a, ADR-0138). Only the event-ingestion bridge (persist-validated-event.ts) may import it, and only through the verify -> prepare -> persist path. A canonical event row must never be creatable outside signed ingestion.',
+};
+
+/**
+ * The LOW-LEVEL writer, banned by NAME rather than by module path.
+ *
+ * The name matters because the package barrel legitimately re-exports the READ-side outcome types
+ * and errors from this same module: a path ban would break the barrel and still say nothing about
+ * write authority.
+ *
+ * The path list matters because an import specifier is matched as a STRING. `**\/persistence/...`
+ * alone missed the most natural bypass of all — a module already sitting in `persistence/` writes
+ * `./event-store.js`, which contains no `persistence/` segment. The bare `./` and `**` forms below
+ * close that, so every practical spelling that can reach this module is covered rather than only the
+ * spellings a probe happened to use.
+ */
+const LOW_LEVEL_EVENT_WRITER_FORBIDDEN_IMPORT_PATTERN = {
+  group: [
+    './event-store.js',
+    './event-store',
+    '**/event-store.js',
+    '**/event-store',
+    '**/persistence/event-store.js',
+    '**/persistence/event-store',
+  ],
+  importNames: ['storeValidatedEvent'],
+  message:
+    'The low-level accepted-event writer is governed (D2a, ADR-0138). Only event-write.ts may call storeValidatedEvent, and only behind the AuthenticatedEventWrite capability. Importing it elsewhere would bypass the governed path without adding a second SQL INSERT. Read-side outcome types from this module remain unrestricted.',
+};
+
+const ACCEPTED_EVENT_WRITE_FORBIDDEN_IMPORT_PATTERNS = [
+  GOVERNED_EVENT_WRITER_FORBIDDEN_IMPORT_PATTERN,
+  LOW_LEVEL_EVENT_WRITER_FORBIDDEN_IMPORT_PATTERN,
+];
+
 const REDUCER_FORBIDDEN_IO_IMPORTS = [
   'node:fs',
   'node:fs/*',
@@ -147,6 +208,52 @@ export default tseslint.config(
   // A claim that nothing enforces is a comment. These rules are the enforcement —
   // a contract library that logs is a contract library that leaks, and the values
   // it would be logging are exactly the ones it just refused to accept.
+  // D2a (ADR-0138): the BASELINE accepted-event write-authority ban, applied repository-wide.
+  //
+  // It sits HERE, before every specialised block, on purpose. Under flat config a later
+  // `no-restricted-imports` REPLACES an earlier one, so a broad block placed last would silently
+  // delete the contracts, event-ingestion and reducer boundaries defined below — a security slice
+  // weakening three older ones. Placed first, a later block that needs to override for its own
+  // scope may do so, and every such block re-states these patterns by spreading
+  // ACCEPTED_EVENT_WRITE_FORBIDDEN_IMPORT_PATTERNS. The single production exception (the governed
+  // ingestion bridge) is granted by its own block further down, which keeps that file's
+  // event-ingestion purity rules in force while omitting only these write patterns.
+  {
+    files: ['packages/**/*.ts', 'apps/**/*.ts'],
+    ignores: [
+      // In-package tests of the capability itself, and the D2a containment tests that prove this
+      // very boundary, must be able to reach it. The claim D2a makes is about PRODUCTION
+      // application code across packages, not about the tests that police it.
+      'packages/event-backbone/src/tests/**/*.ts',
+      'packages/event-ingestion/src/tests/**/*.ts',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        { patterns: [...ACCEPTED_EVENT_WRITE_FORBIDDEN_IMPORT_PATTERNS] },
+      ],
+    },
+  },
+
+  // D2a (ADR-0138): the ONE production exception to the LOW-LEVEL writer ban.
+  //
+  // `event-write.ts` is the module that wraps `storeValidatedEvent` in the governed capability, so it
+  // must import it — as `./event-store.js`, the sibling form the baseline block above deliberately
+  // covers. The exception is granted as a narrower block rather than an `ignores` entry so it drops
+  // ONLY the low-level name restriction: the governed cross-package writer pattern stays in force
+  // here too, and no unrelated rule is stripped from this file.
+  //
+  // The permission is FILE-EXACT. A neighbour in `persistence/` inherits the full ban.
+  {
+    files: ['packages/event-backbone/src/persistence/event-write.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        { patterns: [GOVERNED_EVENT_WRITER_FORBIDDEN_IMPORT_PATTERN] },
+      ],
+    },
+  },
+
   {
     files: ['packages/contracts/src/**/*.ts'],
     ignores: ['packages/contracts/src/tests/**'],
@@ -166,6 +273,8 @@ export default tseslint.config(
               message:
                 'The contracts package is pure data and validation. It performs no I/O of any kind.',
             },
+            // Re-stated because this value REPLACES the baseline D2a block above (flat config).
+            ...ACCEPTED_EVENT_WRITE_FORBIDDEN_IMPORT_PATTERNS,
           ],
         },
       ],
@@ -228,6 +337,63 @@ export default tseslint.config(
               message:
                 'Stage 3.2 signature verification is a pure, synchronous leaf. It performs no filesystem, network, or process I/O. Only node:crypto is permitted.',
             },
+            // Re-stated because this value REPLACES the baseline D2a block above (flat config).
+            ...ACCEPTED_EVENT_WRITE_FORBIDDEN_IMPORT_PATTERNS,
+          ],
+        },
+      ],
+    },
+  },
+
+  // D2a (ADR-0138): the ONE production exception to the GOVERNED CROSS-PACKAGE writer ban.
+  //
+  // The ingestion bridge is the single file that may import the governed write capability. The
+  // exception is granted by a NARROWER block rather than an `ignores` entry, because `ignores` would
+  // have excluded the bridge from the purity block above and quietly stripped its event-ingestion
+  // I/O rules along with the write ban.
+  //
+  // It omits EXACTLY ONE pattern. The bridge keeps its purity rules AND keeps the LOW-LEVEL
+  // `storeValidatedEvent` ban, because it has no business calling the primitive directly: its job is
+  // to build a bound record and hand it to the governed writer. Granting it both authorities would
+  // have made the most authority-sensitive file in the repository the least restricted one, and
+  // would have left the low-level writer with only the source scan protecting it there.
+  //
+  // The result is disjoint least privilege, each file holding exactly one half of the chain:
+  //   event-write.ts             -> low-level writer YES, governed writer NO
+  //   persist-validated-event.ts -> low-level writer NO,  governed writer YES
+  //
+  // The permission is FILE-EXACT. A neighbour in the same directory inherits the full ban.
+  {
+    files: ['packages/event-ingestion/src/ingest/persist-validated-event.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: [
+                'node:fs',
+                'node:fs/*',
+                'node:net',
+                'node:http',
+                'node:https',
+                'node:child_process',
+                'node:dns',
+                'node:tls',
+                'node:dgram',
+                'node:process',
+                'node:worker_threads',
+                'fs',
+                'net',
+                'http',
+                'https',
+                'child_process',
+              ],
+              message:
+                'Stage 3.2 signature verification is a pure, synchronous leaf. It performs no filesystem, network, or process I/O. Only node:crypto is permitted.',
+            },
+            // Retained: the bridge may hold the governed writer, never the low-level primitive.
+            LOW_LEVEL_EVENT_WRITER_FORBIDDEN_IMPORT_PATTERN,
           ],
         },
       ],
@@ -293,6 +459,8 @@ export default tseslint.config(
               message:
                 'A projection reducer is a pure function of the event log. It performs no filesystem, network, process, or crypto I/O; it only writes its read-model table through the borrowed client.',
             },
+            // Re-stated because this value REPLACES the baseline D2a block above (flat config).
+            ...ACCEPTED_EVENT_WRITE_FORBIDDEN_IMPORT_PATTERNS,
           ],
         },
       ],
@@ -325,6 +493,8 @@ export default tseslint.config(
               message:
                 'Only the subject-activity reducer may resolve the opaque subject (QFJ-P03.09, ADR-0044). Other projections remain subject-blind.',
             },
+            // Re-stated because this value REPLACES the baseline D2a block above (flat config).
+            ...ACCEPTED_EVENT_WRITE_FORBIDDEN_IMPORT_PATTERNS,
           ],
         },
       ],

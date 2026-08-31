@@ -88,8 +88,18 @@ describe('apps/worker production start command — direct Node, no package-manag
   });
 });
 
-describe('apps/worker consumer view — event-backbone root surface stays 39', () => {
-  it('sees exactly 39 runtime exports from the @qf-jarvis/event-backbone root', () => {
-    expect(Object.keys(eventBackbone)).toHaveLength(39);
+describe('apps/worker consumer view — event-backbone root surface stays 38', () => {
+  it('sees exactly 38 runtime exports from the @qf-jarvis/event-backbone root', () => {
+    // Was 39 until D2a (ADR-0138), which removed exactly one: `storeValidatedEvent`, the
+    // accepted-event write authority. While it sat on that barrel, this app — and every other
+    // package — could hand-build a persistence record and create a canonical event row that had
+    // never passed signature verification, so a row proved shape and reachability but never origin.
+    // apps/worker consumes the READ side and never needed the writer; nothing here regressed.
+    // Was 39 until D2a (ADR-0138), which removed exactly one: `storeValidatedEvent`, the
+    // accepted-event write authority. While it sat on that barrel, this app — and every other
+    // package — could hand-build a persistence record and create a canonical event row that had
+    // never passed signature verification, so a row proved shape and reachability but never origin.
+    // apps/worker consumes the READ side and never needed the writer; nothing here regressed.
+    expect(Object.keys(eventBackbone)).toHaveLength(38);
   });
 });

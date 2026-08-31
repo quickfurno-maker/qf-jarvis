@@ -144,12 +144,16 @@ describe('the package exports map exposes only the root and narrow internal CLI 
     readonly scripts: Record<string, string>;
   };
 
-  it('publishes exactly the root and the two internal CLI subpaths — no bypass subpath', () => {
-    // QFJ-P03.07G added the read-only inspection CLI as a second narrowly scoped internal subpath. The
-    // containment property this test protects is unchanged: no wildcard, and nothing reaching
-    // persistence or the migration runner.
+  it('publishes exactly the root and the three narrow internal subpaths — no bypass subpath', () => {
+    // QFJ-P03.07G added the read-only inspection CLI as a second narrowly scoped internal subpath.
+    // D2a (ADR-0138) added the third: the governed accepted-event write capability, which was moved
+    // OFF the root barrel precisely so it stops being reachable by every package. The containment
+    // property this test protects is unchanged: no wildcard, and no subpath KEY naming persistence
+    // or the migration runner — a `./persistence/...` key would re-open the deep-import bypass,
+    // whereas `./internal/event-write` names one module and resolves to exactly one file.
     expect(Object.keys(manifest.exports).sort()).toStrictEqual([
       '.',
+      './internal/event-write',
       './internal/projection-inspection-cli',
       './internal/projection-worker-cli',
     ]);

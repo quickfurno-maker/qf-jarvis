@@ -356,7 +356,7 @@ describe('repository invariants this repair must not move', () => {
         fileURLToPath(new URL('packages/event-backbone/src/tests/public-api.test.ts', REPO_ROOT)),
         'utf8',
       ),
-    ).toContain('toHaveLength(39)');
+    ).toContain('toHaveLength(38)');
   });
 
   it('this repair adds exactly the four model-id symbols to the gateway barrel', async () => {

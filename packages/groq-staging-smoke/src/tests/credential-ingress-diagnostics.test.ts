@@ -574,7 +574,7 @@ describe('(22-27) package, repository, and hygiene invariants', () => {
   it('(24) the event-backbone package-root API lock remains 39', () => {
     expect(
       readFileSync(join(REPO_ROOT, 'packages/event-backbone/src/tests/public-api.test.ts'), 'utf8'),
-    ).toContain('toHaveLength(39)');
+    ).toContain('toHaveLength(38)');
   });
 
   it('(25) migrations 0001-0012 are byte-identical and 0013 is absent', () => {

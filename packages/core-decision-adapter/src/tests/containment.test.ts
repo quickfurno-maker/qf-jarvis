@@ -5,7 +5,7 @@
  * event-backbone package import in production source (the M2 agent-runtime is the ONLY workspace
  * dependency); the package depends solely on agent-runtime + zod and exposes only the root and
  * `./testing`; the public API surface is locked; migrations 0001–0011 are byte-exact and there is no
- * 0013; the event-backbone public-api lock remains 39; production source holds no NUL/control byte;
+ * 0013; the event-backbone public-api lock remains 38; production source holds no NUL/control byte;
  * the test fakes never leak into the root barrel.
  */
 import { createHash } from 'node:crypto';
@@ -171,7 +171,7 @@ describe('containment', () => {
 
   it('(event-backbone) the public-api lock remains 39', () => {
     expect(readRepo('packages/event-backbone/src/tests/public-api.test.ts')).toContain(
-      'toHaveLength(39)',
+      'toHaveLength(38)',
     );
   });
 

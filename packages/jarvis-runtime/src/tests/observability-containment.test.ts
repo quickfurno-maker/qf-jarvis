@@ -5,7 +5,7 @@
  * only processInbound; the root barrel surface is locked and the fakes stay under ./testing; production
  * source imports no provider SDK/network/env/transport/DB and no sync-over-async primitive; the
  * dependency direction is one-way (no reverse dependency / cycle); migrations 0001–0011 are byte-exact
- * with no 0013; the event-backbone public-api lock remains 39; production source holds no control byte;
+ * with no 0013; the event-backbone public-api lock remains 38; production source holds no control byte;
  * the emitting build excludes tests so dist is production-only.
  */
 import { createHash } from 'node:crypto';
@@ -312,9 +312,9 @@ describe('containment', () => {
     expect(sql.some((n) => n.startsWith('0013'))).toBe(false);
   });
 
-  it('the event-backbone public-api lock remains 39', () => {
+  it('the event-backbone public-api lock remains 38', () => {
     expect(readRepo('packages/event-backbone/src/tests/public-api.test.ts')).toContain(
-      'toHaveLength(39)',
+      'toHaveLength(38)',
     );
   });
 

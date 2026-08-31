@@ -542,7 +542,10 @@ describe('(71-77) package API and dependency locks are untouched', () => {
       // the helper program, its arguments, its exit codes and its output bound stay module-private.
       // Restated exactly; the count is still pinned.
       'groq-staging-smoke': 30,
-      'event-backbone': 39,
+      // D2a (ADR-0138) removed exactly one root symbol: `storeValidatedEvent`, the
+      // accepted-event write authority. It is now reachable only through the governed
+      // `internal/event-write` subpath, which lint restricts to the ingestion bridge.
+      'event-backbone': 38,
       // QFJ-S3-D-A (ADR-0070): the new Anisha behaviour package, locked from the day it lands.
       'anisha-agent': 14,
       // QFJ-S3-I-A (ADR-0072): the prompt registry foundation, locked from the day it lands.

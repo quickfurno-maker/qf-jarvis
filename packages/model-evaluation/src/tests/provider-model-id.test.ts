@@ -433,7 +433,7 @@ describe('public API and repository invariants', () => {
         fileURLToPath(new URL('packages/event-backbone/src/tests/public-api.test.ts', REPO_ROOT)),
         'utf8',
       ),
-    ).toContain('toHaveLength(39)');
+    ).toContain('toHaveLength(38)');
   });
 
   it('(14) no source touched by this repair references the protected directory', () => {

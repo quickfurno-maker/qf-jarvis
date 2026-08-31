@@ -71,13 +71,24 @@ export {
 
 export { withClient, withTransaction } from './persistence/transaction.js';
 
+/**
+ * The event-store OUTCOME surface — read-side result types and the errors a caller must handle.
+ *
+ * D2a (ADR-0138) deliberately removed `storeValidatedEvent` and `EventPersistenceRecord` from this
+ * barrel. Those two are WRITE AUTHORITY: together they let any package hand-build a record and put a
+ * row into `qf_jarvis.event` that never passed signature verification, which is exactly the bypass
+ * D2a closes. Result types are useful to readers and stay; the writer does not ride along merely
+ * because its record type was convenient.
+ *
+ * The only accepted-event write reachable from outside this package is `storeAuthenticatedEvent` on
+ * the narrow `@qf-jarvis/event-backbone/internal/event-write` subpath, which lint restricts to the
+ * one governed ingestion bridge.
+ */
 export {
   ConflictingEventDigestError,
   EventPersistenceConsistencyError,
-  storeValidatedEvent,
   type DuplicateEvent,
   type EventPersistenceOutcome,
-  type EventPersistenceRecord,
   type StoredEvent,
 } from './persistence/event-store.js';
 
