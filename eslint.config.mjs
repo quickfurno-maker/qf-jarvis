@@ -65,9 +65,30 @@ const LOW_LEVEL_EVENT_WRITER_FORBIDDEN_IMPORT_PATTERN = {
     'The low-level accepted-event writer is governed (D2a, ADR-0138). Only event-write.ts may call storeValidatedEvent, and only behind the AuthenticatedEventWrite capability. Importing it elsewhere would bypass the governed path without adding a second SQL INSERT. Read-side outcome types from this module remain unrestricted.',
 };
 
+/**
+ * D4 (ADR-0140): the purpose-specific trusted communication evidence reader.
+ *
+ * It has **zero** production consumers in this slice, and that is the invariant — not an accident of
+ * nobody having needed it yet. A generic "read the payload at a position" capability shared across
+ * projections is exactly what D4 exists NOT to be, so the reader is banned repository-wide until D5
+ * builds the actual communication-state handler and opens ONE exact-file exception in its own
+ * reviewed PR. Nothing here pre-authorizes that consumer.
+ */
+const COMMUNICATION_EVIDENCE_READER_FORBIDDEN_IMPORT_PATTERN = {
+  group: [
+    './communication-evidence-reader.js',
+    './communication-evidence-reader',
+    '**/communication-evidence-reader.js',
+    '**/communication-evidence-reader',
+  ],
+  message:
+    'The trusted communication evidence reader is purpose-bounded (D4, ADR-0140). It has no production consumer in this slice; D5 must open one exact-file exception when it builds the communication-state projection handler. It is not a generic event-payload reader.',
+};
+
 const ACCEPTED_EVENT_WRITE_FORBIDDEN_IMPORT_PATTERNS = [
   GOVERNED_EVENT_WRITER_FORBIDDEN_IMPORT_PATTERN,
   LOW_LEVEL_EVENT_WRITER_FORBIDDEN_IMPORT_PATTERN,
+  COMMUNICATION_EVIDENCE_READER_FORBIDDEN_IMPORT_PATTERN,
 ];
 
 const REDUCER_FORBIDDEN_IO_IMPORTS = [
@@ -249,7 +270,34 @@ export default tseslint.config(
     rules: {
       'no-restricted-imports': [
         'error',
-        { patterns: [GOVERNED_EVENT_WRITER_FORBIDDEN_IMPORT_PATTERN] },
+        {
+          patterns: [
+            GOVERNED_EVENT_WRITER_FORBIDDEN_IMPORT_PATTERN,
+            // Its exception is for the low-level writer alone. It gains no read-side privilege.
+            COMMUNICATION_EVIDENCE_READER_FORBIDDEN_IMPORT_PATTERN,
+          ],
+        },
+      ],
+    },
+  },
+
+  // D4 (ADR-0140): the evidence reader module is not banned from being itself.
+  //
+  // Every other production file in the repository inherits the ban above, including the projection
+  // handlers — D4 deliberately ships with no consumer. This block exists only so the module can hold
+  // its own imports; it keeps the full D2a write bans, because a READ capability earns no write
+  // authority.
+  {
+    files: ['packages/event-backbone/src/projections/communication-evidence-reader.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            GOVERNED_EVENT_WRITER_FORBIDDEN_IMPORT_PATTERN,
+            LOW_LEVEL_EVENT_WRITER_FORBIDDEN_IMPORT_PATTERN,
+          ],
+        },
       ],
     },
   },
@@ -394,6 +442,8 @@ export default tseslint.config(
             },
             // Retained: the bridge may hold the governed writer, never the low-level primitive.
             LOW_LEVEL_EVENT_WRITER_FORBIDDEN_IMPORT_PATTERN,
+            // Retained: the bridge is a WRITE path. It gains no evidence-read privilege from D4.
+            COMMUNICATION_EVIDENCE_READER_FORBIDDEN_IMPORT_PATTERN,
           ],
         },
       ],

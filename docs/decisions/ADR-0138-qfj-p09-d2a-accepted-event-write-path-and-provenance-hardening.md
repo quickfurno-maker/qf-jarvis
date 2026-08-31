@@ -1,6 +1,6 @@
 # ADR-0138 — QFJ-P09 D2a: accepted-event write-path and provenance hardening
 
-**Status:** **Proposed** — implementation on a feature branch, **PR open, NOT merged.**
+**Status:** **Accepted / MERGED** as PR #179 — reviewed head `56cb28dc1cf2df9601205505100547cc05fb9fbe`, merge commit `2027d3215a36e8fdbed6809d0f12a917bb71cdee`.
 **Baseline:** `fb23e46efbad66b6a82ecc9920c86548aeb058e1` (main after PR #178 / ADR-0137)
 **Accepted Core evidence pin:** `af7c2bb4f5a83731666fe059e963d1824cddd7b6` — **not re-pinned, not
 re-audited, no Core code read or modified in this slice**

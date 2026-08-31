@@ -3,7 +3,7 @@
 **Status:** Adopted under
 [ADR-0135](../decisions/ADR-0135-qfj-p09-s2-local-communication-state-projection-architecture.md)
 (**MERGED**, PR #176, `eebee71`). **Nothing here is implemented, adopted, connected or
-activated.** Its D1 prerequisite is **MERGED** as PR #177 under [ADR-0136](../decisions/ADR-0136-qfj-p10-s3-fresh-quickfurno-core-audit.md) — that audit **confirmed Model 2**. **D2 is decided on a feature branch / PR by [ADR-0137](../decisions/ADR-0137-qfj-p10-d2-core-protocol-and-event-gap-decision.md)** (Proposed, not merged), which fixes the **first durable projection subset** this document's §8.2 leaves open: **6 durable Tier-C states** (`rejected`, `authorized`, `provider-accepted`, `delivered`, `read`, `failed`), **2 conditional Tier-B** (`authorization-requested`, `scheduled`), **10 deliberately excluded** — **`completed` among them, blocked by missing Core truth.** **Its D2a prerequisite (§7) is now IMPLEMENTED on a feature branch / PR ([ADR-0138](../decisions/ADR-0138-qfj-p09-d2a-accepted-event-write-path-and-provenance-hardening.md), Proposed, not merged): the accepted-event writer has left the `@qf-jarvis/event-backbone` root barrel, the low-level writer and the governed cross-package writer each have exactly one tested production caller, the mint has one tested call site, and a single production `INSERT` is enforced by test — a repository/application-path guarantee that does NOT bind a privileged database operator, does not make Core events live, and allocates no migration.**
+activated.** Its D1 prerequisite is **MERGED** as PR #177 under [ADR-0136](../decisions/ADR-0136-qfj-p10-s3-fresh-quickfurno-core-audit.md) — that audit **confirmed Model 2**. **D2 is MERGED under [ADR-0137](../decisions/ADR-0137-qfj-p10-d2-core-protocol-and-event-gap-decision.md)**, which fixes the **first durable projection subset** this document's §8.2 leaves open: **6 durable Tier-C states** (`rejected`, `authorized`, `provider-accepted`, `delivered`, `read`, `failed`), **2 conditional Tier-B** (`authorization-requested`, `scheduled`), **10 deliberately excluded** — **`completed` among them, blocked by missing Core truth.** **Its D2a prerequisite (§7) is MERGED as PR #179 ([ADR-0138](../decisions/ADR-0138-qfj-p09-d2a-accepted-event-write-path-and-provenance-hardening.md), merge commit `2027d3215a36e8fdbed6809d0f12a917bb71cdee`), so the prerequisite this document locked is SATISFIED: the accepted-event writer has left the `@qf-jarvis/event-backbone` root barrel, the low-level writer and the governed cross-package writer each have exactly one tested production caller, the mint has one tested call site, and a single production `INSERT` is enforced by test — a repository/application-path guarantee that does NOT bind a privileged database operator, does not make Core events live, and allocates no migration.** **The active slice is now D4 — the purpose-specific trusted communication evidence-read capability ([ADR-0140](../decisions/ADR-0140-qfj-p09-d4-trusted-communication-evidence-read-capability.md), Proposed, on a feature branch / PR): one internal, root-unexported, position-keyed reader for the six durable Tier-C states above, built OFFLINE against published contracts because Core emits neither target family yet. It adds no V2 contract, no projection and no consumer — its production importer count is deliberately ZERO until D5 opens one. Under the current single-session sequence D2b follows D4's merge, then D3, then D5.**
 **Baseline:** `c6b21dcf921e350f33477d3b18fd4413b8a8aa00` (merge of PR #175 / S2 readiness audit)
 
 Read with [ADR-0134](../decisions/ADR-0134-qfj-p09-s2-communication-state-evidence-alignment.md) (the
@@ -339,9 +339,9 @@ behind in this view. Any Tier A/B source chosen at D2b must preserve the same mi
 
 ## 7. Write-path trust: D2a is a PREREQUISITE, not an option
 
-> **STATUS — D2a is now IMPLEMENTED on a feature branch / PR**
+> **STATUS — D2a is MERGED**
 > ([ADR-0138](../decisions/ADR-0138-qfj-p09-d2a-accepted-event-write-path-and-provenance-hardening.md),
-> **Proposed, not merged**). §7.1 below records the **pre-D2a** state and is kept as the evidence that
+> PR #179, merge commit `2027d3215a36e8fdbed6809d0f12a917bb71cdee`). §7.1 below records the **pre-D2a** state and is kept as the evidence that
 > motivated the slice — it is history, not a current description. Against the §7.2 invariants:
 > **A, B and C now hold structurally and are tested**; **D still stands as written** — a privileged
 > database operator remains outside the application-code guarantee, and D2a changed **no database
@@ -387,8 +387,11 @@ Minimum invariant:
   second appears; migrations (DDL) and projection readers (`JOIN`) are explicitly not counted as
   bypasses.
 - **C.** The reader's trusted capability is produced **only** from that governed path.
-  — **PREREQUISITE MET; the reader itself is D4's work**, which may now rely on this at the
-  repository/application trust level once ADR-0138 merges.
+  — **MET.** ADR-0138 is merged, and the reader itself is built by **D4**
+  ([ADR-0140](../decisions/ADR-0140-qfj-p09-d4-trusted-communication-evidence-read-capability.md),
+  Proposed): position-keyed, purpose-bounded, root-unexported, with zero production consumers until
+  D5 opens exactly one. Its output is trusted **within the application trust model only** — §7.3's
+  limits are unchanged, and invariant **D** below still stands as written.
 - **D.** **A direct database administrator or infrastructure actor remains OUTSIDE the
   application-code trust guarantee** unless a DB-level capability boundary is separately adopted.
 

@@ -291,6 +291,9 @@ importers:
 
   packages/event-backbone:
     dependencies:
+      '@qf-jarvis/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       pg:
         specifier: 8.22.0
         version: 8.22.0
