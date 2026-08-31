@@ -66,12 +66,16 @@ migration need and what each blocks — is in the plan §1. The load-bearing per
 
 **Q1 — prospect ↔ vendor continuity. DECIDED_NOW (semantics) / DEFERRED (shape).** Core must own **one
 durable, unique, idempotent, queryable** correlation between Jarvis's **existing** acquisition identity
-and the Core vendor identity. Jarvis already has that identity: `AcquisitionCase` carries `caseRef` and
-`prospectRef` as opaque `[A-Za-z0-9._:-]{1,128}` references — the same grammar as Core's entity ids.
-**Reuse them; do not invent a second prospect id.** Jarvis may retain its own refs plus the returned
-Core vendor reference. **Jarvis may never guess by phone, name, email, lead id or first match.**
-_Fail closed:_ no correlation fact ⇒ no continuation. _Unresolved:_ Core persistence and read shape
-(C-S8).
+and the Core vendor identity. Jarvis already carries opaque acquisition references — `AcquisitionCase`
+holds `caseRef` and `prospectRef` as opaque strings — so D2 **reuses them rather than inventing a
+second prospect identifier**. That reuse is a carriage decision only: **Jarvis's schema performs format
+validation, which is not uniqueness, persistence or identity authority**, AVG-1 has **no persistence**,
+and the refs are caller-provided. **A shared character grammar proves nothing about semantic
+compatibility or uniqueness with any Core identifier**, so **Core must establish the durable
+uniqueness, idempotency and queryability of the correlation.** Jarvis may retain its own refs plus the
+returned Core vendor reference, and **may never guess by phone, name, email, lead id or first match.**
+_Fail closed:_ no correlation fact ⇒ no continuation. _Unresolved:_ Core persistence and read shape,
+**and which of `caseRef` / `prospectRef` plays which role in the Core correlation** (C-S8).
 
 **Q2 — registration completion. DECIDED_NOW / DEFERRED.** Registration completion is a **distinct Core
 business fact**: not auth-account creation (Core's own `handle_new_user()` says it creates no vendor
@@ -102,12 +106,29 @@ and exact Core evidence; a `rejected` outcome fabricates no approval evidence. *
 suppression copy, `canSend` boolean or `validUntil` is added anywhere.** _Fail closed:_ no
 authorization ⇒ no send.
 
-**Q6 — first primitive events. DECIDED_NOW.** Adopt exactly two:
-**`qf.communication.authorization-recorded`** and **`qf.communication.result-recorded`**. Both name
-real Core-owned facts S3 confirmed, both already exist as Jarvis candidate contracts, and together
+**Q6 — first primitive events. DECIDED_NOW (target family) / DEFERRED (result readiness).** The
+target set is exactly two families: **`qf.communication.authorization-recorded`** and
+**`qf.communication.result-recorded`**. Both name real Core-owned facts S3 confirmed, and together
 they unlock the Tier-C evidence Model 2 needs — including the `rejected` case ADR-0134 proved
 unrepresentable. Everything else is deferred or blocked (plan §2). **A contract existing is never a
 reason to adopt.**
+
+**But naming a target family is not declaring it ready to emit**, so the adoption work splits:
+
+- **C3A — `authorization-recorded`.** Prerequisites **C1 + C2**. This is the C3-ready half.
+- **C3B — `result-recorded`.** **NOT C3-ready.** Its payload is exactly
+  `{ result: CommunicationResultV1 }` with no lighter alternative, and that contract **mandatorily
+  requires `executionIntentId` and `executionResultId`** — while accepted S3 found **zero
+  ExecutionIntent semantic in Core** and established that a generic outbox is not ExecutionIntent
+  persistence. C3B therefore requires a bounded **Core result-contract-fit / execution-chain
+  correlation proof** showing where every required field comes from **without invention**; its exact
+  dependency on **C4/S5** and/or **C6/S7** is for that slice to make explicit.
+
+**`qf.execution.intent-issued` is NOT adopted merely because `CommunicationResultV1` references an
+`executionIntentId`** — **event adoption and artifact existence are separate questions.** Core may need
+an authoritative execution-intent/result **artifact** or a compatible correlation identity **without**
+adopting the `qf.execution.*` **events**. **`result-recorded` must not be called ready to emit until
+that fit gate passes.**
 
 **Q7 — `execution-submitted`. DECIDED_NOW (semantics) / BLOCKED_BY_MISSING_CORE_TRUTH (artifact).**
 
@@ -153,19 +174,31 @@ and a non-WhatsApp authorized channel **fails closed as unsupported for executio
 silently re-routed. Contract generality stays; deployment capability is narrower. **No
 `CommunicationAuthorizationV2`.**
 
-**Q12 — provider result / reconciliation. DECIDED_NOW.** The first Core → Jarvis authoritative result
-primitive is **`qf.communication.result-recorded`**. Core receives the provider/webhook outcome,
-verifies, normalises, records, then emits. **Jarvis never accepts provider or n8n truth directly,
-stores no raw provider payload, and projects only the minimal normalised lifecycle fact.** _Fail
-closed:_ no accepted Core event ⇒ no state.
+**Q12 — provider result / reconciliation. DECIDED_NOW (family) / DEFERRED (readiness).** The target
+Core → Jarvis authoritative result family is **`qf.communication.result-recorded`**. Core receives the
+provider/webhook outcome, verifies, normalises, records, then emits. **Jarvis never accepts provider or
+n8n truth directly, stores no raw provider payload, and projects only the minimal normalised lifecycle
+fact.** **Emission readiness is gated by C3B's contract-fit proof (Q6): current Core provider-result
+rows are not automatically a lawful `CommunicationResultV1`, and C3B may fabricate no execution id,
+failure classification, reason code or correlation.** _Fail closed:_ no accepted Core event ⇒ no
+state.
 
 **Q13 — execution-time eligibility. DECIDED_NOW (semantics) / DEFERRED.** Core remains **sole
 authority** and must be consulted immediately before governed dispatch, re-evaluating at least
 consent/suppression, purpose/scope, channel eligibility and current policy/frequency/attempt controls
-where authoritative. **Jarvis caches no "allowed" result, ever.** A denial there is a **Core decision**,
-recorded and reconciled through the adopted result/authorization semantics — **never converted into a
-provider failure.** Exposure to n8n / the QF Communications Runtime is a narrow internal Core surface
-in S6. **No URL, header or auth scheme here.**
+where authoritative. **Jarvis caches no "allowed" result, ever.** A denial there is a
+**Core-authoritative policy/eligibility outcome — never converted into a provider failure.**
+
+**What its durable artifact and lifecycle mapping are is NOT yet proved: DEFERRED_TO_C5/S6.** The
+canonical transition graph has **no `authorized → rejected` edge** and **no
+`execution-submitted → rejected` edge**; only `authorization-requested → rejected` and
+`scheduled → rejected` exist today. **D2 therefore does not claim a late denial is already recorded
+through the adopted result/authorization semantics, and invents neither edge.** Until C5/S6 settles the
+artifact, the mapping and how immediate and scheduled sends both stay valid, a post-authorization
+denial **fails closed** and emits no durable state. If C5 proves the existing graph cannot represent
+the required semantics, **that slice** raises an ADR-0110 / communication-model reopen — **D2
+preemptively reopens nothing.** Exposure to n8n / the QF Communications Runtime is a narrow internal
+Core surface in S6. **No URL, header or auth scheme here.**
 
 **Q14 — Core event/outbox capability. DECIDED_NOW (gate) / DEFERRED.** Before anything relies on
 event/outbox, a **governed Core readiness gate must verify actual applied-state under Core
@@ -189,11 +222,21 @@ not replace write-path containment, and containment does not replace Core signin
 
 ### 3. Cross-question consistency
 
-**A. The authorization chain, with no arrow collapsed.**
-`CommunicationRequestV1` constructed **≠** submitted **≠** authorized **≠** execution-time eligible
-**≠** submitted to n8n **≠** provider accepted **≠** delivered/read/completed. Q5 keeps A/B/C apart, Q7
-keeps submission distinct from issuance, Q13 keeps eligibility distinct from authorization, and Q12
-keeps provider acceptance distinct from delivery.
+**A. The chain of DISTINCTIONS, with no arrow collapsed.** This states what must never be conflated
+— it does not claim every stage is serialised by these labels, and **implementation order, runtime
+order and lifecycle-state order remain three different things** (plan §4):
+
+> constructed request **≠** submitted to Core **≠** initial Core authorization **≠** Core→n8n submission
+> **≠** execution-side revalidation **≠** provider acceptance **≠** delivery
+
+Q5 keeps submission, business authorization and execution-time eligibility apart, Q7 keeps submission
+distinct from issuance, Q13 keeps eligibility distinct from authorization, and Q12 keeps provider
+acceptance distinct from delivery. **Slice numbering (C4 before C5) is implementation order, not
+runtime chronology.** What D2 locks for MVP: initial Core authorization precedes Core→n8n dispatch; the
+runtime performs a second-line execution-time eligibility check before the provider effect; a prior
+authorization is **never** reusable permission; and a late denial is a Core-authoritative policy
+outcome, not a provider failure. **The durable artifact and lifecycle mapping for a post-authorization
+denial stay DEFERRED_TO_C5/S6.**
 
 **B. Rejection vs cancellation.** Core consent deny → authoritative communication refusal → Jarvis
 **`rejected`**. **Never Jarvis `cancelled`** (Q8).
@@ -221,11 +264,21 @@ rows, or unrestricted metadata. **References and closed machine codes only** (Q5
 
 ### 4. The first durable projection is a SUBSET, and says so
 
-**Durable (7):** `rejected`, `authorized`, `provider-accepted`, `delivered`, `read`, `failed`,
-`completed` — all Tier C, all from the two adopted events.
+**Durable (6):** `rejected`, `authorized`, `provider-accepted`, `delivered`, `read`, `failed` — all
+Tier C, all from the two target event families (`rejected`/`authorized` via C3A, the rest via C3B).
 **Conditional (2):** `authorization-requested`, `scheduled` — pending D2b + C1.
-**Deliberately excluded (9):** `draft`, `execution-submitted`, `answered`, `no-answer`, `busy`,
-`follow-up-requested`, `human-handoff-required`, `cancelled`, `expired`.
+**Deliberately excluded (10):** `draft`, `execution-submitted`, `answered`, `no-answer`, `busy`,
+`follow-up-requested`, `human-handoff-required`, **`completed`**, `cancelled`, `expired`.
+**6 + 2 + 10 = 18.**
+
+**`completed` is EXCLUDED / `BLOCKED_BY_MISSING_CORE_TRUTH` for the first MVP durable projection.**
+Accepted S3 states that Core does not model `answered`, `no-answer` or `busy`, and that **`completed`
+has no distinct Core representation.** `CommunicationResultV1.lifecycleState` merely _allows_ the value
+— **contract vocabulary is not Core business truth** — and `STATES_JARVIS_MAY_NOT_ORIGINATE` lists
+`completed` as Core-owned, so Jarvis may not author it. **It must not be derived from a terminal-looking
+predecessor such as `delivered`, `read`, `failed` or `rejected`, and no synthetic completion fact may be
+created.** Support requires a distinct authoritative Core completion fact with a lawful mapping and
+replayable evidence.
 
 The eighteen-state **vocabulary** is unchanged; the **durable projection** is not eighteen states.
 **D3 must model the supported subset honestly, no producer may emit an unsupported state, full
@@ -234,22 +287,35 @@ The eighteen-state **vocabulary** is unchanged; the **durable projection** is no
 
 ### 5. Sequence, and the next slice
 
-**D2 → D2a (Jarvis trust track)** · **D2 → C0 → C1 → C2 → C3 → {C4 → C5, C6} (Core adoption track)** ·
-**D2 → D2b (Tier A/B)** · **D3** (needs D2b + C3) · **D4** (needs D2a + C3) · **D5** (needs D3 + D4 +
-D2b, supported subset only) · **S8/S9** (need C1) · **D7** certification · **D8** activation,
-separately governed. Mapping to ADR-0132: C1→S4, C4→S5, C5→S6, C6→S7, S8→GAP A, S9→GAP B.
+**Two tracks run in parallel, and D2 restores ADR-0135's accepted dependency split.**
 
-> **The next engineering slice after D2 merges is D2a** — accepted-event write-path /
-> provenance-capability hardening. It is **Core-independent**, already mandatory under ADR-0135, and
-> blocks D4.
+**Jarvis offline / trust track — no live Core required:** **D2 merged → D2a and D2b IN PARALLEL** ·
+**D3** needs **D2 + D2b** · **D4** needs **D2a** · **D5** needs **D3 + D4 + D2b**. D4 is exercised with
+**governed synthetic/test ingestion** and D5 is certified against **synthetic accepted Core-shaped
+events**, for the supported subset only — **D5 remains OFFLINE, NOT LIVE and NOT ACTIVATED, and
+passing synthetic tests does not make it production-ready.** Neither D3 nor D4 claims a live Core
+emission.
 
-**Three cautions:** D2a landing does not mean events are live · **D4 and D5 may not proceed merely
-because D2a lands** · Core adoption stays separately gated on C0 → C3.
+**Core adoption track — scheduled independently under Core governance:** **C0** (may be scheduled
+independently once D2 merges) → **C1** → **C2** → **{C3A, C3B}**, with **C1 → C4 → {C5, C6}** and C6
+feeding C3B's contract-fit proof · **S8/S9** need C1. Mapping to ADR-0132: C1→S4, C4→S5, C5→S6,
+C6→S7, S8→GAP A, S9→GAP B.
+
+> **Live-integration gate:** **C3A / C3B / C4 / C5 / C6 as applicable, PLUS D5**, must all land before
+> **D7** real-integration certification; **D8** activation stays separately governed.
+
+**The next execution wave after D2 merges is D2a and D2b IN PARALLEL**, with C0 schedulable
+independently on the Core side. If a single first slice must be named administratively, **D2a is the
+first executable Jarvis implementation slice** — Core-independent and already mandatory under
+ADR-0135 — but that **must not block starting the docs/design-only D2b at the same time.**
+
+**Three cautions:** D2a landing does not mean events are live · **D5 stays offline until Core
+integration lands** · Core adoption stays separately gated on C0 → C2 → C3A/C3B.
 
 ### 6. Migration
 
 **D2 allocates no migration and reserves no number. `0013` is not reserved.** Per-slice need is marked
-`NONE EXPECTED` / `POSSIBLE — MUST PROVE` / `CORE-SIDE POSSIBLE — MUST PROVE` / `UNKNOWN` in plan §5.2.
+`NONE EXPECTED` / `POSSIBLE — MUST PROVE` / `CORE-SIDE POSSIBLE — MUST PROVE` / `UNKNOWN` in plan §6.3.
 **C0's applied-state verification is not permission to run a migration.** D2a prefers code-capability
 containment first, with DB role/grant hardening only if that slice proves it necessary. The Jarvis
 `0010`–`0012` ledger drift remains separate governance debt, **not repaired here**.
@@ -266,10 +332,13 @@ rewritten.** This ADR stays **Proposed** until owner acceptance.
 - The fifteen-question queue is closed: **9 DECIDED_NOW (7 with a deferred wire shape), 3
   REJECTED_FOR_MVP, 1 BLOCKED_BY_MISSING_CORE_TRUTH on its artifact, 2 decided-and-deferred** — with
   no item left "TBD" without an owner and prerequisite.
-- **Only two Core events are adopted**, so the Core ask is the smallest that unlocks Tier C.
-- **The first durable projection is 7 states, not 18** — stated openly rather than implied.
-- `cancelled`, `expired`, `execution-submitted` and the voice outcomes are **excluded by decision**,
-  not forgotten.
+- **Only two Core event families are targeted**, so the Core ask is the smallest that unlocks Tier C
+  — and **`result-recorded` is explicitly not yet emission-ready** (C3A / C3B).
+- **The first durable projection is 6 states, not 18** — stated openly rather than implied.
+- `completed`, `cancelled`, `expired`, `execution-submitted` and the voice outcomes are **excluded by
+  decision**, not forgotten.
+- **The Jarvis offline track is not blocked on live Core**: D2a and D2b run in parallel, and D3/D4/D5
+  proceed offline — while the live-integration gate stays explicit.
 - **No second Jarvis event log** is created, and **no new Core state event**.
 - D2b is reduced to bounded confirmation; D3's entry gate is now well defined.
 - Nothing is activated. Production rollout remains **OFF**; Aarohi's runtime remains
@@ -303,4 +372,4 @@ production code, no contract, no event registry, no event-backbone, no ingestion
 change. No Core modification, branch or PR. No managed Supabase, n8n or provider access. No message
 sent. No migration.**
 
-**Production rollout OFF. Runtime activation unchanged. The next slice is D2a.**
+**Production rollout OFF. Runtime activation unchanged. The next wave is D2a and D2b in parallel.**
