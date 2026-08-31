@@ -1,8 +1,9 @@
 # Communication-state projection — Model 2 design
 
-**Status:** **Proposed** design under
-[ADR-0135](../decisions/ADR-0135-qfj-p09-s2-local-communication-state-projection-architecture.md);
-**not merged.** **Nothing here is implemented, adopted, connected or activated.**
+**Status:** Adopted under
+[ADR-0135](../decisions/ADR-0135-qfj-p09-s2-local-communication-state-projection-architecture.md)
+(**MERGED**, PR #176, `eebee71`). **Nothing here is implemented, adopted, connected or
+activated.** Its D1 prerequisite is **presented for owner acceptance** on PR #177 under [ADR-0136](../decisions/ADR-0136-qfj-p10-s3-fresh-quickfurno-core-audit.md) (**Proposed, not merged**) — that audit **confirms Model 2**. **If PR #177 merges, D2 becomes the next step.**
 **Baseline:** `c6b21dcf921e350f33477d3b18fd4413b8a8aa00` (merge of PR #175 / S2 readiness audit)
 
 Read with [ADR-0134](../decisions/ADR-0134-qfj-p09-s2-communication-state-evidence-alignment.md) (the
