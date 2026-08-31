@@ -183,10 +183,12 @@ rows are not automatically a lawful `CommunicationResultV1`, and C3B may fabrica
 failure classification, reason code or correlation.** _Fail closed:_ no accepted Core event ⇒ no
 state.
 
-**Q13 — execution-time eligibility. DECIDED_NOW (semantics) / DEFERRED.** Core remains **sole
-authority** and must be consulted immediately before governed dispatch, re-evaluating at least
+**Q13 — execution-time eligibility. DECIDED_NOW (semantics) / DEFERRED.** Core remains the **sole
+authority**. **At execution time, the execution side must revalidate current eligibility through the
+governed Core/runtime authority path before any external provider effect**, re-evaluating at least
 consent/suppression, purpose/scope, channel eligibility and current policy/frequency/attempt controls
-where authoritative. **Jarvis caches no "allowed" result, ever.** A denial there is a
+where authoritative. **This second-line check sits after the Core→n8n handoff of Q7/S5, not before it**
+— the two are different points in the chain and neither is "governed dispatch" as a single moment. **Jarvis caches no "allowed" result, ever.** A denial there is a
 **Core-authoritative policy/eligibility outcome — never converted into a provider failure.**
 
 **What its durable artifact and lifecycle mapping are is NOT yet proved: DEFERRED_TO_C5/S6.** The
