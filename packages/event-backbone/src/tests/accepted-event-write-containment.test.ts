@@ -77,8 +77,29 @@ async function collectTypeScriptFiles(dir: string): Promise<readonly string[]> {
   return found;
 }
 
+/**
+ * The production file list and their contents, read ONCE per suite.
+ *
+ * Five assertions below need the same corpus. Re-walking the monorepo and re-reading every file for
+ * each of them was pure duplicated I/O, and enough of it to trip the default 5s timeout when vitest
+ * runs this suite alongside the rest of the repository. Caching changes no assertion; it just stops
+ * the suite failing for a reason that has nothing to do with containment.
+ */
+let productionCorpus: Promise<ReadonlyMap<string, string>> | undefined;
+
+async function productionFiles(): Promise<ReadonlyMap<string, string>> {
+  productionCorpus ??= (async () => {
+    const paths = await scanProductionSources();
+    const entries = await Promise.all(
+      paths.map(async (path) => [path, await readFile(path, 'utf8')] as const),
+    );
+    return new Map(entries);
+  })();
+  return productionCorpus;
+}
+
 /** Production source across the monorepo: packages + apps, excluding every test tree. */
-async function productionSources(): Promise<readonly string[]> {
+async function scanProductionSources(): Promise<readonly string[]> {
   const roots = ['packages', 'apps'].map((d) => join(REPO_DIR, d));
   const all: string[] = [];
   for (const root of roots) all.push(...(await collectTypeScriptFiles(root)));
@@ -177,13 +198,12 @@ describe('D2a — the three-layer production containment chain', () => {
    */
 
   it('has exactly ONE production caller of the low-level storeValidatedEvent', async () => {
-    const files = await productionSources();
+    const files = await productionFiles();
     const definition = join('persistence', 'event-store.ts');
 
     const referencing: string[] = [];
-    for (const file of files) {
+    for (const [file, code] of files) {
       if (file.endsWith(definition)) continue; // the implementation itself
-      const code = await readFile(file, 'utf8');
       // Strip comments first: several files legitimately DISCUSS the primitive in prose, and a scan
       // that confused a doc comment for a call would either cry wolf or be quietly loosened later.
       if (/\bstoreValidatedEvent\b/.test(stripComments(code))) referencing.push(file);
@@ -208,13 +228,16 @@ describe('D2a — the three-layer production containment chain', () => {
   });
 
   it('has exactly ONE production importer of the governed write capability', async () => {
-    const files = await productionSources();
+    const files = await productionFiles();
+    // Real import/re-export statements only. Several files legitimately NAME the subpath in a doc
+    // comment (this boundary is worth documenting where it is enforced); naming it is not importing
+    // it, and a scan that conflated the two would be theatre.
     const importsCapability =
       /(?:^|\n)\s*(?:import|export)[\s\S]{0,400}?from\s+'(?:@qf-jarvis\/event-backbone\/internal\/event-write|[^']*persistence\/event-write\.js)'/;
 
     const importers: string[] = [];
-    for (const file of files) {
-      if (importsCapability.test(await readFile(file, 'utf8'))) importers.push(file);
+    for (const [file, code] of files) {
+      if (importsCapability.test(code)) importers.push(file);
     }
 
     expect(importers.map(relative)).toStrictEqual([
@@ -231,16 +254,16 @@ describe('D2a — the three-layer production containment chain', () => {
     // It also counts the MEMBER NAME rather than the call shape, so an alias
     // (`const mint = AuthenticatedEventWrite.fromVerifiedIngestion`) cannot slip past a
     // call-shaped regex.
-    const files = await productionSources();
+    const files = await productionFiles();
     const definition = join('persistence', 'event-write.ts');
 
     let memberReferences = 0;
     let directCalls = 0;
     const holders: string[] = [];
 
-    for (const file of files) {
+    for (const [file, raw] of files) {
       if (file.endsWith(definition)) continue; // the class declares the member; that is not a use
-      const code = stripComments(await readFile(file, 'utf8'));
+      const code = stripComments(raw);
       const refs = countMatches(code, MINT_MEMBER_REFERENCE);
       if (refs === 0) continue;
       memberReferences += refs;
@@ -326,13 +349,12 @@ describe('D2a — the containment scans are not vacuous', () => {
 
 describe('D2a — exactly one production path writes qf_jarvis.event', () => {
   it('finds no second INSERT in repository production source', async () => {
-    const files = await productionSources();
-    expect(files.length).toBeGreaterThan(100); // the scan actually ran
+    const files = await productionFiles();
+    expect(files.size).toBeGreaterThan(100); // the scan actually ran
 
-    const inserters = files.filter((file) => file.endsWith('event-store.ts'));
+    const inserters = [...files.keys()].filter((file) => file.endsWith('event-store.ts'));
     const others: string[] = [];
-    for (const file of files) {
-      const code = await readFile(file, 'utf8');
+    for (const [file, code] of files) {
       if (/insert\s+into\s+qf_jarvis\.event\b/i.test(code) && !file.endsWith('event-store.ts')) {
         others.push(file);
       }
@@ -392,24 +414,9 @@ describe('D2a — the import boundary is configured, not merely documented', () 
     expect(subpath).not.toContain('*');
   });
 
-  it('has exactly one production importer of the write capability', async () => {
-    const files = await productionSources();
-    // Real import/re-export statements only. Several files legitimately NAME the subpath in a
-    // doc comment (this boundary is worth documenting where it is enforced); naming it is not
-    // importing it, and a scan that conflated the two would be theatre.
-    const importsCapability =
-      /(?:^|\n)\s*(?:import|export)[\s\S]{0,400}?from\s+'(?:@qf-jarvis\/event-backbone\/internal\/event-write|[^']*persistence\/event-write\.js)'/;
-
-    const importers: string[] = [];
-    for (const file of files) {
-      const code = await readFile(file, 'utf8');
-      if (importsCapability.test(code)) importers.push(file);
-    }
-
-    // Exactly the governed bridge. The capability module does not import itself.
-    expect(importers.length).toBe(1);
-    expect(importers[0]?.replace(/\\/g, '/')).toContain(
-      'packages/event-ingestion/src/ingest/persist-validated-event.ts',
-    );
-  });
+  // NOTE: the "exactly one production importer" assertion lives in the three-layer chain block
+  // above, where it sits beside the low-level-writer and mint scans it belongs with. A weaker
+  // duplicate used to live here too (length + `toContain` rather than exact list equality); it was
+  // removed because it re-scanned every production file for no extra coverage, and the doubled I/O
+  // made this suite time out under parallel load.
 });

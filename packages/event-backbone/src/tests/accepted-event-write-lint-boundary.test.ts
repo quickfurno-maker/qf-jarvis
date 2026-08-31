@@ -109,15 +109,36 @@ async function removeProbes(): Promise<void> {
   for (const path of written.splice(0)) await rm(path, { force: true });
 }
 
-/** Every `group` pattern in the rule ESLint would really apply to `path`, flattened. */
-async function resolvedGroups(path: string): Promise<readonly string[]> {
+/** One entry of a resolved `no-restricted-imports` rule, with its `importNames` intact. */
+interface ResolvedPattern {
+  readonly group?: readonly string[];
+  readonly importNames?: readonly string[];
+}
+
+/**
+ * The rule OBJECTS ESLint would really apply to `path`.
+ *
+ * Flattening to group strings loses `importNames`, and `importNames` is what distinguishes "this
+ * module is banned" from "this one exported NAME is banned" — the whole basis of the low-level
+ * restriction, which must never break the barrel's read-side re-exports. So assertions about the
+ * low-level ban go through this, not through the flattened view.
+ */
+async function resolvedPatterns(path: string): Promise<readonly ResolvedPattern[]> {
   const config: unknown = await eslint.calculateConfigForFile(at(path));
   const rule = (config as { rules?: Record<string, unknown> }).rules?.['no-restricted-imports'];
-  const patterns = Array.isArray(rule)
-    ? ((rule[1] as { patterns?: readonly { group?: readonly string[] }[] } | undefined)?.patterns ??
-      [])
+  return Array.isArray(rule)
+    ? ((rule[1] as { patterns?: readonly ResolvedPattern[] } | undefined)?.patterns ?? [])
     : [];
-  return patterns.flatMap((p) => p.group ?? []);
+}
+
+/** Every `group` pattern in the rule ESLint would really apply to `path`, flattened. */
+async function resolvedGroups(path: string): Promise<readonly string[]> {
+  return (await resolvedPatterns(path)).flatMap((p) => p.group ?? []);
+}
+
+/** The resolved pattern that bans the low-level writer by NAME, if the scope carries one. */
+async function lowLevelWriterPattern(path: string): Promise<ResolvedPattern | undefined> {
+  return (await resolvedPatterns(path)).find((p) => p.importNames?.includes('storeValidatedEvent'));
 }
 
 beforeAll(async () => {
@@ -205,13 +226,51 @@ describe('D2a did not clobber any pre-existing import boundary', () => {
   it('grants the bridge write authority WITHOUT stripping its purity rules', async () => {
     const groups = await resolvedGroups(GOVERNED_BRIDGE);
 
-    // The exception is narrow: it drops the D2a write patterns and nothing else. Expressing this as
-    // an `ignores` entry on the purity block would have removed both, which is the trap this asserts
-    // against.
+    // The exception omits ONE pattern, not the whole rule. Expressing it as an `ignores` entry on
+    // the purity block would have removed everything, which is the trap this asserts against.
     expect(groups).toContain('node:fs');
     expect(groups).toContain('child_process');
     expect(groups).not.toContain('@qf-jarvis/event-backbone/internal/event-write');
-    expect(groups).not.toContain('**/persistence/event-store.js');
+  });
+
+  it('does NOT hand the bridge the low-level writer as well — the two halves are disjoint', async () => {
+    // The bridge is the most authority-sensitive production file in the repository, so it must not
+    // also be the least restricted one. It builds a bound record and hands it to the governed
+    // writer; it has no business calling `storeValidatedEvent` directly, and if it could, the
+    // low-level ban would have had only the source scan protecting it exactly where it matters most.
+    const pattern = await lowLevelWriterPattern(GOVERNED_BRIDGE);
+
+    expect(pattern).toBeDefined();
+    // Asserted on the rule OBJECT, because a flattened group list would hide the `importNames` that
+    // makes this a name ban rather than a module ban.
+    expect(pattern?.importNames).toStrictEqual(['storeValidatedEvent']);
+    expect(pattern?.group).toContain('./event-store.js');
+    expect(pattern?.group).toContain('**/event-store.js');
+  });
+
+  it('gives event-write.ts the complementary half, and only that half', async () => {
+    // The mirror image: it may hold the low-level writer, and may not hold the governed one.
+    const groups = await resolvedGroups(EVENT_WRITE_MODULE);
+    const pattern = await lowLevelWriterPattern(EVENT_WRITE_MODULE);
+
+    expect(pattern).toBeUndefined();
+    expect(groups).toContain('@qf-jarvis/event-backbone/internal/event-write');
+  });
+
+  it('leaves neither file holding both authorities', async () => {
+    // Stated once, as the property the two blocks exist to produce:
+    //   event-write.ts             -> low-level YES, governed NO
+    //   persist-validated-event.ts -> low-level NO,  governed YES
+    const holdsLowLevel = async (path: string): Promise<boolean> =>
+      (await lowLevelWriterPattern(path)) === undefined;
+    const holdsGoverned = async (path: string): Promise<boolean> =>
+      !(await resolvedGroups(path)).includes('@qf-jarvis/event-backbone/internal/event-write');
+
+    expect(await holdsLowLevel(EVENT_WRITE_MODULE)).toBe(true);
+    expect(await holdsGoverned(EVENT_WRITE_MODULE)).toBe(false);
+
+    expect(await holdsLowLevel(GOVERNED_BRIDGE)).toBe(false);
+    expect(await holdsGoverned(GOVERNED_BRIDGE)).toBe(true);
   });
 });
 
@@ -274,8 +333,8 @@ describe('D2a — the low-level writer has no same-package bypass either', () =>
   });
 
   it('keeps the governed cross-package writer pattern in force even for event-write.ts', async () => {
-    // The exception is narrow on purpose: it omits ONE pattern, not the whole rule.
-    const groups = await resolvedGroups('packages/event-backbone/src/persistence/event-write.ts');
+    // Its exception is narrow on purpose: it omits ONE pattern, not the whole rule.
+    const groups = await resolvedGroups(EVENT_WRITE_MODULE);
 
     expect(groups).toContain('@qf-jarvis/event-backbone/internal/event-write');
     expect(groups).not.toContain('./event-store.js');

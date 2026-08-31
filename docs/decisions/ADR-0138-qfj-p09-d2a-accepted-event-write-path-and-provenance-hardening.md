@@ -195,9 +195,21 @@ capability exists. There is one adapter; the trust logic is not cloned.
 
   The corrected shape: the D2a baseline block sits **first**, and every narrower block that defines
   its own `no-restricted-imports` **re-states** the D2a patterns by spreading the shared constant.
-  The single production exception is expressed as a **narrower block** for the bridge that re-states
-  the event-ingestion purity patterns and omits only the D2a write patterns — **not** as an `ignores`
-  entry, which would have stripped the bridge's purity rules along with the write ban.
+  There are **two exceptions, each omitting exactly one pattern**, expressed as narrower blocks
+  rather than `ignores` entries (an `ignores` entry would have stripped a file's unrelated rules
+  along with the write ban). They are **disjoint**, so neither file holds the other's authority:
+
+  | File                                | Low-level `storeValidatedEvent`        | Governed cross-package writer    |
+  | ----------------------------------- | -------------------------------------- | -------------------------------- |
+  | `persistence/event-write.ts`        | **permitted** — it wraps the primitive | banned                           |
+  | `ingest/persist-validated-event.ts` | **banned**                             | **permitted** — it is the bridge |
+
+  The bridge keeping the low-level ban matters: it is the most authority-sensitive production file in
+  the repository, so it must not also be the least restricted one. It builds a bound record and hands
+  it to the governed writer; it has no business calling the primitive directly, and granting it both
+  would have left the low-level ban with only the source scan protecting it exactly where it matters
+  most. Both files keep every unrelated rule — the bridge retains its event-ingestion purity
+  patterns in full.
 
 - **A repository-wide scan** asserts no second production `INSERT INTO qf_jarvis.event` exists, and
   separately asserts that **migrations and projection readers are not mistaken for bypasses** — DDL

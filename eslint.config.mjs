@@ -345,16 +345,24 @@ export default tseslint.config(
     },
   },
 
-  // D2a (ADR-0138): the ONE production exception to the accepted-event write ban.
+  // D2a (ADR-0138): the ONE production exception to the GOVERNED CROSS-PACKAGE writer ban.
   //
-  // The governed ingestion bridge is the single file that may import the write capability. It is
-  // granted here by a NARROWER block rather than by an `ignores` entry on the purity block above,
-  // because `ignores` would have excluded the bridge from that block entirely and quietly stripped
-  // its event-ingestion purity rules along with the write ban. So this block re-states the purity
-  // patterns verbatim and simply omits the D2a write patterns: the bridge gains write authority and
-  // loses nothing.
+  // The ingestion bridge is the single file that may import the governed write capability. The
+  // exception is granted by a NARROWER block rather than an `ignores` entry, because `ignores` would
+  // have excluded the bridge from the purity block above and quietly stripped its event-ingestion
+  // I/O rules along with the write ban.
   //
-  // The permission is FILE-EXACT. A neighbour in the same directory inherits the ban above.
+  // It omits EXACTLY ONE pattern. The bridge keeps its purity rules AND keeps the LOW-LEVEL
+  // `storeValidatedEvent` ban, because it has no business calling the primitive directly: its job is
+  // to build a bound record and hand it to the governed writer. Granting it both authorities would
+  // have made the most authority-sensitive file in the repository the least restricted one, and
+  // would have left the low-level writer with only the source scan protecting it there.
+  //
+  // The result is disjoint least privilege, each file holding exactly one half of the chain:
+  //   event-write.ts             -> low-level writer YES, governed writer NO
+  //   persist-validated-event.ts -> low-level writer NO,  governed writer YES
+  //
+  // The permission is FILE-EXACT. A neighbour in the same directory inherits the full ban.
   {
     files: ['packages/event-ingestion/src/ingest/persist-validated-event.ts'],
     rules: {
@@ -384,6 +392,8 @@ export default tseslint.config(
               message:
                 'Stage 3.2 signature verification is a pure, synchronous leaf. It performs no filesystem, network, or process I/O. Only node:crypto is permitted.',
             },
+            // Retained: the bridge may hold the governed writer, never the low-level primitive.
+            LOW_LEVEL_EVENT_WRITER_FORBIDDEN_IMPORT_PATTERN,
           ],
         },
       ],
