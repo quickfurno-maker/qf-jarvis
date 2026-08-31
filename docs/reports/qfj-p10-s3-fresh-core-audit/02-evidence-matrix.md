@@ -2,7 +2,7 @@
 
 **Companion to** [01-current-core-capability-audit.md](./01-current-core-capability-audit.md).
 **All rows are read from one pinned commit. Nothing here was executed, applied or mutated.**
-**S3 is presented for owner acceptance on PR #177 — not delivered or merged.**
+**S3 is MERGED as PR #177; this index is FROZEN evidence and is not re-audited by D2.**
 
 |                |                                                                                |
 | -------------- | ------------------------------------------------------------------------------ |
