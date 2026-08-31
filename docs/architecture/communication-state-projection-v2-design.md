@@ -3,7 +3,7 @@
 **Status:** Adopted under
 [ADR-0135](../decisions/ADR-0135-qfj-p09-s2-local-communication-state-projection-architecture.md)
 (**MERGED**, PR #176, `eebee71`). **Nothing here is implemented, adopted, connected or
-activated.** Its D1 prerequisite is **MERGED** as PR #177 under [ADR-0136](../decisions/ADR-0136-qfj-p10-s3-fresh-quickfurno-core-audit.md) — that audit **confirmed Model 2**. **D2 is decided on a feature branch / PR by [ADR-0137](../decisions/ADR-0137-qfj-p10-d2-core-protocol-and-event-gap-decision.md)** (Proposed, not merged), which fixes the **first durable projection subset** this document's §8.2 leaves open: **6 durable Tier-C states** (`rejected`, `authorized`, `provider-accepted`, `delivered`, `read`, `failed`), **2 conditional Tier-B** (`authorization-requested`, `scheduled`), **10 deliberately excluded** — **`completed` among them, blocked by missing Core truth.** **Its D2a prerequisite (§7) is now IMPLEMENTED on a feature branch / PR ([ADR-0138](../decisions/ADR-0138-qfj-p09-d2a-accepted-event-write-path-and-provenance-hardening.md), Proposed, not merged): the accepted-event writer has left the `@qf-jarvis/event-backbone` root barrel, the one remaining write is import-restricted to the governed ingestion bridge and takes an unforgeable capability, and a single production `INSERT` is enforced by test — a repository/application-path guarantee that does NOT bind a privileged database operator, does not make Core events live, and allocates no migration.**
+activated.** Its D1 prerequisite is **MERGED** as PR #177 under [ADR-0136](../decisions/ADR-0136-qfj-p10-s3-fresh-quickfurno-core-audit.md) — that audit **confirmed Model 2**. **D2 is decided on a feature branch / PR by [ADR-0137](../decisions/ADR-0137-qfj-p10-d2-core-protocol-and-event-gap-decision.md)** (Proposed, not merged), which fixes the **first durable projection subset** this document's §8.2 leaves open: **6 durable Tier-C states** (`rejected`, `authorized`, `provider-accepted`, `delivered`, `read`, `failed`), **2 conditional Tier-B** (`authorization-requested`, `scheduled`), **10 deliberately excluded** — **`completed` among them, blocked by missing Core truth.** **Its D2a prerequisite (§7) is now IMPLEMENTED on a feature branch / PR ([ADR-0138](../decisions/ADR-0138-qfj-p09-d2a-accepted-event-write-path-and-provenance-hardening.md), Proposed, not merged): the accepted-event writer has left the `@qf-jarvis/event-backbone` root barrel, the low-level writer and the governed cross-package writer each have exactly one tested production caller, the mint has one tested call site, and a single production `INSERT` is enforced by test — a repository/application-path guarantee that does NOT bind a privileged database operator, does not make Core events live, and allocates no migration.**
 **Baseline:** `c6b21dcf921e350f33477d3b18fd4413b8a8aa00` (merge of PR #175 / S2 readiness audit)
 
 Read with [ADR-0134](../decisions/ADR-0134-qfj-p09-s2-communication-state-evidence-alignment.md) (the
@@ -372,9 +372,14 @@ D2a + D4.**
 Minimum invariant:
 
 - **A.** Only the governed event-ingestion composition may use the supported event-write primitive.
-  — **MET (ADR-0138):** the writer left the root barrel; the one reachable write is published on a
-  narrow internal subpath that lint restricts to a single production file, and it accepts only an
-  unforgeable capability that no object literal can satisfy.
+  — **MET (ADR-0138)**, as a THREE-LAYER chain rather than one barrel change: the SQL `INSERT` lives
+  in `event-store.ts` alone, the low-level `storeValidatedEvent` has one production caller
+  (`event-write.ts`), and the governed cross-package writer has one production importer and one mint
+  call site (the ingestion bridge). Each is enforced by lint **and** by a source scan, because an
+  `eslint-disable` comment can silence the first but not the second. The `AuthenticatedEventWrite`
+  wrapper is **nominal-substitution protection, not independent authentication evidence** — its mint
+  takes a plain record, so the boundary is the tested one-file/one-call-site containment plus the
+  bridge's evidence binding.
 - **B.** Repository code has **no supported bypass** for `qf_jarvis.event` writes.
   — **MET (ADR-0138):** exactly one production `INSERT` exists, and a repository-wide scan fails if a
   second appears; migrations (DDL) and projection readers (`JOIN`) are explicitly not counted as

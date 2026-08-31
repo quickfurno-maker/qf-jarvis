@@ -15,17 +15,31 @@
  * `@qf-jarvis/event-backbone/internal/event-write` subpath and restricted by lint to exactly one
  * governed file — the ingestion bridge in `@qf-jarvis/event-ingestion`.
  *
- * ### Provenance comes from control flow, not from caller data
+ * ### What the wrapper does, and what it does NOT do
  *
  * The writer does not accept a record. It accepts an {@link AuthenticatedEventWrite}, a class with a
  * `#private` field and a `private constructor`. TypeScript's structural typing does not apply to a
  * class carrying a `#private` member, so **no object literal can satisfy this type** — not
  * `{ verified: true }`, not `{ trusted: true }`, not `{ source: 'ingestion' }`, not a hand-built
  * record wrapped to look the part. There is no boolean, no string tag and no caller-selectable
- * discriminator anywhere in this capability. The only way to obtain one is
- * {@link AuthenticatedEventWrite.fromVerifiedIngestion}, and the only code permitted to import it is
- * the governed bridge that builds its record from a verified signature's evidence bound to an
- * already contract-validated prepared event.
+ * discriminator anywhere in this capability.
+ *
+ * **That is nominal-substitution protection, and it is not the same thing as authentication.** Be
+ * precise about it: {@link AuthenticatedEventWrite.fromVerifiedIngestion} is a public static factory
+ * over a plain {@link EventPersistenceRecord}, so **any code permitted to import this module could
+ * mint one from a hand-built record.** The class cannot prevent that, and cannot check a signature
+ * either — the evidence types live in `@qf-jarvis/event-ingestion` and the dependency direction is
+ * one-way. Calling this class "unforgeable" on its own would be an overclaim.
+ *
+ * The actual security boundary is therefore four things together, three of which live outside this
+ * file:
+ *
+ * 1. **tested one-file import containment** — exactly one production file may import this module;
+ * 2. **tested one-call-site containment** — exactly one production call to the mint exists;
+ * 3. **the governed bridge's evidence binding** — it builds the record only from a verified
+ *    signature's immutable evidence bound to an already contract-validated prepared event, and
+ *    throws before minting if the two do not describe the same body;
+ * 4. **this wrapper**, which stops accidental or careless structural substitution reaching the INSERT.
  *
  * ### What this does NOT claim
  *
@@ -61,20 +75,19 @@ export class UnmintedEventWriteError extends Error {
 }
 
 /**
- * An unforgeable capability to append ONE already-authenticated, contract-validated event.
+ * A **nominal, construction-guarded wrapper** around one persistence-ready record.
  *
  * The `#record` field is a true private field, which makes this class **nominally** typed: a value
  * of this type cannot be produced by writing an object literal, by spreading, or by any structural
  * look-alike. The constructor is `private` AND guarded by a module-private mint symbol, so it cannot
  * be produced with `new` either — not by a TypeScript caller, and not by a cast or a JavaScript
- * caller, who gets {@link UnmintedEventWriteError} instead. The single mint is
- * {@link fromVerifiedIngestion}, reachable only from the one file lint permits to import this
- * module.
+ * caller, who gets {@link UnmintedEventWriteError} instead.
  *
- * The token carries no authority of its own beyond the record it wraps: it is evidence that the
- * governed bridge built this record, not a claim that any particular signature was valid. The
- * verification itself happens upstream, in `@qf-jarvis/event-ingestion`, and cannot be expressed as
- * a type here — this package must never depend on that one.
+ * **It is not independent authentication evidence.** Holding one proves that *some* code called
+ * {@link fromVerifiedIngestion} — not that a signature was verified. The mint accepts a plain
+ * record, so the guarantee that only *verified* records are minted comes from **who may call it**
+ * (one production file, enforced by lint and by a repository-wide scan) and from **what that caller
+ * does** (the bridge's evidence binding), never from this type alone.
  */
 export class AuthenticatedEventWrite {
   readonly #record: EventPersistenceRecord;
@@ -91,12 +104,13 @@ export class AuthenticatedEventWrite {
   }
 
   /**
-   * Mint the capability for a record the governed ingestion bridge has just built from a verified
+   * Mint the wrapper for a record the governed ingestion bridge has just built from a verified
    * signature's immutable evidence bound to an already contract-validated prepared event.
    *
-   * This is deliberately not a validator: it cannot re-check a signature, because the evidence types
-   * live in `@qf-jarvis/event-ingestion` and the dependency direction is one-way. Its guarantee is
-   * reachability — only the governed bridge may call it — not cryptography.
+   * **This is deliberately not a validator, and it verifies nothing about the record it is given.**
+   * It cannot re-check a signature: the evidence types live in `@qf-jarvis/event-ingestion` and the
+   * dependency direction is one-way. Its guarantee is **reachability, not cryptography** — exactly
+   * one production call site is permitted to reach it, and that is asserted by test, not by trust.
    */
   static fromVerifiedIngestion(record: EventPersistenceRecord): AuthenticatedEventWrite {
     return new AuthenticatedEventWrite(MINT, record);

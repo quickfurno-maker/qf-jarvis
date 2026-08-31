@@ -25,11 +25,17 @@
  *
  * Before D2a this file's guarantee stopped at its own path: some *other* caller could still import
  * `storeValidatedEvent` from the `@qf-jarvis/event-backbone` root and store a forged record. That
- * export is gone. The writer now lives behind
- * `@qf-jarvis/event-backbone/internal/event-write`, lint permits **only this file** to import it,
- * and it accepts only an `AuthenticatedEventWrite` — a class with a `#private` field and a `private`
- * constructor, which no object literal can satisfy. So the safe path is not merely the recommended
- * one; it is the only one repository application code can compile and lint.
+ * export is gone, the low-level primitive is itself import-restricted so no other `event-backbone`
+ * module may call it, and lint permits **only this file** to import the governed writer. A
+ * repository-wide scan asserts exactly one production importer and exactly one call to the mint --
+ * a scan being necessary because an `eslint-disable` comment can silence a lint rule but not a
+ * source scan.
+ *
+ * The `AuthenticatedEventWrite` wrapper stops structural substitution reaching the INSERT. It does
+ * **not** by itself prove a signature was verified: its mint takes a plain record, so any code that
+ * could import the module could mint from a hand-built one. **That proof is this file's job** — the
+ * binding above is what makes a minted record trustworthy, which is exactly why the mint has one
+ * permitted call site.
  *
  * ### Internal
  *
@@ -41,8 +47,9 @@
 import { type DatabasePool } from '@qf-jarvis/event-backbone';
 // D2a (ADR-0138): the accepted-event write authority is NOT on the package root. It lives on this
 // narrow internal subpath, and lint permits exactly this file to import it. `storeAuthenticatedEvent`
-// takes an unforgeable `AuthenticatedEventWrite`, so no caller — here or anywhere — can reach the
-// INSERT with a hand-built record or a structurally-faked "verified" object.
+// takes an `AuthenticatedEventWrite`, a nominal wrapper no object literal can substitute for — which
+// is substitution protection, not authentication. The record it wraps is trustworthy because of the
+// binding below, and because this is the only production file allowed to mint one.
 import {
   AuthenticatedEventWrite,
   storeAuthenticatedEvent,

@@ -31,6 +31,16 @@ const REPO_DIR = fileURLToPath(REPO_ROOT);
 /** Kept in step with `accepted-event-write-lint-boundary.test.ts`. See `productionSources`. */
 const LINT_PROBE_FILENAME = 'zz-d2a-lint-probe.ts';
 
+/** Source with block and line comments removed, so prose about a symbol is not read as a use of it. */
+function stripComments(code: string): string {
+  return code.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+}
+
+/** An absolute path as a repo-relative, forward-slashed one, so assertions read the same everywhere. */
+function relative(absolute: string): string {
+  return absolute.slice(REPO_DIR.length).replace(/\\/g, '/');
+}
+
 /** Every `.ts` file under a directory, recursively. */
 async function collectTypeScriptFiles(dir: string): Promise<readonly string[]> {
   const found: string[] = [];
@@ -98,7 +108,7 @@ describe('D2a — the accepted-event writer is not on the package root', () => {
   });
 });
 
-describe('D2a — the governed write capability cannot be forged', () => {
+describe('D2a — the capability is a NOMINAL wrapper, not independent authentication evidence', () => {
   it('exposes exactly one writer and one mint on the internal module', () => {
     expect(eventWrite.storeAuthenticatedEvent).toBeTypeOf('function');
     expect(eventWrite.AuthenticatedEventWrite).toBeTypeOf('function');
@@ -111,11 +121,16 @@ describe('D2a — the governed write capability cannot be forged', () => {
     expect(() => new Ctor({})).toThrow();
   });
 
-  it('rejects every structurally-faked capability at the type level', () => {
-    // These are the exact forgeries ADR-0138 forbids. Each is a compile ERROR, which is the point:
-    // the capability carries a #private field, so no object literal — and no caller-selected
-    // boolean or string tag — can satisfy it. @ts-expect-error FAILS THE BUILD if the line ever
-    // starts compiling, so this test is a live assertion, not a comment.
+  it('rejects structural substitution at the type level', () => {
+    // What this proves, precisely: NOMINAL-TYPE SUBSTITUTION PROTECTION. The capability carries a
+    // #private field, so no object literal — and no caller-selected boolean or string tag — can
+    // stand in for it. @ts-expect-error FAILS THE BUILD if any line here starts compiling, so this
+    // is a live assertion rather than a comment.
+    //
+    // What it does NOT prove: that a value of this type came from signature verification. The mint
+    // is a public static factory taking a plain record, so any code permitted to import the module
+    // could mint from a hand-built one. That is why the security boundary is the TESTED ONE-FILE
+    // import/call containment below plus the bridge's evidence binding — not this class alone.
     const pool = {} as unknown as Parameters<typeof eventWrite.storeAuthenticatedEvent>[0];
 
     // @ts-expect-error a caller-constructed "verified" discriminator is not the capability
@@ -130,6 +145,114 @@ describe('D2a — the governed write capability cannot be forged', () => {
     void (() => eventWrite.storeAuthenticatedEvent(pool, { eventId: 'any-id-a-caller-can-type' }));
 
     expect(eventWrite.storeAuthenticatedEvent).toBeTypeOf('function');
+  });
+});
+
+describe('D2a — the three-layer production containment chain', () => {
+  /**
+   * These scans read SOURCE TEXT, deliberately. A lint rule can be suppressed with an
+   * `eslint-disable` comment; a text scan cannot be, so the two layers fail independently. Between
+   * them they pin the whole chain:
+   *
+   *   1. the SQL INSERT           -> event-store.ts only          (asserted below)
+   *   2. `storeValidatedEvent`    -> event-write.ts only          (this block)
+   *   3. the governed writer      -> persist-validated-event.ts   (this block)
+   *   4. the mint call site       -> persist-validated-event.ts   (this block)
+   *
+   * Break any single link and a canonical event row becomes creatable outside signed ingestion.
+   */
+
+  it('has exactly ONE production caller of the low-level storeValidatedEvent', async () => {
+    const files = await productionSources();
+    const definition = join('persistence', 'event-store.ts');
+
+    const referencing: string[] = [];
+    for (const file of files) {
+      if (file.endsWith(definition)) continue; // the implementation itself
+      const code = await readFile(file, 'utf8');
+      // Strip comments first: several files legitimately DISCUSS the primitive in prose, and a scan
+      // that confused a doc comment for a call would either cry wolf or be quietly loosened later.
+      if (/\bstoreValidatedEvent\b/.test(stripComments(code))) referencing.push(file);
+    }
+
+    expect(referencing.map(relative)).toStrictEqual([
+      'packages/event-backbone/src/persistence/event-write.ts',
+    ]);
+  });
+
+  it('has exactly ONE production importer of the governed write capability', async () => {
+    const files = await productionSources();
+    const importsCapability =
+      /(?:^|\n)\s*(?:import|export)[\s\S]{0,400}?from\s+'(?:@qf-jarvis\/event-backbone\/internal\/event-write|[^']*persistence\/event-write\.js)'/;
+
+    const importers: string[] = [];
+    for (const file of files) {
+      if (importsCapability.test(await readFile(file, 'utf8'))) importers.push(file);
+    }
+
+    expect(importers.map(relative)).toStrictEqual([
+      'packages/event-ingestion/src/ingest/persist-validated-event.ts',
+    ]);
+  });
+
+  it('has exactly ONE production call site of the mint', async () => {
+    // The mint is a public static factory over a plain record, so "who may call it" IS the boundary
+    // (ADR-0138). A second production call site would mean a second place that can decide a record
+    // is fit to persist, which is precisely what the bridge's evidence binding exists to own.
+    const files = await productionSources();
+
+    const callers: string[] = [];
+    for (const file of files) {
+      const code = stripComments(await readFile(file, 'utf8'));
+      if (/AuthenticatedEventWrite\s*\.\s*fromVerifiedIngestion\s*\(/.test(code)) {
+        callers.push(file);
+      }
+    }
+
+    expect(callers.map(relative)).toStrictEqual([
+      'packages/event-ingestion/src/ingest/persist-validated-event.ts',
+    ]);
+  });
+});
+
+describe('D2a — the containment scans are not vacuous', () => {
+  // A scan that can never fail is decoration. These prove the detectors actually fire on the exact
+  // bypass shapes, and stay quiet on prose — checked as pure functions of source text, so no probe
+  // file is written and no other suite can race them.
+  //
+  // This matters because the two enforcement layers fail INDEPENDENTLY: an `eslint-disable` comment
+  // suppresses the lint rule but cannot suppress a text scan. That was verified by planting a real
+  // second module which imported the primitive under `eslint-disable no-restricted-imports`: lint
+  // passed clean with zero errors, and the scan above caught it by name.
+  //
+  // The fixtures are joined from lines rather than written as template literals, because embedding
+  // comment delimiters inside a template that a comment-stripping function then processes is
+  // needlessly confusing for whoever edits this next.
+  const OPEN = '/' + '*';
+  const CLOSE = '*' + '/';
+  const BYPASS = [
+    OPEN + ' eslint-disable no-restricted-imports ' + CLOSE,
+    "import { storeValidatedEvent } from './event-store.js';",
+    'export const sneaky = storeValidatedEvent;',
+  ].join('\n');
+  const PROSE = [
+    OPEN +
+      '* Persistence goes through storeValidatedEvent, which this module never calls. ' +
+      CLOSE,
+    'export const nothing = 1;',
+  ].join('\n');
+
+  it('detects a second low-level writer reference, even under eslint-disable', () => {
+    expect(/\bstoreValidatedEvent\b/.test(stripComments(BYPASS))).toBe(true);
+  });
+
+  it('does not mistake a doc comment about the writer for a use of it', () => {
+    expect(/\bstoreValidatedEvent\b/.test(stripComments(PROSE))).toBe(false);
+  });
+
+  it('detects a second mint call site', () => {
+    const second = 'const w = AuthenticatedEventWrite.fromVerifiedIngestion(record);';
+    expect(/AuthenticatedEventWrite\s*\.\s*fromVerifiedIngestion\s*\(/.test(second)).toBe(true);
   });
 });
 

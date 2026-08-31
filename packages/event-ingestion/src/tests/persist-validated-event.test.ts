@@ -15,7 +15,8 @@ import { describe, expect, it, vi } from 'vitest';
 // D2a (ADR-0138): the bridge no longer reaches the package root for its write. It calls
 // `storeAuthenticatedEvent` on the governed `internal/event-write` subpath, so that is what is
 // mocked here. `AuthenticatedEventWrite` is deliberately NOT mocked — the real class is what makes
-// the capability unforgeable, and this test asserts the bridge mints a genuine one.
+// the wrapper resistant to structural substitution, and this test asserts the bridge mints a
+// genuine one rather than passing a look-alike.
 // Only the pool TYPE is needed from the root now; the write moved to the governed subpath (D2a).
 import type * as EventBackbone from '@qf-jarvis/event-backbone';
 import * as EventWrite from '@qf-jarvis/event-backbone/internal/event-write';

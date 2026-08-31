@@ -9,6 +9,43 @@ import tseslint from 'typescript-eslint';
  * QFJ-P03.08). Shared so the subject-reader-boundary block can re-state it without drift when it
  * additionally restricts the subject reader for the metadata reducers.
  */
+/**
+ * D2a (ADR-0138): the accepted-event WRITE AUTHORITY patterns.
+ *
+ * Two layers, both banned for ordinary production code:
+ *   - the governed cross-package writer (`internal/event-write`), and
+ *   - the low-level primitive `storeValidatedEvent` itself, wherever it is imported from. Banning
+ *     only the first left a same-package bypass: another `event-backbone` module could import
+ *     `storeValidatedEvent` from `persistence/event-store.js`, hand-build a record and write a row
+ *     while adding no second SQL INSERT and no second `event-write` importer.
+ *
+ * The second entry is keyed by `importNames`, NOT by module path, because the barrel legitimately
+ * re-exports the READ-side outcome types and errors from that same module. Write authority is
+ * restricted; read types are not.
+ *
+ * MUST be re-stated by every narrower block that defines its own `no-restricted-imports`: under
+ * flat config a later value REPLACES an earlier one rather than merging with it. That is the same
+ * hazard the subject-reader block below already documents, and composing through this constant is
+ * how D2a avoids silently deleting an older boundary.
+ */
+const ACCEPTED_EVENT_WRITE_FORBIDDEN_IMPORT_PATTERNS = [
+  {
+    group: [
+      '@qf-jarvis/event-backbone/internal/event-write',
+      '**/persistence/event-write.js',
+      '**/persistence/event-write',
+    ],
+    message:
+      'Accepted-event write authority is governed (D2a, ADR-0138). Only the event-ingestion bridge (persist-validated-event.ts) may import it, and only through the verify -> prepare -> persist path. A canonical event row must never be creatable outside signed ingestion.',
+  },
+  {
+    group: ['**/persistence/event-store.js', '**/persistence/event-store'],
+    importNames: ['storeValidatedEvent'],
+    message:
+      'The low-level accepted-event writer is governed (D2a, ADR-0138). Only event-write.ts may call storeValidatedEvent, and only behind the AuthenticatedEventWrite capability. Importing it elsewhere would bypass the governed path without adding a second SQL INSERT. Read-side outcome types from this module remain unrestricted.',
+  },
+];
+
 const REDUCER_FORBIDDEN_IO_IMPORTS = [
   'node:fs',
   'node:fs/*',
@@ -147,6 +184,33 @@ export default tseslint.config(
   // A claim that nothing enforces is a comment. These rules are the enforcement —
   // a contract library that logs is a contract library that leaks, and the values
   // it would be logging are exactly the ones it just refused to accept.
+  // D2a (ADR-0138): the BASELINE accepted-event write-authority ban, applied repository-wide.
+  //
+  // It sits HERE, before every specialised block, on purpose. Under flat config a later
+  // `no-restricted-imports` REPLACES an earlier one, so a broad block placed last would silently
+  // delete the contracts, event-ingestion and reducer boundaries defined below — a security slice
+  // weakening three older ones. Placed first, a later block that needs to override for its own
+  // scope may do so, and every such block re-states these patterns by spreading
+  // ACCEPTED_EVENT_WRITE_FORBIDDEN_IMPORT_PATTERNS. The single production exception (the governed
+  // ingestion bridge) is granted by its own block further down, which keeps that file's
+  // event-ingestion purity rules in force while omitting only these write patterns.
+  {
+    files: ['packages/**/*.ts', 'apps/**/*.ts'],
+    ignores: [
+      // In-package tests of the capability itself, and the D2a containment tests that prove this
+      // very boundary, must be able to reach it. The claim D2a makes is about PRODUCTION
+      // application code across packages, not about the tests that police it.
+      'packages/event-backbone/src/tests/**/*.ts',
+      'packages/event-ingestion/src/tests/**/*.ts',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        { patterns: [...ACCEPTED_EVENT_WRITE_FORBIDDEN_IMPORT_PATTERNS] },
+      ],
+    },
+  },
+
   {
     files: ['packages/contracts/src/**/*.ts'],
     ignores: ['packages/contracts/src/tests/**'],
@@ -166,6 +230,8 @@ export default tseslint.config(
               message:
                 'The contracts package is pure data and validation. It performs no I/O of any kind.',
             },
+            // Re-stated because this value REPLACES the baseline D2a block above (flat config).
+            ...ACCEPTED_EVENT_WRITE_FORBIDDEN_IMPORT_PATTERNS,
           ],
         },
       ],
@@ -202,6 +268,53 @@ export default tseslint.config(
           message: 'The verifier reads no clock. The current time is injected as `now`.',
         },
       ],
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: [
+                'node:fs',
+                'node:fs/*',
+                'node:net',
+                'node:http',
+                'node:https',
+                'node:child_process',
+                'node:dns',
+                'node:tls',
+                'node:dgram',
+                'node:process',
+                'node:worker_threads',
+                'fs',
+                'net',
+                'http',
+                'https',
+                'child_process',
+              ],
+              message:
+                'Stage 3.2 signature verification is a pure, synchronous leaf. It performs no filesystem, network, or process I/O. Only node:crypto is permitted.',
+            },
+            // Re-stated because this value REPLACES the baseline D2a block above (flat config).
+            ...ACCEPTED_EVENT_WRITE_FORBIDDEN_IMPORT_PATTERNS,
+          ],
+        },
+      ],
+    },
+  },
+
+  // D2a (ADR-0138): the ONE production exception to the accepted-event write ban.
+  //
+  // The governed ingestion bridge is the single file that may import the write capability. It is
+  // granted here by a NARROWER block rather than by an `ignores` entry on the purity block above,
+  // because `ignores` would have excluded the bridge from that block entirely and quietly stripped
+  // its event-ingestion purity rules along with the write ban. So this block re-states the purity
+  // patterns verbatim and simply omits the D2a write patterns: the bridge gains write authority and
+  // loses nothing.
+  //
+  // The permission is FILE-EXACT. A neighbour in the same directory inherits the ban above.
+  {
+    files: ['packages/event-ingestion/src/ingest/persist-validated-event.ts'],
+    rules: {
       'no-restricted-imports': [
         'error',
         {
@@ -293,6 +406,8 @@ export default tseslint.config(
               message:
                 'A projection reducer is a pure function of the event log. It performs no filesystem, network, process, or crypto I/O; it only writes its read-model table through the borrowed client.',
             },
+            // Re-stated because this value REPLACES the baseline D2a block above (flat config).
+            ...ACCEPTED_EVENT_WRITE_FORBIDDEN_IMPORT_PATTERNS,
           ],
         },
       ],
@@ -325,47 +440,8 @@ export default tseslint.config(
               message:
                 'Only the subject-activity reducer may resolve the opaque subject (QFJ-P03.09, ADR-0044). Other projections remain subject-blind.',
             },
-          ],
-        },
-      ],
-    },
-  },
-
-  // D2a (ADR-0138): accepted-event WRITE AUTHORITY is least-privilege by MODULE BOUNDARY.
-  //
-  // `@qf-jarvis/event-backbone/internal/event-write` is the only accepted-event INSERT reachable
-  // from outside the event-backbone package. A row in `qf_jarvis.event` is only evidence of signed
-  // ingestion if nothing else can write one, so exactly ONE file may import it: the governed
-  // ingestion bridge, which builds its record from a verified signature's evidence bound to an
-  // already contract-validated prepared event.
-  //
-  // This block covers every source file EXCEPT that bridge, so the ban applies repository-wide and
-  // the one permitted importer is named by `ignores` (flat-config semantics), exactly as the
-  // ADR-0044 subject-reader boundary is expressed above.
-  {
-    files: ['packages/**/*.ts', 'apps/**/*.ts'],
-    ignores: [
-      'packages/event-ingestion/src/ingest/persist-validated-event.ts',
-      // In-package tests of the capability itself, and the D2a containment tests that prove this
-      // very boundary, must be able to reach it. The claim D2a makes is about PRODUCTION
-      // application code across packages, not about the tests that police it.
-      'packages/event-backbone/src/tests/**/*.ts',
-      'packages/event-ingestion/src/tests/**/*.ts',
-    ],
-    rules: {
-      'no-restricted-imports': [
-        'error',
-        {
-          patterns: [
-            {
-              group: [
-                '@qf-jarvis/event-backbone/internal/event-write',
-                '**/persistence/event-write.js',
-                '**/persistence/event-write',
-              ],
-              message:
-                'Accepted-event write authority is governed (D2a, ADR-0138). Only the event-ingestion bridge (persist-validated-event.ts) may import it, and only through the verify -> prepare -> persist path. A canonical event row must never be creatable outside signed ingestion.',
-            },
+            // Re-stated because this value REPLACES the baseline D2a block above (flat config).
+            ...ACCEPTED_EVENT_WRITE_FORBIDDEN_IMPORT_PATTERNS,
           ],
         },
       ],
