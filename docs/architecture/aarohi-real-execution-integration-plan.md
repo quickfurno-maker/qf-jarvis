@@ -16,7 +16,15 @@ commit `eefe32cc75d05b22bc112bf8c60093087b78758b`); it composes with nothing and
 [ADR-0134](../decisions/ADR-0134-qfj-p09-s2-communication-state-evidence-alignment.md) proved that
 `CommunicationStateRecordV1` cannot represent a lawful Core refusal, a pre-execution cancellation or
 a pre-dispatch expiry, that six further states parse on insufficient or no evidence, and that only
-`draft` is buildable without a Core prerequisite. Nothing else here is
+`draft` is buildable without a Core prerequisite. The authorship question that audit left open is
+now decided: [ADR-0135](../decisions/ADR-0135-qfj-p09-s2-local-communication-state-projection-architecture.md)
+adopts **Model 2** — a LOCAL Jarvis projection over authenticated, **adopted** primitive Core
+events, needing **no new Core state event**, though it may still require targeted Core primitive
+adoption for facts S3 finds absent. Trusting that projection additionally requires **write-path
+hardening (`D2a`)**, because a narrow reader is a data-access boundary and cannot authenticate an
+event's origin — and **`D2b`**, because four of the five Jarvis-owned coordination states have no
+durable, ordered replay source today, so **full 18-state rebuild is not certified**. It makes
+**S3, the fresh read-only Core audit, the next execution step**. That decision is **on a feature branch / PR, not merged**. Nothing else here is
 implemented, adopted, connected or activated. Aarohi's runtime is **PLANNED / DISABLED** and
 production rollout is **OFF**. Every edge marked *proposed* or *blocked* below does not exist.
 
@@ -336,7 +344,7 @@ slices.**
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | **1** | **QFJ-P08** | **`CommunicationRequestV1` producer** — POWERLESS — **MERGED (ADR-0133, PR #174)** | none | production code + tests | **proved: NONE required** | none | no | design review | not composed by any app |
 | **2** | QFJ-P09 | `CommunicationStateRecordV1` producer — **BLOCKED (ADR-0134); split into S2a/S2b/S2c; only S2a is Core-free** | PR 1 | production code + tests | must be proved; none foreseen | none | no | design review | not composed by any app |
-| **3** | QFJ-P10 | **Fresh read-only Core audit** at a current pinned commit | none | docs | none | read-only inspection | no | owner sign-off on findings | n/a |
+| **3** | QFJ-P10 | **Fresh read-only Core audit** at a current pinned commit — **NEXT (ADR-0135)** | none | docs | none | read-only inspection | no | owner sign-off on findings | n/a |
 | **4** | QFJ-P10 | Core protocol **adoption** — identity, registration, payment, activation, reconciliation | PR 3 + Core-side work | contracts + docs | must be proved | **Core change required** | no | bilateral adoption | contracts unused until composed |
 | **5** | **QFJ-P08** | **Live Core transport for communication authorization** | PRs 1, 4 | production code | must be proved | Core | no | transport adoption | not composed |
 | **6** | QFJ-P09 | Adopted Core → n8n transport + composition | PRs 2, 4, 5 | production code | must be proved | Core + n8n | no | transport adoption | composition not wired |
