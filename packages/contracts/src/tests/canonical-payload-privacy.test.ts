@@ -23,6 +23,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   CANONICAL_EVENT_ENTRIES,
+  safeParseCanonicalPayload,
   CANONICAL_EVENT_TYPES,
   CANONICAL_PAYLOAD_KEYS,
   canonicalPayloadKey,
@@ -382,5 +383,81 @@ describe('the guard cannot be crashed by hostile input', () => {
 
     expect(() => inspectProhibitedContent(deep)).not.toThrow();
     expect(isFreeOfProhibitedContent(deep)).toBe(false); // depth is itself refused
+  });
+});
+
+/**
+ * `safeParseCanonicalPayload` — the narrow, registry-backed payload validator (D4, ADR-0140).
+ *
+ * It exists because a consumer that reads a payload back out of storage needs to re-parse it against
+ * the contract the event was ACCEPTED under, not against the nested artifact schema. Those are not the
+ * same contract: the registered `@2` payload wraps the artifact in `contractPayloadV2`, whose
+ * prohibited-content guard scans the whole payload. Validating only the nested artifact skips it.
+ *
+ * The function hands out no schema, so a caller cannot mutate the registry entry it validated against.
+ */
+describe('safeParseCanonicalPayload', () => {
+  const authorization = {
+    contractVersion: 1,
+    communicationId: '1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d',
+    communicationRequestId: '2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e',
+    issuer: 'quickfurno-core',
+    outcome: 'authorized',
+    authorizedChannel: 'whatsapp',
+    // An authorized communication must name the approval decision it rests on.
+    approvalDecisionId: '6f7a8b9c-0d1e-4f2a-9b4c-5d6e7f809102',
+    decidedAt: '2026-08-31T09:00:00.000Z',
+    reasonCode: 'approved-by-policy',
+    policy: { policyId: 'communication-policy', policyVersion: 3 },
+    correlationId: '7a8b9c0d-1e2f-4a3b-8c5d-6e7f80910203',
+  } as const;
+
+  const TYPE = 'qf.communication.authorization-recorded';
+
+  it('accepts a payload that satisfies the registered contract', () => {
+    const result = safeParseCanonicalPayload(TYPE, 2, { authorization });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('applies the v2 prohibited-content guard across the WHOLE payload', () => {
+    // `explanation` is a bounded string the nested artifact schema accepts. The registered payload
+    // rejects it for the coordinate, which is precisely the difference this function exists to keep.
+    const result = safeParseCanonicalPayload(TYPE, 2, {
+      authorization: { ...authorization, explanation: 'GPS: 18.5204, 73.8567' },
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts the same payload once the prohibited content is gone', () => {
+    const result = safeParseCanonicalPayload(TYPE, 2, {
+      authorization: { ...authorization, explanation: 'approved by policy' },
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects an extra wrapper key', () => {
+    const result = safeParseCanonicalPayload(TYPE, 2, { authorization, extra: 1 });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('fails for an UNREGISTERED version rather than falling back to a neighbouring one', () => {
+    // A fallback schema is a schema that accepts an event nobody designed. @1 is not registered, so
+    // it must fail here even though a v1 artifact schema still exists for history.
+    const result = safeParseCanonicalPayload(TYPE, 1, { authorization });
+
+    expect(result.success).toBe(false);
+  });
+
+  it('fails for an unknown event type', () => {
+    expect(safeParseCanonicalPayload('qf.nothing.here', 2, {}).success).toBe(false);
+  });
+
+  it('is pure — it returns a result and never throws for bad input', () => {
+    expect(() => safeParseCanonicalPayload(TYPE, 2, null)).not.toThrow();
+    expect(safeParseCanonicalPayload(TYPE, 2, null).success).toBe(false);
   });
 });

@@ -59,12 +59,33 @@ purpose and returns ONE minimised semantic union, and a test asserts no such gen
 
 ### The two target families, and their honest status
 
-Exactly two, unchanged from ADR-0137: `qf.communication.authorization-recorded@1` and
-`qf.communication.result-recorded@1`.
+Exactly two **families**, unchanged from ADR-0137: `qf.communication.authorization-recorded` and
+`qf.communication.result-recorded`.
 
-**Core does not emit either today.** `authorization-recorded` awaits **C3A**; `result-recorded` awaits
-**C3B**'s contract-fit / execution-chain proof. D4 is built and proved **offline** against published
-contracts and synthetic accepted rows, and claims no live emission. `qf.execution.intent-issued` and
+#### Two version axes, and D2 decided only one of them
+
+**D2 selected the FAMILIES. It said nothing about their envelope version**, and the first cut of this
+slice silently assumed `@1`. That was wrong in a way worth stating plainly:
+
+| Axis                                           | Value    | Why                                                                            |
+| ---------------------------------------------- | -------- | ------------------------------------------------------------------------------ |
+| canonical **event / payload registry** version | **`@2`** | what the authoritative registry carries, privacy-hardened                      |
+| nested communication **artifact** contract     | **`V1`** | `CommunicationAuthorizationV1` / `CommunicationResultV1`, `contractVersion: 1` |
+
+At this baseline the `@1` schemas survive for **regression and history only**: they are absent from the
+payload registry, so the ingestion path's `safeParseCanonicalEvent` refuses them and **a `@1` target row
+cannot be created by the verify → prepare → persist path at all**. Admitting `@1` would therefore have
+meant trusting a row that the very trust path D4 leans on would never produce — a contradiction, and the
+reason this is a correction rather than a preference.
+
+**D4 supports `@2` as an explicit reviewed constant**, not "whatever the registry's highest version
+happens to be". A future `@3` carries fields nobody here has reviewed, so it must fail closed until a
+deliberate D4 change reviews them.
+
+**No adopted or live emission for either family was established at the accepted S3 pin, and D4 makes no
+current-live emission claim.** `authorization-recorded` readiness awaits **C3A**; `result-recorded`
+awaits **C3B**'s contract-fit / execution-chain proof. D4 is built and proved **offline** against
+published contracts and synthetic accepted rows. `qf.execution.intent-issued` and
 `qf.execution.result-recorded` remain **unadopted**.
 
 ### The six admitted states, and the ten that are not
@@ -101,8 +122,16 @@ refusal.
 
 ### Full canonical parse, then minimisation
 
-The complete `CommunicationAuthorizationV1` / `CommunicationResultV1` is parsed by its **canonical
-schema** before any field is read out. Fields are stripped only afterwards.
+The stored payload is parsed against the **AUTHORITATIVE REGISTERED contract for its exact
+`type@version`**, through a new narrow contracts API (below), before any field is read out. Fields are
+stripped only afterwards.
+
+**Parsing the nested artifact alone would have been a weaker contract.** The registered `@2` payload is
+`contractPayloadV2({ authorization: ... })`, which applies a privacy-hardened prohibited-content guard
+across the WHOLE payload. A coordinate pair inside an otherwise-bounded `explanation` passes
+`communicationAuthorizationV1Schema` and is rejected by the registered payload — so hand-parsing the
+nested artifact would have admitted a payload the registry refuses. That exact case is asserted by
+test, using the repository's own positive fixture for the detector.
 
 **This distinction is load-bearing: returning less is not parsing less.** A `CommunicationResultV1`
 missing its mandatory `executionIntentId` or `executionResultId` **fails**, even though accepted

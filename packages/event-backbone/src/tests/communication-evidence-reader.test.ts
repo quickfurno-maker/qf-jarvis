@@ -1,14 +1,15 @@
 /**
  * D4 — the purpose-specific trusted communication evidence reader (ADR-0140).
  *
- * These are unit tests against a mock `DatabaseClient` returning synthetic stored rows. No database
- * and no live Core are required, which is the point: the two event families D4 admits are D2 TARGET
- * families that Core does not emit today, so D4 is built and proved offline against published
- * contracts.
+ * These are unit tests against a mock `DatabaseClient` returning synthetic stored rows. No database and
+ * no live Core are required, which is the point: the two event families D4 admits are D2 TARGET
+ * families with **no adopted or live emission established at the accepted S3 pin**, so D4 is built and
+ * proved offline against published contracts.
  *
  * The rows are deliberately built from real canonical artifacts. A fixture that hand-waved the
  * payload would prove the reader parses a shape nobody will ever store.
  */
+import { CANONICAL_PAYLOAD_KEYS } from '@qf-jarvis/contracts';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { DatabaseClient } from '../persistence/pool.js';
@@ -23,6 +24,20 @@ import {
 
 const AUTHORIZATION_TYPE = 'qf.communication.authorization-recorded';
 const RESULT_TYPE = 'qf.communication.result-recorded';
+
+/**
+ * The canonical EVENT WIRE version — which is NOT the artifact contract version.
+ *
+ * The authoritative registry carries both families at `@2`; the embedded artifacts stay
+ * `CommunicationAuthorizationV1` / `CommunicationResultV1` with `contractVersion: 1`. Two different
+ * axes, and the first version of this slice conflated them: it admitted `@1`, a version the payload
+ * registry does not carry and the ingestion path therefore refuses to store.
+ */
+const SUPPORTED_EVENT_VERSION = 2;
+
+/** A real, currently registered canonical event with nothing to do with communications. */
+const UNRELATED_TYPE = 'qf.recommendation.created';
+const UNRELATED_VERSION = 2;
 
 const EVENT_ID = '4d9f2b0e-9a1c-4f3b-9d21-7c6e5a4b3c2d';
 const COMMUNICATION_ID = '1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d';
@@ -114,7 +129,7 @@ function row(overrides: RowOverrides = {}): Record<string, unknown> {
     position: '7',
     event_id: EVENT_ID,
     event_type: AUTHORIZATION_TYPE,
-    event_version: 1,
+    event_version: SUPPORTED_EVENT_VERSION,
     source: 'quickfurno-core',
     payload: { authorization: authorization() },
     ...overrides,
@@ -172,6 +187,16 @@ describe('D4 — input and stored-data validation fail closed', () => {
     },
   );
 
+  it.each([[7], [7n], [true], [null], [{ position: 7 }]])(
+    'fails closed on a NON-STRING stored position (%#)',
+    async (position) => {
+      // Coercing through String() would turn a corrupted column type into a value that then passes
+      // the grammar check. The existing projection readers refuse the same coercion, and D4 must not
+      // be more permissive than the substrate it depends on.
+      await expect(read([row({ position })])).rejects.toBeInstanceOf(ProjectionStoredDataError);
+    },
+  );
+
   it('fails closed when the stored position is not the requested one', async () => {
     // Silently returning another position's evidence would corrupt ordering without ever erroring.
     await expect(read([row({ position: '8' })], 7n)).rejects.toBeInstanceOf(
@@ -192,14 +217,33 @@ describe('D4 — input and stored-data validation fail closed', () => {
     );
   });
 
-  it.each([[2], [0], ['1'], [null]])(
+  it.each([[1], [3], [17]])(
     'fails closed on a KNOWN target family at unsupported version %s',
     async (event_version) => {
       // Deliberately NOT null: silently skipping an unknown version of a fact the projection relies
-      // on would produce a quietly incomplete projection.
+      // on would produce a quietly incomplete projection. `1` is here on purpose — it was this
+      // slice's original happy path, and it is a version the ingestion registry will not accept.
       await expect(read([row({ event_version })])).rejects.toBeInstanceOf(
         ProjectionStoredDataError,
       );
+    },
+  );
+
+  it.each([[0], ['2'], [null], [2.5], [1001]])(
+    'fails closed on a structurally invalid stored event version (%s)',
+    async (event_version) => {
+      await expect(read([row({ event_version })])).rejects.toBeInstanceOf(
+        ProjectionStoredDataError,
+      );
+    },
+  );
+
+  it.each([['!!!'], [' QF '], ['qf.communication.BAD'], ['a'.repeat(65)], [''], [42]])(
+    'fails closed on a malformed stored event type (%#)',
+    async (event_type) => {
+      // Corruption, not a benign unrelated event. Classifying `'!!!'` as "not our business" and
+      // returning null would hide a broken column behind a normal-looking answer.
+      await expect(read([row({ event_type })])).rejects.toBeInstanceOf(ProjectionStoredDataError);
     },
   );
 
@@ -237,6 +281,63 @@ describe('D4 — input and stored-data validation fail closed', () => {
   });
 });
 
+describe('D4 — the canonical event WIRE version it admits', () => {
+  it('admits exactly the version the authoritative payload registry carries', () => {
+    // The load-bearing fact: the registry carries these families at @2, so @2 is what the verify ->
+    // prepare -> persist path can actually accept. Admitting @1 would have meant trusting a row that
+    // path refuses to create.
+    expect(CANONICAL_PAYLOAD_KEYS).toContain(`${AUTHORIZATION_TYPE}@2`);
+    expect(CANONICAL_PAYLOAD_KEYS).toContain(`${RESULT_TYPE}@2`);
+    expect(SUPPORTED_EVENT_VERSION).toBe(2);
+  });
+
+  it('confirms the target families are NOT ingestible at @1', () => {
+    // v1 schemas still exist for regression and history, but they are absent from the authoritative
+    // payload registry, which is what makes them un-ingestible.
+    expect(CANONICAL_PAYLOAD_KEYS).not.toContain(`${AUTHORIZATION_TYPE}@1`);
+    expect(CANONICAL_PAYLOAD_KEYS).not.toContain(`${RESULT_TYPE}@1`);
+  });
+
+  it('keeps the embedded ARTIFACT at contract version 1 — a different axis', () => {
+    // The event envelope is @2; the artifact inside it is V1. Conflating the two is the exact mistake
+    // this suite now guards against.
+    expect(authorization()['contractVersion']).toBe(1);
+    expect(communicationResult()['contractVersion']).toBe(1);
+  });
+
+  it('admits a valid @2 authorization and a valid @2 result', async () => {
+    expect((await read([row()]))?.kind).toBe('communication-authorization');
+    expect(
+      (await read([row({ event_type: RESULT_TYPE, payload: { result: communicationResult() } })]))
+        ?.kind,
+    ).toBe('communication-result');
+  });
+});
+
+describe('D4 — it re-parses the REGISTERED payload contract, not just the nested artifact', () => {
+  it('rejects a payload the nested V1 artifact accepts but the @2 privacy guard refuses', async () => {
+    // This is the whole point of parsing through the registry. `explanation` is a bounded string the
+    // nested CommunicationAuthorizationV1 schema happily accepts — but the registered @2 payload wraps
+    // it in contractPayloadV2, whose prohibited-content guard scans the WHOLE payload and rejects a
+    // coordinate pair. The fixture is the repository's own positive case for that detector.
+    //
+    // If D4 ever regressed to parsing only the nested artifact, this row would be admitted and a
+    // coordinate would reach evidence. It must fail.
+    const payload = {
+      authorization: authorization({ explanation: 'GPS: 18.5204, 73.8567' }),
+    };
+
+    await expect(read([row({ payload })])).rejects.toBeInstanceOf(ProjectionStoredDataError);
+  });
+
+  it('still admits the same authorization once the prohibited content is gone', async () => {
+    // The control: it is the coordinate that is rejected, not the presence of an explanation.
+    const payload = { authorization: authorization({ explanation: 'approved by policy' }) };
+
+    expect((await read([row({ payload })]))?.kind).toBe('communication-authorization');
+  });
+});
+
 describe('D4 — the SQL boundary', () => {
   it('issues exactly one parameterized, fully-qualified, position-keyed query', async () => {
     const { client, query } = mockClient([row()]);
@@ -250,9 +351,10 @@ describe('D4 — the SQL boundary', () => {
     expect(sql).toContain('e.sequence = m.event_storage_sequence');
     expect(sql).toContain('WHERE m.position = $1');
     expect(params[0]).toBe('7');
-    // The event types are parameters, not interpolated literals.
+    // The event types AND the supported version are parameters, not interpolated literals.
     expect(params).toContain(AUTHORIZATION_TYPE);
     expect(params).toContain(RESULT_TYPE);
+    expect(params).toContain(SUPPORTED_EVENT_VERSION);
   });
 
   it('opens no transaction, takes no lock, and writes nothing', async () => {
@@ -287,15 +389,28 @@ describe('D4 — the SQL boundary', () => {
     expect(sql).not.toContain('m.event_storage_sequence AS');
   });
 
-  it('asks the database for a payload ONLY for the two target families', async () => {
-    // Payload minimisation at the SQL boundary: an unrelated positioned event never sends its
-    // payload across this boundary at all, rather than being read and then discarded.
+  it('gates the payload on the target family AND the exact supported version', async () => {
+    // Family alone is not enough. A future @3 is precisely the version carrying fields nobody here
+    // has reviewed, so its payload must not cross the boundary before the version check rejects it.
     const { client, query } = mockClient([row()]);
     await readTrustedCommunicationEvidenceAtPosition(client, 7n);
-    const [sql] = query.mock.calls[0] as [string];
+    const [sql, params] = query.mock.calls[0] as [string, readonly unknown[]];
 
     expect(sql).toContain('CASE');
     expect(sql).toContain('ELSE NULL');
+    expect(sql).toContain('e.event_version =');
+    expect(sql).toMatch(/e\.event_type IN \(\$2, \$3\)\s+AND\s+e\.event_version = \$4/);
+    expect(params[3]).toBe(SUPPORTED_EVENT_VERSION);
+  });
+
+  it('does not request the payload of a target at an unsupported version', async () => {
+    // The database returns NULL for it, and the reader still fails closed on the version rather than
+    // treating the absent payload as a benign miss.
+    const { client } = mockClient([row({ event_version: 3, payload: null })]);
+
+    await expect(readTrustedCommunicationEvidenceAtPosition(client, 7n)).rejects.toBeInstanceOf(
+      ProjectionStoredDataError,
+    );
   });
 });
 
@@ -487,8 +602,14 @@ describe('D4 — admitted result evidence', () => {
 });
 
 describe('D4 — the states it deliberately declines', () => {
-  it('returns null for an unrelated canonical event type', async () => {
-    expect(await read([row({ event_type: 'qf.recommendation.issued', payload: null })])).toBeNull();
+  it('returns null for a REAL unrelated registered canonical event', async () => {
+    // A genuinely registered event at its registered version, not an invented string — otherwise this
+    // would prove the null path for something that could never be stored.
+    expect(
+      await read([
+        row({ event_type: UNRELATED_TYPE, event_version: UNRELATED_VERSION, payload: null }),
+      ]),
+    ).toBeNull();
   });
 
   it.each([

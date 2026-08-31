@@ -1,6 +1,6 @@
 # ADR-0135 — QFJ-P09 S2 local communication-state projection architecture
 
-**Status:** Accepted. **MERGED** as PR #176, merge commit `eebee71e4e156608e2e04e60802b9d24b33140f5`. Its D1 prerequisite — the fresh read-only Core audit — is **MERGED** as PR #177 under [ADR-0136](./ADR-0136-qfj-p10-s3-fresh-quickfurno-core-audit.md), which **confirmed Model 2 and reopened nothing**. **D2 is decided on a feature branch / PR by [ADR-0137](./ADR-0137-qfj-p10-d2-core-protocol-and-event-gap-decision.md) (Proposed, not merged); the next engineering slice after it merges is D2a.**
+**Status:** Accepted. **MERGED** as PR #176, merge commit `eebee71e4e156608e2e04e60802b9d24b33140f5`. Its D1 prerequisite — the fresh read-only Core audit — is **MERGED** as PR #177 under [ADR-0136](./ADR-0136-qfj-p10-s3-fresh-quickfurno-core-audit.md), which **confirmed Model 2 and reopened nothing**. **D2 is MERGED as PR #178 under [ADR-0137](./ADR-0137-qfj-p10-d2-core-protocol-and-event-gap-decision.md), and D2a — the write-path prerequisite this ADR locked — is MERGED as PR #179 under [ADR-0138](./ADR-0138-qfj-p09-d2a-accepted-event-write-path-and-provenance-hardening.md). The current slice is D4, the trusted evidence-read capability ([ADR-0140](./ADR-0140-qfj-p09-d4-trusted-communication-evidence-read-capability.md), Proposed); D2b follows it.** Status only — the decision body below is unchanged.
 **Date:** 2026-08-30
 **Phase ownership:** **QFJ-P09** (execution gateway and communication lifecycle). A bounded
 architecture decision for **slice S2** of

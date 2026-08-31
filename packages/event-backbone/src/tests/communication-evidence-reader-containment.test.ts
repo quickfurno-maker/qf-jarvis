@@ -117,6 +117,22 @@ async function productionFiles(): Promise<ReadonlyMap<string, string>> {
 
 const relative = (absolute: string): string => absolute.slice(REPO_DIR.length).replace(/\\/g, '/');
 
+/** The module's basename, without extension — what every reference form has in common. */
+const READER_BASENAME = 'communication-evidence-reader';
+
+/**
+ * Does this source REFERENCE the reader module in any form a bundler would resolve?
+ *
+ * Keyed on the module SPECIFIER inside quotes rather than on `from '...'`, because the earlier
+ * `from`-shaped regex missed a side-effect import, a dynamic `import()`, a `require()` and any
+ * double-quoted specifier. Comments are stripped first so prose naming the file is not a reference.
+ */
+function referencesReader(code: string): boolean {
+  const withoutComments = code.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+
+  return new RegExp(`['"\`][^'"\`]*${READER_BASENAME}(?:\\.js)?['"\`]`).test(withoutComments);
+}
+
 beforeAll(async () => {
   const { mkdir, writeFile } = await import('node:fs/promises');
   const targets = CASES.map((c, i) => ({
@@ -211,32 +227,67 @@ describe('D4 — no production code may import the reader', () => {
     }
   });
 
-  it('has exactly ZERO production importers of the reader', async () => {
+  it('has exactly ZERO production references to the reader, in ANY module form', async () => {
     // The independent second layer: a source scan cannot be silenced by an eslint-disable comment.
     // D5 changes this number to exactly 1, deliberately, in its own PR.
     const files = await productionFiles();
-    const importsReader =
-      /(?:^|\n)\s*(?:import|export)[\s\S]{0,400}?from\s+'[^']*communication-evidence-reader(?:\.js)?'/;
 
-    const importers: string[] = [];
+    const referrers: string[] = [];
     for (const [file, code] of files) {
-      if (file.endsWith('communication-evidence-reader.ts')) continue; // the module itself
-      if (importsReader.test(code)) importers.push(relative(file));
+      if (file.endsWith(READER_BASENAME + '.ts')) continue; // the module itself
+      if (referencesReader(code)) referrers.push(relative(file));
     }
 
-    expect(importers).toStrictEqual([]);
+    expect(referrers).toStrictEqual([]);
   });
 
-  it('the zero-importer scan is not vacuous', () => {
-    // It must actually fire on a real import, and stay quiet on prose that merely names the module.
-    const importsReader =
-      /(?:^|\n)\s*(?:import|export)[\s\S]{0,400}?from\s+'[^']*communication-evidence-reader(?:\.js)?'/;
+  it.each([
+    ['a static named import', READER_IMPORT],
+    ['the sibling static import', READER_IMPORT_SIBLING],
+    [
+      'an export-from re-export',
+      "export { readTrustedCommunicationEvidenceAtPosition } from './communication-evidence-reader.js';",
+    ],
+    ['a side-effect import', "import './communication-evidence-reader.js';"],
+    ['a dynamic import', "const m = await import('./communication-evidence-reader.js');"],
+    [
+      'a double-quoted import',
+      'import { x } from "../projections/communication-evidence-reader.js";',
+    ],
+    ['a require call', "const m = require('./communication-evidence-reader.js');"],
+    [
+      'an eslint-disabled static import',
+      "/* eslint-disable no-restricted-imports */\nimport { x } from './communication-evidence-reader.js';",
+    ],
+  ])('the zero-reference scan catches %s', (_label, source) => {
+    // The earlier scan keyed on `from '...'`, so a side-effect import, a dynamic import and a
+    // double-quoted specifier all slipped past it — which meant the "independent second layer" was
+    // not actually independent for those forms. It now matches the MODULE SPECIFIER itself.
+    expect(referencesReader(`\n${source}\n`)).toBe(true);
+  });
 
-    expect(importsReader.test(`\n${READER_IMPORT}`)).toBe(true);
-    expect(importsReader.test(`\n${READER_IMPORT_SIBLING}`)).toBe(true);
+  it('stays quiet on prose that merely names the module', () => {
+    // A scan that fired on a doc comment would be quietly loosened by the first person it annoyed.
     expect(
-      importsReader.test('\n// see communication-evidence-reader.js for the D4 boundary\n'),
+      referencesReader('\n// see communication-evidence-reader.js for the D4 boundary\n'),
     ).toBe(false);
+    expect(referencesReader('\n * The reader lives in communication-evidence-reader.ts.\n')).toBe(
+      false,
+    );
+  });
+
+  it('is honest about which forms LINT covers, versus only the scan', async () => {
+    // `no-restricted-imports` governs static import/export specifiers. Dynamic `import()` is a call
+    // expression, so it is NOT covered by that rule here — the structural scan is what closes it,
+    // together with the eslint-disabled case. Claiming two independent layers for every syntax would
+    // be an overclaim, so this asserts the split rather than papering over it.
+    const groups = await resolvedGroups('packages/event-backbone/src/projections/hypothetical.ts');
+
+    expect(groups).toContain('**/communication-evidence-reader.js');
+    // ...and the scan independently catches the dynamic form the lint rule does not.
+    expect(referencesReader("const m = await import('./communication-evidence-reader.js');")).toBe(
+      true,
+    );
   });
 
   it('adds no generic payload reader anywhere in the package', async () => {

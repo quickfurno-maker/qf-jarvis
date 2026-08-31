@@ -35,10 +35,12 @@
  *
  * ### Offline by construction
  *
- * The two event families this reader admits are D2 TARGET families. **Core does not emit them today.**
- * `authorization-recorded` awaits C3A; `result-recorded` awaits C3B's contract-fit proof. D4 is built
- * and tested offline against published contracts and synthetic accepted rows, and claims no live
- * emission. `qf.execution.intent-issued` and `qf.execution.result-recorded` remain unadopted.
+ * The two event families this reader admits are D2 TARGET families. **No adopted or live emission for
+ * either was established at the accepted S3 pin, and D4 makes no current-live emission claim** — D4
+ * did not re-pin or inspect Core, so it is in no position to assert what Core does right now.
+ * `authorization-recorded` readiness awaits C3A; `result-recorded` awaits C3B's contract-fit proof. D4
+ * is built and tested offline against published contracts and synthetic accepted rows.
+ * `qf.execution.intent-issued` and `qf.execution.result-recorded` remain unadopted.
  *
  * ### Least privilege by module boundary
  *
@@ -49,9 +51,8 @@
  * Nothing here pre-authorizes that.
  */
 import {
-  communicationAuthorizationV1Schema,
-  communicationResultV1Schema,
   eventIdSchema,
+  safeParseCanonicalPayload,
   type CommunicationAuthorizationV1,
   type CommunicationResultV1,
 } from '@qf-jarvis/contracts';
@@ -78,7 +79,24 @@ interface TrustedEvidenceBrand {
 /** The two Core-owned event families D2 selected as targets. Nothing else is admitted. */
 const AUTHORIZATION_RECORDED_EVENT_TYPE = 'qf.communication.authorization-recorded';
 const RESULT_RECORDED_EVENT_TYPE = 'qf.communication.result-recorded';
-const SUPPORTED_EVENT_VERSION = 1;
+/**
+ * The canonical EVENT WIRE version D4 supports — a different axis from the artifact contract version.
+ *
+ *   canonical event / payload registry version : **@2**  (this constant)
+ *   nested communication ARTIFACT contract     : **V1**  (`CommunicationAuthorizationV1` etc.)
+ *
+ * Conflating them is easy and wrong. D2 (ADR-0137) selected the two **families**; it said nothing
+ * about their envelope version. At this baseline the authoritative registry carries both families at
+ * **@2**, privacy-hardened; the `@1` schemas survive for regression and history only, are absent from
+ * the payload registry, and are therefore **NOT INGESTIBLE**. A `@1` row cannot reach the store through
+ * the verify -> prepare -> persist path D4 relies on, so admitting one would have meant trusting a row
+ * that very trust path refuses.
+ *
+ * Deliberately an explicit constant, not "whatever the registry's highest version happens to be". A
+ * future `@3` carries fields nobody here has reviewed, so it must fail closed until a D4 change
+ * reviews them.
+ */
+const SUPPORTED_EVENT_VERSION = 2;
 
 /** The one canonical emitter of a canonical event. A consistency check, not an authentication anchor. */
 const CANONICAL_CORE_SOURCE = 'quickfurno-core';
@@ -180,8 +198,10 @@ interface RawEvidenceRow {
  * ONE parameterized, fully-qualified, position-keyed query.
  *
  * The `CASE` is the payload-minimisation boundary: the database returns a payload ONLY for the two
- * target families, so an unrelated positioned event never sends its payload across this boundary at
- * all. Everything else selected is envelope metadata this reader actually needs. Deliberately NOT
+ * target families **at the exact supported version**, so neither an unrelated positioned event nor a
+ * target at an unreviewed version sends its payload across this boundary at all. Gating on the family
+ * alone would have let a future `@3` payload — precisely the one carrying fields nobody here has
+ * reviewed — into the process before the version check rejected it. Everything else selected is envelope metadata this reader actually needs. Deliberately NOT
  * selected: `sequence` (used only for the join), `subject_type`, `subject_id`, `occurred_at`,
  * `emitted_at`, `causation_event_id`, `signature`, `signature_key_id`, `signature_signed_at`,
  * `semantic_event_digest`, `body_digest`.
@@ -194,7 +214,7 @@ SELECT
   e.event_version,
   e.source,
   CASE
-    WHEN e.event_type IN ($2, $3) THEN e.payload
+    WHEN e.event_type IN ($2, $3) AND e.event_version = $4 THEN e.payload
     ELSE NULL
   END AS payload
 FROM qf_jarvis.projection_event_position AS m
@@ -205,29 +225,47 @@ WHERE m.position = $1
 /** A canonical positive decimal, as the position map stores it. No sign, no padding, no exponent. */
 const CANONICAL_POSITION_PATTERN = /^[1-9][0-9]*$/;
 
-/** A plain object, not an array and not null — the only shape a canonical payload wrapper may take. */
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
+/** The event-type grammar and version range from migration 0001, mirrored by the existing readers. */
+const EVENT_TYPE_PATTERN = /^[a-z0-9]+([-.][a-z0-9]+)*$/;
+const MAX_EVENT_TYPE_LENGTH = 64;
+const MIN_EVENT_VERSION = 1;
+const MAX_EVENT_VERSION = 1000;
 
 /**
- * The stored payload must be EXACTLY `{ [key]: <artifact> }` — one key, that key, nothing else.
+ * Re-parse the stored payload against the **authoritative registered contract** for this exact
+ * `type@version`, then hand back the one nested artifact.
  *
- * Enforced here rather than with a schema so this module needs no direct `zod` dependency: the nested
- * artifact is still parsed by its canonical schema, which is where validation that matters belongs.
- * An extra wrapper key is stored-data corruption, not a payload to be leniently read around.
+ * This goes through `safeParseCanonicalPayload` rather than reaching for the nested artifact schema
+ * directly, and the difference is not cosmetic. The registered `@2` payload is
+ * `contractPayloadV2({ authorization: ... })`, which applies a privacy-hardened prohibited-content
+ * guard across the WHOLE payload. Parsing only `communicationAuthorizationV1Schema` would skip that
+ * guard, so a payload the registry rejects — a coordinate pair inside an otherwise-bounded
+ * `explanation`, say — would sail straight through. **D4 minimises what it RETURNS; it must never
+ * parse a weaker contract than the one the event was accepted under.**
+ *
+ * The wrapper key is then read out of an already-validated payload, so that step is extraction rather
+ * than a second, weaker validation pass.
  */
-function readPayloadWrapper(payload: unknown, key: string): unknown {
-  if (!isPlainObject(payload)) {
-    throw new ProjectionStoredDataError('A stored communication event payload is not an object.');
+function parseRegisteredPayload(
+  eventType: string,
+  eventVersion: number,
+  payload: unknown,
+  key: string,
+): unknown {
+  const parsed = safeParseCanonicalPayload(eventType, eventVersion, payload);
+  if (!parsed.success) {
+    throw new ProjectionStoredDataError(
+      'A stored communication event payload does not satisfy its registered canonical contract.',
+    );
   }
-  const keys = Object.keys(payload);
-  if (keys.length !== 1 || keys[0] !== key) {
+
+  const data = parsed.data;
+  if (typeof data !== 'object' || data === null || !(key in data)) {
     throw new ProjectionStoredDataError(
       'A stored communication event payload does not have the exact canonical wrapper.',
     );
   }
-  return payload[key];
+  return (data as Record<string, unknown>)[key];
 }
 
 function isAdmittedResultState(state: string): state is AdmittedCommunicationResultState {
@@ -264,28 +302,48 @@ export async function readTrustedCommunicationEvidenceAtPosition(
     position.toString(),
     AUTHORIZATION_RECORDED_EVENT_TYPE,
     RESULT_RECORDED_EVENT_TYPE,
+    SUPPORTED_EVENT_VERSION,
   ]);
   const raw = result.rows[0];
   if (raw === undefined) {
     throw new ProjectionStoredDataError('No event maps to the requested projection position.');
   }
 
-  // The stored position must be canonical AND the one that was asked for. A reader that silently
-  // returned evidence for a different position would corrupt ordering without ever erroring.
-  const storedPosition = typeof raw.position === 'string' ? raw.position : String(raw.position);
-  if (!CANONICAL_POSITION_PATTERN.test(storedPosition)) {
+  // The stored position must be a STRING, canonical, AND the one that was asked for.
+  //
+  // Requiring the string is not pedantry: coercing a number or bigint through `String()` would turn a
+  // corrupted column type into a value that then passes the grammar check, and the existing projection
+  // readers deliberately refuse that coercion. A reader that silently returned evidence for a
+  // different position would corrupt ordering without ever erroring.
+  if (typeof raw.position !== 'string' || !CANONICAL_POSITION_PATTERN.test(raw.position)) {
     throw new ProjectionStoredDataError(
       'A stored projection position is not a canonical position.',
     );
   }
-  if (BigInt(storedPosition) !== position) {
+  if (BigInt(raw.position) !== position) {
     throw new ProjectionStoredDataError(
       'A stored projection position does not match the requested position.',
     );
   }
 
-  if (typeof raw.event_type !== 'string') {
-    throw new ProjectionStoredDataError('A stored event type is not a machine token.');
+  // Validate the stored METADATA against the event log's own contract BEFORE classifying it. Without
+  // this, a corrupted type such as `'!!!'` would be quietly treated as a benign "unrelated event" and
+  // return null — hiding corruption behind a normal-looking answer.
+  if (
+    typeof raw.event_type !== 'string' ||
+    raw.event_type.length < 1 ||
+    raw.event_type.length > MAX_EVENT_TYPE_LENGTH ||
+    !EVENT_TYPE_PATTERN.test(raw.event_type)
+  ) {
+    throw new ProjectionStoredDataError('A stored event type is not a valid machine token.');
+  }
+  if (
+    typeof raw.event_version !== 'number' ||
+    !Number.isSafeInteger(raw.event_version) ||
+    raw.event_version < MIN_EVENT_VERSION ||
+    raw.event_version > MAX_EVENT_VERSION
+  ) {
+    throw new ProjectionStoredDataError('A stored event version is not a valid contract version.');
   }
   const isAuthorization = raw.event_type === AUTHORIZATION_RECORDED_EVENT_TYPE;
   const isResult = raw.event_type === RESULT_RECORDED_EVENT_TYPE;
@@ -315,24 +373,22 @@ export async function readTrustedCommunicationEvidenceAtPosition(
   }
 
   if (isAuthorization) {
-    const parsed = communicationAuthorizationV1Schema.safeParse(
-      readPayloadWrapper(raw.payload, 'authorization'),
-    );
-    if (!parsed.success) {
-      throw new ProjectionStoredDataError(
-        'A stored communication authorization is not a valid canonical artifact.',
-      );
-    }
-    return authorizationEvidence(position, eventId.data, parsed.data);
+    const authorization = parseRegisteredPayload(
+      raw.event_type,
+      raw.event_version,
+      raw.payload,
+      'authorization',
+    ) as CommunicationAuthorizationV1;
+    return authorizationEvidence(position, eventId.data, authorization);
   }
 
-  const parsed = communicationResultV1Schema.safeParse(readPayloadWrapper(raw.payload, 'result'));
-  if (!parsed.success) {
-    throw new ProjectionStoredDataError(
-      'A stored communication result is not a valid canonical artifact.',
-    );
-  }
-  return resultEvidence(position, eventId.data, parsed.data);
+  const communicationResult = parseRegisteredPayload(
+    raw.event_type,
+    raw.event_version,
+    raw.payload,
+    'result',
+  ) as CommunicationResultV1;
+  return resultEvidence(position, eventId.data, communicationResult);
 }
 
 /**
