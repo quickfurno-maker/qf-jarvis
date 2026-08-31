@@ -186,16 +186,21 @@ must not be assumed reusable** for a Jarvis trust purpose. `execution-submitted`
   owns consent, suppression, a delivery trace and signature-gated webhooks. **Full business/send
   authorization and a Jarvis-facing authorization artifact remain unproved**, so S4 is not
   unblocked by this alone.
-- The **event-transport half is the true blocker**: `domain_events`/`outbox_events` are unapplied and
-  the envelope is unwired, so **every Tier-C projection fact still waits on Core Phase 6/7**.
+- The **event-transport half is the true blocker**: the `domain_events`/`outbox_events` schema is
+  **defined in source** and the Jarvis envelope is **unwired at the pinned code**. **Core's own
+  boundary documentation says the workflow-kernel migration is unapplied on the live database, but
+  S3 did not independently inspect managed applied-state** — D2-Q14 must verify governed
+  applied-state before deciding what must be applied or wired. Either way, **every Tier-C projection
+  fact still waits on Core Phase 6/7**.
 - GAP A and GAP B remain open, so S8 and S9 remain blocked exactly as ADR-0132 said.
 - Nothing is activated. Production rollout remains **OFF**; Aarohi's runtime remains
   **PLANNED / DISABLED**.
 
 ## Alternatives considered
 
-- **Trust the historical audit.** Rejected by ADR-0132's own hard prerequisite — and it would have been
-  badly wrong: six of fifteen delta rows changed.
+- **Trust the historical audit.** Rejected by ADR-0132's own hard prerequisite — and it would have
+  been insufficient: **three previously-audited findings materially changed, four remained unchanged,
+  and eight domains had not been audited historically.**
 - **Query live Supabase to settle ambiguity.** Refused. Out of scope, and the boundary is read-only;
   ambiguities are recorded as `AMBIGUOUS_REQUIRES_D2` instead.
 - **Adopt an event because a Core fact exists.** Refused: a fact in a table is not an emission, and the
