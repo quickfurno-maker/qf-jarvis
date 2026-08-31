@@ -36,6 +36,20 @@ function stripComments(code: string): string {
   return code.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
 }
 
+/** How many times `pattern` occurs in `code`. Occurrences, never files — see the mint scan below. */
+function countMatches(code: string, pattern: RegExp): number {
+  return (code.match(pattern) ?? []).length;
+}
+
+/** Every reference to the mint MEMBER, in any shape: a call, an alias, a re-export, a property read. */
+const MINT_MEMBER_REFERENCE = /\bfromVerifiedIngestion\b/g;
+
+/** The one intended shape: a direct call on the class. */
+const MINT_DIRECT_CALL = /\bAuthenticatedEventWrite\s*\.\s*fromVerifiedIngestion\s*\(/g;
+
+/** Every invocation of the low-level writer. */
+const LOW_LEVEL_INVOCATION = /\bstoreValidatedEvent\s*\(/g;
+
 /** An absolute path as a repo-relative, forward-slashed one, so assertions read the same everywhere. */
 function relative(absolute: string): string {
   return absolute.slice(REPO_DIR.length).replace(/\\/g, '/');
@@ -180,6 +194,19 @@ describe('D2a — the three-layer production containment chain', () => {
     ]);
   });
 
+  it('makes exactly ONE production invocation of the low-level writer', async () => {
+    // The file-level assertion above says only that one file mentions it. This says the file calls
+    // it once, so "one production caller" is literally true rather than approximately true.
+    const code = stripComments(
+      await readFile(
+        join(REPO_DIR, 'packages/event-backbone/src/persistence/event-write.ts'),
+        'utf8',
+      ),
+    );
+
+    expect(countMatches(code, LOW_LEVEL_INVOCATION)).toBe(1);
+  });
+
   it('has exactly ONE production importer of the governed write capability', async () => {
     const files = await productionSources();
     const importsCapability =
@@ -195,23 +222,39 @@ describe('D2a — the three-layer production containment chain', () => {
     ]);
   });
 
-  it('has exactly ONE production call site of the mint', async () => {
-    // The mint is a public static factory over a plain record, so "who may call it" IS the boundary
-    // (ADR-0138). A second production call site would mean a second place that can decide a record
-    // is fit to persist, which is precisely what the bridge's evidence binding exists to own.
+  it('has exactly ONE production reference to the mint, and it is the intended direct call', async () => {
+    // COUNTS OCCURRENCES, NOT FILES. A file-level check would pass with two mint calls inside the
+    // permitted file, and a second mint there is exactly the dangerous case: it could build a record
+    // by some other route while still satisfying "one file". The mint is a public factory over a
+    // plain record, so "how many places may call it" IS the boundary (ADR-0138).
+    //
+    // It also counts the MEMBER NAME rather than the call shape, so an alias
+    // (`const mint = AuthenticatedEventWrite.fromVerifiedIngestion`) cannot slip past a
+    // call-shaped regex.
     const files = await productionSources();
+    const definition = join('persistence', 'event-write.ts');
 
-    const callers: string[] = [];
+    let memberReferences = 0;
+    let directCalls = 0;
+    const holders: string[] = [];
+
     for (const file of files) {
+      if (file.endsWith(definition)) continue; // the class declares the member; that is not a use
       const code = stripComments(await readFile(file, 'utf8'));
-      if (/AuthenticatedEventWrite\s*\.\s*fromVerifiedIngestion\s*\(/.test(code)) {
-        callers.push(file);
-      }
+      const refs = countMatches(code, MINT_MEMBER_REFERENCE);
+      if (refs === 0) continue;
+      memberReferences += refs;
+      directCalls += countMatches(code, MINT_DIRECT_CALL);
+      holders.push(file);
     }
 
-    expect(callers.map(relative)).toStrictEqual([
+    expect(holders.map(relative)).toStrictEqual([
       'packages/event-ingestion/src/ingest/persist-validated-event.ts',
     ]);
+    // Exactly one reference, and that one reference is the direct call — so there is no alias, no
+    // re-export and no second mint anywhere in production.
+    expect(memberReferences).toBe(1);
+    expect(directCalls).toBe(1);
   });
 });
 
@@ -250,9 +293,34 @@ describe('D2a — the containment scans are not vacuous', () => {
     expect(/\bstoreValidatedEvent\b/.test(stripComments(PROSE))).toBe(false);
   });
 
-  it('detects a second mint call site', () => {
-    const second = 'const w = AuthenticatedEventWrite.fromVerifiedIngestion(record);';
-    expect(/AuthenticatedEventWrite\s*\.\s*fromVerifiedIngestion\s*\(/.test(second)).toBe(true);
+  it('detects a SECOND mint call in the SAME file — the file-counting weakness', () => {
+    // The gap this replaced: counting files would report 1 here and pass. Counting occurrences
+    // reports 2 and fails, which is the whole point of the change.
+    const twoMints = [
+      'const a = AuthenticatedEventWrite.fromVerifiedIngestion(record);',
+      'const b = AuthenticatedEventWrite.fromVerifiedIngestion(other);',
+    ].join('\n');
+
+    expect(countMatches(twoMints, MINT_MEMBER_REFERENCE)).toBe(2);
+    expect(countMatches(twoMints, MINT_DIRECT_CALL)).toBe(2);
+  });
+
+  it('detects an ALIASED mint, which a call-shaped regex alone would miss', () => {
+    const aliased = [
+      'const mint = AuthenticatedEventWrite.fromVerifiedIngestion;',
+      'const w = mint(record);',
+    ].join('\n');
+
+    // The call-shaped pattern sees nothing...
+    expect(countMatches(aliased, MINT_DIRECT_CALL)).toBe(0);
+    // ...so the member-name count is what catches it, and the two assertions together
+    // (`memberReferences === 1` AND `directCalls === 1`) make this shape fail.
+    expect(countMatches(aliased, MINT_MEMBER_REFERENCE)).toBe(1);
+  });
+
+  it('detects a second low-level invocation', () => {
+    const twice = 'storeValidatedEvent(pool, a);\nstoreValidatedEvent(pool, b);';
+    expect(countMatches(twice, LOW_LEVEL_INVOCATION)).toBe(2);
   });
 });
 

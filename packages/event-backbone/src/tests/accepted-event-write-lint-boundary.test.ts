@@ -56,16 +56,26 @@ export const probe = storeAuthenticatedEvent;
 `;
 
 /**
- * BLOCKER 2's scenario: a second event-backbone production module importing the LOW-LEVEL writer
- * directly. This compiles, adds no second SQL INSERT, and adds no second `event-write` importer —
- * so before the correction it slipped through every D2a check.
+ * A second event-backbone production module importing the LOW-LEVEL writer directly. This compiles,
+ * adds no second SQL INSERT, and adds no second `event-write` importer, so nothing else in the D2a
+ * suite catches it.
+ *
+ * Two spellings are probed, and the SIBLING one is the important half. A module already sitting in
+ * `persistence/` would naturally write `./event-store.js` — a specifier containing no
+ * `persistence/` segment, which an earlier pattern list missed entirely. Probing only the
+ * `../persistence/...` form would have been a probe written to match the rule rather than to match
+ * what a developer would actually type.
  */
-const LOW_LEVEL_WRITER_IMPORT = `import { storeValidatedEvent } from '../persistence/event-store.js';
+const LOW_LEVEL_WRITER_IMPORT_FROM_ELSEWHERE = `import { storeValidatedEvent } from '../persistence/event-store.js';
+export const probe = storeValidatedEvent;
+`;
+
+const LOW_LEVEL_WRITER_IMPORT_SIBLING = `import { storeValidatedEvent } from './event-store.js';
 export const probe = storeValidatedEvent;
 `;
 
 /** Read-side types from the SAME module must stay importable: write authority is restricted, reads are not. */
-const READ_SIDE_TYPE_IMPORT = `import type { StoredEvent } from '../persistence/event-store.js';
+const READ_SIDE_TYPE_IMPORT = `import type { StoredEvent } from './event-store.js';
 export type Probe = StoredEvent;
 `;
 
@@ -73,13 +83,24 @@ const CASES = [
   { key: 'capability-from-projections', dir: 'src/projections', code: WRITE_CAPABILITY_IMPORT },
   { key: 'capability-from-persistence', dir: 'src/persistence', code: WRITE_CAPABILITY_IMPORT },
   { key: 'capability-deep-relative', dir: 'src/projections', code: RELATIVE_CAPABILITY_IMPORT },
-  { key: 'low-level-writer', dir: 'src/projections', code: LOW_LEVEL_WRITER_IMPORT },
-  { key: 'low-level-writer-beside-it', dir: 'src/persistence', code: LOW_LEVEL_WRITER_IMPORT },
-  { key: 'read-side-types', dir: 'src/projections', code: READ_SIDE_TYPE_IMPORT },
+  {
+    key: 'low-level-writer',
+    dir: 'src/projections',
+    code: LOW_LEVEL_WRITER_IMPORT_FROM_ELSEWHERE,
+  },
+  {
+    key: 'low-level-writer-sibling',
+    dir: 'src/persistence',
+    code: LOW_LEVEL_WRITER_IMPORT_SIBLING,
+  },
+  { key: 'read-side-types', dir: 'src/persistence', code: READ_SIDE_TYPE_IMPORT },
 ] as const;
 
 /** The real committed bridge — the one production file that may hold the write capability. */
 const GOVERNED_BRIDGE = 'packages/event-ingestion/src/ingest/persist-validated-event.ts';
+
+/** The real committed module — the one production file that may hold the LOW-LEVEL writer. */
+const EVENT_WRITE_MODULE = 'packages/event-backbone/src/persistence/event-write.ts';
 
 const restrictedByKey = new Map<string, readonly string[]>();
 const written: string[] = [];
@@ -112,7 +133,11 @@ beforeAll(async () => {
       written.push(t.path);
     }
 
-    const results = await eslint.lintFiles([...targets.map((t) => t.path), at(GOVERNED_BRIDGE)]);
+    const results = await eslint.lintFiles([
+      ...targets.map((t) => t.path),
+      at(GOVERNED_BRIDGE),
+      at(EVENT_WRITE_MODULE),
+    ]);
     const byPath = new Map(
       results.map((r) => [
         r.filePath,
@@ -121,6 +146,7 @@ beforeAll(async () => {
     );
     for (const t of targets) restrictedByKey.set(t.key, byPath.get(t.path) ?? []);
     restrictedByKey.set('governed-bridge', byPath.get(at(GOVERNED_BRIDGE)) ?? []);
+    restrictedByKey.set('event-write-module', byPath.get(at(EVENT_WRITE_MODULE)) ?? []);
   } finally {
     await removeProbes();
   }
@@ -228,8 +254,8 @@ describe('D2a — an arbitrary package cannot import the accepted-event write ca
 
 describe('D2a — the low-level writer has no same-package bypass either', () => {
   it.each([
-    ['from another directory in the package', 'low-level-writer'],
-    ['from the writer’s own directory', 'low-level-writer-beside-it'],
+    ["as '../persistence/event-store.js', from elsewhere in the package", 'low-level-writer'],
+    ["as './event-store.js', the natural SIBLING form", 'low-level-writer-sibling'],
   ])('rejects importing storeValidatedEvent %s', (_label, key) => {
     // This is BLOCKER 2's scenario made executable: a second event-backbone production module
     // importing the low-level primitive. It compiles, adds no second SQL INSERT and no second
@@ -238,6 +264,35 @@ describe('D2a — the low-level writer has no same-package bypass either', () =>
 
     expect(messages.length).toBeGreaterThan(0);
     expect(messages.join('\n')).toContain('ADR-0138');
+  });
+
+  it('PERMITS event-write.ts, the one module that may hold the low-level writer', () => {
+    // The real committed file, which imports `storeValidatedEvent` from './event-store.js'. Its
+    // exception is granted by a narrower block rather than an `ignores` entry, so it drops only the
+    // low-level name restriction — if this ever fails, the capability module itself cannot lint.
+    expect(restrictedByKey.get('event-write-module')).toStrictEqual([]);
+  });
+
+  it('keeps the governed cross-package writer pattern in force even for event-write.ts', async () => {
+    // The exception is narrow on purpose: it omits ONE pattern, not the whole rule.
+    const groups = await resolvedGroups('packages/event-backbone/src/persistence/event-write.ts');
+
+    expect(groups).toContain('@qf-jarvis/event-backbone/internal/event-write');
+    expect(groups).not.toContain('./event-store.js');
+  });
+
+  it('covers every practical spelling that can reach the writer module', async () => {
+    const groups = await resolvedGroups('packages/event-backbone/src/persistence/hypothetical.ts');
+
+    for (const spelling of [
+      './event-store.js',
+      './event-store',
+      '**/event-store.js',
+      '**/event-store',
+      '**/persistence/event-store.js',
+    ]) {
+      expect(groups).toContain(spelling);
+    }
   });
 
   it('still allows READ-side types from the same module', () => {

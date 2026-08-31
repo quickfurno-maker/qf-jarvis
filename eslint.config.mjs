@@ -28,22 +28,46 @@ import tseslint from 'typescript-eslint';
  * hazard the subject-reader block below already documents, and composing through this constant is
  * how D2a avoids silently deleting an older boundary.
  */
+const GOVERNED_EVENT_WRITER_FORBIDDEN_IMPORT_PATTERN = {
+  group: [
+    '@qf-jarvis/event-backbone/internal/event-write',
+    '**/persistence/event-write.js',
+    '**/persistence/event-write',
+  ],
+  message:
+    'Accepted-event write authority is governed (D2a, ADR-0138). Only the event-ingestion bridge (persist-validated-event.ts) may import it, and only through the verify -> prepare -> persist path. A canonical event row must never be creatable outside signed ingestion.',
+};
+
+/**
+ * The LOW-LEVEL writer, banned by NAME rather than by module path.
+ *
+ * The name matters because the package barrel legitimately re-exports the READ-side outcome types
+ * and errors from this same module: a path ban would break the barrel and still say nothing about
+ * write authority.
+ *
+ * The path list matters because an import specifier is matched as a STRING. `**\/persistence/...`
+ * alone missed the most natural bypass of all — a module already sitting in `persistence/` writes
+ * `./event-store.js`, which contains no `persistence/` segment. The bare `./` and `**` forms below
+ * close that, so every practical spelling that can reach this module is covered rather than only the
+ * spellings a probe happened to use.
+ */
+const LOW_LEVEL_EVENT_WRITER_FORBIDDEN_IMPORT_PATTERN = {
+  group: [
+    './event-store.js',
+    './event-store',
+    '**/event-store.js',
+    '**/event-store',
+    '**/persistence/event-store.js',
+    '**/persistence/event-store',
+  ],
+  importNames: ['storeValidatedEvent'],
+  message:
+    'The low-level accepted-event writer is governed (D2a, ADR-0138). Only event-write.ts may call storeValidatedEvent, and only behind the AuthenticatedEventWrite capability. Importing it elsewhere would bypass the governed path without adding a second SQL INSERT. Read-side outcome types from this module remain unrestricted.',
+};
+
 const ACCEPTED_EVENT_WRITE_FORBIDDEN_IMPORT_PATTERNS = [
-  {
-    group: [
-      '@qf-jarvis/event-backbone/internal/event-write',
-      '**/persistence/event-write.js',
-      '**/persistence/event-write',
-    ],
-    message:
-      'Accepted-event write authority is governed (D2a, ADR-0138). Only the event-ingestion bridge (persist-validated-event.ts) may import it, and only through the verify -> prepare -> persist path. A canonical event row must never be creatable outside signed ingestion.',
-  },
-  {
-    group: ['**/persistence/event-store.js', '**/persistence/event-store'],
-    importNames: ['storeValidatedEvent'],
-    message:
-      'The low-level accepted-event writer is governed (D2a, ADR-0138). Only event-write.ts may call storeValidatedEvent, and only behind the AuthenticatedEventWrite capability. Importing it elsewhere would bypass the governed path without adding a second SQL INSERT. Read-side outcome types from this module remain unrestricted.',
-  },
+  GOVERNED_EVENT_WRITER_FORBIDDEN_IMPORT_PATTERN,
+  LOW_LEVEL_EVENT_WRITER_FORBIDDEN_IMPORT_PATTERN,
 ];
 
 const REDUCER_FORBIDDEN_IO_IMPORTS = [
@@ -207,6 +231,25 @@ export default tseslint.config(
       'no-restricted-imports': [
         'error',
         { patterns: [...ACCEPTED_EVENT_WRITE_FORBIDDEN_IMPORT_PATTERNS] },
+      ],
+    },
+  },
+
+  // D2a (ADR-0138): the ONE production exception to the LOW-LEVEL writer ban.
+  //
+  // `event-write.ts` is the module that wraps `storeValidatedEvent` in the governed capability, so it
+  // must import it — as `./event-store.js`, the sibling form the baseline block above deliberately
+  // covers. The exception is granted as a narrower block rather than an `ignores` entry so it drops
+  // ONLY the low-level name restriction: the governed cross-package writer pattern stays in force
+  // here too, and no unrelated rule is stripped from this file.
+  //
+  // The permission is FILE-EXACT. A neighbour in `persistence/` inherits the full ban.
+  {
+    files: ['packages/event-backbone/src/persistence/event-write.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        { patterns: [GOVERNED_EVENT_WRITER_FORBIDDEN_IMPORT_PATTERN] },
       ],
     },
   },

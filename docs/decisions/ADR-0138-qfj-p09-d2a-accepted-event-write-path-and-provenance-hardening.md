@@ -225,19 +225,23 @@ exported from its own module, so a second `event-backbone` production module cou
 hand-built a record and written a row **while adding no second SQL INSERT and no second `event-write`
 importer** — passing every check the first implementation had. The chain is now pinned end to end:
 
-| Layer                              | Permitted production holder              | Enforced by                 |
-| ---------------------------------- | ---------------------------------------- | --------------------------- |
-| The SQL `INSERT`                   | `persistence/event-store.ts` only        | repository-wide scan        |
-| `storeValidatedEvent` (low-level)  | `persistence/event-write.ts` only        | lint (`importNames`) + scan |
-| The governed writer import         | `ingest/persist-validated-event.ts` only | lint + scan                 |
-| `fromVerifiedIngestion` (the mint) | `ingest/persist-validated-event.ts` only | scan                        |
+| Layer                              | Permitted production holder                                 | Enforced by                                 |
+| ---------------------------------- | ----------------------------------------------------------- | ------------------------------------------- |
+| The SQL `INSERT`                   | `persistence/event-store.ts` only                           | repository-wide scan                        |
+| `storeValidatedEvent` (low-level)  | `persistence/event-write.ts` only, invoked **once**         | lint (`importNames`, every spelling) + scan |
+| The governed writer import         | `ingest/persist-validated-event.ts` only                    | lint + scan                                 |
+| `fromVerifiedIngestion` (the mint) | `ingest/persist-validated-event.ts` only, **one call site** | scan (occurrences, not files)               |
 
 - **The barrel exposes no writer**, and no subpath exposes the low-level one.
 - **The permission is one file, not one directory** — a neighbour of the bridge is still rejected.
 - **Read-side types from `event-store.js` remain freely importable.** The ban is on a name, not a
   module, so the barrel keeps re-exporting outcomes and errors.
-- **A second production INSERT, a second low-level caller, a second importer, a second mint call, a
-  widened exception, or a re-export would fail a test** rather than passing review quietly.
+- **A second production INSERT, a second low-level caller or invocation, a second importer, a second
+  mint call — including one inside the permitted file — a widened exception, or a re-export would
+  fail a test** rather than passing review quietly. The mint scan counts **occurrences, not files**,
+  and counts the member NAME as well as the call shape, so neither a second call in the bridge nor an
+  aliased `const mint = AuthenticatedEventWrite.fromVerifiedIngestion` slips past it. Both shapes
+  were planted and observed to fail before being reverted.
 - **No pre-existing import boundary was weakened**, and that is asserted from the resolved rules.
 - **The trust ordering is untouched.** D2a changed no verification, no parsing and no transaction:
   `createEventIngestor` still runs **verify → prepare → persist**, `storeAuthenticatedEvent` adds no

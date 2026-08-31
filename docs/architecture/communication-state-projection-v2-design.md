@@ -374,9 +374,11 @@ Minimum invariant:
 - **A.** Only the governed event-ingestion composition may use the supported event-write primitive.
   — **MET (ADR-0138)**, as a THREE-LAYER chain rather than one barrel change: the SQL `INSERT` lives
   in `event-store.ts` alone, the low-level `storeValidatedEvent` has one production caller
-  (`event-write.ts`), and the governed cross-package writer has one production importer and one mint
-  call site (the ingestion bridge). Each is enforced by lint **and** by a source scan, because an
-  `eslint-disable` comment can silence the first but not the second. The `AuthenticatedEventWrite`
+  (`event-write.ts`) that invokes it exactly once, and the governed cross-package writer has one
+  production importer and exactly one mint **call site** (the ingestion bridge). Each is enforced by
+  lint **and** by a source scan, because an `eslint-disable` comment can silence the first but not
+  the second; the lint ban covers every practical import spelling including the bare sibling
+  `./event-store.js`, and the mint scan counts occurrences rather than files. The `AuthenticatedEventWrite`
   wrapper is **nominal-substitution protection, not independent authentication evidence** — its mint
   takes a plain record, so the boundary is the tested one-file/one-call-site containment plus the
   bridge's evidence binding.
