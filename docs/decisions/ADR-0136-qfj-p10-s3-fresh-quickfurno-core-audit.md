@@ -1,6 +1,8 @@
 # ADR-0136 — QFJ-P10 S3 fresh QuickFurno Core audit
 
-**Status:** Proposed (read-only audit; implemented on a feature branch / PR, **not merged**)
+**Status:** **Proposed** — read-only audit on a feature branch, **PR #177 open, NOT merged**.
+**S3 is presented for owner acceptance; it is not delivered, complete or closed.** If PR #177 is
+merged, **D2** becomes the next execution step.
 **Date:** 2026-08-31
 **Phase ownership:** **QFJ-P10** (Core integration and reconciliation). Slice **S3** of
 [ADR-0132](./ADR-0132-aarohi-real-execution-integration-planning.md), step **D1** of
@@ -47,15 +49,20 @@ detached checkout outside the qf-jarvis tree.
 **No Core branch, commit, push or PR. No managed Supabase access. No migration run. No n8n, provider
 or Meta access. No message sent. No secret value read or printed.**
 
-### 2. Core has changed profoundly, and mostly toward Jarvis
+### 2. Core has changed substantially, and much of it was never audited before
 
 At the pinned SHA Core has **101 migrations**, a **unified communication core**, an **append-only
-consent-evidence model with a sole decision authority and a closed enforcement outcome**, a
-**signature-gated provider webhook and append-only delivery trace**, a **workflow kernel defining
-`domain_events` and `outbox_events`**, and a **written QF Jarvis integration boundary**.
+consent-evidence model with a sole consent decision authority and a closed consent enforcement
+outcome**, a **signature-gated provider webhook and append-only delivery trace**, a **workflow kernel
+defining `domain_events` and `outbox_events`**, and a **written QF Jarvis integration boundary**.
 
-The historical picture — no communication authority, no event mechanism, no reconciliation — is
-**obsolete**.
+**The historical audit did NOT say communication authority was absent.** It recorded that
+execution-time eligibility authority belonged to the **QuickFurno Communication Core / QF
+Communications Runtime**, with **no adopted Jarvis-facing protocol**. What was never audited is the
+**concrete Core implementation**, which is now visible; **Core event/outbox and Core → Jarvis
+reconciliation were NOT AUDITED HISTORICALLY**. This report separates genuinely changed
+previously-audited findings (**3**) from unchanged ones (**4**) and newly audited domains (**8**), and
+never phrases a newly audited domain as a historical absence.
 
 ### 3. Core independently describes the same architecture Jarvis chose
 
@@ -73,24 +80,27 @@ authorization outcome**, and states **consent ≠ send authorization**.
 
 ### 4. The transport Model 2 needs is a CONTRACT, not a capability
 
-`lib/events/eventEnvelope.ts` is _"inert TYPES + METADATA only"_; the `domain_events` /
-`outbox_events` migration is **committed but UNAPPLIED on the live database**, with the envelope **not
-wired to it**. Core's own roadmap places signed integration delivery at **Phase 7**, after a Phase 6
-event taxonomy.
+`lib/events/eventEnvelope.ts` is _"inert TYPES + METADATA only"_ and is **definitively NOT WIRED** to
+`domain_events` / `outbox_events` at the pinned code. **Core's own boundary documentation states that
+migration is unapplied on the live database — S3 did not query live schema and does not independently
+certify managed applied-state.** Three statements are kept apart: **schema definition PRESENT in
+source**, **envelope wiring definitively ABSENT**, **live applied-state `AMBIGUOUS_REQUIRES_D2`
+(Core documentation says unapplied)**. Core's roadmap places signed integration delivery at **Phase
+7**, after a Phase 6 event taxonomy.
 
-**This confirms ADR-0135 §2 exactly: candidate contracts are not adopted Core emissions.** Nothing in
-this audit adopts, implements or schedules an event.
+**This confirms ADR-0135 §2: candidate contracts are not adopted Core emissions.** Nothing in this
+audit adopts, implements or schedules an event.
 
 ### 5. Findings that move a locked question
 
-| Question                               | Movement                                                                                                                                                                           |
-| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Communication authority**            | historical _absent_ → **`AUTHORITATIVE_PRESENT`**: sole consent decision authority, closed machine-readable refusal codes, fails closed when unavailable                           |
-| **`cancelled`**                        | ADR-0134 _no artifact_ → **state now exists** in `communication_messages.status` and `outbox_events.status`; no event/result surface yet                                           |
-| **`provider-accepted` vs `delivered`** | → **independently mirrored** in `communication_delivery_events.normalized_event_type`                                                                                              |
-| **Dispatch phases**                    | → Core **can** distinguish created / attempted / accepted / failed, in the automation-communication transport; **no event emitted**, and it is not an `ExecutionIntentV1` issuance |
-| **Payment / order status**             | historical _unconstrained text_ → **CHECK-constrained vocabularies**                                                                                                               |
-| **Auth account ≠ registration**        | → now **explicit** in `handle_new_user()`'s own comment                                                                                                                            |
+| Question                               | Movement                                                                                                                                                                                                                                                                                                                                                                                                            |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Consent / suppression authority**    | historically **authority already assigned to the Communication Core, implementation never audited** → now visible and **`AUTHORITATIVE_PRESENT`** in the consent scope: sole decision authority, closed machine-readable consent codes, fails closed. **Consent ≠ send authorization** — full business authorization is `PRESENT_BUT_NOT_AUTHORITATIVE`, and no Jarvis-facing authorization artifact is established |
+| **`cancelled`**                        | ADR-0134 _no artifact_ → **vocabulary exists**, plus ONE consent-deny terminalization writer. **No cancellation operation exists** (`cancelCommunication`: 0 hits; no cancel route). **Core's `cancelled` currently means consent refusal — which is Jarvis's `rejected`, not Jarvis's `cancelled`**                                                                                                                |
+| **`provider-accepted` vs `delivered`** | → **independently mirrored** in `communication_delivery_events.normalized_event_type`                                                                                                                                                                                                                                                                                                                               |
+| **Dispatch phases**                    | → Core **can** distinguish created / attempted / accepted / failed in its automation-communication transport; **no event emitted**, and **no ExecutionIntent semantic exists in Core at all** (5 term variants, 0 hits)                                                                                                                                                                                             |
+| **Payment / order status**             | historical _unconstrained text_ → **CHECK-constrained vocabularies**                                                                                                                                                                                                                                                                                                                                                |
+| **Auth account ≠ registration**        | → now **explicit** in `handle_new_user()`'s own comment                                                                                                                                                                                                                                                                                                                                                             |
 
 ### 6. Findings that do NOT move
 
@@ -132,16 +142,50 @@ header, signature or event name is invented.**
 
 ### 10. Status reconciliation
 
-PR #176 merged at `eebee71e4e156608e2e04e60802b9d24b33140f5`. ADR-0135 and the Model-2 design document
-are corrected from _Proposed / not merged_ to **Accepted / MERGED**; the roadmap and integration plan
-record that S3 is now **audited at a pinned commit** and that **D2 is next**. **ADR-0135's findings are
-not rewritten.**
+PR #176 merged at `eebee71e4e156608e2e04e60802b9d24b33140f5`, so **ADR-0135 and the Model-2 design
+document become Accepted / MERGED**. The roadmap and integration plan record that S3 is
+**audited on this feature branch and awaiting owner acceptance on PR #177**, and that **D2 becomes
+the next execution step only if and when PR #177 is accepted and merged**. **S3 is not called
+delivered, complete, merged or closed. ADR-0135's findings are not rewritten.**
+
+### 11. Three classifications the first revision overstated
+
+**11.1 Generic outbox capacity is not ExecutionIntent persistence.** `OutboxCommandRequest` is
+`{ commandType: string; payload?: JsonRecord; … }` and the only `commandType` in the repository is
+`"test.noop"`. A bounded search for `ExecutionIntent`, `execution_intent`, `executionIntent`,
+`intent-issued` and `ExecutionIntentV1` returns **0 hits each**. So for `qf.execution.intent-issued`:
+**Core ownership NOT ESTABLISHED; persistence of the exact fact NOT ESTABLISHED; emission none;
+adoption blocked/ambiguous pending D2/S5.** The same rule — **generic persistence capacity ≠
+persistence of the specific business fact** — was applied to every candidate-event row.
+
+**11.2 Cancellation vocabulary is not an authoritative cancellation fact.** A bounded writer audit
+finds `cancelCommunication` **0 hits**, no admin or API communication-cancel route, and exactly one
+authoritative writer of `communication_messages.status='cancelled'`: the private
+`terminalizeBeforeClaim(…)`, reached **only** on a consent DENY. So: **cancellation vocabulary /
+storage capacity `PRESENT_BUT_NOT_AUTHORITATIVE`; consent-deny terminalization
+`AUTHORITATIVE_PRESENT`; an authoritative communication-cancellation operation or durable business
+fact `ABSENT` / `AMBIGUOUS_REQUIRES_D2`.**
+
+> **Core can represent `cancelled`, but S3 did not prove an authoritative communication-cancellation
+> operation or durable business fact** — and **Core's `cancelled` currently means a consent refusal,
+> which maps to Jarvis's `rejected`, not to Jarvis's `cancelled`.** D2 must not conflate them.
+
+**11.3 The existing n8n transport is not the Jarvis B4 protocol.** `automationRecoveryService`'s
+`recover_v1` / `reconcile_v1` are an **automation supervisor / claim / recovery transport** —
+_"n8n supplies three transport fields and nothing else … CORE SELECTS EVERYTHING"_ — serving Core's
+own QF-MVP automation purpose. The **Jarvis canonical Core → n8n execution-intent dispatch protocol
+(ADR-0090 B4 / S5) is NOT ADOPTED / `CANDIDATE_OR_PROPOSED_ONLY`**, and **the existing signing domain
+must not be assumed reusable** for a Jarvis trust purpose. `execution-submitted` stays
+`AMBIGUOUS_REQUIRES_D2`.
 
 ## Consequences
 
-- **D2 can now be taken against current facts** rather than a year-old audit.
-- The communication-authority half of the integration is far more tractable than ADR-0132 assumed —
-  Core already owns consent, suppression, delivery trace and signature-gated webhooks.
+- **If accepted, D2 can be taken against current facts** rather than a year-old audit. Until PR #177
+  merges, S3 remains presented rather than delivered.
+- The **consent** half of the integration is far more tractable than ADR-0132 assumed — Core already
+  owns consent, suppression, a delivery trace and signature-gated webhooks. **Full business/send
+  authorization and a Jarvis-facing authorization artifact remain unproved**, so S4 is not
+  unblocked by this alone.
 - The **event-transport half is the true blocker**: `domain_events`/`outbox_events` are unapplied and
   the envelope is unwired, so **every Tier-C projection fact still waits on Core Phase 6/7**.
 - GAP A and GAP B remain open, so S8 and S9 remain blocked exactly as ADR-0132 said.
@@ -161,11 +205,12 @@ not rewritten.**
 
 ## Compliance
 
-Every finding cites a file, symbol, table or migration at the pinned SHA (evidence index E1–E24), with
+Every finding cites a file, symbol, table or migration at the pinned SHA (evidence index E1–E25), with
 bounded absence searches for each `ABSENT` claim. Classifications use the required vocabulary. **No
 Core modification, no Supabase, no n8n/provider, no message sent, no Jarvis production code, no
 contract, no event registry, no persistence and no migration** — `0013` is not allocated and the
 `0010`–`0012` ledger drift is untouched.
 
-**Production rollout OFF. Runtime activation unchanged. The next step is D2 — the Core protocol/event
-gap decision.**
+**Production rollout OFF. Runtime activation unchanged. PR #177 presents this audit for owner
+acceptance; if merged, D2 — the Core protocol/event gap decision — becomes the next execution
+step.**

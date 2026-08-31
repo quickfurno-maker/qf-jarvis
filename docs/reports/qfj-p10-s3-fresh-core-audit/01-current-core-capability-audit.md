@@ -1,11 +1,16 @@
 # QFJ-P10 S3 — fresh read-only QuickFurno Core capability audit
 
-**Status:** Read-only audit. **No Core modification, no Supabase access, no n8n/provider access, no
-message sent, no migration, no activation.**
+**Status:** Read-only audit, **presented for owner acceptance on PR #177 — NOT delivered, complete or
+merged.** **No Core modification, no Supabase access, no n8n/provider access, no message sent, no
+migration, no activation.**
 **Owning decision:** [ADR-0136](../../decisions/ADR-0136-qfj-p10-s3-fresh-quickfurno-core-audit.md)
+(**Proposed**, PR #177 open)
 **Jarvis baseline:** `eebee71e4e156608e2e04e60802b9d24b33140f5` (merge of PR #176 / ADR-0135)
 **Slice:** **S3 / D1** under [ADR-0132](../../decisions/ADR-0132-aarohi-real-execution-integration-planning.md)
 and [ADR-0135](../../decisions/ADR-0135-qfj-p09-s2-local-communication-state-projection-architecture.md).
+
+> **PR #177 presents the S3 audit for owner acceptance. If merged, D2 becomes the next execution
+> step.** Until then S3 is **audited on this feature branch, awaiting owner acceptance**.
 
 ## Pinned Core commit
 
@@ -21,41 +26,43 @@ and [ADR-0135](../../decisions/ADR-0135-qfj-p09-s2-local-communication-state-pro
 
 `main` was resolved **once** at audit start and pinned. Everything below is read from that SHA only.
 
-### Method and limits
+### Method, and exactly what it can certify
 
 Read-only detached checkout outside the qf-jarvis tree; static inspection of migrations, services,
-routes, libraries and docs. **No branch, commit, push or PR was made in Core. No managed Supabase
-connection, no migration run, no seed, no live data.** Where code was insufficient, the finding is
-classified `AMBIGUOUS_REQUIRES_D2` rather than settled from live data.
+routes, libraries and docs. **No branch, commit, push or PR in Core. No managed Supabase connection,
+no migration run, no seed, no live data.** Where code was insufficient, findings are classified
+`AMBIGUOUS_REQUIRES_D2` rather than settled from live data.
 
-**One checkout limitation, recorded honestly:** six files failed to materialise on Windows for
-path-length reasons — five `.png` reference mockups and one `.docx` under
-`QuickFurno_Codex_Implementation_Kit/`. **Zero** are in `app/`, `db/`, `lib/`, `services/`,
-`supabase/`, `automation/` or `scripts/`, so no audit-relevant file was missed.
+**What S3 independently certifies:** the contents of the repository at the pinned SHA — schema
+definitions, service behaviour, routes, tests, typed constants and documentation.
+
+**What S3 does NOT certify:** the **managed live database applied-state**. S3 read files, not a
+database. Where this report cites applied-state, it is citing **Core's own repository documentation**,
+attributed as such.
+
+**Checkout limitation:** six files failed to materialise on Windows for path-length reasons — five
+`.png` mockups and one `.docx` under `QuickFurno_Codex_Implementation_Kit/`. **Zero** are in `app/`,
+`db/`, `lib/`, `services/`, `supabase/`, `automation/` or `scripts/`.
 
 ---
 
 ## 0. Headline
 
-**Core has changed profoundly since the historical audit, and mostly in Jarvis's favour.** The
-historical picture — "no communication authority, no event mechanism, no reconciliation" — is
-obsolete. At the pinned SHA Core has **101 migrations**, a **unified communication core**, an
-**append-only consent-evidence model with a sole decision authority**, a **provider webhook/delivery
-trace with signature validation**, a **workflow kernel with `domain_events` and `outbox_events`**, and
-— decisively — a **written integration boundary for QF Jarvis**.
+**Core has changed substantially since the historical audit, and the concrete implementation now
+visible was never audited before.**
 
-**Two findings dominate everything else:**
+Two findings dominate:
 
-1. **Core has independently designed the same architecture Jarvis chose.**
+1. **Core independently describes the same architecture Jarvis chose.**
    `docs/QF-Jarvis-Integration-Boundary.md` states QuickFurno is the system of record, Jarvis holds no
-   authoritative copy, Jarvis submits inert recommendations that authorise nothing, and an approved
+   authoritative copy, Jarvis recommendations are inert and authorise nothing, and an approved
    recommendation does **not** bypass the policy engine. **This corroborates Model 2 from the other
    side of the boundary.**
 2. **The event transport Model 2 needs is a CONTRACT, not a capability.**
-   `lib/events/eventEnvelope.ts` is explicitly _"inert TYPES + METADATA only"_, and the
-   `domain_events` / `outbox_events` migration is **committed but UNAPPLIED on the live database**,
-   with the envelope **not wired to it**. **This confirms ADR-0135's caution exactly: candidate
-   contracts are not adopted Core emissions.**
+   `lib/events/eventEnvelope.ts` is explicitly _"inert TYPES + METADATA only"_, and it is **not wired**
+   to `domain_events` / `outbox_events` at the pinned code. **Core's own documentation states that
+   migration is unapplied on the live database** — S3 did not independently verify that. **This
+   confirms ADR-0135's caution: candidate contracts are not adopted Core emissions.**
 
 **Model 2 remains viable. No finding requires reopening ADR-0135.**
 
@@ -64,8 +71,6 @@ trace with signature validation**, a **workflow kernel with `domain_events` and 
 ## 1. Domain A — identity / prospect → vendor continuity
 
 **Classification: `ABSENT` (unchanged from historical GAP A).**
-
-Bounded search across `supabase/migrations`, `services`, `lib` and `app`:
 
 | Term               | Hits                                          |
 | ------------------ | --------------------------------------------- |
@@ -76,49 +81,41 @@ Bounded search across `supabase/migrations`, `services`, `lib` and `app`:
 | `prospect` (any)   | 4 (incidental prose; no correlation contract) |
 
 `leads.vendor_id` and `lead_assignments` link **client leads to vendors** — a different concept from
-vendor-acquisition prospect continuity. There is still **no durable, unique, queryable
-pre-registration prospect → final vendor-id correlation**, and no authoritative read exposing one.
-
-**GAP A is unchanged.** An acquisition flow still cannot later read registration/payment/activation
-facts for a party it met before registration without guessing.
+vendor-acquisition prospect continuity. **GAP A is unchanged.**
 
 ---
 
 ## 2. Domain B — registration
 
 **Classification: `PRESENT_BUT_NOT_AUTHORITATIVE` for "registration complete"; the auth-account
-question is now `AUTHORITATIVE_PRESENT` and settled in the negative.**
+question is now settled in the negative.**
 
 `supabase/migrations/20260723000700_qf_mvp_auth_user_onboarding_trigger.sql:189`,
-`public.handle_new_user()`, creates a `public.profiles` row for a new auth user and its own comment
-states it **"Creates no vendor, client, credit, package, verification or assignment state."**
+`public.handle_new_user()`, creates a `public.profiles` row and its own comment states it **"Creates
+no vendor, client, credit, package, verification or assignment state."**
 
-> **Auth account creation is NOT registration.** This is now explicit in Core, not inferred.
+> **Auth account creation is NOT registration.** Now explicit in Core, not inferred.
 
-`vendors.verification_status` ∈ `('Pending','Verified','Rejected')` and `vendors.status` ∈
-`('Pending','Approved','Rejected','Suspended')` exist, but there is still **no readable
-registration-process/step/status surface addressable for an unregistered party** — the historical
-"registration is a write, with no process read" finding **stands**.
+`vendors.verification_status` and `vendors.status` exist, but there is still **no readable
+registration-process surface addressable for an unregistered party** — the historical finding
+**stands**.
 
 ---
 
 ## 3. Domain C — payment / package / commercial
 
-**Classification: `AUTHORITATIVE_PRESENT` (constrained), and this is a genuine CHANGE.**
+**Classification: `AUTHORITATIVE_PRESENT` (constrained). Genuine change to a previously audited
+finding.**
 
-The historical audit recorded `payment_status` / `order_status` / `activation_status` as
-_"unconstrained `text` with no CHECK."_ **That is no longer true at the pinned SHA:**
+| Field                                                       | Constraint at pinned SHA                          | Source                                        |
+| ----------------------------------------------------------- | ------------------------------------------------- | --------------------------------------------- |
+| `payments.payment_status`, `vendor_packages.payment_status` | `('Pending','Paid','Failed','Refunded')`          | `20260620000001_create_tables.sql:98,112`     |
+| `vendor_package_orders.order_status`                        | `('created','cancelled','expired')`               | `20260701000023_vendor_package_orders.sql:69` |
+| `vendors.package_status`                                    | `('none','active','expired','cancelled','trial')` | `20260630000018…sql:42`                       |
 
-| Field                                                       | Constraint at pinned SHA                          | Source                                                      |
-| ----------------------------------------------------------- | ------------------------------------------------- | ----------------------------------------------------------- |
-| `payments.payment_status`, `vendor_packages.payment_status` | `('Pending','Paid','Failed','Refunded')`          | `20260620000001_create_tables.sql:98,112`                   |
-| `vendor_package_orders.order_status`                        | `('created','cancelled','expired')`               | `20260701000023_vendor_package_orders.sql:69`               |
-| `vendors.package_status`                                    | `('none','active','expired','cancelled','trial')` | `20260630000018_vendor_actions_credits_package_sync.sql:42` |
-
-**Historical finding CHANGED: these are now CHECK-constrained vocabularies rather than free text.**
-
-Still **vendor-id keyed**, so **not prospect-addressable** — that half of the historical finding
-stands. And `package_status = 'active'` remains a _package_ fact: **paid ≠ active vendor** (§4).
+The historical audit recorded these as _"unconstrained `text` with no CHECK"_. **CHANGED.** Still
+vendor-id keyed, so **not prospect-addressable**; and `package_status='active'` remains a _package_
+fact — **paid ≠ active vendor**.
 
 ---
 
@@ -126,110 +123,76 @@ stands. And `package_status = 'active'` remains a _package_ fact: **paid ≠ act
 
 **Classification: `ABSENT` as a single fact (unchanged GAP B).**
 
-Three similarly named fields mean three different things, and none is "this party is live as a vendor":
+| Field                    | Vocabulary                                | Meaning                                      |
+| ------------------------ | ----------------------------------------- | -------------------------------------------- |
+| `vendors.status`         | `Pending, Approved, Rejected, Suspended`  | approval/moderation — **no `ACTIVE` member** |
+| `vendors.is_active`      | boolean                                   | a separate enable/disable flag               |
+| `vendors.package_status` | `none, active, expired, cancelled, trial` | a commercial package state                   |
 
-| Field                    | Vocabulary                                | What it actually means                                                   |
-| ------------------------ | ----------------------------------------- | ------------------------------------------------------------------------ |
-| `vendors.status`         | `Pending, Approved, Rejected, Suspended`  | an **approval/moderation** state — **there is still no `ACTIVE` member** |
-| `vendors.is_active`      | boolean                                   | a separate enable/disable flag                                           |
-| `vendors.package_status` | `none, active, expired, cancelled, trial` | a **commercial package** state, lowercase `active`                       |
-
-`20260620000001_create_tables.sql:41,44` and `20260630000018:42`. There is **no single authoritative
-read and no event** meaning "this party is live". **GAP B is unchanged**, and Jarvis's `ACTIVE`
-remains an abstraction over a fact Core does not publish.
+**GAP B is unchanged.**
 
 ---
 
-## 5. Domain E — communication authority
+## 5. Domain E — communication authority, split by what the source actually proves
 
-**Classification: `AUTHORITATIVE_PRESENT` — and the largest change in the entire audit.**
+The historical audit did **not** say communication authority was absent. It recorded that
+**execution-time eligibility authority belonged to the QuickFurno Communication Core / QF
+Communications Runtime, with no adopted Jarvis-facing protocol.** What was never audited is the
+**concrete Core implementation**, which is now visible. The split below reports only what executable
+source proves.
 
-The historical audit found no Jarvis-facing communication authority. At the pinned SHA Core has a
-complete one.
+### 5.A Consent / suppression decision authority — `AUTHORITATIVE_PRESENT`
 
-### 5.1 The Communication Core exists
+`services/communicationConsentDecisionService.ts` (501 lines) is, in Core's own words, the **"SOLE
+read-only communication-consent + suppression PRECEDENCE authority."**
 
-`supabase/migrations/20260708000170_unified_communication_core.sql` creates
-`communication_templates`, `communication_messages`, `communication_delivery_events`,
-`communication_webhook_receipts`, `communication_automation_catalog`, with security invariants stated
-in the migration header: **no plaintext destination column** (only `destination_hash` +
-`destination_masked`), no plaintext OTP/token/secret, and `communication_delivery_events` is
-**append-only** (`ON DELETE RESTRICT`, service_role gets `SELECT + INSERT` only).
+Backed by real schema: `communication_consent_events` (append-only evidence — scope, action,
+`state_before`/`state_after`, reason, `policy_version`, idempotency), `communication_preferences`
+(allowed / blocked) and `communication_suppressions` (destination hash, expiry, deactivation), from
+`20260711000200_communication_consent_evidence_and_state_hardening.sql:102` onward. STOP/DNC arrive
+through inbound consent commands (`20260712000300`, `20260713000100`, plus
+`inboundConsentCommandService`, `consentCommandResponseService`, `consentAckWorkerService`).
 
-`communication_messages.status` (line 87) is a real lifecycle:
+### 5.B Outbound consent enforcement coordinator — `AUTHORITATIVE_PRESENT`
 
-```
-queued · dispatching · accepted · sent · delivered · read · failed ·
-retry_scheduled · dead_letter · cancelled
-```
+`services/outboundConsentEnforcementService.ts` (397 lines) is the **"SOLE OUTBOUND CONSENT
+ENFORCEMENT COORDINATOR"**, converting a decision into **one closed outcome**. Its refusal codes are
+machine-readable and closed — `CONSENT_SUPPRESSED`, `CONSENT_NOT_GRANTED`,
+`UNCLASSIFIED_MESSAGE_TYPE`, `CONSENT_ENFORCEMENT_INVALID`, `CONSENT_AUTHORITY_INTEGRITY`,
+`CONSENT_AUTHORITY_UNAVAILABLE` — the outcome is a discriminated union validated in full, and caller-
+chosen scope/identity is refused. It **fails closed**.
 
-with `accepted_at`, `sent_at`, `delivered_at`, `read_at`, `failed_at`, `scheduled_at`,
-`attempt_count`, `max_attempts`, `next_retry_at`, `provider_message_id`, `idempotency_key` (unique)
-and `policy_decision_id`.
+It names Jarvis explicitly: _"CommunicationService, provider adapters, Meta, SMS, n8n and Jarvis
+consume ONLY the closed outcome."_
 
-### 5.2 Consent, suppression and preference are modelled with evidence
+### 5.C Full business / send authorization — **NOT proved by consent**
 
-`20260711000200_communication_consent_evidence_and_state_hardening.sql:102` creates
-`communication_consent_events` — an evidence table with `target_type` (`preference` | `suppression`),
-`channel` (`whatsapp`/`sms`/`rcs`), `scope` (`authentication` | `transactional` | `marketing` |
-`global`), `action`, `state_before` / `state_after` (`absent`/`allowed`/`blocked`/`active`/`inactive`),
-`reason`, `evidence_type`, `policy_version`, `actor_type`, `source_event_type`/`source_event_id`, and a
-64-hex `idempotency_key`.
+The same file states it outright:
 
-Alongside it: `communication_preferences` (`state ∈ allowed|blocked`) and
-`communication_suppressions` (`destination_hash`, `reason`, active/deactivated, `expires_at`).
-
-STOP/DNC semantics are implemented through inbound consent commands —
-`20260712000300_communication_consent_command_writer_rpc.sql`,
-`20260713000100_communication_consent_ack_intents.sql`, with
-`services/inboundConsentCommandService.ts`, `consentCommandResponseService.ts`,
-`consentAckWorkerService.ts`.
-
-### 5.3 There is ONE decision authority, and one enforcement coordinator
-
-`services/communicationConsentDecisionService.ts` (501 lines) is named in Core's own comments as
-**"the SOLE read-only consent/suppression DECISION authority."**
-
-`services/outboundConsentEnforcementService.ts` (397 lines) is **"the SOLE OUTBOUND CONSENT
-ENFORCEMENT COORDINATOR"**, and its header is directly on point for Jarvis:
-
-> **AUTHORITY.** QuickFurno Core is the sole consent authority. … **CommunicationService, provider
-> adapters, Meta, SMS, n8n and Jarvis consume ONLY the closed outcome below** — none of them ever
-> sees a disposition, a preference row, or a suppression row.
->
 > **CONSENT ≠ SEND AUTHORIZATION.** An `allow` means the CONSENT LAYER passed and nothing more. The
 > authentication action, transport policy, auth deadline, transactional basis, template/mapping gate,
-> provider runtime gate and canary all remain SEPARATE authorities that must ALSO pass.
+> provider runtime gate and canary all remain **SEPARATE authorities that must ALSO pass**.
 
-**Rejection is machine-readable and closed.** `OutboundConsentDenyCode` includes
-`CONSENT_SUPPRESSED`, `CONSENT_NOT_GRANTED`, `UNCLASSIFIED_MESSAGE_TYPE`; plus
-`CONSENT_ENFORCEMENT_INVALID`, `CONSENT_AUTHORITY_INTEGRITY` and `CONSENT_AUTHORITY_UNAVAILABLE`.
-The outcome is a **discriminated union validated in full** — the file explicitly refuses to trust a
-duck-typed `{ kind: "allow" }`.
+Core's boundary doc assigns **business communication authorization to the Phase 4 Policy Engine**.
+That is **design evidence** for where the authority sits; this audit did **not** trace the Phase 4
+engine's full executable surface.
 
-**Caller-chosen scope is refused.** The input carries no caller-selected consent scope, identity
-confidence, principal or policy version: _"A caller that could choose its own scope or claim its own
-identity would be interpreting consent. Every one of those is DERIVED here."_
+**Classification: `PRESENT_BUT_NOT_AUTHORITATIVE` as a single provable "send is authorized" fact —
+consent is necessary but insufficient.** Retained and unweakened: **Core can deny consent despite
+human approval**, and **an approved recommendation cannot bypass policy or consent.**
 
-### 5.4 Can Core refuse despite founder/human approval? — YES
+### 5.D Jarvis-facing request → authorization wire surface — `CANDIDATE_OR_PROPOSED_ONLY`
 
-`docs/QF-Jarvis-Integration-Boundary.md`: _"**Phase 4 Policy Engine** remains the business
-communication authorization authority. An `approved` recommendation does **NOT** bypass it.
-Attribution (`decision_source_type = agent`, a logical agent label) authorizes nothing."_
+The boundary doc names **Recommendation APIs** and the chain `agent recommendation → QuickFurno
+authorization → consent/suppression → channel/provider decision → CommunicationService → provider`,
+but Phase 5F-A ships **no Jarvis code, no endpoint, no agent role, no service-role grant.** The
+_shape_ is agreed; the _adopted protocol_ is not.
 
-**This independently matches Jarvis's own rule that founder approval never overrides an opt-out.**
+### 5.E A `CommunicationAuthorizationV1`-equivalent artifact returned to Jarvis — **NOT ESTABLISHED**
 
-### 5.5 Can Jarvis submit a request-equivalent today?
-
-**`CANDIDATE_OR_PROPOSED_ONLY`.** The boundary doc names **Recommendation APIs** (`AgentRecommendation`
-/ `CommunicationRecommendation`) as the intended surface, and describes the required chain:
-
-> `agent recommendation → QuickFurno authorization → consent/suppression → channel/provider decision
-→ CommunicationService → provider`
-
-but Phase 5F-A explicitly ships **no Jarvis code, no endpoint, no agent role, no service-role grant**.
-So the _shape_ is agreed; the _adopted wire protocol_ is not. Whether a `CommunicationAuthorizationV1`
-equivalent is returned in a Jarvis-consumable form is **`AMBIGUOUS_REQUIRES_D2`**.
+`AMBIGUOUS_REQUIRES_D2`. The closed consent outcome is **not** a complete
+`CommunicationAuthorizationV1` equivalent: it answers the consent layer only, carries no authorized
+channel, no approval-decision citation and no Jarvis-facing identity.
 
 ---
 
@@ -237,110 +200,141 @@ equivalent is returned in a Jarvis-consumable form is **`AMBIGUOUS_REQUIRES_D2`*
 
 **Classification: `CANDIDATE_OR_PROPOSED_ONLY` across the board.**
 
-`lib/events/eventEnvelope.ts:60` defines `CanonicalEventEnvelope` with `eventId`, `eventType`,
-`eventVersion`, `occurredAt`, `recordedAt`, `sourceSystem`, `actorType`, `actorId`, `entityType`,
-`correlation_id` / `causation_id` / `trace_id`, `risk_level`, `approval_required`, and a sanitized
-`safePayload`. Its header is unambiguous:
+`lib/events/eventEnvelope.ts:60` defines `CanonicalEventEnvelope` _"for the future Jarvis integration
+boundary (signed events) … **inert TYPES + METADATA only** … creates no table, no event bus, no
+outbox, no consumer, and no execution path."_
 
-> PURE, FUTURE-COMPATIBILITY canonical event-envelope CONTRACT **for the future Jarvis integration
-> boundary (signed events)**. It is **inert TYPES + METADATA only** … creates no table, no event bus,
-> no outbox, no consumer, and no execution path.
+**Rule applied to every row: generic persistence capacity ≠ persistence of the specific business
+fact.**
 
-| Jarvis candidate                           | Does Core own the fact?                           | Persisted?                                                | Where                                                         | Emission mechanism | Adoption size                                       |
-| ------------------------------------------ | ------------------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------- | ------------------ | --------------------------------------------------- |
-| `qf.communication.authorization-recorded`  | **YES** — consent decision + policy authorization | **YES** (evidence + decision path)                        | `communication_consent_events`, decision/enforcement services | **none wired**     | **medium** — the fact exists; the emission does not |
-| `qf.communication.result-recorded`         | **YES** — provider outcomes                       | **YES**                                                   | `communication_messages`, `communication_delivery_events`     | **none wired**     | **medium**                                          |
-| `qf.communication.human-handoff-requested` | **not found** as a Core-recorded Jarvis artifact  | —                                                         | —                                                             | —                  | **blocked by missing truth**                        |
-| `qf.communication.human-handoff-recorded`  | **not found**                                     | —                                                         | —                                                             | —                  | **blocked by missing truth**                        |
-| `qf.execution.intent-issued`               | partially — see §8                                | `outbox_events` (unapplied)                               | —                                                             | **none wired**     | **blocked / ambiguous**                             |
-| `qf.execution.result-recorded`             | **YES**                                           | `communication_delivery_events`, automation attempt state | **none wired**                                                | **medium**         |
-| `qf.communication.state-recorded@2`        | compatibility/history only                        | —                                                         | —                                                             | —                  | **not proposed for adoption**                       |
+| Jarvis candidate                           | Core owns the exact fact?                                                             | The exact fact persisted?                                           | Emission | Adoption                               |
+| ------------------------------------------ | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | -------- | -------------------------------------- |
+| `qf.communication.authorization-recorded`  | **partly** — consent decision yes (5.A/5.B); full send authorization not proved (5.C) | consent evidence **yes** (`communication_consent_events`)           | **none** | **medium**, scoped to consent          |
+| `qf.communication.result-recorded`         | **YES** — provider outcomes                                                           | **YES** (`communication_messages`, `communication_delivery_events`) | **none** | **medium**                             |
+| `qf.communication.human-handoff-requested` | **NOT ESTABLISHED** — no Core handoff fact                                            | no                                                                  | none     | **blocked by missing truth**           |
+| `qf.communication.human-handoff-recorded`  | **NOT ESTABLISHED**                                                                   | no                                                                  | none     | **blocked by missing truth**           |
+| `qf.execution.intent-issued`               | **NOT ESTABLISHED** — see §6.1                                                        | **NOT ESTABLISHED**                                                 | none     | **blocked / ambiguous, pending D2/S5** |
+| `qf.execution.result-recorded`             | **YES**                                                                               | **YES**                                                             | none     | **medium**                             |
+| `qf.communication.state-recorded@2`        | compatibility/history only                                                            | —                                                                   | —        | **not proposed**                       |
 
-**No event was adopted or implemented by this audit.**
+### 6.1 `qf.execution.intent-issued` — generic outbox is NOT ExecutionIntent persistence
+
+`lib/aos/workflow/workflowTypes.ts:41` defines `OutboxCommandRequest` as
+`{ commandType: string; payload?: JsonRecord; idempotencyKey: string; … }` — **entirely generic**, and
+the only `commandType` in the repository is `"test.noop"`
+(`lib/aos/workflow/qfKernelTestWorkflow.ts:63`).
+
+Bounded search for an ExecutionIntent semantic across `app`, `lib`, `services`, `supabase`, `scripts`,
+`automation`:
+
+| Term                | Hits  |
+| ------------------- | ----- |
+| `ExecutionIntent`   | **0** |
+| `execution_intent`  | **0** |
+| `executionIntent`   | **0** |
+| `intent-issued`     | **0** |
+| `ExecutionIntentV1` | **0** |
+
+> **Correction to the first revision of this report:** it listed this candidate as _persisted →
+> `outbox_events` (unapplied)_. That was unsupported. A generic outbox can carry _some_ command; it
+> does not persist an `ExecutionIntentV1` fact. **Core ownership: NOT ESTABLISHED. Persistence of the
+> exact fact: NOT ESTABLISHED.**
 
 ---
 
 ## 7. Domain G — event / outbox / reconciliation capability
 
-**Classification: `PRESENT_BUT_NOT_AUTHORITATIVE` — the machinery exists in the repository and is
-UNAPPLIED on the live database.**
+**Classification: `PRESENT_BUT_NOT_AUTHORITATIVE` — defined in source; live applied-state not
+independently certified by S3.**
 
-`supabase/migrations/20260706000146_create_qf_workflow_kernel_foundation.sql` defines:
+`supabase/migrations/20260706000146_create_qf_workflow_kernel_foundation.sql` defines **`domain_events`**
+(line 119) and **`outbox_events`** (line 163) with idempotency keys, bounded attempts, retry
+scheduling and a `pending → processing → sent → completed` status set.
 
-- **`domain_events`** (line 119) — `event_type`, `entity_type/id`, `payload_version`, `payload_json`,
-  `trace_id`, `correlation_id`, `causation_id`, `idempotency_key` (unique, partial),
-  `processing_status ∈ pending|processing|processed|failed|dead_letter`. Its own comment says
-  _"for **future** QuickFurno workflow processing."_
-- **`outbox_events`** (line 163) — a **transactional outbox** with `command_type`, `payload_json`,
-  `idempotency_key`, `status ∈ pending|processing|sent|completed|retry_scheduled|failed|dead_letter|cancelled`,
-  `attempt_count`/`max_attempts` (bounded by CHECK), `next_retry_at`, `locked_at`/`locked_by`,
-  `sent_at`, `completed_at`, `last_error`.
+Three distinct statements, deliberately kept apart:
 
-Writers exist in code (`lib/aos/workflow/domainEventService.ts`, `outboxService.ts`,
-`lib/events/eventEnvelope.ts`, `services/inboundWhatsAppMessageService.ts`).
+|                                   | Status                                                                                                                                                                                             |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Migration / schema definition** | **PRESENT in source** at the pinned SHA                                                                                                                                                            |
+| **Jarvis envelope wiring**        | **definitively NOT WIRED** at the pinned code                                                                                                                                                      |
+| **Managed live applied-state**    | **`AMBIGUOUS_REQUIRES_D2`** — _Core's own boundary documentation states the migration is unapplied on the live database_; **S3 did not query live schema and does not independently certify this** |
 
-**But the boundary doc states plainly that this migration is UNAPPLIED on the live database and the
-envelope is NOT wired to it**, and that canonical persistence is deferred.
+| Question                   | Finding                                                                                                                                       |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Core → Jarvis protocol     | **ABSENT** (contract only)                                                                                                                    |
+| Jarvis → Core protocol     | **ABSENT** (recommendation APIs named, not built)                                                                                             |
+| Core → n8n protocol        | see §9 — an automation supervisor transport exists; **the Jarvis B4 protocol does not**                                                       |
+| n8n → Core result protocol | **PARTIALLY PRESENT** — signature-gated webhook receipts + append-only delivery events                                                        |
+| Retry / idempotency        | **PRESENT** — bounded attempts, `next_retry_at`, unique idempotency keys, plus `idempotency_records`                                          |
+| Signing capability         | **PRESENT** — `communication_webhook_receipts.signature_valid` gates de-duplication; automation recover/reconcile routes take signed requests |
 
-| Question                               | Finding                                                                                                                                                        |
-| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Reusable authoritative event emission? | **capability present, not applied**                                                                                                                            |
-| Transactional outbox?                  | **YES, defined** (`outbox_events`), unapplied                                                                                                                  |
-| Durable-before-publish?                | the outbox shape supports it; **not proven live**                                                                                                              |
-| Retry / idempotency?                   | **YES** — bounded attempts, `next_retry_at`, unique `idempotency_key`; plus a global `idempotency_records` table                                               |
-| Current **Core → Jarvis** protocol     | **ABSENT** (contract only)                                                                                                                                     |
-| Current **Jarvis → Core** protocol     | **ABSENT** (recommendation APIs named, not built)                                                                                                              |
-| Current **Core → n8n** protocol        | **PARTIALLY PRESENT** — signed automation transport routes exist (§8)                                                                                          |
-| Current **n8n → Core** result protocol | **PARTIALLY PRESENT** — webhook receipts + delivery events (§12)                                                                                               |
-| Signing mechanism                      | **PRESENT** — `communication_webhook_receipts.signature_valid` gates de-duplication; automation recovery/reconcile routes are described as **signed requests** |
-
-Core's own roadmap in the boundary doc places this work: **Phase 5F-A** pure contract (current) →
-**Phase 6** canonical event taxonomy → **Phase 7** signed integration/execution delivery and the n8n
-execution fabric → later canonical persistence.
+Core's roadmap (its boundary doc): **5F-A** pure contract (current) → **Phase 6** event taxonomy →
+**Phase 7** signed integration/execution delivery → later canonical persistence.
 
 ---
 
 ## 8. Domain H — `execution-submitted` / dispatch
 
-**Classification: `AMBIGUOUS_REQUIRES_D2` — but materially better than Jarvis assumed.**
+**Classification: `AMBIGUOUS_REQUIRES_D2` — unchanged from ADR-0135, with better detail.**
 
-ADR-0135 locked _issuance ≠ dispatch_ and left the evidence unresolved. Core **does** now distinguish
-dispatch phases, in two places:
+Core distinguishes dispatch phases in two places: `outbox_events.status`
+(`pending → processing → sent → completed`, with `sent_at` ≠ `completed_at`) and
+`communication_messages.status` (`queued → dispatching → accepted → sent`, with `accepted_at` ≠
+`sent_at`).
 
-- `outbox_events.status`: `pending → processing → sent → completed`, plus `retry_scheduled`, `failed`,
-  `dead_letter`, `cancelled`, with **`sent_at` distinct from `completed_at`**.
-- `communication_messages.status`: `queued → dispatching → accepted → sent → …`, with `accepted_at`
-  and `sent_at` distinct.
-
-So Core **can** distinguish _created_ / _dispatch-attempted_ (`processing`, `dispatching`) /
-_dispatch-accepted_ (`sent`, `accepted`) / _dispatch-failed_ (`failed`, `dead_letter`).
-
-**What remains unresolved:** no event is emitted at any of those transitions (§7), and this dispatch
-model belongs to Core's **automation/communication** transport — it is **not** an
-`ExecutionIntentV1`-shaped Core → n8n intent issuance. Whether Jarvis's `execution-submitted` should
-bind to `communication_messages.status = 'dispatching'/'accepted'`, to an outbox `sent`, or to a
-future Phase-7 signed dispatch fact is **a D2 decision, not an audit finding**.
-
-**No dispatch event name is invented here.**
+**But** no event is emitted at any transition (§7), and this is Core's **automation/communication**
+transport — **not** an `ExecutionIntentV1`-shaped issuance (§6.1: zero ExecutionIntent hits). Whether
+Jarvis's `execution-submitted` should bind here, to an outbox `sent`, or to a future Phase-7 signed
+dispatch fact is **a D2 decision**. **No dispatch event name is invented.**
 
 ---
 
 ## 9. Domain I — cancellation
 
-**Classification: `PRESENT_BUT_NOT_AUTHORITATIVE` — and this is a genuine CHANGE.**
+**Two different facts wear the same word. This is the most important mapping trap in the audit.**
 
-ADR-0134 recorded that **no canonical artifact could evidence a pre-execution cancellation**. At the
-pinned SHA, Core has cancellation _state_ in three places:
+### 9.1 What the bounded writer audit found
 
-- `communication_messages.status` includes **`cancelled`** (line 87);
-- `outbox_events.status` includes **`cancelled`** (line 181 constraint);
-- `vendor_package_orders.order_status` includes `cancelled`.
+Searched across `services`, `lib`, `app`, `scripts` at the pinned SHA:
 
-**What is still missing:** a canonical **event** or Jarvis-readable **result** proving cancellation,
-and an audited actor/reason for the cancellation itself. So the _fact_ now exists in Core's tables; the
-_evidence surface_ Jarvis would consume does not.
+| Term                                       | Hits           | Outcome                                                                           |
+| ------------------------------------------ | -------------- | --------------------------------------------------------------------------------- |
+| `status: "cancelled"`                      | 2              | one is a campaign, one a CRM task                                                 |
+| `cancelCommunication`                      | **0**          | **no such operation exists**                                                      |
+| `cancellation`                             | 4              | incidental                                                                        |
+| `cancelled`                                | 79             | mostly unrelated entities (campaigns, CRM tasks, profile changes, package status) |
+| `canceled`                                 | 1              | incidental                                                                        |
+| `revoke` / `abort`                         | 11 / 45        | unrelated                                                                         |
+| admin/API cancel route for a communication | **none found** | —                                                                                 |
 
-**This is the single most improved gap since ADR-0134**, and it is a direct D2 input.
+**The only authoritative writer of `communication_messages.status = 'cancelled'`** is the private
+`CommunicationService.terminalizeBeforeClaim(...)` (`services/communicationService.ts:1042`), reached
+from exactly one place (line 1010):
+
+> _"DENY — a definitive consent refusal. CANCEL it: `cancelled` is a legal edge from both `queued` and
+> `retry_scheduled`, it is terminal, and it is NOT `failed` (nothing failed — we chose not to send)."_
+
+### 9.2 The classification, and the trap
+
+|                                                                                                      | Classification                                                                 |
+| ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Cancellation **vocabulary / storage capacity**                                                       | **PRESENT_BUT_NOT_AUTHORITATIVE** — a status value is not a business operation |
+| An authoritative **consent-refusal terminalization**                                                 | **AUTHORITATIVE_PRESENT** (one internal writer, consent-deny only)             |
+| An authoritative **communication-cancellation operation or durable business fact** in Jarvis's sense | **ABSENT / `AMBIGUOUS_REQUIRES_D2`**                                           |
+
+> **Core can represent `cancelled`, but S3 did not prove an authoritative communication-cancellation
+> operation or durable business fact.**
+
+**The trap:** `communication-model.md` defines Jarvis's `cancelled` as _"Cancelled before execution,
+while cancellation was still permitted"_ — an actor decided to stop it. **Core's `cancelled` currently
+means "consent said no",** which is Jarvis's **`rejected`**. **Mapping Core's `cancelled` onto Jarvis's
+`cancelled` would silently record a consent refusal as a user cancellation.** D2 must not do that.
+
+`automationRecoveryService` reinforces the absence: reconciliation _"READS `communication_messages` …
+never writes it, never re-dispatches it and **never cancels it**."_
+
+> **Correction to the first revision:** it said _"the fact now exists in Core's tables"_. Only the
+> **vocabulary** exists, plus one consent-deny writer that means something else.
 
 ---
 
@@ -348,151 +342,133 @@ _evidence surface_ Jarvis would consume does not.
 
 **Classification: `AMBIGUOUS_REQUIRES_D2`.**
 
-Expiry vocabulary exists — `vendor_package_orders.order_status = 'expired'`,
-`vendors.package_status = 'expired'`, `communication_suppressions.expires_at`,
-`password_reset_grants`, and authentication deadline handling in the transport-policy services. But
-**no durable communication/execution expiry record with an owning clock** was found, and nothing
-establishes that expiry is a _recorded outcome_ rather than a computed comparison.
+Expiry vocabulary exists (`order_status='expired'`, `package_status='expired'`,
+`communication_suppressions.expires_at`, authentication deadlines), but **no durable
+communication/execution expiry record with an owning clock** was found, and nothing establishes expiry
+as a _recorded outcome_ rather than a computed comparison.
 
-**Jarvis must not infer authoritative expiry from `now > expires_at`.** The authoritative expiry fact
-for a communication or an execution intent remains **undetermined**, exactly as ADR-0135 left it.
+**Jarvis must not infer authoritative expiry from `now > expires_at`.** Unresolved, exactly as
+ADR-0135 left it.
 
 ---
 
 ## 11. Domain K — channel semantics
 
-**Classification: `AUTHORITATIVE_PRESENT`, with a constrained vocabulary — and a live constraint
-Jarvis must note.**
+**Classification: `AUTHORITATIVE_PRESENT` vocabulary, with one constraint worth noting.**
 
-- `communication_templates.channel` and `communication_messages.channel` are **`check (channel =
-'whatsapp')`** — a single-channel constraint at this SHA.
-- `communication_consent_events.channel` ∈ `('whatsapp','sms','rcs')`.
-- Enforcement is explicitly per-channel: _"A WhatsApp decision NEVER authorizes an SMS send — the
-  channel is part of the decision input."_ RCS is excluded from the enforcement path (no send path).
-- A separate SMS path exists (`runtimeSmsAdapterFactory`, `smsProviderSelection`, Exotel integration).
+`communication_templates.channel` and `communication_messages.channel` are
+`check (channel = 'whatsapp')`; `communication_consent_events.channel` ∈ `('whatsapp','sms','rcs')`.
+Enforcement is per-channel — _"A WhatsApp decision NEVER authorizes an SMS send."_ A separate SMS path
+exists.
 
-**Core can refuse before any channel authorization** (consent decision precedes channel/provider
-decision in the documented chain). **Whether Core may switch channel is `AMBIGUOUS_REQUIRES_D2`** —
-the messages table pins `whatsapp`, while consent models three channels.
-
-**No V2 `channel` shape is chosen here** — this is exactly the input ADR-0135 §8.3 deferred.
+Core can refuse **before** channel authorization (consent precedes the channel/provider decision).
+**Whether Core may switch channel is `AMBIGUOUS_REQUIRES_D2`.** No V2 `channel` shape is chosen here.
 
 ---
 
 ## 12. Domain M — provider result / reconciliation
 
-**Classification: `AUTHORITATIVE_PRESENT` for the state distinctions; `PRESENT_BUT_NOT_AUTHORITATIVE`
-for Core → Jarvis reconciliation.**
+**`AUTHORITATIVE_PRESENT` for the state distinctions; `ABSENT` for a Core → Jarvis channel.**
 
 `communication_delivery_events.normalized_event_type` ∈ **`accepted, sent, delivered, read, failed`**
-(line 139), append-only, one trace row per `(provider, provider_event_id, provider_message_id,
-normalized_event_type)`.
+(line 139), append-only, uniquely keyed per `(provider, event, message, type)`.
 
-> **`provider-accepted` IS distinct from `delivered` in Core's schema.** Jarvis's core distinction is
+> **`provider-accepted` IS distinct from `delivered` in Core's schema** — Jarvis's core distinction is
 > independently mirrored.
 
-`communication_webhook_receipts` de-duplicates on `(provider, provider_event_id)` and on
-`(provider, payload_hash)`, **partitioned by `signature_valid`** so a forged body can never occupy a
-legitimate redelivery's slot.
+`communication_webhook_receipts` de-duplicates partitioned by `signature_valid`, so a forged body
+cannot occupy a legitimate redelivery's slot. Reconciliation exists **inside Core**
+(`campaignCommunicationResultService`, `automationRecoveryService`), but there is **no Core → Jarvis
+reconciliation event or contract** — that historical finding **stands**.
 
-Reconciliation services exist: `services/campaignCommunicationResultService.ts` (_"the Core-owned
-boundary that lets QF-MVP-50 reconcile a campaign communication INTENT from its canonical
-communication MESSAGE"_) and `services/automationRecoveryService.ts` (`recover_v1` / `reconcile_v1`,
-each _"driven by its own signed request"_).
-
-**But there is still no Core → Jarvis reconciliation event or contract.** The historical
-"reconciliation absent" finding is **partly changed**: reconciliation now exists _inside Core_; the
-_Jarvis-facing_ channel does not.
-
-Mapping to Jarvis's eighteen states: Core can distinguish `accepted`/`sent`/`delivered`/`read`/`failed`
-and `cancelled`; it does **not** model `answered`, `no-answer` or `busy` (no voice path at this SHA),
-and `completed` has no distinct Core representation.
+Core does **not** model `answered`, `no-answer` or `busy` (no voice path at this SHA), and `completed`
+has no distinct Core representation.
 
 ---
 
 ## 13. Domain L — Tier A/B durable coordination evidence (D2b input)
 
-ADR-0135 left four Tier A/B states with **no durable ordered replay source** and one CONDITIONAL.
-Current Core evidence:
+| Jarvis state              | Core primitive recording the Jarvis act?                                  | Finding                                                                   |
+| ------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `draft`                   | **none** — pre-submission by definition                                   | stays Jarvis-local/ephemeral; ADR-0135 Option C fits. **Not chosen here** |
+| `authorization-requested` | **none adopted** — Recommendation APIs named, unbuilt                     | **CANDIDATE**, needs D2                                                   |
+| `scheduled`               | **partial** — `communication_messages.scheduled_at` exists                | **CANDIDATE**, needs D2                                                   |
+| `follow-up-requested`     | **none found**                                                            | **ABSENT**                                                                |
+| `human-handoff-required`  | **none found** — no handoff table among 100+, no handoff service among 89 | **blocked by missing truth**                                              |
 
-| Jarvis state              | Core primitive recording the Jarvis act?                                                                                           | Could it cross the boundary as receipt/occurrence?                                                | Finding                                                                                             |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `draft`                   | **none**                                                                                                                           | a draft is pre-submission by definition — Core has nothing to record                              | **stays Jarvis-local or ephemeral.** ADR-0135 Option C is the natural fit; **not chosen here**      |
-| `authorization-requested` | **none adopted** — the boundary doc names Recommendation APIs, unbuilt                                                             | **yes, in principle** — this is exactly the _"agent recommendation"_ step of the documented chain | **CANDIDATE**, needs D2 protocol adoption                                                           |
-| `scheduled`               | **partial** — `communication_messages.scheduled_at` exists, with a constraint that an ephemeral destination can never be scheduled | **yes**, if Jarvis's schedule becomes a Core-recorded message                                     | **CANDIDATE**, needs D2                                                                             |
-| `follow-up-requested`     | **none found** — no follow-up/task record tying a new request to a prior outcome                                                   | —                                                                                                 | **ABSENT**                                                                                          |
-| `human-handoff-required`  | **none found** in Core (no handoff table or service)                                                                               | —                                                                                                 | **downgraded**: Jarvis's `qf.communication.human-handoff-requested` has **no Core-side fact today** |
-
-**Bounded absence:** no `handoff` table appears in the 101-migration table inventory, and no handoff
-service exists among the 89 services.
-
-> **Correction to an ADR-0135 assumption, in Jarvis's favour to know now:** ADR-0135 treated
-> `human-handoff-required` as the **most** likely Tier-B candidate because a canonical _contract_
-> exists in `@qf-jarvis/contracts`. This audit finds **no corresponding Core fact at the pinned SHA**,
-> so its adoption is **blocked by missing truth**, not merely unadopted. Meanwhile `scheduled` and
-> `authorization-requested` — which ADR-0135 rated UNRESOLVED — have the **clearer** Core-side path.
-> **This reorders D2b's candidates; it does not change Model 2.**
-
-**No ADR-0135 Option A/B/C is chosen here.**
+> **D2b candidate reordering:** ADR-0135 rated `human-handoff-required` the leading Tier-B candidate
+> **conditional on S3**, because a canonical _contract_ exists in `@qf-jarvis/contracts`. This audit
+> finds **no corresponding Core fact**, so it is blocked by missing truth; `scheduled` and
+> `authorization-requested` have the clearer path. **This is the condition resolving inside ADR-0135's
+> own framing — not a decision changing.**
 
 ---
 
 ## 14. Domain N — execution-time eligibility
 
-**Classification: `AUTHORITATIVE_PRESENT` inside Core; `ABSENT` as an adopted Jarvis/n8n-facing
-protocol.**
+**`AUTHORITATIVE_PRESENT` inside Core for consent/suppression; `ABSENT` as an adopted Jarvis- or
+n8n-facing protocol.**
 
-Core **can** authoritatively re-check consent, suppression, scope and channel immediately before
-dispatch — that is precisely what `outboundConsentEnforcementService` does, and it fails closed on
-`CONSENT_AUTHORITY_UNAVAILABLE`. Frequency/attempt limits exist
-(`communicationFrequencyPolicyService.ts`, `20260728001600_qf_mvp_frequency_policy_history_hardening`).
-
-**Quiet hours:** not found as an explicit named control at this SHA — `AMBIGUOUS_REQUIRES_D2`.
-
-**Can n8n or a runtime ask Core?** No adopted protocol. The signed automation routes are Core-owned
-recovery/reconcile lanes, not an eligibility query surface. **S6 is not designed here.**
+Core can re-check consent, suppression, scope and channel immediately before dispatch — that is what
+`outboundConsentEnforcementService` does, failing closed. Frequency/attempt limits exist
+(`communicationFrequencyPolicyService`, `20260728001600`). **Quiet hours: not found as a named control
+— `AMBIGUOUS_REQUIRES_D2`.** No adopted query surface for n8n or a runtime. **S6 is not designed here.**
 
 ---
 
 ## 15. Domain O — security / trust
 
-**Classification: `PRESENT`, capability only — no secret value was read or printed.**
+**`PRESENT`, capability only. No secret value was read or printed.**
 
-- **Webhook signature verification exists** and is load-bearing:
-  `communication_webhook_receipts.signature_valid` partitions the de-duplication indexes, so an
-  unsigned or forged body _cannot_ occupy a legitimate redelivery's slot.
-- **Signed internal requests exist** for the automation recovery/reconcile routes.
-- **Provider account binding** is required for delivery events and consent-ack intents
-  (`20260720000100`, `20260721000100`).
-- **RLS is deny-all for API roles** on communication tables, with least-privilege `service_role`
-  grants; delivery events get `SELECT + INSERT` only.
-- **No agent is a database role.** The boundary doc states the logical agent labels — including
-  `qf_jarvis` — are _"not Supabase users, not PostgreSQL roles, not service-role identities, and not
-  provider credentials."_
+Webhook signature verification is load-bearing (`signature_valid` partitions de-duplication); signed
+internal requests exist for automation recover/reconcile; provider-account binding is required for
+delivery events and consent-ack intents; RLS is deny-all for API roles on communication tables with
+least-privilege `service_role` grants; delivery events get `SELECT + INSERT` only.
 
-**Unsigned current routes are not Jarvis authority**, and none was treated as such.
+**No agent is a database role** — the boundary doc states the agent labels, including `qf_jarvis`, are
+_"not Supabase users, not PostgreSQL roles, not service-role identities, and not provider
+credentials."_
+
+**Unsigned current routes are not Jarvis authority**, and none was treated as such. **The existing
+signing domain must not be assumed reusable** for a Jarvis trust purpose.
 
 ---
 
-## 16. Historical delta table
+## 16. Historical delta
 
-| #   | Question                          | Historical @`06b1e22`                                | Current @`af7c2bb`                                                                 | Changed?              | Impact                               |
-| --- | --------------------------------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------- | --------------------- | ------------------------------------ |
-| 1   | prospect ↔ vendor correlation     | absent                                               | **absent** (bounded search, §1)                                                    | **NO**                | GAP A stands                         |
-| 2   | registration-process read         | write-only; no process read                          | **still no process read**; auth ≠ registration now explicit                        | **partly**            | GAP stands, better documented        |
-| 3   | payment / prospect addressability | unconstrained text; vendor-id keyed                  | **CHECK-constrained**; still vendor-id keyed                                       | **YES (constraints)** | prospect-addressability still absent |
-| 4   | authoritative party-live fact     | no ACTIVE status                                     | **still none**; three distinct "active-ish" fields                                 | **NO**                | GAP B stands                         |
-| 5   | package / commercial truth        | authoritative read, adopted                          | unchanged + constrained                                                            | minor                 | fine                                 |
-| 6   | execution-time eligibility        | Communication Core authoritative, no Jarvis protocol | **Communication Core now EXISTS in Core**, fails closed; still no adopted protocol | **YES (major)**       | S6 far more tractable                |
-| 7   | execution authorization protocol  | contracts exist, wire PROPOSED                       | **still proposed**; Core boundary doc agrees on shape                              | **partly**            | D2 input                             |
-| 8   | result reconciliation             | absent                                               | **exists inside Core**; no Core → Jarvis channel                                   | **YES (partly)**      | D2 input                             |
-| 9   | communication authorization       | not audited as a Core capability                     | **sole decision authority + closed enforcement outcome**                           | **YES (major)**       | Model 2 corroborated                 |
-| 10  | Core event / outbox               | not audited historically                             | **defined, UNAPPLIED, not wired**                                                  | **NEW**               | confirms ADR-0135                    |
-| 11  | dispatch evidence                 | NOT AUDITED HISTORICALLY                             | phase distinctions exist; no event                                                 | **NEW**               | §8, D2                               |
-| 12  | cancellation evidence             | NOT AUDITED HISTORICALLY                             | **state exists**; no event/result                                                  | **NEW**               | §9, D2                               |
-| 13  | expiry evidence                   | NOT AUDITED HISTORICALLY                             | vocabulary only; no owning clock                                                   | **NEW**               | §10, unresolved                      |
-| 14  | Tier A/B recording options        | NOT AUDITED HISTORICALLY                             | handoff absent; scheduled/request clearer                                          | **NEW**               | §13, reorders D2b                    |
-| 15  | channel semantics                 | NOT AUDITED HISTORICALLY                             | messages pinned `whatsapp`; consent 3 channels                                     | **NEW**               | §11, D2                              |
+Two categories, kept separate so a newly audited domain is never phrased as a historical absence.
+
+### 16.1 Previously audited findings — genuine changes (**3**)
+
+| #   | Question                   | Historical @`06b1e22`                                                                             | Current @`af7c2bb`                                                                                                         | Impact                               |
+| --- | -------------------------- | ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| 1   | payment / order status     | unconstrained `text`, no CHECK                                                                    | **CHECK-constrained vocabularies**                                                                                         | prospect-addressability still absent |
+| 2   | execution-time eligibility | authority = Communication Core / QF Communications Runtime; **no adopted Jarvis-facing protocol** | authority **unchanged**; the **concrete implementation is now visible and fails closed**; still no adopted Jarvis protocol | S6 more tractable                    |
+| 3   | result reconciliation      | absent                                                                                            | **exists inside Core**; still no Core → Jarvis channel                                                                     | D2 input                             |
+
+### 16.2 Previously audited findings — unchanged (**4**)
+
+| #   | Question                         | Status                                                  |
+| --- | -------------------------------- | ------------------------------------------------------- |
+| 4   | prospect ↔ vendor correlation    | **ABSENT** — GAP A stands                               |
+| 5   | authoritative party-live fact    | **ABSENT** — GAP B stands                               |
+| 6   | registration-process read        | **still absent** (auth ≠ registration now explicit)     |
+| 7   | execution authorization protocol | still **PROPOSED**; Core's boundary doc agrees on shape |
+
+### 16.3 NOT AUDITED HISTORICALLY — newly audited (**8**)
+
+| #   | Domain                                     | Current finding                                                                     |
+| --- | ------------------------------------------ | ----------------------------------------------------------------------------------- |
+| 8   | concrete Core communication implementation | unified communication core, consent evidence, enforcement coordinator               |
+| 9   | Core event / outbox                        | defined in source; envelope unwired; live applied-state not independently certified |
+| 10  | dispatch evidence                          | phases distinguishable; no event; not ExecutionIntent-shaped                        |
+| 11  | cancellation evidence                      | vocabulary + one consent-deny writer; **no cancellation operation**                 |
+| 12  | expiry evidence                            | vocabulary only; no owning clock                                                    |
+| 13  | Tier A/B recording options                 | handoff absent; scheduled/request clearer                                           |
+| 14  | channel semantics                          | messages pinned `whatsapp`; consent models three                                    |
+| 15  | commercial / package truth                 | authoritative read, constrained                                                     |
+
+**Genuine historical changes: 3. Unchanged: 4. Newly audited: 8.**
 
 ---
 
@@ -500,51 +476,38 @@ recovery/reconcile lanes, not an eligibility query surface. **S6 is not designed
 
 **Model 2 remains VIABLE. No ADR-0135 reopen is required.**
 
-Positive corroboration, from Core's own words:
+Corroboration, from Core's own words: QuickFurno is the system of record and _"Jarvis holds no
+authoritative copy"_; a recommendation is _"inert data"_ that _"authorizes nothing"_; _"an `approved`
+recommendation does NOT bypass"_ the policy engine; _"n8n remains the execution fabric, not the second
+brain."_
 
-- _"QuickFurno remains the system of record … Jarvis holds no authoritative copy."_ → matches Model 2's
-  local-view rule.
-- _"A recommendation is inert data; it authorizes nothing."_ → matches S1's powerless request.
-- _"An `approved` recommendation does NOT bypass [the Policy Engine]."_ → matches _founder approval
-  does not override an opt-out_.
-- _"n8n remains the execution fabric, not the second brain."_ → matches the execution boundary.
-- Consent decision is a **sole authority** with a **closed, machine-readable** outcome → matches
-  `CommunicationAuthorizationV1`'s intent.
+Every ADR-0135 caution is **confirmed**: candidate ≠ live emission; `execution-submitted` unresolved;
+Tier A/B sources unsettled; and a reader cannot manufacture provenance — Core grants Jarvis no database
+role at all.
 
-Constraints confirmed rather than contradicted:
-
-- Candidate contracts are **not** live Core emissions → **ADR-0135 §2 was right**.
-- `execution-submitted` evidence stays unresolved → **ADR-0135 §8 was right**.
-- Tier A/B durable sources are still not settled → **ADR-0135 §8a was right**; only the _ranking_ of
-  candidates changes (§13).
-
-**One item for owner attention, not a reopen:** ADR-0135 named
-`qf.communication.human-handoff-requested` the leading Tier-B candidate. This audit finds no Core-side
-handoff fact at the pinned SHA, so that candidate is **blocked by missing truth** while `scheduled`
-and `authorization-requested` look more tractable. That is a **D2b input reordering**, fully inside
-ADR-0135's stated "conditional on S3" framing.
+**No OWNER ARCHITECTURE REOPEN candidate is raised.**
 
 ---
 
 ## 18. D2 decision queue
 
-| #          | Question                                        | Finding                                   | Why it blocks                         | Smallest future decision                               | Depends on          | Must NOT assume                                           |
-| ---------- | ----------------------------------------------- | ----------------------------------------- | ------------------------------------- | ------------------------------------------------------ | ------------------- | --------------------------------------------------------- |
-| **D2-Q1**  | prospect ↔ vendor continuity                    | `ABSENT`                                  | GAP A blocks S8                       | adopt one durable correlation fact at registration     | Core work           | that `leads.vendor_id` is acquisition continuity          |
-| **D2-Q2**  | registration completion                         | no process read                           | blocks continuation                   | adopt a readable registration-completion fact          | Core work           | that an auth user is a registered vendor                  |
-| **D2-Q3**  | payment / prospect addressability               | constrained, vendor-keyed                 | blocks pre-registration payment reads | decide whether a prospect-addressable read can exist   | D2-Q1               | that paid ⇒ active                                        |
-| **D2-Q4**  | authoritative party-live fact                   | `ABSENT`                                  | GAP B blocks S9                       | adopt one "party is live" fact                         | Core work           | that `package_status='active'` or `is_active` means live  |
-| **D2-Q5**  | communication authorization submission/response | shape agreed, protocol unbuilt            | blocks S4                             | adopt the recommendation → authorization wire protocol | Core Phase 6/7      | that the enforcement outcome is already Jarvis-consumable |
-| **D2-Q6**  | adopted authorization/result primitive events   | `CANDIDATE_ONLY`                          | blocks Tier-C projection              | choose which primitives Core emits first               | D2-Q14              | that a contract implies an emission                       |
-| **D2-Q7**  | dispatch / submission evidence                  | `AMBIGUOUS`                               | blocks `execution-submitted`          | bind the state to a named Core dispatch fact           | D2-Q6, Core Phase 7 | that `intent-issued` proves dispatch                      |
-| **D2-Q8**  | cancellation evidence                           | state exists, no event                    | blocks `cancelled`                    | expose the existing cancellation state as a fact       | D2-Q6               | that a status column is a canonical event                 |
-| **D2-Q9**  | expiry evidence                                 | vocabulary only                           | blocks `expired`                      | identify the owning clock and the recorded outcome     | Core work           | that `now > expires_at` is authoritative                  |
-| **D2-Q10** | Tier A/B durable evidence + ordering            | handoff absent; scheduled/request clearer | blocks D2b, D3, D5                    | pick ADR-0135 Option A/B/C per state                   | D2-Q5, D2-Q6        | that a Jarvis contract implies a Core fact                |
-| **D2-Q11** | channel semantics                               | messages pinned `whatsapp`                | blocks V2 `channel`                   | decide proposed vs authorized representation           | D2-Q5               | that Core will always name a channel                      |
-| **D2-Q12** | provider-result reconciliation                  | internal only                             | blocks S7                             | adopt a Core → Jarvis reconciliation event             | D2-Q6               | that internal reconciliation reaches Jarvis               |
-| **D2-Q13** | execution-time eligibility                      | present, unexposed                        | blocks S6                             | decide whether n8n/runtime may query Core              | D2-Q5               | that Jarvis may cache any answer                          |
-| **D2-Q14** | Core event/outbox transport capability          | defined, **UNAPPLIED**                    | blocks every Tier-C fact              | apply and wire the canonical persistence target        | Core Phase 6/7      | that an unapplied migration is a capability               |
-| **D2-Q15** | signature / trust protocol                      | webhook + signed-route capability exists  | blocks trusted ingestion              | agree the Core → Jarvis signing purpose and key model  | D2-Q14, Jarvis D2a  | that existing webhook signing is the Jarvis protocol      |
+| #          | Question                          | Finding                                                                                                                          | Why it blocks                 | Smallest future decision                                                                                                 | Depends on          | Must NOT assume                                                                                      |
+| ---------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------- | ---------------------------------------------------------------------------------------------------- |
+| **D2-Q1**  | prospect ↔ vendor continuity      | `ABSENT`                                                                                                                         | GAP A blocks S8               | adopt one durable correlation fact                                                                                       | Core work           | that `leads.vendor_id` is acquisition continuity                                                     |
+| **D2-Q2**  | registration completion           | no process read                                                                                                                  | blocks continuation           | adopt a readable completion fact                                                                                         | Core work           | that an auth user is a registered vendor                                                             |
+| **D2-Q3**  | payment / prospect addressability | constrained, vendor-keyed                                                                                                        | blocks pre-registration reads | decide whether a prospect-addressable read can exist                                                                     | D2-Q1               | that paid ⇒ active                                                                                   |
+| **D2-Q4**  | authoritative party-live fact     | `ABSENT`                                                                                                                         | GAP B blocks S9               | adopt one "party is live" fact                                                                                           | Core work           | that `package_status='active'` or `is_active` means live                                             |
+| **D2-Q5**  | communication authorization       | consent enforcement present (5.A/5.B); **full business authorization not proved** (5.C); **no Jarvis-facing artifact** (5.D/5.E) | blocks S4                     | settle three separately: the business-authorization surface, the Jarvis wire protocol, and the response artifact         | Core Phase 6/7      | that a consent `allow` is a send authorization or a `CommunicationAuthorizationV1`                   |
+| **D2-Q6**  | adopted primitive events          | `CANDIDATE_ONLY`                                                                                                                 | blocks Tier-C projection      | choose which primitives Core emits first                                                                                 | D2-Q14              | that a contract implies an emission                                                                  |
+| **D2-Q7**  | dispatch / submission evidence    | **UNRESOLVED**; no ExecutionIntent semantic in Core                                                                              | blocks `execution-submitted`  | bind the state to a named Core dispatch fact                                                                             | D2-Q6, Core Phase 7 | that a generic outbox row is an execution intent                                                     |
+| **D2-Q8**  | cancellation                      | vocabulary + consent-deny writer only                                                                                            | blocks `cancelled`            | **first establish/adopt an authoritative cancellation operation and durable fact — then expose it as evidence**          | D2-Q6               | that Core's `cancelled` means Jarvis's `cancelled` (it currently means consent refusal ⇒ `rejected`) |
+| **D2-Q9**  | expiry evidence                   | vocabulary only                                                                                                                  | blocks `expired`              | identify the owning clock and recorded outcome                                                                           | Core work           | that `now > expires_at` is authoritative                                                             |
+| **D2-Q10** | Tier A/B evidence + ordering      | handoff absent; scheduled/request clearer                                                                                        | blocks D2b, D3, D5            | pick ADR-0135 Option A/B/C per state                                                                                     | D2-Q5, D2-Q6        | that a Jarvis contract implies a Core fact                                                           |
+| **D2-Q11** | channel semantics                 | messages pinned `whatsapp`                                                                                                       | blocks V2 `channel`           | decide proposed vs authorized representation                                                                             | D2-Q5               | that Core will always name a channel                                                                 |
+| **D2-Q12** | provider-result reconciliation    | internal only                                                                                                                    | blocks S7                     | adopt a Core → Jarvis reconciliation event                                                                               | D2-Q6               | that internal reconciliation reaches Jarvis                                                          |
+| **D2-Q13** | execution-time eligibility        | present, unexposed                                                                                                               | blocks S6                     | decide whether n8n/runtime may query Core                                                                                | D2-Q5               | that Jarvis may cache any answer                                                                     |
+| **D2-Q14** | Core event/outbox capability      | defined in source; wiring absent; live state uncertified                                                                         | blocks every Tier-C fact      | **verify governed Core applied-state, then adopt/wire authoritative event/outbox persistence and publication as needed** | Core Phase 6/7      | that a repository migration is a live capability, **or that S3 verified live state**                 |
+| **D2-Q15** | signature / trust protocol        | webhook + signed-route **capability** exists                                                                                     | blocks trusted ingestion      | agree a Jarvis trust purpose, domain separation and key model                                                            | D2-Q14, Jarvis D2a  | **that the existing signing domain is reusable**                                                     |
 
 **Nothing above is designed, adopted or implemented here.**
 
@@ -556,4 +519,5 @@ No Core branch, commit, push or PR. No managed Supabase access. No migration run
 Meta access. No message sent. No secret value read or printed. No Jarvis production code, contract,
 event registry, event-backbone, ingestion or projection change. **No migration allocated.**
 
-**Production rollout remains OFF. Runtime activation is unchanged.**
+**Production rollout remains OFF. Runtime activation is unchanged. S3 awaits owner acceptance on
+PR #177.**

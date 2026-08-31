@@ -1,6 +1,6 @@
 # ADR-0135 — QFJ-P09 S2 local communication-state projection architecture
 
-**Status:** Accepted. **MERGED** as PR #176, merge commit `eebee71e4e156608e2e04e60802b9d24b33140f5`. Its D1 prerequisite — the fresh read-only Core audit — is delivered by [ADR-0136](./ADR-0136-qfj-p10-s3-fresh-quickfurno-core-audit.md), which **confirms Model 2 and reopens nothing**.
+**Status:** Accepted. **MERGED** as PR #176, merge commit `eebee71e4e156608e2e04e60802b9d24b33140f5`. Its D1 prerequisite — the fresh read-only Core audit — is **presented for owner acceptance** on PR #177 under [ADR-0136](./ADR-0136-qfj-p10-s3-fresh-quickfurno-core-audit.md) (**Proposed, not merged**), which **confirms Model 2 and reopens nothing**. **D2 becomes the next execution step only if PR #177 is accepted and merged.**
 **Date:** 2026-08-30
 **Phase ownership:** **QFJ-P09** (execution gateway and communication lifecycle). A bounded
 architecture decision for **slice S2** of

@@ -23,11 +23,9 @@ events, needing **no new Core state event**, though it may still require targete
 adoption for facts S3 finds absent. Trusting that projection additionally requires **write-path
 hardening (`D2a`)**, because a narrow reader is a data-access boundary and cannot authenticate an
 event's origin — and **`D2b`**, because four of the five Jarvis-owned coordination states have no
-durable, ordered replay source today, so **full 18-state rebuild is not certified**. That decision is **MERGED** (PR #176). **S3, the fresh read-only Core audit, is now DELIVERED**
+durable, ordered replay source today, so **full 18-state rebuild is not certified**. That decision is **MERGED** (PR #176). **S3, the fresh read-only Core audit, is AUDITED ON A FEATURE BRANCH AND AWAITING OWNER ACCEPTANCE**
 at pinned marketplace commit `af7c2bb4f5a83731666fe059e963d1824cddd7b6` under
-[ADR-0136](../decisions/ADR-0136-qfj-p10-s3-fresh-quickfurno-core-audit.md) (**on a feature
-branch / PR, not merged**), which confirms Model 2 and makes **D2 — the Core protocol/event gap
-decision — the next step**. That decision is **on a feature branch / PR, not merged**. Nothing else here is
+[ADR-0136](../decisions/ADR-0136-qfj-p10-s3-fresh-quickfurno-core-audit.md) (**Proposed, PR #177 open, not merged**). It confirms Model 2. **PR #177 presents the S3 audit for owner acceptance; if merged, D2 — the Core protocol/event gap decision — becomes the next execution step.** That decision is **on a feature branch / PR, not merged**. Nothing else here is
 implemented, adopted, connected or activated. Aarohi's runtime is **PLANNED / DISABLED** and
 production rollout is **OFF**. Every edge marked *proposed* or *blocked* below does not exist.
 
@@ -347,7 +345,7 @@ slices.**
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | **1** | **QFJ-P08** | **`CommunicationRequestV1` producer** — POWERLESS — **MERGED (ADR-0133, PR #174)** | none | production code + tests | **proved: NONE required** | none | no | design review | not composed by any app |
 | **2** | QFJ-P09 | `CommunicationStateRecordV1` producer — **BLOCKED (ADR-0134); split into S2a/S2b/S2c; only S2a is Core-free** | PR 1 | production code + tests | must be proved; none foreseen | none | no | design review | not composed by any app |
-| **3** | QFJ-P10 | **Fresh read-only Core audit** at a current pinned commit — **DELIVERED (ADR-0136, PR open)** | none | docs | none | read-only inspection | no | owner sign-off on findings | n/a |
+| **3** | QFJ-P10 | **Fresh read-only Core audit** at a current pinned commit — **AUDITED, AWAITING OWNER ACCEPTANCE (ADR-0136, PR #177 open)** | none | docs | none | read-only inspection | no | owner sign-off on findings | n/a |
 | **4** | QFJ-P10 | Core protocol **adoption** — identity, registration, payment, activation, reconciliation | PR 3 + Core-side work | contracts + docs | must be proved | **Core change required** | no | bilateral adoption | contracts unused until composed |
 | **5** | **QFJ-P08** | **Live Core transport for communication authorization** | PRs 1, 4 | production code | must be proved | Core | no | transport adoption | not composed |
 | **6** | QFJ-P09 | Adopted Core → n8n transport + composition | PRs 2, 4, 5 | production code | must be proved | Core + n8n | no | transport adoption | composition not wired |
