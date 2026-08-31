@@ -1,8 +1,9 @@
 # ADR-0136 — QFJ-P10 S3 fresh QuickFurno Core audit
 
-**Status:** **Proposed** — read-only audit on a feature branch, **PR #177 open, NOT merged**.
-**S3 is presented for owner acceptance; it is not delivered, complete or closed.** If PR #177 is
-merged, **D2** becomes the next execution step.
+**Status:** Accepted. **MERGED** as PR #177, merge commit `1c8b4f6a2b4090db816da7dc49654713e8bbcc3b`.
+**S3 is the frozen fact base for D2**, taken up by
+[ADR-0137](./ADR-0137-qfj-p10-d2-core-protocol-and-event-gap-decision.md) (**Proposed, PR open**),
+which decides the fifteen-question queue **without re-pinning or re-auditing Core**.
 **Date:** 2026-08-31
 **Phase ownership:** **QFJ-P10** (Core integration and reconciliation). Slice **S3** of
 [ADR-0132](./ADR-0132-aarohi-real-execution-integration-planning.md), step **D1** of
@@ -144,9 +145,10 @@ header, signature or event name is invented.**
 
 PR #176 merged at `eebee71e4e156608e2e04e60802b9d24b33140f5`, so **ADR-0135 and the Model-2 design
 document become Accepted / MERGED**. The roadmap and integration plan record that S3 is
-**audited on this feature branch and awaiting owner acceptance on PR #177**, and that **D2 becomes
-the next execution step only if and when PR #177 is accepted and merged**. **S3 is not called
-delivered, complete, merged or closed. ADR-0135's findings are not rewritten.**
+**MERGED as PR #177** (merge commit `1c8b4f6a2b4090db816da7dc49654713e8bbcc3b`), and that **D2 is
+decided on a feature branch / PR by
+[ADR-0137](./ADR-0137-qfj-p10-d2-core-protocol-and-event-gap-decision.md)**. **ADR-0135's findings
+are not rewritten, and this audit's evidence is frozen as D2's fact base.**
 
 ### 11. Three classifications the first revision overstated
 

@@ -1,16 +1,18 @@
 # QFJ-P10 S3 — fresh read-only QuickFurno Core capability audit
 
-**Status:** Read-only audit, **presented for owner acceptance on PR #177 — NOT delivered, complete or
-merged.** **No Core modification, no Supabase access, no n8n/provider access, no message sent, no
+**Status:** Read-only audit. **MERGED as PR #177** (merge commit `1c8b4f6a2b4090db816da7dc49654713e8bbcc3b`).
+**Its evidence is FROZEN and is the fact base for D2** — not re-audited and not re-pinned.
+**No Core modification, no Supabase access, no n8n/provider access, no message sent, no
 migration, no activation.**
 **Owning decision:** [ADR-0136](../../decisions/ADR-0136-qfj-p10-s3-fresh-quickfurno-core-audit.md)
-(**Proposed**, PR #177 open)
+(**Accepted / MERGED**)
 **Jarvis baseline:** `eebee71e4e156608e2e04e60802b9d24b33140f5` (merge of PR #176 / ADR-0135)
 **Slice:** **S3 / D1** under [ADR-0132](../../decisions/ADR-0132-aarohi-real-execution-integration-planning.md)
 and [ADR-0135](../../decisions/ADR-0135-qfj-p09-s2-local-communication-state-projection-architecture.md).
 
-> **PR #177 presents the S3 audit for owner acceptance. If merged, D2 becomes the next execution
-> step.** Until then S3 is **audited on this feature branch, awaiting owner acceptance**.
+> **PR #177 is merged, so S3 is accepted.** Its evidence is frozen; **D2 decides against this pin**
+> under [ADR-0137](../../decisions/ADR-0137-qfj-p10-d2-core-protocol-and-event-gap-decision.md)
+> **without re-auditing or re-pinning Core**.
 
 ## Pinned Core commit
 

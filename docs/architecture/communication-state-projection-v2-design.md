@@ -3,7 +3,7 @@
 **Status:** Adopted under
 [ADR-0135](../decisions/ADR-0135-qfj-p09-s2-local-communication-state-projection-architecture.md)
 (**MERGED**, PR #176, `eebee71`). **Nothing here is implemented, adopted, connected or
-activated.** Its D1 prerequisite is **presented for owner acceptance** on PR #177 under [ADR-0136](../decisions/ADR-0136-qfj-p10-s3-fresh-quickfurno-core-audit.md) (**Proposed, not merged**) — that audit **confirms Model 2**. **If PR #177 merges, D2 becomes the next step.**
+activated.** Its D1 prerequisite is **MERGED** as PR #177 under [ADR-0136](../decisions/ADR-0136-qfj-p10-s3-fresh-quickfurno-core-audit.md) — that audit **confirmed Model 2**. **D2 is decided on a feature branch / PR by [ADR-0137](../decisions/ADR-0137-qfj-p10-d2-core-protocol-and-event-gap-decision.md)** (Proposed, not merged), which fixes the **first durable projection subset** this document's §8.2 leaves open: **6 durable Tier-C states** (`rejected`, `authorized`, `provider-accepted`, `delivered`, `read`, `failed`), **2 conditional Tier-B** (`authorization-requested`, `scheduled`), **10 deliberately excluded** — **`completed` among them, blocked by missing Core truth.**
 **Baseline:** `c6b21dcf921e350f33477d3b18fd4413b8a8aa00` (merge of PR #175 / S2 readiness audit)
 
 Read with [ADR-0134](../decisions/ADR-0134-qfj-p09-s2-communication-state-evidence-alignment.md) (the
