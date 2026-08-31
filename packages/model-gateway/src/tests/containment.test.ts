@@ -210,9 +210,9 @@ describe('model-gateway package containment', () => {
 });
 
 describe('cross-package invariants (QFJ-P04.01A must not disturb the event backbone)', () => {
-  it('the event-backbone public-api lock remains 39', () => {
+  it('the event-backbone public-api lock remains 38', () => {
     const test = readRepo('packages/event-backbone/src/tests/public-api.test.ts');
-    expect(test).toContain('toHaveLength(39)');
+    expect(test).toContain('toHaveLength(38)');
   });
 
   it('migrations 0001–0012 are byte-exact and there is no 0013', () => {

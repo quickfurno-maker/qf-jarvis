@@ -6,10 +6,9 @@
  * ### Only proven inputs reach persistence THROUGH THIS BRIDGE
  *
  * The `storeValidatedEvent` primitive in `@qf-jarvis/event-backbone` is a trusted low-level write
- * that verifies nothing — a package boundary cannot stop some other caller handing it a forged
- * record. **This bridge is where that trust is earned on the ingestion path.** The only way to build
- * a record *here* is {@link buildEventPersistenceRecord}, and it takes exactly two things, both
- * produced by *this package* during ingestion:
+ * that verifies nothing. **This bridge is where that trust is earned on the ingestion path.** The
+ * only way to build a record *here* is {@link buildEventPersistenceRecord}, and it takes exactly two
+ * things, both produced by *this package* during ingestion:
  *
  * - a {@link PreparedValidatedEvent} — an already **contract-validated**, deeply-frozen canonical
  *   event with its semantic digest (Stage 3.3 slice 2); and
@@ -22,19 +21,34 @@
  * cannot be paired with a prepared event for another. A mismatch throws
  * {@link EvidencePreparationMismatchError}; it never silently stores a mispaired record.
  *
+ * ### D2a — the bridge is now the ONLY path, structurally (ADR-0138)
+ *
+ * Before D2a this file's guarantee stopped at its own path: some *other* caller could still import
+ * `storeValidatedEvent` from the `@qf-jarvis/event-backbone` root and store a forged record. That
+ * export is gone. The writer now lives behind
+ * `@qf-jarvis/event-backbone/internal/event-write`, lint permits **only this file** to import it,
+ * and it accepts only an `AuthenticatedEventWrite` — a class with a `#private` field and a `private`
+ * constructor, which no object literal can satisfy. So the safe path is not merely the recommended
+ * one; it is the only one repository application code can compile and lint.
+ *
  * ### Internal
  *
  * Neither function is exported from the package barrel. They are the ingest composition, reached
- * only by a future authenticated ingest caller inside this package. The public Stage 3.2 surface
+ * only by the `createEventIngestor` composition inside this package. The public Stage 3.2 surface
  * is unchanged and still exposes no raw body, no key, and no signature bytes.
  */
 
+import { type DatabasePool } from '@qf-jarvis/event-backbone';
+// D2a (ADR-0138): the accepted-event write authority is NOT on the package root. It lives on this
+// narrow internal subpath, and lint permits exactly this file to import it. `storeAuthenticatedEvent`
+// takes an unforgeable `AuthenticatedEventWrite`, so no caller — here or anywhere — can reach the
+// INSERT with a hand-built record or a structurally-faked "verified" object.
 import {
-  storeValidatedEvent,
-  type DatabasePool,
+  AuthenticatedEventWrite,
+  storeAuthenticatedEvent,
   type EventPersistenceOutcome,
   type EventPersistenceRecord,
-} from '@qf-jarvis/event-backbone';
+} from '@qf-jarvis/event-backbone/internal/event-write';
 
 import { type VerifiedSignatureEvidence } from '../signature/verify.js';
 import { type PreparedValidatedEvent } from './prepare-validated-event.js';
@@ -125,14 +139,17 @@ export function buildEventPersistenceRecord(
 /**
  * Persist a prepared, verified event atomically and idempotently.
  *
- * Builds the record (binding evidence to prepared event) and delegates to `storeValidatedEvent`.
- * Returns `stored` on first delivery and `duplicate` for a same-digest redelivery; a conflicting
- * redelivery throws `ConflictingEventDigestError` from the store. It performs no UPDATE or DELETE.
+ * Builds the record (binding evidence to prepared event), mints the D2a write capability from it,
+ * and delegates to `storeAuthenticatedEvent`. Returns `stored` on first delivery and `duplicate` for
+ * a same-digest redelivery; a conflicting redelivery throws `ConflictingEventDigestError` from the
+ * store. It performs no UPDATE or DELETE. **The capability is minted only after the record has been
+ * built from bound evidence — a mismatch throws before any token exists.**
  */
 export async function persistPreparedEvent(
   pool: DatabasePool,
   prepared: PreparedValidatedEvent,
   evidence: VerifiedSignatureEvidence,
 ): Promise<EventPersistenceOutcome> {
-  return storeValidatedEvent(pool, buildEventPersistenceRecord(prepared, evidence));
+  const record = buildEventPersistenceRecord(prepared, evidence);
+  return storeAuthenticatedEvent(pool, AuthenticatedEventWrite.fromVerifiedIngestion(record));
 }

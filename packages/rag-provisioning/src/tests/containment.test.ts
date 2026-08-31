@@ -159,9 +159,9 @@ describe('containment', () => {
     expect(sql.some((n) => n.startsWith('0013'))).toBe(false);
   });
 
-  it('(34) the event-backbone public-api lock remains 39', () => {
+  it('(34) the event-backbone public-api lock remains 38', () => {
     expect(readRepo('packages/event-backbone/src/tests/public-api.test.ts')).toContain(
-      'toHaveLength(39)',
+      'toHaveLength(38)',
     );
   });
 

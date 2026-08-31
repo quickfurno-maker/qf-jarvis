@@ -85,7 +85,6 @@ const EXPECTED_ROOT_SURFACE = [
   'recordIngestionRejection',
   'runPreflight',
   'runPreflightOnClient',
-  'storeValidatedEvent',
   'withClient',
   'withTransaction',
 ] as const;
@@ -259,8 +258,17 @@ describe('the Stage 3.4.5B real handlers, production registry, and worker CLI ar
     }
   });
 
-  it('leaves the package-root runtime surface at exactly 39 symbols (unchanged by Stage 3.4.5B)', () => {
-    expect(EXPECTED_ROOT_SURFACE).toHaveLength(39);
+  it('leaves the package-root runtime surface at exactly 38 symbols after D2a', () => {
+    // Was 39. D2a (ADR-0138) INTENTIONALLY removed exactly one: `storeValidatedEvent`, the
+    // accepted-event write authority. That removal is the point of the slice — while it sat on this
+    // barrel, any package could hand-build a record and create a canonical event row that had never
+    // passed signature verification, so a row proved shape and reachability but never origin.
+    //
+    // The write-side `EventPersistenceRecord` type left the barrel with it; being a type, it never
+    // counted toward this runtime surface. Every read-side result type and error stayed. This
+    // package is workspace-private (`"private": true`), so no external contract depended on either.
+    expect(EXPECTED_ROOT_SURFACE).toHaveLength(38);
+    expect(EXPECTED_ROOT_SURFACE).not.toContain('storeValidatedEvent');
     expect(Object.keys(publicApi).sort()).toEqual(EXPECTED_ROOT_SURFACE);
   });
 
@@ -277,6 +285,7 @@ describe('the Stage 3.4.5B real handlers, production registry, and worker CLI ar
     // read-only inspection CLI here rather than to the root, so the 39-symbol barrel is untouched.
     expect(Object.keys(exports).sort()).toEqual([
       '.',
+      './internal/event-write',
       './internal/projection-inspection-cli',
       './internal/projection-worker-cli',
     ]);
@@ -347,6 +356,7 @@ describe('no package export subpath can reach the migration runner', () => {
     // deep import; the next assertion forbids exactly that.
     expect(Object.keys(exports).sort()).toStrictEqual([
       '.',
+      './internal/event-write',
       './internal/projection-inspection-cli',
       './internal/projection-worker-cli',
     ]);

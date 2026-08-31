@@ -240,7 +240,7 @@ describe('(43, 44, 45) sibling package API locks are undisturbed', () => {
 
   it('(45) event-backbone remains 39', () => {
     expect(readRepo('packages/event-backbone/src/tests/public-api.test.ts')).toContain(
-      'toHaveLength(39)',
+      'toHaveLength(38)',
     );
   });
 });

@@ -331,6 +331,47 @@ export default tseslint.config(
     },
   },
 
+  // D2a (ADR-0138): accepted-event WRITE AUTHORITY is least-privilege by MODULE BOUNDARY.
+  //
+  // `@qf-jarvis/event-backbone/internal/event-write` is the only accepted-event INSERT reachable
+  // from outside the event-backbone package. A row in `qf_jarvis.event` is only evidence of signed
+  // ingestion if nothing else can write one, so exactly ONE file may import it: the governed
+  // ingestion bridge, which builds its record from a verified signature's evidence bound to an
+  // already contract-validated prepared event.
+  //
+  // This block covers every source file EXCEPT that bridge, so the ban applies repository-wide and
+  // the one permitted importer is named by `ignores` (flat-config semantics), exactly as the
+  // ADR-0044 subject-reader boundary is expressed above.
+  {
+    files: ['packages/**/*.ts', 'apps/**/*.ts'],
+    ignores: [
+      'packages/event-ingestion/src/ingest/persist-validated-event.ts',
+      // In-package tests of the capability itself, and the D2a containment tests that prove this
+      // very boundary, must be able to reach it. The claim D2a makes is about PRODUCTION
+      // application code across packages, not about the tests that police it.
+      'packages/event-backbone/src/tests/**/*.ts',
+      'packages/event-ingestion/src/tests/**/*.ts',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: [
+                '@qf-jarvis/event-backbone/internal/event-write',
+                '**/persistence/event-write.js',
+                '**/persistence/event-write',
+              ],
+              message:
+                'Accepted-event write authority is governed (D2a, ADR-0138). Only the event-ingestion bridge (persist-validated-event.ts) may import it, and only through the verify -> prepare -> persist path. A canonical event row must never be creatable outside signed ingestion.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
   // Must remain last: turns off every rule that would fight Prettier.
   // Formatting is Prettier's job; ESLint's job is correctness.
   eslintConfigPrettier,

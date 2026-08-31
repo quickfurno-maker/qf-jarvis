@@ -441,9 +441,9 @@ describe('repository invariants that this slice must not move', () => {
     expect(sql.some((name) => name.startsWith('0013'))).toBe(false);
   });
 
-  it('(52) the event-backbone public-api lock remains 39', () => {
+  it('(52) the event-backbone public-api lock remains 38', () => {
     expect(readRepo('packages/event-backbone/src/tests/public-api.test.ts')).toContain(
-      'toHaveLength(39)',
+      'toHaveLength(38)',
     );
   });
 

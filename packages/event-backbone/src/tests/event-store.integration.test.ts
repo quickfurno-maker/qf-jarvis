@@ -24,12 +24,14 @@ import {
   createDatabasePool,
   defaultMigrationsDirectory,
   MigrationChecksumMismatchError,
-  storeValidatedEvent,
   withClient,
   type DatabaseClient,
   type DatabasePool,
-  type EventPersistenceRecord,
 } from '../index.js';
+// D2a (ADR-0138): `storeValidatedEvent` and its write-side record type are no longer on the package
+// root — they are write authority. This test exercises the low-level primitive itself, so it imports
+// the in-package module directly, exactly as every other event-backbone integration test does.
+import { storeValidatedEvent, type EventPersistenceRecord } from '../persistence/event-store.js';
 import { runMigrations } from '../persistence/migration-runner.js';
 import {
   closeTestPool,
