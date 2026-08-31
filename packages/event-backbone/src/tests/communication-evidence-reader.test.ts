@@ -220,7 +220,7 @@ describe('D4 — input and stored-data validation fail closed', () => {
     // Missing the mandatory executionIntentId. D4 minimises AFTER a lawful parse; it never relaxes
     // the source contract to make a row parse.
     const invalid = communicationResult();
-    delete invalid.executionIntentId;
+    delete invalid['executionIntentId'];
 
     await expect(
       read([row({ event_type: RESULT_TYPE, payload: { result: invalid } })]),
@@ -309,8 +309,8 @@ describe('D4 — admitted authorization evidence', () => {
         reasonCode: 'recipient-opted-out',
       }),
     };
-    delete payload.authorization.authorizedChannel;
-    delete payload.authorization.approvalDecisionId;
+    delete payload.authorization['authorizedChannel'];
+    delete payload.authorization['approvalDecisionId'];
 
     const evidence = await read([row({ payload })]);
 
@@ -358,8 +358,8 @@ describe('D4 — admitted authorization evidence', () => {
   it('still admits a REJECTION regardless of the channel involved', async () => {
     // A refusal is a refusal; channel support has no bearing on whether a rejection happened.
     const auth = authorization({ outcome: 'rejected', reasonCode: 'do-not-contact' });
-    delete auth.authorizedChannel;
-    delete auth.approvalDecisionId;
+    delete auth['authorizedChannel'];
+    delete auth['approvalDecisionId'];
 
     const evidence = await read([row({ payload: { authorization: auth } })]);
 
@@ -477,8 +477,8 @@ describe('D4 — admitted result evidence', () => {
     // The proof that minimisation is not relaxation: a result WITHOUT the mandatory execution ids
     // fails, even though the accepted evidence never exposes them.
     const withoutIds = communicationResult();
-    delete withoutIds.executionIntentId;
-    delete withoutIds.executionResultId;
+    delete withoutIds['executionIntentId'];
+    delete withoutIds['executionResultId'];
 
     await expect(
       read([row({ event_type: RESULT_TYPE, payload: { result: withoutIds } })]),
