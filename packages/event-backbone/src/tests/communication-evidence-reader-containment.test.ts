@@ -78,7 +78,26 @@ async function lowLevelWriterPattern(path: string): Promise<ResolvedPattern | un
   return (await resolvedPatterns(path)).find((p) => p.importNames?.includes('storeValidatedEvent'));
 }
 
-/** Every `.ts` file under a directory, recursively. */
+/**
+ * A TRANSIENT lint probe written by a sibling boundary suite, not repository source.
+ *
+ * `accepted-event-write-lint-boundary.test.ts` and this file's own lint suite each write short-lived
+ * `.ts` files into real package directories to prove their ESLint rules actually fire, then delete
+ * them. Under full parallel load one of those files can exist when this scan lists a directory and be
+ * gone by the time the scan reads it — which surfaced as `ENOENT ... zz-d2a-lint-probe.ts` and made
+ * this suite flaky.
+ *
+ * The classifier is deliberately NARROW: it matches only the exact generated convention
+ * `<case>-<index>-zz-<slice>-lint-probe.ts`. A production file merely containing the word "probe" is
+ * still scanned, because ignoring those would quietly shrink the corpus this containment rests on.
+ */
+const TRANSIENT_LINT_PROBE = /(?:^|[\\/])[a-z0-9-]+-\d+-zz-d\d[a-z]*-lint-probe\.ts$/i;
+
+export function isTransientLintProbe(path: string): boolean {
+  return TRANSIENT_LINT_PROBE.test(path);
+}
+
+/** Every `.ts` file under a directory, recursively, excluding transient lint probes. */
 async function collect(dir: string): Promise<readonly string[]> {
   const found: string[] = [];
   let entries: readonly string[];
@@ -90,7 +109,18 @@ async function collect(dir: string): Promise<readonly string[]> {
   for (const entry of entries) {
     if (entry === 'node_modules' || entry === 'dist') continue;
     const full = join(dir, entry);
-    const info = await stat(full);
+    // Skip a transient probe BEFORE stat(): the race is that the file vanishes between listing and
+    // touching it, so the fix has to land before the first filesystem call that can throw.
+    if (isTransientLintProbe(full)) continue;
+    let info;
+    try {
+      info = await stat(full);
+    } catch {
+      // It disappeared between readdir and stat. Only a probe can legitimately do that; anything
+      // else is a real condition the next line must not hide, so re-check and rethrow.
+      if (isTransientLintProbe(full)) continue;
+      throw new Error(`A repository source file vanished during the scan: ${full}`);
+    }
     if (info.isDirectory()) found.push(...(await collect(full)));
     else if (entry.endsWith('.ts')) found.push(full);
   }
@@ -105,10 +135,18 @@ async function productionFiles(): Promise<ReadonlyMap<string, string>> {
     const paths: string[] = [];
     for (const root of ['packages', 'apps']) paths.push(...(await collect(join(REPO_DIR, root))));
     const kept = paths.filter(
-      (f) => !f.includes(`${sep}tests${sep}`) && !f.includes('.test.') && !f.endsWith(PROBE),
+      (f) =>
+        !f.includes(`${sep}tests${sep}`) &&
+        !f.includes('.test.') &&
+        !f.endsWith(PROBE) &&
+        !isTransientLintProbe(f),
     );
     const entries = await Promise.all(
-      kept.map(async (path) => [path, await readFile(path, 'utf8')] as const),
+      kept.map(async (path) => {
+        // No blanket try/catch here on purpose. A missing production source file is a real problem and
+        // must still fail the suite; only the narrow probe convention above is filtered out.
+        return [path, await readFile(path, 'utf8')] as const;
+      }),
     );
     return new Map(entries);
   })();
@@ -367,5 +405,39 @@ describe('D4 preserved every boundary it inherited', () => {
     expect(subjectActivity).not.toContain('**/projection-subject-reader.js');
     // The permitted subject reducer still gains no D4 read privilege.
     expect(subjectActivity).toContain('**/communication-evidence-reader.js');
+  });
+});
+
+describe('the transient-probe classifier is narrow', () => {
+  // The race this fixes is real but the cure is easy to over-apply: ignoring anything containing
+  // "probe" would silently shrink the corpus the zero-consumer guarantee rests on. So the classifier
+  // matches only the exact generated convention, and these pin both halves of that.
+  it.each([
+    [
+      'a D2a probe',
+      'packages/event-backbone/src/persistence/capability-from-persistence-1-zz-d2a-lint-probe.ts',
+    ],
+    ['a D4 probe', 'packages/event-backbone/src/projections/from-a-handler-2-zz-d4-lint-probe.ts'],
+    [
+      'a relative-form probe',
+      'packages/event-backbone/src/projections/deep-relative-0-zz-d2a-lint-probe.ts',
+    ],
+  ])('excludes %s', (_label, path) => {
+    expect(isTransientLintProbe(path.replace(/\//g, sep))).toBe(true);
+  });
+
+  it.each([
+    [
+      'ordinary production source',
+      'packages/event-backbone/src/projections/communication-evidence-reader.ts',
+    ],
+    [
+      'a production file that merely says probe',
+      'packages/event-backbone/src/persistence/probe.ts',
+    ],
+    ['a production file named like a probe but not generated', 'apps/api/src/lint-probe.ts'],
+    ['a probe-ish name without the index segment', 'packages/x/src/zz-d2a-lint-probe.ts'],
+  ])('still scans %s', (_label, path) => {
+    expect(isTransientLintProbe(path.replace(/\//g, sep))).toBe(false);
   });
 });
