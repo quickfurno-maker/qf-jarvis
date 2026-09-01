@@ -1,6 +1,6 @@
 # ADR-0140 — QFJ-P09 D4: trusted communication evidence-read capability
 
-**Status:** **Proposed** — implementation on a feature branch, **PR open, NOT merged.**
+**Status:** **Accepted / MERGED** as PR #180 — reviewed head `f5d97e7be115e9507707ecf30c4ec4c287f6b904`, merge commit `182a9cb1c00cf1e3ad0225654992099208b992a0`.
 **Baseline:** `2027d3215a36e8fdbed6809d0f12a917bb71cdee` (main after PR #179 / D2a / ADR-0138)
 **Accepted Core evidence pin:** `af7c2bb4f5a83731666fe059e963d1824cddd7b6` — **not re-pinned, not
 re-audited; no Core code was read or modified in this slice**
