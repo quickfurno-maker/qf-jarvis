@@ -31,6 +31,7 @@
     "inspect:failures": "node ./dist/projections/projection-inspection-cli-bin.js"
   },
   "dependencies": {
+    "@qf-jarvis/contracts": "workspace:*",
     "pg": "8.22.0"
   },
   "devDependencies": {

@@ -71,6 +71,7 @@ import { erasureRecordV1Schema, erasureRequestV1Schema } from '../privacy/erasur
 import { recommendationLifecycleRecordV1Schema } from '../recommendations/recommendation-lifecycle.js';
 import { recommendationV1Schema } from '../recommendations/recommendation.js';
 import { z as zod } from 'zod';
+import { contractFailure, safeParseWith, type ContractResult } from '../validation.js';
 import {
   contractPayloadV2,
   leadCategoryShape,
@@ -233,6 +234,9 @@ export const CANONICAL_PAYLOAD_SCHEMAS = {
 export type CanonicalPayloadKey = keyof typeof CANONICAL_PAYLOAD_SCHEMAS;
 
 /** `type@version` — the one key format, so nobody invents a second one. */
+/** The contract name failures are reported under. */
+const CANONICAL_PAYLOAD_CONTRACT_NAME = 'canonical-payload';
+
 export function canonicalPayloadKey(eventType: string, eventVersion: number): string {
   return `${eventType}@${String(eventVersion)}`;
 }
@@ -253,6 +257,45 @@ export function resolveCanonicalPayloadSchema(
   return Object.prototype.hasOwnProperty.call(CANONICAL_PAYLOAD_SCHEMAS, key)
     ? (CANONICAL_PAYLOAD_SCHEMAS as Record<string, z.ZodType>)[key]
     : undefined;
+}
+
+/**
+ * Validate a stored payload against the AUTHORITATIVE registered contract for one exact
+ * `type@version` — including, for a `@2` entry, the privacy-hardened prohibited-content guard.
+ *
+ * This exists so a consumer outside this package can re-parse a payload it read back out of storage
+ * WITHOUT being handed a schema object it could mutate, and without reaching for a nested artifact
+ * schema that is a WEAKER contract than the registered one. Parsing
+ * `{ authorization: communicationAuthorizationV1Schema }` by hand, for instance, skips the whole-payload
+ * guard that `contractPayloadV2` adds — so a payload the registry would reject could pass.
+ *
+ * **There is no fallback and no version coercion.** An unregistered `type@version` fails; it never
+ * parses as a neighbouring version, because a schema chosen for a version nobody asked for is a schema
+ * that accepts an event nobody designed.
+ *
+ * Pure: no I/O, no clock, no mutation, and the schema itself never leaves this module.
+ */
+export function safeParseCanonicalPayload(
+  eventType: string,
+  eventVersion: number,
+  payload: unknown,
+): ContractResult<unknown> {
+  const schema = resolveCanonicalPayloadSchema(eventType, eventVersion);
+  if (schema === undefined) {
+    return contractFailure(CANONICAL_PAYLOAD_CONTRACT_NAME, [
+      {
+        path: '<root>',
+        code: 'unrecognized_payload_contract',
+        message: 'No canonical payload contract is registered for this event type and version.',
+      },
+    ]);
+  }
+
+  return safeParseWith(
+    `${CANONICAL_PAYLOAD_CONTRACT_NAME}:${canonicalPayloadKey(eventType, eventVersion)}`,
+    schema,
+    payload,
+  );
 }
 
 /** Every registered `type@version`, for tests and for the audit. */

@@ -1,6 +1,6 @@
 # ADR-0137 — QFJ-P10 D2 Core protocol and event gap decision
 
-**Status:** **Proposed** — architecture decision on a feature branch, **PR open, NOT merged.**
+**Status:** **Accepted / MERGED** as PR #178 — reviewed head `1161419f55b1723094c3088ec3101356e7d932ac`, merge commit `fb23e46efbad66b6a82ecc9920c86548aeb058e1`.
 **Date:** 2026-08-31
 **Phase ownership:** **QFJ-P10** (Core integration and reconciliation), with QFJ-P09 consequences.
 Step **D2** under [ADR-0135](./ADR-0135-qfj-p09-s2-local-communication-state-projection-architecture.md),

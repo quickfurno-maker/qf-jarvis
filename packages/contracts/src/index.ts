@@ -1068,6 +1068,7 @@ export {
 export {
   CANONICAL_PAYLOAD_KEYS,
   CANONICAL_PAYLOAD_SCHEMAS,
+  safeParseCanonicalPayload,
   canonicalPayloadKey,
   resolveCanonicalPayloadSchema,
   type CanonicalPayloadKey,

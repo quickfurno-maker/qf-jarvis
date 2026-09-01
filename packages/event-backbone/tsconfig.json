@@ -5,5 +5,9 @@
     "rootDir": "./src",
     "outDir": "./dist"
   },
+  // Project references make `tsc --build` compile @qf-jarvis/contracts before this package and
+  // resolve its declarations from source. D4's communication evidence reader parses canonical
+  // communication artifacts with the contracts schemas rather than duplicating that validation.
+  "references": [{ "path": "../contracts" }],
   "include": ["src/**/*.ts"]
 }
