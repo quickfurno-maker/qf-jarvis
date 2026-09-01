@@ -161,29 +161,41 @@ never its own evidence** — writing the projection row does not make the fact d
 > Tier-B states remain vocabulary/roadmap states and are not emitted until exact Core primitive
 > contracts are adopted.**
 
-| #   | State                     | D2 classification  | In first D3 contract? | Evidence source now                        | Reason                                                          |
-| --- | ------------------------- | ------------------ | --------------------- | ------------------------------------------ | --------------------------------------------------------------- |
-| 1   | `rejected`                | durable Tier C     | **YES**               | `authorization-recorded` (refusal), via D4 | adopted target family, admitted by D4                           |
-| 2   | `authorized`              | durable Tier C     | **YES**               | `authorization-recorded`, via D4           | as above; WhatsApp-only per Q11                                 |
-| 3   | `provider-accepted`       | durable Tier C     | **YES**               | `result-recorded`, via D4                  | as above                                                        |
-| 4   | `delivered`               | durable Tier C     | **YES**               | `result-recorded`, via D4                  | as above                                                        |
-| 5   | `read`                    | durable Tier C     | **YES**               | `result-recorded`, via D4                  | as above                                                        |
-| 6   | `failed`                  | durable Tier C     | **YES**               | `result-recorded`, via D4                  | as above                                                        |
-| 7   | `authorization-requested` | conditional Tier B | **NO**                | none — receipt primitive not adopted       | modelling it now needs a placeholder event or a fake receipt id |
-| 8   | `scheduled`               | conditional Tier B | **NO**                | none — scheduling primitive not adopted    | as above; `requestedTiming` is not evidence                     |
-| 9   | `draft`                   | excluded           | **NO**                | none                                       | ephemeral; construction is not a durable fact                   |
-| 10  | `execution-submitted`     | excluded           | **NO**                | none                                       | no proved durable Core submission artifact (Q7)                 |
-| 11  | `answered`                | excluded           | **NO**                | none                                       | Core does not model voice outcomes                              |
-| 12  | `no-answer`               | excluded           | **NO**                | none                                       | as above                                                        |
-| 13  | `busy`                    | excluded           | **NO**                | none                                       | as above                                                        |
-| 14  | `follow-up-requested`     | excluded           | **NO**                | none                                       | a new request is a new lifecycle                                |
-| 15  | `human-handoff-required`  | excluded           | **NO**                | none admitted                              | candidate contract ≠ adopted primitive                          |
-| 16  | `completed`               | excluded           | **NO**                | none                                       | S3 found no distinct Core completion truth                      |
-| 17  | `cancelled`               | excluded           | **NO**                | none                                       | rejected for MVP (Q8)                                           |
-| 18  | `expired`                 | excluded           | **NO**                | none                                       | rejected for MVP (Q9)                                           |
+| #   | State                     | D2 classification  | In first D3 contract? | Evidence source now                                                                                               | Reason                                                                                                                                |
+| --- | ------------------------- | ------------------ | --------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `rejected`                | durable Tier C     | **YES**               | `authorization-recorded` (refusal) — D4-supported target-family contract, read as trusted accepted-event evidence | target family selected by D2 and admitted by D4 for the OFFLINE six-state contract; **adopted/live Core emission is NOT established** |
+| 2   | `authorized`              | durable Tier C     | **YES**               | `authorization-recorded` — same D4-supported contract                                                             | as above; WhatsApp-only per Q11                                                                                                       |
+| 3   | `provider-accepted`       | durable Tier C     | **YES**               | `result-recorded` — same D4-supported contract                                                                    | as above                                                                                                                              |
+| 4   | `delivered`               | durable Tier C     | **YES**               | `result-recorded` — same D4-supported contract                                                                    | as above                                                                                                                              |
+| 5   | `read`                    | durable Tier C     | **YES**               | `result-recorded` — same D4-supported contract                                                                    | as above                                                                                                                              |
+| 6   | `failed`                  | durable Tier C     | **YES**               | `result-recorded` — same D4-supported contract                                                                    | as above                                                                                                                              |
+| 7   | `authorization-requested` | conditional Tier B | **NO**                | none — receipt primitive not adopted                                                                              | modelling it now needs a placeholder event or a fake receipt id                                                                       |
+| 8   | `scheduled`               | conditional Tier B | **NO**                | none — scheduling primitive not adopted                                                                           | as above; `requestedTiming` is not evidence                                                                                           |
+| 9   | `draft`                   | excluded           | **NO**                | none                                                                                                              | ephemeral; construction is not a durable fact                                                                                         |
+| 10  | `execution-submitted`     | excluded           | **NO**                | none                                                                                                              | no proved durable Core submission artifact (Q7)                                                                                       |
+| 11  | `answered`                | excluded           | **NO**                | none                                                                                                              | Core does not model voice outcomes                                                                                                    |
+| 12  | `no-answer`               | excluded           | **NO**                | none                                                                                                              | as above                                                                                                                              |
+| 13  | `busy`                    | excluded           | **NO**                | none                                                                                                              | as above                                                                                                                              |
+| 14  | `follow-up-requested`     | excluded           | **NO**                | none                                                                                                              | a new request is a new lifecycle                                                                                                      |
+| 15  | `human-handoff-required`  | excluded           | **NO**                | none admitted                                                                                                     | candidate contract ≠ adopted primitive                                                                                                |
+| 16  | `completed`               | excluded           | **NO**                | none                                                                                                              | S3 found no distinct Core completion truth                                                                                            |
+| 17  | `cancelled`               | excluded           | **NO**                | none                                                                                                              | rejected for MVP (Q8)                                                                                                                 |
+| 18  | `expired`                 | excluded           | **NO**                | none                                                                                                              | rejected for MVP (Q9)                                                                                                                 |
 
 **6 admitted + 12 not admitted = 18.** The vocabulary is unchanged; the first _implemented_ union is
 six.
+
+**Why the six are admissible without Core adoption.** D3 is an **OFFLINE contract implementation
+against the D2/D4 evidence semantics** — not a claim that Core adoption is complete. The distinction
+matters and collapses easily, so it is spelled out:
+
+> candidate/published contract **≠** D2 target family **≠** D4-supported offline evidence shape
+> **≠** adopted Core emission **≠** live Core emission
+
+**No adopted or live emission for either family was established at the accepted S3 pin.** C3A
+(`authorization-recorded`, gated on C1 + C2) and C3B (`result-recorded`, gated on the contract-fit
+proof) remain **future Core adoption gates**; neither has landed, and D4 supporting a contract offline
+did not make Core adoption true.
 
 **Why not include the two conditional states as placeholders?** Because every available way to do it
 lies. It would need a placeholder event name, a generic "pending Core evidence" token, a
