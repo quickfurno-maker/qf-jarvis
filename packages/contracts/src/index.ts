@@ -339,6 +339,24 @@ export {
   type CommunicationStateRecordV1,
 } from './communications/communication-state-record.js';
 
+/**
+ * `CommunicationStateRecordV2` (QFJ-P09 D3, ADR-0141) — the first honest Model-2 record, for the six
+ * durable evidence-bearing states.
+ *
+ * A JARVIS-LOCAL read-model contract: not a Core wire payload, not a canonical event, and not
+ * authority. **A shape-valid record proves schema validity and nothing more.** The nested evidence
+ * schemas are deliberately NOT exported — publishing them would invite a caller to assemble evidence
+ * directly, and D5 is the only sanctioned producer, building V2 from D4's trusted evidence.
+ */
+export {
+  COMMUNICATION_STATE_RECORD_V2_CONTRACT_VERSION,
+  COMMUNICATION_STATE_RECORD_V2_STATES,
+  communicationStateRecordV2Schema,
+  communicationStateRecordV2StateSchema,
+  type CommunicationStateRecordV2,
+  type CommunicationStateRecordV2State,
+} from './communications/communication-state-record-v2.js';
+
 // ---------------------------------------------------------------------------
 // Requests: Jarvis asking. Never Jarvis deciding.
 // ---------------------------------------------------------------------------

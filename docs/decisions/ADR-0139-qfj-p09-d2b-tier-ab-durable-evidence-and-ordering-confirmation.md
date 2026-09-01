@@ -1,6 +1,6 @@
 # ADR-0139 — QFJ-P09 D2b: Tier A/B durable evidence and ordering confirmation
 
-**Status:** **Proposed** — architecture confirmation on a feature branch, **PR open, NOT merged.**
+**Status:** **Accepted / MERGED** as PR #181 — reviewed head `ede0be8f02b51002a9e677ab0792df801e3ed89d`, merge commit `88ddab543f693c849f710db8de287bac005aba74`.
 **Baseline:** `182a9cb1c00cf1e3ad0225654992099208b992a0` (main after PR #180 / D4 / ADR-0140)
 **Accepted Core evidence pin:** `af7c2bb4f5a83731666fe059e963d1824cddd7b6` — **not re-pinned, not
 re-audited; no Core code was read, accessed or modified in this slice**
