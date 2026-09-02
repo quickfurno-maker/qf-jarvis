@@ -1,6 +1,6 @@
 # ADR-0141 — QFJ-P09 D3: `CommunicationStateRecordV2` six-state contract
 
-**Status:** **Proposed** — implementation on a feature branch, **PR open, NOT merged.**
+**Status:** **Accepted / MERGED** as PR #182 — merge commit `f4bfe67d04f41197fcdea7c86dbd5fabc2f1e81c`.
 **Baseline:** `88ddab543f693c849f710db8de287bac005aba74` (main after PR #181 / D2b / ADR-0139)
 **Accepted Core evidence pin:** `af7c2bb4f5a83731666fe059e963d1824cddd7b6` — **not re-pinned, not
 re-audited; no Core code was read, accessed or modified**
