@@ -106,7 +106,11 @@ function substantiveFailures(
   push('LINEAGE_SPLIT_VIOLATION', dataset.lineageSplitViolations);
   push('EXACT_CROSS_SPLIT_DUPLICATE', dataset.exactCrossSplitDuplicates);
   push('NEAR_CROSS_SPLIT_DUPLICATE', dataset.nearCrossSplitDuplicates);
-  push('SAME_SPLIT_NEAR_DUPLICATE', dataset.sameSplitNearDuplicates);
+  // `sameSplitNearDuplicates` is DELIBERATELY absent. RID-F1 calls that category "Allowed, and
+  // REPORTED -- a family of variants living together is the intended shape", and it is the one
+  // duplicate list the canonical `eligible` expression omits. Promoting it to a blocker here would
+  // make this harness a stricter shadow policy than the validator it is supposed to reuse, and would
+  // reject a legitimate corpus shape. It stays available as reporting and calibration evidence.
   push('PROTECTED_EXACT_LEAKAGE', dataset.protectedExactLeakage);
   push('PROTECTED_NEAR_LEAKAGE', dataset.protectedNearLeakage);
   push('UNSUPPORTED_BUSINESS_FACT', dataset.unsupportedBusinessFacts);
@@ -114,9 +118,15 @@ function substantiveFailures(
   for (const violation of dataset.privacyViolations) {
     problems.push(`PRIVACY:${violation.kind}:${violation.trajectoryId}`);
   }
-  // Gold matrix findings, minus the one that is expected mid-batch.
+  // EVERY Gold matrix finding is substantive, `ASSIGNMENT_UNFULFILLED` included.
+  //
+  // It is tempting to tolerate that one during incremental authoring, but the subset design already
+  // makes it impossible: `PRESENT_ASSIGNMENTS` is built from the trajectories that exist, so an
+  // assignment with no row is never passed to the validator in the first place. If it appears anyway,
+  // something is wrong -- a subset-selection regression, a validator integration bug, or a broken
+  // assignment-to-trajectory mapping -- and ignoring it would hide exactly the class of defect this
+  // harness exists to catch.
   for (const finding of report.findings) {
-    if (finding.reason === 'ASSIGNMENT_UNFULFILLED') continue;
     const where: string = finding.locationRef ?? '';
     problems.push(`${finding.reason}:${where}`);
   }
@@ -291,8 +301,10 @@ describe('the harness policy is the strict one', () => {
     ]);
   });
 
-  it('tolerates ASSIGNMENT_UNFULFILLED, and nothing else', () => {
-    // The one expected mid-batch finding. Every other Gold reason is substantive.
+  it('treats ASSIGNMENT_UNFULFILLED as a blocker, because the subset makes it impossible', () => {
+    // `PRESENT_ASSIGNMENTS` only ever contains assignments that HAVE a row, so this finding cannot
+    // arise from ordinary incremental authoring. If it shows up, the subset selection or the
+    // validator integration is broken, and that must fail rather than be waved through.
     const base = {
       insufficientReview: [],
       duplicateTrajectoryIds: [],
@@ -305,21 +317,74 @@ describe('the harness policy is the strict one', () => {
       unsupportedBusinessFacts: [],
       privacyViolations: [],
     };
-    const tolerated = {
+    const unfulfilled = {
       datasetReport: base,
       findings: [{ reason: 'ASSIGNMENT_UNFULFILLED', locationRef: 'gold.v1.w1.hi.complete-qa.01' }],
     } as unknown as ReturnType<typeof validateRiyaGoldV1Corpus>;
-    const notTolerated = {
+    const authorityUnused = {
       datasetReport: base,
       findings: [
         { reason: 'REQUIRED_AUTHORITY_CLASS_UNUSED', locationRef: 'gold.v1.w1.hi.out-of-scope.02' },
       ],
     } as unknown as ReturnType<typeof validateRiyaGoldV1Corpus>;
 
-    expect(substantiveFailures(tolerated)).toStrictEqual([]);
-    expect(substantiveFailures(notTolerated)).toStrictEqual([
+    expect(substantiveFailures(unfulfilled)).toStrictEqual([
+      'ASSIGNMENT_UNFULFILLED:gold.v1.w1.hi.complete-qa.01',
+    ]);
+    expect(substantiveFailures(authorityUnused)).toStrictEqual([
       'REQUIRED_AUTHORITY_CLASS_UNUSED:gold.v1.w1.hi.out-of-scope.02',
     ]);
+  });
+
+  it('leaves same-split near duplicates as REPORT-ONLY, matching RID-F1', () => {
+    // The category RID-F1 allows on purpose: a family of variants sharing a split is the intended
+    // shape, and it is the one duplicate list the canonical `eligible` expression omits. A harness
+    // that blocked on it would be stricter than the validator it reuses.
+    const report = {
+      datasetReport: {
+        insufficientReview: [],
+        duplicateTrajectoryIds: [],
+        lineageSplitViolations: [],
+        exactCrossSplitDuplicates: [],
+        nearCrossSplitDuplicates: [],
+        sameSplitNearDuplicates: [{ trajectoryId: 'gold.v1.w1.en.discovery.01' }],
+        protectedExactLeakage: [],
+        protectedNearLeakage: [],
+        unsupportedBusinessFacts: [],
+        privacyViolations: [],
+      },
+      findings: [],
+    } as unknown as ReturnType<typeof validateRiyaGoldV1Corpus>;
+
+    expect(substantiveFailures(report)).toStrictEqual([]);
+  });
+
+  it('still blocks the two duplicate categories that ARE eligibility blockers', () => {
+    // Same-split being report-only must not soften its cross-split neighbours, which the canonical
+    // `eligible` expression does require to be empty.
+    const base = {
+      insufficientReview: [],
+      duplicateTrajectoryIds: [],
+      lineageSplitViolations: [],
+      exactCrossSplitDuplicates: [],
+      nearCrossSplitDuplicates: [],
+      sameSplitNearDuplicates: [],
+      protectedExactLeakage: [],
+      protectedNearLeakage: [],
+      unsupportedBusinessFacts: [],
+      privacyViolations: [],
+    };
+    const exact = {
+      datasetReport: { ...base, exactCrossSplitDuplicates: [{ trajectoryId: 'a' }] },
+      findings: [],
+    } as unknown as ReturnType<typeof validateRiyaGoldV1Corpus>;
+    const near = {
+      datasetReport: { ...base, nearCrossSplitDuplicates: [{ trajectoryId: 'b' }] },
+      findings: [],
+    } as unknown as ReturnType<typeof validateRiyaGoldV1Corpus>;
+
+    expect(substantiveFailures(exact)).toStrictEqual(['EXACT_CROSS_SPLIT_DUPLICATE:a']);
+    expect(substantiveFailures(near)).toStrictEqual(['NEAR_CROSS_SPLIT_DUPLICATE:b']);
   });
 
   it('reports a privacy finding by kind, never by value', () => {
