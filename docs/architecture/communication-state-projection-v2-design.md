@@ -540,9 +540,9 @@ flowchart TD
     D3["D3 · CommunicationStateRecordV2 contract"]
     D4["D4 · purpose-specific trusted<br/>evidence-read capability"]
     D5["D5 · tiered local projection"]
-    D6["D6 · S4/S5/S7 transport &amp; result integration"]
-    D7["D7 · real-integration certification"]
-    D8["D8 · staged activation<br/>separately governed"]
+    D6["D6 · JARVIS-SIDE integration/composition<br/>of the adopted S4/S5/S7 path"]
+    D7["D7 · communication/execution subsystem<br/>real-integration certification<br/><b>NOT S11</b>"]
+    D8["D8 · subsystem staged activation<br/>separately governed · <b>NOT S12</b>"]
 
     D0 --> D1 --> D2
     D2 --> D2a
@@ -555,6 +555,21 @@ flowchart TD
     D5 --> D6 --> D7
     D7 -.owner decision, not a dependency.-> D8
 ```
+
+> **Owner ruling, 2026-09-02** (after the QFJ-P12 D7 entry-gate audit, PR #184). **D6 remains
+> canonical** — it was never absorbed or retired — and it is the **Jarvis-side** integration of the
+> **externally adopted** S4/S5/S7 capabilities. The C-track (C1/C4/C6) adopts that capability
+> externally; **neither substitutes for the other.**
+>
+> **D7 ≠ S11.** D7 certifies the **narrower communication/execution subsystem**. ADR-0132's **S11** is
+> the **Aarohi-wide** certification, reached only after **S10** runtime composition, which additionally
+> requires **S8** and **S9**. **D7 precedes S11 and does not replace it.**
+>
+> **D8 ≠ S12.** D8 activates only this subsystem; S12 activates the full Aarohi runtime. **D8 does not
+> authorize S12.** Both remain separately governed.
+>
+> **S8/S9 are not in this graph because they do not gate D7** — they gate S10/S11/S12. Neither is
+> weakened by that; both remain `BLOCKED_BY_EXTERNAL_AUTHORITY`.
 
 **Dependencies — load-bearing:**
 

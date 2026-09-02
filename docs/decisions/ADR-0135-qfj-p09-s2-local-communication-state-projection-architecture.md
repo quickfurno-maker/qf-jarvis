@@ -307,6 +307,53 @@ it requires a separate local evidence store, that implementation and its orderin
 inserted before D5 under separate owner review.** Architecture-step labels only — **no new QFJ
 phases. No migration now.**
 
+#### 11.1 Owner ruling, 2026-09-02 — D6 remains canonical, and D7/D8 are the narrower milestones
+
+**Ratified by the owner after the QFJ-P12 D7 entry-gate audit (PR #184), which found the
+repository ambiguous on these points at baseline `9fd7f449c3ed56535e4cd8381b7a794f56011859`.** This
+subsection is a clarification of the sequence above, not a rewrite of it — the original reasoning
+stands unchanged, and nothing here was in the document when the audit ran.
+
+**D6 was NOT absorbed, superseded or retired by [ADR-0137](./ADR-0137-qfj-p10-d2-core-protocol-and-event-gap-decision.md).**
+The sequence **D5 → D6 → D7 → D8** remains valid. D6 is the **Jarvis-side live
+integration/composition slice**: it integrates the adopted external interfaces and authoritative facts
+of ADR-0132's **S4/S5/S7** into the Jarvis communication/execution path.
+
+**The C-track does not substitute for D6.** The distinction is load-bearing and must stay explicit:
+
+|                  | Owns                                                                                   |
+| ---------------- | -------------------------------------------------------------------------------------- |
+| **C1 / C4 / C6** | **external** capability and authoritative-fact adoption, corresponding to S4 / S5 / S7 |
+| **D6**           | the **Jarvis-side** integration and composition of those capabilities                  |
+| **D7**           | certification of the resulting narrower communication/execution subsystem              |
+
+An external capability existing is not the same thing as Jarvis having integrated it. **They are not
+duplicate work**, and neither one completes the other.
+
+**D7 ≠ S11.** D7 is the **narrower** milestone: real-integration certification of the
+**communication/execution subsystem**, covering D5, D6 and their applicable external prerequisites.
+**S11** is ADR-0132's broader **Aarohi-wide** certification, which happens only after **S10** Aarohi
+runtime composition. **D7 precedes S11 and does not replace it.**
+
+**D8 ≠ S12.** D8 is separately governed staged activation of the **narrower** communication/execution
+subsystem after D7. S12 is separately governed staged activation of the **full Aarohi runtime** after
+S11. **D8 does not authorize S12, and S12 does not follow merely because D8 occurred.** Both remain
+independent activation decisions.
+
+**S8 / GAP A and S9 / GAP B are Aarohi runtime prerequisites, not D7 prerequisites.** They remain
+mandatory for **S8 + S9 → S10 → S11 → S12**, and they are **deliberately absent from the D7 gate**.
+This ruling changes only _which milestone they gate_: **neither is weakened, and no substitute for
+either may be implemented.** Both remain `BLOCKED_BY_EXTERNAL_AUTHORITY`.
+
+**The corrected D7 entry gate is therefore:**
+
+> **D5 + D6 + applicable C3A + applicable C3B + C4/S5 + C5/S6 + C6/S7 → D7**,
+> with every prerequisite beneath those C slices preserved. **D6 itself requires the externally
+> adopted capabilities it integrates**, so it cannot precede them.
+
+**No implementation becomes legal because this nomenclature is settled.** Every external prerequisite
+remains unproved, so **D6, D7 and D8 all remain unimplementable today.**
+
 **S2a (`draft` alone) is deliberately not scheduled before D1**: one state, unable to advance to any
 successor, composed by nothing.
 

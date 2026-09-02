@@ -133,8 +133,8 @@ flowchart TD
     S8["S8 · QFJ-P12<br/>GAP A · same-acquisition continuation"]
     S9["S9 · QFJ-P12<br/>GAP B · authoritative pre-activation bridge"]
     S10["S10 · QFJ-P12<br/>Aarohi runtime composition · default OFF"]
-    S11["S11 · QFJ-P12<br/>Real-integration certification"]
-    S12["S12 · SEPARATELY GOVERNED<br/>Staged activation"]
+    S11["S11 · QFJ-P12<br/>AAROHI-WIDE real-integration certification<br/><b>broader than D7</b>"]
+    S12["S12 · SEPARATELY GOVERNED<br/>Staged AAROHI activation<br/><b>broader than D8</b>"]
 
     S1 --> S2
     S1 --> S4
@@ -154,6 +154,18 @@ flowchart TD
     S10 --> S11
     S11 -.owner decision, not a dependency.-> S12
 ```
+
+> **Owner ruling, 2026-09-02** (after the QFJ-P12 D7 entry-gate audit, PR #184). **S11 is not D7 and
+> S12 is not D8.** The QFJ-P10 D-track certifies and activates the **narrower communication/execution
+> subsystem** (**D6** Jarvis-side integration → **D7** subsystem certification → **D8** subsystem
+> activation). **S11** is the **Aarohi-wide** certification, which happens only after **S10** composes
+> the runtime — and S10 additionally requires **S8** and **S9**.
+>
+> **S8 and S9 remain mandatory here**, exactly as drawn. The ruling changed only *which* milestone they
+> gate: they gate **S10/S11/S12**, not D7. **Neither is weakened, and no substitute may be built for
+> either** — both remain `BLOCKED_BY_EXTERNAL_AUTHORITY`.
+>
+> **D8 does not trigger S10 or S12.** A subsystem activation is not an Aarohi activation.
 
 **S1 — `CommunicationRequestV1` producer (QFJ-P08). MERGED** under
 [ADR-0133](../decisions/ADR-0133-qfj-p08-powerless-communication-request-producer.md) (PR #174, merge

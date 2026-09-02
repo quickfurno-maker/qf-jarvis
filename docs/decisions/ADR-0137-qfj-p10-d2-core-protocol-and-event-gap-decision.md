@@ -306,6 +306,40 @@ C6→S7, S8→GAP A, S9→GAP B.
 > **Live-integration gate:** **C3A / C3B / C4 / C5 / C6 as applicable, PLUS D5**, must all land before
 > **D7** real-integration certification; **D8** activation stays separately governed.
 
+#### Owner ruling, 2026-09-02 — the mapping continues past S9, and the gate includes D6
+
+**Ratified by the owner after the QFJ-P12 D7 entry-gate audit (PR #184).** The audit found that the
+mapping above stops at S9 and that the gate sentence, read alone, appears to allow **D5 + C-track →
+D7** with no Jarvis-side integration step. Both are corrected here. **The decision body above is
+unchanged**; this is an owner-ratified clarification added afterwards.
+
+**The mapping continues:**
+
+|        | Maps to                                                                                                           |
+| ------ | ----------------------------------------------------------------------------------------------------------------- |
+| C1     | S4                                                                                                                |
+| C4     | S5                                                                                                                |
+| C5     | S6                                                                                                                |
+| C6     | S7                                                                                                                |
+| S8     | GAP A                                                                                                             |
+| S9     | GAP B                                                                                                             |
+| **D6** | **the Jarvis-side integration/composition of the adopted S4/S5/S7 path** — not a C slice, and not replaced by one |
+| **D7** | the **narrower** communication/execution certification. **NOT S11.**                                              |
+| **D8** | the **narrower** communication/execution staged activation. **NOT S12.**                                          |
+
+**D6 was never retired.** [ADR-0135](./ADR-0135-qfj-p09-s2-local-communication-state-projection-architecture.md)
+§11 keeps **D5 → D6 → D7 → D8**, and this decision neither scheduled nor withdrew D6 — its absence
+here was a gap, not a repeal. **C1/C4/C6 establish external capability; D6 integrates it on the Jarvis
+side. They are not duplicate work.**
+
+**S8 and S9 are NOT D7 prerequisites.** They gate **S10 → S11 → S12**, the Aarohi-wide path. Neither is
+weakened by this ruling, and no substitute may be built for either; both remain
+`BLOCKED_BY_EXTERNAL_AUTHORITY`.
+
+> **Live-integration gate, corrected:** **D5 + applicable C3A/C3B/C4/C5/C6 + D6** must all land before
+> **D7**, the narrower communication/execution certification. **D8** stays separately governed and
+> authorizes nothing beyond that subsystem. **D7 ≠ S11 and D8 ≠ S12.**
+
 **The next execution wave after D2 merges is D2a and D2b IN PARALLEL**, with C0 schedulable
 independently on the Core side. If a single first slice must be named administratively, **D2a is the
 first executable Jarvis implementation slice** — Core-independent and already mandatory under
