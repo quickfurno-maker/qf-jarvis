@@ -1,6 +1,8 @@
 # ADR-0108 — HGV1-A: Riya Human Gold V1 authoring system and Wave-1 calibration
 
-- **Status:** Accepted — HGV1-A implementation on branch, NOT MERGED
+- **Status:** Accepted — **HGV1-A MERGED as PR #113**, merge commit
+  `359fc4b09a84573a0862c52fd7ac582b4e9fa995`. See the post-acceptance correction of 2026-09-02 at
+  the end of this document.
 - **Date:** 2026-08-10
 - **Depends on:** ADR-0107 (RID-F1 dataset foundation and leakage firewall), ADR-0106 (RWC-P10
   quality evaluation), ADR-0104/0105 (RWC-P8/P9), ADR-0052 (the generic evaluation foundation)
@@ -365,3 +367,83 @@ Owner-locked. Changing any of these requires a new ADR:
 - the Gold authoring system is an offline subpath no runtime may import;
 - no model, provider, judge, embedding, tokenizer, training framework, migration or deployment;
 - release evidence stays `syntheticOnly` with `trainingApproval: false`.
+
+---
+
+## POST-ACCEPTANCE CORRECTION — 2026-09-02 (HGV1-B pre-authoring authority repair)
+
+**Nothing above was rewritten.** The decisions recorded in this ADR stand as accepted on 2026-08-10;
+this section records what a later audit found and what the owner then ratified.
+
+### What the audit found
+
+The **QFJ HGV1-B resumption readiness audit (PR #185)** examined current main before any Human Gold
+dialogue was written, and found **four authoring contradictions** of one class: **a brief instructing
+the author to answer from supplied authority that the assignment never supplies.** Both halves are
+needed to author honestly — the instruction and the material — and `authorityPlan` is derived from the
+assignment, so an authority-free assignment yields an empty plan whatever the prose says.
+
+The two lawful-looking ways to comply were both failures: **invent** the business fact, which is
+exactly what this ADR's volatile-truth rule forbids, or **silently drop** the instruction, which
+destroys the calibration signal because a reviewer cannot distinguish a deliberate omission from a
+missed requirement. **All 253 dataset tests passed at the time**, so nothing guarded either class.
+
+### What was repaired, and what deliberately was not
+
+**1. `OUT_OF_SCOPE` ordinal 2 now requires `PROCESS`.** The slot required `GROUNDING_QA` as a secondary
+kind — a governed factual answer _with a citation_ — while declaring no authority fact class at all.
+
+`PROCESS` rather than `SERVICE_AVAILABILITY` or `POLICY`: it is governed and factual, it exercises the
+intended mixed behaviour (refuse the out-of-scope half, answer the valid half from supplied authority),
+and it commits to no price, availability or policy term — so the slot's `STANDARD` risk stays coherent
+instead of quietly becoming a second high-risk availability slot.
+
+**Exactly 15 assignments changed: 5 waves × 3 languages.** Nothing else moved — no assignment id,
+split, persona, difficulty, risk class, start phase, target depth, secondary kind, forbidden set,
+matrix size or coverage floor. `OUT_OF_SCOPE` ordinal 1 remains authority-free.
+
+**2. The three Wave-1 `OUT_OF_SCOPE` ordinal-2 scenarios were realigned** so the in-scope half is
+explicitly a **process** question — how the work is sequenced on site, how cabinet work is carried out
+and checked, how wardrobe work is planned and installed. Adding `PROCESS` to the assignment without
+this would have made the authority **decorative**: the author would be told to cite something the
+scenario never asked about.
+
+**3. Three Wave-1 ordinal-1 briefs were reworded, and their assignments were deliberately NOT
+widened:**
+
+| Assignment                                  | Now teaches                                                                                                          |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `gold.v1.w1.hinglish.comparison.01`         | a comparison from the customer's own stated priorities, claiming nothing about package contents or prices            |
+| `gold.v1.w1.hi.post-summary-qa.01`          | answering from the summary and conversation already on screen                                                        |
+| `gold.v1.w1.hinglish.objection-timeline.01` | **what to do when timeline truth is NOT supplied** — invent no range, name what is needed, propose one concrete step |
+
+**Their `requiredAuthorityFactClasses` stay `[]` on purpose.** Each has a paired ordinal-2 slot that
+already owns the grounded variant, and Gold V1 needs **both** lessons: how Riya behaves when authority
+exists, and how she behaves when it does not. Granting ordinal 1 authority would have collapsed the
+pair into two grounded slots and **deleted the authority-free lesson from Wave 1** — the timeline one
+most of all, which is the case where inventing a number is the tempting failure.
+
+### What now prevents recurrence
+
+- A **structural property guard**: no generated assignment may require `GROUNDING_QA`, as primary or
+  secondary, while declaring zero authority fact classes. It is a property over the whole plan, not a
+  list of known ids, so a slot added later is covered without anyone remembering the guard exists.
+- A **narrow lexical prose guard**: a brief may not positively instruct use of supplied
+  authority/context when its assignment supplies none. It is deliberately narrow — a semantic checker
+  over authoring instructions would be a small language model with no ground truth, and a noisy guard
+  teaches authors to ignore it. Three benign phrasings are pinned as explicit non-findings: _"can be
+  supplied"_ (a customer request), _"a referral that was not supplied"_ (a prohibition) and _"keep the
+  latest values as authoritative"_ (customer-stated facts).
+
+### Scope of this correction
+
+**ZERO Gold dialogue was authored.** The changed brief text is **authoring metadata** — a writing
+assignment — not conversation, and briefs remain structurally incapable of holding a turn.
+
+No migration (`0001`–`0013` unchanged, none added), no scheduler, no authoring packet, no public API
+change, no runtime importer, no provider or model call, no training, and `trainingApproval` remains a
+literal `false`.
+
+**Human Gold authoring remains blocked.** A separate slice must derive a fresh Wave-1 micro-batch
+schedule from repaired current main and generate a content-free authoring packet before the first
+conversation is written.

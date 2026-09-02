@@ -292,7 +292,17 @@ const SLOTS: Readonly<Record<RiyaDatasetInteractionKind, readonly [SlotShape, Sl
         riskClass: 'STANDARD',
         startPhase: 'INTRO',
         targetAssistantTurns: 5,
-        requiredAuthorityFactClasses: [],
+        // PROCESS, not nothing. This slot requires GROUNDING_QA as a secondary, and a grounded
+        // question is one answered from governed knowledge WITH a citation. An assignment demanding
+        // GROUNDING_QA while requiring no authority class was under-specified: the author had to
+        // ground an answer in something the plan never supplied, and the only ways to comply were to
+        // invent business truth or silently drop the requirement.
+        //
+        // PROCESS is the right class rather than SERVICE_AVAILABILITY or POLICY. It is governed and
+        // factual, it exercises the intended shape -- decline the out-of-scope half, answer the valid
+        // half from authority -- and it commits to no price, availability or policy term, so STANDARD
+        // risk stays coherent instead of quietly becoming a second high-risk availability slot.
+        requiredAuthorityFactClasses: ['PROCESS'],
         requiredSecondaryKinds: ['GROUNDING_QA'],
         extraForbidden: [],
       },
