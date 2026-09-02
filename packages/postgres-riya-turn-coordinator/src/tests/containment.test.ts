@@ -301,8 +301,8 @@ describe('migration 0012 is the ONE authorized addition', () => {
     const sql = readdirSync(dir)
       .filter((name) => name.endsWith('.sql'))
       .sort();
-    expect(sql).toHaveLength(12);
-    expect(sql.some((name) => Number.parseInt(name.slice(0, 4), 10) > 12)).toBe(false);
+    expect(sql).toHaveLength(13);
+    expect(sql.some((name) => Number.parseInt(name.slice(0, 4), 10) > 13)).toBe(false);
     expect(
       createHash('sha256')
         .update(readFileSync(join(dir, '0011_riya_conversation_continuity.sql')))

@@ -404,6 +404,8 @@ describe('public API and repository invariants', () => {
     // LOCAL/CI only; nothing is applied to a managed database.
     '0012_riya_logical_turn_idempotency.sql':
       '5d1b7fe68401a664cea3116ff0900499a1f20d659d4935c586b4ac0f923aaf3e',
+    '0013_communication_state_projection.sql':
+      '4f533fb60ea96bedd11bf2f5b3177376517c07633d3b7e71e0341b43c1a72919',
   };
 
   it('(11, 12) migrations 0001-0012 are byte-identical and 0013 is absent', () => {
@@ -424,7 +426,7 @@ describe('public API and repository invariants', () => {
     // RWC-P8 (ADR-0104) RESTATED, not relaxed: 0012 is the ONE owner-authorized addition -- durable
     // logical-turn idempotency, repository and LOCAL/CI only. The bound moves to 0013, so the
     // lock still says what it always said: no unauthorized migration exists.
-    expect(sql.some((name) => name.startsWith('0013'))).toBe(false);
+    expect(sql.some((name) => name.startsWith('0014'))).toBe(false);
   });
 
   it('(13) the event-backbone root API lock remains 39', () => {

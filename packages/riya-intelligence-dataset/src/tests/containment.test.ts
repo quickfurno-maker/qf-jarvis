@@ -298,8 +298,8 @@ describe('no runtime, service or application can reach the dataset factory', () 
     const migrations = readdirSync(
       join(REPO_ROOT, 'packages/event-backbone/src/persistence/migrations'),
     ).filter((name) => name.endsWith('.sql'));
-    expect(migrations).toHaveLength(12);
-    expect(migrations.some((name) => name.startsWith('0013'))).toBe(false);
+    expect(migrations).toHaveLength(13);
+    expect(migrations.some((name) => name.startsWith('0014'))).toBe(false);
   });
 });
 

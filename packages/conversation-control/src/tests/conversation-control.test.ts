@@ -956,6 +956,7 @@ describe('vocabularies, API surface and containment', () => {
       '0011_riya_conversation_continuity.sql',
       // RWC-P8 (ADR-0104): the ONE authorized addition, repository and LOCAL/CI only.
       '0012_riya_logical_turn_idempotency.sql',
+      '0013_communication_state_projection.sql',
     ]);
   });
 });

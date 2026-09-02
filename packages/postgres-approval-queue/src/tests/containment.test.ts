@@ -405,7 +405,7 @@ describe('migration 0009 carries no authority column', () => {
     expect(sql).not.toMatch(/FOREIGN KEY \(active_approval_request_id\)/);
   });
 
-  it('leaves 0009 unchanged: the set is 0001-0012, with no 0013', () => {
+  it('leaves 0009 unchanged: the set is 0001-0012, with no 0014', () => {
     const dir = fileURLToPath(
       new URL('packages/event-backbone/src/persistence/migrations/', REPO_ROOT),
     );
@@ -413,12 +413,12 @@ describe('migration 0009 carries no authority column', () => {
       .filter((n) => n.endsWith('.sql'))
       .sort();
     // RWC-P8 (ADR-0104) RESTATED, not relaxed: 0012 is the ONE owner-authorized addition.
-    expect(files).toHaveLength(12);
+    expect(files).toHaveLength(13);
     expect(files[9]).toBe('0010_execution_replay_claim.sql');
     expect(files[10]).toBe('0011_riya_conversation_continuity.sql');
     // RWC-P8 (ADR-0104) RESTATED, not relaxed: 0012 is the ONE owner-authorized addition -- durable
     // logical-turn idempotency, repository and LOCAL/CI only. The bound moves to 0013, so the
     // lock still says what it always said: no unauthorized migration exists.
-    expect(files.some((n) => n.startsWith('0013'))).toBe(false);
+    expect(files.some((n) => n.startsWith('0014'))).toBe(false);
   });
 });

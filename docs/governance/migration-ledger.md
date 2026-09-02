@@ -22,11 +22,15 @@
 | 0007 | `0007_subject_activity_projection.sql` | `8823b528d9e5aaccad7ddb6e16ebe254662c9759d14321fd3a6fa2e62b6dee49` | QFJ-P03.09 — subject-activity reference projection | QFJ-P03.09 | Present | Applied (local/CI) | **NOT APPLIED / separately gated** | Yes |
 | 0008 | `0008_conversation_control_persistence.sql` | `e79f1f097407f4e630ce13858545dde80ec7ba5cc155bc117b1a62aa7d2b8a10` | QFJ-P08-B2 — durable conversation-control persistence | QFJ-P08 | Present (new, this slice) | Applied (local/CI) | **NOT APPLIED / separately gated** | Yes (after merge) |
 | 0009 | `0009_durable_approval_queue.sql` | `e834bc3cd0bc8fd30b04f4849a00d29d49b5a19d1636b912535fdbd6d86f20f6` | QFJ-P08 Durable Approval Queue + Audit | QFJ-P08 | Present (new, this slice) | Applied (local/CI) | **NOT APPLIED / separately gated** | Yes (after merge) |
+| 0010 | `0010_execution_replay_claim.sql` | `1add85e08e43dafe85f124b886790cd3495d3f54b3579ad89efe40e2849a8b05` | QFJ-P09.03 — durable execution replay / idempotency store ([ADR-0091](../decisions/ADR-0091-qfj-p09-03-durable-execution-replay-idempotency-store.md)) | QFJ-P09.03 | Present | Applied (local/CI) | **NOT APPLIED / separately gated** | Yes |
+| 0011 | `0011_riya_conversation_continuity.sql` | `80149f8d636aa85eaff7d98f924220107eaa3d539e5d13d5133873154926cc93` | RWC-P2B — durable PostgreSQL Riya conversation continuity ([ADR-0095](../decisions/ADR-0095-rwc-p2b-durable-postgres-riya-conversation-continuity.md)) | **None** — internal Riya work-stream, not a canonical QFJ phase | Present | Applied (local/CI) | **NOT APPLIED / separately gated** | Yes |
+| 0012 | `0012_riya_logical_turn_idempotency.sql` | `5d1b7fe68401a664cea3116ff0900499a1f20d659d4935c586b4ac0f923aaf3e` | RWC-P8 — cross-channel continuity and logical-turn idempotency ([ADR-0104](../decisions/ADR-0104-rwc-p8-cross-channel-continuity-and-logical-turn-idempotency.md)) | **None** — internal Riya work-stream, not a canonical QFJ phase | Present | Applied (local/CI) | **NOT APPLIED / separately gated** | Yes |
+| 0013 | `0013_communication_state_projection.sql` | `4f533fb60ea96bedd11bf2f5b3177376517c07633d3b7e71e0341b43c1a72919` | QFJ-P09 D5 — local communication-state projection read model ([ADR-0142](../decisions/ADR-0142-qfj-p09-d5-communication-state-projection-persistence.md)) | QFJ-P09 | Present (new, this slice) | Applied (local/CI) | **NOT APPLIED / separately gated** | Yes (after merge) |
 
 ## Exact facts
 
 - Migrations **0001–0005 exist and are immutable.** Their bytes are preserved unchanged; the checksums above are the record.
-- **Managed PostgreSQL carries migration 0001 only.** Migrations **0002 through 0009 are unapplied** to managed PostgreSQL, and **no managed migration is authorized**. Because the default migrator applies every pending migration in order, an unauthorized managed run would apply `0002`→`0009` together — which is precisely why it is not authorized.
+- **Managed PostgreSQL carries migration 0001 only.** Migrations **0002 through 0013 are unapplied** to managed PostgreSQL, and **no managed migration is authorized**. Because the default migrator applies every pending migration in order, an unauthorized managed run would apply `0002`→`0013` together — which is precisely why it is not authorized.
 - **Migration 0006 now exists**, created by **QFJ-P03.07C** (its exclusive owner) under separate authorization. It is the **projection failure persistence foundation** ([ADR-0040](../decisions/ADR-0040-projection-failure-operations-quarantine-and-authorized-replay.md)): the failure aggregate, the append-only action/audit ledger, replay authorizations, and replay-attempt/lease evidence. It contains **no** RAG, pgvector, agents, task runtime, model gateway, WhatsApp, n8n, QuickFurno Core integration, memory, analytics, or `rm_subject_activity`. **It has not been applied to managed PostgreSQL and is not deployed.**
 - **QFJ-P03.07D (Atomic Retry-Exhaustion Integration) uses migration 0006 unchanged.** It wires the production runner to the existing 0006 tables (the fifth deterministic failure now establishes a failure aggregate + `created` action atomically) but adds **no** new migration, modifies **no** migration byte (0006 checksum above is unchanged), and creates **no** migration 0007. Managed status is unchanged.
 - **The RAG migration is unallocated.** No migration number is pre-reserved for RAG.
@@ -35,7 +39,43 @@
 - **Migration 0008's checksum changed once before merge**, from `e8fb1c3e…` to the `e79f1f09…` recorded above, when PR #80's final review added the reserved-token constraints. That is permitted only because 0008 was never merged and has never been applied to any managed database; migrations `0001`–`0007` are byte-identical and remain so. The change-control rule below applies from merge onward.
 - **Migration 0009 EXISTS**, created by the **QFJ-P08 Durable Approval Queue + Audit** slice ([ADR-0081](../decisions/ADR-0081-qfj-p08-durable-approval-queue-and-audit.md)) — its exclusive owner. It is the **durable approval queue**: `qf_jarvis.approval_request_record` (the exact `ApprovalRequestV1` plus a canonical recommendation source snapshot), `qf_jarvis.approval_active_slot` (at most ONE active ask per `(recommendation_id, proposed_action_id)`, because `ApprovalDecisionV1` carries no `approvalRequestId` and two overlapping asks would make an arriving decision ambiguous), `qf_jarvis.approval_decision_record` (Core's `ApprovalDecisionV1` verbatim), `qf_jarvis.approval_request_decision_link` (one ask answered at most once; one decision may answer several asks of the same recommendation) and the content-free append-only `qf_jarvis.approval_queue_audit`. It contains **no** `status`, `pending`, `approved`, `authorized`, `can_execute` or `can_send` column and no trigger deriving one — approval authority lives only in the immutable Core decision — and no consent, opt-out, communication-authorization, execution-intent, operator, transport, RAG, pgvector, model or free-text content. Four tables are fully append-only; the slot's `(recommendation_id, proposed_action_id)` key is immutable and its pointer is the only mutable column anywhere. The pointer's foreign key is **composite** over `(recommendation_id, proposed_action_id, active_approval_request_id)`, referencing the matching `UNIQUE` on the request record, so a non-null pointer must name a request belonging to that exact action — a single-column reference would have let the deployment role, which holds UPDATE on that one column, point one action's slot at another action's request. The deployment role receives SELECT/INSERT plus column-level UPDATE on `active_approval_request_id` alone, and no DELETE or TRUNCATE on any of the five. **It has not been applied to managed PostgreSQL and is not deployed.**
 - **Migration 0009's checksum changed once before merge**, from `1927f32a…` to the `e834bc3c…` recorded above, when PR #84's final review replaced the slot's single-column pointer foreign key with the composite one described above. That is permitted only because 0009 was never merged and has never been applied to any managed database; migrations `0001`–`0008` are byte-identical and remain so. The change-control rule below applies from merge onward.
-- **No migration number after 0009 is pre-reserved.** The next number may be used only under its own authorized design, per the change-control rule below.
+- **Migrations 0010–0012 were recorded LATE, in the QFJ-P09 D5 slice, under explicit owner authorization.**
+  They existed in the repository while this ledger still stopped at `0009`. The drift was **reported, not
+  silently repaired**, at the D5 design checkpoint (PR #183): every one of the nine recorded checksums
+  verified exactly, so nothing supposedly immutable had been altered — the gap was three unrecorded
+  additions. The owner then supplied the owning-slice and history facts recorded above, which is why they
+  are written now and were not inferred from filenames earlier.
+
+- **0011 and 0012 belong to the internal Riya work-stream (RWC-P2B and RWC-P8), NOT to canonical QFJ-P08.**
+  Their `Canonical QFJ phase` column says `None` deliberately. Naming a canonical phase they never had
+  would put invented governance history into the document that exists to prevent exactly that.
+
+- **0010's owning phase is QFJ-P09.03**, per [ADR-0091](../decisions/ADR-0091-qfj-p09-03-durable-execution-replay-idempotency-store.md)
+  (`Status: Accepted — QFJ-P09.03`) and commit `f4d8f54a08c599ff70d776edb8dfbef2557987da`
+  (`feat(execution): add durable replay store`). QFJ-P09.02 ([ADR-0090](../decisions/ADR-0090-qfj-p09-02-test-only-execution-dispatch-boundary.md))
+  is the PRECEDING slice, which deliberately shipped **no** production replay store — which is why
+  0010 exists at all.
+
+- **Migration 0013 EXISTS**, created by **QFJ-P09 D5** ([ADR-0142](../decisions/ADR-0142-qfj-p09-d5-communication-state-projection-persistence.md))
+  — its exclusive owner — under **separate, explicit owner authorization for this migration alone**. It is
+  the **local communication-state projection read model**: `qf_jarvis.rm_communication_state`, one
+  disposable, non-authoritative CURRENT row per `communication_id` holding the minimised
+  `CommunicationStateRecordV2` for the six durable evidence-bearing states, plus the projection position
+  that produced it. It contains **no** recipient, phone, email or contact data, purpose code, explanation,
+  policy, approval decision id, execution intent/result id, provider reference, provider timestamp or
+  payload, failure category, description, signature, digest, free text, or wall-clock column — every
+  instant stored comes from the evidence. It carries **no erasure tombstone**: no durable
+  communication-erasure evidence exists to rebuild one from, and inventing it would break the rebuild
+  rule — an owner decision recorded in ADR-0142, and one that makes **no legal or privacy deletion
+  claim**. It adds no trigger, enum, index beyond the primary key, queue, job, audit table or event
+  contract, **registers no projection and activates nothing**. The deployment role receives
+  SELECT/INSERT/UPDATE on the new read model and **no DELETE or TRUNCATE**; **no grant on
+  `qf_jarvis.event` is added or broadened** — the D4 reader's payload access belongs to the activation
+  slice, not to a projection that is not activated. **It has not been applied to managed PostgreSQL and is
+  not deployed. Production rollout remains OFF.**
+
+- **No migration number after 0013 is pre-reserved.** The next number may be used only under its own
+  authorized design, per the change-control rule below.
 
 ## Permanent migration-numbering policy
 

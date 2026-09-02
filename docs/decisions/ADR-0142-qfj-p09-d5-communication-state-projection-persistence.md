@@ -1,13 +1,15 @@
 # ADR-0142 — QFJ-P09 D5: communication-state projection persistence
 
-**Status:** **Proposed — DESIGN CHECKPOINT. Implementation is BLOCKED on a separately authorized
-migration.** No production code, no SQL, and no migration number were created by this slice.
+**Status:** **Accepted — IMPLEMENTED OFFLINE (PR #183).** The owner accepted the design below and
+**separately authorized migration `0013` alone**, repository/local/CI only. The handler, the migration
+and the full test matrix landed on this same PR. **The projection is NOT registered and NOT activated;
+nothing was applied to managed PostgreSQL.**
 **Baseline:** `f4bfe67d04f41197fcdea7c86dbd5fabc2f1e81c` (main after PR #182 / D3 / ADR-0141)
 **Accepted Core evidence pin:** `af7c2bb4f5a83731666fe059e963d1824cddd7b6` — **not re-pinned, not
 re-audited; no Core code read, accessed or modified**
 
-**Offline design only.** No Core change, no managed database, no n8n/provider/Meta, no message,
-**no migration allocated**, rollout **OFF**.
+**Offline implementation only.** No Core change, no managed database, no n8n/provider/Meta, no message,
+**exactly one authorized migration (`0013`)**, no registry entry, no activation, rollout **OFF**.
 
 ## Prerequisites, all merged
 
@@ -18,6 +20,48 @@ re-audited; no Core code read, accessed or modified**
 | D4    | [ADR-0140](./ADR-0140-qfj-p09-d4-trusted-communication-evidence-read-capability.md)      | #180 | `182a9cb1c00cf1e3ad0225654992099208b992a0` |
 | D2b   | [ADR-0139](./ADR-0139-qfj-p09-d2b-tier-ab-durable-evidence-and-ordering-confirmation.md) | #181 | `88ddab543f693c849f710db8de287bac005aba74` |
 | D3    | [ADR-0141](./ADR-0141-qfj-p09-d3-communication-state-record-v2-six-state-contract.md)    | #182 | `f4bfe67d04f41197fcdea7c86dbd5fabc2f1e81c` |
+
+---
+
+## What the owner decided
+
+The design below was put up for review as a checkpoint. The owner **accepted it** and returned four
+decisions, all recorded here as the reasons the implementation looks the way it does.
+
+1. **Migration `0013` is authorized — that one, and only that one.** Repository/local/CI ONLY. **Not**
+   authorized for managed PostgreSQL, not deployed, not a production activation. No other migration is
+   authorized, and migrations `0001`–`0012` are byte-identical and untouched.
+
+2. **NO erasure tombstone — locked out, with the rationale recorded.** The `0007` subject tombstone is
+   lawful because that table is keyed by a real subject reference and is driven by the EXISTING durable
+   `qf.privacy.erasure-recorded` evidence. This table has no `subject_type`, no `subject_id`, no accepted
+   communication-erasure event, and no durable evidence mapping an erasure request to a
+   `communication_id`. An `erased` flag here would invent **both** an identity relation that is not
+   established **and** a durable erasure fact this evidence stream does not contain — and it would break
+   the rebuild rule, because a rebuild could not reproduce it. **This omission makes NO legal or privacy
+   deletion claim.** The row is disposable, non-authoritative, minimised and rebuildable; a future privacy
+   slice may design communication-level erasure once a durable authoritative relation exists.
+
+3. **The `0010`–`0012` ledger entries are to be recorded in the same pass**, from owner-supplied
+   history rather than inferred from filenames — see the ledger section below.
+
+4. **D5 is implemented OFFLINE and is not activated.** No production-registry entry, no rollout.
+
+### One deviation from the proposal, and why
+
+The proposal said the projection role would get what the handler needs to run. Implementation found that
+the D4 reader also selects `event_id`, `source` and the version-gated `payload`, and the projection role
+holds **none** of those (`0004` granted `sequence, event_type, event_version`; `0007` added
+`subject_type, subject_id`). Granting them would hand that role SELECT on the payload column of the
+**whole event log** — and **three existing least-privilege tests assert it must never have it**
+(`projection-foundation`, `projection-ordering`, `subject-activity`).
+
+Weakening those tests to make D5 pass was not an option, and it was not the right trade in any case:
+nothing runs as that role today, because D5 is not registered. **So `0013` adds no grant on
+`qf_jarvis.event` at all.** That grant belongs to the **activation slice**, alongside the registry
+entry, where the exposure can be reviewed against a runtime that actually needs it. The consequence is
+stated plainly: **as merged, the projection role cannot execute this projection** — which is correct,
+because it is not meant to yet.
 
 ---
 
@@ -43,19 +87,19 @@ which would break the erasure and rebuild semantics those tables already own.
 
 **So D5 requires a new table, and therefore a migration.**
 
-### The migration is NOT authorized by this slice
+### The migration was NOT authorized by this slice — and was authorized separately, afterwards
 
 `docs/governance/migration-ledger.md` requires **six** conditions before a migration number may be
 used. Measured against them:
 
-| #   | Condition                                    | Status                                                    |
-| --- | -------------------------------------------- | --------------------------------------------------------- |
-| 1   | owning phase design approved                 | **NO** — this ADR is Proposed                             |
-| 2   | schema change proven necessary               | **YES** — established above                               |
-| 3   | exact scope reviewed                         | **NO** — the proposal below is what review would consider |
-| 4   | prior migration inventory confirmed          | **YES** — `0001`–`0012`, checksums verified               |
-| 5   | managed rollout impact documented            | **YES** — below                                           |
-| 6   | **migration creation separately authorized** | **NO**                                                    |
+| #   | Condition                                    | Status                                                     |
+| --- | -------------------------------------------- | ---------------------------------------------------------- |
+| 1   | owning phase design approved                 | **YES**, at owner review — this ADR is now Accepted        |
+| 2   | schema change proven necessary               | **YES** — established above                                |
+| 3   | exact scope reviewed                         | **YES**, at owner review — the design below is what landed |
+| 4   | prior migration inventory confirmed          | **YES** — `0001`–`0012` verified, and now ledger-recorded  |
+| 5   | managed rollout impact documented            | **YES** — below                                            |
+| 6   | **migration creation separately authorized** | **YES** — `0013` alone, local/CI only                      |
 
 And the two most recent decisions say so explicitly:
 
@@ -68,7 +112,7 @@ anticipates this checkpoint.
 
 ---
 
-## Proposed design, for review
+## The design, as accepted and implemented
 
 Nothing here is implemented. This is the exact scope condition 3 needs.
 
@@ -82,7 +126,7 @@ these facts, and a per-communication latest row is derivable from it determinist
 consumer ever needs it, is already replayable from the event log itself — duplicating it locally would
 add a store that could disagree with its own source.
 
-### Proposed table
+### The table
 
 `qf_jarvis.rm_communication_state`, following the `0007` precedent exactly:
 
@@ -133,18 +177,20 @@ idempotent. Note the standing limit — **D5 cannot claim full 18-state determin
 six implemented states, because the others have no durable source (ADR-0139).
 
 **Erasure:** the row holds no personal data — an opaque `communication_id`, closed machine tokens, and
-minimised evidence. Whether a communication-level tombstone is needed is a **question for review**, not
-something to invent here; `0007`'s subject tombstone exists because that table stores a subject
-reference, and this one does not.
+minimised evidence. Whether a communication-level tombstone was needed was put to review, and the owner
+**locked it out**: there is no durable communication-erasure evidence to rebuild one from, so an `erased`
+flag would be invented rather than derived. See owner decision 2 above. **This makes no legal or privacy
+deletion claim.**
 
 **Grants:** `SELECT/INSERT/UPDATE` on the new table for `qf_jarvis_projection_runtime`, and **no
 `DELETE`/`TRUNCATE`** — a version-bump rebuild destroy stays a trusted admin operation, exactly as
-`0004` and `0007` established. **No other role changes, and no grant is broadened.**
+`0004` and `0007` established. **No other role changes, and no grant is broadened** — including no grant
+on `qf_jarvis.event`, per the deviation note above.
 
 **Managed rollout:** local/CI only. **The managed database still carries only `0001`**, and this
 migration would not change that. **Nothing is applied to managed PostgreSQL.**
 
-### The handler, when authorized
+### The handler, as implemented
 
 A `defineProjection` handler with a fixed name and version, consuming the runner's position and calling
 **only** `readTrustedCommunicationEvidenceAtPosition`. `null` evidence writes nothing — no state is
@@ -154,14 +200,20 @@ and infrastructure errors propagate **fail-closed**. `ProjectionEvent` is not wi
 stays root-unexported, and the handler is **not** added to the production registry — D5 is
 implemented-and-testable **OFFLINE, not activated**.
 
-That handler would move D4's production importer count from **0 to exactly 1**, with containment tests
-updated so the D5 handler path is the sole permitted importer and both zero and two-or-more fail.
+That handler moved D4's production importer count from **0 to exactly 1**. The containment tests now
+compare the full importer list with `toStrictEqual([D5_HANDLER])`, so it bites in both directions — zero
+fails (the handler vanished or stopped using the governed route) and two-or-more fails (a second consumer
+appeared) — and the ESLint exception is **file-exact**: a sibling handler in the same directory is still
+refused, and the D5 handler keeps every other boundary it had (reducer purity, subject-blindness, and both
+event-writer bans). The corpus is the **git-tracked** production source, so the file had to be tracked to
+be scanned — no filename-shaped bypass.
 
 ---
 
 ## Migration ledger drift — reported, not silently repaired
 
-The ledger records **`0001`–`0009`**. The repository contains **`0001`–`0012`**:
+At the checkpoint the ledger recorded **`0001`–`0009`** while the repository contained
+**`0001`–`0012`**:
 
 | Migration                                | SHA-256                                                            | Ledger     |
 | ---------------------------------------- | ------------------------------------------------------------------ | ---------- |
@@ -172,12 +224,24 @@ The ledger records **`0001`–`0009`**. The repository contains **`0001`–`0012
 **All nine recorded checksums verify exactly**, so nothing supposedly immutable has been altered; the
 drift is three unrecorded additions, not tampering.
 
-**The ledger is left untouched.** Recording an entry requires the owning phase, slice and applied-status
-for each — facts that belong to those slices, not to D5. Writing them from filename inference would put
-unverified governance history into the very document that exists to prevent that. **This remains open
-governance debt**, and it matters here because **condition 4 of the migration policy is "prior
-migration inventory confirmed"** — confirmed against the repository it is, but the ledger does not yet
-say so.
+**The ledger was repaired in this slice, under owner-supplied history.** At the checkpoint it was left
+untouched, because recording an entry requires the owning phase, slice and applied-status for each —
+facts belonging to those slices, not to D5, and writing them from filename inference would have put
+unverified governance history into the very document that exists to prevent that. The owner then supplied
+those facts, so the entries are now written from them:
+
+- **`0010`** — **QFJ-P09.03**, [ADR-0091](./ADR-0091-qfj-p09-03-durable-execution-replay-idempotency-store.md),
+  commit `f4d8f54a08c599ff70d776edb8dfbef2557987da` (`feat(execution): add durable replay store`).
+  Recorded as P09.03 because that is what ADR-0091 says (`Status: Accepted — QFJ-P09.03`); **QFJ-P09.02**
+  ([ADR-0090](./ADR-0090-qfj-p09-02-test-only-execution-dispatch-boundary.md)) is the PRECEDING slice,
+  which deliberately shipped no replay store — which is why `0010` exists at all.
+- **`0011`** — internal Riya **RWC-P2B**, [ADR-0095](./ADR-0095-rwc-p2b-durable-postgres-riya-conversation-continuity.md).
+  **Not** a canonical QFJ-P08 migration, and not recorded as one.
+- **`0012`** — internal Riya **RWC-P8**, [ADR-0104](./ADR-0104-rwc-p8-cross-channel-continuity-and-logical-turn-idempotency.md).
+  Explicitly **not** canonical QFJ-P08 either.
+
+Condition 4 — "prior migration inventory confirmed" — is therefore satisfied both against the repository
+and in the ledger itself, and `0013` is recorded alongside them.
 
 **No existing migration byte was modified.**
 
@@ -185,10 +249,13 @@ say so.
 
 ## Consequences
 
-- **D5 implementation does not proceed in this slice.** No handler, no SQL, no migration, no registry
-  entry, no activation.
-- **D4's production importer count remains exactly 0**, and its containment tests are unchanged. They
-  change when the handler lands, not before.
+- **D5 is implemented offline.** The handler, migration `0013` and the test matrix landed together;
+  **no registry entry and no activation**.
+- **D4's production importer count is now exactly 1**, and that one importer is the D5 handler.
+- **The projection role gained upsert on the new read model only.** No grant on `qf_jarvis.event` was
+  added or broadened, so the three existing least-privilege tests stand unweakened — and the projection
+  cannot yet be executed by that role, by design.
+- **No erasure tombstone**, per the owner decision above; this asserts no deletion capability.
 - **No fake persistence.** Not process memory, not a JSON file, not an unrelated table, not direct
   imperative writes, not a second event log, not an unnumbered SQL file.
 - **The six implemented states are unchanged** and no excluded or Tier-A/B state was added.
@@ -207,15 +274,21 @@ say so.
   refused, and unnecessary because the ordered event stream is the history.
 - **Allocate `0013` because it is numerically next.** Rejected: the ledger forbids exactly that, and two
   merged ADRs state `0013` is not reserved.
-- **Update the ledger for `0010`–`0012` now.** Rejected: ownership and applied-status must come from
-  those slices' own history. Reported as debt instead.
+- **Update the ledger for `0010`–`0012` by inferring from filenames.** Rejected at the checkpoint, and
+  still rejected: the entries are written now only because the **owner supplied** the owning slice, ADR
+  and history for each. `0011` and `0012` are recorded as internal Riya work-stream migrations (RWC-P2B,
+  RWC-P8) with **no** canonical QFJ phase, because claiming one they never had is exactly the invented
+  history the ledger exists to prevent.
+- **Grant the projection role payload access so the handler can run as that role.** Rejected — see
+  the deviation note above.
 
 ---
 
 ## Posture
 
-No production code. No contract, event registry, ingestion, projection or runtime change. No Core
-modification, branch, PR, audit or re-pin. No managed Supabase or managed PostgreSQL. No n8n or
-provider access. No message sent. **No migration allocated; `0013` is not reserved.**
+One new projection handler, one new migration (`0013`), and tests. No contract, event registry or
+ingestion change. No Core modification, branch, PR, audit or re-pin. No managed Supabase or managed
+PostgreSQL — **the managed database still carries only `0001`**. No n8n or provider access. No message
+sent. **No production-registry entry; the projection is not activated.**
 
 **Production rollout remains OFF. Runtime activation is unchanged.**

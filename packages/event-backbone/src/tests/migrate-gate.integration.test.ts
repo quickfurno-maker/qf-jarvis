@@ -127,6 +127,7 @@ describe('db:migrate runs the preflight automatically', () => {
       '0011_riya_conversation_continuity.sql',
       // RWC-P8 (ADR-0104): the ONE authorized addition, repository and LOCAL/CI only.
       '0012_riya_logical_turn_idempotency.sql',
+      '0013_communication_state_projection.sql',
     ]);
     expect(await tableExists(MIGRATION_SCHEMA, 'event')).toBe(true);
   });
@@ -139,8 +140,11 @@ describe('db:migrate runs the preflight automatically', () => {
     expect(second.migration.applied).toStrictEqual([]);
     expect(second.migration.alreadyApplied.map((m) => m.version)).toStrictEqual([
       1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
-      // RWC-P8 (ADR-0104): the ONE owner-authorized addition.
+      // RWC-P8 (ADR-0104): the ONE owner-authorized addition of its slice.
       12,
+      // QFJ-P09 D5 (ADR-0142): the ONE owner-authorized addition of this slice -- the local
+      // communication-state read model. LOCAL/CI only; NOT applied to managed PostgreSQL.
+      13,
     ]);
   });
 
