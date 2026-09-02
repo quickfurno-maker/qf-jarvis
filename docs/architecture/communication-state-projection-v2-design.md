@@ -5,7 +5,7 @@
 (**MERGED**, PR #176, `eebee71`). **The full communication-state V2 contract,
 projection and runtime are not yet implemented, connected or activated — the bounded prerequisites
 D2a and D4 ARE implemented and merged, as recorded below.** The architecture itself is adopted under
-ADR-0135; **rollout remains OFF**. Its D1 prerequisite is **MERGED** as PR #177 under [ADR-0136](../decisions/ADR-0136-qfj-p10-s3-fresh-quickfurno-core-audit.md) — that audit **confirmed Model 2**. **D2 is MERGED under [ADR-0137](../decisions/ADR-0137-qfj-p10-d2-core-protocol-and-event-gap-decision.md)**, which fixes the **first durable projection subset** this document's §8.2 leaves open: **6 durable Tier-C states** (`rejected`, `authorized`, `provider-accepted`, `delivered`, `read`, `failed`), **2 conditional Tier-B** (`authorization-requested`, `scheduled`), **10 deliberately excluded** — **`completed` among them, blocked by missing Core truth.** **Its D2a prerequisite (§7) is MERGED as PR #179 ([ADR-0138](../decisions/ADR-0138-qfj-p09-d2a-accepted-event-write-path-and-provenance-hardening.md), merge commit `2027d3215a36e8fdbed6809d0f12a917bb71cdee`), so the prerequisite this document locked is SATISFIED: the accepted-event writer has left the `@qf-jarvis/event-backbone` root barrel, the low-level writer and the governed cross-package writer each have exactly one tested production caller, the mint has one tested call site, and a single production `INSERT` is enforced by test — a repository/application-path guarantee that does NOT bind a privileged database operator, does not make Core events live, and allocates no migration.** **D4 — the purpose-specific trusted communication evidence-read capability — is MERGED as PR #180 ([ADR-0140](../decisions/ADR-0140-qfj-p09-d4-trusted-communication-evidence-read-capability.md), merge commit `182a9cb1c00cf1e3ad0225654992099208b992a0`), so the trusted-reader prerequisite is SATISFIED: one internal, root-unexported, position-keyed reader for the six durable Tier-C states above, at canonical event wire version `@2` with the embedded artifacts still `V1`, built and proved OFFLINE. **No adopted or live emission for either target family was established at the accepted S3 pin, and no current-live emission claim is made.** It adds no V2 contract, no projection and no consumer — its production importer count is deliberately ZERO until D5 opens one. **The active slice is now D2b — the Tier A/B durable-evidence and ordering confirmation ([ADR-0139](../decisions/ADR-0139-qfj-p09-d2b-tier-ab-durable-evidence-and-ordering-confirmation.md), Proposed), which closes the §6.3 ordering question this document left open: any future Option-A Tier-B fact enters the SAME accepted Core event-position stream, no second Jarvis log or order is created, and missing evidence means state unavailable rather than inferred. D3 follows D2b, and D5 still waits on D3 + D4 + D2b.**
+ADR-0135; **rollout remains OFF**. Its D1 prerequisite is **MERGED** as PR #177 under [ADR-0136](../decisions/ADR-0136-qfj-p10-s3-fresh-quickfurno-core-audit.md) — that audit **confirmed Model 2**. **D2 is MERGED under [ADR-0137](../decisions/ADR-0137-qfj-p10-d2-core-protocol-and-event-gap-decision.md)**, which fixes the **first durable projection subset** this document's §8.2 leaves open: **6 durable Tier-C states** (`rejected`, `authorized`, `provider-accepted`, `delivered`, `read`, `failed`), **2 conditional Tier-B** (`authorization-requested`, `scheduled`), **10 deliberately excluded** — **`completed` among them, blocked by missing Core truth.** **Its D2a prerequisite (§7) is MERGED as PR #179 ([ADR-0138](../decisions/ADR-0138-qfj-p09-d2a-accepted-event-write-path-and-provenance-hardening.md), merge commit `2027d3215a36e8fdbed6809d0f12a917bb71cdee`), so the prerequisite this document locked is SATISFIED: the accepted-event writer has left the `@qf-jarvis/event-backbone` root barrel, the low-level writer and the governed cross-package writer each have exactly one tested production caller, the mint has one tested call site, and a single production `INSERT` is enforced by test — a repository/application-path guarantee that does NOT bind a privileged database operator, does not make Core events live, and allocates no migration.** **D4 — the purpose-specific trusted communication evidence-read capability — is MERGED as PR #180 ([ADR-0140](../decisions/ADR-0140-qfj-p09-d4-trusted-communication-evidence-read-capability.md), merge commit `182a9cb1c00cf1e3ad0225654992099208b992a0`), so the trusted-reader prerequisite is SATISFIED: one internal, root-unexported, position-keyed reader for the six durable Tier-C states above, at canonical event wire version `@2` with the embedded artifacts still `V1`, built and proved OFFLINE. **No adopted or live emission for either target family was established at the accepted S3 pin, and no current-live emission claim is made.** It adds no V2 contract, no projection and no consumer — its production importer count is deliberately ZERO until D5 opens one. **D2b is MERGED as PR #181** ([ADR-0139](../decisions/ADR-0139-qfj-p09-d2b-tier-ab-durable-evidence-and-ordering-confirmation.md), merge commit `88ddab543f693c849f710db8de287bac005aba74`), closing the §6.3 ordering question this document left open: any future Option-A Tier-B fact enters the SAME accepted Core event-position stream, no second Jarvis log or order is created, and missing evidence means state unavailable rather than inferred. **The active slice is now D3 — the first `CommunicationStateRecordV2` contract ([ADR-0141](../decisions/ADR-0141-qfj-p09-d3-communication-state-record-v2-six-state-contract.md), Proposed): a Jarvis-local read-model contract for exactly the six durable states above, each bound to its state-specific Tier-C evidence, with `rejected` finally lawful because V2 has no `approvalDecisionId` field to invent. V1 stays immutable and there is no migration between them. It adds no canonical state event, no projection and no D4 consumer — D4's production importer count is still ZERO. D5 follows D3 and remains the first producer; the full projection and runtime are still not implemented, connected or activated, and rollout remains OFF.**
 **Baseline:** `c6b21dcf921e350f33477d3b18fd4413b8a8aa00` (merge of PR #175 / S2 readiness audit)
 
 Read with [ADR-0134](../decisions/ADR-0134-qfj-p09-s2-communication-state-evidence-alignment.md) (the
@@ -428,12 +428,45 @@ but is Jarvis-computed and is **not a Core attestation**. **No cryptographic fac
 
 ---
 
-## 8. `CommunicationStateRecordV2` — semantics only
+## 8. `CommunicationStateRecordV2`
 
 Under Model 2, **V2 is a Jarvis-local projection/read-model contract**, not automatically a Core wire
-payload. **Not implemented here**; no Zod or TypeScript is written.
+payload.
 
-### 8.1 Locked semantics
+> **STATUS — V2 IS NOW IMPLEMENTED by D3**
+> ([ADR-0141](../decisions/ADR-0141-qfj-p09-d3-communication-state-record-v2-six-state-contract.md),
+> Proposed). **§8.0 below states the CURRENT contract. §§8.1–8.4 are the ORIGINAL pre-D2b/D3 semantics
+> and are kept as history** — their rationale still explains why the contract looks as it does, but
+> where they differ from §8.0, §8.0 governs.
+
+### 8.0 What D3 actually implemented (current)
+
+**Six durable, evidence-bearing states only:** `rejected`, `authorized`, `provider-accepted`,
+`delivered`, `read`, `failed`. The domain vocabulary stays **18**; the durable subset is a separate
+list, not a filter over it.
+
+**The two conditional Tier-B states — `authorization-requested` and `scheduled` — are EXCLUDED** until
+their exact Core primitives are adopted (ADR-0139). The other **ten** states are excluded as D2
+decided. **No placeholder or `unknown` evidence variant exists**, because a variant that could hold
+nothing would let a state exist without a source.
+
+**Evidence is Tier-C ONLY**, and coupling is **structural**: the schema is a six-variant discriminated
+union on `state`, so a `rejected` whose outcome is `authorized`, or a `read` whose evidence says
+`delivered`, is not merely rejected at parse time — it cannot be written in TypeScript at all. §8.1's
+"structurally distinguishes Tier A, Tier B and Tier C evidence" describes the eventual shape; **the
+first implementation distinguishes Tier-C variants and defines no Tier-A or Tier-B variant.**
+
+**`previousState` is OPTIONAL CONTEXT, never source evidence**, and is restricted to the same six
+states. §8.1's phrasing that it "stays evidence and context" is superseded: it is context only, and
+allowing all eighteen would smuggle an undurable state into a durable record.
+
+**`reasonCode` remains an open Core machine token**, unchanged.
+
+**D5 is the first producer**, building V2 only from D4's trusted evidence. **No adopted or live Core
+emission for either target family was established at the accepted S3 pin, and no current-live emission
+claim is made.** Rollout remains **OFF**.
+
+### 8.1 Locked semantics (original, pre-D3 — historical)
 
 1. **V1 stays immutable and published.**
 2. **`ApprovalDecisionV1` is never again generic "Core decided" evidence.**
@@ -448,7 +481,7 @@ payload. **Not implemented here**; no Zod or TypeScript is written.
 8. **D3 may not freeze an evidence variant for any Tier A/B state whose durable source is unresolved**
    (§6.1). **D5 may not implement a state until its durable source and ordering are decided.**
 
-### 8.2 Per-state requirements and durable-source status
+### 8.2 Per-state requirements and durable-source status (original, pre-D2b/D3 — historical)
 
 | State | Tier | Evidence requirement | Durable source status |
 | --- | --- | --- | --- |
@@ -468,13 +501,13 @@ payload. **Not implemented here**; no Zod or TypeScript is written.
 
 State meaning and ownership are unchanged from ADR-0134.
 
-### 8.3 `channel`, deliberately open
+### 8.3 `channel`, deliberately open (original — historical)
 
 V1 makes `channel` mandatory, so a `rejected` record must name a channel Core never authorized. Three
 candidate repairs — optional `channel`; a *proposed* vs *authorized* distinction; or a state-sensitive
 rule — are all defensible. Settled when S3 establishes whether Core's authorization always names one.
 
-### 8.4 Intentionally unresolved until S3 / D2 / D2b
+### 8.4 Intentionally unresolved until S3 / D2 / D2b (original — now resolved by D2/D2b/D3)
 
 `cancelled` · `expired` · **`execution-submitted` dispatch evidence** · the S4 submission receipt ·
 `channel` semantics · which candidate contracts the current Core can expose or adopt · **and the
