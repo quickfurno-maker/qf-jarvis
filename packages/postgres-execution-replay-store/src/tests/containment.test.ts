@@ -630,10 +630,11 @@ describe('the migration set is exactly 0001-0011', () => {
       '0011_riya_conversation_continuity.sql',
       // RWC-P8 (ADR-0104): the ONE authorized addition, repository and LOCAL/CI only.
       '0012_riya_logical_turn_idempotency.sql',
+      '0013_communication_state_projection.sql',
     ]);
     // RWC-P8 (ADR-0104) RESTATED, not relaxed: 0012 is the ONE owner-authorized addition -- durable
     // logical-turn idempotency, repository and LOCAL/CI only. The bound moves to 0013, so the
     // lock still says what it always said: no unauthorized migration exists.
-    expect(files.some((name) => name.startsWith('0013'))).toBe(false);
+    expect(files.some((name) => name.startsWith('0014'))).toBe(false);
   });
 });

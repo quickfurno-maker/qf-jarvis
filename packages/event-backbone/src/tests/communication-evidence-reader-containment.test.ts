@@ -30,6 +30,9 @@ const at = (relative: string): string => join(REPO_DIR, relative);
 const execFile = promisify(execFileCallback);
 
 const READER = 'packages/event-backbone/src/projections/communication-evidence-reader.ts';
+
+/** The ONE production file D5 (ADR-0142) authorized to consume the reader. */
+const D5_HANDLER = 'packages/event-backbone/src/projections/handlers/communication-state.ts';
 const PROBE = 'zz-d4-lint-probe.ts';
 
 const eslint = new ESLint({ cwd: REPO_DIR });
@@ -162,7 +165,11 @@ beforeAll(async () => {
       written.push(t.path);
     }
 
-    const results = await eslint.lintFiles([...targets.map((t) => t.path), at(READER)]);
+    const results = await eslint.lintFiles([
+      ...targets.map((t) => t.path),
+      at(READER),
+      at(D5_HANDLER),
+    ]);
     const byPath = new Map(
       results.map((r) => [
         r.filePath,
@@ -171,6 +178,7 @@ beforeAll(async () => {
     );
     for (const t of targets) restrictedByKey.set(t.key, byPath.get(t.path) ?? []);
     restrictedByKey.set('reader-itself', byPath.get(at(READER)) ?? []);
+    restrictedByKey.set('d5-handler', byPath.get(at(D5_HANDLER)) ?? []);
   } finally {
     await removeProbes();
   }
@@ -220,7 +228,7 @@ describe('D4 — no production code may import the reader', () => {
   it.each([
     ['another directory in the package', 'from-persistence'],
     ['the projections directory itself, as a sibling', 'from-projections-sibling'],
-    ['a projection handler — D5 must open this deliberately', 'from-a-handler'],
+    ['an ARBITRARY projection handler — only the D5 one is permitted', 'from-a-handler'],
   ])('rejects importing the reader from %s', (_label, key) => {
     const messages = restrictedByKey.get(key) ?? [];
 
@@ -230,6 +238,28 @@ describe('D4 — no production code may import the reader', () => {
 
   it('does not ban the reader module from being itself', () => {
     expect(restrictedByKey.get('reader-itself')).toStrictEqual([]);
+  });
+
+  it('PERMITS the real D5 handler — the exception is file-exact, not directory-wide', () => {
+    // The committed handler, which really does import the reader. A sibling handler in the same
+    // directory is still refused (the `from-a-handler` case above), so the permission is one file.
+    expect(restrictedByKey.get('d5-handler')).toStrictEqual([]);
+  });
+
+  it('grants the D5 handler the reader WITHOUT stripping its other boundaries', async () => {
+    // The exception omits ONE pattern, not the whole rule. A read consumer earns no write authority,
+    // and it stays subject-blind and I/O-pure like every other reducer.
+    const groups = await resolvedGroups(D5_HANDLER);
+
+    expect(groups).not.toContain('**/communication-evidence-reader.js');
+    expect(groups).toContain('node:fs');
+    expect(groups).toContain('**/projection-subject-reader.js');
+    expect(groups).toContain('@qf-jarvis/event-backbone/internal/event-write');
+    expect(
+      (await resolvedPatterns(D5_HANDLER)).some((p) =>
+        p.importNames?.includes('storeValidatedEvent'),
+      ),
+    ).toBe(true);
   });
 
   it('scopes the ban across every package and app', async () => {
@@ -242,9 +272,12 @@ describe('D4 — no production code may import the reader', () => {
     }
   });
 
-  it('has exactly ZERO production references to the reader, in ANY module form', async () => {
+  it('has EXACTLY ONE production reference to the reader, and it is the D5 handler', async () => {
     // The independent second layer: a source scan cannot be silenced by an eslint-disable comment.
-    // D5 changes this number to exactly 1, deliberately, in its own PR.
+    //
+    // D4 shipped this at ZERO. D5 (ADR-0142) moved it to exactly ONE, deliberately. `toStrictEqual`
+    // on the full list is what makes this bite in both directions: zero fails (the handler vanished
+    // or stopped using the governed route), and two or more fails (a second consumer appeared).
     const files = await productionFiles();
 
     const referrers: string[] = [];
@@ -253,7 +286,20 @@ describe('D4 — no production code may import the reader', () => {
       if (referencesReader(code)) referrers.push(relative(file));
     }
 
-    expect(referrers).toStrictEqual([]);
+    expect(referrers).toStrictEqual([D5_HANDLER]);
+  });
+
+  it('fails if the D5 handler stops being the importer, or a second one appears', () => {
+    // Non-vacuity for the assertion above: the list is compared exactly, so neither an empty set nor
+    // an extra entry can pass. Stated as a property rather than trusted from the shape of the code.
+    const exactlyOne = [D5_HANDLER];
+
+    expect(exactlyOne).toHaveLength(1);
+    expect([]).not.toStrictEqual(exactlyOne);
+    expect([
+      D5_HANDLER,
+      'packages/event-backbone/src/projections/handlers/other.ts',
+    ]).not.toStrictEqual(exactlyOne);
   });
 
   it.each([

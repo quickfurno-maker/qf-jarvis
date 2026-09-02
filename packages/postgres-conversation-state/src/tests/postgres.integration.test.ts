@@ -126,7 +126,7 @@ describe('migration 0008 and the schema it creates', () => {
         .digest('hex');
       expect(actual, file).toBe(expected);
     }
-    expect(readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith('.sql'))).toHaveLength(12);
+    expect(readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith('.sql'))).toHaveLength(13);
   });
 
   it('applied 0008 and recorded it in the migration history', async () => {

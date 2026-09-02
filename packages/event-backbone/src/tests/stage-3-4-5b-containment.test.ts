@@ -104,7 +104,7 @@ describe('destructive/reset operations are absent from ALL production projection
 // The migration set grew as authorized slices landed: 0006 (QFJ-P03.07C), 0007 (QFJ-P03.09), 0008
 // (QFJ-P08-B2), 0009 (QFJ-P08 durable approval queue) and now 0010 (QFJ-P09.03 durable execution
 // replay claim). This guard bounds it at 0001–0011.
-describe('migrations are bounded at 0001–0012 with no 0013', () => {
+describe('migrations are bounded at 0001–0012 with no 0014', () => {
   it('the migrations directory holds EXACTLY the twelve approved SQL files', () => {
     const files = readdirSync(MIGRATIONS_DIR)
       .filter((name) => name.endsWith('.sql'))
@@ -123,6 +123,7 @@ describe('migrations are bounded at 0001–0012 with no 0013', () => {
       '0011_riya_conversation_continuity.sql',
       // RWC-P8 (ADR-0104): the ONE authorized addition, repository and LOCAL/CI only.
       '0012_riya_logical_turn_idempotency.sql',
+      '0013_communication_state_projection.sql',
     ]);
   });
 
@@ -133,7 +134,7 @@ describe('migrations are bounded at 0001–0012 with no 0013', () => {
     const files = readdirSync(MIGRATIONS_DIR).filter((name) => name.endsWith('.sql'));
     // RWC-P8 (ADR-0104): the bound moves to 0012, the ONE owner-authorized addition. The lock
     // still says exactly what it said -- no unauthorized migration exists.
-    const beyond = files.filter((name) => Number.parseInt(name.slice(0, 4), 10) > 12);
+    const beyond = files.filter((name) => Number.parseInt(name.slice(0, 4), 10) > 13);
     expect(beyond).toEqual([]);
   });
 });

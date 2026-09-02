@@ -511,16 +511,16 @@ describe('a real race on one conversation', () => {
 // ---------------------------------------------------------------------------
 
 describe('this slice needed no schema', () => {
-  it('the migration set is still exactly 0001-0012, with 0011 byte-exact', () => {
+  it('the migration set is still exactly 0001-0013, with 0011 byte-exact', () => {
     const files = readdirSync(MIGRATIONS_DIR)
       .filter((name) => name.endsWith('.sql'))
       .sort();
     // RWC-P8 (ADR-0104): 0012 is the ONE owner-authorized addition, repository and LOCAL/CI only.
-    expect(files).toHaveLength(12);
+    expect(files).toHaveLength(13);
     // RWC-P8 (ADR-0104) RESTATED, not relaxed: 0012 is the ONE owner-authorized addition -- durable
     // logical-turn idempotency, repository and LOCAL/CI only. The bound moves to 0013, so the
     // lock still says what it always said: no unauthorized migration exists.
-    expect(files.some((name) => name.startsWith('0013'))).toBe(false);
+    expect(files.some((name) => name.startsWith('0014'))).toBe(false);
     expect(
       createHash('sha256')
         .update(readFileSync(join(MIGRATIONS_DIR, '0011_riya_conversation_continuity.sql')))

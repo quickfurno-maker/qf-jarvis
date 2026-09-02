@@ -1153,6 +1153,7 @@ describe('the runner is idempotent with 0001 through 0005 applied', () => {
       '0011_riya_conversation_continuity.sql',
       // RWC-P8 (ADR-0104): the ONE authorized addition, repository and LOCAL/CI only.
       '0012_riya_logical_turn_idempotency.sql',
+      '0013_communication_state_projection.sql',
     ]);
   });
 });
@@ -1284,6 +1285,7 @@ describe('migration 0002 — comprehensive stale-grant remediation', () => {
         '0011_riya_conversation_continuity.sql',
         // RWC-P8 (ADR-0104): the ONE authorized addition, repository and LOCAL/CI only.
         '0012_riya_logical_turn_idempotency.sql',
+        '0013_communication_state_projection.sql',
       ]);
 
       // 5. Every stale direct privilege is gone. ALL schema_migration privileges, not only SELECT.

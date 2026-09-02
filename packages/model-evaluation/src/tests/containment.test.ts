@@ -3,7 +3,7 @@
  *
  * Matrix items 49–65: content-free events; evaluation grants no authority; scopes distinct; the
  * Conversation Operations Center is documented-mandatory but absent; no semantic/RAG; no live call/
- * provider SDK/DB/secret/n8n dependency; the public API is locked; migrations exact with no 0013; the
+ * provider SDK/DB/secret/n8n dependency; the public API is locked; migrations exact with no 0014; the
  * event-backbone root API remains 39; and no tracked source carries a control byte.
  */
 import { createHash } from 'node:crypto';
@@ -84,6 +84,8 @@ const LOCKED_MIGRATION_HASHES: Record<string, string> = {
   // LOCAL/CI only; nothing is applied to a managed database.
   '0012_riya_logical_turn_idempotency.sql':
     '5d1b7fe68401a664cea3116ff0900499a1f20d659d4935c586b4ac0f923aaf3e',
+  '0013_communication_state_projection.sql':
+    '4f533fb60ea96bedd11bf2f5b3177376517c07633d3b7e71e0341b43c1a72919',
 };
 
 function recorder(): { hook: EvaluationObservabilityHook; events: EvaluationEvent[] } {
@@ -312,7 +314,7 @@ describe('containment', () => {
     expect(b['buildFoundationSuite']).toBeUndefined();
   });
 
-  it('(58,59) migrations 0001–0012 are byte-exact and there is no 0013', () => {
+  it('(58,59) migrations 0001–0013 are byte-exact and there is no 0014', () => {
     const dir = repoPath('packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
       .filter((n) => n.endsWith('.sql'))
@@ -328,7 +330,7 @@ describe('containment', () => {
     // RWC-P8 (ADR-0104) RESTATED, not relaxed: 0012 is the ONE owner-authorized addition -- durable
     // logical-turn idempotency, repository and LOCAL/CI only. The bound moves to 0013, so the
     // lock still says what it always said: no unauthorized migration exists.
-    expect(sql.some((n) => n.startsWith('0013'))).toBe(false);
+    expect(sql.some((n) => n.startsWith('0014'))).toBe(false);
   });
 
   it('(60) the event-backbone public-api lock remains 38', () => {

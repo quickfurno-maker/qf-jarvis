@@ -551,6 +551,41 @@ export default tseslint.config(
     },
   },
 
+  // D5 (ADR-0142): the ONE production consumer of the D4 evidence reader.
+  //
+  // D4 shipped with a deliberate ZERO production importers, and D5 is the slice authorized to move
+  // that invariant to EXACTLY ONE. This block names the single communication-state projection handler
+  // and nothing else — a sibling handler, a persistence module or any other projection still inherits
+  // the ban above, and the tracked-source scan independently asserts the count is exactly one.
+  //
+  // The exception is expressed as a NARROWER block rather than an `ignores` entry so it drops only the
+  // reader pattern: the handler keeps the reducer I/O purity rules and both D2a WRITE bans, because a
+  // read consumer earns no write authority.
+  {
+    files: ['packages/event-backbone/src/projections/handlers/communication-state.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: [...REDUCER_FORBIDDEN_IO_IMPORTS],
+              message:
+                'A projection reducer is a pure function of the event log. It performs no filesystem, network, process, or crypto I/O; it only writes its read-model table through the borrowed client.',
+            },
+            {
+              group: ['**/projection-subject-reader.js', '**/projection-subject-reader'],
+              message:
+                'Only the subject-activity reducer may resolve the opaque subject (QFJ-P03.09, ADR-0044). Other projections remain subject-blind.',
+            },
+            GOVERNED_EVENT_WRITER_FORBIDDEN_IMPORT_PATTERN,
+            LOW_LEVEL_EVENT_WRITER_FORBIDDEN_IMPORT_PATTERN,
+          ],
+        },
+      ],
+    },
+  },
+
   // Must remain last: turns off every rule that would fight Prettier.
   // Formatting is Prettier's job; ESLint's job is correctness.
   eslintConfigPrettier,
