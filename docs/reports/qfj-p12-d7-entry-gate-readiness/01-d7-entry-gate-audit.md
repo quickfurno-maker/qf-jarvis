@@ -1,6 +1,12 @@
 # QFJ-P12 — D7 real-integration entry-gate readiness audit
 
-**Verdict: `OWNER_ARCHITECTURE_REOPEN_REQUIRED`.**
+**Verdict at the audited baseline `4d364f9`: `OWNER_ARCHITECTURE_REOPEN_REQUIRED`.**
+**Current status after the owner ruling of 2026-09-02: `ARCHITECTURE AMBIGUITY RESOLVED` — and
+`D7 ENTRY GATE NOT SATISFIED`.**
+
+> **Read §0 first.** The ambiguity this audit found was real at the time it ran, and the finding below
+> is preserved verbatim as the evidence that produced the ruling. The owner has since resolved it. **No
+> implementation became legal as a result** — only the nomenclature is settled.
 
 **Starting main:** `9fd7f449c3ed56535e4cd8381b7a794f56011859` (merge of PR #183 / D5)
 **Scope:** qf-jarvis repository only. No Core, marketplace, OneDecore, n8n, Meta, provider, external
@@ -11,6 +17,60 @@ D7 cannot be entered — but the reason is **not only** the external blockers. T
 documents disagree about what D7's entry conditions actually are, and that disagreement cannot be
 resolved by an implementer without silently picking a side. The external blockers are recorded below
 and would independently prevent D7 as well.
+
+---
+
+## 0. OWNER RULING / RESOLUTION — 2026-09-02
+
+**The ambiguity recorded in §3 existed at the audited baseline `9fd7f449c3ed56535e4cd8381b7a794f56011859`
+(audit head `4d364f9`). The owner chose the resolution AFTER this audit reported it.** Nothing below in
+§3 has been rewritten to look as though it had always said this; the finding stands as the record of why
+the ruling was needed.
+
+**The ruling, as ratified:**
+
+1. **D6 remains canonical.** It was **not** absorbed, superseded or retired by ADR-0137. ADR-0135's
+   **D5 → D6 → D7 → D8** stands. D6 is the **Jarvis-side live integration/composition** slice for the
+   adopted **S4/S5/S7** surfaces. **The external C-track does not substitute for it** — external
+   capability/adoption (C1/C4/C6) and Jarvis integration/composition (D6) are different work, and
+   neither completes the other.
+
+2. **D7 ≠ S11.** D7 is the **narrower** milestone: real-integration certification of the
+   **communication/execution subsystem**, covering D5, D6 and their applicable external prerequisites.
+   **S11** is the broader **Aarohi-wide** certification, reached only after **S10** runtime composition.
+   **D7 precedes S11 and does not replace it.**
+
+3. **D8 ≠ S12.** D8 is separately governed staged activation of the **narrower** subsystem after D7.
+   S12 is separately governed staged activation of the **full Aarohi runtime** after S11. **D8 does not
+   authorize S12, and S12 does not follow merely because D8 occurred.**
+
+4. **S8 and S9 do not gate D7.** They are **Aarohi runtime** prerequisites and remain mandatory for
+   **S8 + S9 → S10 → S11 → S12**. The ruling changes only _which_ milestone they gate. **Neither is
+   weakened and no substitute may be implemented for either**; both remain
+   `BLOCKED_BY_EXTERNAL_AUTHORITY`.
+
+5. **The corrected D7 entry gate:**
+
+   > **D5 + D6 + applicable C3A + applicable C3B + C4/S5 + C5/S6 + C6/S7 → D7**
+
+   with every prerequisite beneath those C slices preserved, and **D6 itself requiring the externally
+   adopted capabilities it integrates**. S8/S9 are deliberately absent.
+
+6. **The D5 permission/registry problem is NOT fixed here.** ADR-0142 remains authoritative and every
+   fact in §2 is unchanged: no grant on `qf_jarvis.event`, no widened role, no registry entry, no
+   activation, no change to migration `0013`, no migration `0014`. **The correct permission design is
+   reviewed as part of the future live-integration/activation path**, not here.
+
+### What the ruling did NOT change
+
+**Every external blocker in §4 remains exactly as recorded.** C0, C1, C2, C3A, C3B, C4/S5, C5/S6,
+C6/S7, S8 and S9 are all still unproved or externally blocked. **No runtime implementation became legal
+because the nomenclature was settled** — resolving what D7 _means_ did not produce any of the facts D7
+_requires_.
+
+**Outcome after the ruling:** the audit's `OUTCOME C` is discharged. The posture is now
+**`OUTCOME B` — `D7_BLOCKED_EXTERNAL_PREREQUISITES`**: the architecture is internally consistent, and
+the required authoritative external inputs are not proved.
 
 ---
 
@@ -61,7 +121,11 @@ the runtime role would fail on the first read.
 
 ---
 
-## 3. The architecture conflict
+## 3. The architecture conflict — AS FOUND at head `4d364f9` (historical; resolved by §0)
+
+> **This section is preserved as the evidence that produced the owner ruling.** It describes the
+> repository as it stood when the audit ran. The conflicts below are **resolved** — see §0 — and the
+> reconciled documents now carry dated owner-ruling clarifications.
 
 ### 3.1 What each accepted document actually says
 
@@ -329,12 +393,18 @@ That is the correct posture. ADR-0136 §110 records Core has **no `ACTIVE` vendo
 
 ---
 
-## 10. Outcome and the smallest correction proposed
+## 10. Outcome — the options put to the owner, and the ruling that followed
 
-**`OUTCOME C — OWNER_ARCHITECTURE_REOPEN_REQUIRED`.**
+**At head `4d364f9` this audit reported `OUTCOME C — OWNER_ARCHITECTURE_REOPEN_REQUIRED` and
+deliberately did not choose an interpretation.** The candidate resolutions it put up are preserved
+below as the record of what was decided between.
 
-This audit does **not** choose an interpretation. The two candidate resolutions are set out so the
-owner can rule; each has different downstream consequences.
+**The owner ruled on 2026-09-02 — see §0.** The ruling selected **Option 1a** (D6 stands) and
+**Option 2b** (D7 is communication-only; D7 ≠ S11, D8 ≠ S12, S8/S9 do not gate D7). The
+reconciling edits named in the three-step correction below have been applied to ADR-0135, ADR-0137,
+the QFJ-P10 adoption plan, the Model-2 design and the Aarohi plan.
+
+**The current outcome is `OUTCOME B — D7_BLOCKED_EXTERNAL_PREREQUISITES`.**
 
 **Question 1 — does D6 still exist?**
 
@@ -364,17 +434,30 @@ owner can rule; each has different downstream consequences.
 **No ADR is created by this audit**, because no new architecture decision has been made — only an
 existing disagreement identified. Whichever way the owner rules, an ADR amendment is the vehicle.
 
-### The next Jarvis-only slice, once the ruling lands
+### The next Jarvis-only slice, after the ruling
 
-**Nothing in the D7 path can start before the ruling**, and even after it, every remaining gate is
-externally blocked. The smallest _unblocked_ Jarvis work available today is therefore **none on the
-D7 path**.
+**`D6` is the next named Jarvis live-integration slice on this path** — the ruling settles that it
+exists and that it is Jarvis-side work no C slice performs.
 
-The first Jarvis slice that becomes available **when C3A lands** (and only then) is the **D5
-activation slice** already named in ADR-0142: add the `qf_jarvis.event` column grant the D4 reader
-needs, add the production-registry entry, and certify the projection against real adopted emissions.
-That slice is scoped, its shape is recorded, and it is deliberately not started — it requires a real
-Core emission to certify against, which does not exist.
+**D6 is NOT presently implementable.** It integrates externally adopted capabilities, and **none of
+those capabilities has been adopted**: C3A and C3B have not landed, and C4/S5, C5/S6 and C6/S7 are
+externally blocked. There is nothing to integrate.
+
+Accordingly, and until the external prerequisites actually land:
+
+- **do not implement D6**;
+- **do not implement D7**;
+- **do not implement D8**;
+- **do not implement S8**;
+- **do not implement S9**;
+- **do not compose Aarohi**;
+- **do not activate anything.**
+
+**When the external prerequisites land, run a fresh D6 ENTRY-GATE audit before implementing D6.**
+That audit **must** include the **D5 runtime permission problem** recorded in §2 and ADR-0142: the
+projection role holds no `qf_jarvis.event` access, so D5 cannot execute as merged, and the correct
+permission design is a reviewed part of the live-integration/activation path — **not something to
+fix opportunistically inside D6.**
 
 **Do not widen D5. Do not create adapters, mock transports or synthetic evidence to close any gate
 above.**
@@ -405,6 +488,17 @@ worktree` shares `.git` but **not** `node_modules`; after `pnpm install --frozen
 
 **No test, timeout or assertion was weakened.**
 
+### Gates re-run after the 2026-09-02 owner-ruling correction
+
+The ruling correction is **documentation only** — seven markdown files, no source, no SQL, no migration.
+Gates were re-run **serially** at the correction head: `format:check` **0** · `build` **0** ·
+`typecheck` **0** · `lint --max-warnings=0` **0** · `check:dist-containment` OK · `git diff --check`
+clean · unit suite **11,107 / 11,110**.
+
+The three unit failures are again `apps/api/src/tests/deployment-containment.test.ts`, the known
+Windows parallel-load flake — **73/73 in isolation**, unrelated and untouched. **No assertion, timeout,
+lint policy or containment boundary was weakened to obtain any of these results.**
+
 ---
 
 ## 12. Scope statement
@@ -414,4 +508,4 @@ migration was allocated; the inventory remains `0001`–`0013`. **Production rol
 QuickFurno repository, Supabase project, OneDecore system, n8n workflow, Meta or provider endpoint,
 external database or external repository was accessed, and no model call was made.
 
-**D7 ENTRY GATE NOT SATISFIED. OWNER ARCHITECTURE REOPEN REQUIRED — DO NOT IMPLEMENT D7.**
+**ARCHITECTURE AMBIGUITY RESOLVED — D7 ENTRY GATE NOT SATISFIED — DO NOT IMPLEMENT OR ACTIVATE.**

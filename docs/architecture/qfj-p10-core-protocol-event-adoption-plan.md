@@ -244,8 +244,12 @@ flowchart TD
     C6["C6 · result reconciliation (S7)"]
     S8["S8 · GAP A"]
     S9["S9 · GAP B"]
-    D7["D7 · real-integration certification"]
-    D8["D8 · staged activation"]
+    D6["D6 · JARVIS-SIDE integration/composition<br/>of the adopted S4/S5/S7 path"]
+    D7["D7 · communication/execution subsystem<br/>real-integration certification<br/><b>NOT S11</b>"]
+    D8["D8 · subsystem staged activation<br/>separately governed · <b>NOT S12</b>"]
+    S10["S10 · Aarohi runtime composition<br/>default OFF"]
+    S11["S11 · AAROHI-WIDE certification"]
+    S12["S12 · staged Aarohi activation<br/>separately governed"]
 
     D2 --> D2a --> D4
     D2 --> D2b --> D3
@@ -260,14 +264,51 @@ flowchart TD
     C6 -.contract-fit input.-> C3B
     C1 --> S8
     C1 --> S9
-    D5 --> D7
-    C3A --> D7
-    C3B --> D7
+
+    %% Layer A — the narrower communication/execution subsystem.
+    %% The C-track adopts external capability; D6 integrates it on the Jarvis side.
+    %% Neither replaces the other, and S8/S9 are deliberately NOT in this path.
+    C3A --> D6
+    C3B --> D6
+    C4 --> D6
+    C5 --> D6
+    C6 --> D6
+    D5 --> D6
+    D6 --> D7
     D7 -.owner decision.-> D8
+
+    %% Layer B — the Aarohi-wide runtime. It consumes the ALREADY-certified subsystem
+    %% and additionally requires S8 and S9, which gate this layer and not D7.
+    D7 --> S10
+    S8 --> S10
+    S9 --> S10
+    S10 --> S11
+    S11 -.owner decision.-> S12
 ```
 
+**Two layers, deliberately not collapsed into one certification node.**
+
+**Layer A — communication/execution subsystem:** external C-track adoption → **D6** Jarvis-side
+integration → **D7** subsystem certification → **D8** separately governed subsystem activation.
+
+**Layer B — Aarohi-wide runtime:** the already-certified subsystem **plus S8 and S9** → **S10** Aarohi
+runtime composition → **S11** Aarohi-wide certification → **S12** separately governed Aarohi
+activation.
+
+**D8 does not trigger S10 or S12**, and **S8/S9 are not D7 prerequisites** — both edges above are
+`owner decision` dotted edges precisely because activation is never a dependency.
+
 **Mapping to ADR-0132:** C1 → **S4** · C4 → **S5** · C5 → **S6** · C6 → **S7** · S8 → **GAP A** ·
-S9 → **GAP B**. **No new major QFJ phase.**
+S9 → **GAP B** · **D6 → the Jarvis-side integration/composition of the adopted S4/S5/S7 path** (not a
+C slice, and not replaced by one) · **D7 → the narrower communication/execution certification, NOT
+S11** · **D8 → the narrower subsystem staged activation, NOT S12**. **No new major QFJ phase.**
+
+> **Owner ruling, 2026-09-02** (after the QFJ-P12 D7 entry-gate audit, PR #184). The mapping above
+> previously stopped at S9, and the graph omitted D6 — which
+> [ADR-0135](../decisions/ADR-0135-qfj-p09-s2-local-communication-state-projection-architecture.md)
+> §11 requires and which [ADR-0137](../decisions/ADR-0137-qfj-p10-d2-core-protocol-and-event-gap-decision.md)
+> neither scheduled nor withdrew. **D6 remains canonical.** **S8 and S9 gate S10/S11/S12, not D7**, and
+> neither is weakened by that — both remain `BLOCKED_BY_EXTERNAL_AUTHORITY`.
 
 ### 6.1 The Jarvis track proceeds offline; the Core track proceeds independently
 
@@ -284,8 +325,18 @@ tested offline, and D2 does not add that requirement.
 | **D5** | **D3 + D4 + D2b** — offline projection for the supported subset, certified against **synthetic accepted Core-shaped events** | **NO** — **remains NOT LIVE and NOT ACTIVATED** |
 | **C0 … C6** | Core governance, scheduled independently | yes, by definition |
 
-> **Live-integration gate:** **D5** *plus* the applicable **C3A / C3B / C4 / C5 / C6** work must all
-> land before **D7** real-integration certification, and **D8** activation stays separately governed.
+> **Live-integration gate (corrected by the 2026-09-02 owner ruling):** **D5** *plus* the applicable
+> **C3A / C3B / C4 / C5 / C6** work *plus* **D6** must all land before **D7**, the **narrower
+> communication/execution subsystem** real-integration certification. **D8** activation stays
+> separately governed and authorizes nothing beyond that subsystem.
+>
+> **This gate may not be read as `D5 + C-track → D7`.** The C-track adopts external capability; **D6
+> integrates it on the Jarvis side**, and an adopted capability Jarvis has not integrated certifies
+> nothing. **D6 in turn requires the external capabilities it integrates**, so it cannot precede them.
+>
+> **S8 / S9 are deliberately absent from this gate** — they gate the Aarohi-wide path
+> (**S10 → S11 → S12**). **D7 ≠ S11 and D8 ≠ S12.**
+>
 > **D5 passing synthetic tests does not make it production-ready.**
 
 ### 6.2 The next execution wave after D2 merges
