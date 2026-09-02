@@ -11,10 +11,17 @@ a model in the course of this audit, and none may be.**
 **Merge-base:** `359fc4b09a84573a0862c52fd7ac582b4e9fa995` (merge of PR #113 / HGV1-A)
 **Divergence:** DIVERGED — historical branch **3 ahead**, **230 behind** current main.
 
-**One repository-local defect blocks human authoring**, and it is on **current main**, not merely in the
-stale branch: **15 plan slots require the author to produce a grounded answer while supplying no
-authority material** — 3 of them in Wave 1. **The repair is defined below and deliberately NOT applied**
+**Four current-main authoring contradictions block Human Gold Wave-1 resumption: one structural plan
+defect and three brief-prose/assignment authority mismatches.** All four are on **current main**, not
+merely in the stale branch, and all four have the same shape — **the author is instructed to answer from
+authority the assignment never supplies.** **The repair is defined below and deliberately NOT applied**
 in this audit.
+
+> **Correction, 2026-09-02 (owner review of PR #185 at head `55937bd`).** The first version of this
+> report said _"one repository-local defect"_. That was **incomplete**: it documented the structural
+> plan defect and missed three brief-prose contradictions of the same class. All four are recorded in
+> §5, and the minimum repair in §5.4 now covers both classes. The outcome is unchanged — **`OUTCOME B`**
+> either way — but the repair scope was understated.
 
 ---
 
@@ -172,17 +179,23 @@ trajectory or corpus data file was added.
 
 ### Per semantic unit
 
-| Semantic unit                                                                       | Commit  | Production code?      | Classification                                                                                                     |
-| ----------------------------------------------------------------------------------- | ------- | --------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `wave-1-batches.ts` — six-micro-batch schedule module                               | 1, 3    | plan module (offline) | **REIMPLEMENT_FROM_CURRENT_MAIN** — the _idea_ is sound; the _data_ is 230 commits stale and must be re-derived    |
-| `gold-v1-wave-1-batches.test.ts` — schedule invariants                              | 1, 3    | test                  | **REIMPLEMENT_FROM_CURRENT_MAIN** — invariants remain the right ones, bindings are stale                           |
-| `index.ts` — export the batch API                                                   | 1       | production surface    | **HUMAN_DECISION_REQUIRED** — widening the public surface is an owner call, not an audit side effect               |
-| Batch-1 authoring packet (`docs/training/...packet.md`)                             | 1, 2, 3 | docs                  | **OBSOLETE_AFTER_LATER_WORK** — a generated artifact of a stale plan; regenerate, never copy                       |
-| Batch schedule doc                                                                  | 1, 3    | docs                  | **OBSOLETE_AFTER_LATER_WORK** — same reason                                                                        |
-| `gold-v1-brief-authority-audit.test.ts` — brief/assignment authority contradictions | 2, 3    | test                  | **KEEP_AS_CURRENT_DESIGN** — the _class_ of check is exactly what current main lacks (§5)                          |
-| **OUT_OF_SCOPE ordinal-2 `requiredAuthorityFactClasses: ['PROCESS']`**              | 3       | plan module           | **KEEP_AS_CURRENT_DESIGN** — the defect is still live on current main and the fix is still lawful (§5)             |
-| Selected brief rewording                                                            | 3       | plan module           | **HUMAN_DECISION_REQUIRED** — brief prose is authoring guidance; an owner should re-read it against current briefs |
-| ADR-0108 calibration note                                                           | 3       | governance            | **REIMPLEMENT_FROM_CURRENT_MAIN** — record the calibration decision against current ADR text                       |
+| Semantic unit                                                                       | Commit  | Production code?      | Classification                                                                                                  |
+| ----------------------------------------------------------------------------------- | ------- | --------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `wave-1-batches.ts` — six-micro-batch schedule module                               | 1, 3    | plan module (offline) | **REIMPLEMENT_FROM_CURRENT_MAIN** — the _idea_ is sound; the _data_ is 230 commits stale and must be re-derived |
+| `gold-v1-wave-1-batches.test.ts` — schedule invariants                              | 1, 3    | test                  | **REIMPLEMENT_FROM_CURRENT_MAIN** — invariants remain the right ones, bindings are stale                        |
+| `index.ts` — export the batch API                                                   | 1       | production surface    | **HUMAN_DECISION_REQUIRED** — widening the public surface is an owner call, not an audit side effect            |
+| Batch-1 authoring packet (`docs/training/...packet.md`)                             | 1, 2, 3 | docs                  | **OBSOLETE_AFTER_LATER_WORK** — a generated artifact of a stale plan; regenerate, never copy                    |
+| Batch schedule doc                                                                  | 1, 3    | docs                  | **OBSOLETE_AFTER_LATER_WORK** — same reason                                                                     |
+| `gold-v1-brief-authority-audit.test.ts` — brief/assignment authority contradictions | 2, 3    | test                  | **KEEP_AS_CURRENT_DESIGN** — the _class_ of check is exactly what current main lacks (§5)                       |
+| **OUT_OF_SCOPE ordinal-2 `requiredAuthorityFactClasses: ['PROCESS']`**              | 3       | plan module           | **KEEP_AS_CURRENT_DESIGN** — the defect is still live on current main and the fix is still lawful (§5)          |
+| Selected brief rewording                                                            | 3       | plan module           | **KEEP_AS_CURRENT_DESIGN (contradiction) / HUMAN_DECISION_REQUIRED (wording)** — see below                      |
+| ADR-0108 calibration note                                                           | 3       | governance            | **REIMPLEMENT_FROM_CURRENT_MAIN** — record the calibration decision against current ADR text                    |
+
+> **The brief rewordings are not historical curiosities.** Their underlying contradictions are **live on
+> current main** (§5.2) — the historical branch never merged, so the contradictory prose was never
+> corrected. What is historical is one _previously reviewed solution_ to them. The contradictions
+> themselves are **current defects**, and the repair slice must **independently owner-review** the
+> proposed wording against current main rather than re-apply August's text because it once passed review.
 
 **"Not merged" did not mean "still needed", and "historical preparation" did not mean "safe to
 cherry-pick".** Two units are obsolete generated artifacts; two need an owner decision; only one is a
@@ -190,7 +203,22 @@ defect fix that survives unchanged on the merits.
 
 ---
 
-## 5. THE BLOCKER — grounded answers demanded without supplied authority
+## 5. THE BLOCKERS — four authority contradictions on current main
+
+Every one of these was **verified directly against current-main source**. The historical branch was used
+only as corroboration, never as authority.
+
+**A completeness scan was run over all 72 Wave-1 briefs**, cross-referencing each brief's
+`conversationGoal` against its assignment's `requiredAuthorityFactClasses`. It found **exactly four**
+briefs promising supplied authority over an authority-free assignment — the same four below. **Four is
+the complete count for Wave 1, not a sample.**
+
+The inverse direction was also checked: **7** Wave-1 briefs belong to authority-bearing assignments
+without mentioning supplied authority in their prose. **That is not a defect** — `authorityPlan` is
+structured data the packet supplies regardless, and prose need not restate it. The dangerous direction is
+prose promising material that does not exist, never prose omitting mention of material that does.
+
+### 5.1 STRUCTURAL — the plan itself is under-specified
 
 **Independently reproduced on current main. The historical branch was not trusted for this.**
 
@@ -219,7 +247,7 @@ author is instructed to answer from authority that the packet never supplies.
 This violates the invariant exactly: **a slot must never require the human author to produce an
 authority-grounded answer while withholding the authority material needed to write it.**
 
-### Scale — larger than the historical branch recorded
+#### Scale
 
 | Scope      | Affected slots                                                |
 | ---------- | ------------------------------------------------------------- |
@@ -229,28 +257,82 @@ authority-grounded answer while withholding the authority material needed to wri
 No other slot in the plan has this shape: the two genuine `GROUNDING_QA` slots correctly carry
 `SERVICE_AVAILABILITY` and `POLICY`. The defect is **isolated to one slot shape** and **not systemic**.
 
-### It is currently unguarded
+### 5.2 PROSE — three Wave-1 briefs promise authority their assignment does not carry
 
-All **253** dataset tests pass on current main, so **no existing test detects it.** A human could begin
-authoring micro-batch 1 today and hit it on three assignments with nothing to warn them.
+These three assignments are **deliberately authority-free** (`requiredAuthorityFactClasses = []`), which
+is a legitimate design choice. The defect is that their **brief prose instructs the author to use
+supplied authority anyway**, so `authorityPlan` derives empty and the instruction cannot be followed.
 
-### The smallest repair — DEFINED, NOT APPLIED
+Verified verbatim from current `wave-1-briefs.ts`:
 
-1. Set `requiredAuthorityFactClasses: ['PROCESS']` on the `OUT_OF_SCOPE` ordinal-2 `SlotShape` in
-   `generate-plan.ts`. One field. It propagates deterministically to all 15 slots and, through
-   `wave-1-briefs.ts:697`, into each `authorityPlan`.
-2. Add a guard test asserting **no assignment in the plan requires `GROUNDING_QA` as a secondary kind
-   while declaring zero authority fact classes** — the property, so the defect cannot return in another
-   slot.
+| Assignment                                  | Current brief goal (verbatim fragment)                                                                           | Assignment authority | Derived `authorityPlan` |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | -------------------- | ----------------------- |
+| `gold.v1.w1.hinglish.comparison.01`         | _"Answer using **supplied package authority**, keep the difference concrete rather than aspirational…"_          | `[]`                 | **empty**               |
+| `gold.v1.w1.hi.post-summary-qa.01`          | _"Describe the next step **from supplied process context**, keep it to what is actually known…"_                 | `[]`                 | **empty**               |
+| `gold.v1.w1.hinglish.objection-timeline.01` | _"Reward the flexibility with honesty, **give ranges only from supplied authority**, and keep the reply short."_ | `[]`                 | **empty**               |
 
-**`PROCESS` is re-derived, not copied.** It is still a valid class on current main, and it remains the
-right one: `SERVICE_AVAILABILITY` or `POLICY` would commit the slot to an availability or policy term
-and quietly turn a `STANDARD`-risk slot into a second high-risk one, while `PROCESS` is governed and
-factual, exercises the intended shape — decline the out-of-scope half, answer the valid half from
-authority — and commits to no price, availability or policy term. That the historical branch reached the
-same conclusion is corroboration, not the reason.
+**Why each is harmful.** An author following the prose has no supplied package authority, no supplied
+process context and no supplied range. The only ways to comply are to **invent business truth** — a
+package difference, a next step, a timeline range — or to silently ignore the instruction. The first is
+precisely what the volatile-truth firewall exists to prevent; the second corrupts the calibration signal,
+because a reviewer cannot tell a deliberate omission from a missed requirement.
 
-**This repair is not applied here.** It touches an offline plan module and needs its own reviewed slice.
+**Why adding authority classes is NOT automatically the fix.** Widening these three assignments would
+change what each slot teaches, and each has a paired ordinal-2 slot that already owns the grounded
+version — `COMPARISON.02` carries `PACKAGE`, `POST_SUMMARY_QA.02` carries `PACKAGE`, and
+`OBJECTION_TIMELINE.02` carries `CURRENT_STATUS` + `PROCESS`. Granting ordinal 1 authority too would
+collapse the ordinal pair into two grounded slots and **delete the authority-free lesson from Wave 1
+entirely**. The expected direction is therefore the opposite — see §5.4 — but **the direction is an
+owner decision, and this audit does not make it.**
+
+### 5.3 Neither class is guarded today
+
+All **253** dataset tests pass on current main, so **no existing test detects any of the four.** The
+structured brief validator checks that a brief is well-formed; it does not check that the brief's prose
+is _satisfiable_ given the assignment behind it. A human could begin authoring micro-batch 1 today and
+hit the structural defect on three assignments and the prose contradictions on three more — **six of the
+72 Wave-1 slots** — with nothing to warn them.
+
+### 5.4 The corrected minimum repair — DEFINED, NOT APPLIED
+
+Both classes must be repaired before a human authors Wave 1. **Neither is applied in this audit.**
+
+**(1) Structural plan repair.**
+
+- Set `requiredAuthorityFactClasses: ['PROCESS']` on the `OUT_OF_SCOPE` ordinal-2 `SlotShape` in
+  `generate-plan.ts`. One field, propagating deterministically to all 15 slots and, through
+  `wave-1-briefs.ts:697`, into each `authorityPlan`.
+- Add a **plan-level property guard**: no assignment may require `GROUNDING_QA` as a secondary kind
+  while declaring zero authority fact classes.
+
+**`PROCESS` is re-derived, not copied.** It remains a valid class on current main and remains the right
+one: `SERVICE_AVAILABILITY` or `POLICY` would commit the slot to an availability or policy term and
+quietly turn a `STANDARD`-risk slot into a second high-risk one, while `PROCESS` is governed and factual,
+exercises the intended shape — decline the out-of-scope half, answer the valid half from authority — and
+commits to no price, availability or policy term. That the historical branch reached the same conclusion
+is corroboration, not the reason.
+
+**(2) Brief-prose consistency repair.**
+
+- **Independently owner-review** the three authority-free briefs in §5.2.
+- **Expected direction, from the historical evidence and from the ordinal-pair design: reword them to
+  stay authority-free**, rather than silently widening their authority requirements — the Hinglish
+  comparison answerable from known customer context and priorities, the Hindi post-summary question
+  answerable from the summary already on screen, and the Hinglish timeline objection teaching **what to
+  do when no timeline authority is supplied** rather than inventing a range. That last one is the most
+  valuable lesson in the set, and granting it authority would erase it.
+- Add a **narrow lexical regression guard**: prose instructing use of supplied authority or context may
+  not coexist with an empty `authorityPlan` / empty `requiredAuthorityFactClasses`.
+- The structured brief validator must still pass **all 72**.
+
+**The guard must be narrow, and the historical evidence says why.** The preserved test explicitly records
+phrasings that are _not_ findings — _"can be supplied"_ about an appliance is a **customer request**,
+_"a referral that was not supplied"_ is a **prohibition**, and _"keep the latest values as authoritative"_
+concerns **customer-stated facts**. A naive substring guard would flag all three and train authors to
+ignore it. This audit's own scan used a positive-instruction phrase list for the same reason.
+
+**Neither repair is applied here.** Both touch offline plan/test modules and need their own reviewed
+slice, and (2) needs an owner decision on direction first.
 
 ---
 
@@ -304,24 +386,26 @@ conversational turns around that scenario. **AI-generated prose may not cross in
 Run against current main using structural metadata only. No dialogue was created, and no fake completed
 trajectory was fabricated to obtain a green result.
 
-| #   | Capability                                             | Result                                                                                                       |
-| --- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
-| 1   | Enumerate Wave-1 assignments                           | **PASS** — 72                                                                                                |
-| 2   | Derive a micro-batch schedule                          | **BLOCKED** — no schedule module on main (§6)                                                                |
-| 3   | Produce a content-free author packet                   | **PARTIAL** — briefs exist and carry no dialogue field, but `authorityPlan` is empty for 3 Wave-1 slots (§5) |
-| 4   | Validate an empty progress state honestly              | **PASS**                                                                                                     |
-| 5   | Reject teacher-generated content as Gold               | **PASS** — `NOT_HUMAN_AUTHORED`                                                                              |
-| 6   | Reject insufficient high-risk review                   | **PASS** — HIGH_RISK requires 2                                                                              |
-| 7   | Reject wrong-slot trajectory metadata                  | **PASS** — start-phase/kind mismatch findings                                                                |
-| 8   | Reject cross-split lineage contamination               | **PASS** — lineage isolation                                                                                 |
-| 9   | Reject protected-evaluation leakage                    | **PASS** — exact + near-copy                                                                                 |
-| 10  | Reject privacy contamination                           | **PASS** — fail-closed, no echo                                                                              |
-| 11  | Reject grounded claims without prior authority context | **PASS at trajectory level**, **FAILS at plan level** (§5)                                                   |
-| 12  | Derive calibration only from submitted content         | **PASS**                                                                                                     |
-| 13  | Refuse to claim Wave-1 completion with zero dialogue   | **PASS**                                                                                                     |
+| #   | Capability                                             | Result                                                                                                                                                                                                                                                                 |
+| --- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Enumerate Wave-1 assignments                           | **PASS** — 72                                                                                                                                                                                                                                                          |
+| 2   | Derive a micro-batch schedule                          | **BLOCKED** — no schedule module on main (§6)                                                                                                                                                                                                                          |
+| 3   | Produce a content-free author packet                   | **FAILS for 6 of 72 Wave-1 slots** — briefs carry no dialogue field, but 3 slots have missing structured authority (`OUT_OF_SCOPE.02`, §5.1) and 3 more carry authority-promising prose over authority-free assignments (§5.2). All 6 derive an empty `authorityPlan`. |
+| 4   | Validate an empty progress state honestly              | **PASS**                                                                                                                                                                                                                                                               |
+| 5   | Reject teacher-generated content as Gold               | **PASS** — `NOT_HUMAN_AUTHORED`                                                                                                                                                                                                                                        |
+| 6   | Reject insufficient high-risk review                   | **PASS** — HIGH_RISK requires 2                                                                                                                                                                                                                                        |
+| 7   | Reject wrong-slot trajectory metadata                  | **PASS** — start-phase/kind mismatch findings                                                                                                                                                                                                                          |
+| 8   | Reject cross-split lineage contamination               | **PASS** — lineage isolation                                                                                                                                                                                                                                           |
+| 9   | Reject protected-evaluation leakage                    | **PASS** — exact + near-copy                                                                                                                                                                                                                                           |
+| 10  | Reject privacy contamination                           | **PASS** — fail-closed, no echo                                                                                                                                                                                                                                        |
+| 11  | Reject grounded claims without prior authority context | **PASS at trajectory level**, **FAILS at plan level** (§5)                                                                                                                                                                                                             |
+| 12  | Derive calibration only from submitted content         | **PASS**                                                                                                                                                                                                                                                               |
+| 13  | Refuse to claim Wave-1 completion with zero dialogue   | **PASS**                                                                                                                                                                                                                                                               |
 
-Item 11 is the finding: the corpus validator would correctly reject an ungrounded claim at authoring
-time, but the **plan** hands three Wave-1 authors an assignment they cannot satisfy without it.
+Items 3 and 11 are the finding: the corpus validator would correctly reject an ungrounded claim at
+authoring time, but the **plan and the briefs together** hand **six** Wave-1 authors an assignment they
+cannot satisfy without inventing one — three through a missing structured requirement, three through
+prose that promises material the assignment does not carry.
 
 ---
 
@@ -365,20 +449,38 @@ plan module, no test, no SQL, no migration.**
 
 `format:check` **0** · `typecheck` **0** · `lint --max-warnings=0` **0** ·
 `check:dist-containment` OK · `git diff --check` clean · `build` **0** ·
-focused `riya-intelligence-dataset` suites **253 / 253** · unit suite **11,107 / 11,110**.
+focused `riya-intelligence-dataset` suites **253 / 253** · unit suite **11,104 / 11,110** (see below).
 
-Three unit failures, in two files, both under parallel load and **both passing in isolation**:
+### Local Windows flakes — reported, not worked around
 
-| Suite                                                                     | Under load | In isolation |
-| ------------------------------------------------------------------------- | ---------- | ------------ |
-| `apps/api/src/tests/deployment-containment.test.ts`                       | 2 failed   | **73 / 73**  |
-| `packages/riya-candidate-evaluation-runner/src/tests/containment.test.ts` | 1 failed   | **21 / 21**  |
+Two full-suite runs were made across this audit and its correction. **The failing set differed between
+runs**, which is itself the diagnosis:
 
-Both are the known Windows parallel-load timing flake. **Neither file was modified, no timeout was
-increased, nothing was skipped and no assertion was weakened.** The second is worth naming explicitly
-because its title — _"the corpus input type reaches no runtime, service, app or knowledge package"_ —
-reads like a containment breach. **It is not.** It passes cleanly on its own, and this audit adds no
-import anywhere.
+| Run               | Failures | Files                                                                                                                                                                     |
+| ----------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| audit (`55937bd`) | 3        | `deployment-containment`, `riya-candidate-evaluation-runner/containment`                                                                                                  |
+| correction        | 6        | `deployment-containment`, `postgres-riya-conversation-continuity-store/containment`, `riya-intelligence-dataset/containment`, `riya-web-conversation-service/containment` |
+
+**In isolation**, on the correction head: `riya-intelligence-dataset/containment` **21/21** ·
+`postgres-riya-conversation-continuity-store/containment` **18/18** ·
+`riya-web-conversation-service/containment` **28/28** ·
+`riya-candidate-evaluation-runner/containment` **21/21**.
+
+`apps/api/src/tests/deployment-containment.test.ts` is the one that also fails **intermittently in
+isolation** on this Windows machine: **73/73** twice earlier in the session, then **71/73**, then
+**72/73**, with a _different_ subset failing each time and the signature `Error: Test timed out in
+5000ms`. It provisions temporary git repositories per test, so it is filesystem-timing sensitive and
+degrades as the machine loads.
+
+**Nothing was done about any of it:** no timeout raised, no test skipped, no assertion weakened, no file
+touched. **Linux CI at the exact head is the arbiter**, and it passed on the previous head (`55937bd`,
+run 33633135843).
+
+Two titles deserve explicit comment because they read like containment breaches and are **not**:
+_"the corpus input type reaches no runtime, service, app or knowledge package"_ and
+_"[the dataset factory] is imported by nothing outside itself"_. **Both pass cleanly on their own**, and
+this audit adds **no import anywhere** — it changes one Markdown file. The zero-production-importer
+finding in §2H was additionally verified by direct source scan, independently of that test.
 
 One environment note: a `git worktree` shares `.git` but not `node_modules`, so the first run in a fresh
 worktree needs `pnpm install --frozen-lockfile` and a `build` before the dataset suites resolve. That is
@@ -392,22 +494,29 @@ an environment artifact, not a finding.
 
 HGV1-A is intact on current main, later Riya work is compatible, provenance and privacy governance is
 unweakened, and no accepted decision supersedes Human Gold V1. But **a human cannot safely author Wave 1
-today**: three Wave-1 assignments (fifteen plan-wide) require an authority-grounded answer while
-supplying no authority material, and no test catches it.
+today**: **four authority contradictions** affect **six of the 72 Wave-1 slots** — one structural plan
+defect requiring a grounded answer with no authority supplied (3 slots in Wave 1, 15 plan-wide), and
+three briefs whose prose promises supplied authority their assignment does not carry (3 slots). **No
+test catches any of them.**
 
 ### Required before the first Gold conversation is written
 
-1. **Repair the `OUT_OF_SCOPE` ordinal-2 authority gap** (§5), in its own reviewed slice.
-2. **Add the property guard** so no future slot can demand `GROUNDING_QA` with zero authority classes.
-3. **Derive a fresh Wave-1 micro-batch schedule** from repaired current-main assignments (§6).
-4. **Generate the batch-1 packet** from that schedule — content-free, regenerated, never copied from the
+1. **Repair the `OUT_OF_SCOPE` ordinal-2 authority gap** (§5.1), in its own reviewed slice.
+2. **Add the plan-level property guard** so no slot can demand `GROUNDING_QA` with zero authority classes.
+3. **Owner-review and repair the three authority-promising briefs** (§5.2). Expected direction: reword to
+   stay authority-free, not widen the assignments — but that is an owner decision this audit does not make.
+4. **Add the narrow lexical guard** so authority-promising prose cannot coexist with an empty
+   `authorityPlan`, scoped to positive instructions so the false positives the historical test names stay
+   out.
+5. **Derive a fresh Wave-1 micro-batch schedule** from repaired current-main assignments (§6).
+6. **Generate the batch-1 packet** from that schedule — content-free, regenerated, never copied from the
    historical branch.
 
 Only then does the human step become available:
 
 > **Human author micro-batch 1 under the current packet and review workflow.**
 
-**Do not author Gold dialogue before step 1 lands.** Doing so would produce three trajectories whose
+**Do not author Gold dialogue before steps 1–4 land.** Doing so would produce **six** trajectories whose
 briefs cannot be satisfied honestly — and the likeliest way to "satisfy" them is to invent business
 truth, which is the exact failure the whole firewall exists to prevent.
 
