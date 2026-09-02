@@ -447,3 +447,49 @@ literal `false`.
 **Human Gold authoring remains blocked.** A separate slice must derive a fresh Wave-1 micro-batch
 schedule from repaired current main and generate a content-free authoring packet before the first
 conversation is written.
+
+---
+
+## POST-ACCEPTANCE NOTE — 2026-09-02 (HGV1-B Wave-1 scheduler and Batch-1 packet)
+
+**Nothing above was rewritten.** This records the operational step that follows the pre-authoring
+authority repair.
+
+**PR #186 repaired the four pre-authoring authority contradictions**, so **repaired main is the source
+for scheduling**. Any schedule or packet derived before that repair is stale by construction and must
+not be reused.
+
+**Wave 1 is operationally partitioned into six micro-batches of twelve.** The partition comes from a
+deterministic rotation over the current plan rather than a hand-maintained list, so it cannot drift
+away from the assignments it schedules. Each batch carries all twelve interaction kinds exactly once,
+four assignments per language, six of each ordinal, and at least one HARD or EDGE case; the two
+ordinals of any language/kind pair land exactly three batches apart.
+
+**The scheduler changes ORDER and nothing else.** It returns the official assignment objects and adds
+no field, so it never becomes a second, quieter planning authority. It holds assignments only — no
+brief, no scenario, no goal, no turn.
+
+**Batch 1 is the calibration anchor.** It deliberately mixes difficulty (3 BASIC, 3 STANDARD, 4 HARD,
+2 EDGE) and carries three HIGH_RISK cases, because the ordinal alternates with the rotation rather than
+being blocked. Reviewers therefore calibrate against hard work immediately instead of meeting it in
+Batch 4. Its slot 8, `gold.v1.w1.hi.out-of-scope.02`, carries the repaired `PROCESS` authority behind
+its required `GROUNDING_QA` — the direct proof the schedule was built from post-repair source.
+
+**The Batch-1 packet is content-free authoring metadata.** It gives each slot its assignment fields,
+the current situation and goal, required journey events, forbidden shortcuts, authority plan, style
+plan and review focus — and **no sample turn, suggested opener, drafted answer or phrasing variant**.
+It states plainly that a model-written draft cannot become Human Gold by approval, editing or
+paraphrasing, and that authorship remains **process-attested**. A committed packet is a snapshot and
+snapshots rot, so a test re-derives the anchor from the plan and fails if the document drifts.
+
+**Zero Gold dialogue was added.** **The public API was not widened** — the scheduler is internal to the
+authoring workflow, exported from neither the package root nor the `gold-v1` barrel; a future public
+schedule API would need its own owner decision.
+
+### What this unblocks, and what it does not
+
+**Human authoring may begin only after this scheduler/packet PR merges and owner review completes.**
+
+**Only Batch 1 may be authored first.** Batches 2–6 remain gated by Batch-1 calibration: Batch 1 is
+authored, independently reviewed and read end to end before any later batch starts. Wave 1 is **not**
+open for authoring in full.
