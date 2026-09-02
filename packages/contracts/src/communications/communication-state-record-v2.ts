@@ -58,7 +58,6 @@ import {
   executionOutcomeSchema,
   retryClassificationSchema,
 } from '../execution/execution-result.js';
-import { communicationAuthorizationOutcomeSchema } from './communication-authorization.js';
 
 /** This record contract's version. Distinct from the event wire version and the artifact version. */
 export const COMMUNICATION_STATE_RECORD_V2_CONTRACT_VERSION = 2;
@@ -83,8 +82,7 @@ export const communicationStateRecordV2StateSchema = z.enum(COMMUNICATION_STATE_
 export type CommunicationStateRecordV2State = z.infer<typeof communicationStateRecordV2StateSchema>;
 
 /** The four result lifecycle states, mirroring exactly what D4 admits. */
-const RESULT_BACKED_STATES = ['provider-accepted', 'delivered', 'read', 'failed'] as const;
-const resultBackedStateSchema = z.enum(RESULT_BACKED_STATES);
+type ResultBackedState = 'provider-accepted' | 'delivered' | 'read' | 'failed';
 
 /** The states in which a communication actually reached the recipient (`CommunicationResultV1`). */
 const DELIVERED_STATES: readonly string[] = ['delivered', 'read'];
@@ -113,46 +111,68 @@ const minimisedFailureSchema = z.strictObject({
 });
 
 /**
- * Tier-C evidence from a Core communication AUTHORIZATION decision.
+ * The fields every authorization evidence variant shares.
  *
  * `sourceEventId` is an **audit POINTER to provenance, never provenance itself** — an event id is a
  * name any caller can type. It is validated so a malformed id cannot sit in the record, but validity
  * is not authority: a naked UUID cannot make otherwise-invalid evidence valid, and there is
  * deliberately no helper anywhere that turns an event id into a record.
  */
-const authorizationEvidenceSchema = z.strictObject({
+const authorizationEvidenceBase = {
   tier: z.literal('tier-c'),
   kind: z.literal('communication-authorization'),
   sourceEventId: eventIdSchema,
   communicationRequestId: communicationRequestIdSchema,
-  outcome: communicationAuthorizationOutcomeSchema,
-  /** Present only for `authorized`, and only for the channel this runtime can execute. */
-  authorizedChannel: z.literal(SUPPORTED_AUTHORIZED_CHANNEL).optional(),
+} as const;
+
+/**
+ * Rejection evidence. **`authorizedChannel` is not a field here at all**, rather than an optional one.
+ *
+ * That distinction is load-bearing twice over. Statically, the inferred type for a `rejected` record
+ * cannot even name the property. At runtime, `strictObject` treats an explicitly-passed
+ * `authorizedChannel: undefined` as an unknown key and refuses it — where an `.optional()` field would
+ * have quietly accepted it, which is exactly the hole this replaced.
+ */
+const rejectedEvidenceSchema = z.strictObject({
+  ...authorizationEvidenceBase,
+  outcome: z.literal('rejected'),
+});
+
+/** Authorization evidence. The channel is REQUIRED and can only be the one this runtime executes. */
+const authorizedEvidenceSchema = z.strictObject({
+  ...authorizationEvidenceBase,
+  outcome: z.literal('authorized'),
+  authorizedChannel: z.literal(SUPPORTED_AUTHORIZED_CHANNEL),
 });
 
 /**
- * Tier-C evidence from a Core-recorded communication RESULT.
+ * Result evidence for ONE exact lifecycle state.
+ *
+ * Built per state so `state` and `evidence.lifecycleState` are the *same literal* in the type, not two
+ * enums a runtime check has to reconcile afterwards. They are one fact stated twice; if the type let
+ * them disagree, one of them would be decoration.
  *
  * Carries no `executionIntentId`, no `executionResultId`, no `providerEvidence`, no
  * `providerOccurredAt` and no `explanation` — exactly the minimisation D4 performs. The source
- * contract still mandates the execution ids; D4 parses them and strips them, and this record simply
- * never sees them.
+ * contract still mandates the execution ids; D4 parses them and strips them, and this record never
+ * sees them.
  */
-const resultEvidenceSchema = z.strictObject({
-  tier: z.literal('tier-c'),
-  kind: z.literal('communication-result'),
-  sourceEventId: eventIdSchema,
-  communicationResultId: communicationResultIdSchema,
-  lifecycleState: resultBackedStateSchema,
-  outcome: executionOutcomeSchema,
-  failure: minimisedFailureSchema.optional(),
-});
+function resultEvidenceSchemaFor<S extends ResultBackedState>(lifecycleState: S) {
+  return z.strictObject({
+    tier: z.literal('tier-c'),
+    kind: z.literal('communication-result'),
+    sourceEventId: eventIdSchema,
+    communicationResultId: communicationResultIdSchema,
+    lifecycleState: z.literal(lifecycleState),
+    outcome: executionOutcomeSchema,
+    failure: minimisedFailureSchema.optional(),
+  });
+}
 
 /** Fields every V2 record carries, whatever its state. */
 const commonShape = {
   communicationId: communicationIdSchema,
   contractVersion: z.literal(COMMUNICATION_STATE_RECORD_V2_CONTRACT_VERSION),
-  state: communicationStateRecordV2StateSchema,
   /**
    * When the underlying fact was recorded: the authorization's `decidedAt`, or the result's
    * `recordedAt`. **Never a wall clock, and never inferred** — a projection that timestamps itself
@@ -172,88 +192,80 @@ const commonShape = {
    * writing one here would smuggle an undurable state into a durable record through the back door.
    */
   previousState: communicationStateRecordV2StateSchema.optional(),
-};
+} as const;
 
-const authorizationBackedSchema = z.strictObject({
+/**
+ * The six variants. **State/evidence coupling is STRUCTURAL, not a runtime afterthought.**
+ *
+ * A `z.union` of two broad branches plus a `superRefine` would reject the same inputs at runtime while
+ * still letting the inferred TYPE describe impossible records — a `rejected` whose outcome is
+ * `authorized`, or a `read` whose evidence says `delivered`. Discriminating on `state` and pinning
+ * every coupled field to a literal makes those combinations unrepresentable, so a caller building a
+ * record in TypeScript is corrected by the compiler rather than at parse time.
+ */
+const rejectedRecordSchema = z.strictObject({
   ...commonShape,
-  state: z.enum(['rejected', 'authorized']),
-  evidence: authorizationEvidenceSchema,
+  state: z.literal('rejected'),
+  evidence: rejectedEvidenceSchema,
 });
 
-const resultBackedSchema = z.strictObject({
+const authorizedRecordSchema = z.strictObject({
   ...commonShape,
-  state: resultBackedStateSchema,
-  evidence: resultEvidenceSchema,
+  state: z.literal('authorized'),
+  evidence: authorizedEvidenceSchema,
+});
+
+const providerAcceptedRecordSchema = z.strictObject({
+  ...commonShape,
+  state: z.literal('provider-accepted'),
+  evidence: resultEvidenceSchemaFor('provider-accepted'),
+});
+
+const deliveredRecordSchema = z.strictObject({
+  ...commonShape,
+  state: z.literal('delivered'),
+  evidence: resultEvidenceSchemaFor('delivered'),
+});
+
+const readRecordSchema = z.strictObject({
+  ...commonShape,
+  state: z.literal('read'),
+  evidence: resultEvidenceSchemaFor('read'),
+});
+
+const failedRecordSchema = z.strictObject({
+  ...commonShape,
+  state: z.literal('failed'),
+  evidence: resultEvidenceSchemaFor('failed'),
 });
 
 /**
- * The first honest V2 record: six states, each bound to the exact evidence that can produce it.
+ * The first honest V2 record: six variants, each structurally bound to the evidence that produces it.
  *
- * The cross-field rules below are the ones that stop a schema-valid record from being a false one.
+ * The remaining runtime rules are the ones a type cannot express — the outcome/failure relationships,
+ * which depend on values rather than shape. They **mirror `CommunicationResultV1` rather than
+ * tightening it**.
  */
 export const communicationStateRecordV2Schema = z
-  .union([authorizationBackedSchema, resultBackedSchema])
+  .discriminatedUnion('state', [
+    rejectedRecordSchema,
+    authorizedRecordSchema,
+    providerAcceptedRecordSchema,
+    deliveredRecordSchema,
+    readRecordSchema,
+    failedRecordSchema,
+  ])
   .superRefine((value, ctx) => {
     if (value.evidence.kind === 'communication-authorization') {
-      /**
-       * **This is the ADR-0134 deadlock, resolved.**
-       *
-       * V1 required an `approvalDecisionId` for `rejected` while `CommunicationAuthorizationV1`
-       * FORBIDS one on a refusal — so a lawful opt-out could not become a lawful V1 record without
-       * attaching a human approval id to a decision no human made. V2 has no `approvalDecisionId`
-       * field at all, so a rejection needs no invented id and cannot carry one. V1's behaviour is
-       * unchanged and still pinned by its characterization tests.
-       */
-      if (value.state === 'rejected' && value.evidence.outcome !== 'rejected') {
-        ctx.addIssue({
-          code: 'custom',
-          path: ['evidence', 'outcome'],
-          message: 'A "rejected" state must rest on an authorization whose outcome is "rejected"',
-        });
-      }
-      if (value.state === 'rejected' && value.evidence.authorizedChannel !== undefined) {
-        ctx.addIssue({
-          code: 'custom',
-          path: ['evidence', 'authorizedChannel'],
-          message: 'A refusal authorizes no channel, so it must not name one',
-        });
-      }
-      if (value.state === 'authorized') {
-        if (value.evidence.outcome !== 'authorized') {
-          ctx.addIssue({
-            code: 'custom',
-            path: ['evidence', 'outcome'],
-            message:
-              'An "authorized" state must rest on an authorization whose outcome is "authorized"',
-          });
-        }
-        if (value.evidence.authorizedChannel === undefined) {
-          ctx.addIssue({
-            code: 'custom',
-            path: ['evidence', 'authorizedChannel'],
-            message:
-              'An authorized communication must name the channel it was authorized for. The first runtime supports WhatsApp only',
-          });
-        }
-      }
+      // Nothing left to check: `rejected`/`authorized`, their outcomes, and the presence or absence
+      // of `authorizedChannel` are all pinned by the variant shapes above.
       return;
     }
 
-    // Result-backed. The record's state and the evidence's lifecycle state are the same fact stated
-    // twice; if they can disagree, one of them is decoration.
-    if (value.state !== value.evidence.lifecycleState) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['evidence', 'lifecycleState'],
-        message:
-          'The recorded state and the result evidence lifecycle state must be the same state',
-      });
-    }
+    const { outcome, failure } = value.evidence;
+    const reachedRecipient = DELIVERED_STATES.includes(value.state);
 
-    // These mirror CommunicationResultV1 rather than tightening it: the provider taking a message is
-    // not delivery, a failure must be structured, and ambiguity routes to reconciliation instead of
-    // being reported as success.
-    if (value.evidence.outcome === 'succeeded' && !DELIVERED_STATES.includes(value.state)) {
+    if (outcome === 'succeeded' && !reachedRecipient) {
       ctx.addIssue({
         code: 'custom',
         path: ['evidence', 'outcome'],
@@ -261,29 +273,29 @@ export const communicationStateRecordV2Schema = z
           'A "succeeded" outcome must report a state in which the communication actually reached the recipient',
       });
     }
-    if (value.evidence.outcome === 'succeeded' && value.evidence.failure !== undefined) {
+    if (outcome === 'succeeded' && failure !== undefined) {
       ctx.addIssue({
         code: 'custom',
         path: ['evidence', 'failure'],
         message: 'A succeeded result must not carry a failure',
       });
     }
-    if (value.evidence.outcome === 'failed' && value.evidence.failure === undefined) {
+    if (outcome === 'failed' && failure === undefined) {
       ctx.addIssue({
         code: 'custom',
         path: ['evidence', 'failure'],
         message: 'A failed result must carry a structured failure',
       });
     }
-    if (value.evidence.outcome === 'indeterminate') {
-      if (value.evidence.failure === undefined) {
+    if (outcome === 'indeterminate') {
+      if (failure === undefined) {
         ctx.addIssue({
           code: 'custom',
           path: ['evidence', 'failure'],
           message:
             'An indeterminate result must carry a structured failure classified as requires-reconciliation',
         });
-      } else if (value.evidence.failure.retryClassification !== 'requires-reconciliation') {
+      } else if (failure.retryClassification !== 'requires-reconciliation') {
         ctx.addIssue({
           code: 'custom',
           path: ['evidence', 'failure', 'retryClassification'],
@@ -291,7 +303,7 @@ export const communicationStateRecordV2Schema = z
             'An indeterminate outcome must be classified "requires-reconciliation": it must never be retried, and it must never be treated as success',
         });
       }
-      if (DELIVERED_STATES.includes(value.state)) {
+      if (reachedRecipient) {
         ctx.addIssue({
           code: 'custom',
           path: ['state'],

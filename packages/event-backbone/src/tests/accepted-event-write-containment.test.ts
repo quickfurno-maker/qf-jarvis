@@ -16,7 +16,9 @@
  * database grants permit, an out-of-repository actor can still write the table; D2a hardens the
  * repository/application path, not the DBA.
  */
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { execFile as execFileCallback } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
+import { promisify } from 'node:util';
 import { join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -28,8 +30,33 @@ import * as eventStore from '../persistence/event-store.js';
 const REPO_ROOT = new URL('../../../../', import.meta.url);
 const REPO_DIR = fileURLToPath(REPO_ROOT);
 
-/** Kept in step with `accepted-event-write-lint-boundary.test.ts`. See `productionSources`. */
-const LINT_PROBE_FILENAME = 'zz-d2a-lint-probe.ts';
+/** `git ls-files` is the source of truth for what counts as production source. */
+const execFile = promisify(execFileCallback);
+
+/**
+ * Production sources come from GIT, not from a filesystem walk.
+ *
+ * Sibling boundary suites write short-lived lint probes into real package directories and delete
+ * them, so a walk can list a path that is gone by the time it is read, and a name-based skip would
+ * open a bypass: commit a file called `x-1-zz-d4-lint-probe.ts` with an `eslint-disable` and it would
+ * escape both the lint rule and this supposedly independent scan.
+ *
+ * **Trackedness is the honest discriminator.** A transient probe is never committed, so `git ls-files`
+ * never lists it; a committed file is scanned whatever it is called, and nothing is skipped by name.
+ */
+async function scanProductionSources(): Promise<readonly string[]> {
+  const { stdout } = await execFile('git', ['ls-files', '--', 'packages', 'apps'], {
+    cwd: REPO_DIR,
+    maxBuffer: 32 * 1024 * 1024,
+  });
+
+  return stdout
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.endsWith('.ts'))
+    .map((line) => join(REPO_DIR, line))
+    .filter((path) => !path.includes(`${sep}tests${sep}`) && !path.includes('.test.'));
+}
 
 /** Source with block and line comments removed, so prose about a symbol is not read as a use of it. */
 function stripComments(code: string): string {
@@ -55,28 +82,6 @@ function relative(absolute: string): string {
   return absolute.slice(REPO_DIR.length).replace(/\\/g, '/');
 }
 
-/** Every `.ts` file under a directory, recursively. */
-async function collectTypeScriptFiles(dir: string): Promise<readonly string[]> {
-  const found: string[] = [];
-  let entries: readonly string[];
-  try {
-    entries = await readdir(dir);
-  } catch {
-    return found;
-  }
-  for (const entry of entries) {
-    if (entry === 'node_modules' || entry === 'dist') continue;
-    const full = join(dir, entry);
-    const info = await stat(full);
-    if (info.isDirectory()) {
-      found.push(...(await collectTypeScriptFiles(full)));
-    } else if (entry.endsWith('.ts')) {
-      found.push(full);
-    }
-  }
-  return found;
-}
-
 /**
  * The production file list and their contents, read ONCE per suite.
  *
@@ -96,24 +101,6 @@ async function productionFiles(): Promise<ReadonlyMap<string, string>> {
     return new Map(entries);
   })();
   return productionCorpus;
-}
-
-/** Production source across the monorepo: packages + apps, excluding every test tree. */
-async function scanProductionSources(): Promise<readonly string[]> {
-  const roots = ['packages', 'apps'].map((d) => join(REPO_DIR, d));
-  const all: string[] = [];
-  for (const root of roots) all.push(...(await collectTypeScriptFiles(root)));
-  return all.filter(
-    (f) =>
-      !f.includes(`${sep}tests${sep}`) &&
-      !f.includes('.test.') &&
-      // `accepted-event-write-lint-boundary.test.ts` writes short-lived probe files into real
-      // package directories to prove the lint rule actually fires. Vitest may be running it in
-      // parallel with this scan, so a probe can exist on disk for a few hundred milliseconds. It is
-      // never committed — the sibling test removes it in `finally` and again in `afterAll`.
-      !f.endsWith(LINT_PROBE_FILENAME) &&
-      !f.endsWith(`relative-${LINT_PROBE_FILENAME}`),
-  );
 }
 
 describe('D2a — the accepted-event writer is not on the package root', () => {

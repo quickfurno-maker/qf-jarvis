@@ -69,11 +69,23 @@ The twelve non-durable states are rejected by the schema, each for the reason it
 the two conditional Tier-B states have no adopted receipt or scheduling primitive; `completed` has no
 distinct Core completion truth; and so on.
 
-### State-specific Tier-C evidence
+### State-specific Tier-C evidence, coupled STRUCTURALLY
 
-Every record carries the evidence its state was derived from, discriminated by
-`tier: 'tier-c'` and `kind`. **No Tier-A or Tier-B variants, no placeholder variant, and no
-`evidence: unknown`** — a variant that could hold nothing would let a state exist without a source.
+The schema is a **six-variant discriminated union on `state`**, and every coupled field is pinned to a
+literal. **No Tier-A or Tier-B variants, no placeholder variant, and no `evidence: unknown`** — a
+variant that could hold nothing would let a state exist without a source.
+
+**Why a union of two broad branches plus `superRefine` was not enough.** That shape rejected the same
+inputs at runtime, but the inferred TYPE could still describe impossible records: a `rejected` whose
+outcome is `authorized`, a `read` whose evidence says `delivered`, an authorization state holding
+result evidence. A caller assembling a record in TypeScript would have been told only at parse time.
+Now those combinations are **unrepresentable**, and eight `@ts-expect-error` assertions fail the build
+if any of them ever starts compiling.
+
+That change also closed a real runtime hole. With `authorizedChannel` as an `.optional()` field on a
+shared branch, a `rejected` record passing `authorizedChannel: undefined` **was accepted**. The
+rejected variant now has no such field at all, so `strictObject` treats it as an unknown key and
+refuses it.
 
 | State                                                 | Evidence kind                 | Binding rule                                                            |
 | ----------------------------------------------------- | ----------------------------- | ----------------------------------------------------------------------- |
@@ -157,11 +169,15 @@ The pre-existing Windows parallel-load race reported during PR #181 review is fi
 commit: the D4 containment scan listed `.ts` paths and then read them, so a sibling boundary suite's
 short-lived lint probe could vanish in between (`ENOENT ... zz-d2a-lint-probe.ts`).
 
-Probes are now skipped **before `stat()`**, matched by a **narrow** classifier for the exact generated
-convention `<case>-<index>-zz-d<n>-lint-probe.ts`. A file that vanishes and is **not** a probe now
-throws explicitly rather than being swallowed, and production files merely named `probe.ts` are still
-scanned — ignoring those would quietly shrink the corpus the zero-consumer guarantee rests on. **No
-assertion was weakened**, and the D2a/D4 boundary assertions are unchanged.
+**The corpus is now derived from `git ls-files`, not from a filesystem walk.** A first attempt skipped
+paths whose NAME matched the probe convention, which fixed the race but opened a bypass: a committed
+production file called `x-1-zz-d4-lint-probe.ts` carrying an `eslint-disable` would have escaped both
+the lint rule and this supposedly independent scan.
+
+**Trackedness is the honest discriminator.** A transient probe is never committed, so git never lists
+it; a committed file is scanned whatever it is called, and **nothing is skipped by name**. A tracked
+file that cannot be read still fails the suite — there is no blanket `ENOENT` swallow. **No assertion
+was weakened**, and the D2a/D4 boundary assertions are unchanged.
 
 ---
 

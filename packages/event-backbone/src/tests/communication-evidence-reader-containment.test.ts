@@ -13,9 +13,11 @@
  * carelessly would silently delete older ones while every gate stayed green — which is exactly what
  * happened during D2a and must not happen again here.
  */
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { execFile as execFileCallback } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
 import { join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 import { ESLint } from 'eslint';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -23,6 +25,9 @@ import * as barrel from '../index.js';
 
 const REPO_DIR = fileURLToPath(new URL('../../../../', import.meta.url));
 const at = (relative: string): string => join(REPO_DIR, relative);
+
+/** `git ls-files` is the source of truth for what is production source, not the filesystem. */
+const execFile = promisify(execFileCallback);
 
 const READER = 'packages/event-backbone/src/projections/communication-evidence-reader.ts';
 const PROBE = 'zz-d4-lint-probe.ts';
@@ -79,74 +84,46 @@ async function lowLevelWriterPattern(path: string): Promise<ResolvedPattern | un
 }
 
 /**
- * A TRANSIENT lint probe written by a sibling boundary suite, not repository source.
+ * The production-source corpus, derived from GIT-TRACKED files.
  *
- * `accepted-event-write-lint-boundary.test.ts` and this file's own lint suite each write short-lived
- * `.ts` files into real package directories to prove their ESLint rules actually fire, then delete
- * them. Under full parallel load one of those files can exist when this scan lists a directory and be
- * gone by the time the scan reads it — which surfaced as `ENOENT ... zz-d2a-lint-probe.ts` and made
- * this suite flaky.
+ * The earlier version walked the filesystem and skipped anything whose NAME matched the transient
+ * lint-probe convention. That fixed the ENOENT race — sibling boundary suites write short-lived probe
+ * files into real package directories and delete them, so a path could vanish between `readdir` and
+ * `readFile` — but it fixed it with a filename rule, which is a bypass waiting to be used: commit a
+ * real production file called `something-1-zz-d4-lint-probe.ts`, add an `eslint-disable`, and it would
+ * have escaped BOTH the lint rule and this supposedly independent scan.
  *
- * The classifier is deliberately NARROW: it matches only the exact generated convention
- * `<case>-<index>-zz-<slice>-lint-probe.ts`. A production file merely containing the word "probe" is
- * still scanned, because ignoring those would quietly shrink the corpus this containment rests on.
+ * Trackedness is the honest discriminator. A transient probe is never committed, so `git ls-files`
+ * never lists it; a committed file is scanned whatever it is called. Nothing is skipped by name.
  */
-const TRANSIENT_LINT_PROBE = /(?:^|[\\/])[a-z0-9-]+-\d+-zz-d\d[a-z]*-lint-probe\.ts$/i;
+async function trackedProductionPaths(): Promise<readonly string[]> {
+  const { stdout } = await execFile('git', ['ls-files', '--', 'packages', 'apps'], {
+    cwd: REPO_DIR,
+    maxBuffer: 32 * 1024 * 1024,
+  });
 
-export function isTransientLintProbe(path: string): boolean {
-  return TRANSIENT_LINT_PROBE.test(path);
-}
-
-/** Every `.ts` file under a directory, recursively, excluding transient lint probes. */
-async function collect(dir: string): Promise<readonly string[]> {
-  const found: string[] = [];
-  let entries: readonly string[];
-  try {
-    entries = await readdir(dir);
-  } catch {
-    return found;
-  }
-  for (const entry of entries) {
-    if (entry === 'node_modules' || entry === 'dist') continue;
-    const full = join(dir, entry);
-    // Skip a transient probe BEFORE stat(): the race is that the file vanishes between listing and
-    // touching it, so the fix has to land before the first filesystem call that can throw.
-    if (isTransientLintProbe(full)) continue;
-    let info;
-    try {
-      info = await stat(full);
-    } catch {
-      // It disappeared between readdir and stat. Only a probe can legitimately do that; anything
-      // else is a real condition the next line must not hide, so re-check and rethrow.
-      if (isTransientLintProbe(full)) continue;
-      throw new Error(`A repository source file vanished during the scan: ${full}`);
-    }
-    if (info.isDirectory()) found.push(...(await collect(full)));
-    else if (entry.endsWith('.ts')) found.push(full);
-  }
-  return found;
+  return stdout
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.endsWith('.ts'))
+    .map((line) => join(REPO_DIR, line))
+    .filter((path) => !path.includes(`${sep}tests${sep}`) && !path.includes('.test.'));
 }
 
 let corpus: Promise<ReadonlyMap<string, string>> | undefined;
 
-/** Production sources, read once. Tests are excluded — they are not production consumers. */
+/**
+ * Tracked production sources, read once.
+ *
+ * No blanket try/catch: a TRACKED file that cannot be read is a real problem and must still fail the
+ * suite. Only untracked files are absent from the list, and a transient probe is untracked by
+ * construction — which is precisely why trackedness, not the filename, is the discriminator.
+ */
 async function productionFiles(): Promise<ReadonlyMap<string, string>> {
   corpus ??= (async () => {
-    const paths: string[] = [];
-    for (const root of ['packages', 'apps']) paths.push(...(await collect(join(REPO_DIR, root))));
-    const kept = paths.filter(
-      (f) =>
-        !f.includes(`${sep}tests${sep}`) &&
-        !f.includes('.test.') &&
-        !f.endsWith(PROBE) &&
-        !isTransientLintProbe(f),
-    );
+    const paths = await trackedProductionPaths();
     const entries = await Promise.all(
-      kept.map(async (path) => {
-        // No blanket try/catch here on purpose. A missing production source file is a real problem and
-        // must still fail the suite; only the narrow probe convention above is filtered out.
-        return [path, await readFile(path, 'utf8')] as const;
-      }),
+      paths.map(async (path) => [path, await readFile(path, 'utf8')] as const),
     );
     return new Map(entries);
   })();
@@ -408,36 +385,80 @@ describe('D4 preserved every boundary it inherited', () => {
   });
 });
 
-describe('the transient-probe classifier is narrow', () => {
-  // The race this fixes is real but the cure is easy to over-apply: ignoring anything containing
-  // "probe" would silently shrink the corpus the zero-consumer guarantee rests on. So the classifier
-  // matches only the exact generated convention, and these pin both halves of that.
-  it.each([
-    [
-      'a D2a probe',
-      'packages/event-backbone/src/persistence/capability-from-persistence-1-zz-d2a-lint-probe.ts',
-    ],
-    ['a D4 probe', 'packages/event-backbone/src/projections/from-a-handler-2-zz-d4-lint-probe.ts'],
-    [
-      'a relative-form probe',
-      'packages/event-backbone/src/projections/deep-relative-0-zz-d2a-lint-probe.ts',
-    ],
-  ])('excludes %s', (_label, path) => {
-    expect(isTransientLintProbe(path.replace(/\//g, sep))).toBe(true);
+describe('the corpus is defined by TRACKEDNESS, not by filename', () => {
+  // The first cure for the ENOENT race skipped anything whose NAME looked like a transient probe.
+  // That would have let a committed file called `x-1-zz-d4-lint-probe.ts` with an `eslint-disable`
+  // escape BOTH the lint rule and this supposedly independent scan. These pin the replacement.
+
+  it('excludes untracked transient probes, because git never lists them', async () => {
+    const { mkdir, writeFile, rm } = await import('node:fs/promises');
+    const probes = [
+      at(
+        'packages/event-backbone/src/persistence/capability-from-persistence-1-zz-d2a-lint-probe.ts',
+      ),
+      at('packages/event-backbone/src/projections/from-a-handler-2-zz-d4-lint-probe.ts'),
+    ];
+
+    try {
+      for (const probe of probes) {
+        await mkdir(join(probe, '..'), { recursive: true });
+        await writeFile(probe, READER_IMPORT, 'utf8');
+      }
+
+      const paths = await trackedProductionPaths();
+
+      // Present on disk, and importing the reader - yet absent from the corpus, because untracked.
+      for (const probe of probes) expect(paths).not.toContain(probe);
+    } finally {
+      for (const probe of probes) await rm(probe, { force: true });
+    }
   });
 
-  it.each([
-    [
-      'ordinary production source',
+  it('scans a TRACKED file whatever it is called, probe-shaped names included', async () => {
+    // The bypass the filename rule would have opened. `git ls-files` reports what is committed, so a
+    // probe-shaped commit is listed like anything else — verified by asking git directly about a
+    // hypothetical path rather than by trusting a naming rule.
+    const { stdout } = await execFile(
+      'git',
+      [
+        'check-ignore',
+        '--no-index',
+        '-v',
+        '--',
+        'packages/event-backbone/src/x-1-zz-d4-lint-probe.ts',
+      ],
+      { cwd: REPO_DIR },
+    ).catch((error: unknown) => {
+      // exit 1 means "not ignored", which is the answer this asserts.
+      if ((error as { code?: number }).code === 1) return { stdout: '' };
+      throw error;
+    });
+
+    // Nothing in .gitignore hides a probe-shaped path, so committing one WOULD track it — and a
+    // tracked file is always scanned.
+    expect(stdout).toBe('');
+    expect(await trackedProductionPaths()).toContain(at(READER));
+  });
+
+  it('lists ordinary production source and excludes test trees', async () => {
+    const paths = (await trackedProductionPaths()).map(relative);
+
+    expect(paths).toContain(
       'packages/event-backbone/src/projections/communication-evidence-reader.ts',
-    ],
-    [
-      'a production file that merely says probe',
-      'packages/event-backbone/src/persistence/probe.ts',
-    ],
-    ['a production file named like a probe but not generated', 'apps/api/src/lint-probe.ts'],
-    ['a probe-ish name without the index segment', 'packages/x/src/zz-d2a-lint-probe.ts'],
-  ])('still scans %s', (_label, path) => {
-    expect(isTransientLintProbe(path.replace(/\//g, sep))).toBe(false);
+    );
+    expect(paths).toContain(
+      'packages/contracts/src/communications/communication-state-record-v2.ts',
+    );
+    expect(paths.some((p) => p.includes('/tests/') || p.includes('.test.'))).toBe(false);
+  });
+
+  it('would catch a tracked eslint-disabled reader import', () => {
+    // The scan reads source text, so a suppression comment cannot hide the reference from it.
+    const disabled = [
+      '/* eslint-disable no-restricted-imports */',
+      "import { readTrustedCommunicationEvidenceAtPosition } from './communication-evidence-reader.js';",
+    ].join('\n');
+
+    expect(referencesReader(disabled)).toBe(true);
   });
 });

@@ -23,6 +23,7 @@ import {
   communicationStateRecordV1Schema,
   communicationStateRecordV2Schema,
   communicationStateRecordV2StateSchema,
+  type CommunicationStateRecordV2,
 } from '../index.js';
 
 const COMMUNICATION_ID = '1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d';
@@ -80,18 +81,24 @@ function resultRecord(overrides: Record<string, unknown> = {}): Record<string, u
   };
 }
 
-/** A lawful `rejected` record: no approval decision id anywhere, because none exists to name. */
+/**
+ * A lawful `rejected` record: no approval decision id anywhere, because none exists to name.
+ *
+ * `authorizedChannel` is REMOVED rather than set to `undefined`. The rejected variant has no such
+ * field, so an explicitly-passed `undefined` is an unknown key and is refused — which is the point,
+ * and was a real hole while the field was merely `.optional()` on a shared branch.
+ */
 function rejectedRecord(overrides: Record<string, unknown> = {}): Record<string, unknown> {
-  return authorizationRecord({
-    state: 'rejected',
-    reasonCode: 'recipient-opted-out',
+  const evidenceOverrides = (overrides['evidence'] ?? {}) as Record<string, unknown>;
+  const record = authorizationRecord({
     ...overrides,
-    evidence: {
-      outcome: 'rejected',
-      authorizedChannel: undefined,
-      ...(overrides['evidence'] ?? {}),
-    },
+    state: 'rejected',
+    reasonCode: overrides['reasonCode'] ?? 'recipient-opted-out',
+    evidence: { outcome: 'rejected', ...evidenceOverrides },
   });
+  const evidence = { ...(record['evidence'] as Record<string, unknown>) };
+  if (!('authorizedChannel' in evidenceOverrides)) delete evidence['authorizedChannel'];
+  return { ...record, evidence };
 }
 
 const parse = (value: unknown): ReturnType<typeof communicationStateRecordV2Schema.safeParse> =>
@@ -491,5 +498,158 @@ describe('V1 stays immutable, and there is no migration', () => {
     ]) {
       expect(contracts).not.toHaveProperty(internal);
     }
+  });
+});
+
+/**
+ * COMPILE-TIME coupling, which is the half a runtime test cannot reach.
+ *
+ * The earlier shape parsed the same inputs correctly but let the inferred TYPE describe impossible
+ * records — a `rejected` whose outcome is `authorized`, a `read` whose evidence says `delivered`. Those
+ * are now unrepresentable, and `@ts-expect-error` FAILS THE BUILD if any of them ever starts compiling,
+ * so this block is a live assertion rather than documentation.
+ */
+describe('state/evidence coupling is structural', () => {
+  const COMMON = {
+    communicationId: COMMUNICATION_ID,
+    contractVersion: 2,
+    recordedAt: RECORDED_AT,
+    correlationId: CORRELATION_ID,
+  } as const;
+  const AUTH = {
+    tier: 'tier-c',
+    kind: 'communication-authorization',
+    sourceEventId: EVENT_ID,
+    communicationRequestId: REQUEST_ID,
+  } as const;
+  const RESULT = {
+    tier: 'tier-c',
+    kind: 'communication-result',
+    sourceEventId: EVENT_ID,
+    communicationResultId: RESULT_ID,
+  } as const;
+
+  it('accepts the three lawful shapes at compile time', () => {
+    const rejected = {
+      ...COMMON,
+      state: 'rejected',
+      reasonCode: 'recipient-opted-out',
+      evidence: { ...AUTH, outcome: 'rejected' },
+    } satisfies CommunicationStateRecordV2;
+
+    const authorized = {
+      ...COMMON,
+      state: 'authorized',
+      reasonCode: 'approved-by-policy',
+      evidence: { ...AUTH, outcome: 'authorized', authorizedChannel: 'whatsapp' },
+    } satisfies CommunicationStateRecordV2;
+
+    const delivered = {
+      ...COMMON,
+      state: 'delivered',
+      reasonCode: 'delivered-to-recipient',
+      evidence: { ...RESULT, lifecycleState: 'delivered', outcome: 'succeeded' },
+    } satisfies CommunicationStateRecordV2;
+
+    // And they are lawful at runtime too, so the type and the schema agree.
+    for (const record of [rejected, authorized, delivered]) {
+      expect(parse(record).success).toBe(true);
+    }
+  });
+
+  it('makes every impossible combination a compile error', () => {
+    // Each `@ts-expect-error` sits on the exact line TypeScript reports, so an unused directive is
+    // itself a build failure. If any of these ever starts compiling, the coupling has regressed.
+    const missingChannel = {
+      ...COMMON,
+      state: 'authorized',
+      reasonCode: 'approved-by-policy',
+      // @ts-expect-error authorized must name the channel it was authorized for
+      evidence: { ...AUTH, outcome: 'authorized' },
+    } satisfies CommunicationStateRecordV2;
+
+    const authorizedButRejected = {
+      ...COMMON,
+      state: 'authorized',
+      reasonCode: 'approved-by-policy',
+      // @ts-expect-error an authorized state cannot rest on a rejection
+      evidence: { ...AUTH, outcome: 'rejected', authorizedChannel: 'whatsapp' },
+    } satisfies CommunicationStateRecordV2;
+
+    const rejectedButAuthorized = {
+      ...COMMON,
+      state: 'rejected',
+      reasonCode: 'recipient-opted-out',
+      // @ts-expect-error a rejected state cannot rest on an authorization
+      evidence: { ...AUTH, outcome: 'authorized' },
+    } satisfies CommunicationStateRecordV2;
+
+    const rejectedWithChannel = {
+      ...COMMON,
+      state: 'rejected',
+      reasonCode: 'recipient-opted-out',
+      // @ts-expect-error a refusal authorizes no channel, so it cannot even name the field
+      evidence: { ...AUTH, outcome: 'rejected', authorizedChannel: 'whatsapp' },
+    } satisfies CommunicationStateRecordV2;
+
+    const readSaysDelivered = {
+      ...COMMON,
+      state: 'read',
+      reasonCode: 'read-by-recipient',
+      evidence: { ...RESULT, lifecycleState: 'delivered', outcome: 'succeeded' },
+      // @ts-expect-error read cannot carry delivered evidence
+    } satisfies CommunicationStateRecordV2;
+
+    const providerAcceptedSaysFailed = {
+      ...COMMON,
+      state: 'provider-accepted',
+      reasonCode: 'accepted-by-provider',
+      evidence: { ...RESULT, lifecycleState: 'failed', outcome: 'failed' },
+      // @ts-expect-error provider-accepted cannot carry failed evidence
+    } satisfies CommunicationStateRecordV2;
+
+    const resultStateWithAuthEvidence = {
+      ...COMMON,
+      state: 'delivered',
+      reasonCode: 'delivered-to-recipient',
+      // @ts-expect-error a result state cannot rest on authorization evidence
+      evidence: { ...AUTH, outcome: 'authorized', authorizedChannel: 'whatsapp' },
+    } satisfies CommunicationStateRecordV2;
+
+    const authStateWithResultEvidence = {
+      ...COMMON,
+      state: 'authorized',
+      reasonCode: 'approved-by-policy',
+      // @ts-expect-error an authorization state cannot rest on result evidence
+      evidence: { ...RESULT, lifecycleState: 'delivered', outcome: 'succeeded' },
+    } satisfies CommunicationStateRecordV2;
+
+    // Every one of them is refused at runtime too, so the type and the schema agree about what is
+    // impossible rather than each guarding a different set.
+    expect(
+      [
+        missingChannel,
+        authorizedButRejected,
+        rejectedButAuthorized,
+        rejectedWithChannel,
+        readSaysDelivered,
+        providerAcceptedSaysFailed,
+        resultStateWithAuthEvidence,
+        authStateWithResultEvidence,
+      ].every((record) => !parse(record).success),
+    ).toBe(true);
+  });
+
+  it('refuses an explicit authorizedChannel: undefined on a rejection', () => {
+    // `.optional()` would have accepted this. The rejected variant has no such field at all, so
+    // strictObject treats it as an unknown key.
+    const record = {
+      ...COMMON,
+      state: 'rejected',
+      reasonCode: 'recipient-opted-out',
+      evidence: { ...AUTH, outcome: 'rejected', authorizedChannel: undefined },
+    };
+
+    expect(parse(record).success).toBe(false);
   });
 });

@@ -428,12 +428,45 @@ but is Jarvis-computed and is **not a Core attestation**. **No cryptographic fac
 
 ---
 
-## 8. `CommunicationStateRecordV2` — semantics only
+## 8. `CommunicationStateRecordV2`
 
 Under Model 2, **V2 is a Jarvis-local projection/read-model contract**, not automatically a Core wire
-payload. **Not implemented here**; no Zod or TypeScript is written.
+payload.
 
-### 8.1 Locked semantics
+> **STATUS — V2 IS NOW IMPLEMENTED by D3**
+> ([ADR-0141](../decisions/ADR-0141-qfj-p09-d3-communication-state-record-v2-six-state-contract.md),
+> Proposed). **§8.0 below states the CURRENT contract. §§8.1–8.4 are the ORIGINAL pre-D2b/D3 semantics
+> and are kept as history** — their rationale still explains why the contract looks as it does, but
+> where they differ from §8.0, §8.0 governs.
+
+### 8.0 What D3 actually implemented (current)
+
+**Six durable, evidence-bearing states only:** `rejected`, `authorized`, `provider-accepted`,
+`delivered`, `read`, `failed`. The domain vocabulary stays **18**; the durable subset is a separate
+list, not a filter over it.
+
+**The two conditional Tier-B states — `authorization-requested` and `scheduled` — are EXCLUDED** until
+their exact Core primitives are adopted (ADR-0139). The other **ten** states are excluded as D2
+decided. **No placeholder or `unknown` evidence variant exists**, because a variant that could hold
+nothing would let a state exist without a source.
+
+**Evidence is Tier-C ONLY**, and coupling is **structural**: the schema is a six-variant discriminated
+union on `state`, so a `rejected` whose outcome is `authorized`, or a `read` whose evidence says
+`delivered`, is not merely rejected at parse time — it cannot be written in TypeScript at all. §8.1's
+"structurally distinguishes Tier A, Tier B and Tier C evidence" describes the eventual shape; **the
+first implementation distinguishes Tier-C variants and defines no Tier-A or Tier-B variant.**
+
+**`previousState` is OPTIONAL CONTEXT, never source evidence**, and is restricted to the same six
+states. §8.1's phrasing that it "stays evidence and context" is superseded: it is context only, and
+allowing all eighteen would smuggle an undurable state into a durable record.
+
+**`reasonCode` remains an open Core machine token**, unchanged.
+
+**D5 is the first producer**, building V2 only from D4's trusted evidence. **No adopted or live Core
+emission for either target family was established at the accepted S3 pin, and no current-live emission
+claim is made.** Rollout remains **OFF**.
+
+### 8.1 Locked semantics (original, pre-D3 — historical)
 
 1. **V1 stays immutable and published.**
 2. **`ApprovalDecisionV1` is never again generic "Core decided" evidence.**
@@ -448,7 +481,7 @@ payload. **Not implemented here**; no Zod or TypeScript is written.
 8. **D3 may not freeze an evidence variant for any Tier A/B state whose durable source is unresolved**
    (§6.1). **D5 may not implement a state until its durable source and ordering are decided.**
 
-### 8.2 Per-state requirements and durable-source status
+### 8.2 Per-state requirements and durable-source status (original, pre-D2b/D3 — historical)
 
 | State | Tier | Evidence requirement | Durable source status |
 | --- | --- | --- | --- |
@@ -468,13 +501,13 @@ payload. **Not implemented here**; no Zod or TypeScript is written.
 
 State meaning and ownership are unchanged from ADR-0134.
 
-### 8.3 `channel`, deliberately open
+### 8.3 `channel`, deliberately open (original — historical)
 
 V1 makes `channel` mandatory, so a `rejected` record must name a channel Core never authorized. Three
 candidate repairs — optional `channel`; a *proposed* vs *authorized* distinction; or a state-sensitive
 rule — are all defensible. Settled when S3 establishes whether Core's authorization always names one.
 
-### 8.4 Intentionally unresolved until S3 / D2 / D2b
+### 8.4 Intentionally unresolved until S3 / D2 / D2b (original — now resolved by D2/D2b/D3)
 
 `cancelled` · `expired` · **`execution-submitted` dispatch evidence** · the S4 submission receipt ·
 `channel` semantics · which candidate contracts the current Core can expose or adopt · **and the
