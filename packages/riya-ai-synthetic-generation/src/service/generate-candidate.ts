@@ -301,8 +301,16 @@ export async function generateRiyaSyntheticCandidate(
   return generateRiyaSyntheticCandidateWithGate({ ...options, invocationGate: gate });
 }
 
-/** Re-prove a policy through its own constructor. Throws before anything is spent. */
-function reprovedPolicy(policy: RiyaSyntheticGenerationPolicyV1): RiyaSyntheticGenerationPolicyV1 {
+/**
+ * Re-prove a policy through its own constructor. Throws before anything is spent.
+ *
+ * INTERNAL, and deliberately not re-exported from the package barrel: it is enforcement machinery,
+ * not a caller's utility. It is exported from this module only so the run orchestrator can re-prove
+ * the SAME way rather than growing a second copy of this logic that could drift from it.
+ */
+export function reprovedPolicy(
+  policy: RiyaSyntheticGenerationPolicyV1,
+): RiyaSyntheticGenerationPolicyV1 {
   const { version: _version, ...fields } = policy;
   return createRiyaSyntheticGenerationPolicy(fields);
 }

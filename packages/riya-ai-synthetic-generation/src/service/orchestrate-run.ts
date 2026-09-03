@@ -26,6 +26,13 @@
  *
  * Candidates finish out of order under concurrency. Results are placed back at their input index, so
  * a run is reproducible evidence rather than a race report.
+ *
+ * ### The policy is re-proved before either gate exists
+ *
+ * This is a PUBLIC entry point, so the policy it is handed is a runtime value rather than a type. It
+ * is re-proved through its own constructor first, because the limits are read to BUILD the gates —
+ * and a zero limit does not produce a small run, it produces one that waits forever for a permit
+ * nothing will grant. See the note at the re-proof itself.
  */
 import type { RiyaDatasetQualityDimension } from '@qf-jarvis/riya-intelligence-dataset';
 import type { RiyaAiSyntheticScenarioV1 } from '@qf-jarvis/riya-intelligence-dataset/ai-synthetic';
@@ -36,7 +43,7 @@ import type { RiyaSyntheticConfigInventoryV1 } from '../contracts/model-config.j
 import type { RiyaSyntheticGenerationPolicyV1 } from '../contracts/policy.js';
 import type { RiyaSyntheticRoleAllocationV1 } from '../contracts/role-allocation.js';
 import { createRiyaSyntheticConcurrencyGate } from '../internal/concurrency.js';
-import { generateRiyaSyntheticCandidateWithGate } from './generate-candidate.js';
+import { generateRiyaSyntheticCandidateWithGate, reprovedPolicy } from './generate-candidate.js';
 import type {
   RiyaSyntheticCandidateV1,
   RiyaSyntheticInvokerRegistry,
@@ -82,7 +89,24 @@ export interface RiyaSyntheticRunResultV1 {
 export async function orchestrateRiyaSyntheticRun(
   options: OrchestrateRiyaSyntheticRunOptions,
 ): Promise<RiyaSyntheticRunResultV1> {
-  const { items, policy, signal } = options;
+  const { items, signal } = options;
+
+  // ---- DEEP RE-PROOF OF THE POLICY, before a gate can be built ---------------------------------
+  //
+  // This is the PUBLIC run entry, so `options.policy` is a runtime value and not a type. A raw or
+  // cast object with `maxConcurrentCandidates: 0` type-checks perfectly well, and a zero limit is
+  // not merely a small one: the gate's acquire loop waits for a permit that is never granted, so the
+  // run HANGS. It hangs before any candidate reaches the deep re-proof inside
+  // `generateRiyaSyntheticCandidateWithGate`, which is the only place the policy used to be proved —
+  // and a harness that hangs is worse than one that throws, because there is nothing to read and
+  // nothing to report.
+  //
+  // So the policy goes back through its own constructor FIRST, and only the re-proved value is used
+  // below: for both gates, for the worker count, and for every candidate handed to generation. The
+  // supplied object is never read again. `reprovedPolicy` is shared with the single-candidate path
+  // rather than reimplemented, so the two entry points cannot come to disagree about what a valid
+  // policy is.
+  const policy = reprovedPolicy(options.policy);
 
   // ---- PREFLIGHT ------------------------------------------------------------------------------
   //
@@ -147,6 +171,7 @@ export async function orchestrateRiyaSyntheticRun(
           scenario: item.scenario,
           allocation: item.allocation,
           inventory: options.inventory,
+          // The RE-PROVED policy, never `options.policy`.
           policy,
           invokers: options.invokers,
           criticQualityDimensions: options.criticQualityDimensions,
