@@ -66,10 +66,26 @@ export const NO_USAGE: RiyaSyntheticUsageV1 = Object.freeze({
   cachedInputTokens: 0,
 });
 
+/**
+ * The size of the request that is ACTUALLY about to be sent, in UTF-8 bytes.
+ *
+ * Measured on the serialized body — instructions, the projected role input and the bound output
+ * schema — rather than on any one part of it, because the ceiling exists to bound what crosses the
+ * wire. Bytes rather than tokens: bytes are a fact this repository owns, and a token count is a
+ * provider's opinion about the same string that we would have to reimplement to predict.
+ */
+export function riyaSyntheticRequestUtf8Bytes(body: unknown): number {
+  // `JSON.stringify(undefined)` is `undefined` at runtime whatever its type says, and a byte count of
+  // "nothing to send" is zero rather than a crash.
+  if (body === undefined) return 0;
+  return Buffer.byteLength(JSON.stringify(body), 'utf8');
+}
+
 const STATUS_FOR: Readonly<
   Record<RiyaSyntheticProviderFailureKind, RiyaSyntheticInvocationStatus>
 > = Object.freeze({
   AUTH_OR_CONFIG: 'PROVIDER_ERROR',
+  REQUEST_TOO_LARGE: 'PROVIDER_ERROR',
   RATE_LIMITED: 'PROVIDER_ERROR',
   PROVIDER_UNAVAILABLE: 'PROVIDER_ERROR',
   TRANSIENT_PROVIDER_FAILURE: 'PROVIDER_ERROR',
@@ -138,6 +154,8 @@ export async function runRiyaSyntheticProviderInvocation(
   options: RiyaSyntheticInvocationOptions,
   call: (signal: AbortSignal) => Promise<RiyaSyntheticProviderReply>,
   onFailureKind?: RiyaSyntheticProviderFailureObserver,
+  /** The serialized body size and its hard ceiling, when the caller enforces one. */
+  size?: { readonly utf8Bytes: number; readonly maxUtf8Bytes: number },
 ): Promise<RiyaSyntheticInvocationOutcome> {
   const fail = (
     kind: RiyaSyntheticProviderFailureKind,
@@ -157,6 +175,12 @@ export async function runRiyaSyntheticProviderInvocation(
   // waste the re-check exists to prevent.
   if (callerAborted()) {
     return fail('CANCELLED');
+  }
+
+  // HARD, and checked on the bytes that were just built rather than on an estimate of them. Refused
+  // BEFORE a transport is touched, so an over-large request costs nothing at all.
+  if (size !== undefined && size.utf8Bytes > size.maxUtf8Bytes) {
+    return fail('REQUEST_TOO_LARGE');
   }
 
   const deadline = AbortSignal.timeout(options.timeoutMs);

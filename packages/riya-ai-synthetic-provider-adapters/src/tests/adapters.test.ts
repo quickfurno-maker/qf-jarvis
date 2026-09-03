@@ -12,9 +12,20 @@ import { describe, expect, it } from 'vitest';
 
 import { createAnthropicMessagesInvoker } from '../adapters/anthropic-messages-invoker.js';
 import { createOpenAiResponsesInvoker } from '../adapters/openai-responses-invoker.js';
-import { RiyaSyntheticProviderTransportError } from '../contracts/provider-errors.js';
+import {
+  RiyaSyntheticProviderTransportError,
+  riyaSyntheticFailureIsRetryable,
+  riyaSyntheticFailureStopsRun,
+} from '../contracts/provider-errors.js';
 import type { RiyaSyntheticProviderFailureKind } from '../contracts/provider-errors.js';
-import { customerInput, requestFor, validPayloadFor } from './fixtures.js';
+import {
+  createTransportLog,
+  customerInput,
+  requestFor,
+  scriptedAnthropicTransport,
+  scriptedOpenAiTransport,
+  validPayloadFor,
+} from './fixtures.js';
 
 const MODELS = new Map([['cfg.sim.gpt', 'gpt-5.6-sol']]);
 const CLAUDE_MODELS = new Map([['cfg.sim.claude', 'claude-sonnet-5']]);
@@ -292,5 +303,96 @@ describe.each(HARNESSES)('$label adapter', (harness) => {
       ),
     ).rejects.toThrow();
     expect(harnessed.calls()).toBe(0);
+  });
+});
+
+/**
+ * The HARD serialized-request ceiling (AS3A correction, ADR-0143 §2).
+ *
+ * Unlike a token threshold, this one is genuinely impossible to cross: the bytes are counted on the
+ * body that was just built, and the transport is never reached. A request refused here costs nothing
+ * at all — no call, no tokens, no time.
+ */
+describe.each(HARNESSES)('$label adapter — the hard request byte ceiling', (harness) => {
+  /** Build an invoker with a byte ceiling and a transport that must never be called. */
+  function guarded(maxRequestInputUtf8Bytes: number, observed: RiyaSyntheticProviderFailureKind[]) {
+    let calls = 0;
+    const transport = {
+      create() {
+        calls += 1;
+        throw new Error('the transport must not be reached');
+      },
+    };
+    const invoker =
+      harness.label === 'OpenAI'
+        ? createOpenAiResponsesInvoker({
+            models: MODELS,
+            transport,
+            maxRequestInputUtf8Bytes,
+            onProviderFailure: (kind) => {
+              observed.push(kind);
+            },
+          })
+        : createAnthropicMessagesInvoker({
+            models: CLAUDE_MODELS,
+            transport,
+            maxRequestInputUtf8Bytes,
+            onProviderFailure: (kind) => {
+              observed.push(kind);
+            },
+          });
+    return { invoker, calls: () => calls };
+  }
+
+  it('refuses an over-large request BEFORE the transport, spending nothing', async () => {
+    const observed: RiyaSyntheticProviderFailureKind[] = [];
+    // Far below any real body: the shared instruction alone is longer than this.
+    const guard = guarded(512, observed);
+
+    const outcome = await guard.invoker.invoke(
+      requestFor('CUSTOMER_SIMULATOR', harness.configRef),
+      customerInput(),
+      OPTIONS,
+    );
+
+    expect(guard.calls()).toBe(0);
+    expect(outcome.result.status).toBe('PROVIDER_ERROR');
+    // PERMANENT: asking again with the same oversized body would spend the same money for the same
+    // answer.
+    expect(outcome.result.errorClass).toBe('PERMANENT');
+    expect(observed).toStrictEqual(['REQUEST_TOO_LARGE']);
+  });
+
+  it('does not stop the run for one over-large request', () => {
+    // A malformed request is a candidate's problem, not the pilot's. Only an auth fault ends a run.
+    expect(riyaSyntheticFailureStopsRun('REQUEST_TOO_LARGE')).toBe(false);
+    expect(riyaSyntheticFailureIsRetryable('REQUEST_TOO_LARGE')).toBe(false);
+  });
+
+  it('sends a normal request when the ceiling is the budget default', async () => {
+    // The guard must not be so tight that ordinary traffic trips it -- a control that fires on the
+    // happy path is one somebody will raise until it never fires at all.
+    const log = createTransportLog();
+    const invoker =
+      harness.label === 'OpenAI'
+        ? createOpenAiResponsesInvoker({
+            models: MODELS,
+            transport: scriptedOpenAiTransport(log),
+            maxRequestInputUtf8Bytes: 262_144,
+          })
+        : createAnthropicMessagesInvoker({
+            models: CLAUDE_MODELS,
+            transport: scriptedAnthropicTransport(log),
+            maxRequestInputUtf8Bytes: 262_144,
+          });
+
+    const outcome = await invoker.invoke(
+      requestFor('CUSTOMER_SIMULATOR', harness.configRef),
+      customerInput(),
+      OPTIONS,
+    );
+
+    expect(outcome.result.status).toBe('SUCCESS');
+    expect(log.openaiBodies.length + log.anthropicBodies.length).toBe(1);
   });
 });

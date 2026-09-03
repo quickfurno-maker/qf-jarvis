@@ -112,13 +112,58 @@ describe('the CLI prints a summary that is safe to paste into a review', () => {
     expect(output).toContain('OPENAI_CREDENTIAL_PRESENT=true');
     expect(output).toContain('ANTHROPIC_CREDENTIAL_PRESENT=true');
     expect(output).toContain('ceiling provider requests:');
+    expect(output).toContain('ceiling request input bytes:');
+    expect(output).toContain('ceiling reserved output tokens:');
     expect(output).toContain('ceiling wall clock ms:');
+    // HARD controls and OBSERVED thresholds are printed under different words, so a reader planning
+    // a spend does not have to guess which of them is a wall.
+    expect(output).toContain('observed threshold input tokens:');
+    expect(output).toContain('observed threshold output tokens:');
+    expect(output).toContain('observed threshold total tokens:');
     expect(output).toContain('model=gpt-5.6-sol');
     expect(output).toContain('model=claude-sonnet-5');
     expect(output).toContain('instruction=riya.as3a.');
     // No value, no prefix, no length -- a length narrows a key.
     expect(output).not.toContain('sk-');
   }, 30_000);
+});
+
+describe('EXECUTE requires somewhere to put the evidence', () => {
+  it('refuses --execute with both opt-ins and no --artifacts, before any network', async () => {
+    // A paid run whose candidates live only in memory is the run nobody can review: the process
+    // exits, the money is spent, and there is nothing to look at. The refusal happens before the
+    // credential read and before an SDK is constructed, so this spec cannot itself spend anything --
+    // which is why it is safe to run it with the environment fully armed.
+    const path = await planFile();
+
+    const { code, output } = await run(['--plan', path, '--execute'], {
+      ...WITH_CREDENTIALS,
+      [RIYA_AS3_EXECUTE_ENV]: 'true',
+    });
+
+    expect(code).toBe(RIYA_AS3_EXIT_RUNNER_FAILURE);
+    expect(output).toContain('FAILED: artifact-destination-required');
+    // Nothing was attempted. Checked LINE-wise, because `ceiling provider requests:` is printed by
+    // the summary and a substring test would pass for the wrong reason.
+    expect(
+      output.split(String.fromCharCode(10)).some((line) => line.startsWith('provider requests:')),
+    ).toBe(false);
+  }, 30_000);
+
+  it('allows a dry run with no --artifacts, because it produces nothing to keep', async () => {
+    const path = await planFile();
+
+    const { code, output } = await run(['--plan', path], WITH_CREDENTIALS);
+
+    expect(code).toBe(RIYA_AS3_EXIT_OK);
+    expect(output).toContain('provider requests: 0');
+  }, 30_000);
+
+  it('says so in the usage line', async () => {
+    const { output } = await run([], WITH_CREDENTIALS);
+
+    expect(output).toContain('--execute REQUIRES --artifacts');
+  });
 });
 
 describe('the CLI separates a runner failure from a rejected candidate', () => {

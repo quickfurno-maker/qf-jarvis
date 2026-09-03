@@ -18,7 +18,28 @@ import {
 } from '../contracts/provider-errors.js';
 import { budgetInput, inventoryInput, policyInput, runPlanInput } from './fixtures.js';
 
-describe('the execution budget is a hard control', () => {
+describe('the execution budget separates hard controls from observed thresholds', () => {
+  it('names the two kinds differently, so a reader cannot mistake one for the other', () => {
+    const budget = createRiyaSyntheticExecutionBudget(
+      budgetInput() as Parameters<typeof createRiyaSyntheticExecutionBudget>[0],
+    );
+
+    // HARD: checked against something this repository knows before anything is spent.
+    expect(budget.maxProviderRequests).toBeGreaterThan(0);
+    expect(budget.maxRequestInputUtf8Bytes).toBeGreaterThan(0);
+    expect(budget.maxReservedOutputTokens).toBeGreaterThan(0);
+    expect(budget.maxWallClockMs).toBeGreaterThan(0);
+    // OBSERVED: compared against what a provider reported for a call that already happened.
+    expect(budget.maxObservedInputTokens).toBeGreaterThan(0);
+    expect(budget.maxObservedOutputTokens).toBeGreaterThan(0);
+    expect(budget.maxObservedTotalTokens).toBeGreaterThan(0);
+    // The pre-correction names are gone, not aliased. An alias would let a reader keep planning
+    // against a threshold they believed was a wall.
+    expect(budget).not.toHaveProperty('maxInputTokens');
+    expect(budget).not.toHaveProperty('maxOutputTokens');
+    expect(budget).not.toHaveProperty('maxTotalTokens');
+  });
+
   it('accepts a well-formed budget and freezes it', () => {
     const budget = createRiyaSyntheticExecutionBudget(
       budgetInput() as Parameters<typeof createRiyaSyntheticExecutionBudget>[0],
@@ -32,9 +53,15 @@ describe('the execution budget is a hard control', () => {
     ['a zero candidate ceiling', { maxCandidates: 0 }],
     ['a zero request ceiling', { maxProviderRequests: 0 }],
     ['a wall clock under ten minutes', { maxWallClockMs: 1_000 }],
-    ['a total below the input direction', { maxTotalTokens: 1 }],
+    ['a request byte ceiling below 4 KiB', { maxRequestInputUtf8Bytes: 10 }],
+    ['an observed total below the input direction', { maxObservedTotalTokens: 1 }],
     ['fewer requests than candidates', { maxCandidates: 10, maxProviderRequests: 5 }],
+    [
+      'a reservation ceiling above the observed output threshold',
+      { maxReservedOutputTokens: 900_000, maxObservedOutputTokens: 1_000 },
+    ],
     ['an unknown field', { somethingElse: true }],
+    ['the old pre-correction field names', { maxInputTokens: 500_000 }],
   ])('rejects %s', (_label, overrides) => {
     expect(() =>
       createRiyaSyntheticExecutionBudget(

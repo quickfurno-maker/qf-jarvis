@@ -32,7 +32,10 @@ import type {
 import { RiyaSyntheticPilotError } from '../contracts/pilot-errors.js';
 import { renderRiyaSyntheticRequest } from '../prompts/role-prompts.js';
 import type { RiyaSyntheticJsonSchema } from '../prompts/output-schemas.js';
-import { runRiyaSyntheticProviderInvocation } from './invocation-runner.js';
+import {
+  riyaSyntheticRequestUtf8Bytes,
+  runRiyaSyntheticProviderInvocation,
+} from './invocation-runner.js';
 import type {
   RiyaSyntheticProviderFailureObserver,
   RiyaSyntheticProviderReply,
@@ -92,6 +95,14 @@ export interface CreateOpenAiResponsesInvokerOptions {
   readonly models: ReadonlyMap<string, string>;
   /** Told the precise failure kind, so run control can stop on an auth fault and only on one. */
   readonly onProviderFailure?: RiyaSyntheticProviderFailureObserver;
+  /**
+   * The budget's HARD serialized-request ceiling, in UTF-8 bytes.
+   *
+   * Enforced on the body this adapter just built, before the transport sees it. Absent means the
+   * caller enforces no ceiling — which is what a spec building one request wants, and never what an
+   * EXECUTE run gets: the executor always passes the budget's value.
+   */
+  readonly maxRequestInputUtf8Bytes?: number;
 }
 
 /** The schema name a provider sees. The ref itself, so a captured request says which contract it used. */
@@ -171,6 +182,12 @@ export function createOpenAiResponsesInvoker(
           };
         },
         options.onProviderFailure,
+        options.maxRequestInputUtf8Bytes === undefined
+          ? undefined
+          : {
+              utf8Bytes: riyaSyntheticRequestUtf8Bytes(body),
+              maxUtf8Bytes: options.maxRequestInputUtf8Bytes,
+            },
       );
     },
   };

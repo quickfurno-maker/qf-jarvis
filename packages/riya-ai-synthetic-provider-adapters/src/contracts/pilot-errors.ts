@@ -20,6 +20,7 @@ export const RIYA_SYNTHETIC_PILOT_ERROR_CODES = [
   'provider-auth-failure',
   'artifact-path-escape',
   'artifact-already-exists',
+  'artifact-destination-required',
 ] as const;
 export type RiyaSyntheticPilotErrorCode = (typeof RIYA_SYNTHETIC_PILOT_ERROR_CODES)[number];
 
@@ -34,6 +35,8 @@ const MESSAGES: Readonly<Record<RiyaSyntheticPilotErrorCode, string>> = Object.f
   'provider-auth-failure': 'A provider rejected the credential or configuration.',
   'artifact-path-escape': 'An artifact path resolved outside its base directory.',
   'artifact-already-exists': 'An artifact already exists and overwriting was not requested.',
+  'artifact-destination-required':
+    'Real provider execution requires an artifact destination, so the run leaves durable evidence.',
 });
 
 /** A bounded, content-free pilot error. Never carries a credential, a path secret or provider text. */

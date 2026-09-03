@@ -94,6 +94,7 @@ export type {
   AnthropicMessagesTransport,
   CreateAnthropicMessagesInvokerOptions,
 } from './adapters/anthropic-messages-invoker.js';
+export { riyaSyntheticRequestUtf8Bytes } from './adapters/invocation-runner.js';
 export type {
   RiyaSyntheticProviderFailureObserver,
   RiyaSyntheticProviderReply,
@@ -126,6 +127,7 @@ export type {
 export { RIYA_SYNTHETIC_STOP_REASONS, createRiyaSyntheticSpendGate } from './service/spend-gate.js';
 export type {
   CreateSpendGateOptions,
+  RiyaSyntheticScheduler,
   RiyaSyntheticSpendGate,
   RiyaSyntheticSpendLedgerV1,
   RiyaSyntheticStopReason,

@@ -21,12 +21,16 @@
 import { orchestrateRiyaSyntheticRun } from '@qf-jarvis/riya-ai-synthetic-generation';
 import type { RiyaSyntheticModelInvoker } from '@qf-jarvis/riya-ai-synthetic-generation';
 import { syntheticProtectedIndex } from '@qf-jarvis/riya-intelligence-dataset/testing';
-import { describe, expect, it } from 'vitest';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import { createAnthropicMessagesInvoker } from '../adapters/anthropic-messages-invoker.js';
 import { createOpenAiResponsesInvoker } from '../adapters/openai-responses-invoker.js';
 
 import { createRiyaSyntheticPilotPlan } from '../contracts/pilot-plan.js';
+import { createRiyaSyntheticArtifactWriter } from '../service/artifact-writer.js';
 import { executeRiyaSyntheticPilot } from '../service/execute-pilot.js';
 import { preflightRiyaSyntheticPilot } from '../service/preflight.js';
 import {
@@ -90,6 +94,8 @@ describe('a scheduled scenario reaches AS1 through real adapters', () => {
       // raised no finding. Asserting the verdict itself would be asserting a property of the scripted
       // fixture -- what a real model's output scores is an AS3B question.
       expect(result.corpusEligible).toBe(result.blockingFindings === 0);
+      // AS1's own number, carried through under AS1's own word.
+      expect(result.acceptedEvidenceCount).toBeGreaterThanOrEqual(0);
       expect(result.ledger.providerRequests).toBe(
         log.openaiBodies.length + log.anthropicBodies.length,
       );
@@ -235,4 +241,176 @@ describe('preflight refuses a run before a transport exists', () => {
     });
     expect(JSON.stringify(preflight.credentials)).not.toContain('sk-');
   });
+});
+
+/**
+ * The pilot's durable evidence (AS3A correction, ADR-0143 §15, blockers D and E).
+ *
+ * ### Why an artifact spec exists at all
+ *
+ * A pilot that spends real money and writes only refs and statuses leaves a reviewer nothing to look
+ * at. The candidate index says WHICH candidates existed; `generated-candidates.jsonl` says what they
+ * actually are. Both are needed, and only one of them was there before this correction.
+ *
+ * ### And why the names matter
+ *
+ * AS1's `eligible` is a CORPUS-level verdict. A corpus-level blocker carries no trajectory id, so a
+ * row-level partition can look clean inside a corpus AS1 refused — which is exactly how a file named
+ * `accepted-pilot.jsonl` would claim more than AS1 ever proved. These specs pin the honest names.
+ */
+describe('a pilot leaves durable, canonical evidence', () => {
+  const scratch: string[] = [];
+
+  afterEach(async () => {
+    for (const directory of scratch.splice(0)) {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  async function runWithArtifacts(): Promise<{
+    readonly directory: string;
+    readonly result: Awaited<ReturnType<typeof executeRiyaSyntheticPilot>>;
+  }> {
+    const directory = await mkdtemp(join(tmpdir(), 'qfj-as3a-evidence-'));
+    scratch.push(directory);
+
+    const plan = planFor([GPT_TAUGHT_ALLOCATION, CLAUDE_TAUGHT_ALLOCATION]);
+    const preflight = preflightRiyaSyntheticPilot({ plan, environment: ENVIRONMENT });
+    const log = createTransportLog();
+
+    const result = await executeRiyaSyntheticPilot({
+      plan,
+      preflight,
+      mode: 'EXECUTE',
+      openaiTransport: scriptedOpenAiTransport(log),
+      anthropicTransport: scriptedAnthropicTransport(log),
+      now: () => 0,
+      protectedIndex: PROTECTED,
+      writer: createRiyaSyntheticArtifactWriter({ baseDirectory: directory }),
+    });
+
+    return { directory, result };
+  }
+
+  async function readArtifact(directory: string, name: string): Promise<string> {
+    return readFile(join(directory, name), 'utf8');
+  }
+
+  const NEWLINE = String.fromCharCode(10);
+
+  it('writes the canonical trajectory, provenance, verdicts and evidence', async () => {
+    const { directory, result } = await runWithArtifacts();
+
+    const rows = (await readArtifact(directory, 'generated-candidates.jsonl'))
+      .split(NEWLINE)
+      .filter((line) => line.length > 0)
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+
+    expect(rows.length).toBe(result.generatedCandidates);
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      expect(row).toHaveProperty('scenarioRef');
+      expect(row).toHaveProperty('generationRef');
+      // The generated behaviour itself -- the thing a reviewer decides the next stage on.
+      expect(row).toHaveProperty('trajectory');
+      expect(row).toHaveProperty('provenance');
+      expect(row).toHaveProperty('verdicts');
+      expect(row).toHaveProperty('evidence');
+      const trajectory = row['trajectory'] as {
+        turns?: readonly unknown[];
+        review?: readonly unknown[];
+        source?: { kind?: string };
+      };
+      expect((trajectory.turns ?? []).length).toBeGreaterThan(0);
+      expect(trajectory.review).toStrictEqual([]);
+      expect(trajectory.source?.kind).toBe('TEACHER_GENERATED_SYNTHETIC');
+    }
+  }, 30_000);
+
+  it('stores no prompt body, no reasoning, no credential and no protected exam', async () => {
+    const { directory, result } = await runWithArtifacts();
+
+    const everything = (
+      await Promise.all(result.artifacts.map(async (one) => readArtifact(directory, one.name)))
+    ).join(NEWLINE);
+
+    for (const forbidden of [
+      // The instruction BODY. Identities and digests are recorded; the words are not.
+      'YOUR ROLE:',
+      'Never include your reasoning',
+      'thinking',
+      'sk-',
+      'Bearer ',
+      'apiKey',
+      'api_key',
+      ...PROTECTED_TEXTS,
+    ]) {
+      expect(everything, forbidden).not.toContain(forbidden);
+    }
+  }, 30_000);
+
+  it('names no artifact "accepted", because AS1 alone says that word', async () => {
+    const { directory, result } = await runWithArtifacts();
+
+    const names = result.artifacts.map((one) => one.name).sort();
+
+    expect(names).toStrictEqual([
+      'acceptance-report.json',
+      'candidate-index.jsonl',
+      'diversity-report.json',
+      'evidence-blocked-index.jsonl',
+      'evidence-clean-index.jsonl',
+      'generated-candidates.jsonl',
+      'run-manifest.json',
+      'trajectory-findings.jsonl',
+      'usage-report.json',
+    ]);
+    // The old names claimed a corpus-level verdict from a row-level partition.
+    for (const name of names) {
+      expect(name).not.toContain('accepted-pilot');
+      expect(name).not.toContain('rejected-pilot');
+    }
+    // The report is where acceptance is decided, and it is written.
+    expect(await readArtifact(directory, 'acceptance-report.json')).toContain(
+      'acceptedEvidenceCount',
+    );
+  }, 30_000);
+
+  it('keeps the corpus verdict and the evidence count as different facts', async () => {
+    // A corpus can hold clean per-trajectory evidence and still fail a corpus-level rule. The row
+    // partition answers "did AS1 name this trajectory"; only the report answers "is this releasable".
+    const { directory, result } = await runWithArtifacts();
+
+    const report = JSON.parse(await readArtifact(directory, 'acceptance-report.json')) as {
+      eligible: boolean;
+      acceptedEvidenceCount: number;
+      findings: readonly { trajectoryId?: string }[];
+    };
+
+    expect(result.corpusEligible).toBe(report.eligible);
+    expect(result.acceptedEvidenceCount).toBe(report.acceptedEvidenceCount);
+    expect(result.blockingFindings).toBe(report.findings.length);
+
+    // Every finding is written, INCLUDING corpus-level ones that name no trajectory -- those are
+    // precisely the findings a row-level partition can never show.
+    const findings = (await readArtifact(directory, 'trajectory-findings.jsonl'))
+      .split(NEWLINE)
+      .filter((line) => line.length > 0);
+    expect(findings.length).toBe(report.findings.length);
+  }, 30_000);
+
+  it('records the hard reservation control in the usage report', async () => {
+    const { directory } = await runWithArtifacts();
+
+    const usage = JSON.parse(await readArtifact(directory, 'usage-report.json')) as {
+      ledger: Record<string, number>;
+      stopReason: string | null;
+    };
+
+    // A HARD control, and its peak is the evidence that it held.
+    expect(usage.ledger).toHaveProperty('peakReservedOutputTokens');
+    // Fully drained: a leaked reservation would stall the next run at its own ceiling.
+    expect(usage.ledger['reservedOutputTokens']).toBe(0);
+    expect(usage.ledger['providerRequests']).toBeGreaterThan(0);
+  }, 30_000);
 });

@@ -31,6 +31,15 @@ import type { RiyaSyntheticErrorClass } from '@qf-jarvis/riya-ai-synthetic-gener
 
 export const RIYA_SYNTHETIC_PROVIDER_FAILURE_KINDS = [
   'AUTH_OR_CONFIG',
+  /**
+   * The serialized request exceeded the budget's hard byte ceiling.
+   *
+   * Not a provider failure at all — it never reached one. It is here rather than in the pilot
+   * taxonomy because it has to travel back through the invocation port, and the port carries closed
+   * provider kinds. It maps to PERMANENT: asking again with the same oversized body would spend the
+   * same money for the same answer.
+   */
+  'REQUEST_TOO_LARGE',
   'RATE_LIMITED',
   'PROVIDER_UNAVAILABLE',
   'TRANSIENT_PROVIDER_FAILURE',
@@ -132,6 +141,7 @@ export function riyaSyntheticErrorClassFor(
       return 'TRANSIENT';
     case 'AUTH_OR_CONFIG':
     case 'PERMANENT_PROVIDER_FAILURE':
+    case 'REQUEST_TOO_LARGE':
       return 'PERMANENT';
   }
 }

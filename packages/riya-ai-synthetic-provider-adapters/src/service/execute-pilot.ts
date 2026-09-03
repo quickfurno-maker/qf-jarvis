@@ -53,7 +53,11 @@ import type { RiyaSyntheticArtifactWriter } from './artifact-writer.js';
 import type { RiyaSyntheticExecutionMode } from './execution-guard.js';
 import type { RiyaSyntheticPreflightResultV1 } from './preflight.js';
 import { createRiyaSyntheticSpendGate } from './spend-gate.js';
-import type { RiyaSyntheticSpendLedgerV1, RiyaSyntheticStopReason } from './spend-gate.js';
+import type {
+  RiyaSyntheticScheduler,
+  RiyaSyntheticSpendLedgerV1,
+  RiyaSyntheticStopReason,
+} from './spend-gate.js';
 
 /** The protected exam's type, borrowed from the validator so this package needs no evaluation import. */
 export type RiyaSyntheticProtectedIndex = NonNullable<
@@ -71,6 +75,8 @@ export interface ExecuteRiyaSyntheticPilotOptions {
   readonly now: () => number;
   /** Absent means "produce the summary, write nothing" — which is what a dry run wants. */
   readonly writer?: RiyaSyntheticArtifactWriter;
+  /** Arms the run deadline. Injected so a spec can drive it without waiting out a wall clock. */
+  readonly scheduler?: RiyaSyntheticScheduler;
   /** The protected exam. Reaches the validator, and nothing else, ever. */
   readonly protectedIndex?: RiyaSyntheticProtectedIndex;
 }
@@ -93,8 +99,14 @@ export interface RiyaSyntheticPilotResultV1 {
   readonly generatedCandidates: number;
   readonly failedCandidates: number;
   readonly notStartedCandidates: number;
-  /** AS1's own count of accepted evidence records. Not recomputed here. */
-  readonly acceptedTrajectories: number;
+  /**
+   * AS1's own count of accepted EVIDENCE records. Not recomputed, and not a count of trajectories.
+   *
+   * Named for what it counts. `acceptedTrajectories` was the earlier name and it conflated two
+   * different things: an evidence record is what AS1 counts, and a corpus can hold clean evidence
+   * while still failing a corpus-level rule.
+   */
+  readonly acceptedEvidenceCount: number;
   readonly blockingFindings: number;
   /** AS1's corpus-level verdict. A pilot is expected to fail this; that is what a pilot is for. */
   readonly corpusEligible: boolean;
@@ -110,6 +122,8 @@ const EMPTY_LEDGER: RiyaSyntheticSpendLedgerV1 = Object.freeze({
   inputTokens: 0,
   outputTokens: 0,
   totalTokens: 0,
+  reservedOutputTokens: 0,
+  peakReservedOutputTokens: 0,
   elapsedMs: 0,
 });
 
@@ -136,7 +150,7 @@ export async function executeRiyaSyntheticPilot(
       generatedCandidates: 0,
       failedCandidates: 0,
       notStartedCandidates: preflight.plannedCandidates,
-      acceptedTrajectories: 0,
+      acceptedEvidenceCount: 0,
       blockingFindings: 0,
       corpusEligible: false,
       ledger: EMPTY_LEDGER,
@@ -155,7 +169,14 @@ export async function executeRiyaSyntheticPilot(
   }
 
   const controller = new AbortController();
-  const gate = createRiyaSyntheticSpendGate({ budget: plan.budget, now, controller });
+  // The gate ARMS the run deadline here, which is the moment EXECUTE begins. It is disposed below,
+  // so a finished pilot never leaves a timer behind.
+  const gate = createRiyaSyntheticSpendGate({
+    budget: plan.budget,
+    now,
+    controller,
+    ...(options.scheduler === undefined ? {} : { scheduler: options.scheduler }),
+  });
 
   const invokers = new Map<string, RiyaSyntheticModelInvoker>();
   if (options.openaiTransport !== undefined && preflight.openaiModels.size > 0) {
@@ -164,6 +185,8 @@ export async function executeRiyaSyntheticPilot(
         transport: options.openaiTransport,
         models: preflight.openaiModels,
         onProviderFailure: gate.observeProviderFailure,
+        // HARD, and always passed on an EXECUTE run: an over-large body is refused before transport.
+        maxRequestInputUtf8Bytes: plan.budget.maxRequestInputUtf8Bytes,
       }),
     );
     for (const configRef of preflight.openaiModels.keys()) invokers.set(configRef, invoker);
@@ -174,6 +197,7 @@ export async function executeRiyaSyntheticPilot(
         transport: options.anthropicTransport,
         models: preflight.anthropicModels,
         onProviderFailure: gate.observeProviderFailure,
+        maxRequestInputUtf8Bytes: plan.budget.maxRequestInputUtf8Bytes,
       }),
     );
     for (const configRef of preflight.anthropicModels.keys()) invokers.set(configRef, invoker);
@@ -195,14 +219,21 @@ export async function executeRiyaSyntheticPilot(
     ),
   });
 
-  const run = await orchestrateRiyaSyntheticRun({
-    items: preflight.items,
-    inventory: plan.inventory,
-    policy: effectivePolicy,
-    invokers: registry,
-    criticQualityDimensions: plan.criticQualityDimensions,
-    signal: controller.signal,
-  });
+  let run;
+  try {
+    run = await orchestrateRiyaSyntheticRun({
+      items: preflight.items,
+      inventory: plan.inventory,
+      policy: effectivePolicy,
+      invokers: registry,
+      criticQualityDimensions: plan.criticQualityDimensions,
+      signal: controller.signal,
+    });
+  } finally {
+    // The deadline has done its job either way. Leaving it armed would fire an abort into a finished
+    // run and, in a long-lived process, keep one timer alive per pilot.
+    gate.dispose();
+  }
 
   const index: RiyaSyntheticCandidateIndexRowV1[] = [];
   const candidates: RiyaSyntheticCandidateV1[] = [];
@@ -264,18 +295,47 @@ export async function executeRiyaSyntheticPilot(
       peakConcurrentCandidates: run.peakConcurrentCandidates,
       peakConcurrentInvocations: run.peakConcurrentInvocations,
     };
-    const acceptedRows = index.filter(
+    // NAMED for what they are. An earlier version called these `accepted-pilot.jsonl` and
+    // `rejected-pilot.jsonl`, which claimed more than AS1 had proved: AS1's `eligible` is a
+    // CORPUS-level verdict, and a corpus-level blocker carries no trajectory id at all -- so rows
+    // could look "accepted" inside an ineligible corpus. These names say only what the partition
+    // means: whether AS1 raised a finding against that trajectory. Acceptance is the report's word,
+    // and the report is the authority.
+    const cleanRows = index.filter(
       (row) => row.trajectoryId !== undefined && !faultedTrajectoryIds.has(row.trajectoryId),
     );
-    const rejectedRows = index.filter(
+    const blockedRows = index.filter(
       (row) => row.trajectoryId === undefined || faultedTrajectoryIds.has(row.trajectoryId),
     );
+
+    /**
+     * The canonical generated evidence, one row per candidate.
+     *
+     * Without this a pilot spends real money and leaves nothing to look at: the index carries refs
+     * and statuses, and a reviewer deciding whether the next stage is worth running needs the
+     * generated behaviour itself. Every field is a canonical AS1/AS2 artifact -- trajectory,
+     * provenance, critic verdicts, acceptance evidence -- and nothing else: no raw provider request
+     * or response, no prompt body, no reasoning, no thinking block, no credential, no protected exam.
+     *
+     * It is ignored local pilot evidence. It is not a production corpus and not a training approval.
+     */
+    const generatedRows = candidates.map((candidate) => ({
+      scenarioRef: candidate.provenance.scenarioRef,
+      generationRef: candidate.provenance.generationRef,
+      trajectory: candidate.trajectory,
+      provenance: candidate.provenance,
+      verdicts: candidate.verdicts,
+      evidence: candidate.evidence,
+    }));
 
     for (const [name, contents] of [
       ['run-manifest.json', JSON.stringify(manifest, null, 2)],
       ['candidate-index.jsonl', toJsonl(index)],
-      ['accepted-pilot.jsonl', toJsonl(acceptedRows)],
-      ['rejected-pilot.jsonl', toJsonl(rejectedRows)],
+      ['generated-candidates.jsonl', toJsonl(generatedRows)],
+      ['evidence-clean-index.jsonl', toJsonl(cleanRows)],
+      ['evidence-blocked-index.jsonl', toJsonl(blockedRows)],
+      // Every AS1 finding, with the trajectory it names -- or none, for a corpus-level one.
+      ['trajectory-findings.jsonl', toJsonl(validation.report.findings)],
       ['acceptance-report.json', JSON.stringify(validation.report, null, 2)],
       [
         'diversity-report.json',
@@ -299,7 +359,7 @@ export async function executeRiyaSyntheticPilot(
     generatedCandidates: index.filter((row) => row.status === 'GENERATED').length,
     failedCandidates: index.filter((row) => row.status === 'FAILED').length,
     notStartedCandidates: index.filter((row) => row.status === 'NOT_STARTED').length,
-    acceptedTrajectories: validation.report.acceptedEvidenceCount,
+    acceptedEvidenceCount: validation.report.acceptedEvidenceCount,
     blockingFindings: validation.report.findings.length,
     corpusEligible: validation.report.eligible,
     ...(stopReason === undefined ? {} : { stopReason }),

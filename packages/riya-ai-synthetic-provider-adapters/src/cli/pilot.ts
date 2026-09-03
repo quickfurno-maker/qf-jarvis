@@ -88,6 +88,11 @@ export function parseRiyaSyntheticCliArgs(argv: readonly string[]): RiyaSyntheti
   };
 }
 
+/** `--artifacts` is required for `--execute`, and the usage line says so. */
+const USAGE =
+  'usage: riya:as3:pilot -- --plan <path> [--artifacts <dir>] [--execute] [--allow-overwrite]\n' +
+  '       --execute REQUIRES --artifacts <dir> and RIYA_AS3_ALLOW_REAL_CALLS=true';
+
 export interface RunCliOptions {
   readonly argv: readonly string[];
   readonly environment: RiyaSyntheticEnvironment;
@@ -109,15 +114,11 @@ export async function runRiyaSyntheticPilotCli(options: RunCliOptions): Promise<
   try {
     args = parseRiyaSyntheticCliArgs(options.argv);
   } catch {
-    write(
-      'usage: riya:as3:pilot -- --plan <path> [--artifacts <dir>] [--execute] [--allow-overwrite]',
-    );
+    write(USAGE);
     return RIYA_AS3_EXIT_USAGE;
   }
   if (args.planPath === undefined) {
-    write(
-      'usage: riya:as3:pilot -- --plan <path> [--artifacts <dir>] [--execute] [--allow-overwrite]',
-    );
+    write(USAGE);
     return RIYA_AS3_EXIT_USAGE;
   }
 
@@ -141,15 +142,29 @@ export async function runRiyaSyntheticPilotCli(options: RunCliOptions): Promise<
     }
     write(`ceiling candidates: ${String(plan.budget.maxCandidates)}`);
     write(`ceiling provider requests: ${String(plan.budget.maxProviderRequests)}`);
-    write(`ceiling input tokens: ${String(plan.budget.maxInputTokens)}`);
-    write(`ceiling output tokens: ${String(plan.budget.maxOutputTokens)}`);
-    write(`ceiling total tokens: ${String(plan.budget.maxTotalTokens)}`);
+    // HARD controls and OBSERVED thresholds are printed under different words, because a reader
+    // planning a spend must not have to guess which of these is a wall.
+    write(`ceiling request input bytes: ${String(plan.budget.maxRequestInputUtf8Bytes)}`);
+    write(`ceiling reserved output tokens: ${String(plan.budget.maxReservedOutputTokens)}`);
     write(`ceiling wall clock ms: ${String(plan.budget.maxWallClockMs)}`);
+    write(`observed threshold input tokens: ${String(plan.budget.maxObservedInputTokens)}`);
+    write(`observed threshold output tokens: ${String(plan.budget.maxObservedOutputTokens)}`);
+    write(`observed threshold total tokens: ${String(plan.budget.maxObservedTotalTokens)}`);
     // PRESENCE. Never a value, never a length.
     write(`OPENAI_CREDENTIAL_PRESENT=${String(preflight.credentials.openaiCredentialPresent)}`);
     write(
       `ANTHROPIC_CREDENTIAL_PRESENT=${String(preflight.credentials.anthropicCredentialPresent)}`,
     );
+
+    // BEFORE the credential read, before an SDK is constructed, and before a transport exists.
+    //
+    // A paid run whose candidates live only in memory is the run nobody can review: the process
+    // exits, the money is spent, and there is nothing to look at. DRY_RUN may omit it, because a dry
+    // run produces nothing to keep.
+    const artifactDirectory = args.artifactDirectory;
+    if (mode === 'EXECUTE' && artifactDirectory === undefined) {
+      throw new RiyaSyntheticPilotError('artifact-destination-required');
+    }
 
     if (mode === 'DRY_RUN') {
       write(
@@ -160,20 +175,22 @@ export async function runRiyaSyntheticPilotCli(options: RunCliOptions): Promise<
       return RIYA_AS3_EXIT_OK;
     }
 
-    // EXECUTE from here. Credentials are read at this line and nowhere earlier.
+    // EXECUTE from here, with a destination already proved present. Credentials are read below and
+    // nowhere earlier.
+    /* c8 ignore next -- proved above; the guard is the check, this narrows the type */
+    if (artifactDirectory === undefined) {
+      throw new RiyaSyntheticPilotError('artifact-destination-required');
+    }
     const transports: Parameters<typeof executeRiyaSyntheticPilot>[0] = {
       plan,
       preflight,
       mode,
       now: options.now,
-      ...(args.artifactDirectory === undefined
-        ? {}
-        : {
-            writer: createRiyaSyntheticArtifactWriter({
-              baseDirectory: args.artifactDirectory,
-              allowOverwrite: args.allowOverwrite,
-            }),
-          }),
+      // Proved present above, so this is a plain construction rather than a conditional one.
+      writer: createRiyaSyntheticArtifactWriter({
+        baseDirectory: artifactDirectory,
+        allowOverwrite: args.allowOverwrite,
+      }),
       ...(preflight.requiresOpenaiCredential
         ? {
             openaiTransport: await buildOpenAiTransport(
@@ -195,7 +212,7 @@ export async function runRiyaSyntheticPilotCli(options: RunCliOptions): Promise<
     write(`generated: ${String(result.generatedCandidates)}`);
     write(`failed: ${String(result.failedCandidates)}`);
     write(`not started: ${String(result.notStartedCandidates)}`);
-    write(`accepted evidence: ${String(result.acceptedTrajectories)}`);
+    write(`accepted evidence: ${String(result.acceptedEvidenceCount)}`);
     write(`findings: ${String(result.blockingFindings)}`);
     write(`corpus eligible: ${String(result.corpusEligible)}`);
     write(`provider requests: ${String(result.ledger.providerRequests)}`);
