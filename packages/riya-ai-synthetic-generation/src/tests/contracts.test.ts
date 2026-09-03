@@ -13,13 +13,15 @@ import {
   createRiyaSyntheticGenerationPolicy,
   createRiyaSyntheticInvocationRequest,
   createRiyaSyntheticInvocationResult,
+  createRiyaSyntheticConfigInventory,
   createRiyaSyntheticModelConfig,
   createRiyaSyntheticRoleInstruction,
+  createRiyaSyntheticRunPlan,
   parseRiyaSyntheticModelOutput,
 } from '../index.js';
 import { customerTurnOutputSchema, teacherTurnOutputSchema } from '../contracts/model-output.js';
 import { sha256Hex } from '../internal/digest.js';
-import { inventory, policy } from './fixtures.js';
+import { policy, runPlan } from './fixtures.js';
 
 const SHA = sha256Hex('anything');
 
@@ -62,11 +64,37 @@ describe('a model configuration carries no credential', () => {
   });
 
   it('refuses an inventory with duplicate configuration refs', () => {
-    const duplicated = inventory();
-    expect(() => createRiyaSyntheticModelConfig({ ...CONFIG, allowedRoles: [] as never })).toThrow(
+    // This spec previously asserted something else under this name: it exercised an empty role list
+    // and never built a duplicate at all. The production guard was real; the test was not.
+    expect(() =>
+      createRiyaSyntheticConfigInventory({
+        inventoryRef: 'inventory.duplicate.v1',
+        configs: [
+          { ...CONFIG, configRef: 'cfg.same' },
+          { ...CONFIG, configRef: 'cfg.same', modelRef: 'model.two' },
+        ],
+      }),
+    ).toThrow(RiyaSyntheticGenerationError);
+  });
+
+  it('accepts the same inventory once the refs differ', () => {
+    // The other half, so the rejection above is provably about DUPLICATION and not the fixture.
+    const built = createRiyaSyntheticConfigInventory({
+      inventoryRef: 'inventory.distinct.v1',
+      configs: [
+        { ...CONFIG, configRef: 'cfg.one' },
+        { ...CONFIG, configRef: 'cfg.two', modelRef: 'model.two' },
+      ],
+    });
+
+    expect(built.configs).toHaveLength(2);
+  });
+
+  it('refuses a configuration with no permitted role', () => {
+    // The assertion the duplicate spec used to carry, kept -- under a name that describes it.
+    expect(() => createRiyaSyntheticModelConfig({ ...CONFIG, allowedRoles: [] })).toThrow(
       RiyaSyntheticGenerationError,
     );
-    expect(duplicated.configs.length).toBeGreaterThan(0);
   });
 });
 
@@ -244,5 +272,37 @@ describe('parsing fails closed', () => {
     expect(() =>
       parseRiyaSyntheticModelOutput('x'.repeat(40_000), customerTurnOutputSchema),
     ).toThrow(RiyaSyntheticGenerationError);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The run plan proves its closed vocabularies at CONSTRUCTION.
+// ---------------------------------------------------------------------------
+
+describe('a run plan cannot claim a vocabulary it does not hold', () => {
+  it('refuses an invalid value on every closed axis', () => {
+    // These were `z.array(z.string())`, so a plan carrying "NOT_A_REAL_VALUE" survived the
+    // constructor and became an object whose TypeScript type claimed only canonical members. Failing
+    // later at schedule time is a weaker guarantee: the false contract has already been issued, by
+    // the very function whose job is to prove one.
+    const axes = [
+      'languageModes',
+      'interactionKinds',
+      'personas',
+      'difficulties',
+      'riskClasses',
+      'startPhases',
+    ] as const;
+
+    for (const axis of axes) {
+      expect(
+        () => createRiyaSyntheticRunPlan({ ...runPlan(4), [axis]: ['NOT_A_REAL_VALUE'] }),
+        `${axis} must be closed at construction`,
+      ).toThrow(RiyaSyntheticGenerationError);
+    }
+  });
+
+  it('still accepts every canonical value', () => {
+    expect(createRiyaSyntheticRunPlan(runPlan(4)).languageModes.length).toBeGreaterThan(0);
   });
 });

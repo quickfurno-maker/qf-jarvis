@@ -100,7 +100,9 @@ export type {
 } from './contracts/role-allocation.js';
 
 // What each role may see, and what each may return.
+export { teacherScenarioView } from './contracts/role-input.js';
 export type {
+  RiyaSyntheticTeacherScenarioViewV1,
   RiyaSyntheticVisibleTurn,
   RiyaSyntheticCustomerSimulatorInput,
   RiyaSyntheticTeacherInput,
@@ -136,6 +138,15 @@ export type {
   RiyaSyntheticCandidateV1,
   RiyaSyntheticInvokerRegistry,
 } from './service/generate-candidate.js';
+
+// Bounded run orchestration. What makes the concurrency policy real.
+export { orchestrateRiyaSyntheticRun } from './service/orchestrate-run.js';
+export type {
+  OrchestrateRiyaSyntheticRunOptions,
+  RiyaSyntheticRunItem,
+  RiyaSyntheticRunOutcomeV1,
+  RiyaSyntheticRunResultV1,
+} from './service/orchestrate-run.js';
 
 // Deterministic fakes. The reference implementation of the port, and what CI runs against.
 export {

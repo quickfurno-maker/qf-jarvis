@@ -20,6 +20,7 @@
  */
 import { z } from 'zod';
 
+import type { RiyaDatasetDiscoveryField } from '@qf-jarvis/riya-intelligence-dataset';
 import {
   RIYA_DATASET_ASSISTANT_DECISIONS,
   RIYA_DATASET_DISCOVERY_FIELDS,
@@ -28,13 +29,14 @@ import {
 } from '@qf-jarvis/riya-intelligence-dataset';
 import { RIYA_CONVERSATION_PHASES } from '@qf-jarvis/riya-conversation-continuity';
 
+import { closedEnum } from '../internal/closed-enum.js';
 import { RiyaSyntheticGenerationError } from './errors.js';
 
 /** A model response larger than this is a failure, not an input. */
 export const RIYA_SYNTHETIC_MAX_PAYLOAD_CHARS = 32_000;
 
 const TURN_TEXT = z.string().min(1).max(4_000);
-const DISCOVERY = z.enum(RIYA_DATASET_DISCOVERY_FIELDS as readonly [string, ...string[]]);
+const DISCOVERY = closedEnum<RiyaDatasetDiscoveryField>(RIYA_DATASET_DISCOVERY_FIELDS);
 
 /**
  * What the customer simulator returns. USER side only.

@@ -68,9 +68,12 @@ import type { RiyaSyntheticGenerationPolicyV1 } from '../contracts/policy.js';
 import type { RiyaSyntheticRoleAllocationV1 } from '../contracts/role-allocation.js';
 import { resolveRiyaSyntheticRoleAllocation } from '../contracts/role-allocation.js';
 import type { RiyaSyntheticVisibleTurn } from '../contracts/role-input.js';
+import { teacherScenarioView } from '../contracts/role-input.js';
 import type { RiyaSyntheticRole } from '../contracts/model-config.js';
 import type { RiyaSyntheticModelInvoker } from '../ports/model-invoker.js';
 import { sha256OfCanonical } from '../internal/digest.js';
+import { createRiyaSyntheticConcurrencyGate } from '../internal/concurrency.js';
+import type { RiyaSyntheticConcurrencyGate } from '../internal/concurrency.js';
 
 /** Which invoker serves which configuration. Resolution is the caller's wiring, not ours. */
 export type RiyaSyntheticInvokerRegistry = ReadonlyMap<string, RiyaSyntheticModelInvoker>;
@@ -83,6 +86,15 @@ export interface GenerateRiyaSyntheticCandidateOptions {
   readonly invokers: RiyaSyntheticInvokerRegistry;
   readonly criticQualityDimensions: readonly RiyaDatasetQualityDimension[];
   readonly signal?: AbortSignal;
+  /**
+   * The SHARED invocation limiter, injected by the run orchestrator.
+   *
+   * Injected rather than created here so `maxConcurrentInvocations` bounds the whole run instead of
+   * each candidate separately -- five candidates each running two calls is ten concurrent calls, and
+   * a per-candidate limiter would happily allow it. When absent (the single-candidate public API) a
+   * local gate of the same size is used, so the same limit applies through one implementation.
+   */
+  readonly invocationGate?: RiyaSyntheticConcurrencyGate;
 }
 
 export interface RiyaSyntheticCandidateV1 {
@@ -90,6 +102,23 @@ export interface RiyaSyntheticCandidateV1 {
   readonly provenance: RiyaAiSyntheticGenerationProvenanceV1;
   readonly evidence: RiyaAiSyntheticTrajectoryAcceptanceEvidenceV1;
   readonly verdicts: readonly RiyaAiSyntheticCriticVerdictV1[];
+}
+
+/**
+ * The gate used when no shared one was injected.
+ *
+ * Memoised per options object so a single candidate does not create a fresh limiter per call, which
+ * would bound nothing at all.
+ */
+const LOCAL_GATES = new WeakMap<object, RiyaSyntheticConcurrencyGate>();
+function localGate(options: GenerateRiyaSyntheticCandidateOptions): RiyaSyntheticConcurrencyGate {
+  const existing = LOCAL_GATES.get(options);
+  if (existing !== undefined) return existing;
+  const created = createRiyaSyntheticConcurrencyGate(
+    options.policy.maxConcurrentInvocations,
+  ).acquire;
+  LOCAL_GATES.set(options, created);
+  return created;
 }
 
 /** Race a promise against a bounded budget. No clock is read; the timer IS the budget. */
@@ -129,6 +158,7 @@ async function invokeRole<T>(
   }
   const config = configFor(options.inventory, configRef);
   const { policy } = options;
+  const gate = options.invocationGate ?? localGate(options);
 
   let transientLeft = policy.maxTransientRetries;
   let repairLeft = policy.maxStructuralRepairAttempts;
@@ -151,23 +181,46 @@ async function invokeRole<T>(
       maxOutputTokens: config.maxOutputTokens,
     });
 
-    const outcome = await withTimeout(
-      invoker.invoke(request, structuredInput, {
-        ...(options.signal === undefined ? {} : { signal: options.signal }),
-        timeoutMs: policy.perInvocationTimeoutMs,
-      }),
-      policy.perInvocationTimeoutMs,
-      () => ({
-        result: {
-          version: 1 as const,
-          requestRef: request.requestRef,
-          configRef,
-          role,
-          status: 'TIMEOUT' as const,
-          errorClass: 'TIMEOUT' as const,
+    // Every invocation gets its OWN controller, combined with whatever signal the candidate is
+    // already running under. Losing a race does not stop the loser: without this, a timed-out call
+    // keeps its socket open and keeps consuming tokens after AS2 has already rejected the attempt.
+    // The candidate controller is deliberately NOT aborted here -- one slow call is not a reason to
+    // end the conversation, and conflating them would make a single blip fail the whole candidate.
+    const callController = new AbortController();
+    const callSignal =
+      options.signal === undefined
+        ? callController.signal
+        : AbortSignal.any([options.signal, callController.signal]);
+
+    const lease = await gate();
+    let outcome;
+    try {
+      outcome = await withTimeout(
+        invoker.invoke(request, structuredInput, {
+          signal: callSignal,
+          timeoutMs: policy.perInvocationTimeoutMs,
+        }),
+        policy.perInvocationTimeoutMs,
+        () => {
+          // Abort FIRST, so the underlying call stops before the caller is told it timed out.
+          callController.abort();
+          return {
+            result: {
+              version: 1 as const,
+              requestRef: request.requestRef,
+              configRef,
+              role,
+              status: 'TIMEOUT' as const,
+              errorClass: 'TIMEOUT' as const,
+            },
+          };
         },
-      }),
-    );
+      );
+    } finally {
+      // Released whether the call succeeded, timed out or threw. A permit leaked on the failure path
+      // shrinks the effective limit until the run stalls, which is the worst way to discover it.
+      lease.release();
+    }
 
     const { status } = outcome.result;
     if (status === 'CANCELLED') {
@@ -244,6 +297,10 @@ export async function generateRiyaSyntheticCandidate(
       : AbortSignal.any([options.signal, candidateController.signal]);
   const ctx: GenerateRiyaSyntheticCandidateOptions = { ...options, signal: effectiveSignal };
 
+  // The teacher, the verifier and the critics see a PROJECTION of the plan. Only the customer
+  // simulator gets the full scenario, because it owns the hidden customer state.
+  const teacherView = teacherScenarioView(scenario);
+
   const turns: RiyaDatasetTurnV1[] = [];
   const visibleHistory: RiyaSyntheticVisibleTurn[] = [];
   const askedByTurn: string[][] = [];
@@ -273,7 +330,7 @@ export async function generateRiyaSyntheticCandidate(
           value: `synthetic-${factClass.toLowerCase()}-band-${String(at)}`,
           factClass,
         })),
-      } as never),
+      }),
     );
   }
 
@@ -315,7 +372,8 @@ export async function generateRiyaSyntheticCandidate(
         allocation.riyaTeacherConfigRef,
         `${allocation.generationRef}.a${String(index)}`,
         {
-          scenario,
+          // The PROJECTION. The teacher must not be able to read a fact the customer has not said.
+          scenario: teacherView,
           visibleHistory: [...visibleHistory],
           turnIndex: index,
           // Only facts an EARLIER authoritative context turn supplied. The teacher cannot cite what
@@ -342,7 +400,7 @@ export async function generateRiyaSyntheticCandidate(
               ? {}
               : { expectedPhaseAfter: annotation.expectedPhaseAfter }),
           },
-        } as never),
+        }),
       );
       visibleHistory.push({ speaker: 'ASSISTANT', text: teacher.assistantText });
       askedByTurn.push([...annotation.askedDiscoveryFields]);
@@ -385,7 +443,7 @@ export async function generateRiyaSyntheticCandidate(
     allocation.annotationVerifierConfigRef,
     `${allocation.generationRef}.verify`,
     {
-      scenario,
+      scenario: teacherView,
       visibleHistory: [...visibleHistory],
       askedDiscoveryFieldsByTurn: askedByTurn,
       decisionsByTurn,
@@ -454,7 +512,7 @@ export async function generateRiyaSyntheticCandidate(
       criticConfigRef,
       `${allocation.generationRef}.critic.${criticConfigRef}`,
       {
-        scenario,
+        scenario: teacherView,
         visibleHistory: [...visibleHistory],
         requestedQualityDimensions: [...options.criticQualityDimensions],
       },

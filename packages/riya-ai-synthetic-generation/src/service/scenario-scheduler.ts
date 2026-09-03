@@ -32,7 +32,14 @@ import {
   createRiyaAiSyntheticScenario,
 } from '@qf-jarvis/riya-intelligence-dataset/ai-synthetic';
 import type { RiyaAiSyntheticScenarioV1 } from '@qf-jarvis/riya-intelligence-dataset/ai-synthetic';
-import { RIYA_DATASET_DISCOVERY_FIELDS } from '@qf-jarvis/riya-intelligence-dataset';
+import {
+  RIYA_DATASET_DIFFICULTIES,
+  RIYA_DATASET_DISCOVERY_FIELDS,
+  RIYA_DATASET_INTERACTION_KINDS,
+  RIYA_DATASET_LANGUAGE_MODES,
+  RIYA_DATASET_PERSONAS,
+  RIYA_DATASET_RISK_CLASSES,
+} from '@qf-jarvis/riya-intelligence-dataset';
 import type {
   RiyaDatasetDifficulty,
   RiyaDatasetInteractionKind,
@@ -40,10 +47,12 @@ import type {
   RiyaDatasetPersona,
   RiyaDatasetRiskClass,
 } from '@qf-jarvis/riya-intelligence-dataset';
+import { RIYA_CONVERSATION_PHASES } from '@qf-jarvis/riya-conversation-continuity';
 import type { RiyaConversationPhase } from '@qf-jarvis/riya-conversation-continuity';
 import { z } from 'zod';
 
 import { RiyaSyntheticGenerationError } from '../contracts/errors.js';
+import { closedEnum } from '../internal/closed-enum.js';
 import { sha256OfCanonical } from '../internal/digest.js';
 
 export interface RiyaSyntheticRunPlanV1 {
@@ -80,12 +89,18 @@ const planSchema = z
     seed: z.int().min(0).max(2_147_483_647),
     // Bounded. AS2 builds the mechanism; AS3 decides how many candidates to actually spend.
     scenarioCount: z.int().min(1).max(10_000),
-    languageModes: z.array(z.string()).min(1),
-    interactionKinds: z.array(z.string()).min(1),
-    personas: z.array(z.string()).min(1),
-    difficulties: z.array(z.string()).min(1),
-    riskClasses: z.array(z.string()).min(1),
-    startPhases: z.array(z.string()).min(1),
+    // CLOSED vocabularies, proved at run-plan construction. These were `z.array(z.string())`, which
+    // let a plan carrying "NOT_A_LANGUAGE" survive the constructor and become an object whose type
+    // claimed it held only canonical language modes -- a false contract issued by the very function
+    // whose job is to prove one. Failing later, at schedule time, is not the same guarantee.
+    languageModes: z.array(closedEnum<RiyaDatasetLanguageMode>(RIYA_DATASET_LANGUAGE_MODES)).min(1),
+    interactionKinds: z
+      .array(closedEnum<RiyaDatasetInteractionKind>(RIYA_DATASET_INTERACTION_KINDS))
+      .min(1),
+    personas: z.array(closedEnum<RiyaDatasetPersona>(RIYA_DATASET_PERSONAS)).min(1),
+    difficulties: z.array(closedEnum<RiyaDatasetDifficulty>(RIYA_DATASET_DIFFICULTIES)).min(1),
+    riskClasses: z.array(closedEnum<RiyaDatasetRiskClass>(RIYA_DATASET_RISK_CLASSES)).min(1),
+    startPhases: z.array(closedEnum<RiyaConversationPhase>(RIYA_CONVERSATION_PHASES)).min(1),
     minAssistantTurns: z
       .int()
       .min(RIYA_AI_SYNTHETIC_MIN_ASSISTANT_TURNS)
@@ -110,7 +125,7 @@ export function createRiyaSyntheticRunPlan(
     throw new RiyaSyntheticGenerationError('invalid-run-plan');
   }
   const { version: _supplied, ...fields } = parsed.data;
-  return Object.freeze({ version: 1 as const, ...fields }) as RiyaSyntheticRunPlanV1;
+  return Object.freeze({ version: 1 as const, ...fields });
 }
 
 /** The content digest of a plan. A run manifest binds to this. */
