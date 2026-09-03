@@ -432,6 +432,8 @@ describe('the contracts this slice reuses are unchanged', () => {
     const ALLOWED_PACKAGE_IMPORTERS = [
       'jarvis-runtime',
       'postgres-riya-conversation-continuity-store',
+      // The offline AS2 generation harness plans scenarios against the phase vocabulary.
+      'riya-ai-synthetic-generation',
       'riya-candidate-evaluation-runner',
       'riya-candidate-evidence-live',
       'riya-conversation-completion',

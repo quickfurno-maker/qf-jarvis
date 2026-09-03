@@ -133,6 +133,18 @@ export type {
   RiyaAiSyntheticDiversityMetricsV1,
 } from './contracts/report.js';
 
+// The canonical trajectory digests evidence binds to.
+//
+// Re-exported on THIS subpath, never on the root -- the root surface deliberately exposes no digest
+// helper. AS2 needs them to construct acceptance evidence, and the alternative is a second
+// implementation of trajectory identity in the generation package. That copy would drift, and the
+// day it did, the validator would recompute a digest the harness could never match and every
+// candidate would fail for a reason nothing could explain.
+export {
+  trajectoryArtifactSha256,
+  trajectoryConversationFingerprint,
+} from '../internal/trajectory-digest.js';
+
 // Services.
 export {
   riyaAiSyntheticDiversityMetrics,

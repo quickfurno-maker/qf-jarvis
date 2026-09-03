@@ -582,6 +582,18 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
 
+  packages/riya-ai-synthetic-generation:
+    dependencies:
+      '@qf-jarvis/riya-conversation-continuity':
+        specifier: workspace:*
+        version: link:../riya-conversation-continuity
+      '@qf-jarvis/riya-intelligence-dataset':
+        specifier: workspace:*
+        version: link:../riya-intelligence-dataset
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+
   packages/riya-candidate-evaluation-runner:
     dependencies:
       '@qf-jarvis/model-evaluation':
