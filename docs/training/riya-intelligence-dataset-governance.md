@@ -1,6 +1,6 @@
 # Riya intelligence dataset governance
 
-**Slice:** RID-F1 · **Decision:** [ADR-0107](../decisions/ADR-0107-riya-intelligence-dataset-foundation-and-leakage-firewall.md) · **Companions:** [Gold V1 coverage plan](./riya-gold-v1-coverage-plan.md), [post-training roadmap](./riya-post-training-roadmap.md)
+**Slice:** RID-F1 · **Decisions:** [ADR-0107](../decisions/ADR-0107-riya-intelligence-dataset-foundation-and-leakage-firewall.md), [ADR-0143](../decisions/ADR-0143-riya-ai-synthetic-training-lane-and-automated-quality-gate.md) (AI-synthetic lane) · **Companions:** [Gold V1 coverage plan](./riya-gold-v1-coverage-plan.md), [post-training roadmap](./riya-post-training-roadmap.md)
 
 This is for whoever authors, reviews or releases Riya training data. It assumes no knowledge of the
 codebase.
@@ -157,6 +157,16 @@ A review carries an opaque ref, a decision and the satisfied dimensions. **No na
 rationale or confidence** — a note about an example quotes the example, and the reviewer's identity
 must not accumulate into a performance record nobody decided to build.
 
+> **The AI-synthetic lane.**
+> [ADR-0143](../decisions/ADR-0143-riya-ai-synthetic-training-lane-and-automated-quality-gate.md) §8
+> adds a second review mode for teacher-generated rows. Everything above is the `HUMAN_REVIEW` mode,
+> it remains the default, and its behaviour is unchanged.
+>
+> `AUTOMATED_SYNTHETIC` is valid **only** for `TEACHER_GENERATED_SYNTHETIC`. It replaces human reviews
+> with automated acceptance evidence — it does **not** fabricate review records, and it cannot be
+> selected for a human-authored row. `RIYA_DATASET_REQUIRED_REVIEWS` is **not** globally zeroed, and
+> Human Gold validation is untouched.
+
 ---
 
 ## 7. Identity and integrity
@@ -258,3 +268,10 @@ live conversation → privacy + consent → redaction → candidate example
 ```
 
 Never `LIVE CHAT → TRAIN`.
+
+> [ADR-0143](../decisions/ADR-0143-riya-ai-synthetic-training-lane-and-automated-quality-gate.md)
+> authorizes the AI-synthetic lane at the **governance** level only. Still not authorized by it:
+> generation, corpus content, benchmarking, training, certification and activation — and it does not
+> change the live-conversation rule above. Fully AI-only evaluation does **not** authorize
+> `LIVE CHAT → TRAIN`; that path still needs its own privacy, consent and redaction governance even if
+> its review step later becomes automated.
