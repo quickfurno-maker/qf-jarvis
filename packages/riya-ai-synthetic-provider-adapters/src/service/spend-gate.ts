@@ -13,6 +13,13 @@
  * checked against something this gate knows before anything is spent — a counter it keeps, a
  * reservation it holds, a timer it armed. None can be exceeded.
  *
+ * "Cannot be exceeded" is a claim about CONCURRENCY, not merely about arithmetic. A check sitting on
+ * the far side of an `await` from the state it guards is not a control: the second review of AS3A
+ * found the request ceiling checked before `reserveOutput`, so two invocations starting in the same
+ * turn both read the same count and both proceeded. Every hard control here is now decided on the
+ * near side of its last await, with no suspension between the check and the state change it
+ * protects.
+ *
  * **OBSERVED**: provider-reported input, output and total tokens. These are reconciled AFTER a call
  * returns, so the call that crosses the line has already happened, and under concurrency several may
  * cross together. They stop the run; they do not prevent the crossing. The first review of AS3A found
@@ -145,6 +152,16 @@ export function createRiyaSyntheticSpendGate(
   /** Everyone waiting for output reservation room. Woken on release AND on stop. */
   const waiters: (() => void)[] = [];
 
+  /**
+   * Read `stopped` through a function.
+   *
+   * It is a value that CHANGES while a continuation is suspended, and TypeScript narrows it after
+   * the first check — so the post-await re-check below would be treated as impossible and reported
+   * as dead code. The call defeats that narrowing, which is the difference between a control and a
+   * comment. AS2's orchestrator does the same thing with its abort flag, for the same reason.
+   */
+  const runStopped = (): RiyaSyntheticStopReason | undefined => stopped;
+
   const wakeAll = (): void => {
     while (waiters.length > 0) {
       const next = waiters.shift();
@@ -191,7 +208,7 @@ export function createRiyaSyntheticSpendGate(
       return false;
     }
     for (;;) {
-      if (stopped !== undefined) return false;
+      if (runStopped() !== undefined) return false;
       if (reservedOutputTokens + tokens <= budget.maxReservedOutputTokens) {
         reservedOutputTokens += tokens;
         if (reservedOutputTokens > peakReservedOutputTokens) {
@@ -232,13 +249,13 @@ export function createRiyaSyntheticSpendGate(
           structuredInput: unknown,
           invocationOptions: RiyaSyntheticInvocationOptions,
         ): Promise<RiyaSyntheticInvocationOutcome> {
-          if (stopped !== undefined) {
+          if (runStopped() !== undefined) {
             // The run is over. Refused as CANCELLED, which is what it is -- not a provider failure,
             // and not something a retry policy should ever act on.
             return riyaSyntheticFailureOutcome(request, 'CANCELLED');
           }
-          // HARD, and reserved BEFORE the call: a request counted only on return would let a burst
-          // of in-flight calls all pass the same check.
+          // A cheap early rejection, so an exhausted run does not queue for reservation room it will
+          // never be allowed to use. It is NOT the control -- the decision is re-made below.
           if (providerRequests >= budget.maxProviderRequests) {
             stop('REQUEST_CEILING');
             return riyaSyntheticFailureOutcome(request, 'CANCELLED');
@@ -257,7 +274,28 @@ export function createRiyaSyntheticSpendGate(
             return riyaSyntheticFailureOutcome(request, 'CANCELLED');
           }
 
+          // ---- THE REQUEST BUDGET DECISION, re-made AFTER the await ---------------------------
+          //
+          // The check above is worth nothing on its own. `reserveOutput` is async, so awaiting it
+          // yields to the microtask queue even when the room is free -- and two invocations started
+          // in the same turn would both read `providerRequests === 0`, both pass, and both increment
+          // afterwards. With a ceiling of one, two calls would reach the provider. That is the
+          // failure this re-check exists to prevent, and the reason a control has to be decided on
+          // the near side of its last await.
+          //
+          // From here to the increment there is no `await`, and JavaScript resumes one continuation
+          // at a time, so the check and the increment are atomic with respect to every other
+          // invocation.
+          if (runStopped() !== undefined || providerRequests >= budget.maxProviderRequests) {
+            if (runStopped() === undefined) stop('REQUEST_CEILING');
+            // The loser is holding reservation room it will never use. Released explicitly, because
+            // the `finally` below covers only a call that actually entered the transport -- and a
+            // reservation abandoned here would stall the run at its own ceiling forever.
+            releaseOutput(reservation);
+            return riyaSyntheticFailureOutcome(request, 'CANCELLED');
+          }
           providerRequests += 1;
+
           try {
             const outcome = await inner.invoke(request, structuredInput, invocationOptions);
             record(outcome.result.usage);

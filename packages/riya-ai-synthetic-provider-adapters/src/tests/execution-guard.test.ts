@@ -533,3 +533,191 @@ describe('an auth failure stops the whole run, and nothing else does', () => {
     gate.dispose();
   });
 });
+
+/**
+ * The request budget under CONCURRENT entry (AS3A final correction, blocker: atomicity).
+ *
+ * ### The bug these specs would have caught
+ *
+ * The ceiling was checked, then `reserveOutput` was awaited, then the counter was incremented. That
+ * await yields to the microtask queue even when the reservation room is free, so two invocations
+ * started in the same turn both observed `providerRequests === 0`, both passed a ceiling of one, and
+ * both went on to increment and call the provider. A "hard" ceiling of one permitted two paid calls.
+ *
+ * The sequential specs above could never have found it: they await each call before starting the
+ * next, so the interleaving never happens. These start calls in the SAME TICK on purpose.
+ *
+ * ### What "atomic" means here, precisely
+ *
+ * The decision is re-made after the last await, and there is no suspension between that check and
+ * the increment it protects. JavaScript resumes one continuation at a time, so no other invocation
+ * can observe the count between the two.
+ */
+describe('HARD control: the request ceiling holds under concurrent entry', () => {
+  /** A deferred the spec releases by hand, so calls can be held inside the transport at will. */
+  function heldInvoker(): {
+    readonly invoker: Parameters<ReturnType<typeof createRiyaSyntheticSpendGate>['wrap']>[0];
+    readonly calls: () => number;
+    readonly releaseAll: () => void;
+  } {
+    let calls = 0;
+    const releases: (() => void)[] = [];
+    return {
+      calls: () => calls,
+      releaseAll: () => {
+        while (releases.length > 0) releases.shift()?.();
+      },
+      invoker: {
+        async invoke(request) {
+          // Counted the instant the transport is entered -- this is the number that maps to money.
+          calls += 1;
+          await new Promise<void>((resolve) => {
+            releases.push(resolve);
+          });
+          return {
+            result: {
+              version: 1 as const,
+              requestRef: request.requestRef,
+              configRef: request.configRef,
+              role: request.role,
+              status: 'SUCCESS' as const,
+              outputDigest: 'a'.repeat(64),
+              usage: { inputTokens: 1, outputTokens: 1, cachedInputTokens: 0 },
+            },
+            payload: '{}',
+          };
+        },
+      },
+    };
+  }
+
+  /** Let every already-scheduled continuation run, without advancing any clock. */
+  async function drainMicrotasks(): Promise<void> {
+    for (let turn = 0; turn < 8; turn += 1) await Promise.resolve();
+  }
+
+  it('admits exactly ONE provider call when two start together under a ceiling of one', async () => {
+    // Reservation room for BOTH, and concurrency for both, so the only thing that can stop the
+    // second call is the request ceiling itself. That is the point: this spec must fail if the
+    // ceiling is decided on the wrong side of an await.
+    const { gate, controller } = gateFor({
+      maxCandidates: 1,
+      maxProviderRequests: 1,
+      maxReservedOutputTokens: 1_000,
+      maxConcurrentInvocations: 4,
+      maxObservedOutputTokens: 200_000,
+    });
+    const held = heldInvoker();
+    const wrapped = gate.wrap(held.invoker);
+
+    // SAME TICK. No await between them.
+    const first = invoke(wrapped, 100);
+    const second = invoke(wrapped, 100);
+    await drainMicrotasks();
+
+    // Asserted while the winner is still inside the transport.
+    expect(held.calls()).toBe(1);
+    expect(gate.ledger().providerRequests).toBe(1);
+    expect(await second).toBe('CANCELLED');
+    expect(gate.stopReason()).toBe('REQUEST_CEILING');
+    expect(controller.signal.aborted).toBe(true);
+    // The loser released the room it had already reserved, so only the winner's is held.
+    expect(gate.ledger().reservedOutputTokens).toBe(100);
+
+    held.releaseAll();
+    await first;
+
+    expect(held.calls()).toBe(1);
+    expect(gate.ledger().providerRequests).toBe(1);
+    expect(gate.ledger().reservedOutputTokens).toBe(0);
+    expect(gate.ledger().peakReservedOutputTokens).toBeLessThanOrEqual(1_000);
+    gate.dispose();
+  });
+
+  it('admits exactly TWO when three start together under a ceiling of two', async () => {
+    const { gate } = gateFor({
+      maxCandidates: 2,
+      maxProviderRequests: 2,
+      maxReservedOutputTokens: 1_000,
+      maxConcurrentInvocations: 8,
+      maxObservedOutputTokens: 200_000,
+    });
+    const held = heldInvoker();
+    const wrapped = gate.wrap(held.invoker);
+
+    const running = [invoke(wrapped, 100), invoke(wrapped, 100), invoke(wrapped, 100)];
+    await drainMicrotasks();
+
+    expect(held.calls()).toBe(2);
+    expect(gate.ledger().providerRequests).toBe(2);
+
+    held.releaseAll();
+    const statuses = await Promise.all(running);
+
+    // Never three, at any point.
+    expect(held.calls()).toBe(2);
+    expect(gate.ledger().providerRequests).toBe(2);
+    expect(statuses.filter((status) => status === 'CANCELLED')).toHaveLength(1);
+    expect(gate.ledger().reservedOutputTokens).toBe(0);
+    gate.dispose();
+  });
+
+  it('never lets the ledger exceed the configured maximum, whatever the entry order', async () => {
+    // Eight concurrent attempts against a ceiling of three. The ledger counts provider ROUND TRIPS,
+    // so a refused invocation must not consume one -- the count and the money stay the same thing.
+    const { gate } = gateFor({
+      maxCandidates: 3,
+      maxProviderRequests: 3,
+      maxReservedOutputTokens: 10_000,
+      maxConcurrentInvocations: 16,
+      maxObservedOutputTokens: 200_000,
+    });
+    const held = heldInvoker();
+    const wrapped = gate.wrap(held.invoker);
+
+    const running = Array.from({ length: 8 }, () => invoke(wrapped, 100));
+    await drainMicrotasks();
+    held.releaseAll();
+    await Promise.all(running);
+
+    expect(held.calls()).toBe(3);
+    expect(gate.ledger().providerRequests).toBe(3);
+    expect(gate.ledger().reservedOutputTokens).toBe(0);
+    gate.dispose();
+  });
+
+  it('wakes a waiter when the request-ceiling loser hands its reservation back', async () => {
+    // The loser is holding room a waiting call needs. If it abandoned that room instead of releasing
+    // it, the waiter would sit forever and the run would look like a slow provider.
+    const { gate } = gateFor({
+      maxCandidates: 2,
+      maxProviderRequests: 2,
+      // Room for ONE at a time, so the third attempt genuinely has to wait.
+      maxReservedOutputTokens: 100,
+      maxConcurrentInvocations: 8,
+      maxObservedOutputTokens: 200_000,
+    });
+    const held = heldInvoker();
+    const wrapped = gate.wrap(held.invoker);
+
+    const running = [invoke(wrapped, 100), invoke(wrapped, 100), invoke(wrapped, 100)];
+    await drainMicrotasks();
+
+    // One inside the transport, the rest queued behind the reservation.
+    expect(held.calls()).toBe(1);
+    expect(gate.ledger().reservedOutputTokens).toBe(100);
+
+    held.releaseAll();
+    await drainMicrotasks();
+    held.releaseAll();
+    const statuses = await Promise.all(running);
+
+    // Everything settled — nobody is deadlocked — and the ceiling held.
+    expect(statuses).toHaveLength(3);
+    expect(held.calls()).toBe(2);
+    expect(gate.ledger().providerRequests).toBe(2);
+    expect(gate.ledger().reservedOutputTokens).toBe(0);
+    expect(gate.ledger().peakReservedOutputTokens).toBe(100);
+    gate.dispose();
+  });
+});

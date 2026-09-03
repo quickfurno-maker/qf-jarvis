@@ -56,18 +56,44 @@ describe('the execution budget separates hard controls from observed thresholds'
     ['a request byte ceiling below 4 KiB', { maxRequestInputUtf8Bytes: 10 }],
     ['an observed total below the input direction', { maxObservedTotalTokens: 1 }],
     ['fewer requests than candidates', { maxCandidates: 10, maxProviderRequests: 5 }],
-    [
-      'a reservation ceiling above the observed output threshold',
-      { maxReservedOutputTokens: 900_000, maxObservedOutputTokens: 1_000 },
-    ],
     ['an unknown field', { somethingElse: true }],
     ['the old pre-correction field names', { maxInputTokens: 500_000 }],
+    ['a reservation ceiling of zero', { maxReservedOutputTokens: 0 }],
+    ['an observed output threshold of zero', { maxObservedOutputTokens: 0 }],
   ])('rejects %s', (_label, overrides) => {
     expect(() =>
       createRiyaSyntheticExecutionBudget(
         budgetInput(overrides) as Parameters<typeof createRiyaSyntheticExecutionBudget>[0],
       ),
     ).toThrow(RiyaSyntheticPilotError);
+  });
+
+  it.each([
+    [
+      'a small reservation ceiling under a large observed threshold',
+      { maxReservedOutputTokens: 1_000, maxObservedOutputTokens: 200_000 },
+    ],
+    [
+      'a large reservation ceiling over a small observed threshold',
+      { maxReservedOutputTokens: 200_000, maxObservedOutputTokens: 1_000 },
+    ],
+    [
+      'the two output limits set equal',
+      { maxReservedOutputTokens: 50_000, maxObservedOutputTokens: 50_000 },
+    ],
+  ])('accepts %s, because they measure different quantities', (_label, overrides) => {
+    // `maxReservedOutputTokens` bounds the INSTANTANEOUS exposure of calls in flight;
+    // `maxObservedOutputTokens` bounds CUMULATIVE reported output across completed calls. An earlier
+    // version imposed an ordering between them and described it backwards. Both orderings are
+    // legitimate: a small reservation with a large threshold throttles concurrency while cumulative
+    // usage climbs across many sequential calls; a large reservation with a small threshold permits
+    // wide concurrency and stops once completed usage crosses the line.
+    const budget = createRiyaSyntheticExecutionBudget(
+      budgetInput(overrides) as Parameters<typeof createRiyaSyntheticExecutionBudget>[0],
+    );
+
+    expect(budget.maxReservedOutputTokens).toBeGreaterThan(0);
+    expect(budget.maxObservedOutputTokens).toBeGreaterThan(0);
   });
 
   it.each([

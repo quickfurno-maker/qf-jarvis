@@ -35,6 +35,18 @@
  * tokenizer, which is a second implementation of somebody else's counting rules — wrong the day
  * either changes, and wrong silently.
  *
+ * ### The two output limits measure DIFFERENT quantities, and are deliberately independent
+ *
+ * `maxReservedOutputTokens` bounds the INSTANTANEOUS exposure of calls in flight right now.
+ * `maxObservedOutputTokens` bounds CUMULATIVE reported output across calls that have completed.
+ * Neither makes the other decorative, and there is no ordering rule between them — an earlier
+ * version imposed one and described it backwards, which is how a wrong invariant survives a reading.
+ *
+ * Both orderings are legitimate, and both are exercised by the contract specs. A small reservation
+ * ceiling with a large observed threshold throttles concurrency while cumulative usage keeps
+ * climbing across many sequential calls. A large reservation ceiling with a small observed threshold
+ * permits wide concurrency and stops the run once completed usage crosses the line.
+ *
  * ### Bytes and requests, deliberately not dollars
  *
  * Prices change, differ per model and per direction, and a stored price becomes a lie the moment a
@@ -158,13 +170,6 @@ export function createRiyaSyntheticExecutionBudget(
   if (data.maxProviderRequests < data.maxCandidates) {
     throw new RiyaSyntheticPilotError('invalid-execution-budget');
   }
-  // A reservation ceiling below the observed output threshold would make the HARD control the only
-  // one that ever fires, and the observed threshold decorative. Stated as a rule rather than left to
-  // chance, because a decorative field is one a reader will plan against.
-  if (data.maxReservedOutputTokens > data.maxObservedOutputTokens) {
-    throw new RiyaSyntheticPilotError('invalid-execution-budget');
-  }
-
   const { version: _supplied, ...fields } = data;
   return Object.freeze({ version: 1 as const, ...fields });
 }
