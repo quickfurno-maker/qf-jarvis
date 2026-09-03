@@ -100,8 +100,10 @@ export type {
 } from './contracts/role-allocation.js';
 
 // What each role may see, and what each may return.
-export { teacherScenarioView } from './contracts/role-input.js';
+export { customerScenarioView, teacherScenarioView } from './contracts/role-input.js';
 export type {
+  RiyaSyntheticAvailableAuthorityFactV1,
+  RiyaSyntheticCustomerScenarioViewV1,
   RiyaSyntheticTeacherScenarioViewV1,
   RiyaSyntheticVisibleTurn,
   RiyaSyntheticCustomerSimulatorInput,

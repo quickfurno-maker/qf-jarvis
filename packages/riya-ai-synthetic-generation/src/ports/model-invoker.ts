@@ -27,7 +27,26 @@ import type {
 } from '../contracts/invocation.js';
 
 export interface RiyaSyntheticInvocationOptions {
-  /** Cooperative cancellation. An adapter that ignores this will be cut off by the timeout anyway. */
+  /**
+   * Cancellation. **Observing this is a REQUIREMENT of the port, not a courtesy.**
+   *
+   * An earlier version of this comment said an adapter that ignored the signal would "be cut off by
+   * the timeout anyway". That was false in the way that matters. `Promise.race` cuts off the caller's
+   * WAITING; it does not stop an HTTP request, provider-side generation, or a socket. An adapter that
+   * ignored abort would keep real work in flight while the harness had already released its
+   * concurrency permit — so live provider calls could exceed `maxConcurrentInvocations` while the
+   * gate's own numbers looked perfectly compliant.
+   *
+   * A conforming implementation MUST:
+   *
+   * - observe the aborted signal;
+   * - stop provider work as far as transport permits;
+   * - **settle its `invoke` promise after abort**, so the caller can release the permit knowing no
+   *   work remains in flight.
+   *
+   * The harness waits for that settlement before freeing the permit. An adapter that never settles
+   * after abort is a contract violation, not a slow adapter.
+   */
   readonly signal?: AbortSignal;
   /** Per-invocation budget. Offline generation is patient, but never unbounded. */
   readonly timeoutMs: number;

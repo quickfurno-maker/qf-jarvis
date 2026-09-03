@@ -32,12 +32,14 @@ import {
   createRiyaIntelligenceTrajectory,
   createRiyaTrainingState,
 } from '@qf-jarvis/riya-intelligence-dataset';
+import { RIYA_DATASET_QUALITY_DIMENSIONS } from '@qf-jarvis/riya-intelligence-dataset';
 import type {
   RiyaDatasetQualityDimension,
   RiyaDatasetTurnV1,
   RiyaIntelligenceTrajectoryV1,
 } from '@qf-jarvis/riya-intelligence-dataset';
 import {
+  createRiyaAiSyntheticScenario,
   createRiyaAiSyntheticCriticVerdict,
   createRiyaAiSyntheticGenerationProvenance,
   createRiyaAiSyntheticTrajectoryAcceptanceEvidence,
@@ -67,8 +69,14 @@ import {
 import type { RiyaSyntheticGenerationPolicyV1 } from '../contracts/policy.js';
 import type { RiyaSyntheticRoleAllocationV1 } from '../contracts/role-allocation.js';
 import { resolveRiyaSyntheticRoleAllocation } from '../contracts/role-allocation.js';
-import type { RiyaSyntheticVisibleTurn } from '../contracts/role-input.js';
-import { teacherScenarioView } from '../contracts/role-input.js';
+import type {
+  RiyaSyntheticAvailableAuthorityFactV1,
+  RiyaSyntheticVisibleTurn,
+} from '../contracts/role-input.js';
+import { customerScenarioView, teacherScenarioView } from '../contracts/role-input.js';
+import { createRiyaSyntheticConfigInventory } from '../contracts/model-config.js';
+import { createRiyaSyntheticGenerationPolicy } from '../contracts/policy.js';
+import { createRiyaSyntheticRoleAllocation } from '../contracts/role-allocation.js';
 import type { RiyaSyntheticRole } from '../contracts/model-config.js';
 import type { RiyaSyntheticModelInvoker } from '../ports/model-invoker.js';
 import { sha256OfCanonical } from '../internal/digest.js';
@@ -86,15 +94,18 @@ export interface GenerateRiyaSyntheticCandidateOptions {
   readonly invokers: RiyaSyntheticInvokerRegistry;
   readonly criticQualityDimensions: readonly RiyaDatasetQualityDimension[];
   readonly signal?: AbortSignal;
-  /**
-   * The SHARED invocation limiter, injected by the run orchestrator.
-   *
-   * Injected rather than created here so `maxConcurrentInvocations` bounds the whole run instead of
-   * each candidate separately -- five candidates each running two calls is ten concurrent calls, and
-   * a per-candidate limiter would happily allow it. When absent (the single-candidate public API) a
-   * local gate of the same size is used, so the same limit applies through one implementation.
-   */
-  readonly invocationGate?: RiyaSyntheticConcurrencyGate;
+}
+
+/**
+ * The INTERNAL shape, carrying the shared limiter.
+ *
+ * Deliberately not part of the public options. Exposing the gate would make concurrency enforcement
+ * a parameter a caller could satisfy with a no-op function, defeating
+ * `policy.maxConcurrentInvocations` from outside the package -- a hook is not a guarantee if anybody
+ * can pass their own.
+ */
+interface InternalGenerateOptions extends GenerateRiyaSyntheticCandidateOptions {
+  readonly invocationGate: RiyaSyntheticConcurrencyGate;
 }
 
 export interface RiyaSyntheticCandidateV1 {
@@ -104,36 +115,34 @@ export interface RiyaSyntheticCandidateV1 {
   readonly verdicts: readonly RiyaAiSyntheticCriticVerdictV1[];
 }
 
-/**
- * The gate used when no shared one was injected.
- *
- * Memoised per options object so a single candidate does not create a fresh limiter per call, which
- * would bound nothing at all.
- */
-const LOCAL_GATES = new WeakMap<object, RiyaSyntheticConcurrencyGate>();
-function localGate(options: GenerateRiyaSyntheticCandidateOptions): RiyaSyntheticConcurrencyGate {
-  const existing = LOCAL_GATES.get(options);
-  if (existing !== undefined) return existing;
-  const created = createRiyaSyntheticConcurrencyGate(
-    options.policy.maxConcurrentInvocations,
-  ).acquire;
-  LOCAL_GATES.set(options, created);
-  return created;
+/** Every governed authority fact supplied EARLIER in this trajectory, with its value and class. */
+function authorityFactsFrom(
+  turns: readonly RiyaDatasetTurnV1[],
+): readonly RiyaSyntheticAvailableAuthorityFactV1[] {
+  return turns
+    .filter((turn) => turn.type === 'AUTHORITATIVE_CONTEXT')
+    .flatMap((turn) =>
+      turn.facts.map((fact) => ({
+        factRef: fact.factRef,
+        factClass: fact.factClass,
+        value: fact.value,
+      })),
+    );
 }
 
-/** Race a promise against a bounded budget. No clock is read; the timer IS the budget. */
-async function withTimeout<T>(work: Promise<T>, timeoutMs: number, onTimeout: () => T): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<T>((resolve) => {
-    timer = setTimeout(() => {
-      resolve(onTimeout());
-    }, timeoutMs);
-  });
-  try {
-    return await Promise.race([work, timeout]);
-  } finally {
-    if (timer !== undefined) clearTimeout(timer);
+/** The critic rubric, held to the canonical closed vocabulary. */
+function reprovedCriticDimensions(
+  dimensions: readonly RiyaDatasetQualityDimension[],
+): readonly RiyaDatasetQualityDimension[] {
+  const allowed: ReadonlySet<string> = new Set<string>(RIYA_DATASET_QUALITY_DIMENSIONS);
+  if (
+    dimensions.length === 0 ||
+    new Set(dimensions).size !== dimensions.length ||
+    dimensions.some((one) => !allowed.has(one))
+  ) {
+    throw new RiyaSyntheticGenerationError('invalid-generation-policy');
   }
+  return Object.freeze([...dimensions]);
 }
 
 /**
@@ -145,7 +154,7 @@ async function withTimeout<T>(work: Promise<T>, timeoutMs: number, onTimeout: ()
  * enum member will return it again, so re-asking is spend without a hypothesis.
  */
 async function invokeRole<T>(
-  options: GenerateRiyaSyntheticCandidateOptions,
+  options: InternalGenerateOptions,
   role: RiyaSyntheticRole,
   configRef: string,
   requestRef: string,
@@ -158,7 +167,7 @@ async function invokeRole<T>(
   }
   const config = configFor(options.inventory, configRef);
   const { policy } = options;
-  const gate = options.invocationGate ?? localGate(options);
+  const gate = options.invocationGate;
 
   let transientLeft = policy.maxTransientRetries;
   let repairLeft = policy.maxStructuralRepairAttempts;
@@ -186,6 +195,7 @@ async function invokeRole<T>(
     // keeps its socket open and keeps consuming tokens after AS2 has already rejected the attempt.
     // The candidate controller is deliberately NOT aborted here -- one slow call is not a reason to
     // end the conversation, and conflating them would make a single blip fail the whole candidate.
+    let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
     const callController = new AbortController();
     const callSignal =
       options.signal === undefined
@@ -195,30 +205,34 @@ async function invokeRole<T>(
     const lease = await gate();
     let outcome;
     try {
-      outcome = await withTimeout(
-        invoker.invoke(request, structuredInput, {
-          signal: callSignal,
-          timeoutMs: policy.perInvocationTimeoutMs,
+      // The invocation promise is held, not just raced. Racing decides when WE stop waiting; only
+      // awaiting the promise itself tells us the provider work is actually over.
+      const invocation = invoker.invoke(request, structuredInput, {
+        signal: callSignal,
+        timeoutMs: policy.perInvocationTimeoutMs,
+      });
+
+      const raced = await Promise.race([
+        invocation.then((value) => ({ kind: 'SETTLED' as const, value })),
+        new Promise<{ readonly kind: 'TIMEOUT' }>((resolve) => {
+          timeoutTimer = setTimeout(() => {
+            resolve({ kind: 'TIMEOUT' as const });
+          }, policy.perInvocationTimeoutMs);
         }),
-        policy.perInvocationTimeoutMs,
-        () => {
-          // Abort FIRST, so the underlying call stops before the caller is told it timed out.
-          callController.abort();
-          return {
-            result: {
-              version: 1 as const,
-              requestRef: request.requestRef,
-              configRef,
-              role,
-              status: 'TIMEOUT' as const,
-              errorClass: 'TIMEOUT' as const,
-            },
-          };
-        },
-      );
+      ]);
+
+      if (raced.kind === 'TIMEOUT') {
+        // Abort, then DRAIN. Releasing the permit here -- before the call is over -- is what would
+        // let a second invocation start while the first is still live, so real provider concurrency
+        // could exceed the policy while the gate's own numbers looked compliant.
+        callController.abort();
+        await invocation.catch(() => undefined);
+        throw new RiyaSyntheticGenerationError('invocation-timeout');
+      }
+      outcome = raced.value;
     } finally {
-      // Released whether the call succeeded, timed out or threw. A permit leaked on the failure path
-      // shrinks the effective limit until the run stalls, which is the worst way to discover it.
+      if (timeoutTimer !== undefined) clearTimeout(timeoutTimer);
+      // Reached only after the call has settled -- normally, or by abort above.
       lease.release();
     }
 
@@ -227,7 +241,8 @@ async function invokeRole<T>(
       throw new RiyaSyntheticGenerationError('invocation-cancelled');
     }
     if (status === 'TIMEOUT') {
-      // A timeout is a failed generation, never a verdict on the conversation.
+      // Reported BY the adapter. The harness-side timeout is handled above, where the call is also
+      // drained. Either way a timeout is a failed generation, never a verdict on the conversation.
       throw new RiyaSyntheticGenerationError('invocation-timeout');
     }
     if (status === 'PROVIDER_ERROR' || status === 'MALFORMED') {
@@ -278,11 +293,57 @@ async function invokeRole<T>(
 export async function generateRiyaSyntheticCandidate(
   options: GenerateRiyaSyntheticCandidateOptions,
 ): Promise<RiyaSyntheticCandidateV1> {
-  const { scenario, allocation, policy } = options;
+  // The single-candidate API owns its limiter rather than accepting one, so
+  // `policy.maxConcurrentInvocations` cannot be defeated by a caller passing a no-op gate.
+  const gate = createRiyaSyntheticConcurrencyGate(
+    reprovedPolicy(options.policy).maxConcurrentInvocations,
+  ).acquire;
+  return generateRiyaSyntheticCandidateWithGate({ ...options, invocationGate: gate });
+}
+
+/** Re-prove a policy through its own constructor. Throws before anything is spent. */
+function reprovedPolicy(policy: RiyaSyntheticGenerationPolicyV1): RiyaSyntheticGenerationPolicyV1 {
+  const { version: _version, ...fields } = policy;
+  return createRiyaSyntheticGenerationPolicy(fields);
+}
+
+/**
+ * INTERNAL. Generate one candidate under an injected shared limiter.
+ *
+ * Not exported from the package barrel: the gate is enforcement machinery, not a caller's parameter.
+ */
+export async function generateRiyaSyntheticCandidateWithGate(
+  supplied: InternalGenerateOptions,
+): Promise<RiyaSyntheticCandidateV1> {
+  // ---- DEEP RE-PROOF, before a single token is spent -------------------------------------------
+  //
+  // TypeScript types are not runtime authority. A raw or cast object can reach this function --
+  // parsed from somewhere, hand-assembled, or forged -- and discovering that halfway through a
+  // conversation means the invalid input has already been paid for. Every external contract goes
+  // back through the constructor that owns it, and only the re-proved values are used below.
+  const { version: _scenarioVersion, ...scenarioFields } = supplied.scenario;
+  const scenario = createRiyaAiSyntheticScenario(scenarioFields);
+  const { version: _allocationVersion, ...allocationFields } = supplied.allocation;
+  const allocation = createRiyaSyntheticRoleAllocation(allocationFields);
+  const inventory = createRiyaSyntheticConfigInventory({
+    inventoryRef: supplied.inventory.inventoryRef,
+    configs: supplied.inventory.configs.map(({ version: _configVersion, ...config }) => config),
+  });
+  const policy = reprovedPolicy(supplied.policy);
+  const criticQualityDimensions = reprovedCriticDimensions(supplied.criticQualityDimensions);
+
+  const options: InternalGenerateOptions = {
+    ...supplied,
+    scenario,
+    allocation,
+    inventory,
+    policy,
+    criticQualityDimensions,
+  };
 
   // Resolve roles and families BEFORE spending a token. A same-family critic set discovered after
   // ten turns has already cost the run, and leaves a candidate somebody may be tempted to keep.
-  const families = resolveRiyaSyntheticRoleAllocation(allocation, options.inventory, policy);
+  const families = resolveRiyaSyntheticRoleAllocation(allocation, inventory, policy);
 
   // Losing a `Promise.race` does not stop the loser. Without this controller the conversation would
   // keep invoking models after the caller had already been rejected -- burning spend on a candidate
@@ -295,11 +356,12 @@ export async function generateRiyaSyntheticCandidate(
     options.signal === undefined
       ? candidateController.signal
       : AbortSignal.any([options.signal, candidateController.signal]);
-  const ctx: GenerateRiyaSyntheticCandidateOptions = { ...options, signal: effectiveSignal };
+  const ctx: InternalGenerateOptions = { ...options, signal: effectiveSignal };
 
   // The teacher, the verifier and the critics see a PROJECTION of the plan. Only the customer
   // simulator gets the full scenario, because it owns the hidden customer state.
   const teacherView = teacherScenarioView(scenario);
+  const customerView = customerScenarioView(scenario);
 
   const turns: RiyaDatasetTurnV1[] = [];
   const visibleHistory: RiyaSyntheticVisibleTurn[] = [];
@@ -349,7 +411,8 @@ export async function generateRiyaSyntheticCandidate(
         allocation.customerSimulatorConfigRef,
         `${allocation.generationRef}.u${String(index)}`,
         {
-          scenario,
+          // The customer's own projection: hidden customer state, and NO dataset governance state.
+          scenario: customerView,
           visibleHistory: [...visibleHistory],
           turnIndex: index,
           mayConclude: index === ceiling - 1,
@@ -378,9 +441,11 @@ export async function generateRiyaSyntheticCandidate(
           turnIndex: index,
           // Only facts an EARLIER authoritative context turn supplied. The teacher cannot cite what
           // does not exist yet, and the AS1 validator refuses it if it tries.
-          availableFactRefs: turns
-            .filter((turn) => turn.type === 'AUTHORITATIVE_CONTEXT')
-            .flatMap((turn) => turn.facts.map((fact) => fact.factRef)),
+          // Governed authority WITH values, built only from earlier AUTHORITATIVE_CONTEXT turns.
+          // A ref alone lets a teacher label a citation but not ground an answer, which pushes it
+          // toward inventing the number -- the exact failure this channel exists to prevent. Never
+          // sourced from plannedCustomerFacts: a customer's private fact is not company truth.
+          availableAuthorityFacts: authorityFactsFrom(turns),
         },
         teacherTurnOutputSchema,
       );

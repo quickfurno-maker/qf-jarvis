@@ -19,6 +19,7 @@ import {
 import {
   RiyaSyntheticGenerationError,
   createFakeClaudeInvoker,
+  customerScenarioView,
   createFakeGptInvoker,
   createRiyaSyntheticInvocationResult,
   generateRiyaSyntheticCandidate,
@@ -166,10 +167,7 @@ describe('the teacher sees a projection, never the customer plan', () => {
       'forbiddenBehaviors',
       'languageMode',
       'plannedDiscoveryFields',
-      'primaryInteractionKind',
       'riskClass',
-      'scenarioRef',
-      'secondaryInteractionKinds',
       'startPhase',
     ]);
   });
@@ -223,36 +221,76 @@ describe('the teacher sees a projection, never the customer plan', () => {
 // ---------------------------------------------------------------------------
 
 describe('customer hidden facts and governed authority facts are separate channels', () => {
-  it('gives the teacher authority fact REFS, never the customer plan', async () => {
-    const withAuthority = scenarios(40).find((one) => one.requiredAuthorityFactClasses.length > 0);
-    expect(withAuthority).toBeDefined();
-    if (withAuthority === undefined) return;
+  const authorityScenario = () => {
+    const found = scenarios(40).find((one) => one.requiredAuthorityFactClasses.length > 0);
+    if (found === undefined) throw new Error('no authority scenario scheduled');
+    return found;
+  };
 
-    const capture = capturing();
-    await generateRiyaSyntheticCandidate({
-      scenario: withAuthority,
+  const withAuthority = (invokers: RiyaSyntheticInvokerRegistry) =>
+    generateRiyaSyntheticCandidate({
+      scenario: authorityScenario(),
       allocation: gptTaughtAllocation(),
       inventory: INVENTORY,
       policy: policy(),
-      invokers: registryWith({
-        'cfg.teacher.gpt': capture.wrap('teacher', createFakeGptInvoker()),
-      }),
+      invokers,
       criticQualityDimensions: [...CRITIC_DIMENSIONS],
     });
 
-    for (const input of capture.seen.get('teacher') ?? []) {
-      const typed = input as {
-        readonly availableFactRefs: readonly string[];
-        readonly scenario: Record<string, unknown>;
-      };
-      // Authority arrives as refs to context ALREADY in the trajectory...
-      expect(Array.isArray(typed.availableFactRefs)).toBe(true);
-      for (const ref of typed.availableFactRefs) {
-        expect(ref.startsWith('synthetic.fact.')).toBe(true);
+  it('gives the teacher the authority VALUE, class and ref, not just an identifier', async () => {
+    // A ref alone lets a teacher label a citation but not ground an answer, which pushes a real model
+    // toward inventing the number or avoiding authority the scenario asked for.
+    const capture = capturing();
+    await withAuthority(
+      registryWith({ 'cfg.teacher.gpt': capture.wrap('teacher', createFakeGptInvoker()) }),
+    );
+
+    const inputs = capture.seen.get('teacher') ?? [];
+    expect(inputs.length).toBeGreaterThan(0);
+    for (const input of inputs) {
+      const facts = (
+        input as { readonly availableAuthorityFacts: readonly Record<string, unknown>[] }
+      ).availableAuthorityFacts;
+      expect(facts.length).toBeGreaterThan(0);
+      for (const fact of facts) {
+        expect(Object.keys(fact).sort()).toStrictEqual(['factClass', 'factRef', 'value']);
+        expect(String(fact['factRef']).startsWith('synthetic.fact.')).toBe(true);
+        expect(String(fact['value']).length).toBeGreaterThan(0);
       }
-      // ...and the customer's hidden plan does not arrive at all.
-      expect(Object.keys(typed.scenario)).not.toContain('plannedCustomerFacts');
     }
+  });
+
+  it('never routes a customer hidden fact through the authority channel', async () => {
+    const customerValues = authorityScenario().plannedCustomerFacts.map((fact) => fact.value);
+    const capture = capturing();
+    await withAuthority(
+      registryWith({ 'cfg.teacher.gpt': capture.wrap('teacher', createFakeGptInvoker()) }),
+    );
+
+    for (const input of capture.seen.get('teacher') ?? []) {
+      const facts = (input as { readonly availableAuthorityFacts: readonly unknown[] })
+        .availableAuthorityFacts;
+      const serialized = JSON.stringify(facts);
+      for (const value of customerValues) {
+        expect(serialized, 'authority must not carry a customer fact').not.toContain(value);
+      }
+    }
+  });
+
+  it('lets a teacher cite the supplied fact, grounded in an earlier context turn', async () => {
+    const candidate = await withAuthority(
+      registryWith({ 'cfg.teacher.gpt': createFakeGptInvoker({ citeAuthority: true }) }),
+    );
+
+    const cited = candidate.trajectory.turns.filter(
+      (turn) => turn.type === 'ASSISTANT' && turn.annotation.supportedFactRefs.length > 0,
+    );
+    const context = candidate.trajectory.turns.filter(
+      (turn) => turn.type === 'AUTHORITATIVE_CONTEXT',
+    );
+
+    expect(cited.length).toBeGreaterThan(0);
+    expect(context.length).toBeGreaterThan(0);
   });
 });
 
@@ -355,4 +393,107 @@ describe('a per-invocation timeout aborts the underlying call', () => {
     expect(later.get('verify') ?? 0).toBe(0);
     expect(later.get('critic') ?? 0).toBe(0);
   }, 20_000);
+});
+
+// ---------------------------------------------------------------------------
+// BLOCKER E - no model role sees dataset governance state.
+// ---------------------------------------------------------------------------
+
+describe('every model input is split-blind', () => {
+  const validationScenario = () => {
+    const found = scenarios(20).find((one) => one.split === 'VALIDATION');
+    if (found === undefined) throw new Error('no VALIDATION scenario scheduled');
+    return found;
+  };
+
+  it('hides split and lineage from the simulator, which keeps its own state', async () => {
+    // Splits are fixed before generation for LINEAGE isolation. That is not the same as telling the
+    // generator which split it is writing: a simulator that knows it is producing VALIDATION can
+    // drift that distribution away from TRAIN for no reason a reader could ever find.
+    const capture = capturing();
+    await generateRiyaSyntheticCandidate({
+      scenario: validationScenario(),
+      allocation: gptTaughtAllocation(),
+      inventory: INVENTORY,
+      policy: policy(),
+      invokers: registryWith({
+        'cfg.sim.claude': capture.wrap('sim', createFakeClaudeInvoker()),
+      }),
+      criticQualityDimensions: [...CRITIC_DIMENSIONS],
+    });
+
+    const inputs = capture.seen.get('sim') ?? [];
+    expect(inputs.length).toBeGreaterThan(0);
+    for (const input of inputs) {
+      const view = (input as { readonly scenario: Record<string, unknown> }).scenario;
+      expect(Object.keys(view)).not.toContain('split');
+      expect(Object.keys(view)).not.toContain('lineageRootRef');
+      expect(Object.keys(view)).not.toContain('scenarioRef');
+      expect(Object.keys(view)).toContain('plannedCustomerFacts');
+      expect(Object.keys(view)).toContain('customerBehaviorCodes');
+      expect(JSON.stringify(input)).not.toContain('VALIDATION');
+      expect(JSON.stringify(input)).not.toContain('HOLDOUT');
+    }
+  });
+
+  it('projects the same customer view whatever the split says', () => {
+    // The strongest form: the split is not merely hidden, it makes no difference to the projection.
+    const scenario = validationScenario();
+
+    expect(JSON.stringify(customerScenarioView(scenario))).toBe(
+      JSON.stringify(customerScenarioView({ ...scenario, split: 'TRAIN' })),
+    );
+  });
+
+  it('hides split and lineage from the teacher, verifier and critic too', () => {
+    const view = teacherScenarioView(validationScenario());
+
+    expect(Object.keys(view)).not.toContain('split');
+    expect(Object.keys(view)).not.toContain('lineageRootRef');
+    expect(JSON.stringify(view)).not.toContain('VALIDATION');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// BLOCKER F - the teacher gets no future interaction label.
+// ---------------------------------------------------------------------------
+
+describe('the teacher is told no future interaction kind', () => {
+  it('carries neither primary nor secondary interaction kinds', () => {
+    const view = teacherScenarioView(firstScenario());
+
+    expect(Object.keys(view)).not.toContain('primaryInteractionKind');
+    expect(Object.keys(view)).not.toContain('secondaryInteractionKinds');
+  });
+
+  it('does not reveal an objection before the customer has objected', async () => {
+    // OBJECTION_PRICE on turn 1 is the same omniscience as a planned fact, in taxonomy form.
+    const objection = scenarios(40).find((one) => one.primaryInteractionKind === 'OBJECTION_PRICE');
+    expect(objection).toBeDefined();
+    if (objection === undefined) return;
+
+    const capture = capturing();
+    await generateRiyaSyntheticCandidate({
+      scenario: objection,
+      allocation: gptTaughtAllocation(),
+      inventory: INVENTORY,
+      policy: policy(),
+      invokers: registryWith({
+        'cfg.teacher.gpt': capture.wrap('teacher', createFakeGptInvoker()),
+      }),
+      criticQualityDimensions: [...CRITIC_DIMENSIONS],
+    });
+
+    for (const input of capture.seen.get('teacher') ?? []) {
+      expect(JSON.stringify(input)).not.toContain('OBJECTION_PRICE');
+    }
+  });
+
+  it('projects two scenarios differing only by interaction kind identically', () => {
+    const base = firstScenario();
+
+    expect(JSON.stringify(teacherScenarioView(base))).toBe(
+      JSON.stringify(teacherScenarioView({ ...base, primaryInteractionKind: 'OBJECTION_PRICE' })),
+    );
+  });
 });

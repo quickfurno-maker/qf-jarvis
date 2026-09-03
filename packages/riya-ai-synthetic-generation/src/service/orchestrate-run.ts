@@ -36,7 +36,7 @@ import type { RiyaSyntheticConfigInventoryV1 } from '../contracts/model-config.j
 import type { RiyaSyntheticGenerationPolicyV1 } from '../contracts/policy.js';
 import type { RiyaSyntheticRoleAllocationV1 } from '../contracts/role-allocation.js';
 import { createRiyaSyntheticConcurrencyGate } from '../internal/concurrency.js';
-import { generateRiyaSyntheticCandidate } from './generate-candidate.js';
+import { generateRiyaSyntheticCandidateWithGate } from './generate-candidate.js';
 import type {
   RiyaSyntheticCandidateV1,
   RiyaSyntheticInvokerRegistry,
@@ -84,6 +84,22 @@ export async function orchestrateRiyaSyntheticRun(
 ): Promise<RiyaSyntheticRunResultV1> {
   const { items, policy, signal } = options;
 
+  // ---- PREFLIGHT ------------------------------------------------------------------------------
+  //
+  // Identity collisions are checked BEFORE any worker starts, not as each item is reached. A run that
+  // discovers a duplicate `generationRef` on item forty has already paid for thirty-nine candidates
+  // whose evidence cannot be told apart -- and the tokens are not refundable.
+  const scenarioRefs = items.map((item) => item.scenario.scenarioRef);
+  if (new Set(scenarioRefs).size !== scenarioRefs.length) {
+    throw new RiyaSyntheticGenerationError('invalid-run-plan');
+  }
+  const generationRefs = items.map((item) => item.allocation.generationRef);
+  if (new Set(generationRefs).size !== generationRefs.length) {
+    // Two candidates under one generation identity means two trajectories claiming one provenance
+    // record, and AS1 evidence that cannot say which is which.
+    throw new RiyaSyntheticGenerationError('role-config-conflict');
+  }
+
   const invocationGateHandle = createRiyaSyntheticConcurrencyGate(policy.maxConcurrentInvocations);
   const candidateGateHandle = createRiyaSyntheticConcurrencyGate(policy.maxConcurrentCandidates);
 
@@ -94,11 +110,16 @@ export async function orchestrateRiyaSyntheticRun(
 
   let nextIndex = 0;
 
+  // Read through a function on purpose. `aborted` is a value that CHANGES, and TypeScript narrows it
+  // after the first check -- so a later `signal?.aborted === true` reads as impossible and the
+  // re-check below would be eliminated as dead code. The call defeats that narrowing.
+  const runAborted = (): boolean => signal?.aborted === true;
+
   const worker = async (): Promise<void> => {
     for (;;) {
       // An aborted run stops SCHEDULING immediately. In-flight candidates receive the same signal
       // and unwind on their own; nothing new is started.
-      if (signal?.aborted === true) return;
+      if (runAborted()) return;
 
       const index = nextIndex;
       nextIndex += 1;
@@ -111,8 +132,18 @@ export async function orchestrateRiyaSyntheticRun(
       // Held for the whole candidate, so the peak reflects candidates in flight rather than workers
       // that happen to exist.
       const lease = await candidateGateHandle.acquire();
+
+      // RE-CHECK after the await. Abort can land between the check at the top of the loop and the
+      // permit being granted, and a candidate started in that window would spend tokens on a run
+      // somebody has already cancelled. Leaving the outcome NOT_STARTED rather than FAILED matters
+      // too: it was never attempted, and recording it as a failure would misreport the run.
+      if (runAborted()) {
+        lease.release();
+        return;
+      }
+
       try {
-        const candidate = await generateRiyaSyntheticCandidate({
+        const candidate = await generateRiyaSyntheticCandidateWithGate({
           scenario: item.scenario,
           allocation: item.allocation,
           inventory: options.inventory,

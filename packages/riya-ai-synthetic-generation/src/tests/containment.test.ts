@@ -48,6 +48,22 @@ function walk(dir: string, skipTests: boolean): string[] {
   return out;
 }
 
+/**
+ * Read a file that another suite may delete underneath us.
+ *
+ * Several suites in this repo write short-lived probe files while these walkers are running, so a
+ * path can vanish between `readdir` and `readFileSync`. A file that no longer exists cannot be
+ * importing anything, so skipping it is correct rather than lenient -- and it keeps a containment
+ * failure meaning "somebody imported this", never "two suites raced".
+ */
+const readIfPresent = (file: string): string => {
+  try {
+    return readFileSync(file, 'utf8');
+  } catch {
+    return '';
+  }
+};
+
 const codeOnly = (text: string): string =>
   text
     .replace(/\/\*[\s\S]*?\*\//gu, '')
@@ -80,7 +96,7 @@ describe('no runtime, application or serving path can reach the generator', () =
       for (const file of walk(root, false)) {
         const relative = file.replaceAll('\\', '/');
         if (relative.includes('/riya-ai-synthetic-generation/')) continue;
-        if (readFileSync(file, 'utf8').includes('@qf-jarvis/riya-ai-synthetic-generation')) {
+        if (readIfPresent(file).includes('@qf-jarvis/riya-ai-synthetic-generation')) {
           importers.push(relative);
         }
       }
@@ -95,10 +111,9 @@ describe('no runtime, application or serving path can reach the generator', () =
     // package being unreachable from every app. apps/api is named rather than merely swept, because
     // it is the app that would reach for it first.
     for (const file of walk(join(REPO_ROOT, 'apps', 'api', 'src'), false)) {
-      expect(
-        readFileSync(file, 'utf8').includes('@qf-jarvis/riya-ai-synthetic-generation'),
-        file,
-      ).toBe(false);
+      expect(readIfPresent(file).includes('@qf-jarvis/riya-ai-synthetic-generation'), file).toBe(
+        false,
+      );
     }
   });
 

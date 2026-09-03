@@ -62,6 +62,13 @@ export interface RiyaSyntheticFakeInvokerOptions {
   readonly criticFails?: readonly string[];
   /** Let the annotation verifier reject, to exercise that boundary. */
   readonly verifierRejects?: boolean;
+  /**
+   * Cite a governed authority fact when one has been supplied.
+   *
+   * Uses the VALUE, not just the ref -- which is the whole point of the authority channel: a teacher
+   * given only an identifier can label a citation but cannot ground an answer.
+   */
+  readonly citeAuthority?: boolean;
 }
 
 const encode = (value: unknown): string => JSON.stringify(value);
@@ -202,6 +209,22 @@ function renderPayload(
   if (role === 'RIYA_TEACHER') {
     const input = structuredInput as RiyaSyntheticTeacherInput;
     const tag = flavour(label, `a${String(input.turnIndex)}`);
+
+    const authority = input.availableAuthorityFacts[0];
+    if (options.citeAuthority === true && authority !== undefined) {
+      return encode({
+        assistantText: `${label} assistant ${tag} shares what the governed record says: ${authority.value}.`,
+        annotation: {
+          decision: 'USE_GOVERNED_KNOWLEDGE',
+          responseObjective: 'ANSWER',
+          askedDiscoveryFields: [],
+          // Cited by ref, grounded by value. AS1 proves the fact existed EARLIER.
+          supportedFactRefs: [authority.factRef],
+          expectedPhaseAfter: 'PROJECT_DETAILS',
+        },
+      });
+    }
+
     const asks = input.turnIndex % 2 === 0;
     const field =
       input.scenario.plannedDiscoveryFields[

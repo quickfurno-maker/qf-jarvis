@@ -1,36 +1,45 @@
 /**
  * What each role is allowed to SEE (AS2, ADR-0143 §6).
  *
- * ### The teacher gets a PROJECTION, not the scenario
+ * ### Every model input is an explicit ALLOWLIST
  *
- * The first version passed the whole `RiyaAiSyntheticScenarioV1` to the Riya teacher while a comment
- * claimed the teacher could not read the customer's plan. The comment was aspirational and the type
- * was the truth: a real adapter receives `structuredInput`, so a real teacher could read
- * `plannedCustomerFacts` on turn 1 and answer around a budget the customer reveals on turn 4.
+ * Not `Omit`. An omit-list silently re-admits every field a future scenario gains, so the next piece
+ * of hidden state would arrive in a model's prompt because nobody remembered to exclude it. Each view
+ * below is built field by field, and a scenario field added tomorrow reaches no model until somebody
+ * decides it should.
  *
- * That is synthetic omniscience. The transcript stays chronologically turn-by-turn while the
- * INFORMATION is not, and the result is a corpus that reads beautifully and teaches Riya to know
- * things nobody told her.
+ * ### Three separate leaks, three separate views
  *
- * So the teacher receives `RiyaSyntheticTeacherScenarioViewV1`: an explicit ALLOWLIST, built field by
- * field. Not `Omit<...>` — an omit-list silently re-admits every field a future scenario gains, and
- * the next hidden-state field would arrive in the teacher's input without anybody deciding it should.
+ * **Hidden customer state** must not reach the teacher. A teacher that could read
+ * `plannedCustomerFacts` on turn 1 answers around a budget the customer reveals on turn 4 — a
+ * transcript that is chronologically turn-by-turn and informationally not.
  *
- * ### The customer simulator keeps the whole plan
+ * **Future interaction labels** are the same leak in taxonomy form. `OBJECTION_PRICE` handed to the
+ * teacher on turn 1 says a price objection is coming before the customer has objected. So the teacher
+ * view carries no interaction kind at all; what the conversation currently IS must be inferred from
+ * `visibleHistory`, exactly as a deployed Riya would have to.
  *
- * It owns that hidden state; revealing facts on its own schedule is its entire job.
+ * **Dataset governance state** must not reach ANY model — the customer simulator included. Splits are
+ * fixed before generation for lineage isolation, and that is not the same as telling the generator
+ * which split it is writing. A simulator that knows it is producing `VALIDATION` can drift the
+ * validation distribution away from `TRAIN` for no reason a reader could ever find, and the exam is
+ * quietly contaminated while lineage looks perfectly separated.
+ *
+ * `scenarioRef` and `lineageRootRef` stay out of the views too. They are transport and evidence
+ * identity — the invocation envelope carries them — and nothing a model writes should depend on them.
  *
  * ### No protected-exam field exists anywhere here
  *
- * ADR-0143 §7. The protected corpus reaches the AS1 validator after a candidate exists. There is
- * deliberately nowhere for it to travel, so an edit that tried to hand the exam to a generator would
- * have to change these types first — visibly, in review.
+ * ADR-0143 §7. The protected corpus reaches the AS1 validator after a candidate exists, and there is
+ * nowhere in these types for it to travel.
  */
 import type { RiyaAiSyntheticScenarioV1 } from '@qf-jarvis/riya-intelligence-dataset/ai-synthetic';
 import type {
+  RiyaDatasetDifficulty,
   RiyaDatasetDiscoveryField,
-  RiyaDatasetInteractionKind,
+  RiyaDatasetFactClass,
   RiyaDatasetLanguageMode,
+  RiyaDatasetPersona,
   RiyaDatasetRiskClass,
 } from '@qf-jarvis/riya-intelligence-dataset';
 import type { RiyaConversationPhase } from '@qf-jarvis/riya-conversation-continuity';
@@ -44,21 +53,13 @@ export interface RiyaSyntheticVisibleTurn {
 /**
  * Everything the Riya teacher may know about the plan.
  *
- * Each field earns its place as something the ASSISTANT side legitimately needs. Deliberately absent,
- * and each for the same reason — it would tell the teacher what the customer is going to do:
- *
- * - `plannedCustomerFacts` — the customer's undisclosed facts and when they surface;
- * - `customerBehaviorCodes` — that a correction, a detour or an objection is coming;
- * - `requiredConversationEvents` — the same, in event form (`APPLY_CORRECTION`, `HANDOFF_TO_HUMAN`);
- * - `persona` and `difficulty` — a forecast of how the customer will behave;
- * - `targetAssistantTurns` — how long the conversation is "supposed" to run, which invites a teacher
- *   to pace toward a close it has been told about rather than one the customer reached.
+ * Deliberately absent, each because it forecasts what the customer will do or what the dataset is
+ * for: `plannedCustomerFacts`, `customerBehaviorCodes`, `requiredConversationEvents`, `persona`,
+ * `difficulty`, `targetAssistantTurns`, `primaryInteractionKind`, `secondaryInteractionKinds`,
+ * `split`, `lineageRootRef`, `scenarioRef`.
  */
 export interface RiyaSyntheticTeacherScenarioViewV1 {
-  readonly scenarioRef: string;
   readonly languageMode: RiyaDatasetLanguageMode;
-  readonly primaryInteractionKind: RiyaDatasetInteractionKind;
-  readonly secondaryInteractionKinds: readonly RiyaDatasetInteractionKind[];
   readonly riskClass: RiyaDatasetRiskClass;
   readonly startPhase: RiyaConversationPhase;
   /** An assistant-side teaching target: which fields this conversation should get to. */
@@ -67,30 +68,42 @@ export interface RiyaSyntheticTeacherScenarioViewV1 {
 }
 
 /**
- * Project a scenario down to what the teacher may see.
+ * Everything the customer simulator may know.
  *
- * Written as an explicit construction rather than a deletion. If `RiyaAiSyntheticScenarioV1` gains a
- * field tomorrow, this function does not change and the teacher does not learn about it — which is
- * the correct default for a boundary whose failure mode is silent.
+ * It keeps the hidden CUSTOMER state, because revealing it on its own schedule is its entire job. It
+ * does not keep dataset GOVERNANCE state — no split, no lineage, no corpus identity.
  */
-export function teacherScenarioView(
-  scenario: RiyaAiSyntheticScenarioV1,
-): RiyaSyntheticTeacherScenarioViewV1 {
-  return Object.freeze({
-    scenarioRef: scenario.scenarioRef,
-    languageMode: scenario.languageMode,
-    primaryInteractionKind: scenario.primaryInteractionKind,
-    secondaryInteractionKinds: scenario.secondaryInteractionKinds,
-    riskClass: scenario.riskClass,
-    startPhase: scenario.startPhase,
-    plannedDiscoveryFields: scenario.plannedDiscoveryFields,
-    forbiddenBehaviors: scenario.forbiddenBehaviors,
-  });
+export interface RiyaSyntheticCustomerScenarioViewV1 {
+  readonly languageMode: RiyaDatasetLanguageMode;
+  readonly persona: RiyaDatasetPersona;
+  readonly difficulty: RiyaDatasetDifficulty;
+  readonly plannedDiscoveryFields: readonly RiyaDatasetDiscoveryField[];
+  readonly plannedCustomerFacts: readonly { readonly field: string; readonly value: string }[];
+  readonly customerBehaviorCodes: readonly string[];
+  readonly requiredConversationEvents: readonly string[];
+  readonly forbiddenBehaviors: readonly string[];
+}
+
+/**
+ * A governed synthetic authority fact the teacher may actually use.
+ *
+ * The VALUE is here on purpose. A teacher given only a `factRef` can produce a citation label but not
+ * a grounded answer, which pushes it toward the two behaviours this lane exists to prevent: invent
+ * the number, or refuse to use authority even where the scenario calls for it.
+ *
+ * These are built ONLY from `AUTHORITATIVE_CONTEXT` turns already earlier in the trajectory — never
+ * from `plannedCustomerFacts`. A customer's undisclosed fact and a governed business fact are
+ * different channels with different rules, and merging them into one bag of "facts" is how a corpus
+ * learns to assert a customer's private information as company truth.
+ */
+export interface RiyaSyntheticAvailableAuthorityFactV1 {
+  readonly factRef: string;
+  readonly factClass: RiyaDatasetFactClass;
+  readonly value: string;
 }
 
 export interface RiyaSyntheticCustomerSimulatorInput {
-  /** The FULL plan. The simulator owns the hidden customer state and reveals it on its own schedule. */
-  readonly scenario: RiyaAiSyntheticScenarioV1;
+  readonly scenario: RiyaSyntheticCustomerScenarioViewV1;
   readonly visibleHistory: readonly RiyaSyntheticVisibleTurn[];
   /** Which exchange this is. Lets a simulator pace a correction or a detour across turns. */
   readonly turnIndex: number;
@@ -99,12 +112,11 @@ export interface RiyaSyntheticCustomerSimulatorInput {
 }
 
 export interface RiyaSyntheticTeacherInput {
-  /** The PROJECTION. Never the scenario — see the note at the top of this file. */
   readonly scenario: RiyaSyntheticTeacherScenarioViewV1;
   readonly visibleHistory: readonly RiyaSyntheticVisibleTurn[];
   readonly turnIndex: number;
-  /** Fact refs already supplied by an EARLIER authoritative context turn, and only those. */
-  readonly availableFactRefs: readonly string[];
+  /** Governed authority already supplied EARLIER in this trajectory, with values. Only those. */
+  readonly availableAuthorityFacts: readonly RiyaSyntheticAvailableAuthorityFactV1[];
 }
 
 export interface RiyaSyntheticVerifierInput {
@@ -116,9 +128,38 @@ export interface RiyaSyntheticVerifierInput {
 }
 
 export interface RiyaSyntheticCriticInput {
-  /** A critic judges the finished conversation, not the plan behind it. */
+  /** A critic judges the finished conversation, not the plan behind it — and never the split. */
   readonly scenario: RiyaSyntheticTeacherScenarioViewV1;
   readonly visibleHistory: readonly RiyaSyntheticVisibleTurn[];
   /** The dimensions this critic is asked about. A closed list, never free-form guidance. */
   readonly requestedQualityDimensions: readonly string[];
+}
+
+/** Project a scenario down to what the teacher may see. Constructed, never deleted from. */
+export function teacherScenarioView(
+  scenario: RiyaAiSyntheticScenarioV1,
+): RiyaSyntheticTeacherScenarioViewV1 {
+  return Object.freeze({
+    languageMode: scenario.languageMode,
+    riskClass: scenario.riskClass,
+    startPhase: scenario.startPhase,
+    plannedDiscoveryFields: scenario.plannedDiscoveryFields,
+    forbiddenBehaviors: scenario.forbiddenBehaviors,
+  });
+}
+
+/** Project a scenario down to what the customer simulator may see. */
+export function customerScenarioView(
+  scenario: RiyaAiSyntheticScenarioV1,
+): RiyaSyntheticCustomerScenarioViewV1 {
+  return Object.freeze({
+    languageMode: scenario.languageMode,
+    persona: scenario.persona,
+    difficulty: scenario.difficulty,
+    plannedDiscoveryFields: scenario.plannedDiscoveryFields,
+    plannedCustomerFacts: scenario.plannedCustomerFacts,
+    customerBehaviorCodes: scenario.customerBehaviorCodes,
+    requiredConversationEvents: scenario.requiredConversationEvents,
+    forbiddenBehaviors: scenario.forbiddenBehaviors,
+  });
 }
