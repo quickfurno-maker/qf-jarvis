@@ -1,6 +1,6 @@
 # Riya post-training roadmap
 
-**Slice:** RID-F1 · **Decision:** [ADR-0107](../decisions/ADR-0107-riya-intelligence-dataset-foundation-and-leakage-firewall.md) · **Companions:** [governance](./riya-intelligence-dataset-governance.md), [Gold V1 plan](./riya-gold-v1-coverage-plan.md)
+**Slice:** RID-F1 · **Decisions:** [ADR-0107](../decisions/ADR-0107-riya-intelligence-dataset-foundation-and-leakage-firewall.md), [ADR-0143](../decisions/ADR-0143-riya-ai-synthetic-training-lane-and-automated-quality-gate.md) (AI-synthetic lane) · **Companions:** [governance](./riya-intelligence-dataset-governance.md), [Gold V1 plan](./riya-gold-v1-coverage-plan.md)
 
 Where Riya's intelligence work goes after the dataset foundation, and in what order.
 
@@ -21,7 +21,7 @@ Riya is not a template chatbot. The model learns **how to converse and decide**;
 
 ## The order
 
-### 1. RID-F1 — dataset foundation ← _this slice_
+### 1. RID-F1 — dataset foundation ← _merged_
 
 Trajectory contract, lineage splits, leakage and privacy firewalls, business-fact rule, review policy,
 SHA-256 identity, derived SFT samples. **Trains nothing.**
@@ -38,16 +38,37 @@ rubric](./riya-human-gold-authoring-rubric.md), the [review
 workflow](./riya-human-gold-review-workflow.md) and the [coverage
 plan](./riya-gold-v1-coverage-plan.md).
 
-> **Status: DEFERRED at the pre-authoring checkpoint.** The schedule, the batch-1 packet and every
-> gate are ready; zero dialogue has been written, because a model may not write it and no human author
-> has yet. Deferred, not cancelled. Step 4 below is independent of it and is the current work.
+> **Status: OPTIONAL / DEFERRED — and no longer a training prerequisite.** Per
+> [ADR-0143](../decisions/ADR-0143-riya-ai-synthetic-training-lane-and-automated-quality-gate.md) the
+> owner has removed Human Gold V1 from the critical path. The schedule, the batch-1 packet and every
+> gate are ready and stay ready; zero dialogue has been written, because a model may not write it and
+> no human author has yet. The corpus file stays empty, and **no model-generated content is ever
+> backfilled into it**.
+>
+> **Deferred, not cancelled.** ADR-0108 still governs it, its provenance rules are permanent, and it
+> may resume at any time without waiting on anything. Step 3 below is now the active path.
 
-### 3. Controlled synthetic expansion
+### 3. AI-synthetic corpus lane ← _the active path_
 
-Gold → teacher-generated variants → deterministic validation → leakage and dedupe → **human review** →
-accepted. A later target of roughly 2,000–5,000 trajectories, and only if quality and coverage justify
-it. No count chasing: the failure mode is a large corpus of near-duplicates that teaches one phrasing
-very well.
+Authorized by [ADR-0143](../decisions/ADR-0143-riya-ai-synthetic-training-lane-and-automated-quality-gate.md).
+
+Structured scenario plan → teacher-generated trajectories → deterministic validation → leakage,
+privacy, authority and dedupe gates → diversity and formula-degeneration gates → independent critic
+evidence → accepted. A later target of roughly 2,000–5,000 **accepted** trajectories, with materially
+more candidates generated than accepted. No count chasing: the failure mode is a large corpus of
+near-duplicates that teaches one phrasing very well.
+
+Every row on this lane is `TEACHER_GENERATED_SYNTHETIC` with a `teacherRef`. **Model-written dialogue
+is never labelled `HUMAN_AUTHORED_SYNTHETIC`** — ADR-0108 §1 is permanent, and this lane exists
+alongside Human Gold rather than inside it.
+
+Human review is not required here, and is replaced by automated acceptance evidence under a separate
+`AUTOMATED_SYNTHETIC` review mode valid only for teacher-generated rows. **Review records are never
+fabricated**, and the generic human-review semantics are not weakened for anything else.
+
+Sub-slices: **AS0** governance (ADR-0143) → **AS1** scenario and acceptance contracts → **AS2**
+provider-independent offline generation harness → **AS3** controlled generation and filtering. None of
+them is implemented yet.
 
 ### 4. Base-model benchmark
 
@@ -133,12 +154,22 @@ knowledge gap, and they have the enormous advantage of being correctable in an a
 grades and would systematically approve the answers it would itself have given. Two humans, both must
 agree.
 
+> Narrowed by [ADR-0143](../decisions/ADR-0143-riya-ai-synthetic-training-lane-and-automated-quality-gate.md)
+> §10 for the AI-synthetic lane only: independent model critics may act as **one filter among many**
+> during corpus acceptance, never as the certificate. No averaged critic score may hide a failed hard
+> gate, a generating configuration is never the sole critic of its own trajectory, and an automated
+> result is **never** presented as human-reviewed P10.
+
 ---
 
 ## The honest position today
 
 The framework exists. The corpus does not, no candidate has been benchmarked, and no run has been
 attempted.
+
+The AI-synthetic lane is **authorized but not built**: ADR-0143 is a governance decision, and AS1–AS7
+are all still ahead. No model has been called, no trajectory has been generated, no base model has
+been chosen, and `trainingApproval` is still the literal `false` it has always been.
 
 Nothing in this repository currently establishes that any model or prompt passes the Riya quality
 suite. Saying otherwise would be a fabricated performance claim, and the whole point of building the

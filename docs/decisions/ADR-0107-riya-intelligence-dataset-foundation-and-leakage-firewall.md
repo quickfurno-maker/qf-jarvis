@@ -2,7 +2,10 @@
 
 - **Status:** Accepted — RID-F1 merged as PR #112. Reviewed head `41abcf2`, merge commit
   `66d83756ffbcc247a4a56c5a177da11ac6c45872`. Extended by
-  [ADR-0108](./ADR-0108-riya-human-gold-v1-authoring-and-calibration.md) (HGV1-A, current).
+  [ADR-0108](./ADR-0108-riya-human-gold-v1-authoring-and-calibration.md) (HGV1-A, current). **Partially
+  superseded for the AI-synthetic lane only** by
+  [ADR-0143](./ADR-0143-riya-ai-synthetic-training-lane-and-automated-quality-gate.md) — see the
+  post-acceptance note of 2026-09-03 at the end of this document.
 - **Date:** 2026-08-10
 - **Depends on:** ADR-0098/0099 (RWC-P4A/P4B), ADR-0103 (RWC-P7), ADR-0104 (RWC-P8),
   ADR-0105 (RWC-P9), ADR-0106 (RWC-P10 quality evaluation), ADR-0052 (the generic evaluation
@@ -291,3 +294,22 @@ Owner-locked. Changing any of these requires a new ADR:
   count, copying the policy identity from the report;
 - a decision naming an authority must cite at least one fact from that authority, and a
   high-confidence volatile claim must cite a fact of the matching class.
+
+## Post-acceptance note — 2026-09-03: partial supersession by ADR-0143
+
+[ADR-0143](./ADR-0143-riya-ai-synthetic-training-lane-and-automated-quality-gate.md) supersedes **three
+narrowly scoped items** of the change-control list above, and **only for the AI-synthetic lane**. The
+historical decision recorded in this document is not rewritten and remains what was accepted in PR #112.
+
+| Item above                     | What ADR-0143 changes                                                                                                                                                                                                |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| "no model call"                | Remains true **of the RID-F1 dataset package**, which still calls no provider. Generation lives in a separate later package (AS2), never inside this one.                                                            |
+| "no LLM-as-judge"              | Remains true for **final quality certification**. Independent model critics may act as one filter among many during AI-lane corpus acceptance, never as the certificate, and never averaged over a failed hard gate. |
+| "review is risk-based … human" | Remains the default (`HUMAN_REVIEW`). An `AUTOMATED_SYNTHETIC` mode applies **only** to `TEACHER_GENERATED_SYNTHETIC` rows, never fabricates review records, and leaves Human Gold validation untouched.             |
+
+**Everything else in this ADR stands unchanged**, including: trajectories are canonical; P10 is
+protected exam data and never a split; splits are lineage-isolated; sources are synthetic only and live
+chat is not representable; volatile business facts require earlier authoritative support; privacy
+findings never echo matched text; and **release evidence remains `trainingApproval: false` with nothing
+auto-training** — ADR-0143 §15 explicitly declines to flip that literal and requires a separate
+owner-approved training-run contract instead.

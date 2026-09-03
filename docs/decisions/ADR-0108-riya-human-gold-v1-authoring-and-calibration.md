@@ -1,8 +1,11 @@
 # ADR-0108 — HGV1-A: Riya Human Gold V1 authoring system and Wave-1 calibration
 
 - **Status:** Accepted — **HGV1-A MERGED as PR #113**, merge commit
-  `359fc4b09a84573a0862c52fd7ac582b4e9fa995`. See the post-acceptance correction of 2026-09-02 at
-  the end of this document.
+  `359fc4b09a84573a0862c52fd7ac582b4e9fa995`. See the post-acceptance correction of 2026-09-02 and the
+  post-acceptance note of 2026-09-03 at the end of this document. **Human Gold V1 is OPTIONAL /
+  DEFERRED and no longer a training prerequisite** per
+  [ADR-0143](./ADR-0143-riya-ai-synthetic-training-lane-and-automated-quality-gate.md); **§1 remains
+  permanent and unmodified.**
 - **Date:** 2026-08-10
 - **Depends on:** ADR-0107 (RID-F1 dataset foundation and leakage firewall), ADR-0106 (RWC-P10
   quality evaluation), ADR-0104/0105 (RWC-P8/P9), ADR-0052 (the generic evaluation foundation)
@@ -493,3 +496,36 @@ schedule API would need its own owner decision.
 **Only Batch 1 may be authored first.** Batches 2–6 remain gated by Batch-1 calibration: Batch 1 is
 authored, independently reviewed and read end to end before any later batch starts. Wave 1 is **not**
 open for authoring in full.
+
+## Post-acceptance note — 2026-09-03: Human Gold V1 is no longer a training prerequisite
+
+The owner has authorized an AI-synthetic training lane in
+[ADR-0143](./ADR-0143-riya-ai-synthetic-training-lane-and-automated-quality-gate.md). One thing changes
+for Human Gold V1, and it is a scheduling fact rather than a rule:
+
+**Human Gold V1 is OPTIONAL / DEFERRED. SFT no longer waits on it.** It is **not cancelled**, and
+deleting any part of it requires a separate owner decision and a cleanup ADR.
+
+### What does not change
+
+**§1 stands, permanently and without qualification.** A trajectory may be labelled
+`HUMAN_AUTHORED_SYNTHETIC` only if a person composed its sentences. ADR-0143 does not weaken,
+reinterpret or route around that definition — it routes _away_ from it, giving model-written dialogue
+its own source kind (`TEACHER_GENERATED_SYNTHETIC`, with a required `teacherRef`) so the two lanes can
+never be confused in the evidence.
+
+Also unchanged: the wave plan, the batch schedule, the Batch-1 packet, the scheduler, the corpus
+harness, every Gold validator, the review workflow, and the rule that the reviewer is never the author.
+The `NOT_HUMAN_AUTHORED` finding still fires exactly as before.
+
+### The corpus file
+
+`data/human-gold-v1/wave-1/batch-1.jsonl` remains committed and **empty**, which is still the honest
+representation of "authoring has not started".
+
+**No model-generated content is ever backfilled into it.** Filling it with teacher output and leaving
+the `HUMAN_AUTHORED_SYNTHETIC` label in place is the precise failure this ADR was written to prevent,
+and an AI lane existing elsewhere does not make it acceptable here.
+
+If human authoring resumes, it resumes under this ADR unchanged — Batch 1 first, Batch-1 calibration
+still gating Batches 2–6, and one independent accepted review per `STANDARD` slot.
