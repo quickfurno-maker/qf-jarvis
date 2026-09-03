@@ -1,7 +1,9 @@
 # ADR-0143 — AS0: Riya AI-synthetic training lane and automated quality gate
 
-- **Status:** Proposed — AS0 governance slice. Owner review required before merge. **Authorizes no
-  generation, no training and no model selection.**
+- **Status:** Accepted — **AS0 MERGED as PR #189**, reviewed head
+  `d91cba9e23c1035e4e8494049e8277189bed206b`, merge commit
+  `3270d382f6cc35e75304b893d732928a96aa5614`. See the AS1 implementation note of 2026-09-03 at the
+  end of this document. **Authorizes no generation, no training and no model selection.**
 - **Date:** 2026-09-03
 - **Depends on:** ADR-0107 (RID-F1 dataset foundation and leakage firewall), ADR-0108 (HGV1-A Human
   Gold V1 authoring and calibration), ADR-0106 (RWC-P10 quality evaluation), ADR-0052 (the generic
@@ -357,3 +359,48 @@ has its own slice and its own evidence, and none of them starts because this doc
 
 Human authoring of Gold V1 remains available and remains governed by ADR-0108. It is no longer in the
 critical path, and it is no longer waiting on anything.
+
+## AS1 implementation note — 2026-09-03
+
+AS1 makes the lane above **structurally representable and deterministically gateable**. It adds no
+corpus, calls no model and trains nothing. The decision recorded above is unchanged; this note says
+how it was built.
+
+### Where it lives
+
+A new offline subpath, `@qf-jarvis/riya-intelligence-dataset/ai-synthetic`, mirroring the `./gold-v1`
+precedent. **The package root is untouched** — no symbol moved, none was renamed, and a containment
+spec asserts no root export is named for this lane.
+
+### What §8 became in code
+
+`RIYA_DATASET_REQUIRED_REVIEWS` is unchanged, and `RiyaDatasetReleasePolicyV1` gained no field. The
+automated policy **wraps** the release policy instead of editing it, so accepted V1 evidence never has
+to be reinterpreted. `AUTOMATED_SYNTHETIC` is a literal on the new policy type, reachable only through
+the new validator.
+
+The generic validator is **reused, not reimplemented**: `validateRiyaIntelligenceDataset` runs first
+with the wrapped base policy and the pinned protected index. Exactly one of its blockers is set aside
+— `insufficientReview` — and only after the data proves the review mode, teacher-only sourcing, empty
+`review` arrays and valid content-bound evidence for every row. Fail any of those and the blocker is
+re-raised. Every other generic blocker stays blocking, `protectedNearLeakage` included: §19 makes
+`QUARANTINED` terminal here because no human is available to adjudicate one.
+
+### Content binding, because ids are not enough
+
+Acceptance evidence carries the trajectory's artifact digest and conversation fingerprint, and the
+validator recomputes both. Evidence for revision 1 therefore cannot attest revision 4 — fix a reply,
+keep the id, and the digest moves. The scenario is bound the same way, by digest rather than by ref.
+
+### What is still policy rather than fact
+
+The diversity thresholds are a **versioned contract with no production values**. AS1 defines the
+metric, the field and the deterministic comparison; AS3 supplies the numbers once a real corpus exists
+to measure. Guessing them now would either be wrong or become the number the generator gets tuned to
+satisfy. Ratios are basis points — integers — so no float comparison decides a gate.
+
+### Still ahead
+
+**AS2** owns provider-independent offline generation, outside this package. **AS3** generates and
+filters the corpus. Nothing generates or trains until those exist, and `trainingApproval` is still the
+literal `false` on both lanes.

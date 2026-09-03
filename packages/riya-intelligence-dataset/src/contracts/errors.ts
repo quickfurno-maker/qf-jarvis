@@ -36,6 +36,13 @@ export const RIYA_DATASET_ERROR_CODES = [
   'release-binding-invalid',
   'dataset-not-eligible',
   'invalid-jsonl',
+  // AI-synthetic lane (AS1, ADR-0143). Additive: no existing code changes meaning.
+  'invalid-ai-synthetic-scenario',
+  'invalid-ai-synthetic-provenance',
+  'invalid-ai-synthetic-critic-verdict',
+  'invalid-ai-synthetic-policy',
+  'invalid-ai-synthetic-evidence',
+  'invalid-ai-synthetic-state',
 ] as const;
 export type RiyaDatasetErrorCode = (typeof RIYA_DATASET_ERROR_CODES)[number];
 
@@ -67,6 +74,12 @@ const RIYA_DATASET_ERROR_MESSAGES: Readonly<Record<RiyaDatasetErrorCode, string>
     'The release attestation is not bound to the dataset, policy or protected corpus it claims.',
   'dataset-not-eligible': 'Release evidence is blocked because the dataset is not eligible.',
   'invalid-jsonl': 'A Riya intelligence trajectory JSONL line is invalid.',
+  'invalid-ai-synthetic-scenario': 'An AI-synthetic generation scenario is invalid.',
+  'invalid-ai-synthetic-provenance': 'An AI-synthetic generation provenance record is invalid.',
+  'invalid-ai-synthetic-critic-verdict': 'An AI-synthetic critic verdict is invalid.',
+  'invalid-ai-synthetic-policy': 'An AI-synthetic acceptance or diversity policy is invalid.',
+  'invalid-ai-synthetic-evidence': 'AI-synthetic trajectory acceptance evidence is invalid.',
+  'invalid-ai-synthetic-state': 'An AI-synthetic candidate state transition is invalid.',
 });
 
 /**

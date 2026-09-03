@@ -24,6 +24,7 @@ import { describe, expect, it } from 'vitest';
 
 import * as barrel from '../index.js';
 import * as goldBarrel from '../gold-v1/index.js';
+import * as aiBarrel from '../ai-synthetic/index.js';
 import * as testingBarrel from '../testing/index.js';
 
 const SRC = fileURLToPath(new URL('../', import.meta.url));
@@ -405,9 +406,43 @@ describe('the root surface is vocabularies, factories and services', () => {
     };
     expect(Object.keys(manifest.exports ?? {}).sort()).toStrictEqual([
       '.',
+      './ai-synthetic',
       './gold-v1',
       './testing',
     ]);
+  });
+
+  it('the AI-synthetic slice reaches no exam, no provider and no protected fixture', () => {
+    // ADR-0143 section 20: the protected corpus is a VALIDATION-ONLY input. It enters the acceptance
+    // validator after a candidate already exists, and no planning, provenance or critic contract has
+    // a field it could travel in. AS2 inherits this boundary.
+    for (const { file, relative, code } of productionFiles()) {
+      if (!relative.startsWith('ai-synthetic/')) continue;
+      expect(code, file).not.toContain('riya.p10.');
+      expect(code, file).not.toContain('RIYA_QUALITY_GOLDEN_FIXTURES');
+      expect(code, file).not.toContain('syntheticUserText');
+      expect(code, file).not.toContain('/testing');
+    }
+    const serialized = JSON.stringify(Object.entries(aiBarrel));
+    expect(serialized).not.toContain('riya.p10.');
+  });
+
+  it('the AI-synthetic subpath carries no dialogue and no critic prose', () => {
+    // A scenario is a PLAN. The strongest way to say there is no generated conversation here is to
+    // show the exported surface has nowhere to put one.
+    const exported = Object.keys(aiBarrel);
+    expect(exported).toContain('createRiyaAiSyntheticScenario');
+    expect(exported).toContain('validateRiyaAiSyntheticCorpus');
+    const serialized = JSON.stringify(Object.entries(aiBarrel));
+    for (const shape of ['"type":"USER"', '"type":"ASSISTANT"', 'annotation', 'turnRef']) {
+      expect(serialized, shape).not.toContain(shape);
+    }
+    for (const key of exported) {
+      const upper = key.toUpperCase();
+      expect(upper, key).not.toContain('TRANSCRIPT');
+      expect(upper, key).not.toContain('RATIONALE');
+      expect(upper, key).not.toContain('PROMPT');
+    }
   });
 
   it('the Gold subpath ships the authoring system and NO Gold conversation', () => {
