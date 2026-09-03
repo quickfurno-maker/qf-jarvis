@@ -1,0 +1,24 @@
+{
+  "name": "@qf-jarvis/riya-ai-synthetic-generation",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis Riya AI-synthetic generation harness (AS2, ADR-0143). The OFFLINE orchestrator that turns an AS1 scenario into a candidate teacher-generated trajectory, and nothing else. It is provider-INDEPENDENT: every model reaches it through one narrow invocation PORT, so GPT and Claude are configuration rather than dependency, and a later local or hosted model needs no contract change. It ships deterministic FAKE adapters only -- there is no OpenAI or Anthropic network code here, no API key, no base URL, no credential of any kind, and CI makes zero provider calls. Conversations are generated TURN BY TURN: the customer simulator writes only USER turns and never sees a future Riya turn, the teacher writes only ASSISTANT turns and never sees a future customer turn, and no API exists to ask one model for a whole conversation. Every model result starts UNTRUSTED -- bounded parse, strict schema, canonical constructor, structural check -- and exactly one structural repair is allowed for malformed transport output; a valid-but-poor candidate is REJECTED, never rewritten until it passes, because retrying until acceptance is how a corpus learns to game its own gate. Cross-family critique is enforceable: a GPT teacher is judged by a Claude critic and a Claude teacher by a GPT critic, family identity comes from the config inventory rather than from a model's self-report, and a teacher can never be the sole approver of its own trajectory. The protected RWC-P10 exam is unreachable from generation and from critics -- it reaches the AS1 validator only, after a candidate already exists. Acceptance is AS1's, reused rather than reimplemented: teacher provenance, critic verdicts, content-bound evidence and validateRiyaAiSyntheticCorpus. Trajectories are TEACHER_GENERATED_SYNTHETIC with an empty review array; no human review is ever fabricated, and HUMAN_AUTHORED_SYNTHETIC is never applied to model-written text. Timeouts, cancellation, transient retry and concurrency are all bounded by policy, and clocks are injected rather than read so artifacts stay deterministic. It generates NO production corpus, trains nothing, selects no base model, and no runtime, app or serving path may import it. Depends on @qf-jarvis/riya-intelligence-dataset, @qf-jarvis/riya-conversation-continuity and zod.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/riya-conversation-continuity": "workspace:*",
+    "@qf-jarvis/riya-intelligence-dataset": "workspace:*",
+    "zod": "4.4.3"
+  }
+}

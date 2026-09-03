@@ -267,13 +267,21 @@ describe('RID-F1 invokes nothing and trains nothing', () => {
 // ---------------------------------------------------------------------------
 
 describe('no runtime, service or application can reach the dataset factory', () => {
-  it('is imported by nothing outside itself', () => {
+  it('is imported by nothing but the offline generation harness', () => {
     // A runtime that could reach this is a runtime that could reach training data, and a path by
     // which a live conversation could be appended to a corpus.
+    //
+    // Exactly ONE importer is permitted: the offline AS2 generation harness (ADR-0143), which
+    // assembles candidates from these contracts. The firewall is not weakened by it, because the
+    // harness is itself proved unreachable from every app and runtime by its own containment spec --
+    // so `runtime -> harness -> dataset` stays broken at the first link, and the chain is checked at
+    // both ends rather than assumed at either. Any OTHER importer is the failure this test exists to
+    // catch, and still fails.
+    const OFFLINE_GENERATION_HARNESS = 'riya-ai-synthetic-generation';
     const importers: string[] = [];
     for (const root of [join(REPO_ROOT, 'packages'), join(REPO_ROOT, 'apps')]) {
       for (const entry of readdirSync(root)) {
-        if (entry === 'riya-intelligence-dataset') continue;
+        if (entry === 'riya-intelligence-dataset' || entry === OFFLINE_GENERATION_HARNESS) continue;
         let files: string[];
         try {
           files = walk(join(root, entry, 'src'), false);
