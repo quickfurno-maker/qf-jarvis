@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
+  },
+
+  // The EMITTING build. Specs under src/tests are EXCLUDED, so no fake transport and no canned
+  // provider response reaches dist/.
+  //
+  // TWO project references, both one-way and both INWARD. `riya-ai-synthetic-generation` owns the
+  // invocation port, the closed error taxonomy, the role projections and the orchestration this
+  // package feeds real models into -- it is depended ON, never modified, and it gains no provider
+  // dependency by this package existing. `riya-intelligence-dataset` owns the AS1 vocabularies the
+  // output schemas are built from and the validator the pilot ends in, and
+  // `riya-conversation-continuity` owns the phase vocabulary the teacher schema closes over.
+  //
+  // Deliberately absent: `model-gateway`, `model-gateway-composition`, `jarvis-runtime`,
+  // `agent-runtime`, `riya-model-interaction` and `riya-web-conversation-service` (this is offline
+  // corpus generation; production serving composition would drag in routing policy, live credentials
+  // and customer authority state), `model-evaluation` (the protected exam reaches the AS1 VALIDATOR
+  // only, never a model request), and anything Postgres or `event-backbone` (no database, no
+  // migration).
+  "references": [
+    { "path": "../riya-conversation-continuity/tsconfig.build.json" },
+    { "path": "../riya-intelligence-dataset/tsconfig.build.json" },
+    { "path": "../riya-ai-synthetic-generation/tsconfig.build.json" }
+  ],
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/tests/**"]
+}

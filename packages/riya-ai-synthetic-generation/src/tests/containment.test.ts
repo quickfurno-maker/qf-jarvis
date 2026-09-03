@@ -89,13 +89,28 @@ const productionFiles = (): readonly {
 // ---------------------------------------------------------------------------
 
 describe('no runtime, application or serving path can reach the generator', () => {
-  it('is imported by nothing outside itself', () => {
+  /**
+   * The ONE package authorised to import this harness (AS3A, ADR-0143 §4).
+   *
+   * `riya-ai-synthetic-provider-adapters` is the offline real-provider control plane: it holds the
+   * OpenAI and Anthropic SDKs so that this package never has to, and reaches them only through the
+   * invocation PORT. Naming it here is an authorised addition, not a relaxation — the assertion is
+   * still an EXACT set match, and every other importer is still zero.
+   *
+   * The direction is what makes it safe. That package depends on this one; nothing depends on that
+   * package, which its own containment spec proves. So the arrow still runs one way, away from
+   * anything that serves a customer.
+   */
+  const AUTHORISED_IMPORTER = '/riya-ai-synthetic-provider-adapters/';
+
+  it('is imported by nothing outside itself, except the authorised provider adapters', () => {
     const importers: string[] = [];
     for (const area of ['apps', 'packages']) {
       const root = join(REPO_ROOT, area);
       for (const file of walk(root, false)) {
         const relative = file.replaceAll('\\', '/');
         if (relative.includes('/riya-ai-synthetic-generation/')) continue;
+        if (relative.includes(AUTHORISED_IMPORTER)) continue;
         if (readIfPresent(file).includes('@qf-jarvis/riya-ai-synthetic-generation')) {
           importers.push(relative);
         }
@@ -103,6 +118,17 @@ describe('no runtime, application or serving path can reach the generator', () =
     }
 
     expect(importers).toStrictEqual([]);
+  });
+
+  it('is reached by the provider adapters ONLY through the invocation port', () => {
+    // The exemption above would be worth nothing if the authorised importer could reach past the
+    // port. It cannot: this package exports no transport, no credential and no URL, so the widest
+    // thing that package can hold is a `RiyaSyntheticModelInvoker`.
+    const barrelSource = readIfPresent(join(SRC, 'index.ts'));
+
+    for (const forbidden of ['apiKey', 'baseURL', 'Authorization', 'openai', 'anthropic']) {
+      expect(barrelSource, `the barrel must not name ${forbidden}`).not.toContain(forbidden);
+    }
   });
 
   it('is not imported by apps/api, named explicitly', () => {

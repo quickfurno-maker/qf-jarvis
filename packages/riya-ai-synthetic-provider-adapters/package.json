@@ -1,0 +1,27 @@
+{
+  "name": "@qf-jarvis/riya-ai-synthetic-provider-adapters",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis Riya AS3A real-provider control plane (ADR-0143). The OFFLINE package that activates real OpenAI and Anthropic models behind the AS2 invocation port, and nothing else. It holds the only provider network code in the repository: AS2's generation core stays provider-INDEPENDENT and gains no SDK, no key and no URL. Credentials are read from the environment at the composition edge only -- never committed, printed, hashed-and-printed, serialized into a config, manifest, provenance record, evidence artifact or thrown error. Every role input is projected through a STRICT allowlist before serialization, so the customer simulator cannot see split or lineage, the teacher cannot see plannedCustomerFacts, customerBehaviorCodes or any future interaction label, and the protected RWC-P10 exam reaches no model request at all -- proved on the serialized bytes, not on the type. Prompts are provider-NEUTRAL and versioned: one instruction layer serves GPT and Claude, and every rendering binds an instructionRef, an instruction digest, an output schema ref, a role and a model identity. Real calls need a DOUBLE opt-in -- an explicit --execute flag AND an environment opt-in -- so a present credential can never by itself reach a network, and CI makes zero provider calls and spends nothing. Spend is bounded by a versioned execution budget over candidates, requests, input, output and total tokens and wall-clock time; exhaustion stops scheduling and an auth failure stops the whole run, both under closed reasons. Provider failures map into AS2's closed statuses and error classes; no raw provider error body, response header, hidden reasoning, OpenAI reasoning or Claude thinking block is ever persisted. Orchestration is AS2's and acceptance is AS1's, reused rather than reimplemented. Pilot artifacts are written to an ignored local directory through an atomic, traversal-defended writer; they are evaluation evidence and are NOT a production corpus. It generates no production corpus, trains nothing, selects no base model, and no app, production runtime, WhatsApp path, model-serving or API composition may import it.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "0.123.0",
+    "@qf-jarvis/riya-ai-synthetic-generation": "workspace:*",
+    "@qf-jarvis/riya-conversation-continuity": "workspace:*",
+    "@qf-jarvis/riya-intelligence-dataset": "workspace:*",
+    "openai": "7.9.0",
+    "zod": "4.4.3"
+  }
+}
