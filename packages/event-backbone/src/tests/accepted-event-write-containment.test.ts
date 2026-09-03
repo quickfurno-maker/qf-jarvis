@@ -36,13 +36,14 @@ const execFile = promisify(execFileCallback);
 /**
  * Production sources come from GIT, not from a filesystem walk.
  *
- * Sibling boundary suites write short-lived lint probes into real package directories and delete
- * them, so a walk can list a path that is gone by the time it is read, and a name-based skip would
- * open a bypass: commit a file called `x-1-zz-d4-lint-probe.ts` with an `eslint-disable` and it would
- * escape both the lint rule and this supposedly independent scan.
+ * The sibling boundary suites used to write short-lived lint probes into real package directories
+ * and delete them, so a walk could list a path that was gone by the time it was read. Those probes
+ * are virtual now, but the discriminator does not go back to filenames: a name-based skip is a bypass
+ * waiting to be used, because committing a file called `x-1-zz-d4-lint-probe.ts` with an
+ * `eslint-disable` would escape both the lint rule and this supposedly independent scan.
  *
- * **Trackedness is the honest discriminator.** A transient probe is never committed, so `git ls-files`
- * never lists it; a committed file is scanned whatever it is called, and nothing is skipped by name.
+ * **Trackedness is the honest discriminator.** An untracked file is never listed by `git ls-files`
+ * whatever it is called, and a committed one always is, so nothing is skipped by name.
  */
 async function scanProductionSources(): Promise<readonly string[]> {
   const { stdout } = await execFile('git', ['ls-files', '--', 'packages', 'apps'], {

@@ -7,7 +7,9 @@
  *  1. **Resolved-rule assertions** via `ESLint#calculateConfigForFile`, which returns the rule value
  *     ESLint would actually apply to a path after flat-config resolution. This is not a grep of the
  *     config text: a block that is present but overridden resolves away, and this API shows that.
- *  2. **Live lint probes**: real files, written at real paths, linted by the real configuration.
+ *  2. **Live lint probes**: real source text, linted by the real configuration at a real path. The
+ *     path is logical — no file is written — for the reason set out under "Why the probes are
+ *     VIRTUAL" below.
  *
  * ### Why (1) exists at all — the defect it now guards
  *
@@ -23,19 +25,32 @@
  * D2a patterns**. If a future change re-introduces the clobber, the resolved value loses patterns
  * and these fail.
  *
- * Probe files stay inside THIS package's tree on purpose: other packages and apps run recursive
- * source scans, and a probe dropped into `apps/api/src` — even for the moment this suite holds it —
- * races those scans. Every probe is removed in `finally` and again in `afterAll`.
+ * ### Why the probes are VIRTUAL
  *
- * All probes are linted in ONE ESLint pass. Type-aware linting is expensive, and a pass per case was
- * slow enough to trip the default timeout under parallel load. Nothing is asserted less strictly for
- * it.
+ * An earlier version wrote each probe to disk at its real path and deleted it afterwards. That is a
+ * repository-wide race, not a local one: a few dozen containment suites across other packages walk
+ * every package's `src` tree recursively, and a probe that appears and vanishes between their
+ * `readdir` and their `stat`/`readFile` makes them fail with ENOENT on a path they never asked
+ * about. It was reproduced on Linux CI and on Windows, and it had nothing to do with the slice that
+ * happened to trip it.
+ *
+ * So the probes are linted as TEXT at a logical path instead. `ESLint#lintText` resolves the flat
+ * config by `filePath` exactly as `lintFiles` does, so every path-scoped block — the `packages/**`
+ * baseline, the file-exact exceptions, the test-tree `ignores` — applies unchanged. The probe still
+ * has to survive a real parse and a real lint; what it no longer does is exist on disk, so nothing
+ * else in the repository can observe it. Physical probe files created by this suite: zero.
+ *
+ * `allowDefaultProject` is the one concession: a file that is not on disk is in no tsconfig, so the
+ * type-aware project service is told to give these logical paths an inferred default project. It is
+ * scoped to the probe filename in the probe directories and to nothing else.
+ *
+ * A fatal parse message would make every "this is PERMITTED" assertion pass for the wrong reason, so
+ * `lintProbe` rejects on one rather than returning an empty message list.
  */
-import { mkdir, rm, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ESLint } from 'eslint';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 
 const REPO_DIR = fileURLToPath(new URL('../../../../', import.meta.url));
 const at = (relative: string): string => join(REPO_DIR, relative);
@@ -103,10 +118,49 @@ const GOVERNED_BRIDGE = 'packages/event-ingestion/src/ingest/persist-validated-e
 const EVENT_WRITE_MODULE = 'packages/event-backbone/src/persistence/event-write.ts';
 
 const restrictedByKey = new Map<string, readonly string[]>();
-const written: string[] = [];
 
-async function removeProbes(): Promise<void> {
-  for (const path of written.splice(0)) await rm(path, { force: true });
+/**
+ * A second ESLint instance for the virtual probes, differing from `eslint` in ONE respect: the
+ * project service is allowed to place these logical paths in an inferred default project, because a
+ * path with no file behind it belongs to no tsconfig.
+ *
+ * Only `languageOptions` is overridden, so rule resolution — which is the entire subject of this
+ * suite — is byte-for-byte the configuration a real file at that path would get. The override is
+ * keyed to the probe filename, so it cannot reach any committed source even by accident, and the
+ * `calculateConfigForFile` assertions all go through the untouched `eslint` instance.
+ */
+const probeEslint = new ESLint({
+  cwd: REPO_DIR,
+  overrideConfig: [
+    {
+      files: [`packages/event-backbone/src/**/*-${PROBE}`],
+      languageOptions: {
+        parserOptions: {
+          projectService: {
+            allowDefaultProject: [
+              ...new Set(CASES.map((c) => `packages/event-backbone/${c.dir}/*-${PROBE}`)),
+            ],
+          },
+        },
+      },
+    },
+  ],
+});
+
+/**
+ * Lint `code` as if it were the file at `path`, without creating that file.
+ *
+ * A fatal message means the probe never reached the rule at all. Returning `[]` for that would turn
+ * every "this import is PERMITTED" assertion into a test of nothing, so it throws instead.
+ */
+async function lintProbe(code: string, path: string): Promise<readonly string[]> {
+  const [result] = await probeEslint.lintText(code, { filePath: path, warnIgnored: false });
+  const messages = result?.messages ?? [];
+  const fatal = messages.filter((m) => m.fatal === true);
+  if (fatal.length > 0) {
+    throw new Error(`probe ${path} did not lint: ${fatal.map((m) => m.message).join('; ')}`);
+  }
+  return messages.filter((m) => m.ruleId === 'no-restricted-imports').map((m) => m.message);
 }
 
 /** One entry of a resolved `no-restricted-imports` rule, with its `importNames` intact. */
@@ -147,33 +201,20 @@ beforeAll(async () => {
     path: at(join('packages/event-backbone', c.dir, `${c.key}-${String(i)}-${PROBE}`)),
   }));
 
-  try {
-    for (const t of targets) {
-      await mkdir(dirname(t.path), { recursive: true });
-      await writeFile(t.path, t.code, 'utf8');
-      written.push(t.path);
-    }
+  for (const t of targets) restrictedByKey.set(t.key, await lintProbe(t.code, t.path));
 
-    const results = await eslint.lintFiles([
-      ...targets.map((t) => t.path),
-      at(GOVERNED_BRIDGE),
-      at(EVENT_WRITE_MODULE),
-    ]);
-    const byPath = new Map(
-      results.map((r) => [
-        r.filePath,
-        r.messages.filter((m) => m.ruleId === 'no-restricted-imports').map((m) => m.message),
-      ]),
-    );
-    for (const t of targets) restrictedByKey.set(t.key, byPath.get(t.path) ?? []);
-    restrictedByKey.set('governed-bridge', byPath.get(at(GOVERNED_BRIDGE)) ?? []);
-    restrictedByKey.set('event-write-module', byPath.get(at(EVENT_WRITE_MODULE)) ?? []);
-  } finally {
-    await removeProbes();
-  }
+  // The two REAL committed files are linted from disk, by the untouched instance. They are the half
+  // of this suite that must be about actual repository content rather than about a logical path.
+  const results = await eslint.lintFiles([at(GOVERNED_BRIDGE), at(EVENT_WRITE_MODULE)]);
+  const byPath = new Map(
+    results.map((r) => [
+      r.filePath,
+      r.messages.filter((m) => m.ruleId === 'no-restricted-imports').map((m) => m.message),
+    ]),
+  );
+  restrictedByKey.set('governed-bridge', byPath.get(at(GOVERNED_BRIDGE)) ?? []);
+  restrictedByKey.set('event-write-module', byPath.get(at(EVENT_WRITE_MODULE)) ?? []);
 }, 180_000);
-
-afterAll(removeProbes);
 
 describe('D2a did not clobber any pre-existing import boundary', () => {
   it('leaves the contracts package I/O ban in force, and adds D2a to it', async () => {
@@ -290,9 +331,9 @@ describe('D2a — an arbitrary package cannot import the accepted-event write ca
   });
 
   it('scopes the ban to every package AND every app', async () => {
-    // The live probes all sit inside event-backbone, for the blast-radius reason documented at the
-    // top. This is the other half: an arbitrary package and an arbitrary app must resolve the ban
-    // too, or a package could import the capability and never be told.
+    // The live probes all carry event-backbone paths, because that is where the capability lives.
+    // This is the other half: an arbitrary package and an arbitrary app must resolve the ban too, or
+    // a package could import the capability and never be told.
     for (const path of [
       'packages/communication-request-runtime/src/hypothetical.ts',
       'apps/api/src/hypothetical.ts',
