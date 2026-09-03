@@ -33,8 +33,10 @@ import {
   RIYA_DATASET_OBJECTION_REVIEW_DIMENSIONS,
 } from '../contracts/vocabularies.js';
 import type {
+  RiyaDatasetDifficulty,
   RiyaDatasetInteractionKind,
   RiyaDatasetLanguageMode,
+  RiyaDatasetPersona,
   RiyaDatasetQualityDimension,
   RiyaDatasetRiskClass,
   RiyaDatasetSplit,
@@ -174,6 +176,16 @@ export interface SyntheticTrajectoryOptions {
   readonly review?: readonly RiyaTrainingReviewV1[];
   readonly sourceRef?: string;
   readonly initialState?: RiyaTrainingStateV1;
+  /**
+   * Teacher provenance, for the AI-synthetic specs (AS1, ADR-0143).
+   *
+   * Default stays `HUMAN_AUTHORED_SYNTHETIC` so every existing spec is untouched. Supplying a
+   * `teacherRef` is what makes a row teacher-generated — the trajectory constructor already refuses
+   * the two halves apart, so there is no way to build an inconsistent source through this option.
+   */
+  readonly teacherRef?: string;
+  readonly persona?: RiyaDatasetPersona;
+  readonly difficulty?: RiyaDatasetDifficulty;
 }
 
 /** A minimal, valid, release-shaped trajectory. */
@@ -190,14 +202,22 @@ export function syntheticTrajectory(
     languageMode: options.languageMode ?? 'ENGLISH',
     primaryInteractionKind: options.primaryInteractionKind ?? 'DISCOVERY',
     secondaryInteractionKinds: [],
-    persona: 'EXPLORING',
-    difficulty: 'STANDARD',
+    persona: options.persona ?? 'EXPLORING',
+    difficulty: options.difficulty ?? 'STANDARD',
     riskClass: risk,
-    source: {
-      kind: 'HUMAN_AUTHORED_SYNTHETIC',
-      sourceRef: options.sourceRef ?? 'author.alpha',
-      synthetic: true,
-    },
+    source:
+      options.teacherRef === undefined
+        ? {
+            kind: 'HUMAN_AUTHORED_SYNTHETIC',
+            sourceRef: options.sourceRef ?? 'author.alpha',
+            synthetic: true,
+          }
+        : {
+            kind: 'TEACHER_GENERATED_SYNTHETIC',
+            sourceRef: options.sourceRef ?? 'teacher.alpha',
+            synthetic: true,
+            teacherRef: options.teacherRef,
+          },
     initialState: options.initialState ?? emptyTrainingState(),
     turns: options.turns ?? discoveryTurns(),
     review: options.review ?? acceptedReviews(risk === 'HIGH_RISK' ? 2 : 1),
