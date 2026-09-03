@@ -14,12 +14,13 @@
  * happened during D2a and must not happen again here.
  */
 import { execFile as execFileCallback } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { ESLint } from 'eslint';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 
 import * as barrel from '../index.js';
 
@@ -54,15 +55,56 @@ const CASES = [
 ] as const;
 
 const restrictedByKey = new Map<string, readonly string[]>();
-const written: string[] = [];
 
-async function removeProbes(): Promise<void> {
-  for (const path of written.splice(0)) await rmQuietly(path);
-}
+/**
+ * The probes are VIRTUAL — linted as text at a logical path, never written to disk.
+ *
+ * Writing them was a repository-wide race rather than a local inconvenience: a few dozen containment
+ * suites in other packages walk every package's `src` tree recursively, and a probe that appears and
+ * vanishes between their `readdir` and their `stat`/`readFile` fails them with ENOENT on a path they
+ * never asked about. Reproduced on Linux CI and on Windows.
+ *
+ * `ESLint#lintText` resolves the flat config from `filePath` exactly as `lintFiles` does, so every
+ * path-scoped block still applies and the probe still has to survive a real parse and a real lint.
+ * What it no longer does is exist, so nothing else in the repository can observe it.
+ *
+ * This second instance differs from `eslint` in ONE respect — `allowDefaultProject`, because a path
+ * with no file behind it belongs to no tsconfig and the type-aware project service would otherwise
+ * refuse to parse it. Only `languageOptions` is overridden, so rule resolution is untouched, and the
+ * override is keyed to the probe filename so it cannot reach committed source.
+ */
+const probeEslint = new ESLint({
+  cwd: REPO_DIR,
+  overrideConfig: [
+    {
+      files: [`packages/event-backbone/src/**/*-${PROBE}`],
+      languageOptions: {
+        parserOptions: {
+          projectService: {
+            allowDefaultProject: [
+              ...new Set(CASES.map((c) => `packages/event-backbone/${c.dir}/*-${PROBE}`)),
+            ],
+          },
+        },
+      },
+    },
+  ],
+});
 
-async function rmQuietly(path: string): Promise<void> {
-  const { rm } = await import('node:fs/promises');
-  await rm(path, { force: true });
+/**
+ * Lint `code` as if it were the file at `path`, without creating that file.
+ *
+ * A fatal message means the probe never reached the rule, which would turn every "this import is
+ * PERMITTED" assertion into a test of nothing. So it throws rather than returning no messages.
+ */
+async function lintProbe(code: string, path: string): Promise<readonly string[]> {
+  const [result] = await probeEslint.lintText(code, { filePath: path, warnIgnored: false });
+  const messages = result?.messages ?? [];
+  const fatal = messages.filter((m) => m.fatal === true);
+  if (fatal.length > 0) {
+    throw new Error(`probe ${path} did not lint: ${fatal.map((m) => m.message).join('; ')}`);
+  }
+  return messages.filter((m) => m.ruleId === 'no-restricted-imports').map((m) => m.message);
 }
 
 interface ResolvedPattern {
@@ -90,18 +132,19 @@ async function lowLevelWriterPattern(path: string): Promise<ResolvedPattern | un
  * The production-source corpus, derived from GIT-TRACKED files.
  *
  * The earlier version walked the filesystem and skipped anything whose NAME matched the transient
- * lint-probe convention. That fixed the ENOENT race — sibling boundary suites write short-lived probe
- * files into real package directories and delete them, so a path could vanish between `readdir` and
- * `readFile` — but it fixed it with a filename rule, which is a bypass waiting to be used: commit a
- * real production file called `something-1-zz-d4-lint-probe.ts`, add an `eslint-disable`, and it would
- * have escaped BOTH the lint rule and this supposedly independent scan.
+ * lint-probe convention. That fixed the ENOENT race — the probes were physical then, so a path could
+ * vanish between `readdir` and `readFile` — but it fixed it with a filename rule, which is a bypass
+ * waiting to be used: commit a real production file called `something-1-zz-d4-lint-probe.ts`, add an
+ * `eslint-disable`, and it would have escaped BOTH the lint rule and this supposedly independent scan.
  *
- * Trackedness is the honest discriminator. A transient probe is never committed, so `git ls-files`
- * never lists it; a committed file is scanned whatever it is called. Nothing is skipped by name.
+ * The probes are virtual now and nothing transient appears in the tree at all, but the discriminator
+ * stays trackedness rather than reverting to filenames, because the bypass above does not depend on
+ * how the probes are written. An untracked file is never listed by `git ls-files` whatever it is
+ * called; a committed one always is. Nothing is skipped by name.
  */
-async function trackedProductionPaths(): Promise<readonly string[]> {
+async function trackedProductionPaths(repoDir: string = REPO_DIR): Promise<readonly string[]> {
   const { stdout } = await execFile('git', ['ls-files', '--', 'packages', 'apps'], {
-    cwd: REPO_DIR,
+    cwd: repoDir,
     maxBuffer: 32 * 1024 * 1024,
   });
 
@@ -109,7 +152,7 @@ async function trackedProductionPaths(): Promise<readonly string[]> {
     .split('\n')
     .map((line) => line.trim())
     .filter((line) => line.endsWith('.ts'))
-    .map((line) => join(REPO_DIR, line))
+    .map((line) => join(repoDir, line))
     .filter((path) => !path.includes(`${sep}tests${sep}`) && !path.includes('.test.'));
 }
 
@@ -152,39 +195,25 @@ function referencesReader(code: string): boolean {
 }
 
 beforeAll(async () => {
-  const { mkdir, writeFile } = await import('node:fs/promises');
   const targets = CASES.map((c, i) => ({
     ...c,
     path: at(join('packages/event-backbone', c.dir, `${c.key}-${String(i)}-${PROBE}`)),
   }));
 
-  try {
-    for (const t of targets) {
-      await mkdir(join(t.path, '..'), { recursive: true });
-      await writeFile(t.path, t.code, 'utf8');
-      written.push(t.path);
-    }
+  for (const t of targets) restrictedByKey.set(t.key, await lintProbe(t.code, t.path));
 
-    const results = await eslint.lintFiles([
-      ...targets.map((t) => t.path),
-      at(READER),
-      at(D5_HANDLER),
-    ]);
-    const byPath = new Map(
-      results.map((r) => [
-        r.filePath,
-        r.messages.filter((m) => m.ruleId === 'no-restricted-imports').map((m) => m.message),
-      ]),
-    );
-    for (const t of targets) restrictedByKey.set(t.key, byPath.get(t.path) ?? []);
-    restrictedByKey.set('reader-itself', byPath.get(at(READER)) ?? []);
-    restrictedByKey.set('d5-handler', byPath.get(at(D5_HANDLER)) ?? []);
-  } finally {
-    await removeProbes();
-  }
+  // The two REAL committed files are linted from disk, by the untouched instance: this half of the
+  // suite has to be about actual repository content, not about a logical path.
+  const results = await eslint.lintFiles([at(READER), at(D5_HANDLER)]);
+  const byPath = new Map(
+    results.map((r) => [
+      r.filePath,
+      r.messages.filter((m) => m.ruleId === 'no-restricted-imports').map((m) => m.message),
+    ]),
+  );
+  restrictedByKey.set('reader-itself', byPath.get(at(READER)) ?? []);
+  restrictedByKey.set('d5-handler', byPath.get(at(D5_HANDLER)) ?? []);
 }, 180_000);
-
-afterAll(removeProbes);
 
 describe('D4 — the reader is not part of any public surface', () => {
   it('is absent from the event-backbone root barrel', () => {
@@ -436,27 +465,44 @@ describe('the corpus is defined by TRACKEDNESS, not by filename', () => {
   // That would have let a committed file called `x-1-zz-d4-lint-probe.ts` with an `eslint-disable`
   // escape BOTH the lint rule and this supposedly independent scan. These pin the replacement.
 
-  it('excludes untracked transient probes, because git never lists them', async () => {
-    const { mkdir, writeFile, rm } = await import('node:fs/promises');
-    const probes = [
-      at(
-        'packages/event-backbone/src/persistence/capability-from-persistence-1-zz-d2a-lint-probe.ts',
-      ),
-      at('packages/event-backbone/src/projections/from-a-handler-2-zz-d4-lint-probe.ts'),
-    ];
+  it('excludes untracked transient probes, and scans tracked ones with the same name', async () => {
+    // Demonstrated on a THROWAWAY repository, not on this one. The claim needs files that are present
+    // on disk, and materialising one inside this repository - even for the moment an assertion takes
+    // - is precisely the ENOENT race the probes above were made virtual to remove.
+    //
+    // Both directions are exercised, which the in-repo version could not do: the untracked probe must
+    // be absent, and a COMMITTED file carrying the very same probe-shaped name must be present. That
+    // second half is the bypass a filename rule would have opened, checked as behaviour rather than
+    // inferred from what .gitignore happens to say.
+    const scratch = await mkdtemp(join(tmpdir(), 'qfj-d4-corpus-'));
 
     try {
-      for (const probe of probes) {
-        await mkdir(join(probe, '..'), { recursive: true });
-        await writeFile(probe, READER_IMPORT, 'utf8');
+      const dir = 'packages/event-backbone/src/projections';
+      const ordinary = `${dir}/communication-evidence-reader.ts`;
+      const trackedProbeShaped = `${dir}/committed-0-${PROBE}`;
+      const untrackedProbe = `${dir}/from-a-handler-1-${PROBE}`;
+
+      await mkdir(join(scratch, dir), { recursive: true });
+      for (const path of [ordinary, trackedProbeShaped, untrackedProbe]) {
+        await writeFile(join(scratch, path), READER_IMPORT, 'utf8');
       }
 
-      const paths = await trackedProductionPaths();
+      await execFile('git', ['init', '--quiet'], { cwd: scratch });
+      // `--force`, so the answer is about this repository's index rather than about whatever global
+      // ignore file the machine running the suite happens to have.
+      await execFile('git', ['add', '--force', '--', ordinary, trackedProbeShaped], {
+        cwd: scratch,
+      });
 
-      // Present on disk, and importing the reader - yet absent from the corpus, because untracked.
-      for (const probe of probes) expect(paths).not.toContain(probe);
+      const paths = await trackedProductionPaths(scratch);
+
+      // On disk, and importing the reader - yet absent from the corpus, because untracked.
+      expect(paths).not.toContain(join(scratch, untrackedProbe));
+      // And a committed file is scanned whatever it is called.
+      expect(paths).toContain(join(scratch, trackedProbeShaped));
+      expect(paths).toContain(join(scratch, ordinary));
     } finally {
-      for (const probe of probes) await rm(probe, { force: true });
+      await rm(scratch, { recursive: true, force: true });
     }
   });
 
