@@ -1,0 +1,28 @@
+{
+  "name": "@qf-jarvis/riya-model-benchmark-local-adapter",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis Riya AS4-PREP-A local benchmark adapter. The OFFLINE implementation of RMB-B's RiyaBenchmarkTargetPort against an OpenAI-compatible LOCAL inference server, and nothing else. It downloads no model, selects no model, trains nothing, and made no real model call to be built: every test runs against an injected fake transport or an ephemeral loopback HTTP server. The network boundary is LOOPBACK-ONLY and fails closed -- only http://127.0.0.1:<port>, http://localhost:<port> and http://[::1]:<port> are accepted, redirects are never followed, a 3xx is refused at both the transport and the adapter, and there is no apiKey, Authorization header, bearer token, credential environment variable or remote base-URL escape hatch anywhere in the surface. Prompts are materialized from a CLOSED deterministic synthetic registry owned by this package -- no Human Gold, no P10 exam, no live customer message, no production prompt -- and the materialized profile digest is proved equal to the workload's BEFORE warmup, so a case whose bytes cannot be reproduced fails before any measured work. Input token counts are the ENGINE's own, obtained through an injected tokenizer port rather than estimated from character length, and output tokens are either strictly-validated server usage or an exact local count; no approximation reaches evidence. Generated text is counted in memory and discarded -- no raw prompt, completion, header, response body or engine log is persisted. Peak memory is deliberately NOT reported: no honest engine-independent probe exists yet, and a fabricated number would sit in a comparison table beside real ones. Evidence, digests, parity and comparison remain @qf-jarvis/riya-model-benchmark's; scheduling, percentiles and the port firewall remain @qf-jarvis/riya-model-benchmark-harness's. It ranks nothing, recommends nothing and approves nothing. No app, production runtime, model gateway, WhatsApp path, training package or AS3 provider adapter may import it.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "default": "./dist/testing/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/riya-model-benchmark": "workspace:*",
+    "@qf-jarvis/riya-model-benchmark-harness": "workspace:*",
+    "zod": "4.4.3"
+  }
+}

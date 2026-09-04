@@ -565,6 +565,26 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // production model gateway is untouched -- a real adapter belongs behind the target port in a
       // later slice, not as benchmark instrumentation on the path that serves customers.
       'riya-model-benchmark-harness',
+      // AS4-PREP-A: the OFFLINE local benchmark ADAPTER -- the implementation of RMB-B's target port
+      // that RMB-B said belonged in a later slice, behind the port rather than as instrumentation on
+      // the path that serves customers. Still an EXACT set match; it records an authorised addition,
+      // it does not relax the assertion. It DOWNLOADS NO MODEL, SELECTS NO MODEL and TRAINS NOTHING,
+      // and it made no real model call to be built: every engine it has spoken to is a scripted fake
+      // or an ephemeral loopback server started by a test. The network boundary is LOOPBACK-ONLY and
+      // fails closed -- only 127.0.0.1, localhost and [::1] over plain http on an explicit port,
+      // requests name a PATH from a closed list rather than a URL, redirects are refused at both the
+      // transport and the adapter, and there is no apiKey, Authorization header, bearer token, header
+      // input, credential environment variable or remote base-URL escape hatch anywhere in the
+      // surface. Benchmark prompts come from a CLOSED generated registry it owns -- no Human Gold, no
+      // P10 exam, no live customer message, no production prompt -- and the materialized digest is
+      // proved equal to the plan's BEFORE warmup. Token counts are the engine's own through an
+      // injected port, never estimated from character length; generated text is counted in memory and
+      // discarded; peak memory is deliberately NOT reported, because no honest engine-independent
+      // probe exists and a fabricated zero would sit beside real readings. Evidence, digests and
+      // parity remain RMB-A's and scheduling remains RMB-B's; it ranks, scores, recommends and
+      // approves nothing, and no runtime, app, gateway, training package or AS3 provider adapter
+      // imports it.
+      'riya-model-benchmark-local-adapter',
       // RWC-P4B (ADR-0099): the Riya half of the ONE structured model call -- the content-minimised
       // continuity projection sent as the single user message, the strict reply+observations schema,
       // the narrowed model provenance vocabulary, and the check that the model's claimed question

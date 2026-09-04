@@ -747,6 +747,18 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
 
+  packages/riya-model-benchmark-local-adapter:
+    dependencies:
+      '@qf-jarvis/riya-model-benchmark':
+        specifier: workspace:*
+        version: link:../riya-model-benchmark
+      '@qf-jarvis/riya-model-benchmark-harness':
+        specifier: workspace:*
+        version: link:../riya-model-benchmark-harness
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+
   packages/riya-model-interaction:
     dependencies:
       '@qf-jarvis/core-service-availability-read':
