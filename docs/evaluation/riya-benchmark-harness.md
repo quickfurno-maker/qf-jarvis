@@ -1,6 +1,6 @@
 # Riya operational benchmark harness
 
-**Slice:** RMB-B · **Package:** `@qf-jarvis/riya-model-benchmark-harness` · **Companions:** [benchmark foundation](./riya-model-benchmark-foundation.md), [measurement policy v1](./riya-benchmark-measurement-policy-v1.md), [selection protocol](./riya-model-selection-protocol.md)
+**Slice:** RMB-B · **Package:** `@qf-jarvis/riya-model-benchmark-harness` · **Companions:** [benchmark foundation](./riya-model-benchmark-foundation.md), [measurement policy v1](./riya-benchmark-measurement-policy-v1.md), [local benchmark adapter](./riya-local-benchmark-adapter.md), [selection protocol](./riya-model-selection-protocol.md)
 
 **No real model has been benchmarked.** This slice builds the scheduler. Every target it has ever run
 against is a deterministic fake, and no provider or local-engine adapter exists yet.
@@ -195,8 +195,13 @@ the [selection protocol](./riya-model-selection-protocol.md).
 
 ## What is not built yet
 
-A real provider or local-engine adapter. A real memory probe. A candidate workload matrix. All three
-need decisions that come after the machinery exists to receive them.
+A real memory probe. A candidate workload matrix. Both need decisions that come after the machinery
+exists to receive them.
+
+The local-engine adapter this page anticipated now exists as
+[AS4-PREP-A](./riya-local-benchmark-adapter.md) — behind the target port, loopback-only, with no
+credential surface, and with nothing in this package changed to admit it. A hosted provider adapter
+still does not exist.
 
 The memory lifecycle exists so the second of those can be honest when it arrives: a probe that could
 only be _read_ at the end would report a peak that might have come from warmup, from the previous case

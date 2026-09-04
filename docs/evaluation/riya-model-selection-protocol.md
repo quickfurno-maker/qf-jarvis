@@ -1,6 +1,6 @@
 # Riya model selection protocol
 
-**Slice:** RMB-A · **Companions:** [benchmark foundation](./riya-model-benchmark-foundation.md), [candidate comparison playbook](./riya-candidate-comparison-playbook.md)
+**Slice:** RMB-A · **Companions:** [benchmark foundation](./riya-model-benchmark-foundation.md), [candidate comparison playbook](./riya-candidate-comparison-playbook.md), [local benchmark adapter](./riya-local-benchmark-adapter.md)
 
 **No model has been selected, benchmarked or recommended.** This is the order the decision gets made
 in, written down before there is any pressure to skip a step.
@@ -83,3 +83,9 @@ Worth naming, because each has a plausible-sounding argument behind it:
 
 Nowhere yet. No base model is named in any package, and naming one before the evidence exists would
 pre-empt the measurement that is supposed to make the choice.
+
+Step 4 now has machinery: RMB-B schedules, and the
+[local benchmark adapter](./riya-local-benchmark-adapter.md) can measure a local open-weight release on
+a loopback engine. **That changes nothing above.** Having a way to measure is not having measured, a
+measurement is not a candidate, and a candidate that has not cleared steps 1-3 does not reach step 4 at
+all.
