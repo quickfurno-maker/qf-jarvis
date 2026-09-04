@@ -429,11 +429,22 @@ describe('the contracts this slice reuses are unchanged', () => {
     //
     // The guarantee is restated rather than dropped, and it did not weaken: the importer set is
     // pinned EXACTLY, and no APPLICATION may import the contract at all.
+    // AS3A (ADR-0143 §7, §8) adds the eleventh, and it is the third that neither stores a state nor
+    // produces one. `riya-ai-synthetic-provider-adapters` reads the PHASE vocabulary to close the
+    // teacher's output schema over it: a model asked which phase its reply leaves the conversation in
+    // must be given the canonical list, or it will invent a label the parser then rejects. Reading
+    // the vocabulary is the alternative to hand-copying it, and a hand-copied enum is a second
+    // definition that drifts.
+    //
+    // The guarantee is restated rather than dropped, and it did not weaken: the importer set is
+    // pinned EXACTLY, and no APPLICATION may import the contract at all.
     const ALLOWED_PACKAGE_IMPORTERS = [
       'jarvis-runtime',
       'postgres-riya-conversation-continuity-store',
       // The offline AS2 generation harness plans scenarios against the phase vocabulary.
       'riya-ai-synthetic-generation',
+      // The offline AS3A provider adapters close the teacher schema over the phase vocabulary.
+      'riya-ai-synthetic-provider-adapters',
       'riya-candidate-evaluation-runner',
       'riya-candidate-evidence-live',
       'riya-conversation-completion',

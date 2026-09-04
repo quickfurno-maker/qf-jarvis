@@ -47,6 +47,13 @@ temp/
 playwright-report/
 test-results/
 
+# Local pilot artifacts.
+#
+# AS3 pilot runs write run manifests, candidate indexes and acceptance reports here. They are local
+# EVALUATION evidence for a human deciding whether the next stage is worth running -- never a
+# production training corpus, and never committed.
+.artifacts/
+
 # Local backups
 backup/
 backups/

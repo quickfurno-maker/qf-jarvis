@@ -490,6 +490,13 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // an authorised addition, it does not relax the assertion. It holds no provider, no
       // credential and no network, and no runtime, service or app imports it.
       'riya-ai-synthetic-generation',
+      // QFJ AS3A (ADR-0143 §4): the OFFLINE real-provider control plane. Still an EXACT set match --
+      // this records an authorised addition, it does not relax the assertion.
+      //
+      // It exists so that the AS2 generation harness never has to hold a provider SDK: the OpenAI and
+      // Anthropic clients live here, behind AS2's invocation port. No app, runtime, serving path or
+      // API composition imports it, and its own containment spec proves that in both directions.
+      'riya-ai-synthetic-provider-adapters',
       'riya-candidate-evaluation-runner',
       // MVP-P2A.2: the EVALUATION-ONLY live evidence operator -- the one composition allowed to
       // depend on both evaluation and execution, so that combination lives in exactly one reviewable
