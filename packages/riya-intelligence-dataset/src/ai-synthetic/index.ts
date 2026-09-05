@@ -104,6 +104,10 @@ export type {
 export {
   createRiyaAiSyntheticExternalSourceBinding,
   riyaAiSyntheticExternalSourceBindingSha256,
+  // The raw-byte conventions those observed digests MUST be computed with. Exported so the future
+  // intake reader calls them instead of reimplementing a byte rule from a doc comment.
+  riyaAiSyntheticExternalJsonlRecordSha256,
+  riyaAiSyntheticExternalBundleSha256,
 } from './contracts/external-source-binding.js';
 export type {
   RiyaAiSyntheticExternalSourceBindingV1,

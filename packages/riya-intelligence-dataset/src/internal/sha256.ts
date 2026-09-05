@@ -33,6 +33,21 @@ export function sha256Hex(text: string): string {
   return createHash('sha256').update(text, 'utf8').digest('hex');
 }
 
+/**
+ * SHA-256 of raw bytes, as 64 lowercase hex characters.
+ *
+ * The byte-exact counterpart to `sha256Hex`, for artifacts whose identity IS their bytes: a delivered
+ * file, or one record inside one. It decodes nothing, so it cannot lose an invalid UTF-8 sequence to a
+ * replacement character, and it normalizes nothing, so two Unicode spellings of the same glyph stay
+ * two different digests. That is the point — a substitution check that "helpfully" agreed about
+ * differently-encoded bytes would be a substitution check with a hole in it.
+ *
+ * A `Buffer` is a `Uint8Array`, so a caller reading a file passes the result straight in.
+ */
+export function sha256Bytes(bytes: Uint8Array): string {
+  return createHash('sha256').update(bytes).digest('hex');
+}
+
 /** SHA-256 over the canonical JSON of a value. Key order and absent optionals cannot change it. */
 export function sha256OfCanonical(value: unknown): string {
   return sha256Hex(canonicalJson(value));

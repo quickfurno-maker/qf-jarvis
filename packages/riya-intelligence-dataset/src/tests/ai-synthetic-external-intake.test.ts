@@ -16,6 +16,8 @@ import {
   createRiyaAiSyntheticDeterministicVerifierRun,
   createRiyaAiSyntheticExternalIntakeProvenance,
   createRiyaAiSyntheticExternalSourceBinding,
+  riyaAiSyntheticExternalBundleSha256,
+  riyaAiSyntheticExternalJsonlRecordSha256,
   createRiyaAiSyntheticGenerationProvenance,
   createRiyaAiSyntheticScenario,
   createRiyaAiSyntheticTrajectoryAcceptanceEvidence,
@@ -40,7 +42,7 @@ import { createRiyaIntelligenceTrajectory } from '../contracts/trajectory.js';
 import type { RiyaIntelligenceTrajectoryV1 } from '../contracts/trajectory.js';
 import { createRiyaDatasetAssistantTurn, createRiyaDatasetUserTurn } from '../contracts/turns.js';
 import type { RiyaDatasetTurnV1 } from '../contracts/turns.js';
-import { sha256OfCanonical } from '../internal/sha256.js';
+import { sha256Bytes, sha256OfCanonical } from '../internal/sha256.js';
 import {
   trajectoryArtifactSha256,
   trajectoryConversationFingerprint,
@@ -743,6 +745,167 @@ describe('external manual synthetic intake provenance', () => {
       'IN_REPO_GENERATED_SYNTHETIC',
       'EXTERNAL_MANUAL_SYNTHETIC_INTAKE',
     ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// B2. The raw-byte hashing conventions, pinned.
+// ---------------------------------------------------------------------------
+
+describe('the external intake hashing conventions are byte-exact', () => {
+  /**
+   * One delivered JSONL record, and its digest.
+   *
+   * The expected values below were computed OUTSIDE this package, with `node:crypto` called directly
+   * on the same bytes — never through the helper under test. A vector a helper computed for itself
+   * proves only that the helper is consistent with its own bug.
+   */
+  const RECORD = '{"candidateRef":"cand.ext.alpha","scenarioRef":"scn.ext.alpha"}';
+  const RECORD_SHA = '5dd395a73d6ac420c9c655582e232f55a5f95ee5026f85ecf9b633f8f7283897';
+
+  const bytes = (text: string): Uint8Array => new TextEncoder().encode(text);
+
+  it('hashes the exact record bytes to a known digest', () => {
+    expect(riyaAiSyntheticExternalJsonlRecordSha256(bytes(RECORD))).toBe(RECORD_SHA);
+  });
+
+  it('strips exactly one trailing LF and exactly two trailing CRLF bytes', () => {
+    // The point of the convention: the same record delivered with either line ending, or with none,
+    // is the same record. A delivery that changed only its line endings must not read as a swap.
+    expect(riyaAiSyntheticExternalJsonlRecordSha256(bytes(RECORD + '\n'))).toBe(RECORD_SHA);
+    expect(riyaAiSyntheticExternalJsonlRecordSha256(bytes(RECORD + '\r\n'))).toBe(RECORD_SHA);
+
+    // And the digests of the UNSTRIPPED bytes are genuinely different, so the two assertions above
+    // prove that stripping happened rather than that the terminators never mattered.
+    expect(sha256Bytes(bytes(RECORD + '\n'))).toBe(
+      '3c1d3893962b2f0303c08c82fbe98e1638dea0bf1a5b40547b72613ef8f360dd',
+    );
+    expect(sha256Bytes(bytes(RECORD + '\r\n'))).toBe(
+      'd089c4b5c1a5c6ea5a47c42954ffd1b3441a2b5e9943a1345169af8672c45a3d',
+    );
+  });
+
+  it('keeps a bare trailing CR, because bare CR is not a defined terminator here', () => {
+    // Dropping it would be a guess, and a guess that silently changes a digest is how a record stops
+    // describing the file it claims to describe.
+    expect(riyaAiSyntheticExternalJsonlRecordSha256(bytes(RECORD + '\r'))).toBe(
+      'beca6b93a93f17b3c906a3789839f2b1638c965e864740cc506d711bcd37f636',
+    );
+  });
+
+  it('does NOT trim spaces, before or after the record', () => {
+    expect(riyaAiSyntheticExternalJsonlRecordSha256(bytes(RECORD + ' \n'))).toBe(
+      '3b24f6f29ab0d35f6ec55d33bb88b085d8c8495b96b1f64b9dc2e1d856a2a401',
+    );
+    expect(riyaAiSyntheticExternalJsonlRecordSha256(bytes(' ' + RECORD))).toBe(
+      '25e9e4735e8959cf7d89b5a421c7d0651a069508dd6b7d7ccd369956ae6ce2b9',
+    );
+    // Both differ from the untouched record: whitespace is delivered content, not noise.
+    expect(riyaAiSyntheticExternalJsonlRecordSha256(bytes(RECORD + ' \n'))).not.toBe(RECORD_SHA);
+    expect(riyaAiSyntheticExternalJsonlRecordSha256(bytes(' ' + RECORD))).not.toBe(RECORD_SHA);
+  });
+
+  it('is byte identity, NOT canonical JSON identity', () => {
+    // The same parsed object with its keys in a different order. Canonical JSON calls those equal —
+    // which is exactly why `sha256OfCanonical` is the wrong tool for a delivered file.
+    const KEY_SWAPPED = '{"scenarioRef":"scn.ext.alpha","candidateRef":"cand.ext.alpha"}';
+    const REFORMATTED = '{"candidateRef": "cand.ext.alpha","scenarioRef":"scn.ext.alpha"}';
+
+    expect(riyaAiSyntheticExternalJsonlRecordSha256(bytes(KEY_SWAPPED))).toBe(
+      'ba4b8fad9367b433d358cb65129aa91a3f9342dc8a42fb0ba096b2ae0a795a3c',
+    );
+    expect(riyaAiSyntheticExternalJsonlRecordSha256(bytes(REFORMATTED))).toBe(
+      'a9cf7d3787aba14be3cad1e98ba7f9d59aa18f54a7f1b45da645f5affad9d469',
+    );
+    expect(riyaAiSyntheticExternalJsonlRecordSha256(bytes(KEY_SWAPPED))).not.toBe(RECORD_SHA);
+    expect(riyaAiSyntheticExternalJsonlRecordSha256(bytes(REFORMATTED))).not.toBe(RECORD_SHA);
+
+    // The contrast as an assertion rather than a comment: canonicalizing DOES collapse them.
+    expect(sha256OfCanonical(JSON.parse(KEY_SWAPPED))).toBe(sha256OfCanonical(JSON.parse(RECORD)));
+  });
+
+  it('does not Unicode-normalize', () => {
+    // NFD and NFC spellings of one glyph. A normalizing digest would call these one delivery.
+    // Written as escapes, deliberately: an editor that normalized the literals would silently
+    // turn these two vectors into one and the spec would stop proving anything.
+    const NFD = '{"note":"e\u0301"}';
+    const NFC = '{"note":"\u00e9"}';
+
+    expect(riyaAiSyntheticExternalJsonlRecordSha256(bytes(NFD))).toBe(
+      '652adce0901f1d9c40c956bde6fac2a53cee7bc87592006c9d0f4435ae46c78b',
+    );
+    expect(riyaAiSyntheticExternalJsonlRecordSha256(bytes(NFC))).toBe(
+      '6442fa400575468d43a22425ba3cc684670d3b02d8b855ce32b6f1e99a03909b',
+    );
+  });
+
+  it('refuses a record that is empty once its terminator is removed', () => {
+    for (const empty of ['', '\n', '\r\n']) {
+      expect(() => riyaAiSyntheticExternalJsonlRecordSha256(bytes(empty)), empty).toThrow(
+        RiyaDatasetError,
+      );
+    }
+  });
+
+  /** A delivered bundle, ending in CRLF on purpose: the bundle helper must not touch it. */
+  const BUNDLE = Uint8Array.from([0x50, 0x4b, 0x03, 0x04, 0xff, 0x00, 0x0d, 0x0a]);
+  const BUNDLE_SHA = 'e29e148919c549ebd0fe43016dbc9e502dee40e742e9181d1693d446dd7087d6';
+
+  it('hashes the exact bundle bytes to a known digest', () => {
+    expect(riyaAiSyntheticExternalBundleSha256(BUNDLE)).toBe(BUNDLE_SHA);
+  });
+
+  it('strips nothing from a bundle, line endings included', () => {
+    // The bundle ends in CRLF. If it stripped that the way the record helper does, it would return
+    // the digest of the first six bytes — which is a different, independently known value.
+    expect(riyaAiSyntheticExternalBundleSha256(BUNDLE.subarray(0, 6))).toBe(
+      'f9709437c1e4db38aea43d39f66e9bf4604398d2ddf60dd38df4368de1b35fcd',
+    );
+    expect(riyaAiSyntheticExternalBundleSha256(BUNDLE)).not.toBe(
+      riyaAiSyntheticExternalBundleSha256(BUNDLE.subarray(0, 6)),
+    );
+  });
+
+  it('changes when any single bundle byte changes', () => {
+    const flipped = Uint8Array.from(BUNDLE);
+    flipped[4] = 0xfe;
+
+    expect(riyaAiSyntheticExternalBundleSha256(flipped)).not.toBe(BUNDLE_SHA);
+  });
+
+  it('refuses anything that is not raw bytes', () => {
+    // A string of the record is the tempting mistake: it would hash, and it would hash DIFFERENTLY
+    // once any non-ASCII byte appeared. An array-like is the other one. Both are refused.
+    const notBytes: readonly { readonly label: string; readonly value: unknown }[] = [
+      { label: 'string', value: RECORD },
+      { label: 'null', value: null },
+      { label: 'undefined', value: undefined },
+      { label: 'array-like', value: { length: 3 } },
+      { label: 'number array', value: [1, 2, 3] },
+    ];
+    for (const { label, value } of notBytes) {
+      expect(() => riyaAiSyntheticExternalJsonlRecordSha256(value as never), label).toThrow(
+        RiyaDatasetError,
+      );
+      expect(() => riyaAiSyntheticExternalBundleSha256(value as never), label).toThrow(
+        RiyaDatasetError,
+      );
+    }
+  });
+
+  it('feeds a source binding without ever putting the bytes in it', () => {
+    // The helpers are how an intake reader computes what it observed; the binding carries only the
+    // results. There is no path by which delivered content itself reaches the record.
+    const binding = createRiyaAiSyntheticExternalSourceBinding({
+      generationRef: 'gen.ext.alpha',
+      observedSourceCandidateSha256: riyaAiSyntheticExternalJsonlRecordSha256(bytes(RECORD + '\n')),
+      observedSourceBundleSha256: riyaAiSyntheticExternalBundleSha256(BUNDLE),
+    });
+
+    expect(binding.observedSourceCandidateSha256).toBe(RECORD_SHA);
+    expect(binding.observedSourceBundleSha256).toBe(BUNDLE_SHA);
+    expect(JSON.stringify(binding)).not.toContain('candidateRef');
+    expect(JSON.stringify(binding)).not.toContain('scn.ext.alpha');
   });
 });
 

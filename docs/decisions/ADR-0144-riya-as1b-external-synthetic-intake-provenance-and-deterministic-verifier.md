@@ -137,18 +137,38 @@ a single deterministic place to hand over digests computed from bytes.
 the validator from the records in hand, which is strictly stronger than an observation a caller
 reports, and adding a reported copy would weaken them.
 
-#### The hashing conventions, pinned
+#### The hashing conventions, pinned in code
 
-"Byte identity" is ambiguous until the bytes are named, so both are named here and are **raw byte**
-digests, deliberately not canonical JSON — canonicalizing would make two differently-formatted
-deliveries hash the same, which is the opposite of what a substitution check needs.
+"Byte identity" is ambiguous until the bytes are named, and a convention that lives only in a
+document is one that two implementations will eventually disagree about. So both are **exported
+functions**, and the future intake reader is expected to call them rather than reimplement a byte
+rule from a paragraph:
 
-- **Candidate:** SHA-256 over the exact UTF-8 bytes of the individual delivered JSONL record,
-  EXCLUDING its line terminator (no `
-`, no `
-`). No trimming, no re-serialization, no key
-  reordering.
-- **Bundle:** SHA-256 over the exact bytes of the delivered bundle file, as received.
+- **Candidate:** `riyaAiSyntheticExternalJsonlRecordSha256(recordBytes)` — SHA-256 over the exact
+  UTF-8 bytes of one delivered JSONL record, removing only a final CRLF (exactly two bytes) or,
+  failing that, a final LF (exactly one byte). No trimming, no JSON parse, no re-serialization, no
+  key reordering, no Unicode normalization, and no bare-CR stripping — bare CR is not a defined
+  JSONL terminator here, so dropping it would be a guess. A record that is empty once its terminator
+  is removed is refused.
+- **Bundle:** `riyaAiSyntheticExternalBundleSha256(bundleBytes)` — SHA-256 over the delivered bundle
+  file's bytes, exactly as supplied. No line-ending handling, no decoding, no normalization.
+
+Both are **raw byte** digests, deliberately not canonical JSON: canonicalizing would make two
+differently-formatted deliveries hash the same, which is the opposite of what a substitution check
+needs. `sha256OfCanonical` is the function that says otherwise and is the wrong tool for a delivered
+file.
+
+The specs pin both against hard-coded SHA-256 vectors computed OUTSIDE this package, with
+`node:crypto` called directly on the same bytes — never through the helper under test, so a vector
+cannot agree with a bug in the helper. They cover: the bare record; the same record with LF and with
+CRLF hashing identically; a bare trailing CR being kept; leading and trailing spaces changing the
+digest; key-reordered and reformatted JSON changing the digest while `sha256OfCanonical` collapses
+them; NFD and NFC spellings staying distinct; the empty record being refused; and the bundle helper
+stripping nothing and moving on any single byte change.
+
+The three mechanisms stay distinct: the **provenance digest** seals the claims, the **source
+binding** compares those claims to what intake observed, and the **raw-byte helpers** define how
+those observations must be computed.
 
 #### No member digest
 
@@ -279,7 +299,10 @@ Owner-locked. Changing any of these requires a new ADR:
 - `sourceCandidateSha256` and `sourceBundleSha256` are corroborated against an observed external
   source binding at validation time, and `provenanceSha256` is never presented as proof of them;
 - the source-candidate digest convention is the raw UTF-8 bytes of the delivered JSONL record
-  excluding its line terminator, and the bundle digest is the delivered bundle file's raw bytes;
+  excluding its line terminator, and the bundle digest is the delivered bundle file's raw bytes —
+  both implemented by `riyaAiSyntheticExternalJsonlRecordSha256` and
+  `riyaAiSyntheticExternalBundleSha256`, and pinned by executable tests against externally computed
+  vectors rather than left as prose;
 - a deterministic verifier is bound by identity AND run evidence, never by a bare ref, and a model
   configuration is never accepted in its place;
 - critic ≠ teacher, verifier ≠ teacher and critic ≠ verifier hold on both routes;
