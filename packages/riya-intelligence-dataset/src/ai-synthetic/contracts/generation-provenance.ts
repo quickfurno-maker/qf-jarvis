@@ -18,11 +18,22 @@
  * A config ref is an opaque handle into whatever inventory AS2 keeps; this package never learns what
  * is behind it, and could not leak it if it wanted to. Provenance answers "which configuration",
  * not "what did you say to it".
+ *
+ * ### This record is the IN-REPO mode, and it did not change in AS1-B
+ *
+ * AS1-B added a second provenance mode for candidates generated outside this repository — see
+ * `external-intake-provenance.ts`. Nothing here moved, was renamed or changed meaning to make room
+ * for it, and no discriminant was added: this record's canonical bytes are exactly what they were, so
+ * every acceptance evidence record already bound to one of these digests still validates unchanged.
+ * The in-repo mode is identified by the ABSENCE of the external record's `generationMode` literal.
  */
 import { z } from 'zod';
 
 import { RiyaDatasetError } from '../../contracts/errors.js';
 import { SHA256_HEX, sha256OfCanonical } from '../../internal/sha256.js';
+// TYPE-ONLY, and that is what makes it safe: `verbatimModuleSyntax` erases the statement entirely,
+// so the two provenance modules have no runtime edge between them in either direction.
+import type { RiyaAiSyntheticProvenanceV1 } from './external-intake-provenance.js';
 
 export interface RiyaAiSyntheticGenerationProvenanceV1 {
   readonly version: 1;
@@ -127,9 +138,16 @@ export function createRiyaAiSyntheticGenerationProvenance(
   });
 }
 
-/** The content digest of a provenance record. */
-export function riyaAiSyntheticProvenanceSha256(
-  provenance: RiyaAiSyntheticGenerationProvenanceV1,
-): string {
+/**
+ * The content digest of a provenance record, in EITHER mode.
+ *
+ * One function, deliberately. Acceptance evidence binds provenance by `provenanceSha256` and nothing
+ * else, so the digest is the join — and a second digest helper for the external mode would be a
+ * second way to compute the thing the whole gate hangs on. The widening is purely a type change:
+ * `sha256OfCanonical` was always structural, so every digest this function returned before AS1-B it
+ * still returns, byte for byte, and every acceptance evidence record already issued still validates
+ * against the exact provenance it was built from (`ai-synthetic-external-intake.test.ts` pins this).
+ */
+export function riyaAiSyntheticProvenanceSha256(provenance: RiyaAiSyntheticProvenanceV1): string {
   return sha256OfCanonical(provenance);
 }

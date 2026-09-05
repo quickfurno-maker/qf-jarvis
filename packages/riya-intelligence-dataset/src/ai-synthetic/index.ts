@@ -14,6 +14,11 @@
  * evidence, the candidate state machine, deterministic diversity metrics, the automated validator and
  * its own release evidence identity.
  *
+ * AS1-B adds a second, explicit provenance mode for candidates generated OUTSIDE this repository, and
+ * a deterministic verifier run record that binds identity, scope, verdict and report digest. Neither
+ * changes the in-repo mode, weakens a critic requirement or reduces the required quality dimensions;
+ * the external mode is asked for more, not less.
+ *
  * ### What is NOT here
  *
  * Any generated conversation. AS1 makes the lane representable and gateable; AS2 builds the offline
@@ -36,6 +41,8 @@ export {
   RIYA_AI_SYNTHETIC_PROGRESSION,
   RIYA_AI_SYNTHETIC_TERMINAL_STATES,
   RIYA_AI_SYNTHETIC_FINDING_KINDS,
+  RIYA_AI_SYNTHETIC_PROVENANCE_MODES,
+  RIYA_AI_SYNTHETIC_VERIFIER_VERDICTS,
   RIYA_AI_SYNTHETIC_MIN_ASSISTANT_TURNS,
   RIYA_AI_SYNTHETIC_MAX_ASSISTANT_TURNS,
   RIYA_AI_SYNTHETIC_BASIS_POINTS_MAX,
@@ -47,6 +54,8 @@ export type {
   RiyaAiSyntheticForbiddenBehavior,
   RiyaAiSyntheticAcceptanceState,
   RiyaAiSyntheticFindingKind,
+  RiyaAiSyntheticProvenanceMode,
+  RiyaAiSyntheticVerifierVerdict,
 } from './contracts/vocabularies.js';
 
 // The generation plan.
@@ -69,6 +78,33 @@ export type {
   RiyaAiSyntheticGenerationProvenanceV1,
   RiyaAiSyntheticGenerationProvenanceInput,
 } from './contracts/generation-provenance.js';
+
+// Who generated it, when it was NOT generated here (AS1-B).
+//
+// A sibling mode, not a replacement. The in-repo record above is untouched, and the two are mutually
+// unconstructible -- an external record cannot claim an AS2 role allocation, and an in-repo record
+// cannot carry the external discriminant.
+export {
+  createRiyaAiSyntheticExternalIntakeProvenance,
+  riyaAiSyntheticExternalIntakeProvenanceSha256,
+  riyaAiSyntheticProvenanceMode,
+  isRiyaAiSyntheticExternalIntakeProvenance,
+} from './contracts/external-intake-provenance.js';
+export type {
+  RiyaAiSyntheticExternalIntakeProvenanceV1,
+  RiyaAiSyntheticExternalIntakeProvenanceInput,
+  RiyaAiSyntheticProvenanceV1,
+} from './contracts/external-intake-provenance.js';
+
+// What deterministically checked it (AS1-B). Identity AND run evidence, never a bare ref.
+export {
+  createRiyaAiSyntheticDeterministicVerifierRun,
+  riyaAiSyntheticDeterministicVerifierRunSha256,
+} from './contracts/deterministic-verifier.js';
+export type {
+  RiyaAiSyntheticDeterministicVerifierRunV1,
+  RiyaAiSyntheticDeterministicVerifierRunInput,
+} from './contracts/deterministic-verifier.js';
 
 // Who judged it.
 export {

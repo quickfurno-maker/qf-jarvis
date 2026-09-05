@@ -24,6 +24,40 @@ export const RIYA_AI_SYNTHETIC_REVIEW_MODES = ['HUMAN_REVIEW', 'AUTOMATED_SYNTHE
 export type RiyaAiSyntheticReviewMode = (typeof RIYA_AI_SYNTHETIC_REVIEW_MODES)[number];
 
 /**
+ * Where a candidate's dialogue actually came from (AS1-B).
+ *
+ * Two modes, and the distinction is the whole point of the vocabulary. `IN_REPO_GENERATED_SYNTHETIC`
+ * is a candidate the AS2 harness produced inside this repository, under an allocated planner,
+ * simulator, teacher and annotation verifier that a config inventory can name. `EXTERNAL_MANUAL_
+ * SYNTHETIC_INTAKE` is a candidate produced OUTSIDE the harness and handed over as files.
+ *
+ * The second cannot honestly claim the first's role allocation, and the cheapest way to let it into
+ * canonical acceptance evidence would have been to fill those four config refs with plausible
+ * strings. That is fabrication: the refs would name an inventory allocation that never happened, and
+ * nothing downstream could ever tell the invented ones from the real ones.
+ *
+ * So the two modes are separate record shapes with separate constructors, and neither can be
+ * constructed as the other — see `external-intake-provenance.ts`.
+ */
+export const RIYA_AI_SYNTHETIC_PROVENANCE_MODES = [
+  'IN_REPO_GENERATED_SYNTHETIC',
+  'EXTERNAL_MANUAL_SYNTHETIC_INTAKE',
+] as const;
+export type RiyaAiSyntheticProvenanceMode = (typeof RIYA_AI_SYNTHETIC_PROVENANCE_MODES)[number];
+
+/**
+ * What a deterministic verifier run concluded (AS1-B).
+ *
+ * Deliberately NOT `RIYA_DATASET_REVIEW_DECISIONS`. `ACCEPTED`/`REJECTED` is the vocabulary of a
+ * judgement about quality — a human reviewer's, or a critic's. A deterministic verifier does not
+ * judge; it runs a fixed algorithm over a record and reports whether the record satisfied it. Giving
+ * the two the same word would make a validator run readable as a review, which is exactly the
+ * substitution ADR-0143 §17 refuses everywhere else.
+ */
+export const RIYA_AI_SYNTHETIC_VERIFIER_VERDICTS = ['PASSED', 'FAILED'] as const;
+export type RiyaAiSyntheticVerifierVerdict = (typeof RIYA_AI_SYNTHETIC_VERIFIER_VERDICTS)[number];
+
+/**
  * How a synthetic customer behaves. **Behaviour, never identity.**
  *
  * ADR-0143 §11: authenticity comes from behavioural diversity, not from copying real messages. So
@@ -171,6 +205,13 @@ export const RIYA_AI_SYNTHETIC_FINDING_KINDS = [
   'SCENARIO_DEPTH_OUT_OF_TOLERANCE',
   'PROVENANCE_DIGEST_MISMATCH',
   'PROVENANCE_ROLE_NOT_SEPARATED',
+  // AS1-B. An external-intake row binds the source artifact it was derived from, and a deterministic
+  // verifier run stands where the in-repo route has an annotation verifier config ref.
+  'EXTERNAL_SOURCE_DIGEST_MISMATCH',
+  'VERIFIER_RUN_MISSING',
+  'VERIFIER_RUN_NOT_BOUND_TO_TRAJECTORY',
+  'VERIFIER_VERDICT_NOT_PASSED',
+  'VERIFIER_NOT_INDEPENDENT',
   'CRITIC_COUNT_BELOW_POLICY',
   'CRITIC_DUPLICATE_REF',
   'CRITIC_DUPLICATE_CONFIG',
