@@ -15,6 +15,7 @@ import {
   createRiyaAiSyntheticAcceptancePolicy,
   createRiyaAiSyntheticDeterministicVerifierRun,
   createRiyaAiSyntheticExternalIntakeProvenance,
+  createRiyaAiSyntheticExternalSourceBinding,
   createRiyaAiSyntheticGenerationProvenance,
   createRiyaAiSyntheticScenario,
   createRiyaAiSyntheticTrajectoryAcceptanceEvidence,
@@ -175,13 +176,36 @@ const EXTERNAL_INPUT = {
   sourceBundleSha256: 'd'.repeat(64),
 } as const;
 
-function externalProvenanceFor(seed: string, trajectory: RiyaIntelligenceTrajectoryV1) {
-  return createRiyaAiSyntheticExternalIntakeProvenance({
+function externalProvenanceInputFor(seed: string, trajectory: RiyaIntelligenceTrajectoryV1) {
+  return {
     ...EXTERNAL_INPUT,
     generationRef: `gen.ext.${seed}`,
     scenarioRef: `scn.ext.${seed}`,
     scenarioSha256: riyaAiSyntheticScenarioSha256(scenarioFor(seed)),
+    sourceCandidateSha256: sha256OfCanonical({ candidate: seed }),
     sourceTrajectoryArtifactSha256: trajectoryArtifactSha256(trajectory),
+    sourceBundleSha256: sha256OfCanonical({ bundle: 'batch.ext.2026-09' }),
+  };
+}
+
+function externalProvenanceFor(seed: string, trajectory: RiyaIntelligenceTrajectoryV1) {
+  return createRiyaAiSyntheticExternalIntakeProvenance(
+    externalProvenanceInputFor(seed, trajectory),
+  );
+}
+
+/**
+ * What the intake reader OBSERVED from the delivered files for this row.
+ *
+ * Built from the same values the provenance claims, which is what a clean corpus looks like. The
+ * specs that matter move ONE of them and prove the gate notices.
+ */
+function sourceBindingFor(seed: string, trajectory: RiyaIntelligenceTrajectoryV1) {
+  const claimed = externalProvenanceInputFor(seed, trajectory);
+  return createRiyaAiSyntheticExternalSourceBinding({
+    generationRef: claimed.generationRef,
+    observedSourceCandidateSha256: claimed.sourceCandidateSha256,
+    observedSourceBundleSha256: claimed.sourceBundleSha256,
   });
 }
 
@@ -286,7 +310,34 @@ function externalCorpus(seeds: readonly string[] = ['alpha', 'beta']) {
       deterministicVerifierRun: verifierRunFor(seed, at(trajectories, index)),
     }),
   );
-  return { trajectories, scenarios, provenances, evidence };
+  const sourceBindings = seeds.map((seed, index) =>
+    sourceBindingFor(seed, at(trajectories, index)),
+  );
+  return { trajectories, scenarios, provenances, evidence, sourceBindings };
+}
+
+/**
+ * Replace row 0's provenance and RE-SEAL its evidence against the new digest.
+ *
+ * Without the re-seal every source-binding spec would trip `PROVENANCE_DIGEST_MISMATCH` first and
+ * prove nothing about the rule actually under test.
+ */
+function rebind(
+  parts: ReturnType<typeof externalCorpus>,
+  provenance: RiyaAiSyntheticProvenanceV1,
+): ReturnType<typeof externalCorpus> {
+  const first = at(parts.evidence, 0);
+  const resealed = createRiyaAiSyntheticTrajectoryAcceptanceEvidence({
+    ...first,
+    provenanceSha256: riyaAiSyntheticProvenanceSha256(provenance),
+    criticVerdicts: [...first.criticVerdicts],
+    deterministicVerifierRun: first.deterministicVerifierRun,
+  });
+  return {
+    ...parts,
+    provenances: [provenance, at(parts.provenances, 1)],
+    evidence: [resealed, at(parts.evidence, 1)],
+  };
 }
 
 const run = (
@@ -439,7 +490,9 @@ describe('the AS1 in-repo route is exactly what it was', () => {
     });
 
     // No VERIFIER_RUN_MISSING: the run is required only where there is no annotation verifier
-    // config ref to stand in its place.
+    // config ref to stand in its place. And NO `sourceBindings` argument was passed at all --
+    // an in-repo corpus makes no source claim, so it is asked to corroborate none, and the call
+    // above is byte-for-byte the call an AS2 caller already makes.
     expect(result.report.findings).toStrictEqual([]);
     expect(result.report.eligible).toBe(true);
   });
@@ -580,6 +633,109 @@ describe('external manual synthetic intake provenance', () => {
 
     expect(kinds(result)).toContain('EXTERNAL_SOURCE_DIGEST_MISMATCH');
     expect(result.report.eligible).toBe(false);
+  });
+
+  it('blocks a candidate digest that does not match the observed delivery', () => {
+    // Owner review of PR #195: `sourceCandidateSha256` was sealed inside `provenanceSha256` and
+    // never compared to anything. A well-formed digest that described no delivered row passed.
+    const parts = externalCorpus();
+    const swapped = createRiyaAiSyntheticExternalIntakeProvenance({
+      ...externalProvenanceInputFor('alpha', at(parts.trajectories, 0)),
+      sourceCandidateSha256: sha256OfCanonical({ candidate: 'some other row entirely' }),
+    });
+    const result = run(rebind(parts, swapped));
+
+    expect(kinds(result)).toContain('EXTERNAL_SOURCE_DIGEST_MISMATCH');
+    expect(result.report.eligible).toBe(false);
+  });
+
+  it('blocks a bundle digest that does not match the observed delivery', () => {
+    const parts = externalCorpus();
+    const swapped = createRiyaAiSyntheticExternalIntakeProvenance({
+      ...externalProvenanceInputFor('alpha', at(parts.trajectories, 0)),
+      sourceBundleSha256: sha256OfCanonical({ bundle: 'some other delivery entirely' }),
+    });
+    const result = run(rebind(parts, swapped));
+
+    expect(kinds(result)).toContain('EXTERNAL_SOURCE_DIGEST_MISMATCH');
+    expect(result.report.eligible).toBe(false);
+  });
+
+  it('blocks an external row whose observed source binding is absent', () => {
+    const parts = externalCorpus();
+    const result = run({ ...parts, sourceBindings: [at(parts.sourceBindings, 1)] });
+
+    expect(kinds(result)).toContain('EXTERNAL_SOURCE_BINDING_MISSING');
+    expect(result.report.eligible).toBe(false);
+  });
+
+  it('blocks two contradictory observations of one delivery', () => {
+    const parts = externalCorpus();
+    const second = createRiyaAiSyntheticExternalSourceBinding({
+      generationRef: 'gen.ext.alpha',
+      observedSourceCandidateSha256: sha256OfCanonical({ candidate: 'a different reading' }),
+      observedSourceBundleSha256: sha256OfCanonical({ bundle: 'a different reading' }),
+    });
+    const result = run({
+      ...parts,
+      sourceBindings: [...parts.sourceBindings, second],
+    });
+
+    expect(kinds(result)).toContain('EXTERNAL_SOURCE_BINDING_DUPLICATED');
+    expect(result.report.eligible).toBe(false);
+  });
+
+  it('does not let one row’s binding satisfy another row', () => {
+    // The binding is keyed by generationRef. A delivery observation for beta says nothing about
+    // alpha, and must not be silently reused for it.
+    const parts = externalCorpus();
+    const result = run({
+      ...parts,
+      sourceBindings: [at(parts.sourceBindings, 1), at(parts.sourceBindings, 1)],
+    });
+
+    expect(kinds(result)).toContain('EXTERNAL_SOURCE_BINDING_MISSING');
+    expect(result.report.eligible).toBe(false);
+  });
+
+  it('refuses a malformed or over-full source binding', () => {
+    const valid = {
+      generationRef: 'gen.ext.alpha',
+      observedSourceCandidateSha256: 'a'.repeat(64),
+      observedSourceBundleSha256: 'b'.repeat(64),
+    };
+
+    expect(() => createRiyaAiSyntheticExternalSourceBinding(valid)).not.toThrow();
+    for (const broken of [
+      { ...valid, generationRef: 'not a ref' },
+      { ...valid, generationRef: 'https://producer.example/keys' },
+      { ...valid, observedSourceCandidateSha256: 'not-a-digest' },
+      { ...valid, observedSourceBundleSha256: 'B'.repeat(64) },
+      // No unknown field, and above all nowhere to attach the candidate's own words.
+      { ...valid, sourcePath: 'delivery/batch.jsonl' },
+      { ...valid, candidateText: 'the customer said something' },
+      { ...valid, text: 'anything at all' },
+    ]) {
+      expect(
+        () => createRiyaAiSyntheticExternalSourceBinding(broken as never),
+        JSON.stringify(Object.keys(broken)),
+      ).toThrow(RiyaDatasetError);
+    }
+  });
+
+  it('carries no source path and no candidate text', () => {
+    const binding = createRiyaAiSyntheticExternalSourceBinding({
+      generationRef: 'gen.ext.alpha',
+      observedSourceCandidateSha256: 'a'.repeat(64),
+      observedSourceBundleSha256: 'b'.repeat(64),
+    });
+
+    expect(Object.keys(binding).sort()).toStrictEqual([
+      'generationRef',
+      'observedSourceBundleSha256',
+      'observedSourceCandidateSha256',
+      'version',
+    ]);
   });
 
   it('names exactly two modes, and they are closed', () => {

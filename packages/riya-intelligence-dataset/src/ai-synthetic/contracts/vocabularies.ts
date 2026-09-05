@@ -207,6 +207,8 @@ export const RIYA_AI_SYNTHETIC_FINDING_KINDS = [
   'PROVENANCE_ROLE_NOT_SEPARATED',
   // AS1-B. An external-intake row binds the source artifact it was derived from, and a deterministic
   // verifier run stands where the in-repo route has an annotation verifier config ref.
+  'EXTERNAL_SOURCE_BINDING_MISSING',
+  'EXTERNAL_SOURCE_BINDING_DUPLICATED',
   'EXTERNAL_SOURCE_DIGEST_MISMATCH',
   'VERIFIER_RUN_MISSING',
   'VERIFIER_RUN_NOT_BOUND_TO_TRAJECTORY',

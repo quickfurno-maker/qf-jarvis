@@ -39,6 +39,15 @@
  * in-repo record obeys. And no source file PATH; a path is a location, not an identity, and a file
  * that moved would look like a different candidate while a file that was swapped in place would look
  * like the same one. Digests are the identity here.
+ *
+ * ### The source digests are CLAIMS, and claims are checked elsewhere
+ *
+ * `sourceTrajectoryArtifactSha256` and `scenarioSha256` are recomputed by the acceptance validator
+ * from the records in hand. `sourceCandidateSha256` and `sourceBundleSha256` cannot be -- the
+ * delivered bytes are not in this package -- so they are compared against
+ * `RiyaAiSyntheticExternalSourceBindingV1`, which carries what an intake reader observed in the
+ * files. Owner review of PR #195 caught the gap those two fields had before that record existed:
+ * they were sealed into `provenanceSha256` and compared to nothing, so any well-formed digest passed.
  */
 import { z } from 'zod';
 
@@ -83,7 +92,18 @@ export interface RiyaAiSyntheticExternalIntakeProvenanceV1 {
   /** The canonical scenario this candidate was taken in against, bound by ref and by digest. */
   readonly scenarioRef: string;
   readonly scenarioSha256: string;
-  /** The delivered candidate record, as received. Byte identity of the source row. */
+  /**
+   * The delivered candidate record, as received.
+   *
+   * SHA-256 over the exact UTF-8 bytes of the individual delivered JSONL record, EXCLUDING its line
+   * terminator. Raw bytes, deliberately not canonical JSON: canonicalizing would make two
+   * differently-formatted deliveries hash the same, which is the opposite of what a substitution
+   * check needs.
+   *
+   * This is a CLAIM. It is corroborated at validation time against
+   * `RiyaAiSyntheticExternalSourceBindingV1.observedSourceCandidateSha256`, because sealing it into
+   * `provenanceSha256` proves only that it did not change afterwards -- never that it was true.
+   */
   readonly sourceCandidateSha256: string;
   /**
    * The trajectory artifact digest derived from that source.
@@ -95,8 +115,12 @@ export interface RiyaAiSyntheticExternalIntakeProvenanceV1 {
   /**
    * The delivered bundle the candidate came out of.
    *
-   * Without it, a swapped file inside an otherwise unchanged delivery is invisible: the candidate
-   * digest would move, somebody would recompute it, and the record would look consistent again.
+   * SHA-256 over the exact bytes of the delivered bundle file, as received. Without it, a swapped
+   * file inside an otherwise unchanged delivery is invisible: the candidate digest would move,
+   * somebody would recompute it, and the record would look consistent again.
+   *
+   * A CLAIM, like the candidate digest, and corroborated the same way -- against
+   * `observedSourceBundleSha256` on the intake reader's own binding record.
    */
   readonly sourceBundleSha256: string;
 }

@@ -14,8 +14,9 @@
  * evidence, the candidate state machine, deterministic diversity metrics, the automated validator and
  * its own release evidence identity.
  *
- * AS1-B adds a second, explicit provenance mode for candidates generated OUTSIDE this repository, and
- * a deterministic verifier run record that binds identity, scope, verdict and report digest. Neither
+ * AS1-B adds a second, explicit provenance mode for candidates generated OUTSIDE this repository, the
+ * observed source binding that corroborates the delivery digests that mode claims, and a
+ * deterministic verifier run record binding identity, scope, verdict and report digest. None of them
  * changes the in-repo mode, weakens a critic requirement or reduces the required quality dimensions;
  * the external mode is asked for more, not less.
  *
@@ -95,6 +96,19 @@ export type {
   RiyaAiSyntheticExternalIntakeProvenanceInput,
   RiyaAiSyntheticProvenanceV1,
 } from './contracts/external-intake-provenance.js';
+
+// What the intake reader OBSERVED in the delivered files (AS1-B).
+//
+// The counterpart to the external record's source-digest CLAIMS. Without it those claims are sealed
+// but never corroborated, and the acceptance gate requires one per external intake bundle.
+export {
+  createRiyaAiSyntheticExternalSourceBinding,
+  riyaAiSyntheticExternalSourceBindingSha256,
+} from './contracts/external-source-binding.js';
+export type {
+  RiyaAiSyntheticExternalSourceBindingV1,
+  RiyaAiSyntheticExternalSourceBindingInput,
+} from './contracts/external-source-binding.js';
 
 // What deterministically checked it (AS1-B). Identity AND run evidence, never a bare ref.
 export {

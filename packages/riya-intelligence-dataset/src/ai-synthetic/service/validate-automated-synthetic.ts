@@ -39,6 +39,17 @@
  *
  * That last one is an addition, not a substitution. Nothing about the in-repo route changed here, and
  * no existing finding, threshold or bypass condition was relaxed to let the external mode through.
+ *
+ * ### Every external claim is checked against something the claim did not produce
+ *
+ * The trajectory artifact digest and the scenario digest are RECOMPUTED here, from the records in
+ * hand. The two digests describing the DELIVERY cannot be — those bytes are not in this package — so
+ * they are compared against `sourceBindings`, the digests an intake reader computed from the files.
+ *
+ * The distinction matters and is easy to lose: `provenanceSha256` proves the claims did not change
+ * after acceptance evidence was built. It has never proved they were true. Without the observed
+ * binding, any two well-formed 64-hex strings would satisfy the source-substitution rule, which is
+ * why an external row with no binding is refused rather than believed.
  */
 import type { ProtectedTextIndex } from '../../internal/leakage.js';
 import { validateRiyaIntelligenceDataset } from '../../service/validate-dataset.js';
@@ -57,6 +68,7 @@ import type { RiyaAiSyntheticTrajectoryAcceptanceEvidenceV1 } from '../contracts
 import { riyaAiSyntheticProvenanceSha256 } from '../contracts/generation-provenance.js';
 import { isRiyaAiSyntheticExternalIntakeProvenance } from '../contracts/external-intake-provenance.js';
 import type { RiyaAiSyntheticProvenanceV1 } from '../contracts/external-intake-provenance.js';
+import type { RiyaAiSyntheticExternalSourceBindingV1 } from '../contracts/external-source-binding.js';
 import type { RiyaAiSyntheticScenarioV1 } from '../contracts/scenario.js';
 import { riyaAiSyntheticScenarioSha256 } from '../contracts/scenario.js';
 import type {
@@ -79,6 +91,15 @@ export interface ValidateRiyaAiSyntheticOptions {
    */
   readonly provenances: readonly RiyaAiSyntheticProvenanceV1[];
   readonly evidence: readonly RiyaAiSyntheticTrajectoryAcceptanceEvidenceV1[];
+  /**
+   * What the intake reader observed in the delivered external files, one per intake bundle.
+   *
+   * OPTIONAL, so every in-repo caller — the AS2 harness included — keeps working unchanged and
+   * behaves exactly as it did. Optional in the TYPE is not optional in the GATE: an external-intake
+   * row with no binding for its `generationRef` is a blocking finding, because its
+   * `sourceCandidateSha256` and `sourceBundleSha256` would otherwise be claims nothing compares.
+   */
+  readonly sourceBindings?: readonly RiyaAiSyntheticExternalSourceBindingV1[];
   readonly policy: RiyaAiSyntheticAcceptancePolicyV1;
   /** The pinned protected corpus. Absent can never be eligible — the base policy pins it. */
   readonly protectedIndex?: ProtectedTextIndex;
@@ -234,6 +255,23 @@ export function validateRiyaAiSyntheticCorpus(
 
   const scenarioByRef = new Map(scenarios.map((one) => [one.scenarioRef, one]));
   const provenanceByRef = new Map(provenances.map((one) => [one.generationRef, one]));
+
+  // Observed source bindings, indexed by the delivery they describe. Counted rather than merely
+  // mapped: a `Map` silently keeps the last entry, which would turn "two contradictory observations"
+  // into "the second one won" — exactly the quiet resolution a duplicate rule exists to prevent.
+  const sourceBindingCounts = new Map<string, number>();
+  const sourceBindingByRef = new Map<string, RiyaAiSyntheticExternalSourceBindingV1>();
+  for (const binding of options.sourceBindings ?? []) {
+    sourceBindingCounts.set(
+      binding.generationRef,
+      (sourceBindingCounts.get(binding.generationRef) ?? 0) + 1,
+    );
+    sourceBindingByRef.set(binding.generationRef, binding);
+  }
+  const duplicatedSourceBindingRefs = new Set(
+    [...sourceBindingCounts].filter(([, count]) => count > 1).map(([ref]) => ref),
+  );
+
   let acceptedEvidenceCount = 0;
 
   for (const trajectory of trajectories) {
@@ -336,11 +374,12 @@ export function validateRiyaAiSyntheticCorpus(
 
     // ---- external intake source binding -------------------------------------------------------
     //
-    // An external row claims a source it was derived from, and the claim is checked against the
-    // record in hand. Otherwise "this came from batch B" would be a label rather than a binding: a
-    // re-derivation that changed a reply, or a swap onto a different scenario, would keep citing a
-    // delivery that no longer describes it, and the intake trail would quietly stop being true.
+    // An external row claims a source it was derived from, and every part of that claim is checked
+    // against something outside the record making it. Otherwise "this came from batch B" would be a
+    // label rather than a binding: a re-derivation that changed a reply, or a swap onto a different
+    // scenario, would keep citing a delivery that no longer describes it.
     if (provenance !== undefined && isRiyaAiSyntheticExternalIntakeProvenance(provenance)) {
+      // Recomputed from the artifacts in hand. The strongest form: no caller reports these.
       if (
         provenance.sourceTrajectoryArtifactSha256 !== artifactSha256 ||
         provenance.scenarioSha256 !== item.scenarioSha256
@@ -349,6 +388,39 @@ export function validateRiyaAiSyntheticCorpus(
           kind: 'EXTERNAL_SOURCE_DIGEST_MISMATCH',
           trajectoryId: trajectory.trajectoryId,
           counterpartRef: provenance.batchRef,
+        });
+      }
+
+      // And the two digests describing the DELIVERY, which nothing in this package can recompute --
+      // the bytes are not here. Sealing them into `provenanceSha256` proves only that they did not
+      // change after evidence was built; it never proved they were true. So they are compared
+      // against what the intake reader observed in the files, and a row whose observation is absent
+      // is refused rather than believed.
+      const observed = sourceBindingByRef.get(provenance.generationRef);
+      if (observed === undefined) {
+        fail({
+          kind: 'EXTERNAL_SOURCE_BINDING_MISSING',
+          trajectoryId: trajectory.trajectoryId,
+          counterpartRef: provenance.generationRef,
+        });
+      } else if (duplicatedSourceBindingRefs.has(provenance.generationRef)) {
+        // Two observations of one delivery cannot both be authoritative, and picking either would
+        // make the gate depend on argument order.
+        fail({
+          kind: 'EXTERNAL_SOURCE_BINDING_DUPLICATED',
+          trajectoryId: trajectory.trajectoryId,
+          counterpartRef: provenance.generationRef,
+          observed: sourceBindingCounts.get(provenance.generationRef) ?? 0,
+          required: 1,
+        });
+      } else if (
+        observed.observedSourceCandidateSha256 !== provenance.sourceCandidateSha256 ||
+        observed.observedSourceBundleSha256 !== provenance.sourceBundleSha256
+      ) {
+        fail({
+          kind: 'EXTERNAL_SOURCE_DIGEST_MISMATCH',
+          trajectoryId: trajectory.trajectoryId,
+          counterpartRef: provenance.generationRef,
         });
       }
     }

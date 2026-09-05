@@ -87,9 +87,9 @@ the union has two members and one of them stores the literal.
 - `producerFamilyRef` — an opaque, non-secret family handle for whatever produced the dialogue;
 - `producerTeacherRef` — the producer's identifier for the teacher that wrote it;
 - `scenarioRef` / `scenarioSha256` — the canonical scenario, by ref and by digest;
-- `sourceCandidateSha256` — the delivered candidate record, as received;
+- `sourceCandidateSha256` — the delivered candidate record, as received (a **claim**, see §4);
 - `sourceTrajectoryArtifactSha256` — the trajectory artifact derived from that source;
-- `sourceBundleSha256` — the delivered bundle, so a swapped member is not invisible.
+- `sourceBundleSha256` — the delivered bundle, so a swapped member is not invisible (a **claim**).
 
 **No AS2 run id. No config inventory ref. No planner config. No simulator config.** None of them
 existed, and a field somebody has to invent a value for is a field that stops meaning anything.
@@ -104,7 +104,62 @@ and "the thing that wrote it also approved it" would stop being detectable.
 There is no source file path. A path is a location, not an identity: a moved file would look like a
 different candidate, and a file swapped in place would look like the same one.
 
-### 4. Deterministic verifier support is an explicit identity plus run evidence
+### 4. A source-digest CLAIM is not a source-digest PROOF
+
+Owner review of PR #195 found the blocker this section exists to close. `sourceCandidateSha256` and
+`sourceBundleSha256` were sealed into `provenanceSha256` and compared to nothing, so a caller could
+supply any two well-formed 64-hex strings and the gate would accept a row asserting a delivery that
+never existed. The claim that these fields "prevent substitution" was not true as implemented.
+
+The two ideas must be kept apart, because conflating them is what produced the gap:
+
+| Mechanism                          | What it actually proves                                                                     |
+| ---------------------------------- | ------------------------------------------------------------------------------------------- |
+| `provenanceSha256`                 | the source-binding claims have not changed since acceptance evidence was built              |
+| external source-binding validation | those claims equal the digests observed from the actual intake delivery, at validation time |
+
+`provenanceSha256` alone is **not** evidence that `sourceCandidateSha256` or `sourceBundleSha256` are
+accurate. It never was.
+
+So `RiyaAiSyntheticExternalSourceBindingV1` carries what an intake reader OBSERVED in the files:
+`generationRef`, `observedSourceCandidateSha256`, `observedSourceBundleSha256`. The validator takes a
+collection of them and, for every external-intake row, requires exactly one for that `generationRef`
+whose observed digests equal the claimed ones. A missing binding and a duplicated binding are each
+their own blocking finding — a missing observation is not silently reported as a mismatch, because
+the two have different remedies.
+
+**The observation must come from the files, not from the provenance record.** A binding copied out of
+the record it corroborates makes the comparison `x === x`. No contract can enforce where a caller got
+its numbers; what this one does is make the boundary explicit, so the future intake implementation has
+a single deterministic place to hand over digests computed from bytes.
+
+`sourceTrajectoryArtifactSha256` and `scenarioSha256` are NOT in the binding. They are recomputed by
+the validator from the records in hand, which is strictly stronger than an observation a caller
+reports, and adding a reported copy would weaken them.
+
+#### The hashing conventions, pinned
+
+"Byte identity" is ambiguous until the bytes are named, so both are named here and are **raw byte**
+digests, deliberately not canonical JSON — canonicalizing would make two differently-formatted
+deliveries hash the same, which is the opposite of what a substitution check needs.
+
+- **Candidate:** SHA-256 over the exact UTF-8 bytes of the individual delivered JSONL record,
+  EXCLUDING its line terminator (no `
+`, no `
+`). No trimming, no re-serialization, no key
+  reordering.
+- **Bundle:** SHA-256 over the exact bytes of the delivered bundle file, as received.
+
+#### No member digest
+
+The bundle digest already fixes every byte of the delivery, so a member file's bytes are determined by
+it rather than independently attested — a member digest would be derivable from the very thing it
+claims to corroborate, and the actual external bundle layout is not recorded anywhere in this
+repository to justify one on reproducibility grounds. If a future delivery layout makes the
+bundle → member → candidate relationship genuinely non-reproducible, adding one is a contract change
+with its own justification, not a field added on suspicion.
+
+### 5. Deterministic verifier support is an explicit identity plus run evidence
 
 The in-repo route binds an annotation verifier through `annotationVerifierConfigRef`, which is
 meaningful there because the harness really ran that configuration. The external route has no such
@@ -133,7 +188,7 @@ A `FAILED` run record is constructible on purpose. Refusing to represent one wou
 evidence anybody could produce is a passing one, which is how "we did not run it" and "it passed"
 become the same artifact. The gate refuses a failure, visibly, as a finding.
 
-### 5. The acceptance evidence contract was not weakened
+### 6. The acceptance evidence contract was not weakened
 
 `RiyaAiSyntheticTrajectoryAcceptanceEvidenceV1` still binds the trajectory artifact digest, the
 conversation fingerprint, the scenario ref and digest, the generation ref, the provenance digest and
@@ -150,7 +205,7 @@ Optional in the CONTRACT is not optional in the GATE:
 - critic-versus-verifier separation is enforced in the evidence constructor, which is the one artifact
   holding both without a join.
 
-### 6. Critic requirements are NOT weakened, and a fresh critic pass is still required
+### 7. Critic requirements are NOT weakened, and a fresh critic pass is still required
 
 The external route inherits the critic contract unchanged: `criticConfigRef` is required,
 `satisfiedQualityDimensions` is required, the verdict is closed, there is still no rationale and still
@@ -161,13 +216,13 @@ fresh canonical critic pass over the external candidates, producing verdicts wit
 identity and real satisfied dimensions, remains required before any external row can be accepted.
 **AS1-B does not perform that pass** and fabricates no dimension for a historical review.
 
-### 7. Required quality dimensions are unchanged
+### 8. Required quality dimensions are unchanged
 
 The enum is `RIYA_DATASET_QUALITY_DIMENSIONS`, reused, not forked. The external route does not get a
 shorter list, an optional list or an empty list: an empty `satisfiedQualityDimensions` produces one
 `CRITIC_DIMENSION_MISSING` finding per required dimension, and there is a test asserting exactly that.
 
-### 8. Every AS1 invariant is preserved
+### 9. Every AS1 invariant is preserved
 
 `TEACHER_GENERATED_SYNTHETIC` stays truthful — an externally produced row is still model-written, so
 it is still the teacher source kind, and `HUMAN_AUTHORED_SYNTHETIC` is still never applied to it.
@@ -177,7 +232,7 @@ firewall, authority and citation validation, duplicate and cross-split leakage b
 `QUARANTINED` are untouched — the external validator path is the same `validateRiyaIntelligenceDataset`
 call it always was.
 
-### 9. P10 remains deferred, and `trainingApproval` remains `false`
+### 10. P10 remains deferred, and `trainingApproval` remains `false`
 
 The protected exam reaches no AS1-B contract. Neither new constructor takes a protected index; neither
 record has a field one could travel in. RWC-P10 stays exactly what it was on this lane: a
@@ -188,12 +243,13 @@ Protected-exam exposure for the external candidates is a **later release-gate co
 AS1 acceptance, and this ADR does not open it. `trainingApproval` is still the literal `false`, and
 nothing here starts a run.
 
-### 10. The 412 existing candidates are preserved byte-for-byte
+### 11. The 412 existing candidates are preserved byte-for-byte
 
 Nothing in AS1-B reads, copies, rewrites or normalizes an external candidate. The external record
-binds the delivered artifacts by digest — candidate, derived trajectory artifact, bundle — which is
-precisely a commitment that the source bytes must not change: any edit moves a digest and the row
-stops validating. No candidate data is committed by this slice, and no `.artifacts` evidence becomes
+binds the delivered artifacts by digest — candidate, derived trajectory artifact, bundle — and the
+validator compares each of those against something the record did not produce: the trajectory and
+scenario digests recomputed here, the candidate and bundle digests against the intake reader's
+observation. Any edit to the delivered bytes moves an observed digest and the row stops validating. No candidate data is committed by this slice, and no `.artifacts` evidence becomes
 tracked.
 
 ## What AS1-B deliberately does not do
@@ -220,6 +276,10 @@ Owner-locked. Changing any of these requires a new ADR:
   altered;
 - external provenance never claims an AS2 run id, config inventory allocation, planner config or
   simulator config;
+- `sourceCandidateSha256` and `sourceBundleSha256` are corroborated against an observed external
+  source binding at validation time, and `provenanceSha256` is never presented as proof of them;
+- the source-candidate digest convention is the raw UTF-8 bytes of the delivered JSONL record
+  excluding its line terminator, and the bundle digest is the delivered bundle file's raw bytes;
 - a deterministic verifier is bound by identity AND run evidence, never by a bare ref, and a model
   configuration is never accepted in its place;
 - critic ≠ teacher, verifier ≠ teacher and critic ≠ verifier hold on both routes;
@@ -239,6 +299,19 @@ recording deterministic verifier runs over them, in a form the AS1 acceptance ga
 release, benchmarking, training, certification or activation. Each is its own slice with its own
 evidence, and none of them starts because this document merged.
 
+## Owner-review correction — 2026-09-05
+
+Owner review of PR #195 (head `7cbbafc9d9760dcb5a78d77ad820a1db02b901f0`, exact-head Linux CI green)
+found one contract-level blocker: §3's source digests were claimed to prevent substitution, and the
+validator never compared `sourceCandidateSha256` or `sourceBundleSha256` to anything. The finding was
+re-proved from the code before any fix — a corpus with a fabricated candidate digest, and one with a
+fabricated bundle digest, each produced **zero** findings and `eligible: true`.
+
+§4 above is the correction, and it is a correction to an unmerged design rather than a change to the
+owner-locked decision: the modes, the historical-compatibility rule, the critic requirements, the
+verifier requirements, the P10 deferral and `trainingApproval: false` are all exactly as accepted. What
+changed is that a claim this ADR already made is now enforceable.
+
 ## Implementation note — 2026-09-05
 
 Confined to `@qf-jarvis/riya-intelligence-dataset/ai-synthetic` plus one additive error code. The
@@ -250,5 +323,10 @@ bytes for every record it accepted before.
 
 The focused suite `ai-synthetic-external-intake.test.ts` pins the non-regression claims directly: an
 AS1 provenance record and an already-serialized AS1 acceptance evidence record are both re-proved to
-their exact historical field sets and digests, and a clean in-repo corpus with no verifier run at all
-still validates with zero findings.
+their exact historical field sets and digests, and a clean in-repo corpus with no verifier run and
+**no `sourceBindings` argument at all** still validates with zero findings — that call is byte-for-byte
+the call an AS2 caller already makes.
+
+`ValidateRiyaAiSyntheticOptions.sourceBindings` is optional for exactly that reason. Optional in the
+type is not optional in the gate: an external row with no binding for its `generationRef` is refused
+rather than believed.
