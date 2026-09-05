@@ -43,6 +43,9 @@ export const RIYA_DATASET_ERROR_CODES = [
   'invalid-ai-synthetic-policy',
   'invalid-ai-synthetic-evidence',
   'invalid-ai-synthetic-state',
+  // AS1-B. Additive: no existing code changes meaning.
+  'invalid-ai-synthetic-verifier-run',
+  'invalid-ai-synthetic-source-binding',
 ] as const;
 export type RiyaDatasetErrorCode = (typeof RIYA_DATASET_ERROR_CODES)[number];
 
@@ -80,6 +83,10 @@ const RIYA_DATASET_ERROR_MESSAGES: Readonly<Record<RiyaDatasetErrorCode, string>
   'invalid-ai-synthetic-policy': 'An AI-synthetic acceptance or diversity policy is invalid.',
   'invalid-ai-synthetic-evidence': 'AI-synthetic trajectory acceptance evidence is invalid.',
   'invalid-ai-synthetic-state': 'An AI-synthetic candidate state transition is invalid.',
+  'invalid-ai-synthetic-verifier-run':
+    'An AI-synthetic deterministic verifier run record is invalid.',
+  'invalid-ai-synthetic-source-binding':
+    'An AI-synthetic external source binding record is invalid.',
 });
 
 /**

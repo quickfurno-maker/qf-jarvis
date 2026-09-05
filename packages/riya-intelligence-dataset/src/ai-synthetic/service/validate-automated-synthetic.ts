@@ -27,6 +27,29 @@
  * Everything else the generic report can block on stays blocking, `protectedNearLeakage` very much
  * included: there is no human to adjudicate a quarantine here, so a near-leak is discarded rather
  * than argued about.
+ *
+ * ### AS1-B: two provenance modes, one gate
+ *
+ * A row's provenance is either the AS2 in-repo record or the external manual intake record, and the
+ * gate does not soften for the second one. It runs the same base validator, requires the same
+ * content-bound evidence, the same critic count, the same critic independence and the SAME required
+ * quality dimensions. What differs is only what can truthfully be compared: the external mode has two
+ * generation role refs rather than five, and it must carry a deterministic verifier RUN where the
+ * in-repo mode carries an annotation verifier config ref.
+ *
+ * That last one is an addition, not a substitution. Nothing about the in-repo route changed here, and
+ * no existing finding, threshold or bypass condition was relaxed to let the external mode through.
+ *
+ * ### Every external claim is checked against something the claim did not produce
+ *
+ * The trajectory artifact digest and the scenario digest are RECOMPUTED here, from the records in
+ * hand. The two digests describing the DELIVERY cannot be — those bytes are not in this package — so
+ * they are compared against `sourceBindings`, the digests an intake reader computed from the files.
+ *
+ * The distinction matters and is easy to lose: `provenanceSha256` proves the claims did not change
+ * after acceptance evidence was built. It has never proved they were true. Without the observed
+ * binding, any two well-formed 64-hex strings would satisfy the source-substitution rule, which is
+ * why an external row with no binding is refused rather than believed.
  */
 import type { ProtectedTextIndex } from '../../internal/leakage.js';
 import { validateRiyaIntelligenceDataset } from '../../service/validate-dataset.js';
@@ -42,8 +65,10 @@ import {
   riyaAiSyntheticAcceptancePolicySha256,
 } from '../contracts/acceptance-policy.js';
 import type { RiyaAiSyntheticTrajectoryAcceptanceEvidenceV1 } from '../contracts/acceptance-evidence.js';
-import type { RiyaAiSyntheticGenerationProvenanceV1 } from '../contracts/generation-provenance.js';
 import { riyaAiSyntheticProvenanceSha256 } from '../contracts/generation-provenance.js';
+import { isRiyaAiSyntheticExternalIntakeProvenance } from '../contracts/external-intake-provenance.js';
+import type { RiyaAiSyntheticProvenanceV1 } from '../contracts/external-intake-provenance.js';
+import type { RiyaAiSyntheticExternalSourceBindingV1 } from '../contracts/external-source-binding.js';
 import type { RiyaAiSyntheticScenarioV1 } from '../contracts/scenario.js';
 import { riyaAiSyntheticScenarioSha256 } from '../contracts/scenario.js';
 import type {
@@ -56,8 +81,25 @@ import { riyaAiSyntheticDiversityMetrics } from './diversity.js';
 export interface ValidateRiyaAiSyntheticOptions {
   readonly trajectories: readonly RiyaIntelligenceTrajectoryV1[];
   readonly scenarios: readonly RiyaAiSyntheticScenarioV1[];
-  readonly provenances: readonly RiyaAiSyntheticGenerationProvenanceV1[];
+  /**
+   * Provenance in either mode, in one list.
+   *
+   * A corpus is allowed to be mixed. The lookup is by `generationRef`, which both modes carry, and
+   * every rule below either applies to both or narrows explicitly — so an external row is gated by
+   * the same evidence, scenario, digest and critic rules an in-repo row is, plus the ones only it can
+   * satisfy. There is no path on which choosing the external mode asks for less.
+   */
+  readonly provenances: readonly RiyaAiSyntheticProvenanceV1[];
   readonly evidence: readonly RiyaAiSyntheticTrajectoryAcceptanceEvidenceV1[];
+  /**
+   * What the intake reader observed in the delivered external files, one per intake bundle.
+   *
+   * OPTIONAL, so every in-repo caller — the AS2 harness included — keeps working unchanged and
+   * behaves exactly as it did. Optional in the TYPE is not optional in the GATE: an external-intake
+   * row with no binding for its `generationRef` is a blocking finding, because its
+   * `sourceCandidateSha256` and `sourceBundleSha256` would otherwise be claims nothing compares.
+   */
+  readonly sourceBindings?: readonly RiyaAiSyntheticExternalSourceBindingV1[];
   readonly policy: RiyaAiSyntheticAcceptancePolicyV1;
   /** The pinned protected corpus. Absent can never be eligible — the base policy pins it. */
   readonly protectedIndex?: ProtectedTextIndex;
@@ -70,6 +112,27 @@ export interface RiyaAiSyntheticValidationResult {
 
 const assistantTurnsOf = (trajectory: RiyaIntelligenceTrajectoryV1) =>
   trajectory.turns.filter((turn) => turn.type === 'ASSISTANT');
+
+/**
+ * The refs a critic or a verifier may not be, for this row.
+ *
+ * ADR-0143 §9 and §12: the judge may not be the thing it is judging, nor any other role in the bundle
+ * that produced it. Which refs those ARE depends on the mode, and the external mode has exactly two —
+ * the intake bundle and the producer's teacher. It does not get a longer list by inventing planner
+ * and simulator refs it never had; it gets the list of what is true, and every ref in it is compared.
+ */
+function generationRoleRefs(provenance: RiyaAiSyntheticProvenanceV1): ReadonlySet<string> {
+  if (isRiyaAiSyntheticExternalIntakeProvenance(provenance)) {
+    return new Set([provenance.generationRef, provenance.producerTeacherRef]);
+  }
+  return new Set([
+    provenance.generationRef,
+    provenance.scenarioPlannerConfigRef,
+    provenance.customerSimulatorConfigRef,
+    provenance.riyaTeacherConfigRef,
+    provenance.annotationVerifierConfigRef,
+  ]);
+}
 
 /** The generic blockers that stay blocking. `insufficientReview` is handled separately, above. */
 function baseBlockers(base: RiyaDatasetReleaseReportV1): readonly RiyaAiSyntheticFindingV1[] {
@@ -192,6 +255,23 @@ export function validateRiyaAiSyntheticCorpus(
 
   const scenarioByRef = new Map(scenarios.map((one) => [one.scenarioRef, one]));
   const provenanceByRef = new Map(provenances.map((one) => [one.generationRef, one]));
+
+  // Observed source bindings, indexed by the delivery they describe. Counted rather than merely
+  // mapped: a `Map` silently keeps the last entry, which would turn "two contradictory observations"
+  // into "the second one won" — exactly the quiet resolution a duplicate rule exists to prevent.
+  const sourceBindingCounts = new Map<string, number>();
+  const sourceBindingByRef = new Map<string, RiyaAiSyntheticExternalSourceBindingV1>();
+  for (const binding of options.sourceBindings ?? []) {
+    sourceBindingCounts.set(
+      binding.generationRef,
+      (sourceBindingCounts.get(binding.generationRef) ?? 0) + 1,
+    );
+    sourceBindingByRef.set(binding.generationRef, binding);
+  }
+  const duplicatedSourceBindingRefs = new Set(
+    [...sourceBindingCounts].filter(([, count]) => count > 1).map(([ref]) => ref),
+  );
+
   let acceptedEvidenceCount = 0;
 
   for (const trajectory of trajectories) {
@@ -205,8 +285,11 @@ export function validateRiyaAiSyntheticCorpus(
     // This row is accepted only if it adds no finding of its own.
     const findingsBeforeRow = findings.length;
 
-    // THE content binding. Recomputed, never taken on trust.
-    if (item.trajectoryArtifactSha256 !== trajectoryArtifactSha256(trajectory)) {
+    // THE content binding. Recomputed, never taken on trust. Every other digest on this row is
+    // compared against this recomputation rather than against the claim beside it.
+    const artifactSha256 = trajectoryArtifactSha256(trajectory);
+
+    if (item.trajectoryArtifactSha256 !== artifactSha256) {
       fail({ kind: 'TRAJECTORY_DIGEST_MISMATCH', trajectoryId: trajectory.trajectoryId });
     }
     if (item.conversationFingerprint !== trajectoryConversationFingerprint(trajectory)) {
@@ -289,6 +372,105 @@ export function validateRiyaAiSyntheticCorpus(
       });
     }
 
+    // ---- external intake source binding -------------------------------------------------------
+    //
+    // An external row claims a source it was derived from, and every part of that claim is checked
+    // against something outside the record making it. Otherwise "this came from batch B" would be a
+    // label rather than a binding: a re-derivation that changed a reply, or a swap onto a different
+    // scenario, would keep citing a delivery that no longer describes it.
+    if (provenance !== undefined && isRiyaAiSyntheticExternalIntakeProvenance(provenance)) {
+      // Recomputed from the artifacts in hand. The strongest form: no caller reports these.
+      if (
+        provenance.sourceTrajectoryArtifactSha256 !== artifactSha256 ||
+        provenance.scenarioSha256 !== item.scenarioSha256
+      ) {
+        fail({
+          kind: 'EXTERNAL_SOURCE_DIGEST_MISMATCH',
+          trajectoryId: trajectory.trajectoryId,
+          counterpartRef: provenance.batchRef,
+        });
+      }
+
+      // And the two digests describing the DELIVERY, which nothing in this package can recompute --
+      // the bytes are not here. Sealing them into `provenanceSha256` proves only that they did not
+      // change after evidence was built; it never proved they were true. So they are compared
+      // against what the intake reader observed in the files, and a row whose observation is absent
+      // is refused rather than believed.
+      const observed = sourceBindingByRef.get(provenance.generationRef);
+      if (observed === undefined) {
+        fail({
+          kind: 'EXTERNAL_SOURCE_BINDING_MISSING',
+          trajectoryId: trajectory.trajectoryId,
+          counterpartRef: provenance.generationRef,
+        });
+      } else if (duplicatedSourceBindingRefs.has(provenance.generationRef)) {
+        // Two observations of one delivery cannot both be authoritative, and picking either would
+        // make the gate depend on argument order.
+        fail({
+          kind: 'EXTERNAL_SOURCE_BINDING_DUPLICATED',
+          trajectoryId: trajectory.trajectoryId,
+          counterpartRef: provenance.generationRef,
+          observed: sourceBindingCounts.get(provenance.generationRef) ?? 0,
+          required: 1,
+        });
+      } else if (
+        observed.observedSourceCandidateSha256 !== provenance.sourceCandidateSha256 ||
+        observed.observedSourceBundleSha256 !== provenance.sourceBundleSha256
+      ) {
+        fail({
+          kind: 'EXTERNAL_SOURCE_DIGEST_MISMATCH',
+          trajectoryId: trajectory.trajectoryId,
+          counterpartRef: provenance.generationRef,
+        });
+      }
+    }
+
+    // ---- the deterministic verifier -----------------------------------------------------------
+    //
+    // The external route has no `annotationVerifierConfigRef`, because no AS2 role allocation ever
+    // ran for it. A run record stands in that place, and it is REQUIRED there — a route with no
+    // verification must not be indistinguishable from one with a clean deterministic pass.
+    //
+    // On the in-repo route the run stays optional, exactly as it was. But an untruthful one is
+    // refused on both: present means checked.
+    const verifierRun = item.deterministicVerifierRun;
+    if (verifierRun === undefined) {
+      if (provenance !== undefined && isRiyaAiSyntheticExternalIntakeProvenance(provenance)) {
+        fail({ kind: 'VERIFIER_RUN_MISSING', trajectoryId: trajectory.trajectoryId });
+      }
+    } else {
+      if (verifierRun.verdict !== 'PASSED') {
+        fail({
+          kind: 'VERIFIER_VERDICT_NOT_PASSED',
+          trajectoryId: trajectory.trajectoryId,
+          counterpartRef: verifierRun.verifierRef,
+        });
+      }
+      // Recomputed, so a clean run record cannot be pasted from a different row.
+      if (verifierRun.trajectoryArtifactSha256 !== artifactSha256) {
+        fail({
+          kind: 'VERIFIER_RUN_NOT_BOUND_TO_TRAJECTORY',
+          trajectoryId: trajectory.trajectoryId,
+          counterpartRef: verifierRun.verifierRef,
+        });
+      }
+      // Verifier is not teacher, and not any other generation role. Critic-vs-verifier is enforced
+      // one layer up, in the evidence constructor, where both are present without a join.
+      if (provenance !== undefined) {
+        const roles = generationRoleRefs(provenance);
+        if (
+          roles.has(verifierRun.verifierRef) ||
+          roles.has(verifierRun.verifierImplementationRef)
+        ) {
+          fail({
+            kind: 'VERIFIER_NOT_INDEPENDENT',
+            trajectoryId: trajectory.trajectoryId,
+            counterpartRef: verifierRun.verifierRef,
+          });
+        }
+      }
+    }
+
     // ---- critics ------------------------------------------------------------------------------
     const critic = policy.criticPolicy;
     const verdicts = item.criticVerdicts;
@@ -318,14 +500,8 @@ export function validateRiyaAiSyntheticCorpus(
     }
     if (critic.requireCriticConfigDistinctFromGeneration && provenance !== undefined) {
       // ADR-0143 §9 and §12: the critic may not be the thing it is judging, nor any other role in
-      // the bundle that produced it.
-      const generationRoles = new Set([
-        provenance.generationRef,
-        provenance.scenarioPlannerConfigRef,
-        provenance.customerSimulatorConfigRef,
-        provenance.riyaTeacherConfigRef,
-        provenance.annotationVerifierConfigRef,
-      ]);
+      // the bundle that produced it. The role list is mode-dependent; the rule is not.
+      const generationRoles = generationRoleRefs(provenance);
       for (const verdict of verdicts) {
         if (generationRoles.has(verdict.criticConfigRef)) {
           fail({
