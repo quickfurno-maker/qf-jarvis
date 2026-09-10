@@ -1,13 +1,30 @@
 /**
- * The production composition contracts (QFJ-S2-B, ADR-0062).
+ * The production composition contracts (QFJ-S2-B, ADR-0062; JF-2B activation, ADR-0147).
  *
  * TYPE-ONLY, by design: this module exports no runtime value, so the package root stays at exactly two
  * runtime exports. The refusal vocabulary is a closed union derived from a module-private tuple — a
  * caller branches on the literal, and cannot enumerate or mutate the set.
  *
  * Nothing here is secret-bearing. The optional credential-resolver seam is the EXISTING gateway
- * `GroqCredentialResolver` interface, carried as an opaque reference only; S2-B ships no implementation
- * of it and never calls it.
+ * `GroqCredentialResolver` interface, carried as an opaque reference only; no implementation of it
+ * ships here and it is never called.
+ *
+ * ### JF-2B: two modes, and only two
+ *
+ * The composition now admits `OFF` and `ACTIVE`. It still refuses `SHADOW`, `CANARY` and `FALLBACK`,
+ * and that refusal is not an oversight — those are MODEL-RELEASE rollout stages belonging to
+ * `ProviderRolloutController`, which governs a stable/candidate release pair. `ProviderMode`
+ * (`AUTO` / `GROQ_ONLY` / `NARA_ONLY`) is a PROVIDER-SELECTION axis. Wiring a rollout controller into
+ * this hybrid composition to obtain those labels would make the controller take precedence over
+ * `routingProfile`, and the two systems would fight: the rollout would be choosing a release while the
+ * provider mode believed it was choosing a vendor. They stay separate.
+ *
+ * ### Fail-closed by default
+ *
+ * `OFF` is unchanged and inert. `ACTIVE` serves only when a provider mode is named, the roster is
+ * exactly that mode canonical providers, and EVERY provider that could return customer-facing output
+ * carries its own exact `ACTIVE_MODEL_RELEASE` production approval. Nothing is silently downgraded to
+ * `OFF` or upgraded to `ACTIVE`.
  */
 import type { ApprovalEvidence } from '@qf-jarvis/model-evaluation';
 import type {
@@ -21,6 +38,7 @@ import type {
   ModelCapabilityRegistry,
   ModelGateway,
   ModelProvider,
+  ProviderMode,
   ProviderReleaseRef,
 } from '@qf-jarvis/model-gateway';
 
@@ -29,8 +47,38 @@ import type {
  * injected declarations alone — no provider is invoked, no network is touched, no credential is read.
  */
 export type ProductionCompositionRefusal =
-  /** The requested gateway mode is not `OFF`. S2-B is structurally incapable of serving. */
-  | 'mode-not-off'
+  /**
+   * The requested gateway mode is not one this composition serves.
+   *
+   * `SHADOW`, `CANARY` and `FALLBACK` are release-rollout stages, not provider-selection stages, and
+   * this composition never repurposes them. Replaces the S2-B `mode-not-off` code, which stopped being
+   * true the moment `ACTIVE` became reachable.
+   */
+  | 'mode-not-supported'
+  /** `ACTIVE` was requested without naming a provider mode. There is no default. */
+  | 'provider-mode-required'
+  /** The named provider mode is not one of `AUTO` / `GROQ_ONLY` / `NARA_ONLY`. */
+  | 'provider-mode-invalid'
+  /** The provider roster is not exactly the canonical set the provider mode serves. */
+  | 'active-roster-mismatch'
+  /** Two providers in the roster publish the same identity. */
+  | 'duplicate-provider-identity'
+  /** A provider that could serve under this mode has no production approval claim. */
+  | 'production-approval-missing'
+  /** An approval cites an `evaluationRef` that is not registered. */
+  | 'production-evidence-missing'
+  /** An approval claimed digest does not match the digest derived from the registered evidence. */
+  | 'production-evidence-digest-mismatch'
+  /** The registered evidence was produced against a different release. */
+  | 'production-evidence-release-mismatch'
+  /** The registered evidence was produced against a different capability profile. */
+  | 'production-evidence-capability-mismatch'
+  /** The evidence target does not authorize `ACTIVE` — connectivity, shadow or canary only. */
+  | 'production-evidence-target-insufficient'
+  /** The evidence is synthetic. Synthetic fixtures never authorize production serving. */
+  | 'production-evidence-synthetic'
+  /** The evidence is not marked `productionApproval`. */
+  | 'production-approval-required'
   /** No approved release was supplied, or no provider instance was supplied. */
   | 'empty-composition'
   /** A release identity contains a wildcard or a `latest` sentinel. */
@@ -55,15 +103,50 @@ export type ProductionCompositionRefusal =
   | 'conflicting-evidence-registration';
 
 /**
+ * One production approval, joining registered evaluation evidence to a release this composition serves.
+ *
+ * It is a CLAIM. Every field is checked against the registry, and `evidenceDigest` in particular is
+ * recomputed from the registered evidence rather than believed — a digest supplied beside the thing it
+ * digests is a second source of truth, and the verifier has always treated it that way.
+ */
+export interface ProductionApprovalClaim {
+  readonly evaluationRef: string;
+  /** The digest the attestation claims. RECOMPUTED during verification; never trusted. */
+  readonly evidenceDigest: string;
+  /** Must be `ACTIVE_MODEL_RELEASE`. Lower targets cannot authorize production serving. */
+  readonly approvalTarget: string;
+  /** The exact release this approval authorizes. No wildcard, no `latest`. */
+  readonly release: ProviderReleaseRef;
+  readonly capabilityProfileRef: string;
+}
+
+/**
  * What a caller injects to build a production composition.
  *
  * Every collaborator is INJECTED — the composition constructs no provider, opens no transport, reads no
- * environment variable, and touches no filesystem. `mode` exists so an `ACTIVE`/`CANARY` request can be
+ * environment variable, and touches no filesystem. `mode` exists so an unsupported rollout stage is
  * REFUSED explicitly rather than silently downgraded.
  */
 export interface ProductionCompositionConfig {
-  /** Must be `OFF`. Any other mode is refused with `mode-not-off`. */
+  /**
+   * `OFF` or `ACTIVE`. `SHADOW` / `CANARY` / `FALLBACK` are refused with `mode-not-supported` — they
+   * are release-rollout stages and this composition does not repurpose them.
+   */
   readonly mode: GatewayMode;
+  /**
+   * The provider-selection mode. REQUIRED for `ACTIVE`; there is no default, because defaulting an
+   * unnamed mode to `AUTO` would turn a configuration omission into "use both vendors".
+   *
+   * Ignored for `OFF`, which serves nothing and selects nothing.
+   */
+  readonly providerMode?: ProviderMode;
+  /**
+   * The production approvals — one per canonical provider that could return customer-facing output.
+   *
+   * Under `AUTO` that is BOTH providers: Nara is the fallback, and a fallback answer is still an answer
+   * a customer reads. Connectivity or shadow-eligibility evidence is insufficient for either.
+   */
+  readonly productionApprovals?: readonly ProductionApprovalClaim[];
   /** Already-constructed provider instances. The composition never builds one. */
   readonly providers: readonly ModelProvider[];
   /** The exact approved releases. Each must resolve in `capabilityRegistry`. */
@@ -102,10 +185,21 @@ export interface ProductionCompositionConfig {
  * provider instance, no registry, no rollout controller, no resolver, no credential.
  */
 export interface ProductionCompositionStatus {
-  /** Always `OFF` in S2-B. */
+  /** `OFF` or `ACTIVE` — exactly what was composed, never a downgrade or an upgrade. */
   readonly mode: GatewayMode;
-  /** Always `false`. There is no method on this package that could make it true. */
+  /**
+   * Whether this composition serves. `true` only for a fully evidence-gated `ACTIVE` composition.
+   *
+   * Still not a mutation surface: no method anywhere in this package flips it. It reports what
+   * construction decided from the supplied evidence, and changing it means composing again.
+   */
   readonly activatable: boolean;
+  /** The provider-selection mode, when one was composed. Absent for `OFF`. */
+  readonly providerMode?: ProviderMode;
+  /** The canonical providers that may serve under the composed mode, in policy order. */
+  readonly servingProviderIds?: readonly string[];
+  /** How many production approvals were verified. A COUNT — never an approval, a ref or a digest. */
+  readonly verifiedApprovalCount?: number;
   readonly retryBudget: number;
   readonly fallbackEnabled: boolean;
   readonly providerIds: readonly string[];

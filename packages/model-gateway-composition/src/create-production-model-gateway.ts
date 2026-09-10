@@ -5,29 +5,54 @@
  * validation logic — every behaviour below is either an existing `ModelGatewayConfig` field or a
  * construction-time refusal decided from injected declarations. `gateway.ts` is not modified.
  *
- * The composition is born OFF and cannot be activated from this package:
- *   - `mode` is fixed to `OFF`, so the gateway's own `invoke` refuses BEFORE provider selection, before
- *     any `health()` call, and before any credential could be touched;
- *   - an `ACTIVE`/`CANARY`/`SHADOW`/`FALLBACK` configuration is refused at CONSTRUCTION;
- *   - no rollout controller is constructed, passed to the gateway, or returned — `transition()` and
- *     `emergencyDisable()` are unreachable through this package, which is stronger than documenting
- *     that they must not be called;
- *   - `allowFallback` is `false` and a non-zero `retryBudget` is refused at admission.
+ * ### JF-2B (ADR-0147): `ACTIVE` is reachable, and only through a gate
+ *
+ * `OFF` is unchanged and inert — the gateway's own `invoke` refuses BEFORE provider selection, before
+ * any `health()` call, and before any credential could be touched.
+ *
+ * `ACTIVE` requires ALL of the following, each decided at CONSTRUCTION from injected declarations, with
+ * no provider invoked and no `health()` consulted:
+ *   - a NAMED provider mode. There is no default: defaulting an omission to `AUTO` would turn a missing
+ *     line of configuration into "use both vendors";
+ *   - a roster that is EXACTLY that mode's canonical providers — not a superset, no duplicate identity,
+ *     no scoped diagnostic adapter;
+ *   - an exact `ACTIVE_MODEL_RELEASE` production approval for EVERY provider that could return
+ *     customer-facing output. Under `AUTO` that is both: a fallback answer is still an answer.
+ *
+ * ### What stays refused, and why it is not leftover strictness
+ *
+ *   - `SHADOW`/`CANARY`/`FALLBACK` are refused. They are model-RELEASE rollout stages belonging to
+ *     `ProviderRolloutController`, not provider-selection stages;
+ *   - NO rollout controller is ever constructed or passed. A controller takes PRECEDENCE over
+ *     `routingProfile`, so supplying one to obtain those labels would silently disable provider
+ *     selection — the rollout would be choosing a release while the provider mode believed it was
+ *     choosing a vendor;
+ *   - a non-zero `retryBudget` is still refused at admission. One primary attempt, then at most one
+ *     attempt against a DIFFERENT provider;
+ *   - `allowFallback` is DERIVED from the provider mode. A caller-supplied value may agree and may
+ *     never contradict.
  *
  * No environment variable, no filesystem, no network, no database, no secret. Providers arrive already
  * constructed, so the credential-resolver seam is never invoked. QuickFurno Core remains final authority.
  */
 import {
+  createHybridRoutingPolicy,
   createModelGateway,
+  hostedOrderForProviderMode,
+  hybridRoutingPolicyInputForProviderMode,
+  isProviderMode,
   ModelGatewayError,
+  type EvaluationEvidenceVerifier,
   type ModelGateway,
   type ModelGatewayInvokeOptions,
   type ModelProvider,
   type ModelResponse,
+  type ProviderMode,
   type ProviderReleaseRef,
 } from '@qf-jarvis/model-gateway';
 
 import type {
+  ProductionApprovalClaim,
   ProductionCompositionConfig,
   ProductionCompositionRefusal,
   ProductionCompositionResult,
@@ -73,6 +98,70 @@ function retryBudgetIsLocked(candidate: unknown): boolean {
   return value === undefined || value === LOCKED_RETRY_BUDGET;
 }
 
+/** The two modes this composition serves. Everything else belongs to the release-rollout system. */
+const SUPPORTED_MODES: ReadonlySet<string> = new Set(['OFF', 'ACTIVE']);
+
+/** The only approval target that authorizes production serving. */
+const REQUIRED_APPROVAL_TARGET = 'ACTIVE_MODEL_RELEASE';
+
+/** Map a verifier refusal onto this composition's closed vocabulary. Total over the verifier's set. */
+function refusalForVerification(reason: string): ProductionCompositionRefusal {
+  switch (reason) {
+    case 'evidence-missing':
+      return 'production-evidence-missing';
+    case 'evidence-digest-mismatch':
+      return 'production-evidence-digest-mismatch';
+    case 'evidence-release-mismatch':
+      return 'production-evidence-release-mismatch';
+    case 'evidence-capability-mismatch':
+      return 'production-evidence-capability-mismatch';
+    case 'evidence-target-insufficient':
+      return 'production-evidence-target-insufficient';
+    case 'synthetic-evidence-forbidden':
+      return 'production-evidence-synthetic';
+    case 'production-approval-required':
+      return 'production-approval-required';
+    default:
+      // An unmapped verifier reason must not read as success. Fail closed on the strictest code.
+      return 'production-evidence-target-insufficient';
+  }
+}
+
+/**
+ * Verify one canonical provider's production approval.
+ *
+ * Returns `undefined` on success, or the refusal that stops the whole composition. Every serving
+ * provider is checked; there is no "any approval will do" path, because under `AUTO` the fallback also
+ * returns text a customer reads.
+ */
+function verifyServingProvider(
+  providerId: string,
+  approvals: readonly ProductionApprovalClaim[],
+  verifier: EvaluationEvidenceVerifier,
+): ProductionCompositionRefusal | undefined {
+  const claim = approvals.find((one) => one.release.providerId === providerId);
+  if (claim === undefined) {
+    return 'production-approval-missing';
+  }
+  if (claim.approvalTarget !== REQUIRED_APPROVAL_TARGET) {
+    return 'production-evidence-target-insufficient';
+  }
+  if (hasWildcardIdentity(claim.release)) {
+    return 'wildcard-identity';
+  }
+  const verified = verifier.verify({
+    evaluationRef: claim.evaluationRef,
+    evidenceDigest: claim.evidenceDigest,
+    approvalTarget: claim.approvalTarget,
+    release: claim.release,
+    capabilityProfileRef: claim.capabilityProfileRef,
+    // ACTIVE is the mode being authorized. The verifier's own ladder decides whether the evidence
+    // target reaches it, and its production rules demand non-synthetic + production-approved.
+    mode: 'ACTIVE',
+  });
+  return verified.ok ? undefined : refusalForVerification(verified.reason);
+}
+
 /**
  * Compose the production gateway. Fail-closed: every refusal is decided BEFORE `createModelGateway` is
  * called, and no partial composition is returned.
@@ -80,9 +169,10 @@ function retryBudgetIsLocked(candidate: unknown): boolean {
 export function createProductionModelGateway(
   config: ProductionCompositionConfig,
 ): ProductionCompositionResult {
-  // 1. Mode. S2-B serves nothing; anything above OFF is refused rather than silently downgraded.
-  if (config.mode !== 'OFF') {
-    return refuse('mode-not-off');
+  // 1. Mode. OFF and ACTIVE only. A rollout stage is refused rather than reinterpreted as a provider
+  //    stage — SHADOW/CANARY/FALLBACK govern a stable/candidate RELEASE pair, not a vendor choice.
+  if (!SUPPORTED_MODES.has(config.mode)) {
+    return refuse('mode-not-supported');
   }
   // 2. The locked reliability posture.
   if (
@@ -91,7 +181,15 @@ export function createProductionModelGateway(
   ) {
     return refuse('retry-budget-not-zero');
   }
-  if (config.allowFallback !== undefined && config.allowFallback !== LOCKED_ALLOW_FALLBACK) {
+  // `allowFallback` is legacy. It is DERIVED from the provider mode now, and a caller-supplied value may
+  // only agree — never contradict. For OFF the only agreeable value is `false`, because OFF serves
+  // nothing and a composition that claimed a fallback it cannot reach would be describing fiction. The
+  // ACTIVE side is checked once the mode is known, below.
+  if (
+    config.mode === 'OFF' &&
+    config.allowFallback !== undefined &&
+    config.allowFallback !== LOCKED_ALLOW_FALLBACK
+  ) {
     return refuse('fallback-not-disabled');
   }
   // 3. A composition with nothing approved, or nothing to serve it, is refused rather than built empty.
@@ -148,18 +246,95 @@ export function createProductionModelGateway(
     return refuse(registryResult.reason);
   }
 
-  // 6. Compose the EXISTING gateway. No rollout controller and no routing profile are supplied, so the
-  //    rollout and hybrid paths are not merely unused — they are unreachable through this composition.
+  // 6. ACTIVATION (JF-2B, ADR-0147). Everything below is decided from injected declarations; no
+  //    provider is invoked, no health is called and no credential is read during construction.
+  let providerMode: ProviderMode | undefined;
+  let servingProviderIds: readonly string[] = [];
+  let verifiedApprovalCount = 0;
+
+  if (config.mode === 'ACTIVE') {
+    // 6a. The provider mode is REQUIRED and never defaulted. Defaulting an omission to AUTO would turn
+    //     a missing line of configuration into "use both vendors".
+    if (config.providerMode === undefined) {
+      return refuse('provider-mode-required');
+    }
+    if (!isProviderMode(config.providerMode)) {
+      return refuse('provider-mode-invalid');
+    }
+    providerMode = config.providerMode;
+    servingProviderIds = hostedOrderForProviderMode(providerMode);
+
+    // 6b. The roster must be EXACTLY the canonical providers this mode serves. Not a superset: a
+    //     scoped diagnostic adapter or an unrelated local provider sitting in a production roster is
+    //     a provider nobody decided to serve with.
+    const rosterIds = config.providers.map((one) => one.descriptor.providerId);
+    if (new Set(rosterIds).size !== rosterIds.length) {
+      return refuse('duplicate-provider-identity');
+    }
+    const expected = [...servingProviderIds].sort();
+    const actual = [...rosterIds].sort();
+    if (expected.length !== actual.length || expected.some((id, i) => id !== actual[i])) {
+      return refuse('active-roster-mismatch');
+    }
+
+    // 6c. EVERY provider that could return customer-facing output needs its own exact production
+    //     approval. Under AUTO that is both: a fallback answer is still an answer a customer reads,
+    //     so connectivity or shadow-eligibility evidence is insufficient for either provider.
+    const approvals = config.productionApprovals ?? [];
+    for (const providerId of servingProviderIds) {
+      const refusal = verifyServingProvider(
+        providerId,
+        approvals,
+        registryResult.registry.verifier,
+      );
+      if (refusal !== undefined) {
+        return refuse(refusal);
+      }
+      verifiedApprovalCount += 1;
+    }
+  }
+
+  // 7. Compose the EXISTING gateway.
+  //
+  //    NO rollout controller is ever supplied. That is the load-bearing line: a controller takes
+  //    precedence over `routingProfile`, so passing one to obtain SHADOW/CANARY labels would silently
+  //    disable provider selection and leave the two axes fighting over the same request.
+  //
+  //    For ACTIVE the routing profile is built from the provider mode through the EXISTING JF-2A
+  //    helper and the EXISTING policy validator — Groq first, Nara second, one bounded fallback.
+  const routingProfile =
+    providerMode === undefined
+      ? undefined
+      : createHybridRoutingPolicy(
+          hybridRoutingPolicyInputForProviderMode(providerMode, {
+            // One primary attempt plus at most one DIFFERENT provider. Same-provider retry stays 0.
+            maxTotalAttempts: 2,
+            localOrder: [],
+          }),
+        );
+
+  // A caller-supplied `allowFallback` may agree with the derived value; it may never contradict it.
+  // `GROQ_ONLY` with `allowFallback: true` is an operator asking for one provider and two at once.
+  if (
+    routingProfile !== undefined &&
+    config.allowFallback !== undefined &&
+    config.allowFallback !== routingProfile.fallbackEnabled
+  ) {
+    return refuse('fallback-not-disabled');
+  }
+
   const inner = createModelGateway({
-    mode: 'OFF',
+    mode: config.mode,
     providers: config.providers,
     clock: config.clock,
     budgetPolicy: config.budgetPolicy,
     killSwitch: config.killSwitch,
     concurrency: config.concurrency,
     circuit: config.circuit,
-    allowFallback: LOCKED_ALLOW_FALLBACK,
+    // Derived from the provider mode, never from a caller flag that could contradict it.
+    allowFallback: routingProfile?.fallbackEnabled ?? LOCKED_ALLOW_FALLBACK,
     capabilityRegistry: config.capabilityRegistry,
+    ...(routingProfile === undefined ? {} : { routingProfile }),
     ...(config.observability === undefined ? {} : { observability: config.observability }),
   });
 
@@ -177,14 +352,21 @@ export function createProductionModelGateway(
     composition: Object.freeze({
       gateway,
       status: Object.freeze({
-        mode: 'OFF' as const,
-        activatable: false,
+        mode: config.mode,
+        // True only for a fully evidence-gated ACTIVE composition. Not a mutation surface: nothing in
+        // this package flips it, and changing it means composing again.
+        activatable: config.mode === 'ACTIVE',
         retryBudget: LOCKED_RETRY_BUDGET,
-        fallbackEnabled: LOCKED_ALLOW_FALLBACK,
+        fallbackEnabled: routingProfile?.fallbackEnabled ?? LOCKED_ALLOW_FALLBACK,
         providerIds: Object.freeze(config.providers.map((p) => p.descriptor.providerId)),
         releaseIds: Object.freeze(config.approvedReleases.map((r) => r.releaseId)),
         credentialResolverSupplied: config.credentialResolver !== undefined,
         registeredEvidenceCount: registryResult.registry.size(),
+        ...(providerMode === undefined ? {} : { providerMode }),
+        ...(providerMode === undefined
+          ? {}
+          : { servingProviderIds: Object.freeze([...servingProviderIds]) }),
+        ...(providerMode === undefined ? {} : { verifiedApprovalCount }),
       }),
     }),
   });
