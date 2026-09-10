@@ -45,6 +45,22 @@ export const FALLBACK_ALLOW_REASONS = [
 /**
  * The closed allowlist of PRIMARY terminal failure codes that MAY permit a fallback attempt (a transient
  * category). A circuit-open primary is handled separately (pre-invocation). Everything else is terminal.
+ *
+ * ### `rate-limited` is CROSS-PROVIDER transient and SAME-PROVIDER terminal (JF-2B, ADR-0147)
+ *
+ * A quota refusal is non-retryable against the provider that issued it — the gateway has no backoff, so
+ * an immediate second attempt deepens the limit rather than clearing it, and `runProvider` still stops
+ * there with `retryable: false`. But it is the clearest possible signal that a DIFFERENT provider should
+ * answer: the request is well-formed, the credential is good, and the model is entitled. The whole
+ * reason a second provider exists is to absorb this.
+ *
+ * So it appears here, and `decideFallover` admits it WITHOUT consulting the retryable flag — the one
+ * place the two meanings are separated. A policy that does not want the behaviour can drop the code
+ * through `transientFailureCodes`.
  */
-export const FALLBACK_TRANSIENT_CODES = ['provider-unavailable', 'timeout'] as const;
+export const FALLBACK_TRANSIENT_CODES = [
+  'provider-unavailable',
+  'timeout',
+  'rate-limited',
+] as const;
 export type FallbackTransientCode = (typeof FALLBACK_TRANSIENT_CODES)[number];

@@ -141,15 +141,27 @@ describe('(3, 4, 5, 6) it refuses to serve while OFF, before touching anything',
   });
 });
 
-describe('(7, 8) it is structurally incapable of CANARY or ACTIVE', () => {
-  for (const mode of ['ACTIVE', 'CANARY', 'SHADOW', 'FALLBACK'] as const) {
+describe('(7, 8) it serves OFF and ACTIVE, and refuses every release-rollout stage', () => {
+  // JF-2B (ADR-0147) made ACTIVE reachable under an evidence gate. The three ROLLOUT stages stay
+  // refused, and that is not leftover strictness: SHADOW/CANARY/FALLBACK govern a stable/candidate
+  // RELEASE pair through ProviderRolloutController, which takes precedence over `routingProfile`.
+  // Accepting them here would silently disable provider selection.
+  for (const mode of ['CANARY', 'SHADOW', 'FALLBACK'] as const) {
     it(`refuses a ${mode} configuration at construction`, () => {
       const result = createProductionModelGateway(validCompositionConfig({ mode }));
       expect(result.ok).toBe(false);
       if (result.ok) return;
-      expect(result.reason).toBe('mode-not-off');
+      expect(result.reason).toBe('mode-not-supported');
     });
   }
+
+  it('refuses ACTIVE that names no provider mode, rather than defaulting to AUTO', () => {
+    const result = createProductionModelGateway(validCompositionConfig({ mode: 'ACTIVE' }));
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    // Not `mode-not-supported`: ACTIVE is supported now. It failed the gate, which is the point.
+    expect(result.reason).toBe('provider-mode-required');
+  });
 
   it('(15) no activation, promotion or rollout mutation surface is reachable', () => {
     const result = createProductionModelGateway(validCompositionConfig());
@@ -280,10 +292,14 @@ describe('(13, 14) the reliability posture is locked', () => {
 
     const source = readPackageSource('src/create-production-model-gateway.ts');
     expect(source).toContain('const LOCKED_ALLOW_FALLBACK = false;');
-    expect(source).toContain('allowFallback: LOCKED_ALLOW_FALLBACK,');
-    // No routing profile and no rollout controller are ever passed to the gateway.
-    expect(source).not.toMatch(/routingProfile:/);
+
+    // JF-2B: a routing profile IS now passed for ACTIVE, built from the provider mode. What must never
+    // be passed is a rollout controller — it takes precedence over `routingProfile`, so supplying one
+    // would disable provider selection while looking like a richer configuration.
     expect(source).not.toMatch(/rolloutController:/);
+    // And the retry budget is still pinned to zero: one primary attempt, at most one DIFFERENT provider.
+    expect(source).toContain('const LOCKED_RETRY_BUDGET = 0;');
+    expect(source).toContain('retryBudget: LOCKED_RETRY_BUDGET,');
   });
 });
 

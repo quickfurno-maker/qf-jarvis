@@ -164,7 +164,11 @@ describe('JF-2A provider containment', () => {
     }
   });
 
-  it('38. JF-2A added no activation surface to the production composition', () => {
+  it('38. the production composition still fails closed, and never repurposes a rollout stage', () => {
+    // JF-2A added no activation surface. JF-2B (ADR-0147) added one, under an evidence gate — so this
+    // now asserts the gate rather than its absence. What it must never assert away: the composition
+    // still refuses the release-rollout stages, still pins the retry budget, and still derives
+    // fallback rather than taking a caller's word for it.
     const config = readFileSync(
       join(
         REPO_ROOT,
@@ -172,13 +176,20 @@ describe('JF-2A provider containment', () => {
       ),
       'utf8',
     );
-    // The three refusals that keep production OFF are still declared, and JF-2A did not touch them.
-    expect(config).toContain('mode-not-off');
+    expect(config).toContain('mode-not-supported');
     expect(config).toContain('fallback-not-disabled');
     expect(config).toContain('retry-budget-not-zero');
-    // The composition knows nothing about Nara: a provider mode is not an activation.
-    expect(config).not.toMatch(/nara/i);
-    expect(config).not.toMatch(/ProviderMode/);
+    expect(config).toContain('provider-mode-required');
+    expect(config).toContain('production-approval-missing');
+
+    const factory = readFileSync(
+      join(REPO_ROOT, 'packages/model-gateway-composition/src/create-production-model-gateway.ts'),
+      'utf8',
+    );
+    // The load-bearing negative: a rollout controller takes precedence over `routingProfile`, so one
+    // must never reach this composition.
+    expect(factory).not.toMatch(/rolloutController:/);
+    expect(factory).toContain('const LOCKED_RETRY_BUDGET = 0;');
   });
 
   it('39. the Nara adapter reaches the network from exactly one guarded function', () => {

@@ -72,8 +72,23 @@ export function decideFallover(
   if (input.primaryCode === 'structured-output-invalid') {
     return { allow: false, reason: 'primary-structured-invalid' };
   }
-  // A retryable failure in the bounded transient allowlist is the only remaining ALLOW.
   const transient = policy.transientFailureCodes as readonly string[];
+
+  // A rate/quota refusal is the one code whose SAME-provider and CROSS-provider meanings differ, so it
+  // is admitted WITHOUT consulting `primaryRetryable` (JF-2B, ADR-0147).
+  //
+  // `runProvider` reports it `retryable: false` deliberately — retrying the provider that just refused
+  // deepens the limit. That decision is about the SAME provider and it is unchanged. Handing the request
+  // to a DIFFERENT provider is the opposite situation: the request was well-formed, the credential was
+  // good and the model was entitled, so the second provider is likely to answer. Reading the same flag
+  // for both questions is what made a quota refusal look terminal to the whole gateway.
+  if (input.primaryInvoked && input.primaryCode === 'rate-limited') {
+    return transient.includes('rate-limited')
+      ? { allow: true, reason: 'fallback-eligible-transient' }
+      : { allow: false, reason: 'primary-non-retryable' };
+  }
+
+  // Every other transient code still requires the retryable flag, exactly as before.
   if (input.primaryRetryable && transient.includes(input.primaryCode)) {
     return { allow: true, reason: 'fallback-eligible-transient' };
   }
