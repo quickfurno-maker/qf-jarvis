@@ -7,7 +7,21 @@
 
 > **Currency note (2026-09-10, JF-1).** This document previously stated that no model provider, adapter, SDK, model call or API key existed in the repository, and that no implementation had begun. That is no longer accurate, and the claim is corrected here rather than left to mislead a reader deciding what to build. Merged `main` now contains the Groq provider adapter, a local OpenAI-compatible provider adapter, deterministic provider selection, a validated hybrid routing policy, a bounded single-fallback decision and a circuit breaker. What still does not exist is **activation**: the production composition is deliberately `OFF`-only (ADR-0062/0063), and lifting that requires its own owner-authorized, evidence-gated slice. Section E below is stale for the same reason and is superseded by this note.
 >
-> The operating-mode table below remains the approved **architecture**. It is not yet the Production V1 **target**, which is Groq primary with a NaraRouter fallback under an `AUTO` / `GROQ_ONLY` / `NARA_ONLY` provider mode, per [ADR-0145](../decisions/ADR-0145-jarvis-v1-scope-freeze-and-training-offline-boundary.md). Reconciling the two mode surfaces belongs to JF-2A and is deliberately not done here.
+> The operating-mode table below remains the approved **architecture**. It is not yet the Production V1 **target**, which is Groq primary with a NaraRouter fallback under an `AUTO` / `GROQ_ONLY` / `NARA_ONLY` provider mode, per [ADR-0145](../decisions/ADR-0145-jarvis-v1-scope-freeze-and-training-offline-boundary.md).
+
+> **JF-2A reconciliation (2026-09-10).** The V1 provider-mode surface now exists in code as `ProviderMode` (`AUTO` / `GROQ_ONLY` / `NARA_ONLY`), together with a NaraRouter **HOSTED** provider — see [ADR-0146](../decisions/ADR-0146-jf2a-nara-hosted-provider-and-provider-mode-foundation.md). How it relates to the five-mode table below:
+>
+> | This document's mode | V1 equivalent | Status |
+> | --- | --- | --- |
+> | `GROQ_CLOUD` | `GROQ_ONLY` | expressible now |
+> | `HYBRID_GROQ_PRIMARY` | `AUTO` — but the explicit fallback is **NaraRouter (HOSTED)**, not the local server | expressible now |
+> | *(no equivalent below)* | `NARA_ONLY` | expressible now |
+> | `LOCAL_PC`, `HYBRID_LOCAL_PRIMARY` | — | **post-V1.** Local inference is postponed, not removed (ADR-0145). The local adapter and the `LOCAL_ONLY` data class are untouched and still enforced. |
+> | `HUMAN_ONLY` | unchanged | a data class, not a provider mode — and no provider mode can override it |
+>
+> The important correction to this document's original framing: V1's fallback is a **second hosted provider**, not a local one. The `LOCAL_ONLY` rules below still hold exactly as written, and a provider mode cannot override them — it selects among HOSTED candidates only, after the data class has already been enforced.
+>
+> Provider selection is still a separate axis from activation. Nothing in JF-2A switches inference on: the production composition remains `OFF`-only, and lifting that is JF-2B's separately authorized decision.
 
 ## Provider-independence contract
 
