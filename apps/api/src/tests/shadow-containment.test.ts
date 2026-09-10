@@ -240,6 +240,34 @@ describe('(127-132) no live model id, tool, workflow or database path', () => {
    */
   const CONTAINMENT_VOCABULARY_SPECS: readonly string[] = Object.freeze([
     'src/tests/private-riya-web-ingress-containment.test.ts',
+    // JF-4 (ADR-0149). Same reasoning, two more specs: they assert the customer orchestration
+    // contains none of these tokens, so their own forbidden-token lists have to name them.
+    'src/tests/jf4-customer-containment.test.ts',
+    'src/tests/jf4-negative-controls.test.ts',
+  ]);
+
+  /**
+   * The JF-4 customer orchestration (ADR-0149), which legitimately contains a Mastra WORKFLOW.
+   *
+   * An EXACT file list, and it buys exactly one token. `workflow` was forbidden across apps/api
+   * because nothing here orchestrated anything; JF-4 deliberately places a bounded orchestration
+   * shell on the customer path under its own ADR, so the ban is narrowed rather than dropped.
+   *
+   * Everything else on the list below -- n8n, WhatsApp, webhooks, tool calls, raw pools and raw SQL --
+   * stays forbidden in these files too, and a separate JF-4 containment spec asserts the same set
+   * again from the other direction.
+   */
+  const CUSTOMER_ORCHESTRATION_FILES: readonly string[] = Object.freeze([
+    'src/riya-customer-orchestration/index.ts',
+    'src/riya-customer-orchestration/contracts.ts',
+    'src/riya-customer-orchestration/create-riya-customer-runtime.ts',
+    'src/riya-customer-orchestration/governed-rag-knowledge-port.ts',
+    'src/riya-customer-orchestration/mastra-customer-turn-runner.ts',
+    // And the specs that exercise it: a test naming the workflow entry point it calls is not a
+    // capability, and excluding them would mean the orchestration could never be tested by name.
+    'src/tests/jf4-customer-orchestration.test.ts',
+    'src/tests/jf4-customer-containment.test.ts',
+    'src/tests/jf4-negative-controls.test.ts',
   ]);
 
   it('(130, 131) no tool, execution, workflow or database capability is reachable', () => {
@@ -253,6 +281,10 @@ describe('(127-132) no live model id, tool, workflow or database path', () => {
       const composesDatabase = DATABASE_COMPOSITION_FILES.some((allowed) =>
         normalise(file).endsWith(`/${allowed}`),
       );
+      // JF-4: these files may name `workflow`, and nothing else on the list.
+      const orchestratesCustomerTurn = CUSTOMER_ORCHESTRATION_FILES.some((allowed) =>
+        normalise(file).endsWith(`/${allowed}`),
+      );
       if (CONTAINMENT_VOCABULARY_SPECS.some((allowed) => normalise(file).endsWith(`/${allowed}`))) {
         continue;
       }
@@ -263,7 +295,7 @@ describe('(127-132) no live model id, tool, workflow or database path', () => {
         'toolcall',
         'tool_call',
         'tools:',
-        'workflow',
+        ...(orchestratesCustomerTurn ? [] : ['workflow']),
         // A RAW pool stays forbidden EVERYWHERE, the two composition files included: they reach the
         // database through the public workspace APIs or not at all.
         'pg-pool',
