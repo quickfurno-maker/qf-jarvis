@@ -19,6 +19,15 @@
  * process global and no cross-run cache, because two conversations are served concurrently by one
  * process and a shared slot would let one client's answer be grounded in the other's records.
  *
+ * ### The lookup is injectable; the rules are not (JF-4, ADR-0149)
+ *
+ * A deployment may hand this bridge a registry to query, or a bounded retrieval PORT that performs the
+ * lookup -- the JF-3 RAG provisioner, in the production customer composition. What that changes is one
+ * line. Everything this file exists for -- one retrieval per run, the envelope cross-check, the exact
+ * governed request, the minimization, the citation shape, the fail-closed refusal -- is unchanged and
+ * unreachable from the port, because a second implementation of any of it is how two callers start
+ * grounding on different rules.
+ *
  * ### Exact topics. Never a query.
  *
  * The topics are configured at deployment and passed through verbatim. Nothing here reads the
@@ -45,6 +54,8 @@ import type {
   KnowledgeObservabilityHook,
 } from '@qf-jarvis/governed-knowledge';
 import type { RiyaGroundedKnowledgeContextV1 } from '@qf-jarvis/riya-model-interaction';
+
+import type { GovernedRetrievalPort } from '../contracts/runtime-config.js';
 
 /**
  * The RWC-P7 record ceiling.
@@ -74,19 +85,33 @@ export interface RiyaGroundedKnowledgeBridge {
   readCaptured(): RiyaGroundedKnowledgeContextV1 | undefined;
 }
 
-/** What the bridge is built from. All injected; nothing is read from disk, env, HTTP or a database. */
-export interface RiyaGroundedKnowledgeBridgeInput {
+/**
+ * What the bridge is built from. All injected; nothing is read from disk, env, HTTP or a database.
+ *
+ * Either a `registry` this package queries itself (ADR-0103), or a `retrieval` port that performs the
+ * lookup (JF-4, ADR-0149) — never both. Everything after the lookup is identical.
+ */
+export type RiyaGroundedKnowledgeBridgeInput = {
   readonly envelope: InboundEnvelope;
-  readonly registry: GovernedKnowledgeRegistry;
   readonly topics: readonly string[];
-  readonly observability?: KnowledgeObservabilityHook;
-}
+} & (
+  | {
+      readonly registry: GovernedKnowledgeRegistry;
+      readonly retrieval?: never;
+      readonly observability?: KnowledgeObservabilityHook;
+    }
+  | {
+      readonly retrieval: GovernedRetrievalPort;
+      readonly registry?: never;
+      readonly observability?: never;
+    }
+);
 
 /** Build the bridge for exactly one run. */
 export function createRiyaGroundedKnowledgeBridge(
   input: RiyaGroundedKnowledgeBridgeInput,
 ): RiyaGroundedKnowledgeBridge {
-  const { envelope, registry } = input;
+  const envelope = input.envelope;
   const topics = Object.freeze([...input.topics]);
 
   // Function-scoped. Two concurrent runs hold two bridges and two captures.
@@ -142,9 +167,17 @@ export function createRiyaGroundedKnowledgeBridge(
           requireCitation: true,
           selectors: { topics: [...topics] },
         });
-        result = retrieveGovernedKnowledge(registry, governedRequest, {
-          ...(input.observability === undefined ? {} : { observability: input.observability }),
-        });
+        // WHO performs the lookup is configuration; WHAT may come back is not. An injected port
+        // (JF-4) and a direct registry query (ADR-0103) reach the same authority and are held to the
+        // same result contract -- everything below this line is identical for both.
+        result =
+          input.retrieval === undefined
+            ? retrieveGovernedKnowledge(input.registry, governedRequest, {
+                ...(input.observability === undefined
+                  ? {}
+                  : { observability: input.observability }),
+              })
+            : input.retrieval.retrieve(governedRequest);
       } catch {
         return Promise.resolve(refused());
       }

@@ -12,6 +12,8 @@ import type { CoreDecisionProtocol, CoreDecisionTransport } from '@qf-jarvis/cor
 import type {
   GovernedKnowledgeRegistry,
   KnowledgeObservabilityHook,
+  KnowledgeRetrievalRequest,
+  KnowledgeRetrievalResult,
 } from '@qf-jarvis/governed-knowledge';
 import type {
   ModelGatewayInvoker,
@@ -178,12 +180,69 @@ export interface JarvisRuntimeConfig {
  *
  * The registry is handed in. There is no global registry, no default, and no loading from a file, an
  * environment variable, an HTTP endpoint or a database anywhere in this package.
+ *
+ * ### Two ways in, one set of rules (JF-4, ADR-0149)
+ *
+ * A deployment supplies EITHER a `registry` — the ADR-0103 form, where this package calls the
+ * authority itself — OR a `retrieval` port, where the lookup is performed by an injected boundary such
+ * as the JF-3 RAG provisioner. Never both.
+ *
+ * Nothing else differs. The same topics, the same request, the same one-retrieval-per-run rule, the
+ * same minimization and the same citation shape apply to both, because all of that lives in the bridge
+ * rather than in whoever performs the lookup.
  */
-export interface RiyaGroundedKnowledgeConfig {
+/**
+ * A bounded governed retrieval, injected (JF-4, ADR-0149).
+ *
+ * Exactly the shape of `retrieveGovernedKnowledge` bound to a registry, and exactly the shape JF-3's
+ * ACTIVE provisioner exposes. Synchronous on purpose, inherited from the authority: a port that could
+ * await could await a socket, and this one must not be able to.
+ *
+ * It exists so a deployment can route retrieval through the JF-3 provisioning boundary WITHOUT this
+ * package learning what a RAG provisioner is. Everything that decides whether a record may be seen
+ * still lives in `@qf-jarvis/governed-knowledge`, and everything that decides what reaches the model
+ * still lives in the RWC-P7 bridge below.
+ */
+export interface GovernedRetrievalPort {
+  retrieve(request: KnowledgeRetrievalRequest): KnowledgeRetrievalResult;
+}
+
+/** The ADR-0103 form: this package calls the authority itself, over an injected registry. */
+export interface RiyaGroundedKnowledgeRegistryConfig {
   /** The immutable QFJ-P04.03 registry. The one knowledge authority; nothing else is consulted. */
   readonly registry: GovernedKnowledgeRegistry;
+  readonly retrieval?: never;
   /** 1..8 exact topics, unique, in caller order. No wildcard, no pattern, no query. */
   readonly topics: readonly string[];
   /** Optional governed-knowledge observability. Retrieval events stay inside that package's hook. */
   readonly observability?: KnowledgeObservabilityHook;
 }
+
+/**
+ * The JF-4 form: retrieval is performed by an injected port, and this package holds no registry.
+ *
+ * `registry` is `never` rather than optional, deliberately. A config carrying BOTH would leave a
+ * registry sitting unused beside the port — a second body of knowledge that nothing consults until
+ * somebody changes one line and it silently becomes the one that answers. Exactly one source, chosen
+ * at the type level.
+ *
+ * `observability` is `never` for the same reason: the injected port owns its own retrieval
+ * observability, and a hook here would only fire for the path this form does not take.
+ */
+export interface RiyaGroundedKnowledgeRetrievalConfig {
+  readonly retrieval: GovernedRetrievalPort;
+  readonly registry?: never;
+  /** 1..8 exact topics, unique, in caller order. No wildcard, no pattern, no query. */
+  readonly topics: readonly string[];
+  readonly observability?: never;
+}
+
+/**
+ * How a grounded deployment reaches governed knowledge: a registry, or an injected retrieval port.
+ *
+ * Never both. The topics, the request construction, the one-retrieval-per-run rule, the minimization
+ * and the citation shape are identical either way — the union chooses only WHO performs the lookup,
+ * not WHAT is allowed to come back.
+ */
+export type RiyaGroundedKnowledgeConfig =
+  RiyaGroundedKnowledgeRegistryConfig | RiyaGroundedKnowledgeRetrievalConfig;

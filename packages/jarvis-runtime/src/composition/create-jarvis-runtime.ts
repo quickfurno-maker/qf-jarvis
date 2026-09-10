@@ -40,7 +40,10 @@ import {
   parseRiyaModelProfileDetail,
 } from '@qf-jarvis/riya-model-interaction';
 import type { JarvisCoreAuthorizedReplyResult } from '../contracts/core-authorized-reply.js';
-import type { JarvisRuntimeConfig } from '../contracts/runtime-config.js';
+import type {
+  JarvisRuntimeConfig,
+  RiyaGroundedKnowledgeConfig,
+} from '../contracts/runtime-config.js';
 import type { JarvisRuntimeResult } from '../contracts/runtime-result.js';
 import { assertMandatoryDependencies } from './validate-composition.js';
 import { composeAndProcessDetailed, composeAndProcessInternal } from './process-inbound.js';
@@ -54,6 +57,7 @@ import type {
   JarvisRiyaGroundedReplyResult,
 } from '../contracts/riya-grounded-reply.js';
 import { createRiyaGroundedKnowledgeBridge } from './riya-grounded-knowledge.js';
+import type { RiyaGroundedKnowledgeBridgeInput } from './riya-grounded-knowledge.js';
 import {
   applyControlCommandThroughSource,
   type JarvisConversationControlInput,
@@ -177,6 +181,27 @@ function refusedRuntimeResult(
 }
 
 /** Build a frozen Jarvis runtime from injected collaborators. Missing mandatory deps fail closed. */
+/**
+ * Forward a grounded configuration to the bridge, preserving which of the two forms it is.
+ *
+ * One helper rather than the same branch twice: the pre-summary and post-summary paths must ground
+ * through identical machinery, and two copies of this is how they would stop.
+ */
+function groundedBridgeInput(
+  envelope: InboundEnvelope,
+  grounded: RiyaGroundedKnowledgeConfig,
+): RiyaGroundedKnowledgeBridgeInput {
+  if (grounded.retrieval !== undefined) {
+    return { envelope, topics: grounded.topics, retrieval: grounded.retrieval };
+  }
+  return {
+    envelope,
+    topics: grounded.topics,
+    registry: grounded.registry,
+    ...(grounded.observability === undefined ? {} : { observability: grounded.observability }),
+  };
+}
+
 export function createJarvisRuntime(
   config: JarvisRuntimeConfig,
 ): RiyaConversationEvolutionJarvisRuntime {
@@ -247,14 +272,7 @@ export function createJarvisRuntime(
       const bridge =
         grounded === undefined
           ? undefined
-          : createRiyaGroundedKnowledgeBridge({
-              envelope,
-              registry: grounded.registry,
-              topics: grounded.topics,
-              ...(grounded.observability === undefined
-                ? {}
-                : { observability: grounded.observability }),
-            });
+          : createRiyaGroundedKnowledgeBridge(groundedBridgeInput(envelope, grounded));
 
       const run = await composeAndProcessInternal(config, envelope, {
         profile: createRiyaConversationModelProfile({
@@ -322,12 +340,7 @@ export function createJarvisRuntime(
         return refused(envelope.runtimeId, envelope.conversationId);
       }
 
-      const bridge = createRiyaGroundedKnowledgeBridge({
-        envelope,
-        registry: grounded.registry,
-        topics: grounded.topics,
-        ...(grounded.observability === undefined ? {} : { observability: grounded.observability }),
-      });
+      const bridge = createRiyaGroundedKnowledgeBridge(groundedBridgeInput(envelope, grounded));
 
       const run = await composeAndProcessInternal(config, envelope, {
         profile: createRiyaGroundedReplyModelProfile({
