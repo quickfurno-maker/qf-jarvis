@@ -1,7 +1,8 @@
 # ADR-0148 — JF-3: governed exact RAG activation for Jarvis Production V1
 
-- **Status:** Accepted, amended by owner review (content-bound knowledge revision + honest ACTIVE
-  profile; see §7, §8a, §11) — makes `ACTIVE` reachable in the RAG provisioning boundary, under exact
+- **Status:** Accepted, amended twice by owner review (content-bound knowledge revision + honest ACTIVE
+  profile, §7/§8a/§11; runtime pack authenticity, §11e) — makes `ACTIVE` reachable in the RAG
+  provisioning boundary, under exact
   bindings, with deterministic exact retrieval delegated to the existing knowledge authority. **This is
   not a deployment, not a live certification, and not a running service.** No provider is contacted, no
   credential exists in the repository, no migration is added, and the shipped production knowledge pack
@@ -274,6 +275,42 @@ of the revision is refused like any other wrong revision.
 Adding a record changes the revision automatically. There is no separate version somebody could forget
 to bump, and no way to add content while keeping the old approval identity.
 
+#### 11e. The pack must be authentic, not merely pack-shaped (owner correction, pass 2)
+
+Deriving the revision was necessary and not sufficient. TypeScript interfaces are structural, so an
+object literal carrying the four fields of a `RevisionBoundKnowledgePack` satisfies the type at compile
+time and passed the backend's shape check at runtime — including this one:
+
+```ts
+{ knowledgeRevision: packA.knowledgeRevision, registry: packB.registry,
+  recordCount: packB.recordCount, topics: packB.topics }
+```
+
+Measured on head `8532a2c`: that object constructed a backend, reached `active`, and served pack B's
+unapproved text while reporting pack A's approved revision. The same logical substitution as before,
+reached through a different door.
+
+`createRevisionBoundKnowledgePack` therefore records every pack it builds in a module-private
+`WeakSet`, and the backend refuses anything that is not in it. **A `WeakSet` rather than a brand field
+or symbol**, because a field is copyable: a spread, a clone, a `JSON.parse` round trip and a
+hand-written literal all reproduce every field of a pack, and each would carry a brand with it.
+Membership keyed on object identity is the one property of a pack that copying does not reproduce.
+
+Consequences, all intended:
+
+- a spread or clone of an authentic pack is refused — copying a pack's fields does not copy the
+  derivation that produced them;
+- a **deserialized** pack is refused, and must be rebuilt from its governed records through the
+  factory. That rebuild re-derives the revision from the records, so it is a re-proof rather than a
+  re-labelling. A revision-bound pack is an in-memory capability, not a bearer token;
+- the checker is package-internal: not exported from the root, not from `./testing`, and `package.json`
+  exposes only those two subpaths. There is no exported way to ADD to the set, so a pack is authentic
+  exactly when its revision was derived from its own records.
+
+**Runtime authenticity is process-local and is not a signature.** It establishes that an object was
+derived by this factory in this process. It says nothing across a process boundary and attests nothing
+about who approved the records — that gap is unchanged and still belongs to JF-6.
+
 ### 12. Citations are required and preserved
 
 Every returned record arrives paired with its exact citation: knowledge id, version, source ref, source
@@ -379,6 +416,9 @@ Negative, and accepted:
   is no cryptographic operator identity in this repository. JF-6 must wire authenticated operator
   controls and an audit trail. The knowledge revision narrows what that gap covers — it makes the
   approved knowledge tamper-evident — but it attests nothing about who approved it.
+- **A revision-bound pack cannot cross a process boundary.** Serializing one and reviving it is
+  refused; it must be rebuilt from its governed records. That is the correct behaviour and it is also a
+  real constraint on any future deployment that wanted to ship a pre-built pack as data.
 - **A knowledge revision is no longer human-readable.** `qfj.knowledge.sha256.<64 hex>` is not a
   version anybody can recognise at a glance, and a deployment naming the wrong one gets a mismatch
   rather than a helpful message. That is the cost of the label having no authority, and it is the right

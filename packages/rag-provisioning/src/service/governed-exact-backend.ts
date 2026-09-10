@@ -12,13 +12,31 @@
  * and the failure mode of two authorities is not that one is wrong — it is that they disagree quietly,
  * and the more permissive one wins whichever path a caller happens to take.
  *
- * ### It takes a bound pack, and CANNOT take a registry plus a revision
+ * ### It takes an AUTHENTIC bound pack — shape is not enough
  *
- * The owner correction removed the two-parameter form this factory used to have. A caller that could
- * pass a registry and a revision separately could label any records with any approved revision — and
- * measurement against the previous head confirmed it: unapproved text activated cleanly under an
- * approved revision, and served. The revision now arrives already DERIVED from the registry's contents,
- * as one artifact, and there is no parameter through which the two could disagree.
+ * The first owner correction removed the two-parameter form this factory used to have, because a
+ * caller that could pass a registry and a revision separately could label any records with any
+ * approved revision. Measurement confirmed it: unapproved text activated cleanly under an approved
+ * revision, and served.
+ *
+ * The second correction closed what that left open. TypeScript interfaces are structural, so an object
+ * literal with the right four fields satisfies the pack type at compile time and passed the shape
+ * check this file used to perform — including an object holding pack A's approved revision beside
+ * pack B's registry. Measured on head `8532a2c`, that forgery constructed a backend, reached `active`,
+ * and served B's records while reporting A's revision.
+ *
+ * A shape check cannot prove provenance, so this file no longer performs one. It asks
+ * `createRevisionBoundKnowledgePack` whether it made this exact object. A pack's revision is derived
+ * from its own records, and membership of that factory's private registry is keyed on object identity
+ * — so a spread, a clone, a deserialized copy and a hand-written literal are all refused, because
+ * copying a pack's fields does not copy the derivation that produced them.
+ *
+ * That refusal is intended, including for the deserialized case. A revision-bound pack is an in-memory
+ * capability, not a bearer token: a pack that crossed a process boundary must be rebuilt from its
+ * governed records through the factory, which re-derives the revision and so re-proves it.
+ *
+ * **Runtime authenticity is process-local and is not a cryptographic signature.** It establishes that
+ * this object was derived here, in this process. It attests nothing about who approved the records.
  *
  * ### What it cannot do
  *
@@ -48,6 +66,7 @@ import type {
 import type { RagRetrievalBackend } from '../contracts/retrieval-backend.js';
 import type { RevisionBoundKnowledgePack } from '../contracts/revision-bound-knowledge-pack.js';
 import { ACTIVE_ELIGIBLE_BACKEND } from '../contracts/vocabularies.js';
+import { isAuthenticRevisionBoundKnowledgePack } from './create-revision-bound-knowledge-pack.js';
 
 export interface GovernedExactBackendOptions {
   /**
@@ -56,34 +75,15 @@ export interface GovernedExactBackendOptions {
    * There is deliberately no separate `registry` or `knowledgeRevision` option. The revision is read
    * from the pack, and the pack derived it from the records the registry was built from, so a backend
    * cannot claim a revision that its own contents do not produce.
+   *
+   * It must be a pack `createRevisionBoundKnowledgePack` actually built. Satisfying this type is not
+   * sufficient and is not meant to be: the type describes a shape, and a shape is copyable.
    */
   readonly pack: RevisionBoundKnowledgePack;
   /** Optional subject privacy gate. Passed through to the authority verbatim, or absent. */
   readonly privacyGate?: KnowledgePrivacyGate;
   /** Optional content-free knowledge observability. */
   readonly observability?: KnowledgeObservabilityHook;
-}
-
-/**
- * Is this actually a revision-bound pack?
- *
- * The parameter is `unknown` on purpose. Typing it as the pack would make every check below look
- * redundant to the compiler and the linter, and they would be right about the DECLARED type and wrong
- * about reality: the whole point of this guard is the caller one package away who hand-builds an object
- * claiming an approved revision and casts it. Narrowing from `unknown` is the shape in which the checks
- * are honest.
- */
-function isRevisionBoundPack(pack: unknown): pack is RevisionBoundKnowledgePack {
-  if (pack === null || typeof pack !== 'object') {
-    return false;
-  }
-  const candidate = pack as { knowledgeRevision?: unknown; registry?: unknown };
-  return (
-    typeof candidate.knowledgeRevision === 'string' &&
-    candidate.knowledgeRevision.length > 0 &&
-    candidate.registry !== null &&
-    typeof candidate.registry === 'object'
-  );
 }
 
 /**
@@ -97,10 +97,12 @@ export function createGovernedExactBackend(
 ): RagRetrievalBackend {
   const pack: unknown = options.pack;
 
-  // A pack is the only accepted source of both values, so this checks that one was actually passed
-  // rather than an object shaped like one through a cast.
-  if (!isRevisionBoundPack(pack)) {
-    throw new Error('A governed-exact backend requires a revision-bound knowledge pack.');
+  // Not "is this pack-shaped" -- "did the factory derive this exact object". The shape of a pack is
+  // trivially reproducible; its derivation is not.
+  if (!isAuthenticRevisionBoundKnowledgePack(pack)) {
+    throw new Error(
+      'A governed-exact backend requires a knowledge pack derived by createRevisionBoundKnowledgePack.',
+    );
   }
 
   const { privacyGate, observability } = options;
