@@ -1,9 +1,13 @@
 # Model Provider Independence — Groq, Local-PC and Hybrid Inference
 
-**Status:** Approved architecture (extension of QFJ-P04.01 / QFJ-P04.04, with QFJ-P11.06 deployment profiles and QFJ-P12 scaling). **Not implemented.** Adopted 2026-07-21 under [ADR-0041](../decisions/ADR-0041-provider-independent-cloud-local-and-hybrid-model-inference.md). Read with [model-runtime-and-governance.md](./model-runtime-and-governance.md) (the model gateway), [qf-jarvis-roadmap-v3.md](./qf-jarvis-roadmap-v3.md), and [agent-constitution.md](../governance/agent-constitution.md).
+**Status:** Approved architecture (extension of QFJ-P04.01 / QFJ-P04.04, with QFJ-P11.06 deployment profiles and QFJ-P12 scaling). **Partially implemented — see the currency note below.** Adopted 2026-07-21 under [ADR-0041](../decisions/ADR-0041-provider-independent-cloud-local-and-hybrid-model-inference.md). Read with [model-runtime-and-governance.md](./model-runtime-and-governance.md) (the model gateway), [ADR-0145](../decisions/ADR-0145-jarvis-v1-scope-freeze-and-training-offline-boundary.md) (the Production V1 scope freeze), [qf-jarvis-roadmap-v3.md](./qf-jarvis-roadmap-v3.md), and [agent-constitution.md](../governance/agent-constitution.md).
 
 > **What this is.** The provider-neutral architecture that lets a future Riya/Anisha conversation runtime run against Groq Cloud, a local-PC OpenAI-compatible server, or a hybrid — under owner control — without rewriting agents, transport, memory, or integrations.
-> **What this is not.** Anything that runs. **No model provider, adapter, SDK, model call, or API key exists in this repository.** This is design a future phase implements.
+> **What this is not.** An activated inference path. Nothing described here serves production traffic.
+
+> **Currency note (2026-09-10, JF-1).** This document previously stated that no model provider, adapter, SDK, model call or API key existed in the repository, and that no implementation had begun. That is no longer accurate, and the claim is corrected here rather than left to mislead a reader deciding what to build. Merged `main` now contains the Groq provider adapter, a local OpenAI-compatible provider adapter, deterministic provider selection, a validated hybrid routing policy, a bounded single-fallback decision and a circuit breaker. What still does not exist is **activation**: the production composition is deliberately `OFF`-only (ADR-0062/0063), and lifting that requires its own owner-authorized, evidence-gated slice. Section E below is stale for the same reason and is superseded by this note.
+>
+> The operating-mode table below remains the approved **architecture**. It is not yet the Production V1 **target**, which is Groq primary with a NaraRouter fallback under an `AUTO` / `GROQ_ONLY` / `NARA_ONLY` provider mode, per [ADR-0145](../decisions/ADR-0145-jarvis-v1-scope-freeze-and-training-offline-boundary.md). Reconciling the two mode surfaces belongs to JF-2A and is deliberately not done here.
 
 ## Provider-independence contract
 
