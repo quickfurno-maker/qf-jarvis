@@ -215,6 +215,38 @@ export {
   type LocalTransport,
 } from './providers/local-openai-compatible/index.js';
 
+// The NaraRouter provider (JF-2A, ADR-0146) — the second real HOSTED provider. Composition symbols
+// only; no raw HTTP/SDK type, no key accessor, no configurable base URL. A real key + transport are
+// injected at composition. Building this provider activates nothing.
+// The root surface mirrors Groq's exactly: six composition symbols and the types. The alias guard, the
+// error normalizer and the strict-schema declaration stay internal to the provider module — a spec
+// imports them by path, the way the Groq specs already do.
+export {
+  NaraModelProvider,
+  NaraApiKey,
+  createNaraApiKey,
+  createNaraProviderConfig,
+  createFetchNaraTransport,
+  NARA_CHAT_COMPLETIONS_ENDPOINT,
+  type NaraProviderConfig,
+  type NaraProviderConfigInput,
+  type NaraTransport,
+} from './providers/nara/index.js';
+
+// The V1 provider-SELECTION mode (JF-2A, ADR-0146). A closed union and a deterministic mapping onto
+// the EXISTING routing policy. Distinct from `GatewayMode`, which is the ACTIVATION axis: nothing here
+// switches inference on, enables fallback in a production composition, or overrides a data class.
+export {
+  PROVIDER_MODES,
+  GROQ_PROVIDER_ID,
+  NARA_PROVIDER_ID,
+  isProviderMode,
+  parseProviderMode,
+  hostedOrderForProviderMode,
+  hybridRoutingPolicyInputForProviderMode,
+  type ProviderMode,
+} from './routing/provider-mode.js';
+
 // Hybrid routing and failover (QFJ-P04.01D, ADR-0048). Composition + safe observability types only;
 // the mutable attempt ledger, the plan/provider references, and the failover internals stay private.
 export {

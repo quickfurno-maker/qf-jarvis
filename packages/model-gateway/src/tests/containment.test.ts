@@ -99,7 +99,18 @@ describe('model-gateway package containment', () => {
    * the imported barrel counts runtime exports only — `export type` produces no runtime binding — so
    * adding a type costs nothing and adding a value is a deliberate, reviewed change.
    */
-  it('freezes the package-root runtime API at exactly 80 symbols', async () => {
+  it('freezes the package-root runtime API at exactly 93 symbols', async () => {
+    // JF-2A (ADR-0146): 80 -> 93. Thirteen symbols, in two groups, both deliberate.
+    //
+    // Six are the NaraRouter hosted provider, mirroring the Groq six exactly: the provider, the key
+    // holder and its factory, the config factory, the fetch transport factory and the endpoint
+    // constant. The alias guard, the error normalizer and the strict-schema declaration stay OFF the
+    // root and are asserted through relative imports, for the same reason every diagnostic helper is:
+    // a caller that never needs one must not be handed it.
+    //
+    // Seven are the provider-SELECTION mode: the closed tuple, the two canonical provider ids, the
+    // guard, the parser, the hosted-order mapping and the policy-input helper. They add a way to say
+    // WHICH provider, never whether to serve -- activation stays `GatewayMode`'s axis and stays OFF.
     // POST-RBD1 FORENSICS: 79 -> 80. `createGroqChatBestEffortDiagnosticProvider` -- the
     // DIAGNOSTIC-ONLY BEST-EFFORT `json_schema` adapter.
     //
@@ -155,7 +166,7 @@ describe('model-gateway package containment', () => {
     // schemas, and "the production schema projects into the documented subset" has to be asserted
     // against the real schema rather than a replica.
     const barrel = (await import('../index.js')) as unknown as Record<string, unknown>;
-    expect(Object.keys(barrel)).toHaveLength(80);
+    expect(Object.keys(barrel)).toHaveLength(93);
   });
 
   it('does not export FakeModelProvider from the production root', () => {
@@ -169,11 +180,19 @@ describe('model-gateway package containment', () => {
     walkSource(fileURLToPath(new URL('src', PKG_DIR))).filter(
       (f) => !f.replace(/\\/g, '/').includes('/tests/'),
     );
-  // The ONLY two designated network-egress files: the Groq hosted transport and the local transport.
+  // The ONLY designated network-egress files: the Groq hosted transport, the NaraRouter hosted
+  // transport (JF-2A, ADR-0146) and the local transport.
+  //
+  // An AUTHORISED ADDITION, not a relaxation. The rule still refuses `fetch` in every other
+  // production file, and the Nara transport earns its place on the same terms the other two do: it
+  // names ONE endpoint constant and throws on any other URL, sets `redirect: 'error'`, bounds the
+  // response read, never retries and never sleeps. A second hosted provider needs a second egress
+  // point; it does not need a second rule.
   const isDesignatedTransport = (f: string): boolean => {
     const p = f.replace(/\\/g, '/');
     return (
       p.endsWith('/providers/groq/groq-transport.ts') ||
+      p.endsWith('/providers/nara/nara-transport.ts') ||
       p.endsWith('/providers/local-openai-compatible/local-transport.ts')
     );
   };
