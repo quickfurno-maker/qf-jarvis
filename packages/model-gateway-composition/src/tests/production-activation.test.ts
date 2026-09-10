@@ -51,7 +51,8 @@ const NARA = 'nara';
 interface Leg {
   readonly release: ProviderReleaseRef;
   readonly profile: ModelCapabilityProfile;
-  readonly provider: ModelProvider;
+  /** Typed as the FAKE, not the interface: the specs read its `invocations` counter. */
+  readonly provider: FakeModelProvider;
   readonly evidence: ApprovalEvidence;
   readonly approval: ProductionApprovalClaim;
 }
