@@ -12,12 +12,11 @@ import { describe, expect, it } from 'vitest';
 import { createGovernedExactBackend } from '../service/governed-exact-backend.js';
 import { invokeRagRetrieval } from '../service/invoke-rag-retrieval.js';
 import {
-  TEST_KNOWLEDGE_REVISION,
   activeProvisioner,
   digest,
   testBackend,
+  testPack,
   testRecordInput,
-  testRegistry,
   testRequest,
 } from './knowledge-fixtures.js';
 
@@ -79,10 +78,9 @@ describe('JF-3 lifecycle and privacy', () => {
   it('(JF3-31) an erased or tombstoned subject refuses', () => {
     for (const status of ['erased', 'tombstoned', 'anonymised', 'in-progress'] as const) {
       const backend = createGovernedExactBackend({
-        registry: testRegistry([
+        pack: testPack([
           testRecordInput({ subjectRef: 'subject.test.1', classification: 'LOCAL_ONLY' }),
         ]),
-        knowledgeRevision: TEST_KNOWLEDGE_REVISION,
         privacyGate: createDeterministicPrivacyGate({
           statuses: { 'subject.test.1': status },
         }),
@@ -121,10 +119,9 @@ describe('JF-3 lifecycle and privacy', () => {
     // A gate is not a flag saying "privacy was considered". It answers about one subject, and a
     // clearance for somebody else is not a clearance.
     const backend = createGovernedExactBackend({
-      registry: testRegistry([
+      pack: testPack([
         testRecordInput({ subjectRef: 'subject.test.2', classification: 'LOCAL_ONLY' }),
       ]),
-      knowledgeRevision: TEST_KNOWLEDGE_REVISION,
       privacyGate: createDeterministicPrivacyGate({
         statuses: { 'subject.test.1': 'clear' },
         defaultStatus: 'erased',

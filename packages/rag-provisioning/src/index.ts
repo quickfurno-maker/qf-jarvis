@@ -3,9 +3,16 @@
  *
  * The smallest stable composition surface: the closed vocabularies, the profile/request factories and
  * types, the provisioner factory, the no-op invocation, the ACTIVE retrieval entry point, the
- * GOVERNED_EXACT backend, the revision-bound production knowledge pack, and the content-free result/
- * error/observability types. It does NOT export mutable internals or the synthetic fixtures (those
- * live under `./testing`).
+ * revision-bound pack factory, the GOVERNED_EXACT backend, the production knowledge pack, and the
+ * content-free result/error/observability types. It does NOT export mutable internals or the synthetic
+ * fixtures (those live under `./testing`).
+ *
+ * ### One thing this surface deliberately cannot do
+ *
+ * There is no exported way to pair an arbitrary registry with an arbitrary knowledge revision. A
+ * revision is only ever DERIVED from the records it names, by `createRevisionBoundKnowledgePack`. The
+ * earlier surface allowed the pairing, and measurement confirmed what that permitted: unapproved
+ * records activating under an approved revision.
  *
  * ### What ACTIVE is, and what it is not
  *
@@ -47,8 +54,9 @@ export { createRagRequestMetadata } from './contracts/request.js';
 export type { RagRequestMetadata, RagRequestMetadataInput } from './contracts/request.js';
 export type { RagNoOpResult } from './contracts/no-op-result.js';
 
-// The retrieval seam and its bounded outcome (JF-3).
+// The retrieval seam, the revision-bound pack, and the bounded outcome (JF-3).
 export type { RagRetrievalBackend } from './contracts/retrieval-backend.js';
+export type { RevisionBoundKnowledgePack } from './contracts/revision-bound-knowledge-pack.js';
 export type {
   RagRetrievalCounters,
   RagRetrievalOutcome,
@@ -79,15 +87,19 @@ export { invokeRagRetrieval } from './service/invoke-rag-retrieval.js';
 export type { InvokeRagRetrievalOptions } from './service/invoke-rag-retrieval.js';
 export { createGovernedExactBackend } from './service/governed-exact-backend.js';
 export type { GovernedExactBackendOptions } from './service/governed-exact-backend.js';
+// The ONLY way to obtain a knowledge revision: derive it from the records it names. There is
+// deliberately no exported helper that pairs an arbitrary registry with an arbitrary revision.
+export { createRevisionBoundKnowledgePack } from './service/create-revision-bound-knowledge-pack.js';
 
 // The revision-bound production knowledge pack (JF-3). It currently holds ZERO records; the
 // manifest says so, and enumerates exactly what the owner must still supply.
 export {
   PRODUCTION_KNOWLEDGE_PACK_REVISION,
+  PRODUCTION_KNOWLEDGE_PACK_LABEL,
   PRODUCTION_KNOWLEDGE_PACK_MANIFEST,
   PRODUCTION_KNOWLEDGE_RECORDS,
   MISSING_PRODUCTION_KNOWLEDGE,
-  createProductionKnowledgeRegistry,
+  productionKnowledgePack,
   createProductionRagBackend,
 } from './knowledge-pack/production-knowledge-pack.js';
 export type {

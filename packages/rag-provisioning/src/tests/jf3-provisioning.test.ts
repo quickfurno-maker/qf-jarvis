@@ -21,12 +21,10 @@ import {
   disabledProfileInput,
   provisionedNoOpProfileInput,
 } from '../testing/fixtures.js';
-import {
-  TEST_KNOWLEDGE_REVISION,
-  testBackend,
-  testRegistry,
-  testRequest,
-} from './knowledge-fixtures.js';
+import { testBackend, testPack, testRecordInput, testRequest } from './knowledge-fixtures.js';
+
+/** Every derived revision is a content identity of exactly this shape. */
+const DERIVED = /^qfj\.knowledge\.sha256\.[0-9a-f]{64}$/;
 
 describe('JF-3 provisioning', () => {
   it('(JF3-1) absent config stays DISABLED, even with a backend supplied', () => {
@@ -71,7 +69,10 @@ describe('JF-3 provisioning', () => {
 
   it('(JF3-4) ACTIVE + GOVERNED_EXACT succeeds with exact dependencies', () => {
     const backend = testBackend();
-    const provisioner = createRagProvisioner(activeProfileInput(), { backend });
+    const provisioner = createRagProvisioner(
+      activeProfileInput({ knowledgeRevision: backend.knowledgeRevision }),
+      { backend },
+    );
     expect(provisioner.state).toBe('active');
     expect(provisioner.refusal).toBeUndefined();
     expect(provisioner.backend).toBe(backend);
@@ -80,9 +81,11 @@ describe('JF-3 provisioning', () => {
   });
 
   it('(JF3-5) ACTIVE + NONE refuses', () => {
-    const provisioner = createRagProvisioner(activeProfileInput({ backendKind: 'NONE' }), {
-      backend: testBackend(),
-    });
+    const backend = testBackend();
+    const provisioner = createRagProvisioner(
+      activeProfileInput({ backendKind: 'NONE', knowledgeRevision: backend.knowledgeRevision }),
+      { backend },
+    );
     expect(provisioner.state).toBe('invalid');
     expect(provisioner.refusal).toBe('rag-backend-not-runtime-eligible');
   });
@@ -125,7 +128,7 @@ describe('JF-3 provisioning', () => {
     expect(provisioner.refusal).toBe('rag-knowledge-revision-missing');
   });
 
-  it('(JF3-10) a wildcard or `latest` revision refuses, at the profile AND at the backend', () => {
+  it('(JF3-10) a wildcard or `latest` revision refuses, and no pack can ever derive one', () => {
     // `latest` is the whole failure in one word: an approval written against it approves nothing in
     // particular, and silently re-approves every future change to the pack.
     for (const revision of ['latest', 'LATEST', 'Latest']) {
@@ -144,38 +147,63 @@ describe('JF-3 provisioning', () => {
         backend: testBackend(),
       }).refusal,
     ).toBe('rag-profile-invalid');
-    // And a backend cannot be constructed with a moving pointer in the first place.
-    for (const revision of ['latest', 'know.rev.*', '   ']) {
+
+    // The backend side is now structural rather than validated. A revision is DERIVED from records,
+    // so there is no parameter through which a moving pointer could be supplied at all -- and every
+    // derived revision is an exact 64-hex content identity.
+    expect(testBackend().knowledgeRevision).toMatch(DERIVED);
+    expect(testPack([]).knowledgeRevision).toMatch(DERIVED);
+    // Passing something that is not a pack is refused rather than coerced.
+    for (const notAPack of [undefined, null, {}, { knowledgeRevision: 'latest' }]) {
       expect(() =>
-        createGovernedExactBackend({ registry: testRegistry(), knowledgeRevision: revision }),
+        createGovernedExactBackend({ pack: notAPack as unknown as ReturnType<typeof testPack> }),
       ).toThrow(Error);
     }
   });
 
-  it('(JF3-11) a registry/pack revision mismatch refuses, in both directions', () => {
-    // The binding that makes an approval mean something. Without it a profile could approve revision
-    // `r1` while the registry behind the backend held anything at all -- same package, same backend
-    // kind, same everything a coarser check compares.
-    const mismatch = createRagProvisioner(activeProfileInput(), {
-      backend: testBackend(undefined, 'know.rev.2'),
-    });
+  it('(JF3-11) a pack revision mismatch refuses, in both directions', () => {
+    // Two packs whose CONTENT differs, so their derived revisions differ. That is now the only way a
+    // mismatch can arise -- a caller can no longer produce one by typing a different label.
+    const packA = testBackend();
+    const packB = testBackend([
+      testRecordInput({
+        content: 'SYNTHETIC RECORD B. Invented for a spec; not business truth.',
+        contentDigest: 'b'.repeat(64),
+      }),
+    ]);
+    expect(packA.knowledgeRevision).not.toBe(packB.knowledgeRevision);
+
+    const mismatch = createRagProvisioner(
+      activeProfileInput({ knowledgeRevision: packA.knowledgeRevision }),
+      { backend: packB },
+    );
     expect(mismatch.state).toBe('invalid');
     expect(mismatch.refusal).toBe('rag-knowledge-revision-mismatch');
     expect(mismatch.backend).toBeUndefined();
 
-    const mirrored = createRagProvisioner(activeProfileInput({ knowledgeRevision: 'know.rev.9' }), {
-      backend: testBackend(),
-    });
+    const mirrored = createRagProvisioner(
+      activeProfileInput({ knowledgeRevision: packB.knowledgeRevision }),
+      { backend: packA },
+    );
     expect(mirrored.refusal).toBe('rag-knowledge-revision-mismatch');
+
+    // A profile naming a revision no pack ever derived is refused too.
+    expect(
+      createRagProvisioner(activeProfileInput({ knowledgeRevision: 'know.rev.invented' }), {
+        backend: packA,
+      }).refusal,
+    ).toBe('rag-knowledge-revision-mismatch');
 
     // A backend that declares a kind it is not cannot serve either.
     const liar: RagRetrievalBackend = Object.freeze({
-      ...testBackend(),
+      ...packA,
       backendKind: 'FUTURE_MANAGED_VECTOR' as const,
     });
-    expect(createRagProvisioner(activeProfileInput(), { backend: liar }).refusal).toBe(
-      'rag-backend-kind-mismatch',
-    );
+    expect(
+      createRagProvisioner(activeProfileInput({ knowledgeRevision: packA.knowledgeRevision }), {
+        backend: liar,
+      }).refusal,
+    ).toBe('rag-backend-kind-mismatch');
   });
 
   it('(JF3-12) there is no default ACTIVE and no path that reaches it by omission', () => {
@@ -195,7 +223,7 @@ describe('JF-3 provisioning', () => {
     }
     // The ONE way in: name ACTIVE, name GOVERNED_EXACT, name the exact revision, bind the backend.
     expect(
-      createRagProvisioner(activeProfileInput({ knowledgeRevision: TEST_KNOWLEDGE_REVISION }), {
+      createRagProvisioner(activeProfileInput({ knowledgeRevision: backend.knowledgeRevision }), {
         backend,
       }).state,
     ).toBe('active');

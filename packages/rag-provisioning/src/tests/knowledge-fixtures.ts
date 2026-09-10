@@ -8,31 +8,33 @@
  *
  * Every content string below says, in the content itself, that it is synthetic. If one of these ever
  * did leak into an answer, the answer would announce the defect rather than sound plausible.
+ *
+ * ### Revisions are derived here too (JF-3 owner correction)
+ *
+ * These helpers build a real revision-bound pack and read its derived revision. There is deliberately
+ * no test-only shortcut that pairs a registry with a chosen revision label: a convenience API that let
+ * specs do what production cannot would be the same bug with a `test` prefix, and it would make the
+ * suite unable to notice if the production path regained the ability.
  */
-import {
-  createGovernedKnowledgeRegistry,
-  createRetrievalRequest,
-} from '@qf-jarvis/governed-knowledge';
+import { createRetrievalRequest } from '@qf-jarvis/governed-knowledge';
 import type {
-  GovernedKnowledgeRegistry,
   KnowledgeRecordInput,
   KnowledgeRetrievalRequest,
   KnowledgeRetrievalRequestInput,
 } from '@qf-jarvis/governed-knowledge';
 
+import type { RagRetrievalBackend } from '../contracts/retrieval-backend.js';
+import type { RevisionBoundKnowledgePack } from '../contracts/revision-bound-knowledge-pack.js';
 import { createGovernedExactBackend } from '../service/governed-exact-backend.js';
 import { createRagProvisioner } from '../service/create-rag-provisioner.js';
 import type { RagProvisioner } from '../service/create-rag-provisioner.js';
-import type { RagRetrievalBackend } from '../contracts/retrieval-backend.js';
+import { createRevisionBoundKnowledgePack } from '../service/create-revision-bound-knowledge-pack.js';
 import { activeProfileInput } from '../testing/fixtures.js';
 
 /** A 64-hex content digest built deterministically from a single seed character. */
 export function digest(seed: string): string {
   return seed.repeat(64).slice(0, 64);
 }
-
-/** The revision the synthetic test registry claims. Matches `activeProfileInput().knowledgeRevision`. */
-export const TEST_KNOWLEDGE_REVISION = 'know.rev.1';
 
 /** A valid ACTIVE, currently-effective synthetic record input; override any field for a test. */
 export function testRecordInput(
@@ -90,25 +92,26 @@ export function testRequest(
   return createRetrievalRequest(testRequestInput(overrides));
 }
 
-/** An immutable registry over the given synthetic records. */
-export function testRegistry(
+/** A revision-bound pack over the given synthetic records, with its revision derived from them. */
+export function testPack(
   records: readonly KnowledgeRecordInput[] = [testRecordInput()],
-): GovernedKnowledgeRegistry {
-  return createGovernedKnowledgeRegistry(records);
+): RevisionBoundKnowledgePack {
+  return createRevisionBoundKnowledgePack(records);
 }
 
-/** A GOVERNED_EXACT backend over the given synthetic records, at the given revision. */
+/** A GOVERNED_EXACT backend over a pack of the given synthetic records. */
 export function testBackend(
   records: readonly KnowledgeRecordInput[] = [testRecordInput()],
-  revision: string = TEST_KNOWLEDGE_REVISION,
 ): RagRetrievalBackend {
-  return createGovernedExactBackend({
-    registry: testRegistry(records),
-    knowledgeRevision: revision,
-  });
+  return createGovernedExactBackend({ pack: testPack(records) });
 }
 
-/** An ACTIVE provisioner bound to a backend over the given synthetic records. */
+/**
+ * An ACTIVE provisioner bound to a backend, naming that backend's own derived revision.
+ *
+ * The revision is read from the backend rather than written into the fixture, because there is no
+ * longer any way to know it in advance — which is the correction working as intended.
+ */
 export function activeProvisioner(backend: RagRetrievalBackend = testBackend()): RagProvisioner {
   return createRagProvisioner(
     activeProfileInput({ knowledgeRevision: backend.knowledgeRevision }),

@@ -21,37 +21,42 @@
  * success. A caller therefore cannot mistake "no approved knowledge exists" for "nothing applies
  * here": it is told, on every request, that it has no grounding.
  *
- * ### The revision is the binding
+ * ### The revision is the binding, and it is DERIVED (JF-3 owner correction)
  *
- * `PRODUCTION_KNOWLEDGE_PACK_REVISION` is what an ACTIVE profile names as its `knowledgeRevision`, and
- * the provisioner refuses unless the bound backend carries that same revision. The revision is
- * therefore a claim about WHICH body of knowledge was approved — and it must change whenever the
- * records do. `v0-empty` says what this one contains.
+ * `PRODUCTION_KNOWLEDGE_PACK_REVISION` is what an ACTIVE profile names, and the provisioner refuses
+ * unless the bound backend carries that same revision. It is computed from the records below by
+ * `createRevisionBoundKnowledgePack` — a SHA-256 over the canonical form of every governed field of
+ * every record — so it changes automatically whenever the pack's contents or governance metadata
+ * change. Nobody chooses it, and nobody can label different records with it.
+ *
+ * `PRODUCTION_KNOWLEDGE_PACK_LABEL` is the human-readable name for this generation. It is display
+ * metadata and NOT the approval binding: a label is what somebody typed, and the previous head proved
+ * what a typed label is worth as a security property.
  *
  * ### What it cannot do
  *
  * No filesystem, no network, no environment, no clock, no database, no digest computation. The records
  * array is a literal, and the registry is built in memory from it.
  */
-import { createGovernedKnowledgeRegistry } from '@qf-jarvis/governed-knowledge';
 import type {
-  GovernedKnowledgeRegistry,
   KnowledgeObservabilityHook,
   KnowledgePrivacyGate,
   KnowledgeRecordInput,
 } from '@qf-jarvis/governed-knowledge';
 
 import type { RagRetrievalBackend } from '../contracts/retrieval-backend.js';
+import type { RevisionBoundKnowledgePack } from '../contracts/revision-bound-knowledge-pack.js';
 import { createGovernedExactBackend } from '../service/governed-exact-backend.js';
+import { createRevisionBoundKnowledgePack } from '../service/create-revision-bound-knowledge-pack.js';
 
 /**
- * The exact revision of this pack.
+ * The human-readable name of this pack generation.
  *
- * `v0-empty` is deliberately self-describing: a deployment that pins it is pinning a pack with no
- * records. The first pack carrying owner-approved content takes a NEW revision, and every ACTIVE
- * profile then has to be re-approved against it rather than inheriting the approval of an empty one.
+ * `v0-empty` is deliberately self-describing: a deployment reading it is looking at a pack with no
+ * records. It is metadata for people. It is NOT the approval binding and is never compared against a
+ * profile -- {@link PRODUCTION_KNOWLEDGE_PACK_REVISION} is, and that one is derived from the records.
  */
-export const PRODUCTION_KNOWLEDGE_PACK_REVISION = 'qfj.production.knowledge.v0-empty';
+export const PRODUCTION_KNOWLEDGE_PACK_LABEL = 'qfj.production.knowledge.v0-empty';
 
 /**
  * One owner-supplied input this pack still needs.
@@ -128,7 +133,13 @@ export const MISSING_PRODUCTION_KNOWLEDGE: readonly MissingKnowledgeItem[] = Obj
 
 /** The manifest of this pack. Content-free by construction: there is no content to describe. */
 export interface ProductionKnowledgePackManifest {
+  /**
+   * The AUTHORITATIVE revision: content-addressed, derived from the records, and the value an ACTIVE
+   * profile must name. Changes whenever any record's text or governance metadata changes.
+   */
   readonly revision: string;
+  /** The human-readable generation name. Display metadata; never the approval binding. */
+  readonly label: string;
   /** The number of production records this pack ships. Currently, and truthfully, zero. */
   readonly recordCount: number;
   /** The exact topics this pack can serve. Empty while `recordCount` is zero. */
@@ -143,23 +154,46 @@ export interface ProductionKnowledgePackManifest {
  * The production records.
  *
  * EMPTY. Adding an entry here is a business-content decision, not an engineering one: it requires an
- * approved source, a named approver and an owner-set classification, and it requires the pack revision
- * to change in the same commit.
+ * approved source, a named approver and an owner-set classification. The pack revision then changes on
+ * its own -- it is derived from exactly these records, so there is no way to add content and keep the
+ * old approval identity, and no separate version somebody could forget to bump.
  */
 export const PRODUCTION_KNOWLEDGE_RECORDS: readonly KnowledgeRecordInput[] = Object.freeze([]);
 
-/** The manifest, derived from the records rather than declared alongside them. */
+/**
+ * The revision-bound production pack.
+ *
+ * Built once, from the literal above, at module evaluation: a pure synchronous computation with no
+ * clock, no environment, no filesystem and no network. Every deployment of the same source therefore
+ * derives the same revision, which is the property that makes an approval portable.
+ */
+const PRODUCTION_PACK: RevisionBoundKnowledgePack = createRevisionBoundKnowledgePack(
+  PRODUCTION_KNOWLEDGE_RECORDS,
+);
+
+/**
+ * The AUTHORITATIVE production knowledge revision.
+ *
+ * Content-addressed and derived -- `qfj.knowledge.sha256.<64 hex>` over the canonical form of every
+ * governed field of every record above. Adding, removing or editing a record, or changing its
+ * classification, permissions, approval, lifecycle, window, supersession or source identity, changes
+ * this value. That is the whole point: an approval names a body of knowledge, not a label.
+ */
+export const PRODUCTION_KNOWLEDGE_PACK_REVISION = PRODUCTION_PACK.knowledgeRevision;
+
+/** The manifest, derived from the pack rather than declared alongside it. */
 export const PRODUCTION_KNOWLEDGE_PACK_MANIFEST: ProductionKnowledgePackManifest = Object.freeze({
-  revision: PRODUCTION_KNOWLEDGE_PACK_REVISION,
-  recordCount: PRODUCTION_KNOWLEDGE_RECORDS.length,
-  topics: Object.freeze([...new Set(PRODUCTION_KNOWLEDGE_RECORDS.map((r) => r.topic))].sort()),
-  hasApprovedContent: PRODUCTION_KNOWLEDGE_RECORDS.length > 0,
+  revision: PRODUCTION_PACK.knowledgeRevision,
+  label: PRODUCTION_KNOWLEDGE_PACK_LABEL,
+  recordCount: PRODUCTION_PACK.recordCount,
+  topics: PRODUCTION_PACK.topics,
+  hasApprovedContent: PRODUCTION_PACK.recordCount > 0,
   missing: MISSING_PRODUCTION_KNOWLEDGE,
 });
 
-/** Build the immutable registry for this pack. In memory, from the literal above, and nothing else. */
-export function createProductionKnowledgeRegistry(): GovernedKnowledgeRegistry {
-  return createGovernedKnowledgeRegistry(PRODUCTION_KNOWLEDGE_RECORDS);
+/** The revision-bound production pack: registry and derived revision, inseparable. */
+export function productionKnowledgePack(): RevisionBoundKnowledgePack {
+  return PRODUCTION_PACK;
 }
 
 export interface ProductionRagBackendOptions {
@@ -170,18 +204,17 @@ export interface ProductionRagBackendOptions {
 }
 
 /**
- * Build the GOVERNED_EXACT backend for the production pack, bound to this pack's exact revision.
+ * Build the GOVERNED_EXACT backend for the production pack.
  *
- * The revision is taken from the pack rather than accepted as a parameter: a caller that could pass
- * its own would be able to claim an approved revision for a registry that is not it, which is the one
- * thing the profile/backend revision check exists to prevent.
+ * It takes the whole bound pack, so the revision it reports is the one its own records produce. There
+ * is no parameter through which a caller could claim an approved revision for a registry that is not
+ * the approved one -- which is exactly the substitution the owner correction closed.
  */
 export function createProductionRagBackend(
   options?: ProductionRagBackendOptions,
 ): RagRetrievalBackend {
   return createGovernedExactBackend({
-    registry: createProductionKnowledgeRegistry(),
-    knowledgeRevision: PRODUCTION_KNOWLEDGE_PACK_REVISION,
+    pack: PRODUCTION_PACK,
     ...(options?.privacyGate === undefined ? {} : { privacyGate: options.privacyGate }),
     ...(options?.observability === undefined ? {} : { observability: options.observability }),
   });

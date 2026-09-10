@@ -120,9 +120,7 @@ describe('containment', () => {
       const text = readFileSync(file, 'utf8');
       expect(text).not.toMatch(/\bfetch\s*\(/);
       expect(text).not.toMatch(/process\.env/);
-      expect(text).not.toMatch(
-        /from ['"]node:(fs|net|http|https|dns|tls|dgram|child_process|crypto)['"]/,
-      );
+      expect(text).not.toMatch(/from ['"]node:(fs|net|http|https|dns|tls|dgram|child_process)['"]/);
       expect(text).not.toMatch(
         /from ['"](pg|groq-sdk|openai|pinecone|weaviate|qdrant|chroma|faiss|hnswlib|langchain|@xenova\/transformers|onnxruntime-node|axios|undici)['"]/,
       );
@@ -135,6 +133,40 @@ describe('containment', () => {
     }
   });
 
+  it('(30) permits node:crypto in ONE file, for deterministic content identity only', () => {
+    // ADR-0053 banned it outright, correctly: a boundary that did nothing had no digest to compute.
+    // The JF-3 owner correction derives the knowledge revision from the records it names, and that
+    // needs a hash. The ban is NARROWED rather than dropped -- one file, named exactly -- and every
+    // network, filesystem, environment and process ban above is untouched.
+    //
+    // What the hash is: a local, synchronous content identity. It is not a signature, it reaches no
+    // network, it reads no key, and it proves nothing about who authored the records.
+    const pkgRoot = fileURLToPath(PKG_DIR).replace(/\\/g, '/');
+    const importers = productionFiles()
+      .filter((f) => /from ['"]node:crypto['"]/.test(readFileSync(f, 'utf8')))
+      .map((f) => f.replace(/\\/g, '/').replace(pkgRoot, ''))
+      .sort();
+    expect(importers).toEqual(['src/service/create-revision-bound-knowledge-pack.ts']);
+
+    // And in that one file it is a hash and nothing else: no cipher, no key material, no randomness
+    // that would make a revision non-deterministic.
+    const text = readRepo(
+      'packages/rag-provisioning/src/service/create-revision-bound-knowledge-pack.ts',
+    );
+    expect(text).toContain("import { createHash } from 'node:crypto'");
+    for (const forbidden of [
+      'createCipheriv',
+      'createDecipheriv',
+      'createSign',
+      'createVerify',
+      'generateKeyPair',
+      'randomBytes',
+      'randomUUID',
+    ]) {
+      expect(text).not.toContain(forbidden);
+    }
+  });
+
   it('(30,35) permits the governed-knowledge authority in an EXACT allowlist of files only', () => {
     // ACTIVE retrieval delegates to the knowledge authority -- that is the whole design, and hiding
     // it behind a re-export would only make the dependency harder to see. What must NOT happen is
@@ -144,7 +176,9 @@ describe('containment', () => {
       'src/contracts/observability.ts',
       'src/contracts/retrieval-backend.ts',
       'src/contracts/retrieval-outcome.ts',
+      'src/contracts/revision-bound-knowledge-pack.ts',
       'src/knowledge-pack/production-knowledge-pack.ts',
+      'src/service/create-revision-bound-knowledge-pack.ts',
       'src/service/governed-exact-backend.ts',
       'src/service/invoke-rag-retrieval.ts',
     ];
@@ -172,6 +206,7 @@ describe('containment', () => {
       'ACTIVE_ELIGIBLE_BACKEND',
       'MISSING_PRODUCTION_KNOWLEDGE',
       'NOOP_RAG_OBSERVABILITY',
+      'PRODUCTION_KNOWLEDGE_PACK_LABEL',
       'PRODUCTION_KNOWLEDGE_PACK_MANIFEST',
       'PRODUCTION_KNOWLEDGE_PACK_REVISION',
       'PRODUCTION_KNOWLEDGE_RECORDS',
@@ -184,13 +219,14 @@ describe('containment', () => {
       'RUNTIME_ELIGIBLE_BACKEND',
       'RagProvisioningError',
       'createGovernedExactBackend',
-      'createProductionKnowledgeRegistry',
       'createProductionRagBackend',
       'createRagProvisioner',
       'createRagProvisioningProfile',
       'createRagRequestMetadata',
+      'createRevisionBoundKnowledgePack',
       'invokeNoOpRag',
       'invokeRagRetrieval',
+      'productionKnowledgePack',
     ];
     expect(Object.keys(barrel).sort()).toEqual(EXPECTED);
     const b = barrel as Record<string, unknown>;
@@ -207,6 +243,17 @@ describe('containment', () => {
       'auditLookup',
     ]) {
       expect(b[leaked]).toBeUndefined();
+    }
+    // JF-3 owner correction: no exported helper pairs an arbitrary registry with an arbitrary
+    // revision. A revision is only ever DERIVED, and the removed helpers are named here so that
+    // restoring one would fail this lock rather than quietly reopening the substitution.
+    for (const removed of [
+      'createProductionKnowledgeRegistry',
+      'createKnowledgeRevision',
+      'labelRegistry',
+      'bindRevision',
+    ]) {
+      expect(b[removed]).toBeUndefined();
     }
   });
 

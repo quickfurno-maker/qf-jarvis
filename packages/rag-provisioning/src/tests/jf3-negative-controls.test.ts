@@ -22,6 +22,7 @@ import type { RetrievedKnowledge } from '@qf-jarvis/governed-knowledge';
 import { describe, expect, it } from 'vitest';
 
 import type { RagRetrievalBackend } from '../contracts/retrieval-backend.js';
+import { createGovernedExactBackend } from '../service/governed-exact-backend.js';
 import { createRagProvisioner } from '../service/create-rag-provisioner.js';
 import { invokeRagRetrieval } from '../service/invoke-rag-retrieval.js';
 import {
@@ -31,12 +32,11 @@ import {
 } from '../knowledge-pack/production-knowledge-pack.js';
 import { activeProfileInput } from '../testing/fixtures.js';
 import {
-  TEST_KNOWLEDGE_REVISION,
   activeProvisioner,
   digest,
   testBackend,
+  testPack,
   testRecordInput,
-  testRegistry,
   testRequest,
 } from './knowledge-fixtures.js';
 
@@ -70,49 +70,85 @@ describe('JF-3 negative and mutation controls', () => {
       expect(provisioner.backend).toBeUndefined();
     }
     // The control is meaningful only if the SAME call with a real profile does activate.
-    expect(createRagProvisioner(activeProfileInput(), { backend: testBackend() }).state).toBe(
-      'active',
-    );
+    const backend = testBackend();
+    expect(
+      createRagProvisioner(activeProfileInput({ knowledgeRevision: backend.knowledgeRevision }), {
+        backend,
+      }).state,
+    ).toBe('active');
   });
 
   it('MUTANT: a vector backend is treated as runtime-eligible', () => {
     // IN PRODUCTION: a future vector adapter serves under an approval written for deterministic exact
     // retrieval -- semantic search arriving through a door labelled "exact lookup".
+    const backend = testBackend();
     for (const backendKind of ['FUTURE_LOCAL_VECTOR', 'FUTURE_MANAGED_VECTOR', 'NONE'] as const) {
-      const byProfile = createRagProvisioner(activeProfileInput({ backendKind }), {
-        backend: testBackend(),
-      });
+      const byProfile = createRagProvisioner(
+        activeProfileInput({ backendKind, knowledgeRevision: backend.knowledgeRevision }),
+        { backend },
+      );
       expect(byProfile.refusal).toBe('rag-backend-not-runtime-eligible');
     }
     // And from the other side: a backend that DECLARES a vector kind cannot serve an exact profile.
     const vectorish: RagRetrievalBackend = Object.freeze({
-      ...testBackend(),
+      ...backend,
       backendKind: 'FUTURE_LOCAL_VECTOR' as const,
     });
-    expect(createRagProvisioner(activeProfileInput(), { backend: vectorish }).refusal).toBe(
-      'rag-backend-kind-mismatch',
-    );
+    expect(
+      createRagProvisioner(activeProfileInput({ knowledgeRevision: backend.knowledgeRevision }), {
+        backend: vectorish,
+      }).refusal,
+    ).toBe('rag-backend-kind-mismatch');
   });
 
-  it('MUTANT: the knowledgeRevision match is skipped', () => {
-    // IN PRODUCTION: an ACTIVE profile approving revision A binds to a registry holding revision B.
-    // Same package, same backend kind, same everything a coarser check compares -- and every answer
-    // afterwards is grounded in knowledge nobody approved, while the audit trail says otherwise.
-    const approved = testBackend([RECORD], 'know.rev.approved');
-    const substituted = testBackend(
-      [
-        testRecordInput({
-          content: 'SYNTHETIC UNAPPROVED REPLACEMENT. Invented for a spec; not business truth.',
-          contentDigest: digest('8'),
-        }),
-      ],
-      'know.rev.unapproved',
-    );
-    const profile = activeProfileInput({ knowledgeRevision: 'know.rev.approved' });
-    expect(createRagProvisioner(profile, { backend: approved }).state).toBe('active');
-    const caught = createRagProvisioner(profile, { backend: substituted });
+  it('MUTANT: the same revision is claimed for different records (the owner-review bug)', () => {
+    // IN PRODUCTION, on the head this corrects: an ACTIVE profile approving revision A bound to a
+    // registry holding entirely different records, because the revision was a caller-chosen LABEL
+    // and the gate only compared two labels. Measured on head 7bbe1ab, unapproved text activated
+    // cleanly under an approved revision and served, and the citation still carried the approved
+    // record's stale contentDigest.
+    //
+    // The correction makes the mutation unconstructible rather than detected: a revision is DERIVED
+    // from the records, so two different bodies of knowledge cannot share one.
+    const approvedPack = testPack([RECORD]);
+    const substitutedPack = testPack([
+      testRecordInput({
+        content: 'SYNTHETIC UNAPPROVED REPLACEMENT. Invented for a spec; not business truth.',
+        contentDigest: digest('8'),
+      }),
+    ]);
+    // Same identity, same digest field, same everything a label comparison would see.
+    expect(approvedPack.recordCount).toBe(substitutedPack.recordCount);
+    expect(approvedPack.topics).toEqual(substitutedPack.topics);
+    // Different content, therefore different revision. This is the whole correction in one line.
+    expect(approvedPack.knowledgeRevision).not.toBe(substitutedPack.knowledgeRevision);
+
+    const profile = activeProfileInput({ knowledgeRevision: approvedPack.knowledgeRevision });
+    expect(
+      createRagProvisioner(profile, {
+        backend: createGovernedExactBackend({ pack: approvedPack }),
+      }).state,
+    ).toBe('active');
+    const caught = createRagProvisioner(profile, {
+      backend: createGovernedExactBackend({ pack: substitutedPack }),
+    });
     expect(caught.state).toBe('invalid');
     expect(caught.refusal).toBe('rag-knowledge-revision-mismatch');
+
+    // There is no public production constructor that pairs a registry with a chosen revision. The
+    // backend takes a pack and reads the revision off it; a hand-built object is not a pack.
+    expect(createGovernedExactBackend({ pack: substitutedPack }).knowledgeRevision).toBe(
+      substitutedPack.knowledgeRevision,
+    );
+    expect(() =>
+      createGovernedExactBackend({
+        pack: {
+          knowledgeRevision: approvedPack.knowledgeRevision,
+          registry: undefined,
+        } as unknown as typeof approvedPack,
+      }),
+    ).toThrow(Error);
+
     // And the `latest` variant, which is the version of this mutation that looks like convenience.
     expect(
       createRagProvisioner(activeProfileInput({ knowledgeRevision: 'latest' }), {
@@ -125,7 +161,7 @@ describe('JF-3 negative and mutation controls', () => {
     // IN PRODUCTION: every lifecycle, freshness, permission, classification and privacy rule is
     // skipped in one step, and the result still LOOKS correct -- records come back, with content.
     // This is the single most dangerous shortcut available in the whole lane.
-    const registry = testRegistry([
+    const pack = testPack([
       testRecordInput({ classification: 'HUMAN_ONLY' }),
       testRecordInput({
         knowledgeId: 'kb.synthetic.retired',
@@ -134,14 +170,15 @@ describe('JF-3 negative and mutation controls', () => {
         contentDigest: digest('3'),
       }),
     ]);
+    const registry = pack.registry;
     const bypassing: RagRetrievalBackend = Object.freeze({
       backendKind: 'GOVERNED_EXACT' as const,
-      knowledgeRevision: TEST_KNOWLEDGE_REVISION,
+      knowledgeRevision: pack.knowledgeRevision,
       // The mutant: read the registry directly, skip `retrieveGovernedKnowledge` entirely.
       retrieve: (): { ok: true; records: readonly RetrievedKnowledge[] } => ({
         ok: true,
         records: registry.snapshot().map(
-          (summary) =>
+          (summary: { knowledgeId: string }) =>
             ({
               record: { ...summary, content: 'RAW REGISTRY CONTENT' },
               citation: { knowledgeId: summary.knowledgeId },
@@ -290,7 +327,7 @@ describe('JF-3 negative and mutation controls', () => {
     // execution permission.
     const hostile: RagRetrievalBackend = Object.freeze({
       backendKind: 'GOVERNED_EXACT' as const,
-      knowledgeRevision: TEST_KNOWLEDGE_REVISION,
+      knowledgeRevision: testPack().knowledgeRevision,
       retrieve: (): { ok: true; records: readonly RetrievedKnowledge[] } => ({
         ok: true,
         records: [

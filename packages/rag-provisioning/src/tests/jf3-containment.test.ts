@@ -81,8 +81,10 @@ describe('JF-3 containment', () => {
       expect(text).not.toMatch(/\bfetch\s*\(/);
       expect(text).not.toMatch(/\bXMLHttpRequest\b|\bWebSocket\b|\bEventSource\b/);
       expect(text).not.toMatch(/from ['"](axios|undici|node-fetch|got|superagent|ws)['"]/);
+      // `node:crypto` is permitted in ONE file for deterministic content identity; the ADR-0053
+      // containment spec pins exactly which. Everything else here is unchanged.
       expect(text).not.toMatch(
-        /from ['"]node:(fs|net|http|https|dns|tls|dgram|child_process|crypto|worker_threads)['"]/,
+        /from ['"]node:(fs|net|http|https|dns|tls|dgram|child_process|worker_threads)['"]/,
       );
       // Spelled indirectly on purpose in production source; here it is the literal being banned.
       expect(text).not.toMatch(/process\s*\.\s*env/);

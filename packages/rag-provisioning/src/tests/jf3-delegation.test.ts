@@ -13,11 +13,10 @@ import { describe, expect, it } from 'vitest';
 import type { RagRetrievalBackend } from '../contracts/retrieval-backend.js';
 import { invokeRagRetrieval } from '../service/invoke-rag-retrieval.js';
 import {
-  TEST_KNOWLEDGE_REVISION,
   activeProvisioner,
   testBackend,
+  testPack,
   testRecordInput,
-  testRegistry,
   testRequest,
 } from './knowledge-fixtures.js';
 
@@ -31,7 +30,7 @@ function watching(): { backend: RagRetrievalBackend; seen: KnowledgeRetrievalReq
     seen,
     backend: Object.freeze({
       backendKind: 'GOVERNED_EXACT' as const,
-      knowledgeRevision: TEST_KNOWLEDGE_REVISION,
+      knowledgeRevision: inner.knowledgeRevision,
       retrieve: (request: KnowledgeRetrievalRequest) => {
         seen.push(request);
         return inner.retrieve(request);
@@ -69,7 +68,7 @@ describe('JF-3 delegation', () => {
   it('(JF3-15) a backend throw maps to a bounded failure and never escapes', () => {
     const throwing: RagRetrievalBackend = Object.freeze({
       backendKind: 'GOVERNED_EXACT' as const,
-      knowledgeRevision: TEST_KNOWLEDGE_REVISION,
+      knowledgeRevision: testPack().knowledgeRevision,
       retrieve: (): never => {
         throw new Error('SYNTHETIC BACKEND FAILURE carrying pretend record content');
       },
@@ -89,7 +88,7 @@ describe('JF-3 delegation', () => {
     const secretish = 'SYNTHETIC LEAK MARKER 0xdeadbeef pretend-customer-detail';
     const throwing: RagRetrievalBackend = Object.freeze({
       backendKind: 'GOVERNED_EXACT' as const,
-      knowledgeRevision: TEST_KNOWLEDGE_REVISION,
+      knowledgeRevision: testPack().knowledgeRevision,
       retrieve: (): never => {
         throw new Error(secretish);
       },
@@ -129,9 +128,8 @@ describe('JF-3 delegation', () => {
     // Byte-identical to calling the authority directly. This package adds no field, drops none,
     // renames none and rewrites none -- so there is no second projection over the governed contract
     // in which those rules could quietly drift.
-    const registry = testRegistry();
     const request = testRequest();
-    const direct = retrieveGovernedKnowledge(registry, request);
+    const direct = retrieveGovernedKnowledge(testPack().registry, request);
     const viaRag = invokeRagRetrieval(activeProvisioner(), request);
     expect(viaRag.ok).toBe(true);
     expect(direct.ok).toBe(true);

@@ -52,6 +52,14 @@ export function provisionedNoOpProfileInput(
  *
  * Synthetic, and still not an authorization: composing it requires a bound GOVERNED_EXACT backend
  * carrying EXACTLY `knowledgeRevision`, or the provisioner refuses.
+ *
+ * Two things this deliberately omits, per the JF-3 owner correction. It carries no `capabilityRef` and
+ * no `evaluationEvidenceRef`, because JF-3 verifies neither and a serving profile that displays an
+ * unverified evidence reference reads as evidence-bound when it is not.
+ *
+ * The default `knowledgeRevision` is a placeholder that no real pack derives, so a caller that forgets
+ * to name the pack's actual revision gets a refusal rather than an accident. Tests that want an ACTIVE
+ * provisioner pass `pack.knowledgeRevision` explicitly.
  */
 export function activeProfileInput(
   overrides: Partial<RagProvisioningProfileInput> = {},
@@ -64,9 +72,7 @@ export function activeProfileInput(
     policyRevision: 'policy.rev.1',
     configDigest: 'abcdef01',
     createdAt: '2026-07-25T00:00:00Z',
-    knowledgeRevision: 'know.rev.1',
-    capabilityRef: 'cap.profile.a',
-    evaluationEvidenceRef: 'evref-000000',
+    knowledgeRevision: 'know.rev.placeholder',
     ...overrides,
   };
 }

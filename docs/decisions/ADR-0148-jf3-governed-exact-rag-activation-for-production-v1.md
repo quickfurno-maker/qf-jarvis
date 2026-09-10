@@ -1,6 +1,7 @@
 # ADR-0148 — JF-3: governed exact RAG activation for Jarvis Production V1
 
-- **Status:** Accepted — makes `ACTIVE` reachable in the RAG provisioning boundary, under exact
+- **Status:** Accepted, amended by owner review (content-bound knowledge revision + honest ACTIVE
+  profile; see §7, §8a, §11) — makes `ACTIVE` reachable in the RAG provisioning boundary, under exact
   bindings, with deterministic exact retrieval delegated to the existing knowledge authority. **This is
   not a deployment, not a live certification, and not a running service.** No provider is contacted, no
   credential exists in the repository, no migration is added, and the shipped production knowledge pack
@@ -119,11 +120,14 @@ false.
    alone is not enough, because a backend that says it is something else is something else;
 3. the profile names a `knowledgeRevision`;
 4. that revision is an **exact identity** — not `latest`, not a wildcard;
-5. the bound backend carries that **exact** revision.
+5. the bound backend carries that **exact** revision, which it read from the revision-bound pack it
+   was built from (§11);
+6. the profile carries **no** `capabilityRef` and **no** `evaluationEvidenceRef` (§8a).
 
 Each failure has its own reason: `rag-backend-not-runtime-eligible`, `rag-backend-missing`,
 `rag-backend-kind-mismatch`, `rag-knowledge-revision-missing`, `rag-knowledge-revision-not-exact`,
-`rag-knowledge-revision-mismatch`. None is downgraded to a quiet no-op. An ACTIVE declaration that
+`rag-knowledge-revision-mismatch`; an unverified evidence reference is refused at profile construction
+and surfaces as `rag-profile-invalid`. None is downgraded to a quiet no-op. An ACTIVE declaration that
 cannot serve must be visible as a failure — serving nothing while the configuration says ACTIVE is the
 worst of both, because nobody investigates a system that reports no problem.
 
@@ -133,6 +137,32 @@ worst of both, because nobody investigates a system that reports no problem.
 that contact nothing and are refused at runtime. JF-3 built no vector retrieval, added no vector
 dependency, and did not remove the placeholders — a vocabulary entry is not an implementation, and
 deleting them would only hide the eventual decision rather than defer it.
+
+### 8a. An ACTIVE profile carries no unverified evidence reference (owner correction)
+
+`capabilityRef` and `evaluationEvidenceRef` are future-facing declarations from ADR-0053. JF-3 has no
+authority that verifies either of them.
+
+On a `PROVISIONED_NO_OP` profile that is harmless and useful: nothing serves, and the refs let the
+no-op path name a precise missing precondition. That behaviour is unchanged.
+
+On an `ACTIVE` profile it is not harmless. A serving profile displaying an `evaluationEvidenceRef`
+READS as evidence-bound — to an operator, to a reviewer, and in every artifact that records it — while
+the string is in fact ignored. A field that looks like a control and is not one is worse than an absent
+field, because absence prompts the question and a decorative value settles it.
+
+An ACTIVE profile carrying either ref is therefore refused at construction. No `model-evaluation`
+dependency was added to "validate" a string, and no registry was invented to check one against.
+
+**JF-5 owns real behaviour and evaluation certification**, and may supersede this by accepting the refs
+again and actually binding them, under its own ADR.
+
+#### 8b. What the other identity fields do and do not prove
+
+`configDigest` is the existing profile/configuration identity from ADR-0053; `policyRevision` is a
+declared policy identity. Neither is verified against anything here, neither is a signature, and
+neither proves human authorship. Only `knowledgeRevision` is structurally bound to what it names — and
+even that is a content identity, not an attestation (§11b).
 
 ### 9. No free-text retrieval router exists in JF-3
 
@@ -156,17 +186,93 @@ RWC-P7 (ADR-0103) remains the existing Riya-specific grounded path and is **unch
 the same authority directly for its own configured topics. JF-3 did not modify it, replace it, or route
 it through the new boundary.
 
-### 11. An exact `knowledgeRevision` is required, and it is the load-bearing binding
+### 11. An exact `knowledgeRevision` is required, and it is DERIVED from the knowledge itself
 
-The revision is a claim about **which body of knowledge was approved**. Without the profile-to-backend
-revision check, a profile could approve revision `r1` while the registry behind the backend held
-anything at all — same package, same backend kind, same everything a coarser check compares — and every
-answer afterwards would be grounded in knowledge nobody approved, while the audit record said
-otherwise.
+The revision is a claim about **which body of knowledge was approved**. For that claim to mean
+anything, it must be impossible to attach it to a different body of knowledge.
 
-`latest` is refused for the same reason, in one word: it names whatever happens to be current, so an
-approval written against it approves nothing in particular and silently re-approves every future change
-to the pack. The backend factory refuses to construct with a non-exact revision at all.
+**Owner-review correction.** The first JF-3 head did not achieve that. `createGovernedExactBackend`
+took a registry and a revision string as two INDEPENDENT caller-supplied values, and the activation
+gate proved `profile.knowledgeRevision === backend.knowledgeRevision`. That compares two labels. It
+proves label ↔ label; it does not prove label ↔ contents.
+
+Measured against that head, the following worked: build registry A from approved records, build
+registry B from different records, hand both the same string `know.rev.approved`, and point one ACTIVE
+profile at it. Both provisioners activated, both reported `refusal: undefined`, and registry B served
+unapproved text under registry A's approval identity — while the citation carried A's stale
+`contentDigest`. The head's own mismatch specs did not catch it, because they varied the string AND the
+records together and so only ever proved that a string mismatch is detected.
+
+The chain is now:
+
+```
+candidate records
+  → each re-proved through createKnowledgeRecord (governed-knowledge)
+    → canonical complete-record serialization (every governed field, deterministic order)
+      → SHA-256 → knowledgeRevision  "qfj.knowledge.sha256.<64 hex>"
+        → immutable RevisionBoundKnowledgePack { knowledgeRevision, registry }
+          → GOVERNED_EXACT backend built FROM THAT PACK (no separate revision parameter)
+            → ACTIVE profile must name that exact derived revision
+              → retrieval through retrieveGovernedKnowledge
+```
+
+**A caller cannot independently label an arbitrary registry with a revision.** There is no public
+constructor that accepts the two separately — not in production code, and deliberately not in the test
+helpers either, because a convenience API that let specs do what production cannot would be the same
+defect with a `test` prefix.
+
+#### 11a. What the canonical form covers, and why
+
+Every governed field of every record: `knowledgeId`, `version`, `topic`, `sourceType`,
+`authorityTier`, `contentFormat`, **the actual `content` text**, `contentDigest`, `sourceRef`,
+`sourceRevision`, `owner`, `approvedBy`, `approvedAt`, `effectiveFrom`, `expiresAt`, `classification`,
+`lifecycleState`, `permissions` (tenant scope, agent scopes, purposes), `supersededBy`, `subjectRef`.
+
+**Hashing the actual text is load-bearing.** The governed contract treats `contentDigest` as a
+_supplied_ field: `createKnowledgeRecord` validates its shape but never recomputes it from the text. A
+record whose text was edited while its digest was left stale is therefore a valid governed record, and
+a revision derived only from the digest would let changed text hide behind an approval.
+
+**Hashing governance metadata is load-bearing for a different reason.** Re-scoping a record from
+`LOCAL_ONLY` to `HOSTED_ALLOWED`, adding a tenant to its permissions, changing its approver or its
+lifecycle state changes what the pack MEANS and who may see it. Those are exactly the changes an
+approval exists to govern.
+
+Records are ordered by `(knowledgeId, version)` before hashing, so declaration order — an authoring
+detail — cannot produce two identities for one body of knowledge. `allowedAgentScopes` and
+`allowedPurposes` arrive already canonicalized by `freezePermissions`, which de-duplicates and orders
+them by the governed vocabulary; they are sets semantically and are treated as sets. Fields are emitted
+as `name=<JSON>`, so content containing newlines or separators cannot be made to collide with a
+different record. The format carries an explicit version line, so changing it changes revisions
+deliberately rather than silently across a release boundary.
+
+#### 11b. SHA-256 here is content identity, NOT a signature
+
+`node:crypto` is used in exactly one file, for exactly one purpose: a local, synchronous hash of a
+string this repository built. No network, no key, no credential, no randomness, no signing and no
+verification. The ADR-0053 containment ban on `node:crypto` is **narrowed** to that one file and every
+network, filesystem, environment and process ban is untouched.
+
+What this establishes is that a stated revision and a served body of knowledge cannot drift apart.
+What it does NOT establish is who authored or approved the records: anyone who can construct them can
+compute the same revision. Real authorship attestation needs a signer identity this repository does not
+have, and JF-6 owes it — as ADR-0147 already recorded for gateway activation.
+
+#### 11c. `latest` and wildcards
+
+Still refused, and now largely structural: a derived revision is always a 64-hex content identity, so a
+moving pointer cannot be produced by the factory at all. The profile-side check
+(`rag-knowledge-revision-not-exact`) remains as defence against a hand-built backend object.
+
+#### 11d. The production pack
+
+`PRODUCTION_KNOWLEDGE_PACK_REVISION` is now derived from `PRODUCTION_KNOWLEDGE_RECORDS` — which is
+still empty. `PRODUCTION_KNOWLEDGE_PACK_LABEL` (`qfj.production.knowledge.v0-empty`) is retained as
+human-readable display metadata and is **never** compared against a profile. Naming the label instead
+of the revision is refused like any other wrong revision.
+
+Adding a record changes the revision automatically. There is no separate version somebody could forget
+to bump, and no way to add content while keeping the old approval identity.
 
 ### 12. Citations are required and preserved
 
@@ -271,7 +377,15 @@ Negative, and accepted:
   is that a future change to how Jarvis grounds has two places to look.
 - **Activation authority still rests on the trusted composition boundary.** As ADR-0147 recorded, there
   is no cryptographic operator identity in this repository. JF-6 must wire authenticated operator
-  controls and an audit trail.
+  controls and an audit trail. The knowledge revision narrows what that gap covers — it makes the
+  approved knowledge tamper-evident — but it attests nothing about who approved it.
+- **A knowledge revision is no longer human-readable.** `qfj.knowledge.sha256.<64 hex>` is not a
+  version anybody can recognise at a glance, and a deployment naming the wrong one gets a mismatch
+  rather than a helpful message. That is the cost of the label having no authority, and it is the right
+  trade: the previous head's readable revision was readable precisely because somebody typed it.
+- **ACTIVE profiles lose two fields.** A composition that set `capabilityRef` or
+  `evaluationEvidenceRef` on an ACTIVE profile now fails closed. Nothing in the repository does, and
+  JF-5 can reintroduce them with a real binding.
 
 ## What this ADR does not do
 

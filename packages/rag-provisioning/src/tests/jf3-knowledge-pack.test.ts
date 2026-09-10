@@ -23,8 +23,9 @@ import {
   PRODUCTION_KNOWLEDGE_PACK_MANIFEST,
   PRODUCTION_KNOWLEDGE_PACK_REVISION,
   PRODUCTION_KNOWLEDGE_RECORDS,
-  createProductionKnowledgeRegistry,
+  PRODUCTION_KNOWLEDGE_PACK_LABEL,
   createProductionRagBackend,
+  productionKnowledgePack,
 } from '../knowledge-pack/production-knowledge-pack.js';
 import { createRagProvisioner } from '../service/create-rag-provisioner.js';
 import { invokeRagRetrieval } from '../service/invoke-rag-retrieval.js';
@@ -47,15 +48,20 @@ function walk(dir: string): string[] {
 }
 
 describe('JF-3 production knowledge pack', () => {
-  it('(JF3-59) the pack revision is deterministic, and the manifest is derived from the records', () => {
+  it('(JF3-59) the pack revision is deterministic, derived, and content-addressed', () => {
     // Repeated construction gives the same revision and the same (empty) registry -- no clock, no
     // counter, no environment, nothing that could make two deployments disagree about what they hold.
     expect(createProductionRagBackend().knowledgeRevision).toBe(PRODUCTION_KNOWLEDGE_PACK_REVISION);
     expect(createProductionRagBackend().knowledgeRevision).toBe(
       createProductionRagBackend().knowledgeRevision,
     );
-    expect(createProductionKnowledgeRegistry().size).toBe(0);
-    expect(createProductionKnowledgeRegistry().snapshot()).toEqual([]);
+    expect(productionKnowledgePack().registry.size).toBe(0);
+    expect(productionKnowledgePack().registry.snapshot()).toEqual([]);
+
+    // DERIVED, not chosen. The owner correction: the revision is a content identity computed from
+    // the records, so nobody can label a different body of knowledge with it.
+    expect(PRODUCTION_KNOWLEDGE_PACK_REVISION).toMatch(/^qfj\.knowledge\.sha256\.[0-9a-f]{64}$/);
+    expect(PRODUCTION_KNOWLEDGE_PACK_REVISION).not.toBe(PRODUCTION_KNOWLEDGE_PACK_LABEL);
 
     // Derived, not declared alongside. A manifest that merely CLAIMED zero could say so while the
     // array held ten; deriving it means the only way to add a record silently is to not add one.
@@ -63,20 +69,29 @@ describe('JF-3 production knowledge pack', () => {
     expect(PRODUCTION_KNOWLEDGE_PACK_MANIFEST.recordCount).toBe(
       PRODUCTION_KNOWLEDGE_RECORDS.length,
     );
+    expect(PRODUCTION_KNOWLEDGE_PACK_MANIFEST.revision).toBe(PRODUCTION_KNOWLEDGE_PACK_REVISION);
+    expect(PRODUCTION_KNOWLEDGE_PACK_MANIFEST.label).toBe(PRODUCTION_KNOWLEDGE_PACK_LABEL);
     expect(PRODUCTION_KNOWLEDGE_PACK_MANIFEST.hasApprovedContent).toBe(false);
     expect(PRODUCTION_KNOWLEDGE_PACK_MANIFEST.topics).toEqual([]);
     expect(Object.isFrozen(PRODUCTION_KNOWLEDGE_PACK_MANIFEST)).toBe(true);
     expect(Object.isFrozen(PRODUCTION_KNOWLEDGE_RECORDS)).toBe(true);
   });
 
-  it('(JF3-60) the pack revision contains no wildcard and no `latest`', () => {
+  it('(JF3-60) neither the revision nor the label can be a wildcard or `latest`', () => {
+    // The revision is derived, so its shape is structural rather than checked -- but a spec that
+    // says so is what would catch a future change to the derivation that reintroduced a pointer.
     const revision = PRODUCTION_KNOWLEDGE_PACK_REVISION;
     expect(revision).toMatch(/^[A-Za-z0-9._:-]+$/);
     expect(revision).not.toContain('*');
     expect(revision.toLowerCase()).not.toBe('latest');
     expect(revision.toLowerCase().split('.')).not.toContain('latest');
-    // The revision says what the pack is. `v0-empty` is a fact about its contents, not a version bump.
-    expect(revision).toContain('empty');
+    expect(revision.length).toBeLessThanOrEqual(128);
+
+    // The LABEL says what the pack is, for people. It is display metadata and never the binding:
+    // the previous head proved what a typed label is worth as a security property.
+    expect(PRODUCTION_KNOWLEDGE_PACK_LABEL).toContain('empty');
+    expect(PRODUCTION_KNOWLEDGE_PACK_LABEL).not.toContain('*');
+    expect(PRODUCTION_KNOWLEDGE_PACK_LABEL.toLowerCase().split('.')).not.toContain('latest');
   });
 
   it('(JF3-61) a duplicate knowledge identity refuses at pack construction', () => {
@@ -175,6 +190,7 @@ describe('JF-3 production knowledge pack', () => {
     // An ACTIVE profile bound to the empty pack composes, and refuses every retrieval -- so a caller
     // is TOLD it has no grounding on every request rather than inferring it from an empty success.
     const backend = createProductionRagBackend();
+    expect(backend.knowledgeRevision).toBe(PRODUCTION_KNOWLEDGE_PACK_REVISION);
     const active = createRagProvisioner(
       activeProfileInput({ knowledgeRevision: PRODUCTION_KNOWLEDGE_PACK_REVISION }),
       { backend },
@@ -189,10 +205,17 @@ describe('JF-3 production knowledge pack', () => {
     expect(outcome.knowledgeReason).toBe('knowledge-not-found');
     expect(outcome.counters.augmentedCharacterCount).toBe(0);
 
-    // A profile naming any OTHER revision cannot bind to this pack. Approval is of a specific body of
+    // A profile naming any OTHER revision cannot bind to this pack -- including the human-readable
+    // LABEL, which is the mistake somebody would actually make. Approval is of a specific body of
     // knowledge, not of a package that happens to be installed.
     const wrong = createRagProvisioner(activeProfileInput(), { backend });
     expect(wrong.state).toBe('invalid');
     expect(wrong.refusal).toBe('rag-knowledge-revision-mismatch');
+    expect(
+      createRagProvisioner(
+        activeProfileInput({ knowledgeRevision: PRODUCTION_KNOWLEDGE_PACK_LABEL }),
+        { backend },
+      ).refusal,
+    ).toBe('rag-knowledge-revision-mismatch');
   });
 });

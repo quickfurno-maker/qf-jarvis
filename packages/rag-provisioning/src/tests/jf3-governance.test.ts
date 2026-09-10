@@ -14,8 +14,8 @@ import {
   activeProvisioner,
   digest,
   testBackend,
+  testPack,
   testRecordInput,
-  testRegistry,
   testRequest,
 } from './knowledge-fixtures.js';
 
@@ -192,7 +192,7 @@ describe('JF-3 governed resolution', () => {
   it('(JF3-27) authority resolution is unchanged: identical results through both paths', () => {
     // The strongest statement this suite can make. If a rule ever starts being decided here instead
     // of in the authority, these two stop agreeing -- for a request nobody thought to enumerate.
-    const registry = testRegistry([RECORD, BETA]);
+    const registry = testPack([RECORD, BETA]).registry;
     const provisioner = activeProvisioner(testBackend([RECORD, BETA]));
     for (const request of [
       testRequest(),
