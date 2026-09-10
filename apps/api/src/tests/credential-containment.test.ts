@@ -524,7 +524,11 @@ describe('(71-77) package API and dependency locks are untouched', () => {
       // POST-RBD1: 79 -> 80. The DIAGNOSTIC-ONLY best-effort `json_schema` adapter. Production's
       // `buildResponseFormat` is untouched -- its non-strict branch still returns `json_object` --
       // and no production path can ask for `strict: false` with a schema.
-      'model-gateway': 80,
+      // JF-2A (ADR-0146): 80 -> 93. The NaraRouter hosted provider (6 symbols) and the V1
+      // provider-SELECTION mode (7). This lock only tracks that package's count; the reasoning is
+      // recorded in its own containment spec. Nothing about this app changes, and production
+      // inference stays OFF.
+      'model-gateway': 93,
       'model-gateway-composition': 2,
       // MVP-P2A.2 HF1: 24 -> 27. The semantic approval-digest helper and its two readable parts.
       // Pure functions over an already-parsed SmokeConfig -- no filesystem, no clock, no network, no
