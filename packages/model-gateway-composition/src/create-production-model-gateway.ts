@@ -128,18 +128,65 @@ function refusalForVerification(reason: string): ProductionCompositionRefusal {
 }
 
 /**
- * Verify one canonical provider's production approval.
+ * Exact release identity comparison across EVERY governed field.
  *
- * Returns `undefined` on success, or the refusal that stops the whole composition. Every serving
- * provider is checked; there is no "any approval will do" path, because under `AUTO` the fallback also
- * returns text a customer reads.
+ * `providerId` alone is not identity — two Groq releases share it. `releaseId` and `configDigest` are
+ * load-bearing: a configuration change that keeps the same model and version is exactly the kind of
+ * change an approval must not silently carry over.
+ */
+function sameRelease(a: ProviderReleaseRef, b: ProviderReleaseRef): boolean {
+  return (
+    a.releaseId === b.releaseId &&
+    a.providerId === b.providerId &&
+    a.modelId === b.modelId &&
+    a.modelVersion === b.modelVersion &&
+    a.configDigest === b.configDigest &&
+    a.executionClass === b.executionClass
+  );
+}
+
+/**
+ * Index a list by provider id, refusing duplicates rather than letting array order decide.
+ *
+ * Returns `undefined` when any provider id appears twice. `.find()` would have silently taken the
+ * first, which makes the winning entry a function of declaration order — and an operator reading the
+ * configuration would have no way to tell which one authorized production.
+ */
+function indexByProviderUnique<T>(
+  items: readonly T[],
+  providerIdOf: (item: T) => string,
+): Map<string, T> | undefined {
+  const byProvider = new Map<string, T>();
+  for (const item of items) {
+    const providerId = providerIdOf(item);
+    if (byProvider.has(providerId)) {
+      return undefined;
+    }
+    byProvider.set(providerId, item);
+  }
+  return byProvider;
+}
+
+/**
+ * Verify one canonical provider's production approval against the release it will actually serve.
+ *
+ * ### The join this closes
+ *
+ * Verifying the claim against registered evidence proves `claim ↔ evidence`. It does NOT prove
+ * `claim ↔ the release this composition is configured to serve`. Without that third link, valid
+ * production evidence for Groq release B satisfies the verifier while the composition serves Groq
+ * release A — the gate authorizes the wrong exact release, and every downstream artifact says it was
+ * approved.
+ *
+ * So the exact release equality is checked FIRST, and only then does the existing ADR-0063 verifier
+ * run. The chain is: provider instance ↔ approved release ↔ approval claim ↔ registered evidence, with
+ * no break.
  */
 function verifyServingProvider(
-  providerId: string,
-  approvals: readonly ProductionApprovalClaim[],
+  activeRelease: ProviderReleaseRef,
+  claim: ProductionApprovalClaim | undefined,
   verifier: EvaluationEvidenceVerifier,
 ): ProductionCompositionRefusal | undefined {
-  const claim = approvals.find((one) => one.release.providerId === providerId);
   if (claim === undefined) {
     return 'production-approval-missing';
   }
@@ -148,6 +195,11 @@ function verifyServingProvider(
   }
   if (hasWildcardIdentity(claim.release)) {
     return 'wildcard-identity';
+  }
+  // THE JOIN. Distinct from `production-evidence-release-mismatch`, which means the registered
+  // evidence disagrees with the claim: this means the claim does not authorize what will be served.
+  if (!sameRelease(claim.release, activeRelease)) {
+    return 'production-approval-release-mismatch';
   }
   const verified = verifier.verify({
     evaluationRef: claim.evaluationRef,
@@ -195,6 +247,75 @@ export function createProductionModelGateway(
   // 3. A composition with nothing approved, or nothing to serve it, is refused rather than built empty.
   if (config.approvedReleases.length === 0 || config.providers.length === 0) {
     return refuse('empty-composition');
+  }
+
+  // 3b. ACTIVATION SET INVARIANTS (JF-2B, ADR-0147). Decided from injected declarations BEFORE the
+  //     per-release registry validation, so an ACTIVE misconfiguration reports the ACTIVE reason rather
+  //     than whichever generic check the extra entry happened to trip first. No provider is invoked and
+  //     no health is called anywhere in this function.
+  let providerMode: ProviderMode | undefined;
+  let servingProviderIds: readonly string[] = [];
+  let verifiedApprovalCount = 0;
+  let releasesByProvider: Map<string, ProviderReleaseRef> | undefined;
+  let approvalsByProvider: Map<string, ProductionApprovalClaim> | undefined;
+
+  if (config.mode === 'ACTIVE') {
+    // 6a. The provider mode is REQUIRED and never defaulted. Defaulting an omission to AUTO would turn
+    //     a missing line of configuration into "use both vendors".
+    if (config.providerMode === undefined) {
+      return refuse('provider-mode-required');
+    }
+    if (!isProviderMode(config.providerMode)) {
+      return refuse('provider-mode-invalid');
+    }
+    providerMode = config.providerMode;
+    servingProviderIds = hostedOrderForProviderMode(providerMode);
+
+    // 6b. The roster must be EXACTLY the canonical providers this mode serves. Not a superset: a
+    //     scoped diagnostic adapter or an unrelated local provider sitting in a production roster is
+    //     a provider nobody decided to serve with.
+    const rosterIds = config.providers.map((one) => one.descriptor.providerId);
+    if (new Set(rosterIds).size !== rosterIds.length) {
+      return refuse('duplicate-provider-identity');
+    }
+    const expected = [...servingProviderIds].sort();
+    const actual = [...rosterIds].sort();
+    if (expected.length !== actual.length || expected.some((id, i) => id !== actual[i])) {
+      return refuse('active-roster-mismatch');
+    }
+
+    // 6c. The APPROVED RELEASE SET must be one-to-one with the serving providers: exactly one release
+    //     per canonical provider, no second release for the same provider, and nothing extra. A
+    //     production composition carrying a release nobody decided to serve is carrying an approval
+    //     surface nobody reviewed.
+    const releases = indexByProviderUnique(config.approvedReleases, (one) => one.providerId);
+    if (releases === undefined) {
+      return refuse('active-release-set-mismatch');
+    }
+    if (
+      releases.size !== servingProviderIds.length ||
+      servingProviderIds.some((id) => !releases.has(id))
+    ) {
+      return refuse('active-release-set-mismatch');
+    }
+    releasesByProvider = releases;
+
+    // 6d. The APPROVAL CLAIM SET must be one-to-one too. Indexing refuses duplicates rather than
+    //     letting `.find()` take whichever was declared first, which would make the approval that
+    //     authorized production a function of array order.
+    const claims = indexByProviderUnique(
+      config.productionApprovals ?? [],
+      (one) => one.release.providerId,
+    );
+    if (claims === undefined) {
+      return refuse('production-approval-set-mismatch');
+    }
+    approvalsByProvider = claims;
+    if (claims.size > servingProviderIds.length) {
+      // An approval for a provider this mode does not serve. Refused rather than ignored: a claim
+      // sitting unused in a production configuration reads as authorization that was granted.
+      return refuse('production-approval-set-mismatch');
+    }
   }
 
   // 4. Every approved release must be exact, registered, and backed by a matching provider instance.
@@ -246,45 +367,27 @@ export function createProductionModelGateway(
     return refuse(registryResult.reason);
   }
 
-  // 6. ACTIVATION (JF-2B, ADR-0147). Everything below is decided from injected declarations; no
-  //    provider is invoked, no health is called and no credential is read during construction.
-  let providerMode: ProviderMode | undefined;
-  let servingProviderIds: readonly string[] = [];
-  let verifiedApprovalCount = 0;
-
+  // 6. THE JOIN (JF-2B, ADR-0147). EVERY provider that could return customer-facing output needs its
+  //    own exact production approval, joined to the EXACT release it will serve. Under AUTO that is
+  //    both: a fallback answer is still an answer a customer reads.
   if (config.mode === 'ACTIVE') {
-    // 6a. The provider mode is REQUIRED and never defaulted. Defaulting an omission to AUTO would turn
-    //     a missing line of configuration into "use both vendors".
-    if (config.providerMode === undefined) {
-      return refuse('provider-mode-required');
+    // Both maps were built above under the same ACTIVE guard; the checks are for the type system.
+    if (releasesByProvider === undefined) {
+      return refuse('active-release-set-mismatch');
     }
-    if (!isProviderMode(config.providerMode)) {
-      return refuse('provider-mode-invalid');
+    if (approvalsByProvider === undefined) {
+      return refuse('production-approval-set-mismatch');
     }
-    providerMode = config.providerMode;
-    servingProviderIds = hostedOrderForProviderMode(providerMode);
-
-    // 6b. The roster must be EXACTLY the canonical providers this mode serves. Not a superset: a
-    //     scoped diagnostic adapter or an unrelated local provider sitting in a production roster is
-    //     a provider nobody decided to serve with.
-    const rosterIds = config.providers.map((one) => one.descriptor.providerId);
-    if (new Set(rosterIds).size !== rosterIds.length) {
-      return refuse('duplicate-provider-identity');
-    }
-    const expected = [...servingProviderIds].sort();
-    const actual = [...rosterIds].sort();
-    if (expected.length !== actual.length || expected.some((id, i) => id !== actual[i])) {
-      return refuse('active-roster-mismatch');
-    }
-
-    // 6c. EVERY provider that could return customer-facing output needs its own exact production
-    //     approval. Under AUTO that is both: a fallback answer is still an answer a customer reads,
-    //     so connectivity or shadow-eligibility evidence is insufficient for either provider.
-    const approvals = config.productionApprovals ?? [];
+    const activeReleases = releasesByProvider;
+    const activeApprovals = approvalsByProvider;
     for (const providerId of servingProviderIds) {
+      const activeRelease = activeReleases.get(providerId);
+      if (activeRelease === undefined) {
+        return refuse('active-release-set-mismatch');
+      }
       const refusal = verifyServingProvider(
-        providerId,
-        approvals,
+        activeRelease,
+        activeApprovals.get(providerId),
         registryResult.registry.verifier,
       );
       if (refusal !== undefined) {

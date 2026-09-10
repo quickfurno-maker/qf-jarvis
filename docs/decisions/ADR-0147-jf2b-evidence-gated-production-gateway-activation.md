@@ -134,6 +134,50 @@ Required for every serving provider: target `ACTIVE_MODEL_RELEASE`, `synthetic: 
 `productionApproval: true`, exact release identity (no wildcard, no `latest`, no router alias), and a
 matching capability profile.
 
+#### 7b. The join must be one-to-one and EXACT — owner-review correction
+
+Owner review of the first JF-2B head found that the gate proved two links and not the third.
+`verifyServingProvider` selected an approval by `providerId` and verified it against registered
+evidence. That proves **claim ↔ evidence**. It does **not** prove **claim ↔ the release this
+composition will actually serve**.
+
+Without the third link, perfectly valid production evidence for Groq release **B** satisfies the
+verifier while the composition serves Groq release **A** — same provider id, different release. The
+gate authorizes the wrong exact release, and every artifact afterwards records release A as
+production-approved.
+
+`ACTIVE` therefore now requires a **one-to-one exact join**:
+
+```
+canonical provider
+  → exactly ONE active approved release
+    → exactly ONE production approval claim for THAT SAME release
+      → registered ACTIVE_MODEL_RELEASE evidence for THAT SAME release
+```
+
+**Same `providerId` is insufficient.** Release equality compares every governed identity field:
+`releaseId`, `providerId`, `modelId`, `modelVersion`, `configDigest`, `executionClass`. `configDigest`
+and `releaseId` are load-bearing — a configuration change that keeps the model and version is exactly
+the kind of change an approval must not silently carry over.
+
+Both sets are also exact, and duplicates fail closed:
+
+- the **approved-release set** must be one-to-one with the serving providers — a missing release, a
+  second release for the same provider, or a release for a provider this mode does not serve all refuse
+  with `active-release-set-mismatch`;
+- the **approval-claim set** likewise, with `production-approval-set-mismatch`. Selecting by `.find()`
+  made the winning approval a function of declaration order, so duplicates are refused rather than
+  resolved.
+
+The new refusal `production-approval-release-mismatch` is deliberately distinct from
+`production-evidence-release-mismatch`: the former means the claim does not authorize what will be
+served; the latter means the registered evidence disagrees with the claim. Two different
+misconfigurations, two different diagnoses, neither exposing a payload.
+
+The capability-registry relation is unchanged — the approved release is still validated against the
+runtime registry, and `capabilityProfileRef` is still checked against registered evidence. The exact
+release equality is what now joins those two sides.
+
 - `GROQ_ONLY` needs Groq's approval.
 - `NARA_ONLY` needs Nara's approval.
 - **`AUTO` needs BOTH.** Nara is the fallback, and a fallback answer is still an answer a customer

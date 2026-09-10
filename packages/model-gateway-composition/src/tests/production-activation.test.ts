@@ -124,6 +124,62 @@ function leg(
   };
 }
 
+/**
+ * Build a release for `providerId` with overridable identity fields.
+ *
+ * Used to construct the "same provider, different release" case the exact-release join exists to
+ * refuse. Deliberately NOT registered in the ACTIVE capability registry — the evaluation-evidence
+ * registry and the runtime capability registry are separate authorities, and adding it to the latter
+ * would change the thing being tested.
+ */
+function releaseFor(
+  providerId: string,
+  over: Partial<{
+    releaseId: string;
+    modelId: string;
+    modelVersion: string;
+    configDigest: string;
+  }> = {},
+): ProviderReleaseRef {
+  return createProviderReleaseRef({
+    releaseId: `release.jf2b.${providerId}.v1`,
+    providerId,
+    modelId: `${providerId}/model-1`,
+    modelVersion: '2026-09-01',
+    executionClass: 'HOSTED',
+    configDigest: `0fadedbeef0000000000000000000${providerId === GROQ ? '0a1' : '0b2'}`,
+    ...over,
+  });
+}
+
+/**
+ * An approval claim, and its registered evidence, bound to an ARBITRARY release.
+ *
+ * The claim and its evidence agree with each other perfectly. What they do not agree with is the
+ * release the composition is configured to serve.
+ */
+function approvalFor(release: ProviderReleaseRef): {
+  readonly evidence: ApprovalEvidence;
+  readonly approval: ProductionApprovalClaim;
+} {
+  const evidence = evidenceFor('ACTIVE_MODEL_RELEASE', {
+    synthetic: false,
+    productionApproval: true,
+    binding: evidenceBinding({ release }),
+    evaluationRef: `evref.jf2b.join.${release.releaseId}.${release.configDigest}`,
+  });
+  return {
+    evidence,
+    approval: {
+      evaluationRef: evidence.evaluationRef,
+      evidenceDigest: derivedDigestOf(evidence),
+      approvalTarget: 'ACTIVE_MODEL_RELEASE',
+      release,
+      capabilityProfileRef: CAPABILITY_PROFILE_REF,
+    },
+  };
+}
+
 /** An ACTIVE config for a provider mode, from the supplied legs. */
 function activeConfig(
   providerMode: 'AUTO' | 'GROQ_ONLY' | 'NARA_ONLY',
@@ -564,5 +620,268 @@ describe('JF-2B: the two axes stay separate, and the retry budget stays zero', (
         ),
       ),
     ).toBe('retry-budget-not-zero');
+  });
+});
+
+describe('JF-2B correction A. the claim must authorize the release actually served', () => {
+  /**
+   * The gap this closes, stated once.
+   *
+   * Verifying a claim against registered evidence proves `claim` against `evidence`. It does not prove
+   * the claim against the release this composition SERVES. Without that third link, perfectly valid
+   * production evidence for Groq release B satisfies the verifier while the composition serves Groq
+   * release A — and every artifact afterwards says release A was production-approved.
+   *
+   * In each case below the claim and its evidence are internally flawless, registration succeeds, the
+   * provider instance and capability registry are valid for the ACTIVE release, and the provider id
+   * matches. The ONLY defect is the join.
+   */
+  function crossBoundConfig(
+    providerMode: 'GROQ_ONLY' | 'NARA_ONLY',
+    servingProvider: string,
+    otherRelease: ProviderReleaseRef,
+  ): ProductionCompositionConfig {
+    const serving = leg(servingProvider);
+    const other = approvalFor(otherRelease);
+    return activeConfig(providerMode, [serving], {
+      // Only the SERVING release is approved and registered for capability.
+      approvedReleases: [serving.release],
+      // The evidence for the other release registers cleanly.
+      evaluationEvidence: [other.evidence],
+      productionApprovals: [other.approval],
+    });
+  }
+
+  it('1. a different Groq release entirely is refused', () => {
+    const releaseB = releaseFor(GROQ, {
+      releaseId: 'release.jf2b.groq.v2',
+      configDigest: '0fadedbeef0000000000000000000ff9',
+    });
+    expect(
+      reasonOf(createProductionModelGateway(crossBoundConfig('GROQ_ONLY', GROQ, releaseB))),
+    ).toBe('production-approval-release-mismatch');
+  });
+
+  it('2. a configDigest-only difference is refused', () => {
+    const releaseB = releaseFor(GROQ, { configDigest: '0fadedbeef0000000000000000000ff8' });
+    expect(
+      reasonOf(createProductionModelGateway(crossBoundConfig('GROQ_ONLY', GROQ, releaseB))),
+    ).toBe('production-approval-release-mismatch');
+  });
+
+  it('3. a releaseId-only difference is refused', () => {
+    const releaseB = releaseFor(GROQ, { releaseId: 'release.jf2b.groq.v9' });
+    expect(
+      reasonOf(createProductionModelGateway(crossBoundConfig('GROQ_ONLY', GROQ, releaseB))),
+    ).toBe('production-approval-release-mismatch');
+  });
+
+  it('4. a modelVersion-only difference is refused', () => {
+    const releaseB = releaseFor(GROQ, { modelVersion: '2026-10-01' });
+    expect(
+      reasonOf(createProductionModelGateway(crossBoundConfig('GROQ_ONLY', GROQ, releaseB))),
+    ).toBe('production-approval-release-mismatch');
+  });
+
+  it('5. a modelId-only difference is refused', () => {
+    const releaseB = releaseFor(GROQ, { modelId: 'groq/model-2' });
+    expect(
+      reasonOf(createProductionModelGateway(crossBoundConfig('GROQ_ONLY', GROQ, releaseB))),
+    ).toBe('production-approval-release-mismatch');
+  });
+
+  it('6. the exact release composes', () => {
+    const serving = leg(GROQ);
+    expect(reasonOf(createProductionModelGateway(activeConfig('GROQ_ONLY', [serving])))).toBe(
+      'COMPOSED',
+    );
+  });
+
+  it('7-8. AUTO refuses when EITHER leg is cross-bound', () => {
+    const groq = leg(GROQ);
+    const nara = leg(NARA);
+
+    // Groq exact, Nara cross-bound.
+    const naraOther = approvalFor(releaseFor(NARA, { releaseId: 'release.jf2b.nara.v2' }));
+    expect(
+      reasonOf(
+        createProductionModelGateway(
+          activeConfig('AUTO', [groq, nara], {
+            evaluationEvidence: [groq.evidence, naraOther.evidence],
+            productionApprovals: [groq.approval, naraOther.approval],
+          }),
+        ),
+      ),
+    ).toBe('production-approval-release-mismatch');
+
+    // Nara exact, Groq cross-bound.
+    const groqOther = approvalFor(releaseFor(GROQ, { releaseId: 'release.jf2b.groq.v3' }));
+    expect(
+      reasonOf(
+        createProductionModelGateway(
+          activeConfig('AUTO', [groq, nara], {
+            evaluationEvidence: [groqOther.evidence, nara.evidence],
+            productionApprovals: [groqOther.approval, nara.approval],
+          }),
+        ),
+      ),
+    ).toBe('production-approval-release-mismatch');
+  });
+
+  it('9. AUTO with both legs exact composes', () => {
+    expect(
+      reasonOf(createProductionModelGateway(activeConfig('AUTO', [leg(GROQ), leg(NARA)]))),
+    ).toBe('COMPOSED');
+  });
+});
+
+describe('JF-2B correction C-D. the ACTIVE release and approval sets are one-to-one', () => {
+  it('10. AUTO missing an approved release refuses', () => {
+    const groq = leg(GROQ);
+    const nara = leg(NARA);
+    expect(
+      reasonOf(
+        createProductionModelGateway(
+          activeConfig('AUTO', [groq, nara], { approvedReleases: [groq.release] }),
+        ),
+      ),
+    ).toBe('active-release-set-mismatch');
+  });
+
+  it('11. AUTO with an extra unrelated approved release refuses', () => {
+    const groq = leg(GROQ);
+    const nara = leg(NARA);
+    expect(
+      reasonOf(
+        createProductionModelGateway(
+          activeConfig('AUTO', [groq, nara], {
+            approvedReleases: [groq.release, nara.release, releaseFor('local-workstation')],
+          }),
+        ),
+      ),
+    ).toBe('active-release-set-mismatch');
+  });
+
+  it('12. two approved releases for the same provider refuse', () => {
+    const groq = leg(GROQ);
+    const nara = leg(NARA);
+    expect(
+      reasonOf(
+        createProductionModelGateway(
+          activeConfig('AUTO', [groq, nara], {
+            approvedReleases: [
+              groq.release,
+              releaseFor(GROQ, { releaseId: 'release.jf2b.groq.v2' }),
+              nara.release,
+            ],
+          }),
+        ),
+      ),
+    ).toBe('active-release-set-mismatch');
+  });
+
+  it('13. GROQ_ONLY carrying a Nara approved release refuses', () => {
+    const groq = leg(GROQ);
+    const nara = leg(NARA);
+    expect(
+      reasonOf(
+        createProductionModelGateway(
+          activeConfig('GROQ_ONLY', [groq], {
+            approvedReleases: [groq.release, nara.release],
+          }),
+        ),
+      ),
+    ).toBe('active-release-set-mismatch');
+  });
+
+  it('14. NARA_ONLY carrying a scoped extra release refuses', () => {
+    const nara = leg(NARA);
+    expect(
+      reasonOf(
+        createProductionModelGateway(
+          activeConfig('NARA_ONLY', [nara], {
+            approvedReleases: [nara.release, releaseFor('groq.shadow.candidate')],
+          }),
+        ),
+      ),
+    ).toBe('active-release-set-mismatch');
+  });
+
+  it('15, 17. duplicate approval claims refuse', () => {
+    const groq = leg(GROQ);
+    const nara = leg(NARA);
+    expect(
+      reasonOf(
+        createProductionModelGateway(
+          activeConfig('AUTO', [groq, nara], {
+            productionApprovals: [groq.approval, groq.approval, nara.approval],
+          }),
+        ),
+      ),
+    ).toBe('production-approval-set-mismatch');
+    expect(
+      reasonOf(
+        createProductionModelGateway(
+          activeConfig('GROQ_ONLY', [groq], {
+            productionApprovals: [groq.approval, groq.approval],
+          }),
+        ),
+      ),
+    ).toBe('production-approval-set-mismatch');
+  });
+
+  it('16, 18. an approval for a provider this mode does not serve refuses', () => {
+    const groq = leg(GROQ);
+    const nara = leg(NARA);
+    expect(
+      reasonOf(
+        createProductionModelGateway(
+          activeConfig('NARA_ONLY', [nara], {
+            productionApprovals: [nara.approval, groq.approval],
+          }),
+        ),
+      ),
+    ).toBe('production-approval-set-mismatch');
+  });
+
+  it('19. claim order does not change the outcome', () => {
+    const groq = leg(GROQ);
+    const nara = leg(NARA);
+    expect(
+      reasonOf(
+        createProductionModelGateway(
+          activeConfig('AUTO', [groq, nara], {
+            productionApprovals: [groq.approval, nara.approval],
+          }),
+        ),
+      ),
+    ).toBe('COMPOSED');
+    expect(
+      reasonOf(
+        createProductionModelGateway(
+          activeConfig('AUTO', [groq, nara], {
+            productionApprovals: [nara.approval, groq.approval],
+          }),
+        ),
+      ),
+    ).toBe('COMPOSED');
+
+    // And a cross-bound claim is refused from either position, so order cannot hide it.
+    const groqOther = approvalFor(releaseFor(GROQ, { releaseId: 'release.jf2b.groq.v4' }));
+    for (const approvals of [
+      [groqOther.approval, nara.approval],
+      [nara.approval, groqOther.approval],
+    ]) {
+      expect(
+        reasonOf(
+          createProductionModelGateway(
+            activeConfig('AUTO', [groq, nara], {
+              evaluationEvidence: [groqOther.evidence, nara.evidence],
+              productionApprovals: approvals,
+            }),
+          ),
+        ),
+      ).toBe('production-approval-release-mismatch');
+    }
   });
 });

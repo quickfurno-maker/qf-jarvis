@@ -59,10 +59,39 @@ export type ProductionCompositionRefusal =
   | 'provider-mode-required'
   /** The named provider mode is not one of `AUTO` / `GROQ_ONLY` / `NARA_ONLY`. */
   | 'provider-mode-invalid'
-  /** The provider roster is not exactly the canonical set the provider mode serves. */
+  /**
+   * The PROVIDER INSTANCE roster is not exactly the canonical set the provider mode serves.
+   *
+   * About provider instances specifically. The approved-release set has its own code below, because
+   * a roster that is right while the release set is wrong is a different misconfiguration.
+   */
   | 'active-roster-mismatch'
   /** Two providers in the roster publish the same identity. */
   | 'duplicate-provider-identity'
+  /**
+   * The APPROVED RELEASE set is not one-to-one with the serving providers.
+   *
+   * A missing release, a second release for the same provider, or a release for a provider this mode
+   * does not serve. A production composition carrying a release nobody decided to serve is carrying an
+   * approval surface nobody reviewed.
+   */
+  | 'active-release-set-mismatch'
+  /**
+   * The PRODUCTION APPROVAL set is not one-to-one with the serving providers.
+   *
+   * A duplicate claim for one provider, or a claim for a provider this mode does not serve. Duplicates
+   * matter because selecting by `.find()` would make the approval that authorized production a
+   * function of declaration order.
+   */
+  | 'production-approval-set-mismatch'
+  /**
+   * The approval does not authorize the release this composition will actually SERVE.
+   *
+   * Distinct from `production-evidence-release-mismatch`, and the distinction is the whole point:
+   * that one means the registered evidence disagrees with the claim; this one means the claim and its
+   * evidence agree with each other about a release that is not the one being served.
+   */
+  | 'production-approval-release-mismatch'
   /** A provider that could serve under this mode has no production approval claim. */
   | 'production-approval-missing'
   /** An approval cites an `evaluationRef` that is not registered. */
