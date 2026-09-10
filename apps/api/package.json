@@ -16,10 +16,12 @@
     "typecheck:tests": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@mastra/core": "1.61.0",
     "@qf-jarvis/agent-runtime": "workspace:*",
     "@qf-jarvis/approval-core-adapter": "workspace:*",
     "@qf-jarvis/contracts": "workspace:*",
     "@qf-jarvis/event-backbone": "workspace:*",
+    "@qf-jarvis/governed-knowledge": "workspace:*",
     "@qf-jarvis/jarvis-runtime": "workspace:*",
     "@qf-jarvis/model-evaluation": "workspace:*",
     "@qf-jarvis/model-gateway": "workspace:*",
@@ -27,6 +29,7 @@
     "@qf-jarvis/postgres-approval-queue": "workspace:*",
     "@qf-jarvis/postgres-conversation-state": "workspace:*",
     "@qf-jarvis/prompt-registry": "workspace:*",
+    "@qf-jarvis/rag-provisioning": "workspace:*",
     "@qf-jarvis/riya-web-conversation-service": "workspace:*",
     "zod": "4.4.3"
   },
