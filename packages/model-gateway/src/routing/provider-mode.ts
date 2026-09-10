@@ -32,11 +32,21 @@
  * Those properties are not claims made here; they hold because this module only ever produces an
  * ordered list of provider ids, and every gate above operates on the result.
  */
+import {
+  GROQ_CANONICAL_PROVIDER_ID,
+  NARA_CANONICAL_PROVIDER_ID,
+} from '../contracts/provider-identity.js';
 import type { HybridRoutingPolicyInput } from './hybrid-routing-policy.js';
 
-/** The canonical hosted provider ids the V1 modes select between. */
-export const GROQ_PROVIDER_ID = 'groq';
-export const NARA_PROVIDER_ID = 'nara';
+/**
+ * The canonical hosted provider ids the V1 modes select between.
+ *
+ * Re-exported from the contracts layer rather than declared here, so the string this policy reasons
+ * about and the string the adapter is REQUIRED to publish are the same constant. Two literals that
+ * happened to agree would be a coincidence maintained by hand; one constant is an invariant.
+ */
+export const GROQ_PROVIDER_ID = GROQ_CANONICAL_PROVIDER_ID;
+export const NARA_PROVIDER_ID = NARA_CANONICAL_PROVIDER_ID;
 
 /** The closed provider-selection mode. Anything else is refused, never coerced. */
 export const PROVIDER_MODES = ['AUTO', 'GROQ_ONLY', 'NARA_ONLY'] as const;

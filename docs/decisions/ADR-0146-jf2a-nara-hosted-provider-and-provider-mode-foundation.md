@@ -114,6 +114,71 @@ hosted order already holds one id — but it also stops a LOCAL provider in the 
 becoming `ranked[1]`. An operator who asked for `GROQ_ONLY` asked for one provider, not for "Groq, or
 whatever else is eligible".
 
+### 5b. Provider-adapter identity is pinned — owner-review hardening
+
+Owner review of the first JF-2A head found a spoofing surface this ADR had created and not closed.
+`providerId` was an injected string that only had to satisfy an identifier grammar, and the adapter
+published it into `descriptor.providerId` and into its capabilities. Once the modes above began
+treating `groq` and `nara` as SEMANTIC identities, that became exploitable in both directions:
+
+- a Nara adapter configured `providerId: 'groq'` would satisfy `GROQ_ONLY`, and would rank **first**
+  under `AUTO`, while sending every request to NaraRouter;
+- a Groq adapter configured `providerId: 'nara'` would satisfy `NARA_ONLY` while sending every request
+  to Groq.
+
+Provider mode, routing order, fallback evidence, provenance and an operator's expectations all rest on
+the provider id being TRUE, so **both directions are closed** — at two different strengths, because
+the two adapters are not in the same situation:
+
+> **The Nara adapter refuses any provider identity other than `nara`.** An exact equality test, with
+> no normalization and no near-match: `groq`, `Nara`, `nara-typo` and `nara ` are all refused.
+>
+> **The Groq adapter refuses any FOREIGN canonical identity.** It may never publish `nara`. It may
+> still carry a scoped `groq.*` id.
+
+#### Why Groq is not pinned exactly, measured rather than assumed
+
+The exact pin was implemented first and it broke a merged feature. The controlled SHADOW runner
+(`apps/api/src/shadow/create-controlled-shadow-runner.ts`) composes **two** Groq providers into **one**
+gateway roster — `providers: [stableObserved.provider, candidateObserved.provider]` — passing
+`release.providerId`, which is `groq.shadow.stable` for one leg and `groq.shadow.candidate` for the
+other. The roster's health map, circuit breaker and routing plan are all keyed by `providerId`.
+Collapsing both legs to `groq` makes them indistinguishable, and the run returns `internal-invariant`
+instead of performing the comparison — observed, not predicted: 63 tests across 10 files failed, and
+`shadow-json-validate-failed` reported `expected 'internal-invariant' to be 'provider-output-invalid'`.
+
+That A/B path predates this hardening and is not what the hardening is about.
+
+**The weaker rule still closes the spoof completely**, which is the property the modes depend on:
+
+- a Groq adapter can never publish `nara`, so `NARA_ONLY` can never be satisfied by Groq;
+- `GROQ_ONLY` and `NARA_ONLY` map to the hosted orders `['groq']` and `['nara']`, so a provider
+  carrying `groq.shadow.candidate` is `not-in-policy` for **every** provider mode and can satisfy none
+  of them — asserted directly.
+
+What the rule permits is a scoped Groq id in a composition that does not use provider modes at all —
+the shadow runner references `ProviderMode` zero times. What it forbids is the one thing that would
+make a mode lie.
+
+**Residual gap, stated rather than glossed:** a Groq-side typo such as `groq-typo` is still
+constructible, though it can satisfy no provider mode. Closing that too requires giving the shadow
+runner a leg discriminator other than `providerId` — a change to a merged A/B path, and an owner
+decision rather than a JF-2A one.
+
+The canonical ids live in `contracts/provider-identity.ts`, which imports nothing, and the routing
+layer's `GROQ_PROVIDER_ID` / `NARA_PROVIDER_ID` re-export them. One constant, so the string the policy
+reasons about and the string the adapter must publish cannot drift apart. A provider never imports
+routing, so the dependency direction is unchanged.
+
+**This is not a closed enum of every possible provider.** The gateway stays provider-neutral,
+`ModelProvider`, `ProviderDescriptor` and the identifier grammar are untouched, and a future provider
+brings its own adapter and its own constant. What is constrained is narrower: an adapter written
+against one vendor's API may never publish a different vendor's canonical identity.
+
+ADR-0046 is not rewritten; this is recorded here as a JF-2A hardening. No existing Groq fixture or
+`./testing` helper changed — the exact-pin attempt required four such edits, and reverting to the
+foreign-identity rule made all four unnecessary.
+
 ### 6. Observability needed no new contract
 
 `ModelUsage` already carries input/output/total tokens, `ProviderInvocationResult` carries `latencyMs`,

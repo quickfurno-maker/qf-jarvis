@@ -25,6 +25,10 @@ import {
   type ProviderCapabilities,
 } from '../../contracts/capabilities.js';
 import { providerModelIdSchema } from '../../contracts/model-id.js';
+import {
+  NARA_CANONICAL_PROVIDER_ID,
+  assertCanonicalProviderId,
+} from '../../contracts/provider-identity.js';
 import { NaraApiKey } from './nara-secret.js';
 import type { NaraTransport } from './nara-transport.js';
 
@@ -139,10 +143,16 @@ const configPrimitivesSchema = z
  * itself `LOCAL` would be a privacy bypass wearing a configuration field.
  */
 export function createNaraProviderConfig(input: NaraProviderConfigInput): NaraProviderConfig {
-  // Read through widened locals on purpose. The declared types already forbid these shapes, so a
-  // comparison against the narrow type is one the compiler has already decided — and the linter says
-  // so. The guards exist for the callers the types do not reach: a JavaScript composition, a value
-  // parsed from configuration, a cast at a boundary. Those must fail closed too.
+  // The identity lock, checked before anything else is read. A Nara adapter publishing `groq` would
+  // satisfy GROQ_ONLY and rank FIRST under AUTO while sending every request to NaraRouter, so provider
+  // mode, routing order, fallback evidence and provenance would all be describing a provider that is
+  // not the one being called.
+  assertCanonicalProviderId(NARA_CANONICAL_PROVIDER_ID, input.providerId);
+
+  // The guards below read through widened locals on purpose. The declared types already forbid these
+  // shapes, so a comparison against the narrow type is one the compiler has already decided — and the
+  // linter says so. They exist for the callers the types do not reach: a JavaScript composition, a
+  // value parsed from configuration, a cast at a boundary. Those must fail closed too.
   const declaredExecutionClass: unknown = input.executionClass;
   if (declaredExecutionClass !== undefined && declaredExecutionClass !== 'HOSTED') {
     throw new Error('The Nara provider is HOSTED and cannot declare another execution class.');

@@ -13,6 +13,10 @@ import {
   type ProviderCapabilities,
 } from '../../contracts/capabilities.js';
 import { providerModelIdSchema } from '../../contracts/model-id.js';
+import {
+  GROQ_CANONICAL_PROVIDER_ID,
+  assertNoForeignProviderIdentity,
+} from '../../contracts/provider-identity.js';
 import { GroqApiKey } from './groq-secret.js';
 import type { GroqTransport } from './groq-transport.js';
 
@@ -69,6 +73,21 @@ const configPrimitivesSchema = z
  * HOSTED. Throws a fixed-message error (never echoing a key) on an invalid field or a missing key/transport.
  */
 export function createGroqProviderConfig(input: GroqProviderConfigInput): GroqProviderConfig {
+  // The identity lock (JF-2A hardening, ADR-0146), checked before anything else is read.
+  //
+  // Once `ProviderMode` treats `groq` and `nara` as semantic identities, a Groq adapter configured
+  // `providerId: 'nara'` would satisfy NARA_ONLY while sending every request to Groq. Closing only the
+  // Nara direction would leave that open, so this closes it here.
+  //
+  // FOREIGN-identity refusal rather than an exact pin, and the difference is load-bearing: the
+  // controlled SHADOW runner composes TWO Groq providers into ONE gateway roster (a stable leg and a
+  // candidate leg), and the roster's health map, circuit breaker and routing plan are all keyed by
+  // `providerId`. Collapsing both legs to `groq` makes them indistinguishable and the gateway returns
+  // `internal-invariant` instead of running the comparison. A scoped `groq.*` id is therefore still
+  // permitted; `nara` never is. Since `GROQ_ONLY`/`NARA_ONLY` name only `groq`/`nara`, a scoped id is
+  // `not-in-policy` for every provider mode and can satisfy none of them.
+  assertNoForeignProviderIdentity(GROQ_CANONICAL_PROVIDER_ID, input.providerId);
+
   if (!(input.apiKey instanceof GroqApiKey)) {
     throw new Error('A Groq provider config requires an injected GroqApiKey.');
   }
