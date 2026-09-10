@@ -71,16 +71,25 @@ describe('profile and default', () => {
 
   it('(6) rejects an unknown mode or backend kind', () => {
     expectInvalidProfile(disabledProfileInput({ mode: 'ENABLED' as never }));
-    expectInvalidProfile(disabledProfileInput({ mode: 'ACTIVE' as never }));
     expectInvalidProfile(disabledProfileInput({ backendKind: 'PINECONE' as never }));
+    // JF-3 (ADR-0148): ACTIVE is now a real mode, so the profile schema PARSES it -- and the
+    // provisioner still refuses this one, because a profile is not an authorization. Naming ACTIVE
+    // beside the NONE backend and no bound retrieval backend yields `invalid`, never a serving state.
+    const provisioner = createRagProvisioner(disabledProfileInput({ mode: 'ACTIVE' }));
+    expect(provisioner.state).toBe('invalid');
+    expect(provisioner.refusal).toBe('rag-backend-not-runtime-eligible');
+    expect(provisioner.backend).toBeUndefined();
   });
 
   it('(7,10) rejects an endpoint/secret/enabled/arbitrary field (strict, no enabled=true)', () => {
     expectInvalidProfile({ ...disabledProfileInput(), endpoint: 'http://x' });
     expectInvalidProfile({ ...disabledProfileInput(), apiKey: 'sk-000' });
     expectInvalidProfile({ ...disabledProfileInput(), enabled: true });
-    // The mode vocabulary has no ENABLED/ACTIVE at all.
-    expect([...RAG_PROVISIONING_MODES]).toEqual(['DISABLED', 'PROVISIONED_NO_OP']);
+    // The mode vocabulary has no ENABLED, in any spelling, and exactly three modes. ACTIVE was
+    // added by ADR-0148 under an explicit gate; `enabled: true` remains a field that cannot exist,
+    // because a boolean is exactly the shape that lets a configuration mistake read as consent.
+    expect([...RAG_PROVISIONING_MODES]).toEqual(['DISABLED', 'PROVISIONED_NO_OP', 'ACTIVE']);
+    expect(RAG_PROVISIONING_MODES).not.toContain('ENABLED');
   });
 
   it('(8) treats absent config as DISABLED', () => {

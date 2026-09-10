@@ -4,4 +4,8 @@
  * A SEPARATE subpath so synthetic profile inputs can never be mistaken for production config. No
  * endpoint, secret, key, token, or content.
  */
-export { disabledProfileInput, provisionedNoOpProfileInput } from './fixtures.js';
+export {
+  activeProfileInput,
+  disabledProfileInput,
+  provisionedNoOpProfileInput,
+} from './fixtures.js';

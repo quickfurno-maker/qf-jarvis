@@ -2,9 +2,17 @@
  * QFJ-P04.05 — authority boundaries and containment (ADR-0053 §K, §L).
  *
  * Matrix items 26–38: Core authority / scope separation preserved; Conversation Operations Center
- * documented-mandatory but absent; no RAG/embedding/vector/network implementation; P04.03/P04.04
- * untouched; no DB and no migration of its own; migrations exact; event-backbone API 39; public API locked; dist
- * production-only; no control byte.
+ * documented-mandatory but absent; no embedding/vector/similarity/network implementation; no DB and no
+ * migration of its own; migrations exact; public API locked; dist production-only; no control byte.
+ *
+ * ### What JF-3 (ADR-0148) changed here, and what it did NOT
+ *
+ * ADR-0053 banned `@qf-jarvis/governed-knowledge` from this package outright, because a boundary that
+ * could not retrieve had no business reaching the knowledge authority. ACTIVE retrieval delegates to
+ * that authority by design, so the ban is REPLACED rather than dropped: the import is permitted in an
+ * EXACT allowlist of three files and refused everywhere else, and `@qf-jarvis/model-evaluation` stays
+ * banned without exception. Every embedding/vector/similarity/network/filesystem/env ban is untouched
+ * and still applies to every production file, ACTIVE path included.
  */
 import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
@@ -14,7 +22,11 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import * as barrel from '../index.js';
-import { RAG_DATA_CLASSES, RUNTIME_ELIGIBLE_BACKEND } from '../contracts/vocabularies.js';
+import {
+  ACTIVE_ELIGIBLE_BACKEND,
+  RAG_DATA_CLASSES,
+  RUNTIME_ELIGIBLE_BACKEND,
+} from '../contracts/vocabularies.js';
 
 const REPO_ROOT = new URL('../../../../', import.meta.url);
 const PKG_DIR = new URL('../../', import.meta.url);
@@ -77,9 +89,13 @@ const LOCKED_MIGRATION_HASHES: Record<string, string> = {
 };
 
 describe('authority and Conversation Operations boundary', () => {
-  it('(26) preserves the standard data-class lattice and only NONE is runtime-eligible', () => {
+  it('(26) preserves the standard data-class lattice and pins both eligible backends', () => {
     expect([...RAG_DATA_CLASSES]).toEqual(['HOSTED_ALLOWED', 'LOCAL_ONLY', 'HUMAN_ONLY']);
+    // The no-op path still pairs with NONE, byte-for-byte as ADR-0053 fixed it.
     expect(RUNTIME_ELIGIBLE_BACKEND).toBe('NONE');
+    // ACTIVE admits exactly ONE backend kind, and it is the deterministic exact one. The FUTURE_*
+    // vector placeholders remain placeholders: JF-3 built no vector retrieval of any kind.
+    expect(ACTIVE_ELIGIBLE_BACKEND).toBe('GOVERNED_EXACT');
   });
 
   it('(27) documents the Conversation Operations Center as mandatory-later but implements none of it', () => {
@@ -99,7 +115,7 @@ describe('containment', () => {
     readFileSync(fileURLToPath(new URL('package.json', PKG_DIR)), 'utf8'),
   ) as { dependencies?: Record<string, string>; exports: Record<string, unknown> };
 
-  it('(30,31,35) has no retrieval/embedding/vector/network library, no P04.03/P04.04 import, no n8n/agent', () => {
+  it('(30,31,35) has no embedding/vector/similarity/network library, no n8n/agent, no env/fs/crypto', () => {
     for (const file of productionFiles()) {
       const text = readFileSync(file, 'utf8');
       expect(text).not.toMatch(/\bfetch\s*\(/);
@@ -110,19 +126,55 @@ describe('containment', () => {
       expect(text).not.toMatch(
         /from ['"](pg|groq-sdk|openai|pinecone|weaviate|qdrant|chroma|faiss|hnswlib|langchain|@xenova\/transformers|onnxruntime-node|axios|undici)['"]/,
       );
-      expect(text).not.toMatch(/from ['"]@qf-jarvis\/(governed-knowledge|model-evaluation)['"]/);
+      // The P04.04 evaluation authority stays banned WITHOUT exception: nothing in a retrieval
+      // boundary should be able to read, produce or consult evaluation evidence.
+      expect(text).not.toMatch(/from ['"]@qf-jarvis\/model-evaluation['"]/);
       expect(text).not.toMatch(/\bn8n\b|kimi|semantic search|cosine/i);
+      // JF-3 restated: ACTIVE mode introduced no similarity, ranking or free-text retrieval.
+      expect(text).not.toMatch(/\b(embedding|embed|vectorStore|similarity|rerank|topK)\s*\(/i);
     }
   });
 
-  it('(35,36) depends only on zod and exposes only the root and ./testing', () => {
-    expect(Object.keys(manifest.dependencies ?? {})).toEqual(['zod']);
+  it('(30,35) permits the governed-knowledge authority in an EXACT allowlist of files only', () => {
+    // ACTIVE retrieval delegates to the knowledge authority -- that is the whole design, and hiding
+    // it behind a re-export would only make the dependency harder to see. What must NOT happen is
+    // the import spreading: a vocabulary file or the no-op path reaching the authority would mean a
+    // second place where retrieval could start, on a path nobody reviewed for it.
+    const ALLOWED = [
+      'src/contracts/observability.ts',
+      'src/contracts/retrieval-backend.ts',
+      'src/contracts/retrieval-outcome.ts',
+      'src/knowledge-pack/production-knowledge-pack.ts',
+      'src/service/governed-exact-backend.ts',
+      'src/service/invoke-rag-retrieval.ts',
+    ];
+    const pkgRoot = fileURLToPath(PKG_DIR).replace(/\\/g, '/');
+    const importers = productionFiles()
+      .filter((f) => /from ['"]@qf-jarvis\/governed-knowledge['"]/.test(readFileSync(f, 'utf8')))
+      .map((f) => f.replace(/\\/g, '/').replace(pkgRoot, ''))
+      .sort();
+    expect(importers).toEqual(ALLOWED);
+  });
+
+  it('(35,36) depends only on zod and the knowledge authority, and exposes two subpaths', () => {
+    // EXACT set match. JF-3 records ONE authorized addition -- the governed-knowledge authority that
+    // ACTIVE retrieval delegates to -- and does not relax the assertion. There is still no provider
+    // SDK, no HTTP client, no database driver, and no vector or embedding library.
+    expect(Object.keys(manifest.dependencies ?? {}).sort()).toEqual([
+      '@qf-jarvis/governed-knowledge',
+      'zod',
+    ]);
     expect(Object.keys(manifest.exports).sort()).toEqual(['.', './testing']);
   });
 
   it('(36) locks the public API surface', () => {
     const EXPECTED = [
+      'ACTIVE_ELIGIBLE_BACKEND',
+      'MISSING_PRODUCTION_KNOWLEDGE',
       'NOOP_RAG_OBSERVABILITY',
+      'PRODUCTION_KNOWLEDGE_PACK_MANIFEST',
+      'PRODUCTION_KNOWLEDGE_PACK_REVISION',
+      'PRODUCTION_KNOWLEDGE_RECORDS',
       'RAG_BACKEND_KINDS',
       'RAG_DATA_CLASSES',
       'RAG_ERROR_CODES',
@@ -131,15 +183,31 @@ describe('containment', () => {
       'RAG_TASK_CLASSES',
       'RUNTIME_ELIGIBLE_BACKEND',
       'RagProvisioningError',
+      'createGovernedExactBackend',
+      'createProductionKnowledgeRegistry',
+      'createProductionRagBackend',
       'createRagProvisioner',
       'createRagProvisioningProfile',
       'createRagRequestMetadata',
       'invokeNoOpRag',
+      'invokeRagRetrieval',
     ];
     expect(Object.keys(barrel).sort()).toEqual(EXPECTED);
     const b = barrel as Record<string, unknown>;
     expect(b['disabledProfileInput']).toBeUndefined();
     expect(b['tryCreateRagProvisioningProfile']).toBeUndefined();
+    // The barrel exports no re-export of the knowledge authority: a caller that wants governed
+    // records asks the authority for them, rather than reaching them through a RAG boundary that
+    // would then be a second, unreviewed door onto the same store.
+    for (const leaked of [
+      'retrieveGovernedKnowledge',
+      'createGovernedKnowledgeRegistry',
+      'createRetrievalRequest',
+      'createKnowledgeRecord',
+      'auditLookup',
+    ]) {
+      expect(b[leaked]).toBeUndefined();
+    }
   });
 
   it('(32,33) migrations 0001–0013 are byte-exact and there is no 0014', () => {

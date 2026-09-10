@@ -560,6 +560,9 @@ importers:
 
   packages/rag-provisioning:
     dependencies:
+      '@qf-jarvis/governed-knowledge':
+        specifier: workspace:*
+        version: link:../governed-knowledge
       zod:
         specifier: 4.4.3
         version: 4.4.3

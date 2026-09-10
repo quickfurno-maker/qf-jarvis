@@ -5,6 +5,9 @@
  * retrieval, embedding, vector query, augmentation, chunking, indexing, network, or side effect. The
  * reason names why it did nothing: disabled, provisioned-no-op, invalid, a non-runtime-eligible
  * backend, or a missing future-facing reference. Deterministic: same provisioner → same result.
+ *
+ * JF-3 (ADR-0148) added an ACTIVE mode, and this function is NOT its entry point -- it still does
+ * nothing, for every provisioner it is handed. ACTIVE retrieval is `invokeRagRetrieval`.
  */
 import { noOpResult } from '../contracts/no-op-result.js';
 import type { RagNoOpResult } from '../contracts/no-op-result.js';
@@ -20,6 +23,13 @@ export interface InvokeNoOpRagOptions {
 }
 
 function reasonFor(provisioner: RagProvisioner): RagReason {
+  // JF-3. An ACTIVE, bound provisioner routed through the NO-OP entry point is a composition
+  // defect: retrieval lives in `invokeRagRetrieval`. It still does nothing here -- but it is
+  // reported as an invariant rather than as one of the ordinary no-op reasons, because none of
+  // those would be true and a reason that is not true is worse than no reason at all.
+  if (provisioner.state === 'active') {
+    return 'rag-invariant';
+  }
   if (provisioner.state === 'invalid') {
     return 'rag-profile-invalid';
   }
