@@ -9,8 +9,13 @@
 
   // The EMITTING build, referenced by the root solution. The vitest specs under src/tests
   // are EXCLUDED so nothing test-only reaches dist/; the shipped synthetic fixtures under
-  // src/testing ARE emitted because they are the public `./testing` subpath. Depends only
-  // on zod — no project references.
+  // src/testing ARE emitted because they are the public `./testing` subpath.
+  //
+  // JF-3 (ADR-0148) added the ONE project reference this package has: the governed-knowledge
+  // authority that ACTIVE retrieval delegates to. It is a reference to a knowledge contract,
+  // not to a provider, a transport or a store.
+  "references": [{ "path": "../governed-knowledge/tsconfig.build.json" }],
+
   "include": ["src/**/*.ts"],
   "exclude": ["src/tests/**"]
 }

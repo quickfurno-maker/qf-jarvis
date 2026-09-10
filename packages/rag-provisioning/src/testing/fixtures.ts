@@ -2,7 +2,13 @@
  * Deterministic synthetic fixtures for the QFJ-P04.05 no-op boundary (ADR-0053).
  *
  * The only shipped fixture content (exported under `./testing`). All synthetic — no endpoint, secret,
- * key, token, or content. Builds valid DISABLED and PROVISIONED_NO_OP profile inputs a test can vary.
+ * key, token, or content. Builds valid DISABLED, PROVISIONED_NO_OP and ACTIVE profile inputs a test
+ * can vary.
+ *
+ * These are profile INPUTS — configuration shapes. No knowledge record, and therefore no content,
+ * is ever built here: a shipped module that could produce governed records would be a shipped
+ * module that could produce answers, and synthetic answers are the one thing a production
+ * composition must not be able to reach by importing a fixture subpath.
  */
 import type { RagProvisioningProfileInput } from '../contracts/provisioning-profile.js';
 
@@ -37,6 +43,36 @@ export function provisionedNoOpProfileInput(
     knowledgeRevision: 'know.rev.1',
     capabilityRef: 'cap.profile.a',
     evaluationEvidenceRef: 'evref-000000',
+    ...overrides,
+  };
+}
+
+/**
+ * A valid ACTIVE profile input (JF-3, ADR-0148).
+ *
+ * Synthetic, and still not an authorization: composing it requires a bound GOVERNED_EXACT backend
+ * carrying EXACTLY `knowledgeRevision`, or the provisioner refuses.
+ *
+ * Two things this deliberately omits, per the JF-3 owner correction. It carries no `capabilityRef` and
+ * no `evaluationEvidenceRef`, because JF-3 verifies neither and a serving profile that displays an
+ * unverified evidence reference reads as evidence-bound when it is not.
+ *
+ * The default `knowledgeRevision` is a placeholder that no real pack derives, so a caller that forgets
+ * to name the pack's actual revision gets a refusal rather than an accident. Tests that want an ACTIVE
+ * provisioner pass `pack.knowledgeRevision` explicitly.
+ */
+export function activeProfileInput(
+  overrides: Partial<RagProvisioningProfileInput> = {},
+): RagProvisioningProfileInput {
+  return {
+    profileId: 'rag.profile.active',
+    profileVersion: 1,
+    mode: 'ACTIVE',
+    backendKind: 'GOVERNED_EXACT',
+    policyRevision: 'policy.rev.1',
+    configDigest: 'abcdef01',
+    createdAt: '2026-07-25T00:00:00Z',
+    knowledgeRevision: 'know.rev.placeholder',
     ...overrides,
   };
 }

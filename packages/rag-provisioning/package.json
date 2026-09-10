@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "sideEffects": false,
-  "description": "QF Jarvis no-op RAG provisioning boundary (QFJ-P04.05). A dedicated, provider-neutral RAG provisioning boundary that does NOT enable RAG: exactly two modes (DISABLED, PROVISIONED_NO_OP), no ENABLED/ACTIVE mode and no enabled=true, absent/malformed config fails closed to DISABLED, and every invocation returns an immutable content-free NO_OP result with exact zero retrieval/embedding/vector/augmentation counters. No embeddings, vector database, semantic search, chunking, indexing, retrieval, augmentation, external service, network, or side effect; no database/schema/migration; no live model call, key, token, or provider activation. Depends only on zod.",
+  "description": "QF Jarvis RAG provisioning boundary (QFJ-P04.05 ADR-0053; JF-3 ADR-0148). Three modes (DISABLED, PROVISIONED_NO_OP, ACTIVE) and no enabled=true; absent/malformed config fails closed to DISABLED; the no-op path is unchanged and still returns an immutable content-free NO_OP result with exact zero counters. ACTIVE performs deterministic EXACT retrieval delegated to @qf-jarvis/governed-knowledge under an exact profile-to-backend knowledge-revision binding, and ships a revision-bound production knowledge pack that currently holds ZERO records. No embeddings, vector database, semantic search, similarity ranking, free-text query, chunking, indexing, external service, network, or side effect; no database/schema/migration; no live model call, key, token, or provider activation. Depends only on zod and the governed-knowledge authority.",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -21,6 +21,7 @@
     "typecheck:tests": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@qf-jarvis/governed-knowledge": "workspace:*",
     "zod": "4.4.3"
   }
 }
