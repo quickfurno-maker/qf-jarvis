@@ -6,12 +6,32 @@
  * appears nowhere. There is no ENABLED/live-send value: the runtime coordinates proposals only.
  */
 
-/** Closed actors. Riya=client, Anisha=vendor, Jarvis=coordination, plus HUMAN and SYSTEM. */
-export const RUNTIME_ACTORS = ['RIYA', 'ANISHA', 'JARVIS', 'HUMAN', 'SYSTEM'] as const;
+/**
+ * Closed actors. Riya=client, Anisha=registered vendor, Aarohi=net-new prospect,
+ * Jarvis=coordination, plus HUMAN and SYSTEM.
+ *
+ * `AAROHI` was added by JF-4C (ADR-0150). The Aarohi acquisition domain had been fully implemented
+ * and offline-certified for eleven stages while the generic runtime could not name it at all, so a
+ * deployment had no way to route an acquisition turn to the agent that owns it.
+ */
+export const RUNTIME_ACTORS = ['RIYA', 'ANISHA', 'AAROHI', 'JARVIS', 'HUMAN', 'SYSTEM'] as const;
 export type RuntimeActor = (typeof RUNTIME_ACTORS)[number];
 
-/** Closed party types. */
-export const RUNTIME_PARTY_TYPES = ['CLIENT', 'VENDOR', 'UNKNOWN'] as const;
+/**
+ * Closed party types.
+ *
+ * `PROSPECT` was added by JF-4C (ADR-0150), and it is the minimum honest change rather than a
+ * convenience. The Aarohi domain states in its own contracts that a prospect is explicitly NOT a Core
+ * vendor: its identity is opaque and deliberately not a vendor identity, and its whole existing-vendor
+ * gate admits exactly one Core status, `NOT_REGISTERED`.
+ *
+ * So routing an unregistered acquisition prospect through `VENDOR` to avoid touching this list would
+ * have made the runtime assert the one thing Aarohi's domain exists to deny — and it would have sent
+ * the turn to Anisha, whose journey assumes a registered vendor relationship that does not exist yet.
+ *
+ * Who a party IS remains the trusted caller's statement, never inferred from text, channel or a model.
+ */
+export const RUNTIME_PARTY_TYPES = ['CLIENT', 'VENDOR', 'PROSPECT', 'UNKNOWN'] as const;
 export type RuntimePartyType = (typeof RUNTIME_PARTY_TYPES)[number];
 
 /**
@@ -118,4 +138,9 @@ export const RUNTIME_REASONS = [
 export type RuntimeReason = (typeof RUNTIME_REASONS)[number];
 
 /** Actors that are AI agents eligible to draft a reply (HUMAN and SYSTEM are not). */
-export const AI_AGENT_ACTORS: ReadonlySet<RuntimeActor> = new Set(['RIYA', 'ANISHA', 'JARVIS']);
+export const AI_AGENT_ACTORS: ReadonlySet<RuntimeActor> = new Set([
+  'RIYA',
+  'ANISHA',
+  'AAROHI',
+  'JARVIS',
+]);

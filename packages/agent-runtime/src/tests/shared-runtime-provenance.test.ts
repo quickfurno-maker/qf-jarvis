@@ -199,12 +199,16 @@ describe('(2-5) the provenance envelope', () => {
 
 describe('(6-11, 24) the merged actor x party invariants are INHERITED, not re-decided', () => {
   it('(24) cross-product: the merged compatibility rule is total and unchanged', () => {
+    // JF-4C (ADR-0150) adds one agent row and one party column. Aarohi is exactly as exclusive as
+    // Riya and Anisha; the three coordination actors gain PROSPECT exactly as they already carry
+    // every other party. Nothing about the existing five rows changed.
     const expected: Record<RuntimeActor, readonly RuntimePartyType[]> = {
       RIYA: ['CLIENT'],
       ANISHA: ['VENDOR'],
-      JARVIS: ['CLIENT', 'VENDOR', 'UNKNOWN'],
-      HUMAN: ['CLIENT', 'VENDOR', 'UNKNOWN'],
-      SYSTEM: ['CLIENT', 'VENDOR', 'UNKNOWN'],
+      AAROHI: ['PROSPECT'],
+      JARVIS: ['CLIENT', 'VENDOR', 'PROSPECT', 'UNKNOWN'],
+      HUMAN: ['CLIENT', 'VENDOR', 'PROSPECT', 'UNKNOWN'],
+      SYSTEM: ['CLIENT', 'VENDOR', 'PROSPECT', 'UNKNOWN'],
     };
     for (const actor of RUNTIME_ACTORS) {
       for (const party of RUNTIME_PARTY_TYPES) {
