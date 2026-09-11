@@ -255,6 +255,9 @@ describe('JF-5B (C) live execution needs BOTH gates', () => {
     expect(Object.keys(parsed).sort()).toEqual([
       'executeLive',
       'groqSmokeConfig',
+      // JF-5B-R3 adds one NON-SECRET repeatable switch, and it names models to PROBE -- never a
+      // winner, never a provider, never a credential. The scorer still chooses.
+      'naraCandidates',
       'outputDirectory',
       'unknown',
     ]);
@@ -595,6 +598,8 @@ describe('JF-5B (C) the preflight states every non-secret fact, and no secret', 
     ciConclusion: 'success',
     outputDirectory: 'D:/jarvis-certification/JF-5B/run-1',
     runId: 'run.jf5b.001',
+    // No owner decision: the metadata-driven shortlist applies, exactly as it did before JF-5B-R3.
+    naraCandidates: [],
   });
   const text = lines.join('\n');
 

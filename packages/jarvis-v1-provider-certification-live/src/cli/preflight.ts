@@ -28,6 +28,14 @@ export const NARA_CHAT_HOST = 'router.bynara.id';
 /** The Groq host, for the summary only. The Groq smoke owns the real endpoint. */
 export const GROQ_CHAT_HOST = 'api.groq.com';
 
+/**
+ * The ONE repeatable non-secret switch that carries an owner's Nara candidate decision (JF-5B-R3).
+ *
+ * There is deliberately no `--nara-model`, no `--nara-winner` and no `--provider`. This names models
+ * worth PROBING; it cannot name a winner, and the scorer is the only thing that can.
+ */
+export const NARA_CANDIDATE_FLAG = '--nara-candidate';
+
 export interface PreflightFacts {
   readonly headSha: string;
   readonly worktreeClean: boolean;
@@ -35,6 +43,26 @@ export interface PreflightFacts {
   readonly ciConclusion: string;
   readonly outputDirectory: string;
   readonly runId: string;
+  /** The owner-supplied Nara candidates, or empty for the metadata-driven shortlist. */
+  readonly naraCandidates: readonly string[];
+}
+
+/**
+ * The candidate block, or the one line that says there is no owner decision.
+ *
+ * Numbered from 1 rather than listed, so a reader can count them against the command they typed and
+ * see immediately that nothing was added, dropped or reordered.
+ */
+function renderCandidateLines(candidates: readonly string[]): readonly string[] {
+  if (candidates.length === 0) {
+    return ['  nara candidate source  DISCOVERY_METADATA'];
+  }
+  return [
+    '  nara candidate source  OWNER_EXPLICIT',
+    ...candidates.map(
+      (alias, position) => `  nara candidate ${String(position + 1)}       ${alias}`,
+    ),
+  ];
 }
 
 /**
@@ -57,6 +85,9 @@ export function renderPreflightSummary(facts: PreflightFacts): readonly string[]
     `  groq host              ${GROQ_CHAT_HOST}`,
     `  nara chat host         ${NARA_CHAT_HOST}`,
     `  nara discovery         GET ${NARA_MODELS_ENDPOINT}`,
+    // The owner must SEE the exact candidate set before typing the phrase. A decision nobody can read
+    // back is not a decision anybody made.
+    ...renderCandidateLines(facts.naraCandidates),
     '',
     `  max groq calls         ${String(JF5B_BUDGET.maxGroqCalls)}`,
     `  max nara calls         ${String(JF5B_BUDGET.maxNaraCalls)}`,
@@ -97,6 +128,16 @@ export interface CertifyArgv {
    * in it, so this argument cannot become a way to pass a secret.
    */
   readonly groqSmokeConfig: string | undefined;
+  /**
+   * The NON-SECRET owner-supplied Nara candidate aliases, in the order they were typed (JF-5B-R3).
+   *
+   * Repeatable, never comma-delimited, and deliberately not a file or an environment variable: this is
+   * a decision a person makes about one run, and it belongs where a person can see it. It carries no
+   * secret and may appear in a shell history.
+   *
+   * Empty means "no owner decision", and the metadata-driven shortlist applies exactly as before.
+   */
+  readonly naraCandidates: readonly string[];
   readonly unknown: readonly string[];
 }
 
@@ -111,6 +152,7 @@ export function parseCertifyArgv(argv: readonly string[]): CertifyArgv {
   let executeLive = false;
   let outputDirectory: string | undefined;
   let groqSmokeConfig: string | undefined;
+  const naraCandidates: string[] = [];
   const unknown: string[] = [];
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index] ?? '';
@@ -142,12 +184,29 @@ export function parseCertifyArgv(argv: readonly string[]): CertifyArgv {
       groqSmokeConfig = arg.slice('--groq-smoke-config='.length);
       continue;
     }
+    // REPEATABLE, and never split on a comma: a model id may legitimately contain punctuation, and a
+    // delimiter here would be this lane inventing a syntax the endpoint never uses. An empty value is
+    // collected rather than dropped, so the validator refuses it by name instead of silently
+    // shortening the set.
+    if (arg === NARA_CANDIDATE_FLAG) {
+      const next = argv[index + 1];
+      if (next !== undefined) {
+        naraCandidates.push(next);
+        index += 1;
+      }
+      continue;
+    }
+    if (arg.startsWith(`${NARA_CANDIDATE_FLAG}=`)) {
+      naraCandidates.push(arg.slice(NARA_CANDIDATE_FLAG.length + 1));
+      continue;
+    }
     unknown.push(arg);
   }
   return Object.freeze({
     executeLive,
     outputDirectory,
     groqSmokeConfig,
+    naraCandidates: Object.freeze(naraCandidates),
     unknown: Object.freeze(unknown),
   });
 }

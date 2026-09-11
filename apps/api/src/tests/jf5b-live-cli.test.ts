@@ -12,6 +12,7 @@
  */
 import {
   EXIT_CODES,
+  JF5B_BUDGET,
   LIVE_CONFIRMATION_PHRASE,
 } from '@qf-jarvis/jarvis-v1-provider-certification-live';
 import type {
@@ -23,6 +24,8 @@ import type {
   RepositoryFacts,
 } from '@qf-jarvis/jarvis-v1-provider-certification-live';
 import { createGroqApiKey, createNaraApiKey } from '@qf-jarvis/model-gateway';
+
+import { MODEL_REQUIRED_CASES } from '../composition/jf5b-case-corpus.js';
 import { describe, expect, it } from 'vitest';
 
 import type { CertificationRunner } from '../cli/jf5b-certification-runner.js';
@@ -52,6 +55,8 @@ function harness(
     credentialReads: 0,
     discoveryCalls: 0,
     runnerCalls: 0,
+    probedShortlist: [] as readonly string[],
+    probedObjects: [] as readonly { readonly modelId: string }[],
     filesWritten: [] as string[],
   };
 
@@ -120,8 +125,11 @@ function harness(
     },
   };
   const runner: CertificationRunner = {
-    selectNaraModel: () => {
+    selectNaraModel: (input) => {
       seen.runnerCalls += 1;
+      // Recorded, not merely counted: what reaches the probes is the whole question in JF-5B-R3.
+      seen.probedShortlist = input.shortlist.map((one) => one.modelId);
+      seen.probedObjects = input.shortlist;
       return Promise.resolve({ ok: false as const, reason: 'stub' });
     },
     certifyAllSix: () => {
@@ -167,6 +175,29 @@ function harness(
   };
   return { deps, seen };
 }
+
+/** The exact five the owner selected from the authenticated eligible list. */
+const OWNER_SET: readonly string[] = Object.freeze([
+  'gpt-5.6-luna',
+  'qwen3.8-flash',
+  'deepseek-v4.1-flash',
+  'glm-5.3-flash',
+  'mimo-v2.5',
+]);
+
+/**
+ * A discovery body shaped like the one the live run actually received: eligible aliases, and NOT ONE
+ * context length. That is what made the automatic rule refuse, and what the owner channel exists for.
+ */
+const ownerDiscovery = (): DiscoveryHttpResponse => {
+  const body = JSON.stringify({
+    data: [{ id: 'vendor-x/something-else' }, ...OWNER_SET.map((id) => ({ id })), { id: 'auto' }],
+  });
+  return { status: 200, redirected: false, bodyText: body, bodyBytes: body.length };
+};
+
+const withCandidates = (...aliases: readonly string[]): readonly string[] =>
+  aliases.flatMap((alias) => ['--nara-candidate', alias]);
 
 const FULL_ARGV = [
   '--execute-live',
@@ -348,5 +379,140 @@ describe('JF-5B (1,2) the phases run in order, and a failure stops the next one'
     expect(text).toContain('shortlisted: vendor-a/model-one');
     expect(text).not.toContain('shortlisted: auto');
     expect(text).not.toContain('combo');
+  });
+});
+
+describe('JF-5B-R3 (CLI) the owner candidate set travels through the whole sequence', () => {
+  const ARGV = [...FULL_ARGV, ...withCandidates(...OWNER_SET)];
+
+  it('renders the candidates BEFORE the confirmation is requested', async () => {
+    const { deps, seen } = harness({ typed: 'no', discovery: ownerDiscovery() });
+    await runJf5bLiveCertificationCli(ARGV, deps);
+    const text = seen.lines.join('\n');
+    expect(text).toContain('nara candidate source  OWNER_EXPLICIT');
+    for (const [position, alias] of OWNER_SET.entries()) {
+      expect(text).toContain(`nara candidate ${String(position + 1)}       ${alias}`);
+    }
+    // The run stopped at the wrong phrase, so the set was shown and nothing else happened.
+    expect(seen.confirmationReads).toBe(1);
+    expect([seen.credentialReads, seen.discoveryCalls, seen.runnerCalls]).toEqual([0, 0, 0]);
+  });
+
+  it('still performs authenticated discovery, and resolves the owner set from it', async () => {
+    const { deps, seen } = harness({ discovery: ownerDiscovery() });
+    await runJf5bLiveCertificationCli(ARGV, deps);
+    // Discovery is NOT skipped: the account is re-asked what it may use, every run.
+    expect(seen.discoveryCalls).toBe(1);
+    // And the probes receive the owner's five, in the owner's order.
+    expect(seen.probedShortlist).toEqual([...OWNER_SET]);
+    expect(seen.lines.join('\n')).toContain('candidate source       OWNER_EXPLICIT');
+  });
+
+  it('hands the probes the DISCOVERED objects, never ones synthesised from argv', async () => {
+    const { deps, seen } = harness({ discovery: ownerDiscovery() });
+    await runJf5bLiveCertificationCli(ARGV, deps);
+    for (const model of seen.probedObjects) {
+      // A synthesised `{ modelId }` would have none of the fields the parser normalises.
+      expect(Object.keys(model).sort()).toEqual([
+        'capabilities',
+        'contextLength',
+        'modality',
+        'modelId',
+        'reasoning',
+      ]);
+    }
+  });
+
+  it('refuses a candidate the account was not offered, AFTER discovery and BEFORE any probe', async () => {
+    const { deps, seen } = harness({ discovery: ownerDiscovery() });
+    const outcome = await runJf5bLiveCertificationCli(
+      [...FULL_ARGV, ...withCandidates('gpt-5.6-luna', 'not/offered')],
+      deps,
+    );
+    expect(outcome.exitCode).toBe(EXIT_CODES.NARA_SELECTION_REFUSED);
+    expect(outcome.reason).toBe('owner-candidate-not-currently-eligible');
+    // Discovery HAPPENED — that is what made the refusal possible — and no chat probe followed it.
+    expect(seen.discoveryCalls).toBe(1);
+    expect(seen.runnerCalls).toBe(0);
+    // The eligible list is printed, so the owner can correct the command.
+    expect(seen.lines.join('\n')).toContain('eligible: gpt-5.6-luna');
+  });
+
+  it('refuses a sixth candidate before the credential and before the network', async () => {
+    const { deps, seen } = harness({ discovery: ownerDiscovery() });
+    const outcome = await runJf5bLiveCertificationCli(
+      [...FULL_ARGV, ...withCandidates(...OWNER_SET, 'one-too-many')],
+      deps,
+    );
+    expect(outcome.exitCode).toBe(EXIT_CODES.INVALID_USAGE);
+    expect(outcome.reason).toBe('owner-candidate-too-many');
+    expect([seen.confirmationReads, seen.credentialReads, seen.discoveryCalls]).toEqual([0, 0, 0]);
+  });
+
+  it('refuses a duplicate, a router alias and an empty value, all before the credential', async () => {
+    for (const [aliases, refusal] of [
+      [['gpt-5.6-luna', 'GPT-5.6-Luna'], 'owner-candidate-duplicate'],
+      [['auto'], 'owner-candidate-router-alias'],
+      [['  '], 'owner-candidate-empty'],
+      [['has space'], 'owner-candidate-malformed'],
+    ] as const) {
+      const { deps, seen } = harness({ discovery: ownerDiscovery() });
+      const outcome = await runJf5bLiveCertificationCli(
+        [...FULL_ARGV, ...withCandidates(...aliases)],
+        deps,
+      );
+      expect([refusal, outcome.reason]).toEqual([refusal, refusal]);
+      expect([refusal, seen.credentialReads, seen.discoveryCalls]).toEqual([refusal, 0, 0]);
+    }
+  });
+
+  it('with NO candidates the metadata rule still refuses the same list, unchanged', async () => {
+    const { deps, seen } = harness({ discovery: ownerDiscovery() });
+    const outcome = await runJf5bLiveCertificationCli(FULL_ARGV, deps);
+    // The honest stop this lane did NOT remove.
+    expect(outcome.reason).toBe('metadata-insufficient-for-truthful-shortlist');
+    expect(seen.runnerCalls).toBe(0);
+    expect(seen.lines.join('\n')).toContain('nara candidate source  DISCOVERY_METADATA');
+  });
+
+  it('with NO candidates and sufficient metadata the automatic shortlist still applies', async () => {
+    const body = JSON.stringify({
+      data: [
+        { id: 'vendor-a/one', context_length: 131_072 },
+        { id: 'vendor-b/two', context_length: 65_536 },
+      ],
+    });
+    const { deps, seen } = harness({
+      discovery: { status: 200, redirected: false, bodyText: body, bodyBytes: body.length },
+    });
+    await runJf5bLiveCertificationCli(FULL_ARGV, deps);
+    // Ordered by stated context length, exactly as before.
+    expect(seen.probedShortlist).toEqual(['vendor-a/one', 'vendor-b/two']);
+  });
+});
+
+describe('JF-5B-R3 (CLI) the owner set fits inside the existing ceilings', () => {
+  it('the worst-case call arithmetic stays under every budget', () => {
+    // Stated as arithmetic rather than trusted: five candidates is the ceiling, and the probe count
+    // per alias is unchanged at two.
+    const candidates = OWNER_SET.length;
+    const probesPerAlias = 2;
+    const modelRequiredCases = MODEL_REQUIRED_CASES.length;
+
+    const groqCalls = 1 /* smoke */ + modelRequiredCases + 1; /* AUTO healthy */
+    const naraCalls =
+      1 /* discovery */ +
+      candidates * probesPerAlias +
+      modelRequiredCases +
+      1; /* AUTO forced fallback */
+    const spendUsd = (groqCalls - 1 + naraCalls - 1) * 0.01 + 0.001;
+
+    expect(candidates).toBe(5);
+    expect(groqCalls).toBeLessThanOrEqual(JF5B_BUDGET.maxGroqCalls);
+    expect(naraCalls).toBeLessThanOrEqual(JF5B_BUDGET.maxNaraCalls);
+    expect(groqCalls + naraCalls).toBeLessThanOrEqual(JF5B_BUDGET.maxTotalCalls);
+    expect(spendUsd).toBeLessThanOrEqual(JF5B_BUDGET.maxEstimatedSpendUsd);
+    // The exact figures, so a corpus or candidate change that moves them is visible in a diff.
+    expect([groqCalls, naraCalls, groqCalls + naraCalls]).toEqual([39, 49, 88]);
   });
 });

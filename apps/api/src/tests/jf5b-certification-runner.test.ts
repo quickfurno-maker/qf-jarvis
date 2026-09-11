@@ -489,6 +489,89 @@ describe('JF-5B (2c) selection probes every shortlisted alias equally', () => {
     expect(seams.groqCalls()).toBe(0);
   });
 
+  /**
+   * A Nara transport that answers DIFFERENTLY per model id.
+   *
+   * The point of JF-5B-R3 is that the owner chooses which models are worth probing and the SCORER
+   * still chooses the winner. Proving that needs candidates whose probe results actually differ, so
+   * this reads the `model` off the outgoing body and makes exactly one of them assert something
+   * forbidden.
+   */
+  function perAliasNara(poisoned: string): Wire {
+    const counts = { groq: 0, nara: 0 };
+    const urls: string[] = [];
+    return {
+      groqCalls: () => counts.groq,
+      naraCalls: () => counts.nara,
+      urls: () => urls,
+      groq: {
+        send(request: GroqRequest): Promise<GroqResponse> {
+          counts.groq += 1;
+          urls.push(request.url);
+          return Promise.resolve({
+            status: 200,
+            retryAfterSeconds: null,
+            bodyText: chatCompletion(answerFor(request.body, NEUTRAL_BODY)),
+          });
+        },
+      },
+      nara: {
+        send(request: NaraRequest): Promise<NaraResponse> {
+          counts.nara += 1;
+          urls.push(request.url);
+          const model = (JSON.parse(request.body) as { model?: string }).model ?? '';
+          // A UNIVERSAL forbidden claim, so it fails whichever probe cases are used rather than
+          // depending on one row's own list.
+          const body =
+            model === poisoned
+              ? 'Your payment received and the account is now active.'
+              : NEUTRAL_BODY;
+          return Promise.resolve({
+            status: 200,
+            retryAfterSeconds: null,
+            bodyText: chatCompletion(answerFor(request.body, body)),
+          });
+        },
+      },
+    };
+  }
+
+  it('probes ALL candidates and lets the SCORER pick, not argv order', async () => {
+    // The first alias the owner typed asserts a forbidden claim on every probe, so it fails the hard
+    // gate. If argv order decided anything, it would still win.
+    const seams = perAliasNara('vendor-a/first-typed');
+    const selected = await createJf5bCertificationRunner({
+      groqTransport: seams.groq,
+      naraTransport: seams.nara,
+    }).selectNaraModel({
+      shortlist: [alias('vendor-a/first-typed', 131_072), alias('vendor-b/second-typed', 8_192)],
+      apiKey: NARA_KEY,
+      runId: RUN_ID,
+      ledger: budget(),
+    });
+    expect(selected).toEqual({ ok: true, modelId: 'vendor-b/second-typed' });
+    // BOTH were probed, equally. A run that stopped at the first passing alias would have made two
+    // calls, not four, and would have ranked on nothing.
+    expect(seams.naraCalls()).toBe(4);
+  });
+
+  it('a hard-gate failure cannot win even when it is the only candidate', async () => {
+    const seams = perAliasNara('vendor-a/only');
+    const selected = await createJf5bCertificationRunner({
+      groqTransport: seams.groq,
+      naraTransport: seams.nara,
+    }).selectNaraModel({
+      shortlist: [alias('vendor-a/only', 131_072)],
+      apiKey: NARA_KEY,
+      runId: RUN_ID,
+      ledger: budget(),
+    });
+    expect(selected).toEqual({
+      ok: false,
+      reason: 'no-shortlisted-alias-passed-the-hard-gates',
+    });
+  });
+
   it('stops rather than naming a fallback no probe could reach', async () => {
     const seams = brokenWire();
     const selected = await createJf5bCertificationRunner({

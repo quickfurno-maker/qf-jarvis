@@ -375,6 +375,106 @@ for.
 
 **JF-5B is still not complete.** The owner live run has not happened, and no live evidence exists.
 
+## Amendment — JF-5B-R3: a continuation channel for the honest stop
+
+**Date:** 2026-09-11. Same PR, same branch, same ADR.
+
+### R3.1 What the first real live run actually did
+
+The owner ran the R2 executable against the authenticated Nara account. It reached
+`GET https://router.bynara.id/v1/models`, received HTTP 200 and 51 aliases, and the existing filters
+left **50 eligible** and 1 rejected. The endpoint published **no context length** for any of them.
+
+`buildNaraShortlist` therefore refused with `metadata-insufficient-for-truthful-shortlist`, printed the
+sanitized eligible aliases, and stopped before any chat probe or certification.
+
+**That refusal was correct and remains the default.** Its reason is written into the rule itself: with
+no stable capability field to rank on, the only alternative is guessing from brand names, which is how
+a certification run silently becomes somebody's opinion about which vendor sounds better.
+
+### R3.2 What was actually missing
+
+One sentence in the source had no implementation behind it. `buildNaraShortlist` says the operator
+"stops for an owner decision" — and the CLI had no way to accept one. The run could be repeated
+forever and would refuse identically, because nothing carried the decision in.
+
+R3 adds that channel and nothing else.
+
+### R3.3 The shape of the channel
+
+One repeatable, non-secret switch: `--nara-candidate <exact-model-id>` (also `--nara-candidate=<id>`).
+No comma list, no config file, no environment variable, no interactive choice after the confirmation,
+and deliberately no `--nara-model`, `--nara-winner` or `--provider`. `CertifyArgv` gains exactly one
+field, `naraCandidates`.
+
+Shape is checked BEFORE the preflight summary and long before any credential: at most `MAX_SHORTLIST`
+(five — the shortlist ceiling, not a new number), no empty value, the SAME model-id grammar the
+discovery parser applies, no case-insensitive duplicate, and no router alias — through the provider's
+own `isNaraRouterAlias`, because a second alias list would be a second answer to the same question.
+
+The preflight prints `nara candidate source OWNER_EXPLICIT` and each alias, numbered, ABOVE the
+confirmation line. A decision shown after the phrase is a decision nobody consented to.
+
+### R3.4 Authenticated discovery stays authoritative
+
+Owner candidates do **not** skip `/v1/models`. The sequence is unchanged, and candidate verification
+sits between discovery and the probes:
+
+```
+preflight → typed confirmation → Groq smoke → Nara masked key → GET /v1/models
+  → existing parse/filter → owner candidate verification → selection probes
+  → six certifications → AUTO → artifacts
+```
+
+Every candidate is matched EXACTLY and case-SENSITIVELY against `discovered.eligible` from that same
+run, and the object carried forward is the one the endpoint returned. A case-only mismatch refuses
+rather than repairs — the endpoint is the authority on how an alias is spelled, and correcting it would
+mean the receipt named a model the owner never typed. An alias that is absent, rejected by the filters
+or no longer entitled refuses the run with `owner-candidate-not-currently-eligible`, before any chat
+probe. Nothing is ever synthesised from argv.
+
+So a candidate is not a way to NAME a model; it is a way to name one of the models the account was just
+told it may use.
+
+### R3.5 What the owner chooses, and what still chooses itself
+
+The owner answers exactly one question: _which models are worth probing?_ No ranking happens on this
+path — owner order is preserved because the owner typed it, and a longer context window does not move
+anything, because nothing here reads the field.
+
+Context length is **not** required for an explicit owner candidate, and that is the point: the metadata
+rule exists so an AUTOMATIC shortlist cannot be built by guessing, and an owner naming five aliases from
+the authenticated list is not a guess. The automatic rule is unchanged and still refuses the same list.
+
+The winner is still chosen by the existing `selectNaraModel` scorer — hard safety/contract gates first,
+then deterministic task quality, then p95 latency, then token consumption, then lexical tie-break. A
+spec proves that the first alias typed loses when it fails a hard gate, and that all candidates are
+probed before anything is ranked.
+
+**No alias becomes a production constant.** A spec walks every non-test source file under `packages/`
+and `apps/` and asserts none of the owner's five appears. They live in the owner's command and nowhere
+else.
+
+### R3.6 Budgets
+
+Five candidates × two probe cases each = 10 Nara probes. Worst case for the whole run:
+
+- Groq: 1 smoke + 37 model-required certifications + 1 AUTO = **39** (ceiling 120)
+- Nara: 1 discovery + 10 probes + 37 certifications + 1 AUTO fallback = **49** (ceiling 120)
+- Total **88** (ceiling 200); estimated spend ≈ **USD 0.86** (ceiling 10)
+
+Asserted as arithmetic in a spec, so a corpus or candidate change that moves it is visible in a diff.
+Probe cases per alias is unchanged at two, and same-provider retry is still 0.
+
+### R3.7 What R3 did NOT do
+
+No live provider call and no spend. No change to Jarvis, Mastra, the agents, RAG, the Model Gateway,
+provider selection, provider capability claims, the Nara endpoint or credentials, the six-binding model,
+the 45-row corpus, the AUTO measurements, the gates or the artifacts. No migration. No production seal.
+
+**JF-5B is still not complete.** The owner live run with the candidate set has not happened, and no live
+certification evidence exists.
+
 ## Consequences
 
 Positive: the certification harness is complete, fully tested with zero network calls, and the live run
@@ -390,5 +490,5 @@ Negative, and accepted:
 
 ## Next
 
-**JF-5B live execution**, by the owner, at a terminal — the two blockers of §R1.5 are closed in §R2.
+**JF-5B live execution**, by the owner, at a terminal, with the owner Nara candidate set of §R3.
 Then **JF-5C** — owner production evidence seal.

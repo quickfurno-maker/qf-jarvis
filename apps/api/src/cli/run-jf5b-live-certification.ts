@@ -32,12 +32,14 @@ import {
   buildNaraShortlist,
   checkArgvGate,
   checkOutputPath,
+  checkOwnerCandidates,
   checkTypedConfirmation,
   createCallLedger,
   fetchNaraModelCatalogue,
   parseCertifyArgv,
   parseNaraModelDiscovery,
   renderPreflightSummary,
+  resolveOwnerCandidateShortlist,
 } from '@qf-jarvis/jarvis-v1-provider-certification-live';
 import type {
   ArtifactWriter,
@@ -112,6 +114,16 @@ export async function runJf5bLiveCertificationCli(
     return stop('PRECHECK', EXIT_CODES.INVALID_USAGE, 'groq-smoke-config-missing');
   }
 
+  // The owner candidate set is checked for SHAPE here, before the summary is even rendered: a set
+  // that could never be probed should cost nothing, and certainly not a credential. Whether each alias
+  // is currently ENTITLED is a question only the authenticated endpoint can answer, and phase 2b asks
+  // it after discovery.
+  const candidateShape = checkOwnerCandidates(parsed.naraCandidates);
+  if (!candidateShape.ok) {
+    deps.io.err(`refused: ${candidateShape.refusal} (${candidateShape.modelId})`);
+    return stop('PRECHECK', EXIT_CODES.INVALID_USAGE, candidateShape.refusal);
+  }
+
   if (!deps.facts.worktreeClean) {
     // A dirty tree means the artifacts could not name what actually ran.
     deps.io.err('refused: the worktree is dirty; a live result must name an exact head');
@@ -133,6 +145,7 @@ export async function runJf5bLiveCertificationCli(
     ciConclusion: 'success',
     outputDirectory: deps.facts.resolvedOutputDirectory,
     runId: deps.runId,
+    naraCandidates: parsed.naraCandidates,
   })) {
     deps.io.out(line);
   }
@@ -226,8 +239,20 @@ export async function runJf5bLiveCertificationCli(
     `  returned ${String(discovered.totalReturned)}, eligible ${String(discovered.eligible.length)}, rejected ${String(discovered.rejected.length)}`,
   );
 
-  // ---------------------------------------------------------------- PHASE 2b: deterministic shortlist
-  const shortlist = buildNaraShortlist(discovered.eligible);
+  // ---------------------------------------------------------------- PHASE 2b: the shortlist
+  //
+  // Two paths, one outcome: a list of models THIS run's authenticated discovery returned.
+  //
+  //   - with owner candidates, each is re-verified against `discovered.eligible` by exact
+  //     case-sensitive match and the DISCOVERED object is carried forward;
+  //   - without them, the existing metadata rule applies unchanged, including its honest refusal.
+  //
+  // The owner answers "which models are worth probing?" and nothing else. No ranking happens on either
+  // path, and the scorer in phase 2c still chooses the winner.
+  const shortlist =
+    parsed.naraCandidates.length > 0
+      ? resolveOwnerCandidateShortlist(parsed.naraCandidates, discovered.eligible)
+      : buildNaraShortlist(discovered.eligible);
   if (!shortlist.ok) {
     // The honest stop. The sanitized alias list is printed so the owner can choose; nothing is guessed.
     deps.io.err(`nara selection refused: ${shortlist.refusal}`);
@@ -242,6 +267,9 @@ export async function runJf5bLiveCertificationCli(
       ledger.naraCalls(),
     );
   }
+  deps.io.out(
+    `  candidate source       ${parsed.naraCandidates.length > 0 ? 'OWNER_EXPLICIT' : 'DISCOVERY_METADATA'}`,
+  );
   for (const model of shortlist.shortlist) {
     deps.io.out(`  shortlisted: ${model.modelId}`);
   }

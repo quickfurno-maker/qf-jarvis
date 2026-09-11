@@ -64,6 +64,17 @@ const MODEL_ID = z
   .regex(/^[A-Za-z0-9][A-Za-z0-9._:\-/]*$/);
 
 /**
+ * True when a string could be a model id at all.
+ *
+ * The SAME grammar the parser applies to every alias the endpoint returns, exported so the owner
+ * candidate path can reuse it rather than restate it. A second grammar would be a second answer to
+ * "what is a model id", and the two would diverge the first time either was corrected.
+ */
+export function isDiscoverableModelId(value: string): boolean {
+  return MODEL_ID.safeParse(value.trim()).success;
+}
+
+/**
  * One entry of the authenticated model list.
  *
  * Deliberately permissive about EXTRA fields and strict about the ones it reads. The endpoint is not

@@ -43,9 +43,24 @@ export {
   DISCOVERY_REJECTIONS,
   SHORTLIST_REFUSALS,
   buildNaraShortlist,
+  isDiscoverableModelId,
   parseNaraModelDiscovery,
   selectNaraModel,
 } from './discovery/nara-model-discovery.js';
+
+// JF-5B-R3: the OWNER-supplied candidate shortlist. A continuation channel for the honest stop the
+// metadata rule already performs -- it chooses which models are worth probing, and nothing else. The
+// existing scorer still picks the winner, and authenticated discovery still authorises every candidate.
+export {
+  OWNER_CANDIDATE_REFUSALS,
+  checkOwnerCandidates,
+  resolveOwnerCandidateShortlist,
+} from './discovery/owner-candidate-shortlist.js';
+export type {
+  OwnerCandidateCheck,
+  OwnerCandidateRefusal,
+  OwnerShortlistResult,
+} from './discovery/owner-candidate-shortlist.js';
 export type {
   DiscoveredNaraModel,
   DiscoveryRejection,
