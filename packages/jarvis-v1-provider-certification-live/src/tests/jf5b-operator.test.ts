@@ -520,6 +520,29 @@ describe('JF-5B (G) a case record is content-free and pins retry at zero', () =>
     expect(() => createLiveCaseRecord({ ...base, retryCount: 1 })).toThrow();
   });
 
+  it('bounds provider attempts, so a THIRD attempt cannot be recorded as normal', () => {
+    // AUTO is Groq then at most one Nara attempt, so two is the ceiling a real turn can reach. The
+    // bound is what stops a receipt describing a retry loop as if it were routing.
+    expect(
+      createLiveCaseRecord({ ...base, providerAttempts: 2, fallbackCount: 1 }).providerAttempts,
+    ).toBe(2);
+    for (const attempts of [9, 64, 1000]) {
+      expect(
+        () => createLiveCaseRecord({ ...base, providerAttempts: attempts }),
+        String(attempts),
+      ).toThrow();
+    }
+    for (const calls of [9, 64]) {
+      expect(() => createLiveCaseRecord({ ...base, networkCalls: calls }), String(calls)).toThrow();
+    }
+    for (const fallbacks of [5, 64]) {
+      expect(
+        () => createLiveCaseRecord({ ...base, fallbackCount: fallbacks }),
+        String(fallbacks),
+      ).toThrow();
+    }
+  });
+
   it('refuses raw output text, and takes a digest instead', () => {
     // The receipt is read by people who are not entitled to the conversation. The schema is strict, so
     // there is no field a raw reply could be carried in even by accident.
