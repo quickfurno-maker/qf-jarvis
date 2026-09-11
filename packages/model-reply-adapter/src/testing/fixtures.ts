@@ -8,7 +8,7 @@ import type { KnowledgeCitation, ModelReleaseRef, ReplyPlan } from '@qf-jarvis/a
 import { createPromptDefinition } from '@qf-jarvis/prompt-registry';
 import type { PromptDefinition } from '@qf-jarvis/prompt-registry';
 
-import type { StructuredReply } from '../contracts/reply-schema.js';
+import type { GenericReplyWire } from '../contracts/default-structured-output-profile.js';
 
 /** A synthetic exact model release identity (HOSTED by default). */
 export function syntheticRelease(over: Partial<ModelReleaseRef> = {}): ModelReleaseRef {
@@ -50,11 +50,19 @@ export function replyPlan(over: Partial<ReplyPlan> = {}): ReplyPlan {
   };
 }
 
-/** A valid structured REPLY citing the synthetic knowledge; override any field for a specific test. */
-export function structuredReply(over: Partial<StructuredReply> = {}): StructuredReply {
+/**
+ * A valid structured REPLY as a PROVIDER would send it, citing the synthetic knowledge.
+ *
+ * JF-5B-R2 (ADR-0152 amendment): this is a WIRE value, and the generic wire encoding now states every
+ * property — the semantically-optional ones as an explicit `null`. A strict JSON-Schema endpoint has no
+ * concept of an absent key, so a double that omitted one would be impersonating a provider that cannot
+ * exist. The value the ADAPTER returns is unchanged: `null` projects back to an absent key.
+ */
+export function structuredReply(over: Partial<GenericReplyWire> = {}): GenericReplyWire {
   return {
     kind: 'REPLY',
     replyBody: 'Thank you for reaching out — here is the answer.',
+    reasonCode: null,
     citations: [{ knowledgeId: 'kb.fact', version: 1 }],
     ...over,
   };

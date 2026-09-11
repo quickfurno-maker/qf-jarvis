@@ -184,8 +184,22 @@ export function buildGatewayRequest(args: {
       { role: 'user', content: profile === undefined ? (plan.normalizedText ?? '') : userContent },
     ],
     requiredCapabilities: {
+      // What this adapter NEEDS, which is not the same as what a provider may offer.
+      //
+      // JF-5B-R2 (ADR-0152 amendment). `strictJsonSchema` used to be `true` here, for every agent,
+      // every task class and every deployment. Read against the capability contract -- where `true`
+      // means "the provider must have this" and `false` means "not required" -- that was a claim
+      // Jarvis does not actually make: what a governed reply needs is STRUCTURED output that is then
+      // validated against this exact schema before anything is accepted. Provider-native strict JSON
+      // Schema is a stronger way of getting there, not the only one, and demanding it universally
+      // excluded every structured provider that reaches the same guarantee by parsing and validating.
+      //
+      // `false` does NOT mean "must not support it". A strict-capable provider still satisfies this
+      // request and still sends its own strict schema, because HOW a provider meets the guarantee is
+      // the provider's decision and its config's -- never the agent's, the router's or this file's.
+      // There is no provider name anywhere in this adapter, and there must not be one.
       structuredOutput: true,
-      strictJsonSchema: true,
+      strictJsonSchema: false,
       cancellation: false,
       minContextTokens: budgets.minContextTokens,
     },

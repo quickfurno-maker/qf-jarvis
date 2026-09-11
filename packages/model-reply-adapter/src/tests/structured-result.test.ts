@@ -14,7 +14,7 @@ import {
   createModelReplyAdapter,
   type ModelReplyAdapterConfig,
 } from '../adapter/create-model-reply-adapter.js';
-import type { StructuredReply } from '../contracts/reply-schema.js';
+import type { GenericReplyWire } from '../contracts/default-structured-output-profile.js';
 import {
   clearReplyState,
   fixedClock,
@@ -57,10 +57,14 @@ describe('structured output — accepted kinds', () => {
     expect(result.draft?.structured).toBe(true);
   });
 
-  const others: StructuredReply[] = [
-    { kind: 'ESCALATE_TO_HUMAN', citations: [] },
-    { kind: 'REQUEST_CLARIFICATION', citations: [] },
-    { kind: 'NO_ACTION', citations: [] },
+  // WIRE values: every property stated, the semantically-optional ones explicitly `null`. A strict
+  // JSON-Schema endpoint has no concept of an absent key (JF-5B-R2), so a double that omitted one
+  // would be impersonating a provider that cannot exist. What the adapter RETURNS is unchanged —
+  // `null` projects back to an absent key, which is what `result.draft` being undefined proves below.
+  const others: GenericReplyWire[] = [
+    { kind: 'ESCALATE_TO_HUMAN', replyBody: null, reasonCode: null, citations: [] },
+    { kind: 'REQUEST_CLARIFICATION', replyBody: null, reasonCode: null, citations: [] },
+    { kind: 'NO_ACTION', replyBody: null, reasonCode: null, citations: [] },
   ];
   for (const reply of others) {
     it(`(37,38,39) a valid ${reply.kind} is accepted with no reply body`, async () => {

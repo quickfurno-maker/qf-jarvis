@@ -12,16 +12,16 @@
  * The only doubles are the two HTTP transports and the Core responder. That is the narrowest possible
  * seam, and it is what makes the measurements below measurements of OUR code rather than of a stub.
  *
- * ### What running it for real found
+ * ### What running it for real found, and what R2 closed
  *
- * Five of the six certifications cannot reach a provider at all, for two reasons that live in
- * production code and that no fixture could have shown. `jf5b-provider-eligibility.test.ts` pins both
- * root causes directly; the specs here pin what the ENGINE does about them, which is to record them
- * honestly as `INCONCLUSIVE` rather than round them up.
+ * R1 ran this engine and found that five of the six certifications could not reach a provider at all:
+ * the generic reply wire shape was not strict-projectable, and every reply request demanded
+ * provider-native strict JSON Schema. Both were production defects no fixture could have shown, and
+ * both are closed in R2 — see `jf5b-provider-eligibility.test.ts`, which now proves the compatibility
+ * rather than pinning the breakage.
  *
- * These assertions are written as the regression guard they are. When either blocker is lifted, the
- * spec that says "this pair never reaches the wire" fails — which is the correct way for a lane to
- * learn that the world changed.
+ * So the counts below are the real ones: every model-required case reaches a provider, for BOTH
+ * providers, across all three agents.
  */
 import {
   createCallLedger,
@@ -31,7 +31,12 @@ import { createGroqApiKey, createNaraApiKey } from '@qf-jarvis/model-gateway';
 import type { GroqTransport, NaraTransport } from '@qf-jarvis/model-gateway';
 import { describe, expect, it } from 'vitest';
 
-import { JF5B_CASES, PRE_MODEL_CASES, casesFor } from '../composition/jf5b-case-corpus.js';
+import {
+  JF5B_CASES,
+  MODEL_REQUIRED_CASES,
+  PRE_MODEL_CASES,
+  casesFor,
+} from '../composition/jf5b-case-corpus.js';
 import { createJf5bCertificationRunner } from '../composition/jf5b-certification-runner-impl.js';
 
 const GROQ_KEY = createGroqApiKey('gsk-synthetic-certification-key-000000');
@@ -57,9 +62,18 @@ const NEUTRAL_BODY =
 function answerFor(body: string, replyBody: string): string {
   const parsed = JSON.parse(body) as {
     response_format?: { json_schema?: { schema?: { properties?: Record<string, unknown> } } };
+    messages?: readonly { readonly role: string; readonly content: string }[];
   };
   const properties = parsed.response_format?.json_schema?.schema?.properties ?? {};
-  if (Object.prototype.hasOwnProperty.call(properties, 'evolution')) {
+  // A strict endpoint is handed the schema and can answer from it. A `json_object` endpoint is NOT,
+  // and a real model there answers from the SYSTEM PROMPT — so the fake does the same, rather than
+  // assuming a schema it was never sent. Without this, the Nara side of Riya's certification would
+  // look broken when what was really broken was the double.
+  const system = parsed.messages?.find((one) => one.role === 'system')?.content ?? '';
+  const wantsEvolution =
+    Object.prototype.hasOwnProperty.call(properties, 'evolution') ||
+    system.startsWith('You are Riya,');
+  if (wantsEvolution) {
     return JSON.stringify({
       reply: { kind: 'REPLY', replyBody, reasonCode: null, citations: [] },
       evolution: {
@@ -72,7 +86,9 @@ function answerFor(body: string, replyBody: string): string {
       },
     });
   }
-  return JSON.stringify({ kind: 'REPLY', replyBody, citations: [] });
+  // The GENERIC wire shape: every property present, the semantically-optional one explicitly null.
+  // A strict endpoint has no concept of an absent key, so "no reason code" has to be said.
+  return JSON.stringify({ kind: 'REPLY', replyBody, reasonCode: null, citations: [] });
 }
 
 function chatCompletion(content: string): string {
@@ -132,6 +148,37 @@ function wire(replyBody: string = NEUTRAL_BODY): Wire {
           retryAfterSeconds: null,
           bodyText: chatCompletion(answerFor(request.body, replyBody)),
         });
+      },
+    },
+  };
+}
+
+/** A transport that answers 200 with a structurally unusable body. Nothing here is a provider fault. */
+function brokenWire(): Wire {
+  const counts = { groq: 0, nara: 0 };
+  const urls: string[] = [];
+  const answer = (): { status: number; retryAfterSeconds: null; bodyText: string } => ({
+    status: 200,
+    retryAfterSeconds: null,
+    // A well-formed completion carrying an object the request's schema refuses.
+    bodyText: chatCompletion(JSON.stringify({ kind: 'REPLY', unexpected: true })),
+  });
+  return {
+    groqCalls: () => counts.groq,
+    naraCalls: () => counts.nara,
+    urls: () => urls,
+    groq: {
+      send(request: GroqRequest): Promise<GroqResponse> {
+        counts.groq += 1;
+        urls.push(request.url);
+        return Promise.resolve(answer());
+      },
+    },
+    nara: {
+      send(request: NaraRequest): Promise<NaraResponse> {
+        counts.nara += 1;
+        urls.push(request.url);
+        return Promise.resolve(answer());
       },
     },
   };
@@ -212,22 +259,50 @@ describe('JF-5B (3) the engine executes every case, through the real composition
   });
 });
 
-describe('JF-5B (3) GROQ x RIYA is the one pair that certifies today', () => {
-  it('reaches the provider once per model-required case and passes each', async () => {
+describe('JF-5B (3) all six provider x agent pairs certify', () => {
+  it('every pair reaches a provider once per model-required case and passes each', async () => {
     const { result, seams } = await certify();
+    for (const provider of ['groq', 'nara'] as const) {
+      for (const agent of ['RIYA', 'ANISHA', 'AAROHI'] as const) {
+        const model = result.cases.filter(
+          (one) =>
+            one.provider === provider &&
+            one.agent === agent &&
+            one.executionLayer === 'MODEL_REQUIRED',
+        );
+        const label = `${provider}/${agent}`;
+        expect([label, model.length > 0]).toEqual([label, true]);
+        // Named rather than counted: a failure here should say WHICH case, not just that one did.
+        expect(
+          model
+            .filter((one) => one.outcome !== 'PASS')
+            .map(
+              (one) =>
+                `${one.caseId}:${one.outcome}:${one.reason ?? one.providerErrorClass ?? 'none'}`,
+            ),
+        ).toEqual([]);
+        expect([label, model.every((one) => one.networkCalls === 1)]).toEqual([label, true]);
+        expect([label, model.every((one) => one.structuredOutputValid)]).toEqual([label, true]);
+      }
+    }
+    // One call per model-required case, per provider. Measured at the wire, not only in the record.
+    expect(seams.groqCalls()).toBe(MODEL_REQUIRED_CASES.length);
+    expect(seams.naraCalls()).toBe(MODEL_REQUIRED_CASES.length);
+    expect(new Set(seams.urls().map((url) => new URL(url).origin))).toEqual(
+      new Set(['https://api.groq.com', 'https://router.bynara.id']),
+    );
+  });
+
+  it('RIYA still reaches the provider on her own dedicated path', async () => {
+    // Her reviewed prompt lives only at her dedicated task classes, so this is the proof that the
+    // customer arm of the composition still works — not a duplicate of the loop above.
+    const { result } = await certify();
     const model = result.cases.filter(
       (one) =>
         one.provider === 'groq' && one.agent === 'RIYA' && one.executionLayer === 'MODEL_REQUIRED',
     );
     expect(model).toHaveLength(RIYA_MODEL_CASES.length);
-    expect(model.every((one) => one.networkCalls === 1)).toBe(true);
     expect(model.every((one) => one.outcome === 'PASS')).toBe(true);
-    expect(model.every((one) => one.structuredOutputValid)).toBe(true);
-    // The ONLY traffic the whole run produced, and it went to the official Groq endpoint.
-    expect(seams.groqCalls()).toBe(RIYA_MODEL_CASES.length);
-    expect(new Set(seams.urls().map((url) => new URL(url).origin))).toEqual(
-      new Set(['https://api.groq.com']),
-    );
   });
 
   it('an answer that quotes a price FAILS the case rather than passing quietly', async () => {
@@ -245,54 +320,43 @@ describe('JF-5B (3) GROQ x RIYA is the one pair that certifies today', () => {
   });
 });
 
-describe('JF-5B (3) the five blocked pairs are recorded honestly, not rounded up', () => {
-  it('GROQ x ANISHA and GROQ x AAROHI never reach the wire, and say INCONCLUSIVE', async () => {
-    const { result, seams } = await certify();
-    for (const agent of ['ANISHA', 'AAROHI'] as const) {
-      const model = result.cases.filter(
-        (one) =>
-          one.provider === 'groq' && one.agent === agent && one.executionLayer === 'MODEL_REQUIRED',
-      );
-      expect(model.length).toBeGreaterThan(0);
-      expect([agent, model.every((one) => one.outcome === 'INCONCLUSIVE')]).toEqual([agent, true]);
-      // The gateway refused BEFORE any transport call, so nothing was validated and nothing is claimed.
-      expect([agent, model.every((one) => !one.structuredOutputValid)]).toEqual([agent, true]);
-      expect([agent, model.every((one) => one.providerErrorClass === 'provider-terminal')]).toEqual(
-        [agent, true],
-      );
-    }
-    // Not one byte left for these two agents.
-    expect(seams.groqCalls()).toBe(RIYA_MODEL_CASES.length);
-  });
-
-  it('NARA reaches the wire for NO agent, because it declares no strict-schema support', async () => {
-    const { result, seams } = await certify();
-    const model = result.cases.filter(
-      (one) => one.provider === 'nara' && one.executionLayer === 'MODEL_REQUIRED',
-    );
-    expect(model.length).toBeGreaterThan(0);
-    expect(model.every((one) => one.outcome === 'INCONCLUSIVE')).toBe(true);
-    expect(seams.naraCalls()).toBe(0);
-  });
-
-  it('the manifest reports INCONCLUSIVE for the five, and PASS for the one', async () => {
+describe('JF-5B (3) a result that cannot be told is never rounded up', () => {
+  it('the manifest reports PASS for all six pairs when every case passed', async () => {
     const { result } = await certify();
     const verdicts = (result.manifest?.entries ?? [])
       .map((one) => `${one.provider}/${one.agent}:${one.safety}`)
       .sort();
     expect(verdicts).toEqual([
-      'groq/AAROHI:INCONCLUSIVE',
-      'groq/ANISHA:INCONCLUSIVE',
+      'groq/AAROHI:PASS',
+      'groq/ANISHA:PASS',
       'groq/RIYA:PASS',
-      'nara/AAROHI:INCONCLUSIVE',
-      'nara/ANISHA:INCONCLUSIVE',
-      'nara/RIYA:INCONCLUSIVE',
+      'nara/AAROHI:PASS',
+      'nara/ANISHA:PASS',
+      'nara/RIYA:PASS',
     ]);
-    // "We could not tell" is an answer, and it is never written as PASS. The RUN completed and
-    // recorded every case, which is what `ok` reports; whether the measurements are good enough to
-    // seal is JF-5C's question.
     expect(result.ok).toBe(true);
     expect(result.reason).toBe('certified');
+  });
+
+  it('a provider that answers with malformed structure is INCONCLUSIVE, never PASS', async () => {
+    // The rule the R1 blockers exercised by accident, kept as a rule: "we could not tell" is an
+    // answer, and the manifest says it.
+    const seams = brokenWire();
+    const result = await createJf5bCertificationRunner({
+      groqTransport: seams.groq,
+      naraTransport: seams.nara,
+    }).certifyAllSix({
+      naraModelId: NARA_MODEL,
+      naraApiKey: NARA_KEY,
+      groqApiKey: GROQ_KEY,
+      runId: RUN_ID,
+      headSha: HEAD,
+      ledger: budget(),
+    });
+    const model = result.cases.filter((one) => one.executionLayer === 'MODEL_REQUIRED');
+    expect(model.every((one) => one.outcome === 'INCONCLUSIVE')).toBe(true);
+    expect(model.every((one) => !one.structuredOutputValid)).toBe(true);
+    expect(result.manifest?.entries.every((one) => one.safety === 'INCONCLUSIVE')).toBe(true);
   });
 });
 
@@ -337,7 +401,7 @@ describe('JF-5B (3) the bundles keep content out of the receipt', () => {
     const { result } = await certify();
     expect(JSON.stringify(result.cases)).not.toContain(NEUTRAL_BODY);
     const withOutput = result.cases.filter((one) => one.outputDigest !== undefined);
-    expect(withOutput).toHaveLength(RIYA_MODEL_CASES.length);
+    expect(withOutput).toHaveLength(MODEL_REQUIRED_CASES.length * 2);
     expect(withOutput.every((one) => /^[0-9a-f]{64}$/u.test(one.outputDigest ?? ''))).toBe(true);
   });
 
@@ -374,26 +438,26 @@ describe('JF-5B (4) AUTO routing is measured, not asserted', () => {
     return { routing, seams };
   }
 
-  it('reports the routing measurements it could actually take', async () => {
-    const { routing, seams } = await route();
-    // A healthy Groq leaves Nara untouched. The AUTO property that matters most: a working primary
-    // never costs a second provider call.
+  it('a healthy Groq answers in ONE attempt and Nara is never touched', async () => {
+    const { routing } = await route();
+    expect(routing.ok).toBe(true);
+    expect(routing.reason).toBe('routing-certified');
+    // The AUTO property that matters most: a working primary never costs a second provider call.
     expect(routing.groqSuccessNaraCalls).toBe(0);
-    // A class that never becomes a provider attempt cannot be smuggled to the second provider.
-    expect(routing.nonFallbackNaraCalls).toBe(0);
     // Same-provider retry is zero, structurally.
     expect(routing.retryCount).toBe(0);
-    expect(seams.naraCalls()).toBe(0);
   });
 
-  it('refuses to call the fallback measurement certified when Nara could not serve', async () => {
-    const { routing } = await route();
-    // The honest stop. AUTO cannot be certified while one of its two providers is ineligible for
-    // every agent-reply request, and a routing result that said otherwise would be describing a
-    // fallback that never happened.
-    expect(routing.ok).toBe(false);
-    expect(routing.reason).toBe('auto-fallback-did-not-reach-nara');
-    expect(routing.forcedFallbackNaraCalls).toBe(0);
+  it('a forced PRE-NETWORK Groq fault produces exactly two attempts, the second a real Nara call', async () => {
+    const { routing, seams } = await route();
+    expect(routing.forcedFallbackAttempts).toBe(2);
+    expect(routing.forcedFallbackNaraCalls).toBe(1);
+    // A class that never becomes a provider attempt cannot be smuggled to the second provider.
+    expect(routing.nonFallbackNaraCalls).toBe(0);
+    // Three routing cases: the healthy one reaches Groq, the faulted one reaches Nara only, and the
+    // refused class reaches neither. So each transport sees exactly ONE request.
+    expect(seams.groqCalls()).toBe(1);
+    expect(seams.naraCalls()).toBe(1);
   });
 });
 
@@ -406,7 +470,7 @@ describe('JF-5B (2c) selection probes every shortlisted alias equally', () => {
     capabilities: undefined,
   });
 
-  it('stops rather than naming a fallback no probe could reach', async () => {
+  it('probes every alias with the SAME bounded case set, then ranks', async () => {
     const seams = wire();
     const selected = await createJf5bCertificationRunner({
       groqTransport: seams.groq,
@@ -417,11 +481,26 @@ describe('JF-5B (2c) selection probes every shortlisted alias equally', () => {
       runId: RUN_ID,
       ledger: budget(),
     });
-    // Nothing passed the hard gates, because nothing reached a provider. A winner here would be a
-    // fallback chosen on no evidence at all.
-    expect(selected).toEqual({ ok: false, reason: 'no-shortlisted-alias-passed-the-hard-gates' });
-    expect(seams.naraCalls()).toBe(0);
+    expect(selected.ok).toBe(true);
+    // Equal evidence per alias: two aliases, the same two probes each, so the ranking compares like
+    // with like rather than ranking on whatever each alias happened to be asked.
+    expect(seams.naraCalls()).toBe(4);
     // Groq is not involved in choosing a Nara fallback.
     expect(seams.groqCalls()).toBe(0);
+  });
+
+  it('stops rather than naming a fallback no probe could reach', async () => {
+    const seams = brokenWire();
+    const selected = await createJf5bCertificationRunner({
+      groqTransport: seams.groq,
+      naraTransport: seams.nara,
+    }).selectNaraModel({
+      shortlist: [alias('vendor-b/two', 65_536), alias('vendor-a/one', 131_072)],
+      apiKey: NARA_KEY,
+      runId: RUN_ID,
+      ledger: budget(),
+    });
+    // Nothing passed the hard gates. A winner here would be a fallback chosen on no evidence at all.
+    expect(selected).toEqual({ ok: false, reason: 'no-shortlisted-alias-passed-the-hard-gates' });
   });
 });

@@ -278,6 +278,103 @@ owner step at a terminal. With the two blockers above standing, a live run today
 **GROQ × RIYA** and record the other five as inconclusive — which is worth knowing before any money is
 spent, and is why the marker for this lane is `BLOCKED_REWORK_RISK_OWNER_REVIEW_REQUIRED`.
 
+## Amendment — JF-5B-R2: the two compatibility blockers, closed
+
+**Date:** 2026-09-11. Same PR, same branch, same ADR. No new architecture ADR: R1 found two defects in
+decisions this one already governs, and closing them belongs here.
+
+### R2.1 Both were found BEFORE any live spend, and that was the point
+
+R1's executable never made a provider call. It did not need to: building the real request, through the
+real adapter, against real provider adapters was enough to show that five of the six certifications
+could not have worked. Neither defect was reachable by any existing test, because every earlier spec
+exercised these paths against a fake invoker that never projected a schema and never matched a
+capability.
+
+### R2.2 Blocker A — a WIRE encoding defect, not a business-semantics defect
+
+`structuredReplySchema` is the SEMANTIC contract and it is correct: `REPLY` requires a body, every
+other kind must omit one, `reasonCode` is optional, extra keys are refused. It was also being used
+verbatim as the MODEL-WIRE schema, and there its optionality is fatal — a provider-native strict
+JSON-Schema endpoint has no concept of an absent property, so `projectGroqStrictJsonSchema` refused the
+whole document as `malformed-object` before any transport call.
+
+**The fix is an encoding, and it changes no semantics.** A new default profile,
+`DEFAULT_STRUCTURED_OUTPUT_PROFILE`, supplies a wire schema in which every property is REQUIRED and the
+two semantically-optional ones are NULLABLE, and projects `null` back to ordinary absence. The
+projection is then RE-PROVED against the same `structuredReplySchema` as before — so
+`structuredReplySchema` still decides what counts as a reply, and a profile still cannot widen it.
+
+What projection REFUSES rather than repairs: a non-`REPLY` carrying a non-null body, and a `REPLY`
+whose body is null. Normalising the first would let a model attach an answer to an escalation and have
+the adapter quietly drop it; the caller would see a clean `ESCALATE_TO_HUMAN` and never learn.
+
+The seam is ADR-0099's, unchanged. Riya's reviewed profile already used exactly this required+nullable
+pattern for `reasonCode`, learned against a real endpoint in the earlier live lane; this generalises it.
+There is ONE generic wire shape and every base-profile agent uses it — Anisha and Aarohi do not get a
+schema each.
+
+**This amends the ADR-0099 default-path guarantee, honestly.** That guarantee said an absent profile
+sent `structuredReplySchema` verbatim. It now sends the default strict wire schema instead. The
+SEMANTIC reply, the public result keys, the citation authorization, the state gates, provider routing
+and prompt binding are all untouched; only the provider-facing encoding moved. The spec that asserted
+the old guarantee is rewritten to assert the new one plus the unchanged semantic result, rather than
+deleted.
+
+A consequence worth stating: a test double that impersonates a provider now has to speak the wire
+dialect. `structuredReply()` and the scripted gateway invokers were updated to do so, because a double
+that omitted a key would be impersonating a provider that cannot exist.
+
+### R2.3 Blocker B — an over-strong requirement, not a missing Nara capability
+
+`build-gateway-request.ts` declared `requiredCapabilities.strictJsonSchema: true` on every reply
+request. Under the capability contract — where `true` means "the provider must have this" and `false`
+means "not required" — that was a claim Jarvis does not make. What a governed reply needs is STRUCTURED
+output that is then validated against the exact request schema before anything is accepted.
+Provider-native strict JSON Schema is a stronger way of reaching that guarantee, not the only one.
+
+**The fix is one field: `strictJsonSchema: false`.** It does NOT mean "must not support it".
+
+Both capability systems follow from that one change, which is why no second edit was needed: the
+registry path derives `structuredMode` from the same flag, and `matchRequirement` already states that a
+`json-object` requirement is satisfied by a strict-capable OR a json-object-capable profile and refused
+only by `unsupported`. The contract was already written for this.
+
+What did NOT change, and is asserted:
+
+- `NARA_SUPPORTS_STRICT_JSON_SCHEMA` remains `false`. Raising it needs live evidence from the endpoint,
+  which no lane has gathered, and this correction makes no live call.
+- Nara still sends `response_format: { type: 'json_object' }`, and its returned value is still parsed
+  locally and validated by the gateway against the exact request schema.
+- Groq still sends provider-native strict JSON Schema whenever its own provider config says it can. The
+  request's minimum REQUIREMENT and the selected provider's stronger CAPABILITY are different concepts,
+  and a spec locks the distinction by reading the outgoing request body.
+- There is no provider name anywhere in the reply adapter, asserted by a scan over its source. The
+  adapter states what it needs; the provider decides how it meets it.
+
+### R2.4 The result
+
+All six provider × agent pairs are OFFLINE-eligible, proved end to end through the real composition
+with recording transports: GROQ × {RIYA, ANISHA, AAROHI} and NARA × {RIYA, ANISHA, AAROHI}. The
+certification engine now executes all 45 corpus rows against both providers — 90 executions — where R1
+could reach a provider for only 9.
+
+Riya did not regress: her prompt bytes and digest are unchanged, her configured profile is untouched,
+her turn is still ONE model call through her own dedicated capability, and her Core authorization path
+is unchanged. She is now eligible for Nara too, for the same reason everyone is — provider-native
+strict schema stopped being a universal requirement — and the value Nara returns is held to the same
+exact request schema.
+
+### R2.5 What R2 did NOT do
+
+No live provider call, and no money spent. No production seal, approval or activation. No migration. No
+change to Jarvis, Mastra, the agents, RAG, the router, provider selection, the JF-5B executable, the
+six-binding model, the budgets, the gates or the artifacts. Retry is still 0. `jf5b-provider-eligibility.test.ts`
+was rewritten from a blocker pin into a compatibility proof, which is what a pin that fails on repair is
+for.
+
+**JF-5B is still not complete.** The owner live run has not happened, and no live evidence exists.
+
 ## Consequences
 
 Positive: the certification harness is complete, fully tested with zero network calls, and the live run
@@ -293,6 +390,5 @@ Negative, and accepted:
 
 ## Next
 
-**An owner decision on the two blockers in §R1.5**, each of which is its own lane: the generic reply
-schema's strict-mode shape, and Nara's strict-schema capability. Then **JF-5B live execution**, by the
-owner, at a terminal. Then **JF-5C** — owner production evidence seal.
+**JF-5B live execution**, by the owner, at a terminal — the two blockers of §R1.5 are closed in §R2.
+Then **JF-5C** — owner production evidence seal.
