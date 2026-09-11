@@ -24,6 +24,7 @@ import type { PromptRegistry } from '@qf-jarvis/prompt-registry';
 
 import type { AuthoritativeConversationStatePort } from './authoritative-state.js';
 import type { ClientSalesBehaviourInputPort } from './behaviour-input.js';
+import type { AarohiAcquisitionBehaviourInputPort } from './aarohi-acquisition-behaviour-input.js';
 import type { VendorJourneyBehaviourInputPort } from './vendor-journey-behaviour-input.js';
 import type { JarvisRuntimeObservabilityHook } from './observability.js';
 
@@ -156,6 +157,15 @@ export interface JarvisRuntimeConfig {
    * turns take the legacy `REPLY` path unchanged and Anisha behaviour is never consulted.
    */
   readonly vendorJourneyBehaviourInput?: VendorJourneyBehaviourInputPort;
+
+  /**
+   * Optional Aarohi acquisition behaviour inputs (JF-4C, ADR-0150). Additive and non-breaking.
+   *
+   * Absent -> `PROSPECT` turns take the legacy path unchanged and Aarohi behaviour is never consulted,
+   * exactly as an unconfigured VENDOR turn never consults Anisha. Absent in every deployment today:
+   * the authoritative source of these certified artifacts is a future QuickFurno/Core adapter.
+   */
+  readonly aarohiAcquisitionBehaviourInput?: AarohiAcquisitionBehaviourInputPort;
 
   /** Optional deployment-level provenance references; safe defaults are derived when absent. */
   readonly provenanceRefs?: JarvisProvenanceRefs;

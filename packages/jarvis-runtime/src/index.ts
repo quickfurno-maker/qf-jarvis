@@ -74,6 +74,13 @@ export type {
   VendorJourneyBehaviourInputPort,
   VendorJourneyBehaviourInputRequest,
 } from './contracts/vendor-journey-behaviour-input.js';
+// JF-4C (ADR-0150): the Aarohi acquisition behaviour seam. TYPES only -- the adapter is internal to
+// the composition root, exactly as the Riya and Anisha adapters are.
+export type {
+  AarohiAcquisitionBehaviourInput,
+  AarohiAcquisitionBehaviourInputPort,
+  AarohiAcquisitionBehaviourInputRequest,
+} from './contracts/aarohi-acquisition-behaviour-input.js';
 
 // Config + result + outcome vocabulary.
 export type { JarvisRuntimeConfig, JarvisProvenanceRefs } from './contracts/runtime-config.js';

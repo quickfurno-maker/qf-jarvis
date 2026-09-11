@@ -35,6 +35,7 @@ import { canonicalizeCommandRow, canonicalizeStateRow, isSameCommand } from '../
 import {
   DATA_CLASSES,
   PARTY_TYPES,
+  PARTY_TYPES_NOT_DURABLY_PERSISTABLE,
   SUBJECT_STATUSES,
   isCanonicalInstant,
   parseBigintRevision,
@@ -92,7 +93,17 @@ describe('private vocabularies match their governed originals', () => {
   it('mirrors the agent-runtime party, data-class and subject-status vocabularies exactly', () => {
     // These are duplicated so the package keeps no PRODUCTION dependency on agent-runtime. That is
     // only safe if drift fails loudly, which is what this asserts.
-    expect([...PARTY_TYPES]).toEqual([...RUNTIME_PARTY_TYPES]);
+    //
+    // JF-4C (ADR-0150) added `PROSPECT` to the runtime vocabulary, and migration `0008`'s CHECK
+    // constraint cannot carry it without a migration this lane is not authorized to add. So the
+    // relationship is pinned EXACTLY rather than relaxed to a subset check: both sets are stated, and
+    // the difference is stated as a value. Any other divergence still fails.
+    expect([...PARTY_TYPES]).toEqual(['CLIENT', 'VENDOR', 'UNKNOWN']);
+    expect([...RUNTIME_PARTY_TYPES]).toEqual(['CLIENT', 'VENDOR', 'PROSPECT', 'UNKNOWN']);
+    expect([...PARTY_TYPES_NOT_DURABLY_PERSISTABLE]).toEqual(['PROSPECT']);
+    expect(RUNTIME_PARTY_TYPES.filter((party) => !PARTY_TYPES.includes(party as never))).toEqual([
+      ...PARTY_TYPES_NOT_DURABLY_PERSISTABLE,
+    ]);
     expect([...DATA_CLASSES]).toEqual([...RUNTIME_DATA_CLASSES]);
     expect([...SUBJECT_STATUSES]).toEqual([...RUNTIME_SUBJECT_STATUSES]);
   });
@@ -107,11 +118,10 @@ describe('private vocabularies match their governed originals', () => {
       ),
       'utf8',
     );
-    for (const value of [
-      ...RUNTIME_PARTY_TYPES,
-      ...RUNTIME_DATA_CLASSES,
-      ...RUNTIME_SUBJECT_STATUSES,
-    ]) {
+    // The store's OWN vocabulary, not the runtime's: this asserts the CHECK constraint and the
+    // mirrored list agree, which is what keeps a write from failing at the database instead of at the
+    // boundary. `PROSPECT` is deliberately absent from both (ADR-0150).
+    for (const value of [...PARTY_TYPES, ...RUNTIME_DATA_CLASSES, ...RUNTIME_SUBJECT_STATUSES]) {
       expect(sql).toContain(`'${value}'`);
     }
     for (const value of [

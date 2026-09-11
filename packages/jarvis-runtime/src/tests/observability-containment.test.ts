@@ -219,12 +219,16 @@ describe('public API lock', () => {
     }
   });
 
-  it('depends only on the lower packages + the two behaviour agents, exposes root + ./testing', () => {
-    // QFJ-S3-C-B (ADR-0068) added @qf-jarvis/riya-agent; QFJ-S3-D-B (ADR-0071) adds
-    // @qf-jarvis/anisha-agent. The composition root is the ONE layer allowed to know both the generic
-    // pipeline and a business agent, and each behaviour package depends only on agent-runtime, so the
-    // graph stays acyclic and the two agents never see each other. Still an EXACT set match.
+  it('depends only on the lower packages + the three behaviour agents, exposes root + ./testing', () => {
+    // QFJ-S3-C-B (ADR-0068) added @qf-jarvis/riya-agent; QFJ-S3-D-B (ADR-0071) added
+    // @qf-jarvis/anisha-agent; JF-4C (ADR-0150) adds @qf-jarvis/aarohi-agent. The composition root is
+    // the ONE layer allowed to know both the generic pipeline and a business agent, and each behaviour
+    // package depends only on agent-runtime (Aarohi depends on neither -- it is pure contracts over
+    // zod), so the graph stays acyclic and the three agents never see each other.
+    //
+    // Still an EXACT set match: this records one authorized addition, it does not relax the assertion.
     expect(Object.keys(manifest.dependencies ?? {}).sort()).toEqual([
+      '@qf-jarvis/aarohi-agent',
       '@qf-jarvis/agent-runtime',
       '@qf-jarvis/anisha-agent',
       // QFJ-P08-A (ADR-0075): the pure control reducer behind the operator surface. EXACT set match.

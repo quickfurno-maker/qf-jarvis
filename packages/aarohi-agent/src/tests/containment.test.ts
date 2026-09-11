@@ -10,7 +10,7 @@
  * refuses to be and scanning the prose would report every prohibition as a violation.
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
@@ -1430,8 +1430,25 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
     ]);
   });
 
-  it('NO package or app imports it', () => {
-    // Aarohi has no runtime. Asserted so the first consumer is a deliberate decision.
+  it('exactly ONE package composes it, in ONE file, and no application does', () => {
+    // This lock existed so the first consumer would be a deliberate decision. JF-4C (ADR-0150) IS that
+    // decision, so it is NARROWED rather than dropped -- and what it now says is worth more than
+    // "nobody imports this", because the risk was never that Aarohi would be composed. It was that
+    // Aarohi's domain would be reached from many places, each re-deciding what an acquisition turn
+    // means.
+    //
+    // One importer, one file: the jarvis-runtime composition root, which is the only layer permitted to
+    // know both the generic pipeline and a business agent -- exactly as it is for Riya and Anisha. No
+    // application, no other package, and no second file inside that package either. The composition
+    // root reaches ONE existing evaluator; it adds no acquisition behaviour of its own.
+    const ALLOWED = [
+      'packages/jarvis-runtime/src/composition/aarohi-behaviour-adapter.ts',
+      // The composition root's OWN dependency lock, which has to name the package to assert its exact
+      // dependency set. A spec stating a dependency is not a composition of it -- the same reasoning
+      // apps/api uses for the specs that must name the tokens they forbid.
+      'packages/jarvis-runtime/src/tests/jf4-three-agent-containment.test.ts',
+      'packages/jarvis-runtime/src/tests/observability-containment.test.ts',
+    ];
     const importers: string[] = [];
     for (const root of [join(REPO_ROOT, 'packages'), join(REPO_ROOT, 'apps')]) {
       for (const entry of readdirSync(root)) {
@@ -1444,12 +1461,14 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
         }
         for (const file of files) {
           if (readFileSync(file, 'utf8').includes('@qf-jarvis/aarohi-agent')) {
-            importers.push(file);
+            const normalised = file.split(sep).join('/');
+            const at = normalised.indexOf('/packages/');
+            importers.push(at === -1 ? normalised : normalised.slice(at + 1));
           }
         }
       }
     }
-    expect(importers).toStrictEqual([]);
+    expect(importers.sort()).toStrictEqual(ALLOWED);
   });
 });
 

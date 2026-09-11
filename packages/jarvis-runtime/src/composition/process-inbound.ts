@@ -24,6 +24,7 @@ import type {
   ModelReplyStructuredOutputProfile,
 } from '@qf-jarvis/model-reply-adapter';
 
+import { aarohiBehaviourPort } from './aarohi-behaviour-adapter.js';
 import { anishaBehaviourPort } from './anisha-behaviour-adapter.js';
 import { behaviourMux } from './behaviour-mux.js';
 import { riyaBehaviourPort } from './riya-behaviour-adapter.js';
@@ -286,6 +287,18 @@ export async function composeAndProcessInternal(
       : {
           anisha: anishaBehaviourPort(
             config.vendorJourneyBehaviourInput,
+            source,
+            stateKey,
+            taskClass,
+          ),
+        }),
+    // JF-4C (ADR-0150). The third pair, wired exactly as the second: an optional port, an adapter
+    // built per turn over the ONE tenant-scoped key, and nothing at all when the port is absent.
+    ...(config.aarohiAcquisitionBehaviourInput === undefined
+      ? {}
+      : {
+          aarohi: aarohiBehaviourPort(
+            config.aarohiAcquisitionBehaviourInput,
             source,
             stateKey,
             taskClass,

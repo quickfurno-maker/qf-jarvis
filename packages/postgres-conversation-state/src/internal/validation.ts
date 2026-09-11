@@ -24,8 +24,31 @@ const EXACT_IDENTIFIER = /^[A-Za-z0-9._:-]{1,128}$/;
  */
 const SAFE_REFERENCE = /^[A-Za-z0-9._:+-]{1,128}$/;
 
-/** Mirrors `RUNTIME_PARTY_TYPES`. Conformance is asserted by spec. */
+/**
+ * The party types this DURABLE STORE can persist.
+ *
+ * Until JF-4C this mirrored `RUNTIME_PARTY_TYPES` exactly. It is now a strict SUBSET of it, and the
+ * difference is deliberate rather than drift: ADR-0150 added `PROSPECT` to the runtime vocabulary, and
+ * migration `0008`'s CHECK constraint — which this list mirrors — enumerates the three it was written
+ * with. Widening that constraint is a migration, and JF-4 is not authorized to add one.
+ *
+ * The consequence is honest and already enforced: a `PROSPECT` conversation is REFUSED at this
+ * boundary, on write and on read, rather than accepted and lost to a database constraint later. That
+ * matches the rest of the lane — Aarohi is composed but unsupplied, and acquisition-case persistence
+ * belongs to a future QuickFurno/Core owner.
+ *
+ * Conformance is asserted by spec in both directions: this list equals the migration's CHECK exactly,
+ * and its relationship to the runtime vocabulary is pinned with the gap named, so any OTHER drift still
+ * fails loudly.
+ */
 export const PARTY_TYPES = ['CLIENT', 'VENDOR', 'UNKNOWN'] as const;
+
+/**
+ * Runtime party types this store cannot durably persist, and why.
+ *
+ * Exported so the gap is a value a spec can assert rather than a comment somebody has to notice.
+ */
+export const PARTY_TYPES_NOT_DURABLY_PERSISTABLE = ['PROSPECT'] as const;
 /** Mirrors `RUNTIME_DATA_CLASSES`. */
 export const DATA_CLASSES = ['HOSTED_ALLOWED', 'LOCAL_ONLY', 'HUMAN_ONLY'] as const;
 /** Mirrors `RUNTIME_SUBJECT_STATUSES`. */
