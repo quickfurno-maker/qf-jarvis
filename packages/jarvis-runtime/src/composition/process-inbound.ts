@@ -24,8 +24,17 @@ import type {
   ModelReplyStructuredOutputProfile,
 } from '@qf-jarvis/model-reply-adapter';
 
+import { aarohiBehaviourPort } from './aarohi-behaviour-adapter.js';
 import { anishaBehaviourPort } from './anisha-behaviour-adapter.js';
 import { behaviourMux } from './behaviour-mux.js';
+import { assignAgent } from '@qf-jarvis/agent-runtime';
+import { createAgentGroundedKnowledgeBridge } from './riya-grounded-knowledge.js';
+import type { RiyaGroundedKnowledgeBridge } from './riya-grounded-knowledge.js';
+import {
+  AGENT_KNOWLEDGE_BINDINGS,
+  isGroundedAgentActor,
+  topicsForActor,
+} from '../contracts/agent-knowledge-policy.js';
 import { riyaBehaviourPort } from './riya-behaviour-adapter.js';
 import { materializeCoreAuthorizedReply } from './materialize-core-authorized-reply.js';
 import type { ConversationStateKey } from '../contracts/authoritative-state.js';
@@ -101,6 +110,70 @@ export interface InternalRunResult {
   readonly authorizedReply: JarvisCoreAuthorizedReplyResult['authorizedReply'];
   /** Whatever the Riya profile validated out of the SAME model call, or `undefined`. */
   readonly profileDetail: unknown;
+}
+
+/**
+ * What this turn grounds on: ONE bridge, and the exact topics it will accept. `undefined` when the
+ * turn grounds on nothing.
+ *
+ * The bridge and the topics are returned TOGETHER, from one lookup, because M2 cross-checks the topic
+ * list against what the port actually served. Two independent lookups would be two chances to disagree.
+ */
+interface SharedGroundedKnowledge {
+  readonly bridge: RiyaGroundedKnowledgeBridge;
+  readonly topics: readonly string[];
+}
+
+/**
+ * Build the shared agent-grounded bridge for THIS turn, or `undefined` when nothing grounds.
+ *
+ * ### Why party type is enough to pick the policy
+ *
+ * The actor is `assignAgent(partyType, humanTakeover, policy)`, and the knowledge port is only ever
+ * reached AFTER the orchestrator's complete first gate has passed (ADR-0068) — a paused, cancelled,
+ * privacy-blocked, out-of-scope or human-owned turn never calls it. So at the only moment this bridge
+ * can be used, takeover is already known false, and the actor is a pure function of the party type.
+ *
+ * Deriving it that way costs no extra authoritative-state read. Reading control state here to learn
+ * something the first gate has already decided would add a read to every turn and a second place that
+ * believes it.
+ *
+ * `UNKNOWN` needs no special case: it routes to `JARVIS` or `HUMAN`, neither of which is a grounded
+ * business agent, so the lookup returns nothing and no turn can borrow another agent's topics.
+ */
+function sharedGroundedKnowledgeFor(
+  config: JarvisRuntimeConfig,
+  envelope: InboundEnvelope,
+): SharedGroundedKnowledge | undefined {
+  const policy = config.agentGroundedKnowledge;
+  if (policy === undefined) {
+    return undefined;
+  }
+  const actor = assignAgent(envelope.partyType, false, config.policy);
+  if (!isGroundedAgentActor(actor)) {
+    return undefined;
+  }
+  const topics = topicsForActor(policy, actor);
+  if (topics === undefined) {
+    return undefined;
+  }
+  // Scope and purpose come from the CLOSED table, never from configuration. A deployment supplies
+  // topics; which records those topics may be read from is this repository's conclusion, not its input.
+  const binding = AGENT_KNOWLEDGE_BINDINGS[actor];
+  const common = {
+    envelope,
+    topics,
+    agentScope: binding.agentScope,
+    purpose: binding.purpose,
+  } as const;
+  // ONE authority path, with no branch on it (owner correction, ADR-0150 §43). `retrieval` is required
+  // by the contract and re-proved by `assertMandatoryDependencies`, so there is no registry branch to
+  // take, no fallback between two reaches, and no "configured but unreachable" case to decide per turn.
+  // A malformed shared-RAG configuration failed at construction; it cannot arrive here.
+  return {
+    bridge: createAgentGroundedKnowledgeBridge({ ...common, retrieval: policy.retrieval }),
+    topics,
+  };
 }
 
 /**
@@ -277,6 +350,12 @@ export async function composeAndProcessInternal(
   // The Riya-aware run uses its DEDICATED task class, so the prompt registry resolves the
   // evaluated evolution definition rather than a reply-only one that happens to share the scope.
   const taskClass = riya?.taskClass ?? config.taskClass ?? DEFAULT_TASK_CLASS;
+
+  // ONE bridge for THIS turn, for whichever agent the router will select. Built here rather than in
+  // each behaviour adapter: an adapter that retrieved would be a second place deciding what reaches
+  // a model, and three of them would be three places.
+  const shared =
+    riya?.knowledgePort === undefined ? sharedGroundedKnowledgeFor(config, envelope) : undefined;
   const behaviourPort = behaviourMux({
     ...(config.behaviourInput === undefined
       ? {}
@@ -286,6 +365,18 @@ export async function composeAndProcessInternal(
       : {
           anisha: anishaBehaviourPort(
             config.vendorJourneyBehaviourInput,
+            source,
+            stateKey,
+            taskClass,
+          ),
+        }),
+    // JF-4C (ADR-0150). The third pair, wired exactly as the second: an optional port, an adapter
+    // built per turn over the ONE tenant-scoped key, and nothing at all when the port is absent.
+    ...(config.aarohiAcquisitionBehaviourInput === undefined
+      ? {}
+      : {
+          aarohi: aarohiBehaviourPort(
+            config.aarohiAcquisitionBehaviourInput,
             source,
             stateKey,
             taskClass,
@@ -304,17 +395,27 @@ export async function composeAndProcessInternal(
     // deployment-level port, exactly as before. Never both: one turn has one knowledge source, and a
     // fallback between them would mean a grounded turn whose retrieval failed could still be
     // answered from somewhere else.
+    // Precedence, deliberately. Riya's DEDICATED RWC-P7 bridge wins first, so an existing grounded
+    // Riya deployment is byte-identical. Then the SHARED three-agent policy, which is how Anisha and
+    // Aarohi ground. Then the deployment-level port, exactly as before.
+    //
+    // Never two: one turn has one knowledge source, and a fallback between them would mean a grounded
+    // turn whose retrieval failed could still be answered from somewhere else.
     ...(riya?.knowledgePort !== undefined
       ? { knowledgePort: riya.knowledgePort }
-      : config.knowledgePort === undefined
-        ? {}
-        : { knowledgePort: config.knowledgePort }),
+      : shared !== undefined
+        ? { knowledgePort: shared.bridge.knowledgePort }
+        : config.knowledgePort === undefined
+          ? {}
+          : { knowledgePort: config.knowledgePort }),
     taskClass,
     ...(riya?.knowledgeTopics !== undefined
       ? { knowledgeTopics: riya.knowledgeTopics }
-      : config.knowledgeTopics === undefined
-        ? {}
-        : { knowledgeTopics: config.knowledgeTopics }),
+      : shared !== undefined
+        ? { knowledgeTopics: shared.topics }
+        : config.knowledgeTopics === undefined
+          ? {}
+          : { knowledgeTopics: config.knowledgeTopics }),
     ...(config.requireEvaluationRef === undefined
       ? {}
       : { requireEvaluationRef: config.requireEvaluationRef }),

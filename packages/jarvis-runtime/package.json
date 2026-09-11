@@ -21,6 +21,7 @@
     "typecheck:tests": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@qf-jarvis/aarohi-agent": "workspace:*",
     "@qf-jarvis/agent-runtime": "workspace:*",
     "@qf-jarvis/anisha-agent": "workspace:*",
     "@qf-jarvis/conversation-control": "workspace:*",

@@ -24,8 +24,14 @@ const EXACT_IDENTIFIER = /^[A-Za-z0-9._:-]{1,128}$/;
  */
 const SAFE_REFERENCE = /^[A-Za-z0-9._:+-]{1,128}$/;
 
-/** Mirrors `RUNTIME_PARTY_TYPES`. Conformance is asserted by spec. */
-export const PARTY_TYPES = ['CLIENT', 'VENDOR', 'UNKNOWN'] as const;
+/**
+ * Mirrors `RUNTIME_PARTY_TYPES`. Conformance is asserted by spec.
+ *
+ * `PROSPECT` joined this list with migration `0014` (ADR-0150 §2a). It was briefly absent while the
+ * runtime vocabulary carried it and the durable CHECK did not; the owner correction closed that gap
+ * rather than leaving an acquisition conversation representable in memory and refused on write.
+ */
+export const PARTY_TYPES = ['CLIENT', 'VENDOR', 'PROSPECT', 'UNKNOWN'] as const;
 /** Mirrors `RUNTIME_DATA_CLASSES`. */
 export const DATA_CLASSES = ['HOSTED_ALLOWED', 'LOCAL_ONLY', 'HUMAN_ONLY'] as const;
 /** Mirrors `RUNTIME_SUBJECT_STATUSES`. */

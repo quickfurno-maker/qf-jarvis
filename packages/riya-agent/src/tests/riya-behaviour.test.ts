@@ -566,12 +566,15 @@ describe('(32-40) privacy, prompt boundary and no-execution', () => {
 
 describe('(40) the merged role invariants are unchanged by this package', () => {
   it('the full actor x party cross-product still matches the merged rule', () => {
+    // JF-4C (ADR-0150) adds one agent row and one party column. What this spec exists to say is
+    // unchanged and is still true: RIYA is CLIENT-only, and nothing this package does widens that.
     const expected: Record<RuntimeActor, readonly RuntimePartyType[]> = {
       RIYA: ['CLIENT'],
       ANISHA: ['VENDOR'],
-      JARVIS: ['CLIENT', 'VENDOR', 'UNKNOWN'],
-      HUMAN: ['CLIENT', 'VENDOR', 'UNKNOWN'],
-      SYSTEM: ['CLIENT', 'VENDOR', 'UNKNOWN'],
+      AAROHI: ['PROSPECT'],
+      JARVIS: ['CLIENT', 'VENDOR', 'PROSPECT', 'UNKNOWN'],
+      HUMAN: ['CLIENT', 'VENDOR', 'PROSPECT', 'UNKNOWN'],
+      SYSTEM: ['CLIENT', 'VENDOR', 'PROSPECT', 'UNKNOWN'],
     };
     for (const actor of RUNTIME_ACTORS) {
       for (const party of RUNTIME_PARTY_TYPES) {
@@ -580,7 +583,7 @@ describe('(40) the merged role invariants are unchanged by this package', () => 
         );
       }
     }
-    expect([...RUNTIME_PARTY_TYPES]).toEqual(['CLIENT', 'VENDOR', 'UNKNOWN']);
+    expect([...RUNTIME_PARTY_TYPES]).toEqual(['CLIENT', 'VENDOR', 'PROSPECT', 'UNKNOWN']);
   });
 
   it('the merged boundary independently refuses a RIYA proposal on a vendor conversation', () => {

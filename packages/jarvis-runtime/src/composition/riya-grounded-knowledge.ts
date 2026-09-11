@@ -19,6 +19,22 @@
  * process global and no cross-run cache, because two conversations are served concurrently by one
  * process and a shared slot would let one client's answer be grounded in the other's records.
  *
+ * ### One bridge, three agents (JF-4B/C/D owner correction, ADR-0150 §4b)
+ *
+ * This file was Riya-specific and hard-coded `CLIENT` / `CLIENT_RESPONSE`. Anisha and Aarohi need the
+ * same grounding with their own scope and purpose, and copying the file twice would have produced three
+ * places where "what may reach a model" is decided — which is exactly the drift every rule below exists
+ * to prevent.
+ *
+ * So the implementation is now agent-neutral: `createAgentGroundedKnowledgeBridge` takes the scope and
+ * purpose as arguments, and `createRiyaGroundedKnowledgeBridge` is a thin wrapper that supplies the two
+ * Riya has always used. Every invariant is unchanged and shared, so a fix or a mistake in any of them
+ * lands on all three agents at once rather than on whichever copy somebody remembered.
+ *
+ * The scope and purpose are NOT caller-selectable at runtime: the composition maps them from the actor
+ * `assignAgent` already chose, through a closed table. A caller that could name its own scope could read
+ * another agent's records.
+ *
  * ### The lookup is injectable; the rules are not (JF-4, ADR-0149)
  *
  * A deployment may hand this bridge a registry to query, or a bounded retrieval PORT that performs the
@@ -51,11 +67,17 @@ import type {
 import { createRetrievalRequest, retrieveGovernedKnowledge } from '@qf-jarvis/governed-knowledge';
 import type {
   GovernedKnowledgeRegistry,
+  KnowledgeAgentScope,
   KnowledgeObservabilityHook,
+  KnowledgePurpose,
 } from '@qf-jarvis/governed-knowledge';
 import type { RiyaGroundedKnowledgeContextV1 } from '@qf-jarvis/riya-model-interaction';
 
 import type { GovernedRetrievalPort } from '../contracts/runtime-config.js';
+import {
+  RIYA_KNOWLEDGE_PURPOSE,
+  RIYA_KNOWLEDGE_SCOPE,
+} from '../contracts/agent-knowledge-policy.js';
 
 /**
  * The RWC-P7 record ceiling.
@@ -107,9 +129,29 @@ export type RiyaGroundedKnowledgeBridgeInput = {
     }
 );
 
-/** Build the bridge for exactly one run. */
-export function createRiyaGroundedKnowledgeBridge(
-  input: RiyaGroundedKnowledgeBridgeInput,
+/**
+ * What an agent-neutral bridge is built from: the Riya input plus the scope and purpose to retrieve
+ * under.
+ *
+ * Both are REQUIRED here and neither has a default. A default scope would be a decision about which
+ * agent's records a turn may read, made by the wrong layer.
+ */
+export type AgentGroundedKnowledgeBridgeInput = RiyaGroundedKnowledgeBridgeInput & {
+  readonly agentScope: KnowledgeAgentScope;
+  readonly purpose: KnowledgePurpose;
+};
+
+/**
+ * Build the agent-neutral bridge for exactly one run.
+ *
+ * Every safety invariant in this file applies identically whichever agent it serves: one retrieval per
+ * run, the envelope cross-check, the exact governed request built from the run's own envelope, exact
+ * topic selectors only, `requireCitation` true, the unchanged record and content bounds, the minimized
+ * five-field capture, the preserved citations, and a fail-closed refusal that says nothing about the
+ * governed reason.
+ */
+export function createAgentGroundedKnowledgeBridge(
+  input: AgentGroundedKnowledgeBridgeInput,
 ): RiyaGroundedKnowledgeBridge {
   const envelope = input.envelope;
   const topics = Object.freeze([...input.topics]);
@@ -158,8 +200,10 @@ export function createRiyaGroundedKnowledgeBridge(
         const governedRequest = createRetrievalRequest({
           requestId: envelope.messageId,
           tenantId: envelope.tenantId,
-          agentScope: 'CLIENT',
-          purpose: 'CLIENT_RESPONSE',
+          // From the CLOSED actor -> scope/purpose table, never from a caller. Riya keeps the exact
+          // pair she always used; Anisha and Aarohi carry their own.
+          agentScope: input.agentScope,
+          purpose: input.purpose,
           dataClass: envelope.dataClass,
           asOf: envelope.receivedAt,
           maxRecords: topics.length,
@@ -231,5 +275,22 @@ export function createRiyaGroundedKnowledgeBridge(
   return Object.freeze({
     knowledgePort,
     readCaptured: () => captured,
+  });
+}
+
+/**
+ * Build the bridge for exactly one Riya run.
+ *
+ * A thin wrapper over {@link createAgentGroundedKnowledgeBridge} that supplies the two values Riya has
+ * always retrieved under. It exists so every RWC-P7 caller and spec keeps working unchanged, and so
+ * Riya's scope cannot drift by someone editing a shared default: the pair is written here, once.
+ */
+export function createRiyaGroundedKnowledgeBridge(
+  input: RiyaGroundedKnowledgeBridgeInput,
+): RiyaGroundedKnowledgeBridge {
+  return createAgentGroundedKnowledgeBridge({
+    ...input,
+    agentScope: RIYA_KNOWLEDGE_SCOPE,
+    purpose: RIYA_KNOWLEDGE_PURPOSE,
   });
 }

@@ -104,16 +104,37 @@ export function dataClassRank(dataClass: KnowledgeDataClass): number {
 }
 
 /**
- * The closed agent scopes. Riya is CLIENT-only, Anisha is VENDOR-only, Jarvis is COORDINATION;
- * SYSTEM is a non-agent internal scope. Capability retrieval never blurs these authority boundaries.
+ * The closed agent scopes. Riya is CLIENT-only, Anisha is VENDOR-only, Aarohi is PROSPECT-only,
+ * Jarvis is COORDINATION; SYSTEM is a non-agent internal scope. Capability retrieval never blurs
+ * these authority boundaries.
+ *
+ * `PROSPECT` was added by the JF-4B/C/D owner correction (ADR-0150 §4a), and adding it was the whole
+ * point rather than a convenience. Aarohi's acquisition domain owns a party that is explicitly NOT a
+ * Core vendor, so reusing `VENDOR` would have let acquisition material and registered-vendor material
+ * see each other — and reusing `CLIENT` or `COORDINATION` would have done the same across a different
+ * boundary. A scope exists to say who may read a record; sharing one between two authorities is how a
+ * record written for one of them reaches the other.
  */
-export const KNOWLEDGE_AGENT_SCOPES = ['CLIENT', 'VENDOR', 'COORDINATION', 'SYSTEM'] as const;
+export const KNOWLEDGE_AGENT_SCOPES = [
+  'CLIENT',
+  'VENDOR',
+  'PROSPECT',
+  'COORDINATION',
+  'SYSTEM',
+] as const;
 export type KnowledgeAgentScope = (typeof KNOWLEDGE_AGENT_SCOPES)[number];
 
-/** The closed, launch-focused set of retrieval purpose/task classes. */
+/**
+ * The closed, launch-focused set of retrieval purpose/task classes.
+ *
+ * `PROSPECT_RESPONSE` joins the two existing response purposes (ADR-0150 §4a). A purpose says what a
+ * retrieval is FOR, and an acquisition answer is not a client answer or a vendor answer: the three are
+ * governed differently, and a record approved for one of them has not been approved for another.
+ */
 export const KNOWLEDGE_PURPOSES = [
   'CLIENT_RESPONSE',
   'VENDOR_RESPONSE',
+  'PROSPECT_RESPONSE',
   'INTERNAL_REASONING',
   'POLICY_LOOKUP',
   'PACKAGE_LOOKUP',

@@ -378,6 +378,9 @@ importers:
 
   packages/jarvis-runtime:
     dependencies:
+      '@qf-jarvis/aarohi-agent':
+        specifier: workspace:*
+        version: link:../aarohi-agent
       '@qf-jarvis/agent-runtime':
         specifier: workspace:*
         version: link:../agent-runtime

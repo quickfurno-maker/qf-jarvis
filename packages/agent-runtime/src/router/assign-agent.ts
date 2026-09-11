@@ -22,6 +22,12 @@ export function assignAgent(
       return 'RIYA';
     case 'VENDOR':
       return 'ANISHA';
+    // JF-4C (ADR-0150). A net-new unregistered prospect is Aarohi's, and deliberately not Anisha's:
+    // the vendor journey assumes a registered relationship that does not exist yet, and Aarohi's own
+    // gate admits exactly one Core status. Extending this switch rather than adding a sibling router
+    // keeps assignment in one place -- two routers is how two answers to "whose turn is this" begin.
+    case 'PROSPECT':
+      return 'AAROHI';
     case 'UNKNOWN':
       return policy.unknownRouting === 'HUMAN' ? 'HUMAN' : 'JARVIS';
     default:

@@ -1,15 +1,21 @@
 /**
  * The deterministic behaviour multiplexer (QFJ-S3-D-B, ADR-0071).
  *
- * The orchestrator accepts exactly ONE `BehaviourDecisionPort` (ADR-0068), and there are now two
- * business agents. This is the whole of the reconciliation: a pure selector that picks at most one
- * adapter from the actor-and-party pair the merged router already decided, and calls only that one.
+ * The orchestrator accepts exactly ONE `BehaviourDecisionPort` (ADR-0068), and there are now THREE
+ * business agents (JF-4C, ADR-0150 adds Aarohi). This is the whole of the reconciliation: a pure
+ * selector that picks at most one adapter from the actor-and-party pair the merged router already
+ * decided, and calls only that one.
  *
  * It is deliberately NOT a registry, and deliberately not a loop. "Ask each adapter until one
  * answers" would mean a client turn could cost a vendor-input read, and a vendor adapter's refusal
  * could be quietly answered by Riya — two failures that are invisible in a passing test suite and
  * catastrophic in a real conversation. So selection is exact-pair matching, and a selected adapter's
- * `undefined` or rejection is the turn's answer. The other adapter is never consulted, on any path.
+ * `undefined` or rejection is the turn's answer. The others are never consulted, on any path.
+ *
+ * Adding a third pair does not change that shape, and the reason it must not is sharper with three
+ * agents than with two: an acquisition prospect answered by the vendor journey would be told about a
+ * relationship that does not exist, and a registered vendor answered by the acquisition brain would be
+ * sold something it already has.
  *
  * The pair comes from `BehaviourDecisionRequest`, which the orchestrator fills from `assignAgent`.
  * That keeps the M1 router the single assignment authority: the mux reads the routing decision, it
@@ -25,6 +31,7 @@ import type {
 export interface BehaviourMuxPorts {
   readonly riya?: BehaviourDecisionPort;
   readonly anisha?: BehaviourDecisionPort;
+  readonly aarohi?: BehaviourDecisionPort;
 }
 
 /**
@@ -32,7 +39,7 @@ export interface BehaviourMuxPorts {
  * is configured at all — in which case the composition is byte-for-byte the pre-S3-C pipeline.
  */
 export function behaviourMux(ports: BehaviourMuxPorts): BehaviourDecisionPort | undefined {
-  if (ports.riya === undefined && ports.anisha === undefined) {
+  if (ports.riya === undefined && ports.anisha === undefined && ports.aarohi === undefined) {
     return undefined;
   }
   return Object.freeze({
@@ -44,7 +51,9 @@ export function behaviourMux(ports: BehaviourMuxPorts): BehaviourDecisionPort | 
           ? ports.riya
           : request.partyType === 'VENDOR' && request.assignedActor === 'ANISHA'
             ? ports.anisha
-            : undefined;
+            : request.partyType === 'PROSPECT' && request.assignedActor === 'AAROHI'
+              ? ports.aarohi
+              : undefined;
 
       if (selected === undefined) {
         return Promise.resolve(undefined);

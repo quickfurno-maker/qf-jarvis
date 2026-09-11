@@ -345,6 +345,7 @@ describe('repository invariants this slice must not move', () => {
       // RWC-P8 (ADR-0104): the ONE authorized addition, repository and LOCAL/CI only.
       '0012_riya_logical_turn_idempotency.sql',
       '0013_communication_state_projection.sql',
+      '0014_conversation_prospect_party_type.sql',
     ]);
   });
 

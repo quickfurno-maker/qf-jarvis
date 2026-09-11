@@ -22,3 +22,16 @@ export type {
 } from './contracts.js';
 
 export { createGovernedRagRetrievalPort } from './governed-rag-knowledge-port.js';
+
+// JF-4B/C/D (ADR-0150): the internal three-agent composition. Anisha and Aarohi reach the same
+// authoritative runtime through the same Mastra workflow; Riya is passed through untouched.
+export {
+  createThreeAgentJarvisRuntimeComposition,
+  ThreeAgentRuntimeCompositionError,
+} from './three-agent-runtime.js';
+export type {
+  InternalAgentTurn,
+  InternalAgentTurnRunner,
+  ThreeAgentRuntimeComposition,
+  ThreeAgentRuntimeConfig,
+} from './three-agent-runtime.js';

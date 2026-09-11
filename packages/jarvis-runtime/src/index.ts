@@ -74,6 +74,26 @@ export type {
   VendorJourneyBehaviourInputPort,
   VendorJourneyBehaviourInputRequest,
 } from './contracts/vendor-journey-behaviour-input.js';
+// JF-4C (ADR-0150): the Aarohi acquisition behaviour seam. TYPES only -- the adapter is internal to
+// the composition root, exactly as the Riya and Anisha adapters are.
+export type {
+  AarohiAcquisitionBehaviourInput,
+  AarohiAcquisitionBehaviourInputPort,
+  AarohiAcquisitionBehaviourInputRequest,
+} from './contracts/aarohi-acquisition-behaviour-input.js';
+
+// JF-4B/C/D owner correction (ADR-0150 §4): the ONE shared governed-RAG policy.
+//
+// TYPES ONLY, and that is the point. A deployment configures TOPICS, which needs nothing but the
+// shapes below; the actor -> scope/purpose table is a decision this package makes, not a value a
+// caller needs, and publishing it as a runtime value would grow the locked public surface for the
+// sake of something no composition has to read. Scope and purpose stay unreachable from outside.
+export type {
+  AgentGroundedKnowledgePolicy,
+  AgentKnowledgeBinding,
+  AgentKnowledgeTopicPolicy,
+  GroundedAgentActor,
+} from './contracts/agent-knowledge-policy.js';
 
 // Config + result + outcome vocabulary.
 export type { JarvisRuntimeConfig, JarvisProvenanceRefs } from './contracts/runtime-config.js';

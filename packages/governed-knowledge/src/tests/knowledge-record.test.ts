@@ -10,7 +10,9 @@ import { describe, expect, it } from 'vitest';
 import { GovernedKnowledgeError } from '../contracts/errors.js';
 import { createKnowledgeRecord } from '../contracts/knowledge-record.js';
 import {
+  KNOWLEDGE_AGENT_SCOPES,
   KNOWLEDGE_LIFECYCLE_STATES,
+  KNOWLEDGE_PURPOSES,
   isValidLifecycleTransition,
 } from '../contracts/vocabularies.js';
 import { recordInput } from './fixtures.js';
@@ -105,6 +107,68 @@ describe('createKnowledgeRecord', () => {
     );
     expectInvalid(
       recordInput({ metadata: { x: 1 } } as unknown as Parameters<typeof recordInput>[0]),
+    );
+  });
+});
+
+describe('the permission caps follow the VOCABULARIES, not a literal that outgrows them', () => {
+  it('a record may name EVERY agent scope and EVERY purpose that exists', () => {
+    // The JF-4 correction added `PROSPECT` and `PROSPECT_RESPONSE` (ADR-0150 §4a). The caps used to be
+    // the literal counts of the old vocabularies, so the very next addition would have made a record
+    // that names every scope unrepresentable -- a governance limit created by arithmetic rather than by
+    // a decision about disclosure.
+    const record = createKnowledgeRecord(
+      recordInput({
+        permissions: {
+          tenantScope: 'GLOBAL',
+          allowedAgentScopes: [...KNOWLEDGE_AGENT_SCOPES],
+          allowedPurposes: [...KNOWLEDGE_PURPOSES],
+        },
+      }),
+    );
+    expect(record.permissions.allowedAgentScopes).toHaveLength(KNOWLEDGE_AGENT_SCOPES.length);
+    expect(record.permissions.allowedPurposes).toHaveLength(KNOWLEDGE_PURPOSES.length);
+  });
+
+  it('and still refuses more entries than exist, or a token that is not in either vocabulary', () => {
+    // Binding the cap to the vocabulary did not remove it. A list longer than the vocabulary can only
+    // be a duplicate or an invented member, and both are refused.
+    expectInvalid(
+      recordInput({
+        permissions: {
+          tenantScope: 'GLOBAL',
+          allowedAgentScopes: [...KNOWLEDGE_AGENT_SCOPES, 'CLIENT'],
+          allowedPurposes: ['CLIENT_RESPONSE'],
+        },
+      }),
+    );
+    expectInvalid(
+      recordInput({
+        permissions: {
+          tenantScope: 'GLOBAL',
+          allowedAgentScopes: ['ACQUISITION'],
+          allowedPurposes: ['CLIENT_RESPONSE'],
+        },
+      } as unknown as Parameters<typeof recordInput>[0]),
+    );
+    expectInvalid(
+      recordInput({
+        permissions: {
+          tenantScope: 'GLOBAL',
+          allowedAgentScopes: ['PROSPECT'],
+          allowedPurposes: ['PROSPECT_REPLY'],
+        },
+      } as unknown as Parameters<typeof recordInput>[0]),
+    );
+    // And an empty list is still refused: a record nobody may read is not a governed record.
+    expectInvalid(
+      recordInput({
+        permissions: {
+          tenantScope: 'GLOBAL',
+          allowedAgentScopes: [],
+          allowedPurposes: ['CLIENT_RESPONSE'],
+        },
+      } as unknown as Parameters<typeof recordInput>[0]),
     );
   });
 });

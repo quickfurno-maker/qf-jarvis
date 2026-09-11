@@ -89,13 +89,13 @@ beforeEach(async () => {
 // ---------------------------------------------------------------------------
 
 describe('migration 0012 is the ONE authorized addition, and it is not a transcript', () => {
-  it('the migration set is exactly 0001-0013, with 0011 byte-identical and no 0014', () => {
+  it('the migration set is exactly 0001-0014, with 0011 byte-identical and no 0015', () => {
     const sql = readdirSync(MIGRATIONS_DIR)
       .filter((name) => name.endsWith('.sql'))
       .sort();
-    expect(sql).toHaveLength(13);
+    expect(sql).toHaveLength(14);
     expect(sql[11]).toBe('0012_riya_logical_turn_idempotency.sql');
-    expect(sql.some((name) => Number.parseInt(name.slice(0, 4), 10) > 13)).toBe(false);
+    expect(sql.some((name) => Number.parseInt(name.slice(0, 4), 10) > 14)).toBe(false);
     expect(
       createHash('sha256')
         .update(readFileSync(join(MIGRATIONS_DIR, '0011_riya_conversation_continuity.sql')))

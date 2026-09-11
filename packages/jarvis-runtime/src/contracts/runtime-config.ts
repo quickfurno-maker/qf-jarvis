@@ -24,6 +24,8 @@ import type { PromptRegistry } from '@qf-jarvis/prompt-registry';
 
 import type { AuthoritativeConversationStatePort } from './authoritative-state.js';
 import type { ClientSalesBehaviourInputPort } from './behaviour-input.js';
+import type { AarohiAcquisitionBehaviourInputPort } from './aarohi-acquisition-behaviour-input.js';
+import type { AgentGroundedKnowledgePolicy } from './agent-knowledge-policy.js';
 import type { VendorJourneyBehaviourInputPort } from './vendor-journey-behaviour-input.js';
 import type { JarvisRuntimeObservabilityHook } from './observability.js';
 
@@ -156,6 +158,31 @@ export interface JarvisRuntimeConfig {
    * turns take the legacy `REPLY` path unchanged and Anisha behaviour is never consulted.
    */
   readonly vendorJourneyBehaviourInput?: VendorJourneyBehaviourInputPort;
+
+  /**
+   * Optional Aarohi acquisition behaviour inputs (JF-4C, ADR-0150). Additive and non-breaking.
+   *
+   * Absent -> `PROSPECT` turns take the legacy path unchanged and Aarohi behaviour is never consulted,
+   * exactly as an unconfigured VENDOR turn never consults Anisha. Absent in every deployment today:
+   * the authoritative source of these certified artifacts is a future QuickFurno/Core adapter.
+   */
+  readonly aarohiAcquisitionBehaviourInput?: AarohiAcquisitionBehaviourInputPort;
+
+  /**
+   * The ONE shared governed-RAG policy for all three business agents (ADR-0150 §4c).
+   *
+   * One authority reach, one pack, one retrieval implementation; per-agent exact topics, and scope and
+   * purpose derived in code from the actor the router chose. Absent -> no agent grounds, which is the
+   * pre-correction behaviour for Anisha and Aarohi and is unchanged for Riya either way.
+   *
+   * PRESENT means complete: `retrieval` is required, `registry` is forbidden, and `agents` must be a
+   * valid per-agent topic map. A malformed one fails at CONSTRUCTION through
+   * `assertMandatoryDependencies`, never as a per-turn "this deployment grounds on nothing".
+   *
+   * Riya's DEDICATED `riyaGroundedKnowledge` configuration continues to win when both are present, so
+   * an existing RWC-P7 deployment keeps byte-identical behaviour.
+   */
+  readonly agentGroundedKnowledge?: AgentGroundedKnowledgePolicy;
 
   /** Optional deployment-level provenance references; safe defaults are derived when absent. */
   readonly provenanceRefs?: JarvisProvenanceRefs;

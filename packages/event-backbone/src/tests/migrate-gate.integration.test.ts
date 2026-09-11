@@ -128,6 +128,7 @@ describe('db:migrate runs the preflight automatically', () => {
       // RWC-P8 (ADR-0104): the ONE authorized addition, repository and LOCAL/CI only.
       '0012_riya_logical_turn_idempotency.sql',
       '0013_communication_state_projection.sql',
+      '0014_conversation_prospect_party_type.sql',
     ]);
     expect(await tableExists(MIGRATION_SCHEMA, 'event')).toBe(true);
   });
@@ -142,9 +143,13 @@ describe('db:migrate runs the preflight automatically', () => {
       1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
       // RWC-P8 (ADR-0104): the ONE owner-authorized addition of its slice.
       12,
-      // QFJ-P09 D5 (ADR-0142): the ONE owner-authorized addition of this slice -- the local
+      // QFJ-P09 D5 (ADR-0142): the ONE owner-authorized addition of its slice -- the local
       // communication-state read model. LOCAL/CI only; NOT applied to managed PostgreSQL.
       13,
+      // JF-4B/C/D owner correction (ADR-0150 §34): the ONE owner-authorized addition of this slice --
+      // the party CHECK widened to hold PROSPECT. LOCAL/CI only; the managed database still carries
+      // 0001 alone and JF-6 owns that parity.
+      14,
     ]);
   });
 

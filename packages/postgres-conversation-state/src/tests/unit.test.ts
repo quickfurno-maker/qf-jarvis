@@ -92,27 +92,77 @@ describe('private vocabularies match their governed originals', () => {
   it('mirrors the agent-runtime party, data-class and subject-status vocabularies exactly', () => {
     // These are duplicated so the package keeps no PRODUCTION dependency on agent-runtime. That is
     // only safe if drift fails loudly, which is what this asserts.
+    //
+    // `PROSPECT` joined both sides with migration `0014` (ADR-0150 §2a), so this is an exact mirror
+    // again. Drift still fails loudly, which is the only thing that makes the duplication safe.
     expect([...PARTY_TYPES]).toEqual([...RUNTIME_PARTY_TYPES]);
     expect([...DATA_CLASSES]).toEqual([...RUNTIME_DATA_CLASSES]);
     expect([...SUBJECT_STATUSES]).toEqual([...RUNTIME_SUBJECT_STATUSES]);
   });
 
   it('the migration CHECK constraints name exactly those vocabularies', () => {
-    const sql = readFileSync(
-      fileURLToPath(
-        new URL(
-          'packages/event-backbone/src/persistence/migrations/0008_conversation_control_persistence.sql',
-          REPO_ROOT,
+    // The EFFECTIVE constraint, not one file's version of it. `0008` wrote the original three-value
+    // party CHECK and `0014` (ADR-0150 §2a) widened it to four, so reading `0008` alone would now
+    // report a `PROSPECT` gap that the applied schema does not have. Both are read, in order.
+    const migration = (name: string): string =>
+      readFileSync(
+        fileURLToPath(
+          new URL(`packages/event-backbone/src/persistence/migrations/${name}`, REPO_ROOT),
         ),
-      ),
-      'utf8',
-    );
+        'utf8',
+      );
+    const control = migration('0008_conversation_control_persistence.sql');
+    const prospect = migration('0014_conversation_prospect_party_type.sql');
+    const sql = [control, prospect].join('\n');
+
     for (const value of [
       ...RUNTIME_PARTY_TYPES,
       ...RUNTIME_DATA_CLASSES,
       ...RUNTIME_SUBJECT_STATUSES,
     ]) {
       expect(sql).toContain(`'${value}'`);
+    }
+
+    // And `0014` is narrow: it widens the party CHECK and touches nothing else. A migration that also
+    // granted a privilege or added a column would be a very different review.
+    //
+    // STATEMENTS only: `0014`'s header explains what it does not do, and a scan over prose would read
+    // that explanation as the thing it forbids.
+    const statements = prospect
+      .split('\n')
+      .filter((line) => !line.trimStart().startsWith('--'))
+      .join('\n');
+    expect(statements).toContain('conversation_runtime_state_party_type_known');
+    expect(statements).toContain(
+      "CHECK (party_type IN ('CLIENT', 'VENDOR', 'PROSPECT', 'UNKNOWN'))",
+    );
+    // A WIDENING, and provably not a removal. Naming the constraint and quoting the new CHECK is not
+    // enough on its own: a migration that only DROPPED the constraint, with the widened text left in a
+    // comment or a dead clause, would satisfy both assertions above and leave the column accepting any
+    // string forever. So the ADD is required, and exactly one DROP and one ADD are permitted.
+    expect(statements).toContain('ADD CONSTRAINT');
+    expect(statements.match(/ADD CONSTRAINT/g)).toHaveLength(1);
+    expect(statements.match(/DROP CONSTRAINT/g)).toHaveLength(1);
+    expect(statements.indexOf('DROP CONSTRAINT')).toBeLessThan(
+      statements.indexOf('ADD CONSTRAINT'),
+    );
+    for (const forbidden of [
+      'GRANT',
+      'REVOKE',
+      'CREATE TABLE',
+      'ADD COLUMN',
+      'DROP COLUMN',
+      'CREATE INDEX',
+      'UPDATE ',
+      'DELETE ',
+      'INSERT ',
+      'SET DEFAULT',
+      'rm_communication_state',
+    ]) {
+      expect({ forbidden, present: statements.includes(forbidden) }).toEqual({
+        forbidden,
+        present: false,
+      });
     }
     for (const value of [
       ...CONVERSATION_CONTROL_ACTIONS_FROZEN,
@@ -788,6 +838,7 @@ describe('API surface, dependencies and containment', () => {
       // RWC-P8 (ADR-0104): the ONE authorized addition, repository and LOCAL/CI only.
       '0012_riya_logical_turn_idempotency.sql',
       '0013_communication_state_projection.sql',
+      '0014_conversation_prospect_party_type.sql',
     ]);
   });
 

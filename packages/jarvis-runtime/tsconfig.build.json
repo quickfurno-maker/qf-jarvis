@@ -37,6 +37,8 @@
     // brings no retrieval engine, no index and no embedding with it.
     { "path": "../governed-knowledge/tsconfig.build.json" },
     { "path": "../anisha-agent/tsconfig.build.json" },
+    // JF-4C (ADR-0150): the existing Aarohi AVG domain. ONE edge, for ONE evaluator.
+    { "path": "../aarohi-agent/tsconfig.build.json" },
     { "path": "../prompt-registry/tsconfig.build.json" },
     { "path": "../conversation-control/tsconfig.build.json" }
   ],
