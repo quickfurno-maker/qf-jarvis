@@ -32,11 +32,14 @@ import type { RuntimePolicy } from '@qf-jarvis/agent-runtime';
 import {
   createGovernedKnowledgeRegistry,
   createKnowledgeRecord,
+  retrieveGovernedKnowledge,
 } from '@qf-jarvis/governed-knowledge';
 import type {
   KnowledgeEvent,
   KnowledgeObservabilityHook,
   KnowledgeRecordInput,
+  KnowledgeRetrievalRequest,
+  KnowledgeRetrievalResult,
 } from '@qf-jarvis/governed-knowledge';
 import { scriptedCoreTransport } from '@qf-jarvis/core-decision-adapter/testing';
 import { scriptedGatewayInvoker, structuredReply } from '@qf-jarvis/model-reply-adapter/testing';
@@ -48,7 +51,7 @@ import { createJarvisRuntime } from '../composition/create-jarvis-runtime.js';
 import { AGENT_KNOWLEDGE_BINDINGS } from '../contracts/agent-knowledge-policy.js';
 import type { AgentGroundedKnowledgePolicy } from '../contracts/agent-knowledge-policy.js';
 import type { ConversationControlState } from '../contracts/authoritative-state.js';
-import type { JarvisRuntimeConfig } from '../contracts/runtime-config.js';
+import type { GovernedRetrievalPort, JarvisRuntimeConfig } from '../contracts/runtime-config.js';
 import {
   clearControlState,
   controllableAuthoritativeState,
@@ -123,6 +126,7 @@ function recordingObservability(): KnowledgeObservabilityHook & {
  */
 function deployment(topics: Readonly<Partial<Record<Actor, readonly string[]>>>): {
   readonly observability: ReturnType<typeof recordingObservability>;
+  readonly retrieval: GovernedRetrievalPort;
   readonly policy: AgentGroundedKnowledgePolicy;
 } {
   const registry = createGovernedKnowledgeRegistry([
@@ -135,14 +139,14 @@ function deployment(topics: Readonly<Partial<Record<Actor, readonly string[]>>>)
   for (const [actor, list] of Object.entries(topics)) {
     agents[actor] = { topics: list };
   }
-  return {
-    observability,
-    policy: {
-      registry,
-      observability,
-      agents,
-    },
-  };
+  // ONE retrieval port, as a real deployment supplies (ADR-0150 §43). The observability hook goes to
+  // whoever performs the lookup -- which on this path is the port -- and not to the policy, which has
+  // no field for one precisely because it does not perform the lookup.
+  const retrieval: GovernedRetrievalPort = Object.freeze({
+    retrieve: (request: KnowledgeRetrievalRequest): KnowledgeRetrievalResult =>
+      retrieveGovernedKnowledge(registry, request, { observability }),
+  });
+  return { observability, retrieval, policy: { retrieval, agents } };
 }
 
 /**

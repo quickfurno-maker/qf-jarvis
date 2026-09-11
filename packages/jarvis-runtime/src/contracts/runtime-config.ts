@@ -175,6 +175,10 @@ export interface JarvisRuntimeConfig {
    * purpose derived in code from the actor the router chose. Absent -> no agent grounds, which is the
    * pre-correction behaviour for Anisha and Aarohi and is unchanged for Riya either way.
    *
+   * PRESENT means complete: `retrieval` is required, `registry` is forbidden, and `agents` must be a
+   * valid per-agent topic map. A malformed one fails at CONSTRUCTION through
+   * `assertMandatoryDependencies`, never as a per-turn "this deployment grounds on nothing".
+   *
    * Riya's DEDICATED `riyaGroundedKnowledge` configuration continues to win when both are present, so
    * an existing RWC-P7 deployment keeps byte-identical behaviour.
    */

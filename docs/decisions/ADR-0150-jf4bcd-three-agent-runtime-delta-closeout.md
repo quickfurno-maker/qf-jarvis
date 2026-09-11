@@ -1,6 +1,6 @@
 # ADR-0150 — JF-4B/C/D: three-agent runtime delta closeout without external authority fabrication
 
-- **Status:** Accepted, **as amended by the owner correction in §33–42**. A **composition delta**, not an
+- **Status:** Accepted, **as amended by the owner corrections in §33–42 and §43**. A **composition delta**, not an
   agent build. **No deployment, no live provider call, no external side effect, no QuickFurno
   integration, and no D5 activation.** The correction adds **exactly one migration** — `0014` — under
   explicit owner authorization (§34).
@@ -335,6 +335,67 @@ credential. No managed-database migration. No new dependency, no vector store, n
 training or benchmark asset touched. No historical evidence or dataset deleted. Riya's behaviour is
 byte-unchanged, and her web wire stays client-only.
 
+## Final owner correction (§43)
+
+### 43. The shared production RAG reach is RETRIEVAL-ONLY
+
+§35 said there was one authority reach. The policy it introduced did not enforce it:
+`AgentGroundedKnowledgePolicy` carried `registry?` **and** `retrieval?`, both optional, so four
+structural states were expressible where the architecture permits one — retrieval only (intended),
+registry only, both (the runtime silently preferred `retrieval`, leaving a whole body of knowledge
+unused beside the port), and neither (configured agents silently ground on nothing). Three of the four
+were wrong and two were silently wrong.
+
+The registry form was also a **production bypass**. JF-3 provisioning is the access boundary that
+decides whether a pack is ACTIVE and whether its revision is the approved one; a policy that accepts a
+registry directly answers production turns without ever asking.
+
+The chain is now locked end to end, with no side door:
+
+```
+one authentic revision-bound pack
+  → one JF-3 RagProvisioner
+  → one GovernedRetrievalPort      (via the existing JF-4A adapter — no second adapter)
+  → one AgentGroundedKnowledgePolicy
+  → Riya / Anisha / Aarohi, each under its own closed scope and exact topics
+```
+
+`retrieval` is REQUIRED. `registry` is typed `never`, so a config carrying one is a compile error at
+the deployment that wrote it, and `assertMandatoryDependencies` refuses one that arrives through a cast.
+`observability` is gone too: the governed hook belongs to whoever performs the lookup, which on this
+path is the injected port, and a field this package accepted and could not act on was another silent
+no-op.
+
+`sharedGroundedKnowledgeFor` now has ONE authority path and no branch on it. The only reasons a turn
+does not ground are semantic: the policy is absent, the actor is not one of the three, the actor is
+unconfigured, or its topic list is empty. A malformed configured authority is no longer one of them.
+
+### Malformed shared-RAG config fails at CONSTRUCTION
+
+Through the existing `invalid-config` taxonomy — no new error code — alongside the RWC-P7
+absent-or-COMPLETE check it sits next to. A registry, both fields, neither, a port without `retrieve`,
+a non-object `agents`, an unknown agent key, a duplicate topic, a ninth topic or a malformed topic
+string each refuse the runtime before it exists. None of them becomes a per-turn "this deployment
+grounds on nothing", because none of them is a per-turn decision.
+
+Topic SYNTAX is checked by the governed authority's own request validator rather than by a regex
+written here: that grammar is module-private in `@qf-jarvis/governed-knowledge` with no exported
+bare-string form, so the only way to reuse it instead of writing a second one that would drift is to
+build one throwaway request carrying just the selectors and see whether the authority accepts it.
+Nothing is retrieved and no registry is consulted.
+
+Zero topics stays valid and stays zero retrieval. RWC-P7 requires 1..8 because a grounded Riya
+deployment that approved nothing is a mistake; the shared policy permits 0..8 because "Aarohi has no
+approved topics yet" is a true state of the world and grounding on nothing is the honest response.
+
+### The low-level bridge keeps both forms, exclusively
+
+`createAgentGroundedKnowledgeBridge` still accepts `registry` XOR `retrieval` — each form types the
+other as `never`, so neither both nor neither is expressible — for the RWC-P7 specs and the dedicated
+Riya configuration that predate JF-3. That seam takes one turn's envelope and nothing routes production
+grounding through it by itself, so it is not the boundary this section is about. Riya's dedicated path
+is byte-unchanged.
+
 ## Consequences
 
 Positive: the result is smaller than a rebuild. All three agents are representable, deterministic and
@@ -351,6 +412,10 @@ Negative, and accepted:
 - **Aarohi is composed, grounded and still unsupplied.** Her acquisition ARTIFACTS wait on a future
   QuickFurno/Core adapter, and she has no model scope in V1 (§41). Her governed retrieval boundary,
   however, is real and shared. That is the honest state, not a defect.
+- **The shared policy lost a field it should never have had.** `registry` is gone from the shared
+  production policy (§43). A deployment that had configured one would now fail to construct — correctly,
+  because it was reaching the authority around JF-3. No such deployment exists: the policy was added in
+  this same PR and nothing outside its own specs ever configured it.
 - **Two more shared vocabularies grew.** `KNOWLEDGE_AGENT_SCOPES` and `KNOWLEDGE_PURPOSES` each gained
   one member (§37), and the jarvis-runtime root barrel deliberately gained **type exports only** — its
   locked runtime-value surface is still six symbols.

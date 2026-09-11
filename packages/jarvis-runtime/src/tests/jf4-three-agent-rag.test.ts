@@ -20,12 +20,15 @@ import {
   KNOWLEDGE_PURPOSES,
   createGovernedKnowledgeRegistry,
   createKnowledgeRecord,
+  retrieveGovernedKnowledge,
 } from '@qf-jarvis/governed-knowledge';
 import type {
   GovernedKnowledgeRegistry,
   KnowledgeAgentScope,
   KnowledgePurpose,
   KnowledgeRecordInput,
+  KnowledgeRetrievalRequest,
+  KnowledgeRetrievalResult,
 } from '@qf-jarvis/governed-knowledge';
 import { describe, expect, it } from 'vitest';
 
@@ -41,6 +44,7 @@ import type {
   AgentGroundedKnowledgePolicy,
   GroundedAgentActor,
 } from '../contracts/agent-knowledge-policy.js';
+import type { GovernedRetrievalPort } from '../contracts/runtime-config.js';
 import type { RuntimePolicy } from '@qf-jarvis/agent-runtime';
 
 const POLICY = { unknownRouting: 'JARVIS' } as unknown as RuntimePolicy;
@@ -98,6 +102,30 @@ function envelope(partyType: 'CLIENT' | 'VENDOR' | 'PROSPECT' | 'UNKNOWN'): Inbo
     normalizedText: 'a question',
     receivedAt: '2026-06-01T10:00:00Z',
   });
+}
+
+/**
+ * A shared `GovernedRetrievalPort` over one registry — the shape a REAL deployment supplies.
+ *
+ * The shared production policy is retrieval-only (ADR-0150 §43): there is no `registry` field, because
+ * a direct registry answers production turns around the JF-3 provisioning boundary. These specs
+ * therefore configure what a deployment configures. `retrieveGovernedKnowledge` is exactly what JF-3's
+ * ACTIVE provisioner calls, so nothing about the authority's decision is simulated here — only the
+ * ACTIVE/revision gate that JF-3 owns and that `apps/api` proves separately with the real adapter.
+ */
+function retrievalOver(registry: GovernedKnowledgeRegistry): GovernedRetrievalPort {
+  return Object.freeze({
+    retrieve: (request: KnowledgeRetrievalRequest): KnowledgeRetrievalResult =>
+      retrieveGovernedKnowledge(registry, request),
+  });
+}
+
+/** The shared policy a deployment supplies: ONE port, and per-agent topics. */
+function sharedPolicy(
+  registry: GovernedKnowledgeRegistry,
+  agents: AgentGroundedKnowledgePolicy['agents'],
+): AgentGroundedKnowledgePolicy {
+  return { retrieval: retrievalOver(registry), agents };
 }
 
 const m2Request = (topics: readonly string[]) =>
@@ -227,10 +255,9 @@ describe('(B) the 3x3 cross-agent denial matrix', () => {
 
 describe('(C,D) scope and purpose are derived, never supplied', () => {
   it('(C20,C21) the policy type has no scope or purpose field for a caller to set', () => {
-    const policy: AgentGroundedKnowledgePolicy = {
-      registry: createGovernedKnowledgeRegistry([privateTo('AAROHI', 'c')]),
-      agents: { AAROHI: { topics: ['topic-aarohi'] } },
-    };
+    const policy = sharedPolicy(createGovernedKnowledgeRegistry([privateTo('AAROHI', 'c')]), {
+      AAROHI: { topics: ['topic-aarohi'] },
+    });
     // A deployment configures TOPICS. Scope and purpose are absent from what it can express, so a
     // client turn has no field through which to request vendor or prospect records.
     expect(Object.keys(policy.agents.AAROHI ?? {})).toEqual(['topics']);
@@ -259,14 +286,11 @@ describe('(C,D) scope and purpose are derived, never supplied', () => {
   });
 
   it('(D25,D26) UNKNOWN/JARVIS and HUMAN ground nothing, and borrow no policy', () => {
-    const policy: AgentGroundedKnowledgePolicy = {
-      registry: createGovernedKnowledgeRegistry([privateTo('RIYA', 'a')]),
-      agents: {
-        RIYA: { topics: ['topic-riya'] },
-        ANISHA: { topics: ['topic-anisha'] },
-        AAROHI: { topics: ['topic-aarohi'] },
-      },
-    };
+    const policy = sharedPolicy(createGovernedKnowledgeRegistry([privateTo('RIYA', 'a')]), {
+      RIYA: { topics: ['topic-riya'] },
+      ANISHA: { topics: ['topic-anisha'] },
+      AAROHI: { topics: ['topic-aarohi'] },
+    });
     for (const actor of ['JARVIS', 'HUMAN', 'SYSTEM']) {
       expect(isGroundedAgentActor(actor)).toBe(false);
       expect(topicsForActor(policy, actor)).toBeUndefined();
@@ -276,10 +300,10 @@ describe('(C,D) scope and purpose are derived, never supplied', () => {
   });
 
   it('(D27,D28,D32) an agent gets only its own topics, and zero topics means no retrieval', () => {
-    const policy: AgentGroundedKnowledgePolicy = {
-      registry: createGovernedKnowledgeRegistry([privateTo('AAROHI', 'c')]),
-      agents: { RIYA: { topics: ['topic-riya'] }, AAROHI: { topics: [] } },
-    };
+    const policy = sharedPolicy(createGovernedKnowledgeRegistry([privateTo('AAROHI', 'c')]), {
+      RIYA: { topics: ['topic-riya'] },
+      AAROHI: { topics: [] },
+    });
     expect(topicsForActor(policy, 'RIYA')).toEqual(['topic-riya']);
     // Configured with an EMPTY list: no retrieval, and emphatically not "retrieve everything".
     expect(topicsForActor(policy, 'AAROHI')).toBeUndefined();
@@ -399,28 +423,31 @@ describe('(G) Core truth outranks anything a record says', () => {
 });
 
 describe('(H) it is ONE system', () => {
-  it('(H48,H49,H50,H51,H52,H53) one authority reach serves all three agents, by identity', () => {
-    // The policy holds ONE registry (or one retrieval port) for every agent. There is no per-agent
-    // field for it, so three agents cannot end up on three registries or three packs.
+  it('(H48,H49,H50,H51,H52,H53) one retrieval port serves all three agents, by identity', () => {
+    // The policy holds ONE retrieval port for every agent, and there is no per-agent field for it, so
+    // three agents cannot end up on three ports, three packs or three revisions.
     const registry = createGovernedKnowledgeRegistry([
       privateTo('RIYA', 'a'),
       privateTo('ANISHA', 'b'),
       privateTo('AAROHI', 'c'),
     ]);
+    const retrieval = retrievalOver(registry);
     const policy: AgentGroundedKnowledgePolicy = {
-      registry,
+      retrieval,
       agents: {
         RIYA: { topics: ['topic-riya'] },
         ANISHA: { topics: ['topic-anisha'] },
         AAROHI: { topics: ['topic-aarohi'] },
       },
     };
-    // Object identity: the same registry instance, for each agent.
+    // Object identity: the same port instance, for each agent.
     for (const actor of GROUNDED_AGENT_ACTORS) {
-      expect(policy.registry).toBe(registry);
+      expect(policy.retrieval).toBe(retrieval);
       expect(topicsForActor(policy, actor)).toHaveLength(1);
     }
-    expect(Object.keys(policy).sort()).toEqual(['agents', 'registry']);
+    // TWO own keys, and `registry` is not one of them (owner correction, ADR-0150 §43).
+    expect(Object.keys(policy).sort()).toEqual(['agents', 'retrieval']);
+    expect('registry' in policy).toBe(false);
     // No per-agent registry, retrieval, pack, backend or provider field exists to configure.
     for (const actor of GROUNDED_AGENT_ACTORS) {
       const configured = policy.agents[actor] as unknown as Record<string, unknown>;

@@ -11,6 +11,23 @@
  * would each be a second answer to "what may this agent see", and the answers would diverge the first
  * time one of them was fixed.
  *
+ * ### The shared production reach is RETRIEVAL-ONLY (owner correction, ADR-0150 §43)
+ *
+ * One authentic revision-bound pack -> one JF-3 provisioner -> one `GovernedRetrievalPort` -> this
+ * policy -> three exact scopes and topic lists. `retrieval` is REQUIRED and there is no `registry`
+ * field, so the chain has no side door.
+ *
+ * A `registry` here would let a deployment hand this package a knowledge authority DIRECTLY and answer
+ * production turns from it, stepping around the JF-3 provisioning boundary that decides whether a pack
+ * is ACTIVE and whether its revision is the approved one. It made four structural states expressible
+ * where the architecture permits one: retrieval only, registry only, both (the runtime silently
+ * preferred retrieval and a whole registry sat unused beside it), and neither (configured agents
+ * silently ground on nothing). Three of the four were wrong, and two of them were silently wrong.
+ *
+ * The low-level `createAgentGroundedKnowledgeBridge` still accepts either form, exclusively, for the
+ * RWC-P7 tests and the dedicated Riya configuration that predate JF-3. That seam is not this boundary:
+ * it takes one turn's envelope, and nothing routes production grounding through it by itself.
+ *
  * ### The scope and purpose are CODE-CLOSED
  *
  * A deployment configures TOPICS. It does not configure scope or purpose: those are derived from the
@@ -29,8 +46,6 @@
  * search.
  */
 import type { KnowledgeAgentScope, KnowledgePurpose } from '@qf-jarvis/governed-knowledge';
-import type { KnowledgeObservabilityHook } from '@qf-jarvis/governed-knowledge';
-import type { GovernedKnowledgeRegistry } from '@qf-jarvis/governed-knowledge';
 
 import type { GovernedRetrievalPort } from './runtime-config.js';
 
@@ -94,16 +109,27 @@ export interface AgentKnowledgeTopicPolicy {
 /**
  * The per-agent policy a deployment supplies, plus the ONE shared way to reach the authority.
  *
- * `registry` or `retrieval` is supplied ONCE for all three agents, not per agent. That is deliberate and
- * is the structural half of "one RAG system": there is exactly one place a deployment can point
- * grounding at, so three agents cannot end up on three registries or three packs.
+ * Two fields, and that is the whole surface.
+ *
+ * `retrieval` is supplied ONCE for all three agents, not per agent, and it is REQUIRED. That is the
+ * structural half of "one RAG system": there is exactly one place a deployment can point grounding at,
+ * so three agents cannot end up on three packs. It is also the reason there is no `registry` field --
+ * see the file header. Production grounding reaches the authority through the JF-3 provisioning
+ * boundary or it does not reach it at all.
+ *
+ * There is no `observability` field either, and its absence is deliberate rather than an oversight: the
+ * governed-knowledge hook belongs to whoever performs the lookup, which on this path is the injected
+ * port. A hook here would be a field this package accepted and then had nowhere to put.
  */
 export interface AgentGroundedKnowledgePolicy {
-  /** The ONE authority reach, shared by every agent. Exactly one of these two. */
-  readonly registry?: GovernedKnowledgeRegistry;
-  readonly retrieval?: GovernedRetrievalPort;
-  /** Optional governed-knowledge observability, shared. */
-  readonly observability?: KnowledgeObservabilityHook;
+  /** The ONE authority reach, shared by every agent. Required; there is no second form. */
+  readonly retrieval: GovernedRetrievalPort;
+  /**
+   * Never present. Typed `never` rather than omitted so a config carrying a registry is a COMPILE
+   * error at the deployment that wrote it, not a runtime surprise -- and `assertMandatoryDependencies`
+   * refuses one that reaches here through a cast anyway.
+   */
+  readonly registry?: never;
   /** Per-agent exact topics. An absent agent grounds nothing. */
   readonly agents: Readonly<Partial<Record<GroundedAgentActor, AgentKnowledgeTopicPolicy>>>;
 }

@@ -166,27 +166,14 @@ function sharedGroundedKnowledgeFor(
     agentScope: binding.agentScope,
     purpose: binding.purpose,
   } as const;
-  // Exactly one authority reach, and the narrowing is what proves it: there is no branch on which
-  // both are passed and no branch on which neither is.
-  if (policy.retrieval !== undefined) {
-    return {
-      bridge: createAgentGroundedKnowledgeBridge({ ...common, retrieval: policy.retrieval }),
-      topics,
-    };
-  }
-  if (policy.registry !== undefined) {
-    return {
-      bridge: createAgentGroundedKnowledgeBridge({
-        ...common,
-        registry: policy.registry,
-        ...(policy.observability === undefined ? {} : { observability: policy.observability }),
-      }),
-      topics,
-    };
-  }
-  // Configured agents but no way to reach the authority. Grounding on nothing is the honest answer;
-  // inventing a reach here is how an unconfigured deployment starts answering from somewhere.
-  return undefined;
+  // ONE authority path, with no branch on it (owner correction, ADR-0150 §43). `retrieval` is required
+  // by the contract and re-proved by `assertMandatoryDependencies`, so there is no registry branch to
+  // take, no fallback between two reaches, and no "configured but unreachable" case to decide per turn.
+  // A malformed shared-RAG configuration failed at construction; it cannot arrive here.
+  return {
+    bridge: createAgentGroundedKnowledgeBridge({ ...common, retrieval: policy.retrieval }),
+    topics,
+  };
 }
 
 /**

@@ -420,9 +420,13 @@ describe('JF-4 correction: there is ONE governed RAG, not three', () => {
         'utf8',
       ),
     );
-    // One declaration of each, at POLICY level.
-    expect(policy.match(/readonly registry\?:/g)).toHaveLength(1);
-    expect(policy.match(/readonly retrieval\?:/g)).toHaveLength(1);
+    // ONE authority reach, at POLICY level, and it is the RETRIEVAL port (owner correction, ADR-0150
+    // §43). `retrieval` is required, so there is no optional form of it to configure around; `registry`
+    // appears exactly once and only as the `never` that forbids a direct-authority bypass.
+    expect(policy.match(/readonly retrieval: GovernedRetrievalPort;/g)).toHaveLength(1);
+    expect(policy.match(/readonly registry\?: never;/g)).toHaveLength(1);
+    expect(policy).not.toContain('readonly retrieval?:');
+    expect(policy).not.toContain('GovernedKnowledgeRegistry');
     // The per-agent shape carries topics and nothing else. A scope or purpose field here would be a
     // field through which a caller could cross an authority boundary.
     const perAgent = policy.slice(
