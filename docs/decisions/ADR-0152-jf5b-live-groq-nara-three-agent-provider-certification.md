@@ -165,6 +165,119 @@ model-evaluation framework and its evidence verifier · governed RAG and the JF-
 production knowledge pack mechanism · `@qf-jarvis/groq-staging-smoke` · `@qf-jarvis/riya-candidate-
 evidence-live` · `@qf-jarvis/riya-candidate-evaluation-runner`.
 
+## Amendment — JF-5B-R1: the executable, and what running it found
+
+**Date:** 2026-09-11. Same PR, same branch, same ADR. No ADR-0153: this closes a gap in THIS decision
+rather than making a new one.
+
+### R1.1 What was actually missing
+
+The harness declared `"bin": { "qfj-jf5b-certify": "./dist/cli/bin.js" }` and `src/cli/` contained only
+`preflight.ts`. There was no `bin.ts`, no phase sequence and no code that drove a governed turn — the
+discovery module said in its own words that it "performs no I/O". Every gate, bound and refusal the
+original decision described was real and tested; what did not exist was anything that could run them.
+
+A manifest can claim an executable, and a report can repeat the claim, and neither is a check.
+`apps/api/src/tests/jf5b-bin-exists.test.ts` now asserts, for every declared bin in this repository,
+that the emitted file exists and that a source file produced it — in both directions.
+
+### R1.2 The process boundary, and why it is not in the harness
+
+**Option A.** The false `bin` is removed from the evaluation-only package, and the executable lives at
+`apps/api/src/bin/run-jf5b-live-certification.ts`, mirroring `run-shadow-once.ts` exactly.
+
+The harness deliberately cannot reach `jarvis-runtime`, Mastra or the three-agent composition, and it
+should not: it is an evaluation library, and giving it those edges to make an executable possible would
+have inverted the dependency direction the whole package exists to respect. `apps/api` already has the
+composition, already owns the process boundary, and is already the only place in this repository
+allowed to acquire a credential.
+
+One owner command, and only one:
+
+```
+node apps/api/dist/bin/run-jf5b-live-certification.js --execute-live --output-dir <OUTSIDE-REPO> --groq-smoke-config <NON-SECRET-JSON>
+```
+
+### R1.3 The seams the executable added, each narrow and injected
+
+- **Groq connectivity** is the existing `runGroqStagingSmokeOnce`, composed — not a second check.
+- **The Groq credential** is resolved ONCE, by the existing masked-TTY primitive, and the redacting
+  holder is passed on to the certification phases. The resolver admits one entry per process, so the
+  alternative was prompting the owner twice for one secret.
+- **The Nara credential** is a separate ingress into the provider's own `NaraApiKey` holder. It is
+  never `GroqApiKey`, and neither key is ever a string outside its holder.
+- **Nara discovery** is ONE bounded `GET` with `redirect: 'manual'`, a byte ceiling measured before
+  parsing, and an abort deadline. It is the only `fetch` in `apps/api`.
+- **Repository facts** come from `git` via `execFileSync` — an argument vector, never a shell string.
+- **The typed confirmation** is read from a real terminal with echo ON. It is the only stream read in
+  this application, and `credential-containment.test.ts` pins it by exact filename.
+
+Every one of them is an injected seam, so the whole phase sequence is driven in CI by
+`jf5b-live-cli.test.ts` with fakes and zero network.
+
+### R1.4 The engine runs the actual governed cases
+
+`createJf5bCertificationRunner` executes every row of the corpus, per provider, through the EXISTING
+composition. Anisha and Aarohi go through `internalAgentTurnRunner.handleAgentTurn`; Riya goes through
+`riyaCustomerRuntime.handleConversationTurn`. Both are arms of the same
+`createThreeAgentJarvisRuntimeComposition`, over the same `runCustomerTurnWorkflow`. There is no second
+Mastra workflow, and no provider is contacted except through `ModelGateway.invoke`.
+
+Riya takes the customer arm because her three reviewed prompt variants live only at her dedicated task
+classes. Running her bytes through the ordinary inbound path would have put a reviewed system prompt in
+front of a schema she never runs under, and the receipt would still have said "GROQ × RIYA".
+
+Measurement happens at the gateway invoker — the one point all six certifications pass through —
+because `processInbound` is content-free by design. Nothing in the runtime, the adapter or the gateway
+was modified to make that possible.
+
+The Core decision boundary is REAL and its responder is LOCAL: this lane may not integrate with
+QuickFurno, and a networked Core would put a business system in the path of a measurement about a model.
+No behaviour input port is wired, because those carry Core-owned facts this lane may not invent — which
+is also the configuration every deployment has today.
+
+### R1.5 What running it for real found, and did not fix
+
+Two production blockers, neither of which any fixture could have shown, both pinned by
+`apps/api/src/tests/jf5b-provider-eligibility.test.ts`:
+
+1. **The generic structured reply schema is not projectable to Groq strict mode.** It renders four
+   properties with only two in `required` (`replyBody` and `reasonCode` are optional), and Groq strict
+   mode has no concept of an absent property. `projectGroqStrictJsonSchema` refuses it as
+   `malformed-object` BEFORE any transport call. So **GROQ × ANISHA** and **GROQ × AAROHI** cannot reach
+   a provider. Riya is unaffected: her dedicated schema was corrected to the required-and-nullable form
+   during the earlier live lane, and it projects cleanly.
+
+2. **No Nara provider is eligible for any agent-reply request.** `NARA_SUPPORTS_STRICT_JSON_SCHEMA` is
+   `false` — deliberately, and its own documentation says a certification lane with a live entitled
+   model may raise it — while `build-gateway-request.ts` hardcodes `requiredCapabilities.strictJsonSchema:
+true` on every request it builds. Capability matching therefore refuses Nara for **all three agents**.
+
+Neither is repaired here. Both change production behaviour for every deployment and every agent: one
+edits a core structured-output contract, the other flips a provider capability whose documentation
+requires live evidence first — evidence this lane cannot gather while the capability refuses the call.
+Repairing either inside a lane whose mandate is "close the missing executable wiring, no rework" is
+exactly the rework the mandate forbids.
+
+The engine records all five as `INCONCLUSIVE`, and the manifest says `INCONCLUSIVE` rather than `PASS`.
+"We could not tell" is an answer. Both specs are written to FAIL when a blocker is lifted, so whoever
+lifts one is told by the build that the blocked pairs are now runnable.
+
+### R1.6 What did NOT move
+
+No provider routing left the gateway. No production seal, approval or activation was minted. No
+migration was added. Retry stayed 0. The orchestration lock is unchanged, and no second workflow exists.
+Every containment lock touched was NARROWED with a note — by exact filename or exact path, never by
+directory — and `riya-conversation-continuity` stayed application-free by deriving its type from the
+store port rather than importing the contract.
+
+### R1.7 The lane still ends before the live call
+
+The owner command exists, builds, and refuses correctly with zero network. The live run is still an
+owner step at a terminal. With the two blockers above standing, a live run today would certify
+**GROQ × RIYA** and record the other five as inconclusive — which is worth knowing before any money is
+spent, and is why the marker for this lane is `BLOCKED_REWORK_RISK_OWNER_REVIEW_REQUIRED`.
+
 ## Consequences
 
 Positive: the certification harness is complete, fully tested with zero network calls, and the live run
@@ -180,4 +293,6 @@ Negative, and accepted:
 
 ## Next
 
-**JF-5B live execution**, by the owner, at a terminal. Then **JF-5C** — owner production evidence seal.
+**An owner decision on the two blockers in §R1.5**, each of which is its own lane: the generic reply
+schema's strict-mode shape, and Nara's strict-schema capability. Then **JF-5B live execution**, by the
+owner, at a terminal. Then **JF-5C** — owner production evidence seal.

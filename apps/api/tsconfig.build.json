@@ -41,7 +41,24 @@
     // request/result TYPES that port adapts between. Neither adds a knowledge authority here -- the
     // authority stays inside governed-knowledge, reached through JF-3.
     { "path": "../../packages/rag-provisioning/tsconfig.build.json" },
-    { "path": "../../packages/governed-knowledge/tsconfig.build.json" }
+    { "path": "../../packages/governed-knowledge/tsconfig.build.json" },
+
+    // JF-5B (ADR-0152): the offline certification bin. The harness is the evaluation-only library and
+    // re-exports the three reviewed prompt definitions the six bindings pin; `riya-prompts` is named
+    // directly because her dedicated capability needs all three of her task-class variants registered;
+    // the Groq smoke is reused for connectivity and for the masked-TTY secret primitive; the
+    // core-decision adapter supplies the synthetic certification Core boundary; the model-reply adapter
+    // supplies the invoker and prompt-binding TYPES the runtime configuration is built from.
+    // Reachable ONLY from src/bin/run-jf5b-live-certification.ts.
+    { "path": "../../packages/jarvis-v1-provider-certification-live/tsconfig.build.json" },
+    { "path": "../../packages/groq-staging-smoke/tsconfig.build.json" },
+    { "path": "../../packages/core-decision-adapter/tsconfig.build.json" },
+    { "path": "../../packages/model-reply-adapter/tsconfig.build.json" },
+    { "path": "../../packages/riya-prompts/tsconfig.build.json" },
+    // The synthetic certification context builds its Core availability snapshot through that
+    // package's OWN public parser rather than casting a hand-written object into its contract. One
+    // edge, used only by the certification composition.
+    { "path": "../../packages/core-service-availability-read/tsconfig.build.json" }
   ],
   "include": ["src/**/*.ts"],
   "exclude": ["src/tests/**"]

@@ -247,7 +247,17 @@ describe('JF-5B (C) live execution needs BOTH gates', () => {
     expect(parsed.executeLive).toBe(true);
     expect(parsed.outputDirectory).toBe('D:/out');
     // A credential that can be an argument is a credential in somebody's shell history.
-    expect(Object.keys(parsed).sort()).toEqual(['executeLive', 'outputDirectory', 'unknown']);
+    //
+    // The key set is pinned EXACTLY, and JF-5B-R1 (ADR-0152) adds exactly one: `groqSmokeConfig`, the
+    // path to the existing smoke's NON-SECRET configuration file. That parser refuses any
+    // credential-shaped key inside the file it names, so the argument cannot become a way to smuggle a
+    // secret in through a path. Every other key here is still a flag or a directory.
+    expect(Object.keys(parsed).sort()).toEqual([
+      'executeLive',
+      'groqSmokeConfig',
+      'outputDirectory',
+      'unknown',
+    ]);
     for (const switchName of ['--api-key', '--token', '--secret', '--key', '--nara-key']) {
       const attempted = parseCertifyArgv([EXECUTE_LIVE_FLAG, switchName, 'sk-not-a-real-value']);
       // Unrecognised: carried through as unknown, never interpreted as a secret.

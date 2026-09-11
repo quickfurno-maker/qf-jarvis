@@ -157,7 +157,33 @@ describe('JF-5B (0A) Mastra orchestrates; it never routes, holds or sends', () =
 // ---------------------------------------------------------------------------
 
 describe('JF-5B the certification operator is off the serving path', () => {
-  it('no production package or app imports it', () => {
+  it('is imported ONLY by the named certification files, and by nothing that serves a turn', () => {
+    // NARROWED, not relaxed (JF-5B-R1, ADR-0152).
+    //
+    // The first version of this lock said "nothing imports it", and that was the honest statement of
+    // the rule while the package had no executable. It had one problem: the `bin` the manifest
+    // declared did not exist, so the operator could not be RUN. JF-5B-R1 closed that by putting the
+    // executable at the application's process boundary -- the only place in this repository allowed to
+    // acquire a credential -- which means `apps/api` now imports this package.
+    //
+    // The property being protected was never "no importer". It was "nothing on the serving path". So
+    // the lock names the exact files, by path, rather than permitting a directory: a new certification
+    // module cannot appear without being added here, and no ingress, route, runtime factory, worker or
+    // server startup can reach the operator by adding an import.
+    const ALLOWED: readonly string[] = [
+      // The sequence the process boundary runs. The bin itself is deliberately absent: it imports the
+      // composition and the CLI and nothing else, which is what keeps it four lines long.
+      'apps/api/src/cli/jf5b-certification-runner.ts',
+      'apps/api/src/cli/run-jf5b-live-certification.ts',
+      // The production wiring and the engine behind it.
+      'apps/api/src/composition/jf5b-live-composition.ts',
+      'apps/api/src/composition/jf5b-certification-context.ts',
+      'apps/api/src/composition/jf5b-certification-runner-impl.ts',
+      'apps/api/src/composition/jf5b-repository-facts.ts',
+      // The two specs that drive all of the above with injected fakes and zero network.
+      'apps/api/src/tests/jf5b-live-cli.test.ts',
+      'apps/api/src/tests/jf5b-certification-runner.test.ts',
+    ];
     const importers: string[] = [];
     for (const root of [repoPath('packages'), repoPath('apps')]) {
       for (const entry of readdirSync(root)) {
@@ -170,12 +196,44 @@ describe('JF-5B the certification operator is off the serving path', () => {
           // that counted those would make every lock that documents this package an importer of it.
           const code = codeOnly(readFileSync(file, 'utf8'));
           if (code.includes(`from '@qf-jarvis/jarvis-v1-provider-certification-live`)) {
-            importers.push(file.split(sep).slice(-2).join('/'));
+            importers.push(file.replace(/\\/gu, '/').split('/qf-jarvis-jf5b/').pop() ?? file);
           }
         }
       }
     }
-    expect(importers).toEqual([]);
+    expect([...importers].sort()).toEqual([...ALLOWED].sort());
+  });
+
+  it('nothing that starts or serves the application reaches the operator', () => {
+    // The other half of the same rule, stated as a property rather than as a list. A file that binds a
+    // socket, builds the durable runtime or handles a request may not name this package, whatever the
+    // allowlist above happens to say.
+    const SERVING = ['/src/bin/', '/src/runtime/', '/src/private-riya-web-ingress/', '/src/server'];
+    for (const file of walk(join(repoPath('apps'), 'api', 'src'))) {
+      const normalised = file.replace(/\\/gu, '/');
+      if (
+        !codeOnly(readFileSync(file, 'utf8')).includes(
+          `from '@qf-jarvis/jarvis-v1-provider-certification-live`,
+        )
+      ) {
+        continue;
+      }
+      for (const area of SERVING) {
+        // The certification bin is itself under `/src/bin/`, and it is the one file there that starts
+        // nothing: it parses argv, composes the operator and exits. Named exactly so the rest of the
+        // directory stays closed.
+        const isCertificationBin = normalised.endsWith('/bin/run-jf5b-live-certification.ts');
+        expect({
+          file: normalised.split('/api/').pop(),
+          area,
+          reached: normalised.includes(area) && !isCertificationBin,
+        }).toEqual({
+          file: normalised.split('/api/').pop(),
+          area,
+          reached: false,
+        });
+      }
+    }
   });
 
   it('implements no business authority and reaches no database', () => {
@@ -263,13 +321,30 @@ describe('JF-5B (31) no test or CI path can open the live gate', () => {
     ];
     // COMPOSED, so this spec does not match itself while saying what it forbids.
     const flag = ['--execute', '-live'].join('');
-    // The two files ALLOWED to contain the string: the module that defines the constant, and the
-    // package manifest whose description explains the gate to a reader. Neither invokes anything.
+    // The files ALLOWED to contain the string, each for a reason that is not "it runs a live call":
+    //
+    //   - `live-execution-gate.ts` DEFINES the constant, and the package manifest's description
+    //     explains the gate to a reader. Neither invokes anything.
+    //   - the JF-5B CLI must NAME the flag to refuse a run that omits it, and its bin's usage line
+    //     must print it so an owner knows what to type. Naming a flag is how a gate says what it wants.
+    //   - the CLI's spec passes it, deliberately, to prove the SECOND gate still stops the run: that
+    //     spec injects a fake terminal, a fake transport and a fake runner, so the flag opens nothing.
+    //     A lock that forbade the spec from passing it would forbid proving the gate works.
+    //
+    // Two gates, and this lock protects the first. The second -- a phrase typed at a real TTY -- is
+    // unreachable from CI by construction: `ConfirmationReader.isInteractive()` is false there, and the
+    // CLI stops before any credential. That is asserted in `jf5b-live-cli.test.ts`.
     const allowed = new Set(['live-execution-gate.ts', 'package.json']);
+    const APP_ALLOWED: readonly string[] = [
+      'apps/api/src/bin/run-jf5b-live-certification.ts',
+      'apps/api/src/cli/run-jf5b-live-certification.ts',
+      'apps/api/src/tests/jf5b-live-cli.test.ts',
+    ];
     const offenders: string[] = [];
     for (const root of roots) {
       for (const file of walk(root, ['.ts', '.yml', '.yaml', '.mjs', '.json', '.sh', '.ps1'])) {
         const name = file.split(sep).pop() ?? '';
+        const normalised = file.replace(/\\/gu, '/');
         if (name === 'jf5b-containment.test.ts') {
           continue;
         }
@@ -279,11 +354,22 @@ describe('JF-5B (31) no test or CI path can open the live gate', () => {
         if (allowed.has(name) && file.includes('jarvis-v1-provider-certification-live')) {
           continue;
         }
+        if (APP_ALLOWED.some((one) => normalised.endsWith(one))) {
+          continue;
+        }
         offenders.push(file.split(sep).slice(-2).join('/'));
       }
     }
-    // No CI workflow, no script, no other package and no spec carries it.
+    // No CI workflow, no script, no other package and no other spec carries it.
     expect(offenders).toEqual([]);
+
+    // And no GitHub workflow carries it at all, allowlist or not.
+    for (const file of walk(repoPath('.github'), ['.yml', '.yaml'])) {
+      expect({
+        file: file.split(sep).pop(),
+        flagged: readFileSync(file, 'utf8').includes(flag),
+      }).toEqual({ file: file.split(sep).pop(), flagged: false });
+    }
   });
 
   it('no CI workflow names a provider host or a certification credential', () => {

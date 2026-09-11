@@ -765,8 +765,20 @@ describe('(50, 53-57) the repository invariants this slice must not move', () =>
     // directly. So the service is reached from exactly two application directories -- the ingress,
     // which still declares the service type it is handed, and the composition that builds the runner.
     //
+    // JF-5B-R1 (ADR-0152) adds ONE FILE, named exactly rather than by directory:
+    // `src/composition/jf5b-certification-context.ts`. It composes the service over in-memory
+    // collaborators so the offline certification operator can run Riya's REAL serving path -- her
+    // reviewed prompts live only at her dedicated task classes, and certifying her through the
+    // ordinary inbound path would measure a configuration she never runs under.
+    //
+    // A directory exception was the obvious shape and the wrong one: `src/composition/` is where this
+    // application assembles everything, so permitting it would permit a fifth entry point to appear
+    // there unnoticed. The exception is one filename, and it is reached only from the certification
+    // bin.
+    //
     // It still says what it always said: no OTHER module in `apps/api` may name this package, so the
-    // service cannot acquire a third entry point without somebody deciding it should have one.
+    // service cannot acquire a third serving entry point without somebody deciding it should have one.
+    const CERTIFICATION_COMPOSITION = '/src/composition/jf5b-certification-context.ts';
     const apiSrc = join(REPO_ROOT, 'apps/api/src');
     for (const file of walk(apiSrc, false)) {
       const normalised = file.replace(/\\/gu, '/');
@@ -775,6 +787,7 @@ describe('(50, 53-57) the repository invariants this slice must not move', () =>
       expect(
         normalised.includes('/src/private-riya-web-ingress/') ||
           normalised.includes('/src/riya-customer-orchestration/') ||
+          normalised.endsWith(CERTIFICATION_COMPOSITION) ||
           normalised.includes('/src/tests/'),
         file,
       ).toBe(true);

@@ -131,6 +131,32 @@ export type {
   NaraCredentialResult,
 } from './credential/nara-credential-ingress.js';
 
+// The ONE bounded network seam: authenticated discovery I/O, kept apart from the pure rules next to it.
+export {
+  DISCOVERY_FAILURES,
+  DISCOVERY_TIMEOUT_MS,
+  fetchNaraModelCatalogue,
+} from './discovery/nara-discovery-transport.js';
+export type {
+  DiscoveryFailure,
+  DiscoveryFetchResult,
+  DiscoveryHttpResponse,
+  NaraDiscoveryTransport,
+  ReserveCall,
+} from './discovery/nara-discovery-transport.js';
+
+// The seams the executable injects, the phase vocabulary and the closed exit codes.
+export { EXIT_CODES, RUN_PHASES } from './contracts/run-seams.js';
+export type {
+  ArtifactWriter,
+  ConfirmationReader,
+  ExitCode,
+  OperatorIo,
+  RepositoryFacts,
+  RunOutcome,
+  RunPhase,
+} from './contracts/run-seams.js';
+
 // The non-secret preflight summary and the argv surface.
 export {
   GROQ_CHAT_HOST,

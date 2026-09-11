@@ -84,10 +84,19 @@ export function renderPreflightSummary(facts: PreflightFacts): readonly string[]
   ]);
 }
 
-/** Parsed argv for the operator. Deliberately tiny: two switches and one required path. */
+/** Parsed argv for the operator. Deliberately tiny: one switch and two non-secret paths. */
 export interface CertifyArgv {
   readonly executeLive: boolean;
   readonly outputDirectory: string | undefined;
+  /**
+   * The NON-SECRET Groq smoke configuration file.
+   *
+   * Required because the existing `@qf-jarvis/groq-staging-smoke` contract is `loadSmokeConfig(path)`,
+   * and reusing that harness rather than writing a second connectivity call is the whole point. The
+   * file carries release identity and bounds; the smoke's own parser refuses any credential-shaped key
+   * in it, so this argument cannot become a way to pass a secret.
+   */
+  readonly groqSmokeConfig: string | undefined;
   readonly unknown: readonly string[];
 }
 
@@ -101,6 +110,7 @@ export interface CertifyArgv {
 export function parseCertifyArgv(argv: readonly string[]): CertifyArgv {
   let executeLive = false;
   let outputDirectory: string | undefined;
+  let groqSmokeConfig: string | undefined;
   const unknown: string[] = [];
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index] ?? '';
@@ -120,11 +130,24 @@ export function parseCertifyArgv(argv: readonly string[]): CertifyArgv {
       outputDirectory = arg.slice('--output-dir='.length);
       continue;
     }
+    if (arg === '--groq-smoke-config') {
+      const next = argv[index + 1];
+      if (next !== undefined) {
+        groqSmokeConfig = next;
+        index += 1;
+      }
+      continue;
+    }
+    if (arg.startsWith('--groq-smoke-config=')) {
+      groqSmokeConfig = arg.slice('--groq-smoke-config='.length);
+      continue;
+    }
     unknown.push(arg);
   }
   return Object.freeze({
     executeLive,
     outputDirectory,
+    groqSmokeConfig,
     unknown: Object.freeze(unknown),
   });
 }
