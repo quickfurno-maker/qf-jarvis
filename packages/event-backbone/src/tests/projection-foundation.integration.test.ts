@@ -136,7 +136,7 @@ afterAll(async () => {
 // ---------------------------------------------------------------------------
 
 describe('migrations apply in order, idempotently, with 0001–0007 unchanged', () => {
-  it('records exactly 0001..0013 in order with the immutable checksums intact', async () => {
+  it('records exactly 0001..0014 in order with the immutable checksums intact', async () => {
     const rows = await withClient(admin, async (client) => {
       const r = await client.query<{ version: number; filename: string; checksum: Buffer }>(
         `SELECT version, filename, checksum FROM qf_jarvis.schema_migration ORDER BY version ASC`,
@@ -160,9 +160,10 @@ describe('migrations apply in order, idempotently, with 0001–0007 unchanged', 
       '0013_communication_state_projection.sql',
       '0014_conversation_prospect_party_type.sql',
     ]);
-    // RWC-P8 (ADR-0104): the ONE owner-authorized addition.
+    // RWC-P8 (ADR-0104) added 0012; QFJ-P09 D5 (ADR-0142) added 0013; the JF-4B/C/D owner correction
+    // (ADR-0150 §34) adds 0014, the party CHECK widened to hold PROSPECT. One authorized addition each.
     expect(rows.map((row) => row.version)).toStrictEqual([
-      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13,
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14,
     ]);
     for (const row of rows) {
       const hex = row.checksum.toString('hex');
@@ -172,7 +173,7 @@ describe('migrations apply in order, idempotently, with 0001–0007 unchanged', 
     }
   });
 
-  it('re-migrating is idempotent — still exactly thirteen applied migrations', async () => {
+  it('re-migrating is idempotent — still exactly fourteen applied migrations', async () => {
     await runMigrations(admin, defaultMigrationsDirectory());
     const count = await withClient(admin, async (client) => {
       const r = await client.query<{ n: string }>(
@@ -180,8 +181,9 @@ describe('migrations apply in order, idempotently, with 0001–0007 unchanged', 
       );
       return Number.parseInt(r.rows[0]?.n ?? '0', 10);
     });
-    // RWC-P8 (ADR-0104): 0012 is the ONE owner-authorized addition, repository and LOCAL/CI only.
-    expect(count).toBe(13);
+    // Each slice added exactly one: 0012 (RWC-P8, ADR-0104), 0013 (QFJ-P09 D5, ADR-0142) and 0014
+    // (JF-4B/C/D owner correction, ADR-0150 §34). Repository and LOCAL/CI only.
+    expect(count).toBe(14);
   });
 
   it('records the EXACT reviewed 0004 and 0005 checksums in the migration history', async () => {
