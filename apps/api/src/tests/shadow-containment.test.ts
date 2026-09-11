@@ -263,6 +263,8 @@ describe('(127-132) no live model id, tool, workflow or database path', () => {
     'src/riya-customer-orchestration/create-riya-customer-runtime.ts',
     'src/riya-customer-orchestration/governed-rag-knowledge-port.ts',
     'src/riya-customer-orchestration/mastra-customer-turn-runner.ts',
+    // JF-4B/C/D (ADR-0150): the internal three-agent composition, which reuses the SAME workflow.
+    'src/riya-customer-orchestration/three-agent-runtime.ts',
     // And the specs that exercise it: a test naming the workflow entry point it calls is not a
     // capability, and excluding them would mean the orchestration could never be tested by name.
     'src/tests/jf4-customer-orchestration.test.ts',

@@ -8,7 +8,7 @@
  * scan proves the path is not there.
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
@@ -106,9 +106,13 @@ describe('JF-4 (A) the Mastra surface is minimal', () => {
 
   it('(A6,A7,A8) no agent, no memory, no storage, no scheduler, no MCP, no server', () => {
     const code = orchestrationCode();
+    // `Agent` as a bare substring became `new Agent(` and the agent subpath. JF-4B/C/D names
+    // `handleAgentTurn` and `InternalAgentTurnRunner` -- an agent TURN is not a Mastra Agent, and what
+    // must be absent is the framework's autonomous construct, not the English word.
     for (const forbidden of [
-      'Agent',
+      'new Agent(',
       'createAgent',
+      '@mastra/core/agent',
       'Memory',
       'createMemory',
       'storage',
@@ -315,13 +319,22 @@ describe('JF-4 (J) boundaries', () => {
       'submitIntake',
       'continuityStore',
       'turnCoordinator',
-      'JarvisRuntime',
-      'processInbound',
     ]) {
       expect({ forbidden, present: code.includes(forbidden) }).toEqual({
         forbidden,
         present: false,
       });
     }
+    // The authoritative runtime IS reached, by exactly one file and one method: JF-4B/C/D's internal
+    // three-agent composition calls `processInbound` so Anisha and Aarohi can reach the same runtime
+    // Riya already reaches through her service. That is the composition's whole purpose.
+    //
+    // What must stay true is that it reaches the runtime and NOTHING deeper -- no Core adapter, no
+    // continuity store, no turn coordinator, no gateway, all of which the list above still asserts.
+    const runtimeCallers = orchestrationFiles()
+      .filter((file) => codeOnly(readFileSync(file, 'utf8')).includes('processInbound'))
+      .map((file) => file.split(sep).pop() ?? file)
+      .sort();
+    expect(runtimeCallers).toEqual(['three-agent-runtime.ts']);
   });
 });
