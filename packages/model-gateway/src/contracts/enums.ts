@@ -13,8 +13,27 @@ export function isModelDataClass(value: unknown): value is ModelDataClass {
   return typeof value === 'string' && (MODEL_DATA_CLASSES as readonly string[]).includes(value);
 }
 
-/** The agent scope a request is made on behalf of. CLIENT=Riya, VENDOR=Anisha, COORDINATION=Jarvis. */
-export const MODEL_AGENT_SCOPES = ['CLIENT', 'VENDOR', 'COORDINATION', 'SYSTEM'] as const;
+/**
+ * The agent scope a request is made on behalf of.
+ *
+ * `CLIENT`=Riya, `VENDOR`=Anisha, `PROSPECT`=Aarohi, `COORDINATION`=Jarvis; `SYSTEM` is internal.
+ *
+ * `PROSPECT` joined in JF-5A (ADR-0151). Aarohi's acquisition turns were routable and grounded from
+ * JF-4 and then had no scope to be inferred under, so a model-eligible draft reached the gateway
+ * boundary and failed closed. Reusing `CLIENT` or `VENDOR` for her would make an unregistered prospect
+ * indistinguishable from a client or a registered vendor at the request boundary, and `COORDINATION` is
+ * Jarvis's own scope rather than a place to park a fourth agent.
+ *
+ * The order mirrors `RUNTIME_PARTY_TYPES` and `KNOWLEDGE_AGENT_SCOPES`, which is the repository's
+ * established sequence for these five. There is no `HUMAN` scope: a human turn never reaches a model.
+ */
+export const MODEL_AGENT_SCOPES = [
+  'CLIENT',
+  'VENDOR',
+  'PROSPECT',
+  'COORDINATION',
+  'SYSTEM',
+] as const;
 export type ModelAgentScope = (typeof MODEL_AGENT_SCOPES)[number];
 export function isModelAgentScope(value: unknown): value is ModelAgentScope {
   return typeof value === 'string' && (MODEL_AGENT_SCOPES as readonly string[]).includes(value);

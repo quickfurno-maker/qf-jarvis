@@ -1,0 +1,22 @@
+{
+  "name": "@qf-jarvis/anisha-prompts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis governed Anisha prompt definitions (JF-5A, ADR-0151). The CONTENT boundary @qf-jarvis/prompt-registry deliberately does not have: the registry binds an identity to exact bytes and ships no content, and this holds the bytes. Owns the Anisha VENDOR journey system prompt v1, bound to the RESPONSE_GENERATION task class with STRUCTURED result mode, whose content digest is computed by the real createPromptDefinition and never supplied by a caller. ONE task class, because Anisha's serving path resolves one identity; extra variants would be identities nothing resolves. ONE canonical copy of the bytes exists and nothing else in the repository may hold them. Every behavioural rule in the prompt is read off the already-built domain -- the fixed ANISHA/VENDOR role boundary, the five ADR-0070 dispositions and which of them permit a model draft, the four vendor-journey context fields -- and none of it is invented here. A definition is not approval, evaluation, rollout or selection. No model, no provider, no gateway, no network, no database, no environment, no credential, no activation state, no lifecycle API, and no volatile business data -- no price, package, credit, entitlement, lead, city, service or promotion, because those are QuickFurno Core's live truth and belong to the governed turn context. Depends on @qf-jarvis/prompt-registry for the constructor and nothing else.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/prompt-registry": "workspace:*"
+  }
+}

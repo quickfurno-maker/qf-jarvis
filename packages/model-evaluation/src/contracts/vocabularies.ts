@@ -63,8 +63,21 @@ export type EvaluationOutcome = (typeof EVALUATION_OUTCOMES)[number];
 export const EVALUATION_EXECUTION_CLASSES = ['HOSTED', 'LOCAL'] as const;
 export type EvaluationExecutionClass = (typeof EVALUATION_EXECUTION_CLASSES)[number];
 
-/** Closed agent scopes. Riya=CLIENT, Anisha=VENDOR, Jarvis=COORDINATION; SYSTEM is internal. */
-export const EVALUATION_AGENT_SCOPES = ['CLIENT', 'VENDOR', 'COORDINATION', 'SYSTEM'] as const;
+/**
+ * Closed agent scopes. Riya=CLIENT, Anisha=VENDOR, Aarohi=PROSPECT, Jarvis=COORDINATION; SYSTEM is
+ * internal.
+ *
+ * `PROSPECT` joined in JF-5A (ADR-0151), and its absence was the sharpest of the three gaps: a scope
+ * this framework cannot name is an agent it cannot honestly evaluate, so Aarohi could not have had
+ * production evidence at all. Same members and same order as the gateway and prompt mirrors.
+ */
+export const EVALUATION_AGENT_SCOPES = [
+  'CLIENT',
+  'VENDOR',
+  'PROSPECT',
+  'COORDINATION',
+  'SYSTEM',
+] as const;
 export type EvaluationAgentScope = (typeof EVALUATION_AGENT_SCOPES)[number];
 
 /** Closed data classes, LEAST → MOST restrictive (mirrors the model/knowledge data-class lattice). */

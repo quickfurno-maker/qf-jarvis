@@ -57,6 +57,8 @@
     { "path": "./packages/riya-model-benchmark/tsconfig.build.json" },
     { "path": "./packages/riya-model-benchmark-harness/tsconfig.build.json" },
     { "path": "./packages/riya-candidate-evaluation-runner/tsconfig.build.json" },
+    { "path": "./packages/anisha-prompts/tsconfig.build.json" },
+    { "path": "./packages/aarohi-prompts/tsconfig.build.json" },
     { "path": "./packages/riya-prompts/tsconfig.build.json" },
     { "path": "./packages/riya-candidate-evidence-live/tsconfig.build.json" }
   ]

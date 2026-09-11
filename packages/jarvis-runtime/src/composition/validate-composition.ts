@@ -283,6 +283,8 @@ function hasAtLeastOneBinding(
   return (
     bindings.CLIENT !== undefined ||
     bindings.VENDOR !== undefined ||
+    // JF-5A (ADR-0151): a runtime configured for Aarohi alone is configured.
+    bindings.PROSPECT !== undefined ||
     bindings.COORDINATION !== undefined ||
     bindings.SYSTEM !== undefined
   );

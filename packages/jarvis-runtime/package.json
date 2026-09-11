@@ -34,5 +34,10 @@
     "@qf-jarvis/riya-conversation-continuity": "workspace:*",
     "@qf-jarvis/riya-conversation-evolution": "workspace:*",
     "@qf-jarvis/riya-model-interaction": "workspace:*"
+  },
+  "devDependencies": {
+    "@qf-jarvis/aarohi-prompts": "workspace:*",
+    "@qf-jarvis/anisha-prompts": "workspace:*",
+    "@qf-jarvis/riya-prompts": "workspace:*"
   }
 }

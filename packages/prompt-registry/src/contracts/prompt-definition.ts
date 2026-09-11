@@ -25,11 +25,21 @@ export type PromptRegistryVersion = typeof PROMPT_REGISTRY_VERSION;
 /**
  * The scopes a prompt may serve.
  *
- * Mirrors the gateway's agent scopes without importing them: this package stays a leaf, and S3-I-B
- * will assert exact compatibility with `MODEL_AGENT_SCOPES` at the binding boundary. There is no
- * `HUMAN` scope, because a human turn never reaches a model.
+ * Mirrors the gateway's agent scopes without importing them: this package stays a leaf, and the
+ * binding boundary in `@qf-jarvis/model-reply-adapter` asserts exact compatibility with
+ * `MODEL_AGENT_SCOPES` at runtime. There is no `HUMAN` scope, because a human turn never reaches a
+ * model.
+ *
+ * `PROSPECT` joined in JF-5A (ADR-0151), together with the gateway and evaluation mirrors and in the
+ * same order, so the duplication this package accepts in exchange for staying a leaf stays honest.
  */
-const PROMPT_AGENT_SCOPE_VALUES = ['CLIENT', 'VENDOR', 'COORDINATION', 'SYSTEM'] as const;
+const PROMPT_AGENT_SCOPE_VALUES = [
+  'CLIENT',
+  'VENDOR',
+  'PROSPECT',
+  'COORDINATION',
+  'SYSTEM',
+] as const;
 export type PromptAgentScope = (typeof PROMPT_AGENT_SCOPE_VALUES)[number];
 
 export const PROMPT_AGENT_SCOPES_FROZEN: readonly PromptAgentScope[] = Object.freeze([
