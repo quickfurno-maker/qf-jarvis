@@ -141,7 +141,15 @@ describe('observability and authority', () => {
   });
 
   it('(53) keeps agent scopes distinct', () => {
-    expect([...EVALUATION_AGENT_SCOPES]).toEqual(['CLIENT', 'VENDOR', 'COORDINATION', 'SYSTEM']);
+    // NARROWED WITH A NOTE, not relaxed: `PROSPECT` is the ONE member JF-5A adds (ADR-0151). Without
+    // it this framework could not name Aarohi's scope, so it could not evaluate her at all.
+    expect([...EVALUATION_AGENT_SCOPES]).toEqual([
+      'CLIENT',
+      'VENDOR',
+      'PROSPECT',
+      'COORDINATION',
+      'SYSTEM',
+    ]);
     expect(new Set(EVALUATION_AGENT_SCOPES).size).toBe(EVALUATION_AGENT_SCOPES.length);
   });
 

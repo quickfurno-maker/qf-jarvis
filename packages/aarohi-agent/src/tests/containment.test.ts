@@ -1447,6 +1447,12 @@ describe('the public API is locked and nothing composes this leaf yet', () => {
       // dependency set. A spec stating a dependency is not a composition of it -- the same reasoning
       // apps/api uses for the specs that must name the tokens they forbid.
       'packages/jarvis-runtime/src/tests/jf4-three-agent-containment.test.ts',
+      // JF-5A (ADR-0151): the spec that proves an eligible acquisition turn now reaches the model
+      // gateway exactly once. It imports the AVG-5/AVG-7 CONSTRUCTORS to build certified artifacts,
+      // because a hand-written snapshot would be refused by the evaluator for reasons unrelated to what
+      // it measures. Building a domain artifact to feed the one permitted composition is not a second
+      // composition -- nothing here decides an acquisition outcome.
+      'packages/jarvis-runtime/src/tests/jf5a-three-agent-model-path.test.ts',
       'packages/jarvis-runtime/src/tests/observability-containment.test.ts',
     ];
     const importers: string[] = [];

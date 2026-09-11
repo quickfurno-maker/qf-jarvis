@@ -1,0 +1,22 @@
+{
+  "name": "@qf-jarvis/aarohi-prompts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis governed Aarohi prompt definitions (JF-5A, ADR-0151). The CONTENT boundary @qf-jarvis/prompt-registry deliberately does not have: the registry binds an identity to exact bytes and ships no content, and this holds the bytes. Owns the Aarohi PROSPECT acquisition system prompt v1, bound to the RESPONSE_GENERATION task class with STRUCTURED result mode, whose content digest is computed by the real createPromptDefinition and never supplied by a caller. ONE task class, because only two of AVG-7's six closed strategies permit a model draft and both produce the same kind of turn. Defining a prompt does NOT make any strategy model-eligible: that mapping stays in evaluateAarohiSalesTurn and the Aarohi behaviour adapter, both REQUEST_CORE_*_CONTEXT strategies remain NO_ACTION with zero model calls, and both review strategies remain escalations with zero model calls. Every prohibition in the prompt is read off the AVG domain -- a prospect is not a Core vendor identity, registration/payment/ACTIVE/consent/recipient/package/price/credits/entitlement are Core or external authority, completeCoreActiveHandoff is the only route into Anisha ownership and no text can perform it, and every AVG-7 sales-ethics prohibition is a schema-pinned literal false. ONE canonical copy of the bytes exists and nothing else in the repository may hold them. A definition is not approval, evaluation, rollout or selection. No model, no provider, no gateway, no network, no database, no environment, no credential, no activation state, no lifecycle API, and no business data. Depends on @qf-jarvis/prompt-registry for the constructor and nothing else.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/prompt-registry": "workspace:*"
+  }
+}

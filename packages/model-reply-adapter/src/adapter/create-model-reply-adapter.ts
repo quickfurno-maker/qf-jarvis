@@ -61,12 +61,20 @@ export interface ModelReplyPromptBinding {
 /**
  * Per-scope prompt configuration (ADR-0073).
  *
- * A prompt definition is scope-bound, so one runtime serving both Riya and Anisha configures one
+ * A prompt definition is scope-bound, so one runtime serving Riya, Anisha AND Aarohi configures one
  * binding per scope. There is no HUMAN entry: a human turn never reaches a model.
+ *
+ * This IS the deterministic actor-bound prompt policy. A deployment supplies the identity per scope;
+ * WHICH scope a turn resolves under is decided by `scopeKeyFor` from the actor `assignAgent` chose, so
+ * there is no field through which a caller, a message or a model could select another agent's prompt,
+ * and no fallback between scopes when the one a turn needs is unconfigured.
+ *
+ * `PROSPECT` joined in JF-5A (ADR-0151) so Aarohi can own a prompt rather than borrow one.
  */
 export interface ModelReplyPromptBindings {
   readonly CLIENT?: ModelReplyPromptBinding;
   readonly VENDOR?: ModelReplyPromptBinding;
+  readonly PROSPECT?: ModelReplyPromptBinding;
   readonly COORDINATION?: ModelReplyPromptBinding;
   readonly SYSTEM?: ModelReplyPromptBinding;
 }
@@ -125,7 +133,12 @@ function releaseEqual(a: ModelReleaseRef, b: ModelReleaseRef): boolean {
   );
 }
 
-/** Map an assigned actor to its prompt scope. HUMAN never reaches a model, so it has no binding. */
+/**
+ * Map an assigned actor to its prompt scope. HUMAN never reaches a model, so it has no binding.
+ *
+ * The selection point for `promptFamily`/`promptVersion`: a turn gets the binding for ITS actor's
+ * scope, or none. `AAROHI -> PROSPECT` joined in JF-5A (ADR-0151).
+ */
 function scopeKeyFor(
   actor: ReplyPlan['assignedActor'],
 ): keyof ModelReplyPromptBindings | undefined {
@@ -134,6 +147,8 @@ function scopeKeyFor(
       return 'CLIENT';
     case 'ANISHA':
       return 'VENDOR';
+    case 'AAROHI':
+      return 'PROSPECT';
     case 'JARVIS':
       return 'COORDINATION';
     case 'SYSTEM':

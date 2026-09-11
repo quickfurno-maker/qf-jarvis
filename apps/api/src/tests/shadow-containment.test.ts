@@ -411,10 +411,17 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // A domain, not a runtime: Aarohi's runtime status remains PLANNED / DISABLED. The package
       // depends on zod alone, imports no workspace package, and nothing imports it.
       'aarohi-agent',
+      // JF-5A (ADR-0151): the governed prompt CONTENT packages Anisha and Aarohi did not have.
+      // Still an EXACT set match -- this records two authorised additions, it does not relax the
+      // assertion. Each owns ONE reviewed prompt body, depends on the prompt-registry constructor
+      // and nothing else, and holds no provider, network, database, environment, credential or
+      // business data. Content lives beside its agent; the registry stays a mechanism.
+      'aarohi-prompts',
       'agent-runtime',
       // QFJ-S3-D-A (ADR-0070): the Anisha vendor-journey behaviour package. Still an EXACT set
       // match -- this records an authorised addition, it does not relax the assertion.
       'anisha-agent',
+      'anisha-prompts',
       // QFJ-P08 (ADR-0082): the Core approval submission protocol. Still an EXACT set match -- this
       // records an authorised addition, it does not relax the assertion.
       'approval-core-adapter',

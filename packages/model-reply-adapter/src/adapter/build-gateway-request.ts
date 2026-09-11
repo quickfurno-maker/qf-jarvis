@@ -57,13 +57,25 @@ export const DEFAULT_GATEWAY_REQUEST_BUDGETS: GatewayRequestBudgets = Object.fre
   minContextTokens: 1,
 });
 
-/** Map an assigned actor to the gateway agent scope. HUMAN never reaches the gateway. */
+/**
+ * Map an assigned actor to the gateway agent scope. HUMAN never reaches the gateway.
+ *
+ * This is where `agentScope` is DECIDED, and the signature is the proof that a caller cannot decide it:
+ * the only input is the actor `assignAgent` already chose from the trusted party type. There is no
+ * scope field on a plan, a request, a message or a model result.
+ *
+ * `AAROHI -> PROSPECT` joined in JF-5A (ADR-0151). Before it, this switch fell through to `default` and
+ * an acquisition turn's draft failed closed at the boundary -- correct, and the reason Aarohi could not
+ * reach a model at all.
+ */
 function agentScopeFor(actor: ReplyPlan['assignedActor']): ModelAgentScope {
   switch (actor) {
     case 'RIYA':
       return 'CLIENT';
     case 'ANISHA':
       return 'VENDOR';
+    case 'AAROHI':
+      return 'PROSPECT';
     case 'JARVIS':
       return 'COORDINATION';
     case 'SYSTEM':

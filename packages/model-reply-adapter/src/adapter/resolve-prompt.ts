@@ -24,13 +24,21 @@ export type PromptResolution =
 
 const DIGEST = /^[0-9a-f]{64}$/;
 
-/** Map an assigned actor to the prompt/gateway agent scope. HUMAN never reaches M4. */
+/**
+ * Map an assigned actor to the prompt/gateway agent scope. HUMAN never reaches M4.
+ *
+ * The same total map as `agentScopeFor`, and deliberately a second one rather than a shared helper:
+ * this one returns `undefined` to refuse, that one throws, and collapsing them would make one of the
+ * two boundaries report the other's failure mode. `AAROHI -> PROSPECT` joined in JF-5A (ADR-0151).
+ */
 function scopeFor(actor: ReplyPlan['assignedActor']): ModelAgentScope | undefined {
   switch (actor) {
     case 'RIYA':
       return 'CLIENT';
     case 'ANISHA':
       return 'VENDOR';
+    case 'AAROHI':
+      return 'PROSPECT';
     case 'JARVIS':
       return 'COORDINATION';
     case 'SYSTEM':

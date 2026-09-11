@@ -73,7 +73,15 @@ function materialized(over: Record<string, unknown> = {}): Record<string, unknow
 
 describe('(A) prompt definition validation', () => {
   it('accepts every agent scope and every result mode', () => {
-    expect([...PROMPT_AGENT_SCOPES_FROZEN]).toEqual(['CLIENT', 'VENDOR', 'COORDINATION', 'SYSTEM']);
+    // NARROWED WITH A NOTE, not relaxed: `PROSPECT` is the ONE member JF-5A adds (ADR-0151), so Aarohi
+    // can own a prompt instead of borrowing a scope. Order mirrors the gateway and evaluation sets.
+    expect([...PROMPT_AGENT_SCOPES_FROZEN]).toEqual([
+      'CLIENT',
+      'VENDOR',
+      'PROSPECT',
+      'COORDINATION',
+      'SYSTEM',
+    ]);
     expect([...PROMPT_RESULT_MODES_FROZEN]).toEqual(['STRUCTURED', 'TEXT']);
     for (const agentScope of PROMPT_AGENT_SCOPES_FROZEN) {
       expect(definition({ agentScope }).agentScope).toBe(agentScope);
