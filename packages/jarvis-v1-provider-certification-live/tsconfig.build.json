@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
+  },
+
+  // The EMITTING build. Specs under src/tests are excluded so nothing test-only reaches dist/.
+  //
+  // Every reference is a system this operator COMPOSES rather than reimplements: the gateway owns all
+  // provider selection, the Groq smoke owns Groq connectivity and the masked-TTY secret primitive, the
+  // evaluation framework owns bindings, and the three prompt packages own the reviewed bytes.
+  //
+  // Deliberately absent: jarvis-runtime, agent-runtime, every agent domain, governed-knowledge,
+  // rag-provisioning, the Mastra application composition, and anything Postgres. This operator holds no
+  // business authority and reaches no serving path; a conversational certification run drives the REAL
+  // application composition from a spec, and that spec lives beside the application rather than here.
+  "references": [
+    { "path": "../aarohi-prompts/tsconfig.build.json" },
+    { "path": "../anisha-prompts/tsconfig.build.json" },
+    { "path": "../groq-staging-smoke/tsconfig.build.json" },
+    { "path": "../model-evaluation/tsconfig.build.json" },
+    { "path": "../model-gateway" },
+    { "path": "../prompt-registry/tsconfig.build.json" },
+    { "path": "../riya-prompts/tsconfig.build.json" }
+  ],
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/tests/**"]
+}

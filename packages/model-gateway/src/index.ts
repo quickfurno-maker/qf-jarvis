@@ -228,6 +228,18 @@ export {
   createNaraProviderConfig,
   createFetchNaraTransport,
   NARA_CHAT_COMPLETIONS_ENDPOINT,
+  // JF-5B (ADR-0152): the alias guard becomes reachable, and ONLY the guard.
+  //
+  // It is a pure predicate over a string -- no key, no transport, no configuration, no behaviour -- and
+  // it was previously internal because the only callers were `createNaraProviderConfig` and specs in
+  // this package. Authenticated model discovery added a caller that cannot be either: an operator
+  // outside this package must refuse a router alias returned by `/v1/models` BEFORE it can build a
+  // config to be refused by. Exporting the guard is what stops that operator writing a second alias
+  // list, which would be a second answer to "may Jarvis pin this" and would drift from this one.
+  //
+  // The error normalizer and the strict-schema declaration stay internal, unchanged.
+  isNaraRouterAlias,
+  NARA_REFUSED_ROUTER_ALIASES,
   type NaraProviderConfig,
   type NaraProviderConfigInput,
   type NaraTransport,

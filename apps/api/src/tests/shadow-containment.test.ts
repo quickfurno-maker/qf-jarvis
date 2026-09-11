@@ -491,6 +491,12 @@ describe('(133-148) the declared budget and every prior lock', () => {
       'governed-knowledge',
       'groq-staging-smoke',
       'jarvis-runtime',
+      // JF-5B (ADR-0152): the live certification OPERATOR. Still an EXACT set match -- this
+      // records an authorised addition, it does not relax the assertion. Evaluation only and off
+      // the serving path: no production package or app imports it, it holds no business
+      // authority, it reaches no database, and a live provider call needs an explicit flag AND a
+      // phrase typed at a terminal.
+      'jarvis-v1-provider-certification-live',
       'model-evaluation',
       'model-gateway',
       'model-gateway-composition',
@@ -719,7 +725,10 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // provider-SELECTION mode (7). This lock only tracks that package's count; the reasoning is
       // recorded in its own containment spec. Nothing about this app changes, and production
       // inference stays OFF.
-      'model-gateway': 93,
+      // JF-5B (ADR-0152): 93 -> 95. The Nara alias guard and its frozen refusal list become
+      // reachable so an operator outside the gateway can refuse a router alias returned by
+      // authenticated discovery. A pure predicate: no key, no transport, no behaviour change.
+      'model-gateway': 95,
       'model-gateway-composition': 2,
       // MVP-P2A.2 HF1: 24 -> 27. The semantic approval-digest helper and its two readable parts.
       // Pure functions over an already-parsed SmokeConfig -- no filesystem, no clock, no network, no

@@ -1,0 +1,32 @@
+{
+  "name": "@qf-jarvis/jarvis-v1-provider-certification-live",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis JF-5B live three-agent provider certification operator (ADR-0152). EVALUATION ONLY and off the serving path: no production package or app imports it, it implements no business authority, it writes nothing to any database, and it activates nothing. It adds the ONE thing the repository did not already have -- bounded authenticated NaraRouter model discovery and the deterministic selection of one exact entitled fallback model -- and otherwise composes existing systems unchanged: the Groq staging smoke for Groq connectivity and its masked-TTY secret primitive for credential ingress, the Nara provider for the chat transport and its router-alias refusal, the QF Model Gateway for ALL provider selection, the model-evaluation framework for bindings, and the three JF-5A production prompts. It builds SIX exact provider x prompt evaluation bindings (Groq/Nara x Riya/Anisha/Aarohi) because one prompt digest cannot honestly certify three prompt bodies. It mints no ApprovalEvidence, sets no productionApproval, and produces no ACTIVE_MODEL_RELEASE: JF-5C owns the owner seal. Live execution requires BOTH an explicit --execute-live flag and a second interactive TTY confirmation, so importing this package or running the test suite performs zero network calls. Raw live artifacts are written only to an explicit directory outside the repository.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "qfj-jf5b-certify": "./dist/cli/bin.js"
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/aarohi-prompts": "workspace:*",
+    "@qf-jarvis/anisha-prompts": "workspace:*",
+    "@qf-jarvis/groq-staging-smoke": "workspace:*",
+    "@qf-jarvis/model-evaluation": "workspace:*",
+    "@qf-jarvis/model-gateway": "workspace:*",
+    "@qf-jarvis/prompt-registry": "workspace:*",
+    "@qf-jarvis/riya-prompts": "workspace:*",
+    "zod": "4.4.3"
+  }
+}

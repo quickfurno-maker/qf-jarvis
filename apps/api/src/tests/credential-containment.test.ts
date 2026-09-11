@@ -539,7 +539,10 @@ describe('(71-77) package API and dependency locks are untouched', () => {
       // provider-SELECTION mode (7). This lock only tracks that package's count; the reasoning is
       // recorded in its own containment spec. Nothing about this app changes, and production
       // inference stays OFF.
-      'model-gateway': 93,
+      // JF-5B (ADR-0152): 93 -> 95. The Nara alias guard and its frozen refusal list become
+      // reachable so an operator outside the gateway can refuse a router alias returned by
+      // authenticated discovery. A pure predicate: no key, no transport, no behaviour change.
+      'model-gateway': 95,
       'model-gateway-composition': 2,
       // MVP-P2A.2 HF1: 24 -> 27. The semantic approval-digest helper and its two readable parts.
       // Pure functions over an already-parsed SmokeConfig -- no filesystem, no clock, no network, no

@@ -224,11 +224,13 @@ describe('dependency graph, exports, and the locked public API', () => {
   });
 
   it('(57) only the offline evidence operator depends on this package, and it closes no cycle', () => {
-    // RESTATED, not relaxed. MVP-P2A.2 adds exactly one dependant, and the property this spec
-    // protects is acyclicity rather than zero dependants: `riya-candidate-evidence-live` is an
-    // offline leaf that nothing imports, and this package depends only on `model-gateway` and `zod`,
-    // so the arrow cannot come back. Reusing the governed one-shot smoke was the whole point --
-    // the alternative was a second connectivity check with its own credential handling.
+    // RESTATED, not relaxed. The property this spec protects is ACYCLICITY rather than zero
+    // dependants, and both dependants are offline leaves that nothing imports:
+    // `riya-candidate-evidence-live` (MVP-P2A.2) and `jarvis-v1-provider-certification-live`
+    // (JF-5B, ADR-0152). This package depends only on `model-gateway` and `zod`, so the arrow cannot
+    // come back from either. Reusing the governed one-shot smoke and its masked-TTY secret primitive
+    // was the whole point -- the alternative was a second connectivity check and a second credential
+    // policy, which would drift from this one the first time either was fixed.
     const packagesDir = repoPath('packages');
     const appsDir = repoPath('apps');
     const dependants: string[] = [];
@@ -250,7 +252,10 @@ describe('dependency graph, exports, and the locked public API', () => {
         }
       }
     }
-    expect(dependants).toEqual(['@qf-jarvis/riya-candidate-evidence-live']);
+    expect(dependants).toEqual([
+      '@qf-jarvis/jarvis-v1-provider-certification-live',
+      '@qf-jarvis/riya-candidate-evidence-live',
+    ]);
 
     // And the arrow does not come back: this package's own dependencies do not include it.
     expect(Object.keys(manifest.dependencies ?? {})).not.toContain(
