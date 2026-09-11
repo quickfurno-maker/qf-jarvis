@@ -25,6 +25,7 @@ import type { PromptRegistry } from '@qf-jarvis/prompt-registry';
 import type { AuthoritativeConversationStatePort } from './authoritative-state.js';
 import type { ClientSalesBehaviourInputPort } from './behaviour-input.js';
 import type { AarohiAcquisitionBehaviourInputPort } from './aarohi-acquisition-behaviour-input.js';
+import type { AgentGroundedKnowledgePolicy } from './agent-knowledge-policy.js';
 import type { VendorJourneyBehaviourInputPort } from './vendor-journey-behaviour-input.js';
 import type { JarvisRuntimeObservabilityHook } from './observability.js';
 
@@ -166,6 +167,18 @@ export interface JarvisRuntimeConfig {
    * the authoritative source of these certified artifacts is a future QuickFurno/Core adapter.
    */
   readonly aarohiAcquisitionBehaviourInput?: AarohiAcquisitionBehaviourInputPort;
+
+  /**
+   * The ONE shared governed-RAG policy for all three business agents (ADR-0150 §4c).
+   *
+   * One authority reach, one pack, one retrieval implementation; per-agent exact topics, and scope and
+   * purpose derived in code from the actor the router chose. Absent -> no agent grounds, which is the
+   * pre-correction behaviour for Anisha and Aarohi and is unchanged for Riya either way.
+   *
+   * Riya's DEDICATED `riyaGroundedKnowledge` configuration continues to win when both are present, so
+   * an existing RWC-P7 deployment keeps byte-identical behaviour.
+   */
+  readonly agentGroundedKnowledge?: AgentGroundedKnowledgePolicy;
 
   /** Optional deployment-level provenance references; safe defaults are derived when absent. */
   readonly provenanceRefs?: JarvisProvenanceRefs;

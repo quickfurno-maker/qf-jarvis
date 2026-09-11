@@ -269,13 +269,13 @@ describe('JF-4B/C/D repository boundaries', () => {
     }
   });
 
-  it('(J93) migrations are unchanged: 0001-0013, and no 0014', () => {
+  it('(J93) migrations are unchanged: 0001-0014, and no 0015', () => {
     const dir = repoPath('packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
       .filter((n) => n.endsWith('.sql'))
       .sort();
-    expect(sql).toHaveLength(13);
-    expect(sql.some((n) => n.startsWith('0014'))).toBe(false);
+    expect(sql).toHaveLength(14);
+    expect(sql.some((n) => n.startsWith('0015'))).toBe(false);
   });
 
   it('(J91,J92) D5 is neither activated nor granted new permissions by this lane', () => {
@@ -333,5 +333,208 @@ describe('JF-4B/C/D repository boundaries', () => {
         });
       }
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// JF-4 owner correction §17 — ONE RAG system, and the migration ledger.
+// ---------------------------------------------------------------------------
+
+describe('JF-4 correction: there is ONE governed RAG, not three', () => {
+  it('no per-agent RAG package, directory or barrel exists anywhere in the repository', () => {
+    // The correction's central instruction. A per-agent package would work and would be wrong: three
+    // packages are three answers to "what may this agent see", and the answers diverge the first time
+    // one of them is fixed. This scan proves the path is not there to take.
+    const workspaces = [repoPath('packages'), repoPath('apps')];
+    // COMPOSED, not spelled. The second scan below reads every source file in the workspace --
+    // including this one -- so a literal list here would match itself and fail for the wrong reason.
+    const forbiddenNames = [
+      ['riya', 'rag'],
+      ['anisha', 'rag'],
+      ['aarohi', 'rag'],
+      ['riya', 'knowledge'],
+      ['anisha', 'knowledge'],
+      ['aarohi', 'knowledge'],
+      ['prospect', 'rag'],
+      ['vendor', 'rag'],
+      ['client', 'rag'],
+    ].map((parts) => parts.join('-'));
+    for (const workspace of workspaces) {
+      const entries = readdirSync(workspace);
+      for (const forbidden of forbiddenNames) {
+        expect({
+          workspace: workspace.split(sep).pop(),
+          forbidden,
+          present: entries.includes(forbidden),
+        }).toEqual({
+          workspace: workspace.split(sep).pop(),
+          forbidden,
+          present: false,
+        });
+      }
+    }
+    // And no source file anywhere NAMES one, so a future import cannot resolve to a package that was
+    // added quietly and then removed from this list.
+    for (const workspace of workspaces) {
+      for (const file of walk(workspace)) {
+        const code = codeOnly(readFileSync(file, 'utf8'));
+        for (const forbidden of forbiddenNames) {
+          expect({
+            file: file.split(sep).pop(),
+            forbidden,
+            present: code.includes(forbidden),
+          }).toEqual({
+            file: file.split(sep).pop(),
+            forbidden,
+            present: false,
+          });
+        }
+      }
+    }
+  });
+
+  it('exactly ONE production knowledge pack and ONE pack revision exist', () => {
+    // Three packs would mean three approval bindings, and an ACTIVE profile could then name the one
+    // whose content it liked. A repository-wide scan for a second production pack symbol.
+    const declaring: string[] = [];
+    for (const workspace of [repoPath('packages'), repoPath('apps')]) {
+      for (const file of walk(workspace)) {
+        if (file.includes(`${sep}tests${sep}`)) {
+          continue;
+        }
+        const code = codeOnly(readFileSync(file, 'utf8'));
+        if (code.includes('export const PRODUCTION_KNOWLEDGE_PACK_REVISION')) {
+          declaring.push(file.split(sep).pop() ?? file);
+        }
+      }
+    }
+    expect(declaring).toEqual(['production-knowledge-pack.ts']);
+  });
+
+  it('the agent policy carries the authority reach ONCE, with no per-agent field for it', () => {
+    // Structural, and the load-bearing half of "one RAG system": a deployment has exactly one place to
+    // point grounding at, so three agents cannot end up on three registries.
+    const policy = codeOnly(
+      readFileSync(
+        fileURLToPath(new URL('../contracts/agent-knowledge-policy.ts', import.meta.url)),
+        'utf8',
+      ),
+    );
+    // One declaration of each, at POLICY level.
+    expect(policy.match(/readonly registry\?:/g)).toHaveLength(1);
+    expect(policy.match(/readonly retrieval\?:/g)).toHaveLength(1);
+    // The per-agent shape carries topics and nothing else. A scope or purpose field here would be a
+    // field through which a caller could cross an authority boundary.
+    const perAgent = policy.slice(
+      policy.indexOf('interface AgentKnowledgeTopicPolicy'),
+      policy.indexOf('interface AgentGroundedKnowledgePolicy'),
+    );
+    expect(perAgent).toContain('readonly topics:');
+    for (const forbidden of [
+      'agentScope',
+      'purpose',
+      'registry',
+      'retrieval',
+      'pack',
+      'backend',
+      'provider',
+      'model',
+      'embedding',
+    ]) {
+      expect({ forbidden, present: perAgent.includes(forbidden) }).toEqual({
+        forbidden,
+        present: false,
+      });
+    }
+  });
+
+  it('no agent-facing code can name its own knowledge scope or purpose', () => {
+    // The security property, as a scan. `agentScope` and `purpose` appear in the composition only
+    // where they are READ from the closed table or passed to the authority -- never assigned from
+    // configuration, an envelope, a message or a model.
+    const bridge = codeOnly(
+      readFileSync(
+        fileURLToPath(new URL('../composition/process-inbound.ts', import.meta.url)),
+        'utf8',
+      ),
+    );
+    expect(bridge).toContain('AGENT_KNOWLEDGE_BINDINGS[actor]');
+    for (const forbidden of [
+      'agentScope: config',
+      'agentScope: policy',
+      'agentScope: envelope',
+      'purpose: config',
+      'purpose: policy',
+      'purpose: envelope',
+    ]) {
+      expect({ forbidden, present: bridge.includes(forbidden) }).toEqual({
+        forbidden,
+        present: false,
+      });
+    }
+  });
+
+  it('(§17) the migration ledger is exactly 0001-0014, in order, with no gap', () => {
+    const dir = repoPath('packages/event-backbone/src/persistence/migrations');
+    const sql = readdirSync(dir)
+      .filter((name) => name.endsWith('.sql'))
+      .sort();
+    expect(sql.map((name) => name.slice(0, 4))).toEqual([
+      '0001',
+      '0002',
+      '0003',
+      '0004',
+      '0005',
+      '0006',
+      '0007',
+      '0008',
+      '0009',
+      '0010',
+      '0011',
+      '0012',
+      '0013',
+      '0014',
+    ]);
+    // One new migration in this correction, and it is the party widening.
+    expect(sql[13]).toBe('0014_conversation_prospect_party_type.sql');
+  });
+
+  it('(§17) 0014 is the ONLY migration that mentions PROSPECT, and it adds no table or grant', () => {
+    const dir = repoPath('packages/event-backbone/src/persistence/migrations');
+    const mentioning = readdirSync(dir)
+      .filter((name) => name.endsWith('.sql'))
+      .filter((name) => readFileSync(join(dir, name), 'utf8').includes('PROSPECT'))
+      .sort();
+    expect(mentioning).toEqual(['0014_conversation_prospect_party_type.sql']);
+
+    // STATEMENTS only. 0014's header documents exhaustively what it does NOT do, and a scan over the
+    // prose would read that documentation as the thing it forbids.
+    const statements = readFileSync(join(dir, '0014_conversation_prospect_party_type.sql'), 'utf8')
+      .split('\n')
+      .filter((line) => !line.trimStart().startsWith('--'))
+      .join('\n');
+    for (const forbidden of [
+      'CREATE TABLE',
+      'CREATE INDEX',
+      'CREATE VIEW',
+      'CREATE TYPE',
+      'ADD COLUMN',
+      'DROP COLUMN',
+      'DROP TABLE',
+      'GRANT',
+      'REVOKE',
+      'SET DEFAULT',
+      'INSERT ',
+      'UPDATE ',
+      'DELETE ',
+      'communication_state',
+    ]) {
+      expect({ forbidden, present: statements.includes(forbidden) }).toEqual({
+        forbidden,
+        present: false,
+      });
+    }
+    // Exactly two statements: drop the old constraint, add the widened one.
+    expect(statements.split(';').filter((part) => part.trim().length > 0)).toHaveLength(2);
   });
 });

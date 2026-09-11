@@ -1,10 +1,13 @@
 # ADR-0150 — JF-4B/C/D: three-agent runtime delta closeout without external authority fabrication
 
-- **Status:** Accepted — a **composition delta**, not an agent build. **No deployment, no live provider
-  call, no external side effect, no QuickFurno integration, no migration, and no D5 activation.**
+- **Status:** Accepted, **as amended by the owner correction in §33–42**. A **composition delta**, not an
+  agent build. **No deployment, no live provider call, no external side effect, no QuickFurno
+  integration, and no D5 activation.** The correction adds **exactly one migration** — `0014` — under
+  explicit owner authorization (§34).
 - **Date:** 2026-09-11
 - **Baseline:** `origin/main` at `a8129ebda6f4ec567ea6b969aaa361ab59d7c8c0` (PR #200, JF-4A).
-  Migrations `0001`–`0013`. **JF-4B/C/D adds none.**
+  Migrations `0001`–`0013` at baseline; **`0014` is added by the correction (§34)** and the ledger is
+  `0001`–`0014` with `0001`–`0013` byte-identical.
 - **Governed by:** ADR-0145 (JF-1 scope freeze), ADR-0146/0147 (JF-2 gateway), ADR-0148 (JF-3 RAG),
   ADR-0149 (JF-4A Mastra customer composition)
 - **Depends on:** ADR-0054 (M1 runtime, actors, party types, `assignAgent`), ADR-0068 (Riya behaviour
@@ -193,6 +196,145 @@ creation or assignment. No real Groq/Nara call and no credential. Nothing binds 
 controls. **JF-7** freezes the external three-agent/Core handshake. **QH-1** supplies the real QuickFurno
 adapters.
 
+## Owner correction (§33–42)
+
+The owner reviewed the head above and returned two blockers. Both are closed here, in the same PR.
+
+The first review finding was that a gap I had **reported** was a blocker to close, not a limitation to
+accept. That applies to §34 below. The second was that "Anisha and Aarohi are intentionally ungrounded"
+was simply wrong: one shared governed RAG is required, and that is §35–§39.
+
+### 33. What the head got wrong, stated plainly
+
+`PROSPECT` was added to the runtime vocabulary and routed to `AAROHI`, and then **could not be
+persisted**. Two separate places refused it:
+
+1. the durable store's party `CHECK`, written by migration `0008` with the three types that existed
+   then; and
+2. the orchestration context schema, which carried **its own** three-value party list rather than
+   deriving one from `RUNTIME_PARTY_TYPES`.
+
+Every JF-4 spec passed, because each tested a piece in isolation: `assignAgent` in one file, the
+behaviour mux in another, the adapter's gates in a third. **No spec ran a whole `processInbound` for a
+`PROSPECT` turn.** A party type the authoritative store cannot hold and the context builder throws on is
+not a party type; it is a crash waiting for its first real conversation. `jf4-three-agent-end-to-end`
+now runs complete turns for all four party types so this cannot recur.
+
+### 34. Migration `0014` — authorized, and narrow
+
+`0014_conversation_prospect_party_type.sql` does exactly one thing: it drops
+`conversation_runtime_state_party_type_known` and re-adds it as
+`CHECK (party_type IN ('CLIENT', 'VENDOR', 'PROSPECT', 'UNKNOWN'))`. Two statements.
+
+It adds no table, column, index, type or view; changes no `DEFAULT`; transforms no row; issues no
+`GRANT` or `REVOKE`; activates no D5; and changes no other `CHECK`. Its header documents that
+exhaustively, and the containment scans read **statements only** so the documentation cannot be mistaken
+for the thing it forbids.
+
+**It was a widening, not a removal.** A dropped constraint would have satisfied "PROSPECT now persists"
+and quietly accepted any string forever, so the specs assert both halves: `PROSPECT` is accepted, and an
+arbitrary token is still refused at the application layer **and** by the database constraint, by name and
+by SQL state `23514`. A database actually taken to `0013` is migrated forward with rows already in it,
+and the refusal observed at `0013` becomes an acceptance at `0014`.
+
+**The managed production database is NOT migrated by this lane.** It still carries `0001` only. JF-6 owns
+managed parity and application.
+
+### 35. ONE governed RAG, three truthful scopes — not three RAG systems
+
+There is one governed-knowledge authority, one JF-3 provisioner, one revision-bound pack and one
+retrieval implementation. What differs per agent is exactly three things: the agent scope a retrieval
+runs under, the purpose it runs for, and the exact topics it may ask for.
+
+There is no `riya-rag`, no `anisha-rag`, no `aarohi-rag`, no second registry, no second pack revision and
+no vector store — and a repository-wide containment scan proves those paths are not there to take, not
+merely untaken. `AgentGroundedKnowledgePolicy` carries `registry`/`retrieval` **once, at policy level**,
+so a deployment has exactly one place to point grounding at.
+
+`createRiyaGroundedKnowledgeBridge` survives as a thin wrapper over the generalized
+`createAgentGroundedKnowledgeBridge`, so an existing RWC-P7 Riya deployment is byte-unchanged and keeps
+precedence when both configurations are present.
+
+### 36. The actor → scope/purpose map is CODE-CLOSED
+
+`AGENT_KNOWLEDGE_BINDINGS` is a frozen total map: `RIYA → CLIENT/CLIENT_RESPONSE`,
+`ANISHA → VENDOR/VENDOR_RESPONSE`, `AAROHI → PROSPECT/PROSPECT_RESPONSE`. A deployment configures
+**topics**. It cannot configure a scope or a purpose, because `AgentKnowledgeTopicPolicy` has no field
+for either.
+
+That split is the whole security property. A caller able to name its own scope could read another
+agent's records — a client turn retrieving vendor-only material, or an acquisition turn reading a
+registered vendor's operational records. The party type is the trusted caller's statement of fact; the
+scope is this repository's conclusion from it, derived from the actor `assignAgent` already chose.
+
+The 3×3 denial matrix is asserted exactly, and the strongest form is measured end to end: a deployment
+that **wrongly** configures Anisha with Aarohi's topic still cannot read the prospect record — the
+authority reports `knowledge-not-found` rather than `knowledge-permission-denied`, so a vendor turn
+cannot even learn that a prospect record exists, and the turn fails closed.
+
+### 37. `PROSPECT` and `PROSPECT_RESPONSE` are the minimum honest additions
+
+`KNOWLEDGE_AGENT_SCOPES` gained `PROSPECT` and `KNOWLEDGE_PURPOSES` gained `PROSPECT_RESPONSE`. Neither
+`CLIENT` nor `VENDOR` was reused for Aarohi — that would make an acquisition turn indistinguishable from
+a client or a registered-vendor turn at the authority boundary — and `COORDINATION` was not borrowed
+merely to avoid a vocabulary addition. The permission scope cap is now bound to the vocabulary's own
+length rather than to the literal `4` it used to carry.
+
+### 38. Zero configured topics means NO retrieval, never "retrieve everything"
+
+An agent with no configured topics, and an agent configured with an **empty** list, both reach the
+authority zero times. `topicsForActor` returns `undefined` rather than an empty array so a caller cannot
+confuse "this deployment did not configure Aarohi" with "Aarohi is configured to ask for nothing" — both
+mean no retrieval, and neither means retrieve everything. There is no wildcard, no `latest`, no pattern,
+and no selector derived from a message, a model or a channel.
+
+### 39. No content was fabricated
+
+`PRODUCTION_KNOWLEDGE_RECORDS` remains **0**, by design. Synthetic records exist only inside specs and
+say so in their own content. Nothing was sourced from assistant memory, test fixtures, the web, the
+QuickFurno repository, old training corpora or invented FAQs.
+
+The empty pack's derived revision is **unchanged** by the vocabulary additions and is now pinned as a
+literal, because that revision is the approval binding: if a vocabulary change could move it, every such
+change would silently invalidate a production approval.
+
+### 40. Party type alone selects the policy, and costs no extra state read
+
+The knowledge port is reached only **after** the orchestrator's complete first gate has passed
+(ADR-0068), so at the only moment the bridge can be used, takeover is already known false and the actor
+is a pure function of the party type. Reading control state again here to learn something the gate has
+already decided would add a read to every turn and a second place that believes it.
+
+`UNKNOWN` needs no special case: it routes to `JARVIS` or `HUMAN`, neither of which is a grounded
+business agent, so the lookup returns nothing and no turn can borrow another agent's topics.
+
+### 41. Aarohi has no MODEL scope in Production V1 — measured, not assumed
+
+This is the correction's honest residue, and it is recorded rather than hidden.
+
+`MODEL_AGENT_SCOPES` and `PROMPT_AGENT_SCOPES` are `CLIENT | VENDOR | COORDINATION | SYSTEM`. There is no
+prospect member, so a **model-eligible** acquisition turn reaches the draft step and **fails closed**
+with `orchestration-draft-invalid` and **zero** gateway calls. The end-to-end spec asserts exactly that
+figure rather than a loose bound, so a regression that started calling a model for Aarohi would fail.
+
+That is consistent with Aarohi's own domain rather than a contradiction of it: AVG-7 pins `modelCall`,
+`promptResolution` and `retrieval` to literal `false`, and the strategies that matter today map to
+`NO_ACTION` or `ESCALATE_TO_HUMAN` with no model. What grounding buys her in V1 is therefore the
+**boundary**, not a draft: the retrieval happens, under the `PROSPECT` scope, from the one shared
+authority, and no other agent can read what it returns.
+
+Closing it would mean adding a prospect member to the **model gateway and prompt-registry** scope
+vocabularies, which binds to approved-release and evaluation identities. That is a separate authorized
+lane — `JF-5` is where real models and their scope bindings are certified — and this correction was not
+authorized to touch it. **Flagged for the owner rather than decided here.**
+
+### 42. What this correction did NOT do
+
+No D5 activation and no grant change. No QuickFurno, OneDecore, Meta or n8n. No provider call and no
+credential. No managed-database migration. No new dependency, no vector store, no embedding, no
+training or benchmark asset touched. No historical evidence or dataset deleted. Riya's behaviour is
+byte-unchanged, and her web wire stays client-only.
+
 ## Consequences
 
 Positive: the result is smaller than a rebuild. All three agents are representable, deterministic and
@@ -204,8 +346,14 @@ Negative, and accepted:
   package reads, so adding a member touches exact-set locks by design. Five existing locks were narrowed
   — including Aarohi's own "nothing composes this leaf", which becomes "exactly one package, in one
   file". Each records what it buys.
-- **Aarohi is composed but unsupplied.** A `PROSPECT` turn reaches nothing until a future QuickFurno/Core
-  adapter provides certified artifacts. That is the honest state, not a defect.
+- **One migration was needed after all.** The head claimed none; `0014` is it, narrowly and under owner
+  authorization (§34). The ledger is `0001`–`0014` and `0001`–`0013` are byte-identical.
+- **Aarohi is composed, grounded and still unsupplied.** Her acquisition ARTIFACTS wait on a future
+  QuickFurno/Core adapter, and she has no model scope in V1 (§41). Her governed retrieval boundary,
+  however, is real and shared. That is the honest state, not a defect.
+- **Two more shared vocabularies grew.** `KNOWLEDGE_AGENT_SCOPES` and `KNOWLEDGE_PURPOSES` each gained
+  one member (§37), and the jarvis-runtime root barrel deliberately gained **type exports only** — its
+  locked runtime-value surface is still six symbols.
 - **The two AVG-10 gaps are still open**, and are JF-5/JF-7 prerequisites rather than JF-4 work.
 
 ## Next

@@ -32,7 +32,12 @@ export interface RetrievalPermissions {
 export const retrievalPermissionsSchema = z
   .object({
     tenantScope: IDENTIFIER,
-    allowedAgentScopes: z.array(z.enum(KNOWLEDGE_AGENT_SCOPES)).min(1).max(4),
+    // Bounded by the vocabulary itself rather than a hand-written number, so adding a scope cannot
+    // leave a record unable to name every scope that legitimately applies to it (ADR-0150 §4a).
+    allowedAgentScopes: z
+      .array(z.enum(KNOWLEDGE_AGENT_SCOPES))
+      .min(1)
+      .max(KNOWLEDGE_AGENT_SCOPES.length),
     allowedPurposes: z.array(z.enum(KNOWLEDGE_PURPOSES)).min(1).max(KNOWLEDGE_PURPOSES.length),
   })
   .strict();
