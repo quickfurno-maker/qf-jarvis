@@ -35,7 +35,13 @@
     // SERVICE the handler delegates to, and `agent-runtime` for the closed `RUNTIME_DATA_CLASSES`
     // vocabulary the classification-policy output is validated against.
     { "path": "../../packages/riya-web-conversation-service/tsconfig.build.json" },
-    { "path": "../../packages/agent-runtime/tsconfig.build.json" }
+    { "path": "../../packages/agent-runtime/tsconfig.build.json" },
+    // JF-4 (ADR-0149): the customer orchestration boundary. `rag-provisioning` is the JF-3
+    // provisioning boundary the governed-RAG port calls, and `governed-knowledge` supplies the
+    // request/result TYPES that port adapts between. Neither adds a knowledge authority here -- the
+    // authority stays inside governed-knowledge, reached through JF-3.
+    { "path": "../../packages/rag-provisioning/tsconfig.build.json" },
+    { "path": "../../packages/governed-knowledge/tsconfig.build.json" }
   ],
   "include": ["src/**/*.ts"],
   "exclude": ["src/tests/**"]

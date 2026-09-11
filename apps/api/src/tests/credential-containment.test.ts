@@ -392,6 +392,11 @@ describe('the staging smoke stays out of the production boundary', () => {
     // production source that composes the real gateway (ADR-0065 §6). `zod` is the schema validator
     // already pinned by nine other workspace packages — no new third-party resolution (ADR-0065 §14).
     expect(Object.keys(manifest.dependencies ?? {}).sort()).toEqual([
+      // JF-4 (ADR-0149): the customer orchestration boundary. `@mastra/core` is pinned to the
+      // EXACT version already in the repository lock for the JAO operations lane, so this is an
+      // application dependency delta and not a new third-party resolution. A spec asserts both
+      // manifests carry the same exact version, and `packages/**` remain Mastra-free.
+      '@mastra/core',
       // ADR-0097 adds exactly two, both genuinely used by the private ingress: the conversation
       // SERVICE it delegates to, and `agent-runtime` for the closed `RUNTIME_DATA_CLASSES`
       // vocabulary its classification-policy output is validated against. No web framework, and no
@@ -408,6 +413,11 @@ describe('the staging smoke stays out of the production boundary', () => {
       // QFJ-P08-B3 (ADR-0078): the three -- and only three -- new production edges the durable
       // composition needs, to create a pool, build the durable adapter, and compose the runtime.
       '@qf-jarvis/event-backbone',
+      // JF-4 (ADR-0149): the JF-3 provisioning boundary the governed-RAG port calls, and the
+      // governed request/result TYPES that port adapts between. Still an EXACT set match; both
+      // are workspace packages already in this repository, and neither is a knowledge authority
+      // here -- the authority stays inside governed-knowledge, reached through JF-3.
+      '@qf-jarvis/governed-knowledge',
       '@qf-jarvis/jarvis-runtime',
       '@qf-jarvis/model-evaluation',
       '@qf-jarvis/model-gateway',
@@ -417,6 +427,7 @@ describe('the staging smoke stays out of the production boundary', () => {
       // QFJ-S3-I-B (ADR-0073): the SHADOW runner's fixed synthetic prompt is now a real
       // `PromptDefinition`, so its identity and its bytes cannot drift apart. Still an EXACT set.
       '@qf-jarvis/prompt-registry',
+      '@qf-jarvis/rag-provisioning',
       '@qf-jarvis/riya-web-conversation-service',
       'zod',
     ]);

@@ -38,6 +38,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@mastra/core':
+        specifier: 1.61.0
+        version: 1.61.0(zod@4.4.3)
       '@qf-jarvis/agent-runtime':
         specifier: workspace:*
         version: link:../../packages/agent-runtime
@@ -50,6 +53,9 @@ importers:
       '@qf-jarvis/event-backbone':
         specifier: workspace:*
         version: link:../../packages/event-backbone
+      '@qf-jarvis/governed-knowledge':
+        specifier: workspace:*
+        version: link:../../packages/governed-knowledge
       '@qf-jarvis/jarvis-runtime':
         specifier: workspace:*
         version: link:../../packages/jarvis-runtime
@@ -71,6 +77,9 @@ importers:
       '@qf-jarvis/prompt-registry':
         specifier: workspace:*
         version: link:../../packages/prompt-registry
+      '@qf-jarvis/rag-provisioning':
+        specifier: workspace:*
+        version: link:../../packages/rag-provisioning
       '@qf-jarvis/riya-web-conversation-service':
         specifier: workspace:*
         version: link:../../packages/riya-web-conversation-service

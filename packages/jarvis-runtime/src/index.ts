@@ -77,7 +77,12 @@ export type {
 
 // Config + result + outcome vocabulary.
 export type { JarvisRuntimeConfig, JarvisProvenanceRefs } from './contracts/runtime-config.js';
-export type { RiyaGroundedKnowledgeConfig } from './contracts/runtime-config.js';
+export type {
+  RiyaGroundedKnowledgeConfig,
+  RiyaGroundedKnowledgeRegistryConfig,
+  RiyaGroundedKnowledgeRetrievalConfig,
+  GovernedRetrievalPort,
+} from './contracts/runtime-config.js';
 export type {
   JarvisRiyaGroundedReplyInput,
   JarvisRiyaGroundedReplyResult,

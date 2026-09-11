@@ -757,16 +757,23 @@ describe('(50, 53-57) the repository invariants this slice must not move', () =>
     expect([...importingPackages].sort()).toStrictEqual(ALLOWED_PACKAGE_IMPORTERS);
     expect([...importingApps].sort()).toStrictEqual(ALLOWED_APP_IMPORTERS);
 
-    // The application reaches it from the private ingress ONLY. If any other module in `apps/api`
-    // ever named this package, the service would have acquired a second entry point without anybody
-    // deciding it should have one.
+    // JF-4 (ADR-0149) narrows this a FOURTH time rather than dropping it, and this widening is the
+    // point of that lane: `apps/api/src/riya-customer-orchestration/` is now the production customer
+    // composition, and the private ingress receives the Mastra-bounded RUNNER instead of the service
+    // directly. So the service is reached from exactly two application directories -- the ingress,
+    // which still declares the service type it is handed, and the composition that builds the runner.
+    //
+    // It still says what it always said: no OTHER module in `apps/api` may name this package, so the
+    // service cannot acquire a third entry point without somebody deciding it should have one.
     const apiSrc = join(REPO_ROOT, 'apps/api/src');
     for (const file of walk(apiSrc, false)) {
       const normalised = file.replace(/\\/gu, '/');
       if (!readFileSync(file, 'utf8').includes('@qf-jarvis/riya-web-conversation-service'))
         continue;
       expect(
-        normalised.includes('/src/private-riya-web-ingress/') || normalised.includes('/src/tests/'),
+        normalised.includes('/src/private-riya-web-ingress/') ||
+          normalised.includes('/src/riya-customer-orchestration/') ||
+          normalised.includes('/src/tests/'),
         file,
       ).toBe(true);
     }
