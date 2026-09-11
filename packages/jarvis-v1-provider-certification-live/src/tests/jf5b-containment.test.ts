@@ -17,6 +17,18 @@ import { describe, expect, it } from 'vitest';
 const REPO_ROOT = new URL('../../../../', import.meta.url);
 const repoPath = (rel: string): string => fileURLToPath(new URL(rel, REPO_ROOT));
 
+/**
+ * An absolute path, stated relative to the repository ROOT.
+ *
+ * Derived from `REPO_ROOT` rather than by splitting on a directory NAME. A checkout is called whatever
+ * the person or the runner called it — a worktree here, `/home/runner/work/qf-jarvis/qf-jarvis` on CI —
+ * and a spec that assumes the name passes locally and fails in the one place it matters.
+ */
+const fromRepoRoot = (file: string): string => {
+  const root = fileURLToPath(REPO_ROOT).replace(/\\/gu, '/');
+  return file.replace(/\\/gu, '/').replace(root, '');
+};
+
 const SKIP = new Set(['node_modules', 'dist', '.turbo', 'coverage', '.git']);
 
 function walk(dir: string, extensions: readonly string[] = ['.ts']): string[] {
@@ -196,7 +208,7 @@ describe('JF-5B the certification operator is off the serving path', () => {
           // that counted those would make every lock that documents this package an importer of it.
           const code = codeOnly(readFileSync(file, 'utf8'));
           if (code.includes(`from '@qf-jarvis/jarvis-v1-provider-certification-live`)) {
-            importers.push(file.replace(/\\/gu, '/').split('/qf-jarvis-jf5b/').pop() ?? file);
+            importers.push(fromRepoRoot(file));
           }
         }
       }
