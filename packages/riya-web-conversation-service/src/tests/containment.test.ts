@@ -249,11 +249,11 @@ describe('RWC-P2D containment', () => {
     const sql = readdirSync(dir)
       .filter((n) => n.endsWith('.sql'))
       .sort();
-    expect(sql).toHaveLength(13);
+    expect(sql).toHaveLength(14);
     // RWC-P8 (ADR-0104) RESTATED, not relaxed: 0012 is the ONE owner-authorized addition -- durable
     // logical-turn idempotency, repository and LOCAL/CI only. The bound moves to 0013, so the
     // lock still says what it always said: no unauthorized migration exists.
-    expect(sql.some((n) => n.startsWith('0014'))).toBe(false);
+    expect(sql.some((n) => n.startsWith('0015'))).toBe(false);
     // The RWC-P2B hash, unchanged: P2D needs no schema at all.
     expect(
       createHash('sha256')
@@ -627,6 +627,8 @@ describe('(50, 53-57) the repository invariants this slice must not move', () =>
         '5d1b7fe68401a664cea3116ff0900499a1f20d659d4935c586b4ac0f923aaf3e',
       '0013_communication_state_projection.sql':
         '4f533fb60ea96bedd11bf2f5b3177376517c07633d3b7e71e0341b43c1a72919',
+      '0014_conversation_prospect_party_type.sql':
+        '572ba13764cffed600d8580e00b781502ddc85c19126e3621d0a8127e5dc536e',
     };
     const dir = join(REPO_ROOT, 'packages/event-backbone/src/persistence/migrations');
     const sql = readdirSync(dir)
@@ -642,7 +644,7 @@ describe('(50, 53-57) the repository invariants this slice must not move', () =>
       ).toBe(hash);
     }
     // RWC-P8 (ADR-0104) RESTATED, not relaxed: 0012 is the ONE owner-authorized addition.
-    expect(sql.some((name) => Number.parseInt(name.slice(0, 4), 10) > 13)).toBe(false);
+    expect(sql.some((name) => Number.parseInt(name.slice(0, 4), 10) > 14)).toBe(false);
   });
 
   it('(54, 55) the two channel vocabularies are exactly as JRW-0B left them', () => {

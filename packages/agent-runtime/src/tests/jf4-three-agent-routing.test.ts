@@ -11,9 +11,14 @@
  * question "whose turn is this" be answered by something other than the trusted caller's statement of
  * who the party is.
  */
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
 import { describe, expect, it } from 'vitest';
 
 import { assignAgent } from '../router/assign-agent.js';
+import { createOrchestrationContext } from '../orchestration/contracts.js';
+import { RUNTIME_DATA_CLASSES } from '../contracts/vocabularies.js';
 import { AI_AGENT_ACTORS, RUNTIME_ACTORS, RUNTIME_PARTY_TYPES } from '../contracts/vocabularies.js';
 import { isActorPartyCompatible } from '../contracts/scope.js';
 import type { RuntimePolicy } from '../contracts/policy.js';
@@ -101,5 +106,83 @@ describe('JF-4C deterministic assignment', () => {
       'PROSPECT->AAROHI',
       'UNKNOWN->JARVIS',
     ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The orchestration context must accept every party the router can assign.
+// ---------------------------------------------------------------------------
+
+/** Comments stripped, so a scan cannot match this file's own prose or a doc comment. */
+function codeOnly(text: string): string {
+  return text
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n')
+    .filter((line) => !/^\s*\/\//.test(line))
+    .join('\n');
+}
+
+const CONTEXT_CONTRACTS = fileURLToPath(new URL('../orchestration/contracts.ts', import.meta.url));
+
+const contextInput = (partyType: string) => ({
+  conversationId: 'conv.1',
+  tenantId: 'tenant.a',
+  partyType: partyType as never,
+  dataClass: 'HOSTED_ALLOWED' as const,
+  revision: 1,
+  humanTakeover: false,
+  aiPaused: false,
+  cancelled: false,
+  subjectRef: undefined,
+});
+
+describe('JF-4 correction: the orchestration context and the router share ONE party vocabulary', () => {
+  it('accepts every party type the router can assign, PROSPECT included', () => {
+    // The gap this closes: `assignAgent` returned AAROHI for PROSPECT while this schema carried its
+    // own three-value list, so a real acquisition turn threw `invalid-context` at the second gate and
+    // Aarohi was never reached. Every isolated spec passed; no spec ran a whole turn.
+    for (const party of RUNTIME_PARTY_TYPES) {
+      const context = createOrchestrationContext(contextInput(party));
+      expect(context.partyType, party).toBe(party);
+      // And the actor the router picks for it is one the scope rule permits.
+      expect(isActorPartyCompatible(assignAgent(party, false, JARVIS_POLICY), party), party).toBe(
+        true,
+      );
+    }
+  });
+
+  it('accepts every data class, and still refuses an unknown token in either vocabulary', () => {
+    for (const dataClass of RUNTIME_DATA_CLASSES) {
+      expect(createOrchestrationContext({ ...contextInput('CLIENT'), dataClass }).dataClass).toBe(
+        dataClass,
+      );
+    }
+    // Widening the enum to the shared vocabulary did not open it: a token in neither list is refused.
+    for (const bad of ['ACQUISITION', 'prospect', 'PROSPECT ', 'LEAD', '']) {
+      expect(() => createOrchestrationContext(contextInput(bad)), bad).toThrow();
+    }
+    expect(() =>
+      createOrchestrationContext({
+        ...contextInput('CLIENT'),
+        dataClass: 'HOSTED' as never,
+      }),
+    ).toThrow();
+  });
+
+  it('respells neither vocabulary as a literal list anywhere in the orchestration contracts', () => {
+    // A second list is a vocabulary that drifts, and this is exactly how it drifted. The scan looks
+    // for a re-spelled party or data-class enum in CODE, with comments stripped so this file's own
+    // explanation cannot satisfy it.
+    const code = codeOnly(readFileSync(CONTEXT_CONTRACTS, 'utf8'));
+    expect(code).toContain('z.enum(RUNTIME_PARTY_TYPES)');
+    expect(code).toContain('z.enum(RUNTIME_DATA_CLASSES)');
+    for (const respelled of [
+      ['CLIENT', 'VENDOR', 'UNKNOWN'],
+      ['CLIENT', 'VENDOR', 'PROSPECT', 'UNKNOWN'],
+      ['HOSTED_ALLOWED', 'LOCAL_ONLY', 'HUMAN_ONLY'],
+    ]) {
+      const literal = respelled.map((value) => `'${value}'`).join(', ');
+      expect(code, literal).not.toContain(`[${literal}]`);
+    }
   });
 });

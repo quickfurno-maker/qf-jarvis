@@ -161,6 +161,7 @@ describe('migration 0006 applies with 0001–0005 unchanged', () => {
       // RWC-P8 (ADR-0104): the ONE authorized addition, repository and LOCAL/CI only.
       '0012_riya_logical_turn_idempotency.sql',
       '0013_communication_state_projection.sql',
+      '0014_conversation_prospect_party_type.sql',
     ]);
     for (const row of rows) {
       const known = IMMUTABLE_CHECKSUMS[row.filename];

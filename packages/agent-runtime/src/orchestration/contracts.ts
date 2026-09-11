@@ -11,7 +11,11 @@ import { z } from 'zod';
 
 import { AgentRuntimeError } from '../contracts/errors.js';
 import { assertActorPartyCompatible } from '../contracts/scope.js';
-import { PROPOSAL_AUTHORITY_STATUS } from '../contracts/vocabularies.js';
+import {
+  PROPOSAL_AUTHORITY_STATUS,
+  RUNTIME_DATA_CLASSES,
+  RUNTIME_PARTY_TYPES,
+} from '../contracts/vocabularies.js';
 import type {
   ProposalAuthorityStatus,
   RuntimeActor,
@@ -114,8 +118,12 @@ const contextSchema = z
   .object({
     conversationId: IDENTIFIER,
     tenantId: IDENTIFIER,
-    partyType: z.enum(['CLIENT', 'VENDOR', 'UNKNOWN']),
-    dataClass: z.enum(['HOSTED_ALLOWED', 'LOCAL_ONLY', 'HUMAN_ONLY']),
+    // Derived from the merged vocabulary, not respelled. This schema previously carried its own
+    // three-value list, which is how `PROSPECT` came to be routable by `assignAgent` and still
+    // rejected here -- an acquisition turn threw at the context boundary before Aarohi was reached.
+    // A literal list is a second vocabulary, and a second vocabulary is a vocabulary that drifts.
+    partyType: z.enum(RUNTIME_PARTY_TYPES),
+    dataClass: z.enum(RUNTIME_DATA_CLASSES),
     // A conversation revision, not an authored version: 0 is legitimate and required by the durable
     // schema for a freshly provisioned conversation.
     revision: REVISION,

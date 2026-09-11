@@ -158,6 +158,7 @@ describe('migrations apply in order, idempotently, with 0001–0007 unchanged', 
       // RWC-P8 (ADR-0104): the ONE authorized addition, repository and LOCAL/CI only.
       '0012_riya_logical_turn_idempotency.sql',
       '0013_communication_state_projection.sql',
+      '0014_conversation_prospect_party_type.sql',
     ]);
     // RWC-P8 (ADR-0104): the ONE owner-authorized addition.
     expect(rows.map((row) => row.version)).toStrictEqual([

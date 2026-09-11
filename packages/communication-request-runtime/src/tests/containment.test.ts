@@ -399,6 +399,7 @@ describe('side-effect containment', () => {
       '0011_riya_conversation_continuity.sql',
       '0012_riya_logical_turn_idempotency.sql',
       '0013_communication_state_projection.sql',
+      '0014_conversation_prospect_party_type.sql',
     ]);
   });
 });
