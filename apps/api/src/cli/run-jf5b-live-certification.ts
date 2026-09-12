@@ -45,6 +45,7 @@ import type {
   ArtifactWriter,
   ConfirmationReader,
   ExitCode,
+  LiveCaseRecord,
   NaraDiscoveryTransport,
   OperatorIo,
   RepositoryFacts,
@@ -108,6 +109,103 @@ function printProbeSummaries(io: OperatorIo, probes: readonly NaraProbeSummary[]
       }
       io.out(parts.join(' '));
     }
+  }
+}
+
+/**
+ * The SANITIZED phase-3 failure diagnostics (JF-5B-R5).
+ *
+ * Run-7 proved the R4 repair worked: two aliases passed the structured hard gates, the unchanged scorer
+ * picked one, and phase 3 then stopped with a single line — `certification failed:
+ * forbidden-claim-asserted`. True, and almost useless: 90 executions produced one sentence naming no
+ * provider, no agent and no case.
+ *
+ * `certifyAllSix` already returned every record, on the failure branch as much as the success one. This
+ * function is the only thing that was missing: the CLI discarded them. Nothing is computed here that
+ * was not already measured, and no new record type exists.
+ *
+ * ### What may be printed, and what may not
+ *
+ * `LiveCaseRecord` is content-free by construction, and even so this prints a SUBSET of it. `outputDigest`
+ * is deliberately withheld: a 64-hex string is not evidence an operator can act on, and a digest on
+ * screen is a digest in a terminal scrollback. Raw text, the bundles, prompt or message bodies, headers
+ * and credentials are not reachable from a record at all.
+ *
+ * PASS records are counted, never dumped. A failure report that reprinted 80 successes would bury the
+ * ten lines somebody needs.
+ */
+function summarizeCaseCounts(cases: readonly LiveCaseRecord[]): {
+  readonly total: number;
+  readonly pass: number;
+  readonly fail: number;
+  readonly inconclusive: number;
+  readonly other: number;
+} {
+  const count = (outcome: LiveCaseRecord['outcome']): number =>
+    cases.filter((one) => one.outcome === outcome).length;
+  const pass = count('PASS');
+  const fail = count('FAIL');
+  const inconclusive = count('INCONCLUSIVE');
+  return {
+    total: cases.length,
+    pass,
+    fail,
+    inconclusive,
+    other: cases.length - pass - fail - inconclusive,
+  };
+}
+
+/** One sanitized line per non-PASS case. Existing fields only, and a strict subset of them. */
+function renderCaseLine(record: LiveCaseRecord): string {
+  const parts = [
+    `  case ${record.provider}/${record.agent}/${record.caseId}:`,
+    `outcome=${record.outcome}`,
+    `structuredValid=${record.structuredOutputValid ? 'yes' : 'no'}`,
+    `calls=${String(record.networkCalls)}`,
+    `attempts=${String(record.providerAttempts)}`,
+    `retry=${String(record.retryCount)}`,
+    `latency=${String(record.latencyMs)}ms`,
+  ];
+  if (record.providerErrorClass !== undefined) {
+    parts.push(`errorClass=${record.providerErrorClass}`);
+  }
+  if (record.reason !== undefined) {
+    parts.push(`reason=${record.reason}`);
+  }
+  parts.push(`model=${record.modelId}`);
+  return parts.join(' ');
+}
+
+/** Print the aggregate, then every non-PASS case, grouped by provider and agent in corpus order. */
+function printCertificationFailure(io: OperatorIo, cases: readonly LiveCaseRecord[]): void {
+  const counts = summarizeCaseCounts(cases);
+  io.out('phase 3 SANITIZED FAILURE DIAGNOSTICS');
+  io.out(
+    `  cases ${String(counts.total)}: PASS ${String(counts.pass)} FAIL ${String(counts.fail)} ` +
+      `INCONCLUSIVE ${String(counts.inconclusive)} OTHER ${String(counts.other)}`,
+  );
+  // The provider/agent grouping comes free: both are fields on the record, and the records arrive in
+  // provider-then-agent-then-corpus order because that is the order they were executed in.
+  for (const provider of ['groq', 'nara'] as const) {
+    for (const agent of ['RIYA', 'ANISHA', 'AAROHI'] as const) {
+      const pair = cases.filter((one) => one.provider === provider && one.agent === agent);
+      if (pair.length === 0) {
+        continue;
+      }
+      const pairCounts = summarizeCaseCounts(pair);
+      io.out(
+        `  ${provider}/${agent}: PASS ${String(pairCounts.pass)} FAIL ${String(pairCounts.fail)} ` +
+          `INCONCLUSIVE ${String(pairCounts.inconclusive)}`,
+      );
+    }
+  }
+  const nonPass = cases.filter((one) => one.outcome !== 'PASS');
+  if (nonPass.length === 0) {
+    return;
+  }
+  io.out(`  non-PASS cases (${String(nonPass.length)}):`);
+  for (const record of nonPass) {
+    io.out(renderCaseLine(record));
   }
 }
 
@@ -352,6 +450,46 @@ export async function runJf5bLiveCertificationCli(
   });
   if (!certification.ok) {
     deps.io.err(`certification failed: ${certification.reason}`);
+    printCertificationFailure(deps.io, certification.cases);
+    // ONE sanitized receipt, in the already-approved external run directory. Deliberately NOT the raw
+    // bundle, the review bundle or the manifest: a failed certification has nothing to seal, and a raw
+    // bundle beside a refusal is content kept for a claim nobody is making.
+    deps.artifacts.writeFile(
+      'receipt-certification-failure.json',
+      JSON.stringify(
+        {
+          runId: deps.runId,
+          headSha: deps.facts.headSha,
+          phase: 'CERTIFICATION',
+          reason: certification.reason,
+          selectedNaraModelId: selected.modelId,
+          groqCalls: ledger.groqCalls(),
+          naraCalls: ledger.naraCalls(),
+          counts: summarizeCaseCounts(certification.cases),
+          // The SAME sanitized subset the terminal prints, and no more. `outputDigest` is not here.
+          nonPassCases: certification.cases
+            .filter((one) => one.outcome !== 'PASS')
+            .map((one) => ({
+              provider: one.provider,
+              agent: one.agent,
+              caseId: one.caseId,
+              modelId: one.modelId,
+              outcome: one.outcome,
+              structuredOutputValid: one.structuredOutputValid,
+              networkCalls: one.networkCalls,
+              providerAttempts: one.providerAttempts,
+              retryCount: one.retryCount,
+              latencyMs: one.latencyMs,
+              ...(one.providerErrorClass === undefined
+                ? {}
+                : { providerErrorClass: one.providerErrorClass }),
+              ...(one.reason === undefined ? {} : { reason: one.reason }),
+            })),
+        },
+        null,
+        2,
+      ),
+    );
     return stop(
       'CERTIFICATION',
       EXIT_CODES.CERTIFICATION_FAILED,

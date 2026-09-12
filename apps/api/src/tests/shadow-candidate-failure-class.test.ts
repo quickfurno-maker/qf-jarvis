@@ -270,6 +270,15 @@ describe('(13-15) the line stays one line, leaks nothing, and disposes output', 
     });
     const line = formatShadowRunResult(result);
     expect(line.split('\n')).toHaveLength(1);
+    // The status scan reads the line WITHOUT its wall-clock timestamp.
+    //
+    // The three-digit status probes below are substrings, and a timestamp is full of digits: a run
+    // at `...:57.500Z` made this spec report an HTTP 500 leak that was really a millisecond. It
+    // failed about one run in a thousand, in whichever suite happened to be red that day. The
+    // timestamp is asserted present and well-formed first, so removing it from the scan hides
+    // nothing.
+    expect(line).toMatch(/"timestamp":"\d{4}-\d{2}-\d{2}T[\d:.]+Z"/u);
+    const withoutTimestamp = line.replace(/"timestamp":"[^"]*"/u, '"timestamp":""');
     for (const forbidden of [
       '503',
       '429',
@@ -284,7 +293,7 @@ describe('(13-15) the line stays one line, leaks nothing, and disposes output', 
       'stack',
       '.key',
     ]) {
-      expect(line).not.toContain(forbidden);
+      expect(withoutTimestamp).not.toContain(forbidden);
     }
     expect(line.toLowerCase()).not.toContain('authorization');
   });

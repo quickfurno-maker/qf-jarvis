@@ -192,9 +192,11 @@ describe('JF-5B the certification operator is off the serving path', () => {
       'apps/api/src/composition/jf5b-certification-context.ts',
       'apps/api/src/composition/jf5b-certification-runner-impl.ts',
       'apps/api/src/composition/jf5b-repository-facts.ts',
-      // The two specs that drive all of the above with injected fakes and zero network.
+      // The specs that drive all of the above with injected fakes and zero network.
       'apps/api/src/tests/jf5b-live-cli.test.ts',
       'apps/api/src/tests/jf5b-certification-runner.test.ts',
+      // JF-5B-R5: the phase-3 sanitized failure diagnostics, driven through the same CLI.
+      'apps/api/src/tests/jf5b-phase3-diagnostics.test.ts',
     ];
     const importers: string[] = [];
     for (const root of [repoPath('packages'), repoPath('apps')]) {
@@ -351,6 +353,9 @@ describe('JF-5B (31) no test or CI path can open the live gate', () => {
       'apps/api/src/bin/run-jf5b-live-certification.ts',
       'apps/api/src/cli/run-jf5b-live-certification.ts',
       'apps/api/src/tests/jf5b-live-cli.test.ts',
+      // JF-5B-R5, for the same reason as the spec above it: it drives the CLI past both gates with a
+      // fake terminal, a fake transport and a fake runner, so the flag opens nothing.
+      'apps/api/src/tests/jf5b-phase3-diagnostics.test.ts',
     ];
     const offenders: string[] = [];
     for (const root of roots) {
