@@ -197,6 +197,10 @@ describe('JF-5B the certification operator is off the serving path', () => {
       'apps/api/src/tests/jf5b-certification-runner.test.ts',
       // JF-5B-R5: the phase-3 sanitized failure diagnostics, driven through the same CLI.
       'apps/api/src/tests/jf5b-phase3-diagnostics.test.ts',
+      // JF-5B-R11: the sanitized discovery-throw diagnostic. Drives `fetchNaraModelCatalogue` with
+      // injected transports and reads the production seam's SOURCE; it opens no socket and holds no
+      // credential. Added here as a decision, which is the point of keeping this set exact.
+      'apps/api/src/tests/jf5b-discovery-transport-diagnostic.test.ts',
     ];
     const importers: string[] = [];
     for (const root of [repoPath('packages'), repoPath('apps')]) {

@@ -224,6 +224,21 @@ export type {
   ObservedNaraTransport,
   WireObserver,
 } from './diagnostics/jf5b-wire-observer.js';
+// The JF-5B-ONLY sanitized discovery-throw diagnostic (JF-5B-R11). Classification and rendering only:
+// no I/O, no transport, and nothing that can change a discovery outcome.
+export {
+  UNKNOWN_CAUSE_CODE,
+  UNKNOWN_ERROR_NAME,
+  classifyDiscoveryThrow,
+  createDiscoveryDiagnosticRecorder,
+  renderDiscoveryDiagnostic,
+} from './diagnostics/jf5b-discovery-diagnostic.js';
+export type {
+  DiscoveryDiagnostic,
+  DiscoveryDiagnosticRecorder,
+  DiscoveryStage,
+  DiscoveryThrowFacts,
+} from './diagnostics/jf5b-discovery-diagnostic.js';
 export {
   MAX_SCHEMA_ISSUES,
   SCHEMA_ISSUES_UNAVAILABLE,

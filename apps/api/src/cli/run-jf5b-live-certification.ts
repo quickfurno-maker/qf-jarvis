@@ -53,7 +53,11 @@ import type {
   RunPhase,
 } from '@qf-jarvis/jarvis-v1-provider-certification-live';
 
-import { renderSchemaIssues } from '@qf-jarvis/jarvis-v1-provider-certification-live';
+import {
+  renderDiscoveryDiagnostic,
+  renderSchemaIssues,
+} from '@qf-jarvis/jarvis-v1-provider-certification-live';
+import type { DiscoveryDiagnostic } from '@qf-jarvis/jarvis-v1-provider-certification-live';
 import { JF5B_GROQ_MODEL_ID } from '../composition/jf5b-certification-runner-impl.js';
 import type {
   CertificationRunner,
@@ -73,6 +77,13 @@ export interface Jf5bCliDeps {
   /** Phase 2: the Nara credential, through the existing masked-TTY primitive. */
   readonly naraCredential: NaraCredentialGate;
   readonly discoveryTransport: NaraDiscoveryTransport;
+  /**
+   * The sanitized discovery-throw diagnostic (JF-5B-R11). Optional: a spec that does not care omits it.
+   *
+   * Read ONLY after `discovery-transport-failed`, which is the one failure whose cause was discarded on
+   * purpose. Every other discovery failure already names itself.
+   */
+  readonly discoveryDiagnostics?: { latest(): DiscoveryDiagnostic | undefined };
   /** Phases 3-4: the real three-agent Mastra composition. */
   readonly runner: CertificationRunner;
   readonly artifacts: ArtifactWriter;
@@ -451,7 +462,17 @@ export async function runJf5bLiveCertificationCli(
     () => ledger.reserve('nara', 0.001) === undefined,
   );
   if (!catalogue.ok) {
+    // UNCHANGED, verbatim: an operator and every prior run receipt read this exact line.
     deps.io.err(`nara discovery failed: ${catalogue.failure}`);
+    // And, for the ONE failure that deliberately discarded its cause, a second sanitized line saying
+    // where the throw happened. Run-13 and run-14 produced the line above twice, identically, with no
+    // way to tell a refused connection from a body that never finished arriving.
+    if (catalogue.failure === 'discovery-transport-failed') {
+      const diagnostic = deps.discoveryDiagnostics?.latest();
+      if (diagnostic !== undefined) {
+        deps.io.err(renderDiscoveryDiagnostic(diagnostic));
+      }
+    }
     return stop(
       'NARA_DISCOVERY',
       EXIT_CODES.NARA_DISCOVERY_FAILED,

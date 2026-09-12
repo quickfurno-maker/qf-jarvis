@@ -37,8 +37,10 @@ import { createSystemClock } from '@qf-jarvis/model-gateway';
 import type { GroqApiKey } from '@qf-jarvis/model-gateway';
 import {
   NARA_MODELS_ENDPOINT,
+  createDiscoveryDiagnosticRecorder,
   readNaraCredential,
 } from '@qf-jarvis/jarvis-v1-provider-certification-live';
+import type { DiscoveryDiagnosticRecorder } from '@qf-jarvis/jarvis-v1-provider-certification-live';
 import type {
   ArtifactWriter,
   ConfirmationReader,
@@ -93,7 +95,9 @@ function systemConfirmationReader(): ConfirmationReader {
  * credential attached. The body is read as text and measured before parsing, so an oversized payload is
  * refused instead of truncated.
  */
-function systemDiscoveryTransport(): NaraDiscoveryTransport {
+function systemDiscoveryTransport(
+  diagnostics: DiscoveryDiagnosticRecorder,
+): NaraDiscoveryTransport {
   return Object.freeze({
     async get(request: {
       readonly authorization: string;
@@ -104,6 +108,13 @@ function systemDiscoveryTransport(): NaraDiscoveryTransport {
       const timer = setTimeout(() => {
         controller.abort();
       }, request.timeoutMs);
+      // JF-5B-R11. Two facts, tracked so a throw can say WHICH await produced it: run-13 and run-14 both
+      // stopped on the same collapsed token and neither could distinguish a refused connection from a
+      // body that never finished arriving. Everything below the request itself is unchanged: one GET,
+      // one URL, the same headers, `redirect: 'manual'`, the same signal, the same 20s timer, no retry.
+      const startedAt = Date.now();
+      let responseStatus: number | undefined;
+      let bodyReadStarted = false;
       try {
         const response = await fetch(NARA_MODELS_ENDPOINT, {
           method: 'GET',
@@ -111,6 +122,8 @@ function systemDiscoveryTransport(): NaraDiscoveryTransport {
           redirect: 'manual',
           signal: controller.signal,
         });
+        responseStatus = response.status;
+        bodyReadStarted = true;
         const bodyText = await response.text();
         return Object.freeze({
           status: response.status,
@@ -118,6 +131,18 @@ function systemDiscoveryTransport(): NaraDiscoveryTransport {
           bodyBytes: Buffer.byteLength(bodyText, 'utf8'),
           bodyText,
         });
+      } catch (error: unknown) {
+        // RECORD and RETHROW. The error object is handed to a classifier that reads only `name` and
+        // `cause.code`, under strict patterns, and is then unreachable. `fetchNaraModelCatalogue` still
+        // catches exactly what it caught before and still answers `discovery-transport-failed`.
+        diagnostics.record({
+          error,
+          elapsedMs: Date.now() - startedAt,
+          responseStatus,
+          bodyReadStarted,
+          signalAborted: controller.signal.aborted,
+        });
+        throw error;
       } finally {
         clearTimeout(timer);
       }
@@ -245,6 +270,8 @@ export function createDefaultJf5bCliDeps(argv: readonly string[]): Jf5bCliDeps {
   const resolvedOutputDirectory = rawOutput === '' ? '' : resolve(rawOutput);
 
   const facts: RepositoryFacts = readRepositoryFacts(resolvedOutputDirectory);
+  // ONE recorder per run (JF-5B-R11), held in memory and never persisted.
+  const discoveryDiagnostics = createDiscoveryDiagnosticRecorder();
 
   return Object.freeze({
     io: systemIo,
@@ -253,7 +280,10 @@ export function createDefaultJf5bCliDeps(argv: readonly string[]): Jf5bCliDeps {
     runId: runId(),
     groqConnectivity: systemGroqConnectivity(),
     naraCredential: systemNaraCredential(),
-    discoveryTransport: systemDiscoveryTransport(),
+    discoveryTransport: systemDiscoveryTransport(discoveryDiagnostics),
+    // Read ONLY when the top-level failure is `discovery-transport-failed`. A run that discovers
+    // successfully never consults it.
+    discoveryDiagnostics,
     // JF-5B-R6: the real pacing seams. A wall clock and a real sleeper, supplied ONLY here — every
     // spec omits both, so no test ever waits. This is evaluation pacing for a one-time certification
     // run; no serving path is paced and no production policy changes. The sleeper holds the event loop

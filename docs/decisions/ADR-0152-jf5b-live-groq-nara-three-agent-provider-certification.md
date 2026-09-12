@@ -1358,6 +1358,108 @@ Aarohi `0377569e…f323de8d6`.
 
 **Certification remains incomplete until run-13.**
 
+## Amendment — JF-5B-R11: where authenticated Nara discovery threw
+
+**Date:** 2026-09-12. Same PR, same branch, same ADR. **Diagnostics only — no behaviour change.**
+
+### R11.1 Two runs, one line
+
+Run-13 and run-14 both ran at exact head `fca64e34cbaff6489a5e93e646a782589a5d3dbf`, and both stopped in
+the same place with the same sentence:
+
+```
+nara discovery failed: discovery-transport-failed
+```
+
+Phase 1 Groq connectivity succeeded both times and the Nara credential was accepted by the ingress both
+times. Neither run reached phase 2c, so the 120B candidate of §R10.3 has still never been exercised.
+
+### R11.2 What the owner proved, with no real key
+
+| check                                      | result             |
+| ------------------------------------------ | ------------------ |
+| DNS for `router.bynara.id`                 | resolves           |
+| TCP 443                                    | connects           |
+| `curl` GET `/v1/models`, no auth           | HTTP 401           |
+| Node `fetch` GET `/v1/models`, no auth     | HTTP 401 in 625 ms |
+| Node `fetch` GET `/v1/models`, FAKE bearer | HTTP 401 in 637 ms |
+
+So DNS is healthy, TLS is healthy, Node's own fetch stack is healthy, IPv6 is not broadly broken, and the
+mere presence of an `Authorization` header does not provoke the failure. The 20-second timeout is not
+proved too small for those requests either — both answered in about 0.63 s.
+
+What remains is specific to the REAL authenticated call or to reading its body. And the one fact that
+separates those two possibilities was deliberately thrown away.
+
+### R11.3 Why it was thrown away, and why that stays
+
+`fetchNaraModelCatalogue` catches every thrown transport exception and answers
+`discovery-transport-failed`, discarding the error. That is correct and unchanged: a fetch error can
+quote the request it failed on, and that request carries an `Authorization` header. Discarding it is what
+keeps a credential out of a terminal.
+
+R11 does not undo that. It adds a JF-5B-only observer in the composition layer, beside the one production
+transport, which records WHERE the throw happened and then rethrows the error unchanged. The failure, the
+exit code and the existing operator line are byte-identical.
+
+### R11.4 What the diagnostic may say
+
+Four closed stages: `FETCH_REJECTED` (no `Response` was ever obtained), `RESPONSE_BODY_READ_FAILED` (a
+`Response` arrived and reading it threw), `DISCOVERY_ABORTED` (the 20-second timer fired), and
+`DISCOVERY_TRANSPORT_UNKNOWN` (the honest answer when the facts do not decide).
+
+**Abort is checked first**, deliberately. A timer-driven abort surfaces as a rejection of whichever await
+was in flight, so classifying it as a network refusal would report a connection problem for what is
+really a deadline — the single most misleading thing this could say. The response status and the
+body-read flag travel alongside, so an abort DURING a body read stays distinguishable from an abort
+before any response arrived.
+
+Beside the stage: elapsed milliseconds, a normalized `errorName`, a normalized `causeCode`, the response
+status when one was already in hand, and two booleans. `errorName` is taken from `Error.name` only when
+it already matches a bare-identifier pattern; `causeCode` from `error.cause.code` only when it matches an
+upper-case token pattern. Both are **gated, not trimmed** — truncating a name like
+`TypeError: fetch failed for https://…` to 64 characters would publish the first 64 characters of a URL.
+Anything that does not match becomes `OTHER` or `OTHER_OR_ABSENT`.
+
+Never a message, a cause message, a stack, a URL, a header, a key, a response header, a body, a body
+prefix, a socket address or a request id. The object contains no free text at all, proved by
+sentinel-driven specs for each of those. The line is TERMINAL-ONLY: no artifact file is written, and
+nothing raw is persisted anywhere.
+
+It appears for `discovery-transport-failed` and for no other failure. Every other discovery outcome —
+unauthorized, HTTP error, too large, invalid JSON, redirect refused, and success — is untouched and prints
+nothing extra.
+
+### R11.5 The transport is unchanged
+
+One GET to the pinned `NARA_MODELS_ENDPOINT`; the same `authorization` and `accept` headers;
+`redirect: 'manual'`; the same `AbortController` and the same single 20-second timer; `response.text()`;
+one call; no retry. No IPv4 forcing, no DNS steering, no dispatcher, no agent, no user-agent, no
+streaming, no followed redirect, and no increased timeout. R11 is diagnosis, not repair — there is not
+yet enough evidence to repair anything, which is the whole point.
+
+### R11.6 What the mutation controls found
+
+Twenty-two mutations, each restored byte-identically; every one caught. **Five passed silently until a
+lock was added**, and they share two causes worth recording:
+
+1. **Nothing pinned the exact key set handed to the recorder.** Asserting "no `request` inside
+   `record()`" left a body or a header free to arrive under any other name. The key list is now pinned.
+2. **Three locks compared an imported constant rather than the source.** `apps/api` resolves this package
+   through `dist`, so a spec that checks `DISCOVERY_TIMEOUT_MS`, `NARA_MODELS_ENDPOINT` or the collapsed
+   failure token via an import can pass against a stale build while the source says something else. Those
+   three now read the package SOURCE, and a fourth lock scans the discovery module itself for loops — a
+   retry added to the caller had gone unnoticed because nothing was reading that file.
+
+### R11.7 What did not change
+
+The Groq GPT-OSS-120B candidate, strict mode, pacing, completion budget and retry budget. Nara candidates,
+the Nara chat transport, the gateway provider and the schema guidance — a spec asserts none of them
+knows this diagnostic exists. Prompts, corpus, matcher, RAG, Mastra, Core and durable state. No
+`productionApproval`, no `ACTIVE` seal. Zero migrations, zero new dependencies. Prompt digests unchanged.
+
+**Certification remains incomplete, and run-15 is required before any transport repair is attempted.**
+
 ## Consequences
 
 Positive: the certification harness is complete, fully tested with zero network calls, and the live run
@@ -1373,10 +1475,17 @@ Negative, and accepted:
 
 ## Next
 
-**JF-5B live execution as run-13**, by the owner, at a terminal, with the SAME five Free-plan aliases,
-the SAME local Groq smoke config, the 120B candidate of §R10.3 and the seven repairs of §R10.4.
+**JF-5B live execution as run-15**, by the owner, at a terminal, with the SAME five Free-plan aliases,
+the SAME local Groq smoke config, the 120B candidate of §R10.3 and the discovery diagnostic of §R11.4.
 
-Preflight must show `groq certification model openai/gpt-oss-120b` before the phrase is typed.
+If discovery fails again, return ONLY the two lines: the ordinary `nara discovery failed: …` and the new
+`nara discovery diagnostic: …`. Those two together are what the next decision needs — a refused
+connection, a body that never finished arriving, and a 20-second deadline are three different problems
+with three different repairs, and run-13 and run-14 could not tell them apart.
+
+Preflight must show `groq certification model openai/gpt-oss-120b` before the phrase is typed — though
+run-13 and run-14 both stopped at Nara discovery before phase 3, so the 120B candidate has still never
+been exercised.
 
 **The run-13 decision is already written down.** If 120B materially clears the 20B Riya
 `json_validate_failed` pattern, JF-5B continues on its normal completion path. If 120B shows the SAME
