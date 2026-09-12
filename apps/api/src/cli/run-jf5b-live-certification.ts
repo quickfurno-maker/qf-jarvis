@@ -52,7 +52,7 @@ import type {
   RunPhase,
 } from '@qf-jarvis/jarvis-v1-provider-certification-live';
 
-import type { CertificationRunner } from './jf5b-certification-runner.js';
+import type { CertificationRunner, NaraProbeSummary } from './jf5b-certification-runner.js';
 import type { GroqConnectivityCheck, NaraCredentialGate } from './jf5b-live-deps.js';
 
 /** Everything the CLI needs from the outside world. Production wires it in `bin`; specs fake it. */
@@ -69,6 +69,46 @@ export interface Jf5bCliDeps {
   /** Phases 3-4: the real three-agent Mastra composition. */
   readonly runner: CertificationRunner;
   readonly artifacts: ArtifactWriter;
+}
+
+/**
+ * Print the SANITIZED per-candidate probe summary (JF-5B-R4).
+ *
+ * Two authenticated live runs ended with `no-shortlisted-alias-passed-the-hard-gates` and nothing else.
+ * That is true, and it is almost useless: it says five aliases failed without saying what any of them
+ * did, which is how a lane ends up guessing at another blind model set.
+ *
+ * Every field below comes from the existing `NaraProbeScore` or the existing sanitized
+ * `LiveCaseRecord`. There is no reply text, no response body, no message content, no header and no
+ * credential in either — `LiveCaseRecord` carries a DIGEST of the output and never the output, which is
+ * exactly why it is the right vocabulary to print.
+ */
+function printProbeSummaries(io: OperatorIo, probes: readonly NaraProbeSummary[]): void {
+  for (const probe of probes) {
+    const score = probe.score;
+    io.out(
+      `  probe ${score.modelId}: hardGates=${score.hardGatesPassed ? 'PASS' : 'FAIL'} ` +
+        `quality=${String(score.qualityPassed)}/${String(score.qualityAttempted)} ` +
+        `p95=${String(score.p95LatencyMs)}ms tokens=${String(score.totalTokens)}`,
+    );
+    for (const record of probe.cases) {
+      const parts = [
+        `    ${record.caseId}`,
+        `outcome=${record.outcome}`,
+        `structuredValid=${record.structuredOutputValid ? 'yes' : 'no'}`,
+        `calls=${String(record.networkCalls)}`,
+        `attempts=${String(record.providerAttempts)}`,
+        `latency=${String(record.latencyMs)}ms`,
+      ];
+      if (record.providerErrorClass !== undefined) {
+        parts.push(`errorClass=${record.providerErrorClass}`);
+      }
+      if (record.reason !== undefined) {
+        parts.push(`reason=${record.reason}`);
+      }
+      io.out(parts.join(' '));
+    }
+  }
 }
 
 const stop = (
@@ -287,6 +327,7 @@ export async function runJf5bLiveCertificationCli(
     runId: deps.runId,
     ledger,
   });
+  printProbeSummaries(deps.io, selected.probes);
   if (!selected.ok) {
     deps.io.err(`nara selection refused: ${selected.reason}`);
     return stop(

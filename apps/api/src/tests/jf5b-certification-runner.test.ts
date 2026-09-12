@@ -549,7 +549,13 @@ describe('JF-5B (2c) selection probes every shortlisted alias equally', () => {
       runId: RUN_ID,
       ledger: budget(),
     });
-    expect(selected).toEqual({ ok: true, modelId: 'vendor-b/second-typed' });
+    expect(selected.ok && selected.modelId).toBe('vendor-b/second-typed');
+    // Both candidates carry a sanitized summary, and the loser's says exactly why it lost.
+    expect(selected.probes.map((one) => one.score.modelId)).toEqual([
+      'vendor-a/first-typed',
+      'vendor-b/second-typed',
+    ]);
+    expect(selected.probes.map((one) => one.score.hardGatesPassed)).toEqual([false, true]);
     // BOTH were probed, equally. A run that stopped at the first passing alias would have made two
     // calls, not four, and would have ranked on nothing.
     expect(seams.naraCalls()).toBe(4);
@@ -566,10 +572,36 @@ describe('JF-5B (2c) selection probes every shortlisted alias equally', () => {
       runId: RUN_ID,
       ledger: budget(),
     });
-    expect(selected).toEqual({
-      ok: false,
-      reason: 'no-shortlisted-alias-passed-the-hard-gates',
+    expect(selected.ok).toBe(false);
+    expect(selected.ok ? '' : selected.reason).toBe('no-shortlisted-alias-passed-the-hard-gates');
+    expect(selected.probes).toHaveLength(1);
+  });
+
+  it('the probe summaries carry NO trace of the model answer', async () => {
+    // The runner is the only place the raw text exists. This drives the REAL probe path with a
+    // sentinel reply and then looks for that sentinel in every byte of what comes out.
+    const SENTINEL = 'SENTINEL-PROBE-REPLY-BODY-DO-NOT-EXPORT-8c1d';
+    const seams = wire(SENTINEL);
+    const selected = await createJf5bCertificationRunner({
+      groqTransport: seams.groq,
+      naraTransport: seams.nara,
+    }).selectNaraModel({
+      shortlist: [alias('vendor-a/one', 131_072)],
+      apiKey: NARA_KEY,
+      runId: RUN_ID,
+      ledger: budget(),
     });
+    // The probe happened, so the sentinel really was in the provider's answer.
+    expect(seams.naraCalls()).toBe(2);
+    expect(selected.probes).toHaveLength(1);
+    const serialized = JSON.stringify(selected);
+    expect(serialized).not.toContain(SENTINEL);
+    // And the per-case records carry only the closed sanitized vocabulary — an output DIGEST at most.
+    for (const record of selected.probes[0]?.cases ?? []) {
+      expect(Object.keys(record)).not.toContain('rawText');
+      expect(Object.keys(record)).not.toContain('answer');
+      expect(Object.keys(record)).not.toContain('content');
+    }
   });
 
   it('stops rather than naming a fallback no probe could reach', async () => {
@@ -584,6 +616,10 @@ describe('JF-5B (2c) selection probes every shortlisted alias equally', () => {
       ledger: budget(),
     });
     // Nothing passed the hard gates. A winner here would be a fallback chosen on no evidence at all.
-    expect(selected).toEqual({ ok: false, reason: 'no-shortlisted-alias-passed-the-hard-gates' });
+    expect(selected.ok).toBe(false);
+    expect(selected.ok ? '' : selected.reason).toBe('no-shortlisted-alias-passed-the-hard-gates');
+    // And the REFUSAL still carries evidence: one summary per alias, each saying why it lost.
+    expect(selected.probes).toHaveLength(2);
+    expect(selected.probes.every((one) => !one.score.hardGatesPassed)).toBe(true);
   });
 });

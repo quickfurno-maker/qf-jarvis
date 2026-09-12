@@ -39,6 +39,7 @@ import type {
   DiscoveredNaraModel,
   Jf5bCoverageManifest,
   LiveCaseRecord,
+  NaraProbeScore,
 } from '@qf-jarvis/jarvis-v1-provider-certification-live';
 
 export interface NaraSelectionInput {
@@ -48,8 +49,32 @@ export interface NaraSelectionInput {
   readonly ledger: CallLedger;
 }
 
+/**
+ * What ONE shortlisted alias scored, and what each of its probes did (JF-5B-R4).
+ *
+ * Two existing vocabularies, reused rather than joined by a third: `NaraProbeScore` is what the scorer
+ * ranks on, and `LiveCaseRecord` is the sanitized per-case record the whole lane already writes. There
+ * is no new diagnostic type here, and deliberately so — a second vocabulary would be a second answer to
+ * "what happened", and the two would disagree the first time either was corrected.
+ *
+ * `LiveCaseRecord` is content-free by construction: identities, counts, timings, closed outcome tokens
+ * and a DIGEST of the output. No reply text, no response body, no header, no credential can reach it.
+ */
+export interface NaraProbeSummary {
+  readonly score: NaraProbeScore;
+  readonly cases: readonly LiveCaseRecord[];
+}
+
+/**
+ * The selection answer, now carrying the per-candidate evidence either way.
+ *
+ * On a REFUSAL especially. Two live runs ended with `no-shortlisted-alias-passed-the-hard-gates` and
+ * nothing else, which is true and almost useless: it says five aliases failed without saying what any
+ * of them did. The summaries travel on both branches so a stop is diagnosable from its own output.
+ */
 export type NaraSelectionResult =
-  { readonly ok: true; readonly modelId: string } | { readonly ok: false; readonly reason: string };
+  | { readonly ok: true; readonly modelId: string; readonly probes: readonly NaraProbeSummary[] }
+  | { readonly ok: false; readonly reason: string; readonly probes: readonly NaraProbeSummary[] };
 
 export interface CertifyAllInput {
   /** The exact alias discovery selected. Never a router alias; never a documentation example. */

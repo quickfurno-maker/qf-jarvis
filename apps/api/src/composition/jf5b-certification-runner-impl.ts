@@ -91,7 +91,6 @@ import type {
   DiscoveredNaraModel,
   Jf5bCoverageManifest,
   LiveCaseRecord,
-  NaraProbeScore,
 } from '@qf-jarvis/jarvis-v1-provider-certification-live';
 import type { ModelReleaseRef } from '@qf-jarvis/agent-runtime';
 
@@ -104,6 +103,7 @@ import type {
   CertifyAllInput,
   CertifyAllResult,
   CertificationRunner,
+  NaraProbeSummary,
   NaraSelectionInput,
   NaraSelectionResult,
 } from '../cli/jf5b-certification-runner.js';
@@ -717,22 +717,32 @@ export function createJf5bCertificationRunner(seams: Jf5bRunnerSeams = {}): Cert
     async selectNaraModel(input: NaraSelectionInput): Promise<NaraSelectionResult> {
       const cases = probeCases();
       if (cases.length === 0) {
-        return { ok: false as const, reason: 'probe-corpus-empty' };
+        return { ok: false as const, reason: 'probe-corpus-empty', probes: [] };
       }
-      const scores: NaraProbeScore[] = [];
+      const probes: NaraProbeSummary[] = [];
       for (const model of input.shortlist) {
         const outcome = await probeOneAlias(model, input, cases, clock, seams);
         if (outcome === undefined) {
           // A ceiling stopped the run. Continuing would produce a ranking built on fewer probes for
-          // the later aliases, which is a comparison of nothing.
-          return { ok: false as const, reason: 'probe-budget-exhausted' };
+          // the later aliases, which is a comparison of nothing. The summaries gathered so far still
+          // travel out: a stop should be diagnosable from its own output.
+          return {
+            ok: false as const,
+            reason: 'probe-budget-exhausted',
+            probes: Object.freeze(probes),
+          };
         }
-        scores.push(outcome);
+        probes.push(outcome);
       }
-      const best = selectNaraModelByScore(scores);
+      // The SAME scorer, over the same scores. Ranking is unchanged; only the evidence now escapes.
+      const best = selectNaraModelByScore(probes.map((one) => one.score));
       return best === undefined
-        ? { ok: false as const, reason: 'no-shortlisted-alias-passed-the-hard-gates' }
-        : { ok: true as const, modelId: best.modelId };
+        ? {
+            ok: false as const,
+            reason: 'no-shortlisted-alias-passed-the-hard-gates',
+            probes: Object.freeze(probes),
+          }
+        : { ok: true as const, modelId: best.modelId, probes: Object.freeze(probes) };
     },
 
     /** Phase 3. The six direct certifications: Groq and Nara, each against all three agents. */
@@ -972,7 +982,7 @@ async function probeOneAlias(
   cases: readonly GovernedCase[],
   clock: () => string,
   seams: Jf5bRunnerSeams,
-): Promise<NaraProbeScore | undefined> {
+): Promise<NaraProbeSummary | undefined> {
   const gateway = createEvaluationGateway('NARA_ONLY', {
     naraApiKey: input.apiKey,
     naraModelId: model.modelId,
@@ -980,6 +990,7 @@ async function probeOneAlias(
   });
   const release = releaseFor('nara', model.modelId);
   const latencies: number[] = [];
+  const records: LiveCaseRecord[] = [];
   let passed = 0;
   let tokens = 0;
   let structural = true;
@@ -998,6 +1009,7 @@ async function probeOneAlias(
     if (executed.record.providerErrorClass === 'budget-exhausted') {
       return undefined;
     }
+    records.push(executed.record);
     latencies.push(executed.record.latencyMs);
     tokens += executed.record.totalTokens ?? 0;
     if (executed.record.outcome === 'PASS') {
@@ -1012,11 +1024,16 @@ async function probeOneAlias(
   const sorted = [...latencies].sort((a, b) => a - b);
   const index = Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.95) - 1);
   return Object.freeze({
-    modelId: model.modelId,
-    hardGatesPassed: structural,
-    qualityPassed: passed,
-    qualityAttempted: cases.length,
-    p95LatencyMs: sorted[Math.max(index, 0)] ?? 0,
-    totalTokens: tokens,
+    score: Object.freeze({
+      modelId: model.modelId,
+      hardGatesPassed: structural,
+      qualityPassed: passed,
+      qualityAttempted: cases.length,
+      p95LatencyMs: sorted[Math.max(index, 0)] ?? 0,
+      totalTokens: tokens,
+    }),
+    // The records this function ALREADY built, carried out instead of discarded. Each is the sanitized
+    // `LiveCaseRecord` the rest of the lane writes: identities, counts, closed tokens and a digest.
+    cases: Object.freeze(records),
   });
 }

@@ -475,6 +475,108 @@ the 45-row corpus, the AUTO measurements, the gates or the artifacts. No migrati
 **JF-5B is still not complete.** The owner live run with the candidate set has not happened, and no live
 certification evidence exists.
 
+## Amendment — JF-5B-R4: the schema reached the provider and never reached the model
+
+**Date:** 2026-09-12. Same PR, same branch, same ADR.
+
+### R4.1 The live evidence
+
+Run-5 and run-6 both authenticated, called `GET /v1/models` successfully (51 returned, 50 eligible, 1
+rejected), accepted the owner shortlist — and then every shortlisted alias failed the phase 2c hard
+gates, stopping at `no-shortlisted-alias-passed-the-hard-gates`. Run-6 used five Free-plan aliases, so
+the failure was not one vendor's quirk.
+
+A direct owner-side diagnostic against `agnes-2.5-flash` then proved the infrastructure was fine:
+
+```
+PLAIN_STATUS=200            PLAIN_CONTENT_JSON_VALID=YES
+JSON_OBJECT_STATUS=200      JSON_OBJECT_CONTENT_JSON_VALID=YES
+```
+
+The key works, the endpoint works, the model answers, `response_format: json_object` works, and the
+content is valid JSON. So nothing needed rotating and PAYG was never the issue.
+
+### R4.2 Root cause, proven offline before anything was edited
+
+A regression run at the starting head `526c57c` established three facts:
+
+1. a STRUCTURED request reaches the Nara provider carrying the exact locally authoritative schema in
+   `ProviderInvocationInput.structuredJsonSchema` — the gateway renders it for precisely this purpose;
+2. the Nara wire sent `response_format: { type: 'json_object' }`;
+3. **no message on that wire contained any representation of the schema** — not `replyBody`, not
+   `reasonCode`, not `citations`, not `additionalProperties`.
+
+The Groq provider consumes `structuredJsonSchema` and puts a native strict JSON Schema on the wire.
+Nara discarded it.
+
+`json_object` asks for "some JSON". It does not say WHICH JSON. And the canonical agent prompts
+deliberately do not restate the reply shape — the schema contract is the authority, and duplicating it
+in reviewed prompt bytes would create a second definition that drifts. So the model was asked for an
+object, never shown the object, produced something reasonable, and local validation correctly refused
+it. Every case. Every alias. Twice.
+
+### R4.3 The repair: the same document, carried a different way
+
+`packages/model-gateway/src/providers/nara/nara-schema-guidance.ts` builds ONE provider-owned system
+message and inserts it after the leading application system messages and before the user content. The
+message states only encoding rules — exactly one JSON object, conform to the supplied schema, include
+every required property, add none, use JSON `null` where the schema permits it, no markdown or fences,
+output the object only — followed by the **exact serialized `structuredJsonSchema`** it was handed.
+
+There is no field name anywhere in that file, and a spec walks the whole Nara provider directory to
+prove it: the guidance is DERIVED from the schema, never a restatement of it. A handwritten list would
+be a second definition of the reply and would drift from the schema the answer is validated against,
+which is the failure being removed.
+
+What did not move:
+
+- `NARA_SUPPORTS_STRICT_JSON_SCHEMA` stays **false**. Guidance in a message is not a capability, and
+  raising the descriptor would need live evidence from the endpoint — the opposite of why this exists.
+- the wire still sends `response_format: { type: 'json_object' }`, and never `json_schema`.
+- the application's system and user bytes are untouched, and the caller's message array is not mutated.
+- local exact-schema validation remains the only authority on whether an answer is acceptable.
+- one HTTP request, zero retry, the fixed endpoint.
+- a TEXT request is byte-identical to before: no guidance, no `response_format`.
+
+It fails CLOSED before the network. A structured request whose schema is missing, unserializable or
+larger than `NARA_MAX_SCHEMA_GUIDANCE_BYTES` (32 KiB — a new Nara-internal bound, because every existing
+bound in the package is a RESPONSE ceiling and reusing one would let a response limit decide what a
+request may describe) returns a non-retryable failure without sending anything.
+
+### R4.4 Prompt digests unchanged
+
+Verified against the built packages, not asserted: Riya `d0c2da57…b71fb`, Anisha `ba7c6ecc…cd14`,
+Aarohi `0377569e…e8d6`. No reviewed prompt byte was edited, and a mutation that edits one is caught.
+
+### R4.5 Sanitized per-candidate probe diagnostics
+
+Two live runs ended with a one-line refusal naming no alias and no reason. That is true and almost
+useless, and it is how a lane ends up guessing at another blind model set.
+
+`NaraSelectionResult` now carries `probes: readonly NaraProbeSummary[]` on **both** branches — a refusal
+is exactly when the evidence is needed. A summary is the existing `NaraProbeScore` plus the existing
+per-case `LiveCaseRecord`s: two vocabularies already in the lane, reused rather than joined by a third.
+
+The operator prints, per candidate: `modelId`, hard-gate verdict, `qualityPassed/qualityAttempted`,
+p95 latency and total tokens; then per case: `caseId`, `outcome`, `structuredOutputValid`, network
+calls, provider attempts, latency, and — when present — `providerErrorClass` and the sanitized `reason`.
+
+No raw text, no response body, no message content, no header and no credential. `LiveCaseRecord` is
+content-free by construction: it carries a DIGEST of the output and never the output, which is exactly
+why it is the right vocabulary. A spec drives the REAL probe path with a sentinel reply body and asserts
+the sentinel appears in no byte of what comes out, and a mutation that attaches the raw answer is caught.
+
+Selection semantics are untouched: the same two probe cases per alias, every candidate probed, hard-gate
+failure cannot win, and the scorer order stays hard gate → quality → p95 → tokens → lexical.
+
+### R4.6 What R4 did NOT do
+
+No live provider call and no spend. No change to Jarvis, Mastra, RAG, Core, provider routing, the
+Nara endpoint or credentials, the probe corpus, `PROBE_CASES_PER_ALIAS`, the six certifications, AUTO,
+the budgets, retry=0 or the production-seal posture. No migration. No new external dependency.
+
+**JF-5B is still not complete.** Run-7 has not happened, and no live certification evidence exists.
+
 ## Consequences
 
 Positive: the certification harness is complete, fully tested with zero network calls, and the live run
@@ -490,5 +592,7 @@ Negative, and accepted:
 
 ## Next
 
-**JF-5B live execution**, by the owner, at a terminal, with the owner Nara candidate set of §R3.
-Then **JF-5C** — owner production evidence seal.
+**JF-5B live execution as run-7**, by the owner, at a terminal, with the five Free-plan aliases and the
+schema-guidance repair of §R4. The operator now prints sanitized per-candidate probe summaries; if every
+alias still fails, diagnose from those summaries rather than trying another blind model set. Then
+**JF-5C** — owner production evidence seal.

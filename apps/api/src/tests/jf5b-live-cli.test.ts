@@ -24,11 +24,13 @@ import type {
   RepositoryFacts,
 } from '@qf-jarvis/jarvis-v1-provider-certification-live';
 import { createGroqApiKey, createNaraApiKey } from '@qf-jarvis/model-gateway';
+import { createLiveCaseRecord } from '@qf-jarvis/jarvis-v1-provider-certification-live';
+import type { LiveCaseRecord } from '@qf-jarvis/jarvis-v1-provider-certification-live';
 
 import { MODEL_REQUIRED_CASES } from '../composition/jf5b-case-corpus.js';
 import { describe, expect, it } from 'vitest';
 
-import type { CertificationRunner } from '../cli/jf5b-certification-runner.js';
+import type { CertificationRunner, NaraProbeSummary } from '../cli/jf5b-certification-runner.js';
 import type { GroqConnectivityCheck, NaraCredentialGate } from '../cli/jf5b-live-deps.js';
 import { runJf5bLiveCertificationCli } from '../cli/run-jf5b-live-certification.js';
 import type { Jf5bCliDeps } from '../cli/run-jf5b-live-certification.js';
@@ -45,6 +47,7 @@ function harness(
     readonly groqOk?: boolean;
     readonly credentialOk?: boolean;
     readonly discovery?: DiscoveryHttpResponse | Error;
+    readonly probes?: readonly NaraProbeSummary[];
   } = {},
 ) {
   const seen = {
@@ -130,7 +133,13 @@ function harness(
       // Recorded, not merely counted: what reaches the probes is the whole question in JF-5B-R3.
       seen.probedShortlist = input.shortlist.map((one) => one.modelId);
       seen.probedObjects = input.shortlist;
-      return Promise.resolve({ ok: false as const, reason: 'stub' });
+      // The widened contract (JF-5B-R4) carries the sanitized per-candidate summaries on BOTH
+      // branches. A stub that omitted them would be a stub the CLI cannot print.
+      return Promise.resolve({
+        ok: false as const,
+        reason: 'stub',
+        probes: over.probes ?? [],
+      });
     },
     certifyAllSix: () => {
       seen.runnerCalls += 1;
@@ -514,5 +523,102 @@ describe('JF-5B-R3 (CLI) the owner set fits inside the existing ceilings', () =>
     expect(spendUsd).toBeLessThanOrEqual(JF5B_BUDGET.maxEstimatedSpendUsd);
     // The exact figures, so a corpus or candidate change that moves them is visible in a diff.
     expect([groqCalls, naraCalls, groqCalls + naraCalls]).toEqual([39, 49, 88]);
+  });
+});
+
+describe('JF-5B-R4 the operator prints SANITIZED per-candidate probe summaries', () => {
+  /** The secret this spec hunts for: a reply body that must never reach an operator line. */
+  const RAW_REPLY = 'RAW-MODEL-TEXT-THAT-MUST-NEVER-BE-PRINTED-4f2a';
+
+  const record = (caseId: string, over: Partial<Record<string, unknown>> = {}): LiveCaseRecord =>
+    createLiveCaseRecord({
+      runId: 'run.jf5b.test',
+      caseId,
+      caseVersion: 1,
+      agent: 'ANISHA',
+      agentScope: 'VENDOR',
+      provider: 'nara',
+      releaseId: 'rel.jf5b.nara.1',
+      modelId: 'agnes-2.5-flash',
+      modelVersion: 'certification-snapshot-2026-09-11',
+      configDigest: 'abcdef0123456789',
+      promptFamily: 'anisha.vendor-journey',
+      promptVersion: 1,
+      promptDigest: 'b'.repeat(64),
+      evaluationSuiteId: 'suite.jf5b.three-agent-live',
+      fixtureManifestId: 'fixtures.jf5b.synthetic-three-agent',
+      languageMode: 'EN',
+      executionLayer: 'MODEL_REQUIRED',
+      providerAttempts: 1,
+      networkCalls: 1,
+      fallbackCount: 0,
+      retryCount: 0,
+      latencyMs: 812,
+      totalTokens: 160,
+      structuredOutputValid: false,
+      outcome: 'INCONCLUSIVE',
+      providerErrorClass: 'provider-terminal',
+      reason: 'forbidden-claim-asserted',
+      ...over,
+    });
+
+  const probeSummary = (): readonly NaraProbeSummary[] => [
+    {
+      score: {
+        modelId: 'agnes-2.5-flash',
+        hardGatesPassed: false,
+        qualityPassed: 0,
+        qualityAttempted: 2,
+        p95LatencyMs: 812,
+        totalTokens: 320,
+      },
+      cases: [record('anisha.routine-question.en'), record('anisha.onboarding-clarification.hi')],
+    },
+  ];
+
+  it('prints the score line and one line per case, on a REFUSAL', async () => {
+    // The refusal is exactly when the owner needs this: two live runs ended with a one-line stop.
+    const { deps, seen } = harness({ probes: probeSummary() });
+    await runJf5bLiveCertificationCli(FULL_ARGV, deps);
+    const text = seen.lines.join('\n');
+    expect(text).toContain(
+      'probe agnes-2.5-flash: hardGates=FAIL quality=0/2 p95=812ms tokens=320',
+    );
+    expect(text).toContain('anisha.routine-question.en outcome=INCONCLUSIVE structuredValid=no');
+    expect(text).toContain('calls=1 attempts=1 latency=812ms');
+    expect(text).toContain('errorClass=provider-terminal');
+    expect(text).toContain('reason=forbidden-claim-asserted');
+    // One score line and two case lines for one candidate.
+    expect(text.split('\n').filter((line) => line.includes('probe agnes-2.5-flash:'))).toHaveLength(
+      1,
+    );
+  });
+
+  it('leaks no raw content, no body, no header and no credential', async () => {
+    const { deps, seen } = harness({
+      probes: [
+        {
+          score: probeSummary()[0]?.score ?? {
+            modelId: 'x',
+            hardGatesPassed: false,
+            qualityPassed: 0,
+            qualityAttempted: 0,
+            p95LatencyMs: 0,
+            totalTokens: 0,
+          },
+          // A record carrying an output DIGEST, which is the only trace of an answer the lane keeps.
+          cases: [record('anisha.routine-question.en', { outputDigest: 'c'.repeat(64) })],
+        },
+      ],
+    });
+    await runJf5bLiveCertificationCli(FULL_ARGV, deps);
+    const everything = [...seen.lines, ...seen.errors].join('\n');
+    // The raw text was never given to the printer, and the record has nowhere to put it.
+    expect(everything).not.toContain(RAW_REPLY);
+    for (const forbidden of ['authorization', 'Bearer', 'api-key', 'nara-synthetic', 'gsk-']) {
+      expect([forbidden, everything.includes(forbidden)]).toEqual([forbidden, false]);
+    }
+    // The digest is printed by nothing: a 64-hex string is not evidence an operator needs on screen.
+    expect(everything).not.toContain('c'.repeat(64));
   });
 });

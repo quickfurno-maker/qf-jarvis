@@ -19,6 +19,8 @@ export type { NaraHttpRequest, NaraHttpResponse, NaraTransport } from './nara-tr
 
 export {
   NARA_REFUSED_ROUTER_ALIASES,
+  NARA_MAX_SCHEMA_GUIDANCE_BYTES,
+  NARA_SCHEMA_GUIDANCE_PREFIX,
   NARA_SUPPORTS_STRICT_JSON_SCHEMA,
   createNaraProviderConfig,
   isNaraRouterAlias,
