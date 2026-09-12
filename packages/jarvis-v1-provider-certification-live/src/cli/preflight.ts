@@ -15,6 +15,13 @@ import { AAROHI_ACQUISITION_PROMPT_V1 } from '@qf-jarvis/aarohi-prompts';
 import { ANISHA_VENDOR_JOURNEY_PROMPT_V1 } from '@qf-jarvis/anisha-prompts';
 import { RIYA_CLIENT_SALES_EVOLUTION_PROMPT_V1 } from '@qf-jarvis/riya-prompts';
 
+import {
+  GROQ_OBSERVED_RPM,
+  GROQ_OBSERVED_TPM,
+  MIN_MODEL_CALL_INTERVAL_MS,
+  PACING_TARGET_TPM,
+  RATE_LIMIT_COOLDOWN_MS,
+} from '../contracts/groq-live-pacing.js';
 import { NARA_MODELS_ENDPOINT } from '../discovery/nara-model-discovery.js';
 import {
   EXECUTE_LIVE_FLAG,
@@ -94,6 +101,17 @@ export function renderPreflightSummary(facts: PreflightFacts): readonly string[]
     `  max total calls        ${String(JF5B_BUDGET.maxTotalCalls)}`,
     `  max estimated spend    USD ${String(JF5B_BUDGET.maxEstimatedSpendUsd)}`,
     '  same-provider retry    0',
+    '',
+    // JF-5B-R6. The observed limits are what the owner READ in the provider console on 2026-09-12, and
+    // the pacing values are what THIS LANE aims at. Neither is a production limit or a production
+    // policy: no serving path is paced, and nothing here promises anything about the platform.
+    '  JF-5B GROQ PACING      evaluation-only; production serving pacing is unchanged',
+    `  groq observed RPM      ${String(GROQ_OBSERVED_RPM)} (project inherits organisation limits)`,
+    `  groq observed TPM      ${String(GROQ_OBSERVED_TPM)}`,
+    `  groq pacing target TPM ${String(PACING_TARGET_TPM)} (25% headroom under the observed ceiling)`,
+    `  groq min call interval ${String(MIN_MODEL_CALL_INTERVAL_MS / 1000)}s`,
+    `  rate-limit cooldown    ${String(RATE_LIMIT_COOLDOWN_MS / 1000)}s, applied to the NEXT case; the failed case is never retried`,
+    '  nara pacing            none; this pacer is Groq-only',
     '',
     `  riya prompt            ${RIYA_CLIENT_SALES_EVOLUTION_PROMPT_V1.promptId} v${String(RIYA_CLIENT_SALES_EVOLUTION_PROMPT_V1.promptVersion)} ${RIYA_CLIENT_SALES_EVOLUTION_PROMPT_V1.contentDigest}`,
     `  anisha prompt          ${ANISHA_VENDOR_JOURNEY_PROMPT_V1.promptId} v${String(ANISHA_VENDOR_JOURNEY_PROMPT_V1.promptVersion)} ${ANISHA_VENDOR_JOURNEY_PROMPT_V1.contentDigest}`,

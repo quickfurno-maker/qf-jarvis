@@ -254,7 +254,27 @@ export function createDefaultJf5bCliDeps(argv: readonly string[]): Jf5bCliDeps {
     groqConnectivity: systemGroqConnectivity(),
     naraCredential: systemNaraCredential(),
     discoveryTransport: systemDiscoveryTransport(),
-    runner: createJf5bCertificationRunner(),
+    // JF-5B-R6: the real pacing seams. A wall clock and a real sleeper, supplied ONLY here — every
+    // spec omits both, so no test ever waits. This is evaluation pacing for a one-time certification
+    // run; no serving path is paced and no production policy changes.
+    runner: createJf5bCertificationRunner({
+      pacingClock: { now: () => Date.now() },
+      pacingSleeper: {
+        sleep: (ms: number): Promise<void> =>
+          new Promise((resolve) => {
+            const timer = setTimeout(() => {
+              // Cleared on the way out even though a fired timer needs no clearing. Every timer in this
+              // application is armed once and cleared once, and a sleep that broke that pattern would
+              // make the next reader wonder which timers are exempt.
+              clearTimeout(timer);
+              resolve();
+            }, ms);
+            // Never keep the process alive for a pacing wait: a one-shot executable that has finished
+            // its work should exit, not linger on a timer.
+            timer.unref();
+          }),
+      },
+    }),
     artifacts: systemArtifactWriter(resolvedOutputDirectory),
   });
 }

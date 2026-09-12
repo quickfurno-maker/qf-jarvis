@@ -85,6 +85,26 @@ export {
 } from './contracts/live-execution-gate.js';
 export type { CallLedger, GateRefusal, LiveBudget } from './contracts/live-execution-gate.js';
 
+// JF-5B-R6: the EVALUATION-ONLY Groq pacer. Not a production rate limiter, not a gateway policy, and
+// imported by nothing that serves a turn -- a containment spec asserts that rather than trusting it.
+export {
+  GROQ_OBSERVED_RPD,
+  GROQ_OBSERVED_RPM,
+  GROQ_OBSERVED_TPD,
+  GROQ_OBSERVED_TPM,
+  MIN_MODEL_CALL_INTERVAL_MS,
+  PACING_TARGET_TPM,
+  RATE_LIMIT_COOLDOWN_MS,
+  createGroqLivePacer,
+  pacingDelayMsFor,
+} from './contracts/groq-live-pacing.js';
+export type {
+  GroqLivePacer,
+  PacingClock,
+  PacingObservation,
+  PacingSleeper,
+} from './contracts/groq-live-pacing.js';
+
 // The sanitized result model and the six-binding coverage manifest.
 export {
   CASE_OUTCOMES,

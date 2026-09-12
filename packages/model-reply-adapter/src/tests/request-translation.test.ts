@@ -133,3 +133,14 @@ describe('request translation — exact binding', () => {
     expect(JSON.stringify(build().metadata)).toBe(JSON.stringify(build().metadata));
   });
 });
+
+describe('the default budgets permit NO same-provider retry', () => {
+  it('pins retryBudget at zero, at the default and in the request it builds', () => {
+    // A retried call is a DIFFERENT call: it may be answered by a warmer cache, a different shard, or
+    // simply a luckier moment, and an evaluation that silently retried would report the best of N
+    // attempts as if it were the first. Provider FAILOVER remains the gateway's decision under `AUTO`;
+    // what is pinned here is that the same provider is never asked twice for the same request.
+    expect(DEFAULT_GATEWAY_REQUEST_BUDGETS.retryBudget).toBe(0);
+    expect(build().retryBudget).toBe(0);
+  });
+});

@@ -372,10 +372,13 @@ describe('JF-5B-R5 nothing about certification SEMANTICS moved', () => {
 
   it('the forbidden-claim evaluator is byte-for-byte the rule it was', () => {
     const runner = read('../composition/jf5b-certification-runner-impl.ts');
-    // The matcher, the universal list's use, the FAIL selection and the reason token.
-    expect(runner).toContain('const haystack = raw.toLowerCase();');
-    expect(runner).toContain('if (haystack.includes(claim.toLowerCase()))');
-    expect(runner).toContain('...governed.forbiddenClaims, ...UNIVERSAL_FORBIDDEN_CLAIMS');
+    // UPDATED, not dropped (JF-5B-R6). The occurrence-level rule moved into
+    // `jf5b-forbidden-claim-matcher.ts`, where a hit is the DEFAULT and only a clear refusal in the same
+    // clause suppresses it. The R5 lock caught that change and demanded it be a decision rather than a
+    // drift; what must not move is everything around it, and that is what this asserts.
+    expect(runner).toContain(
+      'assertedForbiddenClaim(raw, [...governed.forbiddenClaims, ...UNIVERSAL_FORBIDDEN_CLAIMS])',
+    );
     expect(runner).toContain(
       "const failed = executed.filter((one) => one.record.outcome === 'FAIL')",
     );
@@ -386,6 +389,12 @@ describe('JF-5B-R5 nothing about certification SEMANTICS moved', () => {
     expect(runner).toContain(
       "executed.record.structuredOutputValid && executed.record.outcome !== 'FAIL'",
     );
+    // The matcher is deterministic and LOCAL. Asserted structurally rather than by scanning for
+    // vocabulary: it imports nothing at all, so it cannot reach a model, a network or a random source,
+    // and it is synchronous, so it cannot await one.
+    const matcher = read('../composition/jf5b-forbidden-claim-matcher.ts');
+    expect(matcher).not.toMatch(/^import /mu);
+    expect(matcher).not.toContain('async ');
   });
 
   it('the corpus phrases and counts are unchanged', () => {
@@ -420,5 +429,38 @@ describe('JF-5B-R5 nothing about certification SEMANTICS moved', () => {
       '../../../../packages/model-gateway/src/providers/groq/groq-model-provider.ts',
     );
     expect(groq).toContain('this.config.capabilities.supportsStrictJsonSchema');
+  });
+});
+
+describe('JF-5B-R6 the Groq pacer is wired where it must be, and only there', () => {
+  const runner = readFileSync(
+    fileURLToPath(new URL('../composition/jf5b-certification-runner-impl.ts', import.meta.url)),
+    'utf8',
+  );
+
+  it('waits before a MODEL_REQUIRED call, and observes after it', () => {
+    expect(runner).toContain('await input.pacer.waitBeforeNextCall();');
+    expect(runner).toContain('input.pacer.observe({');
+  });
+
+  it('guards BOTH the wait and the observation on MODEL_REQUIRED, so PRE_MODEL rows never sleep', () => {
+    // Two arms, one guard each. A run that paced its PRE_MODEL rows would spend real minutes waiting
+    // for a lane it never entered, and the guard is the only thing that prevents it.
+    const guard = "if (input.pacer !== undefined && governed.layer === 'MODEL_REQUIRED') {";
+    expect(runner.split(guard).length - 1).toBe(2);
+  });
+
+  it('hands the pacer to the GROQ column only', () => {
+    // Nara is not the lane under pressure. Pacing it would double the wall-clock of a run for nothing,
+    // and would also make the pacer's token view a mixture of two providers' spend.
+    expect(runner).toContain("...(provider === 'groq' && pacer !== undefined ? { pacer } : {})");
+    expect(runner).not.toContain("provider === 'nara' && pacer");
+  });
+
+  it('builds exactly one pacer per runner, from BOTH injected seams or neither', () => {
+    expect(runner).toContain(
+      'seams.pacingClock === undefined || seams.pacingSleeper === undefined',
+    );
+    expect(runner).toContain('createGroqLivePacer(seams.pacingClock, seams.pacingSleeper)');
   });
 });

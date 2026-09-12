@@ -462,21 +462,28 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
     }
   });
 
-  it('exactly two modules arm a timer, and each clears it', () => {
-    // The second is the certification discovery transport (JF-5B-R1, ADR-0152): one bounded GET needs
-    // one abort deadline, or a hung provider would hang an owner's terminal indefinitely. The RULE is
-    // unchanged and is now asserted twice -- one arm, one clear, no repeat, no reschedule.
+  it('exactly two modules arm timers, and every arm has its clear', () => {
+    // The second is the certification composition (JF-5B-R1, ADR-0152): the bounded discovery GET needs
+    // one abort deadline, or a hung provider would hang an owner's terminal indefinitely. JF-5B-R6 adds
+    // the evaluation-only pacing sleep in the same file. The RULE is unchanged -- every arm matched by a
+    // clear, nothing repeating, nothing rescheduling -- and it is now COUNTED per file rather than
+    // assumed to be one.
+    const ARMS_BY_FILE: Readonly<Record<string, number>> = Object.freeze({
+      [DESIGNATED_TIMER_MODULE]: 1,
+      [JF5B_COMPOSITION]: 2,
+    });
     const timerFiles = productionFiles().filter((file) =>
       codeOnly(readFileSync(file, 'utf8')).includes('setTimeout'),
     );
     expect(timerFiles.map((f) => normalise(f).split('/apps/api/')[1] ?? '').sort()).toEqual(
-      [DESIGNATED_TIMER_MODULE, JF5B_COMPOSITION].sort(),
+      Object.keys(ARMS_BY_FILE).sort(),
     );
     for (const file of timerFiles) {
+      const expected = ARMS_BY_FILE[normalise(file).split('/apps/api/')[1] ?? ''] ?? 0;
       const code = codeOnly(readFileSync(file, 'utf8'));
-      // One arm, one clear — a single hard deadline, released on every path.
-      expect(code.match(/setTimeout/g), file).toHaveLength(1);
-      expect(code.match(/clearTimeout/g), file).toHaveLength(1);
+      // Each arm released, on every path.
+      expect(code.match(/setTimeout/g), file).toHaveLength(expected);
+      expect(code.match(/clearTimeout/g), file).toHaveLength(expected);
       // Not a repeating or rescheduling timer.
       expect(code, file).not.toMatch(/setInterval|refresh\s*\(\s*\)/);
     }

@@ -14,12 +14,29 @@
  * (ADR-0058 §6, §10). A live async gateway binding is still deferred; the only concrete implementation
  * here is the deterministic fake under `./testing`.
  */
-import type { ModelRequest, ModelResponse } from '@qf-jarvis/model-gateway';
+import type { ModelGatewayErrorCode, ModelRequest, ModelResponse } from '@qf-jarvis/model-gateway';
 
 /** The result of one gateway invocation: a validated response, or a bounded refusal (no raw error). */
 export type ModelGatewayInvocation =
   | { readonly ok: true; readonly response: ModelResponse }
-  | { readonly ok: false; readonly transient: boolean };
+  | {
+      readonly ok: false;
+      readonly transient: boolean;
+      /**
+       * The gateway's own CLOSED error code, when the failure was a real `ModelGatewayError`
+       * (JF-5B-R6). Absent for anything else.
+       *
+       * DIAGNOSTIC ONLY. Nothing routes, retries or decides on it — `transient` is still the whole
+       * behavioural signal, and it is unchanged. This exists because a coarse boolean cannot tell a
+       * rate limit from a timeout from a circuit breaker, and a live run that reported 37 identical
+       * `provider-transient` results could not say which of those it had actually hit.
+       *
+       * It is the gateway's existing vocabulary, not a new one, and it is a closed union: a code cannot
+       * carry a message, a cause, a stack, an HTTP body, a header, a URL or a request id, because
+       * `ModelGatewayError` normalises anything unrecognised to `internal-invariant` at construction.
+       */
+      readonly errorCode?: ModelGatewayErrorCode;
+    };
 
 /** Sends a validated request to the existing gateway and resolves its validated response. May reject. */
 export interface ModelGatewayInvoker {

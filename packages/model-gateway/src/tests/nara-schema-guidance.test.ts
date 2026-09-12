@@ -229,6 +229,25 @@ describe('JF-5B-R4 the repair puts the EXACT schema on the wire as provider guid
     expect(guidance).toContain(JSON.stringify(REPLY_SCHEMA));
   });
 
+  it('states the instruction BEFORE the schema, and ends on the schema', async () => {
+    // Found by a JF-5B-R6 mutation control: reordering the document so the schema precedes the prose
+    // that explains it left every other assertion in this file green. Order is the contract — the model
+    // is told what to do with the document, then given the document, and `JSON Schema:` is the last
+    // thing it reads before the braces. A tidy-up that swapped them would ship silently.
+    const wire = scriptedTransport(VALID_ANSWER);
+    await buildProvider(wire.transport).invoke(invocation());
+    const whole = (sentBody(wire.requests[0]).messages ?? [])[1]?.content ?? '';
+    const serialized = JSON.stringify(REPLY_SCHEMA);
+    const label = 'JSON Schema:';
+    expect(whole.indexOf('Respond with exactly one JSON object')).toBeLessThan(
+      whole.indexOf(label),
+    );
+    expect(whole.indexOf(label)).toBeLessThan(whole.indexOf(serialized));
+    // Nothing follows the schema: a trailing instruction after a long document is an instruction a
+    // model may never reach.
+    expect(whole.endsWith(serialized)).toBe(true);
+  });
+
   it('says only what a provider may say: shape, no extras, no fences, nulls, object only', async () => {
     const wire = scriptedTransport(VALID_ANSWER);
     await buildProvider(wire.transport).invoke(invocation());

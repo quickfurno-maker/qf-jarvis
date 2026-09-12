@@ -84,8 +84,19 @@ export function createLiveModelGatewayInvoker(gateway: ModelGateway): ModelGatew
       } catch (error: unknown) {
         if (isModelGatewayError(error)) {
           // Classified by CODE alone. The message, name and stack are read by nothing here.
-          return Object.freeze({ ok: false as const, transient: TRANSIENT_BY_CODE[error.code] });
+          //
+          // JF-5B-R6 also PRESERVES that code. It was already in hand and was being thrown away, so a
+          // caller could see "transient" and never learn whether it had been rate-limited, timed out or
+          // refused by an open circuit. `transient` is unchanged and is still the only behavioural
+          // signal; `errorCode` is diagnostic, closed, and carries nothing but the code itself.
+          return Object.freeze({
+            ok: false as const,
+            transient: TRANSIENT_BY_CODE[error.code],
+            errorCode: error.code,
+          });
         }
+        // Anything that is not a gateway error keeps the fixed outcome, with NO code: a foreign error
+        // has no closed code to report, and inventing one would be a guess wearing a vocabulary.
         return INTERNAL_FAILURE;
       }
     },
