@@ -848,6 +848,122 @@ All three reviewed prompt digests are unchanged and verified against the built p
 thirty-seven Groq rows never ran, so no binding has a defensible live result. Certification remains
 incomplete until run-9.
 
+## Amendment — JF-5B-R7: the pacing timer that told Node nobody was waiting
+
+**Date:** 2026-09-12. Same PR, same branch, same ADR. **One deleted statement.**
+
+### R7.1 Run-9 was not a provider certification failure
+
+Run-9 ran at exact head `52b4dbc68bd37f55e02f71189ce00f89f2972921`. Everything the previous six
+corrections built worked:
+
+- **Preflight** printed the R6 posture correctly: observed RPM 30, observed TPM 8,000, pacing target
+  TPM 6,000, minimum call interval 15 s, rate-limit cooldown 65 s, same-provider retry 0.
+- **Phase 1** — Groq connectivity succeeded.
+- **Phase 2** — Nara discovery succeeded: **returned 50, eligible 49, rejected 1**.
+- **Phase 2c** — succeeded, and produced a better result than run-8:
+
+| alias                         | phase 2c                                           |
+| ----------------------------- | -------------------------------------------------- |
+| `agnes-2.5-flash`             | PASS 2/2                                           |
+| `laguna-s-2.1`                | PASS 2/2                                           |
+| `stepfun-3.7-flash`           | PASS 2/2                                           |
+| `ling-3.0-flash-fin-free`     | FAIL `provider-terminal:provider-failed`           |
+| `nemotron-3.5-lightning-free` | FAIL `provider-terminal:malformed-provider-output` |
+
+**Three** aliases passed the hard gates this time rather than two, and the unchanged scorer selected
+**`laguna-s-2.1`**. The two failures are named by the R6 bounded error code — the first time a
+per-candidate rejection in this lane has carried the gateway's own closed token rather than a coarse
+class.
+
+Then phase 3 began and the process terminated immediately:
+
+```
+Warning: Detected unsettled top-level await at
+  .../apps/api/dist/bin/run-jf5b-live-certification.js:13
+const outcome = await runJf5bLiveCertificationCli(...)
+```
+
+**No phase-3 certification result was produced.** Not one row.
+
+### R7.2 The root cause, proved before anything was edited
+
+`apps/api/src/composition/jf5b-live-composition.ts` supplied the real pacing sleeper, and its timer
+called `timer.unref()`. `unref` tells Node that a timer must not keep the process alive. The promise
+that `bin/run-jf5b-live-certification.js:13` top-level-awaits is resolved, transitively, by that timer
+firing. So at the first pacing wait Node looked at an event loop with nothing referenced in it,
+concluded the program had finished, and exited — while the await was still suspended.
+
+The comment above the call stated the mistake plainly: _"a one-shot executable that has finished its
+work should exit, not linger on a timer."_ The executable had **not** finished its work. It was pacing,
+and pacing is part of the work.
+
+This was demonstrated executably at the starting head, before any edit, by lifting the production
+sleeper's own bytes into a child `node` process under a real top-level await:
+
+| child                      | exit | stdout    | stderr                               |
+| -------------------------- | ---: | --------- | ------------------------------------ |
+| the shipped bytes          |   13 | _(empty)_ | `Detected unsettled top-level await` |
+| the same bytes, no `unref` |    0 | sentinel  | _(empty)_                            |
+
+Exit 13 is Node's own code for an unsettled top-level await. The reproduction is exact.
+
+**What this was not:** a Groq failure, a Nara failure, a rate limit, a matcher failure, a routing
+failure, a top-level-await syntax problem, or any reason to touch the pacing arithmetic. Run-9 is an
+**operator executable liveness defect**, and it should not be recorded as a certification failure.
+
+### R7.3 Why nothing caught it
+
+Every R6 pacing spec injects a fake sleeper that returns `Promise.resolve()`. A microtask resolves
+whether or not the event loop holds anything, so no in-process assertion could observe liveness at all.
+The only sleeper that could ever have exhibited the defect was the one no test ran.
+
+Whether a timer holds Node's event loop open is a property of a **process**. It is observable by running
+one and seeing whether it survives, and by nothing else.
+
+### R7.4 The fix, and its regression
+
+The fix is the deletion of `timer.unref();` — one statement. The timer is still armed once and cleared
+once, as every timer in this application is. The invariant now sits where the next editor will read it:
+
+> The real JF-5B pacing timer stays referenced because the awaited pacing delay is part of the live
+> certification work. Tests inject fake sleepers, so CI does not wait.
+
+`apps/api/src/tests/jf5b-pacing-liveness.test.ts` takes the production sleeper's bytes out of the
+source, writes them to a temporary module, and runs them in a real child `node` process under a real
+top-level await. It asserts exit 0, the sentinel printed, no `unsettled top-level await` on stderr, and
+that the sleep actually took the time it was asked for rather than resolving immediately. A **negative
+control** re-inserts `.unref()` and asserts that this very harness then fails — so a green result means
+the defect is absent, not that the test stopped looking. A source lock asserts the JF-5B composition
+unrefs no timer at all.
+
+The lock is deliberately **scoped to this file** and is not a repository-wide ban. `groq-staging-smoke`
+and the Riya spend gate both unref on purpose, and a spec there says so. The rule is about what a timer
+MEANS: a timer nobody awaits must not hold a finished process open; a timer that resolves an awaited
+promise must not pretend the process is finished.
+
+Cost to CI: about half a second, no network, no credential, no TTY, and no 15-second wait.
+
+`apps/api` spec-import containment was **narrowed with a note** rather than relaxed: a second spec may
+now import `node:child_process`, for the reason above, and every network module stays forbidden to it.
+
+### R7.5 What did not change
+
+The R6 pacing constants (observed RPM 30 / RPD 1,000 / TPM 8,000 / TPD 200,000; target TPM 6,000;
+minimum interval 15,000 ms; cooldown 65,000 ms) and the R6 formula
+(`tokenDelayMs = ceil(totalTokens / 6000 * 60_000)`, `max(15_000, tokenDelayMs)`, minus elapsed,
+65,000 ms after a rate limit, no retry of a failed case). The bounded `ModelGatewayErrorCode` and its
+no-raw-leakage guarantee. The R6 forbidden-claim matcher, the corpus and the universal claim list. Groq
+strict structured output; Nara `json_object` plus exact schema guidance; Nara strict capability
+`false`. The six provider×agent matrix, AUTO, Mastra, Core, RAG, `retryBudget = 0`, no production
+seal, zero migrations, zero new dependencies. All three prompt digests.
+
+Not one of those files appears in the R7 diff. The production change is one deleted statement in one
+file.
+
+**JF-5B remains incomplete.** Run-9 produced no phase-3 evidence, so no binding has a live result.
+Certification remains incomplete until run-10.
+
 ## Consequences
 
 Positive: the certification harness is complete, fully tested with zero network calls, and the live run
@@ -863,15 +979,19 @@ Negative, and accepted:
 
 ## Next
 
-**JF-5B live execution as run-9**, by the owner, at a terminal, with the SAME five Free-plan aliases,
-the Groq pacing of §R6.4 and the repaired matcher of §R6.6.
+**JF-5B live execution as run-10**, by the owner, at a terminal, with the SAME five Free-plan aliases,
+the Groq pacing of §R6.4, the repaired matcher of §R6.6 and the timer liveness fix of §R7.4.
 
-Run-9 will take materially longer than run-8 by design: the Groq column now waits at least fifteen
+**The process must stay alive during Groq pacing waits.** Phase 3 will look idle for stretches of
+fifteen seconds and longer; that is the pacer working, not the run hanging. Do not interrupt it.
+
+Run-10 will take materially longer than run-8 by design: the Groq column waits at least fifteen
 seconds between model-required calls, and longer after an expensive turn. That is the cost of staying
 inside an 8,000 TPM lane, and a slow run that completes is worth more than a fast one that does not.
+Run-9 never reached that cost — it exited at the first wait.
 
-Expect from run-9 either a certification, or a failure that names its provider, agent, case AND — now —
-its closed gateway error code. Make the next correction only from those. Then **JF-5C** — owner
+Expect from run-10 either a certification, or a failure that names its provider, agent, case AND — since
+R6 — its closed gateway error code. Make the next correction only from those. Then **JF-5C** — owner
 production evidence seal.
 
 Should the Groq column still return `provider-transient:rate-limited` at this pace, the remaining

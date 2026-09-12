@@ -876,18 +876,30 @@ describe('(78, 79, 80, 81) repository invariants', () => {
     const specs = readdirSync(dir).filter((name) => name.endsWith('.ts'));
     expect(specs.length).toBeGreaterThan(0);
     /**
-     * The ONE spec permitted to spawn a process, and only `node:child_process`.
+     * The specs permitted to spawn a process, and only `node:child_process`.
      *
      * `deployment-containment.test.ts` proves the merged-main deployment guard by RUNNING it: a
      * guard deciding whether unreviewed code can reach production is worth executing against real
      * commits — including a real unmerged one — rather than pattern-matching its source.
      *
-     * The exception is narrow on purpose. It buys process spawning and nothing else: the network
-     * modules below stay forbidden for this spec too, and its fixture is a throwaway git repository
-     * whose `origin` is a local bare repo, so it reaches no network even while exercising a code
-     * path that fetches. Every other spec remains fully hermetic.
+     * `jf5b-pacing-liveness.test.ts` is the second, added in JF-5B-R7 and for the same kind of
+     * reason. Run-9 died at the first pacing wait because the production sleeper `unref`ed the timer
+     * its awaited promise depended on, and NO in-process assertion could have caught it: whether a
+     * timer holds Node's event loop open is a property of a process, observable only by running one
+     * and seeing whether it survives. Every R6 pacing spec passed against a fake sleeper that
+     * resolves a microtask. So this spec writes the production sleeper's own bytes to a temporary
+     * module and runs it under a real top-level `await`.
+     *
+     * The exception is narrow on purpose, for both. It buys process spawning and nothing else: the
+     * network modules below stay forbidden for these specs too. The deployment fixture is a throwaway
+     * git repository whose `origin` is a local bare repo, so it reaches no network even while
+     * exercising a code path that fetches; the liveness child imports nothing, opens no socket, reads
+     * no credential, and is deleted with its directory. Every other spec remains fully hermetic.
      */
-    const PROCESS_CAPABLE = 'deployment-containment.test.ts';
+    const PROCESS_CAPABLE: readonly string[] = Object.freeze([
+      'deployment-containment.test.ts',
+      'jf5b-pacing-liveness.test.ts',
+    ]);
 
     /**
      * The ONE spec permitted to import `node:http`, and only that.
@@ -908,7 +920,7 @@ describe('(78, 79, 80, 81) repository invariants', () => {
       const statements = text.match(/^import[\s\S]*?from\s*['"][^'"]+['"]/gm) ?? [];
       expect(statements.length).toBeGreaterThan(0);
       for (const statement of statements) {
-        if (name === PROCESS_CAPABLE) {
+        if (PROCESS_CAPABLE.includes(name)) {
           expect(statement, name).not.toMatch(/node:(net|http|https|dns|tls|dgram)/);
         } else if (name === LOOPBACK_HTTP_CAPABLE) {
           expect(statement, name).not.toMatch(/node:(net|https|dns|tls|dgram|child_process)/);

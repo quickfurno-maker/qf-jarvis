@@ -256,7 +256,8 @@ export function createDefaultJf5bCliDeps(argv: readonly string[]): Jf5bCliDeps {
     discoveryTransport: systemDiscoveryTransport(),
     // JF-5B-R6: the real pacing seams. A wall clock and a real sleeper, supplied ONLY here — every
     // spec omits both, so no test ever waits. This is evaluation pacing for a one-time certification
-    // run; no serving path is paced and no production policy changes.
+    // run; no serving path is paced and no production policy changes. The sleeper holds the event loop
+    // for the length of each wait (JF-5B-R7), because the run is not finished while it is pacing.
     runner: createJf5bCertificationRunner({
       pacingClock: { now: () => Date.now() },
       pacingSleeper: {
@@ -269,9 +270,16 @@ export function createDefaultJf5bCliDeps(argv: readonly string[]): Jf5bCliDeps {
               clearTimeout(timer);
               resolve();
             }, ms);
-            // Never keep the process alive for a pacing wait: a one-shot executable that has finished
-            // its work should exit, not linger on a timer.
-            timer.unref();
+            // The real JF-5B pacing timer stays referenced because the awaited pacing delay is part of
+            // the live certification work. Tests inject fake sleepers, so CI does not wait.
+            //
+            // JF-5B-R7: this timer was `unref`ed, on the reasoning that a one-shot executable should not
+            // linger. That reasoning inverts the facts. `unref` is right for a timer NOBODY awaits — an
+            // abort deadline, a spend gate — because such a timer must not hold a finished process
+            // open. This one resolves the promise the top-level `await` in `bin/` is suspended on, so
+            // unrefing it told Node that nothing was waiting while something was. Run-9 reached the
+            // first pacing wait and the process exited with `Detected unsettled top-level await`,
+            // producing no phase-3 evidence at all.
           }),
       },
     }),
