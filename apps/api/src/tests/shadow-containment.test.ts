@@ -208,7 +208,12 @@ describe('(127-132) no live model id, tool, workflow or database path', () => {
         // naming a model id at all.
         const code = codeOnly(text);
         expect(code.match(/gpt-oss/g), file).toHaveLength(1);
-        expect(code, file).toContain("JF5B_GROQ_MODEL_ID = 'openai/gpt-oss-20b'");
+        // CANDIDATE UPDATED, rule unchanged (JF-5B-R10). The rule is "a model id may be hard-coded in
+        // exactly one JF-5B constant and nowhere else", and that is untouched. What changed is WHICH
+        // model JF-5B certifies: run-12 proved `openai/gpt-oss-20b` cannot hold Riya's schema under
+        // strict constrained generation, and `openai/gpt-oss-120b` is already permitted on the same
+        // project at the same limits. One constant, one model, still pinned and never floating.
+        expect(code, file).toContain("JF5B_GROQ_MODEL_ID = 'openai/gpt-oss-120b'");
         expect(code, file).not.toContain('latest');
         expect(code, file).not.toContain("modelId: '*'");
         // Still no endpoint: the host stays inside the gateway's own guarded transport.

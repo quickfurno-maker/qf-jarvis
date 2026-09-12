@@ -54,6 +54,7 @@ import type {
 } from '@qf-jarvis/jarvis-v1-provider-certification-live';
 
 import { renderSchemaIssues } from '@qf-jarvis/jarvis-v1-provider-certification-live';
+import { JF5B_GROQ_MODEL_ID } from '../composition/jf5b-certification-runner-impl.js';
 import type {
   CertificationRunner,
   Jf5bCaseDiagnostic,
@@ -381,6 +382,7 @@ export async function runJf5bLiveCertificationCli(
     outputDirectory: deps.facts.resolvedOutputDirectory,
     runId: deps.runId,
     naraCandidates: parsed.naraCandidates,
+    groqCertificationModelId: JF5B_GROQ_MODEL_ID,
   })) {
     deps.io.out(line);
   }

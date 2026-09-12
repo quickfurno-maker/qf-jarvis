@@ -159,17 +159,56 @@ const EVALUATION_CIRCUIT = Object.freeze({ failureThreshold: 1_000, cooldownMs: 
 const MAX_INPUT_TOKENS = 16_384;
 const MAX_COMPLETION_TOKENS = 4_096;
 
-/** The exact Groq model JF-5B certifies. Pinned; never `latest`, never a floating alias. */
-export const JF5B_GROQ_MODEL_ID = 'openai/gpt-oss-20b';
+/**
+ * The exact Groq model JF-5B certifies. Pinned; never `latest`, never a floating alias.
+ *
+ * ### Why this moved from 20B to 120B (JF-5B-R10)
+ *
+ * Run-12 turned eight Groq/RIYA inconclusives into a diagnosis. Every one was HTTP 400 with Groq's own
+ * closed `json_validate_failed`, and every `failed_generation` was a COMPLETE, syntactically valid JSON
+ * object -- opening brace to closing brace, not schema-document-shaped, usually carrying both of Riya's
+ * root keys. What the local schema then found were ordinary shape and value violations:
+ * `evolution.version:invalid_value`, `evolution.skipProjectDetails:invalid_type`,
+ * `evolution.questionPlan:invalid_type`, `evolution.observations:invalid_type`,
+ * `(root):unrecognized_keys`.
+ *
+ * So it is not rate limiting, not truncation, not a request the provider rejected before generating, not
+ * a schema-document echo, not authentication and not routing. `openai/gpt-oss-20b` under strict
+ * constrained generation simply does not hold Riya's production-shaped schema reliably in this lane --
+ * while the SAME provider, model and strict mode pass every Anisha and Aarohi row.
+ *
+ * `openai/gpt-oss-120b` is already permitted on the owner's project, carries the SAME free-plan limits
+ * (30 RPM, 1,000 RPD, 8,000 TPM, 200,000 TPD), and is documented as supporting `strict: true` structured
+ * outputs. So the correction is a CANDIDATE SUBSTITUTION and nothing else: one provider, one model, the
+ * same strict mode, the same token bounds, the same pacing, the same retry budget of zero, and no
+ * agent-specific routing anywhere. Provider selection remains the Model Gateway's alone.
+ *
+ * 20B is NOT retained as a fallback. A hidden second model would mean a certification that could not say
+ * which model earned it.
+ */
+export const JF5B_GROQ_MODEL_ID = 'openai/gpt-oss-120b';
+
+/**
+ * The catalogue snapshot label, UNCHANGED (JF-5B-R10).
+ *
+ * It names the DATE the reviewed release set was snapshotted, not the model inside it, and the label is
+ * paired with `modelId` everywhere it is recorded -- so a receipt already says which model served. No
+ * invariant ties the label to a model, and inventing a new snapshot identity for a candidate swap would
+ * claim a review that did not happen.
+ */
 export const JF5B_CATALOGUE_LABEL = 'certification-snapshot-2026-09-11';
 
 /**
  * The per-call spend charged to the ledger BEFORE the call is made.
  *
- * An estimate, deliberately pessimistic for a 20B-class hosted model at these token bounds. It is a
+ * An estimate, deliberately pessimistic for a hosted GPT-OSS-class model at these token bounds. It is a
  * ceiling mechanism, not an invoice: charging before the call is what makes the ceiling binding, and
  * charging high is what keeps a surprise on the provider's side from becoming a surprise on the
  * owner's. At 0.01 USD, the whole run cannot pass the 10 USD ceiling before the call counters do.
+ *
+ * Re-audited for the 120B candidate (JF-5B-R10) and left unchanged. At the pinned ceilings -- 16,384
+ * input and 4,096 completion tokens -- a single call at 120B published list pricing remains well under a
+ * cent, so one cent per call is still the conservative direction. The 10 USD ceiling is not loosened.
  */
 const PER_CALL_SPEND_USD = 0.01;
 

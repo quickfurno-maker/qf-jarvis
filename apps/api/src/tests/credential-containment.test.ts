@@ -393,7 +393,12 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
         // naming the exact model a certification run measured is the opposite of that failure, and a
         // floating alias would be the real one. The narrow exception is the model-id constant.
         if (forbidden === 'openai' && isJf5bFile(file, [JF5B_RUNNER_IMPL])) {
-          expect(code, file).toContain("jf5b_groq_model_id = 'openai/gpt-oss-20b'");
+          // CANDIDATE UPDATED, rule unchanged (JF-5B-R10). The rule is "a model id may be hard-coded in
+          // exactly one JF-5B constant and nowhere else", and that is untouched. What changed is WHICH
+          // model JF-5B certifies: run-12 proved `openai/gpt-oss-20b` cannot hold Riya's schema under
+          // strict constrained generation, and `openai/gpt-oss-120b` is already permitted on the same
+          // project at the same limits. One constant, one model, still pinned and never floating.
+          expect(code, file).toContain("jf5b_groq_model_id = 'openai/gpt-oss-120b'");
           // Still no SDK and no client: the id is a string, and the transport stays in the gateway.
           expect(code, file).not.toContain("from 'openai");
           continue;

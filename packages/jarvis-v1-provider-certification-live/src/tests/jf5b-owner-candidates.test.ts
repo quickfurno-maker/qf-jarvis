@@ -237,6 +237,7 @@ describe('JF-5B-R3 the owner sees the exact candidate set before typing the phra
       ciConclusion: 'success',
       outputDirectory: 'D:/jarvis-certification/JF-5B/run-5',
       runId: 'run.jf5b.001',
+      groqCertificationModelId: 'openai/gpt-oss-120b',
       naraCandidates,
     }).join('\n');
 

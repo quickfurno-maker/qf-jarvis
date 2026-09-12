@@ -459,9 +459,28 @@ describe('JF-5B-R5 nothing about certification SEMANTICS moved', () => {
     // nothing asserted what JF-5B sets it to. Silently building a non-strict Groq provider would make
     // every `json_validate_failed` diagnostic in R9 describe a request nobody meant to send.
     const runner = read('../composition/jf5b-certification-runner-impl.ts');
-    expect(runner).toContain("export const JF5B_GROQ_MODEL_ID = 'openai/gpt-oss-20b';");
+    // CANDIDATE UPDATED, posture unchanged (JF-5B-R10). Strict stays true and the id stays pinned to
+    // one exact model; only which model JF-5B certifies moved, and for live-proved reasons.
+    expect(runner).toContain("export const JF5B_GROQ_MODEL_ID = 'openai/gpt-oss-120b';");
     expect(runner).toContain('supportsStrictJsonSchema: true,');
     expect(runner).not.toContain('supportsStrictJsonSchema: false');
+    // NO hidden fallback: 20B appears in no CODE, and exactly one Groq provider is built. The R10 header
+    // above the constant does name 20B, because it explains why the candidate moved — documentation, not
+    // a second model anything can reach.
+    const NEWLINE = String.fromCharCode(10);
+    const runnerCode = runner
+      .replace(/\/\*[\s\S]*?\*\//gu, '')
+      .split(NEWLINE)
+      .filter((line) => !/^\s*\/\//u.test(line))
+      .join(NEWLINE);
+    expect(runnerCode).not.toContain('gpt-oss-20b');
+    expect(runnerCode.match(/new GroqModelProvider\(/gu)).toHaveLength(1);
+    // NO agent-specific model routing: the id is a module constant, never chosen per agent.
+    expect(runner).not.toMatch(/agent === '(RIYA|ANISHA|AAROHI)'[^;]*openai\//u);
+    // The ceilings and the reservation the candidate was re-audited against.
+    expect(runner).toContain('const MAX_INPUT_TOKENS = 16_384;');
+    expect(runner).toContain('const MAX_COMPLETION_TOKENS = 4_096;');
+    expect(runner).toContain('const PER_CALL_SPEND_USD = 0.01;');
   });
 
   it('the Nara schema guidance and the Groq strict path are untouched', () => {

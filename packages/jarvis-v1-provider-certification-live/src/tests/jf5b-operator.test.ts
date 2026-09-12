@@ -590,6 +590,46 @@ describe('JF-5B (G) a case record is content-free and pins retry at zero', () =>
 // The preflight summary: every fact a person needs before typing the phrase.
 // ---------------------------------------------------------------------------
 
+describe('JF-5B-R10 the preflight separates the smoke from the certification model', () => {
+  const lines = renderPreflightSummary({
+    headSha: 'c'.repeat(40),
+    worktreeClean: true,
+    ciRunId: '34700000001',
+    ciConclusion: 'success',
+    outputDirectory: 'D:/jarvis-certification/JF-5B/run-13',
+    runId: 'run.jf5b.013',
+    groqCertificationModelId: 'openai/gpt-oss-120b',
+    naraCandidates: [],
+  }).join(String.fromCharCode(10));
+
+  it('names BOTH, so the owner never edits a local smoke file to change a candidate', () => {
+    // Two different things. Phase 1 proves a credential and a host with whatever model the supplied
+    // smoke config names; phase 3 certifies the model below. Conflating them cost an owner a pointless
+    // edit, which is why they are printed adjacently and labelled by phase.
+    expect(lines).toContain(
+      'groq connectivity smoke  as supplied by --groq-smoke-config (phase 1 only)',
+    );
+    expect(lines).toContain('groq certification model openai/gpt-oss-120b (phase 3)');
+  });
+
+  it('renders the model it was GIVEN, never a literal of its own', () => {
+    // The package sits below the application that owns the candidate constant. A literal here would be a
+    // second place for the model id to live, and the two would drift the first time either changed.
+    const other = renderPreflightSummary({
+      headSha: 'c'.repeat(40),
+      worktreeClean: true,
+      ciRunId: '34700000001',
+      ciConclusion: 'success',
+      outputDirectory: 'D:/jarvis-certification/JF-5B/run-13',
+      runId: 'run.jf5b.013',
+      groqCertificationModelId: 'some/other-model',
+      naraCandidates: [],
+    }).join(String.fromCharCode(10));
+    expect(other).toContain('groq certification model some/other-model (phase 3)');
+    expect(other).not.toContain('gpt-oss');
+  });
+});
+
 describe('JF-5B (C) the preflight states every non-secret fact, and no secret', () => {
   const lines = renderPreflightSummary({
     headSha: 'b'.repeat(40),
@@ -598,6 +638,7 @@ describe('JF-5B (C) the preflight states every non-secret fact, and no secret', 
     ciConclusion: 'success',
     outputDirectory: 'D:/jarvis-certification/JF-5B/run-1',
     runId: 'run.jf5b.001',
+    groqCertificationModelId: 'openai/gpt-oss-120b',
     // No owner decision: the metadata-driven shortlist applies, exactly as it did before JF-5B-R3.
     naraCandidates: [],
   });

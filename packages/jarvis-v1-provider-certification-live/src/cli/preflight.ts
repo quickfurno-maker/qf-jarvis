@@ -52,6 +52,15 @@ export interface PreflightFacts {
   readonly runId: string;
   /** The owner-supplied Nara candidates, or empty for the metadata-driven shortlist. */
   readonly naraCandidates: readonly string[];
+  /**
+   * The Groq model PHASE 3 certifies (JF-5B-R10).
+   *
+   * Supplied by the application, because the candidate is an application constant and this package sits
+   * below it. Printed beside the connectivity smoke so the owner can see that the two are DIFFERENT
+   * things: phase 1 proves a credential and a host reach Groq at all, using whatever model the local
+   * smoke file names, and phase 3 is the certification of this one.
+   */
+  readonly groqCertificationModelId: string;
 }
 
 /**
@@ -90,6 +99,11 @@ export function renderPreflightSummary(facts: PreflightFacts): readonly string[]
     '',
     '  providers              groq (primary), nara (fallback)',
     `  groq host              ${GROQ_CHAT_HOST}`,
+    // JF-5B-R10. TWO different things, printed adjacently because conflating them costs an owner a
+    // pointless edit to a local file. Phase 1 proves the credential and the host with whatever model the
+    // supplied smoke config names; phase 3 certifies the model below. The smoke file is not touched.
+    '  groq connectivity smoke  as supplied by --groq-smoke-config (phase 1 only)',
+    `  groq certification model ${facts.groqCertificationModelId} (phase 3)`,
     `  nara chat host         ${NARA_CHAT_HOST}`,
     `  nara discovery         GET ${NARA_MODELS_ENDPOINT}`,
     // The owner must SEE the exact candidate set before typing the phrase. A decision nobody can read
