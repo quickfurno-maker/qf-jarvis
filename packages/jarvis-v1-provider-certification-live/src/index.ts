@@ -200,3 +200,30 @@ export {
   renderPreflightSummary,
 } from './cli/preflight.js';
 export type { CertifyArgv, PreflightFacts } from './cli/preflight.js';
+
+// The JF-5B-ONLY phase-3 root-cause diagnostics (JF-5B-R8). Evaluation-only, like the pacer above: a
+// spec pins the exact set of files permitted to name them, and no serving path is among them.
+export {
+  groqFactsFrom,
+  groqMalformedStage,
+  naraFactsFrom,
+  naraMalformedStage,
+  observeGroqTransport,
+  observeNaraTransport,
+  renderWireDiagnostic,
+} from './diagnostics/jf5b-wire-observer.js';
+export type {
+  GroqWireFacts,
+  MalformedStage,
+  MessageContentKind,
+  NaraWireFacts,
+  ObservedGroqTransport,
+  ObservedNaraTransport,
+  WireObserver,
+} from './diagnostics/jf5b-wire-observer.js';
+export {
+  MAX_SCHEMA_ISSUES,
+  SCHEMA_ISSUES_UNAVAILABLE,
+  renderSchemaIssues,
+  schemaIssueTokens,
+} from './diagnostics/jf5b-schema-issues.js';

@@ -108,6 +108,7 @@ import type {
   CertifyAllInput,
   CertifyAllResult,
   CertificationRunner,
+  Jf5bCaseDiagnostic,
   NaraProbeSummary,
   NaraSelectionInput,
   NaraSelectionResult,
@@ -120,8 +121,20 @@ import {
   createCertificationRiyaService,
   createCertificationRuntime,
 } from './jf5b-certification-context.js';
+import type { ZodType } from 'zod';
+
+import {
+  groqMalformedStage,
+  naraMalformedStage,
+  observeGroqTransport,
+  observeNaraTransport,
+  renderWireDiagnostic,
+  schemaIssueTokens,
+} from '@qf-jarvis/jarvis-v1-provider-certification-live';
 import { UNIVERSAL_FORBIDDEN_CLAIMS, casesFor } from './jf5b-case-corpus.js';
-import { assertedForbiddenClaim } from './jf5b-forbidden-claim-matcher.js';
+import { findForbiddenClaim } from './jf5b-forbidden-claim-matcher.js';
+import { buildClaimExcerpt } from './jf5b-claim-excerpt.js';
+import type { ForbiddenClaimHit } from './jf5b-forbidden-claim-matcher.js';
 import type { GovernedCase } from './jf5b-case-corpus.js';
 
 /** Bounded, and one at a time. Concurrency is not what is measured, and order aids diagnosis. */
@@ -307,10 +320,21 @@ interface CaseCapture {
   failure: string | undefined;
   /** The gateway's closed code alone, for the pacer. Never a message. */
   errorCode: ModelGatewayErrorCode | undefined;
+  /**
+   * The sanitized wire diagnostic for a TERMINAL provider failure (JF-5B-R8).
+   *
+   * A bounded string of `key=value` pairs over the observer's structural facts: where a malformed
+   * decision was taken, the finish reason, the token counts. Never a body, a content or a message.
+   */
+  diagnostic: string | undefined;
+  /** `path:code` tokens for a `structured-output-invalid`, at most eight. Never a value or a message. */
+  schemaIssues: readonly string[] | undefined;
 }
 
 function newCapture(): CaseCapture {
   return {
+    diagnostic: undefined,
+    schemaIssues: undefined,
     calls: 0,
     attempts: 0,
     usedFallback: false,
@@ -341,6 +365,7 @@ function recordingInvoker(
   posture: 'GROQ_ONLY' | 'NARA_ONLY' | 'AUTO',
   ledger: CallLedger,
   capture: CaseCapture,
+  diagnostics?: CaseDiagnostics,
 ): ModelGatewayInvoker {
   const primary: CertifiedProvider = posture === 'NARA_ONLY' ? 'nara' : 'groq';
   return Object.freeze({
@@ -360,6 +385,16 @@ function recordingInvoker(
         const coarse = result.transient ? 'provider-transient' : 'provider-terminal';
         capture.failure = result.errorCode === undefined ? coarse : `${coarse}:${result.errorCode}`;
         capture.errorCode = result.errorCode;
+        // JF-5B-R8. The gateway has ALREADY decided; this asks the observer what it saw on the wire that
+        // produced that decision, and asks the governed schema which of its fields were refused. Neither
+        // question can change `result`, which is returned below exactly as it arrived.
+        if (diagnostics !== undefined && result.errorCode !== undefined) {
+          capture.diagnostic = diagnostics.diagnosticFor(primary, result.errorCode);
+          if (result.errorCode === 'structured-output-invalid') {
+            const issues = diagnostics.schemaIssuesFor(primary, request.structuredSchema);
+            capture.schemaIssues = issues.length === 0 ? undefined : issues;
+          }
+        }
         return result;
       }
       const response = result.response;
@@ -431,12 +466,26 @@ function releaseFor(provider: CertifiedProvider, modelId: string): ModelReleaseR
  * The occurrence-level rule lives in `jf5b-forbidden-claim-matcher.ts`: a hit by default, suppressed
  * only inside a clear explicit refusal in the same clause, and any unrefused occurrence fails the case.
  */
-function forbiddenClaimHit(raw: string | undefined, governed: GovernedCase): string | undefined {
+function forbiddenClaimHit(
+  raw: string | undefined,
+  governed: GovernedCase,
+): ForbiddenClaimHit | undefined {
   // The SAME claim lists, unchanged and un-shortened — the case's own plus the universal set. What
   // changed in JF-5B-R6 is the question asked of each occurrence: does the answer ASSERT the claim, or
   // mention it while clearly refusing it? Run-8 failed three rows for producing exactly the refusal the
   // fixture was written to reward.
-  return assertedForbiddenClaim(raw, [...governed.forbiddenClaims, ...UNIVERSAL_FORBIDDEN_CLAIMS]);
+  //
+  // JF-5B-R6 asked the search for a verdict. JF-5B-R8 asks the SAME search for the claim and the
+  // position it already had: run-10's seven forbidden-claim FAILs name a rule without showing the text
+  // it fired on, which is how R6 came to exist in the first place. One search, two questions.
+  return findForbiddenClaim(raw, [...governed.forbiddenClaims, ...UNIVERSAL_FORBIDDEN_CLAIMS]);
+}
+
+/** The non-PASS diagnostic rows, in execution order. A fully passing run produces none. */
+function diagnosticsOf(executed: readonly ExecutedCase[]): readonly Jf5bCaseDiagnostic[] {
+  return Object.freeze(
+    executed.flatMap((one) => (one.diagnostic === undefined ? [] : [one.diagnostic])),
+  );
 }
 
 /** One executed case, with the raw text kept beside the sanitized record rather than inside it. */
@@ -444,6 +493,24 @@ interface ExecutedCase {
   readonly record: LiveCaseRecord;
   readonly raw: string | undefined;
   readonly governed: GovernedCase;
+  /** The sanitized R8 diagnostic row, present only for a NON-PASS case. */
+  readonly diagnostic: Jf5bCaseDiagnostic | undefined;
+}
+
+/**
+ * What the runner may ask the wire observers, per case (JF-5B-R8).
+ *
+ * Two questions and a forget. The runner never sees an HTTP response, a body, a header or a content
+ * string; it asks for a rendered diagnostic line and, for a schema rejection, a list of `path:code`
+ * tokens. Both answers are bounded strings by the time they arrive here.
+ */
+interface CaseDiagnostics {
+  /** Forget the previous case. Called before the turn, so a diagnostic can never describe another call. */
+  reset(): void;
+  /** The sanitized wire line for a terminal failure, or `undefined` if no exchange was observed. */
+  diagnosticFor(provider: CertifiedProvider, errorCode: ModelGatewayErrorCode): string | undefined;
+  /** `path:code` tokens for a structured rejection, from the value the observer still holds in memory. */
+  schemaIssuesFor(provider: CertifiedProvider, schema: ZodType | undefined): readonly string[];
 }
 
 interface RunCaseInput {
@@ -463,6 +530,8 @@ interface RunCaseInput {
    * failed case is ever re-executed because of it.
    */
   readonly pacer?: GroqLivePacer;
+  /** The wire observers (JF-5B-R8). Absent means the run produces no wire diagnostics. */
+  readonly diagnostics?: CaseDiagnostics;
 }
 
 /**
@@ -480,11 +549,13 @@ async function runOneCase(input: RunCaseInput): Promise<ExecutedCase> {
   const dataClass = governed.dataClass ?? 'HOSTED_ALLOWED';
 
   const capture = newCapture();
+  input.diagnostics?.reset();
   const invoker = recordingInvoker(
     createEvaluationInvoker(input.gateway),
     input.posture,
     input.ledger,
     capture,
+    input.diagnostics,
   );
 
   // Before the call, not after: the wait is what keeps the NEXT request inside the lane the previous one
@@ -625,7 +696,33 @@ async function runOneCase(input: RunCaseInput): Promise<ExecutedCase> {
     throw new Error('jf5b-mastra-traversal-count');
   }
 
-  return { record, raw: capture.rawText, governed };
+  // JF-5B-R8. Built AFTER `outcome` and `record` are final, from values already computed: the wire
+  // facts the observer rendered, the schema tokens the governed schema produced, and the very hit the
+  // verdict rests on. Nothing here is read back into the record, and a PASS produces no row at all.
+  const excerpt =
+    hit === undefined || capture.rawText === undefined
+      ? undefined
+      : buildClaimExcerpt({
+          raw: capture.rawText,
+          at: hit.at,
+          claim: hit.claim,
+          dimension: governed.dimension,
+        });
+  const diagnostic: Jf5bCaseDiagnostic | undefined =
+    record.outcome === 'PASS'
+      ? undefined
+      : Object.freeze({
+          provider: input.provider,
+          agent,
+          caseId: governed.caseId,
+          ...(capture.diagnostic === undefined ? {} : { wireDiagnostic: capture.diagnostic }),
+          ...(capture.schemaIssues === undefined ? {} : { schemaIssues: capture.schemaIssues }),
+          ...(hit === undefined ? {} : { matchedClaim: hit.claim }),
+          ...(excerpt?.kind !== 'EXCERPT' ? {} : { excerpt: excerpt.excerpt }),
+          ...(excerpt?.kind !== 'OMITTED' ? {} : { excerptOmitted: excerpt.reason }),
+        });
+
+  return { record, raw: capture.rawText, governed, diagnostic };
 }
 
 // ---------------------------------------------------------------------------
@@ -760,10 +857,62 @@ export function createJf5bCertificationRunner(seams: Jf5bRunnerSeams = {}): Cert
       ? undefined
       : createGroqLivePacer(seams.pacingClock, seams.pacingSleeper);
   const clock = (): string => new Date().toISOString().replace(/\.\d{3}Z$/u, 'Z');
+  // JF-5B-R8. ONE observer pair per runner, wrapping whichever transport the gateway would have used:
+  // the injected one in a spec, the real fetch one in a live run. The `??` default moves up here so the
+  // observed transport is always the transport, rather than the gateway quietly building an unobserved
+  // one behind the wrapper. Each delegates exactly once and returns the inner response object itself.
+  const groqWire = observeGroqTransport(seams.groqTransport ?? createFetchGroqTransport());
+  const naraWire = observeNaraTransport(seams.naraTransport ?? createFetchNaraTransport());
+
   const wire = <T extends Jf5bGatewayDeps>(deps: T): T & Jf5bRunnerSeams => ({
     ...deps,
-    ...(seams.groqTransport === undefined ? {} : { groqTransport: seams.groqTransport }),
-    ...(seams.naraTransport === undefined ? {} : { naraTransport: seams.naraTransport }),
+    groqTransport: groqWire.transport,
+    naraTransport: naraWire.transport,
+  });
+
+  /**
+   * The two questions the runner may ask the wire, and the forget that bounds them to one case.
+   *
+   * `diagnosticFor` answers only for a TERMINAL failure. A transient one — a rate limit, a timeout — is
+   * already fully named by its closed code, and a wire line describing an HTTP 429 body would add
+   * nothing but surface area.
+   */
+  const caseDiagnostics: CaseDiagnostics = Object.freeze({
+    reset: (): void => {
+      groqWire.observer.reset();
+      naraWire.observer.reset();
+    },
+    diagnosticFor: (
+      provider: CertifiedProvider,
+      errorCode: ModelGatewayErrorCode,
+    ): string | undefined => {
+      if (errorCode !== 'malformed-provider-output' && errorCode !== 'structured-output-invalid') {
+        return undefined;
+      }
+      if (provider === 'groq') {
+        const facts = groqWire.observer.facts();
+        return facts === undefined
+          ? undefined
+          : renderWireDiagnostic(groqMalformedStage(facts), facts);
+      }
+      const facts = naraWire.observer.facts();
+      return facts === undefined
+        ? undefined
+        : renderWireDiagnostic(naraMalformedStage(facts), facts);
+    },
+    schemaIssuesFor: (
+      provider: CertifiedProvider,
+      schema: ZodType | undefined,
+    ): readonly string[] => {
+      if (schema === undefined) {
+        return [];
+      }
+      const observer = provider === 'groq' ? groqWire.observer : naraWire.observer;
+      const value = observer.structuredValueInMemory();
+      // The value never leaves this expression. `schemaIssueTokens` returns `path:code` strings and
+      // nothing else, and what it was given is unreachable from here on.
+      return value === undefined ? [] : schemaIssueTokens(schema, value);
+    },
   });
 
   return Object.freeze({
@@ -839,6 +988,10 @@ export function createJf5bCertificationRunner(seams: Jf5bRunnerSeams = {}): Cert
                   // GROQ ONLY. Nara answered all 45 rows in run-8 without one provider failure; it is
                   // not the lane under pressure, and pacing it would double a run for no reason.
                   ...(provider === 'groq' && pacer !== undefined ? { pacer } : {}),
+                  // BOTH providers, unlike pacing: run-10 produced malformed rows on Groq and schema
+                  // rejections on Nara, and a diagnostic that covered one column would answer half a
+                  // question.
+                  diagnostics: caseDiagnostics,
                 }),
               );
             }
@@ -855,6 +1008,7 @@ export function createJf5bCertificationRunner(seams: Jf5bRunnerSeams = {}): Cert
           manifest: undefined,
           rawBundle: '',
           reviewBundle: '',
+          diagnostics: diagnosticsOf(executed),
         };
       }
 
@@ -912,6 +1066,7 @@ export function createJf5bCertificationRunner(seams: Jf5bRunnerSeams = {}): Cert
         manifest,
         rawBundle,
         reviewBundle,
+        diagnostics: diagnosticsOf(executed),
       };
     },
 

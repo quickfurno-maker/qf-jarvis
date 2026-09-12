@@ -93,6 +93,34 @@ export interface CertifyAllInput {
   readonly ledger: CallLedger;
 }
 
+/**
+ * ONE case's sanitized phase-3 diagnostics (JF-5B-R8).
+ *
+ * A JF-5B-only, readonly, NON-AUTHORIZING structure. It exists because `LiveCaseRecord` is the canonical
+ * evidence shape — validated by a strict schema, written into receipts and read by JF-5C — and widening
+ * it for a diagnostic would make every consumer of that schema a consumer of this lane's debugging.
+ * Nothing here is validated by the manifest, sealed, approved, or allowed to decide an outcome: the
+ * outcome on the matching `LiveCaseRecord` is computed before any of these fields is filled in.
+ *
+ * `excerpt` is the ONLY field that carries model text, it is bounded to 240 code points, it appears in
+ * the owner-local review file alone, and it is absent entirely for a `SECRET_AND_PII_LEAKAGE` case.
+ */
+export interface Jf5bCaseDiagnostic {
+  readonly provider: string;
+  readonly agent: string;
+  readonly caseId: string;
+  /** The sanitized wire line for a terminal provider failure. Structure and numbers only. */
+  readonly wireDiagnostic?: string;
+  /** `path:code` tokens for a structured rejection, at most eight. */
+  readonly schemaIssues?: readonly string[];
+  /** The exact governed claim token the matcher fired on. A corpus string, never model text. */
+  readonly matchedClaim?: string;
+  /** The bounded local excerpt around the exact unrefused occurrence. Review file only. */
+  readonly excerpt?: string;
+  /** Why no excerpt was produced, when the case dimension forbids one. */
+  readonly excerptOmitted?: string;
+}
+
 export interface CertifyAllResult {
   readonly ok: boolean;
   readonly reason: string;
@@ -104,6 +132,12 @@ export interface CertifyAllResult {
   readonly rawBundle: string;
   /** Blinded items for human review, written ONLY outside the repository. */
   readonly reviewBundle: string;
+  /**
+   * One sanitized diagnostic row per NON-PASS case (JF-5B-R8), in execution order.
+   *
+   * Empty when every case passed. Never consulted by `ok`, by the manifest, or by any approval.
+   */
+  readonly diagnostics: readonly Jf5bCaseDiagnostic[];
 }
 
 export interface AutoRoutingInput {

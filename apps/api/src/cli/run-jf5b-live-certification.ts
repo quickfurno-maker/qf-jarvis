@@ -53,7 +53,12 @@ import type {
   RunPhase,
 } from '@qf-jarvis/jarvis-v1-provider-certification-live';
 
-import type { CertificationRunner, NaraProbeSummary } from './jf5b-certification-runner.js';
+import { renderSchemaIssues } from '@qf-jarvis/jarvis-v1-provider-certification-live';
+import type {
+  CertificationRunner,
+  Jf5bCaseDiagnostic,
+  NaraProbeSummary,
+} from './jf5b-certification-runner.js';
 import type { GroqConnectivityCheck, NaraCredentialGate } from './jf5b-live-deps.js';
 
 /** Everything the CLI needs from the outside world. Production wires it in `bin`; specs fake it. */
@@ -155,8 +160,29 @@ function summarizeCaseCounts(cases: readonly LiveCaseRecord[]): {
   };
 }
 
-/** One sanitized line per non-PASS case. Existing fields only, and a strict subset of them. */
-function renderCaseLine(record: LiveCaseRecord): string {
+/**
+ * The R8 diagnostic for one case, if there is one, keyed by its identity (JF-5B-R8).
+ *
+ * A map rather than a join, because the diagnostics arrive in execution order and the printer walks the
+ * cases in provider-then-agent order; matching them by position would be a silent mis-attribution the
+ * first time either order changed.
+ */
+function diagnosticIndex(
+  diagnostics: readonly Jf5bCaseDiagnostic[],
+): ReadonlyMap<string, Jf5bCaseDiagnostic> {
+  return new Map(
+    diagnostics.map((one) => [`${one.provider}/${one.agent}/${one.caseId}`, one] as const),
+  );
+}
+
+/**
+ * One sanitized line per non-PASS case. Existing record fields, plus the R8 diagnostics.
+ *
+ * What R8 adds to the TERMINAL is a wire line (structure and numbers), a list of schema `path:code`
+ * tokens, and the exact governed claim token. What it does NOT add is the excerpt: an excerpt is model
+ * text, a terminal is scrollback, and the excerpt has its own owner-local file for that reason.
+ */
+function renderCaseLine(record: LiveCaseRecord, diagnostic?: Jf5bCaseDiagnostic): string {
   const parts = [
     `  case ${record.provider}/${record.agent}/${record.caseId}:`,
     `outcome=${record.outcome}`,
@@ -173,11 +199,27 @@ function renderCaseLine(record: LiveCaseRecord): string {
     parts.push(`reason=${record.reason}`);
   }
   parts.push(`model=${record.modelId}`);
+  if (diagnostic?.wireDiagnostic !== undefined) {
+    parts.push(diagnostic.wireDiagnostic);
+  }
+  if (diagnostic?.schemaIssues !== undefined) {
+    parts.push(renderSchemaIssues(diagnostic.schemaIssues));
+  }
+  if (diagnostic?.matchedClaim !== undefined) {
+    // The token as the CORPUS wrote it. A fixture string, not model output — which is exactly why it is
+    // safe on a terminal and the excerpt beside it is not.
+    parts.push(`matchedClaim="${diagnostic.matchedClaim}"`);
+  }
   return parts.join(' ');
 }
 
 /** Print the aggregate, then every non-PASS case, grouped by provider and agent in corpus order. */
-function printCertificationFailure(io: OperatorIo, cases: readonly LiveCaseRecord[]): void {
+function printCertificationFailure(
+  io: OperatorIo,
+  cases: readonly LiveCaseRecord[],
+  diagnostics: readonly Jf5bCaseDiagnostic[] = [],
+): void {
+  const byCase = diagnosticIndex(diagnostics);
   const counts = summarizeCaseCounts(cases);
   io.out('phase 3 SANITIZED FAILURE DIAGNOSTICS');
   io.out(
@@ -205,8 +247,63 @@ function printCertificationFailure(io: OperatorIo, cases: readonly LiveCaseRecor
   }
   io.out(`  non-PASS cases (${String(nonPass.length)}):`);
   for (const record of nonPass) {
-    io.out(renderCaseLine(record));
+    io.out(
+      renderCaseLine(record, byCase.get(`${record.provider}/${record.agent}/${record.caseId}`)),
+    );
   }
+}
+
+/**
+ * The OWNER-LOCAL bounded excerpt file, written outside the repository on a phase-3 failure (JF-5B-R8).
+ *
+ * ### Why this file exists, and why it is separate from everything else
+ *
+ * Run-10 produced seven forbidden-claim FAILs. The terminal names the rule that fired and the claim it
+ * fired on. It does not, and must not, show what the model actually said — a terminal is scrollback, and
+ * scrollback is pasted. But deciding whether a FAIL is correct REQUIRES reading the sentence, and R6
+ * exists precisely because an earlier lane had to guess at exactly that and guessed wrong.
+ *
+ * So the sentence goes in one place: a file, in the already-approved external run directory, holding
+ * only the rows that failed on a claim, each with at most 240 code points centred on the exact
+ * occurrence the verdict rests on. Not the output. Not the digest. Not the prompt. Not a PASS. Not a
+ * provider failure, which has no claim to excerpt.
+ *
+ * A `SECRET_AND_PII_LEAKAGE` case is excluded from quoting entirely and says so in the file, because
+ * those fixtures exist to provoke exactly the text nobody may copy anywhere.
+ *
+ * Nothing reads this back. It is not the manifest, not the receipt, not evidence of a certification, and
+ * no outcome anywhere depends on whether it was written.
+ */
+function writeForbiddenClaimExcerpts(
+  artifacts: Jf5bCliDeps['artifacts'],
+  diagnostics: readonly Jf5bCaseDiagnostic[],
+): void {
+  const items = diagnostics.filter(
+    (one) =>
+      one.matchedClaim !== undefined &&
+      (one.excerpt !== undefined || one.excerptOmitted !== undefined),
+  );
+  if (items.length === 0) {
+    return;
+  }
+  artifacts.writeFile(
+    'review/phase3-forbidden-claim-excerpts.json',
+    JSON.stringify(
+      {
+        note: 'OWNER REVIEW ONLY. Bounded local excerpts. Not evidence, not sealed, not read back.',
+        items: items.map((one) => ({
+          provider: one.provider,
+          agent: one.agent,
+          caseId: one.caseId,
+          matchedClaim: one.matchedClaim,
+          ...(one.excerpt === undefined ? {} : { excerpt: one.excerpt }),
+          ...(one.excerptOmitted === undefined ? {} : { excerptOmitted: one.excerptOmitted }),
+        })),
+      },
+      null,
+      2,
+    ),
+  );
 }
 
 const stop = (
@@ -450,7 +547,9 @@ export async function runJf5bLiveCertificationCli(
   });
   if (!certification.ok) {
     deps.io.err(`certification failed: ${certification.reason}`);
-    printCertificationFailure(deps.io, certification.cases);
+    printCertificationFailure(deps.io, certification.cases, certification.diagnostics);
+    // The excerpts go to a FILE, never the terminal, and only on failure. See the function's header.
+    writeForbiddenClaimExcerpts(deps.artifacts, certification.diagnostics);
     // ONE sanitized receipt, in the already-approved external run directory. Deliberately NOT the raw
     // bundle, the review bundle or the manifest: a failed certification has nothing to seal, and a raw
     // bundle beside a refusal is content kept for a claim nobody is making.

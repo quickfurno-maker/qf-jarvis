@@ -147,6 +147,7 @@ function harness(
         ok: false,
         reason: 'stub',
         cases: [],
+        diagnostics: [],
         manifest: undefined,
         rawBundle: '',
         reviewBundle: '',

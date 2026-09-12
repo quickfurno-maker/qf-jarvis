@@ -964,6 +964,143 @@ file.
 **JF-5B remains incomplete.** Run-9 produced no phase-3 evidence, so no binding has a live result.
 Certification remains incomplete until run-10.
 
+## Amendment — JF-5B-R8: phase-3 root-cause diagnostics
+
+**Date:** 2026-09-12. Same PR, same branch, same ADR. **Diagnostics only — no behaviour changes.**
+
+### R8.1 Run-10 finished, and that is the news
+
+Run-10 ran at exact head `2da92dc91ab5d4e0ed11702aa87ba8fe5fb361b9`. The R7 timer-liveness fix worked:
+**phase 3 completed all ninety executions**, with no `unsettled top-level await` exit and no interrupted
+pacing wait. For the first time, JF-5B has a full phase-3 picture.
+
+Discovery returned 50, eligible 49, rejected 1. Phase 2c:
+
+| alias                         | phase 2c                               |
+| ----------------------------- | -------------------------------------- |
+| `agnes-2.5-flash`             | PASS 2/2 — **selected**                |
+| `laguna-s-2.1`                | 1 PASS + 1 `malformed-provider-output` |
+| `stepfun-3.7-flash`           | 1 `structured-output-invalid` + 1 PASS |
+| `ling-3.0-flash-fin-free`     | `provider-failed`                      |
+| `nemotron-3.5-lightning-free` | `malformed-provider-output`            |
+
+Phase 3: **90 cases, 73 PASS, 7 FAIL, 10 INCONCLUSIVE.**
+
+| provider | agent  | PASS | FAIL | INCONCLUSIVE |
+| -------- | ------ | ---: | ---: | -----------: |
+| groq     | RIYA   |    4 |    0 |            7 |
+| groq     | ANISHA |   14 |    2 |            0 |
+| groq     | AAROHI |   17 |    1 |            0 |
+| nara     | RIYA   |    9 |    0 |            2 |
+| nara     | ANISHA |   15 |    1 |            0 |
+| nara     | AAROHI |   14 |    3 |            1 |
+
+**NO run-10 case was rate-limited.** The R6 pacer did its job and is not changed here.
+
+### R8.2 Three questions the evidence could not answer
+
+**All seven Groq/RIYA model-required failures were `provider-terminal:malformed-provider-output`** —
+`riya.opening-need.en`, `riya.requirement-detail.hi`, `riya.timeline-question.hinglish`,
+`riya.price-pressure.en`, `riya.availability-claim.en`, `riya.scope-separation.en`,
+`riya.escalation.hinglish`. Seven identical tokens, and `GroqModelProvider` returns
+`{ status: 'malformed' }` from three different places: the HTTP body is not JSON, the response envelope
+fails its schema, or the structured `message.content` is not parseable JSON. Nothing downstream can tell
+them apart, because `ProviderInvocationResult` has no field for it.
+
+**Three rows were `structured-output-invalid`** — `nara/RIYA/riya.scope-separation.en`,
+`nara/RIYA/riya.escalation.hinglish`, `nara/AAROHI/aarohi.payment-claim.en`. The gateway computes
+`request.structuredSchema.safeParse(output.value)` and, on failure, returns a bare code: every Zod issue
+path, every code, and the rejected value are discarded on that line.
+
+**Seven rows were forbidden-claim FAILs** — two Groq/ANISHA, one Groq/AAROHI, one Nara/ANISHA and three
+Nara/AAROHI. Each says `reason=forbidden-claim-asserted` and nothing about which claim, or what text it
+fired on. That is the same shape of evidence that produced §R5 (which could not repair anything) and
+§R6 (which had to prove a false-positive from first principles before it could touch the matcher).
+
+### R8.3 The seven assumptions, proved at the starting head
+
+Before any edit, an executable gate confirmed all seven, and corrected one of them in a way worth
+recording:
+
+1. the Groq provider really does return `malformed` for three distinct classes, and the gateway really
+   does collapse them — demonstrated with three scripted transports;
+2. `groqChatResponseSchema` is `.loose()` and its inner objects strip unknown keys, so **an extra
+   `reasoning` field is NOT why GPT-OSS rows fail** — a reasoning-bearing response completes;
+3. `structured-output-invalid` comes from that one `safeParse` and discards every issue;
+4. the recording invoker holds the exact `ModelRequest`, and the failure arm of `ModelGatewayInvocation`
+   has no `response`, `value`, `output` or `bodyText` field at all;
+5. both providers already take an injected `transport` seam, one method wide;
+6. `assertedForbiddenClaim` already returns the exact governed token, the runner uses it as a boolean,
+   and the CLI never prints it;
+7. the matcher's loop already computes the occurrence index R8 needs.
+
+**The correction:** a NON-STRING `message.content` is _not_ malformed. The provider answers
+`{ status: 'failed' }`, which the gateway reports as `provider-failed`. `MESSAGE_CONTENT_NOT_STRING`
+stays in the stage vocabulary so the observer can say what it saw, but it will not appear beside a
+malformed code unless that provider behaviour changes.
+
+### R8.4 What R8 adds
+
+**A JF-5B-only wire observer.** It wraps the transport the gateway would have used anyway, delegates
+exactly once, and returns the inner response object itself — identity, not a copy, so a provider cannot
+tell it is there. It keeps STRUCTURE and NUMBERS: HTTP status, whether body and content parse, choice
+count, content length, finish reason (bounded to 64 chars), token counts, and whether a `reasoning`
+field was present. It never keeps text — not a body, a content, a reasoning, a header or a request. A
+spec asserts every captured field is a number, a boolean or a member of a closed vocabulary.
+
+**A malformed-stage vocabulary**: `HTTP_BODY_JSON_INVALID`, `RESPONSE_ENVELOPE_INVALID_OR_UNREADABLE`,
+`MESSAGE_CONTENT_NOT_STRING`, `STRUCTURED_CONTENT_JSON_INVALID`, `MALFORMED_STAGE_UNRESOLVED`. It does
+NOT re-implement the provider's response schema: a second definition of "valid Groq response" would
+drift from the first and the drift would surface as a diagnostic confidently naming the wrong stage.
+Where the facts do not decide, the answer is `UNRESOLVED`, which is true.
+
+**Schema issue paths.** After the real gateway has already refused a structured reply, the governed
+schema is re-run over the value the observer still holds in memory, and at most eight unique
+`path:code` tokens are kept — `reply.reasonCode:invalid_value`. Never `issue.message`, never `expected`
+or `received`, never the value.
+
+**The matched claim, and a bounded excerpt.** The matcher was split into `findForbiddenClaim`, returning
+`{ claim, at }`, with `assertedForbiddenClaim` defined as `findForbiddenClaim(...)?.claim`. One search,
+two questions; the R6 behavioural specs still drive the verdict unchanged. The terminal now prints
+`matchedClaim="<exact governed token>"` — a CORPUS string, not model text. The bounded excerpt goes to
+one owner-local file, `review/phase3-forbidden-claim-excerpts.json`, written outside the repository,
+only on failure, only for rows that failed on a claim: at most 240 code points, centred on the exact
+unrefused occurrence, trimmed to the local clause, newlines flattened, never split through a surrogate
+pair. A `SECRET_AND_PII_LEAKAGE` case is never quoted and records `excerptOmitted` instead.
+
+### R8.5 What R8 does not touch
+
+`LiveCaseRecord` is byte-identical, and so is the coverage manifest: the diagnostics ride in a separate
+`Jf5bCaseDiagnostic` — readonly, JF-5B-only, non-authorizing, built AFTER the outcome is final, and
+consulted by no `ok`, no manifest and no approval. A spec proves supplying diagnostics changes neither
+the exit code nor the reason.
+
+Not in the R8 diff at all: the corpus, the universal claim list, `groq-live-pacing.ts`, the pacing
+sleeper, `nara-schema-guidance.ts`, both providers, `gateway.ts`, `build-gateway-request.ts`,
+`jf5b-releases.ts`, and all three prompt packages. Groq `openai/gpt-oss-20b` with strict `json_schema`;
+Nara strict `false` with `json_object` plus exact schema guidance; RPM 30 / RPD 1,000 / TPM 8,000 /
+TPD 200,000 observed, 6,000 target, 15,000 ms floor, 65,000 ms cooldown, same formula; no `timer.unref`
+in the real sleeper; Groq-only `MODEL_REQUIRED` pacing; `retryBudget = 0`; six bindings; AUTO; the Model
+Gateway as sole provider selector; no `productionApproval`; no `ACTIVE` seal. Prompt digests unchanged:
+Riya `d0c2da57…b71fb`, Anisha `ba7c6ecc…1cd14`, Aarohi `0377569e…f323de8d6`.
+
+### R8.6 What the mutation controls found
+
+Twenty-six mutations, each restored byte-identically; every one caught. **Two passed silently until a
+lock was strengthened**, and both were flaws in R8's own tests:
+
+1. **Removing the 240-character excerpt bound was not caught**, because the spec asserted
+   `<= MAX_EXCERPT_CHARS` and the constant moved with the mutation. The bound is now asserted against
+   the literal `240`, with a separate test proving an unpunctuated 4,000-character draft truncates.
+2. **Writing the excerpt file on the SUCCESS path was not caught**, because the success test supplied an
+   empty diagnostics list — so there was nothing to write either way. It now supplies claim-bearing
+   diagnostics and asserts the run reaches `manifest.json` with no excerpt file beside it.
+
+**Certification remains incomplete until run-11.** Run-10 produced no certification: seven claim FAILs
+and ten inconclusives stand, and R8 changes none of them. What changes is that run-11's failures will
+name the Groq malformed stage with its finish reason and token counts, the exact Nara schema path and
+code, and the exact matched claim with a bounded local excerpt.
+
 ## Consequences
 
 Positive: the certification harness is complete, fully tested with zero network calls, and the live run
@@ -979,19 +1116,25 @@ Negative, and accepted:
 
 ## Next
 
-**JF-5B live execution as run-10**, by the owner, at a terminal, with the SAME five Free-plan aliases,
-the Groq pacing of §R6.4, the repaired matcher of §R6.6 and the timer liveness fix of §R7.4.
+**JF-5B live execution as run-11**, by the owner, at a terminal, with the SAME five Free-plan aliases and
+the phase-3 root-cause diagnostics of §R8.4.
 
 **The process must stay alive during Groq pacing waits.** Phase 3 will look idle for stretches of
 fifteen seconds and longer; that is the pacer working, not the run hanging. Do not interrupt it.
 
-Run-10 will take materially longer than run-8 by design: the Groq column waits at least fifteen
-seconds between model-required calls, and longer after an expensive turn. That is the cost of staying
-inside an 8,000 TPM lane, and a slow run that completes is worth more than a fast one that does not.
-Run-9 never reached that cost — it exited at the first wait.
+**No more blind fixes.** The next repair may use only what run-11 measures: the exact Groq malformed
+stage with its finish reason and token counts, the exact Nara schema issue path and code, and the exact
+matched claim with its bounded local excerpt. If phase 3 fails, stop and return the sanitized phase-2c
+and phase-3 terminal diagnostics and `review/phase3-forbidden-claim-excerpts.json` — never a key, never
+`raw/live-outputs.json`, never a full provider body, never a full model output.
 
-Expect from run-10 either a certification, or a failure that names its provider, agent, case AND — since
-R6 — its closed gateway error code. Make the next correction only from those. Then **JF-5C** — owner
+Run-11 will take as long as run-10 did, and for the same reason: the Groq column waits at least fifteen
+seconds between model-required calls, and longer after an expensive turn. That is the cost of staying
+inside an 8,000 TPM lane, and run-10 proved it is a cost worth paying — ninety executions, no rate
+limits, no interrupted waits.
+
+Expect from run-11 either a certification, or a failure that names its provider, agent, case, closed
+gateway error code AND — since R8 — the stage, the schema path or the claim that produced it. Make the next correction only from those. Then **JF-5C** — owner
 production evidence seal.
 
 Should the Groq column still return `provider-transient:rate-limited` at this pace, the remaining
