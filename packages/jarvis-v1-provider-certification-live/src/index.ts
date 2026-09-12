@@ -212,7 +212,10 @@ export {
   observeNaraTransport,
   renderWireDiagnostic,
 } from './diagnostics/jf5b-wire-observer.js';
+export { GROQ_JSON_VALIDATE_FAILED_CODE } from './diagnostics/jf5b-wire-observer.js';
 export type {
+  FailedGenerationFacts,
+  FailedGenerationKind,
   GroqWireFacts,
   MalformedStage,
   MessageContentKind,

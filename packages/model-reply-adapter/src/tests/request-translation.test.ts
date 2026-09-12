@@ -16,6 +16,7 @@ import {
   DEFAULT_GATEWAY_REQUEST_BUDGETS,
 } from '../adapter/build-gateway-request.js';
 import { ModelReplyAdapterError } from '../contracts/errors.js';
+import { structuredReplySchema } from '../contracts/reply-schema.js';
 import { replyPlan, syntheticRelease } from '../testing/index.js';
 
 const requestedAt = '2026-07-25T00:00:00Z';
@@ -142,5 +143,32 @@ describe('the default budgets permit NO same-provider retry', () => {
     // what is pinned here is that the same provider is never asked twice for the same request.
     expect(DEFAULT_GATEWAY_REQUEST_BUDGETS.retryBudget).toBe(0);
     expect(build().retryBudget).toBe(0);
+  });
+
+  it('pins the completion budget and the citation bound the model is asked for', () => {
+    // Found by a JF-5B-R9 mutation control: both are inputs to what a provider generates, and a strict
+    // structured endpoint refuses a generation that outgrows either. Changing one silently changes what
+    // every live certification run measures, so both are decisions rather than defaults nobody reads.
+    expect(DEFAULT_GATEWAY_REQUEST_BUDGETS.completionBudget).toBe(4096);
+    expect(DEFAULT_GATEWAY_REQUEST_BUDGETS.tokenBudget).toBe(4096);
+    expect(build().completionBudget).toBe(4096);
+    const shape = structuredReplySchema.safeParse({
+      kind: 'REPLY',
+      replyBody: 'ok',
+      citations: Array.from({ length: 64 }, (_, i) => ({
+        knowledgeId: `k${String(i)}`,
+        version: 1,
+      })),
+    });
+    expect(shape.success).toBe(true);
+    const tooMany = structuredReplySchema.safeParse({
+      kind: 'REPLY',
+      replyBody: 'ok',
+      citations: Array.from({ length: 65 }, (_, i) => ({
+        knowledgeId: `k${String(i)}`,
+        version: 1,
+      })),
+    });
+    expect(tooMany.success).toBe(false);
   });
 });

@@ -407,12 +407,17 @@ describe('JF-5B-R8 (20) this is not, and cannot become, production observability
         }
       }
     }
-    // The harness barrel, the certification runner, and the two specs that drive them. Nothing in
-    // `model-gateway`, no provider, no runtime, no ingress, no worker.
+    // The harness barrel, the certification runner, the phase-3 CLI, and the specs that drive them.
+    // Nothing in `model-gateway`, no provider, no runtime, no ingress, no worker.
+    //
+    // `jf5b-groq-failed-generation.test.ts` joined the list in JF-5B-R9 (the `json_validate_failed`
+    // structural diagnostic). It is a spec, not a serving path, and the set stays EXACT precisely so a
+    // new name has to be argued in a diff rather than appear in one.
     expect(importers.sort()).toEqual([
       'cli/run-jf5b-live-certification.ts',
       'composition/jf5b-certification-runner-impl.ts',
       'index.ts',
+      'tests/jf5b-groq-failed-generation.test.ts',
       'tests/jf5b-wire-diagnostics.test.ts',
     ]);
   });

@@ -53,6 +53,49 @@ export type MessageContentKind = 'STRING' | 'NULL' | 'ABSENT' | 'OTHER';
 /** Bound on the finish reason we are willing to carry, matching the provider schema's own bound. */
 const FINISH_REASON_MAX_CHARS = 64;
 
+/** The SHAPE a `failed_generation` arrived in. Closed; never the value. */
+export type FailedGenerationKind = 'STRING' | 'OBJECT' | 'ARRAY' | 'OTHER';
+
+/**
+ * Structural facts about a Groq `json_validate_failed` `failed_generation` (JF-5B-R9).
+ *
+ * ### Why this exists
+ *
+ * Run-11's eight Groq/RIYA inconclusives were all HTTP 400 with the closed code
+ * `json_validate_failed`, reported as the generic `RESPONSE_ENVELOPE_INVALID_OR_UNREADABLE`. True — the
+ * body IS an error envelope with no `choices` — and useless: `json_validate_failed` means the model
+ * generated something the strict schema refused, and the something is in `error.failed_generation`.
+ *
+ * Anisha and Aarohi pass every row on the same provider and model, and some Riya rows pass too, so
+ * whatever this is, it is neither the account nor the model nor a universally invalid schema. Run-12
+ * has to name it, and it cannot be named from a boolean.
+ *
+ * ### What may be kept
+ *
+ * `failed_generation` is RAW MODEL OUTPUT and is treated as such: booleans, a length, a closed kind
+ * token, and — when it parses — the presence of two expected root keys and a closed schema-document
+ * signature. Not one character of it is retained, rendered, written or logged.
+ *
+ * The four candidate shapes this is designed to tell apart, without asserting which: a schema-document
+ * ECHO (the model returning the schema instead of an instance), valid JSON with the wrong fields, an
+ * incomplete or truncated document, and anything else.
+ */
+export interface FailedGenerationFacts {
+  readonly failedGenerationPresent: boolean;
+  readonly failedGenerationKind: FailedGenerationKind | undefined;
+  /** Length in characters, for a STRING. Never the string. */
+  readonly failedGenerationChars: number | undefined;
+  readonly failedGenerationJsonValid: boolean | undefined;
+  /** First non-space character is `{`. Distinguishes an object attempt from prose. */
+  readonly failedGenerationStartsObject: boolean | undefined;
+  /** Last non-space character is `}`. A `yes/no` pair here is the signature of TRUNCATION. */
+  readonly failedGenerationEndsObject: boolean | undefined;
+  /** At least three of `type`, `properties`, `required`, `additionalProperties`, `$schema`. */
+  readonly schemaDocumentLike: boolean;
+  /** Riya's two structured root keys. Booleans only; no other key name is ever read out. */
+  readonly expectedRiyaRootKeysPresent: { readonly reply: boolean; readonly evolution: boolean };
+}
+
 /** Structural facts about ONE Groq HTTP exchange. Every field is a number, a boolean or a closed token. */
 export interface GroqWireFacts {
   readonly httpStatus: number;
@@ -66,6 +109,10 @@ export interface GroqWireFacts {
   readonly totalTokens: number | undefined;
   readonly structuredContentJsonValid: boolean | undefined;
   readonly reasoningFieldPresent: boolean;
+  /** The closed Groq error code, when it is the ONE code this lane recognises (JF-5B-R9). */
+  readonly closedErrorCode: string | undefined;
+  /** Present only for a `json_validate_failed` response. */
+  readonly failedGeneration: FailedGenerationFacts | undefined;
 }
 
 /** The same, for Nara. No reasoning field: NaraRouter does not emit one, so nothing pretends to look. */
@@ -93,6 +140,12 @@ export interface NaraWireFacts {
  * by a bound this observer deliberately does not re-implement.
  */
 export type MalformedStage =
+  /**
+   * Groq accepted the request, generated, and its own strict validator refused the result
+   * (JF-5B-R9). An OUTPUT failure, not a rejected request: the key, project, model permission and
+   * request were all accepted and the tokens were billed.
+   */
+  | 'GROQ_JSON_VALIDATE_FAILED'
   | 'HTTP_BODY_JSON_INVALID'
   | 'RESPONSE_ENVELOPE_INVALID_OR_UNREADABLE'
   | 'MESSAGE_CONTENT_NOT_STRING'
@@ -173,6 +226,103 @@ function firstMessage(body: Record<string, unknown> | undefined): {
 }
 
 /**
+ * The ONE closed Groq error code this lane recognises (JF-5B-R9).
+ *
+ * A JF-5B-LOCAL literal, not a reuse. `closedErrorCode` in `groq-error-normalization.ts` is module
+ * private, and exporting it so an evaluation diagnostic could borrow it would widen a production
+ * surface for a diagnostic's convenience. A spec locks this literal against that file's, so the two
+ * cannot drift apart silently.
+ */
+export const GROQ_JSON_VALIDATE_FAILED_CODE = 'json_validate_failed';
+
+/** The keys whose presence, three or more together, marks a JSON Schema DOCUMENT rather than an instance. */
+const SCHEMA_DOCUMENT_KEYS = ['type', 'properties', 'required', 'additionalProperties', '$schema'];
+const SCHEMA_DOCUMENT_MINIMUM = 3;
+
+/** Riya's two structured root keys. Asked about by name, and no other key name is ever reported. */
+const RIYA_ROOT_KEYS = { reply: 'reply', evolution: 'evolution' } as const;
+
+/** The error object of a Groq error envelope, if the body is one. */
+function errorEnvelope(parsed: unknown): Record<string, unknown> | undefined {
+  if (!isRecord(parsed)) {
+    return undefined;
+  }
+  const error: unknown = parsed['error'];
+  return isRecord(error) ? error : undefined;
+}
+
+/** The kind of a `failed_generation` value. Never its content. */
+function failedGenerationKindOf(value: unknown): FailedGenerationKind {
+  if (typeof value === 'string') {
+    return 'STRING';
+  }
+  if (Array.isArray(value)) {
+    return 'ARRAY';
+  }
+  return isRecord(value) ? 'OBJECT' : 'OTHER';
+}
+
+/**
+ * Read the structure of a `failed_generation`, and nothing else.
+ *
+ * The proven location is `error.failed_generation`, beside `error.code` — the shape two independently
+ * recorded live 400 fixtures agree on. No other location is guessed at: an absent value reports
+ * `present=false`, which is a true statement, rather than a hunt that might find something else.
+ */
+function failedGenerationFactsFrom(
+  error: Record<string, unknown> | undefined,
+): FailedGenerationFacts {
+  const absent: FailedGenerationFacts = {
+    failedGenerationPresent: false,
+    failedGenerationKind: undefined,
+    failedGenerationChars: undefined,
+    failedGenerationJsonValid: undefined,
+    failedGenerationStartsObject: undefined,
+    failedGenerationEndsObject: undefined,
+    schemaDocumentLike: false,
+    expectedRiyaRootKeysPresent: { reply: false, evolution: false },
+  };
+  if (error === undefined || !('failed_generation' in error)) {
+    return Object.freeze(absent);
+  }
+  const raw: unknown = error['failed_generation'];
+  const kind = failedGenerationKindOf(raw);
+  const text = typeof raw === 'string' ? raw.trim() : undefined;
+  let parsed: unknown;
+  let jsonValid: boolean | undefined;
+  if (text !== undefined) {
+    try {
+      parsed = JSON.parse(text);
+      jsonValid = true;
+    } catch {
+      jsonValid = false;
+    }
+  } else if (kind === 'OBJECT' || kind === 'ARRAY') {
+    // Already structured on the wire. There is nothing to parse and nothing to be invalid.
+    parsed = raw;
+  }
+  const document = isRecord(parsed) ? parsed : undefined;
+  const schemaKeys = SCHEMA_DOCUMENT_KEYS.filter(
+    (key) => document !== undefined && key in document,
+  );
+  return Object.freeze({
+    failedGenerationPresent: true,
+    failedGenerationKind: kind,
+    failedGenerationChars: typeof raw === 'string' ? raw.length : undefined,
+    failedGenerationJsonValid: jsonValid,
+    // The TRUNCATION signature is `starts=yes ends=no`: a document that began as an object and never
+    // closed. Computed on the trimmed text so trailing whitespace cannot mask it.
+    failedGenerationStartsObject: text === undefined ? undefined : text.startsWith('{'),
+    failedGenerationEndsObject: text === undefined ? undefined : text.endsWith('}'),
+    schemaDocumentLike: schemaKeys.length >= SCHEMA_DOCUMENT_MINIMUM,
+    expectedRiyaRootKeysPresent: Object.freeze({
+      reply: document !== undefined && RIYA_ROOT_KEYS.reply in document,
+      evolution: document !== undefined && RIYA_ROOT_KEYS.evolution in document,
+    }),
+  });
+}
+
+/**
  * The structured reply the provider sent, parsed, for the schema diagnostic alone.
  *
  * `undefined` unless the envelope is readable, the content is a string, and that string is JSON. Each of
@@ -185,6 +335,26 @@ function structuredValueOf(bodyText: string): unknown {
     parsed = JSON.parse(bodyText);
   } catch {
     return undefined;
+  }
+  // JF-5B-R9. A `json_validate_failed` 400 carries the refused generation instead of a choice, and it
+  // is the SAME question: which fields of the governed schema did this value violate? Asking it of the
+  // thing Groq's own validator refused is the point of the diagnostic.
+  const error = errorEnvelope(parsed);
+  if (error?.['code'] === GROQ_JSON_VALIDATE_FAILED_CODE) {
+    const raw: unknown = error['failed_generation'];
+    if (isRecord(raw)) {
+      return raw;
+    }
+    if (typeof raw !== 'string') {
+      return undefined;
+    }
+    try {
+      return JSON.parse(raw);
+    } catch {
+      // Not parseable. `failedGenerationJsonValid=no` already says so, and there is nothing coherent to
+      // ask a schema about.
+      return undefined;
+    }
   }
   const { message } = firstMessage(isRecord(parsed) ? parsed : undefined);
   const content = message?.['content'];
@@ -212,6 +382,10 @@ export function groqFactsFrom(response: GroqHttpResponse): GroqWireFacts {
   const kind = contentKindOf(message);
   const content = message?.['content'];
   const usage = usageOf(body);
+  // JF-5B-R9. Only for the ONE closed code, and only from the proven location.
+  const error = errorEnvelope(parsed);
+  const closed =
+    error?.['code'] === GROQ_JSON_VALIDATE_FAILED_CODE ? GROQ_JSON_VALIDATE_FAILED_CODE : undefined;
   return Object.freeze({
     httpStatus: response.status,
     responseBodyJsonValid: bodyValid,
@@ -225,6 +399,8 @@ export function groqFactsFrom(response: GroqHttpResponse): GroqWireFacts {
     structuredContentJsonValid: typeof content === 'string' ? parsesAsJson(content) : undefined,
     // A BOOLEAN, and deliberately nothing more. See the header.
     reasoningFieldPresent: message !== undefined && 'reasoning' in message,
+    closedErrorCode: closed,
+    failedGeneration: closed === undefined ? undefined : failedGenerationFactsFrom(error),
   });
 }
 
@@ -265,6 +441,13 @@ export function naraFactsFrom(response: NaraHttpResponse): NaraWireFacts {
 export function groqMalformedStage(facts: GroqWireFacts | undefined): MalformedStage {
   if (facts === undefined) {
     return 'MALFORMED_STAGE_UNRESOLVED';
+  }
+  // FIRST, because it is the most specific thing we can know: Groq told us, in its own closed
+  // vocabulary, that generation completed and its validator refused the result. Falling through to the
+  // envelope check would report "the body had no choices", which is a true fact about an error body and
+  // no help at all.
+  if (facts.closedErrorCode === GROQ_JSON_VALIDATE_FAILED_CODE) {
+    return 'GROQ_JSON_VALIDATE_FAILED';
   }
   if (!facts.responseBodyJsonValid) {
     return 'HTTP_BODY_JSON_INVALID';
@@ -319,6 +502,7 @@ export function renderWireDiagnostic(
   if (facts === undefined) {
     return parts.join(' ');
   }
+  const failed = 'failedGeneration' in facts ? facts.failedGeneration : undefined;
   const pairs: readonly (readonly [string, string | number | boolean | undefined])[] = [
     ['httpStatus', facts.httpStatus],
     ['contentKind', 'messageContentKind' in facts ? facts.messageContentKind : facts.contentKind],
@@ -331,6 +515,17 @@ export function renderWireDiagnostic(
     ['completionTokens', facts.completionTokens],
     ['totalTokens', facts.totalTokens],
     ['reasoning', 'reasoningFieldPresent' in facts ? facts.reasoningFieldPresent : undefined],
+    // JF-5B-R9. Booleans, a length and one closed kind token. Nothing derived from the CONTENT of a
+    // `failed_generation` beyond whether it parses and what shape it is.
+    ['failedGenerationPresent', failed?.failedGenerationPresent],
+    ['failedGenerationKind', failed?.failedGenerationKind],
+    ['failedGenerationChars', failed?.failedGenerationChars],
+    ['failedGenerationJsonValid', failed?.failedGenerationJsonValid],
+    ['failedGenerationStartsObject', failed?.failedGenerationStartsObject],
+    ['failedGenerationEndsObject', failed?.failedGenerationEndsObject],
+    ['schemaDocumentLike', failed?.schemaDocumentLike],
+    ['expectedReplyKey', failed?.expectedRiyaRootKeysPresent.reply],
+    ['expectedEvolutionKey', failed?.expectedRiyaRootKeysPresent.evolution],
   ];
   for (const [key, value] of pairs) {
     if (value !== undefined) {

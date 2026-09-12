@@ -390,7 +390,15 @@ function recordingInvoker(
         // question can change `result`, which is returned below exactly as it arrived.
         if (diagnostics !== undefined && result.errorCode !== undefined) {
           capture.diagnostic = diagnostics.diagnosticFor(primary, result.errorCode);
-          if (result.errorCode === 'structured-output-invalid') {
+          // BOTH codes ask the schema question (JF-5B-R9). `structured-output-invalid` is the gateway
+          // refusing a returned value; `malformed-provider-output` now also covers a Groq
+          // `json_validate_failed`, where GROQ's validator refused a generation that the observer still
+          // holds. Same question, same eight bounded `path:code` tokens, and `schemaIssuesFor` answers
+          // with an empty list whenever there is nothing in memory to ask about.
+          if (
+            result.errorCode === 'structured-output-invalid' ||
+            result.errorCode === 'malformed-provider-output'
+          ) {
             const issues = diagnostics.schemaIssuesFor(primary, request.structuredSchema);
             capture.schemaIssues = issues.length === 0 ? undefined : issues;
           }

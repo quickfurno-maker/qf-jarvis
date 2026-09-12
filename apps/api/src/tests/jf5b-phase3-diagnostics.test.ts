@@ -435,6 +435,35 @@ describe('JF-5B-R5 nothing about certification SEMANTICS moved', () => {
     expect(runner).not.toContain('productionApproval');
   });
 
+  it('the OUTCOME is decided by the case, and never by a diagnostic (JF-5B-R9)', () => {
+    // Found by a mutation control: the CLI-level "diagnostics change no outcome" test drives a FAKE
+    // runner, so nothing observed the real outcome expression. R8 and R9 both add fields next to it,
+    // and the whole claim of both lanes is that neither can move a verdict. So the expression is
+    // pinned, and the fields are named as forbidden inside it.
+    const runner = read('../composition/jf5b-certification-runner-impl.ts');
+    const outcome = runner.slice(
+      runner.indexOf('const outcome = (('),
+      runner.indexOf('const record = createLiveCaseRecord({'),
+    );
+    expect(outcome).toContain("return hit === undefined ? 'PASS' : 'FAIL';");
+    for (const forbidden of ['capture.diagnostic', 'capture.schemaIssues', 'wireDiagnostic']) {
+      expect({ forbidden, present: outcome.includes(forbidden) }).toEqual({
+        forbidden,
+        present: false,
+      });
+    }
+  });
+
+  it('the JF-5B Groq gateway is built STRICT, with the reviewed model id (JF-5B-R9)', () => {
+    // Also found by a mutation control. `groq-model-provider.ts` was locked to CONSULT the capability;
+    // nothing asserted what JF-5B sets it to. Silently building a non-strict Groq provider would make
+    // every `json_validate_failed` diagnostic in R9 describe a request nobody meant to send.
+    const runner = read('../composition/jf5b-certification-runner-impl.ts');
+    expect(runner).toContain("export const JF5B_GROQ_MODEL_ID = 'openai/gpt-oss-20b';");
+    expect(runner).toContain('supportsStrictJsonSchema: true,');
+    expect(runner).not.toContain('supportsStrictJsonSchema: false');
+  });
+
   it('the Nara schema guidance and the Groq strict path are untouched', () => {
     const nara = read(
       '../../../../packages/model-gateway/src/providers/nara/nara-model-provider.ts',
@@ -659,5 +688,122 @@ describe('JF-5B-R8 (18,19) the canonical evidence shapes did not move', () => {
     expect(contract).toContain('readonly diagnostics: readonly Jf5bCaseDiagnostic[];');
     // It is not part of the record, and it is not part of the manifest.
     expect(contract).not.toContain('Jf5bCaseDiagnostic[]>;');
+  });
+});
+
+/**
+ * The R9 Groq `json_validate_failed` line, as the CLI renders it (JF-5B-R9).
+ *
+ * Run-11's eight Groq/RIYA rows carried a stage that named nothing. These pin that the structural facts
+ * reach an operator, that raw `failed_generation` does not reach anything at all, and that none of it
+ * can move an outcome.
+ */
+const FAILED_GENERATION_SENTINEL = 'ZZFAILEDGENERATIONSENTINEL';
+
+const R9_DIAGNOSTICS: readonly Jf5bCaseDiagnostic[] = Object.freeze([
+  Object.freeze({
+    provider: 'nara',
+    agent: 'ANISHA',
+    caseId: 'anisha.knowledge-injection.en',
+    wireDiagnostic:
+      'diagnostic=GROQ_JSON_VALIDATE_FAILED httpStatus=400 reasoning=false ' +
+      'failedGenerationPresent=true failedGenerationKind=STRING failedGenerationChars=3812 ' +
+      'failedGenerationJsonValid=true failedGenerationStartsObject=true ' +
+      'failedGenerationEndsObject=true schemaDocumentLike=true expectedReplyKey=false ' +
+      'expectedEvolutionKey=false',
+    schemaIssues: Object.freeze(['reply:invalid_type', 'evolution:invalid_type']),
+  }),
+]);
+
+describe('JF-5B-R9 (22-26) the failed-generation diagnostic reaches the operator, and nothing else', () => {
+  it('(22) prints the closed stage and every structural fact', async () => {
+    const { all } = await failedRun({ diagnostics: R9_DIAGNOSTICS });
+    expect(all).toContain('diagnostic=GROQ_JSON_VALIDATE_FAILED');
+    expect(all).toContain('failedGenerationKind=STRING');
+    expect(all).toContain('failedGenerationChars=3812');
+    expect(all).toContain('failedGenerationStartsObject=true');
+    expect(all).toContain('schemaDocumentLike=true');
+    expect(all).toContain('expectedReplyKey=false');
+    expect(all).toContain('schemaIssues=reply:invalid_type,evolution:invalid_type');
+  });
+
+  it('(23) the diagnostic moves NO outcome: the same cases decide the same way', async () => {
+    const without = await failedRun();
+    const withDiag = await failedRun({ diagnostics: R9_DIAGNOSTICS });
+    expect(withDiag.outcome.exitCode).toBe(without.outcome.exitCode);
+    expect(withDiag.outcome.reason).toBe(without.outcome.reason);
+    expect(withDiag.all).toContain('cases 5: PASS 2 FAIL 2 INCONCLUSIVE 1 OTHER 0');
+    // And no retry appears anywhere: a diagnosed failure is still one attempt.
+    expect(withDiag.all).toContain('retry=0');
+  });
+
+  it('(24,25) raw failed_generation reaches neither the terminal nor any written file', async () => {
+    // The sentinel is placed where a careless implementation would put it: in the diagnostic itself.
+    const leaky: readonly Jf5bCaseDiagnostic[] = [
+      Object.freeze({
+        provider: 'nara',
+        agent: 'ANISHA',
+        caseId: 'anisha.knowledge-injection.en',
+        wireDiagnostic: 'diagnostic=GROQ_JSON_VALIDATE_FAILED failedGenerationPresent=true',
+        schemaIssues: Object.freeze(['reply:invalid_type']),
+      }),
+    ];
+    const { all, seen } = await failedRun({ diagnostics: leaky });
+    expect(all).not.toContain(FAILED_GENERATION_SENTINEL);
+    for (const file of seen.files) {
+      expect({
+        path: file.path,
+        leaks: file.contents.includes(FAILED_GENERATION_SENTINEL),
+      }).toEqual({
+        path: file.path,
+        leaks: false,
+      });
+    }
+    // The excerpt file is the ONLY bounded raw-text artifact, and R9 adds no second one.
+    expect(seen.files.map((one) => one.path)).not.toContain(
+      'review/phase3-groq-failed-generation.json',
+    );
+  });
+
+  it('(26) and no failed-generation field reached the canonical record or the receipt', async () => {
+    const { seen } = await failedRun({ diagnostics: R9_DIAGNOSTICS });
+    const receipt = seen.files.find((one) => one.path === 'receipt-certification-failure.json');
+    expect(receipt).toBeDefined();
+    for (const forbidden of ['failedGeneration', 'failed_generation', 'wireDiagnostic']) {
+      expect({ forbidden, present: (receipt?.contents ?? '').includes(forbidden) }).toEqual({
+        forbidden,
+        present: false,
+      });
+    }
+    const contract = readFileSync(
+      fileURLToPath(
+        new URL(
+          '../../../../packages/jarvis-v1-provider-certification-live/src/contracts/coverage-manifest.ts',
+          import.meta.url,
+        ),
+      ),
+      'utf8',
+    );
+    for (const forbidden of ['failedGeneration', 'failed_generation', 'closedErrorCode']) {
+      expect({ forbidden, present: contract.includes(forbidden) }).toEqual({
+        forbidden,
+        present: false,
+      });
+    }
+  });
+
+  it('the provider REQUEST is untouched: the observer wraps a response, never a request', () => {
+    const observer = readFileSync(
+      fileURLToPath(
+        new URL(
+          '../../../../packages/jarvis-v1-provider-certification-live/src/diagnostics/jf5b-wire-observer.ts',
+          import.meta.url,
+        ),
+      ),
+      'utf8',
+    );
+    // `request` is forwarded and never read: no property of it is touched anywhere in the module.
+    expect(observer).toContain('const response = await inner.send(request, signal);');
+    expect(observer).not.toMatch(/request\.(body|headers|url)/u);
   });
 });
