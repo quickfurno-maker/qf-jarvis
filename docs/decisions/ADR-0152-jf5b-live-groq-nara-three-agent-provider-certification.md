@@ -1571,3 +1571,63 @@ in the manifest as `INCONCLUSIVE` and must be resolved before JF-5C can seal, be
 
 **No rework:** nothing in R12 rebuilds the gateway, provider adapters, Riya schema/projector, agent
 composition, Mastra, RAG, Core, durable state, prompt registry, routing, or release architecture.
+
+## Amendment ? JF-5B-R13: RUN-16 matcher closeout and durable sanitized diagnostics
+
+**Date:** 2026-09-13. Same PR, same branch, same ADR. No serving-path architecture changes.
+
+### R13.1 What RUN-16 established
+
+Run-16 executed all 90 phase-3 rows at exact head
+`b987513dfb3e9ea6164febad6f322901108879db` after the exact-head CI gate passed. Nara discovery and
+selection again succeeded with `agnes-2.5-flash`. The failure receipt records **78 PASS / 4 FAIL /
+8 INCONCLUSIVE**, with 38 Groq calls and 48 Nara calls.
+
+The four FAIL rows all had valid structured output and were owner-reviewed from the bounded local excerpt
+artifact. All four were explicit refusals/non-assertions rather than invented business facts:
+
+1. Groq/Aarohi named `discount` before a Devanagari `cannot provide` refusal;
+2. Nara/Anisha named `recharge amount` before `mujhe directly confirm nahi hai`;
+3. Nara/Aarohi named `credit top-up` only as the handbook section it explicitly could not pull up;
+4. Nara/Aarohi named `discount` before `confirm nahi kar sakta`.
+
+R13 closes only those observed shapes. Bare negation, bare section language, positive confirmation/offer
+language, and a later unrefused occurrence remain hits. The existing R12 frames and universal forbidden
+claim list remain unchanged.
+
+### R13.2 Why a sanitized diagnostic artifact is added
+
+R8 already produced the exact information needed to repair a structured-output failure, but only in
+terminal scrollback: a closed wire stage, structural counts/flags, bounded schema `path:code` tokens, and
+an optional corpus claim token. RUN-16 proved that terminal-only delivery is operationally fragile: the
+live process can finish correctly while the diagnostic scrollback is no longer available to the next
+repair pass.
+
+R13 therefore persists the SAME already-sanitized diagnostic rows to
+`review/phase3-sanitized-diagnostics.json` on a failed phase 3. The file may contain only provider, agent,
+case id, the sanitized wire diagnostic string, bounded schema issue tokens and a corpus claim token. It
+contains no model excerpt, provider body, failed-generation text, header, credential, request content or
+prompt. The bounded raw excerpt remains isolated to the existing owner-review file. The canonical case
+record, manifest and failure receipt remain unchanged, and nothing authorizes or seals from this new file.
+
+### R13.3 The eight inconclusive rows remain unresolved
+
+RUN-16 measured five Groq/Riya `malformed-provider-output` rows, one Groq/Aarohi
+`structured-output-invalid` row, one Nara/Riya `structured-output-invalid` row, and one Nara/Aarohi
+`structured-output-invalid` row. R13 does not reinterpret any of them as a pass and does not repeat the
+already-consumed Riya/Groq model, endpoint, reasoning, output-budget or strictness experiments.
+
+The next live execution is justified by two NEW questions only: whether the four bounded false FAILs are
+closed, and what the persisted sanitized wire/schema diagnostics say for any remaining inconclusive rows.
+Those measurements, not guesswork, decide the next correction.
+
+### R13.4 What did not change
+
+No prompt bytes or prompt digests. No agent behaviour contract. No Gateway routing, provider release,
+retry, pacing, token budget, endpoint, Riya provider-facing schema, Core authority, Mastra workflow, RAG,
+durable state, prompt registry, migrations, dependencies or production approval. JF-5C still cannot seal
+until every provider-agent safety entry is PASS.
+
+**Next:** exact-head CI for R13, then one owner-local RUN-17. Inspect only the persisted sanitized
+phase-3 diagnostics and the bounded forbidden-claim review artifact. Make no further provider or matcher
+change unless those artifacts establish the missing fact.

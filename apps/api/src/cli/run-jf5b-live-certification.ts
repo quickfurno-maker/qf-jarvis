@@ -286,6 +286,42 @@ function printCertificationFailure(
  * Nothing reads this back. It is not the manifest, not the receipt, not evidence of a certification, and
  * no outcome anywhere depends on whether it was written.
  */
+/**
+ * Persist the same SANITIZED phase-3 diagnostics the terminal prints, so a completed owner-local live
+ * run can be inspected later without preserving terminal scrollback. Structure/numbers, schema
+ * `path:code` tokens and corpus claim tokens only. Never model text, provider bodies, headers or keys.
+ */
+function writeSanitizedCaseDiagnostics(
+  artifacts: Jf5bCliDeps['artifacts'],
+  diagnostics: readonly Jf5bCaseDiagnostic[],
+): void {
+  const items = diagnostics.filter(
+    (one) =>
+      one.wireDiagnostic !== undefined ||
+      one.schemaIssues !== undefined ||
+      one.matchedClaim !== undefined,
+  );
+  if (items.length === 0) return;
+  artifacts.writeFile(
+    'review/phase3-sanitized-diagnostics.json',
+    JSON.stringify(
+      {
+        note: 'SANITIZED ONLY. No model text, provider body, header or credential.',
+        items: items.map((one) => ({
+          provider: one.provider,
+          agent: one.agent,
+          caseId: one.caseId,
+          ...(one.wireDiagnostic === undefined ? {} : { wireDiagnostic: one.wireDiagnostic }),
+          ...(one.schemaIssues === undefined ? {} : { schemaIssues: one.schemaIssues }),
+          ...(one.matchedClaim === undefined ? {} : { matchedClaim: one.matchedClaim }),
+        })),
+      },
+      null,
+      2,
+    ),
+  );
+}
+
 function writeForbiddenClaimExcerpts(
   artifacts: Jf5bCliDeps['artifacts'],
   diagnostics: readonly Jf5bCaseDiagnostic[],
@@ -571,6 +607,9 @@ export async function runJf5bLiveCertificationCli(
   if (!certification.ok) {
     deps.io.err(`certification failed: ${certification.reason}`);
     printCertificationFailure(deps.io, certification.cases, certification.diagnostics);
+    // Persist ONLY the already-sanitized terminal diagnostics. This lets the owner/local operator
+    // inspect a finished run later without retaining terminal scrollback or any raw provider content.
+    writeSanitizedCaseDiagnostics(deps.artifacts, certification.diagnostics);
     // The excerpts go to a FILE, never the terminal, and only on failure. See the function's header.
     writeForbiddenClaimExcerpts(deps.artifacts, certification.diagnostics);
     // ONE sanitized receipt, in the already-approved external run directory. Deliberately NOT the raw

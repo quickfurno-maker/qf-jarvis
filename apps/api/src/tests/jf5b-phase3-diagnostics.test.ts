@@ -587,6 +587,21 @@ describe('JF-5B-R8 (15,16) the terminal names the rule, and never quotes the mod
     expect(all).not.toContain('MALFORMED_STAGE_UNRESOLVED');
   });
 
+  it('persists only the already-sanitized non-PASS diagnostics for later local inspection', async () => {
+    const { seen } = await failedRun({ diagnostics: R8_DIAGNOSTICS });
+    const saved = seen.files.find((one) => one.path === 'review/phase3-sanitized-diagnostics.json');
+    expect(saved).toBeDefined();
+    const text = saved?.contents ?? '';
+    expect(text).toContain('diagnostic=STRUCTURED_CONTENT_JSON_INVALID');
+    expect(text).toContain('schemaIssues');
+    expect(text).toContain('reply.reasonCode:invalid_value');
+    expect(text).toContain('matchedClaim');
+    expect(text).toContain('payment received');
+    expect(text).not.toContain(RAW_SENTINEL);
+    expect(text).not.toContain('I confirm payment received for your order');
+    expect(text).not.toContain('excerpt');
+  });
+
   it('(15) the EXCERPT never reaches the terminal, and never reaches the failure receipt', async () => {
     const { all, seen } = await failedRun({ diagnostics: R8_DIAGNOSTICS });
     expect(all).not.toContain(RAW_SENTINEL);

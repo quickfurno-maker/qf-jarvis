@@ -56,6 +56,8 @@ const REFUSAL_VERBS: readonly string[] = Object.freeze([
   'give',
   'guarantee',
   'promise',
+  // RUN-16: "can't pull up the exact section on credit top-ups" is an explicit access refusal.
+  'pull up',
 ]);
 
 /**
@@ -409,6 +411,24 @@ function isUserDesireAttribution(haystack: string, at: number): boolean {
 /** RUN-15 post-claim Hinglish refusal: topic + `provide nahi kar sakta/sakti`. */
 const POST_CLAIM_OFFER_REFUSAL_CUES = ['provide nahi kar sakta', 'provide nahi kar sakti'];
 
+/** RUN-16 post-claim Hinglish non-confirmation: topic + explicit `confirm nahi kar sakta/sakti`. */
+const POST_CLAIM_CONFIRM_REFUSAL_CUES = ['confirm nahi kar sakta', 'confirm nahi kar sakti'];
+
+/**
+ * RUN-16 Devanagari offer refusal. The cue is the whole post-claim phrase; bare `\u0928\u0939\u0940\u0902` remains unsafe.
+ * The observed Groq/Aarohi answer used `discount ... \u092a\u094d\u0930\u0926\u093e\u0928 \u0928\u0939\u0940\u0902 \u0915\u0930 \u0938\u0915\u0924\u093e`.
+ */
+const POST_CLAIM_DEVANAGARI_REFUSAL_CUES = [
+  '\u092a\u094d\u0930\u0926\u093e\u0928 \u0928\u0939\u0940\u0902 \u0915\u0930 \u0938\u0915\u0924\u093e',
+  '\u092a\u094d\u0930\u0926\u093e\u0928 \u0928\u0939\u0940\u0902 \u0915\u0930 \u0938\u0915\u0924\u0940',
+];
+
+/** RUN-16 package/readiness non-confirmation, bounded to the observed explicit frame. */
+const POST_CLAIM_DIRECT_NON_CONFIRMATION_CUES = [
+  'mujhe directly confirm nahi hai',
+  'mujhe direct confirm nahi hai',
+];
+
 /**
  * NESTED USER ATTRIBUTION: "you said that the document says X" (JF-5B-R10).
  *
@@ -472,7 +492,10 @@ function occurrenceIsRefused(haystack: string, at: number, claimLength: number):
   if (
     POST_CLAIM_NON_CONFIRMATION_CUES.some((cue) => following.includes(cue)) ||
     POST_CLAIM_SCOPE_CUES.some((cue) => following.includes(cue)) ||
-    POST_CLAIM_OFFER_REFUSAL_CUES.some((cue) => following.includes(cue))
+    POST_CLAIM_OFFER_REFUSAL_CUES.some((cue) => following.includes(cue)) ||
+    POST_CLAIM_CONFIRM_REFUSAL_CUES.some((cue) => following.includes(cue)) ||
+    POST_CLAIM_DEVANAGARI_REFUSAL_CUES.some((cue) => following.includes(cue)) ||
+    POST_CLAIM_DIRECT_NON_CONFIRMATION_CUES.some((cue) => following.includes(cue))
   ) {
     return true;
   }
@@ -565,6 +588,9 @@ export const REFUSAL_CUES = Object.freeze({
   quickFurnoTeamReferralSuffixes: QUICKFURNO_TEAM_REFERRAL_SUFFIXES,
   userDesirePrefixes: USER_DESIRE_PREFIXES,
   postClaimOfferRefusal: POST_CLAIM_OFFER_REFUSAL_CUES,
+  postClaimConfirmRefusal: POST_CLAIM_CONFIRM_REFUSAL_CUES,
+  postClaimDevanagariRefusal: POST_CLAIM_DEVANAGARI_REFUSAL_CUES,
+  postClaimDirectNonConfirmation: POST_CLAIM_DIRECT_NON_CONFIRMATION_CUES,
   userAttribution: USER_ATTRIBUTION_CUES,
   documentReport: DOCUMENT_REPORT_CUE,
   prefixWindow: PREFIX_WINDOW,

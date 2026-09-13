@@ -252,8 +252,15 @@ describe('JF-5B-R11 (20) the generic Nara chat path is untouched', () => {
     expect(cli).toContain('deps.io.err(renderDiscoveryDiagnostic(diagnostic));');
     // The pre-existing line is byte-identical.
     expect(cli).toContain('deps.io.err(`nara discovery failed: ${catalogue.failure}`);');
-    // And nothing writes the diagnostic to a file: this is terminal-only.
-    expect(cli).not.toMatch(/writeFile\([^)]*[Dd]iagnostic/u);
+    // And THIS discovery-transport diagnostic remains terminal-only. R13 deliberately persists a
+    // separate phase-3 sanitized diagnostic artifact, so pin the discovery failure branch itself rather
+    // than forbidding every unrelated diagnostic file in the CLI.
+    const discoveryBranch = cli.slice(
+      cli.indexOf("if (catalogue.failure === 'discovery-transport-failed') {"),
+      cli.indexOf("return stop(\n      'NARA_DISCOVERY'"),
+    );
+    expect(discoveryBranch).not.toContain('writeFile(');
+    expect(cli).not.toContain('review/discovery-diagnostic');
   });
 
   it('the recorder is in-memory only, and nothing persists it', () => {
