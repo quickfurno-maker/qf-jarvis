@@ -253,7 +253,15 @@ describe('JF-5B-R4 the repair puts the EXACT schema on the wire as provider guid
     await buildProvider(wire.transport).invoke(invocation());
     const whole = (sentBody(wire.requests[0]).messages ?? [])[1]?.content ?? '';
     const guidance = whole.toLowerCase();
-    for (const required of ['exactly one json object', 'json schema', 'no additional', 'null']) {
+    for (const required of [
+      'exactly one json object',
+      'json schema',
+      'no additional',
+      'null',
+      'booleans must be true/false',
+      'array-typed property must be a json array',
+      'enum value must match',
+    ]) {
       expect([required, guidance.includes(required)]).toEqual([required, true]);
     }
     // And no BUSINESS policy in the INSTRUCTION. Scoped to the prose the provider wrote, because the

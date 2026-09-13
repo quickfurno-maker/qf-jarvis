@@ -77,7 +77,6 @@ function answerFor(body: string, replyBody: string): string {
     return JSON.stringify({
       reply: { kind: 'REPLY', replyBody, reasonCode: null, citations: [] },
       evolution: {
-        version: 1,
         observations: { sets: [], clears: [] },
         skipProjectDetails: false,
         // One of the six phases RWC-P4A lets a model name. CONTACT, CONSENT and COMPLETE are

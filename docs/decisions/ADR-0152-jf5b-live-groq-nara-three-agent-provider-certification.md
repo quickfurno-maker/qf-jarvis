@@ -1631,3 +1631,65 @@ until every provider-agent safety entry is PASS.
 **Next:** exact-head CI for R13, then one owner-local RUN-17. Inspect only the persisted sanitized
 phase-3 diagnostics and the bounded forbidden-claim review artifact. Make no further provider or matcher
 change unless those artifacts establish the missing fact.
+
+## Amendment — JF-5B-R14: RUN-17 evaluator boundary and provider-wire simplification
+
+**Date:** 2026-09-13. Same PR, same branch, same architecture. This amendment is evidence-driven from
+RUN-17 only.
+
+### R14.1 What RUN-17 established
+
+RUN-17 executed all 90 phase-3 rows at exact head
+`3edc09e7840378388af3cdc86b6456ead8e3e7f0` after exact-head CI succeeded. It selected
+`agnes-2.5-flash`, made 38 Groq calls and 48 Nara calls, and recorded **75 PASS / 7 FAIL / 8
+INCONCLUSIVE**.
+
+The persisted sanitized diagnostics localized the six Groq/Riya inconclusives to valid JSON objects with
+the expected `reply` and `evolution` roots. Every one failed `evolution.version:invalid_value`; a subset
+also carried invalid `skipProjectDetails`, `questionPlan`, or an extra root key. Nara independently showed
+invalid Riya boolean/question-plan values, and one Aarohi row showed `citations:invalid_type`.
+
+RUN-17 also proved that the certification safety evaluator was scanning
+`JSON.stringify(structuredResult)`. That let non-customer metadata such as
+`reasonCode: DISCOUNT_NOT_ALLOWED` trigger a forbidden-claim FAIL even though the customer never sees
+that token.
+
+### R14.2 Customer-visible speech is the safety surface
+
+R14 keeps the full accepted structured result for canonical evidence and output digest, but forbidden-
+claim scoring and bounded owner excerpts now read only the customer-visible `replyBody`. Generic replies
+use their top-level body; Riya uses its nested reply body. A valid non-REPLY with a null body contributes
+no customer speech. An unknown accepted shape fails closed as INCONCLUSIVE rather than silently passing.
+
+The forbidden-claim corpus and default-HIT rule are unchanged. RUN-17's remaining reviewed
+non-assertions receive only occurrence-local bounded repairs: explicit no-access/non-confirmation,
+QuickFurno support referral, Aarohi-to-Anisha dashboard referral, Hindi/Hinglish non-confirmation and
+user/document reading attribution. Later unrefused occurrences still FAIL.
+
+### R14.3 Riya no longer asks the model to mint protocol version
+
+`evolution.version` is canonical protocol bookkeeping, not model authority. The authoritative Riya
+semantic schema still requires exactly version `1`, and the canonical observation constructor still
+receives version `1`. R14 changes only the provider wire: the model no longer emits that field; the
+profile injects canonical `version: 1` and immediately re-proves the complete semantic shape before any
+business-bearing field is used.
+
+No question-plan, skip-project-details, observation, provenance, Core-availability or citation authority
+is weakened. Those existing gates remain exact.
+
+### R14.4 Nara guidance remains derived and non-authoritative
+
+Nara still declares no native strict JSON-Schema capability and still receives the exact schema-derived
+guidance. R14 adds encoding-only reminders to respect JSON primitive types, arrays and enum values. No
+agent field list or business policy is duplicated into the provider adapter, and local exact-schema
+validation remains authoritative.
+
+### R14.5 Explicit non-rework statement
+
+R14 does not rebuild or replace Gateway routing, provider selection, retries, pacing, prompts, prompt
+digests, Mastra, Core, RAG, durable state, continuity, agent behaviour, release approval or JF-5C. It
+changes only the certification evaluator boundary, the smallest Riya provider-wire bookkeeping field,
+closed RUN-17 matcher frames and existing Nara schema guidance.
+
+**Next:** full repository validation, exact-head CI, then the next owner-local live certification. JF-5C
+remains blocked until all six provider-agent safety entries are PASS.

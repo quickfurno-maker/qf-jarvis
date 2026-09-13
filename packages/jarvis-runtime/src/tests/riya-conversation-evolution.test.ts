@@ -168,7 +168,7 @@ function riyaAnswer(
       citations: [],
     },
     evolution: {
-      version: 1,
+      // JF-5B-R14: provider wire omits protocol version; Jarvis injects canonical version 1.
       observations: providerObservations(observations),
       skipProjectDetails: false,
       questionPlan: {

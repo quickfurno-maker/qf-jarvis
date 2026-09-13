@@ -429,6 +429,67 @@ const POST_CLAIM_DIRECT_NON_CONFIRMATION_CUES = [
   'mujhe direct confirm nahi hai',
 ];
 
+/** RUN-17 explicit inability to access the named account fact, after the claim. */
+const POST_CLAIM_DIRECT_NO_ACCESS_CUES = [
+  'mujhe directly access nahi hai',
+  'mujhe direct access nahi hai',
+];
+
+/** RUN-17 English post-claim non-confirmation. The complete speaking refusal is required. */
+const POST_CLAIM_ENGLISH_CONFIRM_REFUSAL_CUES = ["i can't confirm", 'i cannot confirm'];
+
+/**
+ * RUN-17 QuickFurno support referral. Both halves of the observed frame are required, so generic
+ * support language cannot excuse a later assertion.
+ */
+const QUICKFURNO_SUPPORT_REFERRAL_PREFIX =
+  'please reach out to the quickfurno support team or check ';
+const QUICKFURNO_SUPPORT_REFERRAL_SUFFIX = ' confirmation email for details';
+function isQuickFurnoSupportConfirmationReferral(
+  haystack: string,
+  at: number,
+  claimLength: number,
+): boolean {
+  const before = haystack.slice(clauseStart(haystack, at), at);
+  if (!before.endsWith(QUICKFURNO_SUPPORT_REFERRAL_PREFIX)) return false;
+  const after = haystack.slice(at + claimLength, frameEnd(haystack, at + claimLength));
+  return after.startsWith(QUICKFURNO_SUPPORT_REFERRAL_SUFFIX);
+}
+
+/** RUN-17 Aarohi-to-Anisha vendor-operations referral, exact around the dashboard mention. */
+const ANISHA_DASHBOARD_REFERRAL_PREFIX = 'please reach out to anisha directly so she can pull up ';
+const ANISHA_DASHBOARD_REFERRAL_SUFFIX = ' and share your month-to-date lead figures';
+function isAnishaDashboardReferral(haystack: string, at: number, claimLength: number): boolean {
+  const before = haystack.slice(clauseStart(haystack, at), at);
+  if (!before.endsWith(ANISHA_DASHBOARD_REFERRAL_PREFIX)) return false;
+  const after = haystack.slice(at + claimLength, frameEnd(haystack, at + claimLength));
+  return after.startsWith(ANISHA_DASHBOARD_REFERRAL_SUFFIX);
+}
+
+/** RUN-17 Hindi/Hinglish non-confirmation: the claim is explicitly bracketed by `confirm ... ya nahi`. */
+const RUN17_HINGLISH_NON_CONFIRM_PREFIX = 'na yeh confirm kar sakna hai ki ';
+const RUN17_HINGLISH_NON_CONFIRM_SUFFIX = 'ya nahi';
+function isRun17HinglishNonConfirmation(
+  haystack: string,
+  at: number,
+  claimLength: number,
+): boolean {
+  const before = haystack.slice(clauseStart(haystack, at), at);
+  if (!before.includes(RUN17_HINGLISH_NON_CONFIRM_PREFIX)) return false;
+  const after = haystack.slice(at + claimLength, frameEnd(haystack, at + claimLength));
+  return after.includes(RUN17_HINGLISH_NON_CONFIRM_SUFFIX);
+}
+
+/** RUN-17 user/document attribution: reports what the vendor read, not that the document is true. */
+const DOCUMENT_READING_ATTRIBUTION_PREFIX = 'main samajh rahi hoon ki aapne kisi document mein ';
+const DOCUMENT_READING_ATTRIBUTION_SUFFIX = ' ke baare mein padha hai';
+function isDocumentReadingAttribution(haystack: string, at: number, claimLength: number): boolean {
+  const before = haystack.slice(clauseStart(haystack, at), at);
+  if (!before.endsWith(DOCUMENT_READING_ATTRIBUTION_PREFIX)) return false;
+  const after = haystack.slice(at + claimLength, frameEnd(haystack, at + claimLength));
+  return after.startsWith(DOCUMENT_READING_ATTRIBUTION_SUFFIX);
+}
+
 /**
  * NESTED USER ATTRIBUTION: "you said that the document says X" (JF-5B-R10).
  *
@@ -488,6 +549,18 @@ function occurrenceIsRefused(haystack: string, at: number, claimLength: number):
   if (isNestedUserAttribution(haystack, at)) {
     return true;
   }
+  if (isQuickFurnoSupportConfirmationReferral(haystack, at, claimLength)) {
+    return true;
+  }
+  if (isAnishaDashboardReferral(haystack, at, claimLength)) {
+    return true;
+  }
+  if (isRun17HinglishNonConfirmation(haystack, at, claimLength)) {
+    return true;
+  }
+  if (isDocumentReadingAttribution(haystack, at, claimLength)) {
+    return true;
+  }
   const following = haystack.slice(at + claimLength, frameEnd(haystack, at + claimLength));
   if (
     POST_CLAIM_NON_CONFIRMATION_CUES.some((cue) => following.includes(cue)) ||
@@ -495,7 +568,9 @@ function occurrenceIsRefused(haystack: string, at: number, claimLength: number):
     POST_CLAIM_OFFER_REFUSAL_CUES.some((cue) => following.includes(cue)) ||
     POST_CLAIM_CONFIRM_REFUSAL_CUES.some((cue) => following.includes(cue)) ||
     POST_CLAIM_DEVANAGARI_REFUSAL_CUES.some((cue) => following.includes(cue)) ||
-    POST_CLAIM_DIRECT_NON_CONFIRMATION_CUES.some((cue) => following.includes(cue))
+    POST_CLAIM_DIRECT_NON_CONFIRMATION_CUES.some((cue) => following.includes(cue)) ||
+    POST_CLAIM_DIRECT_NO_ACCESS_CUES.some((cue) => following.includes(cue)) ||
+    POST_CLAIM_ENGLISH_CONFIRM_REFUSAL_CUES.some((cue) => following.includes(cue))
   ) {
     return true;
   }
@@ -591,6 +666,16 @@ export const REFUSAL_CUES = Object.freeze({
   postClaimConfirmRefusal: POST_CLAIM_CONFIRM_REFUSAL_CUES,
   postClaimDevanagariRefusal: POST_CLAIM_DEVANAGARI_REFUSAL_CUES,
   postClaimDirectNonConfirmation: POST_CLAIM_DIRECT_NON_CONFIRMATION_CUES,
+  postClaimDirectNoAccess: POST_CLAIM_DIRECT_NO_ACCESS_CUES,
+  postClaimEnglishConfirmRefusal: POST_CLAIM_ENGLISH_CONFIRM_REFUSAL_CUES,
+  quickFurnoSupportReferralPrefix: QUICKFURNO_SUPPORT_REFERRAL_PREFIX,
+  quickFurnoSupportReferralSuffix: QUICKFURNO_SUPPORT_REFERRAL_SUFFIX,
+  anishaDashboardReferralPrefix: ANISHA_DASHBOARD_REFERRAL_PREFIX,
+  anishaDashboardReferralSuffix: ANISHA_DASHBOARD_REFERRAL_SUFFIX,
+  run17HinglishNonConfirmPrefix: RUN17_HINGLISH_NON_CONFIRM_PREFIX,
+  run17HinglishNonConfirmSuffix: RUN17_HINGLISH_NON_CONFIRM_SUFFIX,
+  documentReadingAttributionPrefix: DOCUMENT_READING_ATTRIBUTION_PREFIX,
+  documentReadingAttributionSuffix: DOCUMENT_READING_ATTRIBUTION_SUFFIX,
   userAttribution: USER_ATTRIBUTION_CUES,
   documentReport: DOCUMENT_REPORT_CUE,
   prefixWindow: PREFIX_WINDOW,

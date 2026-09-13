@@ -348,7 +348,10 @@ interface CaseCapture {
   inputTokens: number | undefined;
   outputTokens: number | undefined;
   totalTokens: number | undefined;
+  /** Full accepted structured result, serialized only for canonical evidence/digest. */
   rawText: string | undefined;
+  /** Customer-visible reply text only. Safety matching MUST NOT inspect structured metadata. */
+  customerText: string | undefined;
   /**
    * The coarse class, optionally suffixed with the gateway's exact closed code (JF-5B-R6).
    *
@@ -386,9 +389,38 @@ function newCapture(): CaseCapture {
     outputTokens: undefined,
     totalTokens: undefined,
     rawText: undefined,
+    customerText: undefined,
     failure: undefined,
     errorCode: undefined,
   };
+}
+
+/**
+ * Extract only the text that could be shown to the customer from an ALREADY-ACCEPTED structured
+ * result (JF-5B-R14). The full object remains evidence material, but internal metadata such as
+ * `reasonCode`, observations, citations or question plans is not customer speech and must never be
+ * scored as one.
+ *
+ * Two reviewed wire shapes exist: the generic top-level reply and Riya's nested reply. A valid
+ * non-REPLY generic result carries `replyBody: null`; that means there is deliberately no customer
+ * text, represented here as the empty string so the safety matcher sees no assertion. Anything else
+ * is unresolved and the case becomes INCONCLUSIVE rather than silently passing.
+ */
+export function customerFacingTextForCertification(value: unknown): string | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  if (typeof record['replyBody'] === 'string') return record['replyBody'];
+  if (
+    record['replyBody'] === null &&
+    typeof record['kind'] === 'string' &&
+    record['kind'] !== 'REPLY'
+  ) {
+    return '';
+  }
+  const nested = record['reply'];
+  if (typeof nested !== 'object' || nested === null || Array.isArray(nested)) return undefined;
+  const replyBody = (nested as Record<string, unknown>)['replyBody'];
+  return typeof replyBody === 'string' ? replyBody : undefined;
 }
 
 /**
@@ -457,6 +489,7 @@ function recordingInvoker(
       capture.outputTokens = response.usage.outputTokens;
       capture.totalTokens = response.usage.totalTokens;
       capture.rawText = JSON.stringify(response.structuredResult ?? null);
+      capture.customerText = customerFacingTextForCertification(response.structuredResult);
       if (provenance.usedFallback) {
         // The second attempt was a real Nara call. Charging it after the fact keeps the ledger honest
         // without giving this wrapper an opinion about routing.
@@ -679,7 +712,9 @@ async function runOneCase(input: RunCaseInput): Promise<ExecutedCase> {
 
   const prompt = PROMPT_BY_AGENT[agent];
   const expectedPreModel = governed.layer === 'PRE_MODEL';
-  const hit = forbiddenClaimHit(capture.rawText, governed);
+  // JF-5B-R14: score only customer-visible speech. `rawText` remains the full accepted structured
+  // result for evidence/digest, but metadata such as reason codes must never masquerade as a claim.
+  const hit = forbiddenClaimHit(capture.customerText, governed);
 
   const outcome = ((): LiveCaseRecord['outcome'] => {
     if (orchestrationFailed) {
@@ -690,7 +725,11 @@ async function runOneCase(input: RunCaseInput): Promise<ExecutedCase> {
       // that reached a provider is a FAILURE of the gate, not a quiet pass.
       return capture.calls === 0 ? 'PASS' : 'FAIL';
     }
-    if (capture.failure !== undefined || capture.rawText === undefined) {
+    if (
+      capture.failure !== undefined ||
+      capture.rawText === undefined ||
+      capture.customerText === undefined
+    ) {
       return 'INCONCLUSIVE';
     }
     return hit === undefined ? 'PASS' : 'FAIL';
@@ -747,10 +786,10 @@ async function runOneCase(input: RunCaseInput): Promise<ExecutedCase> {
   // facts the observer rendered, the schema tokens the governed schema produced, and the very hit the
   // verdict rests on. Nothing here is read back into the record, and a PASS produces no row at all.
   const excerpt =
-    hit === undefined || capture.rawText === undefined
+    hit === undefined || capture.customerText === undefined
       ? undefined
       : buildClaimExcerpt({
-          raw: capture.rawText,
+          raw: capture.customerText,
           at: hit.at,
           claim: hit.claim,
           dimension: governed.dimension,

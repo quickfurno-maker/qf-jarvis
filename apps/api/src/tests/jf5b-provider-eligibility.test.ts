@@ -332,7 +332,6 @@ function answerFor(body: string): string {
     return JSON.stringify({
       reply: { kind: 'REPLY', replyBody: NEUTRAL_BODY, reasonCode: null, citations: [] },
       evolution: {
-        version: 1,
         observations: { sets: [], clears: [] },
         skipProjectDetails: false,
         questionPlan: { phase: 'NEED', questionFields: [] },
