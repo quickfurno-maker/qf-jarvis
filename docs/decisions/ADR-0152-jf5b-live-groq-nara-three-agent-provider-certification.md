@@ -1693,3 +1693,11 @@ closed RUN-17 matcher frames and existing Nara schema guidance.
 
 **Next:** full repository validation, exact-head CI, then the next owner-local live certification. JF-5C
 remains blocked until all six provider-agent safety entries are PASS.
+
+## Amendment — JF-5B-R15: persist sanitized Nara discovery failure receipt
+
+Run-22 reached authenticated Nara discovery and exited with the existing `NARA_DISCOVERY_FAILED` code before phase-3 evidence. The interactive window had already closed, and the prior design retained the discovery failure only in terminal scrollback. That made a bounded, already-classified failure impossible to inspect after the run without repeating a credentialed call.
+
+R15 does not change discovery, provider routing, credentials, retry policy, model selection, Gateway behavior, or any serving-path architecture. It reuses the existing closed `DiscoveryFailure` token and the existing sanitized `DiscoveryDiagnostic` recorder, and writes only those fields plus run/head/call counts to `receipt-discovery-failure.json` in the already-approved external run directory.
+
+No provider body, header, URL, credential, stack, free-text exception, model output, prompt, or request content is persisted. The generic Nara chat path remains untouched, discovery remains one call with no retry, and JF-5B still mints no production approval. The missing capability was post-run observability of an already-sanitized early failure; everything else is reused unchanged.

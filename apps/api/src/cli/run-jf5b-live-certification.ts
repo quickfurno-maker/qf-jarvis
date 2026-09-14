@@ -500,15 +500,33 @@ export async function runJf5bLiveCertificationCli(
   if (!catalogue.ok) {
     // UNCHANGED, verbatim: an operator and every prior run receipt read this exact line.
     deps.io.err(`nara discovery failed: ${catalogue.failure}`);
-    // And, for the ONE failure that deliberately discarded its cause, a second sanitized line saying
-    // where the throw happened. Run-13 and run-14 produced the line above twice, identically, with no
-    // way to tell a refused connection from a body that never finished arriving.
+    // R15: persist the SAME closed-token reason the terminal already prints. Run-22 proved the prior
+    // terminal-only diagnostic was insufficient when the interactive window closed before review.
+    // No provider body, header, URL, credential, stack or free-text error is written here.
+    let discoveryDiagnostic: DiscoveryDiagnostic | undefined;
     if (catalogue.failure === 'discovery-transport-failed') {
       const diagnostic = deps.discoveryDiagnostics?.latest();
       if (diagnostic !== undefined) {
+        discoveryDiagnostic = diagnostic;
         deps.io.err(renderDiscoveryDiagnostic(diagnostic));
       }
     }
+    deps.artifacts.writeFile(
+      'receipt-discovery-failure.json',
+      JSON.stringify(
+        {
+          runId: deps.runId,
+          headSha: deps.facts.headSha,
+          phase: 'NARA_DISCOVERY',
+          reason: catalogue.failure,
+          groqCalls: ledger.groqCalls(),
+          naraCalls: ledger.naraCalls(),
+          ...(discoveryDiagnostic === undefined ? {} : { diagnostic: discoveryDiagnostic }),
+        },
+        null,
+        2,
+      ),
+    );
     return stop(
       'NARA_DISCOVERY',
       EXIT_CODES.NARA_DISCOVERY_FAILED,

@@ -243,23 +243,17 @@ describe('JF-5B-R11 (20) the generic Nara chat path is untouched', () => {
     }
   });
 
-  it('the recorder reaches the CLI only through one optional dep, read on one failure', () => {
+  it('the recorder reaches the CLI only through one optional dep and persists only the closed diagnostic', () => {
     const cli = read('../cli/run-jf5b-live-certification.ts');
     expect(cli).toContain(
       'readonly discoveryDiagnostics?: { latest(): DiscoveryDiagnostic | undefined };',
     );
     expect(cli).toContain("if (catalogue.failure === 'discovery-transport-failed') {");
     expect(cli).toContain('deps.io.err(renderDiscoveryDiagnostic(diagnostic));');
+    expect(cli).toContain("'receipt-discovery-failure.json'");
     // The pre-existing line is byte-identical.
     expect(cli).toContain('deps.io.err(`nara discovery failed: ${catalogue.failure}`);');
-    // And THIS discovery-transport diagnostic remains terminal-only. R13 deliberately persists a
-    // separate phase-3 sanitized diagnostic artifact, so pin the discovery failure branch itself rather
-    // than forbidding every unrelated diagnostic file in the CLI.
-    const discoveryBranch = cli.slice(
-      cli.indexOf("if (catalogue.failure === 'discovery-transport-failed') {"),
-      cli.indexOf("return stop(\n      'NARA_DISCOVERY'"),
-    );
-    expect(discoveryBranch).not.toContain('writeFile(');
+    // R15 persists only the closed failure token plus the already-sanitized diagnostic object.
     expect(cli).not.toContain('review/discovery-diagnostic');
   });
 

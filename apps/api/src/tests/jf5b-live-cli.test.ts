@@ -343,6 +343,7 @@ describe('JF-5B (1,2) the phases run in order, and a failure stops the next one'
     expect(outcome.reason).toBe('discovery-redirect-refused');
     expect(seen.discoveryCalls).toBe(1);
     expect(seen.runnerCalls).toBe(0);
+    expect(seen.filesWritten).toEqual(['receipt-discovery-failure.json']);
   });
 
   it('an unparseable body selects nothing', async () => {
@@ -360,6 +361,7 @@ describe('JF-5B (1,2) the phases run in order, and a failure stops the next one'
     expect(outcome.reason).toBe('discovery-transport-failed');
     // ONE call. A failure is a failure; the operator does not try again.
     expect(seen.discoveryCalls).toBe(1);
+    expect(seen.filesWritten).toEqual(['receipt-discovery-failure.json']);
     // And the sanitized reason carries no host, no address and no header.
     expect(JSON.stringify(outcome)).not.toContain('ECONNREFUSED');
   });
