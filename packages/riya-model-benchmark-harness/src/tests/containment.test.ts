@@ -214,12 +214,22 @@ describe('the harness cannot call anything real', () => {
   });
 
   it('is imported by no runtime, service or application', () => {
+    // AS4-PREP-A adds the first and only permitted importer, and it is exactly the consumer this
+    // package's header predicted: `riya-model-benchmark-local-adapter` IMPLEMENTS the target port
+    // against a local engine rather than modifying anything here. It is offline, holds no credential
+    // and can reach nothing but a loopback port.
+    //
+    // The invariant this spec protects is unchanged: nothing that serves a customer turn may name this
+    // package. The moment a runtime, an app, `model-gateway` or `model-gateway-composition` appears in
+    // this list, that is the failure this spec exists to cause -- and the neighbouring spec proves the
+    // gateway still names no benchmark concept at all.
+    const ALLOWED = new Set(['riya-model-benchmark-local-adapter']);
     // RAW source, deliberately: a regex comment stripper is not a TypeScript lexer, and a false
     // negative at an import firewall is the expensive direction.
     const importers: string[] = [];
     for (const root of [join(REPO_ROOT, 'packages'), join(REPO_ROOT, 'apps')]) {
       for (const entry of readdirSync(root)) {
-        if (entry === 'riya-model-benchmark-harness') continue;
+        if (entry === 'riya-model-benchmark-harness' || ALLOWED.has(entry)) continue;
         let files: string[];
         try {
           files = walk(join(root, entry, 'src'), false);
