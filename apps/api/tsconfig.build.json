@@ -53,6 +53,7 @@
     { "path": "../../packages/jarvis-v1-provider-certification-live/tsconfig.build.json" },
     { "path": "../../packages/groq-staging-smoke/tsconfig.build.json" },
     { "path": "../../packages/core-decision-adapter/tsconfig.build.json" },
+    { "path": "../../packages/core-decision-http-transport/tsconfig.build.json" },
     { "path": "../../packages/model-reply-adapter/tsconfig.build.json" },
     { "path": "../../packages/riya-prompts/tsconfig.build.json" },
     // The synthetic certification context builds its Core availability snapshot through that

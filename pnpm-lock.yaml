@@ -53,6 +53,9 @@ importers:
       '@qf-jarvis/core-decision-adapter':
         specifier: workspace:*
         version: link:../../packages/core-decision-adapter
+      '@qf-jarvis/core-decision-http-transport':
+        specifier: workspace:*
+        version: link:../../packages/core-decision-http-transport
       '@qf-jarvis/core-service-availability-read':
         specifier: workspace:*
         version: link:../../packages/core-service-availability-read
