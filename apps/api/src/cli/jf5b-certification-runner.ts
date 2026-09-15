@@ -63,6 +63,8 @@ export interface NaraSelectionInput {
 export interface NaraProbeSummary {
   readonly score: NaraProbeScore;
   readonly cases: readonly LiveCaseRecord[];
+  /** Existing sanitized JF5B diagnostics for NON-PASS probe rows only. Never authorizing. */
+  readonly diagnostics?: readonly Jf5bCaseDiagnostic[];
 }
 
 /**
@@ -109,7 +111,7 @@ export interface Jf5bCaseDiagnostic {
   readonly provider: string;
   readonly agent: string;
   readonly caseId: string;
-  /** The sanitized wire line for a terminal provider failure. Structure and numbers only. */
+  /** The sanitized wire line for a provider failure. Structure and numbers only. */
   readonly wireDiagnostic?: string;
   /** `path:code` tokens for a structured rejection, at most eight. */
   readonly schemaIssues?: readonly string[];

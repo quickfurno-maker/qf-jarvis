@@ -518,6 +518,7 @@ describe('JF-5B (2c) selection probes every shortlisted alias equally', () => {
     expect(selected.probes[0]?.cases[0]?.providerErrorClass).toBe(
       'provider-transient:rate-limited',
     );
+    expect(selected.probes[0]?.diagnostics?.[0]?.wireDiagnostic).toContain('httpStatus=429');
   });
 
   /**

@@ -109,19 +109,28 @@ function sanitizedProbeSummaries(probes: readonly NaraProbeSummary[]) {
     qualityAttempted: probe.score.qualityAttempted,
     p95LatencyMs: probe.score.p95LatencyMs,
     totalTokens: probe.score.totalTokens,
-    cases: probe.cases.map((record) => ({
-      caseId: record.caseId,
-      outcome: record.outcome,
-      structuredOutputValid: record.structuredOutputValid,
-      networkCalls: record.networkCalls,
-      providerAttempts: record.providerAttempts,
-      retryCount: record.retryCount,
-      latencyMs: record.latencyMs,
-      ...(record.providerErrorClass === undefined
-        ? {}
-        : { providerErrorClass: record.providerErrorClass }),
-      ...(record.reason === undefined ? {} : { reason: record.reason }),
-    })),
+    cases: probe.cases.map((record) => {
+      const diagnostic = probe.diagnostics?.find((one) => one.caseId === record.caseId);
+      return {
+        caseId: record.caseId,
+        outcome: record.outcome,
+        structuredOutputValid: record.structuredOutputValid,
+        networkCalls: record.networkCalls,
+        providerAttempts: record.providerAttempts,
+        retryCount: record.retryCount,
+        latencyMs: record.latencyMs,
+        ...(record.providerErrorClass === undefined
+          ? {}
+          : { providerErrorClass: record.providerErrorClass }),
+        ...(record.reason === undefined ? {} : { reason: record.reason }),
+        ...(diagnostic?.wireDiagnostic === undefined
+          ? {}
+          : { wireDiagnostic: diagnostic.wireDiagnostic }),
+        ...(diagnostic?.schemaIssues === undefined
+          ? {}
+          : { schemaIssues: diagnostic.schemaIssues }),
+      };
+    }),
   }));
 }
 

@@ -443,6 +443,16 @@ describe('JF-5B (1,2) the phases run in order, and a failure stops the next one'
             totalTokens: 42,
           },
           cases: [probe],
+          diagnostics: [
+            {
+              provider: 'nara',
+              agent: 'RIYA',
+              caseId: 'probe.case',
+              wireDiagnostic: 'diagnostic=MALFORMED_STAGE_UNRESOLVED httpStatus=503',
+              schemaIssues: ['reply.citations:invalid_type'],
+              excerpt: 'MODEL_TEXT_MUST_NOT_REACH_SELECTION_RECEIPT',
+            },
+          ],
         },
       ],
     });
@@ -451,6 +461,9 @@ describe('JF-5B (1,2) the phases run in order, and a failure stops the next one'
     const receipt = seen.fileContents.get('receipt-selection-failure.json') ?? '';
     expect(receipt).toContain('"stage": "PROBES"');
     expect(receipt).toContain('structured-output-invalid');
+    expect(receipt).toContain('httpStatus=503');
+    expect(receipt).toContain('reply.citations:invalid_type');
+    expect(receipt).not.toContain('MODEL_TEXT_MUST_NOT_REACH_SELECTION_RECEIPT');
     expect(receipt).not.toContain('b'.repeat(64));
     expect(receipt).not.toContain('nara-synthetic-certification-key');
   });

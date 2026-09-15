@@ -1733,3 +1733,17 @@ Nara's public API documentation observed on 2026-09-15 states that plan limits a
 Selection now stops immediately when a probe returns `provider-transient:rate-limited`, preserving the already-sanitized partial probe evidence and returning `probe-capacity-limited`. A transient 429 can no longer be converted into a model hard-gate verdict. Genuine structured-output invalidity and forbidden-claim assertions remain unchanged hard failures.
 
 The Nara pacer is separate from Groq's token-driven pacer. It changes no Gateway retry/fallback rule, provider adapter, serving path, prompt, prompt digest, schema, Core authority, Mastra workflow, RAG, credential handling or JF-5C approval. AUTO's known forced-fallback case is paced before its Nara attempt; same-provider retry remains exactly zero.
+
+## Amendment — JF-5B-R19: persist sanitized selection-probe wire status
+
+**Date:** 2026-09-15. Evidence source: owner-local Runs 30 and 31 on exact head `2d6c2405ce7561dfcd044cdc3afcf5d53bf99ec1`, after exact-head CI run `34925891942` succeeded.
+
+Run-30 isolated `glm-5.3-free`; Run-31 isolated `mimo-v2.5-free` after more than a full clean limiter window. Both stopped in phase 2c with `probe-capacity-limited`, 1 Groq call and 3 Nara calls. In both runs, the first Nara probe was `provider-terminal:provider-failed` and the second was `provider-transient:rate-limited`. R18 therefore worked as intended — a 429 no longer became a model hard-gate loss — but the persisted selection receipt still could not distinguish the HTTP class behind the terminal failure, nor prove whether the transient was router rate, model-tier quota, or upstream availability.
+
+Nara's public documentation observed on 2026-09-15 documents multiple provider-side capacity classes: HTTP 429 can represent rate/quota limits, including plan/model-tier constraints, while HTTP 503 represents temporary model-service unavailability; routed upstream providers can also impose independent capacity limits. Repeating candidate calls without the HTTP status would therefore be blind spend rather than evidence.
+
+R19 reuses the existing JF-5B wire observer and `Jf5bCaseDiagnostic`. Phase-2c Nara probes now traverse the already-observed transport, and each non-PASS probe may carry the same sanitized diagnostic structure used by phase 3. For malformed/schema failures the existing rich structural diagnostic is unchanged. For all other provider failures the observer exposes only `diagnostic=PROVIDER_HTTP_FAILURE httpStatus=<status>`.
+
+The persisted phase-2c receipt copies only `wireDiagnostic` and `schemaIssues` beside the existing content-free probe record. It explicitly does not persist diagnostic excerpts, provider bodies/messages, model output, prompts, request content, headers, URLs, request IDs, credentials, stacks, free-text exceptions, or `outputDigest`. Diagnostics remain non-authorizing and cannot affect outcome, scorer, model ranking, hard gates, retry, pacing, Gateway routing, fallback, Mastra, RAG, Core, durable state, provider adapters, or serving behavior.
+
+R19 adds no retry and spends no extra provider call. It only makes an already-failed selection call diagnosable after the local terminal closes. JF-5C remains blocked until a fresh exact-head JF-5B run produces the required six provider-agent safety PASS bindings.

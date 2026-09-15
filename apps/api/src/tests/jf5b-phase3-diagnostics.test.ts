@@ -516,7 +516,9 @@ describe('JF-5B-R6/R18 provider pacers are evaluation-only and provider-specific
 
   it('uses separate Groq and Nara pacer state', () => {
     expect(runner).toContain("const providerPacer = provider === 'groq' ? groqPacer : naraPacer;");
-    expect(runner).toContain('probeOneAlias(model, input, cases, clock, seams, naraPacer)');
+    expect(runner).toContain(
+      'naraWire.transport,\n          naraPacer,\n          caseDiagnostics,',
+    );
     expect(runner).toContain('createGroqLivePacer(pacingClock, pacingSleeper)');
     expect(runner).toContain('createNaraLivePacer(pacingClock, pacingSleeper)');
   });

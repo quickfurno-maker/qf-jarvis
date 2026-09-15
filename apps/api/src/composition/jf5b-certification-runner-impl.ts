@@ -999,19 +999,20 @@ export function createJf5bCertificationRunner(seams: Jf5bRunnerSeams = {}): Cert
       provider: CertifiedProvider,
       errorCode: ModelGatewayErrorCode,
     ): string | undefined => {
-      if (errorCode !== 'malformed-provider-output' && errorCode !== 'structured-output-invalid') {
-        return undefined;
-      }
+      const rich =
+        errorCode === 'malformed-provider-output' || errorCode === 'structured-output-invalid';
       if (provider === 'groq') {
         const facts = groqWire.observer.facts();
-        return facts === undefined
-          ? undefined
-          : renderWireDiagnostic(groqMalformedStage(facts), facts);
+        if (facts === undefined) return undefined;
+        return rich
+          ? renderWireDiagnostic(groqMalformedStage(facts), facts)
+          : `diagnostic=PROVIDER_HTTP_FAILURE httpStatus=${String(facts.httpStatus)}`;
       }
       const facts = naraWire.observer.facts();
-      return facts === undefined
-        ? undefined
-        : renderWireDiagnostic(naraMalformedStage(facts), facts);
+      if (facts === undefined) return undefined;
+      return rich
+        ? renderWireDiagnostic(naraMalformedStage(facts), facts)
+        : `diagnostic=PROVIDER_HTTP_FAILURE httpStatus=${String(facts.httpStatus)}`;
     },
     schemaIssuesFor: (
       provider: CertifiedProvider,
@@ -1043,7 +1044,15 @@ export function createJf5bCertificationRunner(seams: Jf5bRunnerSeams = {}): Cert
       }
       const probes: NaraProbeSummary[] = [];
       for (const model of input.shortlist) {
-        const outcome = await probeOneAlias(model, input, cases, clock, seams, naraPacer);
+        const outcome = await probeOneAlias(
+          model,
+          input,
+          cases,
+          clock,
+          naraWire.transport,
+          naraPacer,
+          caseDiagnostics,
+        );
         if (outcome === undefined) {
           // A ceiling stopped the run. Continuing would produce a ranking built on fewer probes for
           // the later aliases, which is a comparison of nothing. The summaries gathered so far still
@@ -1322,17 +1331,19 @@ async function probeOneAlias(
   input: NaraSelectionInput,
   cases: readonly GovernedCase[],
   clock: () => string,
-  seams: Jf5bRunnerSeams,
+  naraTransport: NaraTransport,
   pacer: NaraLivePacer | undefined,
+  caseDiagnostics: CaseDiagnostics,
 ): Promise<NaraProbeSummary | undefined> {
   const gateway = createEvaluationGateway('NARA_ONLY', {
     naraApiKey: input.apiKey,
     naraModelId: model.modelId,
-    ...(seams.naraTransport === undefined ? {} : { naraTransport: seams.naraTransport }),
+    naraTransport,
   });
   const release = releaseFor('nara', model.modelId);
   const latencies: number[] = [];
   const records: LiveCaseRecord[] = [];
+  const diagnostics: Jf5bCaseDiagnostic[] = [];
   let passed = 0;
   let tokens = 0;
   let structural = true;
@@ -1348,11 +1359,15 @@ async function probeOneAlias(
       ledger: input.ledger,
       clock,
       ...(pacer === undefined ? {} : { pacer }),
+      diagnostics: caseDiagnostics,
     });
     if (executed.record.providerErrorClass === 'budget-exhausted') {
       return undefined;
     }
     records.push(executed.record);
+    if (executed.diagnostic !== undefined) {
+      diagnostics.push(executed.diagnostic);
+    }
     latencies.push(executed.record.latencyMs);
     if (executed.record.providerErrorClass === 'provider-transient:rate-limited') {
       break;
@@ -1381,5 +1396,6 @@ async function probeOneAlias(
     // The records this function ALREADY built, carried out instead of discarded. Each is the sanitized
     // `LiveCaseRecord` the rest of the lane writes: identities, counts, closed tokens and a digest.
     cases: Object.freeze(records),
+    diagnostics: Object.freeze(diagnostics),
   });
 }
