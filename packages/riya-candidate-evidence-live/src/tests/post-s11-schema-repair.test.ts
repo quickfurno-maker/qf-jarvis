@@ -149,11 +149,12 @@ describe('POST-SDH4 — the historical R0-R8 matrix can no longer be planned, an
     // `$.evolution.observations` array items — and Groq returned HTTP 400. The repair removed that
     // composition, so the historical planner can no longer locate the fragment it is named after.
     //
-    // It THROWS rather than quietly re-pointing R4 at some other shape, which is exactly right: every
-    // SDH4 receipt already says what R4 meant, and a planner that silently changed it would make the
-    // immutable evidence unreadable. The failure is therefore a regression proof that the rejected
-    // fragment is gone.
-    expect(() => planRiyaSchemaProbeMatrix(projected)).toThrow(/DIMENSION_NOT_LOCATED_ANYOFARRAY/u);
+    // It THROWS rather than quietly re-pointing a historical dimension at some other shape. R14 also
+    // removed the provider-generated numeric version enum, so the old matrix now fails even earlier
+    // at NUMERICENUM. Historical receipts remain immutable; no consumed probe is silently repurposed.
+    expect(() => planRiyaSchemaProbeMatrix(projected)).toThrow(
+      /DIMENSION_NOT_LOCATED_NUMERICENUM/u,
+    );
   });
 
   it('the repaired document contains NO anyOf under any array items', () => {

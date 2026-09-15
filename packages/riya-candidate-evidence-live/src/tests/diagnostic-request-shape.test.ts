@@ -139,7 +139,8 @@ describe('R8-C27 — the static request-shape inventory is lengths and counts on
     expect(inventory.maxNestingDepth).toBeGreaterThan(1);
     expect(inventory.anyOfCount).toBeGreaterThan(0);
     expect(inventory.enumCount).toBeGreaterThan(0);
-    expect(inventory.numericEnumCount).toBeGreaterThanOrEqual(1);
+    // JF-5B-R14 moved protocol version out of the provider wire, so no numeric singleton enum remains.
+    expect(inventory.numericEnumCount).toBe(0);
     expect(inventory.stringEnumCount).toBeGreaterThanOrEqual(1);
 
     // The body field NAMES are the documented Groq set, and nothing else.

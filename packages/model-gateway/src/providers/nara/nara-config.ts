@@ -121,6 +121,27 @@ export interface NaraProviderConfigInput {
  */
 export const NARA_SUPPORTS_STRICT_JSON_SCHEMA = false;
 
+/**
+ * The ceiling on the serialized schema this provider will put on the wire as guidance (JF-5B-R4).
+ *
+ * A NARA-INTERNAL bound, and a new one: every existing bound in this package is a RESPONSE ceiling, and
+ * reusing one of those would mean a response limit silently deciding what a request may describe. 32 KiB
+ * is far above every schema this repository renders -- the generic reply document is well under 2 KiB --
+ * and far below anything that could crowd out the turn inside the model's context.
+ *
+ * A schema past it fails CLOSED, before the network: a structured request we cannot describe is a
+ * request we should not spend on.
+ */
+export const NARA_MAX_SCHEMA_GUIDANCE_BYTES = 32_768;
+
+/**
+ * The opening line of the provider-owned guidance message.
+ *
+ * Exists so a spec -- and a person reading a captured request -- can tell the PROVIDER's message from
+ * the application's own system bytes without matching prose. It is a marker, not a policy.
+ */
+export const NARA_SCHEMA_GUIDANCE_PREFIX = '[provider-encoding-guidance]';
+
 const configPrimitivesSchema = z
   .object({
     providerId: IDENTIFIER,

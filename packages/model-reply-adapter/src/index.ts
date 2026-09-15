@@ -24,6 +24,16 @@ export type {
   ModelReplyStructuredProjection,
 } from './contracts/structured-output-profile.js';
 
+// JF-5B-R2 (ADR-0152 amendment): the DEFAULT strict-projectable model-wire profile. Exported so the
+// shape a provider is actually asked for can be asserted, and so a reader can find the one place the
+// generic wire encoding is defined. It is an ENCODING, not a second reply contract: every projection
+// is re-proved against `structuredReplySchema` below.
+export {
+  DEFAULT_STRUCTURED_OUTPUT_PROFILE,
+  genericReplyWireSchema,
+} from './contracts/default-structured-output-profile.js';
+export type { GenericReplyWire } from './contracts/default-structured-output-profile.js';
+
 export { STRUCTURED_REPLY_KINDS, structuredReplySchema } from './contracts/reply-schema.js';
 export type {
   StructuredReply,

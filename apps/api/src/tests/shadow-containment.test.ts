@@ -187,9 +187,39 @@ describe('(121-126) the production composition is still non-activatable', () => 
 });
 
 describe('(127-132) no live model id, tool, workflow or database path', () => {
-  it('(127, 128) no production source hard-codes a live provider model id', () => {
+  it('(127, 128) no SERVING source hard-codes a live provider model id', () => {
+    // NARROWED, not relaxed (JF-5B-R1, ADR-0152).
+    //
+    // The rule protects the SHADOW path and every serving path: a model a deployment can reach without
+    // a release naming it is a model nobody approved. The JF-5B certification runner is the opposite
+    // case. It exists to say exactly which model was measured, and it must pin one -- a floating alias
+    // there would mean a receipt that cannot be reproduced, which is the failure this rule is really
+    // about.
+    //
+    // So the exception is ONE file, named by path, and the assertions below still hold it to the shape
+    // of the rule: exactly one pinned id, never `latest`, never a wildcard.
+    const CERTIFICATION_RUNNER = '/src/composition/jf5b-certification-runner-impl.ts';
     for (const file of allFiles().filter((f) => !normalise(f).includes('/tests/'))) {
       const text = readFileSync(file, 'utf8');
+      if (normalise(file).endsWith(CERTIFICATION_RUNNER)) {
+        // CODE, not documentation. This file necessarily WRITES DOWN the rule it obeys -- that the id
+        // is pinned and never a floating alias -- and a raw-text scan would read the promise as the
+        // breach. Every other file above is still scanned raw, because none of them has any business
+        // naming a model id at all.
+        const code = codeOnly(text);
+        expect(code.match(/gpt-oss/g), file).toHaveLength(1);
+        // CANDIDATE UPDATED, rule unchanged (JF-5B-R10). The rule is "a model id may be hard-coded in
+        // exactly one JF-5B constant and nowhere else", and that is untouched. What changed is WHICH
+        // model JF-5B certifies: run-12 proved `openai/gpt-oss-20b` cannot hold Riya's schema under
+        // strict constrained generation, and `openai/gpt-oss-120b` is already permitted on the same
+        // project at the same limits. One constant, one model, still pinned and never floating.
+        expect(code, file).toContain("JF5B_GROQ_MODEL_ID = 'openai/gpt-oss-120b'");
+        expect(code, file).not.toContain('latest');
+        expect(code, file).not.toContain("modelId: '*'");
+        // Still no endpoint: the host stays inside the gateway's own guarded transport.
+        expect(code, file).not.toContain('groq.com');
+        continue;
+      }
       expect(text).not.toContain('gpt-oss');
       expect(text).not.toContain('llama-3');
       expect(text).not.toContain('mixtral');
@@ -491,6 +521,12 @@ describe('(133-148) the declared budget and every prior lock', () => {
       'governed-knowledge',
       'groq-staging-smoke',
       'jarvis-runtime',
+      // JF-5B (ADR-0152): the live certification OPERATOR. Still an EXACT set match -- this
+      // records an authorised addition, it does not relax the assertion. Evaluation only and off
+      // the serving path: no production package or app imports it, it holds no business
+      // authority, it reaches no database, and a live provider call needs an explicit flag AND a
+      // phrase typed at a terminal.
+      'jarvis-v1-provider-certification-live',
       'model-evaluation',
       'model-gateway',
       'model-gateway-composition',
@@ -719,7 +755,10 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // provider-SELECTION mode (7). This lock only tracks that package's count; the reasoning is
       // recorded in its own containment spec. Nothing about this app changes, and production
       // inference stays OFF.
-      'model-gateway': 93,
+      // JF-5B (ADR-0152): 93 -> 95. The Nara alias guard and its frozen refusal list become
+      // reachable so an operator outside the gateway can refuse a router alias returned by
+      // authenticated discovery. A pure predicate: no key, no transport, no behaviour change.
+      'model-gateway': 95,
       'model-gateway-composition': 2,
       // MVP-P2A.2 HF1: 24 -> 27. The semantic approval-digest helper and its two readable parts.
       // Pure functions over an already-parsed SmokeConfig -- no filesystem, no clock, no network, no
@@ -787,16 +826,28 @@ describe('(133-148) the declared budget and every prior lock', () => {
     // budget rather than left to lose a race with whatever runs beside it.
   }, 30_000);
 
-  it('the two executables are declared as bins and each runs nothing on import', () => {
+  it('the three executables are declared as bins and each runs nothing on import', () => {
     const manifest = JSON.parse(readFileSync(join(APP_DIR, 'package.json'), 'utf8')) as {
       bin?: Record<string, string>;
     };
+    // JF-5B-R1 (ADR-0152) adds the third, and it is a DECLARATION that matches a file: the JF-5B
+    // harness previously declared a bin whose source did not exist, which is how a lane can report an
+    // executable it never had. The path is asserted against the emitting build's output, and
+    // `jf5b-bin-exists.test.ts` asserts that both the source and the compiled file are really there.
     expect(manifest.bin).toEqual({
       'qfj-generate-shadow-evidence': './dist/bin/generate-shadow-evidence.js',
+      'qfj-jf5b-certify': './dist/bin/run-jf5b-live-certification.js',
       'qfj-run-shadow-once': './dist/bin/run-shadow-once.js',
     });
     // Only the bin entries execute; every other module is import-safe.
-    for (const file of allFiles().filter((f) => !normalise(f).includes('/bin/'))) {
+    //
+    // `jf5b-bin-exists.test.ts` is excluded for the usual reason a scanner is excluded from its own
+    // scan: it exists to assert that the certification bin DOES read argv and DOES set an exit code,
+    // so it necessarily writes both strings down. It executes neither.
+    const BIN_SPEC = '/src/tests/jf5b-bin-exists.test.ts';
+    for (const file of allFiles().filter(
+      (f) => !normalise(f).includes('/bin/') && !normalise(f).endsWith(BIN_SPEC),
+    )) {
       const code = codeOnly(readFileSync(file, 'utf8'));
       expect(code).not.toMatch(/process\s*\.\s*exitCode/);
       expect(code).not.toMatch(/process\s*\.\s*argv/);

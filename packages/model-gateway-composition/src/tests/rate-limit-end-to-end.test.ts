@@ -96,7 +96,10 @@ describe('(1, 2, 3, 4, 5) the 429 path, end to end', () => {
     };
 
     const result = await createLiveModelGatewayInvoker(counted).invoke(request);
-    expect(result).toEqual({ ok: false, transient: true });
+    // JF-5B-R6 adds the gateway's own CLOSED code beside the unchanged transient flag. `transient` is
+    // still the whole behavioural signal; the code is diagnostic, and a run that reported dozens of
+    // identical transient failures could not previously say which of them were 429s.
+    expect(result).toEqual({ ok: false, transient: true, errorCode: 'rate-limited' });
     expect(gatewayCalls).toBe(1);
     expect(transport.calls()).toBe(1);
   });
@@ -165,7 +168,11 @@ describe('(10, 11, 12) nothing from the 429 response can escape', () => {
       'The provider refused the request because a rate or quota limit was reached.',
     );
     expect((thrown as unknown as { cause?: unknown }).cause).toBeUndefined();
-    expect(Object.keys(invocation).sort()).toEqual(['ok', 'transient']);
+    // JF-5B-R6 adds the gateway's own CLOSED code. It is the third key and the only new one, and it is
+    // the code alone: every sentinel above is still absent from `JSON.stringify(invocation)`, which this
+    // loop already scanned.
+    expect(Object.keys(invocation).sort()).toEqual(['errorCode', 'ok', 'transient']);
+    expect(invocation.ok ? undefined : invocation.errorCode).toBe('rate-limited');
   });
 });
 

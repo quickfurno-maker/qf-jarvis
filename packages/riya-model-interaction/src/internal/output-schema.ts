@@ -231,7 +231,7 @@ export function isModelProducibleObservation(observation: {
   return !(observation.operation === 'CLEAR' && observation.provenance !== 'user_stated');
 }
 
-/** The whole Riya one-call answer. */
+/** The whole Riya one-call answer, including the canonical protocol version. */
 export const riyaStructuredOutputSchema = z
   .object({
     reply: riyaReplySchema,
@@ -240,6 +240,22 @@ export const riyaStructuredOutputSchema = z
   .strict();
 
 export type RiyaStructuredOutput = z.infer<typeof riyaStructuredOutputSchema>;
+
+/**
+ * The provider WIRE shape (JF-5B-R14). `evolution.version` is protocol bookkeeping, not a model
+ * decision: the canonical observation constructor already pins version 1. Run-17 proved all six
+ * Groq/Riya malformed generations independently failed that literal, so asking the model to mint it
+ * adds a failure mode and no authority.
+ *
+ * The wire therefore omits exactly that one field. Projection injects canonical `version: 1` and
+ * re-proves the resulting value against `riyaStructuredOutputSchema`; every business-bearing field
+ * and every existing semantic gate stays unchanged.
+ */
+const riyaProviderEvolutionSchema = evolutionSchema.omit({ version: true });
+export const riyaProviderWireSchema = riyaStructuredOutputSchema
+  .extend({ evolution: riyaProviderEvolutionSchema })
+  .strict();
+export type RiyaProviderWireOutput = z.infer<typeof riyaProviderWireSchema>;
 
 /**
  * The POST-SUMMARY grounded answer (RWC-P7, ADR-0103 §16).

@@ -18,6 +18,7 @@ import type {
 } from '@qf-jarvis/agent-runtime';
 
 import type { ModelReplyAdapterResult, SafeReplyProvenance } from '../contracts/adapter-result.js';
+import { DEFAULT_STRUCTURED_OUTPUT_PROFILE } from '../contracts/default-structured-output-profile.js';
 import type { ModelReplyStructuredOutputProfile } from '../contracts/structured-output-profile.js';
 import type { ModelReplyAdapterReason } from '../contracts/reasons.js';
 import type { ReplyStateReader } from '../contracts/state.js';
@@ -37,10 +38,7 @@ import {
   type GatewayRequestBudgets,
 } from './build-gateway-request.js';
 import { provenanceMatches } from './validate-provenance.js';
-import {
-  validateProfileStructuredResult,
-  validateStructuredResult,
-} from './validate-gateway-result.js';
+import { validateProfileStructuredResult } from './validate-gateway-result.js';
 import { citationsAuthorized } from './validate-citations.js';
 import { resolveAuthoritativePrompt } from './resolve-prompt.js';
 import { postGatewayBlockReason, stateBlockReason } from './state-gates.js';
@@ -341,6 +339,18 @@ export function createModelReplyAdapter(config: ModelReplyAdapterConfig): ModelR
     const prompt = resolution.prompt;
     resolved.promptDigest = prompt.contentDigest;
 
+    // ONE profile for this turn: the caller's, or the default strict wire shape.
+    //
+    // JF-5B-R2 (ADR-0152 amendment). There used to be a "no profile" path that asked the provider for
+    // `structuredReplySchema` verbatim, and that schema is semantically right and NOT strict-projectable
+    // -- two of its four properties are optional, and a strict endpoint cannot express an absent one.
+    // So every agent without a custom profile could never reach a strict-capable provider.
+    //
+    // The default profile changes the WIRE ENCODING and nothing else: required+nullable out, null
+    // projected back to absence, and the result re-proved against the same `structuredReplySchema` it
+    // always was. A configured profile -- Riya's -- is untouched and still wins.
+    const profile = config.structuredOutputProfile ?? DEFAULT_STRUCTURED_OUTPUT_PROFILE;
+
     // Build the exact gateway request from that one definition.
     let request;
     try {
@@ -349,9 +359,7 @@ export function createModelReplyAdapter(config: ModelReplyAdapterConfig): ModelR
         prompt,
         requestedAt: config.clock(),
         budgets,
-        ...(config.structuredOutputProfile === undefined
-          ? {}
-          : { profile: config.structuredOutputProfile }),
+        profile,
       });
     } catch {
       return refuse('model-plan-invalid', false);
@@ -390,12 +398,10 @@ export function createModelReplyAdapter(config: ModelReplyAdapterConfig): ModelR
     if (!provenanceMatches(response, plan, request)) {
       return refuse('model-provenance-mismatch', true);
     }
-    // Strict structured output. With a profile the answer is projected to a reply and RE-PROVED
-    // against the base schema; without one this is byte-for-byte the path it always was.
-    const structured =
-      config.structuredOutputProfile === undefined
-        ? validateStructuredResult(response)
-        : validateProfileStructuredResult(response, config.structuredOutputProfile);
+    // Strict structured output. The answer is projected to a reply and RE-PROVED against the base
+    // `structuredReplySchema` -- which is what decides what counts as a reply, for every profile
+    // including the default one. A projection cannot widen it.
+    const structured = validateProfileStructuredResult(response, profile);
     if (!structured.ok) {
       return refuse('model-structured-output-invalid', true);
     }

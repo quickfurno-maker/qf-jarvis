@@ -101,7 +101,7 @@ describe('model-gateway package containment', () => {
    * the imported barrel counts runtime exports only — `export type` produces no runtime binding — so
    * adding a type costs nothing and adding a value is a deliberate, reviewed change.
    */
-  it('freezes the package-root runtime API at exactly 93 symbols', async () => {
+  it('freezes the package-root runtime API at exactly 95 symbols', async () => {
     // JF-2A (ADR-0146): 80 -> 93. Thirteen symbols, in two groups, both deliberate.
     //
     // Six are the NaraRouter hosted provider, mirroring the Groq six exactly: the provider, the key
@@ -168,7 +168,12 @@ describe('model-gateway package containment', () => {
     // schemas, and "the production schema projects into the documented subset" has to be asserted
     // against the real schema rather than a replica.
     const barrel = (await import('../index.js')) as unknown as Record<string, unknown>;
-    expect(Object.keys(barrel)).toHaveLength(93);
+    // JF-5B (ADR-0152): 93 -> 95. The Nara ALIAS GUARD and its frozen refusal list become
+    // reachable, and only those: a pure predicate over a string with no key, no transport and no
+    // behaviour. Authenticated `/v1/models` discovery added a caller outside this package that must
+    // refuse a router alias BEFORE it can build a config to be refused by, and the alternative was a
+    // second alias list in the operator. An EXACT count, narrowed with a note rather than relaxed.
+    expect(Object.keys(barrel)).toHaveLength(95);
   });
 
   it('does not export FakeModelProvider from the production root', () => {

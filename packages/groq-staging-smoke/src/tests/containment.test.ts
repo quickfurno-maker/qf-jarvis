@@ -224,11 +224,21 @@ describe('dependency graph, exports, and the locked public API', () => {
   });
 
   it('(57) only the offline evidence operator depends on this package, and it closes no cycle', () => {
-    // RESTATED, not relaxed. MVP-P2A.2 adds exactly one dependant, and the property this spec
-    // protects is acyclicity rather than zero dependants: `riya-candidate-evidence-live` is an
-    // offline leaf that nothing imports, and this package depends only on `model-gateway` and `zod`,
-    // so the arrow cannot come back. Reusing the governed one-shot smoke was the whole point --
-    // the alternative was a second connectivity check with its own credential handling.
+    // RESTATED, not relaxed. The property this spec protects is ACYCLICITY rather than zero
+    // dependants, and the two offline leaves that nothing imports are
+    // `riya-candidate-evidence-live` (MVP-P2A.2) and `jarvis-v1-provider-certification-live`
+    // (JF-5B, ADR-0152). This package depends only on `model-gateway` and `zod`, so the arrow cannot
+    // come back from any of them. Reusing the governed one-shot smoke and its masked-TTY secret
+    // primitive was the whole point -- the alternative was a second connectivity check and a second
+    // credential policy, which would drift from this one the first time either was fixed.
+    //
+    // JF-5B-R1 (ADR-0152) adds `@qf-jarvis/api`, and it is a different KIND of dependant: an
+    // application, not a leaf package. The dependency exists because the JF-5B executable lives at the
+    // application's process boundary -- the only place in this repository allowed to acquire a
+    // credential -- and it uses this package for exactly two things, the connectivity smoke and the
+    // masked-TTY primitive. It is reached from ONE file, `src/composition/jf5b-live-composition.ts`,
+    // which `credential-containment.test.ts` pins by exact path. An application cannot close a cycle:
+    // nothing imports `@qf-jarvis/api`, and its own containment specs prove that too.
     const packagesDir = repoPath('packages');
     const appsDir = repoPath('apps');
     const dependants: string[] = [];
@@ -250,7 +260,11 @@ describe('dependency graph, exports, and the locked public API', () => {
         }
       }
     }
-    expect(dependants).toEqual(['@qf-jarvis/riya-candidate-evidence-live']);
+    expect(dependants.sort()).toEqual([
+      '@qf-jarvis/api',
+      '@qf-jarvis/jarvis-v1-provider-certification-live',
+      '@qf-jarvis/riya-candidate-evidence-live',
+    ]);
 
     // And the arrow does not come back: this package's own dependencies do not include it.
     expect(Object.keys(manifest.dependencies ?? {})).not.toContain(

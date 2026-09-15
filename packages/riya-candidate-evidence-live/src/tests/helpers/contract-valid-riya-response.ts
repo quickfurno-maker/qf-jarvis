@@ -125,7 +125,7 @@ export function evolutionPayload(args: {
       citations: args.citations.map((one) => ({ ...one })),
     },
     evolution: {
-      version: 1,
+      // JF-5B-R14: provider wire omits canonical protocol version; Jarvis injects version 1.
       // POST-SDH4: the observation container, with both arrays required and empty.
       observations: { sets: [], clears: [] },
       skipProjectDetails: false,

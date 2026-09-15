@@ -38,6 +38,26 @@ export default defineConfig({
   test: {
     environment: 'node',
 
+    /**
+     * The per-test wall-clock budget.
+     *
+     * Raised from vitest's 5s default because this repository's containment suites are, by design,
+     * whole-repository WALKS: dozens of them read every source file under `packages/**` and `apps/**`
+     * to prove an import firewall. Each one is I/O-bound, each grows as the repository does, and under
+     * the parallel suite they contend with each other — so on a loaded machine a walk that takes 1s
+     * alone takes 6s beside fifteen others, and vitest reports a CONTAINMENT BREACH that is really a
+     * stopwatch.
+     *
+     * That failure mode is worse than a slow test: it makes a red suite mean nothing, which is exactly
+     * what a gate measured by exit code cannot afford. Two specs had already worked around it with
+     * per-test budgets and a note saying why; this moves the fix to the cause instead of spreading the
+     * workaround.
+     *
+     * It weakens nothing. Every assertion is unchanged, no lock is relaxed, and a test that genuinely
+     * hangs still fails — 25 seconds later than it used to.
+     */
+    testTimeout: 30_000,
+
     // Tests live beside the source they cover, inside a workspace package.
     include: ['apps/*/src/**/*.{test,spec}.ts', 'packages/*/src/**/*.{test,spec}.ts'],
 

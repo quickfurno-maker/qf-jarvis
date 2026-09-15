@@ -23,6 +23,7 @@ import {
   createModelReplyAdapter,
   type ModelReplyAdapterConfig,
 } from '../adapter/create-model-reply-adapter.js';
+import { genericReplyWireSchema } from '../contracts/default-structured-output-profile.js';
 import { structuredReplySchema } from '../contracts/reply-schema.js';
 import type { StructuredReply } from '../contracts/reply-schema.js';
 import type { ModelReplyStructuredOutputProfile } from '../contracts/structured-output-profile.js';
@@ -155,17 +156,53 @@ function syntheticProfile(
   };
 }
 
-const validProfileAnswer = (): unknown => ({ reply: structuredReply(), note: 'synthetic-note' });
+/**
+ * A SEMANTIC reply, for the synthetic profile whose schema is the semantic one.
+ *
+ * Deliberately not the shared wire fixture: this profile declares `structuredReplySchema` as its own
+ * structured schema, so an answer carrying a `null` optional field is one that profile refuses — and
+ * it should. A custom profile owns its wire dialect; the default profile's dialect is not it.
+ */
+const semanticReply = (): unknown => ({
+  kind: 'REPLY',
+  replyBody: structuredReply().replyBody,
+  citations: [{ knowledgeId: 'kb.fact', version: 1 }],
+});
+
+const validProfileAnswer = (): unknown => ({ reply: semanticReply(), note: 'synthetic-note' });
 
 // ---------------------------------------------------------------------------
 // The DEFAULT path: absence changes nothing.
 // ---------------------------------------------------------------------------
 
 describe('no profile: the path this package always had', () => {
-  it('uses the base structuredReplySchema in the request', async () => {
+  it('asks the provider for the DEFAULT strict wire schema, and still gates on the base one', async () => {
+    // AMENDED, not dropped (JF-5B-R2, ADR-0152 amendment on ADR-0099).
+    //
+    // This used to assert that an absent profile sent `structuredReplySchema` verbatim. That schema is
+    // semantically right and NOT strict-projectable — two of its four properties are optional, and a
+    // provider-native strict endpoint cannot express an absent one — so the guarantee it encoded was
+    // "the default path can never reach a strict-capable provider". JF-5B found that by running it.
+    //
+    // What replaced it is an ENCODING, not a second contract: required+nullable on the wire, `null`
+    // projected back to absence, and the SAME `structuredReplySchema` re-proving the projection. The
+    // assertions below are the two halves of that sentence.
     const invoker = recordingInvoker(structuredReply());
     await adapterWith(invoker).draftReplyDetailed(replyPlan());
-    expect(invoker.request()?.structuredSchema).toBe(structuredReplySchema);
+    expect(invoker.request()?.structuredSchema).toBe(genericReplyWireSchema);
+    expect(invoker.request()?.structuredSchema).not.toBe(structuredReplySchema);
+  });
+
+  it('returns exactly the semantic reply the base schema describes', async () => {
+    // The other half: what the CALLER sees is byte-for-byte what it always was.
+    const result = await adapterWith(recordingInvoker(structuredReply())).draftReplyDetailed(
+      replyPlan(),
+    );
+    expect(result.ok).toBe(true);
+    expect(result.kind).toBe('REPLY');
+    expect(result.draft?.replyBody).toBe(structuredReply().replyBody);
+    // `reasonCode` was `null` on the wire, and is ABSENT in the result.
+    expect(structuredReplySchema.safeParse(structuredReply()).success).toBe(false);
   });
 
   it('the one user message is the plan normalizedText, verbatim', async () => {
@@ -377,7 +414,7 @@ describe("the profile's detail rides only on a fully accepted result", () => {
   it('the extra material the profile did NOT project cannot escape', async () => {
     // The provider answered with a field the profile's schema strips. Nothing downstream sees it.
     const invoker = recordingInvoker({
-      reply: structuredReply(),
+      reply: semanticReply(),
       note: 'synthetic-note',
     });
     const dropping = syntheticProfile({
@@ -392,7 +429,7 @@ describe("the profile's detail rides only on a fully accepted result", () => {
   });
 
   it('no raw provider response reaches the detail', async () => {
-    const raw = { reply: structuredReply(), note: 'synthetic-note' };
+    const raw = { reply: semanticReply(), note: 'synthetic-note' };
     const result = await adapterWith(recordingInvoker(raw), syntheticProfile()).draftReplyDetailed(
       replyPlan(),
     );

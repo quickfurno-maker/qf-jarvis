@@ -34,6 +34,7 @@ import {
   type NaraChatRequestBody,
 } from './nara-contracts.js';
 import { normalizeNaraHttpStatus } from './nara-error-normalization.js';
+import { buildNaraSchemaGuidance, withSchemaGuidance } from './nara-schema-guidance.js';
 import { NARA_CHAT_COMPLETIONS_ENDPOINT, type NaraTransport } from './nara-transport.js';
 
 const HTTP_OK = 200;
@@ -125,9 +126,29 @@ export class NaraModelProvider implements ModelProvider {
     const responseFormat: NaraChatRequestBody['response_format'] =
       input.resultMode === 'STRUCTURED' ? { type: 'json_object' } : undefined;
 
+    // JF-5B-R4. `json_object` asks for "some JSON" and says nothing about WHICH JSON, and two
+    // authenticated live runs failed every hard gate for exactly that reason: the model was asked for an
+    // object and never shown the object. The schema was never missing -- the gateway renders it into
+    // `structuredJsonSchema` and the Groq provider already consumes it -- so this provider consumes the
+    // SAME document and, lacking a strict mode to be handed it in, puts it in a message instead.
+    //
+    // Fails CLOSED before the network on a missing, unserializable or oversized schema. A structured
+    // request we cannot describe is a request we should not spend on.
+    let messages = input.messages;
+    if (input.resultMode === 'STRUCTURED') {
+      const guidance = buildNaraSchemaGuidance(input.structuredJsonSchema);
+      if (!guidance.ok) {
+        return { status: 'failed', retryable: false };
+      }
+      messages = withSchemaGuidance(input.messages, {
+        role: 'system',
+        content: guidance.content,
+      });
+    }
+
     const body: NaraChatRequestBody = {
       model: this.config.modelId,
-      messages: input.messages,
+      messages,
       stream: false,
       n: 1,
       max_tokens: this.completionTokensFor(input),

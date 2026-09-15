@@ -69,6 +69,33 @@ const isDesignatedAdapter = (f: string): boolean =>
   DESIGNATED_FS_ADAPTERS.some((a) => normalise(f).endsWith(`/${a}`));
 
 /**
+ * The JF-5B certification process boundary (JF-5B-R1, ADR-0152).
+ *
+ * A SEPARATE list from the two adapters above, and deliberately so. Those two are read-only and are on
+ * the serving path; these two are the offline certification executable's own seams, reachable from one
+ * bin and from nothing else. Merging the lists would let a serving module inherit a write permission
+ * that only an offline operator has any business holding.
+ *
+ * Every rule below still applies to them by name rather than by directory: `src/composition/` is where
+ * this application assembles everything, so a directory exception would let a third file appear there
+ * unnoticed.
+ */
+const JF5B_BIN = 'src/bin/run-jf5b-live-certification.ts';
+const JF5B_CLI = 'src/cli/run-jf5b-live-certification.ts';
+const JF5B_COMPOSITION = 'src/composition/jf5b-live-composition.ts';
+const JF5B_REPOSITORY_FACTS = 'src/composition/jf5b-repository-facts.ts';
+const JF5B_RUNNER_IMPL = 'src/composition/jf5b-certification-runner-impl.ts';
+const JF5B_FILES: readonly string[] = Object.freeze([
+  JF5B_BIN,
+  JF5B_CLI,
+  JF5B_COMPOSITION,
+  JF5B_REPOSITORY_FACTS,
+  JF5B_RUNNER_IMPL,
+]);
+const isJf5bFile = (f: string, only: readonly string[] = JF5B_FILES): boolean =>
+  only.some((one) => normalise(f).endsWith(`/${one}`));
+
+/**
  * The files permitted to touch `process` at all, and the exact member each may touch.
  *
  * `process.env` is never in this table: no file in `apps/api` may read the environment (ADR-0064 §7,
@@ -83,6 +110,12 @@ const PROCESS_ALLOWLIST: Readonly<Record<string, readonly string[]>> = Object.fr
   // The default IO factories are the ONLY modules that touch a stream, and only for WRITING.
   'src/cli/run-shadow-once.ts': ['process.stdout'],
   'src/cli/generate-shadow-evidence.ts': ['process.stdout', 'process.stderr'],
+  // JF-5B-R1 (ADR-0152). The certification bin reads argv and sets an exit code, exactly as the two
+  // shadow bins do; its composition writes the operator's lines and reads the ONE typed confirmation.
+  // `process.stdin` appears here and in no other file in this application -- see the stream lock below,
+  // which explains why a live certification is the one operation that must read a terminal.
+  'src/bin/run-jf5b-live-certification.ts': ['process.exitCode', 'process.argv'],
+  'src/composition/jf5b-live-composition.ts': ['process.stdout', 'process.stderr', 'process.stdin'],
 });
 
 /** THE one file permitted to arm a timer: the single hard run deadline (ADR-0065 §11). */
@@ -189,21 +222,47 @@ describe('(67) the process boundary reads no environment', () => {
     expect([...seen].sort()).toEqual([...declared].sort());
   });
 
-  it('no file reads a stream — argv and exit codes are written, never stdin', () => {
+  it('exactly ONE file reads a stream, and only to read a typed confirmation', () => {
+    // NARROWED, not relaxed (JF-5B-R1, ADR-0152).
+    //
+    // The rule was "no file reads stdin", and it held for as long as this application had no operation
+    // that a person had to authorise in the moment. The JF-5B live certification is that operation: it
+    // spends real money against real providers, and its second gate is a phrase typed at a real
+    // terminal. A gate that could be satisfied by a flag, a file or an environment variable is not a
+    // second gate at all -- it is the first one wearing a different hat.
+    //
+    // So exactly one file may read a stream, it is named here, and what it reads is a PHRASE rather
+    // than a secret: echo stays ON, because hiding it would make a deliberate acknowledgement look
+    // like a password prompt. The credential ingress is a different seam entirely, and it stays inside
+    // the governed masked-TTY primitive in `packages/groq-staging-smoke`.
     for (const file of allFiles()) {
       const code = codeOnly(readFileSync(file, 'utf8'));
-      expect(code).not.toMatch(/process\s*\.\s*stdin/);
-      expect(code).not.toMatch(/\bprompt\s*\(|setRawMode|createInterface/);
+      if (isJf5bFile(file, [JF5B_COMPOSITION])) {
+        // One import and one call, and the interface is closed on every path.
+        expect(code.match(/createInterface\s*\(/g), file).toHaveLength(1);
+        expect(code, file).toContain('rl.close()');
+        // Still no raw mode: this is a line read, not a keystroke capture.
+        expect(code, file).not.toMatch(/setRawMode/);
+        continue;
+      }
+      expect(code, file).not.toMatch(/process\s*\.\s*stdin/);
+      expect(code, file).not.toMatch(/\bprompt\s*\(|setRawMode|createInterface/);
     }
   });
 });
 
 describe('(68) node:fs is confined to one designated adapter', () => {
-  it('only the designated adapter imports a filesystem module', () => {
+  it('only the designated adapters and the certification boundary import a filesystem module', () => {
     for (const file of productionFiles()) {
       const code = codeOnly(readFileSync(file, 'utf8'));
       if (isDesignatedAdapter(file)) {
         expect(code).toMatch(/from 'node:fs\/promises'/);
+        continue;
+      }
+      // The certification operator writes its run artifacts and reads the repository's own facts. Both
+      // are synchronous and both are offline; neither is on any serving path.
+      if (isJf5bFile(file, [JF5B_COMPOSITION, JF5B_REPOSITORY_FACTS])) {
+        expect(code, file).toMatch(/from 'node:fs'/);
         continue;
       }
       expect(code).not.toMatch(/from ['"]node:fs(\/promises)?['"]/);
@@ -267,14 +326,47 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
         expect(code, file).not.toMatch(
           /from ['"]node:(net|https|dns|tls|dgram|child_process|readline|repl|worker_threads|cluster)['"]/,
         );
+      } else if (isJf5bFile(file, [JF5B_REPOSITORY_FACTS])) {
+        // `node:child_process` for `git`, and nothing else from the forbidden set. No network module,
+        // no terminal module, no worker and no cluster.
+        expect(code, file).not.toMatch(
+          /from ['"]node:(net|http|https|dns|tls|dgram|readline|repl|worker_threads|cluster)['"]/,
+        );
+      } else if (isJf5bFile(file, [JF5B_COMPOSITION])) {
+        // `node:readline/promises` for the ONE typed confirmation, and nothing else. No child process,
+        // no socket module: the single bounded GET uses the platform `fetch`, which the next
+        // assertion counts.
+        expect(code, file).not.toMatch(
+          /from ['"]node:(net|http|https|dns|tls|dgram|child_process|repl|worker_threads|cluster)['"]/,
+        );
       } else {
         expect(code, file).not.toMatch(FORBIDDEN_MODULES);
       }
       // The one live HTTP call a SHADOW run makes is issued by the gateway's Groq transport inside
       // `packages/model-gateway`. `apps/api` supplies the credential and the composition; it never
       // opens a socket itself.
-      expect(code).not.toMatch(/\bfetch\s*\(/);
-      expect(code).not.toMatch(/\bexec\w*\s*\(|\bspawn\w*\s*\(/);
+      //
+      // JF-5B-R1 (ADR-0152) adds exactly two exceptions, each in one named file:
+      //
+      //   - the certification composition issues ONE bounded `fetch`, to the fixed NaraRouter model
+      //     catalogue. Provider CHAT still goes through the gateway's own transports; what this call
+      //     discovers is which aliases the credential is entitled to, which is an infrastructure
+      //     question and takes the direct bounded path by design.
+      //   - the repository-facts module runs `git` through `execFileSync` to read the head, the
+      //     worktree state and the repository root. A live certification result that could not name
+      //     the exact commit it ran at would be a receipt about nothing.
+      if (isJf5bFile(file, [JF5B_COMPOSITION])) {
+        expect(code.match(/\bfetch\s*\(/g), file).toHaveLength(1);
+      } else {
+        expect(code, file).not.toMatch(/\bfetch\s*\(/);
+      }
+      if (isJf5bFile(file, [JF5B_REPOSITORY_FACTS])) {
+        // `execFileSync` only: an argument vector, never a shell string, so nothing is interpreted.
+        expect(code, file).not.toMatch(/\bexecSync\s*\(|\bspawn\w*\s*\(/);
+        expect(code, file).toContain('execFileSync');
+      } else {
+        expect(code, file).not.toMatch(/\bexec\w*\s*\(|\bspawn\w*\s*\(/);
+      }
     }
   });
 
@@ -296,6 +388,21 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
         'groq-sdk',
         'openai',
       ]) {
+        // The certification runner PINS one exact Groq model id, and that id is namespaced
+        // `openai/gpt-oss-20b`. The rule this list enforces is "no vendor SDK, no vendor client" --
+        // naming the exact model a certification run measured is the opposite of that failure, and a
+        // floating alias would be the real one. The narrow exception is the model-id constant.
+        if (forbidden === 'openai' && isJf5bFile(file, [JF5B_RUNNER_IMPL])) {
+          // CANDIDATE UPDATED, rule unchanged (JF-5B-R10). The rule is "a model id may be hard-coded in
+          // exactly one JF-5B constant and nowhere else", and that is untouched. What changed is WHICH
+          // model JF-5B certifies: run-12 proved `openai/gpt-oss-20b` cannot hold Riya's schema under
+          // strict constrained generation, and `openai/gpt-oss-120b` is already permitted on the same
+          // project at the same limits. One constant, one model, still pinned and never floating.
+          expect(code, file).toContain("jf5b_groq_model_id = 'openai/gpt-oss-120b'");
+          // Still no SDK and no client: the id is a string, and the transport stays in the gateway.
+          expect(code, file).not.toContain("from 'openai");
+          continue;
+        }
         expect(code, `${file}: ${forbidden}`).not.toContain(forbidden);
       }
       // `postgres` is permitted in EXACTLY TWO modules and forbidden everywhere else: the one that
@@ -360,30 +467,60 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
     }
   });
 
-  it('exactly one module arms a timer, and it clears it', () => {
+  it('exactly two modules arm timers, and every arm has its clear', () => {
+    // The second is the certification composition (JF-5B-R1, ADR-0152): the bounded discovery GET needs
+    // one abort deadline, or a hung provider would hang an owner's terminal indefinitely. JF-5B-R6 adds
+    // the evaluation-only pacing sleep in the same file. The RULE is unchanged -- every arm matched by a
+    // clear, nothing repeating, nothing rescheduling -- and it is now COUNTED per file rather than
+    // assumed to be one.
+    const ARMS_BY_FILE: Readonly<Record<string, number>> = Object.freeze({
+      [DESIGNATED_TIMER_MODULE]: 1,
+      [JF5B_COMPOSITION]: 2,
+    });
     const timerFiles = productionFiles().filter((file) =>
       codeOnly(readFileSync(file, 'utf8')).includes('setTimeout'),
     );
-    expect(timerFiles.map((f) => normalise(f).split('/apps/api/')[1] ?? '')).toEqual([
-      DESIGNATED_TIMER_MODULE,
-    ]);
-    const code = codeOnly(readFileSync(timerFiles[0] ?? '', 'utf8'));
-    // One arm, one clear — the single hard deadline, released on every path.
-    expect(code.match(/setTimeout/g)).toHaveLength(1);
-    expect(code.match(/clearTimeout/g)).toHaveLength(1);
-    // Not a repeating or rescheduling timer.
-    expect(code).not.toMatch(/setInterval|refresh\s*\(\s*\)/);
+    expect(timerFiles.map((f) => normalise(f).split('/apps/api/')[1] ?? '').sort()).toEqual(
+      Object.keys(ARMS_BY_FILE).sort(),
+    );
+    for (const file of timerFiles) {
+      const expected = ARMS_BY_FILE[normalise(file).split('/apps/api/')[1] ?? ''] ?? 0;
+      const code = codeOnly(readFileSync(file, 'utf8'));
+      // Each arm released, on every path.
+      expect(code.match(/setTimeout/g), file).toHaveLength(expected);
+      expect(code.match(/clearTimeout/g), file).toHaveLength(expected);
+      // Not a repeating or rescheduling timer.
+      expect(code, file).not.toMatch(/setInterval|refresh\s*\(\s*\)/);
+    }
   });
 });
 
 describe('the staging smoke stays out of the production boundary', () => {
-  it('apps/api never imports groq-staging-smoke or the masked-TTY resolver', () => {
+  it('exactly ONE file reaches the staging smoke, and the serving boundary still never does', () => {
+    // NARROWED, not relaxed (JF-5B-R1, ADR-0152).
+    //
+    // The rule was "the staging smoke stays out of the production boundary", and the reason was that a
+    // SERVING process must not acquire an interactive credential ingress. That reason is untouched:
+    // the one file permitted to name this package is the offline certification composition, reachable
+    // from one bin and from no route, runtime or startup path.
+    //
+    // Reuse was the whole point. The alternative was a second connectivity check and a second
+    // credential policy living in this application, and two credential policies drift the first time
+    // either is corrected.
+    const SMOKE_TOKENS = [
+      '@qf-jarvis/groq-staging-smoke',
+      'createNodeMaskedSecretSource',
+      'createMaskedTtyCredentialResolver',
+    ];
+    const namers: string[] = [];
     for (const file of allFiles()) {
       const text = readFileSync(file, 'utf8');
-      expect(text).not.toContain('@qf-jarvis/groq-staging-smoke');
-      expect(text).not.toContain('createNodeMaskedSecretSource');
-      expect(text).not.toContain('createMaskedTtyCredentialResolver');
+      if (SMOKE_TOKENS.some((token) => text.includes(token))) {
+        namers.push(normalise(file).split('/apps/api/')[1] ?? '');
+      }
     }
+    // The composition names the package and both primitives; its own spec names neither.
+    expect(namers.sort()).toEqual([JF5B_COMPOSITION]);
     const manifest = JSON.parse(readFileSync(join(APP_DIR, 'package.json'), 'utf8')) as {
       dependencies?: Record<string, string>;
       devDependencies?: Record<string, string>;
@@ -410,6 +547,18 @@ describe('the staging smoke stays out of the production boundary', () => {
       // still no new third-party resolution.
       '@qf-jarvis/approval-core-adapter',
       '@qf-jarvis/contracts',
+      // JF-5B-R1 (ADR-0152): the offline certification executable, and nothing else, needs these six.
+      // Every one is an existing workspace package -- there is no new third-party resolution, and the
+      // set is still matched EXACTLY rather than as a superset.
+      //
+      //   core-decision-adapter        the synthetic certification Core boundary (TYPE only)
+      //   core-service-availability-read  builds the synthetic snapshot through Core's OWN parser
+      //   groq-staging-smoke           the reused connectivity check and masked-TTY primitive
+      //   jarvis-v1-provider-certification-live  the evaluation-only operator library
+      //   model-reply-adapter          the gateway invoker and prompt-binding TYPES
+      //   riya-prompts                 her three task-class variants, for her dedicated capability
+      '@qf-jarvis/core-decision-adapter',
+      '@qf-jarvis/core-service-availability-read',
       // QFJ-P08-B3 (ADR-0078): the three -- and only three -- new production edges the durable
       // composition needs, to create a pool, build the durable adapter, and compose the runtime.
       '@qf-jarvis/event-backbone',
@@ -418,16 +567,20 @@ describe('the staging smoke stays out of the production boundary', () => {
       // are workspace packages already in this repository, and neither is a knowledge authority
       // here -- the authority stays inside governed-knowledge, reached through JF-3.
       '@qf-jarvis/governed-knowledge',
+      '@qf-jarvis/groq-staging-smoke',
       '@qf-jarvis/jarvis-runtime',
+      '@qf-jarvis/jarvis-v1-provider-certification-live',
       '@qf-jarvis/model-evaluation',
       '@qf-jarvis/model-gateway',
       '@qf-jarvis/model-gateway-composition',
+      '@qf-jarvis/model-reply-adapter',
       '@qf-jarvis/postgres-approval-queue',
       '@qf-jarvis/postgres-conversation-state',
       // QFJ-S3-I-B (ADR-0073): the SHADOW runner's fixed synthetic prompt is now a real
       // `PromptDefinition`, so its identity and its bytes cannot drift apart. Still an EXACT set.
       '@qf-jarvis/prompt-registry',
       '@qf-jarvis/rag-provisioning',
+      '@qf-jarvis/riya-prompts',
       '@qf-jarvis/riya-web-conversation-service',
       'zod',
     ]);
@@ -435,13 +588,20 @@ describe('the staging smoke stays out of the production boundary', () => {
     // proofs need. An EXACT set, not merely a superset. QFJ-P08 (ADR-0082) adds two: the operator
     // boundary's specs build a REAL governed recommendation and a REAL approval request rather than
     // hand-assembling fixtures, which would prove only that the service agrees with a fixture.
+    // JF-5B-R1 (ADR-0152) MOVES two of these rather than adding any: `core-decision-adapter` and
+    // `model-reply-adapter` are now named by production source, so they are production edges and a
+    // package may not be both. The set shrinks; it does not grow.
     expect(Object.keys(manifest.devDependencies ?? {}).sort()).toEqual([
       '@qf-jarvis/approval-runtime',
       '@qf-jarvis/conversation-control',
-      '@qf-jarvis/core-decision-adapter',
-      '@qf-jarvis/model-reply-adapter',
       '@qf-jarvis/recommendation-runtime',
     ]);
+    // And neither appears twice: a package declared in both lists is a dependency with a note that
+    // says otherwise.
+    for (const both of ['@qf-jarvis/core-decision-adapter', '@qf-jarvis/model-reply-adapter']) {
+      expect(manifest.devDependencies?.[both], both).toBeUndefined();
+      expect(manifest.dependencies?.[both], both).toBe('workspace:*');
+    }
     // `pg` is absent from BOTH lists: the app composes a pool through event-backbone's public API
     // and never touches the driver.
     expect(manifest.dependencies?.['pg']).toBeUndefined();
@@ -539,7 +699,10 @@ describe('(71-77) package API and dependency locks are untouched', () => {
       // provider-SELECTION mode (7). This lock only tracks that package's count; the reasoning is
       // recorded in its own containment spec. Nothing about this app changes, and production
       // inference stays OFF.
-      'model-gateway': 93,
+      // JF-5B (ADR-0152): 93 -> 95. The Nara alias guard and its frozen refusal list become
+      // reachable so an operator outside the gateway can refuse a router alias returned by
+      // authenticated discovery. A pure predicate: no key, no transport, no behaviour change.
+      'model-gateway': 95,
       'model-gateway-composition': 2,
       // MVP-P2A.2 HF1: 24 -> 27. The semantic approval-digest helper and its two readable parts.
       // Pure functions over an already-parsed SmokeConfig -- no filesystem, no clock, no network, no
@@ -718,18 +881,30 @@ describe('(78, 79, 80, 81) repository invariants', () => {
     const specs = readdirSync(dir).filter((name) => name.endsWith('.ts'));
     expect(specs.length).toBeGreaterThan(0);
     /**
-     * The ONE spec permitted to spawn a process, and only `node:child_process`.
+     * The specs permitted to spawn a process, and only `node:child_process`.
      *
      * `deployment-containment.test.ts` proves the merged-main deployment guard by RUNNING it: a
      * guard deciding whether unreviewed code can reach production is worth executing against real
      * commits — including a real unmerged one — rather than pattern-matching its source.
      *
-     * The exception is narrow on purpose. It buys process spawning and nothing else: the network
-     * modules below stay forbidden for this spec too, and its fixture is a throwaway git repository
-     * whose `origin` is a local bare repo, so it reaches no network even while exercising a code
-     * path that fetches. Every other spec remains fully hermetic.
+     * `jf5b-pacing-liveness.test.ts` is the second, added in JF-5B-R7 and for the same kind of
+     * reason. Run-9 died at the first pacing wait because the production sleeper `unref`ed the timer
+     * its awaited promise depended on, and NO in-process assertion could have caught it: whether a
+     * timer holds Node's event loop open is a property of a process, observable only by running one
+     * and seeing whether it survives. Every R6 pacing spec passed against a fake sleeper that
+     * resolves a microtask. So this spec writes the production sleeper's own bytes to a temporary
+     * module and runs it under a real top-level `await`.
+     *
+     * The exception is narrow on purpose, for both. It buys process spawning and nothing else: the
+     * network modules below stay forbidden for these specs too. The deployment fixture is a throwaway
+     * git repository whose `origin` is a local bare repo, so it reaches no network even while
+     * exercising a code path that fetches; the liveness child imports nothing, opens no socket, reads
+     * no credential, and is deleted with its directory. Every other spec remains fully hermetic.
      */
-    const PROCESS_CAPABLE = 'deployment-containment.test.ts';
+    const PROCESS_CAPABLE: readonly string[] = Object.freeze([
+      'deployment-containment.test.ts',
+      'jf5b-pacing-liveness.test.ts',
+    ]);
 
     /**
      * The ONE spec permitted to import `node:http`, and only that.
@@ -750,7 +925,7 @@ describe('(78, 79, 80, 81) repository invariants', () => {
       const statements = text.match(/^import[\s\S]*?from\s*['"][^'"]+['"]/gm) ?? [];
       expect(statements.length).toBeGreaterThan(0);
       for (const statement of statements) {
-        if (name === PROCESS_CAPABLE) {
+        if (PROCESS_CAPABLE.includes(name)) {
           expect(statement, name).not.toMatch(/node:(net|http|https|dns|tls|dgram)/);
         } else if (name === LOOPBACK_HTTP_CAPABLE) {
           expect(statement, name).not.toMatch(/node:(net|https|dns|tls|dgram|child_process)/);

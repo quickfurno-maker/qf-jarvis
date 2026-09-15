@@ -175,6 +175,11 @@ describe('containment', () => {
 
   it('(81) locks the root barrel surface', () => {
     const EXPECTED = [
+      // JF-5B-R2 (ADR-0152 amendment) adds exactly two: the DEFAULT strict-projectable model-wire
+      // profile and the schema behind it. Both are an ENCODING of the reply this package already
+      // owned, not a second reply contract — `structuredReplySchema` below is still what decides what
+      // counts as a reply, and every projection is re-proved against it.
+      'DEFAULT_STRUCTURED_OUTPUT_PROFILE',
       'MODEL_REPLY_ADAPTER_ERROR_CODES',
       'MODEL_REPLY_ADAPTER_EVENT_TYPES',
       'MODEL_REPLY_ADAPTER_REASONS',
@@ -182,6 +187,7 @@ describe('containment', () => {
       'NOOP_MODEL_REPLY_ADAPTER_OBSERVABILITY',
       'STRUCTURED_REPLY_KINDS',
       'createModelReplyAdapter',
+      'genericReplyWireSchema',
       'structuredReplySchema',
     ];
     expect(Object.keys(barrel).sort()).toEqual([...EXPECTED].sort());

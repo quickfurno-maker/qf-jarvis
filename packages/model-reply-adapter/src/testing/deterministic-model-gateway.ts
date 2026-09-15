@@ -10,7 +10,7 @@
 import type { ModelRequest, ModelResponse } from '@qf-jarvis/model-gateway';
 
 import type { ReplyState, ReplyStateReader } from '../contracts/state.js';
-import type { StructuredReply } from '../contracts/reply-schema.js';
+import type { GenericReplyWire } from '../contracts/default-structured-output-profile.js';
 import type {
   ModelGatewayInvocation,
   ModelGatewayInvoker,
@@ -63,8 +63,14 @@ function buildResponse(
   };
 }
 
-/** A gateway invoker that echoes the request's bound provenance with the scripted reply. */
-export function scriptedGatewayInvoker(reply: StructuredReply): ModelGatewayInvoker & Recording {
+/**
+ * A gateway invoker that echoes the request's bound provenance with the scripted reply.
+ *
+ * It takes a WIRE value, because that is what it impersonates: a provider answering the request's
+ * structured schema. JF-5B-R2 made the generic wire encoding required+nullable, so the two
+ * semantically-optional fields are stated rather than omitted here too.
+ */
+export function scriptedGatewayInvoker(reply: GenericReplyWire): ModelGatewayInvoker & Recording {
   const counter = { n: 0 };
   return Object.freeze({
     invoke(request: ModelRequest): Promise<ModelGatewayInvocation> {
@@ -124,7 +130,7 @@ export function textModeGatewayInvoker(): ModelGatewayInvoker & Recording {
 
 /** A gateway invoker that echoes a MISMATCHED provenance with the scripted reply. */
 export function mismatchedProvenanceGatewayInvoker(
-  reply: StructuredReply,
+  reply: GenericReplyWire,
   over: ProvenanceOverride = { providerId: 'wrong.provider' },
 ): ModelGatewayInvoker & Recording {
   const counter = { n: 0 };

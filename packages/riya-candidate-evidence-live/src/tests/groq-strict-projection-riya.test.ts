@@ -161,8 +161,9 @@ describe('R7-C12/C13 — both real schemas project into the documented subset', 
       return;
     }
     const document = JSON.stringify(result.schema);
-    // `kind: REPLY`, the provenance and the evolution version all reach the provider as constraints
-    // rather than being silently dropped with the `const` keyword.
+    // `kind: REPLY` and provenance reach the provider as constraints rather than being silently
+    // dropped with the `const` keyword. JF-5B-R14 deliberately removed evolution.version from the
+    // provider wire because Jarvis owns that canonical protocol bookkeeping.
     //
     // POST-SDH4: `"SET"` and `"CLEAR"` are no longer literals in the document. The repair removed the
     // operation tag from the provider payload entirely — the array a payload sits in IS the
@@ -177,7 +178,7 @@ describe('R7-C12/C13 — both real schemas project into the documented subset', 
     const properties = (result.schema['properties'] as Record<string, Record<string, unknown>>)[
       'evolution'
     ]?.['properties'] as Record<string, unknown>;
-    expect((properties['version'] as Record<string, unknown>)['enum']).toEqual([1]);
+    expect(properties['version']).toBeUndefined();
   });
 
   it('R7-C6 reasonCode stays a REQUIRED nullable union', () => {
