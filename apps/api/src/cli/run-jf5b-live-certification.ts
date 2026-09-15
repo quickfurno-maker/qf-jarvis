@@ -101,6 +101,30 @@ export interface Jf5bCliDeps {
  * credential in either — `LiveCaseRecord` carries a DIGEST of the output and never the output, which is
  * exactly why it is the right vocabulary to print.
  */
+function sanitizedProbeSummaries(probes: readonly NaraProbeSummary[]) {
+  return probes.map((probe) => ({
+    modelId: probe.score.modelId,
+    hardGatesPassed: probe.score.hardGatesPassed,
+    qualityPassed: probe.score.qualityPassed,
+    qualityAttempted: probe.score.qualityAttempted,
+    p95LatencyMs: probe.score.p95LatencyMs,
+    totalTokens: probe.score.totalTokens,
+    cases: probe.cases.map((record) => ({
+      caseId: record.caseId,
+      outcome: record.outcome,
+      structuredOutputValid: record.structuredOutputValid,
+      networkCalls: record.networkCalls,
+      providerAttempts: record.providerAttempts,
+      retryCount: record.retryCount,
+      latencyMs: record.latencyMs,
+      ...(record.providerErrorClass === undefined
+        ? {}
+        : { providerErrorClass: record.providerErrorClass }),
+      ...(record.reason === undefined ? {} : { reason: record.reason }),
+    })),
+  }));
+}
+
 function printProbeSummaries(io: OperatorIo, probes: readonly NaraProbeSummary[]): void {
   for (const probe of probes) {
     const score = probe.score;
@@ -571,6 +595,25 @@ export async function runJf5bLiveCertificationCli(
     for (const model of discovered.eligible) {
       deps.io.out(`  eligible: ${model.modelId}`);
     }
+    // R16: persist only the same sanitized selection facts already printed to the terminal.
+    // No provider body, prompt, model text, header, credential or URL is retained.
+    deps.artifacts.writeFile(
+      'receipt-selection-failure.json',
+      JSON.stringify(
+        {
+          runId: deps.runId,
+          headSha: deps.facts.headSha,
+          phase: 'NARA_SELECTION',
+          stage: 'SHORTLIST',
+          reason: shortlist.refusal,
+          groqCalls: ledger.groqCalls(),
+          naraCalls: ledger.naraCalls(),
+          eligibleModelIds: discovered.eligible.map((model) => model.modelId),
+        },
+        null,
+        2,
+      ),
+    );
     return stop(
       'NARA_SELECTION',
       EXIT_CODES.NARA_SELECTION_REFUSED,
@@ -602,6 +645,25 @@ export async function runJf5bLiveCertificationCli(
   printProbeSummaries(deps.io, selected.probes);
   if (!selected.ok) {
     deps.io.err(`nara selection refused: ${selected.reason}`);
+    // R16: preserve the already-sanitized probe summary after the terminal closes. The subset mirrors
+    // `printProbeSummaries` and deliberately excludes output digests and every raw-content field.
+    deps.artifacts.writeFile(
+      'receipt-selection-failure.json',
+      JSON.stringify(
+        {
+          runId: deps.runId,
+          headSha: deps.facts.headSha,
+          phase: 'NARA_SELECTION',
+          stage: 'PROBES',
+          reason: selected.reason,
+          groqCalls: ledger.groqCalls(),
+          naraCalls: ledger.naraCalls(),
+          probes: sanitizedProbeSummaries(selected.probes),
+        },
+        null,
+        2,
+      ),
+    );
     return stop(
       'NARA_SELECTION',
       EXIT_CODES.NARA_SELECTION_REFUSED,

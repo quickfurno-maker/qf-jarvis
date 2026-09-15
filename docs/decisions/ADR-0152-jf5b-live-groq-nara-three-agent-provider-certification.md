@@ -1701,3 +1701,11 @@ Run-22 reached authenticated Nara discovery and exited with the existing `NARA_D
 R15 does not change discovery, provider routing, credentials, retry policy, model selection, Gateway behavior, or any serving-path architecture. It reuses the existing closed `DiscoveryFailure` token and the existing sanitized `DiscoveryDiagnostic` recorder, and writes only those fields plus run/head/call counts to `receipt-discovery-failure.json` in the already-approved external run directory.
 
 No provider body, header, URL, credential, stack, free-text exception, model output, prompt, or request content is persisted. The generic Nara chat path remains untouched, discovery remains one call with no retry, and JF-5B still mints no production approval. The missing capability was post-run observability of an already-sanitized early failure; everything else is reused unchanged.
+
+## Amendment — JF-5B-R16: persist sanitized Nara selection refusal receipt
+
+Run-24 passed the interactive owner gate and authenticated Nara discovery, then exited with the existing `NARA_SELECTION_REFUSED` code (31). The external run directory was created, but no receipt was written because both selection-refusal branches were still terminal-only: shortlist reconciliation and bounded probe scoring. Once the console closed, the safe reason and probe summary were lost.
+
+R16 changes only that observability gap. On a shortlist refusal it writes `receipt-selection-failure.json` with run/head identity, `NARA_SELECTION`, stage `SHORTLIST`, the existing closed refusal token, call counts, and the same eligible model aliases already printed to the terminal. On a probe refusal it writes the same receipt with stage `PROBES`, the existing reason, call counts, and a strict subset of the existing sanitized `NaraProbeSummary` / `LiveCaseRecord` fields already printed by `printProbeSummaries`.
+
+The persisted probe subset excludes `outputDigest` as well as raw model output, provider response bodies, prompts, request content, headers, credentials, URLs, stacks, and free-text exceptions. It does not change discovery, candidate resolution, scoring, hard gates, retry, pacing, Gateway routing, Mastra composition, RAG, Core, provider transports, or any serving-path behavior. JF-5B still certifies only and mints no production approval.

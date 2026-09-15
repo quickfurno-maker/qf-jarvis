@@ -61,6 +61,7 @@ function harness(
     probedShortlist: [] as readonly string[],
     probedObjects: [] as readonly { readonly modelId: string }[],
     filesWritten: [] as string[],
+    fileContents: new Map<string, string>(),
   };
 
   const io: OperatorIo = {
@@ -168,7 +169,10 @@ function harness(
   };
   const artifacts: ArtifactWriter = {
     ensureDirectory: () => undefined,
-    writeFile: (relativePath) => seen.filesWritten.push(relativePath),
+    writeFile: (relativePath, content) => {
+      seen.filesWritten.push(relativePath);
+      seen.fileContents.set(relativePath, content);
+    },
     digestOf: () => 'f'.repeat(64),
   };
 
@@ -382,6 +386,10 @@ describe('JF-5B (1,2) the phases run in order, and a failure stops the next one'
     expect(seen.lines.join('\n')).toContain('eligible: vendor-a/one');
     // Nothing was probed: a stop is a stop.
     expect(seen.runnerCalls).toBe(0);
+    expect(seen.filesWritten).toContain('receipt-selection-failure.json');
+    const receipt = seen.fileContents.get('receipt-selection-failure.json') ?? '';
+    expect(receipt).toContain('"stage": "SHORTLIST"');
+    expect(receipt).toContain('vendor-a/one');
   });
 
   it('router aliases and combo models never reach the shortlist', async () => {
@@ -391,6 +399,60 @@ describe('JF-5B (1,2) the phases run in order, and a failure stops the next one'
     expect(text).toContain('shortlisted: vendor-a/model-one');
     expect(text).not.toContain('shortlisted: auto');
     expect(text).not.toContain('combo');
+  });
+
+  it('persists only sanitized probe evidence when phase 2c refuses every alias', async () => {
+    const probe = createLiveCaseRecord({
+      runId: 'run.jf5b.test',
+      caseId: 'probe.case',
+      caseVersion: 1,
+      agent: 'RIYA',
+      agentScope: 'CLIENT',
+      provider: 'nara',
+      releaseId: 'rel',
+      modelId: 'vendor-a/model-one',
+      modelVersion: 'v1',
+      configDigest: 'cfg',
+      promptFamily: 'riya.client-sales',
+      promptVersion: 1,
+      promptDigest: 'a'.repeat(64),
+      evaluationSuiteId: 'eval',
+      fixtureManifestId: 'fixtures',
+      languageMode: 'EN',
+      executionLayer: 'MODEL_REQUIRED',
+      providerAttempts: 1,
+      networkCalls: 1,
+      fallbackCount: 0,
+      retryCount: 0,
+      latencyMs: 321,
+      totalTokens: 42,
+      structuredOutputValid: false,
+      outcome: 'FAIL',
+      reason: 'structured-output-invalid',
+      outputDigest: 'b'.repeat(64),
+    });
+    const { deps, seen } = harness({
+      probes: [
+        {
+          score: {
+            modelId: 'vendor-a/model-one',
+            hardGatesPassed: false,
+            qualityPassed: 0,
+            qualityAttempted: 1,
+            p95LatencyMs: 321,
+            totalTokens: 42,
+          },
+          cases: [probe],
+        },
+      ],
+    });
+    const outcome = await runJf5bLiveCertificationCli(FULL_ARGV, deps);
+    expect(outcome.exitCode).toBe(EXIT_CODES.NARA_SELECTION_REFUSED);
+    const receipt = seen.fileContents.get('receipt-selection-failure.json') ?? '';
+    expect(receipt).toContain('"stage": "PROBES"');
+    expect(receipt).toContain('structured-output-invalid');
+    expect(receipt).not.toContain('b'.repeat(64));
+    expect(receipt).not.toContain('nara-synthetic-certification-key');
   });
 });
 
@@ -443,11 +505,15 @@ describe('JF-5B-R3 (CLI) the owner candidate set travels through the whole seque
     );
     expect(outcome.exitCode).toBe(EXIT_CODES.NARA_SELECTION_REFUSED);
     expect(outcome.reason).toBe('owner-candidate-not-currently-eligible');
-    // Discovery HAPPENED — that is what made the refusal possible — and no chat probe followed it.
+    // Discovery HAPPENED â€” that is what made the refusal possible â€” and no chat probe followed it.
     expect(seen.discoveryCalls).toBe(1);
     expect(seen.runnerCalls).toBe(0);
     // The eligible list is printed, so the owner can correct the command.
     expect(seen.lines.join('\n')).toContain('eligible: gpt-5.6-luna');
+    expect(seen.filesWritten).toContain('receipt-selection-failure.json');
+    const receipt = seen.fileContents.get('receipt-selection-failure.json') ?? '';
+    expect(receipt).toContain('"owner-candidate-not-currently-eligible"');
+    expect(receipt).not.toContain('nara-synthetic-certification-key');
   });
 
   it('refuses a sixth candidate before the credential and before the network', async () => {
