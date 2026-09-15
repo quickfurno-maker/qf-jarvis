@@ -21,6 +21,7 @@
     "@qf-jarvis/approval-core-adapter": "workspace:*",
     "@qf-jarvis/contracts": "workspace:*",
     "@qf-jarvis/core-decision-adapter": "workspace:*",
+    "@qf-jarvis/core-decision-http-transport": "workspace:*",
     "@qf-jarvis/core-service-availability-read": "workspace:*",
     "@qf-jarvis/event-backbone": "workspace:*",
     "@qf-jarvis/governed-knowledge": "workspace:*",

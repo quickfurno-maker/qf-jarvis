@@ -318,11 +318,19 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
    */
   const INGRESS_DIR = 'src/private-riya-web-ingress/';
   const isIngress = (file: string): boolean => normalise(file).includes(INGRESS_DIR);
+  const JF6_PRIVATE_PROCESS = 'src/jf6-private-process/create-private-process.ts';
+  const isJf6PrivateProcess = (file: string): boolean =>
+    normalise(file).endsWith(`/${JF6_PRIVATE_PROCESS}`);
 
   it('production source imports no network, shell or terminal module', () => {
     for (const file of productionFiles()) {
       const code = codeOnly(readFileSync(file, 'utf8'));
       if (isIngress(file)) {
+        expect(code, file).not.toMatch(
+          /from ['"]node:(net|https|dns|tls|dgram|child_process|readline|repl|worker_threads|cluster)['"]/,
+        );
+      } else if (isJf6PrivateProcess(file)) {
+        expect(code, file).toMatch(/from 'node:http'/);
         expect(code, file).not.toMatch(
           /from ['"]node:(net|https|dns|tls|dgram|child_process|readline|repl|worker_threads|cluster)['"]/,
         );
@@ -558,6 +566,9 @@ describe('the staging smoke stays out of the production boundary', () => {
       //   model-reply-adapter          the gateway invoker and prompt-binding TYPES
       //   riya-prompts                 her three task-class variants, for her dedicated capability
       '@qf-jarvis/core-decision-adapter',
+      // JF-6 prep: the private process composes the signed QuickFurno Core transport through the
+      // existing adapter. Workspace-only dependency; no new third-party resolution and no provider.
+      '@qf-jarvis/core-decision-http-transport',
       '@qf-jarvis/core-service-availability-read',
       // QFJ-P08-B3 (ADR-0078): the three -- and only three -- new production edges the durable
       // composition needs, to create a pool, build the durable adapter, and compose the runtime.
@@ -917,7 +928,11 @@ describe('(78, 79, 80, 81) repository invariants', () => {
      * the only `fetch` in the file targets that loopback server. Every other network module stays
      * forbidden for it.
      */
-    const LOOPBACK_HTTP_CAPABLE = 'private-riya-web-ingress.test.ts';
+    const LOOPBACK_HTTP_CAPABLE: ReadonlySet<string> = new Set([
+      'private-riya-web-ingress.test.ts',
+      'jf6-private-process.test.ts',
+      'jf6-core-decision-boundary.test.ts',
+    ]);
 
     for (const name of specs) {
       const text = readFileSync(join(dir, name), 'utf8');
@@ -927,7 +942,7 @@ describe('(78, 79, 80, 81) repository invariants', () => {
       for (const statement of statements) {
         if (PROCESS_CAPABLE.includes(name)) {
           expect(statement, name).not.toMatch(/node:(net|http|https|dns|tls|dgram)/);
-        } else if (name === LOOPBACK_HTTP_CAPABLE) {
+        } else if (LOOPBACK_HTTP_CAPABLE.has(name)) {
           expect(statement, name).not.toMatch(/node:(net|https|dns|tls|dgram|child_process)/);
         } else {
           expect(statement, name).not.toMatch(/node:(net|http|https|dns|tls|dgram|child_process)/);
@@ -943,7 +958,7 @@ describe('(78, 79, 80, 81) repository invariants', () => {
         }
         expect(statement).not.toMatch(/\b(pg|postgres|supabase|dockerode|groq-sdk|openai)\b/);
       }
-      if (name !== LOOPBACK_HTTP_CAPABLE) {
+      if (!LOOPBACK_HTTP_CAPABLE.has(name)) {
         expect(text, name).not.toMatch(/\bfetch\s*\(/);
       }
     }
