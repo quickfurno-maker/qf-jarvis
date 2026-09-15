@@ -17,6 +17,7 @@
     { "path": "./packages/model-evaluation/tsconfig.build.json" },
     { "path": "./packages/agent-runtime/tsconfig.build.json" },
     { "path": "./packages/core-decision-adapter/tsconfig.build.json" },
+    { "path": "./packages/core-decision-http-transport/tsconfig.build.json" },
     { "path": "./packages/model-gateway" },
     { "path": "./packages/groq-staging-smoke/tsconfig.build.json" },
     { "path": "./packages/model-reply-adapter/tsconfig.build.json" },

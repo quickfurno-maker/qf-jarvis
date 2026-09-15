@@ -485,6 +485,10 @@ describe('(133-148) the declared budget and every prior lock', () => {
       'control-plane-read-contract',
       'conversation-control',
       'core-decision-adapter',
+      // QFJ integration transport: one signed qfj.core.decision HTTP hop behind the existing Core
+      // transport contract. Still an EXACT set match; this records an authorised, non-activating
+      // transport leaf rather than weakening the shadow package-containment assertion.
+      'core-decision-http-transport',
       // RWC-P5 (ADR-0100): the Core-owned service availability READ contract -- which cities
       // QuickFurno Core operates in, which services it sells, and which service is available in
       // which city, as an explicit PAIR property. Still an EXACT set match; it records an authorised
