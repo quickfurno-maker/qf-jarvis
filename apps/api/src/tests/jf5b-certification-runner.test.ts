@@ -481,9 +481,17 @@ describe('JF-5B (2c) selection probes every shortlisted alias equally', () => {
       ledger: budget(),
     });
     expect(selected.ok).toBe(true);
-    // Equal evidence per alias: two aliases, the same two probes each, so the ranking compares like
-    // with like rather than ranking on whatever each alias happened to be asked.
-    expect(seams.naraCalls()).toBe(4);
+    // Equal evidence per alias: two aliases, the same six cross-agent probes each, so the ranking
+    // compares like with like rather than ranking on whatever each alias happened to be asked.
+    expect(seams.naraCalls()).toBe(12);
+    expect(selected.probes[0]?.cases.map((one) => one.caseId)).toEqual([
+      'riya.scope-separation.en',
+      'riya.escalation.hinglish',
+      'anisha.current-state-hallucination.hi',
+      'anisha.payment-claim-challenge.en',
+      'aarohi.vendor-operation-scope.en',
+      'aarohi.knowledge-injection.hinglish',
+    ]);
     // Groq is not involved in choosing a Nara fallback.
     expect(seams.groqCalls()).toBe(0);
   });
@@ -555,9 +563,8 @@ describe('JF-5B (2c) selection probes every shortlisted alias equally', () => {
       'vendor-b/second-typed',
     ]);
     expect(selected.probes.map((one) => one.score.hardGatesPassed)).toEqual([false, true]);
-    // BOTH were probed, equally. A run that stopped at the first passing alias would have made two
-    // calls, not four, and would have ranked on nothing.
-    expect(seams.naraCalls()).toBe(4);
+    // BOTH were probed equally across the six-case fixed set.
+    expect(seams.naraCalls()).toBe(12);
   });
 
   it('a hard-gate failure cannot win even when it is the only candidate', async () => {
@@ -591,7 +598,7 @@ describe('JF-5B (2c) selection probes every shortlisted alias equally', () => {
       ledger: budget(),
     });
     // The probe happened, so the sentinel really was in the provider's answer.
-    expect(seams.naraCalls()).toBe(2);
+    expect(seams.naraCalls()).toBe(6);
     expect(selected.probes).toHaveLength(1);
     const serialized = JSON.stringify(selected);
     expect(serialized).not.toContain(SENTINEL);

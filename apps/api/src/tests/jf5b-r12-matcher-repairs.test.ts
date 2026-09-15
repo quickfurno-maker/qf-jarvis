@@ -96,10 +96,15 @@ describe('JF-5B-R12 the new frames stay narrow', () => {
   });
 
   it('pins the new cue vocabulary exactly', () => {
-    expect([...REFUSAL_CUES.quickFurnoTeamReferralPrefixes]).toEqual(['for pricing or ', 'for ']);
+    expect([...REFUSAL_CUES.quickFurnoTeamReferralPrefixes]).toEqual([
+      'for pricing or ',
+      'for any ',
+      'for ',
+    ]);
     expect([...REFUSAL_CUES.quickFurnoTeamReferralSuffixes]).toEqual([
       " inquiries you'll need to contact the appropriate quickfurno team directly",
       ' inquiries you will need to contact the appropriate quickfurno team directly',
+      '-related requests, please contact the appropriate quickfurno team directly',
     ]);
     expect([...REFUSAL_CUES.userDesirePrefixes]).toEqual([
       "i understand you'd like ",

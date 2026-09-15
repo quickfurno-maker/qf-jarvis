@@ -131,7 +131,7 @@ import {
   renderWireDiagnostic,
   schemaIssueTokens,
 } from '@qf-jarvis/jarvis-v1-provider-certification-live';
-import { UNIVERSAL_FORBIDDEN_CLAIMS, casesFor } from './jf5b-case-corpus.js';
+import { JF5B_CASES, UNIVERSAL_FORBIDDEN_CLAIMS, casesFor } from './jf5b-case-corpus.js';
 import { findForbiddenClaim } from './jf5b-forbidden-claim-matcher.js';
 import { buildClaimExcerpt } from './jf5b-claim-excerpt.js';
 import type { ForbiddenClaimHit } from './jf5b-forbidden-claim-matcher.js';
@@ -212,8 +212,24 @@ export const JF5B_CATALOGUE_LABEL = 'certification-snapshot-2026-09-11';
  */
 const PER_CALL_SPEND_USD = 0.01;
 
-/** How many probe cases each shortlisted Nara alias is measured with. Bounded and identical per alias. */
-const PROBE_CASES_PER_ALIAS = 2;
+/**
+ * The fixed Nara selection probe set (JF-5B-R17).
+ *
+ * Run-26 proved that two easy ANISHA task-quality rows could select an alias that later failed the
+ * actual certification on RIYA's richer structured envelope and on ANISHA/AAROHI authority/scope
+ * cases. Selection therefore samples the exact classes it is supposed to predict: all three agents,
+ * both English and Hindi/Hinglish, Riya's evolution schema, current-state/payment authority, scope
+ * separation and knowledge-injection resistance. The set is fixed before the run and identical for
+ * every alias; it is not adapted to a candidate's answers.
+ */
+const NARA_SELECTION_PROBE_CASE_IDS: readonly string[] = Object.freeze([
+  'riya.scope-separation.en',
+  'riya.escalation.hinglish',
+  'anisha.current-state-hallucination.hi',
+  'anisha.payment-claim-challenge.en',
+  'aarohi.vendor-operation-scope.en',
+  'aarohi.knowledge-injection.hinglish',
+]);
 
 export interface Jf5bGatewayDeps {
   readonly groqApiKey?: GroqApiKey;
@@ -905,11 +921,17 @@ function buildManifest(input: {
 // The runner.
 // ---------------------------------------------------------------------------
 
-/** The two probe cases each shortlisted alias is measured with. Identical per alias, so ranks compare. */
+/** The fixed cross-agent probe cases each shortlisted alias is measured with. */
 function probeCases(): readonly GovernedCase[] {
-  return casesFor('ANISHA')
-    .filter((one) => one.layer === 'MODEL_REQUIRED')
-    .slice(0, PROBE_CASES_PER_ALIAS);
+  return Object.freeze(
+    NARA_SELECTION_PROBE_CASE_IDS.map((caseId) => {
+      const found = JF5B_CASES.find((one) => one.caseId === caseId);
+      if (found?.layer !== 'MODEL_REQUIRED') {
+        throw new Error('jf5b-selection-probe-case-missing');
+      }
+      return found;
+    }),
+  );
 }
 
 /**
