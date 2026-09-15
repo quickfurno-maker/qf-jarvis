@@ -84,6 +84,7 @@ import {
   createJf5bRelease,
   createLiveCaseRecord,
   createGroqLivePacer,
+  createNaraLivePacer,
   selectNaraModel as selectNaraModelByScore,
 } from '@qf-jarvis/jarvis-v1-provider-certification-live';
 import type {
@@ -93,6 +94,7 @@ import type {
   DiscoveredNaraModel,
   Jf5bCoverageManifest,
   GroqLivePacer,
+  NaraLivePacer,
   LiveCaseRecord,
   PacingClock,
   PacingSleeper,
@@ -619,13 +621,10 @@ interface RunCaseInput {
   readonly ledger: CallLedger;
   readonly clock: () => string;
   /**
-   * The GROQ-only live pacer (JF-5B-R6). Absent means unpaced.
-   *
-   * Supplied for the six-certification phase's Groq column and for nothing else. Nara is never paced by
-   * it, a PRE_MODEL row never waits on it (the gate answers before any provider is reached), and no
-   * failed case is ever re-executed because of it.
+   * Evaluation-only provider pacer. Absent means unpaced. A PRE_MODEL row never waits on it, and no
+   * failed case is ever re-executed because of pacing.
    */
-  readonly pacer?: GroqLivePacer;
+  readonly pacer?: GroqLivePacer | NaraLivePacer;
   /** The wire observers (JF-5B-R8). Absent means the run produces no wire diagnostics. */
   readonly diagnostics?: CaseDiagnostics;
 }
@@ -958,12 +957,18 @@ export interface Jf5bRunnerSeams {
 }
 
 export function createJf5bCertificationRunner(seams: Jf5bRunnerSeams = {}): CertificationRunner {
-  // ONE pacer per runner, so the whole Groq column shares a single view of when it last spent tokens.
-  // A spec injects a fake clock and a fake sleeper, so CI never really waits.
-  const pacer =
-    seams.pacingClock === undefined || seams.pacingSleeper === undefined
+  // One pacer per provider per runner. They share the same injected clock/sleeper but never state: Groq
+  // is token-driven; Nara is request-rate-driven. Specs omit the seams, so CI never really waits.
+  const pacingClock = seams.pacingClock;
+  const pacingSleeper = seams.pacingSleeper;
+  const groqPacer =
+    pacingClock === undefined || pacingSleeper === undefined
       ? undefined
-      : createGroqLivePacer(seams.pacingClock, seams.pacingSleeper);
+      : createGroqLivePacer(pacingClock, pacingSleeper);
+  const naraPacer =
+    pacingClock === undefined || pacingSleeper === undefined
+      ? undefined
+      : createNaraLivePacer(pacingClock, pacingSleeper);
   const clock = (): string => new Date().toISOString().replace(/\.\d{3}Z$/u, 'Z');
   // JF-5B-R8. ONE observer pair per runner, wrapping whichever transport the gateway would have used:
   // the injected one in a spec, the real fetch one in a live run. The `??` default moves up here so the
@@ -1038,7 +1043,7 @@ export function createJf5bCertificationRunner(seams: Jf5bRunnerSeams = {}): Cert
       }
       const probes: NaraProbeSummary[] = [];
       for (const model of input.shortlist) {
-        const outcome = await probeOneAlias(model, input, cases, clock, seams);
+        const outcome = await probeOneAlias(model, input, cases, clock, seams, naraPacer);
         if (outcome === undefined) {
           // A ceiling stopped the run. Continuing would produce a ranking built on fewer probes for
           // the later aliases, which is a comparison of nothing. The summaries gathered so far still
@@ -1050,6 +1055,15 @@ export function createJf5bCertificationRunner(seams: Jf5bRunnerSeams = {}): Cert
           };
         }
         probes.push(outcome);
+        if (
+          outcome.cases.some((one) => one.providerErrorClass === 'provider-transient:rate-limited')
+        ) {
+          return {
+            ok: false as const,
+            reason: 'probe-capacity-limited',
+            probes: Object.freeze(probes),
+          };
+        }
       }
       // The SAME scorer, over the same scores. Ranking is unchanged; only the evidence now escapes.
       const best = selectNaraModelByScore(probes.map((one) => one.score));
@@ -1081,6 +1095,7 @@ export function createJf5bCertificationRunner(seams: Jf5bRunnerSeams = {}): Cert
             provider,
             provider === 'groq' ? JF5B_GROQ_MODEL_ID : input.naraModelId,
           );
+          const providerPacer = provider === 'groq' ? groqPacer : naraPacer;
           for (const agent of CERTIFIED_AGENTS) {
             for (const governed of casesFor(agent)) {
               executed.push(
@@ -1093,9 +1108,7 @@ export function createJf5bCertificationRunner(seams: Jf5bRunnerSeams = {}): Cert
                   runId: input.runId,
                   ledger: input.ledger,
                   clock,
-                  // GROQ ONLY. Nara answered all 45 rows in run-8 without one provider failure; it is
-                  // not the lane under pressure, and pacing it would double a run for no reason.
-                  ...(provider === 'groq' && pacer !== undefined ? { pacer } : {}),
+                  ...(providerPacer === undefined ? {} : { pacer: providerPacer }),
                   // BOTH providers, unlike pacing: run-10 produced malformed rows on Groq and schema
                   // rejections on Nara, and a diagnostic that covered one column would answer half a
                   // question.
@@ -1208,6 +1221,7 @@ export function createJf5bCertificationRunner(seams: Jf5bRunnerSeams = {}): Cert
         runId: input.runId,
         ledger: input.ledger,
         clock,
+        ...(groqPacer === undefined ? {} : { pacer: groqPacer }),
       });
       const groqSuccessNaraCalls = input.ledger.naraCalls() - naraBefore;
 
@@ -1233,6 +1247,7 @@ export function createJf5bCertificationRunner(seams: Jf5bRunnerSeams = {}): Cert
         runId: input.runId,
         ledger: input.ledger,
         clock,
+        ...(naraPacer === undefined ? {} : { pacer: naraPacer }),
       });
       const forcedFallbackNaraCalls = input.ledger.naraCalls() - beforeFallback;
 
@@ -1308,6 +1323,7 @@ async function probeOneAlias(
   cases: readonly GovernedCase[],
   clock: () => string,
   seams: Jf5bRunnerSeams,
+  pacer: NaraLivePacer | undefined,
 ): Promise<NaraProbeSummary | undefined> {
   const gateway = createEvaluationGateway('NARA_ONLY', {
     naraApiKey: input.apiKey,
@@ -1331,12 +1347,16 @@ async function probeOneAlias(
       runId: input.runId,
       ledger: input.ledger,
       clock,
+      ...(pacer === undefined ? {} : { pacer }),
     });
     if (executed.record.providerErrorClass === 'budget-exhausted') {
       return undefined;
     }
     records.push(executed.record);
     latencies.push(executed.record.latencyMs);
+    if (executed.record.providerErrorClass === 'provider-transient:rate-limited') {
+      break;
+    }
     tokens += executed.record.totalTokens ?? 0;
     if (executed.record.outcome === 'PASS') {
       passed += 1;
@@ -1354,7 +1374,7 @@ async function probeOneAlias(
       modelId: model.modelId,
       hardGatesPassed: structural,
       qualityPassed: passed,
-      qualityAttempted: cases.length,
+      qualityAttempted: records.length,
       p95LatencyMs: sorted[Math.max(index, 0)] ?? 0,
       totalTokens: tokens,
     }),

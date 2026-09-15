@@ -498,7 +498,7 @@ describe('JF-5B-R5 nothing about certification SEMANTICS moved', () => {
   });
 });
 
-describe('JF-5B-R6 the Groq pacer is wired where it must be, and only there', () => {
+describe('JF-5B-R6/R18 provider pacers are evaluation-only and provider-specific', () => {
   const runner = readFileSync(
     fileURLToPath(new URL('../composition/jf5b-certification-runner-impl.ts', import.meta.url)),
     'utf8',
@@ -510,24 +510,20 @@ describe('JF-5B-R6 the Groq pacer is wired where it must be, and only there', ()
   });
 
   it('guards BOTH the wait and the observation on MODEL_REQUIRED, so PRE_MODEL rows never sleep', () => {
-    // Two arms, one guard each. A run that paced its PRE_MODEL rows would spend real minutes waiting
-    // for a lane it never entered, and the guard is the only thing that prevents it.
     const guard = "if (input.pacer !== undefined && governed.layer === 'MODEL_REQUIRED') {";
     expect(runner.split(guard).length - 1).toBe(2);
   });
 
-  it('hands the pacer to the GROQ column only', () => {
-    // Nara is not the lane under pressure. Pacing it would double the wall-clock of a run for nothing,
-    // and would also make the pacer's token view a mixture of two providers' spend.
-    expect(runner).toContain("...(provider === 'groq' && pacer !== undefined ? { pacer } : {})");
-    expect(runner).not.toContain("provider === 'nara' && pacer");
+  it('uses separate Groq and Nara pacer state', () => {
+    expect(runner).toContain("const providerPacer = provider === 'groq' ? groqPacer : naraPacer;");
+    expect(runner).toContain('probeOneAlias(model, input, cases, clock, seams, naraPacer)');
+    expect(runner).toContain('createGroqLivePacer(pacingClock, pacingSleeper)');
+    expect(runner).toContain('createNaraLivePacer(pacingClock, pacingSleeper)');
   });
 
-  it('builds exactly one pacer per runner, from BOTH injected seams or neither', () => {
-    expect(runner).toContain(
-      'seams.pacingClock === undefined || seams.pacingSleeper === undefined',
-    );
-    expect(runner).toContain('createGroqLivePacer(seams.pacingClock, seams.pacingSleeper)');
+  it('turns a probe 429 into capacity interruption instead of a model ranking', () => {
+    expect(runner).toContain("reason: 'probe-capacity-limited'");
+    expect(runner).toContain("one.providerErrorClass === 'provider-transient:rate-limited'");
   });
 });
 

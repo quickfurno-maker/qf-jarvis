@@ -22,6 +22,11 @@ import {
   PACING_TARGET_TPM,
   RATE_LIMIT_COOLDOWN_MS,
 } from '../contracts/groq-live-pacing.js';
+import {
+  NARA_MIN_MODEL_CALL_INTERVAL_MS,
+  NARA_PUBLISHED_FREE_RPM,
+  NARA_RATE_LIMIT_COOLDOWN_MS,
+} from '../contracts/nara-live-pacing.js';
 import { NARA_MODELS_ENDPOINT } from '../discovery/nara-model-discovery.js';
 import {
   EXECUTE_LIVE_FLAG,
@@ -125,7 +130,10 @@ export function renderPreflightSummary(facts: PreflightFacts): readonly string[]
     `  groq pacing target TPM ${String(PACING_TARGET_TPM)} (25% headroom under the observed ceiling)`,
     `  groq min call interval ${String(MIN_MODEL_CALL_INTERVAL_MS / 1000)}s`,
     `  rate-limit cooldown    ${String(RATE_LIMIT_COOLDOWN_MS / 1000)}s, applied to the NEXT case; the failed case is never retried`,
-    '  nara pacing            none; this pacer is Groq-only',
+    '  JF-5B NARA PACING      evaluation-only; production serving pacing is unchanged',
+    `  nara published Free RPM ${String(NARA_PUBLISHED_FREE_RPM)} (public docs observed 2026-09-15)`,
+    `  nara min call interval ${String(NARA_MIN_MODEL_CALL_INTERVAL_MS / 1000)}s`,
+    `  nara 429 cooldown      ${String(NARA_RATE_LIMIT_COOLDOWN_MS / 1000)}s, applied to the NEXT case; the failed case is never retried`,
     '',
     `  riya prompt            ${RIYA_CLIENT_SALES_EVOLUTION_PROMPT_V1.promptId} v${String(RIYA_CLIENT_SALES_EVOLUTION_PROMPT_V1.promptVersion)} ${RIYA_CLIENT_SALES_EVOLUTION_PROMPT_V1.contentDigest}`,
     `  anisha prompt          ${ANISHA_VENDOR_JOURNEY_PROMPT_V1.promptId} v${String(ANISHA_VENDOR_JOURNEY_PROMPT_V1.promptVersion)} ${ANISHA_VENDOR_JOURNEY_PROMPT_V1.contentDigest}`,

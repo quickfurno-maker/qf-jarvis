@@ -496,6 +496,30 @@ describe('JF-5B (2c) selection probes every shortlisted alias equally', () => {
     expect(seams.groqCalls()).toBe(0);
   });
 
+  it('stops selection as capacity-limited on the first Nara 429', async () => {
+    let calls = 0;
+    const nara: NaraTransport = {
+      send(): Promise<{ status: number; retryAfterSeconds: number | null; bodyText: string }> {
+        calls += 1;
+        return Promise.resolve({ status: 429, retryAfterSeconds: 60, bodyText: '{}' });
+      },
+    };
+    const selected = await createJf5bCertificationRunner({ naraTransport: nara }).selectNaraModel({
+      shortlist: [alias('vendor-a/limited', 131_072)],
+      apiKey: NARA_KEY,
+      runId: RUN_ID,
+      ledger: budget(),
+    });
+    expect(selected.ok).toBe(false);
+    expect(selected.ok ? '' : selected.reason).toBe('probe-capacity-limited');
+    expect(calls).toBe(1);
+    expect(selected.probes).toHaveLength(1);
+    expect(selected.probes[0]?.score.qualityAttempted).toBe(1);
+    expect(selected.probes[0]?.cases[0]?.providerErrorClass).toBe(
+      'provider-transient:rate-limited',
+    );
+  });
+
   /**
    * A Nara transport that answers DIFFERENTLY per model id.
    *

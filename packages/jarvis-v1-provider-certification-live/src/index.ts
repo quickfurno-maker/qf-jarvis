@@ -105,6 +105,16 @@ export type {
   PacingSleeper,
 } from './contracts/groq-live-pacing.js';
 
+// JF-5B-R18: evaluation-only Nara pacing. It is not a serving-path limiter or retry policy.
+export {
+  NARA_MIN_MODEL_CALL_INTERVAL_MS,
+  NARA_PUBLISHED_FREE_RPM,
+  NARA_RATE_LIMIT_COOLDOWN_MS,
+  createNaraLivePacer,
+  naraPacingDelayMsFor,
+} from './contracts/nara-live-pacing.js';
+export type { NaraLivePacer } from './contracts/nara-live-pacing.js';
+
 // The sanitized result model and the six-binding coverage manifest.
 export {
   CASE_OUTCOMES,

@@ -242,6 +242,7 @@ describe('JF-5B-R6 this is not, and cannot become, a production rate policy', ()
       'cli/preflight.ts',
       'composition/jf5b-certification-runner-impl.ts',
       'composition/jf5b-live-composition.ts',
+      'contracts/nara-live-pacing.ts',
       'index.ts',
       'tests/jf5b-groq-pacing.test.ts',
       'tests/jf5b-phase3-diagnostics.test.ts',
