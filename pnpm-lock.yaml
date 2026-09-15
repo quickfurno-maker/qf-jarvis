@@ -301,6 +301,12 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
 
+  packages/core-decision-http-transport:
+    dependencies:
+      '@qf-jarvis/core-decision-adapter':
+        specifier: workspace:*
+        version: link:../core-decision-adapter
+
   packages/core-riya-intake:
     dependencies:
       '@qf-jarvis/contracts':

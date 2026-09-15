@@ -1,0 +1,22 @@
+{
+  "name": "@qf-jarvis/core-decision-http-transport",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "Signed, one-shot QuickFurno Core decision transport. Authenticates Jarvis to QuickFurno with Ed25519, sends exactly one qfj.core.decision v2 command, and returns the raw Core response for the existing adapter to validate. No environment access, no database, no n8n, no provider, no retry, no activation.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/core-decision-adapter": "workspace:*"
+  }
+}
