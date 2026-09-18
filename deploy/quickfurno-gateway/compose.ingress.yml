@@ -1,0 +1,43 @@
+services:
+  quickfurno-gateway:
+    labels:
+      traefik.enable: 'true'
+      traefik.docker.network: 'qf-jarvis-gateway_gateway'
+
+      # General machine gateway router. The application currently exposes only health +
+      # handshake, but this ceiling leaves headroom for later governed turn traffic without
+      # weakening the much tighter handshake-specific perimeter below.
+      traefik.http.routers.qf-jarvis-gateway.rule: 'Host(`gateway.jarvis.quickfurno.in`)'
+      traefik.http.routers.qf-jarvis-gateway.entrypoints: 'websecure'
+      traefik.http.routers.qf-jarvis-gateway.tls.certresolver: 'letsencrypt'
+      traefik.http.routers.qf-jarvis-gateway.middlewares: 'qf-jarvis-gateway-ip@docker,qf-jarvis-gateway-ratelimit@docker,qf-jarvis-gateway-buffer@docker'
+      traefik.http.services.qf-jarvis-gateway.loadbalancer.server.port: '3100'
+
+      # QuickFurno production VPS only. Cryptographic signatures remain mandatory;
+      # this network allowlist is defense in depth, not authentication. DNS must therefore
+      # resolve directly to this VPS rather than proxying through a CDN.
+      traefik.http.middlewares.qf-jarvis-gateway-ip.ipallowlist.sourcerange: '213.210.21.216/32'
+
+      traefik.http.middlewares.qf-jarvis-gateway-ratelimit.ratelimit.average: '300'
+      traefik.http.middlewares.qf-jarvis-gateway-ratelimit.ratelimit.period: '1m'
+      traefik.http.middlewares.qf-jarvis-gateway-ratelimit.ratelimit.burst: '100'
+
+      traefik.http.middlewares.qf-jarvis-gateway-buffer.buffering.maxRequestBodyBytes: '65536'
+      traefik.http.middlewares.qf-jarvis-gateway-buffer.buffering.memRequestBodyBytes: '65536'
+
+      # Handshake canary has its own high-priority, low-volume router. A later high-rate
+      # machine endpoint does not inherit this low threshold and therefore does not require
+      # an ingress redesign.
+      traefik.http.routers.qf-jarvis-gateway-handshake.rule: 'Host(`gateway.jarvis.quickfurno.in`) && Path(`/v1/handshake/challenge`)'
+      traefik.http.routers.qf-jarvis-gateway-handshake.entrypoints: 'websecure'
+      traefik.http.routers.qf-jarvis-gateway-handshake.tls.certresolver: 'letsencrypt'
+      traefik.http.routers.qf-jarvis-gateway-handshake.priority: '100'
+      traefik.http.routers.qf-jarvis-gateway-handshake.middlewares: 'qf-jarvis-gateway-ip@docker,qf-jarvis-gateway-handshake-ratelimit@docker,qf-jarvis-gateway-handshake-buffer@docker'
+      traefik.http.routers.qf-jarvis-gateway-handshake.service: 'qf-jarvis-gateway'
+
+      traefik.http.middlewares.qf-jarvis-gateway-handshake-ratelimit.ratelimit.average: '10'
+      traefik.http.middlewares.qf-jarvis-gateway-handshake-ratelimit.ratelimit.period: '1m'
+      traefik.http.middlewares.qf-jarvis-gateway-handshake-ratelimit.ratelimit.burst: '20'
+
+      traefik.http.middlewares.qf-jarvis-gateway-handshake-buffer.buffering.maxRequestBodyBytes: '8192'
+      traefik.http.middlewares.qf-jarvis-gateway-handshake-buffer.buffering.memRequestBodyBytes: '8192'

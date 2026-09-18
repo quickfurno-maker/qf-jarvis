@@ -1,0 +1,47 @@
+name: qf-jarvis-gateway
+
+services:
+  quickfurno-gateway:
+    image: 'qf-jarvis-gateway:${QFJ_GATEWAY_IMAGE_TAG:?QFJ_GATEWAY_IMAGE_TAG must be the exact merged git SHA}'
+    container_name: qf-jarvis-gateway
+    restart: unless-stopped
+    init: true
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    stop_grace_period: 15s
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=16m
+    user: '10002:10002'
+    environment:
+      NODE_ENV: production
+      QFJ_GATEWAY_CONFIG_FILE: /run/secrets/qf-jarvis-gateway.json
+    volumes:
+      - type: bind
+        source: /srv/qf-jarvis/secrets/qf-jarvis-gateway.json
+        target: /run/secrets/qf-jarvis-gateway.json
+        read_only: true
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256m
+          pids: 128
+        reservations:
+          memory: 64m
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '5'
+    networks:
+      - gateway
+    labels:
+      traefik.enable: 'false'
+
+networks:
+  gateway:
+    name: qf-jarvis-gateway_gateway
+    driver: bridge

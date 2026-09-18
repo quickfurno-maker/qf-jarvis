@@ -1,0 +1,13 @@
+{
+  "name": "@qf-jarvis/quickfurno-gateway",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Dedicated machine-to-machine ingress for QuickFurno Core -> Jarvis. Verifies signed, bounded requests; owns no business authority and no provider credentials.",
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json",
+    "start": "node ./dist/index.js"
+  }
+}

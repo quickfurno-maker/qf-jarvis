@@ -11,6 +11,7 @@
     { "path": "./apps/api/tsconfig.build.json" },
     { "path": "./apps/worker/tsconfig.build.json" },
     { "path": "./apps/temporal-worker/tsconfig.build.json" },
+    { "path": "./apps/quickfurno-gateway/tsconfig.build.json" },
     { "path": "./packages/contracts" },
     { "path": "./packages/event-backbone" },
     { "path": "./packages/event-ingestion/tsconfig.build.json" },
