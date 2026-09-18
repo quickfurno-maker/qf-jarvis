@@ -86,7 +86,20 @@ describe('QuickFurno WhatsApp signed HTTP clients', () => {
         dataClass: 'HOSTED_ALLOWED',
         subjectRef: '44444444-4444-4444-8444-444444444444',
         receivedAt: '2026-09-18T12:00:00.000Z',
-        normalizedText: 'hello',
+        inbound: {
+          version: 1,
+          messageType: 'image',
+          normalizedText: '[Attachment: image; content not inspected] Caption: Need this style',
+          attachment: {
+            kind: 'image',
+            mediaId: 'media-123',
+            mimeType: 'image/jpeg',
+            caption: 'Need this style',
+          },
+          replyContext: { providerMessageId: 'wamid.parent' },
+          referral: { sourceType: 'ad', sourceId: 'ad-123' },
+        },
+        normalizedText: '[Attachment: image; content not inspected] Caption: Need this style',
       };
       return Promise.resolve({
         status: 200,
@@ -104,8 +117,44 @@ describe('QuickFurno WhatsApp signed HTTP clients', () => {
       subjectType: 'client',
       tenantId: 'quickfurno.marketplace',
     });
+    expect(result.inbound).toMatchObject({
+      messageType: 'image',
+      attachment: { mediaId: 'media-123' },
+      replyContext: { providerMessageId: 'wamid.parent' },
+    });
     expect(post).toHaveBeenCalledOnce();
   });
+
+  it('material reader rejects conflicting parallel text and structured material', async () => {
+    const post: QuickFurnoWhatsAppHttpPost = (_url, init) => {
+      const request = JSON.parse(init.body) as Record<string, unknown>;
+      return Promise.resolve({
+        status: 200,
+        text: () => Promise.resolve(JSON.stringify({
+          protocol: 'qfj.whatsapp.turn-material',
+          version: 1,
+          requestId: request['requestId'],
+          conversationId: request['conversationId'],
+          inboundMessageId: request['inboundMessageId'],
+          conversationRevision: request['expectedRevision'],
+          assignedActor: 'RIYA',
+          subjectType: 'client',
+          tenantId: 'quickfurno.marketplace',
+          dataClass: 'HOSTED_ALLOWED',
+          receivedAt: '2026-09-18T12:00:00.000Z',
+          inbound: { version: 1, messageType: 'text', normalizedText: 'trusted text' },
+          normalizedText: 'different text',
+        })),
+      });
+    };
+    const reader = createQuickFurnoWhatsAppMaterialReader(config(post));
+    await expect(reader.read({
+      conversationId: '22222222-2222-4222-8222-222222222222',
+      inboundMessageId: '33333333-3333-4333-8333-333333333333',
+      expectedRevision: 7,
+    })).rejects.toMatchObject({ code: 'response-invalid' });
+  });
+
   it('reply writer signs V2 structured Concierge output with deterministic idempotency', async () => {
     let captured: Record<string, unknown> | undefined;
     const post = vi.fn<QuickFurnoWhatsAppHttpPost>((_url, init) => {
