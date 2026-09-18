@@ -66,7 +66,7 @@ HTTP, UI and authentication provider.
 
 **QFJ-P09 remains INCOMPLETE**, with these outstanding, confirmed against the import graph:
 
-1. an **adopted** Core → n8n transport and its composition (the B4 wire protocol is **PROPOSED**);
+1. an **adopted** Core → QuickFurno Core Automation transport and its composition (the B4 wire protocol is **PROPOSED**);
 2. execution-time communications **eligibility** integration;
 3. a **producer** of `CommunicationStateRecordV1`;
 4. provider dispatch, provider results and **reconciliation**;
@@ -107,25 +107,25 @@ been re-proved.
 ### 1. This is planning. It activates nothing.
 
 No production code, no dependency, no migration, no transport, no credential, no provider call, no
-n8n call, no Core read or write, no live send, and no change to production rollout — which remains
+QuickFurno Core Automation call, no Core read or write, no live send, and no change to production rollout — which remains
 **OFF**. Aarohi's runtime remains **PLANNED / DISABLED**.
 
 ### 2. Phase ownership is assigned to existing phases
 
-| Capability                                                                           | Canonical owner                           |
-| ------------------------------------------------------------------------------------ | ----------------------------------------- |
-| `CommunicationRequestV1` producer                                                    | **QFJ-P08**                               |
-| Live Core transport for communication authorization                                  | **QFJ-P08**, blocked on Core adoption     |
-| `CommunicationStateRecordV1` producer                                                | **QFJ-P09**                               |
-| Adopted Core → n8n transport and composition                                         | **QFJ-P09**, blocked on Core/n8n adoption |
-| Execution-time eligibility integration                                               | **QFJ-P09**, authority is Core's          |
-| Core protocol adoption (identity, registration, payment, activation, reconciliation) | **QFJ-P10**                               |
-| Provider dispatch, results, Core reconciliation                                      | **QFJ-P10**                               |
-| Same-acquisition post-registration continuation (GAP A)                              | **QFJ-P12**, blocked on P10               |
-| Authoritative pre-activation case bridge (GAP B)                                     | **QFJ-P12**, blocked on P10               |
-| Aarohi runtime composition                                                           | **QFJ-P12**, default OFF                  |
-| Real-integration certification                                                       | **QFJ-P12**                               |
-| Staged activation                                                                    | **out of scope**, separately governed     |
+| Capability                                                                           | Canonical owner                                                  |
+| ------------------------------------------------------------------------------------ | ---------------------------------------------------------------- |
+| `CommunicationRequestV1` producer                                                    | **QFJ-P08**                                                      |
+| Live Core transport for communication authorization                                  | **QFJ-P08**, blocked on Core adoption                            |
+| `CommunicationStateRecordV1` producer                                                | **QFJ-P09**                                                      |
+| Adopted Core → QuickFurno Core Automation transport and composition                  | **QFJ-P09**, blocked on Core/QuickFurno Core Automation adoption |
+| Execution-time eligibility integration                                               | **QFJ-P09**, authority is Core's                                 |
+| Core protocol adoption (identity, registration, payment, activation, reconciliation) | **QFJ-P10**                                                      |
+| Provider dispatch, results, Core reconciliation                                      | **QFJ-P10**                                                      |
+| Same-acquisition post-registration continuation (GAP A)                              | **QFJ-P12**, blocked on P10                                      |
+| Authoritative pre-activation case bridge (GAP B)                                     | **QFJ-P12**, blocked on P10                                      |
+| Aarohi runtime composition                                                           | **QFJ-P12**, default OFF                                         |
+| Real-integration certification                                                       | **QFJ-P12**                                                      |
+| Staged activation                                                                    | **out of scope**, separately governed                            |
 
 ### 2a. The QFJ-P08 `CommunicationRequestV1` producer slice
 
@@ -153,9 +153,9 @@ Producing a request is asking. It is the first half of a question whose answer i
 ### 3. The permanent flow is unchanged
 
 Core → signed events/contracts → Jarvis → recommendation/approval request → Core or human
-authorization → n8n execution → provider delivery → result to Core → result event to Jarvis.
+authorization → QuickFurno Core Automation execution → provider delivery → result to Core → result event to Jarvis.
 
-Aarohi never calls a provider or n8n. n8n executes and authorizes nothing. A provider delivers and
+Aarohi never calls a provider or QuickFurno Core Automation. QuickFurno Core Automation executes and authorizes nothing. A provider delivers and
 decides nothing. Jarvis mints no business truth.
 
 ### 4. The two AVG-10 gaps stay open, and the conditions for closing them are named
@@ -178,7 +178,7 @@ ACTIVE vendor status at all** — `vendors.status` is `('Pending','Approved','Re
 ### 5. Execution-time eligibility is Core's, and Jarvis may never cache it
 
 The authority is the **QuickFurno Communication Core**, inside QuickFurno Core. The **QF
-Communications Runtime** — outside this repository, on the execution side, reached only by n8n under
+Communications Runtime** — outside this repository, on the execution side, reached only by QuickFurno Core Automation under
 an authorized execution intent — re-validates at execution time as a second line of defence.
 
 Jarvis stores no consent, opt-out, suppression, STOP/START, do-not-contact or eligibility answer,
@@ -186,7 +186,7 @@ and a prior authorization is never a future permission slip.
 
 ### 6. Result truth returns through Core, never from the provider
 
-A provider result and an n8n outcome are transport facts. They become business truth only after Core
+A provider result and an QuickFurno Core Automation outcome are transport facts. They become business truth only after Core
 records them, and reach Jarvis only as an authoritative Core event or contract. No versioned
 Core → Jarvis reconciliation contract exists today; that is a **QFJ-P10 prerequisite**, not
 something this ADR invents.

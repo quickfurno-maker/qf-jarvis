@@ -6,7 +6,7 @@
 re-audited, no Core code read or modified in this slice**
 
 **Core-independent.** No live event transport, no Core modification, no managed Supabase, no
-n8n/provider/Meta, no message sent, **no migration**, rollout **OFF**.
+QuickFurno Core Automation/provider/Meta, no message sent, **no migration**, rollout **OFF**.
 
 Supersedes nothing. Implements the `D2a` prerequisite locked by
 [ADR-0135](./ADR-0135-qfj-p09-s2-local-communication-state-projection-architecture.md) and re-affirmed
@@ -356,7 +356,7 @@ and does not wait for **C0/C1/C2/C3A/C3B**. Nothing here is activated: productio
 ## Posture
 
 No production behaviour changed. No contract, event registry, event-backbone schema, ingestion
-semantic or projection changed. No Core modification, branch or PR. No managed Supabase. No n8n or
+semantic or projection changed. No Core modification, branch or PR. No managed Supabase. No QuickFurno Core Automation or
 provider access. No message sent. **No migration allocated.**
 
 **Production rollout remains OFF. Runtime activation is unchanged.**

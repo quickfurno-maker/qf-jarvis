@@ -186,7 +186,7 @@ describe('(B) no transport, no provider, no credential', () => {
     }
   });
 
-  it('names no endpoint, webhook, workflow, n8n or provider', () => {
+  it('names no endpoint, webhook, workflow, QuickFurno Core Automation or provider', () => {
     const code = productionCode();
     for (const forbidden of [
       'http://',
@@ -195,7 +195,7 @@ describe('(B) no transport, no provider, no credential', () => {
       'baseUrl',
       'webhook',
       'workflowId',
-      'n8n',
+      'quickfurno-core-automation',
       'whatsapp',
       'twilio',
       'graph.facebook',

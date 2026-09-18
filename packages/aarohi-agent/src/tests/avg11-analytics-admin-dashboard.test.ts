@@ -292,7 +292,7 @@ describe('the AVG-11 contract is pinned', () => {
       'approvalDecisionCreated',
       'communicationAuthorizationCreated',
       'executionIntentCreated',
-      'n8nExecutionRequested',
+      'coreAutomationExecutionRequested',
       'providerSendRequested',
       'channelSendRequested',
       'sent',

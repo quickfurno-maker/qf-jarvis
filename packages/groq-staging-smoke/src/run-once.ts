@@ -5,7 +5,7 @@
  * ONE bind, ONE invocation, ONE HTTP request, ZERO retries, and a harness-owned `AbortController` plus a
  * single bounded timer. There is no loop anywhere in this module and no second-invocation surface: the
  * function returns a frozen terminal result and the caller exits. Nothing here can send, deliver,
- * persist, register a provider, promote a rollout, or reach QuickFurno Core, the Jarvis runtime, n8n, or
+ * persist, register a provider, promote a rollout, or reach QuickFurno Core, the Jarvis runtime, QuickFurno Core Automation, or
  * WhatsApp — none of those are imported, and the only capability this module has is the one injected
  * transport.
  *

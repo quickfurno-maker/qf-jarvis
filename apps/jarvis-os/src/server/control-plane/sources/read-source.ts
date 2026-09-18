@@ -191,7 +191,7 @@ export const SECTIONS_CLOSED_TO_ADAPTERS: readonly ControlPlaneSectionName[] = O
  *
  * - QuickFurno Core has no adopted read protocol. Inventing an endpoint, a token or a Supabase
  *   query would fabricate connectivity, and Core owns business truth regardless.
- * - n8n has no adopted read protocol, and the test-only execution bridge belongs to QFJ-P09.02.
+ * - QuickFurno Core Automation has no adopted read protocol, and the test-only execution bridge belongs to QFJ-P09.02.
  * - The durable runtimes (`postgres-conversation-state`, `postgres-approval-queue`) are reachable
  *   only with managed-database credentials. Granting Jarvis OS a connection string to make panels
  *   look populated would hand a read-only surface the reach it was designed not to have.

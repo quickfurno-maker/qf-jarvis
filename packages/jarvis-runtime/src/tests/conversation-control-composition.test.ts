@@ -1395,7 +1395,7 @@ describe('the runtime surface', () => {
       'persist',
       'approve',
       'authorize',
-      'callN8n',
+      'callcoreAutomation',
       'dispatch',
       'webhook',
       'startWorker',

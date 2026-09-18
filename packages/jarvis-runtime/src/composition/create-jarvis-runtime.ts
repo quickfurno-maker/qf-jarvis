@@ -23,7 +23,7 @@
  * and kept replying. The two operator methods are OPTIONAL capabilities detected on that object, so a
  * read-only source stays valid and existing inbound composition is untouched.
  *
- * Still no send/deliver/execute/persist/authorize/approve/callN8n method, no HTTP route, no
+ * Still no send/deliver/execute/persist/authorize/approve/callcoreAutomation method, no HTTP route, no
  * authentication, no UI, no database and no global mutable state. `operatorRef` is attribution, not
  * proof of identity — a future operator API must authenticate and authorize before calling in.
  * QuickFurno Core remains the only business authority; model output is a draft only.

@@ -39,7 +39,7 @@ Riya / Anisha runtime → repository-owned ModelProvider → selected adapter �
 
 ## Agent ownership (unchanged by provider selection)
 
-Provider selection never alters agent authority. **Riya** — Customer Conversation and Qualification Agent. **Anisha** — Vendor Sales, Relationship and Success Agent (complete vendor lifecycle; **not** narrowed to onboarding/support). QuickFurno Core = final business authority; Jarvis recommends/coordinates; n8n executes approved intents; providers deliver only.
+Provider selection never alters agent authority. **Riya** — Customer Conversation and Qualification Agent. **Anisha** — Vendor Sales, Relationship and Success Agent (complete vendor lifecycle; **not** narrowed to onboarding/support). QuickFurno Core = final business authority; Jarvis recommends/coordinates; QuickFurno Core Automation executes approved intents; providers deliver only.
 
 ## Compatibility verdicts
 

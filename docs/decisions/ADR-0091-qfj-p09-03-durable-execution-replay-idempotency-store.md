@@ -22,10 +22,10 @@ This slice supplies the missing durability, and only that.
 ### 1. It is transport-neutral, and the wire protocol is still PROPOSED
 
 `@qf-jarvis/postgres-execution-replay-store` holds no transport, endpoint, URL, webhook, workflow
-id, HTTP client, n8n client, provider client or credential. Persisting a replay claim is **not**
-adopting the Core → n8n envelope: not one of the three values stored is a transport artifact.
+id, HTTP client, QuickFurno Core Automation client, provider client or credential. Persisting a replay claim is **not**
+adopting the Core → QuickFurno Core Automation envelope: not one of the three values stored is a transport artifact.
 
-Real adopted Core → n8n transport remains deferred to a separately approved cross-system phase
+Real adopted Core → QuickFurno Core Automation transport remains deferred to a separately approved cross-system phase
 involving QuickFurno Core and the execution side. Nothing here brings that closer by inventing an
 endpoint, a header, a credential format or a workflow.
 
@@ -200,7 +200,7 @@ laundered into an exact replay.
 ## Consequences
 
 - Migrations `0001`–`0010`; there is no `0011`. Managed database untouched.
-- No Core connection, no n8n connection, no Meta, WhatsApp or provider connection, no credential.
+- No Core connection, no QuickFurno Core Automation connection, no Meta, WhatsApp or provider connection, no credential.
 - **No application composes the store.** It remains a durable adapter with tests until a later,
   separately authorized composition slice adopts it — and `apps/api` PRODUCTION/runtime code is
   unchanged.
@@ -212,7 +212,7 @@ laundered into an exact replay.
 
 ## What this does NOT implement
 
-Real adopted Core → n8n transport and composition · execution-time communications eligibility · the
+Real adopted Core → QuickFurno Core Automation transport and composition · execution-time communications eligibility · the
 18-state communication lifecycle runtime · provider dispatch, results and reconciliation · retention
 or archival of replay claims · production rollout.
 

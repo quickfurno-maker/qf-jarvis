@@ -258,7 +258,7 @@ approval and no P09.
 
 No managed migration or managed access · no deployment · no Jarvis-runtime wiring · no operations
 projection producer · no Core-derived synchronization · no operator HTTP/API/UI/auth · no consent or
-opt-out state · no approval runtime · no P09 transport · no WhatsApp/n8n · no live Core · no provider
+opt-out state · no approval runtime · no P09 transport · no WhatsApp/QuickFurno Core Automation · no live Core · no provider
 call · no persistent memory · no dataset or training · no send, deliver, execute or authorize path.
 
 ## Change-control rule

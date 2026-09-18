@@ -389,7 +389,7 @@ describe('(9, 11) adding WEB added no transport and no client', () => {
       'createServer',
       'listen(',
       'webhook',
-      'n8n',
+      'quickfurno-core-automation',
       'twilio',
       'graph.facebook',
       'ReadableStream',

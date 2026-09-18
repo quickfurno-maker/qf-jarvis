@@ -56,7 +56,7 @@ Bounded, content-free events only: `rollout-transitioned`, `rollout-refused`, `e
 
 ### H. Authority / non-goals
 
-Inference only; the controller and providers hold no business authority; QuickFurno Core is final; n8n is execution-only; Riya client-only; Anisha vendor-only; Jarvis coordinator; Kimi excluded. **No** live activation/calls/keys/tokens; no remote ops; no persistence/schema/migration/0008; no full evaluation; no automatic promotion; no A/B platform; no dynamic cost/latency optimizer; no voting; no parallel shadow; no agents/memory/RAG/tools/n8n; no deployment.
+Inference only; the controller and providers hold no business authority; QuickFurno Core is final; QuickFurno Core Automation is execution-only; Riya client-only; Anisha vendor-only; Jarvis coordinator; Kimi excluded. **No** live activation/calls/keys/tokens; no remote ops; no persistence/schema/migration/0008; no full evaluation; no automatic promotion; no A/B platform; no dynamic cost/latency optimizer; no voting; no parallel shadow; no agents/memory/RAG/tools/QuickFurno Core Automation; no deployment.
 
 ## Rejected alternatives
 

@@ -33,7 +33,7 @@ QF Jarvis uses **exactly one** thing from Supabase: **a PostgreSQL 17 database, 
 - **Supabase Auth** — Jarvis authorizes nothing. Authorization is QuickFurno Core's ([ADR-0001](./ADR-0001-source-of-truth-boundary.md), [ADR-0002](./ADR-0002-recommend-authorize-execute-model.md)).
 - **Supabase Storage** — Jarvis stores no files.
 - **Supabase Realtime** — Phase 3 is checkpoint-driven and deliberately broker-free ([ADR-0021](./ADR-0021-processing-retries-dead-letters-and-replay.md)). A realtime channel is a second delivery path with a second durability boundary.
-- **Supabase Edge Functions** — Jarvis executes nothing. Execution is n8n's, on Core's authority.
+- **Supabase Edge Functions** — Jarvis executes nothing. Execution is QuickFurno Core Automation's, on Core's authority.
 - **The Data API (PostgREST).** See §4: the schema is never exposed through it.
 - **Supabase client SDKs.** **`@supabase/supabase-js` must not be added.** It is a client for Auth, Storage, Realtime, and PostgREST — every one of which is a capability this ADR declines. Adding it would import the platform in order to use the database, and the database is already reachable.
 

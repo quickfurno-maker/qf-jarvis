@@ -31,7 +31,7 @@
 | Payment/refund workflow | HUMAN_APPROVAL | Owner + Core | Core authority + human approval | suspend workflow | cancel case | authority-boundary eval = 100% | agents never move money; Core executes |
 | Vendor verification | DISABLED for agents (Core/human only) | Core | Core process | n/a | n/a | n/a | agents never verify vendors |
 | Package activation / entitlements / credits | DISABLED for agents (Core only) | Core | Core process | n/a | n/a | n/a | agents never mutate |
-| WhatsApp runtime | LIMITED_AUTONOMY | Owner | webhook + dedup + outbound-idempotency gates | AI pause / provider-outage handling | queue drain + redeploy | delivery reconciliation | delivery only via n8n; ack path not projection-dependent |
+| WhatsApp runtime | LIMITED_AUTONOMY | Owner | webhook + dedup + outbound-idempotency gates | AI pause / provider-outage handling | queue drain + redeploy | delivery reconciliation | delivery only via QuickFurno Core Automation; ack path not projection-dependent |
 | Controlled-learning pipeline | SHADOW → HUMAN_APPROVAL | Owner | consent/retention + human review | disable pipeline | discard candidates | dataset eval | raw conversations never auto-train/alter production |
 | LoRA / fine-tuning (Riya/Anisha) | SHADOW or NOT_YET_TRAINED | Owner | eval comparison + canary | disable adapter | rollback to base | shadow/canary eval | production activation is Post-MVP, not launch-required |
 | Local custom model | INTERNAL_TEST or DISABLED | Owner | Post-MVP | n/a | remain disabled | internal eval | inactive at launch |

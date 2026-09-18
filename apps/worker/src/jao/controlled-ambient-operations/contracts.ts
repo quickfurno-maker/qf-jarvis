@@ -506,7 +506,7 @@ export const jao5AmbientCycleResultSchema = z.strictObject({
   coreMutations: z.literal(0),
   executionIntentsCreated: z.literal(0),
   channelSends: z.literal(0),
-  n8nExecutions: z.literal(0),
+  coreAutomationExecutions: z.literal(0),
   specialistCalls: z.literal(0),
   memoryWrites: z.literal(0),
   toolCalls: z.literal(0),

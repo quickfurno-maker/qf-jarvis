@@ -39,7 +39,7 @@
  *
  * It creates no approval, no communication authorization and no execution intent; it sends,
  * executes, persists, queues and emits nothing; it reads no clock; and it can reach no Core
- * endpoint, no n8n workflow and no provider.
+ * endpoint, no QuickFurno Core Automation workflow and no provider.
  */
 import {
   COMMUNICATION_REQUEST_CONTRACT_VERSION,

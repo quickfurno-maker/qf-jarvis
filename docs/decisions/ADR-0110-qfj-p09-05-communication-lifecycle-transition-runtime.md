@@ -1,7 +1,7 @@
 # ADR-0110 — QFJ-P09.05: communication lifecycle transition runtime
 
 **Status:** Accepted — offline coordination policy only (no persistence, no transport, no new
-migration, no managed-database access, no Core call, no n8n, no WhatsApp, no provider, no rollout).
+migration, no managed-database access, no Core call, no QuickFurno Core Automation, no WhatsApp, no provider, no rollout).
 QFJ-P09 remains **INCOMPLETE**.
 
 **Date:** 2026-08-23
@@ -121,7 +121,7 @@ must not take a recipient with it.
 Consider the case most worth getting wrong: a `delivered` record whose transition is perfectly
 consistent. The verdict says the movement from `provider-accepted` to `delivered` is legal and the
 record evidences it. It says nothing about whether a message reached a person — _"no provider state
-becomes authoritative until Core records it"_, and this runtime never spoke to Core, to n8n or to a
+becomes authoritative until Core records it"_, and this runtime never spoke to Core, to QuickFurno Core Automation or to a
 provider. A consumer that renders a tick on `ok: true` has invented a fact.
 
 Nor is consistency permission looking forward. A consistent move into `authorized` authorizes
@@ -150,14 +150,14 @@ nothing, owns no table and issues no DDL.
 
 - **No persistence.** No migration (`0001`–`0012`, no `0013`), no table, no DDL, no connection. The
   managed database is untouched.
-- **No transport.** No URL, webhook, endpoint, n8n client, workflow id, credential, provider client,
+- **No transport.** No URL, webhook, endpoint, QuickFurno Core Automation client, workflow id, credential, provider client,
   message or recipient resolution.
 - **No producer.** Nothing in this repository yet creates `CommunicationStateRecordV1` records for it
   to validate, and no package or application imports it.
 - **No consent, opt-out, suppression, STOP/START or eligibility state**, in keeping with
   communication-model.md and ADR-0083. Jarvis holds no consent database and never will.
 
-**QFJ-P09 remains INCOMPLETE.** Still absent: a real adopted Core -> n8n transport and its
+**QFJ-P09 remains INCOMPLETE.** Still absent: a real adopted Core -> QuickFurno Core Automation transport and its
 composition, execution-time communications eligibility integration, a producer of communication state
 records, provider dispatch, provider results and reconciliation, and production rollout. **Live send
 remains OFF.** WhatsApp is not activated, no provider is integrated, and the exit criteria of QFJ-P09

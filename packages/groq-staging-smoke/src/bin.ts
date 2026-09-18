@@ -5,7 +5,7 @@
  * The ONLY place the real capabilities are constructed: the fixed-origin Groq fetch transport, the
  * masked interactive terminal, the system clock, and one `setTimeout`. It wires them into `runSmokeCli`,
  * writes the sanitized report, sets an exit code, and ends. There is no loop, no prompt for a second
- * run, no interactive session, and no path that reaches QuickFurno Core, the Jarvis runtime, n8n,
+ * run, no interactive session, and no path that reaches QuickFurno Core, the Jarvis runtime, QuickFurno Core Automation,
  * WhatsApp, a database, a rollout, or a provider activation.
  *
  * No test imports this file — every test drives `runSmokeCli`/`runGroqStagingSmokeOnce` with injected

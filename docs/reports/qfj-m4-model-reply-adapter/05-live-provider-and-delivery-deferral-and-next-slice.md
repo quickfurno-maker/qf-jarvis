@@ -10,7 +10,7 @@ This slice is the **drafting seam only**. It implements the adapter shape, the e
 2. **Live Groq/local provider calls.** No live provider is contacted; the gateway's real providers, key holders, and HTTP transports are **not** wired here.
 3. **Provider keys / tokens / environment.** No key, token, or `process.env` access; no endpoint provisioning.
 4. **Provider activation and rollout promotion.** The adapter activates no release and promotes no rollout mode; the P04.01E rollout controller and P04.04 evaluation approval remain the sole authorities for those.
-5. **Delivery / execution.** A validated draft is only an **input** to the M2 proposal / Core-decision flow. Sending, delivering, executing, n8n orchestration, and WhatsApp transport remain out of scope and are Core/n8n responsibilities.
+5. **Delivery / execution.** A validated draft is only an **input** to the M2 proposal / Core-decision flow. Sending, delivering, executing, QuickFurno Core Automation orchestration, and WhatsApp transport remain out of scope and are Core/QuickFurno Core Automation responsibilities.
 6. **Persistence, live Core, knowledge retrieval, RAG, dashboard, deployment.** Unchanged from M1–M3 — none are touched; **migration 0008** is absent; semantic/vector/embedding/RAG stays disabled.
 
 ## Why this ordering is safe
@@ -23,4 +23,4 @@ The adapter **cannot** select a provider, invent a fallback, activate a release,
 
 ## Standing constraints (unchanged)
 
-Riya client-only; Anisha vendor-only; Jarvis coordinator; **QuickFurno Core** is the final business authority and system of record; n8n is transport/execution only and decides no business rule; models/providers/evaluators/retrievers authorize and execute nothing; Kimi / Kimi K3 excluded. The **Conversation Operations Center** remains mandatory for a later slice and is **not** implemented here (no dashboard, WhatsApp, persistence, or n8n). Managed database/live lanes remain paused.
+Riya client-only; Anisha vendor-only; Jarvis coordinator; **QuickFurno Core** is the final business authority and system of record; QuickFurno Core Automation is transport/execution only and decides no business rule; models/providers/evaluators/retrievers authorize and execute nothing; Kimi / Kimi K3 excluded. The **Conversation Operations Center** remains mandatory for a later slice and is **not** implemented here (no dashboard, WhatsApp, persistence, or QuickFurno Core Automation). Managed database/live lanes remain paused.

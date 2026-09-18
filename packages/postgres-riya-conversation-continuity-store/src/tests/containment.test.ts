@@ -302,8 +302,8 @@ describe('what this package cannot become', () => {
   });
 });
 
-describe('nothing composes this adapter', () => {
-  it('is imported by no application, runtime or other package', () => {
+describe('only the reviewed JF-6 composition composes this adapter', () => {
+  it('is imported by exactly one application composition and nothing else', () => {
     const searched: string[] = [];
     const roots = ['apps', 'packages'];
     for (const root of roots) {
@@ -330,7 +330,9 @@ describe('nothing composes this adapter', () => {
         "from '@qf-jarvis/postgres-riya-conversation-continuity-store'",
       );
     });
-    expect(importers).toStrictEqual([]);
+    expect(importers).toStrictEqual([
+      join(REPO_ROOT, 'apps/api/src/jf6-private-process/create-riya-service-boundary.ts'),
+    ]);
   });
 
   it('RWC-P2C still requires an injected store and ships no default', () => {

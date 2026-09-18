@@ -49,7 +49,7 @@ export default async function SettingsPage() {
           <ul className="space-y-2.5 text-[12px] leading-relaxed text-[var(--color-ink-muted)]">
             <li>Create or answer an approval.</li>
             <li>Send a communication, or reach a provider.</li>
-            <li>Invoke n8n, or edit a workflow.</li>
+            <li>Invoke coreAutomation, or edit a workflow.</li>
             <li>Mutate QuickFurno Core or any Jarvis durable state.</li>
             <li>Read a secret, or reach a database.</li>
           </ul>

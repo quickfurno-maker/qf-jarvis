@@ -12,9 +12,9 @@ Mechanisms are chosen in Phase 1 and hardened in Phase 13. These are the princip
 Every component gets the minimum access it needs, and nothing more.
 
 - **Agents** receive only the data their domain requires. Jitin does not get client phone numbers; Kabir does not get payment history ([ADR-0006](../decisions/ADR-0006-agent-responsibility-boundaries.md)).
-- **QF Jarvis** has no write access to business state, no path to n8n, and no provider credentials.
+- **QF Jarvis** has no write access to business state, no path to QuickFurno Core Automation, and no provider credentials.
 - **Model access is mediated, not distributed.** Agents call the internal **model gateway** (Phase 4.0), never a provider directly, and every capability an agent may invoke is a **declared, bounded, contract-typed door** (Phase 4.1) — never arbitrary SQL, shell, filesystem access, URL fetching, generic provider invocation, or unrestricted document retrieval ([model-runtime-and-governance.md](../architecture/model-runtime-and-governance.md), [governed-knowledge-and-capabilities.md](../architecture/governed-knowledge-and-capabilities.md), [ADR-0028](../decisions/ADR-0028-ai-runtime-foundations-and-roadmap-sequencing.md)). **Approved architecture, not implemented.**
-- **Provider credentials in n8n** are scoped to the minimum each integration needs — one compromised credential must not reach another provider.
+- **Provider credentials in QuickFurno Core Automation** are scoped to the minimum each integration needs — one compromised credential must not reach another provider.
 - **Human approvers** have delegated limits. Money escalates ([ADR-0005](../decisions/ADR-0005-human-and-policy-approval.md)).
 
 The strongest form of least privilege is **not having the capability at all**. Jarvis's inability to call a provider is not a permission check that could be misconfigured — it is the absence of an integration and the absence of a secret. That is why the boundary is a security control, not just an architectural preference.
@@ -31,14 +31,14 @@ Everything is refused unless it is explicitly permitted.
 
 ## 3. Signed service communication
 
-Every message crossing a system boundary is signed by its sender and verified by its recipient: Core → Jarvis (events), Jarvis → Core (recommendations), Core → n8n (intents), n8n → Core (results).
+Every message crossing a system boundary is signed by its sender and verified by its recipient: Core → Jarvis (events), Jarvis → Core (recommendations), Core → QuickFurno Core Automation (intents), QuickFurno Core Automation → Core (results).
 
-Signing keys between systems are **distinct**. A compromised Jarvis key must not let an attacker impersonate Core to n8n — which is the difference between "the intelligence layer is compromised" and "the attacker can now spend money."
+Signing keys between systems are **distinct**. A compromised Jarvis key must not let an attacker impersonate Core to QuickFurno Core Automation — which is the difference between "the intelligence layer is compromised" and "the attacker can now spend money."
 
 ## 4. Secret isolation
 
 - Secrets live in a **secret store**. Never in source, never in committed configuration, never in an environment dump, never in a log line.
-- **Provider credentials exist only in n8n's trust zone.**
+- **Provider credentials exist only in QuickFurno Core Automation's trust zone.**
 - Secrets are scoped narrowly and rotated.
 - A developer must never need a production secret to do their job.
 
@@ -78,7 +78,7 @@ A policy that authorizes automatically is attributable **exactly as a human appr
 
 An execution intent authorizes **one specific thing**: exact action, exact subject, exact provider and channel, exact parameters, with an expiry and an idempotency key. Anything outside those bounds is unauthorized.
 
-n8n has **no discretion**. It does not interpret, expand, or helpfully adjust an intent — because discretion is precisely where an execution fabric becomes a decision-maker, and the decision was supposed to have been made already.
+QuickFurno Core Automation has **no discretion**. It does not interpret, expand, or helpfully adjust an intent — because discretion is precisely where an execution fabric becomes a decision-maker, and the decision was supposed to have been made already.
 
 **Rate and volume bounds** apply at the provider boundary, so that a fault or a compromise cannot become a mass-outreach or mass-spend event before a human notices.
 
@@ -108,7 +108,7 @@ Design as though each component will eventually be compromised, and ask what hol
 | Compromised | Attacker gains | What holds |
 | --- | --- | --- |
 | **QF Jarvis** | The ability to produce misleading recommendations and communication *requests* | Cannot authorize, execute, call anyone, message anyone, move money, or alter business truth. Holds no WhatsApp or telephony credential. Cannot choose a recipient — Core resolves that from its own contact identity. Cannot bypass consent or do-not-contact, which Core enforces and the runtime re-checks |
-| **A provider credential in n8n** | The ability to act through that one provider, within its scope | Scoped credentials contain it; rate and volume bounds cap it; execution results still flow to Core, so it is visible in the audit trail rather than invisible; Core's truth is not corrupted |
+| **A provider credential in QuickFurno Core Automation** | The ability to act through that one provider, within its scope | Scoped credentials contain it; rate and volume bounds cap it; execution results still flow to Core, so it is visible in the audit trail rather than invisible; Core's truth is not corrupted |
 | **A signing key** | The ability to impersonate one system to another | Distinct keys per boundary limit the blast radius; rotation is immediate and requires no deploy |
 | **An approver account** | Real authority, within that approver's delegated limits | Strong authentication, no shared accounts, session expiry, delegated limits, money escalates, and every action is attributable and audited |
 

@@ -240,7 +240,7 @@ migration-ledger and open-PR collision check. Managed PostgreSQL remains a separ
 
 No database, `pg`, SQL, migration or migration number · no persistence · no durable idempotency · no
 bootstrap implementation · no operations-projection producer · no operator HTTP/API/UI/auth · no
-approval runtime · no consent/opt-out state · no P09 transport · no WhatsApp/n8n · no live Core · no
+approval runtime · no consent/opt-out state · no P09 transport · no WhatsApp/QuickFurno Core Automation · no live Core · no
 provider call · no deployment or activation.
 
 ## Change-control rule

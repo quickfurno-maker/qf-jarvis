@@ -19,7 +19,7 @@
 - **No persistence:** no failure aggregate, no `blocked ↔ exactly-one-unresolved-failure` reconciliation table, no action/audit ledger, no replay-authorization or replay-attempt evidence.
 - **No migration:** migration 0006 (owned exclusively by **QFJ-P03.07C**, separately authorized) was not created; no SQL; no schema/checkpoint/attempt change; migration 0007 not created.
 - **No operator surface:** no quarantine persistence, no replay authorization/execution, no operator API.
-- **No MVP runtime:** no Groq/Riya/Anisha/RAG/pgvector/WhatsApp/n8n/Core work; no deployment.
+- **No MVP runtime:** no Groq/Riya/Anisha/RAG/pgvector/WhatsApp/QuickFurno Core Automation/Core work; no deployment.
 - **No package-root API expansion.**
 
 ## Next slice

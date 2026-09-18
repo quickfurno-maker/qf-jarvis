@@ -9,7 +9,7 @@
  *   -> canonical POWERLESS `ApprovalRequestV1`
  *   -> STOP.
  *
- * There is no Core submission, no approval decision, no execution intent, no n8n call, no provider
+ * There is no Core submission, no approval decision, no execution intent, no QuickFurno Core Automation call, no provider
  * or channel call and no persistence. The output means "ready to enter the existing path", which is
  * a different thing from "authorized", and the difference is enforced by what this module is unable
  * to construct rather than by what it promises not to.
@@ -199,7 +199,7 @@ export function proposeJao6BusinessActionInternal(
 ): Jao6ProposalResult {
   // 1. Strict request. An unknown key -- `risk`, `requiredApproval`, `actionType`, `producingAgent`,
   //    `approved`, `authorized`, `canExecute`, `canSend`, `approvalDecision`, `executionIntent`,
-  //    `provider`, `executor`, `n8n`, `webhookUrl`, `recipient`, `phoneNumber`, any credential -- is
+  //    `provider`, `executor`, `QuickFurno Core Automation`, `webhookUrl`, `recipient`, `phoneNumber`, any credential -- is
   //    a refusal. The Zod issue tree is discarded: it can quote the very values the governed schemas
   //    exist to keep out of a log line.
   const parsedRequest = jao6ProposalRequestSchema.safeParse(request);
@@ -278,7 +278,7 @@ export function proposeJao6BusinessActionInternal(
   // 7. Parameters, against the POLICY's own closed schema -- resolved from a PRIVATE lookup keyed by
   //    policy identity, because a Zod object on a governance record would make that record
   //    un-freezable. Unknown keys are refused here, which is what stops `canExecute`, `executor`,
-  //    `n8n` or `webhookUrl` arriving as data instead of as a field: the canonical governed scan
+  //    `QuickFurno Core Automation` or `webhookUrl` arriving as data instead of as a field: the canonical governed scan
   //    catches credentials and contact details, but it permits keys it has never heard of.
   //
   //    Every field in that schema is a closed enum code or a timestamp. No caller prose survives
@@ -399,7 +399,7 @@ export function proposeJao6BusinessActionInternal(
 
   // 12. STOP. What exists now is an inert recommendation, its content binding, and a powerless ask.
   //     Only QuickFurno Core issues an `ApprovalDecisionV1`; only Core issues an `ExecutionIntentV1`;
-  //     only n8n executes one. None of those happens here, and none of them can.
+  //     only QuickFurno Core Automation executes one. None of those happens here, and none of them can.
   const ready: Jao6ProposalReadyResult = Object.freeze({
     outcome: 'PROPOSAL_READY' as const,
     refusalReason: null,

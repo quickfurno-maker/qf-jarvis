@@ -68,7 +68,7 @@ There is no single place where cross-domain signals are synthesized into "here i
 | Client-support team | Act on client follow-up and reactivation recommendations |
 | Technical operators | Run, observe, and maintain the Jarvis platform |
 
-Clients and vendors are **subjects** of the system, never direct users of it. They experience its effects only through actions that QuickFurno Core has authorized and n8n has executed via approved providers.
+Clients and vendors are **subjects** of the system, never direct users of it. They experience its effects only through actions that QuickFurno Core has authorized and QuickFurno Core Automation has executed via approved providers.
 
 ## 7. System boundary
 
@@ -76,7 +76,7 @@ The boundary below is permanent. The authoritative statement lives in [system-bo
 
 - **QuickFurno Core** owns business truth, operational state, authorization, policy enforcement, money, wallets, packages, payments, leads, clients, vendors, assignments, and all authoritative lifecycle state. It approves or rejects actions. It is the source of truth.
 - **QF Jarvis** provides intelligence, reasoning, structured recommendations, specialist-agent coordination, prioritization, cross-domain synthesis, and founder decision support. It never becomes the source of business truth, never directly mutates QuickFurno Core state, and never directly calls communication or advertising providers.
-- **n8n** is the approved execution fabric. It executes only authorized execution intents, integrates with providers (WhatsApp, SMS, email, voice, CRM, Google Ads, Meta Ads, and other approved providers), and reports execution results back to QuickFurno Core.
+- **QuickFurno Core Automation** is the approved execution fabric. It executes only authorized execution intents, integrates with providers (WhatsApp, SMS, email, voice, CRM, Google Ads, Meta Ads, and other approved providers), and reports execution results back to QuickFurno Core.
 - **External providers** deliver communications and operational actions.
 - **Human approvers** hold authority that no agent holds.
 
@@ -84,7 +84,7 @@ The boundary below is permanent. The authoritative statement lives in [system-bo
 
 > Jarvis recommends.
 > QuickFurno authorizes.
-> n8n executes.
+> QuickFurno Core Automation executes.
 > Providers deliver.
 > Results return to QuickFurno Core.
 
@@ -98,7 +98,7 @@ QuickFurno Core
         → Structured Recommendation
           → QuickFurno Policy or Human Approval
             → Execution Intent
-              → n8n
+              → QuickFurno Core Automation
                 → Provider
                   → Execution Result
                     → QuickFurno Core
@@ -194,7 +194,7 @@ The following are **capabilities QuickFurno Core is targeted to have by Phase 11
 
 ### Working assumptions
 
-- n8n remains the approved execution fabric and is reachable only through authorized execution intents.
+- QuickFurno Core Automation remains the approved execution fabric and is reachable only through authorized execution intents.
 - The founder is available as the final approver for high-risk actions during early phases.
 - Pune-only operation gives sufficient signal volume to evaluate recommendation quality before expansion.
 
@@ -208,7 +208,7 @@ The following are **capabilities QuickFurno Core is targeted to have by Phase 11
 | Event contract drift between Core and Jarvis | Silent data loss, wrong recommendations | Versioned canonical events ([ADR-0003](../decisions/ADR-0003-event-driven-integration.md)); contract tests |
 | Premature automation | Wrong actions reach real clients and vendors | Automation levels with explicit gates; shadow mode before assisted mode |
 | Sensitive data leakage into logs or model context | Privacy and trust failure | Data minimization, redaction, no chain-of-thought storage |
-| Provider compromise or misuse via n8n | Unauthorized outreach or ad spend | Bounded, expiring execution intents; Jarvis holds no provider credentials |
+| Provider compromise or misuse via QuickFurno Core Automation | Unauthorized outreach or ad spend | Bounded, expiring execution intents; Jarvis holds no provider credentials |
 | Over-engineering (microservices too early) | Slow delivery, no business value | Modular monolith first ([ADR-0004](../decisions/ADR-0004-modular-monolith-first.md)) |
 
 ## 15. Phased delivery approach

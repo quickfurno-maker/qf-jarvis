@@ -70,7 +70,7 @@ const STATES_REQUIRING_DECISION: readonly CommunicationState[] = [
   'scheduled',
 ];
 
-/** States that exist only because Core dispatched an execution intent to n8n. */
+/** States that exist only because Core dispatched an execution intent to QuickFurno Core Automation. */
 const STATES_REQUIRING_INTENT: readonly CommunicationState[] = [
   'execution-submitted',
   'provider-accepted',

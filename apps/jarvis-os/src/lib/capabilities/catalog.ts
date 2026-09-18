@@ -6,7 +6,7 @@
  * This is the single most important sentence in this file. A capability state here decides
  * whether a surface renders as usable, planned, disabled or disconnected. It decides
  * nothing else. It cannot approve, authorize, send, execute or unlock anything, because
- * Jarvis OS holds none of those powers to begin with — QuickFurno Core authorizes, n8n
+ * Jarvis OS holds none of those powers to begin with — QuickFurno Core authorizes, QuickFurno Core Automation
  * executes, providers deliver.
  *
  * The reason to write it down rather than scatter booleans through page components is
@@ -51,7 +51,7 @@ export const CAPABILITY_IDS = [
   'conversation.control.read',
   'conversation.control.write',
   'execution.intent.validate',
-  'execution.n8n.bridge',
+  'execution.core-automation.bridge',
   'communication.live-send',
   'core.sync',
   'model.gateway',
@@ -155,8 +155,8 @@ export const CAPABILITY_SNAPSHOT: readonly Capability[] = Object.freeze([
     note: 'QFJ-P09.01 merged. Validates a Core-issued intent; issues none.',
   },
   {
-    id: 'execution.n8n.bridge',
-    label: 'n8n execution bridge',
+    id: 'execution.core-automation.bridge',
+    label: 'QuickFurno Core Automation execution bridge',
     lifecycle: 'PLANNED',
     note: 'QFJ-P09.02 — next main-track slice. Not implemented.',
   },

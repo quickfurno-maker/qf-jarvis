@@ -216,7 +216,7 @@ describe('JF-4 (J) boundaries', () => {
       'graph.facebook',
       'wa.me',
       'whatsapp.com',
-      'n8n',
+      'quickfurno-core-automation',
       'twilio',
       'sendmessage',
       'deliver',

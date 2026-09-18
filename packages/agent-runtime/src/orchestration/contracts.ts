@@ -264,7 +264,7 @@ const proposalSchema = z
 
 /**
  * Build a frozen `PENDING_CORE_VALIDATION` proposal. Enforces actor↔party scope (Riya client-only /
- * Anisha vendor-only). It carries no `send`/`execute`/`authorize`/`callN8n` method. Throws
+ * Anisha vendor-only). It carries no `send`/`execute`/`authorize`/`callcoreAutomation` method. Throws
  * `AgentRuntimeError('invalid-proposal' | 'scope-violation')`.
  */
 export function createOrchestrationProposal(

@@ -129,7 +129,7 @@ export function mapSnapshotToReadModel(snapshot: ControlPlaneSnapshotV2): Contro
   const agentWorkload = slices(sections.agentWorkload);
   const approvalBreakdown = slices(sections.approvalBreakdown);
   const businessAnalytics = slices(sections.businessAnalytics);
-  const n8nExecution = slices(sections.n8nExecution);
+  const coreAutomationExecution = slices(sections.coreAutomationExecution);
   // The union is carried across BRANCH BY BRANCH rather than spread, so the unavailable variant
   // arrives at the UI with no `value` key at all. A `value: stage.value ?? 0` here would have been
   // the exact defect AVG-11 exists to prevent, and there is deliberately no shape in which to write
@@ -269,7 +269,7 @@ export function mapSnapshotToReadModel(snapshot: ControlPlaneSnapshotV2): Contro
     agentWorkload: () => agentWorkload,
     approvalBreakdown: () => approvalBreakdown,
     businessAnalytics: () => businessAnalytics,
-    n8nExecution: () => n8nExecution,
+    coreAutomationExecution: () => coreAutomationExecution,
     vendorGrowthFunnel: () => vendorGrowthFunnel,
     aarohiReadiness: () => aarohiReadiness,
     attention: () => attention,

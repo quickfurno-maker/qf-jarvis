@@ -126,7 +126,7 @@ This is a feature rather than a compromise. Replayable, fixture-driven ingestion
 
 ## What Phase 3 must not introduce
 
-No agents. No AI or model SDK. No recommendations. No approval flow. No execution intents acted upon. No communication sending. No n8n. No provider integration. **No live QuickFurno Core connection.** No writes to QuickFurno business tables. **No QuickFurno Supabase credential.** No WhatsApp, no voice. No founder control-plane UI.
+No agents. No AI or model SDK. No recommendations. No approval flow. No execution intents acted upon. No communication sending. No QuickFurno Core Automation. No provider integration. **No live QuickFurno Core connection.** No writes to QuickFurno business tables. **No QuickFurno Supabase credential.** No WhatsApp, no voice. No founder control-plane UI.
 
 `apps/api` **remains a compileable boundary** — ingestion is a function, not an endpoint ([ADR-0020](../decisions/ADR-0020-event-ingestion-signature-verification-and-idempotency.md) §10).
 

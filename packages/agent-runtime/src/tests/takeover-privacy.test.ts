@@ -135,7 +135,7 @@ describe('authority (proposals only)', () => {
         expect(proposal.authorityStatus).toBe(PROPOSAL_AUTHORITY_STATUS);
       }
       const asRecord = decision as unknown as Record<string, unknown>;
-      for (const method of ['authorize', 'execute', 'send', 'callN8n', 'commit']) {
+      for (const method of ['authorize', 'execute', 'send', 'callcoreAutomation', 'commit']) {
         expect(asRecord[method]).toBeUndefined();
       }
     }

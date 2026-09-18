@@ -76,7 +76,11 @@ export const NAV_GROUPS: readonly NavGroup[] = Object.freeze([
     label: 'Boundary',
     items: Object.freeze([
       { href: '/core-sync', label: 'QuickFurno Core Sync', scope: 'Source-of-truth boundary' },
-      { href: '/integrations', label: 'n8n / Integrations', scope: 'Execution fabric status' },
+      {
+        href: '/integrations',
+        label: 'QuickFurno Core Automation / Integrations',
+        scope: 'Execution fabric status',
+      },
       { href: '/analytics', label: 'Analytics', scope: 'Operational trends' },
       { href: '/governance', label: 'Governance', scope: 'Roadmap, authority and audit posture' },
       { href: '/settings', label: 'Settings', scope: 'Operator preferences' },

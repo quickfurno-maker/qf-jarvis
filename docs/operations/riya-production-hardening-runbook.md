@@ -5,7 +5,7 @@
 This is for whoever is on call during a Riya pilot. It assumes no knowledge of the codebase.
 
 Nothing described here is deployed. The private ingress is **OFF / NOT DEPLOYED**, there is no live
-WhatsApp adapter, no QuickFurno handshake, no provider or n8n activation, and no migration is applied
+WhatsApp adapter, no QuickFurno handshake, no provider or QuickFurno Core Automation activation, and no migration is applied
 to any managed database.
 
 ---
@@ -191,4 +191,4 @@ starvation, which is strictly worse: it degrades every conversation instead of s
 - QuickFurno handshake: **deferred**. Core remains an abstract external authority.
 - Managed database: **never** written by these slices. Migrations `0001`–`0012` are repository and
   LOCAL/CI only.
-- Provider / n8n: **not activated**.
+- Provider / QuickFurno Core Automation: **not activated**.

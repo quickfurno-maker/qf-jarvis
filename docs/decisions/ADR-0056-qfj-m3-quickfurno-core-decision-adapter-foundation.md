@@ -9,7 +9,7 @@
 
 **Design documents introduced:** [docs/reports/qfj-m3-core-decision-adapter/](../reports/qfj-m3-core-decision-adapter/) (reports 01–05)
 
-> **This ADR is implemented in the same bounded slice it governs.** It adds one new package `@qf-jarvis/core-decision-adapter`: a concrete implementation of the M2 `CoreDecisionPort` that converts a revision-bound proposal into a **versioned Core command**, hands it to a **narrow injected transport**, and **strictly validates** the Core response — producing an `ACCEPTED` **only** when Core returns it against the exact command identity. **No live QuickFurno Core, network, HTTP, auth, or secret; no WhatsApp/n8n/send/transport implementation; no persistence/DB/schema/migration 0008; no live model; no RAG.** `ACCEPTED` means Core-approved proposal only — never sent, delivered, executed, or persisted. The adapter contains **no business decision rule** and cannot fabricate or upgrade an outcome. **This is a PROPOSED integration contract; later QuickFurno Core-side adoption is required.** The `@qf-jarvis/event-backbone` root API remains **39**.
+> **This ADR is implemented in the same bounded slice it governs.** It adds one new package `@qf-jarvis/core-decision-adapter`: a concrete implementation of the M2 `CoreDecisionPort` that converts a revision-bound proposal into a **versioned Core command**, hands it to a **narrow injected transport**, and **strictly validates** the Core response — producing an `ACCEPTED` **only** when Core returns it against the exact command identity. **No live QuickFurno Core, network, HTTP, auth, or secret; no WhatsApp/QuickFurno Core Automation/send/transport implementation; no persistence/DB/schema/migration 0008; no live model; no RAG.** `ACCEPTED` means Core-approved proposal only — never sent, delivered, executed, or persisted. The adapter contains **no business decision rule** and cannot fabricate or upgrade an outcome. **This is a PROPOSED integration contract; later QuickFurno Core-side adoption is required.** The `@qf-jarvis/event-backbone` root API remains **39**.
 
 ---
 
@@ -33,7 +33,7 @@ A command/response binds exact identities: protocol name/version/contract-digest
 
 ### D. Command
 
-Immutable and bounded. A reply body is included **only** for a `REPLY` when Core validation needs it. It carries **never** chain-of-thought, a raw provider body/header, an SDK object, a secret, a callback, an n8n command, a delivery-state mutation, or a DB handle.
+Immutable and bounded. A reply body is included **only** for a `REPLY` when Core validation needs it. It carries **never** chain-of-thought, a raw provider body/header, an SDK object, a secret, a callback, an QuickFurno Core Automation command, a delivery-state mutation, or a DB handle.
 
 ### E. Response
 
@@ -65,7 +65,7 @@ Content-free events only: `command-created`, `transport-requested`, `response-re
 
 ### L. Authority / non-goals
 
-Only a Core response may produce `ACCEPTED`; the adapter cannot fabricate or upgrade an outcome and exposes no `send`/`deliver`/`execute`/`callN8n`. Non-goals: no live Core/HTTP/auth/secrets; no WhatsApp/n8n/send; no persistence/DB/migration 0008; no live model; no RAG; no dashboard; no deployment. Riya client-only, Anisha vendor-only, Jarvis coordinator; n8n execution-only; Kimi excluded; the Conversation Operations Center remains a mandatory later phase.
+Only a Core response may produce `ACCEPTED`; the adapter cannot fabricate or upgrade an outcome and exposes no `send`/`deliver`/`execute`/`callQuickFurno Core Automation`. Non-goals: no live Core/HTTP/auth/secrets; no WhatsApp/QuickFurno Core Automation/send; no persistence/DB/migration 0008; no live model; no RAG; no dashboard; no deployment. Riya client-only, Anisha vendor-only, Jarvis coordinator; QuickFurno Core Automation execution-only; Kimi excluded; the Conversation Operations Center remains a mandatory later phase.
 
 ## Rejected alternatives
 

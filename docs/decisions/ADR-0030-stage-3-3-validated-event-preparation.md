@@ -111,7 +111,7 @@ For `unknown-event-type` / `unknown-event-version`, the registry-generated messa
 
 ## Explicit exclusions
 
-This slice does **not** add, and this ADR does **not** authorize: `ingest()`; database pools or clients; PostgreSQL, Supabase, `db:preflight`, `db:migrate`, SQL, or migrations; event-log, `ingestion_rejection`, or `event_conflict` repositories or tables; idempotency persistence, duplicate processing, or conflict recording; a `duplicate-conflict` outcome; projections, retries, dead letters, replay, worker loops, or HTTP endpoints; any `apps/api` or `apps/worker` change; a direct `zod` dependency or import; any additional dependency beyond the single `@qf-jarvis/contracts` workspace link; network or environment-secret access; or any Core, n8n, WhatsApp, or provider integration.
+This slice does **not** add, and this ADR does **not** authorize: `ingest()`; database pools or clients; PostgreSQL, Supabase, `db:preflight`, `db:migrate`, SQL, or migrations; event-log, `ingestion_rejection`, or `event_conflict` repositories or tables; idempotency persistence, duplicate processing, or conflict recording; a `duplicate-conflict` outcome; projections, retries, dead letters, replay, worker loops, or HTTP endpoints; any `apps/api` or `apps/worker` change; a direct `zod` dependency or import; any additional dependency beyond the single `@qf-jarvis/contracts` workspace link; network or environment-secret access; or any Core, QuickFurno Core Automation, WhatsApp, or provider integration.
 
 ## Follow-up work
 

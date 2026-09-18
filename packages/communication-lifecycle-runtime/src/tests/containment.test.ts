@@ -2,7 +2,7 @@
  * QFJ-P09.05 — public API, dependency and side-effect containment (ADR-0110).
  *
  * The safety argument of this package is what it CANNOT do. It cannot send, cannot persist, cannot
- * reach Core, n8n, WhatsApp, Meta or a provider, cannot read a clock, and — the one that matters
+ * reach Core, QuickFurno Core Automation, WhatsApp, Meta or a provider, cannot read a clock, and — the one that matters
  * most here — **cannot create authority**.
  *
  * That last prohibition is what separates a lifecycle POLICY from a lifecycle ENGINE. An engine
@@ -321,7 +321,7 @@ describe('side-effect containment', () => {
       // forbid the vocabulary itself. The identifiers below are the ones a developer would write
       // while building a transport, and none of them is a state.
       for (const forbidden of [
-        'n8n',
+        'quickfurno-core-automation',
         'whatsapp',
         'twilio',
         'webhook',

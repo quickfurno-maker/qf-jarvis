@@ -25,7 +25,7 @@ interface Verdict {
 const PASS: Verdict = { outcome: 'PASS', reason: 'contract-ok' };
 const fail = (reason: EvaluationReason): Verdict => ({ outcome: 'FAIL', reason });
 
-const BUSINESS_EXEC: readonly string[] = ['CORE_WRITE', 'BUSINESS_MUTATION', 'N8N_CALL'];
+const BUSINESS_EXEC: readonly string[] = ['CORE_WRITE', 'BUSINESS_MUTATION', 'coreAutomation_CALL'];
 
 function hasBusinessExecution(o: CandidateObservation): boolean {
   return o.businessActions.some((a) => BUSINESS_EXEC.includes(a));

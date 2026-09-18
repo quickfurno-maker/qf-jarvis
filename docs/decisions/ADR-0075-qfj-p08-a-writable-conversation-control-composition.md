@@ -266,7 +266,7 @@ remains the final business authority.
 the approval request/decision runtime, broader human control and the operator interface all remain
 unimplemented.
 
-**QFJ-P09 has not started.** No transport, queue, webhook, outbound path, WhatsApp or n8n.
+**QFJ-P09 has not started.** No transport, queue, webhook, outbound path, WhatsApp or QuickFurno Core Automation.
 
 **NO_MIGRATION_REQUIRED**: migrations remain exactly `0001`–`0007`, no `0008`. **Production rollout
 remains OFF.**
@@ -282,7 +282,7 @@ separate migration authorisation.
 
 No second authoritative state source · no production database adapter · no persistence · no durable
 idempotency · no operator HTTP/API · no authentication or RBAC · no operator UI · no approval runtime ·
-no consent/opt-out runtime · no P09 transport · no WhatsApp · no n8n · no live Core call · no provider
+no consent/opt-out runtime · no P09 transport · no WhatsApp · no QuickFurno Core Automation · no live Core call · no provider
 or live model call · no credential or environment read · no migration · no deployment or activation ·
 no CANARY/ACTIVE/FALLBACK · no RAG · no memory · no dataset or training · no send, deliver, execute,
 authorize or persist.

@@ -198,7 +198,7 @@ mutation. Semantic RAG stays off.
 
 ### 14. No live WhatsApp, and no QuickFurno repository
 
-No webhook, Meta client, token, phone number, provider SDK, n8n, outbound send, template or media
+No webhook, Meta client, token, phone number, provider SDK, QuickFurno Core Automation, outbound send, template or media
 handling, public route or delivery status. A WhatsApp channel turn may produce an `authorizedReply` as
 an application capability; RWC-P8 sends nothing and records no delivery. A future trusted adapter
 calls the channel-neutral service added here.

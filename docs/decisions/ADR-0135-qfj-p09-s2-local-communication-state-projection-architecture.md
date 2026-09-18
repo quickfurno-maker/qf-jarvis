@@ -177,15 +177,15 @@ earns a minimisation row only when it is admitted.
 ### 8. `execution-submitted` evidence is UNRESOLVED
 
 `communication-model.md` defines the state as **"Core dispatched an authorized execution intent to
-n8n."** `qf.execution.intent-issued` is documented as _"QuickFurno Core issued a bounded, expiring
-execution intent to n8n."_ **Issuance is not dispatch**, and the repository does not prove the event
-is emitted only after a successful n8n submission:
+QuickFurno Core Automation."** `qf.execution.intent-issued` is documented as _"QuickFurno Core issued a bounded, expiring
+execution intent to QuickFurno Core Automation."_ **Issuance is not dispatch**, and the repository does not prove the event
+is emitted only after a successful QuickFurno Core Automation submission:
 
 - the event is named `intent-issued`, not `intent-dispatched`, and `event-catalog.ts` carries no
   dispatch vocabulary;
-- `ExecutionIntentV1.executor` is a **literal naming n8n as the intended executor** — an address, not
+- `ExecutionIntentV1.executor` is a **literal naming QuickFurno Core Automation as the intended executor** — an address, not
   a delivery receipt;
-- **`execution-dispatch-runtime` (ADR-0090) states the Core → n8n edge is not built:** _"The wire
+- **`execution-dispatch-runtime` (ADR-0090) states the Core → QuickFurno Core Automation edge is not built:** _"The wire
   protocol is PROPOSED. Core does not sign this way yet and the execution side does not verify this
   way yet."_
 
@@ -193,10 +193,10 @@ This is the same correction already applied to `authorization-requested`: **cons
 submission.**
 
 **Therefore:** `qf.execution.intent-issued` proves a Core-issued intent exists; `execution-submitted`
-requires evidence that Core actually **dispatched** it to n8n. Whether the existing event is emitted
+requires evidence that Core actually **dispatched** it to QuickFurno Core Automation. Whether the existing event is emitted
 only after successful dispatch, or whether a distinct transport receipt or dispatch event is needed,
 must be verified during **S3 / D2** and the **S5** transport design. **Until then the source evidence
-for `execution-submitted` is UNRESOLVED**, and no dispatch event name, receipt schema, n8n endpoint or
+for `execution-submitted` is UNRESOLVED**, and no dispatch event name, receipt schema, QuickFurno Core Automation endpoint or
 delivery acknowledgement is invented here.
 
 ### 8a. Tier A/B facts need a durable, ordered replay source — D2b
@@ -400,7 +400,7 @@ readers and `ProjectionEvent`; the `eslint.config.mjs` restricted-import boundar
 registry; `event-store.ts`, its INSERT columns and its root-barrel export; `persist-validated-event.ts`;
 `signing-input.ts`; `event-catalog.ts`; `execution-dispatch-runtime`'s PROPOSED-protocol statement; and
 the communication and execution contracts. **No production code, no contract, no event registry, no
-event-backbone, no projection runtime, no ingestion, no Core access, no n8n or provider, no message
+event-backbone, no projection runtime, no ingestion, no Core access, no QuickFurno Core Automation or provider, no message
 sent, no persistence and no migration.** `0013` is not allocated and the `0010`–`0012` ledger drift is
 untouched.
 

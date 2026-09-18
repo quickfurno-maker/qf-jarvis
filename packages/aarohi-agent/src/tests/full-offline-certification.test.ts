@@ -1350,7 +1350,7 @@ describe('certification C — the domain reaches nothing, and claims nothing it 
       'approvalDecisionCreated',
       'communicationAuthorizationCreated',
       'executionIntentCreated',
-      'n8nExecutionRequested',
+      'coreAutomationExecutionRequested',
       'metaApiCalled',
       'providerSendRequested',
       'sent',

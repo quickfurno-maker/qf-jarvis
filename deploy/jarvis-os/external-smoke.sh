@@ -93,4 +93,4 @@ if [[ "$MODE" == "extract" ]]; then
 fi
 
 echo "==> running $REL_PATH from $SHA (verified) against $HOST, mode $MODE"
-bash "$SMOKE" "$MODE" "$HOST"
+"${BASH:?BASH must identify the current interpreter}" "$SMOKE" "$MODE" "$HOST"

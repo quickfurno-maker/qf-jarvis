@@ -32,4 +32,4 @@ src/index.ts
 
 ## Authority boundary (unchanged)
 
-Riya client-only; Anisha vendor-only; Jarvis coordinator; **QuickFurno Core** is the final business authority and system of record; n8n is transport/execution only and is absent here; models/providers/evaluators/retrievers authorize and execute nothing; Kimi is excluded. The Conversation Operations Center remains a mandatory later phase (not implemented here). The `@qf-jarvis/event-backbone` root API remains **39**; migrations 0001–0007 are byte-exact and there is no 0008.
+Riya client-only; Anisha vendor-only; Jarvis coordinator; **QuickFurno Core** is the final business authority and system of record; QuickFurno Core Automation is transport/execution only and is absent here; models/providers/evaluators/retrievers authorize and execute nothing; Kimi is excluded. The Conversation Operations Center remains a mandatory later phase (not implemented here). The `@qf-jarvis/event-backbone` root API remains **39**; migrations 0001–0007 are byte-exact and there is no 0008.

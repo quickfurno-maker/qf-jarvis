@@ -20,7 +20,7 @@
  *
  * `authorized`, `delivered`, and `completed` are not Jarvis's to write.
  * Authorization comes from Core. Delivery comes from the provider, is reported
- * through n8n, and Core records it. Jarvis *reflects* all three; it originates
+ * through QuickFurno Core Automation, and Core records it. Jarvis *reflects* all three; it originates
  * none of them.
  *
  * ### Opt-out is not a state

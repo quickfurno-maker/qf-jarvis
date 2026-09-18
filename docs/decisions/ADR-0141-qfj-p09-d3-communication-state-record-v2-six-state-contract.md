@@ -6,7 +6,7 @@
 re-audited; no Core code was read, accessed or modified**
 
 **Offline contract slice.** No projection, no persistence, no canonical event, no Core integration, no
-migration, no Core/Supabase/n8n/provider access, no message, rollout **OFF**.
+migration, no Core/Supabase/QuickFurno Core Automation/provider access, no message, rollout **OFF**.
 
 ## Prerequisites, all merged
 
@@ -217,7 +217,7 @@ was weakened**, and the D2a/D4 boundary assertions are unchanged.
 ## Posture
 
 No projection, persistence, canonical event, event-registry, ingestion or runtime change. No Core
-modification, branch, PR, audit or re-pin. No managed Supabase. No n8n or provider access. No message
+modification, branch, PR, audit or re-pin. No managed Supabase. No QuickFurno Core Automation or provider access. No message
 sent. **No migration allocated.**
 
 **Production rollout remains OFF. Runtime activation is unchanged.**

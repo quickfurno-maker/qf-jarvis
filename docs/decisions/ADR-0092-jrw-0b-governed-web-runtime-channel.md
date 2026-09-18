@@ -35,7 +35,7 @@ thing and compare unequal, and every downstream lock would then have to know bot
 ### 2. `COMMUNICATION_CHANNELS` remains closed, and this is the load-bearing separation
 
 `@qf-jarvis/contracts` owns a **different** vocabulary — `['whatsapp','sms','email','voice']` — for
-the channels a governed **outbound communication request** may be delivered on, by n8n → QF
+the channels a governed **outbound communication request** may be delivered on, by QuickFurno Core Automation → QF
 Communications Runtime → provider → recipient.
 
 Every member of that set is somewhere a provider can **deliver to**. A browser is not: nobody can
@@ -174,7 +174,7 @@ separate, separately authorized slice.
 
 HTTP transport · public endpoint · QuickFurno adapter or browser client · web session token ·
 conversation service · conversational memory · persistence · streaming · City Context · lead
-creation · consent mutation · n8n or provider delivery · live Riya.
+creation · consent mutation · QuickFurno Core Automation or provider delivery · live Riya.
 
 ## Change-control rule
 

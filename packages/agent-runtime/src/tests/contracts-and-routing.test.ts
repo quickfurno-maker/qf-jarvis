@@ -122,7 +122,7 @@ describe('proposals and scope', () => {
       expect(proposal.authorityStatus).toBe(PROPOSAL_AUTHORITY_STATUS);
       expect(Object.isFrozen(proposal)).toBe(true);
       const asRecord = proposal as unknown as Record<string, unknown>;
-      for (const method of ['execute', 'send', 'authorize', 'callN8n', 'commit']) {
+      for (const method of ['execute', 'send', 'authorize', 'callcoreAutomation', 'commit']) {
         expect(asRecord[method]).toBeUndefined();
       }
     }

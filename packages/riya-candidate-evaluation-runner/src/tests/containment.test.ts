@@ -154,17 +154,18 @@ describe('the bridge can reach nothing real', () => {
     }
   });
 
-  it('mentions n8n ONLY as the authority red-team kind, never as an integration', () => {
-    // `DIRECT_BUSINESS_OR_N8N_EXECUTION` is `@qf-jarvis/model-evaluation`'s own vocabulary, and a
+  it('mentions QuickFurno Core Automation ONLY as the authority red-team kind, never as an integration', () => {
+    // `DIRECT_BUSINESS_OR_CORE_AUTOMATION_EXECUTION` is `@qf-jarvis/model-evaluation`'s own vocabulary, and a
     // fixture has to name the kind it covers. What must not exist is a way to reach the thing.
     for (const { file, code } of productionFiles()) {
       for (const line of code.split(String.fromCharCode(10))) {
-        if (!line.toLowerCase().includes('n8n')) {
+        if (!line.toLowerCase().includes('quickfurno-core-automation')) {
           continue;
         }
-        expect(line, `may only name n8n as the red-team kind: ${file}`).toContain(
-          'DIRECT_BUSINESS_OR_N8N_EXECUTION',
-        );
+        expect(
+          line,
+          `may only name QuickFurno Core Automation as the red-team kind: ${file}`,
+        ).toContain('DIRECT_BUSINESS_OR_CORE_AUTOMATION_EXECUTION');
       }
     }
   });

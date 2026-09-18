@@ -887,7 +887,7 @@ describe('the WhatsApp channel handoff candidate is inert, and is not the other 
     expect(posture.approvalDecisionCreated).toBe(false);
     expect(posture.communicationAuthorizationCreated).toBe(false);
     expect(posture.executionIntentCreated).toBe(false);
-    expect(posture.n8nExecutionRequested).toBe(false);
+    expect(posture.coreAutomationExecutionRequested).toBe(false);
     expect(posture.providerSendRequested).toBe(false);
     expect(posture.whatsappSendRequested).toBe(false);
     expect(posture.sent).toBe(false);

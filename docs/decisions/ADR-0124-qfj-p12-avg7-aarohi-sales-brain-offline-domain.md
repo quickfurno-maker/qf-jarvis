@@ -360,15 +360,15 @@ being run by something that does have a connection, so SQL shapes are now banned
 
 ## What AVG-7 deliberately does not do
 
-| Left out                                                                                  | Owner                                                          |
-| ----------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| Price, package, discount, offer, entitlement, any commercial fact                         | AVG-8                                                          |
-| Registration integration                                                                  | AVG-9                                                          |
-| Payment, activation, Anisha ownership handoff                                             | AVG-10                                                         |
-| Persistence, dashboard, admin APIs, analytics, conversation memory                        | AVG-11                                                         |
-| Any increase in autonomy                                                                  | AVG-12                                                         |
-| Model calls, prompt resolution, retrieval, drafting                                       | later composition through QF Model Gateway and Prompt Registry |
-| Shared executable channel adoption, `CommunicationRequestV1`, n8n route, provider adapter | **QFJ-P09**                                                    |
+| Left out                                                                                                         | Owner                                                          |
+| ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| Price, package, discount, offer, entitlement, any commercial fact                                                | AVG-8                                                          |
+| Registration integration                                                                                         | AVG-9                                                          |
+| Payment, activation, Anisha ownership handoff                                                                    | AVG-10                                                         |
+| Persistence, dashboard, admin APIs, analytics, conversation memory                                               | AVG-11                                                         |
+| Any increase in autonomy                                                                                         | AVG-12                                                         |
+| Model calls, prompt resolution, retrieval, drafting                                                              | later composition through QF Model Gateway and Prompt Registry |
+| Shared executable channel adoption, `CommunicationRequestV1`, QuickFurno Core Automation route, provider adapter | **QFJ-P09**                                                    |
 
 There is no database, migration, store, cache, scheduler, environment read, secret, HTTP client,
 provider SDK, embedding or vector store. Dependencies are unchanged: `zod` alone.

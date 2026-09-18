@@ -26,7 +26,7 @@ Stated as a product capability and as an architecture, both of which are true:
 
 > **Jarvis supports calling and WhatsApp through governed execution.**
 > **QuickFurno Core authorizes.**
-> **n8n and the communication runtime execute.**
+> **QuickFurno Core Automation and the communication runtime execute.**
 > **Providers deliver.**
 > **Results return to QuickFurno Core and are reflected by Jarvis.**
 
@@ -36,7 +36,7 @@ Jarvis **must not** directly invoke WhatsApp APIs; directly connect to telephony
 
 The flow is the existing flow, with communication as its subject:
 
-> Founder, administrator, or canonical event → Jarvis, Riya, or Anisha prepares a structured communication request → **QuickFurno Core validates recipient identity, consent, opt-out state, communication eligibility, policy, risk, and authorization** → Core creates an authorized execution intent → n8n and the **QF Communications Runtime** execute, routing through the **WhatsApp adapter** or the **QF Voice Runtime** → the **external WhatsApp provider or telephony/SIP provider delivers** → the result returns through the runtime and n8n → **QuickFurno Core records the authoritative result** → Jarvis and the relevant specialist reflect the outcome.
+> Founder, administrator, or canonical event → Jarvis, Riya, or Anisha prepares a structured communication request → **QuickFurno Core validates recipient identity, consent, opt-out state, communication eligibility, policy, risk, and authorization** → Core creates an authorized execution intent → QuickFurno Core Automation and the **QF Communications Runtime** execute, routing through the **WhatsApp adapter** or the **QF Voice Runtime** → the **external WhatsApp provider or telephony/SIP provider delivers** → the result returns through the runtime and QuickFurno Core Automation → **QuickFurno Core records the authoritative result** → Jarvis and the relevant specialist reflect the outcome.
 
 **The QF Voice Runtime is ours, and it is not a provider.** It is an internal component of the QF Communications Runtime; it hands a call to an external telephony or SIP provider, which delivers it. It never becomes the authoritative provider or a source of truth ([communication-model.md](../architecture/communication-model.md)).
 
@@ -50,7 +50,7 @@ A control that yields to seniority is not a control. And the person most likely 
 
 ### Delivery is never claimed, only reflected
 
-**`authorized`, `delivered`, and `completed` are not Jarvis's to originate.** The provider delivers; n8n reports; **QuickFurno Core records the authoritative result**; Jarvis reflects it. A **Call** or **Send WhatsApp** button initiates the governed flow — **the action is not considered delivered or completed merely because the button was clicked** ([communication-model.md](../architecture/communication-model.md)).
+**`authorized`, `delivered`, and `completed` are not Jarvis's to originate.** The provider delivers; QuickFurno Core Automation reports; **QuickFurno Core records the authoritative result**; Jarvis reflects it. A **Call** or **Send WhatsApp** button initiates the governed flow — **the action is not considered delivered or completed merely because the button was clicked** ([communication-model.md](../architecture/communication-model.md)).
 
 ### Shared infrastructure, separate agents
 
@@ -79,7 +79,7 @@ Rejected. This is coordinator absorption ([ADR-0006](./ADR-0006-agent-responsibi
 Superficially attractive — why recommend a call to someone who opted out? Rejected as the *authority*. Jarvis's view of consent is a derived read model, and derived views go stale ([ADR-0001](./ADR-0001-source-of-truth-boundary.md)). A recipient may opt out in the seconds between recommendation and execution. If Jarvis's check were the enforcement point, that person gets called. **Core enforces, and the runtime re-validates at execution.** Jarvis *should* still consult its derived view to avoid proposing obviously-forbidden contact — but as courtesy, never as permission. Note this cuts both ways: Jarvis must not treat its own consent view as authoritative in *either* direction.
 
 **5. Approval and delivery status handled inside the QF Communications Runtime.**
-Rejected. It repeats the n8n mistake from [ADR-0007](./ADR-0007-founder-approval-interface-and-authority.md): the component that holds every provider credential must not also decide whether to use them. The runtime executes and reports. Core authorizes and records.
+Rejected. It repeats the QuickFurno Core Automation mistake from [ADR-0007](./ADR-0007-founder-approval-interface-and-authority.md): the component that holds every provider credential must not also decide whether to use them. The runtime executes and reports. Core authorizes and records.
 
 ## Consequences
 

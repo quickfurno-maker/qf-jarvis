@@ -119,7 +119,7 @@ describe('approval, privacy, and authority', () => {
       'authorize',
       'execute',
       'send',
-      'callN8n',
+      'callcoreAutomation',
     ]) {
       expect(provisioner[method]).toBeUndefined();
     }

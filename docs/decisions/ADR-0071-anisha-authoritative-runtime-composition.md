@@ -213,7 +213,7 @@ injects the port. **Production rollout remains OFF.**
 
 No production input source · no provider or live model call · no database, Supabase, Docker or
 migration · no credential or environment read · no deployment or activation · no CANARY/ACTIVE/
-FALLBACK · no WhatsApp · no n8n · no memory · no prompt text or registry · no send, deliver, execute
+FALLBACK · no WhatsApp · no QuickFurno Core Automation · no memory · no prompt text or registry · no send, deliver, execute
 or persist · no vendor approval, verification, activation, ranking, assignment, package, recharge,
 payment or complaint resolution — `CORE_ACCEPTED` means Core approved a proposal, never that anything
 was applied.

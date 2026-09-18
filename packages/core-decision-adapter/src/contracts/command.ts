@@ -3,7 +3,7 @@
  *
  * Built from an M2 `CoreDecisionRequest` plus the exact protocol identity, a correlation id, and an
  * injected canonical instant. It binds every exact identity and a DETERMINISTIC idempotency key. It
- * carries no chain-of-thought, raw provider body/header, SDK object, secret, callback, n8n command,
+ * carries no chain-of-thought, raw provider body/header, SDK object, secret, callback, QuickFurno Core Automation command,
  * delivery mutation, or DB handle; a reply body is present only for a `REPLY`.
  */
 import type {

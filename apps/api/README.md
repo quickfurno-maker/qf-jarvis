@@ -57,12 +57,12 @@ When each of those arrives is decided by [the phased roadmap](../../docs/archite
 The [permanent architecture boundary](../../docs/architecture/system-boundary.md) is authoritative and applies to every line ever added here:
 
 - It may not authorize anything, including its own recommendations.
-- It may not call n8n, or any external provider.
+- It may not call QuickFurno Core Automation, or any external provider.
 - It may not write QuickFurno Core's business state.
 - It may not hold an **execution or communication** provider credential — WhatsApp, SMS, email, voice, telephony, CRM, or advertising. It has none and must never be given any.
 - It may not render an action as approved, delivered, or complete before Core's authoritative result returns.
 
-The distinction is authoritative, not local to this README: [`system-boundary.md` § Two kinds of provider credential](../../docs/architecture/system-boundary.md#two-kinds-of-provider-credential) defines it. **Execution and integration credentials remain forbidden to Jarvis entirely** and stay with n8n or the relevant execution service. The single **model-inference** credential exception is confined to an executable process boundary under [ADR-0064](../../docs/decisions/ADR-0064-production-credential-binding.md), may never enter Core state, agent memory, a prompt, an event, a log, provenance, a report or a database row, and grants no execution authority whatsoever.
+The distinction is authoritative, not local to this README: [`system-boundary.md` § Two kinds of provider credential](../../docs/architecture/system-boundary.md#two-kinds-of-provider-credential) defines it. **Execution and integration credentials remain forbidden to Jarvis entirely** and stay with QuickFurno Core Automation or the relevant execution service. The single **model-inference** credential exception is confined to an executable process boundary under [ADR-0064](../../docs/decisions/ADR-0064-production-credential-binding.md), may never enter Core state, agent memory, a prompt, an event, a log, provenance, a report or a database row, and grants no execution authority whatsoever.
 
 ## Commands
 

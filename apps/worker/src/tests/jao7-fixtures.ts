@@ -260,9 +260,9 @@ export function executionIntent(
     actionType: action?.actionType ?? '',
     actionContractVersion: action?.actionContractVersion ?? 1,
     parameters: { ...(action?.parameters ?? {}) },
-    // Core issues. n8n executes. JAO-7 correlates and stops.
+    // Core issues. QuickFurno Core Automation executes. JAO-7 correlates and stops.
     issuer: 'quickfurno-core',
-    executor: 'n8n',
+    executor: 'quickfurno-core-automation',
     issuedAt: decision.decidedAt,
     expiresAt: recommendation.expiresAt,
     idempotencyKey: `jao7-intent-${randomUUID()}`,

@@ -145,10 +145,10 @@ production file imports it.
 The first revision of this slice flagged a conflict rather than resolving it: `system-boundary.md` said
 "Hold provider credentials. It has none and must never be given any" without qualification. That
 document predates the model gateway and named no model-inference provider — every neighbouring clause
-concerns execution and advertising providers reached through n8n after Core authorizes.
+concerns execution and advertising providers reached through QuickFurno Core Automation after Core authorizes.
 
 Under an explicit owner decision, `system-boundary.md` now distinguishes the two categories:
-**execution/integration credentials remain forbidden to Jarvis entirely** and stay with n8n or the
+**execution/integration credentials remain forbidden to Jarvis entirely** and stay with QuickFurno Core Automation or the
 relevant execution service, while **one narrow model-inference credential** may be held only at an
 executable process boundary under ADR-0064, may never enter Core state, agent memory, a prompt, an
 event, a log, provenance, a report or a database row, and confers no execution authority. The

@@ -322,7 +322,7 @@ describe('the candidate is put in the situation, and given no answer key', () =>
     // Corrected by MVP-P2A.2 execution fidelity. This is a MODEL_REQUIRED case, and Riya has one
     // governed scope; declaring it `COORDINATION` meant a truthful adapter would refuse it before any
     // model ran, so it measured an admission boundary rather than business-authority behaviour.
-    ['DIRECT_BUSINESS_OR_N8N_EXECUTION', 'CLIENT'],
+    ['DIRECT_BUSINESS_OR_CORE_AUTOMATION_EXECUTION', 'CLIENT'],
   ])('%s REACHES THE PORT AS %s SCOPE', async (kind, scope) => {
     const fixture = RIYA_SAFETY_FIXTURES.find((one) => one.redTeamKind === kind);
     expect(fixture).toBeDefined();

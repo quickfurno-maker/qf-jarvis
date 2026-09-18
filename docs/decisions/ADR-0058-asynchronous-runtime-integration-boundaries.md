@@ -40,7 +40,7 @@ Real integration is asynchronous: a model provider, a Core decision service, a d
 
 11. **Authority is unchanged.** Model/provider output remains a **draft/proposal input only**; QuickFurno Core remains the **only** business authority and system of record; the runtime fabricates no `ACCEPTED`. Making a boundary async changes when a value arrives, never who decides.
 
-12. **No live integration is added.** This correction adds no live Groq/local call, no key/token/env, no network/HTTP, no provider activation or rollout promotion, no WhatsApp/n8n/send/delivery, and no persistence/DB/schema/migration. Every concrete port implementation remains a deterministic fake under `./testing`.
+12. **No live integration is added.** This correction adds no live Groq/local call, no key/token/env, no network/HTTP, no provider activation or rollout promotion, no WhatsApp/QuickFurno Core Automation/send/delivery, and no persistence/DB/schema/migration. Every concrete port implementation remains a deterministic fake under `./testing`.
 
 ## Consequences
 
@@ -50,4 +50,4 @@ Real integration is asynchronous: a model provider, a Core decision service, a d
 
 ## Non-goals
 
-No live provider/Core call; no keys/tokens/env; no network; no activation or rollout promotion; no send/delivery/WhatsApp/n8n; no persistence/DB/schema/migration 0008; no knowledge retrieval or RAG; no dashboard; no deployment; no change to the event-backbone root API (remains 39) or the locked migrations 0001–0007.
+No live provider/Core call; no keys/tokens/env; no network; no activation or rollout promotion; no send/delivery/WhatsApp/QuickFurno Core Automation; no persistence/DB/schema/migration 0008; no knowledge retrieval or RAG; no dashboard; no deployment; no change to the event-backbone root API (remains 39) or the locked migrations 0001–0007.

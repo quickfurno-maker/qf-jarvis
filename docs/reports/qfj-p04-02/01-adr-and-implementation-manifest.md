@@ -18,7 +18,7 @@ The roadmap (`docs/architecture/qf-jarvis-roadmap-v3.md`, table row) names **QFJ
 
 One immutable, version-bound **Model Capability Registry** inside `@qf-jarvis/model-gateway`: a canonical technical record of configured provider/model **release** capabilities bound to exact `ProviderReleaseRef` identities (QFJ-P04.01E). Routing and rollout consume it; a mismatched provider/release is excluded **before invocation**. Registry eligibility is technical inference eligibility only — no business authority, no provider activation. It is **opt-in**: a gateway with no registry behaves exactly as QFJ-P04.01E (its 279 prior tests are unchanged).
 
-**No live Groq or local-model call, no real key/token, no external network, no model discovery. No agent, no WhatsApp/dashboard, no memory/RAG, no n8n, no schema, no migration.**
+**No live Groq or local-model call, no real key/token, no external network, no model discovery. No agent, no WhatsApp/dashboard, no memory/RAG, no QuickFurno Core Automation, no schema, no migration.**
 
 ## Changed-file manifest
 

@@ -23,8 +23,8 @@ flowchart LR
         Coord["Coordination"]
     end
 
-    subgraph T3["Trust zone: n8n"]
-        N8N["Execution fabric<br/>holds provider credentials"]
+    subgraph T3["Trust zone: QuickFurno Core Automation"]
+        QuickFurno Core Automation["Execution fabric<br/>holds provider credentials"]
     end
 
     subgraph T4["Untrusted: external providers"]
@@ -35,10 +35,10 @@ flowchart LR
     Ingest --> Agents
     Agents --> Coord
     Coord -->|"B3: signed recommendations"| Core
-    Core -->|"B4: signed, bounded, expiring<br/>execution intents"| N8N
-    N8N -->|"B5: authenticated provider calls"| Prov
-    Prov -->|"B6: verified callbacks"| N8N
-    N8N -->|"B4: signed execution results"| Core
+    Core -->|"B4: signed, bounded, expiring<br/>execution intents"| QuickFurno Core Automation
+    QuickFurno Core Automation -->|"B5: authenticated provider calls"| Prov
+    Prov -->|"B6: verified callbacks"| QuickFurno Core Automation
+    QuickFurno Core Automation -->|"B4: signed execution results"| Core
 
     Human["B7: founder and admin access"] --> Core
     Human --> Coord
@@ -102,30 +102,30 @@ This is the reason the approval **authority** sits on the far side of this bound
 
 ---
 
-## B4 — QuickFurno Core → n8n (and results back)
+## B4 — QuickFurno Core → QuickFurno Core Automation (and results back)
 
 **What crosses:** authorized execution intents outbound; execution results inbound.
 
 **What must be true:**
 
-- Intents are **signed** by Core. n8n verifies authenticity and integrity before executing. **n8n accepts execution intents from QuickFurno Core's authorized dispatch and from nowhere else** — in particular, never from QF Jarvis.
+- Intents are **signed** by Core. QuickFurno Core Automation verifies authenticity and integrity before executing. **QuickFurno Core Automation accepts execution intents from QuickFurno Core's authorized dispatch and from nowhere else** — in particular, never from QF Jarvis.
 - Intents are **bounded**: exact action, exact subject, exact provider and channel, exact parameters ([execution-governance.md](./execution-governance.md)).
-- Intents **expire**. n8n refuses an expired intent.
+- Intents **expire**. QuickFurno Core Automation refuses an expired intent.
 - Intents carry an **idempotency key**; retries reuse it; N attempts produce one effect. For money-related actions, ambiguity fails rather than repeats.
 - **Replay protection**: a previously-executed intent identifier cannot be re-executed.
 - Execution results returning to Core are **signed** and **idempotent**.
 
-**Threat this defends against:** an attacker who can talk to n8n causing unauthorized outreach or ad spend. Without a valid Core signature and an unexpired, unreplayed intent, nothing executes.
+**Threat this defends against:** an attacker who can talk to QuickFurno Core Automation causing unauthorized outreach or ad spend. Without a valid Core signature and an unexpired, unreplayed intent, nothing executes.
 
 ---
 
-## B5 — n8n and the QF Communications Runtime → providers
+## B5 — QuickFurno Core Automation and the QF Communications Runtime → providers
 
 **What crosses:** authenticated provider API calls, including the WhatsApp adapter and the QF Voice Runtime.
 
 **What must be true:**
 
-- **Provider credentials live only in n8n's trust zone**, in a secret store, never in source, **never in Jarvis**, never in logs. WhatsApp and telephony credentials are included, and Jarvis has none of them.
+- **Provider credentials live only in QuickFurno Core Automation's trust zone**, in a secret store, never in source, **never in Jarvis**, never in logs. WhatsApp and telephony credentials are included, and Jarvis has none of them.
 - Credentials are **scoped to the minimum** each provider integration needs, and **rotated** on a schedule and immediately on suspicion.
 - Calls are made **only** in service of a validated, unexpired execution intent.
 - **The runtime re-validates consent, opt-out, do-not-contact, quiet hours, and attempt limits at execution time** — a second line of defence, not a replacement for Core's enforcement. State changes between authorization and execution, and a scheduled communication is exactly the case where it does ([communication-model.md](./communication-model.md)).
@@ -172,7 +172,7 @@ This is the reason the approval **authority** sits on the far side of this bound
 - **QF Jarvis holds no provider credentials** — the most effective secret-management strategy available to it is not having the secret.
 - Secrets are **rotated** on schedule and immediately on suspicion of compromise.
 - Rotation must be possible **without downtime** and without a code change.
-- Signing keys between Core, Jarvis, and n8n are distinct — one compromised key must not grant another system's authority.
+- Signing keys between Core, Jarvis, and QuickFurno Core Automation are distinct — one compromised key must not grant another system's authority.
 
 ---
 
@@ -203,7 +203,7 @@ A system with signatures but no idempotency will double-charge a vendor on a net
 
 ## Compromised-provider scenario
 
-Assume a provider — or a provider's credentials inside n8n — is compromised. What holds?
+Assume a provider — or a provider's credentials inside QuickFurno Core Automation — is compromised. What holds?
 
 **What the attacker gains:** the ability to send messages or make changes through that provider, within whatever scope the stolen credential permits.
 

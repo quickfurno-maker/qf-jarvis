@@ -1,6 +1,6 @@
 # ADR-0087 — Jarvis OS Owner Authentication and Operator Session Boundary
 
-**Status:** Accepted — JOS-01C (owner authentication, MFA and operator sessions; no deployment, no database, no live Core/n8n/provider, no business authority, no migration)
+**Status:** Accepted — JOS-01C (owner authentication, MFA and operator sessions; no deployment, no database, no live Core/QuickFurno Core Automation/provider, no business authority, no migration)
 **Deciders:** Owner
 **Relates to:** [ADR-0001](./ADR-0001-source-of-truth-boundary.md) · [ADR-0002](./ADR-0002-recommend-authorize-execute-model.md) · [ADR-0085](./ADR-0085-qfj-p12-aarohi-vendor-growth-and-roadmap-reconciliation.md) · [ADR-0086](./ADR-0086-jos-01b-read-only-control-plane-contract-and-snapshot-api.md)
 
@@ -40,7 +40,7 @@ reviewed replacement for this model — must be adopted. The specific gap is nam
 
 An authenticated OWNER session permits **viewing Jarvis OS**. It does not imply approval granted,
 communication authorized, dispatch allowed, consent valid, payment authority, vendor activation,
-package or pricing authority, or any Core mutation right. QuickFurno Core authorizes; n8n executes;
+package or pricing authority, or any Core mutation right. QuickFurno Core authorizes; QuickFurno Core Automation executes;
 providers deliver.
 
 The only state JOS-01C mutates is a browser cookie. Sign-in sets one; sign-out clears one. That is
@@ -203,7 +203,7 @@ and sanitises forwarding headers at the edge.
 
 ## Non-goals
 
-No deployment, DNS, Traefik or VPS change. No database of any kind. No live QuickFurno Core, n8n,
+No deployment, DNS, Traefik or VPS change. No database of any kind. No live QuickFurno Core, QuickFurno Core Automation,
 Meta or model-provider access. No business mutation. No migration — `0010` is not created. No
 Android files. Production rollout remains **OFF**.
 

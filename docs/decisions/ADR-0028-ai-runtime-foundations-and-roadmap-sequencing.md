@@ -13,7 +13,7 @@
 
 ## Context
 
-The roadmap through [ADR-0017](./ADR-0017-live-communication-sequencing.md) sequenced the product cleanly — contracts, then the event backbone, then the coordinator, then the specialists, then approval, then the n8n bridge, then live Core integration, then the founder control plane, then hardening, evaluation and controlled automation. That sequence is sound and is **not** overturned here.
+The roadmap through [ADR-0017](./ADR-0017-live-communication-sequencing.md) sequenced the product cleanly — contracts, then the event backbone, then the coordinator, then the specialists, then approval, then the QuickFurno Core Automation bridge, then live Core integration, then the founder control plane, then hardening, evaluation and controlled automation. That sequence is sound and is **not** overturned here.
 
 But it left a set of foundations **implied rather than scheduled**. The specialists (Phases 5–8) call a model; nothing yet says _how_ a model is invoked, budgeted, bounded, or failed over. Phase 9 exposes approval to people; nothing yet says those people must first have named accounts, MFA and role-based access. Phase 11 turns on live Core data and Phase 11A reaches a real person; nothing yet gates that on proven backups, disaster recovery, or multilingual communication safety in the languages QuickFurno's clients and vendors actually use. Phase 13 was quietly carrying "and also introduce tracing, redaction, access control, backups, cost limits, evaluation and capability restriction" — which would make Phase 13 the _first appearance_ of controls that everything before it had already depended on. A control that first appears in the hardening phase was not a control during the phases it was meant to protect.
 
@@ -71,7 +71,7 @@ The architecture is [model-runtime-and-governance.md](../architecture/model-runt
 
 **Open-ended capabilities are prohibited** — no arbitrary SQL, no arbitrary shell, no unrestricted filesystem access, no arbitrary URL fetching, no generic provider invocation, no unrestricted document retrieval. A capability is a **named, bounded, contract-typed door**, or it does not exist.
 
-**The boundary is unchanged.** Jarvis still has no write access to QuickFurno business state, no direct path to n8n, no provider credentials, and no direct communication transport.
+**The boundary is unchanged.** Jarvis still has no write access to QuickFurno business state, no direct path to QuickFurno Core Automation, no provider credentials, and no direct communication transport.
 
 The architecture is [governed-knowledge-and-capabilities.md](../architecture/governed-knowledge-and-capabilities.md).
 
@@ -158,7 +158,7 @@ Phase 7     Anisha
 Phase 8     Jitin
 Phase 8.5   Human identity and access foundation
 Phase 9     Approval and policy
-Phase 10    n8n execution bridge (test only)
+Phase 10    QuickFurno Core Automation execution bridge (test only)
 Phase 10.5  Production readiness foundation
 Phase 11    QuickFurno Core integration (live)
 Phase 11A   Controlled communication pilot — with the multilingual safety gate
@@ -179,7 +179,7 @@ Phase 15    Controlled automation rollout
 ```
 Jarvis recommends.
 QuickFurno Core authorizes.
-n8n executes.
+QuickFurno Core Automation executes.
 Providers deliver.
 Results return to QuickFurno Core.
 ```
@@ -187,9 +187,9 @@ Results return to QuickFurno Core.
 None of the additions weakens it:
 
 - The **model gateway** invokes models; it authorizes nothing, executes nothing, and holds no provider credential. A hijacked model still cannot authorize, execute, dial, or write business state ([security-principles.md](../governance/security-principles.md)).
-- **Governed capabilities** are bounded, contract-typed doors — never arbitrary SQL, shell, fetch, or provider access. Jarvis still has **no write access to business state, no path to n8n, no provider credentials, and no direct communication transport.**
+- **Governed capabilities** are bounded, contract-typed doors — never arbitrary SQL, shell, fetch, or provider access. Jarvis still has **no write access to business state, no path to QuickFurno Core Automation, no provider credentials, and no direct communication transport.**
 - **Governed knowledge** is evidence, never authority. **QuickFurno Core remains authoritative** for current operational and business state.
-- **Identity, backups, and multilingual safety** are controls _around_ the boundary; none introduces a new edge across it. The four edges that do not exist — Jarvis → provider, Jarvis → n8n, Jarvis → business state, agent → approval — still do not exist.
+- **Identity, backups, and multilingual safety** are controls _around_ the boundary; none introduces a new edge across it. The four edges that do not exist — Jarvis → provider, Jarvis → QuickFurno Core Automation, Jarvis → business state, agent → approval — still do not exist.
 
 ## Alternatives considered
 
@@ -225,7 +225,7 @@ None of the additions weakens it:
 This ADR does **not**:
 
 - implement any runtime code, model SDK, model call, gateway, knowledge store, capability registry, evaluation harness, tracing, identity system, or backup mechanism;
-- access a database, SQL, migrations, Supabase, QuickFurno Core, n8n, WhatsApp, telephony, provider credentials, or any deployment system;
+- access a database, SQL, migrations, Supabase, QuickFurno Core, QuickFurno Core Automation, WhatsApp, telephony, provider credentials, or any deployment system;
 - add a package dependency or change the lockfile;
 - authorize starting Stage 3.3, or any Phase 4.x, 8.5, 10.5, 11A, or 12 implementation;
 - decide the production event-log privacy and retention question (an owner gate on Phase 11, [ADR-0019](./ADR-0019-durable-event-store-and-persistence.md) §7);

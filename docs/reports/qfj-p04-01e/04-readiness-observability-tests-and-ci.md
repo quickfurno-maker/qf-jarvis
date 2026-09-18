@@ -33,7 +33,7 @@ Integration tests (`test:integration`) require the CI PostgreSQL service and run
 
 - The **241 prior model-gateway tests are unchanged and green** — the foundation, Groq, local, and hybrid-routing behaviour is untouched because rollout is opt-in (default/routing paths unchanged).
 - The containment test still holds: `fetch` only in the two transport files; no `process.env`/SDK/DB import (the operations modules use only `zod` and pure logic); event-backbone public-API lock remains **39**; migrations 0001–0007 byte-exact; **no 0008**.
-- No agent/n8n/memory/tool dependency; no CLI or remote ops API; no live Groq/local network call; no real key/token.
+- No agent/QuickFurno Core Automation/memory/tool dependency; no CLI or remote ops API; no live Groq/local network call; no real key/token.
 
 ## Test inventory — `provider-operations.test.ts` (38 tests)
 

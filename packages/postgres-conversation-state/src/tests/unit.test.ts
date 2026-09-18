@@ -773,7 +773,7 @@ describe('API surface, dependencies and containment', () => {
       expect(code).not.toMatch(
         /\b(consent|optOut|suppression|approval|entitlement|payment|refund)\b/i,
       );
-      expect(code).not.toMatch(/\bn8n\b|whatsapp|groq/i);
+      expect(code).not.toMatch(/\bcoreAutomation\b|whatsapp|groq/i);
       expect(code).not.toMatch(/\b(send|deliver|execute|authorize|dispatch)\s*\(/);
     }
     expect(

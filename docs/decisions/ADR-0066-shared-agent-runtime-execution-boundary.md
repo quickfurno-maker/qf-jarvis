@@ -120,7 +120,7 @@ provenance record. Nothing is persisted, executed, sent or activated.
 ## Non-goals
 
 No Riya sales behaviour, no Anisha service behaviour, no Jarvis routing prompts, no prompt text, no
-memory, no tools, no transport, no WhatsApp, no n8n, no database write, no deployment, no provider call.
+memory, no tools, no transport, no WhatsApp, no QuickFurno Core Automation, no database write, no deployment, no provider call.
 
 ## Change-control rule
 

@@ -69,7 +69,7 @@ perfectly concise Riya in the world does not acquire one.
 
 ### 6. No model is invoked. Ever.
 
-No gateway, no provider, no Groq, no OpenAI, no Anthropic, no local inference, no HTTP, no n8n. The
+No gateway, no provider, no Groq, no OpenAI, no Anthropic, no local inference, no HTTP, no QuickFurno Core Automation. The
 evaluator accepts PRE-SUPPLIED normalized observations and HUMAN annotations, and a containment spec
 proves the capability is absent rather than merely unused.
 
@@ -258,7 +258,7 @@ Any statement that Riya "passes" the quality suite would be a fabricated perform
 No change to `jarvis-runtime`, `riya-model-interaction`, `riya-web-conversation-service`,
 `model-reply-adapter`, `model-gateway`, `prompt-registry`, `governed-knowledge`, or any RWC-P4 to
 RWC-P9 production package. No runtime `qualityRef`, no prompt change, no `evaluationRef` change, no
-provider selection. No migration, no managed database access, no live WhatsApp, no provider or n8n
+provider selection. No migration, no managed database access, no live WhatsApp, no provider or QuickFurno Core Automation
 activation, no QuickFurno repository access.
 
 ### 22. Scope boundaries

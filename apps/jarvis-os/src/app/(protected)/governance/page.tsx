@@ -56,8 +56,8 @@ export default async function GovernancePage() {
             Execution intent correlation. Validates a Core-issued intent; issues none.
           </Statement>
           <Statement title="Main resume point" value="QFJ-P09.02" tone="warning">
-            Test-only authorized dispatch envelope and n8n bridge validation, after the Jarvis OS
-            foundation track.
+            Test-only authorized dispatch envelope and coreAutomation bridge validation, after the
+            Jarvis OS foundation track.
           </Statement>
         </div>
 
@@ -123,7 +123,7 @@ export default async function GovernancePage() {
             <ul className="space-y-2.5 text-[12px] leading-relaxed text-[var(--color-ink-muted)]">
               <li>Jarvis recommends, reasons, correlates and observes.</li>
               <li>QuickFurno Core authorizes and records business truth.</li>
-              <li>n8n executes approved intents and decides nothing.</li>
+              <li>coreAutomation executes approved intents and decides nothing.</li>
               <li>Providers deliver and decide nothing; results return to Core.</li>
               <li>No agent self-approves, at any confidence, in any circumstance.</li>
             </ul>

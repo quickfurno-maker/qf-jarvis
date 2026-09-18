@@ -15,7 +15,7 @@
   // domain and key purpose), to approval-runtime or communication-authorization-runtime (no
   // approval evidence crosses this boundary), to execution-intent-runtime (that is the Jarvis-side
   // static correlation, this is the execution-side boundary), to persistence, to a transport, to
-  // n8n, to a provider, or to any application.
+  // QuickFurno Core Automation, to a provider, or to any application.
   "references": [{ "path": "../../packages/contracts" }],
   "include": ["src/**/*.ts"],
   "exclude": ["src/tests/**"]

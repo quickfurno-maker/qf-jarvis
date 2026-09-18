@@ -2,7 +2,7 @@
  * What this package cannot become.
  *
  * Aarohi's runtime status is PLANNED / DISABLED, and AVG-1 does not change that. The overlay's words
- * are "no Aarohi runtime, no outreach, no channel, no credential, and no Instagram, WhatsApp, n8n or
+ * are "no Aarohi runtime, no outreach, no channel, no credential, and no Instagram, WhatsApp, QuickFurno Core Automation or
  * Meta integration in this repository". This slice adds a DOMAIN, and these specs are how that stays
  * true as the package grows.
  *
@@ -75,10 +75,10 @@ describe('Aarohi remains a DOMAIN, not a runtime through AVG-10', () => {
   it('reaches no channel, provider, execution path or credential', () => {
     // ### Why these are SHAPES rather than bare words, from AVG-5 onward
     //
-    // Through AVG-4 this list banned the substrings `instagram`, `meta`, `n8n` and `authorization`
+    // Through AVG-4 this list banned the substrings `instagram`, `meta`, `QuickFurno Core Automation` and `authorization`
     // outright, which worked because no file had cause to write them. AVG-5 does: its channel token
     // is `instagram`, and its outbound candidate declares `metaApiCalled: false`,
-    // `n8nExecutionRequested: false` and `communicationAuthorizationCreated: false`.
+    // `coreAutomationExecutionRequested: false` and `communicationAuthorizationCreated: false`.
     //
     // Those are DECLARATIONS OF ABSENCE. A scan that reads them as presence would force the public
     // contract to be renamed around a grep — making the contract less legible to keep a test quiet,
@@ -122,9 +122,9 @@ describe('Aarohi remains a DOMAIN, not a runtime through AVG-10', () => {
         'whatsapp-business',
         'wa.me',
         'whatsapp.com',
-        'n8nclient',
-        'calln8n',
-        'n8n_',
+        'coreAutomationclient',
+        'callCoreAutomation',
+        'coreAutomation_',
         // Secrets and provider account identity.
         'accesstoken',
         'appsecret',
@@ -189,7 +189,7 @@ describe('Aarohi remains a DOMAIN, not a runtime through AVG-10', () => {
 
   it('names no send, execute, mutate or payment verb', () => {
     // A domain package that named one of these would be one edit away from performing it, and
-    // approved execution goes Core/human -> n8n -> provider, never from here.
+    // approved execution goes Core/human -> QuickFurno Core Automation -> provider, never from here.
     for (const { file, code } of productionFiles()) {
       for (const forbidden of [
         'sendMessage',
@@ -238,7 +238,7 @@ describe('Aarohi remains a DOMAIN, not a runtime through AVG-10', () => {
       'approvalDecisionCreated',
       'communicationAuthorizationCreated',
       'executionIntentCreated',
-      'n8nExecutionRequested',
+      'coreAutomationExecutionRequested',
       'providerSendRequested',
       'whatsappSendRequested',
       'sent',
@@ -351,7 +351,7 @@ describe('Aarohi remains a DOMAIN, not a runtime through AVG-10', () => {
       'approvalDecisionCreated',
       'communicationAuthorizationCreated',
       'executionIntentCreated',
-      'n8nExecutionRequested',
+      'coreAutomationExecutionRequested',
       'providerSendRequested',
       'channelSendRequested',
       'sent',
@@ -510,7 +510,7 @@ describe('Aarohi remains a DOMAIN, not a runtime through AVG-10', () => {
       'approvalDecisionCreated',
       'communicationAuthorizationCreated',
       'executionIntentCreated',
-      'n8nExecutionRequested',
+      'coreAutomationExecutionRequested',
       'providerSendRequested',
       'channelSendRequested',
       'sent',
@@ -647,7 +647,7 @@ describe('Aarohi remains a DOMAIN, not a runtime through AVG-10', () => {
       'approvalDecisionCreated',
       'communicationAuthorizationCreated',
       'executionIntentCreated',
-      'n8nExecutionRequested',
+      'coreAutomationExecutionRequested',
       'providerSendRequested',
       'channelSendRequested',
       'sent',
@@ -838,7 +838,7 @@ describe('Aarohi remains a DOMAIN, not a runtime through AVG-10', () => {
       'approvalDecisionCreated',
       'communicationAuthorizationCreated',
       'executionIntentCreated',
-      'n8nExecutionRequested',
+      'coreAutomationExecutionRequested',
       'providerSendRequested',
       'channelSendRequested',
       'sent',
@@ -967,7 +967,7 @@ describe('Aarohi remains a DOMAIN, not a runtime through AVG-10', () => {
       'approvalDecisionCreated',
       'communicationAuthorizationCreated',
       'executionIntentCreated',
-      'n8nExecutionRequested',
+      'coreAutomationExecutionRequested',
       'metaApiCalled',
       'providerSendRequested',
       'sent',
@@ -1528,11 +1528,11 @@ describe('AVG-11 observes, and adds no authority of any kind', () => {
       'knowledgeBase',
       'embedding',
       'mastra',
-      // n8n, providers and channels. Named as CALLS, because the posture pins
-      // `n8nExecutionRequested: false` and a bare token would fire on the ceiling itself.
-      'n8nClient',
-      'callN8n',
-      'dispatchToN8n',
+      // QuickFurno Core Automation, providers and channels. Named as CALLS, because the posture pins
+      // `coreAutomationExecutionRequested: false` and a bare token would fire on the ceiling itself.
+      'coreAutomationClient',
+      'callcoreAutomation',
+      'dispatchTocoreAutomation',
       'webhook',
       'whatsapp',
       'graph.facebook',
@@ -1649,7 +1649,7 @@ describe('AVG-11 observes, and adds no authority of any kind', () => {
       'retrievalExecuted: z.literal(false)',
       'communicationAuthorizationCreated: z.literal(false)',
       'executionIntentCreated: z.literal(false)',
-      'n8nExecutionRequested: z.literal(false)',
+      'coreAutomationExecutionRequested: z.literal(false)',
       'providerSendRequested: z.literal(false)',
       'channelSendRequested: z.literal(false)',
       'persisted: z.literal(false)',
@@ -1858,7 +1858,7 @@ describe('AVG-12 evaluates, and adds no capability of any kind', () => {
       'anishaHandoffExecuted: z.literal(false)',
       'communicationAuthorizationCreated: z.literal(false)',
       'executionIntentCreated: z.literal(false)',
-      'n8nExecutionRequested: z.literal(false)',
+      'coreAutomationExecutionRequested: z.literal(false)',
       'providerSendRequested: z.literal(false)',
       'channelSendRequested: z.literal(false)',
       'modelCallExecuted: z.literal(false)',

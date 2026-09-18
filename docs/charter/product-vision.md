@@ -35,7 +35,7 @@ Kabir reads each lead for completeness, plausibility, internal consistency, spam
 
 ### 5. Client-lifecycle intelligence
 
-Riya keeps client relationships from going quiet by accident: follow-up timing, channel choice, nurture sequences, abandoned-requirement recovery, reactivation of dormant clients. Recommendations, not messages — the message is sent only after approval, and only by n8n through an approved provider.
+Riya keeps client relationships from going quiet by accident: follow-up timing, channel choice, nurture sequences, abandoned-requirement recovery, reactivation of dormant clients. Recommendations, not messages — the message is sent only after approval, and only by QuickFurno Core Automation through an approved provider.
 
 ### 6. Vendor-lifecycle intelligence
 

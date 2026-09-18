@@ -191,7 +191,7 @@ describe('it reaches nothing and composes nothing', () => {
       'quickfurno',
       'supabase',
       'service_role',
-      'n8n',
+      'quickfurno-core-automation',
       'webhook',
       'whatsappClient',
       'metaClient',
@@ -269,7 +269,7 @@ describe('it reaches nothing and composes nothing', () => {
     }
   });
 
-  it('nothing in the repository composes it', () => {
+  it('only the reviewed JF-6 application composition may compose it', () => {
     const importers: string[] = [];
     for (const root of ['packages', 'apps']) {
       for (const entry of readdirSync(join(REPO_ROOT, root))) {
@@ -284,14 +284,17 @@ describe('it reaches nothing and composes nothing', () => {
           if (
             readFileSync(file, 'utf8').includes("from '@qf-jarvis/postgres-riya-turn-coordinator'")
           ) {
-            importers.push(entry);
+            importers.push(file.replace(/\\/gu, '/'));
           }
         }
       }
     }
-    // Declaring the adapter is not deploying it. The final composition is the QuickFurno handshake's,
-    // and until then importing this package connects nowhere.
-    expect([...new Set(importers)]).toStrictEqual([]);
+    // JF-6 is the ONE reviewed production composition. The adapter still opens nothing on import;
+    // the application supplies the caller-owned pool explicitly and no package may compose it.
+    expect(importers).toHaveLength(1);
+    expect(importers[0]).toMatch(
+      /\/apps\/api\/src\/jf6-private-process\/create-riya-service-boundary\.ts$/u,
+    );
   });
 });
 

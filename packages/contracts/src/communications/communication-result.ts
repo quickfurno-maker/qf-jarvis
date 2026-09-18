@@ -3,7 +3,7 @@
  * recorded by QuickFurno Core.
  *
  * The authority rule, stated once and then enforced: **`issuer` is the literal
- * `quickfurno-core`.** n8n and the QF Communications Runtime *observe* a provider
+ * `quickfurno-core`.** QuickFurno Core Automation and the QF Communications Runtime *observe* a provider
  * and *report*; the QuickFurno Communication Core *records*, and that recording is
  * what makes it true. A provider's own view of a delivery is not truth until Core
  * has recorded it (execution-governance.md §6).

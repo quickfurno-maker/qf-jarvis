@@ -15,7 +15,7 @@ Ownership follows [system-boundary.md](./system-boundary.md), which is authorita
 | --- | --- | --- |
 | **Authoritative QuickFurno domains** | QuickFurno Core | Yes — these *are* the business truth |
 | **Jarvis intelligence domains** | QF Jarvis | No — derived, rebuildable, non-authoritative |
-| **Execution domains** | QuickFurno Core (authorization and record) + n8n (mechanics) | Core's record is authoritative |
+| **Execution domains** | QuickFurno Core (authorization and record) + QuickFurno Core Automation (mechanics) | Core's record is authoritative |
 | **Shared contract domains** | Agreed between systems; versioned | The contract is authoritative for *shape*, not for business state |
 
 ---
@@ -58,14 +58,14 @@ Owned by QF Jarvis. Every one of these is **derived** — rebuildable from canon
 
 ## Execution domains
 
-Authorization and record live in QuickFurno Core. The mechanics live in n8n. Jarvis reads these to close its own lifecycle and to learn; it writes none of them.
+Authorization and record live in QuickFurno Core. The mechanics live in QuickFurno Core Automation. Jarvis reads these to close its own lifecycle and to learn; it writes none of them.
 
 | Domain | Authoritative owner | Mechanics | Jarvis's access |
 | --- | --- | --- | --- |
 | **approvals** | QuickFurno Core — the attributable record of who decided what, when | — | Read |
-| **executions** (execution intents) | QuickFurno Core — bounded, expiring, created only from an approved recommendation | n8n validates and performs | Read |
-| **execution results** | QuickFurno Core — recorded as truth | n8n reports | Read |
-| **communications** | QuickFurno Core — contact identity, consent, opt-out, do-not-contact, eligibility, approved purpose, attempt limits, quiet hours, communication history, and authoritative delivery and call outcomes | n8n + the **QF Communications Runtime** (WhatsApp adapter, QF Voice Runtime) deliver | Read. Jarvis may originate a communication **request**, and may never write `delivered` or `completed` ([communication-model.md](./communication-model.md)) |
+| **executions** (execution intents) | QuickFurno Core — bounded, expiring, created only from an approved recommendation | QuickFurno Core Automation validates and performs | Read |
+| **execution results** | QuickFurno Core — recorded as truth | QuickFurno Core Automation reports | Read |
+| **communications** | QuickFurno Core — contact identity, consent, opt-out, do-not-contact, eligibility, approved purpose, attempt limits, quiet hours, communication history, and authoritative delivery and call outcomes | QuickFurno Core Automation + the **QF Communications Runtime** (WhatsApp adapter, QF Voice Runtime) deliver | Read. Jarvis may originate a communication **request**, and may never write `delivered` or `completed` ([communication-model.md](./communication-model.md)) |
 
 Note what is absent: there is no Jarvis-owned execution domain, because Jarvis does not execute.
 
@@ -80,8 +80,8 @@ These are the agreements between systems. They are versioned, and a breaking cha
 | **Canonical event contract** | Core → Jarvis | Versioned business facts, with stable identifiers, correlation, and causation |
 | **Recommendation contract** | Jarvis → Core | Subject, evidence, rationale, confidence, risk, priority, expiry, required approval level |
 | **Approval decision contract** | Core → Jarvis | Approved, rejected, or changes requested; attributable; with reason |
-| **Execution intent contract** | Core → n8n | The bounded, expiring, authorized action |
-| **Execution result contract** | n8n → Core → Jarvis | Outcome, provider status, failure detail, idempotency key |
+| **Execution intent contract** | Core → QuickFurno Core Automation | The bounded, expiring, authorized action |
+| **Execution result contract** | QuickFurno Core Automation → Core → Jarvis | Outcome, provider status, failure detail, idempotency key |
 
 ---
 
@@ -102,7 +102,7 @@ flowchart TB
         AU["audits"]
     end
 
-    subgraph ExecDomains["Execution — Core authorizes and records, n8n performs"]
+    subgraph ExecDomains["Execution — Core authorizes and records, QuickFurno Core Automation performs"]
         AP["approvals"]
         EX["execution intents"]
         ER["execution results"]

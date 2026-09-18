@@ -8,7 +8,7 @@ An **orchestration** module inside `@qf-jarvis/agent-runtime` that composes the 
 
 ## Boundary (what it does NOT do)
 
-No real QuickFurno Core integration, WhatsApp API, or provider webhook; no n8n; **no sending/transport/delivery-state mutation**; no persistence/DB/schema/**migration 0008**; no live model/provider/key/token; no semantic retrieval/RAG; no dashboard; no deployment. The orchestration module imports **none** of the P04 packages — everything is an injected port with a deterministic fake. `@qf-jarvis/event-backbone` root API remains **39**; migrations 0001–0007 byte-exact.
+No real QuickFurno Core integration, WhatsApp API, or provider webhook; no QuickFurno Core Automation; **no sending/transport/delivery-state mutation**; no persistence/DB/schema/**migration 0008**; no live model/provider/key/token; no semantic retrieval/RAG; no dashboard; no deployment. The orchestration module imports **none** of the P04 packages — everything is an injected port with a deterministic fake. `@qf-jarvis/event-backbone` root API remains **39**; migrations 0001–0007 byte-exact.
 
 ## Package layout (additive to agent-runtime)
 

@@ -52,7 +52,7 @@ runSmokeCli
 
 The deterministic fakes never leak into it — every `./testing` export is asserted absent from the root,
 and no exported name contains `chat`, `loop`, `session`, `repeat`, `retry`, `stream`, `send`, `deliver`,
-`persist`, `store`, `activate`, `promote`, `rollout`, `register`, `core`, `n8n`, `whatsapp`, `approve`,
+`persist`, `store`, `activate`, `promote`, `rollout`, `register`, `core`, `QuickFurno Core Automation`, `whatsapp`, `approve`,
 or `accept`.
 
 The `@qf-jarvis/model-gateway` barrel is **extended, not broken**: no export is removed. The additive
@@ -86,7 +86,7 @@ change is the two new `GROQ_STAGING_BIND_REASONS` members and the new required f
 | ---------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
 | `fetch(` / `XMLHttpRequest`                                                                                                        | absent                                       |
 | `node:net`/`http`/`http2`/`https`/`dns`/`tls`/`dgram`/`child_process`/`worker_threads`                                             | absent                                       |
-| `pg`, `groq-sdk`, `openai`, `axios`, `undici`, `node-fetch`, WhatsApp libs, `n8n`                                                  | absent                                       |
+| `pg`, `groq-sdk`, `openai`, `axios`, `undici`, `node-fetch`, WhatsApp libs, `QuickFurno Core Automation`                           | absent                                       |
 | `process.env` / `import.meta.env` / `dotenv`                                                                                       | absent                                       |
 | file writes (`writeFile*`, `appendFile*`, `createWriteStream`, `mkdir*`, `rm*`)                                                    | absent                                       |
 | `node:fs` importers                                                                                                                | exactly one — `config.ts`, read-only         |

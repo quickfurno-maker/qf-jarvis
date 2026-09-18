@@ -108,7 +108,7 @@ The persistence vocabulary is the **exact union** of `@qf-jarvis/event-ingestion
 
 ## Explicit exclusions
 
-This slice does **not** add, and this ADR does **not** authorize: an `ingest()` composition; any HTTP endpoint, worker loop, projection, retry, dead letter, or replay; any `apps/api` or `apps/worker` change; a read or count repository API for either audit table; a uniqueness constraint that deduplicates conflicts; storage of any payload, raw body, signature bytes, subject reference, or free text; migration `0004` or any change to `0001`/`0002`; any managed-database access, `db:preflight`, or `db:migrate`; and any Core, n8n, WhatsApp, provider, or live-data integration.
+This slice does **not** add, and this ADR does **not** authorize: an `ingest()` composition; any HTTP endpoint, worker loop, projection, retry, dead letter, or replay; any `apps/api` or `apps/worker` change; a read or count repository API for either audit table; a uniqueness constraint that deduplicates conflicts; storage of any payload, raw body, signature bytes, subject reference, or free text; migration `0004` or any change to `0001`/`0002`; any managed-database access, `db:preflight`, or `db:migrate`; and any Core, QuickFurno Core Automation, WhatsApp, provider, or live-data integration.
 
 ## Follow-up work
 

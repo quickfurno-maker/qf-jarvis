@@ -1,6 +1,6 @@
 # ADR-0085 — QFJ-P12 Aarohi Vendor Growth and Acquisition Agent (QVGE), and roadmap reconciliation
 
-**Status:** Accepted — governance and documentation only (no runtime package, no UI, no migration, no managed database, no deployment, no provider or channel configuration, no n8n or Meta execution). Aarohi's runtime remains **PLANNED / DISABLED**.
+**Status:** Accepted — governance and documentation only (no runtime package, no UI, no migration, no managed database, no deployment, no provider or channel configuration, no QuickFurno Core Automation or Meta execution). Aarohi's runtime remains **PLANNED / DISABLED**.
 **Deciders:** Owner
 **Relates to:** [ADR-0002](./ADR-0002-recommend-authorize-execute-model.md) · [ADR-0006](./ADR-0006-agent-responsibility-boundaries.md) · [ADR-0015](./ADR-0015-complete-client-journey-and-reassignment-policy.md) · [ADR-0039](./ADR-0039-canonical-qf-jarvis-roadmap-v3-and-governance-reconciliation.md) · [ADR-0083](./ADR-0083-qfj-p08-communication-authorization-correlation-runtime.md) · [ADR-0084](./ADR-0084-qfj-p09-01-execution-intent-correlation-runtime.md)
 
@@ -61,7 +61,7 @@ first.
 - **Jarvis** — coordination, and complex or cross-agent cases.
 - **QuickFurno Core** — final business, commercial, identity, consent, payment and activation
   authority.
-- **n8n** — approved execution only. **Providers** — delivery only.
+- **QuickFurno Core Automation** — approved execution only. **Providers** — delivery only.
 
 Anisha is **narrowed at the front edge only**. She loses cold acquisition of unregistered parties; she
 keeps the complete routine lifecycle of a registered vendor. The standing rule that her role must not
@@ -99,7 +99,7 @@ The overlay is recorded in
 anything, they do not create QFJ-P13, and QFJ-P13 does not exist. `P00`–`P12` are unchanged.
 
 Every AVG stage is **PLANNED / DISABLED**. Recording a capability grants nothing: there is no Aarohi
-runtime, no outreach, no channel, no credential, and no Instagram, WhatsApp, n8n or Meta integration
+runtime, no outreach, no channel, no credential, and no Instagram, WhatsApp, QuickFurno Core Automation or Meta integration
 in this repository.
 
 ### 6. QFJ-P09.01 status correction
@@ -108,7 +108,7 @@ The canonical QFJ-P09 status paragraph is corrected to the merged truth: PR #87 
 head `e0bc58c33adcf09cc98fcbeddef14682a7e0a7ce`, merge commit
 `710426bc8546441e1c1d2d284a91ee127aa60414`, merged at `2026-08-03T07:06:21Z`. The execution-intent
 correlation foundation is merged, remains powerless and dispatches nothing; **QFJ-P09 remains
-INCOMPLETE**; the next bounded slice is **QFJ-P09.02 — test-only authorized dispatch envelope / n8n
+INCOMPLETE**; the next bounded slice is **QFJ-P09.02 — test-only authorized dispatch envelope / QuickFurno Core Automation
 bridge validation**; live send remains OFF.
 
 ADR-0084's history is not rewritten, and no execution-intent runtime code is modified.

@@ -260,7 +260,7 @@ describe('a communication result is QuickFurno Core’s truth', () => {
   });
 
   it('refuses a result issued by anyone but Core', () => {
-    for (const issuer of ['qf-jarvis', 'n8n', 'qf-communications-runtime']) {
+    for (const issuer of ['qf-jarvis', 'quickfurno-core-automation', 'qf-communications-runtime']) {
       const result = { ...cloneFixture(validCommunicationResultDelivered), issuer };
       expect(safeParseCommunicationResult(result).success).toBe(false);
     }

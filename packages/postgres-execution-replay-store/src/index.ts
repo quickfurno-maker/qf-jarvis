@@ -16,13 +16,13 @@
  *
  * ### What this is not
  *
- * It is **transport-neutral**. The Core → n8n wire protocol remains PROPOSED, and persisting a
+ * It is **transport-neutral**. The Core → QuickFurno Core Automation wire protocol remains PROPOSED, and persisting a
  * replay fact does not adopt it: not one of the three stored values is a transport artifact. There
- * is no transport, endpoint, URL, webhook, workflow id, HTTP client, n8n client, provider client or
+ * is no transport, endpoint, URL, webhook, workflow id, HTTP client, QuickFurno Core Automation client, provider client or
  * credential anywhere in this package, and nothing in the repository imports it — it is a durable
  * adapter with tests, deliberately, until a later composition slice adopts it.
  *
- * It creates **no execution authority**. Jarvis recommends, QuickFurno Core authorizes, n8n
+ * It creates **no execution authority**. Jarvis recommends, QuickFurno Core authorizes, QuickFurno Core Automation
  * executes, providers deliver, results return to Core. A stored claim says one instruction already
  * crossed the B4 boundary; it does not say anything may happen, and it does not say anything did.
  *

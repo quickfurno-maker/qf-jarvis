@@ -47,13 +47,13 @@ This is the field people will want to relax, so it is worth defending.
 
 Every canonical event is emitted by Core, because **a fact is only a fact once Core has recorded it** ([ADR-0001](../decisions/ADR-0001-source-of-truth-boundary.md)). This holds even when the underlying thing happened somewhere else entirely:
 
-> A provider delivered a message. n8n observed it. n8n reported it. **Core recorded it. Core emitted the canonical event.**
+> A provider delivered a message. QuickFurno Core Automation observed it. QuickFurno Core Automation reported it. **Core recorded it. Core emitted the canonical event.**
 
-The provider's own view of the delivery appears _inside_ an execution-result payload, as **reported evidence** — `reportingSystem` may name n8n or the QF Communications Runtime. But the envelope still says Core.
+The provider's own view of the delivery appears _inside_ an execution-result payload, as **reported evidence** — `reportingSystem` may name QuickFurno Core Automation or the QF Communications Runtime. But the envelope still says Core.
 
 So a single event carries two distinct claims, and the contract keeps them apart:
 
-- **The payload says:** "n8n reports the provider accepted this."
+- **The payload says:** "QuickFurno Core Automation reports the provider accepted this."
 - **The envelope says:** "QuickFurno Core is telling you."
 
 Collapsing those would make a provider's optimistic acknowledgement into business truth — which is precisely the failure that lets a founder believe a message arrived when it did not.

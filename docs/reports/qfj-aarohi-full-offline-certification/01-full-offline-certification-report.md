@@ -23,7 +23,7 @@ This certifies exactly one sentence:
 > **Aarohi AVG-0…AVG-12 is internally coherent and certified as an OFFLINE domain implementation
 > under the existing governance boundaries.**
 
-It is **not** AVG-13, not QFJ-P13, not a feature phase, not live Core integration, not provider/n8n/
+It is **not** AVG-13, not QFJ-P13, not a feature phase, not live Core integration, not provider/QuickFurno Core Automation/
 channel integration, not deployment, and not production activation. Section M lists what it does not
 prove.
 
@@ -122,7 +122,7 @@ matches a 7+ digit run, an address shape or a URL shape. No PII is present in th
 | DB, HTTP, provider, model or evaluation SDK | **none**                                                       |
 
 The package-wide static containment scans (`containment.test.ts`, 48 tests) run beside the
-certification suite and find no transport, store, credential, provider, n8n, Meta, model, prompt,
+certification suite and find no transport, store, credential, provider, QuickFurno Core Automation, Meta, model, prompt,
 RAG, scheduler, queue or worker capability.
 
 ## J. Control-plane and Jarvis OS audit

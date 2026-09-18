@@ -20,4 +20,4 @@ The S1 bind observability is content-free: `GroqStagingBindEvent` carries only s
 
 ## Authority (§O)
 
-Groq returns model output only; the bound provider is an **inference engine** (`descriptor`/`capabilities`/`health`/`invoke`) with **no** send/deliver/execute/callN8n method; the bind result exposes no such method either. **M4 makes a draft; QuickFurno Core remains the final authority.** No send/deliver/execute/n8n; no live call/key/activation; no DB/migration 0008; no RAG; no dashboard/deployment.
+Groq returns model output only; the bound provider is an **inference engine** (`descriptor`/`capabilities`/`health`/`invoke`) with **no** send/deliver/execute/callQuickFurno Core Automation method; the bind result exposes no such method either. **M4 makes a draft; QuickFurno Core remains the final authority.** No send/deliver/execute/QuickFurno Core Automation; no live call/key/activation; no DB/migration 0008; no RAG; no dashboard/deployment.

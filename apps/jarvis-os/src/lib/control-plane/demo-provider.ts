@@ -81,7 +81,7 @@ export function createDemoControlPlane(): ControlPlaneReadModel {
     agentWorkload: () => fixtureSection(AGENT_WORKLOAD),
     approvalBreakdown: () => fixtureSection(APPROVAL_BREAKDOWN),
     businessAnalytics: () => fixtureSection(AGENT_WORKLOAD),
-    n8nExecution: () => fixtureSection(APPROVAL_BREAKDOWN),
+    coreAutomationExecution: () => fixtureSection(APPROVAL_BREAKDOWN),
     vendorGrowthFunnel: () => fixtureSection(VENDOR_GROWTH_FUNNEL),
     aarohiReadiness: () => fixtureSection(AAROHI_READINESS),
     attention: () => fixtureSection(ATTENTION),

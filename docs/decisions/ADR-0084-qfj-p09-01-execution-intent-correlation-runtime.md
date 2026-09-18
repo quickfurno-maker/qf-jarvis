@@ -1,6 +1,6 @@
 # ADR-0084 — QFJ-P09.01 Execution Intent Correlation Runtime
 
-**Status:** Accepted — QFJ-P09.01 (the Jarvis-side correlation foundation; no intent issuance, no dispatch, no n8n, no provider, no persistence, no deployment)
+**Status:** Accepted — QFJ-P09.01 (the Jarvis-side correlation foundation; no intent issuance, no dispatch, no QuickFurno Core Automation, no provider, no persistence, no deployment)
 **Deciders:** Owner
 **Relates to:** [ADR-0001](./ADR-0001-source-of-truth-boundary.md) · [ADR-0002](./ADR-0002-recommend-authorize-execute-model.md) · [ADR-0005](./ADR-0005-human-and-policy-approval.md) · [ADR-0007](./ADR-0007-approval-request-submission-model.md) · [ADR-0080](./ADR-0080-qfj-p08-approval-runtime-foundation.md) · [ADR-0082](./ADR-0082-qfj-p08-core-approval-submission-and-authenticated-operator-boundary.md) · [ADR-0083](./ADR-0083-qfj-p08-communication-authorization-correlation-runtime.md)
 
@@ -24,7 +24,7 @@ corresponds to. `ExecutionIntentV1` carries exactly the missing fields — `reco
 `approvalDecisionId`, `approvedActionId`, `actionType`, `actionContractVersion`, `parameters`.
 
 This slice implements the lock, and it comes first in P09 because everything after it — dispatch
-envelopes, an n8n bridge, execution results — depends on knowing that an intent genuinely reproduces
+envelopes, an QuickFurno Core Automation bridge, execution results — depends on knowing that an intent genuinely reproduces
 the action a human approved.
 
 ## Decision
@@ -35,16 +35,16 @@ the action a human approved.
 configuration. Given Core's `ExecutionIntentV1` and raw approval evidence, it proves the intent names
 and exactly reproduces the approved proposed action, and returns a deeply frozen observation.
 
-**Only QuickFurno Core issues execution intents. Only n8n is the named executor.** Nothing here
+**Only QuickFurno Core issues execution intents. Only QuickFurno Core Automation is the named executor.** Nothing here
 creates an intent, dispatches, sends, executes, retries, persists, emits, resolves a recipient or a
-phone number, chooses a provider, holds a credential, or reaches n8n, Meta or any provider. Its
+phone number, chooses a provider, holds a credential, or reaches QuickFurno Core Automation, Meta or any provider. Its
 production dependencies are `@qf-jarvis/contracts` and `@qf-jarvis/approval-runtime` — not even
 `zod`.
 
 ### 2. The intent's own schema proves issuer, executor and semantics
 
 `executionIntentV1Schema` establishes structurally that `issuer` is `quickfurno-core`, `executor` is
-`n8n`, `deliverySemantics` is the literal `at-most-once`, an idempotency key is present and
+`QuickFurno Core Automation`, `deliverySemantics` is the literal `at-most-once`, an idempotency key is present and
 well-formed, `issuedAt < expiresAt`, and the parameters are governed — carrying no contact detail, no
 credential and no smuggled permission to retry.
 
@@ -155,7 +155,7 @@ Absent, and unable to be added without reopening this ADR: `canExecute`, `canSen
 credential, `communicationRequestId`, communication-authorization id, consent snapshot or generic
 subject field added. The intent is linked to the governed recommendation and action through
 `recommendationId` + `approvedActionId` + exact action content, and recipient resolution and live
-dispatch semantics belong to Core and the later execution runtime. If a future n8n bridge needs more
+dispatch semantics belong to Core and the later execution runtime. If a future QuickFurno Core Automation bridge needs more
 wire-level information, that is a separate, versioned protocol decision **after** this correlation
 foundation.
 
@@ -248,23 +248,23 @@ PostgreSQL was not accessed. Production rollout remains **OFF**.
 
 **QuickFurno Core Sync Gate: passed.** Core still owns authoritative business truth, approval
 decisions, execution-intent issuance, consent and eligibility, and authoritative execution history,
-and still revalidates current truth before execution. n8n remains the executor and authorizes
-nothing. Meta and providers deliver and decide nothing. No live Core, n8n or provider protocol was
-invented, and the existing QuickFurno Meta WhatsApp and n8n infrastructure is untouched by this PR.
+and still revalidates current truth before execution. QuickFurno Core Automation remains the executor and authorizes
+nothing. Meta and providers deliver and decide nothing. No live Core, QuickFurno Core Automation or provider protocol was
+invented, and the existing QuickFurno Meta WhatsApp and QuickFurno Core Automation infrastructure is untouched by this PR.
 
 **It still cannot execute anything.** Dispatch-time freshness, authenticity and signature validation
 remain pending; a communication action still requires execution-time consent revalidation by Core and
-the communications runtime; and the n8n bridge does not exist. P09 remains incomplete.
+the communications runtime; and the QuickFurno Core Automation bridge does not exist. P09 remains incomplete.
 
 Compatibility with the locked QuickFurno Mini Brain architecture is preserved: a Mini Brain may
 recommend an action, choose a governed template and produce a powerless communication request, and
 may never create an `ExecutionIntentV1`, choose `approvedActionId` for Core, sign a dispatch, call
-n8n or Meta, hold a provider credential, or turn high confidence into permission. No Mini Brain code
+QuickFurno Core Automation or Meta, hold a provider credential, or turn high confidence into permission. No Mini Brain code
 is in this PR.
 
 ## Non-goals
 
-No execution-intent issuance. No dispatch, send, execute or retry. No n8n bridge, workflow, client or
+No execution-intent issuance. No dispatch, send, execute or retry. No QuickFurno Core Automation bridge, workflow, client or
 protocol. No Meta, WhatsApp or provider client. No provider credential. No recipient or phone-number
 resolution. No transport, persistence, cache or event emission. No idempotency-key generation,
 reservation, consumption or deduplication. No dispatch-time freshness or signature validation. No

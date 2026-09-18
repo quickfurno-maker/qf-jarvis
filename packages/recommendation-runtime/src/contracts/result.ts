@@ -60,7 +60,7 @@ export interface RecommendationRuntimeIdentityPort {
  * touches no I/O, so there is nothing to await.
  *
  * There is deliberately no `createApprovalRequest`, no `approve`, no `decide`, no `execute`, no
- * `send` and no `emit`. Jarvis recommends; QuickFurno Core authorizes; n8n executes.
+ * `send` and no `emit`. Jarvis recommends; QuickFurno Core authorizes; QuickFurno Core Automation executes.
  */
 export interface RecommendationRuntime {
   create(input: unknown): RecommendationRuntimeResult;

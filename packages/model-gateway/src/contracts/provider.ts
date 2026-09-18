@@ -2,7 +2,7 @@
  * The provider-neutral `ModelProvider` interface (QFJ-P04.01A, ADR-0045).
  *
  * A provider is an INFERENCE ENGINE ONLY. It declares capabilities, reports health, and performs one
- * bounded non-streaming invocation. It has NO business-authority method, executes NO tool, holds NO n8n
+ * bounded non-streaming invocation. It has NO business-authority method, executes NO tool, holds NO QuickFurno Core Automation
  * access, and touches NO database. A provider SDK type NEVER crosses this boundary — a real adapter
  * (Groq in QFJ-P04.01B, a local workstation later) wraps its SDK/HTTP internally and returns only the
  * bounded shapes below. A provider signals a normal failure by RETURNING a normalized status, not by

@@ -474,15 +474,15 @@ describe('the boundary a source can never cross', () => {
   it('cannot claim business authority for Jarvis', () => {
     expect(live().authority.jarvis).toBe('RECOMMENDS_AND_OBSERVES');
     expect(live().authority.quickfurnoCore).toBe('AUTHORIZES_AND_OWNS_BUSINESS_TRUTH');
-    expect(live().authority.n8n).toBe('EXECUTES_ONLY');
+    expect(live().authority.coreAutomation).toBe('EXECUTES_ONLY');
   });
 
-  it('keeps Core and n8n unconnected with an adopted source present', () => {
+  it('keeps Core and QuickFurno Core Automation unconnected with an adopted source present', () => {
     const snapshot = live();
     // Core's DATA is unreadable, so those sections carry no rows. `coreSync` is not Core data -- it
     // is the repository's declaration of which records Core owns -- so it stays byte-identical.
     expect(snapshot.sections.businessAnalytics.availability).toBe('NOT_CONNECTED');
-    expect(snapshot.sections.n8nExecution.availability).toBe('NOT_CONNECTED');
+    expect(snapshot.sections.coreAutomationExecution.availability).toBe('NOT_CONNECTED');
     expect(snapshot.sections.coreSync).toStrictEqual(baselineSections().coreSync);
   });
 

@@ -171,7 +171,7 @@ anyway would attach one client's continuity to another's message.
 No transcript, history or rolling summary — the request carries at most one current
 `normalizedText`, and the store holds only P2A state. No consent, `canSubmit`, lead, vendor, city or
 pricing authority; QuickFurno Core remains final, and any action-like proposal stays
-`PENDING_CORE_VALIDATION`. No provider, n8n or delivery. No migration and no managed-database access.
+`PENDING_CORE_VALIDATION`. No provider, QuickFurno Core Automation or delivery. No migration and no managed-database access.
 The QuickFurno repository is untouched and `lib/riya-ui/jarvisClient.ts` does not exist.
 
 ## Consequences

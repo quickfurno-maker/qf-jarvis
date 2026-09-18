@@ -165,7 +165,7 @@ with a tighter compensating assertion), and the two sanitized-output key locks.
 No credential was read, requested, validated, displayed, hashed, or stored. The masked resolver was
 not invoked. No Groq, API, or network request was made — no `curl`, `Invoke-WebRequest`,
 `Test-NetConnection`, `nslookup`, `ping`, Postman, Playground, or SDK test. No database, Supabase,
-Docker, migration, deployment, activation, or rollout. No QuickFurno Core, WhatsApp, n8n, or real data.
+Docker, migration, deployment, activation, or rollout. No QuickFurno Core, WhatsApp, QuickFurno Core Automation, or real data.
 The protected reconciliation directory was never opened, read, hashed, staged, or modified.
 
 ## 10. Next

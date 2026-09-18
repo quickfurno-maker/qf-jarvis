@@ -10,7 +10,7 @@
  *
  *   Jarvis recommends.
  *   QuickFurno authorizes.
- *   n8n executes.
+ *   QuickFurno Core Automation executes.
  *   Providers deliver.
  *   Results return to QuickFurno Core.
  *
@@ -21,7 +21,7 @@
  *   `decidedBy` can only be a human or a named policy — an agent has no
  *   representation, so agent self-approval cannot be expressed.
  * - An execution intent's `issuer` can only be `quickfurno-core` and its `executor`
- *   only `n8n`. **Jarvis cannot construct a valid execution intent**, and there is
+ *   only `quickfurno-core-automation`. **Jarvis cannot construct a valid execution intent**, and there is
  *   no provider to address one to.
  * - Delivery semantics can only be `at-most-once`.
  * - An indeterminate execution result cannot be recorded as a success.
@@ -154,7 +154,7 @@ export {
   AGENT_IDS,
   agentIdSchema,
   executionReportingSystemSchema,
-  n8nSchema,
+  quickfurnoCoreAutomationSchema,
   qfJarvisSchema,
   quickfurnoCoreSchema,
   SPECIALIST_AGENT_IDS,

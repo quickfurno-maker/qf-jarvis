@@ -47,7 +47,7 @@ as **historical evidence, never a current certification**. This ADR supplies the
 `2026-08-30T15:19:52Z`). Every finding is read from that SHA only, by static inspection of a read-only
 detached checkout outside the qf-jarvis tree.
 
-**No Core branch, commit, push or PR. No managed Supabase access. No migration run. No n8n, provider
+**No Core branch, commit, push or PR. No managed Supabase access. No migration run. No QuickFurno Core Automation, provider
 or Meta access. No message sent. No secret value read or printed.**
 
 ### 2. Core has changed substantially, and much of it was never audited before
@@ -70,7 +70,7 @@ never phrases a newly audited domain as a historical absence.
 `docs/QF-Jarvis-Integration-Boundary.md` states, in Core's own words: QuickFurno is the **system of
 record** and _"Jarvis holds no authoritative copy"_; Jarvis submits **recommendations** that are
 _"inert data"_ and _"authorize nothing"_; _"an `approved` recommendation does **NOT** bypass"_ the
-policy engine; _"n8n remains the execution fabric, not the second brain"_; and the required chain is
+policy engine; _"QuickFurno Core Automation remains the execution fabric, not the second brain"_; and the required chain is
 `agent recommendation → QuickFurno authorization → consent/suppression → channel/provider decision →
 CommunicationService → provider`.
 
@@ -172,10 +172,10 @@ fact `ABSENT` / `AMBIGUOUS_REQUIRES_D2`.**
 > operation or durable business fact** — and **Core's `cancelled` currently means a consent refusal,
 > which maps to Jarvis's `rejected`, not to Jarvis's `cancelled`.** D2 must not conflate them.
 
-**11.3 The existing n8n transport is not the Jarvis B4 protocol.** `automationRecoveryService`'s
+**11.3 The existing QuickFurno Core Automation transport is not the Jarvis B4 protocol.** `automationRecoveryService`'s
 `recover_v1` / `reconcile_v1` are an **automation supervisor / claim / recovery transport** —
-_"n8n supplies three transport fields and nothing else … CORE SELECTS EVERYTHING"_ — serving Core's
-own QF-MVP automation purpose. The **Jarvis canonical Core → n8n execution-intent dispatch protocol
+_"QuickFurno Core Automation supplies three transport fields and nothing else … CORE SELECTS EVERYTHING"_ — serving Core's
+own QF-MVP automation purpose. The **Jarvis canonical Core → QuickFurno Core Automation execution-intent dispatch protocol
 (ADR-0090 B4 / S5) is NOT ADOPTED / `CANDIDATE_OR_PROPOSED_ONLY`**, and **the existing signing domain
 must not be assumed reusable** for a Jarvis trust purpose. `execution-submitted` stays
 `AMBIGUOUS_REQUIRES_D2`.
@@ -214,7 +214,7 @@ must not be assumed reusable** for a Jarvis trust purpose. `execution-submitted`
 
 Every finding cites a file, symbol, table or migration at the pinned SHA (evidence index E1–E25), with
 bounded absence searches for each `ABSENT` claim. Classifications use the required vocabulary. **No
-Core modification, no Supabase, no n8n/provider, no message sent, no Jarvis production code, no
+Core modification, no Supabase, no QuickFurno Core Automation/provider, no message sent, no Jarvis production code, no
 contract, no event registry, no persistence and no migration** — `0013` is not allocated and the
 `0010`–`0012` ledger drift is untouched.
 

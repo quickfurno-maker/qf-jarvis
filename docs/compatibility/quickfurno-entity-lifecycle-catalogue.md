@@ -262,12 +262,12 @@
 
 ## 21. Runtime setting ⚪
 
-|                           |                                                                                                                                                               |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Owner**                 | **Core (Superadmin), exclusively**                                                                                                                            |
-| **Three separate tables** | `aos_runtime_settings` (one key: the n8n lock) · `marketplace_runtime_settings` (**preview engine only**) · `app_settings` (**no application writer exists**) |
-| **Sensitivity**           | ⚠️ **`marketplace_runtime_settings` has NO RLS** — under Supabase's default grants it is **anon-writable**, and it holds runtime kill-switches                |
-| **Jarvis interest**       | **NONE. Jarvis never modifies a runtime setting. An agent that could change its own operating parameters could authorize itself, one indirection removed**    |
+|                           |                                                                                                                                                                                      |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Owner**                 | **Core (Superadmin), exclusively**                                                                                                                                                   |
+| **Three separate tables** | `aos_runtime_settings` (one key: the QuickFurno Core Automation lock) · `marketplace_runtime_settings` (**preview engine only**) · `app_settings` (**no application writer exists**) |
+| **Sensitivity**           | ⚠️ **`marketplace_runtime_settings` has NO RLS** — under Supabase's default grants it is **anon-writable**, and it holds runtime kill-switches                                       |
+| **Jarvis interest**       | **NONE. Jarvis never modifies a runtime setting. An agent that could change its own operating parameters could authorize itself, one indirection removed**                           |
 
 ---
 

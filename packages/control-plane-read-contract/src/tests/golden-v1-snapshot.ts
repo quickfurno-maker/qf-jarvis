@@ -28,7 +28,7 @@ export const GOLDEN_V1_SNAPSHOT_PRE_AVG11: unknown = Object.freeze({
   authority: {
     jarvis: 'RECOMMENDS_AND_OBSERVES',
     quickfurnoCore: 'AUTHORIZES_AND_OWNS_BUSINESS_TRUTH',
-    n8n: 'EXECUTES_ONLY',
+    coreAutomation: 'EXECUTES_ONLY',
     provider: 'DELIVERS_ONLY',
   },
   rollout: { enabled: false, state: 'ROLLOUT_OFF' },
@@ -223,10 +223,12 @@ export const GOLDEN_V1_SNAPSHOT_PRE_AVG11: unknown = Object.freeze({
       expectedSource: 'QuickFurno Core, once a read protocol is adopted and authenticated.',
       items: [],
     },
-    n8nExecution: {
+    coreAutomationExecution: {
       availability: 'NOT_CONNECTED',
-      reason: 'n8n executes approved intents. Jarvis OS has no adopted protocol to read its state.',
-      expectedSource: 'The real Core-to-n8n execution transport, which is not implemented.',
+      reason:
+        'QuickFurno Core Automation executes approved intents. Jarvis OS has no adopted protocol to read its state.',
+      expectedSource:
+        'The real Core-to-QuickFurno Core Automation execution transport, which is not implemented.',
       items: [],
     },
   },

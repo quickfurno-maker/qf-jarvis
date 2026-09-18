@@ -167,7 +167,7 @@ describe('the vocabularies are exactly what ADR-0107 locks', () => {
     const joined = RIYA_DATASET_ASSISTANT_DECISIONS.join(' ');
     for (const forbidden of [
       'PROVIDER',
-      'N8N',
+      'coreAutomation',
       'DATABASE',
       'ASSIGN_VENDOR',
       'SET_PRICE',

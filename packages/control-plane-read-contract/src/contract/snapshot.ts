@@ -23,7 +23,7 @@ import {
  * There is no `canSend`, `canExecute`, `isAuthorized`, `consentValid`, `approvalGranted` or
  * `dispatchAllowed` in this file, and every object is `.strict()`, so there is nowhere to smuggle
  * one in later without editing this file and failing review. That is deliberate and permanent:
- * QuickFurno Core authorizes, n8n executes, providers deliver. A read surface that could carry a
+ * QuickFurno Core authorizes, QuickFurno Core Automation executes, providers deliver. A read surface that could carry a
  * permission bit would become a second source of business truth, which ADR-0001 forbids outright.
  *
  * There are also no methods. A JSON contract with a method is not a contract, it is an API client,
@@ -90,7 +90,7 @@ export const authorityBoundarySchema = z
   .object({
     jarvis: z.literal('RECOMMENDS_AND_OBSERVES'),
     quickfurnoCore: z.literal('AUTHORIZES_AND_OWNS_BUSINESS_TRUTH'),
-    n8n: z.literal('EXECUTES_ONLY'),
+    coreAutomation: z.literal('EXECUTES_ONLY'),
     provider: z.literal('DELIVERS_ONLY'),
   })
   .strict();
@@ -346,7 +346,7 @@ export const sectionsSchema = z
     evaluations: sectionSchema(evaluationDimensionSchema, 32),
     coreSync: sectionSchema(ownershipRowSchema, 32),
     businessAnalytics: sectionSchema(distributionSliceSchema, 24),
-    n8nExecution: sectionSchema(distributionSliceSchema, 24),
+    coreAutomationExecution: sectionSchema(distributionSliceSchema, 24),
   })
   .strict();
 

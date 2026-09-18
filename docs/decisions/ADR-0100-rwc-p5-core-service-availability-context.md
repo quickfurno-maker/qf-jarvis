@@ -55,7 +55,7 @@ inference resolve both **and** say something true if the pair is not served.
 ### 3. A read PORT, with no implementation here
 
 `@qf-jarvis/core-service-availability-read` declares the snapshot and the reader. It contains no
-HTTP, fetch, URL, API key, environment read, database, cache, clock, randomness, n8n, provider or
+HTTP, fetch, URL, API key, environment read, database, cache, clock, randomness, QuickFurno Core Automation, provider or
 model — and **no QuickFurno adapter**.
 
 That is the same move RWC-P2C made with `RiyaContinuityStorePort`: declare the operation the design
@@ -360,7 +360,7 @@ whoever notices the failure first.
 
 No QuickFurno handshake, UI, route, adapter or repository change. No live Core reader, no
 `/api/cities`, no browser city selector, no ingress wire change, no ingress deployment, no provider or
-n8n activation, no production prompt activation. No migration and no `0012`. No managed database
+QuickFurno Core Automation activation, no production prompt activation. No migration and no `0012`. No managed database
 access. No vendor matching or availability inference, no lead creation, no package, pricing, payment
 or consent. No `projectArea`, alias management, geocoding, lat/long or pincode. No summary
 confirmation (**RWC-P6**), no RAG (**RWC-P7**), no cross-channel identity linking (**RWC-P8**).

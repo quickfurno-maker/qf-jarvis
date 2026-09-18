@@ -14,17 +14,17 @@
 
 ## Context
 
-QFJ-P04.01B added Groq, the first real HOSTED provider, behind the provider-neutral `ModelProvider` contract. The owner fixed a **local OpenAI-compatible workstation/private-GPU node** as the second provider class — the privacy-preserving, private-compute complement to Groq. It must implement the **same** contract so the gateway, agents, Core tools, n8n, memory, and business rules stay unchanged: adding it is configuration and evaluation, not a rewrite. The adapter is inference only; it authorizes and executes nothing. Because a local server lives on a private network reachable by IP, the dominant new risk is **SSRF** — an arbitrary destination masquerading as "local". This ADR therefore locks a strict private-IP endpoint policy.
+QFJ-P04.01B added Groq, the first real HOSTED provider, behind the provider-neutral `ModelProvider` contract. The owner fixed a **local OpenAI-compatible workstation/private-GPU node** as the second provider class — the privacy-preserving, private-compute complement to Groq. It must implement the **same** contract so the gateway, agents, Core tools, QuickFurno Core Automation, memory, and business rules stay unchanged: adding it is configuration and evaluation, not a rewrite. The adapter is inference only; it authorizes and executes nothing. Because a local server lives on a private network reachable by IP, the dominant new risk is **SSRF** — an arbitrary destination masquerading as "local". This ADR therefore locks a strict private-IP endpoint policy.
 
 ## Decision
 
 ### A. Purpose
 
-Add a **LOCAL** execution-class provider behind the existing `ModelProvider` contract, targeting an OpenAI-compatible **non-streaming** Chat Completions server on a future local workstation / private GPU node. The adapter is an inference engine only: no agent, tool, n8n, database, or business-authority coupling; its output is advisory and locally validated.
+Add a **LOCAL** execution-class provider behind the existing `ModelProvider` contract, targeting an OpenAI-compatible **non-streaming** Chat Completions server on a future local workstation / private GPU node. The adapter is an inference engine only: no agent, tool, QuickFurno Core Automation, database, or business-authority coupling; its output is advisory and locally validated.
 
 ### B. Hybrid architecture
 
-Groq remains the first hosted provider; the local provider is the privacy-preserving/private-compute provider. `LOCAL_ONLY` routes **only** to LOCAL providers; `HOSTED_ALLOWED` may route to Groq or local according to **injected policy** (provider array order); `HUMAN_ONLY` reaches no provider. The **gateway** selects providers — never n8n and never an agent. Hybrid failover policy stays gateway-owned and separately governed (QFJ-P04.01D). QuickFurno Core remains the final authority.
+Groq remains the first hosted provider; the local provider is the privacy-preserving/private-compute provider. `LOCAL_ONLY` routes **only** to LOCAL providers; `HOSTED_ALLOWED` may route to Groq or local according to **injected policy** (provider array order); `HUMAN_ONLY` reaches no provider. The **gateway** selects providers — never QuickFurno Core Automation and never an agent. Hybrid failover policy stays gateway-owned and separately governed (QFJ-P04.01D). QuickFurno Core remains the final authority.
 
 ### C. Protocol
 
@@ -65,7 +65,7 @@ This slice makes **no live local-model call**. Production readiness/health **fai
 
 ### J. Scope / non-goals
 
-No model-server installation (Ollama/llama.cpp/vLLM/LocalAI/etc.); no model download; no GPU orchestration/load-balancing/multi-node scheduler; no voice/audio/vision; no agents; no memory/RAG; no tools/n8n; no schema/migration/0008; no managed access; no production activation; no live external or LAN network in tests/CI.
+No model-server installation (Ollama/llama.cpp/vLLM/LocalAI/etc.); no model download; no GPU orchestration/load-balancing/multi-node scheduler; no voice/audio/vision; no agents; no memory/RAG; no tools/QuickFurno Core Automation; no schema/migration/0008; no managed access; no production activation; no live external or LAN network in tests/CI.
 
 ## Rejected alternatives
 

@@ -942,7 +942,7 @@ export interface WhatsAppChannelHandoffPosture {
   readonly approvalDecisionCreated: false;
   readonly communicationAuthorizationCreated: false;
   readonly executionIntentCreated: false;
-  readonly n8nExecutionRequested: false;
+  readonly coreAutomationExecutionRequested: false;
   readonly providerSendRequested: false;
   readonly whatsappSendRequested: false;
   readonly sent: false;
@@ -969,7 +969,7 @@ export const whatsappChannelHandoffPostureSchema = z
     approvalDecisionCreated: z.literal(false),
     communicationAuthorizationCreated: z.literal(false),
     executionIntentCreated: z.literal(false),
-    n8nExecutionRequested: z.literal(false),
+    coreAutomationExecutionRequested: z.literal(false),
     providerSendRequested: z.literal(false),
     whatsappSendRequested: z.literal(false),
     sent: z.literal(false),
@@ -998,7 +998,7 @@ export const WHATSAPP_CHANNEL_HANDOFF_POSTURE: WhatsAppChannelHandoffPosture = O
     approvalDecisionCreated: false,
     communicationAuthorizationCreated: false,
     executionIntentCreated: false,
-    n8nExecutionRequested: false,
+    coreAutomationExecutionRequested: false,
     providerSendRequested: false,
     whatsappSendRequested: false,
     sent: false,

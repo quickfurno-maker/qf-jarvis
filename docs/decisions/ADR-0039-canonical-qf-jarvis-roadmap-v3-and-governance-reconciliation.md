@@ -42,8 +42,8 @@ This ADR does not implement anything. It **locks the canonical taxonomy, the age
 - **QuickFurno Core** owns authoritative business data (customers, leads, vendors, packages, pricing, payments, consent, assignments, outcomes), authorizes sensitive and commercial actions, and remains the final business authority. Jarvis must never replace, duplicate, or bypass it.
 - **Jarvis** analyzes, recommends, classifies, routes, coordinates, evaluates, monitors, manages complex cases, requests approvals, and preserves conflicts. Jarvis does **not** independently authorize sensitive business actions, directly mutate QuickFurno marketplace tables, or directly call providers.
 - **Riya — Customer Conversation and Qualification Agent** owns the complete routine customer side. **Anisha — Vendor Sales, Relationship and Success Agent** owns the complete routine vendor side (see §4).
-- **n8n** executes only approved intents; it decides no business policy, authorizes nothing, and is never the source of truth. **Providers** deliver approved external actions, decide nothing, and return outcomes for reconciliation.
-- **Permanent flow:** QuickFurno Core → signed events/contracts → Jarvis → recommendation/task/approval request → QuickFurno Core or human authorization → n8n execution → provider delivery → result to QuickFurno Core → result event to Jarvis.
+- **QuickFurno Core Automation** executes only approved intents; it decides no business policy, authorizes nothing, and is never the source of truth. **Providers** deliver approved external actions, decide nothing, and return outcomes for reconciliation.
+- **Permanent flow:** QuickFurno Core → signed events/contracts → Jarvis → recommendation/task/approval request → QuickFurno Core or human authorization → QuickFurno Core Automation execution → provider delivery → result to QuickFurno Core → result event to Jarvis.
 
 ### 2. Canonical QFJ-P00 … QFJ-P12 taxonomy
 
@@ -104,7 +104,7 @@ Git history, historical commits/PRs, and historical ADR bodies are **not** rewri
 
 - Migrations **0001–0005** exist and are **immutable** (see [migration-ledger.md](../governance/migration-ledger.md) for exact filenames and SHA-256 checksums).
 - Managed PostgreSQL currently carries **0001 only**; **0002–0005 remain unapplied** to managed PostgreSQL unless a separately authorized managed-readiness task applies them.
-- **Migration 0006 does not exist and is not created here.** It is _conditionally reserved_ for **QFJ-P03.07 Projection Failure Operations** — and only if the approved QFJ-P03.07 design proves schema is required. It must not contain RAG, agents, task runtime, model gateway, WhatsApp, n8n, QuickFurno Core integration, or `rm_subject_activity` (unless a later explicit architectural decision changes ownership).
+- **Migration 0006 does not exist and is not created here.** It is _conditionally reserved_ for **QFJ-P03.07 Projection Failure Operations** — and only if the approved QFJ-P03.07 design proves schema is required. It must not contain RAG, agents, task runtime, model gateway, WhatsApp, QuickFurno Core Automation, QuickFurno Core integration, or `rm_subject_activity` (unless a later explicit architectural decision changes ownership).
 - **The RAG migration is unallocated.** No migration number is pre-reserved for RAG. No migration after 0006 is pre-reserved.
 
 ### 6. RAG and structured-data boundary

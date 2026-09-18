@@ -14,7 +14,7 @@
  *
  * ### Data in, nothing out
  *
- * No HTTP, fetch, URL, API key, environment read, database, cache, clock, randomness, n8n, provider
+ * No HTTP, fetch, URL, API key, environment read, database, cache, clock, randomness, QuickFurno Core Automation, provider
  * or model — and **no QuickFurno adapter**. It also knows nothing about a conversation: no phase, no
  * continuity, no observation, no reducer. Both directions are enforced by its containment spec.
  *

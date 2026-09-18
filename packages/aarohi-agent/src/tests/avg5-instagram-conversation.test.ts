@@ -641,7 +641,7 @@ describe('an outbound candidate carries the reviewed draft, and no permission', 
     expect(posture.approvalDecisionCreated).toBe(false);
     expect(posture.communicationAuthorizationCreated).toBe(false);
     expect(posture.executionIntentCreated).toBe(false);
-    expect(posture.n8nExecutionRequested).toBe(false);
+    expect(posture.coreAutomationExecutionRequested).toBe(false);
     expect(posture.metaApiCalled).toBe(false);
     expect(posture.providerSendRequested).toBe(false);
     expect(posture.sent).toBe(false);

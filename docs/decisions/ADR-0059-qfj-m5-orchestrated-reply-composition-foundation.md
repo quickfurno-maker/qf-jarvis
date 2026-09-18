@@ -52,15 +52,15 @@ Correlated **content-free** stage events only: safe ids, actors, parties, revisi
 
 ### I. Authority
 
-QuickFurno Core is the final authority; the model draft is a proposal input only; Jarvis coordinates; n8n is absent; there is no send/deliver/execute/persist. Riya is client-only; Anisha is vendor-only; the Conversation Operations Center is a mandatory later phase (not implemented here); Kimi is excluded.
+QuickFurno Core is the final authority; the model draft is a proposal input only; Jarvis coordinates; QuickFurno Core Automation is absent; there is no send/deliver/execute/persist. Riya is client-only; Anisha is vendor-only; the Conversation Operations Center is a mandatory later phase (not implemented here); Kimi is excluded.
 
 ### J. Non-goals
 
-No live provider/Core call; no secrets/env; no provider activation/rollout; no WhatsApp/n8n/send/delivery; no persistence/DB/schema/migration 0008; no RAG/semantic retrieval; no dashboard; no deployment.
+No live provider/Core call; no secrets/env; no provider activation/rollout; no WhatsApp/QuickFurno Core Automation/send/delivery; no persistence/DB/schema/migration 0008; no RAG/semantic retrieval; no dashboard; no deployment.
 
 ### K. Next mandatory launch work
 
-After M5 there are **no more broad foundations**. The roadmap moves to: (1) live staging provider binding through the model gateway; (2) QuickFurno Core-side M3 protocol adoption; (3) a Core-approved delivery command plus n8n/WhatsApp transport; (4) authoritative persistence/delivery states; (5) the minimum Conversation Operations Center; (6) a controlled pilot.
+After M5 there are **no more broad foundations**. The roadmap moves to: (1) live staging provider binding through the model gateway; (2) QuickFurno Core-side M3 protocol adoption; (3) a Core-approved delivery command plus QuickFurno Core Automation/WhatsApp transport; (4) authoritative persistence/delivery states; (5) the minimum Conversation Operations Center; (6) a controlled pilot.
 
 ## Consequences
 

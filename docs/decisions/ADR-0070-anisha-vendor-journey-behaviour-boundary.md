@@ -141,7 +141,7 @@ change eligibility, rank, assign a lead, score lead quality, mutate a profile or
 approve documents, change or purchase a package, recharge a wallet, change credits, read or expose a
 balance, process a payment, mutate a subscription, promise lead volume or ranking, communicate with
 clients, inspect campaign performance, execute a follow-up, send a message, write a database, or call
-n8n, WhatsApp or a provider. `agent-model.md:76` states the core of that list in those words. The
+QuickFurno Core Automation, WhatsApp or a provider. `agent-model.md:76` states the core of that list in those words. The
 package contains no method or field through which any of it could happen.
 
 ### 11. Prompt boundary
@@ -185,7 +185,7 @@ nothing here activates a provider, a mode or a deployment.
 ## Non-goals
 
 No prompt text · no model call · no router, state machine, proposal helper, proposal authority or
-ModelReplyPort · no memory · no tools · no WhatsApp · no n8n · no database or persistence · no
+ModelReplyPort · no memory · no tools · no WhatsApp · no QuickFurno Core Automation · no database or persistence · no
 migration · no deployment · no client ownership · no lead-quality judgement · no money.
 
 ## Change-control rule

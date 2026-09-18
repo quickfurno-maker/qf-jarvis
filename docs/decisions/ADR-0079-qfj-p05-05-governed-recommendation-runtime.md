@@ -162,7 +162,7 @@ a category error.
 No `ApprovalRequestV1`, no approval runtime, queue, state or decision handling — that is the next P08
 phase, and `actionBindings` is the exact hand-off. No execution intent. No persistence, cache or
 store, and no migration: the set stays `0001`–`0008` with no `0009`. No model, prompt, RAG or
-gateway. No transport, n8n or WhatsApp.
+gateway. No transport, QuickFurno Core Automation or WhatsApp.
 
 **No event is emitted.** Jarvis does not emit `qf.recommendation.created`; Core owns canonical event
 emission after it records the submission, so there is no `event-backbone` dependency here.
@@ -210,7 +210,7 @@ unimplemented.
 ## Non-goals
 
 No approval request, approval decision or execution runtime. No persistence, migration or `0009`. No
-event emission by Jarvis. No model, provider, prompt, RAG or gateway call. No Core call, n8n,
+event emission by Jarvis. No model, provider, prompt, RAG or gateway call. No Core call, QuickFurno Core Automation,
 WhatsApp or P09 transport. No `JarvisRuntime` or application wiring. No send, deliver, execute or
 authorize path. No managed database access or deployment.
 

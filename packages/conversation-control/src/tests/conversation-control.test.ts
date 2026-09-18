@@ -902,7 +902,7 @@ describe('vocabularies, API surface and containment', () => {
         /from ['"](pg|groq-sdk|openai|@anthropic-ai\/sdk|ollama|axios|undici)['"]/,
       );
       expect(code).not.toMatch(/\b(supabase|postgres|redis|SELECT |INSERT |UPDATE |DELETE )/i);
-      expect(code).not.toMatch(/\bn8n\b|whatsapp|groq/i);
+      expect(code).not.toMatch(/\bcoreAutomation\b|whatsapp|groq/i);
     }
   });
 

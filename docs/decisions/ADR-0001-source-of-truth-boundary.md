@@ -74,7 +74,7 @@ These costs are accepted deliberately. They are the price of the single source o
 
 ## Follow-up
 
-- [ADR-0002](./ADR-0002-recommend-authorize-execute-model.md) establishes the corresponding authority boundary: Jarvis recommends, Core authorizes, n8n executes.
+- [ADR-0002](./ADR-0002-recommend-authorize-execute-model.md) establishes the corresponding authority boundary: Jarvis recommends, Core authorizes, QuickFurno Core Automation executes.
 - Phase 2 defines the canonical event and recommendation contracts that make this boundary workable in practice.
 - Phase 11 must prove that derived views can be destroyed and rebuilt with identical results, and that Core wins every reconciliation.
 - The responsibility matrix ([responsibility-matrix.md](../architecture/responsibility-matrix.md)) is reviewed at every phase gate. If QF Jarvis has appeared in an **A** or **R** cell for business state, this ADR has been violated.

@@ -35,8 +35,8 @@ import type { DatabaseConfig, DatabasePool } from '@qf-jarvis/event-backbone';
 import { createJarvisRuntime } from '@qf-jarvis/jarvis-runtime';
 import type {
   JarvisProvenanceRefs,
-  JarvisRuntime,
   JarvisRuntimeConfig,
+  RiyaConversationEvolutionJarvisRuntime,
 } from '@qf-jarvis/jarvis-runtime';
 import { createPostgresConversationStateAdapter } from '@qf-jarvis/postgres-conversation-state';
 
@@ -68,7 +68,7 @@ export type DurableJarvisRuntimeConfig = Omit<
 
 /** A started durable runtime and the means to shut it down. Nothing else is reachable. */
 export interface DurableJarvisRuntimeLifecycle {
-  readonly runtime: JarvisRuntime;
+  readonly runtime: RiyaConversationEvolutionJarvisRuntime;
   /** Closes the pool this module created. Idempotent, via `closeDatabasePool`'s `ended` guard. */
   close(): Promise<void>;
 }
@@ -85,7 +85,7 @@ export interface DurableJarvisRuntimeLifecycle {
 export async function composeDurableJarvisRuntime(input: {
   readonly pool: DatabasePool;
   readonly runtimeConfig: DurableJarvisRuntimeConfig;
-}): Promise<JarvisRuntime> {
+}): Promise<RiyaConversationEvolutionJarvisRuntime> {
   const adapter = createPostgresConversationStateAdapter({ pool: input.pool });
 
   // BEFORE the runtime exists. If this rejects, no runtime is returned and none was ever built.
@@ -116,7 +116,7 @@ export async function startDurableJarvisRuntime(input: {
 }): Promise<DurableJarvisRuntimeLifecycle> {
   const pool = createDatabasePool(input.databaseConfig);
 
-  let runtime: JarvisRuntime;
+  let runtime: RiyaConversationEvolutionJarvisRuntime;
   try {
     runtime = await composeDurableJarvisRuntime({ pool, runtimeConfig: input.runtimeConfig });
   } catch (error) {

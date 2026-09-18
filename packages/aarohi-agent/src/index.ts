@@ -11,7 +11,7 @@
  * ### What this is NOT
  *
  * Not a runtime. Aarohi's runtime status is PLANNED / DISABLED and this slice does not change that:
- * there is no outreach, no channel, no credential, no provider, no n8n, no Instagram, no WhatsApp
+ * there is no outreach, no channel, no credential, no provider, no QuickFurno Core Automation, no Instagram, no WhatsApp
  * and no persistence here. This package is pure contracts and pure functions over frozen values.
  *
  * Not a second source of vendor truth. A prospect is explicitly NOT a vendor. QuickFurno Core
@@ -77,7 +77,7 @@
  * Core gate has been re-run through AVG-4's own readiness function. It carries the draft's own words
  * -- there is no body field on the builder's input -- and it states as literal `false` that no
  * communication request, approval request, approval decision, communication authorization or
- * execution intent was created, that no provider or n8n was asked to do anything, and that nothing
+ * execution intent was created, that no provider or QuickFurno Core Automation was asked to do anything, and that nothing
  * was sent or delivered.
  *
  * The channel token is AAROHI-LOCAL. The repository's shared governed channel vocabulary is

@@ -88,7 +88,7 @@ describe('it reaches nothing', () => {
       '/api/',
       'quickfurno',
       'supabase',
-      'n8n',
+      'quickfurno-core-automation',
       'webhook',
     ]) {
       expect({

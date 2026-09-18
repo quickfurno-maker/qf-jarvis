@@ -19,7 +19,7 @@ The reviewer's first question is the one from `docs/governance/engineering-princ
 
 If yes, it does not merge, regardless of what it fixes.
 
-- [ ] This change does **not** create a path from QF Jarvis to n8n, to a provider, or to business state.
+- [ ] This change does **not** create a path from QF Jarvis to QuickFurno Core Automation, to a provider, or to business state.
 - [ ] This change does **not** let QF Jarvis authorize anything, including its own recommendations.
 - [ ] This change introduces **no optimistic or local approval state**, and claims no delivery, call completion, or success before an authoritative execution result.
 - [ ] This change holds **no provider, WhatsApp, or telephony credential** in QF Jarvis.

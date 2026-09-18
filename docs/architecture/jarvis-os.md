@@ -1,6 +1,6 @@
 # Jarvis OS — the operator control plane
 
-**Status:** **JOS-01E is the current Jarvis OS slice** in this build ([ADR-0089](../decisions/ADR-0089-jos-01e-progressive-backend-read-source-composition-boundary.md)) — the progressive backend read-source composition boundary, and the **final slice of the bounded Jarvis OS foundation track**. JOS-01A, JOS-01B, JOS-01C and JOS-01D are **merged**. **No read source is adopted yet:** nothing in merged `main` is reachable from Jarvis OS without managed-database credentials or a protocol Core and n8n have not adopted, so the control plane still renders the repository baseline and both remain `NOT_CONNECTED`. **After this slice the JOS track closes and main Jarvis work resumes at QFJ-P09.02.** Whether a deployment is running is an operational fact this repository does not assert.
+**Status:** **JOS-01E is the current Jarvis OS slice** in this build ([ADR-0089](../decisions/ADR-0089-jos-01e-progressive-backend-read-source-composition-boundary.md)) — the progressive backend read-source composition boundary, and the **final slice of the bounded Jarvis OS foundation track**. JOS-01A, JOS-01B, JOS-01C and JOS-01D are **merged**. **No read source is adopted yet:** nothing in merged `main` is reachable from Jarvis OS without managed-database credentials or a protocol Core and QuickFurno Core Automation have not adopted, so the control plane still renders the repository baseline and both remain `NOT_CONNECTED`. **After this slice the JOS track closes and main Jarvis work resumes at QFJ-P09.02.** Whether a deployment is running is an operational fact this repository does not assert.
 
 > **Why this reads as "current" and not as a branch status.** An architecture document that says a
 > slice is "on a feature branch, not merged" is false the instant that branch merges, and nobody
@@ -25,15 +25,15 @@ switched off.
 ## It is powerless, and that is a design constraint rather than a phase
 
 Jarvis OS holds **no business authority**, and holds no backend connection at all. QuickFurno Core
-and n8n are both `NOT_CONNECTED`: no live read protocol has been adopted in this repository, and
+and QuickFurno Core Automation are both `NOT_CONNECTED`: no live read protocol has been adopted in this repository, and
 neither is contacted from here.
 
 It creates no approval and answers none. It sends no communication and reaches no provider.
-It invokes no n8n workflow and calls no Meta API. It mutates no QuickFurno Core record and no
+It invokes no QuickFurno Core Automation workflow and calls no Meta API. It mutates no QuickFurno Core record and no
 Jarvis durable state. It reaches no database and performs no network access whatsoever — a
 source-level test asserts the absence of `fetch`, `XMLHttpRequest`, `WebSocket`, any URL literal,
 browser storage, `'use server'`, and any import of a backend workspace package or a database,
-provider, n8n or Meta client.
+provider, QuickFurno Core Automation or Meta client.
 
 JOS-01C **narrowed** two of those rules rather than dropping them, and the tests enforce the narrow
 version. `process.env` is permitted in exactly two reviewed places — the auth config-path boundary
@@ -46,7 +46,7 @@ The permanent boundary is unchanged and is stated on the surfaces themselves:
 
 > **Jarvis** recommends, reasons, correlates and observes.
 > **QuickFurno Core** authorizes and owns business truth.
-> **n8n** executes approved intents and decides nothing.
+> **QuickFurno Core Automation** executes approved intents and decides nothing.
 > **Providers** deliver and decide nothing; results return to Core.
 
 QuickFurno Core remains authoritative for vendors, customers and leads, packages and pricing,
@@ -128,7 +128,7 @@ The reason to centralise it is that ad-hoc booleans drift: `enabled`, `ready`, `
 that point a surface can claim a system is live because a variable said so.
 
 Tests pin that `AVAILABLE` is the only interactive state, and that `approval.submit`,
-`conversation.control.write`, `communication.live-send`, `execution.n8n.bridge` and
+`conversation.control.write`, `communication.live-send`, `execution.QuickFurno Core Automation.bridge` and
 `aarohi.vendor-growth` are none of them.
 
 ## The demo read model
@@ -212,7 +212,7 @@ nothing, and there is no QFJ-P13.
 | **JOS-01E** | Progressive backend read wiring: a governed source-composition boundary, adopted one source at a time. |
 
 **After the Jarvis OS foundation track, main Jarvis backend work resumes at QFJ-P09.02** — the
-test-only authorized dispatch envelope and n8n bridge validation. That marker is rendered on
+test-only authorized dispatch envelope and QuickFurno Core Automation bridge validation. That marker is rendered on
 the Execution and Governance surfaces so it cannot be lost, and a test asserts it is present.
 
 ## Deployment topology
@@ -235,7 +235,7 @@ unchanged. **No Android files are added in this track.**
 
 **No slice of this track deploys anything by being merged, and JOS-01E changes no deployment
 artefact, no Traefik configuration, no DNS record and no container definition.** Shared Traefik,
-QuickFurno Core staging and n8n are not modified by it. `next.config.ts` sets `output: 'standalone'`
+QuickFurno Core staging and QuickFurno Core Automation are not modified by it. `next.config.ts` sets `output: 'standalone'`
 so that the isolated image builds without a configuration change landing alongside a deployment.
 
 Deployment is a separate, governed act: a per-SHA release package is materialised from `git archive`,
@@ -248,7 +248,7 @@ Known VPS layout, as audited when the deployment topology was designed:
 | --- | --- |
 | Traefik | Shared ingress |
 | `qf-core-staging` | Isolated compose project/network — **temporary** |
-| `n8n-cjls` | Isolated compose project/network — **permanent** |
+| `QuickFurno Core Automation-cjls` | Isolated compose project/network — **permanent** |
 | `/srv/qf-jarvis` | **Permanent** Jarvis home |
 
 JOS-01D owns the Dockerfile, the isolated `qf-jarvis` compose project, the private-container

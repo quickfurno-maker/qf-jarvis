@@ -216,7 +216,7 @@ describe('a replacement requires the client to have asked, and Core to have agre
 });
 
 describe('authority: only QuickFurno Core creates a batch', () => {
-  it.each(['qf-jarvis', 'n8n', 'qf-communications-runtime'])(
+  it.each(['qf-jarvis', 'quickfurno-core-automation', 'qf-communications-runtime'])(
     'refuses a batch issued by %s',
     (issuer) => {
       const batch = { ...cloneFixture(validInitialBatch), issuer };

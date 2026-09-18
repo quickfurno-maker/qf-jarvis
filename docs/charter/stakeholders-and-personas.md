@@ -71,7 +71,7 @@ Brings vendors in and gets them to activation and beyond.
 Owns campaigns, channels, creative, and spend.
 
 - **Get from Jarvis (Jitin):** cost-per-verified-lead analysis by city and category, channel performance, creative fatigue, SEO opportunity, content recommendations, budget-shift proposals.
-- **Note:** a budget-shift recommendation is a proposal. Authorization to change spend follows policy, and spend changes execute through n8n against the ad provider — never from Jarvis.
+- **Note:** a budget-shift recommendation is a proposal. Authorization to change spend follows policy, and spend changes execute through QuickFurno Core Automation against the ad provider — never from Jarvis.
 
 ### Client-support team
 
@@ -91,7 +91,7 @@ Run the Jarvis platform: event processing, queues, retries, dead letters, latenc
 
 People looking for interior design, carpentry, modular factories, premium interiors, sofa work, painting, or civil work — starting in Pune.
 
-- **Relationship to Jarvis:** subjects, not users. They never interact with Jarvis. They may receive a message that originated as a Riya recommendation — but only after QuickFurno Core authorized it and n8n delivered it through an approved provider.
+- **Relationship to Jarvis:** subjects, not users. They never interact with Jarvis. They may receive a message that originated as a Riya recommendation — but only after QuickFurno Core authorized it and QuickFurno Core Automation delivered it through an approved provider.
 
 ### QuickFurno vendors
 

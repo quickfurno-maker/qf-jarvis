@@ -2,7 +2,7 @@
  * QFJ-M1 — observability and containment (ADR-0054 §K, §M).
  *
  * Matrix items 24, 25, 27–35: content-free events; no message/subject/PII/token in events; no
- * WhatsApp/n8n/provider/DB/network coupling and no P04 package import; this package adds no schema/migration;
+ * WhatsApp/QuickFurno Core Automation/provider/DB/network coupling and no P04 package import; this package adds no schema/migration;
  * migrations 0001–0011 exact; event-backbone API 39; locked public API; production-only dist; no
  * control byte.
  */
@@ -115,7 +115,7 @@ describe('containment', () => {
     readFileSync(fileURLToPath(new URL('package.json', PKG_DIR)), 'utf8'),
   ) as { dependencies?: Record<string, string>; exports: Record<string, unknown> };
 
-  it('(27,28,31) has no WhatsApp/n8n/provider/DB/network library and no P04 package import', () => {
+  it('(27,28,31) has no WhatsApp/QuickFurno Core Automation/provider/DB/network library and no P04 package import', () => {
     for (const file of productionFiles()) {
       const text = readFileSync(file, 'utf8');
       expect(text).not.toMatch(/\bfetch\s*\(/);
@@ -195,7 +195,15 @@ describe('containment', () => {
     expect(Object.keys(barrel)).toHaveLength(46);
     expect(Object.keys(barrel).sort()).toEqual([...EXPECTED].sort());
     // No provider-, transport- or storage-specific symbol reached the root.
-    for (const forbidden of ['groq', 'whatsapp', 'n8n', 'http', 'sql', 'postgres', 'fetch']) {
+    for (const forbidden of [
+      'groq',
+      'whatsapp',
+      'quickfurno-core-automation',
+      'http',
+      'sql',
+      'postgres',
+      'fetch',
+    ]) {
       expect(Object.keys(barrel).filter((k) => k.toLowerCase().includes(forbidden))).toEqual([]);
     }
     const b = barrel as Record<string, unknown>;

@@ -6,7 +6,7 @@
 re-audited; no Core code was read or modified in this slice**
 
 **Core-independent and OFFLINE.** No live event transport, no Core modification, no managed Supabase,
-no n8n/provider/Meta, no message sent, **no migration**, rollout **OFF**.
+no QuickFurno Core Automation/provider/Meta, no message sent, **no migration**, rollout **OFF**.
 
 Implements the D4 slice locked by
 [ADR-0135](./ADR-0135-qfj-p09-s2-local-communication-state-projection-architecture.md), against the
@@ -267,7 +267,7 @@ current single-session sequence **D2b is next after this PR is merged**, then D3
 ## Posture
 
 No contract, event registry, event-backbone schema, ingestion semantic or projection changed. No Core
-modification, branch or PR. No managed Supabase. No n8n or provider access. No message sent. **No
+modification, branch or PR. No managed Supabase. No QuickFurno Core Automation or provider access. No message sent. **No
 migration allocated.**
 
 **Production rollout remains OFF. Runtime activation is unchanged.**

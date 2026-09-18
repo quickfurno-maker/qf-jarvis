@@ -19,7 +19,7 @@
  * opt-out, suppression, STOP or do-not-contact authority and stores no copy of one — so the shape
  * that would invite a suppression decision to be made here does not exist.
  *
- * Reaching a business is an execution concern, and execution goes Core/human -> n8n -> provider.
+ * Reaching a business is an execution concern, and execution goes Core/human -> QuickFurno Core Automation -> provider.
  *
  * ### Frozen, strict, opaque
  *

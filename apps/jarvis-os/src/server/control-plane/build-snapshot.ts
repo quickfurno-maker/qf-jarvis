@@ -110,7 +110,7 @@ interface SharedSnapshotCore {
     readonly authority: {
       readonly jarvis: string;
       readonly quickfurnoCore: string;
-      readonly n8n: string;
+      readonly coreAutomation: string;
       readonly provider: string;
     };
     readonly rollout: { readonly enabled: false; readonly state: 'ROLLOUT_OFF' };
@@ -153,7 +153,7 @@ function buildSharedCore(request: SnapshotRequest): SharedSnapshotCore {
       authority: {
         jarvis: 'RECOMMENDS_AND_OBSERVES',
         quickfurnoCore: 'AUTHORIZES_AND_OWNS_BUSINESS_TRUTH',
-        n8n: 'EXECUTES_ONLY',
+        coreAutomation: 'EXECUTES_ONLY',
         provider: 'DELIVERS_ONLY',
       },
       rollout: { enabled: false, state: 'ROLLOUT_OFF' },

@@ -13,12 +13,12 @@
 WhatsApp ⇄ Jarvis VPS (webhook, queues, routing, provider selection, validation, delivery, monitoring)
                      │  bounded, sanitized ModelProvider request over mTLS + firewall allowlist
                      ▼
-             Local PC (model serving + GPU only) — no business credentials, no WhatsApp/n8n/Core reach-back
+             Local PC (model serving + GPU only) — no business credentials, no WhatsApp/QuickFurno Core Automation/Core reach-back
 ```
 
 ## Credentials the local PC must NOT receive
 
-WhatsApp access tokens · Supabase service-role credentials · unrestricted database credentials · n8n administrative credentials · GitHub credentials · payment credentials.
+WhatsApp access tokens · Supabase service-role credentials · unrestricted database credentials · QuickFurno Core Automation administrative credentials · GitHub credentials · payment credentials.
 
 ## Local inference transport requirements
 
@@ -39,5 +39,5 @@ WhatsApp access tokens · Supabase service-role credentials · unrestricted data
 ## Independence verdicts
 
 - **WhatsApp/queue independence:** the WhatsApp webhook and queue workers depend only on the `ModelProvider` contract and never import provider-specific types; a provider swap does not touch them.
-- **QuickFurno Core boundary:** no provider (Groq or local) directly calls WhatsApp, n8n, or QuickFurno Core; Core remains the final business authority; providers deliver only.
+- **QuickFurno Core boundary:** no provider (Groq or local) directly calls WhatsApp, QuickFurno Core Automation, or QuickFurno Core; Core remains the final business authority; providers deliver only.
 - **Credential boundary:** the local PC receives no business-system credentials; hosted-provider requests are minimized and sanitized.

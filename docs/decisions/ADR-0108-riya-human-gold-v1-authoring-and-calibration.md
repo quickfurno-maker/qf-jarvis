@@ -312,7 +312,7 @@ policies. Runtime importers of the package are zero and stay zero.
 
 No model, provider, gateway, judge, embedding, tokenizer or training framework. No HTTP, database,
 migration, filesystem, clock or randomness. No migration is added; there is no `0013`. Nothing about
-Wave-1 authoring touches the managed database, live WhatsApp, n8n or the QuickFurno repository.
+Wave-1 authoring touches the managed database, live WhatsApp, QuickFurno Core Automation or the QuickFurno repository.
 
 ### 23. No base model is named, still
 

@@ -142,7 +142,7 @@ done
 # --- no direct application port ------------------------------------------------------------------
 echo "-- no direct application port exposed --"
 for p in 3000 3001 3100 5678; do
-  if timeout 4 bash -c "</dev/tcp/${HOST}/${p}" 2>/dev/null; then
+  if timeout 4 "${BASH:?BASH must identify the current interpreter}" -c "</dev/tcp/${HOST}/${p}" 2>/dev/null; then
     bad "port ${p} is reachable"
   else good "port ${p} closed"; fi
 done

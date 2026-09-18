@@ -103,7 +103,7 @@ export default async function CoreSyncPage() {
               'Jarvis',
               'recommendation / approval request',
               'Core authorizes',
-              'n8n executes',
+              'coreAutomation executes',
               'provider delivers',
               'result → Core',
               'reflected to Jarvis',

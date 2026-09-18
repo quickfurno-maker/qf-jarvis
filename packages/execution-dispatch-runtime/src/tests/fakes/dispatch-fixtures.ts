@@ -98,7 +98,7 @@ export function makeIntent(overrides: Partial<ExecutionIntentV1> = {}): Executio
     actionContractVersion: 1,
     parameters: { subjectRef: 'core-subject-ref-alpha', channel: 'whatsapp' },
     issuer: 'quickfurno-core',
-    executor: 'n8n',
+    executor: 'quickfurno-core-automation',
     issuedAt: '2026-08-04T12:00:00.000Z',
     expiresAt: '2026-08-04T12:30:00.000Z',
     idempotencyKey: 'idem-0000000000000000000001',

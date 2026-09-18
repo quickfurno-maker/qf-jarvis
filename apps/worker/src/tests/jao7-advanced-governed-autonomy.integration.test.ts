@@ -16,7 +16,7 @@
  *
  * Every run that moves past the authority gate is handed an `ApprovalDecisionV1` and an
  * `ExecutionIntentV1` built by the fixtures. JAO-7 cannot build either, has no Core transport to
- * fetch one from and no n8n client to hand one to — which is exactly the property under test.
+ * fetch one from and no QuickFurno Core Automation client to hand one to — which is exactly the property under test.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
@@ -535,7 +535,7 @@ describe('JAO-7 durable advanced autonomy', () => {
     expect(applied.rehearsal?.afterIntegerA).toBe(9);
     expect(applied.rehearsalApplies).toBe(1);
     expect(applied.posture.executionIntentExecuted).toBe(false);
-    expect(applied.posture.n8nExecutions).toBe(0);
+    expect(applied.posture.coreAutomationExecutions).toBe(0);
     await b.close();
 
     // ---- PROCESS C: a NEW process verifies and completes. ---------------------------------------

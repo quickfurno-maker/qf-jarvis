@@ -51,7 +51,7 @@ Money-adjacent events carry **bands** (`low`/`medium`/`high`/`critical`), **neve
 
 Legend — **Status**: ✅ canonical event exists · ⚠️ exists but Core lacks the semantics · ❌ **contract gap** (no canonical event).
 
-| #   | Source operation           | Source table / RPC                        | Current n8n event                                     | Canonical event                           | v   | Subject         | Status                                 | Resolution                                                     |
+| #   | Source operation           | Source table / RPC                        | Current QuickFurno Core Automation event              | Canonical event                           | v   | Subject         | Status                                 | Resolution                                                     |
 | --- | -------------------------- | ----------------------------------------- | ----------------------------------------------------- | ----------------------------------------- | --- | --------------- | -------------------------------------- | -------------------------------------------------------------- |
 | 1   | Lead captured              | `leads` insert (`leadService.ts:111`)     | `lead.created`                                        | `qf.client.requirement-completed`         | 1   | `lead`          | ⚠️                                     | Phase 11                                                       |
 | 2   | Lead scored                | `lead_scores`                             | `lead.scored`                                         | —                                         | —   | —               | **unsupported**                        | Core's score stays Core's                                      |

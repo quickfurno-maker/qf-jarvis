@@ -209,7 +209,7 @@ identically. S3-D is split the same way this phase was: **S3-D-A** the behaviour
 ## Non-goals
 
 No prompt text · no model call · no router, state machine, proposal authority or ModelReplyPort · no
-memory · no tools · no WhatsApp · no n8n · no database · no persistence · no deployment · no vendor
+memory · no tools · no WhatsApp · no QuickFurno Core Automation · no database · no persistence · no deployment · no vendor
 ownership.
 
 ## Change-control rule

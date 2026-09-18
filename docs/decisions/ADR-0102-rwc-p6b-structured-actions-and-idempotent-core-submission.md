@@ -225,7 +225,7 @@ handshake supplies it.
 ## What this does NOT implement
 
 No live QuickFurno adapter, no HTTP, no ingress route, no migration, no managed-database access, no
-provider or n8n activation, no client-facing text, no RWC-P7 (RAG) and no RWC-P8 (cross-channel
+provider or QuickFurno Core Automation activation, no client-facing text, no RWC-P7 (RAG) and no RWC-P8 (cross-channel
 identity).
 
 ## Change-control rule

@@ -2,7 +2,7 @@
  * QFJ-P04.03 — authority/integration boundaries and containment (ADR-0051 §N, §O, §P).
  *
  * Matrix items 58–76: knowledge grants no business authority; agent scopes stay distinct; the
- * Conversation Operations Center is documented-mandatory but absent; no provider/RAG/DB/secret/n8n
+ * Conversation Operations Center is documented-mandatory but absent; no provider/RAG/DB/secret/QuickFurno Core Automation
  * dependency; the public API is locked; migrations 0001–0011 are exact with no 0014; the event-backbone
  * root API remains 39; and no tracked source carries a control byte.
  */
@@ -85,12 +85,20 @@ const LOCKED_MIGRATION_HASHES: Record<string, string> = {
 };
 
 describe('authority and integration boundaries', () => {
-  it('(58,59) grants no business authority — no authorize/execute/tool/n8n method', () => {
+  it('(58,59) grants no business authority — no authorize/execute/tool/QuickFurno Core Automation method', () => {
     const registry = createGovernedKnowledgeRegistry([recordInput()]) as unknown as Record<
       string,
       unknown
     >;
-    for (const method of ['authorize', 'execute', 'invoke', 'run', 'mutate', 'send', 'callN8n']) {
+    for (const method of [
+      'authorize',
+      'execute',
+      'invoke',
+      'run',
+      'mutate',
+      'send',
+      'callcoreAutomation',
+    ]) {
       expect(registry[method]).toBeUndefined();
     }
     const result = retrieveGovernedKnowledge(
@@ -145,7 +153,7 @@ describe('authority and integration boundaries', () => {
     expect(record['approved']).toBeUndefined();
   });
 
-  it('(63,65,71,72) has no provider/RAG/model/network/n8n/agent term in production source', () => {
+  it('(63,65,71,72) has no provider/RAG/model/network/QuickFurno Core Automation/agent term in production source', () => {
     for (const file of productionFiles()) {
       const text = readFileSync(file, 'utf8');
       expect(text).not.toMatch(/\bfetch\s*\(/);
@@ -157,7 +165,7 @@ describe('authority and integration boundaries', () => {
         /from ['"](pg|groq-sdk|openai|@anthropic-ai\/sdk|ollama|axios|undici)['"]/,
       );
       expect(text).not.toMatch(/embedding|vector|semantic search|cosine|\bRAG\b/i);
-      expect(text).not.toMatch(/\bn8n\b|kimi/i);
+      expect(text).not.toMatch(/\bcoreAutomation\b|kimi/i);
     }
   });
 });

@@ -19,7 +19,7 @@ Everything below is a consequence of that sentence.
 
 A recommendation is inert by construction. It is a structured proposal — evidence, rationale, confidence, risk, priority, expiry, required approval — and it has no mechanism to cause an effect.
 
-This is not enforced by policy alone; it is enforced by the architecture. Jarvis has no path to n8n and no provider credentials ([system-boundary.md](./system-boundary.md)). Even a compromised agent producing a malicious recommendation cannot execute it. The worst it can do is *propose* something a human or a policy then declines.
+This is not enforced by policy alone; it is enforced by the architecture. Jarvis has no path to QuickFurno Core Automation and no provider credentials ([system-boundary.md](./system-boundary.md)). Even a compromised agent producing a malicious recommendation cannot execute it. The worst it can do is *propose* something a human or a policy then declines.
 
 ## 2. Approval decisions are explicit
 
@@ -105,20 +105,20 @@ An execution intent is not a general permission. It is a narrow, time-limited au
 
 Anything outside those bounds is unauthorized. An intent to message one client does not authorize messaging a cohort. An intent to shift a budget by a stated amount does not authorize a larger shift.
 
-## 5. n8n validates, then executes
+## 5. QuickFurno Core Automation validates, then executes
 
-n8n does not trust an intent because it arrived. Before acting, it verifies:
+QuickFurno Core Automation does not trust an intent because it arrived. Before acting, it verifies:
 
 - **Authenticity** — the intent genuinely came from QuickFurno Core's authorized dispatch (signature verification).
 - **Integrity** — it has not been altered in transit.
 - **Freshness** — it has not expired, and it is not a replay ([trust-boundaries.md](./trust-boundaries.md)).
 - **Bounds** — the action it is about to perform is exactly what the intent describes.
 
-If validation fails, n8n does not execute, and the failure is reported. n8n never "helpfully" adjusts, expands, or reinterprets an intent. It has no discretion, by design — discretion is where an execution fabric becomes a decision-maker.
+If validation fails, QuickFurno Core Automation does not execute, and the failure is reported. QuickFurno Core Automation never "helpfully" adjusts, expands, or reinterprets an intent. It has no discretion, by design — discretion is where an execution fabric becomes a decision-maker.
 
 ## 6. Providers deliver; results return
 
-The provider performs the real-world effect. n8n records what the provider said. The execution result returns to **QuickFurno Core**, which records it as truth, and reaches Jarvis as a canonical event so it can close the recommendation's lifecycle and learn from the outcome.
+The provider performs the real-world effect. QuickFurno Core Automation records what the provider said. The execution result returns to **QuickFurno Core**, which records it as truth, and reaches Jarvis as a canonical event so it can close the recommendation's lifecycle and learn from the outcome.
 
 A provider's own view of a delivery is not truth until Core has recorded it.
 
@@ -190,9 +190,9 @@ flowchart TB
     DEC -->|"rejected, changes requested,<br/>or expired"| NOOP["Nothing executes.<br/>Outcome recorded for evaluation."]
     DEC -->|"approved"| INT["Bounded, expiring execution intent<br/>created by QuickFurno Core"]
 
-    INT --> VAL{"n8n validates:<br/>authenticity, integrity,<br/>freshness, bounds"}
+    INT --> VAL{"QuickFurno Core Automation validates:<br/>authenticity, integrity,<br/>freshness, bounds"}
     VAL -->|"invalid"| REJ["Not executed.<br/>Failure reported."]
-    VAL -->|"valid"| EXE["n8n executes<br/>against the provider"]
+    VAL -->|"valid"| EXE["QuickFurno Core Automation executes<br/>against the provider"]
 
     EXE --> OK{"Outcome"}
     OK -->|"success"| RES["Execution result → QuickFurno Core"]

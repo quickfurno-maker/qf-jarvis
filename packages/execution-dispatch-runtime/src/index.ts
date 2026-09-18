@@ -4,11 +4,11 @@
  *
  * ### Which edge this is
  *
- * QuickFurno Core → n8n. This package models the validation an n8n-side adapter would run before
+ * QuickFurno Core → QuickFurno Core Automation. This package models the validation an QuickFurno Core Automation-side adapter would run before
  * acting on a Core-issued `ExecutionIntentV1`.
  *
- * It is NOT Jarvis → n8n. That edge does not exist and this package does not create it: there is no
- * transport, no endpoint, no URL, no webhook, no workflow id, no n8n client, no provider client and
+ * It is NOT Jarvis → QuickFurno Core Automation. That edge does not exist and this package does not create it: there is no
+ * transport, no endpoint, no URL, no webhook, no workflow id, no QuickFurno Core Automation client, no provider client and
  * no credential anywhere in it. Nothing in the repository imports this package yet — it is a leaf
  * with tests, deliberately.
  *

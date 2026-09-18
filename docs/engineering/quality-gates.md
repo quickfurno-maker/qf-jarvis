@@ -99,14 +99,14 @@ An empty suite tells the truth: _nothing is verified yet, because nothing is cla
 
 These rules are developed **test-first**, without exception ([engineering-principles.md](../governance/engineering-principles.md) §2):
 
-| Rule                     | Why the test _is_ the rule                                                      |
-| ------------------------ | ------------------------------------------------------------------------------- |
-| **Idempotency**          | The same event, intent, or submission processed twice has the effect of once    |
-| **Expiry**               | An expired recommendation cannot become an intent. An expired intent is refused |
-| **Authorization**        | An unapproved recommendation cannot execute. **There is no timeout-to-approve** |
-| **Bounds**               | n8n executes exactly what an intent describes, and nothing beyond it            |
-| **Signature and replay** | A forged or replayed message is rejected                                        |
-| **Money**                | Anything touching a wallet, package, payment, or ad spend                       |
+| Rule                     | Why the test _is_ the rule                                                                  |
+| ------------------------ | ------------------------------------------------------------------------------------------- |
+| **Idempotency**          | The same event, intent, or submission processed twice has the effect of once                |
+| **Expiry**               | An expired recommendation cannot become an intent. An expired intent is refused             |
+| **Authorization**        | An unapproved recommendation cannot execute. **There is no timeout-to-approve**             |
+| **Bounds**               | QuickFurno Core Automation executes exactly what an intent describes, and nothing beyond it |
+| **Signature and replay** | A forged or replayed message is rejected                                                    |
+| **Money**                | Anything touching a wallet, package, payment, or ad spend                                   |
 
 Write the test that proves the rule holds, **watch it fail**, then make it pass. For these rules the test is not a check _on_ the implementation — it is the only evidence the rule exists at all.
 
@@ -163,7 +163,7 @@ The question every pull request is judged against ([engineering-principles.md](.
 
 Blocking, beyond correctness ([change-management.md](../governance/change-management.md)):
 
-- A path from QF Jarvis to n8n, to a provider, or to business state.
+- A path from QF Jarvis to QuickFurno Core Automation, to a provider, or to business state.
 - A recommendation that can execute without an approval decision.
 - A **timeout-to-approve**, in any form, under any name.
 - An approval path shortened by model confidence.

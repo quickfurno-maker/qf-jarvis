@@ -43,7 +43,7 @@
  *
  * It asks Core nothing, sends nothing, executes nothing, persists nothing, queues nothing, emits no
  * event, creates no approval, no communication authorization and no execution intent, holds no
- * pending or authorized state, reads no clock, and can reach no Core endpoint, no n8n workflow and
+ * pending or authorized state, reads no clock, and can reach no Core endpoint, no QuickFurno Core Automation workflow and
  * no provider. No package and no application imports it.
  *
  * Three root runtime symbols. Every schema, validator, identity helper and freezer stays internal.

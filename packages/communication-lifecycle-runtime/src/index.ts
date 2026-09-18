@@ -20,7 +20,7 @@
  * to make it, and QuickFurno Core remains authoritative over every fact the records contain.
  *
  * It creates no record, mutates no input, reads no clock, persists nothing, emits nothing, owns no
- * table, adds no migration, and cannot reach Core, n8n, WhatsApp, Meta or any provider.
+ * table, adds no migration, and cannot reach Core, QuickFurno Core Automation, WhatsApp, Meta or any provider.
  *
  * Two root runtime symbols. The transition table, the start state and the verdict constructors stay
  * internal: a caller who could read the table would start branching on it instead of asking, and a

@@ -29,7 +29,7 @@
  * A prior authorization is not a future permission slip.
  *
  * It asks Core nothing, sends nothing, persists nothing, emits no event, creates no execution
- * intent, reads no clock, and cannot reach Meta, n8n or any provider.
+ * intent, reads no clock, and cannot reach Meta, QuickFurno Core Automation or any provider.
  *
  * Three root runtime symbols. Every schema, comparator and classifier stays internal.
  */

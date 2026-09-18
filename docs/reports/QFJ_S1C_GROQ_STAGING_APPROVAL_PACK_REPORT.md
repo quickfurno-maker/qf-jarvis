@@ -120,7 +120,7 @@ event-backbone root API 39; model-ID semantics aligned across gateway, evaluatio
 
 No credential read, requested, validated, displayed, or stored. No Groq or network request. No smoke
 execution. No credential-resolver invocation. No database, Supabase, Docker, or migration command.
-No deployment, provider activation, or rollout. No QuickFurno Core, WhatsApp, n8n, or real data. The
+No deployment, provider activation, or rollout. No QuickFurno Core, WhatsApp, QuickFurno Core Automation, or real data. The
 protected reconciliation directory was never opened, read, hashed, staged, or modified.
 
 **The one-time smoke authorization remains UNCONSUMED**, because S1C reads no credential and issues

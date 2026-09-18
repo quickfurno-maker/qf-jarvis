@@ -435,10 +435,10 @@ describe('(42-46) the service reaches nothing', () => {
     }
   });
 
-  it('(46) reaches no provider, n8n or model gateway', () => {
+  it('(46) reaches no provider, QuickFurno Core Automation or model gateway', () => {
     const code = productionCode();
     for (const forbidden of [
-      'n8n',
+      'quickfurno-core-automation',
       'twilio',
       'graph.facebook',
       'webhook',
@@ -779,6 +779,7 @@ describe('(50, 53-57) the repository invariants this slice must not move', () =>
     // It still says what it always said: no OTHER module in `apps/api` may name this package, so the
     // service cannot acquire a third serving entry point without somebody deciding it should have one.
     const CERTIFICATION_COMPOSITION = '/src/composition/jf5b-certification-context.ts';
+    const JF6_SERVICE_COMPOSITION = '/src/jf6-private-process/create-riya-service-boundary.ts';
     const apiSrc = join(REPO_ROOT, 'apps/api/src');
     for (const file of walk(apiSrc, false)) {
       const normalised = file.replace(/\\/gu, '/');
@@ -788,6 +789,7 @@ describe('(50, 53-57) the repository invariants this slice must not move', () =>
         normalised.includes('/src/private-riya-web-ingress/') ||
           normalised.includes('/src/riya-customer-orchestration/') ||
           normalised.endsWith(CERTIFICATION_COMPOSITION) ||
+          normalised.endsWith(JF6_SERVICE_COMPOSITION) ||
           normalised.includes('/src/tests/'),
         file,
       ).toBe(true);

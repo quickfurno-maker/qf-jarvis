@@ -22,7 +22,7 @@
 This slice did **not**, and this report asserts it did not:
 
 - read, request, or create a Groq API key; place any secret in the repository; make any live external request; or activate production.
-- add any agent runtime, Riya/Anisha prompt logic, memory, RAG, model tool-calls, MCP, web search, code execution, built-in provider tools, or n8n.
+- add any agent runtime, Riya/Anisha prompt logic, memory, RAG, model tool-calls, MCP, web search, code execution, built-in provider tools, or QuickFurno Core Automation.
 - touch any database, schema, or migration; reserve or add **migration 0008**; or access a managed database.
 - deploy anything, merge this PR, delete a branch, or use squash/rebase/admin-bypass/auto-merge.
 - introduce `process.env`, a secret loader, or a hard-coded production model default.
@@ -31,7 +31,7 @@ This slice did **not**, and this report asserts it did not:
 
 ## Standing boundary — reaffirmed
 
-Riya is client-only, Anisha vendor-only, Jarvis the coordinator, QuickFurno Core the final authority, n8n execution-only. Kimi is excluded unless the owner reintroduces it. Model providers perform bounded inference only and authorize/execute nothing.
+Riya is client-only, Anisha vendor-only, Jarvis the coordinator, QuickFurno Core the final authority, QuickFurno Core Automation execution-only. Kimi is excluded unless the owner reintroduces it. Model providers perform bounded inference only and authorize/execute nothing.
 
 ## Readiness
 

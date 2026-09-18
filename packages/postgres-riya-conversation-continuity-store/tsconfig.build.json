@@ -24,7 +24,7 @@
   // `event-backbone` is deliberately NOT referenced: it is a DEV dependency supplying migration
   // tooling to the integration harness only, so a production import of it fails the build rather
   // than quietly creating an edge from a storage adapter to the event backbone. There is likewise no
-  // reference to jarvis-runtime, agent-runtime, a transport, a provider, n8n, QuickFurno or any
+  // reference to jarvis-runtime, agent-runtime, a transport, a provider, QuickFurno Core Automation, QuickFurno or any
   // application -- this package is an adapter, and it composes nothing.
   "references": [
     { "path": "../../packages/riya-conversation-continuity/tsconfig.build.json" },

@@ -256,14 +256,14 @@ This is not a Phase 1 convention. It is [the permanent boundary](../architecture
 
 **No code in this repository — in any application, in any package, in any phase — may:**
 
-- call n8n, or dispatch an execution intent;
+- call QuickFurno Core Automation, or dispatch an execution intent;
 - call a communication or advertising provider: WhatsApp, SMS, email, voice, telephony, SIP, CRM, Google Ads, Meta Ads, or any other;
 - hold or store a provider credential;
 - write QuickFurno Core's business state;
 - authorize anything, including its own recommendations;
 - record or render an action as approved, delivered, or complete before Core's authoritative result returns.
 
-**The four edges that do not exist:** Jarvis → provider · Jarvis → n8n · Jarvis → business state · agent → approval.
+**The four edges that do not exist:** Jarvis → provider · Jarvis → QuickFurno Core Automation · Jarvis → business state · agent → approval.
 
 Introducing any of them is a boundary violation. It requires a superseding ADR and the business owner's explicit decision — not a code review comment, and not a sprint deadline.
 

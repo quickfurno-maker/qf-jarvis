@@ -19,7 +19,7 @@ The decision behind this boundary is recorded in [ADR-0001](../decisions/ADR-000
 
 > Jarvis recommends.
 > QuickFurno authorizes.
-> n8n executes.
+> QuickFurno Core Automation executes.
 > Providers deliver.
 > Results return to QuickFurno Core.
 
@@ -54,14 +54,14 @@ The decision behind this boundary is recorded in [ADR-0001](../decisions/ADR-000
 - Present recommendations to human approvers.
 - Apply policy to authorize or reject an action automatically, where an explicit policy permits it.
 - Create bounded, expiring execution intents from **approved** recommendations.
-- Dispatch authorized execution intents to n8n.
-- Record execution results returned by n8n.
+- Dispatch authorized execution intents to QuickFurno Core Automation.
+- Record execution results returned by QuickFurno Core Automation.
 - Reject anything, at any time, for any policy reason.
 
 ### Must not
 
 - Treat a recommendation as an authorization. A recommendation carries no authority, regardless of its confidence.
-- Execute a provider action directly, bypassing n8n as the approved execution fabric.
+- Execute a provider action directly, bypassing QuickFurno Core Automation as the approved execution fabric.
 - Delegate authorization to an agent.
 - Accept an execution intent that did not originate from an approval decision it recorded.
 
@@ -87,7 +87,7 @@ The failure this prevents is concrete, and it is not recoverable: three new vend
 
 ### The QuickFurno Communication Core
 
-**"QuickFurno Communication Core" is the communication authority *inside* QuickFurno Core.** It is not a separate system, and — this is the confusion worth killing on sight — **it is not the QF Communications Runtime**, which lives on the execution side of the boundary, in n8n's trust zone, and *delivers* ([communication-model.md](./communication-model.md)).
+**"QuickFurno Communication Core" is the communication authority *inside* QuickFurno Core.** It is not a separate system, and — this is the confusion worth killing on sight — **it is not the QF Communications Runtime**, which lives on the execution side of the boundary, in QuickFurno Core Automation's trust zone, and *delivers* ([communication-model.md](./communication-model.md)).
 
 The Communication Core **decides**. The Communications Runtime **delivers what Core decided**. Keeping the names apart is not pedantry: the moment "the communication system said it was fine" can mean either one, consent has been checked by whichever component happened to be nearest — which is exactly how a system ends up messaging someone who asked it not to.
 
@@ -142,16 +142,16 @@ Two rules follow from that ownership, and neither may ever be softened:
 
 The prohibitions below were written when every provider in this architecture was an **execution** provider. They are not, and never were, about model inference. The distinction is now explicit, because a rule that has to be interpreted is a rule that will eventually be interpreted wrongly.
 
-**Execution / integration credentials** buy a real-world effect: a message sent, a call placed, a budget changed, a record written. WhatsApp, SMS, email, voice, telephony, CRM, advertising, payment, and any vendor or client operational system. **Jarvis holds none of these, and must never be given any.** They belong to the execution boundary — n8n, an integration adapter, or the relevant execution service ([execution-governance.md](./execution-governance.md)).
+**Execution / integration credentials** buy a real-world effect: a message sent, a call placed, a budget changed, a record written. WhatsApp, SMS, email, voice, telephony, CRM, advertising, payment, and any vendor or client operational system. **Jarvis holds none of these, and must never be given any.** They belong to the execution boundary — QuickFurno Core Automation, an integration adapter, or the relevant execution service ([execution-governance.md](./execution-governance.md)).
 
 **Model-inference credentials** buy a draft. They purchase tokens from a model provider that returns proposed text and can deliver nothing, pay nothing, and mutate nothing. Exactly one narrow exception exists for these, and only under all of the following conditions ([ADR-0064](../decisions/ADR-0064-production-credential-binding.md), [ADR-0062](../decisions/ADR-0062-production-model-gateway-composition.md), [ADR-0060](../decisions/ADR-0060-qfj-s1-groq-staging-provider-binding.md), [ADR-0046](../decisions/ADR-0046-qfj-p04-01b-groq-cloud-adapter.md)):
 
 - it is acquired **only at an executable process boundary** — today `apps/api` — and never by agent logic, business-domain code, or a reusable library;
 - reusable packages receive an **opaque reference** or an already-**branded credential object** through explicit injection, and never read the environment or the filesystem themselves;
 - it may never enter QuickFurno Core domain state, agent memory, a prompt, a model message, an event, a log line, a diagnostic, provenance, a report, a database row, or a client or vendor record;
-- holding it grants **no execution authority**: it does not let an agent execute an action, does not make Jarvis a general secrets manager, does not authorise deployment, does not activate a model provider, and does not move any n8n credential into Jarvis.
+- holding it grants **no execution authority**: it does not let an agent execute an action, does not make Jarvis a general secrets manager, does not authorise deployment, does not activate a model provider, and does not move any QuickFurno Core Automation credential into Jarvis.
 
-QuickFurno Core remains the final authority. A model provider produces drafts and recommendations, never a business decision. n8n executes only approved commands and keeps its own credentials.
+QuickFurno Core remains the final authority. A model provider produces drafts and recommendations, never a business decision. QuickFurno Core Automation executes only approved commands and keeps its own credentials.
 
 ### Must not
 
@@ -159,7 +159,7 @@ QuickFurno Core remains the final authority. A model provider produces drafts an
 - **Directly mutate QuickFurno Core state.** No write path into business records exists or may be built.
 - **Directly call communication or advertising providers.** Not WhatsApp, SMS, email, voice, CRM, Google Ads, Meta Ads, or any other **execution** provider.
 - **Hold execution or integration provider credentials.** It has none and must never be given any. The single narrow model-inference exception is defined above and is confined to an executable process boundary.
-- **Call n8n.** Execution intents reach n8n from QuickFurno Core, after authorization.
+- **Call QuickFurno Core Automation.** Execution intents reach QuickFurno Core Automation from QuickFurno Core, after authorization.
 - **Authorize anything**, including its own recommendations. Hosting the approval **interface** is not holding the approval **authority**: a button click inside Jarvis is a request, not a decision.
 - **Locally mark an action as approved** before QuickFurno Core's authoritative response arrives. No optimistic approval state, ever ([ADR-0007](../decisions/ADR-0007-founder-approval-interface-and-authority.md)).
 - **Directly invoke WhatsApp APIs, or directly connect to telephony or SIP providers.** No integration, no credential ([ADR-0008](../decisions/ADR-0008-controlled-communication-capability.md)).
@@ -181,7 +181,7 @@ QuickFurno Core remains the final authority. A model provider produces drafts an
 
 ---
 
-## n8n
+## QuickFurno Core Automation
 
 ### Owns
 
@@ -218,7 +218,7 @@ QuickFurno Core remains the final authority. A model provider produces drafts an
 
 ### May
 
-- Accept authenticated requests from n8n.
+- Accept authenticated requests from QuickFurno Core Automation.
 - Return delivery status, callbacks, and webhooks.
 
 ### Must not
@@ -262,7 +262,7 @@ Because money is where boundary erosion does the most damage, it gets its own st
 | Package eligibility and state | QuickFurno Core | Recommend that a package is worth discussing |
 | Package purchase | QuickFurno Core | None |
 | Payment | QuickFurno Core | None |
-| Ad spend and budget change | QuickFurno Core authorizes; n8n executes at the provider | Recommend a budget shift, with evidence |
+| Ad spend and budget change | QuickFurno Core authorizes; QuickFurno Core Automation executes at the provider | Recommend a budget shift, with evidence |
 | Lead assignment (which consumes vendor value) | QuickFurno Core | Assess matching readiness; explain; flag |
 
 Every money-related action requires stronger approval than a low-risk one, per [execution-governance.md](./execution-governance.md).
@@ -274,7 +274,7 @@ Every money-related action requires stronger approval than a low-risk one, per [
 These are worth stating as prohibitions rather than omissions, because each is a shortcut somebody will eventually be tempted to take:
 
 1. **QF Jarvis → execution provider.** There is no direct integration and no credential. Not WhatsApp, SMS, email, voice, telephony, CRM, advertising, payment, or any vendor or client operational system.
-2. **QF Jarvis → n8n.** There is no dispatch path. Intents come from Core.
+2. **QF Jarvis → QuickFurno Core Automation.** There is no dispatch path. Intents come from Core.
 3. **QF Jarvis → QuickFurno business state.** There is no write path.
 4. **Agent → approval.** No agent authorizes, including Jarvis the coordinator.
 

@@ -14,13 +14,13 @@
 
 ## Context
 
-QFJ-P04.01A delivered the provider-neutral gateway and a deterministic `FakeModelProvider`. The owner fixed **Groq** as the first real hosted provider. This slice adds a Groq adapter that implements the same `ModelProvider` interface — the gateway, agents, memory, and n8n are unchanged. The adapter is inference only; it authorizes and executes nothing.
+QFJ-P04.01A delivered the provider-neutral gateway and a deterministic `FakeModelProvider`. The owner fixed **Groq** as the first real hosted provider. This slice adds a Groq adapter that implements the same `ModelProvider` interface — the gateway, agents, memory, and QuickFurno Core Automation are unchanged. The adapter is inference only; it authorizes and executes nothing.
 
 ## Decision
 
 ### A. Purpose
 
-Add Groq as the first real **HOSTED** provider behind the existing `ModelProvider` contract. Groq is an inference engine only: no agent, tool, n8n, database, or business-authority coupling; its output is advisory and locally validated.
+Add Groq as the first real **HOSTED** provider behind the existing `ModelProvider` contract. Groq is an inference engine only: no agent, tool, QuickFurno Core Automation, database, or business-authority coupling; its output is advisory and locally validated.
 
 ### B. Endpoint / protocol
 
@@ -56,7 +56,7 @@ A local OpenAI-compatible workstation adapter (QFJ-P04.01C) later implements the
 
 ### J. Scope / non-goals
 
-No schema/migration/0008; no live external test; no production activation; no agent/n8n/memory/tool use; no app wiring beyond a compile-only factory if strictly required; no Groq Compound/built-in tools; no audio/vision/batch/fine-tuning; no MCP/web/code execution; no chain-of-thought output.
+No schema/migration/0008; no live external test; no production activation; no agent/QuickFurno Core Automation/memory/tool use; no app wiring beyond a compile-only factory if strictly required; no Groq Compound/built-in tools; no audio/vision/batch/fine-tuning; no MCP/web/code execution; no chain-of-thought output.
 
 ## Rejected alternatives
 

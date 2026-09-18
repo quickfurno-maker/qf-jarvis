@@ -4,7 +4,7 @@
  * Matrix: a success prints sanitized references and counters only; a failure prints a closed sanitized
  * code only; no prompt text, model output, raw body/header/error, key, PII, or chain-of-thought can
  * appear; the Groq answer is discarded; the harness imports nothing that could send, persist, activate,
- * or reach QuickFurno Core / the Jarvis runtime / n8n / WhatsApp; and Core remains the final authority.
+ * or reach QuickFurno Core / the Jarvis runtime / QuickFurno Core Automation / WhatsApp; and Core remains the final authority.
  */
 import { describe, expect, it } from 'vitest';
 
@@ -220,7 +220,7 @@ describe('(40, 41) nothing sensitive escapes, and the model output is discarded'
   });
 });
 
-describe('(42, 43) authority: no send, persist, activate, Core, n8n, or WhatsApp surface', () => {
+describe('(42, 43) authority: no send, persist, activate, Core, QuickFurno Core Automation, or WhatsApp surface', () => {
   it('the barrel exposes no delivery, persistence, activation, or authority symbol', () => {
     for (const name of Object.keys(barrel)) {
       const lowered = name.toLowerCase();
@@ -234,7 +234,7 @@ describe('(42, 43) authority: no send, persist, activate, Core, n8n, or WhatsApp
         'rollout',
         'register',
         'core',
-        'n8n',
+        'quickfurno-core-automation',
         'whatsapp',
         'approve',
         'accept',
@@ -252,7 +252,7 @@ describe('(42, 43) authority: no send, persist, activate, Core, n8n, or WhatsApp
       'deliver',
       'execute',
       'persist',
-      'callN8n',
+      'callcoreAutomation',
       'authorize',
       'promote',
       'activate',

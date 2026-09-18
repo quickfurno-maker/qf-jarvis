@@ -4,7 +4,7 @@
  * The runner is the first `apps/api` code that composes a real gateway holding a real credential, so the
  * envelope is asserted rather than described: the composition root API has not grown, the ONE internal
  * subpath exports exactly one factory, `createProductionModelGateway` is still OFF-only and
- * non-activatable, the live model id lives only in configuration, no tool/n8n/database path exists, and
+ * non-activatable, the live model id lives only in configuration, no tool/QuickFurno Core Automation/database path exists, and
  * every prior package lock is exactly where S2-D-B left it.
  *
  * Scans read CODE, not documentation, and skip this file: a spec that names what it forbids would
@@ -51,7 +51,7 @@ function walk(dir: string): string[] {
  * behavioural spec is still covered.
  *
  * `deployment-containment` joins the list for the same reason: it asserts the production image and
- * compose topology reference no n8n, Core, database or provider host, which it can only do by naming
+ * compose topology reference no QuickFurno Core Automation, Core, database or provider host, which it can only do by naming
  * those strings.
  */
 const SCANNERS: readonly string[] = Object.freeze([
@@ -245,13 +245,15 @@ describe('(127-132) no live model id, tool, workflow or database path', () => {
    * The files QFJ-P08-B3 (ADR-0078) authorises to name the persistence packages.
    *
    * `event-backbone` moved from "never" to "exactly here". The durable composition must create a
-   * pool through its public API, and its test must apply migrations and read rows back. Naming both
-   * files keeps that a decision about two modules rather than a capability the application acquired.
+   * pool through its public API; JF-6 additionally injects that caller-owned pool into the two
+   * reviewed durable Riya adapters. The test harness applies migrations and reads rows back. Naming
+   * all three files keeps this an exact, reviewed capability boundary.
    *
-   * Everything else on the list below — n8n, WhatsApp, webhooks, tool calls, workflows, raw pools and
+   * Everything else on the list below — QuickFurno Core Automation, WhatsApp, webhooks, tool calls, workflows, raw pools and
    * raw SQL — stays forbidden EVERYWHERE, including in these two.
    */
   const DATABASE_COMPOSITION_FILES: readonly string[] = Object.freeze([
+    'src/jf6-private-process/create-riya-service-boundary.ts',
     'src/runtime/durable-jarvis-runtime.ts',
     'src/tests/durable-database-harness.ts',
   ]);
@@ -259,7 +261,7 @@ describe('(127-132) no live model id, tool, workflow or database path', () => {
   /**
    * The specs whose JOB is to forbid these tokens, and which therefore have to name them.
    *
-   * Same reasoning as the `DIRECT_BUSINESS_OR_N8N_EXECUTION` substitution below, one level up: the
+   * Same reasoning as the `DIRECT_BUSINESS_OR_CORE_AUTOMATION_EXECUTION` substitution below, one level up: the
    * check is about CAPABILITY, not prose. `private-riya-web-ingress-containment.test.ts` (ADR-0097)
    * asserts that the ingress source contains none of these tokens, so its own forbidden-token list
    * necessarily contains them. Reading that list as a violation would mean a containment spec could
@@ -283,7 +285,7 @@ describe('(127-132) no live model id, tool, workflow or database path', () => {
    * because nothing here orchestrated anything; JF-4 deliberately places a bounded orchestration
    * shell on the customer path under its own ADR, so the ban is narrowed rather than dropped.
    *
-   * Everything else on the list below -- n8n, WhatsApp, webhooks, tool calls, raw pools and raw SQL --
+   * Everything else on the list below -- QuickFurno Core Automation, WhatsApp, webhooks, tool calls, raw pools and raw SQL --
    * stays forbidden in these files too, and a separate JF-4 containment spec asserts the same set
    * again from the other direction.
    */
@@ -302,13 +304,19 @@ describe('(127-132) no live model id, tool, workflow or database path', () => {
     'src/tests/jf4-negative-controls.test.ts',
   ]);
 
+  const DURABLE_ORCHESTRATION_FILES: readonly string[] = Object.freeze([
+    // ADR-0154: the ONE API-side native Temporal client. It may name Temporal workflow operations,
+    // but it carries no provider/business execution authority and every other forbidden token stays locked.
+    'src/temporal/create-durable-orchestration-client.ts',
+  ]);
+
   it('(130, 131) no tool, execution, workflow or database capability is reachable', () => {
     for (const file of allFiles()) {
-      // `DIRECT_BUSINESS_OR_N8N_EXECUTION` is a red-team case KIND from `model-evaluation`: it names the
+      // `DIRECT_BUSINESS_OR_CORE_AUTOMATION_EXECUTION` is a red-team case KIND from `model-evaluation`: it names the
       // behaviour the candidate must REFUSE, and the evidence generator must enumerate it to cover the
       // mandatory set. Removing the identifier before scanning keeps the check on capability, not prose.
       const code = codeOnly(readFileSync(file, 'utf8'))
-        .replace(/DIRECT_BUSINESS_OR_N8N_EXECUTION/g, 'MANDATORY_REFUSAL_KIND')
+        .replace(/DIRECT_BUSINESS_OR_CORE_AUTOMATION_EXECUTION/g, 'MANDATORY_REFUSAL_KIND')
         .toLowerCase();
       const composesDatabase = DATABASE_COMPOSITION_FILES.some((allowed) =>
         normalise(file).endsWith(`/${allowed}`),
@@ -317,17 +325,20 @@ describe('(127-132) no live model id, tool, workflow or database path', () => {
       const orchestratesCustomerTurn = CUSTOMER_ORCHESTRATION_FILES.some((allowed) =>
         normalise(file).endsWith(`/${allowed}`),
       );
+      const orchestratesDurableJourney = DURABLE_ORCHESTRATION_FILES.some((allowed) =>
+        normalise(file).endsWith(`/${allowed}`),
+      );
       if (CONTAINMENT_VOCABULARY_SPECS.some((allowed) => normalise(file).endsWith(`/${allowed}`))) {
         continue;
       }
       for (const forbidden of [
-        'n8n',
+        'quickfurno-core-automation',
         'whatsapp',
         'webhook',
         'toolcall',
         'tool_call',
         'tools:',
-        ...(orchestratesCustomerTurn ? [] : ['workflow']),
+        ...(orchestratesCustomerTurn || orchestratesDurableJourney ? [] : ['workflow']),
         // A RAW pool stays forbidden EVERYWHERE, the two composition files included: they reach the
         // database through the public workspace APIs or not at all.
         'pg-pool',
@@ -348,15 +359,15 @@ describe('(127-132) no live model id, tool, workflow or database path', () => {
     }
   });
 
-  it('(130, 131) exactly two files name the persistence packages, and only one is production', () => {
+  it('(130, 131) exactly three files name the persistence packages, and only two are production', () => {
     const naming = allFiles().filter((file) =>
       codeOnly(readFileSync(file, 'utf8')).toLowerCase().includes('event-backbone'),
     );
     expect(naming.map((f) => normalise(f).split('/apps/api/')[1] ?? '').sort()).toEqual([
       ...DATABASE_COMPOSITION_FILES,
     ]);
-    // Only ONE of them is production source; the other is excluded from the emitting build.
-    expect(naming.filter((f) => !normalise(f).includes('/tests/'))).toHaveLength(1);
+    // Exactly TWO are production composition seams; the harness remains test-only and excluded.
+    expect(naming.filter((f) => !normalise(f).includes('/tests/'))).toHaveLength(2);
   });
 
   it('(132) the prompt and schema are fixed in source and not configurable', () => {
@@ -447,6 +458,9 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // and nothing else, and holds no provider, network, database, environment, credential or
       // business data. Content lives beside its agent; the registry stays a mechanism.
       'aarohi-prompts',
+      // ADR-0153: the deterministic Action Kernel submission-control boundary. It carries no
+      // provider or business authority; this exact-set lock records the reviewed addition.
+      'action-kernel',
       'agent-runtime',
       // QFJ-S3-D-A (ADR-0070): the Anisha vendor-journey behaviour package. Still an EXACT set
       // match -- this records an authorised addition, it does not relax the assertion.
@@ -505,6 +519,9 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // neither ClientConfirmationV1 nor CommunicationAuthorizationV1.
       'core-riya-intake',
       'core-service-availability-read',
+      // ADR-0154: content-minimized contracts for native Temporal orchestration. Contract-only;
+      // execution authority stays with QuickFurno Core and Core Automation.
+      'durable-orchestration-contracts',
       'event-backbone',
       'event-ingestion',
       // QFJ-P09.04 (ADR-0109): the durable execution dispatch composition binding the merged
@@ -515,11 +532,11 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // boundary is restart-durable BY CONSTRUCTION and cannot be assembled with an in-memory
       // guard by mistake.
       'execution-dispatch-composition',
-      // QFJ-P09.02 (ADR-0090): the test-only Core -> n8n execution DISPATCH boundary. It holds no
+      // QFJ-P09.02 (ADR-0090): the test-only Core -> QuickFurno Core Automation execution DISPATCH boundary. It holds no
       // transport, and no application imports it. Its ONE consumer is the durable replay store
       // below, which implements the guard contract this package declares.
       'execution-dispatch-runtime',
-      // QFJ-P09.01 (ADR-0084): the execution intent correlation runtime -- Core issues, n8n executes,
+      // QFJ-P09.01 (ADR-0084): the execution intent correlation runtime -- Core issues, QuickFurno Core Automation executes,
       // this only correlates. Still an EXACT set match; it records an authorised addition.
       'execution-intent-runtime',
       'governed-knowledge',
@@ -544,7 +561,7 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // QFJ-P09.03 (ADR-0091): the durable execution replay / idempotency store -- the PostgreSQL
       // implementation of the guard P09.02 declared and deliberately left defaultless. Still an
       // EXACT set match; it records an authorised addition, it does not relax the assertion. It is
-      // TRANSPORT-NEUTRAL: no endpoint, no n8n, no provider, no credential, no intent payload.
+      // TRANSPORT-NEUTRAL: no endpoint, no QuickFurno Core Automation, no provider, no credential, no intent payload.
       'postgres-execution-replay-store',
       // RWC-P2B (ADR-0095): the durable PostgreSQL Riya conversation-continuity store -- the
       // implementation of the port RWC-P2C declared and deliberately left injected with no default.
@@ -680,9 +697,9 @@ describe('(133-148) the declared budget and every prior lock', () => {
     ]);
     // JOS-01A (docs/architecture/jarvis-os.md): the Jarvis OS operator control plane. Still an
     // EXACT set match -- this records an authorised addition, it does not relax the assertion.
-    // It is a POWERLESS read surface: it reaches no database, no provider, no n8n and no Core,
+    // It is a POWERLESS read surface: it reaches no database, no provider, no QuickFurno Core Automation and no Core,
     // and its own suite scans its source to prove it.
-    expect(dirs('apps')).toEqual(['api', 'jarvis-os', 'worker']);
+    expect(dirs('apps')).toEqual(['api', 'jarvis-os', 'temporal-worker', 'worker']);
   });
 
   it('(RWC-P5) no production source anywhere invents a city or a service', () => {

@@ -10,7 +10,7 @@
  * its state on every restart — the exact failure mode that produces a duplicate provider effect.
  *
  * It changes nothing else. There is no transport, no endpoint, no URL, no webhook, no workflow id,
- * no HTTP client, no n8n client, no provider client and no credential. The Core → n8n wire protocol
+ * no HTTP client, no QuickFurno Core Automation client, no provider client and no credential. The Core → QuickFurno Core Automation wire protocol
  * remains PROPOSED: storing a replay claim is not adopting a protocol, because none of the three
  * values stored is a transport artifact. Nothing here is an authority, and nothing imports it.
  *

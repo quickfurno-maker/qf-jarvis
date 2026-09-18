@@ -16,7 +16,7 @@ Properties proven: exact actor/party/task/data-class; exact release/provider/mod
 
 ## Prompt contract (§F)
 
-The system message is an **exact versioned prompt contract** that preserves the authority boundary — Riya client-only, Anisha vendor-only, Jarvis coordinator, QuickFurno Core the final authority — and demands **reply/proposal only** with **exact citations**, forbidding direct execution, n8n, business mutation, and chain-of-thought. The prompt **identity** (`promptId` = `promptFamily`, `promptVersion`) is carried from the plan; there is no free-form, provider-specific prompt construction spread through business logic.
+The system message is an **exact versioned prompt contract** that preserves the authority boundary — Riya client-only, Anisha vendor-only, Jarvis coordinator, QuickFurno Core the final authority — and demands **reply/proposal only** with **exact citations**, forbidding direct execution, QuickFurno Core Automation, business mutation, and chain-of-thought. The prompt **identity** (`promptId` = `promptFamily`, `promptVersion`) is carried from the plan; there is no free-form, provider-specific prompt construction spread through business logic.
 
 ## Exact provenance validation (§I)
 

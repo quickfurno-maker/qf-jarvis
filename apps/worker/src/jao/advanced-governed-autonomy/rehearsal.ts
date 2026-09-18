@@ -4,7 +4,7 @@
  * ### A rehearsal is not an execution, and the name is part of the control
  *
  * This module changes exactly one thing: two integers in a JAO-7 row. It reaches no host filesystem,
- * no process, no environment, no network, no provider, no channel, no n8n, no Core and no business
+ * no process, no environment, no network, no provider, no channel, no QuickFurno Core Automation, no Core and no business
  * table. It produces no `ExecutionResultV1`, because nothing executed.
  *
  * It is called `VIRTUAL_REVERSIBLE_REHEARSAL` and never `EXECUTION`, `LIVE_APPLY` or
@@ -15,7 +15,7 @@
  * ### What it may consume, and when
  *
  * The exact approved action, AFTER authority correlation, as SIMULATION INPUT. That is what makes
- * the rehearsal meaningful: it simulates what the action would do if Core issued it and n8n ran it.
+ * the rehearsal meaningful: it simulates what the action would do if Core issued it and QuickFurno Core Automation ran it.
  * It does not run the Core-issued intent, and holding the intent does not make Jarvis its executor.
  *
  * ### The two sandboxes

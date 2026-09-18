@@ -4,7 +4,7 @@
 
 ## Authority boundary
 
-The capability registry selects **no** business outcome and grants **no** business authority: a resolution is a **data summary** with no `authorize`/`execute` method (proven). It decides technical capability match only — never health/readiness, circuit, rollout mode, canary cohort, failover, business permission, agent assignment, or n8n execution; those remain in their existing layers. Agent scope (Riya=CLIENT, Anisha=VENDOR, Jarvis=COORDINATION) and task class are separate — capability matching never blurs an authority boundary. QuickFurno Core remains final authority; n8n execution-only; models/providers/gateway authorize and execute nothing. The Jarvis Conversation Operations Center remains a **mandatory later phase** but is **absent here** (no conversation store, no WhatsApp, no dashboard). Kimi excluded.
+The capability registry selects **no** business outcome and grants **no** business authority: a resolution is a **data summary** with no `authorize`/`execute` method (proven). It decides technical capability match only — never health/readiness, circuit, rollout mode, canary cohort, failover, business permission, agent assignment, or QuickFurno Core Automation execution; those remain in their existing layers. Agent scope (Riya=CLIENT, Anisha=VENDOR, Jarvis=COORDINATION) and task class are separate — capability matching never blurs an authority boundary. QuickFurno Core remains final authority; QuickFurno Core Automation execution-only; models/providers/gateway authorize and execute nothing. The Jarvis Conversation Operations Center remains a **mandatory later phase** but is **absent here** (no conversation store, no WhatsApp, no dashboard). Kimi excluded.
 
 ## Declared vs approved
 
@@ -34,7 +34,7 @@ Integration tests (`test:integration`) require the CI PostgreSQL service and run
 
 - The **279 prior model-gateway tests are unchanged and green** — the foundation, Groq, local, routing, and rollout behaviour is untouched because the registry is opt-in.
 - The containment test still holds: `fetch` only in the two transport files; no `process.env`/SDK/DB import (the capability modules use only `zod` and pure logic); event-backbone public-API lock remains **39**; migrations 0001–0007 byte-exact; **no 0008**. A repo scan confirms **no control-byte anomalies** in the new capability source.
-- No agent/n8n/memory/RAG/tool dependency; no CLI or remote ops API; no live Groq/local network call; no real key/token.
+- No agent/QuickFurno Core Automation/memory/RAG/tool dependency; no CLI or remote ops API; no live Groq/local network call; no real key/token.
 
 ## Test inventory — `capability-registry.test.ts` (25 tests)
 

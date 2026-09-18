@@ -2,7 +2,7 @@
  * QFJ-P08 — public API, dependency and side-effect containment (ADR-0083).
  *
  * The safety argument of this package is what it CANNOT do. It cannot ask Core, cannot send, cannot
- * persist, cannot reach Meta or n8n, cannot build an execution intent, and — the one that matters
+ * persist, cannot reach Meta or QuickFurno Core Automation, cannot build an execution intent, and — the one that matters
  * most — **cannot hold a single byte of consent state**.
  *
  * That last prohibition is not a style rule. *"Jarvis must not create parallel consent, preference,
@@ -285,7 +285,7 @@ describe('side-effect containment', () => {
     for (const file of productionFiles()) {
       const code = codeOnly(readFileSync(file, 'utf8')).toLowerCase();
       for (const forbidden of [
-        'n8n',
+        'quickfurno-core-automation',
         'whatsapp',
         'meta',
         'twilio',

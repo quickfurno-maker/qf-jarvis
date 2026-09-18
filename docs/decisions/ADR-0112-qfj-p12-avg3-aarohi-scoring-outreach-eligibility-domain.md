@@ -113,7 +113,7 @@ Unchanged:
 - no model call;
 - no discovery adapter or scraper;
 - no channel/provider credential;
-- no Meta/Instagram/WhatsApp/n8n integration;
+- no Meta/Instagram/WhatsApp/QuickFurno Core Automation integration;
 - no message drafting or delivery;
 - no package/pricing truth;
 - no identity resolution;

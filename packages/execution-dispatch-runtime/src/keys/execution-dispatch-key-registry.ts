@@ -16,11 +16,11 @@ import { EXECUTION_DISPATCH_KEY_PURPOSE } from '../protocol/limits.js';
  * The most dangerous shortcut available in this phase would have been to import the B1 registry:
  * it already parses SPKI keys, already tracks validity windows, already works. Doing so would have
  * silently unified two trust purposes — a key trusted to sign events Jarvis merely RECORDS would
- * also have authorised dispatches n8n would ACT on. The algorithm being the same is precisely why
+ * also have authorised dispatches QuickFurno Core Automation would ACT on. The algorithm being the same is precisely why
  * that is easy to miss.
  *
  * So this registry is separate, and every record must declare
- * `purpose: 'quickfurno-core-to-n8n-execution-dispatch'`. A record carrying any other purpose is a
+ * `purpose: 'quickfurno-core-to-QuickFurno Core Automation-execution-dispatch'`. A record carrying any other purpose is a
  * CONSTRUCTION error: it throws when the registry is built, so an operator who wires the wrong keys
  * finds out immediately rather than at the first dispatch. There is deliberately no lookup-time
  * refusal reason for it -- a key with the wrong purpose never enters the registry, so no dispatch

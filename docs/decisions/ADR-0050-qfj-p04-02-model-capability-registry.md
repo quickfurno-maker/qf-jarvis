@@ -48,7 +48,7 @@ Immutable after construction; deterministic ordering; a duplicate `releaseId` is
 
 ### H. Matching
 
-A request capability requirement resolves only when: the exact release exists; the provider descriptor matches the release/profile identity; the execution class matches; the task class is supported; the result mode is supported; the structured mode/schema-strictness requirement is supported; the input/context/completion budgets fit; the timeout/cancellation requirements fit; the current non-streaming requirement fits; and optional prompt/cost profile references match when required. Matching **must not** decide health/readiness, circuit state, rollout mode, canary cohort, failover, business permissions, agent assignment, or n8n execution — those remain in their existing layers.
+A request capability requirement resolves only when: the exact release exists; the provider descriptor matches the release/profile identity; the execution class matches; the task class is supported; the result mode is supported; the structured mode/schema-strictness requirement is supported; the input/context/completion budgets fit; the timeout/cancellation requirements fit; the current non-streaming requirement fits; and optional prompt/cost profile references match when required. Matching **must not** decide health/readiness, circuit state, rollout mode, canary cohort, failover, business permissions, agent assignment, or QuickFurno Core Automation execution — those remain in their existing layers.
 
 ### I. Integration
 
@@ -60,11 +60,11 @@ Safe closed reasons only: `registry-release-missing`, `registry-release-duplicat
 
 ### K. Authority / future agents
 
-The capability registry selects no business outcome; models/providers/gateway authorize and execute nothing. Riya client-only, Anisha vendor-only, Jarvis coordinates, Core final authority, n8n execution-only. The **Jarvis Conversation Operations Center** remains a mandatory later phase but is **absent here** (no conversation store, no WhatsApp, no dashboard). Kimi is excluded.
+The capability registry selects no business outcome; models/providers/gateway authorize and execute nothing. Riya client-only, Anisha vendor-only, Jarvis coordinates, Core final authority, QuickFurno Core Automation execution-only. The **Jarvis Conversation Operations Center** remains a mandatory later phase but is **absent here** (no conversation store, no WhatsApp, no dashboard). Kimi is excluded.
 
 ### L. Non-goals
 
-No live provider activation; no provider key/token; no external network; no model discovery; no model benchmarking/evaluation execution; no prompt library; no training/fine-tuning; no memory/RAG/knowledge; no agents; no WhatsApp/dashboard; no tools/n8n; no database/persistence; no schema/migration/0008; no deployment.
+No live provider activation; no provider key/token; no external network; no model discovery; no model benchmarking/evaluation execution; no prompt library; no training/fine-tuning; no memory/RAG/knowledge; no agents; no WhatsApp/dashboard; no tools/QuickFurno Core Automation; no database/persistence; no schema/migration/0008; no deployment.
 
 ## Rejected alternatives
 

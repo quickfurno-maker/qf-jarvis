@@ -14,7 +14,7 @@
 
 A governed **provider-rollout controller** — OFF → SHADOW → CANARY → ACTIVE with FALLBACK and a synchronous emergency disable — over the existing Groq (HOSTED) and local (LOCAL) providers and the hybrid routing, behind the unchanged `ModelProvider` contract. Rollout is **opt-in**: a gateway with no controller behaves exactly as QFJ-P04.01D (its 241 prior tests are unchanged). The controller consumes already-authorized approval attestations; it is not itself an authorization system, and **it activates no live provider**.
 
-**No live Groq or local-model call, no real key/token, no external network in tests/CI. No agent, no n8n, no RAG, no memory, no schema, no migration.**
+**No live Groq or local-model call, no real key/token, no external network in tests/CI. No agent, no QuickFurno Core Automation, no RAG, no memory, no schema, no migration.**
 
 ## Changed-file manifest
 

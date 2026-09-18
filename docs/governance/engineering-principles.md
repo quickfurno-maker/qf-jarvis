@@ -20,7 +20,7 @@ Not everything needs a test first. These do, without exception:
 - **Idempotency** — the same event, intent, or submission processed twice has the effect of once.
 - **Expiry** — an expired recommendation cannot become an execution intent. An expired intent is refused.
 - **Authorization** — an unapproved recommendation cannot execute. There is no timeout-to-approve.
-- **Bounds** — n8n executes exactly what an intent describes and nothing beyond it.
+- **Bounds** — QuickFurno Core Automation executes exactly what an intent describes and nothing beyond it.
 - **Signature and replay** — a forged or replayed message is rejected.
 - **Money** — anything touching a wallet, package, payment, or ad spend.
 
@@ -41,7 +41,7 @@ If a rule reliably decides it, a rule decides it. Deterministic logic runs **fir
 
 Module boundaries are real, and they are drawn where a service boundary would go ([ADR-0004](../decisions/ADR-0004-modular-monolith-first.md)). System boundaries are permanent ([system-boundary.md](../architecture/system-boundary.md)).
 
-**Forbids:** reaching across a module's interface into its internals because it is convenient. Building a Jarvis path to n8n, to a provider, or to business state — under any justification, in any branch, even temporarily. There is no such thing as a temporary write path.
+**Forbids:** reaching across a module's interface into its internals because it is convenient. Building a Jarvis path to QuickFurno Core Automation, to a provider, or to business state — under any justification, in any branch, even temporarily. There is no such thing as a temporary write path.
 
 ## 5. Reversible changes
 

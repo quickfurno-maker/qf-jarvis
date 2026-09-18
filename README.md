@@ -6,7 +6,7 @@ QF Jarvis is the intelligence, recommendation, coordination, and founder decisio
 
 - QuickFurno Core owns business truth, operational state, authorization, policy, money, leads, clients, vendors, packages, and wallets.
 - QF Jarvis provides intelligence, reasoning, recommendations, coordination, prioritization, and specialist-agent orchestration.
-- n8n executes only actions authorized by QuickFurno Core or an approved human authority.
+- QuickFurno Core Automation executes only actions authorized by QuickFurno Core or an approved human authority.
 - External providers deliver communications and operational actions.
 - Execution results return to QuickFurno Core.
 
@@ -20,7 +20,7 @@ Jarvis recommends.
 
 QuickFurno authorizes.
 
-n8n executes.
+QuickFurno Core Automation executes.
 
 Providers deliver.
 
@@ -81,7 +81,7 @@ The revised requirements are recorded in [quickfurno-compatibility-directive.md]
 - A recommendation's `producingSystem` can only be `qf-jarvis`, and a recommendation is inert — no `approved` field, no recipient address, no credential.
 - An **approval request** is a separate contract from an approval **decision**. It has no outcome field, and one cannot be added. **An unanswered request expires; it never ripens into an approval** — silence is never consent.
 - An approval decision's `issuer` can only be `quickfurno-core`, and its deciding actor can only be a **human or a versioned policy**. There is no agent variant, so **agent self-approval is unrepresentable**.
-- An execution intent's `issuer` can only be `quickfurno-core` and its `executor` only `n8n`. **Jarvis cannot construct a valid execution intent**, and there is no provider to address one to.
+- An execution intent's `issuer` can only be `quickfurno-core` and its `executor` only `QuickFurno Core Automation`. **Jarvis cannot construct a valid execution intent**, and there is no provider to address one to.
 - An ambiguous execution result **cannot be recorded as a success**, and **`provider-accepted` cannot be recorded as `delivered`**.
 - A communication recipient can only be an opaque Core reference; a phone number or email address will not parse. There is **no consent field** — the QuickFurno Communication Core decides, and a stale copy of a permission cannot exist because there is nowhere to put one.
 - An assignment batch can only be issued by `quickfurno-core`. **Riya cannot construct one.** Three vendors per batch, one replacement batch, **six unique vendors per lead-category, for all time** — and a seventh does not parse ([ADR-0015](docs/decisions/ADR-0015-complete-client-journey-and-reassignment-policy.md)).
@@ -92,7 +92,7 @@ The revised requirements are recorded in [quickfurno-compatibility-directive.md]
 
 `apps/api` and `apps/worker` remain **compileable boundaries** — a documentation comment and `export {};`. They start no server, run no loop, and print nothing.
 
-Specifically, **none of the following exists in this repository**: agents, coordinator logic, AI or LLM SDKs, **a model gateway**, model prompts, **event ingestion** (the ingest function/persistence), **projections**, **replay**, message brokers or queues, webhooks, HTTP endpoints, a web framework, a frontend, n8n workflows, WhatsApp or calling or telephony integration, provider integrations, provider credentials, or production deployment configuration. (**Pure signature verification does now exist** — see Stage 3.2 below — but it performs no ingestion and touches no database.)
+Specifically, **none of the following exists in this repository**: agents, coordinator logic, AI or LLM SDKs, **a model gateway**, model prompts, **event ingestion** (the ingest function/persistence), **projections**, **replay**, message brokers or queues, webhooks, HTTP endpoints, a web framework, a frontend, QuickFurno Core Automation workflows, WhatsApp or calling or telephony integration, provider integrations, provider credentials, or production deployment configuration. (**Pure signature verification does now exist** — see Stage 3.2 below — but it performs no ingestion and touches no database.)
 
 The client, vendor, assignment, and governance events are **target contracts**. **No claim is made that QuickFurno Core emits any of them today** — establishing the live emitters is Phase 11's work, and where Core's shapes differ, an adapter absorbs the difference and the contract does not bend ([event-catalog.md](docs/contracts/event-catalog.md)).
 

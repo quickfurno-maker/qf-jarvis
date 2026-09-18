@@ -10,11 +10,11 @@ Every invocation returns a content-free `NO_OP` result with **exact zero** count
 - **PROVISIONED_NO_OP** → `rag-provisioned-no-op` (still nothing runs).
 - **A `FUTURE_LOCAL_VECTOR` / `FUTURE_MANAGED_VECTOR` backend cannot run** → `rag-backend-not-runtime-eligible`; only `NONE` is runtime-eligible.
 
-The result's keys are exactly `{profileId, profileVersion, mode, reason, retrievalCount, embeddingCount, vectorQueryCount, augmentedCharacterCount}` — no content, citation, prompt, document, or provider output (proven by serialization). The provisioner and result expose **no** `retrieve`/`embed`/`query`/`search`/`index`/`augment` method (proven). Invocation is deterministic (same config → identical result). The package performs no network, filesystem, `process.env`, clock, database, provider, or `n8n` access (proven by source scan; no such import or `fetch`).
+The result's keys are exactly `{profileId, profileVersion, mode, reason, retrievalCount, embeddingCount, vectorQueryCount, augmentedCharacterCount}` — no content, citation, prompt, document, or provider output (proven by serialization). The provisioner and result expose **no** `retrieve`/`embed`/`query`/`search`/`index`/`augment` method (proven). Invocation is deterministic (same config → identical result). The package performs no network, filesystem, `process.env`, clock, database, provider, or `QuickFurno Core Automation` access (proven by source scan; no such import or `fetch`).
 
 ## Approval boundary
 
-Proven: a fully-referenced `PROVISIONED_NO_OP` profile — carrying a capability ref, a knowledge revision, and a (synthetic) evaluation-evidence ref — is **still** a no-op (`rag-provisioned-no-op`, zero counters). None of these references, and no rollout approval, turns RAG on. Synthetic QFJ-P04.04 evidence is **not** production approval. The provisioner exposes **no** `activate`/`promote`/`mutate`/`authorize`/`execute`/`send`/`callN8n` method — provisioning authorizes and executes nothing and mutates no rollout/provider state.
+Proven: a fully-referenced `PROVISIONED_NO_OP` profile — carrying a capability ref, a knowledge revision, and a (synthetic) evaluation-evidence ref — is **still** a no-op (`rag-provisioned-no-op`, zero counters). None of these references, and no rollout approval, turns RAG on. Synthetic QFJ-P04.04 evidence is **not** production approval. The provisioner exposes **no** `activate`/`promote`/`mutate`/`authorize`/`execute`/`send`/`callQuickFurno Core Automation` method — provisioning authorizes and executes nothing and mutates no rollout/provider state.
 
 ## Privacy
 

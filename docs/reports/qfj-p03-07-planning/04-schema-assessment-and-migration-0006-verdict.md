@@ -70,7 +70,7 @@ Retry-exhaustion failure creation is written in the **same** transaction as `rec
 
 ## What migration 0006 must NOT contain
 
-RAG; agents; task runtime; model gateway; WhatsApp; n8n; QuickFurno Core integration; `rm_subject_activity` (absent a later explicit ownership decision). It is scoped strictly to projection failure operations.
+RAG; agents; task runtime; model gateway; WhatsApp; QuickFurno Core Automation; QuickFurno Core integration; `rm_subject_activity` (absent a later explicit ownership decision). It is scoped strictly to projection failure operations.
 
 ## Rollout risks
 

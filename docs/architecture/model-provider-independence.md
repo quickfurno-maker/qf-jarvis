@@ -62,7 +62,7 @@ provider SDK / HTTP  (NEVER crosses the adapter boundary)
 **Model providers perform bounded inference only. Communication providers deliver approved messages only. Neither provider class has QuickFurno business authority.**
 
 - A **model provider** (Groq, the local OpenAI-compatible server) performs bounded language-model inference; it never holds business authority, never directly sends WhatsApp messages, and never directly mutates QuickFurno Core.
-- A **communication provider** (e.g. the WhatsApp/Meta delivery path reached only through n8n under an approved execution intent) delivers an approved message; it never performs business authorization and never decides agent policy.
+- A **communication provider** (e.g. the WhatsApp/Meta delivery path reached only through QuickFurno Core Automation under an approved execution intent) delivers an approved message; it never performs business authorization and never decides agent policy.
 
 Do not use the ambiguous shorthand that "all providers merely deliver": inference and delivery are distinct provider classes with distinct, bounded roles.
 
@@ -95,7 +95,7 @@ Every inference request carries a data class, and the router enforces it **befor
 
 **Local PC owns only:** model serving · GPU resource control · local-model health · model lifecycle.
 
-**The local PC must NOT receive:** WhatsApp access tokens · Supabase service-role credentials · unrestricted database credentials · n8n administrative credentials · GitHub credentials · payment credentials.
+**The local PC must NOT receive:** WhatsApp access tokens · Supabase service-role credentials · unrestricted database credentials · QuickFurno Core Automation administrative credentials · GitHub credentials · payment credentials.
 
 **Local inference service transport:** a private authenticated connection · TLS/mTLS or equivalent signed service authentication · firewall allowlisting · **no anonymous public inference endpoint** · bounded, sanitized requests only. The VPS calls the local node as a bounded `ModelProvider`; the node returns bounded model output and never reaches back into business systems.
 
@@ -103,12 +103,12 @@ Every inference request carries a data class, and the router enforces it **befor
 WhatsApp ⇄ Jarvis VPS (webhook, queues, routing, provider selection, validation, delivery, monitoring)
                      │  bounded, sanitized ModelProvider request over mTLS + firewall allowlist
                      ▼
-             Local PC (model serving + GPU only)  ── no business credentials, no WhatsApp/n8n/Core access
+             Local PC (model serving + GPU only)  ── no business credentials, no WhatsApp/QuickFurno Core Automation/Core access
 ```
 
 ## Agent ownership (unchanged)
 
-Provider selection **never** alters agent authority. **Riya** = Customer Conversation and Qualification Agent; **Anisha** = Vendor Sales, Relationship and Success Agent (complete vendor lifecycle — **not** narrowed to onboarding/support). QuickFurno Core is the final business authority; Jarvis recommends/coordinates; n8n executes approved intents; providers deliver only. See [agent-constitution.md](../governance/agent-constitution.md).
+Provider selection **never** alters agent authority. **Riya** = Customer Conversation and Qualification Agent; **Anisha** = Vendor Sales, Relationship and Success Agent (complete vendor lifecycle — **not** narrowed to onboarding/support). QuickFurno Core is the final business authority; Jarvis recommends/coordinates; QuickFurno Core Automation executes approved intents; providers deliver only. See [agent-constitution.md](../governance/agent-constitution.md).
 
 ## Memory and data boundaries
 
@@ -123,7 +123,7 @@ Provider selection **never** alters agent authority. **Riya** = Customer Convers
 2. Provider output is revalidated locally (structured-output validation refuses malformed output).
 3. Hosted-provider requests are minimized and sanitized (no raw PII, credentials, or secrets).
 4. The local PC receives no business-system credentials.
-5. No provider directly calls WhatsApp, n8n, or QuickFurno Core.
+5. No provider directly calls WhatsApp, QuickFurno Core Automation, or QuickFurno Core.
 6. Provider errors never expose request content, prompts, headers, or secrets.
 7. A provider outage never loses inbound messages (durable queue; retry; human handoff).
 8. Fallback is idempotent.

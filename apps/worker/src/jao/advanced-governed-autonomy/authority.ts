@@ -4,7 +4,7 @@
  * ### The single most important boundary in this slice
  *
  * JAO-7 does not create an `ApprovalDecisionV1`. It does not create an `ExecutionIntentV1`. It does
- * not infer them, edit them, call Core to obtain them, or call n8n with them. There is no
+ * not infer them, edit them, call Core to obtain them, or call QuickFurno Core Automation with them. There is no
  * constructor for either artifact anywhere in this module or in the packages it imports: the
  * approval runtime only VALIDATES a decision Core has already issued, and the execution-intent
  * runtime only VALIDATES an intent Core has already issued and has no method that creates one.
@@ -17,7 +17,7 @@
  * It proves that the supplied artifacts are structurally valid by their own governed contracts, and
  * that they describe EXACTLY this recommendation, this proposed action, this fingerprint and these
  * parameters. `executionIntentV1Schema` is doing most of that work structurally: it establishes that
- * the issuer is `quickfurno-core`, the executor is `n8n`, delivery is at-most-once, an idempotency
+ * the issuer is `quickfurno-core`, the executor is `QuickFurno Core Automation`, delivery is at-most-once, an idempotency
  * key is present, and the parameters carry no contact detail, credential or smuggled retry
  * permission. None of that is restated below, because re-implementing it would create a second
  * definition of a contract `@qf-jarvis/contracts` already owns.
@@ -29,8 +29,8 @@
  *
  * ### And the intent is still not executed
  *
- * A validated `ExecutionIntentV1` names `n8n` as its executor. JAO-7 records a bounded OBSERVATION —
- * digests and identities — and stops. It does not become n8n because it happens to be holding the
+ * A validated `ExecutionIntentV1` names `QuickFurno Core Automation` as its executor. JAO-7 records a bounded OBSERVATION —
+ * digests and identities — and stops. It does not become QuickFurno Core Automation because it happens to be holding the
  * intent.
  */
 import { createApprovalRuntime } from '@qf-jarvis/approval-runtime';

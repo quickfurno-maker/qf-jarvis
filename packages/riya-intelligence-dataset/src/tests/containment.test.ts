@@ -166,7 +166,7 @@ describe('RID-F1 invokes nothing and trains nothing', () => {
         'undici',
         'axios',
         'WebSocket',
-        'n8n',
+        'quickfurno-core-automation',
         'node:fs',
         'readFileSync',
         'writeFileSync',

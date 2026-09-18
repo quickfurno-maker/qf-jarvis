@@ -1,7 +1,7 @@
 /**
  * QFJ-S1A — containment and repository guardrails (ADR-0061 §B, §C, §I, §J).
  *
- * Matrix: production source performs no network/database/n8n/WhatsApp/Core/Jarvis-runtime access, reads
+ * Matrix: production source performs no network/database/QuickFurno Core Automation/WhatsApp/Core/Jarvis-runtime access, reads
  * no environment variable, writes no file, and holds no control byte or sync-over-async primitive; the
  * package depends only on @qf-jarvis/model-gateway and zod and exposes only the root plus `./testing`;
  * the public API surface is locked; the fixed Groq endpoint is unchanged and the gateway stays the only
@@ -85,7 +85,7 @@ const LOCKED_MIGRATION_HASHES: Record<string, string> = {
 };
 
 describe('containment — the harness reaches nothing it must not reach', () => {
-  it('(48, 42) production source performs no direct network, DB, n8n, WhatsApp, or Core access', () => {
+  it('(48, 42) production source performs no direct network, DB, QuickFurno Core Automation, WhatsApp, or Core access', () => {
     for (const file of productionFiles()) {
       const text = readFileSync(file, 'utf8');
       // QFJ-S1D-B: exactly ONE production module may name `fetch` — the instrumented transport, whose
@@ -106,7 +106,7 @@ describe('containment — the harness reaches nothing it must not reach', () => 
         /from ['"]node:(net|http|http2|https|dns|tls|dgram|worker_threads)['"]/,
       );
       expect(text).not.toMatch(
-        /from ['"](pg|groq-sdk|openai|axios|undici|node-fetch|whatsapp-web\.js|@whiskeysockets\/baileys|n8n)['"]/,
+        /from ['"](pg|groq-sdk|openai|axios|undici|node-fetch|whatsapp-web\.js|@whiskeysockets\/baileys|QuickFurno Core Automation)['"]/,
       );
       expect(text).not.toMatch(
         /from ['"]@qf-jarvis\/(core-decision-adapter|jarvis-runtime|agent-runtime|event-backbone|event-ingestion|governed-knowledge|rag-provisioning|model-evaluation|model-reply-adapter)['"]/,

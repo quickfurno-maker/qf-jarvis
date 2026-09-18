@@ -2,7 +2,7 @@
  * QFJ-P05.05 — public API, dependency and side-effect containment (ADR-0079).
  *
  * A recommendation is inert, and this package must be too. Its whole safety argument is that it
- * CANNOT reach a database, a provider, Core, n8n or a transport — so that is asserted rather than
+ * CANNOT reach a database, a provider, Core, QuickFurno Core Automation or a transport — so that is asserted rather than
  * assumed, on the source, not on intent.
  *
  * The API lock matters for the same reason as everywhere else in this repository: a fifth root
@@ -188,7 +188,7 @@ describe('side-effect containment', () => {
     for (const file of productionFiles()) {
       const code = codeOnly(readFileSync(file, 'utf8')).toLowerCase();
       for (const forbidden of [
-        'n8n',
+        'quickfurno-core-automation',
         'whatsapp',
         'webhook',
         'twilio',

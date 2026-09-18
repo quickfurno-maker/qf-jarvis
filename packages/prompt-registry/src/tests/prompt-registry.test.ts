@@ -723,7 +723,7 @@ describe('(J, K) source containment and the exact public API', () => {
         'process.env',
         'supabase',
         'postgres',
-        'n8n',
+        'quickfurno-core-automation',
         'whatsapp',
         'groq',
         'ACTIVE',

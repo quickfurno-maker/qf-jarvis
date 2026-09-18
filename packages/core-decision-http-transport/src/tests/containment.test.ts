@@ -6,12 +6,12 @@ const sourcePath = fileURLToPath(new URL('../transport.ts', import.meta.url));
 const source = readFileSync(sourcePath, 'utf8');
 
 describe('QuickFurno Core transport containment', () => {
-  it('contains no environment, database, n8n, provider or QuickFurno business-table access', () => {
+  it('contains no environment, database, QuickFurno Core Automation, provider or QuickFurno business-table access', () => {
     for (const forbidden of [
       'process.env',
       'postgres',
       'supabase',
-      'n8n',
+      'quickfurno-core-automation',
       'whatsapp',
       'groq',
       'nara',

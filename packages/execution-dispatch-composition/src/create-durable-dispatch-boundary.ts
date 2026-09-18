@@ -18,12 +18,12 @@
  *
  * ### What it does NOT do, and will not become
  *
- * It adopts no transport. There is no URL, no webhook, no endpoint, no n8n client, no n8n workflow
+ * It adopts no transport. There is no URL, no webhook, no endpoint, no QuickFurno Core Automation client, no QuickFurno Core Automation workflow
  * id, no credential, no provider, no message and no recipient anywhere in this package. Nothing here
  * sends, executes, schedules, retries, polls or queues.
  *
  * The permanent flow is unchanged: Jarvis recommends, QuickFurno Core authorizes and issues the
- * intent, this boundary VERIFIES, n8n executes only behind a future adopted transport, providers
+ * intent, this boundary VERIFIES, QuickFurno Core Automation executes only behind a future adopted transport, providers
  * deliver, and results return to Core. Composing a verifier with a store creates no new authority
  * for anybody, and this package deliberately exposes nothing that could be mistaken for one — no
  * `canExecute`, `canSend`, `isAuthorized`, `executed`, `sent`, `delivered` or `consentValid`.

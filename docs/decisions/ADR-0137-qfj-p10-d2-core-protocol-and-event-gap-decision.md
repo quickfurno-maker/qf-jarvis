@@ -51,7 +51,7 @@ approval never overrides Core consent; a request is an ASK; construction ≠ sub
 execution-time eligibility re-evaluated by Core; issuance ≠ dispatch; Core's consent-deny `cancelled`
 maps to Jarvis **`rejected`**; a bare `eventId` is never provenance; `ProjectionEvent` stays
 metadata-only; **D2a remains mandatory**; **no `state-recorded@3`**; `@2` is history/compat only;
-generic outbox capacity ≠ ExecutionIntent persistence; the QF-MVP n8n automation transport ≠ Jarvis
+generic outbox capacity ≠ ExecutionIntent persistence; the QF-MVP QuickFurno Core Automation automation transport ≠ Jarvis
 B4/S5; Core's current signing domain is not automatically reusable; no provider → Jarvis truth path;
 no Jarvis mutation of Core business tables; no projection row is source-of-fact; no
 timestamp/UUID/last-writer ordering; **rollout OFF**.
@@ -132,7 +132,7 @@ that fit gate passes.**
 
 **Q7 — `execution-submitted`. DECIDED_NOW (semantics) / BLOCKED_BY_MISSING_CORE_TRUTH (artifact).**
 
-> `execution-submitted` means **Core has actually handed the authorized execution to the governed n8n
+> `execution-submitted` means **Core has actually handed the authorized execution to the governed QuickFurno Core Automation
 > execution boundary and holds DURABLE Core evidence that the handoff reached the defined submission
 > boundary.**
 
@@ -177,7 +177,7 @@ silently re-routed. Contract generality stays; deployment capability is narrower
 **Q12 — provider result / reconciliation. DECIDED_NOW (family) / DEFERRED (readiness).** The target
 Core → Jarvis authoritative result family is **`qf.communication.result-recorded`**. Core receives the
 provider/webhook outcome, verifies, normalises, records, then emits. **Jarvis never accepts provider or
-n8n truth directly, stores no raw provider payload, and projects only the minimal normalised lifecycle
+QuickFurno Core Automation truth directly, stores no raw provider payload, and projects only the minimal normalised lifecycle
 fact.** **Emission readiness is gated by C3B's contract-fit proof (Q6): current Core provider-result
 rows are not automatically a lawful `CommunicationResultV1`, and C3B may fabricate no execution id,
 failure classification, reason code or correlation.** _Fail closed:_ no accepted Core event ⇒ no
@@ -187,7 +187,7 @@ state.
 authority**. **At execution time, the execution side must revalidate current eligibility through the
 governed Core/runtime authority path before any external provider effect**, re-evaluating at least
 consent/suppression, purpose/scope, channel eligibility and current policy/frequency/attempt controls
-where authoritative. **This second-line check sits after the Core→n8n handoff of Q7/S5, not before it**
+where authoritative. **This second-line check sits after the Core→QuickFurno Core Automation handoff of Q7/S5, not before it**
 — the two are different points in the chain and neither is "governed dispatch" as a single moment. **Jarvis caches no "allowed" result, ever.** A denial there is a
 **Core-authoritative policy/eligibility outcome — never converted into a provider failure.**
 
@@ -199,7 +199,7 @@ through the adopted result/authorization semantics, and invents neither edge.** 
 artifact, the mapping and how immediate and scheduled sends both stay valid, a post-authorization
 denial **fails closed** and emits no durable state. If C5 proves the existing graph cannot represent
 the required semantics, **that slice** raises an ADR-0110 / communication-model reopen — **D2
-preemptively reopens nothing.** Exposure to n8n / the QF Communications Runtime is a narrow internal
+preemptively reopens nothing.** Exposure to QuickFurno Core Automation / the QF Communications Runtime is a narrow internal
 Core surface in S6. **No URL, header or auth scheme here.**
 
 **Q14 — Core event/outbox capability. DECIDED_NOW (gate) / DEFERRED.** Before anything relies on
@@ -219,7 +219,7 @@ baseline: `SUPPORTED_ALGORITHM = 'ed25519'`, `DOMAIN_SEPARATION_PREFIX = 'qf-jar
 **`EVENT_KEY_PURPOSE = 'core-to-jarvis-event'` — a dedicated Core → Jarvis trust domain that already
 exists in Jarvis.** Core must sign the exact canonical raw bytes Jarvis ingestion expects, under that
 dedicated purpose, preserving key-id/rotation, freshness and replay semantics. **No existing Core
-provider-webhook or n8n signing key or domain is reused.** **D2a is still required: Core signing does
+provider-webhook or QuickFurno Core Automation signing key or domain is reused.** **D2a is still required: Core signing does
 not replace write-path containment, and containment does not replace Core signing. Both.**
 
 ### 3. Cross-question consistency
@@ -228,13 +228,13 @@ not replace write-path containment, and containment does not replace Core signin
 — it does not claim every stage is serialised by these labels, and **implementation order, runtime
 order and lifecycle-state order remain three different things** (plan §4):
 
-> constructed request **≠** submitted to Core **≠** initial Core authorization **≠** Core→n8n submission
+> constructed request **≠** submitted to Core **≠** initial Core authorization **≠** Core→QuickFurno Core Automation submission
 > **≠** execution-side revalidation **≠** provider acceptance **≠** delivery
 
 Q5 keeps submission, business authorization and execution-time eligibility apart, Q7 keeps submission
 distinct from issuance, Q13 keeps eligibility distinct from authorization, and Q12 keeps provider
 acceptance distinct from delivery. **Slice numbering (C4 before C5) is implementation order, not
-runtime chronology.** What D2 locks for MVP: initial Core authorization precedes Core→n8n dispatch; the
+runtime chronology.** What D2 locks for MVP: initial Core authorization precedes Core→QuickFurno Core Automation dispatch; the
 runtime performs a second-line execution-time eligibility check before the provider effect; a prior
 authorization is **never** reusable permission; and a late denial is a Core-authoritative policy
 outcome, not a provider failure. **The durable artifact and lifecycle mapping for a post-authorization
@@ -390,7 +390,7 @@ rewritten.** This ADR stays **Proposed** until owner acceptance.
   handoff and voice truth Core does not have.
 - **Build a separate durable Jarvis coordination log (Option B).** Rejected for MVP — Options A and C
   cover every state a current consumer needs, and a second log duplicates ordering and authority.
-- **Reuse Core's existing webhook/n8n signing domain.** Rejected: a distinct Core → Jarvis purpose
+- **Reuse Core's existing webhook/QuickFurno Core Automation signing domain.** Rejected: a distinct Core → Jarvis purpose
   already exists in Jarvis (`core-to-jarvis-event`), and cross-purpose key reuse destroys domain
   separation.
 - **Add `CommunicationAuthorizationV2` or `state-recorded@3`.** Rejected — no new field or event is
@@ -405,7 +405,7 @@ at the Jarvis baseline — `AcquisitionCase.caseRef`/`prospectRef`, `SUPPORTED_A
 with `DOMAIN_SEPARATION_PREFIX = 'qf-jarvis-event-v1'`, and
 `EVENT_KEY_PURPOSE = 'core-to-jarvis-event'` — are repository facts, not new audit findings. **No
 production code, no contract, no event registry, no event-backbone, no ingestion, no projection
-change. No Core modification, branch or PR. No managed Supabase, n8n or provider access. No message
+change. No Core modification, branch or PR. No managed Supabase, QuickFurno Core Automation or provider access. No message
 sent. No migration.**
 
 **Production rollout OFF. Runtime activation unchanged. The next wave is D2a and D2b in parallel.**

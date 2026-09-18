@@ -153,7 +153,7 @@ Not in admission, not in the service, not in the coordinator. RWC-P8's rule stan
 ### 14–15. Nothing is deployed and nothing is activated
 
 **No migration** — `0001`–`0012` unchanged, no `0013`. No managed database access. No live WhatsApp,
-no provider, no n8n, no QuickFurno repository access and no handshake. The private ingress production
+no provider, no QuickFurno Core Automation, no QuickFurno repository access and no handshake. The private ingress production
 code is unchanged and stays **NOT DEPLOYED**. No autoscaling, no Kubernetes, no load balancer, no
 health or metrics endpoint.
 

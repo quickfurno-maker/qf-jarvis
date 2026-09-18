@@ -34,11 +34,16 @@
     "@qf-jarvis/model-reply-adapter": "workspace:*",
     "@qf-jarvis/postgres-approval-queue": "workspace:*",
     "@qf-jarvis/postgres-conversation-state": "workspace:*",
+    "@qf-jarvis/postgres-riya-conversation-continuity-store": "workspace:*",
+    "@qf-jarvis/postgres-riya-turn-coordinator": "workspace:*",
     "@qf-jarvis/prompt-registry": "workspace:*",
     "@qf-jarvis/rag-provisioning": "workspace:*",
     "@qf-jarvis/riya-prompts": "workspace:*",
     "@qf-jarvis/riya-web-conversation-service": "workspace:*",
-    "zod": "4.4.3"
+    "zod": "4.4.3",
+    "@qf-jarvis/action-kernel": "workspace:*",
+    "@qf-jarvis/durable-orchestration-contracts": "workspace:*",
+    "@temporalio/client": "1.24.0"
   },
   "devDependencies": {
     "@qf-jarvis/approval-runtime": "workspace:*",

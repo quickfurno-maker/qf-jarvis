@@ -256,11 +256,11 @@ package was added.
 ## Authority
 
 Unchanged. **Recommend -> Authorize -> Execute.** QuickFurno Core remains the final business
-authority. The QF Model Gateway remains the sole model authority. n8n remains the approved external
+authority. The QF Model Gateway remains the sole model authority. QuickFurno Core Automation remains the approved external
 execution path. Providers deliver.
 
 **Tool output is evidence, never permission.** JAO-4 may inspect, list, excerpt, search and hash. It
-may not apply a fix, mutate Core, create an execution intent, send a message, run n8n, deploy, edit a
+may not apply a fix, mutate Core, create an execution intent, send a message, run QuickFurno Core Automation, deploy, edit a
 production file, reach a shell, read an environment, call a URL or touch a production database.
 
 The founder-approved future shape is unchanged, and JAO-4 stops well before the end of it:

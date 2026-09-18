@@ -286,7 +286,7 @@ hashing, no submission or lookup flow, no contact or consent read composition, n
 model call, no live QuickFurno adapter and no ingress change. Those are P6B and the handshake.
 
 No QuickFurno repository change. No migration, no `0012`. No managed database access. No provider or
-n8n activation. No RWC-P7 (RAG) and no RWC-P8 (cross-channel identity).
+QuickFurno Core Automation activation. No RWC-P7 (RAG) and no RWC-P8 (cross-channel identity).
 
 ## Change-control rule
 

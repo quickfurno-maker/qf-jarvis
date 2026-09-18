@@ -18,13 +18,13 @@ Those revisions had not been written down anywhere. An audit of the Phase 2 impl
 
 ## 1. The permanent rule is unchanged
 
-> **Jarvis recommends. QuickFurno Core authorizes. n8n executes. Providers deliver. Results return to Core.**
+> **Jarvis recommends. QuickFurno Core authorizes. QuickFurno Core Automation executes. Providers deliver. Results return to Core.**
 
-- **No Jarvis-to-n8n path.** Not now, not in any phase.
+- **No Jarvis-to-QuickFurno Core Automation path.** Not now, not in any phase.
 - **No Jarvis-to-provider path.** No WhatsApp API call, no telephony connection, no provider credential inside the Jarvis trust zone.
 - **No Jarvis write path into any QuickFurno business table.** Not permanently, not temporarily, not "just as a cache."
 
-Nothing in this directive weakens that rule, and nothing may. It is enforced structurally in `@qf-jarvis/contracts` — `ExecutionIntentV1.issuer` is the literal `quickfurno-core` and its `executor` the literal `n8n`, so **Jarvis cannot construct a valid execution intent** ([ADR-0002](../decisions/ADR-0002-recommend-authorize-execute-model.md), [ADR-0014](../decisions/ADR-0014-governed-lifecycle-contracts.md)).
+Nothing in this directive weakens that rule, and nothing may. It is enforced structurally in `@qf-jarvis/contracts` — `ExecutionIntentV1.issuer` is the literal `quickfurno-core` and its `executor` the literal `QuickFurno Core Automation`, so **Jarvis cannot construct a valid execution intent** ([ADR-0002](../decisions/ADR-0002-recommend-authorize-execute-model.md), [ADR-0014](../decisions/ADR-0014-governed-lifecycle-contracts.md)).
 
 ---
 
@@ -36,7 +36,7 @@ Jarvis holds **derived, non-authoritative views**. When a derived view and Core 
 
 ### The QuickFurno Communication Core
 
-**"QuickFurno Communication Core" is the communication authority inside QuickFurno Core.** It is not a separate system, and it is not the QF Communications Runtime (which lives in n8n's trust zone and *delivers*; see [communication-model.md](./communication-model.md)).
+**"QuickFurno Communication Core" is the communication authority inside QuickFurno Core.** It is not a separate system, and it is not the QF Communications Runtime (which lives in QuickFurno Core Automation's trust zone and *delivers*; see [communication-model.md](./communication-model.md)).
 
 It owns, exclusively:
 
@@ -211,9 +211,9 @@ So the two are separate contracts (`RecommendationEvaluationV1` and `OutcomeFeed
 
 Corrected, and load-bearing ([ADR-0017](../decisions/ADR-0017-live-communication-sequencing.md)):
 
-### Phase 10 — n8n Execution Bridge: **TEST ONLY**
+### Phase 10 — QuickFurno Core Automation Execution Bridge: **TEST ONLY**
 
-Test dispatcher. Fixtures. Simulated Core interface. Intent validation. n8n contract validation. Duplicate-effect testing. Messaging lifecycle simulation. Voice-gate design and tests.
+Test dispatcher. Fixtures. Simulated Core interface. Intent validation. QuickFurno Core Automation contract validation. Duplicate-effect testing. Messaging lifecycle simulation. Voice-gate design and tests.
 
 **No production recipient. No live provider. No production message. No production call.**
 

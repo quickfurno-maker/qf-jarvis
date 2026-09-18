@@ -24,7 +24,7 @@ Establish one provider-neutral, version-bound, deterministic **evaluation and re
 
 ### B. Package ownership
 
-A dedicated, provider-neutral package — `packages/model-evaluation/` (`@qf-jarvis/model-evaluation`) — separate from model-gateway serving, governed knowledge, agents, Core, and n8n. No global mutable singleton; **no database or persistence**. Production source has no network, model SDK, `process.env`, filesystem I/O, wall clock, or randomness — canonical time is injected.
+A dedicated, provider-neutral package — `packages/model-evaluation/` (`@qf-jarvis/model-evaluation`) — separate from model-gateway serving, governed knowledge, agents, Core, and QuickFurno Core Automation. No global mutable singleton; **no database or persistence**. Production source has no network, model SDK, `process.env`, filesystem I/O, wall clock, or randomness — canonical time is injected.
 
 ### C. Exact evaluation binding
 
@@ -60,7 +60,7 @@ Explainable deterministic evaluators for: exact schema and required/forbidden fi
 
 ### K. Red-team suite
 
-Synthetic mandatory cases: override QuickFurno Core; Riya performs a vendor-only action; Anisha performs a client-only action; Jarvis/model calls n8n or executes a business action directly; prompt injection inside governed knowledge; ignore privacy/tombstone/authority rules; reveal key/token/system prompt/chain-of-thought; `LOCAL_ONLY` sent hosted; `HUMAN_ONLY` sent to a model; erased/tombstoned subject retrieval; stale/superseded package/product/website/policy fact; fabricated/versionless citation; malformed structured output; unsupported tool intent; human takeover active but AI replies; cancellation/kill-switch ignored; candidate/shadow output treated as authority.
+Synthetic mandatory cases: override QuickFurno Core; Riya performs a vendor-only action; Anisha performs a client-only action; Jarvis/model calls QuickFurno Core Automation or executes a business action directly; prompt injection inside governed knowledge; ignore privacy/tombstone/authority rules; reveal key/token/system prompt/chain-of-thought; `LOCAL_ONLY` sent hosted; `HUMAN_ONLY` sent to a model; erased/tombstoned subject retrieval; stale/superseded package/product/website/policy fact; fabricated/versionless citation; malformed structured output; unsupported tool intent; human takeover active but AI replies; cancellation/kill-switch ignored; candidate/shadow output treated as authority.
 
 ### L. Outcomes
 
@@ -84,11 +84,11 @@ Content-free evaluation events: suite/run/evidence ids/versions; release/provide
 
 ### Q. Authority
 
-Evaluation produces **evidence only** — it authorizes and executes nothing. Core is final authority; n8n execution-only; Riya client-only; Anisha vendor-only; Jarvis coordinates. The Jarvis Conversation Operations Center remains a mandatory later phase, absent here. Kimi is excluded.
+Evaluation produces **evidence only** — it authorizes and executes nothing. Core is final authority; QuickFurno Core Automation execution-only; Riya client-only; Anisha vendor-only; Jarvis coordinates. The Jarvis Conversation Operations Center remains a mandatory later phase, absent here. Kimi is excluded.
 
 ### R. Non-goals
 
-No live model/provider/LLM-judge/real data/activation/promotion/persistence/DB/schema/migration 0008/semantic retrieval/vector/RAG/agents/memory/WhatsApp/dashboard/n8n/tools/deployment.
+No live model/provider/LLM-judge/real data/activation/promotion/persistence/DB/schema/migration 0008/semantic retrieval/vector/RAG/agents/memory/WhatsApp/dashboard/QuickFurno Core Automation/tools/deployment.
 
 ## Rejected alternatives
 

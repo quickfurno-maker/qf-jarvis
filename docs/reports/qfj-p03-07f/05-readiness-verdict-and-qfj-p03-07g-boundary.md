@@ -38,7 +38,7 @@ exactly one position; there is no skip.
 - **No dashboard/frontend; no sensitive event payload, stack, raw message, SQL, or read-model row exposed.**
 - **No migration change, no migration 0007, no SQL file, no managed deployment, no managed-PostgreSQL or
   Supabase access; no package-root API expansion (39 symbols).**
-- **No n8n, WhatsApp, Riya/Anisha, Groq/model-gateway, RAG/pgvector/memory, Core, payment, package,
+- **No QuickFurno Core Automation, WhatsApp, Riya/Anisha, Groq/model-gateway, RAG/pgvector/memory, Core, payment, package,
   marketing, or analytics code. No MVP (M1) runtime work.**
 
 ## Readiness posture

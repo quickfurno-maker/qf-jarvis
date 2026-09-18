@@ -4,7 +4,7 @@
  * This root barrel exposes ONLY the minimum stable, provider-neutral contracts a future consumer needs
  * to build/route a model call and a real provider adapter to implement. It exposes NO provider SDK type,
  * NO internal router/circuit/semaphore, NO mutable registry, and NOT the `FakeModelProvider` (that is a
- * test double, exported only from the `@qf-jarvis/model-gateway/testing` subpath). No agent, no n8n, no
+ * test double, exported only from the `@qf-jarvis/model-gateway/testing` subpath). No agent, no QuickFurno Core Automation, no
  * database, no network, no key.
  */
 

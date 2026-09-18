@@ -133,7 +133,7 @@ describe('JF-5B (0A) Mastra orchestrates; it never routes, holds or sends', () =
         'whatsapp',
         'WhatsApp',
         'webhook',
-        'n8n',
+        'quickfurno-core-automation',
         'graph.facebook',
         'sendMessage',
       ]) {
@@ -268,7 +268,7 @@ describe('JF-5B the certification operator is off the serving path', () => {
         }).toEqual({ file: file.split(sep).pop(), importSpecifier, imported: false });
       }
       for (const forbidden of [
-        'n8n',
+        'quickfurno-core-automation',
         'Pool(',
         'createDatabasePool',
         'migration',

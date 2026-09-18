@@ -8,7 +8,7 @@ The reply plan binds exact references — the model port's `ProviderReleaseRef` 
 
 ## Proposal contract
 
-Every proposal is frozen, `PENDING_CORE_VALIDATION`, and carries **no** `send`/`execute`/`authorize`/`callN8n`/`commit`/`deliver` method (proven). The closed kinds `REPLY`, `ESCALATE_TO_HUMAN`, `REQUEST_CLARIFICATION`, `NO_ACTION` are all constructible and pending. Actor↔party scope is enforced at creation: a `RIYA` proposal on a `VENDOR` party (or `ANISHA` on a `CLIENT` party) is refused (`scope-violation`); deterministic assignment never produces a crossover (CLIENT→RIYA, VENDOR→ANISHA).
+Every proposal is frozen, `PENDING_CORE_VALIDATION`, and carries **no** `send`/`execute`/`authorize`/`callQuickFurno Core Automation`/`commit`/`deliver` method (proven). The closed kinds `REPLY`, `ESCALATE_TO_HUMAN`, `REQUEST_CLARIFICATION`, `NO_ACTION` are all constructible and pending. Actor↔party scope is enforced at creation: a `RIYA` proposal on a `VENDOR` party (or `ANISHA` on a `CLIENT` party) is refused (`scope-violation`); deterministic assignment never produces a crossover (CLIENT→RIYA, VENDOR→ANISHA).
 
 ## Core decision port — the only business authority
 
@@ -19,4 +19,4 @@ The Core decision comes **solely** from the injected port; agent-runtime cannot 
 - the decision is immutable (frozen), and `ACCEPTED` carries **no** `send`/`deliver`/`execute` method — it means Core-approved **only**, never sent, delivered, executed, or persisted;
 - the orchestration result exposes no `send`/`deliver`/`transmit`/`dispatch` — **there is no delivery command**.
 
-QuickFurno Core is the final business authority; models/agents/Jarvis authorize and execute nothing; n8n later executes only a separately authorized delivery command; Riya stays client-only, Anisha vendor-only, Jarvis coordination.
+QuickFurno Core is the final business authority; models/agents/Jarvis authorize and execute nothing; QuickFurno Core Automation later executes only a separately authorized delivery command; Riya stays client-only, Anisha vendor-only, Jarvis coordination.

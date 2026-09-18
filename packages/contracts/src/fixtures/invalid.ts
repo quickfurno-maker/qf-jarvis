@@ -280,9 +280,10 @@ export const INVALID_FIXTURES: readonly InvalidFixture[] = [
     }),
   },
   {
-    name: 'execution intent: targeting a provider directly instead of n8n',
+    name: 'execution intent: targeting a provider directly instead of QuickFurno Core Automation',
     contract: 'ExecutionIntentV1',
-    because: 'The Jarvis-to-provider edge does not exist. Only n8n executes.',
+    because:
+      'The Jarvis-to-provider edge does not exist. Only QuickFurno Core Automation executes.',
     value: variantOf(validExecutionIntent, (draft) => {
       draft['executor'] = 'whatsapp-provider';
     }),
@@ -608,7 +609,7 @@ export const INVALID_FIXTURES: readonly InvalidFixture[] = [
       contractVersion: 1,
       state: 'executed',
       recordedAt: FIXTURE_TIMES.recordedAt,
-      reasonCode: 'n8n.execution-attempted',
+      reasonCode: 'quickfurno-core-automation.execution-attempted',
       correlationId: FIXTURE_IDS.correlation,
     },
   },

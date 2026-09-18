@@ -11,7 +11,7 @@ Ownership follows [system-boundary.md](./system-boundary.md), which is authorita
 
 **Agents recommend. They do not authorize and they do not execute.**
 
-An agent's only output is a structured recommendation. A recommendation is inert: it cannot cause an effect, cannot move money, cannot message anyone, cannot assign a lead. It becomes capable of causing an effect only after QuickFurno Core records an approval decision and issues a bounded execution intent — and even then, n8n does the executing, not the agent.
+An agent's only output is a structured recommendation. A recommendation is inert: it cannot cause an effect, cannot move money, cannot message anyone, cannot assign a lead. It becomes capable of causing an effect only after QuickFurno Core records an approval decision and issues a bounded execution intent — and even then, QuickFurno Core Automation does the executing, not the agent.
 
 This is not a limitation to be engineered around. It is the product.
 
@@ -65,7 +65,7 @@ Those are three different failures, and each is worth being concrete about:
 
 - **Never assigns.** She may *notice* that a client is dissatisfied, may *carry* the client's explicit confirmation, and may *ask* Core to reassign. She may not choose the vendors — and the reassignment request has **no field in which she could name one**. The failure this prevents is not abstract: three vendors are charged, in real lead value, for a real person's home renovation because a model decided their tone had cooled. Nobody gets that back.
 - **Never changes consent.** Consent, preferences, suppressions, and STOP/START belong to the QuickFurno Communication Core, exclusively ([communication-model.md](./communication-model.md)). Unknown or stale consent is **not permission**, and a client who tolerated a delivery update has not agreed to be marketed to.
-- **Never sends directly.** A message reaches a client only after Core authorizes it and n8n executes it through an approved provider. Riya recommends what to say, when, and through which channel — and that is the end of her reach.
+- **Never sends directly.** A message reaches a client only after Core authorizes it and QuickFurno Core Automation executes it through an approved provider. Riya recommends what to say, when, and through which channel — and that is the end of her reach.
 
 Dissatisfaction is **evidence**, never confirmation. A replacement requires a confirmation artifact that points at the canonical event in which the client **actually asked**; a model's confidence is not a substitute for that, and may never be promoted into one ([ADR-0015](../decisions/ADR-0015-complete-client-journey-and-reassignment-policy.md)). Riya will therefore sometimes be right and unable to act — she will spot a dissatisfied client who never asks — and that is the correct outcome, because the failure in the other direction is unrecoverable.
 
@@ -81,7 +81,7 @@ She recommends a recharge **conversation**; she never touches money. Money-adjac
 
 Campaign performance intelligence. Marketing channel efficiency. Cost per verified lead by city and category. Demand intelligence. SEO opportunity detection. Content recommendations. Creative fatigue detection. Budget-shift recommendations.
 
-**Jitin has no advertising-provider credentials and no budget authority.** There is no Google Ads path and no Meta Ads path out of the Jarvis trust zone — not now, not in a later phase. He *may* recommend a budget shift with evidence; he *may not* change a budget. Ad spend is money: authorization is Core's and execution is n8n's.
+**Jitin has no advertising-provider credentials and no budget authority.** There is no Google Ads path and no Meta Ads path out of the Jarvis trust zone — not now, not in a later phase. He *may* recommend a budget shift with evidence; he *may not* change a budget. Ad spend is money: authorization is Core's and execution is QuickFurno Core Automation's.
 
 Jitin works in **aggregate**. His domain is cities, categories, and campaigns, and it contains **no client and no vendor**. Marketing intelligence does not *require* remembering individual people in order to work, so it is not permitted to — a capability that is unnecessary and dangerous is simply not granted.
 

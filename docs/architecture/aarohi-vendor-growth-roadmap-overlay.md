@@ -4,7 +4,7 @@
 
 **Runtime status: PLANNED / DISABLED.** There is no Aarohi runtime, no prospect store, no enrichment
 pipeline, no outreach, no provider or channel credential, no Meta API call, no Instagram transport, no
-WhatsApp integration, no n8n execution and no managed persistence in this repository. Production
+WhatsApp integration, no QuickFurno Core Automation execution and no managed persistence in this repository. Production
 rollout remains **OFF**, and no package or application imports the Aarohi package at all.
 
 **Offline DOMAIN status.** This overlay once said "nothing here is implemented", which stopped being
@@ -109,8 +109,8 @@ a **stop**, not a proceed.
   authority.** Aarohi never replaces, duplicates or bypasses it.
 - **Aarohi holds no consent, opt-out, suppression, STOP or do-not-contact authority**, and stores no
   copy of one. Core decides eligibility, and re-decides it at execution time.
-- **Aarohi never mutates QuickFurno marketplace tables**, and never calls a provider or n8n directly.
-  Approved execution goes Core/human → n8n → provider.
+- **Aarohi never mutates QuickFurno marketplace tables**, and never calls a provider or QuickFurno Core Automation directly.
+  Approved execution goes Core/human → QuickFurno Core Automation → provider.
 - **Commercial truth — packages, entitlements, pricing, discounts, offers — comes from Core**, never
   from a model, never from RAG, and never from an enriched or scraped source.
 - **A request carries no authority** ([ADR-0002](../decisions/ADR-0002-recommend-authorize-execute-model.md)).
@@ -176,7 +176,7 @@ execution path or rollout, and Aarohi remains **PLANNED / DISABLED**.
 
 ### AVG-5 — Instagram Conversation Integration
 Governed inbound/outbound conversation on Instagram. Delivery remains provider-side and execution
-remains n8n-side; Aarohi holds no provider credential and calls no Meta API. Consent and eligibility
+remains QuickFurno Core Automation-side; Aarohi holds no provider credential and calls no Meta API. Consent and eligibility
 are Core's, revalidated at execution time.
 
 **The offline DOMAIN for this stage is defined by
@@ -211,8 +211,8 @@ deployment and no production activation. Exact first-proof boundaries:
 - **The single positive outcome is `READY_FOR_FUTURE_CORE_INSTAGRAM_COMMUNICATION_PATH`**, and every
   candidate states as a machine-checked literal `false` that no communication request, approval
   request, approval decision, communication authorization or execution intent was created, that no
-  provider, Meta API or n8n was asked for anything, and that nothing was sent or delivered.
-- Zero Meta API calls, n8n executions, provider sends, channel sends, model calls, persistence,
+  provider, Meta API or QuickFurno Core Automation was asked for anything, and that nothing was sent or delivered.
+- Zero Meta API calls, QuickFurno Core Automation executions, provider sends, channel sends, model calls, persistence,
   managed migrations, production entries and new third-party dependencies.
 
 ### AVG-6 — Omnichannel Identity and WhatsApp Handoff
@@ -261,7 +261,7 @@ production activation. Exact first-proof boundaries:
 - **The shared governed channel vocabulary is unchanged.** `whatsapp` was already a member and stays
   one; naming the destination channel of a transition is not activating it, and adopting the real
   execution path remains QFJ-P09's separately reviewed work.
-- Zero Meta API calls, WhatsApp sends, n8n executions, provider sends, channel sends, model calls,
+- Zero Meta API calls, WhatsApp sends, QuickFurno Core Automation executions, provider sends, channel sends, model calls,
   persistence, managed migrations, production entries and new third-party dependencies.
 
 ### AVG-7 — Aarohi Sales Brain
@@ -314,7 +314,7 @@ activation. Exact first-proof boundaries:
   own. AVG-7's own `interpretationRef` and `planRef` additionally carry the contact shapes and a
   count of digits anywhere, so a destination cannot be smuggled into the two references AVG-7
   invents.
-- Zero model calls, prompt resolutions, retrievals, Meta API calls, n8n executions, provider sends,
+- Zero model calls, prompt resolutions, retrievals, Meta API calls, QuickFurno Core Automation executions, provider sends,
   channel sends, communication requests, approvals, authorizations, execution intents, acquisition
   case transitions, persistence, managed migrations, production entries and new third-party
   dependencies.
@@ -605,5 +605,5 @@ source and no production activation. Exact first-proof boundaries:
 
 No migration is allocated or authorized by this document. No managed database is touched. No
 deployment, DNS, Traefik or infrastructure change is implied. No provider, channel or credential is
-configured. No n8n workflow or Meta API is invoked. **Roadmap and overlay text alone cannot authorize
+configured. No QuickFurno Core Automation workflow or Meta API is invoked. **Roadmap and overlay text alone cannot authorize
 a migration, a capability activation, or a production rollout.**

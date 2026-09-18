@@ -55,7 +55,14 @@ describe('end-to-end composition', () => {
     expect(source.reads()).toBeGreaterThanOrEqual(4);
     // CORE_ACCEPTED exposes no send/deliver/execute/persist surface.
     const surface = result as unknown as Record<string, unknown>;
-    for (const forbidden of ['send', 'deliver', 'execute', 'persist', 'callN8n', 'transmit']) {
+    for (const forbidden of [
+      'send',
+      'deliver',
+      'execute',
+      'persist',
+      'callcoreAutomation',
+      'transmit',
+    ]) {
       expect(surface[forbidden]).toBeUndefined();
     }
   });

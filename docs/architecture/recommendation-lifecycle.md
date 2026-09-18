@@ -22,7 +22,7 @@ Ownership follows [system-boundary.md](./system-boundary.md), which is authorita
 | **changes requested** | A decider wants it revised before deciding | Human approver, recorded by Core |
 | **expired** | It went stale before a decision was made. **Not approved.** Nothing happens | Time |
 | **converted to execution intent** | Core has produced a bounded, expiring execution intent from the approval | QuickFurno Core |
-| **executed** | n8n has attempted the intent against a provider | n8n |
+| **executed** | QuickFurno Core Automation has attempted the intent against a provider | QuickFurno Core Automation |
 | **result received** | The execution result has returned to Core and reached Jarvis as an event | QuickFurno Core → QF Jarvis |
 | **closed** | The lifecycle is finished and the outcome is recorded for evaluation | QF Jarvis |
 
@@ -110,7 +110,7 @@ This is worth stating plainly, because a lifecycle diagram invites the assumptio
 
 A recommendation may be **informational** — "verified lead rate in Pune for carpentry dropped this week, here is the evidence" — and close as soon as a human has read it. It may be **advisory to a person** — "manually verify this lead" — where the human does the work themselves and no execution intent is ever created. It may be **suppressed** by Jarvis during consolidation because a better recommendation already covers the same underlying situation.
 
-Only recommendations that propose an *action against a client, vendor, ad account, or other external system* need to travel the full path through approval, intent, n8n, and a provider.
+Only recommendations that propose an *action against a client, vendor, ad account, or other external system* need to travel the full path through approval, intent, QuickFurno Core Automation, and a provider.
 
 ---
 
@@ -132,8 +132,8 @@ A client submitted a requirement four days ago, was contacted once, and has gone
 - Riya emits a recommendation: subject = the client, proposed action = a follow-up message, with recommended timing and channel, evidence = the requirement, the contact attempt, and the silence.
 - **awaiting approval** — this reaches a real client, so it requires approval. A client-support team member approves within an approved template.
 - **approved → converted to execution intent** by QuickFurno Core: bounded (this client, this channel, this content, expires in N hours).
-- **executed** by n8n via the communication provider. **result received.** **closed.**
-- Riya never sent anything. She proposed; a human authorized; n8n delivered.
+- **executed** by QuickFurno Core Automation via the communication provider. **result received.** **closed.**
+- Riya never sent anything. She proposed; a human authorized; QuickFurno Core Automation delivered.
 
 ### Anisha recommends vendor reactivation
 
@@ -141,7 +141,7 @@ A vendor onboarded, completed 60% of their profile, never activated, and has not
 
 - Anisha emits a recommendation: subject = the vendor, proposed action = a reactivation conversation, evidence = the profile gaps, the inactivity, and the supply-demand context.
 - Approval by the sales/vendor-acquisition team. If the recommendation had proposed anything touching **wallet, package, or payment**, it would escalate to stronger approval — those are money.
-- Approved → intent → n8n → provider → result → closed.
+- Approved → intent → QuickFurno Core Automation → provider → result → closed.
 
 ### Jitin recommends campaign budget review
 
@@ -149,7 +149,7 @@ A campaign's lead volume is steady but its cost per **verified** lead has risen 
 
 - Jitin emits a recommendation: subject = the campaign, proposed action = a budget shift, evidence = the verified-lead economics by city and category, the trend, and the demand signal.
 - **This is money.** It requires stronger approval — the founder or an administrator with explicit authority ([execution-governance.md](./execution-governance.md)).
-- If approved, QuickFurno Core issues a bounded execution intent and n8n applies the change at the advertising provider. If not approved, nothing changes. Jitin has no path to the ad account.
+- If approved, QuickFurno Core issues a bounded execution intent and QuickFurno Core Automation applies the change at the advertising provider. If not approved, nothing changes. Jitin has no path to the ad account.
 
 ### Jarvis consolidates founder priorities
 

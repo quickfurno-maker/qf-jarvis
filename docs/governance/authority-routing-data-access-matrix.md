@@ -9,7 +9,7 @@
 | **READ** | May read the data/state; no change. |
 | **RECOMMEND** | May produce an evidence-backed recommendation; no authority to act. |
 | **REQUEST** | May submit a bounded request (carries no authority; someone else authorizes). |
-| **EXECUTE_APPROVED** | May trigger an **already-approved** action through the execution gateway (n8n → provider). Never self-approves. |
+| **EXECUTE_APPROVED** | May trigger an **already-approved** action through the execution gateway (QuickFurno Core Automation → provider). Never self-approves. |
 | **ESCALATE** | Must route to Jarvis, QuickFurno Core, or an authorized human. |
 | **PROHIBITED** | Must never do this by any path. |
 
@@ -55,7 +55,7 @@
 | Deletion / erasure | REQUEST · ESCALATE | REQUEST · ESCALATE | REQUEST · ESCALATE | ESCALATE (privacy case) | Core/Human |
 | Legal issue | ESCALATE | ESCALATE | ESCALATE | ESCALATE (owns case) | Human |
 | Fraud issue | ESCALATE | ESCALATE | ESCALATE | ESCALATE (owns case) | Core/Human |
-| Provider invocation | PROHIBITED | PROHIBITED | PROHIBITED | PROHIBITED | n8n after approval |
+| Provider invocation | PROHIBITED | PROHIBITED | PROHIBITED | PROHIBITED | QuickFurno Core Automation after approval |
 | Database mutation (marketplace) | PROHIBITED | PROHIBITED | PROHIBITED | PROHIBITED | Core |
 | Deployment | PROHIBITED | PROHIBITED | PROHIBITED | PROHIBITED | Human/ops |
 
@@ -67,7 +67,7 @@ net-new UNREGISTERED vendor acquisition (through paid/active conversion) → Aar
 REGISTERED/existing vendor relationship, support and success → Anisha
 complex / disputed / cross-agent task → Jarvis
 sensitive / commercial / legal authority → QuickFurno Core or authorized human
-approved execution           → n8n
+approved execution           → QuickFurno Core Automation
 delivery                     → provider
 result                       → QuickFurno Core and Jarvis
 ```

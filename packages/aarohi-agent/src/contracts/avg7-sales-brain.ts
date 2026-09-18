@@ -771,7 +771,7 @@ export interface AarohiSalesBrainPosture {
   readonly modelCallExecuted: false;
   readonly promptResolved: false;
   readonly retrievalExecuted: false;
-  readonly n8nExecutionRequested: false;
+  readonly coreAutomationExecutionRequested: false;
   readonly providerSendRequested: false;
   readonly channelSendRequested: false;
   readonly sent: false;
@@ -816,7 +816,7 @@ export const salesBrainPostureSchema = z
     modelCallExecuted: z.literal(false),
     promptResolved: z.literal(false),
     retrievalExecuted: z.literal(false),
-    n8nExecutionRequested: z.literal(false),
+    coreAutomationExecutionRequested: z.literal(false),
     providerSendRequested: z.literal(false),
     channelSendRequested: z.literal(false),
     sent: z.literal(false),
@@ -863,7 +863,7 @@ export const AAROHI_SALES_BRAIN_POSTURE: AarohiSalesBrainPosture = Object.freeze
     modelCallExecuted: false,
     promptResolved: false,
     retrievalExecuted: false,
-    n8nExecutionRequested: false,
+    coreAutomationExecutionRequested: false,
     providerSendRequested: false,
     channelSendRequested: false,
     sent: false,

@@ -9,7 +9,7 @@ ambient monitor governor and one governed business-action proposal composition n
 `apps/worker/src/jao/`, and none of them is imported or started by any production entry point.
 
 JAO-6 is merged and certified (PR #162). It still submits nothing to Core, creates no approval
-decision and no execution intent, calls no n8n, provider or channel, and persists nothing.
+decision and no execution intent, calls no QuickFurno Core Automation, provider or channel, and persists nothing.
 
 **A JAO-7 implementation proof is PROPOSED IN THIS BRANCH and is not merged.** It adds one durable
 advanced-autonomy coordinator: policy-bounded planning over two static missions, one governed Riya
@@ -17,9 +17,9 @@ delegation, deterministic capacity optimisation, continuous evaluation, durable 
 pause/resume/kill/expiry, correlation of EXTERNALLY SUPPLIED Core artifacts, and a VIRTUAL REVERSIBLE
 REHEARSAL with verification and rollback.
 
-**No live Core -> n8n execution transport is adopted by JAO-7.** It creates no approval decision and
+**No live Core -> QuickFurno Core Automation execution transport is adopted by JAO-7.** It creates no approval decision and
 no execution intent, and it does not execute a Core-issued intent -- the executor named on an
-`ExecutionIntentV1` is n8n, and correlating one does not make Jarvis its executor. The only reversible
+`ExecutionIntentV1` is QuickFurno Core Automation, and correlating one does not make Jarvis its executor. The only reversible
 effect is a local synthetic integer. This paragraph is written to be true on the branch; it must be
 updated to say "merged" only after the pull request actually merges.
 
@@ -40,7 +40,7 @@ is activated.** Ambient eligibility is decided by an explicit function a caller 
 scheduler or event ingress requires its own activation review.
 
 Nothing beyond that is activated. There is still no autonomous loop, capability-broker package, MCP
-server, provider route, credential, managed migration, n8n execution, channel action, production
+server, provider route, credential, managed migration, QuickFurno Core Automation execution, channel action, production
 mutation, deployment or rollout. Implementation is not activation.
 
 ## What this overlay is
@@ -67,7 +67,7 @@ Existing responsibilities remain where they are:
 | Execution intent / dispatch provenance | existing execution-intent and dispatch boundaries |
 | Operational read model | existing framework-neutral control-plane read contract |
 | Business truth and authorization | **QuickFurno Core** |
-| Approved external execution | **existing QF execution path through n8n/providers** |
+| Approved external execution | **existing QF execution path through QuickFurno Core Automation/providers** |
 
 JAO may coordinate these seams. It may not duplicate their authority.
 
@@ -134,7 +134,7 @@ approved/synthetic operational snapshot
 
 The supervisor may investigate, correlate evidence, rank hypotheses, ask for missing evidence, and recommend a next step.
 
-It performs **zero external business effect**: no communication send, Core mutation, n8n execution, provider/channel action, database write, deployment, or automatic remediation.
+It performs **zero external business effect**: no communication send, Core mutation, QuickFurno Core Automation execution, provider/channel action, database write, deployment, or automatic remediation.
 
 Exit requires deterministic fixtures for healthy operation, one explainable anomaly, missing evidence, tool failure, model failure, budget exhaustion, human pause, and prompt-injection/tool-abuse attempts, with bounded provenance/cost evidence.
 
@@ -145,7 +145,7 @@ Framework-specific Mastra code is confined to `apps/worker/src/jao/mastra-superv
 does not activate it. The proof parses one injected control-plane snapshot, invokes one bounded L1
 read capability, may make at most one provider-neutral call through the existing QF Model Gateway,
 and returns an inert founder-facing shadow operational attention record. It adds no provider
-credential, direct model route, persistence, migration, specialist delegation, Core/n8n/channel
+credential, direct model route, persistence, migration, specialist delegation, Core/QuickFurno Core Automation/channel
 execution, deployment or production rollout. JAO-1 remains **SHADOW / DEFAULT-OFF** after merge.
 
 ### JAO-2 - Governed Specialist Delegation
@@ -257,7 +257,7 @@ is no unkill.
 JAO-5 reuses the canonical JAO-1 shadow investigation rather than inventing a second engine, the QF
 Model Gateway remains the only model path, and the public runner accepts no investigator callback.
 Output is inert `SHADOW_OPERATIONAL_ATTENTION`: zero business effect, zero Core mutation, zero
-execution intents, zero channel sends, zero n8n, zero JAO-3 writes, zero JAO-4 tool calls and zero
+execution intents, zero channel sends, zero QuickFurno Core Automation, zero JAO-3 writes, zero JAO-4 tool calls and zero
 specialist delegation. The JAO-5 schema is LOCAL and is not managed migration history.
 
 ### JAO-6 - Governed Business-Action Proposals
@@ -267,7 +267,7 @@ Permit the supervisor to construct proposals that enter the **existing** recomme
 **Implementation proof MERGED (PR #162)**
 ([ADR-0120](../decisions/ADR-0120-jao6-governed-business-action-proposals.md)). It remains OFFLINE
 and DEFAULT-OFF: it submits nothing to Core, creates no approval decision and no execution intent,
-calls no n8n, provider or channel, persists nothing, and is imported by no production entry point.
+calls no QuickFurno Core Automation, provider or channel, persists nothing, and is imported by no production entry point.
 Exact first-proof boundaries:
 
 - The pipeline is `bounded candidate + static reviewed policy -> canonical RecommendationV1 ->
@@ -301,7 +301,7 @@ Exact first-proof boundaries:
 - **A proposal is not send permission.** Consent, opt-out, suppression and STOP eligibility are
   re-read at execution time by Core and the communications path. JAO-6 resolves no recipient, reads
   no consent state and caches none.
-- Zero Core calls, zero approval decisions, zero execution intents, zero n8n executions, zero
+- Zero Core calls, zero approval decisions, zero execution intents, zero QuickFurno Core Automation executions, zero
   channel sends, zero provider calls, zero persistence, zero JAO-3 writes, zero JAO-4 tool calls,
   zero JAO-5 scheduler activation, zero new third-party dependencies.
 
@@ -353,8 +353,8 @@ Advanced autonomy does not relax the permanent authority ceiling. Irreversible, 
 - **Persisted authority is history, not permission** -- digests and identities only, with no state or
   column meaning `AUTHORIZED`, `CAN_EXECUTE` or `SEND_ALLOWED`.
 - **The reversible effect is a VIRTUAL REHEARSAL**, never an execution: two integers in a JAO-7 row,
-  no host, network, provider, channel, n8n, Core or business reach, and no `ExecutionResultV1`.
-- Zero Core calls, n8n executions, provider calls, channel sends, production mutations, managed
+  no host, network, provider, channel, QuickFurno Core Automation, Core or business reach, and no `ExecutionResultV1`.
+- Zero Core calls, QuickFurno Core Automation executions, provider calls, channel sends, production mutations, managed
   migrations, worker-entry changes and new third-party dependencies.
 
 ## Relation to Aarohi AVG
@@ -374,11 +374,11 @@ Implementation is not activation. Shadow output authorizes nothing. Passing eval
 **Current posture:** JAO-0 governance adopted. **JAO-1 through JAO-6 merged as OFFLINE,
 DEFAULT-OFF, SHADOW proofs** -- present in the worker composition, activated by nothing; the JAO-3
 and JAO-5 schemas are applied to no managed database, JAO-4 reaches no host, network or command,
-JAO-5 starts no scheduler, and JAO-6 reaches no Core, n8n, provider or channel and creates no
+JAO-5 starts no scheduler, and JAO-6 reaches no Core, QuickFurno Core Automation, provider or channel and creates no
 approval decision or execution intent.
 
 **A JAO-7 OFFLINE, DEFAULT-OFF, SHADOW proof is PROPOSED and awaiting owner review; it is NOT merged
-and NOT activated.** No live Core -> n8n transport is adopted, no approval decision or execution
+and NOT activated.** No live Core -> QuickFurno Core Automation transport is adopted, no approval decision or execution
 intent is created, no Core-issued intent is executed, the only reversible effect is a virtual
 rehearsal over local synthetic integers, its schema is applied to no managed database, and it is
 imported by no production entry point.

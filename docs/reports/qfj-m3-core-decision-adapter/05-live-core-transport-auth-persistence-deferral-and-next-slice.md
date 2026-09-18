@@ -10,7 +10,7 @@ This slice is a **PROPOSED integration contract**. It implements the adapter sha
 2. **A live transport.** No network, HTTP, socket, or webhook implementation exists. `CoreDecisionTransport` is an injected seam with fakes only; a real implementation (and its timeout/backpressure policy) is a later slice.
 3. **Authentication and secrets.** No auth, token, key, signature, or secret handling. Request signing / mTLS / bearer credentials are deferred with the live transport.
 4. **Persistence.** No DB, schema, or **migration 0008**; no idempotency-key store, no decision journal, no delivery-state. The idempotency key is computed deterministically but **not persisted** — deduplication of a real resubmission requires a Core-side or store-backed ledger, which is a later slice.
-5. **Delivery / execution.** `ACCEPTED` is an approved proposal only. Sending, delivering, executing, n8n orchestration, and WhatsApp transport remain **out of scope** and are Core/n8n responsibilities, never Jarvis's.
+5. **Delivery / execution.** `ACCEPTED` is an approved proposal only. Sending, delivering, executing, QuickFurno Core Automation orchestration, and WhatsApp transport remain **out of scope** and are Core/QuickFurno Core Automation responsibilities, never Jarvis's.
 6. **Live model, RAG, dashboard, deployment.** Unchanged from M1/M2 — none are touched.
 
 ## Why this ordering is safe
@@ -23,4 +23,4 @@ The adapter **cannot** fabricate or upgrade an outcome, **cannot** accept agains
 
 ## Standing constraints (unchanged)
 
-Riya client-only; Anisha vendor-only; Jarvis coordinator; **QuickFurno Core** is the final business authority and system of record; n8n is transport/execution only and decides no business rule; models/providers/evaluators/retrievers authorize and execute nothing; Kimi / Kimi K3 excluded. The **Conversation Operations Center** remains mandatory for a later slice and is **not** implemented here (no dashboard, WhatsApp, persistence, or n8n). Managed database/live lanes remain paused.
+Riya client-only; Anisha vendor-only; Jarvis coordinator; **QuickFurno Core** is the final business authority and system of record; QuickFurno Core Automation is transport/execution only and decides no business rule; models/providers/evaluators/retrievers authorize and execute nothing; Kimi / Kimi K3 excluded. The **Conversation Operations Center** remains mandatory for a later slice and is **not** implemented here (no dashboard, WhatsApp, persistence, or QuickFurno Core Automation). Managed database/live lanes remain paused.

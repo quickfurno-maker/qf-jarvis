@@ -173,7 +173,7 @@ describe('public API lock', () => {
       'deliver',
       'execute',
       'persist',
-      'callN8n',
+      'callcoreAutomation',
       'authorize',
       'approve',
       'dispatch',
@@ -204,7 +204,7 @@ describe('public API lock', () => {
         /from ['"](pg|groq-sdk|openai|@anthropic-ai\/sdk|ollama|axios|undici)['"]/,
       );
       expect(code).not.toMatch(/supabase|postgres|redis|SELECT |INSERT |UPDATE |DELETE /i);
-      expect(code).not.toMatch(/\bn8n\b|whatsapp|groq/i);
+      expect(code).not.toMatch(/\bcoreAutomation\b|whatsapp|groq/i);
       // Note the trailing `\s*\(`: `applyConversationControlCommand` is the sanctioned method name,
       // so the scan bans the ACTIONS, not every identifier that happens to contain "apply".
       expect(code).not.toMatch(/\b(send|deliver|execute|persist|approve|dispatch)\s*\(/);
@@ -270,7 +270,7 @@ describe('containment', () => {
         /from ['"]node:(fs|net|http|https|dns|tls|dgram|child_process|crypto)['"]/,
       );
       expect(text).not.toMatch(
-        /from ['"](pg|groq-sdk|openai|axios|undici|whatsapp-web\.js|@whiskeysockets\/baileys|n8n)['"]/,
+        /from ['"](pg|groq-sdk|openai|axios|undici|whatsapp-web\.js|@whiskeysockets\/baileys|QuickFurno Core Automation)['"]/,
       );
     }
   });

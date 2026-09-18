@@ -99,7 +99,7 @@ It does **not** create the repository's canonical approval request. It does not 
 It does not record an approval decision. It does not create communication authorization. It does not
 create an execution intent.
 
-This is deliberate. ADR-0002 says Jarvis recommends, Core authorizes, n8n executes and providers
+This is deliberate. ADR-0002 says Jarvis recommends, Core authorizes, QuickFurno Core Automation executes and providers
 deliver. ADR-0007 allows Jarvis to host an approval interface, but a click is only a request and Core
 owns the authoritative decision record.
 
@@ -175,7 +175,7 @@ Unchanged:
 - no model call or draft generation service;
 - no provider/channel credential;
 - no contact destination;
-- no Meta/Instagram/WhatsApp/n8n integration;
+- no Meta/Instagram/WhatsApp/QuickFurno Core Automation integration;
 - no canonical approval-request duplication;
 - no local approval decision;
 - no communication authorization;

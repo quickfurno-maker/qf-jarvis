@@ -261,7 +261,7 @@ is deliberately not logged either in this first slice.
 ### 15. What it does not touch
 
 No QuickFurno repository change, shared filesystem contract, sync file, client, route, migration,
-secret or browser JavaScript. No QuickFurno service-role credential. No n8n, WhatsApp, Meta, SMS,
+secret or browser JavaScript. No QuickFurno service-role credential. No QuickFurno Core Automation, WhatsApp, Meta, SMS,
 email, telephony, provider send or delivery lifecycle — **an HTTP response to a QuickFurno server is
 not provider delivery.** No database change: migrations stay exactly `0001`–`0011`, `0011` is
 byte-identical, there is no `0012`, and the managed database is not accessed. No continuity schema,

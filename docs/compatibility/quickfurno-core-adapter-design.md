@@ -101,10 +101,10 @@ Jarvis ──RecommendationV1──▶ Core intake
                                │
                                └─ approved ──▶ Core issues ExecutionIntentV1
                                                  issuer:   'quickfurno-core'   (literal)
-                                                 executor: 'n8n'               (literal)
+                                                 executor: 'QuickFurno Core Automation'               (literal)
                                                               │
                                                               ▼
-                                                    n8n executes ──▶ provider delivers
+                                                    QuickFurno Core Automation executes ──▶ provider delivers
                                                               │
                                                               ▼
                                           authoritative result event ──▶ back through the outbox
@@ -135,7 +135,7 @@ Jarvis ──RecommendationV1──▶ Core intake
 | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Opaque identifiers only**                  | `entityReferenceSchema` — `[A-Za-z0-9._:-]`, which **excludes `@` and `+`**, so an email address and an E.164 phone number are **structurally unable** to appear                                                           |
 | **No copied contact details**                | No phone, email, or address in any event or memory — **unless a later, explicit privacy decision approves it.** Stage 3.1.2 approves nothing                                                                               |
-| **Core resolves contacts at execution time** | n8n asks **Core** who to message, at the moment of authorized execution. **Jarvis never learns the recipient**, and cannot, because it never held them                                                                     |
+| **Core resolves contacts at execution time** | QuickFurno Core Automation asks **Core** who to message, at the moment of authorized execution. **Jarvis never learns the recipient**, and cannot, because it never held them                                              |
 | **Bands, never balances**                    | Money-adjacent events carry `low`/`medium`/`high`/`critical`. **A wallet figure in a Jarvis contract would be stale by construction** and would invite reasoning about a real vendor's money from a copy nobody reconciles |
 | **No shared credentials**                    | Jarvis holds **no** Supabase key, service-role key, or database credential for Core. Ever                                                                                                                                  |
 | **No direct table access**                   | In either direction                                                                                                                                                                                                        |

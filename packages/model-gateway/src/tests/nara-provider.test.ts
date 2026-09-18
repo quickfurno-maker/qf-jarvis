@@ -405,7 +405,7 @@ describe('JF-2A NaraRouter provider', () => {
       'write',
       'query',
       'send',
-      'n8n',
+      'quickfurno-core-automation',
     ]) {
       expect(surface).not.toContain(forbidden);
     }

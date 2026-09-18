@@ -6,7 +6,7 @@
 re-audited; no Core code was read, accessed or modified in this slice**
 
 **Docs-only and OFFLINE.** No production code, no contract, no event registry change, no migration, no
-Core/Supabase/n8n/provider access, no message, rollout **OFF**.
+Core/Supabase/QuickFurno Core Automation/provider access, no message, rollout **OFF**.
 
 ## Prerequisites, all merged
 
@@ -253,7 +253,7 @@ evidence variants arrive with their primitives.
 ## Posture
 
 No production code. No contract, event registry, event-backbone, ingestion or projection change. No
-Core modification, branch, PR, audit or re-pin. No managed Supabase. No n8n or provider access. No
+Core modification, branch, PR, audit or re-pin. No managed Supabase. No QuickFurno Core Automation or provider access. No
 message sent. **No migration allocated.**
 
 **Production rollout remains OFF. Runtime activation is unchanged.**

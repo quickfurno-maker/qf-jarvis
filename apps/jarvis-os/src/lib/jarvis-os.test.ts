@@ -135,7 +135,7 @@ describe('capability lifecycle', () => {
       'approval.submit',
       'conversation.control.write',
       'communication.live-send',
-      'execution.n8n.bridge',
+      'execution.core-automation.bridge',
       'aarohi.vendor-growth',
     ] as const) {
       const entry = capability(id);
@@ -270,14 +270,14 @@ describe('the resume marker and phase truth', () => {
   it('records QFJ-P09.02 and QFJ-P09.03 as merged, and invents no successor', async () => {
     // The markers moved when PR #95 and PR #96 merged. What merged is a test-only dispatch
     // VALIDATION boundary and then DURABILITY for its replay guard -- so neither label may read as
-    // an n8n bridge, and n8n must still report NOT_CONNECTED. Replacing "not implemented" with
+    // an QuickFurno Core Automation bridge, and QuickFurno Core Automation must still report NOT_CONNECTED. Replacing "not implemented" with
     // "the bridge is live" would swap one falsehood for a worse one.
     const roadmap = (await controlPlane()).roadmap();
     const qfj = roadmap.filter((marker) => marker.track === 'QFJ');
 
     const p0902 = qfj.find((marker) => marker.label.includes('QFJ-P09.02'));
     expect(p0902?.state).toBe('merged');
-    expect(p0902?.label).not.toContain('n8n bridge');
+    expect(p0902?.label).not.toContain('QuickFurno Core Automation bridge');
     expect(p0902?.detail).toContain('not implemented');
 
     const p0903 = qfj.find((marker) => marker.label.includes('QFJ-P09.03'));
@@ -443,7 +443,7 @@ describe('the default read model is the repository baseline, and read-only', () 
       knowledge: plane.knowledge(),
       evaluations: plane.evaluations(),
       businessAnalytics: plane.businessAnalytics(),
-      n8nExecution: plane.n8nExecution(),
+      coreAutomationExecution: plane.coreAutomationExecution(),
     };
     for (const [name, section] of Object.entries(unconnected)) {
       expect(section.availability, name).toBe('NOT_CONNECTED');
@@ -459,14 +459,14 @@ describe('the default read model is the repository baseline, and read-only', () 
     }
   });
 
-  it('reports QuickFurno Core and n8n as NOT_CONNECTED', async () => {
+  it('reports QuickFurno Core and QuickFurno Core Automation as NOT_CONNECTED', async () => {
     const byId = new Map(
       (await controlPlane())
         .systemHealth()
         .components.map((component) => [component.id, component]),
     );
     expect(byId.get('quickfurno-core')?.state).toBe('NOT_CONNECTED');
-    expect(byId.get('n8n')?.state).toBe('NOT_CONNECTED');
+    expect(byId.get('quickfurno-core-automation')?.state).toBe('NOT_CONNECTED');
   });
 });
 
@@ -501,12 +501,12 @@ describe('no live action capability is exposed', () => {
     }
   });
 
-  it('imports no database, provider, n8n or Meta client', () => {
+  it('imports no database, provider, QuickFurno Core Automation or Meta client', () => {
     for (const file of sourceFiles()) {
       const code = codeOnly(readFileSync(file, 'utf8'));
       const label = file.replace(/\\/g, '/').split('/apps/jarvis-os/')[1] ?? file;
-      // Import SPECIFIERS, not raw substrings. `n8n-not-connected` is a legitimate identifier for
-      // an attention row; `from 'n8n-workflow'` is the thing worth forbidding, and conflating the
+      // Import SPECIFIERS, not raw substrings. `QuickFurno Core Automation-not-connected` is a legitimate identifier for
+      // an attention row; `from 'QuickFurno Core Automation-workflow'` is the thing worth forbidding, and conflating the
       // two would force honest names to be renamed to satisfy a scanner.
       const specifiers = [...code.matchAll(/from\s+['"]([^'"]+)['"]/g)].map(
         (match) => match[1] ?? '',
@@ -516,7 +516,7 @@ describe('no live action capability is exposed', () => {
           'pg',
           'supabase',
           '@supabase',
-          'n8n-',
+          'quickfurno-core-automation-',
           'whatsapp',
           'twilio',
           'groq',

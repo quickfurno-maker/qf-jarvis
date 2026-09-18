@@ -20,7 +20,7 @@ export function validSnapshotV2(): ControlPlaneSnapshotV2 {
     authority: {
       jarvis: 'RECOMMENDS_AND_OBSERVES',
       quickfurnoCore: 'AUTHORIZES_AND_OWNS_BUSINESS_TRUTH',
-      n8n: 'EXECUTES_ONLY',
+      coreAutomation: 'EXECUTES_ONLY',
       provider: 'DELIVERS_ONLY',
     },
     rollout: { enabled: false, state: 'ROLLOUT_OFF' },
@@ -78,7 +78,7 @@ export function validSnapshotV2(): ControlPlaneSnapshotV2 {
       evaluations: emptySection('NOT_CONNECTED'),
       coreSync: emptySection('STATIC_BASELINE'),
       businessAnalytics: emptySection('NOT_CONNECTED'),
-      n8nExecution: emptySection('NOT_CONNECTED'),
+      coreAutomationExecution: emptySection('NOT_CONNECTED'),
     },
   };
 }

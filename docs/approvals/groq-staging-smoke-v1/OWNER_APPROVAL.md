@@ -58,7 +58,7 @@ value and the digest changes.
 ## 2. Owner scope statement (verbatim)
 
 > “The evaluation reference approves only the synthetic staging connectivity smoke. It does not
-> approve production quality, production activation, rollout, real customer data, WhatsApp, n8n,
+> approve production quality, production activation, rollout, real customer data, WhatsApp, QuickFurno Core Automation,
 > QuickFurno Core access, database access, or deployment.”
 
 ---
@@ -91,7 +91,7 @@ request.
 Specifically, S1C does not authorize: reading, requesting, validating, displaying, storing, or using
 the Groq API key; invoking the masked credential resolver; any Groq/API/network request; database,
 Supabase, Docker, or migration commands; deployment, provider activation, or production rollout; or
-any access to QuickFurno Core, WhatsApp, n8n, or real client/vendor data.
+any access to QuickFurno Core, WhatsApp, QuickFurno Core Automation, or real client/vendor data.
 
 ---
 

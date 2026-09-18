@@ -1,0 +1,22 @@
+{
+  "name": "@qf-jarvis/action-kernel",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis fail-closed Action Kernel. It single-flights and fingerprints proposal submissions, delegates every decision to QuickFurno Core, emits content-free observations, and structurally exposes no execution authority. Temporal may call this boundary from activities, but Temporal never authorizes or executes business effects.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/agent-runtime": "workspace:*"
+  }
+}

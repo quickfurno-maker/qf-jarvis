@@ -1,5 +1,5 @@
 {
-  "$comment": "QuickFurno compatibility baseline. Machine-readable, reviewed, and PINNED. Validated by packages/contracts/src/tests/quickfurno-compatibility.test.ts. Contains NO credentials, NO project refs, NO URLs, NO personal data, and NO copied production records. CI does NOT fetch QuickFurno, Supabase, n8n or Meta: this checked-in manifest IS the reviewed baseline, and refreshing the snapshot is an explicit, reviewed act (ADR-0025 s6). Compatibility documentation authorizes no production action.",
+  "$comment": "QuickFurno compatibility baseline. Machine-readable, reviewed, and PINNED. Validated by packages/contracts/src/tests/quickfurno-compatibility.test.ts. Contains NO credentials, NO project refs, NO URLs, NO personal data, and NO copied production records. CI does NOT fetch QuickFurno, Supabase, coreAutomation or Meta: this checked-in manifest IS the reviewed baseline, and refreshing the snapshot is an explicit, reviewed act (ADR-0025 s6). Compatibility documentation authorizes no production action.",
   "manifestVersion": 5,
   "schemaVersion": 2,
   "generatedForStage": "3.1.2",
@@ -141,7 +141,7 @@
     "authorizedDeliveryChain": [
       "quickfurno-core-authorization",
       "execution-intent",
-      "n8n",
+      "quickfurno-core-automation",
       "approved-provider-adapter",
       "provider-result",
       "authoritative-core-result-event"
@@ -170,7 +170,7 @@
       ],
       "affectedEntity": "whatsapp-message",
       "currentExposure": "Supplying WHATSAPP_TOKEN and WHATSAPP_PHONE_ID and invoking the function sends real messages to real people. The Deno Edge Function cannot read the Next.js feature flags, so WHATSAPP_SENDING_ENABLED=false does not restrain it. Core's README asserts no WhatsApp sending, which is false.",
-      "requiredRemediation": "Disable or hard-guard the Edge Function. Do not schedule it, do not supply active Meta credentials, and route all future delivery through Core authorization -> execution intent -> n8n -> approved provider adapter.",
+      "requiredRemediation": "Disable or hard-guard the Edge Function. Do not schedule it, do not supply active Meta credentials, and route all future delivery through Core authorization -> execution intent -> coreAutomation -> approved provider adapter.",
       "remediationOwner": "quickfurno-core",
       "remediationStage": "3.1.3",
       "blockingPhase": "phase-11a",
@@ -344,7 +344,7 @@
       "title": "Core emits none of the 41 canonical events",
       "severity": "high",
       "evidenceSource": [
-        "lib/aos/events/n8nEventTypes.ts",
+        "lib/aos/events/coreAutomationEventTypes.ts",
         "lib/aos/events/safeAgentEventPipeline.ts:93"
       ],
       "affectedEntity": "all",
@@ -368,28 +368,37 @@
     "priorManifestOmission": "Manifest v1 listed 26 of the 34 catalogued transitions. The 8 omitted (lead-scored, package-expired, vendor-inactivity, vendor-performance, client-satisfaction, client-complaint, linked-lead-created, client-lifecycle-closed) are now present. The gap between the documented 33 and the manifested 26 was an omission, not a definitional difference."
   },
   "sourceEvents": {
-    "$comment": "Every named event in QuickFurno at the pinned snapshot. 21 n8n + 4 internal + 4 preview = 29. All are accounted for with a disposition.",
-    "n8n": [
+    "$comment": "Every named event in QuickFurno at the pinned snapshot. 21 coreAutomation + 4 internal + 4 preview = 29. All are accounted for with a disposition.",
+    "coreAutomation": [
       {
         "name": "lead.created",
         "emittable": true,
         "disposition": "replace",
         "canonicalEvent": "qf.client.requirement-completed",
-        "sourceFiles": ["lib/aos/events/n8nEventTypes.ts:2", "services/leadService.ts:148"]
+        "sourceFiles": [
+          "lib/aos/events/coreAutomationEventTypes.ts:2",
+          "services/leadService.ts:148"
+        ]
       },
       {
         "name": "lead.scored",
         "emittable": true,
         "disposition": "unsupported",
         "canonicalEvent": null,
-        "sourceFiles": ["lib/aos/events/n8nEventTypes.ts:3", "services/leadService.ts:174"]
+        "sourceFiles": [
+          "lib/aos/events/coreAutomationEventTypes.ts:3",
+          "services/leadService.ts:174"
+        ]
       },
       {
         "name": "lead.qualified",
         "emittable": true,
         "disposition": "replace",
         "canonicalEvent": "qf.client.requirement-completed",
-        "sourceFiles": ["lib/aos/events/n8nEventTypes.ts:4", "services/leadService.ts:221"]
+        "sourceFiles": [
+          "lib/aos/events/coreAutomationEventTypes.ts:4",
+          "services/leadService.ts:221"
+        ]
       },
       {
         "name": "lead.clarification_required",
@@ -397,7 +406,7 @@
         "disposition": "gap",
         "canonicalEvent": null,
         "sourceFiles": [
-          "lib/aos/events/n8nEventTypes.ts:5",
+          "lib/aos/events/coreAutomationEventTypes.ts:5",
           "lib/aos/events/emitLeadClarificationRequiredEvent.ts:20"
         ]
       },
@@ -406,14 +415,17 @@
         "emittable": true,
         "disposition": "gap",
         "canonicalEvent": null,
-        "sourceFiles": ["lib/aos/events/n8nEventTypes.ts:6", "services/leadService.ts:221"]
+        "sourceFiles": [
+          "lib/aos/events/coreAutomationEventTypes.ts:6",
+          "services/leadService.ts:221"
+        ]
       },
       {
         "name": "lead.assignment_preview",
         "emittable": true,
         "disposition": "deprecate",
         "canonicalEvent": null,
-        "sourceFiles": ["lib/aos/events/n8nEventTypes.ts:7"]
+        "sourceFiles": ["lib/aos/events/coreAutomationEventTypes.ts:7"]
       },
       {
         "name": "lead.assignment_approved",
@@ -421,7 +433,7 @@
         "disposition": "replace",
         "canonicalEvent": "qf.assignment.batch-created",
         "sourceFiles": [
-          "lib/aos/events/n8nEventTypes.ts:8",
+          "lib/aos/events/coreAutomationEventTypes.ts:8",
           "lib/aos/events/emitLeadAssignmentApprovedEvent.ts:97"
         ]
       },
@@ -431,7 +443,7 @@
         "disposition": "deprecate",
         "canonicalEvent": null,
         "sourceFiles": [
-          "lib/aos/events/n8nEventTypes.ts:9",
+          "lib/aos/events/coreAutomationEventTypes.ts:9",
           "lib/lead-assignment/autoAssignmentEngine.ts:285"
         ]
       },
@@ -441,7 +453,7 @@
         "disposition": "deprecate",
         "canonicalEvent": null,
         "sourceFiles": [
-          "lib/aos/events/n8nEventTypes.ts:10",
+          "lib/aos/events/coreAutomationEventTypes.ts:10",
           "lib/lead-assignment/leadQueueService.ts:148"
         ]
       },
@@ -450,7 +462,7 @@
         "emittable": false,
         "disposition": "replace",
         "canonicalEvent": "qf.assignment.batch-completed",
-        "sourceFiles": ["lib/aos/events/n8nEventTypes.ts:11"],
+        "sourceFiles": ["lib/aos/events/coreAutomationEventTypes.ts:11"],
         "note": "Orphan: defined and workflow-mapped, but coerces to aos.failure."
       },
       {
@@ -459,7 +471,7 @@
         "disposition": "gap",
         "canonicalEvent": null,
         "sourceFiles": [
-          "lib/aos/events/n8nEventTypes.ts:12",
+          "lib/aos/events/coreAutomationEventTypes.ts:12",
           "lib/lead-assignment/freeVendorInterestService.ts:110"
         ]
       },
@@ -469,7 +481,7 @@
         "disposition": "rename",
         "canonicalEvent": "qf.vendor.recharge-opportunity-detected",
         "sourceFiles": [
-          "lib/aos/events/n8nEventTypes.ts:13",
+          "lib/aos/events/coreAutomationEventTypes.ts:13",
           "lib/lead-assignment/freeVendorInterestService.ts:129"
         ]
       },
@@ -478,7 +490,7 @@
         "emittable": false,
         "disposition": "gap",
         "canonicalEvent": null,
-        "sourceFiles": ["lib/aos/events/n8nEventTypes.ts:14"],
+        "sourceFiles": ["lib/aos/events/coreAutomationEventTypes.ts:14"],
         "note": "Orphan."
       },
       {
@@ -486,7 +498,7 @@
         "emittable": false,
         "disposition": "rename",
         "canonicalEvent": "qf.client.follow-up-due-detected",
-        "sourceFiles": ["lib/aos/events/n8nEventTypes.ts:15"],
+        "sourceFiles": ["lib/aos/events/coreAutomationEventTypes.ts:15"],
         "note": "Orphan."
       },
       {
@@ -494,7 +506,7 @@
         "emittable": false,
         "disposition": "rename",
         "canonicalEvent": "qf.client.review-requested",
-        "sourceFiles": ["lib/aos/events/n8nEventTypes.ts:16"],
+        "sourceFiles": ["lib/aos/events/coreAutomationEventTypes.ts:16"],
         "note": "Orphan."
       },
       {
@@ -502,7 +514,7 @@
         "emittable": false,
         "disposition": "gap",
         "canonicalEvent": null,
-        "sourceFiles": ["lib/aos/events/n8nEventTypes.ts:17"],
+        "sourceFiles": ["lib/aos/events/coreAutomationEventTypes.ts:17"],
         "note": "Orphan. Nurture is a stub in Core."
       },
       {
@@ -510,7 +522,7 @@
         "emittable": false,
         "disposition": "unsupported",
         "canonicalEvent": null,
-        "sourceFiles": ["lib/aos/events/n8nEventTypes.ts:18"],
+        "sourceFiles": ["lib/aos/events/coreAutomationEventTypes.ts:18"],
         "note": "Orphan. Internal report, not a business fact."
       },
       {
@@ -518,7 +530,7 @@
         "emittable": false,
         "disposition": "rename",
         "canonicalEvent": "qf.vendor.package-readiness-changed",
-        "sourceFiles": ["lib/aos/events/n8nEventTypes.ts:19"],
+        "sourceFiles": ["lib/aos/events/coreAutomationEventTypes.ts:19"],
         "note": "Orphan. Declared and workflow-mapped, never emitted. Must carry a band, never a balance."
       },
       {
@@ -526,7 +538,7 @@
         "emittable": false,
         "disposition": "split",
         "canonicalEvent": "qf.client.complaint-recorded",
-        "sourceFiles": ["lib/aos/events/n8nEventTypes.ts:20"],
+        "sourceFiles": ["lib/aos/events/coreAutomationEventTypes.ts:20"],
         "note": "Orphan. Core has one name; the canonical catalogue has two, by subject (client vs vendor). Core must say which."
       },
       {
@@ -535,7 +547,7 @@
         "disposition": "unsupported",
         "canonicalEvent": null,
         "sourceFiles": [
-          "lib/aos/events/n8nEventTypes.ts:21",
+          "lib/aos/events/coreAutomationEventTypes.ts:21",
           "lib/aos/events/safeAgentEventPipeline.ts:239"
         ],
         "note": "Operational telemetry. Jarvis must not ingest it."
@@ -546,7 +558,7 @@
         "disposition": "replace",
         "canonicalEvent": "qf.communication.state-recorded",
         "sourceFiles": [
-          "lib/aos/events/n8nEventTypes.ts:22",
+          "lib/aos/events/coreAutomationEventTypes.ts:22",
           "app/api/aos/whatsapp-status/route.ts"
         ],
         "note": "Orphan. The endpoint accepts any status string and updates nothing."
@@ -592,7 +604,7 @@
         "emittable": false,
         "disposition": "deprecate",
         "canonicalEvent": null,
-        "sourceFiles": ["lib/aos/events/n8nPreviewWorkflowMap.ts:15"],
+        "sourceFiles": ["lib/aos/events/coreAutomationPreviewWorkflowMap.ts:15"],
         "note": "Display-only. Routes nothing."
       },
       {
@@ -600,7 +612,7 @@
         "emittable": false,
         "disposition": "deprecate",
         "canonicalEvent": null,
-        "sourceFiles": ["lib/aos/events/n8nPreviewWorkflowMap.ts:16"],
+        "sourceFiles": ["lib/aos/events/coreAutomationPreviewWorkflowMap.ts:16"],
         "note": "Display-only."
       },
       {
@@ -608,7 +620,7 @@
         "emittable": false,
         "disposition": "deprecate",
         "canonicalEvent": null,
-        "sourceFiles": ["lib/aos/events/n8nPreviewWorkflowMap.ts:17"],
+        "sourceFiles": ["lib/aos/events/coreAutomationPreviewWorkflowMap.ts:17"],
         "note": "Display-only."
       },
       {
@@ -616,7 +628,7 @@
         "emittable": false,
         "disposition": "deprecate",
         "canonicalEvent": null,
-        "sourceFiles": ["lib/aos/events/n8nPreviewWorkflowMap.ts:18"],
+        "sourceFiles": ["lib/aos/events/coreAutomationPreviewWorkflowMap.ts:18"],
         "note": "Display-only."
       }
     ]
@@ -963,7 +975,7 @@
       "contractStatus": "exists-core-lacks-capability",
       "producer": "quickfurno-core",
       "consumers": ["riya"],
-      "sourceFiles": ["lib/aos/events/n8nEventTypes.ts:15"]
+      "sourceFiles": ["lib/aos/events/coreAutomationEventTypes.ts:15"]
     },
     {
       "id": "client-review-requested",
@@ -975,7 +987,7 @@
       "contractStatus": "exists-core-lacks-capability",
       "producer": "quickfurno-core",
       "consumers": ["riya"],
-      "sourceFiles": ["lib/aos/events/n8nEventTypes.ts:16"]
+      "sourceFiles": ["lib/aos/events/coreAutomationEventTypes.ts:16"]
     },
     {
       "id": "client-satisfaction",
@@ -1479,7 +1491,7 @@
       "jarvisMayRecommend": true,
       "jarvisForbidden": false,
       "approvalLevel": "founder",
-      "executedBy": "n8n",
+      "executedBy": "coreAutomation",
       "sourceFiles": ["supabase/functions/whatsapp-dispatch/index.ts"],
       "note": "Jarvis proposes a CommunicationRequestV1. It never sends, and no Jarvis recommendation may directly trigger the Edge Function. LIVE_WHATSAPP_BEFORE_PHASE_11A = PROHIBITED."
     },
@@ -1489,7 +1501,7 @@
       "jarvisMayRecommend": true,
       "jarvisForbidden": false,
       "approvalLevel": "founder",
-      "executedBy": "n8n",
+      "executedBy": "coreAutomation",
       "sourceFiles": ["docs/architecture/communication-model.md"],
       "note": "Only after messaging safety evidence (Phase 11A)."
     },
@@ -1705,9 +1717,9 @@
       "severity": "high"
     },
     {
-      "id": "n8n-no-webhook-calls",
-      "claim": "lib/aos/README.md:43 says 'No n8n webhook calls yet.'",
-      "reality": "n8nTool.ts:129 performs a real fetch when both locks are open",
+      "id": "core-automation-no-direct-calls",
+      "claim": "lib/aos/README.md:43 says 'No coreAutomation webhook calls yet.'",
+      "reality": "coreAutomationTool.ts:129 performs a real fetch when both locks are open",
       "severity": "medium"
     },
     {
@@ -1717,8 +1729,8 @@
       "severity": "medium"
     },
     {
-      "id": "queue-event-for-n8n",
-      "claim": "queueEventForN8n implies a queue.",
+      "id": "queue-event-for-core-automation",
+      "claim": "queueEventForcoreAutomation implies a queue.",
       "reality": "There is no queue. databasePersisted is always false. A failed event is lost.",
       "severity": "medium"
     },

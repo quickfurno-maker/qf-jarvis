@@ -118,7 +118,7 @@ describe('no transport, no provider, no credential', () => {
       'http://',
       'webhook',
       'workflowId',
-      'n8n.io',
+      'QuickFurno Core Automation.io',
       'graph.facebook.com',
       'whatsapp',
       'WhatsApp',
@@ -228,9 +228,9 @@ describe('no execution authority is created', () => {
   it('offers no function that hands a validated dispatch to a transport', () => {
     const code = productionCode();
     for (const forbidden of [
-      'sendToN8n',
-      'callN8n',
-      'dispatchToN8n',
+      'sendTocoreAutomation',
+      'callcoreAutomation',
+      'dispatchTocoreAutomation',
       'executeIntent',
       'postDispatch',
       'deliver(',
@@ -247,7 +247,7 @@ describe('nothing EXECUTES anything through this package', () => {
    * When P09.02 landed, the guarantee was literally "nothing imports it". QFJ-P09.03 (ADR-0091)
    * changed that fact and no other: `@qf-jarvis/postgres-execution-replay-store` implements the
    * `ExecutionReplayGuard` this package DECLARES and deliberately shipped no default for. It is a
-   * storage adapter — no transport, no endpoint, no n8n, no provider — so it consumes the boundary's
+   * storage adapter — no transport, no endpoint, no QuickFurno Core Automation, no provider — so it consumes the boundary's
    * contract without giving the boundary a way to act.
    *
    * The guarantee is therefore restated rather than dropped, and it is not weakened: the set of
@@ -259,7 +259,7 @@ describe('nothing EXECUTES anything through this package', () => {
    *
    * It is the composition ADR-0091 recorded as belonging to nobody -- it binds this boundary to
    * the durable replay store so a caller cannot assemble the pair with an in-memory guard. It
-   * holds no transport, endpoint, URL, webhook, n8n client, provider client or credential, and it
+   * holds no transport, endpoint, URL, webhook, QuickFurno Core Automation client, provider client or credential, and it
    * returns this package's result verbatim rather than re-classifying it.
    *
    * The guarantee is not weakened: the set stays pinned EXACTLY, no application may import this

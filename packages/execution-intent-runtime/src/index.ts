@@ -13,10 +13,10 @@
  * type, same contract version, structurally identical governed parameters — and returns a deeply
  * frozen OBSERVATION.
  *
- * **Only QuickFurno Core issues execution intents; only n8n executes them.** Nothing here creates an
+ * **Only QuickFurno Core issues execution intents; only QuickFurno Core Automation executes them.** Nothing here creates an
  * intent, dispatches, sends, executes, retries, persists, emits, resolves a recipient or a phone
  * number, chooses a provider, holds a credential, generates or consumes an idempotency key, or
- * reaches n8n, Meta or any provider. It reads no clock and no environment.
+ * reaches QuickFurno Core Automation, Meta or any provider. It reads no clock and no environment.
  *
  * **It is static provenance, not permission.** The result carries no `canExecute`, `canSend`,
  * `isAuthorized`, `isFresh`, `currentlyValid`, `consentValid` or `retryAllowed`. Every temporal rule

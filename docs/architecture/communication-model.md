@@ -5,7 +5,7 @@
 
 > **This document is authoritative** for how QF Jarvis supports calling and WhatsApp communication. Other documents cross-reference it rather than restating it. Ownership follows [system-boundary.md](./system-boundary.md); the decision is recorded in [ADR-0008](../decisions/ADR-0008-controlled-communication-capability.md).
 >
-> **Nothing here is implemented.** Phase 0 documents compatibility and governance only. No WhatsApp integration, telephony, speech-to-text, text-to-speech, provider API, n8n workflow, or UI exists or may be built in this phase.
+> **Nothing here is implemented.** Phase 0 documents compatibility and governance only. No WhatsApp integration, telephony, speech-to-text, text-to-speech, provider API, QuickFurno Core Automation workflow, or UI exists or may be built in this phase.
 
 ---
 
@@ -17,7 +17,7 @@ Say it as a product capability and as an architecture in the same breath, becaus
 
 > **Jarvis supports calling and WhatsApp through governed execution.**
 > **QuickFurno Core authorizes.**
-> **n8n and the communication runtime execute.**
+> **QuickFurno Core Automation and the communication runtime execute.**
 > **Providers deliver.**
 > **Results return to QuickFurno Core and are reflected by Jarvis.**
 
@@ -67,7 +67,7 @@ sequenceDiagram
     participant Origin as Founder, admin,<br/>or canonical event
     participant Agent as Jarvis, Riya, or Anisha
     participant Core as QuickFurno Core
-    participant N8N as n8n
+    participant QuickFurno Core Automation as QuickFurno Core Automation
     participant Runtime as QF Communications Runtime<br/>WhatsApp adapter · QF Voice Runtime
     participant Provider as WhatsApp provider<br/>or telephony/SIP provider
     participant Person as Client or vendor
@@ -81,22 +81,22 @@ sequenceDiagram
         Core->>Agent: rejected, with reason — nothing is sent
     else authorized
         Core->>Core: record authoritative decision
-        Core->>N8N: authorized execution intent —<br/>bounded, expiring, idempotency-keyed
-        N8N->>Runtime: execute workflow
+        Core->>QuickFurno Core Automation: authorized execution intent —<br/>bounded, expiring, idempotency-keyed
+        QuickFurno Core Automation->>Runtime: execute workflow
         Runtime->>Runtime: re-validate consent and eligibility<br/>at execution time
         Runtime->>Runtime: route via the WhatsApp adapter<br/>or the QF Voice Runtime
         Runtime->>Provider: transport
         Provider->>Person: the provider delivers
         Provider->>Runtime: provider result
-        Runtime->>N8N: structured result
-        N8N->>Core: execution result
+        Runtime->>QuickFurno Core Automation: structured result
+        QuickFurno Core Automation->>Core: execution result
         Core->>Core: QuickFurno Core records<br/>the authoritative result
         Core->>Agent: outcome as canonical event
         Agent->>Origin: Jarvis reflects the authoritative outcome
     end
 ```
 
-**Read the diagram for what is absent:** there is no edge from any agent to the runtime, to n8n, or to a provider. Jarvis requests and coordinates. Core authorizes. n8n and the runtime execute. **The provider delivers.** Core records.
+**Read the diagram for what is absent:** there is no edge from any agent to the runtime, to QuickFurno Core Automation, or to a provider. Jarvis requests and coordinates. Core authorizes. QuickFurno Core Automation and the runtime execute. **The provider delivers.** Core records.
 
 ### Runtime and provider are not the same thing
 
@@ -113,9 +113,9 @@ The distinction matters, and it is easy to blur:
 
 The transport chain is therefore:
 
-> **n8n → QF Communications Runtime → WhatsApp adapter or QF Voice Runtime → external WhatsApp or telephony/SIP provider → recipient**
+> **QuickFurno Core Automation → QF Communications Runtime → WhatsApp adapter or QF Voice Runtime → external WhatsApp or telephony/SIP provider → recipient**
 
-**The QF Voice Runtime is ours, and it is not a provider.** It does not deliver a call; it hands the call to an external telephony or SIP provider that does. It never becomes the authoritative provider, and it never becomes a source of truth — **QuickFurno Core records the authoritative result**, from what the external provider reported back through the runtime and n8n.
+**The QF Voice Runtime is ours, and it is not a provider.** It does not deliver a call; it hands the call to an external telephony or SIP provider that does. It never becomes the authoritative provider, and it never becomes a source of truth — **QuickFurno Core records the authoritative result**, from what the external provider reported back through the runtime and QuickFurno Core Automation.
 
 ---
 
@@ -162,7 +162,7 @@ Two constraints hold this together.
 
 ## Shared communication infrastructure
 
-The **QF Communications Runtime** is shared infrastructure. It lives **outside QF Jarvis**, on the execution side of the boundary, reached only by n8n under an authorized execution intent.
+The **QF Communications Runtime** is shared infrastructure. It lives **outside QF Jarvis**, on the execution side of the boundary, reached only by QuickFurno Core Automation under an authorized execution intent.
 
 ```
 QF Communications Runtime
@@ -206,9 +206,9 @@ The two are constantly confused, and the confusion is dangerous rather than mere
 
 | | QuickFurno Communication Core | QF Communications Runtime |
 | --- | --- | --- |
-| **Where it lives** | **Inside QuickFurno Core** | **Execution side**, in n8n's trust zone |
+| **Where it lives** | **Inside QuickFurno Core** | **Execution side**, in QuickFurno Core Automation's trust zone |
 | **What it does** | **Decides** | **Delivers what Core decided** |
-| **Reached by** | An agent asking for authorization | n8n, under an authorized execution intent |
+| **Reached by** | An agent asking for authorization | QuickFurno Core Automation, under an authorized execution intent |
 | **Its consent check is** | **The authority** | A **second line of defence** at execution time |
 
 The moment "the communication system said it was fine" can mean either one, consent has been validated by whichever component happened to be nearest — which is exactly how a system ends up calling someone who asked it never to be called.
@@ -299,7 +299,7 @@ An authorization also carries **no `validUntil` and no consent snapshot**. It sa
 
 ### `CommunicationResultV1` — Core records
 
-**Reporting is not authority.** n8n and the QF Communications Runtime *observe* a provider and *report*. **Core records**, and the recording is what makes it true.
+**Reporting is not authority.** QuickFurno Core Automation and the QF Communications Runtime *observe* a provider and *report*. **Core records**, and the recording is what makes it true.
 
 Two collapses the contract refuses:
 
@@ -359,7 +359,7 @@ Jarvis must expose communication state **accurately**: what Core and the executi
 | **rejected** | Core refused. Nothing is sent. The reason is recorded — including consent withdrawal, opt-out or do-not-contact, unverified identity, quiet hours, or attempt limits |
 | **authorized** | Core validated and authorized it, and recorded the decision |
 | **scheduled** | Authorized, held for a later execution time. Re-validated at execution |
-| **execution submitted** | Core dispatched an authorized execution intent to n8n |
+| **execution submitted** | Core dispatched an authorized execution intent to QuickFurno Core Automation |
 | **provider accepted** | The provider accepted it for transport. **This is not delivery** |
 | **delivered** | The provider delivered it |
 | **read** | The recipient read it, where the channel reports this |
@@ -426,7 +426,7 @@ stateDiagram-v2
 
 ### The states Jarvis may never originate
 
-**`authorized`, `delivered`, and `completed` are not Jarvis's to write.** Authorization comes from Core. Delivery comes from the provider, is reported through n8n, and **QuickFurno Core records the authoritative result**. Jarvis *reflects* all three; it originates none of them.
+**`authorized`, `delivered`, and `completed` are not Jarvis's to write.** Authorization comes from Core. Delivery comes from the provider, is reported through QuickFurno Core Automation, and **QuickFurno Core records the authoritative result**. Jarvis *reflects* all three; it originates none of them.
 
 Note that **`execution submitted` is not `provider accepted`, and `provider accepted` is not `delivered`.** Collapsing them in a UI would tell a founder a message arrived when it may not have — a false statement about the world, which is exactly what this architecture exists to prevent.
 

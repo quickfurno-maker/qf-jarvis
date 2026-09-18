@@ -27,7 +27,7 @@
  * needs somewhere to put something. See docs/architecture/phased-roadmap.md.
  *
  * The permanent architecture boundary applies to every line ever added to this
- * application: Jarvis recommends, QuickFurno Core authorizes, n8n executes,
+ * application: Jarvis recommends, QuickFurno Core authorizes, QuickFurno Core Automation executes,
  * providers deliver, and results return to Core. See
  * docs/architecture/system-boundary.md — it is authoritative.
  */

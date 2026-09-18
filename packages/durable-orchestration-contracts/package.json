@@ -1,0 +1,22 @@
+{
+  "name": "@qf-jarvis/durable-orchestration-contracts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "Content-minimized contracts shared by apps/api and apps/temporal-worker for Jarvis durable orchestration. Temporal history carries opaque references and control state only; raw conversations, model output, contact details, credentials and business authority are deliberately absent.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "zod": "4.4.3"
+  }
+}

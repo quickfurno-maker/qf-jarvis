@@ -6,34 +6,34 @@
 
 ## Acceptance criteria
 
-| #   | Criterion                                                                        | Status   |
-| --- | -------------------------------------------------------------------------------- | -------- |
-| 1   | ADR-0045 committed first; implemented without contradiction                      | **PASS** |
-| 2   | New `@qf-jarvis/model-gateway` package; provider-neutral contract                | **PASS** |
-| 3   | Deterministic `FakeModelProvider` only; no real adapter/key/network              | **PASS** |
-| 4   | Hybrid-ready (execution class first-class; Groq-first later; local later)        | **PASS** |
-| 5   | Default mode OFF; only OFF/ACTIVE execute                                        | **PASS** |
-| 6   | Data-class privacy: LOCAL_ONLY never hosted; HUMAN_ONLY never reaches a provider | **PASS** |
-| 7   | Capability routing; deterministic policy order; unavailable excluded             | **PASS** |
-| 8   | Timeout/cancellation/retry-budget/circuit/kill-switch                            | **PASS** |
-| 9   | Token/cost budgets (refuse, not truncate); concurrency/queue bounded             | **PASS** |
-| 10  | Structured-output validation (malformed/invalid fail; no hidden repair)          | **PASS** |
-| 11  | Provenance (provider/model/prompt/mode/attempt); safe redaction                  | **PASS** |
-| 12  | Gateway authorizes/executes nothing; models propose typed intents only           | **PASS** |
-| 13  | Riya/Anisha/Jarvis/Core/n8n boundary preserved; Kimi excluded                    | **PASS** |
-| 14  | NO schema/migration; migration 0008 absent/unreserved                            | **PASS** |
-| 15  | event-backbone root API remains 39; barrel unchanged                             | **PASS** |
-| 16  | No package-manifest change beyond the new package + required workspace wiring    | **PASS** |
-| 17  | Format/lint/typecheck/unit/build/dist-containment pass                           | **PASS** |
-| 18  | Reports complete; PR remains draft/unmerged                                      | **PASS** |
+| #   | Criterion                                                                            | Status   |
+| --- | ------------------------------------------------------------------------------------ | -------- |
+| 1   | ADR-0045 committed first; implemented without contradiction                          | **PASS** |
+| 2   | New `@qf-jarvis/model-gateway` package; provider-neutral contract                    | **PASS** |
+| 3   | Deterministic `FakeModelProvider` only; no real adapter/key/network                  | **PASS** |
+| 4   | Hybrid-ready (execution class first-class; Groq-first later; local later)            | **PASS** |
+| 5   | Default mode OFF; only OFF/ACTIVE execute                                            | **PASS** |
+| 6   | Data-class privacy: LOCAL_ONLY never hosted; HUMAN_ONLY never reaches a provider     | **PASS** |
+| 7   | Capability routing; deterministic policy order; unavailable excluded                 | **PASS** |
+| 8   | Timeout/cancellation/retry-budget/circuit/kill-switch                                | **PASS** |
+| 9   | Token/cost budgets (refuse, not truncate); concurrency/queue bounded                 | **PASS** |
+| 10  | Structured-output validation (malformed/invalid fail; no hidden repair)              | **PASS** |
+| 11  | Provenance (provider/model/prompt/mode/attempt); safe redaction                      | **PASS** |
+| 12  | Gateway authorizes/executes nothing; models propose typed intents only               | **PASS** |
+| 13  | Riya/Anisha/Jarvis/Core/QuickFurno Core Automation boundary preserved; Kimi excluded | **PASS** |
+| 14  | NO schema/migration; migration 0008 absent/unreserved                                | **PASS** |
+| 15  | event-backbone root API remains 39; barrel unchanged                                 | **PASS** |
+| 16  | No package-manifest change beyond the new package + required workspace wiring        | **PASS** |
+| 17  | Format/lint/typecheck/unit/build/dist-containment pass                               | **PASS** |
+| 18  | Reports complete; PR remains draft/unmerged                                          | **PASS** |
 
 ## Non-goal audit — none breached
 
-No Groq adapter; no local adapter; no network; no API key; no provider SDK; no agent runtime; no Riya/Anisha conversation logic; no memory/RAG/knowledge; no tools/n8n; no database/schema/migration; no deployment; no model training/fine-tuning; no chain-of-thought storage; no full evaluation platform.
+No Groq adapter; no local adapter; no network; no API key; no provider SDK; no agent runtime; no Riya/Anisha conversation logic; no memory/RAG/knowledge; no tools/QuickFurno Core Automation; no database/schema/migration; no deployment; no model training/fine-tuning; no chain-of-thought storage; no full evaluation platform.
 
 ## Owner decisions honoured
 
-Groq is the fixed first real provider for the **next** slice (QFJ-P04.01B); a local OpenAI-compatible workstation adapter follows later (QFJ-P04.01C); the gateway (not n8n, not an agent) selects providers; sensitive/`LOCAL_ONLY` data never silently falls back to hosted; Core remains final authority; Kimi excluded.
+Groq is the fixed first real provider for the **next** slice (QFJ-P04.01B); a local OpenAI-compatible workstation adapter follows later (QFJ-P04.01C); the gateway (not QuickFurno Core Automation, not an agent) selects providers; sensitive/`LOCAL_ONLY` data never silently falls back to hosted; Core remains final authority; Kimi excluded.
 
 ## Risks and rollback
 

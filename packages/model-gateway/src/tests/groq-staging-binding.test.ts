@@ -419,12 +419,19 @@ describe('observability and authority', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     const resultSurface = result as unknown as Record<string, unknown>;
-    for (const forbidden of ['send', 'deliver', 'execute', 'persist', 'callN8n', 'authorize']) {
+    for (const forbidden of [
+      'send',
+      'deliver',
+      'execute',
+      'persist',
+      'callcoreAutomation',
+      'authorize',
+    ]) {
       expect(resultSurface[forbidden]).toBeUndefined();
     }
     expect(Object.keys(result.provider).sort()).not.toContain('send');
     const providerSurface = result.provider as unknown as Record<string, unknown>;
-    for (const forbidden of ['send', 'deliver', 'execute', 'callN8n']) {
+    for (const forbidden of ['send', 'deliver', 'execute', 'callcoreAutomation']) {
       expect(providerSurface[forbidden]).toBeUndefined();
     }
   });

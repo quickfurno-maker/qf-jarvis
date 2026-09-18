@@ -279,7 +279,7 @@ not restricting at all, because it looks like a control.
 ### 9. Rollout, lifecycle and certification
 
 `AAROHI_AVG12_POSTURE` pins `rolloutAuthorityGranted`, `productionActivated`, `liveCoreConnected`,
-`n8nExecutionRequested`, `providerSendRequested`, `channelSendRequested`, `sent`, `delivered`,
+`coreAutomationExecutionRequested`, `providerSendRequested`, `channelSendRequested`, `sent`, `delivered`,
 `sendAuthorityGranted` and `executionAuthorityGranted` false, and
 `requiresSeparateActivatingAdrBeforeRuntimeUse` true. There is no `activateAarohi`, `enableRollout`,
 `promoteToProduction` or `setLifecycleAvailable` function, and the locked barrel export set proves

@@ -5,7 +5,7 @@
 **QuickFurno snapshot:** `quickfurno-maker/quickfurno-marketplace` @ **`00706899b46ae16fa6170c70125708b63e0926a9`**
 **Decision:** [ADR-0025](../decisions/ADR-0025-quickfurno-compatibility-boundary-and-core-adapter-baseline.md) (Proposed)
 
-> **Jarvis recommends. QuickFurno Core authorizes. n8n executes. Providers deliver.**
+> **Jarvis recommends. QuickFurno Core authorizes. QuickFurno Core Automation executes. Providers deliver.**
 >
 > **A recommendation is inert.** It is a proposal carrying evidence, an expiry, and a required approval level. **It is not an instruction, and Core is not obliged to act on it.**
 
@@ -29,7 +29,7 @@
 | **Approval**                                   | `none` (shadow) → `delegated-approver`                                                                                                                                                                     |
 | **Core capability needed**                     | Lead-advisory intake; clarification-request intake                                                                                                                                                         |
 | **Deterministic policy that must validate it** | Core's LeadLens/TrustShield remain authoritative. **A disagreement is resolved in Core's favour**                                                                                                          |
-| **n8n execution**                              | Possible later: send a clarification message — **only** via `CommunicationRequestV1`, Core-authorized                                                                                                      |
+| **QuickFurno Core Automation execution**       | Possible later: send a clarification message — **only** via `CommunicationRequestV1`, Core-authorized                                                                                                      |
 | **Result event**                               | `qf.execution.result-recorded`                                                                                                                                                                             |
 | **🚫 Prohibited**                              | **Verifying or rejecting a lead. Blocking a lead. Naming a vendor. Assigning. Deducting a credit. Replacing LeadLens/TrustShield/MatchForge/LeadFlow** — those are Core's systems and remain authoritative |
 
@@ -37,19 +37,19 @@
 
 ## Riya — the complete client journey
 
-|                            |                                                                                                                                                                                                                                     |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Inputs**                 | `qf.client.*`, `qf.assignment.batch-*`, `qf.communication.state-recorded`                                                                                                                                                           |
-| **Recommends**             | Requirement completion · follow-up timing · satisfaction/**dissatisfaction detection** · complaint escalation · **reassignment requests** · linked-category lead requests · review requests · **human handoff** · lifecycle closure |
-| **Evidence**               | Canonical events. **For a reassignment: a `ClientConfirmationV1` pointing at the event in which the client _actually asked_**                                                                                                       |
-| **Confidence**             | Required · **Risk** `low-risk-reversible` → `client-or-vendor-facing-communication`                                                                                                                                                 |
-| **Expiry**                 | Hours to days                                                                                                                                                                                                                       |
-| **Approval**               | **`founder` for the first client-facing communication.** Then `authorized-team-human`. **Reassignment always requires human approval**                                                                                              |
-| **Core capability needed** | Reassignment intake · linked-lead creation · communication request intake                                                                                                                                                           |
-| **Deterministic policy**   | Core validates the **explicit client confirmation**, the batch cap, and consent                                                                                                                                                     |
-| **n8n execution**          | Follow-up / review message — **Core-authorized only**                                                                                                                                                                               |
-| **Result event**           | `qf.client.reassignment-authorized` \| `-rejected`; `qf.execution.result-recorded`                                                                                                                                                  |
-| **🚫 Prohibited**          | **Assigning or naming a vendor.** **Changing consent.** **Sending anything directly.** **Inferring dissatisfaction into a replacement**                                                                                             |
+|                                          |                                                                                                                                                                                                                                     |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Inputs**                               | `qf.client.*`, `qf.assignment.batch-*`, `qf.communication.state-recorded`                                                                                                                                                           |
+| **Recommends**                           | Requirement completion · follow-up timing · satisfaction/**dissatisfaction detection** · complaint escalation · **reassignment requests** · linked-category lead requests · review requests · **human handoff** · lifecycle closure |
+| **Evidence**                             | Canonical events. **For a reassignment: a `ClientConfirmationV1` pointing at the event in which the client _actually asked_**                                                                                                       |
+| **Confidence**                           | Required · **Risk** `low-risk-reversible` → `client-or-vendor-facing-communication`                                                                                                                                                 |
+| **Expiry**                               | Hours to days                                                                                                                                                                                                                       |
+| **Approval**                             | **`founder` for the first client-facing communication.** Then `authorized-team-human`. **Reassignment always requires human approval**                                                                                              |
+| **Core capability needed**               | Reassignment intake · linked-lead creation · communication request intake                                                                                                                                                           |
+| **Deterministic policy**                 | Core validates the **explicit client confirmation**, the batch cap, and consent                                                                                                                                                     |
+| **QuickFurno Core Automation execution** | Follow-up / review message — **Core-authorized only**                                                                                                                                                                               |
+| **Result event**                         | `qf.client.reassignment-authorized` \| `-rejected`; `qf.execution.result-recorded`                                                                                                                                                  |
+| **🚫 Prohibited**                        | **Assigning or naming a vendor.** **Changing consent.** **Sending anything directly.** **Inferring dissatisfaction into a replacement**                                                                                             |
 
 > ### The one rule that must never be softened
 >
@@ -61,19 +61,19 @@
 
 ## Anisha — the complete vendor journey
 
-|                            |                                                                                                                                                                                                                            |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Inputs**                 | `qf.vendor.*`, `qf.assignment.batch-*`                                                                                                                                                                                     |
-| **Recommends**             | Registration/profile completion nudges · verification readiness · **inactivity** · performance observations · **package readiness** · **recharge opportunity** · complaint patterns · retention risk · win-back candidates |
-| **Evidence**               | Canonical events. **Money-adjacent evidence carries bands, never balances**                                                                                                                                                |
-| **Confidence**             | Required · **Risk** `low-risk-reversible` → `client-or-vendor-facing-communication`. **Never `money-related`, because she never proposes a money movement**                                                                |
-| **Expiry**                 | Days                                                                                                                                                                                                                       |
-| **Approval**               | `authorized-team-human`; **`founder` for the first vendor-facing communication**                                                                                                                                           |
-| **Core capability needed** | Vendor-advisory intake; communication request intake                                                                                                                                                                       |
-| **Deterministic policy**   | Core validates vendor state, consent, and eligibility                                                                                                                                                                      |
-| **n8n execution**          | A recharge **conversation** — never a transaction                                                                                                                                                                          |
-| **Result event**           | `qf.execution.result-recorded`                                                                                                                                                                                             |
-| **🚫 Prohibited**          | **Verification · activation · suspension · eligibility · ranking · packages · wallets · credits · money · assignments.** **She recommends a recharge conversation; she never touches the money**                           |
+|                                          |                                                                                                                                                                                                                            |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Inputs**                               | `qf.vendor.*`, `qf.assignment.batch-*`                                                                                                                                                                                     |
+| **Recommends**                           | Registration/profile completion nudges · verification readiness · **inactivity** · performance observations · **package readiness** · **recharge opportunity** · complaint patterns · retention risk · win-back candidates |
+| **Evidence**                             | Canonical events. **Money-adjacent evidence carries bands, never balances**                                                                                                                                                |
+| **Confidence**                           | Required · **Risk** `low-risk-reversible` → `client-or-vendor-facing-communication`. **Never `money-related`, because she never proposes a money movement**                                                                |
+| **Expiry**                               | Days                                                                                                                                                                                                                       |
+| **Approval**                             | `authorized-team-human`; **`founder` for the first vendor-facing communication**                                                                                                                                           |
+| **Core capability needed**               | Vendor-advisory intake; communication request intake                                                                                                                                                                       |
+| **Deterministic policy**                 | Core validates vendor state, consent, and eligibility                                                                                                                                                                      |
+| **QuickFurno Core Automation execution** | A recharge **conversation** — never a transaction                                                                                                                                                                          |
+| **Result event**                         | `qf.execution.result-recorded`                                                                                                                                                                                             |
+| **🚫 Prohibited**                        | **Verification · activation · suspension · eligibility · ranking · packages · wallets · credits · money · assignments.** **She recommends a recharge conversation; she never touches the money**                           |
 
 > **A wallet figure inside a Jarvis contract would be stale by construction** — a copy nobody reconciles — and it would invite somebody to reason about a real vendor's real money from it. Hence **bands, never balances**.
 >
@@ -83,17 +83,17 @@
 
 ## Jitin — advisory growth intelligence
 
-|                            |                                                                                                                                                                                                                                                                        |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Inputs**                 | **Aggregates only** — city, category, campaign                                                                                                                                                                                                                         |
-| **Recommends**             | Campaign performance · channel efficiency · **cost per verified lead by city and category** · demand intelligence · SEO opportunity · creative fatigue · budget-shift proposals                                                                                        |
-| **Evidence**               | Aggregated derived signals                                                                                                                                                                                                                                             |
-| **Confidence**             | Required · **Risk** `informational` → `money-related` (budget shift)                                                                                                                                                                                                   |
-| **Expiry**                 | Days to weeks                                                                                                                                                                                                                                                          |
-| **Approval**               | **`founder` for anything touching spend.** Always                                                                                                                                                                                                                      |
-| **Core capability needed** | Campaign-advisory intake                                                                                                                                                                                                                                               |
-| **n8n execution**          | **None. Ever**                                                                                                                                                                                                                                                         |
-| **🚫 Prohibited**          | **No advertising-provider credential. No Google Ads path. No Meta Ads path. No budget authority. Ever.** **His memory domain contains no client and no vendor** — marketing intelligence does not require remembering individual people, **so it is not permitted to** |
+|                                          |                                                                                                                                                                                                                                                                        |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Inputs**                               | **Aggregates only** — city, category, campaign                                                                                                                                                                                                                         |
+| **Recommends**                           | Campaign performance · channel efficiency · **cost per verified lead by city and category** · demand intelligence · SEO opportunity · creative fatigue · budget-shift proposals                                                                                        |
+| **Evidence**                             | Aggregated derived signals                                                                                                                                                                                                                                             |
+| **Confidence**                           | Required · **Risk** `informational` → `money-related` (budget shift)                                                                                                                                                                                                   |
+| **Expiry**                               | Days to weeks                                                                                                                                                                                                                                                          |
+| **Approval**                             | **`founder` for anything touching spend.** Always                                                                                                                                                                                                                      |
+| **Core capability needed**               | Campaign-advisory intake                                                                                                                                                                                                                                               |
+| **QuickFurno Core Automation execution** | **None. Ever**                                                                                                                                                                                                                                                         |
+| **🚫 Prohibited**                        | **No advertising-provider credential. No Google Ads path. No Meta Ads path. No budget authority. Ever.** **His memory domain contains no client and no vendor** — marketing intelligence does not require remembering individual people, **so it is not permitted to** |
 
 ---
 
@@ -123,9 +123,9 @@ Jarvis ──RecommendationV1──▶ Core intake
                               ├─ human approval where required
                               └─ approved ⇒ Core issues ExecutionIntentV1
                                              issuer:   'quickfurno-core'  ← LITERAL
-                                             executor: 'n8n'              ← LITERAL
+                                             executor: 'QuickFurno Core Automation'              ← LITERAL
                                                         │
-                                            n8n executes ──▶ provider delivers
+                                            QuickFurno Core Automation executes ──▶ provider delivers
                                                         │
                                     authoritative result event ──▶ through the outbox
 ```

@@ -48,7 +48,7 @@ export type RuntimePartyType = (typeof RUNTIME_PARTY_TYPES)[number];
  *
  * `@qf-jarvis/contracts` owns a DIFFERENT vocabulary — `['whatsapp','sms','email','voice']` — naming
  * the channels a governed OUTBOUND communication request may be delivered on, by
- * n8n → QF Communications Runtime → provider → recipient. Its members are things a provider can
+ * QuickFurno Core Automation → QF Communications Runtime → provider → recipient. Its members are things a provider can
  * deliver TO.
  *
  * `WEB` must never appear there. A browser is not a delivery destination: nobody can push an

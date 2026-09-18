@@ -12,7 +12,7 @@ The adapter **composes** `@qf-jarvis/model-gateway` and delegates **all** routin
 
 ## Boundary (what it does NOT do)
 
-No live Groq/local call, no key/token/env, no network; no provider activation or rollout promotion; no live QuickFurno Core; no WhatsApp/n8n/send/transport/delivery; no persistence/DB/schema/**migration 0008**; no knowledge retrieval; no semantic/vector/embedding/RAG; no dashboard; no deployment. Model output is a **draft/proposal input only** — never a Core `ACCEPTED`, never sent, delivered, or executed.
+No live Groq/local call, no key/token/env, no network; no provider activation or rollout promotion; no live QuickFurno Core; no WhatsApp/QuickFurno Core Automation/send/transport/delivery; no persistence/DB/schema/**migration 0008**; no knowledge retrieval; no semantic/vector/embedding/RAG; no dashboard; no deployment. Model output is a **draft/proposal input only** — never a Core `ACCEPTED`, never sent, delivered, or executed.
 
 ## Package layout
 

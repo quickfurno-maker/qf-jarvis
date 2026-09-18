@@ -16,15 +16,15 @@ These are locked and must govern every future phase. **None of these agents is i
 - **Anisha = vendor-side only** — all vendor actions and vendor relationship work.
 - **Jarvis = central coordinator** — routing, memory, policy, model/tool orchestration, evaluation, recommendations; holds no business authority.
 - **QuickFurno Core = final business authority** and authoritative system of record (approvals, assignments, credits, payments, packages, eligibility, verification, rankings, suspensions, protected business state).
-- **n8n = controlled execution/integration layer only** — provider webhooks, approved WhatsApp delivery, reminders, external API execution, status callbacks; **decides no business rule**.
+- **QuickFurno Core Automation = controlled execution/integration layer only** — provider webhooks, approved WhatsApp delivery, reminders, external API execution, status callbacks; **decides no business rule**.
 - **Agents never directly mutate authoritative business state** — they request approved Core tools, which enforce permissions and business rules.
 - **Kimi / Kimi K3 is EXCLUDED** from the architecture (teacher, evaluator, fallback, coding model, or production component) unless the owner explicitly reintroduces it.
 
-The canonical roadmap already encodes this authority spine (QuickFurno Core final authority; Riya customer side; Anisha vendor side; Jarvis coordination without business authority; n8n executes only approved intents; providers have no business authority). **No contradiction** with accepted ADRs was found.
+The canonical roadmap already encodes this authority spine (QuickFurno Core final authority; Riya customer side; Anisha vendor side; Jarvis coordination without business authority; QuickFurno Core Automation executes only approved intents; providers have no business authority). **No contradiction** with accepted ADRs was found.
 
 ## QFJ-P03.10 non-goals (preserved)
 
-No source/test/config/package/schema/migration/CI/app/worker/script change; no migration 0008; no managed/local database access; no migration execution; no secret access; no deployment; no P04 implementation; no change to the locked agent/Core/n8n boundary; no production-readiness overclaim; no new ADR (this slice records completed evidence/status only).
+No source/test/config/package/schema/migration/CI/app/worker/script change; no migration 0008; no managed/local database access; no migration execution; no secret access; no deployment; no P04 implementation; no change to the locked agent/Core/QuickFurno Core Automation boundary; no production-readiness overclaim; no new ADR (this slice records completed evidence/status only).
 
 ## Verdict
 

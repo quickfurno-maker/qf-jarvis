@@ -710,7 +710,7 @@ describe('JAO-7 advanced governed autonomy', () => {
 
   it('A6 refuses a decision whose issuer is not QuickFurno Core', () => {
     const proposal = taskProposal();
-    for (const issuer of ['qf-jarvis', 'n8n', 'someone-else']) {
+    for (const issuer of ['qf-jarvis', 'quickfurno-core-automation', 'someone-else']) {
       expect(
         () =>
           correlateJao7Authority(proposal, {
@@ -721,12 +721,12 @@ describe('JAO-7 advanced governed autonomy', () => {
     }
   });
 
-  it('A7 refuses an intent whose issuer is not Core or whose executor is not n8n', () => {
+  it('A7 refuses an intent whose issuer is not Core or whose executor is not QuickFurno Core Automation', () => {
     const proposal = taskProposal();
     const decision = approvalDecision(proposal);
     for (const over of [
       { issuer: 'qf-jarvis' },
-      { issuer: 'n8n' },
+      { issuer: 'quickfurno-core-automation' },
       { executor: 'qf-jarvis' },
       { executor: 'quickfurno-core' },
     ]) {
@@ -886,7 +886,7 @@ describe('JAO-7 advanced governed autonomy', () => {
     expect(JAO7_POSTURE.executionIntentExecuted).toBe(false);
     for (const zero of [
       JAO7_POSTURE.coreCalls,
-      JAO7_POSTURE.n8nExecutions,
+      JAO7_POSTURE.coreAutomationExecutions,
       JAO7_POSTURE.providerCalls,
       JAO7_POSTURE.channelSends,
     ]) {
@@ -894,7 +894,7 @@ describe('JAO-7 advanced governed autonomy', () => {
     }
     for (const drift of [
       { executionIntentExecuted: true },
-      { n8nExecutions: 1 },
+      { coreAutomationExecutions: 1 },
       { approvalDecisionCreated: true },
       { executionIntentCreated: true },
       { businessEffect: true },

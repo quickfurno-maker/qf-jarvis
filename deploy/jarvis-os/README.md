@@ -24,7 +24,7 @@ The VPS already has the topology Jarvis OS needs, so **shared Traefik is not mod
 - `--api.dashboard=false --api.insecure=false` — dashboard is **not** exposed
 - Docker socket mounted **read-only**
 
-`qf-core-staging` and `n8n-cjls` both sit on private bridges with **no published ports**, and
+`qf-core-staging` and `QuickFurno Core Automation-cjls` both sit on private bridges with **no published ports**, and
 host-network Traefik reaches them by container IP. Jarvis OS uses that exact pattern.
 
 > **The configured image is `traefik:latest`.** Any `docker compose pull`/`up -d` against the
@@ -61,13 +61,13 @@ identity, filesystem, capabilities, secret mount and auth boundary **before** ex
 - Non-root `10001:10001`, `read_only: true`, `cap_drop: [ALL]`, `no-new-privileges`, `pids: 256`
 - Writable set is exactly `/tmp` (tmpfs, `noexec,nosuid,nodev`, 64 MiB)
 - **No published port.** No `0.0.0.0` binding, no loopback fallback needed
-- Its own bridge; joins no n8n, Core or database network
+- Its own bridge; joins no QuickFurno Core Automation, Core or database network
 - No Docker socket, no privileged, no capabilities, no host PID/IPC, no devices
 - Bounded logs (10 MiB × 5) and resources (1 CPU, 1 GiB)
 - Image tagged by exact Git SHA — never `latest`
 
 **The healthcheck means one thing: the Node process answers HTTP.** It does not mean the auth
-config is valid, TLS works, DNS resolves, or Core and n8n are reachable — the container cannot
+config is valid, TLS works, DNS resolves, or Core and QuickFurno Core Automation are reachable — the container cannot
 honestly assess any of those. External readiness is `external-smoke.sh`, run from outside the host
 in Gate 2.
 
@@ -109,7 +109,7 @@ Required owner action before Gate 2 — Let's Encrypt HTTP-01 cannot issue witho
 Type: A      Host: jarvis      Value: 200.141.10.108      TTL: 600 (or provider default)
 ```
 
-Do not change `quickfurno.in`, `www`, `staging-core` or the n8n hostname.
+Do not change `quickfurno.in`, `www`, `staging-core` or the QuickFurno Core Automation hostname.
 
 ## Gate 2 — sequence
 
@@ -203,7 +203,7 @@ that was still private. After bringing the container up it verifies the revision
 container actually landed in the stage that was named.
 
 It prunes nothing; `system prune`, `image prune -a`, `volume prune` and `network prune` would all
-reach shared Traefik, n8n and Core resources.
+reach shared Traefik, QuickFurno Core Automation and Core resources.
 
 ## Runtime image vulnerability disposition
 
@@ -235,5 +235,5 @@ must be re-run immediately before Gate 2 production activation.
 ## What this phase does NOT change
 
 Authentication (JOS-01C) remains the access boundary. QuickFurno Core stays authoritative and
-`NOT_CONNECTED`; n8n stays execution-only and `NOT_CONNECTED`. No database, no managed database, no
+`NOT_CONNECTED`; QuickFurno Core Automation stays execution-only and `NOT_CONNECTED`. No database, no managed database, no
 Meta or provider, no business mutation, no migration. **Production business rollout remains OFF.**

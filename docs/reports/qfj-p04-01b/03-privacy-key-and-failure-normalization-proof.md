@@ -54,4 +54,4 @@ This preserves the existing QFJ-P04.01A gateway behaviour (a failure with no exp
 
 ## Authority boundary — unchanged
 
-The provider is an inference engine only: it has no authorize/execute method, no n8n access, no database, and no tool. It returns bounded data. Riya remains client-only, Anisha vendor-only, Jarvis the coordinator, QuickFurno Core the final authority, n8n execution-only; Kimi is excluded; the model authorizes and executes nothing.
+The provider is an inference engine only: it has no authorize/execute method, no QuickFurno Core Automation access, no database, and no tool. It returns bounded data. Riya remains client-only, Anisha vendor-only, Jarvis the coordinator, QuickFurno Core the final authority, QuickFurno Core Automation execution-only; Kimi is excluded; the model authorizes and executes nothing.

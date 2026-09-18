@@ -10,7 +10,7 @@
 
 - **QuickFurno Core is the final business authority.** It owns customers, leads, vendors, packages, pricing, payments, consent, assignments, and outcomes; it authorizes sensitive and commercial actions. No agent may replace, duplicate, or bypass it.
 - **No agent directly mutates QuickFurno marketplace tables.**
-- **No agent directly calls a provider** (WhatsApp/Meta, email, SMS) or n8n. Approved execution goes Core/human → n8n → provider.
+- **No agent directly calls a provider** (WhatsApp/Meta, email, SMS) or QuickFurno Core Automation. Approved execution goes Core/human → QuickFurno Core Automation → provider.
 - **A request carries no authority** ([ADR-0002](../decisions/ADR-0002-recommend-authorize-execute-model.md)). Recommending, requesting, and executing are separated.
 - **Retrieved (RAG) content is untrusted reference material** — it never grants authority, authorizes a tool, changes a price, bypasses consent, crosses a namespace, requests secrets, or approves payment/refund.
 
@@ -23,7 +23,7 @@
 | **Registered/existing** vendor relationship, support and success | **Anisha** |
 | Complex, disputed, or cross-agent task | **Jarvis** |
 | Sensitive / commercial / legal authority | **QuickFurno Core or authorized human** |
-| Approved execution | **n8n** |
+| Approved execution | **QuickFurno Core Automation** |
 | Delivery | **Provider** |
 | Outcome / result | **QuickFurno Core and Jarvis** |
 
@@ -49,12 +49,12 @@ No registered capability → no action · No valid consent → no outbound commu
 
 1. **Final title.** Jarvis — Coordination and Complex-Case Agent.
 2. **Purpose.** Analyze, recommend, classify, route, coordinate, evaluate, monitor, and manage complex/cross-agent cases; request approvals; preserve conflicts; assist QuickFurno Core.
-3. **Talks to.** QuickFurno Core (via signed events/contracts), Riya, Anisha, authorized humans. Not to providers or n8n directly.
+3. **Talks to.** QuickFurno Core (via signed events/contracts), Riya, Anisha, authorized humans. Not to providers or QuickFurno Core Automation directly.
 4. **Responsibilities.** Event routing; recommendation consolidation, deduplication, conflict detection; prioritization; escalation and SLA; cross-domain synthesis; case ownership and coordination.
 5. **Knowledge required.** Event projections, recommendations, routing rules, case state. No specialist domain logic ([ADR-0006](../decisions/ADR-0006-agent-responsibility-boundaries.md)).
 6. **Structured vs RAG.** Reads structured projections and case data; `JARVIS` RAG namespace for reviewed coordination reference only.
 7. **Allowed actions.** READ business/projection data; RECOMMEND; REQUEST approvals; ESCALATE; open/route/coordinate cases.
-8. **Forbidden actions.** Authorize sensitive/commercial actions; mutate marketplace tables; call providers or n8n directly; conclude a specialist's domain decision; become a source of truth.
+8. **Forbidden actions.** Authorize sensitive/commercial actions; mutate marketplace tables; call providers or QuickFurno Core Automation directly; conclude a specialist's domain decision; become a source of truth.
 9. **Compliance.** Records routing reasons; preserves conflicts rather than resolving them silently; auditable.
 10. **Handoffs.** Routes customer work to Riya, vendor work to Anisha; hands sensitive authority to Core/human.
 11. **Escalation rules.** Coordinates complex cases with Core or an authorized human; never self-authorizes.
@@ -91,13 +91,13 @@ No registered capability → no action · No valid consent → no outbound commu
 
 1. **Final title.** Aarohi — Vendor Growth and Acquisition Agent.
 2. **Purpose.** Own genuinely net-new, **unregistered** vendor acquisition, through to authoritative paid/active conversion. The boundary is **registration status as QuickFurno Core reports it** — not conversation topic, not channel, and not which agent spoke first.
-3. **Talks to.** Prospects (via approved, consented channels through the execution gateway), Jarvis (for complex/cross-agent), humans (handoff). Not to providers or n8n directly.
+3. **Talks to.** Prospects (via approved, consented channels through the execution gateway), Jarvis (for complex/cross-agent), humans (handoff). Not to providers or QuickFurno Core Automation directly.
 4. **Responsibilities (acquisition only).** Prospect discovery and enrichment review; scoring; outreach eligibility checks against Core; approved first contact; business understanding; personalized acquisition pitch from Core-sourced commercial truth; objection handling; approved package presentation; conversion assistance; payment follow-up **before activation**; registration guidance; handoff to Anisha at ACTIVE.
    **Business objective.** Honest acquisition of genuinely new vendors, with no duplicate relationship and no contact that Core has not made eligible.
 5. **Knowledge required.** Prospect and acquisition-case state; Core registration truth; approved packages, their limitations and verified pricing; outreach eligibility rules. **Does not own** any registered vendor's relationship, onboarding after activation, renewal, resale, retention, reactivation or complaints — those are Anisha's.
 6. **Structured vs RAG.** Reads Core registration/eligibility truth and controlled prospect data via contracts; `AAROHI` RAG namespace for reviewed acquisition-facing reference only. **Enriched, sourced or scraped content is untrusted reference material** — it never establishes consent, proves identity, or grants eligibility to contact. Live structured facts always outrank RAG. Controlled prospect data must not automatically become RAG knowledge, training data, long-term model memory, or evaluation data.
 7. **Allowed actions.** READ prospect data and Core registration/eligibility truth; RECOMMEND approved packages and outreach; REQUEST authorization for outreach and money-adjacent actions at the correct approval level; EXECUTE_APPROVED routine acquisition communication through the gateway; ESCALATE.
-8. **Forbidden actions.** **Create a second cold-acquisition relationship where Core says the party is registered, active, inactive, dormant, former, previously contacted, duplicate or do-not-contact** — absent or ambiguous Core truth is a **stop**, not a proceed. Continue acquisition selling after Core confirms ACTIVE. Own a registered vendor's relationship. Guarantee lead quantity, revenue or conversion; invent discounts, prices, urgency or scarcity; hide package limitations; use unsupported social proof; contact after rejection or opt-out; make binding contractual commitments; approve refunds; change package entitlements; source commercial truth from a model or RAG; mutate marketplace tables; call providers or n8n directly; bypass QuickFurno Core.
+8. **Forbidden actions.** **Create a second cold-acquisition relationship where Core says the party is registered, active, inactive, dormant, former, previously contacted, duplicate or do-not-contact** — absent or ambiguous Core truth is a **stop**, not a proceed. Continue acquisition selling after Core confirms ACTIVE. Own a registered vendor's relationship. Guarantee lead quantity, revenue or conversion; invent discounts, prices, urgency or scarcity; hide package limitations; use unsupported social proof; contact after rejection or opt-out; make binding contractual commitments; approve refunds; change package entitlements; source commercial truth from a model or RAG; mutate marketplace tables; call providers or QuickFurno Core Automation directly; bypass QuickFurno Core.
 9. **Compliance.** Consent/opt-out enforced by Core before any outbound, and revalidated at execution time; the existing-vendor gate is checked against Core, never resolved from local state or model memory; outreach eligibility is fail-closed.
 10. **Handoffs.** **On QuickFurno Core's authoritative ACTIVE confirmation, acquisition selling stops and primary vendor relationship ownership moves to Anisha.** The trigger is Core's confirmation — never a provider receipt, a model's reading of a conversation, or a message claiming payment. Customer matters → Riya; complex/sensitive/financial/legal/fraud → Jarvis; sensitive authority → Core/human.
 11. **Escalation rules.** Escalate disputed identity, suspected duplication, complaints, and any complex/sensitive/financial/legal/fraud matter to Jarvis; never self-authorize.

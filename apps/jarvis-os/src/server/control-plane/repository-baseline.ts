@@ -20,7 +20,7 @@ import type {
  * ### Why unreadable sources carry no rows
  *
  * QuickFurno Core is authoritative and there is no adopted Jarvis-to-Core read protocol in this
- * repository. n8n runs on the VPS and Jarvis OS has no adopted protocol to read it either. So both
+ * repository. QuickFurno Core Automation runs on the VPS and Jarvis OS has no adopted protocol to read it either. So both
  * report NOT_CONNECTED, and every section that would depend on them carries no rows and states why.
  *
  * `0 approvals` and `the approval source is not connected` are different facts. Rendering the
@@ -35,7 +35,7 @@ export const BASELINE_FACTS = Object.freeze({
    *
    * QFJ-P09.03 merged as PR #96 (merge commit `6aba6795`). What merged is DURABILITY for the
    * P09.02 replay guard — a storage adapter with no transport. Neither slice connected anything,
-   * so the sections below still report n8n as NOT_CONNECTED for exactly that reason.
+   * so the sections below still report QuickFurno Core Automation as NOT_CONNECTED for exactly that reason.
    */
   mergedPhase: 'QFJ-P09.03',
   /**
@@ -119,12 +119,12 @@ export const BASELINE_SYSTEM: readonly SystemComponent[] = Object.freeze<
     detail: 'Authoritative for business truth. No Jarvis-to-Core read protocol is adopted.',
   },
   {
-    id: 'n8n',
-    label: 'n8n execution fabric',
+    id: 'quickfurno-core-automation',
+    label: 'QuickFurno Core Automation execution fabric',
     state: 'NOT_CONNECTED',
     detail:
       'Executes approved intents only. QFJ-P09.02 merged the test-only dispatch VALIDATION ' +
-      'boundary; the real Core-to-n8n transport is not implemented.',
+      'boundary; the real Core-to-QuickFurno Core Automation transport is not implemented.',
   },
   {
     id: 'model-gateway',
@@ -226,10 +226,10 @@ export const BASELINE_ROADMAP: readonly BaselineRoadmap[] = Object.freeze<
     track: 'QFJ',
     label: 'QFJ-P09.02 - Authorized dispatch envelope validation (test-only)',
     state: 'merged',
-    // What merged is a VERIFIER. Saying "the n8n bridge merged" would replace one falsehood with
+    // What merged is a VERIFIER. Saying "the QuickFurno Core Automation bridge merged" would replace one falsehood with
     // its opposite: the boundary holds no transport, and nothing dispatches.
     detail:
-      'Test-only Core-to-n8n dispatch validation. The real transport is not implemented and the ' +
+      'Test-only Core-to-QuickFurno Core Automation dispatch validation. The real transport is not implemented and the ' +
       'wire protocol remains PROPOSED.',
   },
   {
@@ -297,7 +297,7 @@ export const BASELINE_ROADMAP: readonly BaselineRoadmap[] = Object.freeze<
     label: 'JOS-01E - Progressive backend read wiring',
     state: 'current',
     detail:
-      'Governed read-source composition. No source is adopted yet: none is reachable without a protocol Core and n8n have not adopted.',
+      'Governed read-source composition. No source is adopted yet: none is reachable without a protocol Core and QuickFurno Core Automation have not adopted.',
   },
 ]);
 
@@ -540,7 +540,8 @@ export function baselineSections(): Sections {
           id: 'live-integrations',
           label: 'Live integrations',
           value: '0',
-          caption: 'Core and n8n are both NOT_CONNECTED. No provider is reachable.',
+          caption:
+            'Core and QuickFurno Core Automation are both NOT_CONNECTED. No provider is reachable.',
         },
         {
           id: 'production-rollout',
@@ -585,9 +586,9 @@ export function baselineSections(): Sections {
           severity: 'warning',
         },
         {
-          id: 'n8n-not-connected',
+          id: 'core-automation-not-connected',
           kind: 'integration',
-          title: 'n8n is not connected',
+          title: 'QuickFurno Core Automation is not connected',
           context:
             'QFJ-P09.02 merged the test-only dispatch VALIDATION boundary. The real transport is ' +
             'not implemented and the protocol is not adopted. Nothing dispatches.',
@@ -714,10 +715,10 @@ export function baselineSections(): Sections {
       'Business analytics are QuickFurno Core truth, and Core is not connected.',
       'QuickFurno Core, once a read protocol is adopted and authenticated.',
     ),
-    n8nExecution: unreadable(
+    coreAutomationExecution: unreadable(
       'NOT_CONNECTED',
-      'n8n executes approved intents. Jarvis OS has no adopted protocol to read its state.',
-      'The real Core-to-n8n execution transport, which is not implemented. QFJ-P09.02 merged only ' +
+      'QuickFurno Core Automation executes approved intents. Jarvis OS has no adopted protocol to read its state.',
+      'The real Core-to-QuickFurno Core Automation execution transport, which is not implemented. QFJ-P09.02 merged only ' +
         'the test-only validation boundary.',
     ),
   };

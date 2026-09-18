@@ -31,7 +31,7 @@ Run against the working tree on branch `qfj-p04-04-evaluation-red-team-foundatio
 ## Containment — proven
 
 - Depends **only** on `zod`; exposes only `.` and `./testing`.
-- Production source has **no** `fetch`, `process.env`, `node:` I/O import, provider SDK import, `n8n`/excluded-vendor term, or `embedding`/`vector`/`cosine`/`RAG` (proven by source scan).
+- Production source has **no** `fetch`, `process.env`, `node:` I/O import, provider SDK import, `QuickFurno Core Automation`/excluded-vendor term, or `embedding`/`vector`/`cosine`/`RAG` (proven by source scan).
 - The build excludes `src/tests`, so **dist is production-only** (no `*.test.*`); the synthetic `./testing` fixtures are the only test-support export.
 - Migrations 0001–0007 **byte-exact** (sha-256 locked); **no 0008**; `@qf-jarvis/event-backbone` root API remains **39**.
 - No control byte in any tracked TypeScript file (whole-repo scan).

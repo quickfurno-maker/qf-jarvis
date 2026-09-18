@@ -98,7 +98,7 @@ describe('async Core transport — a change while the transport is pending block
     const result = await adapter.decideDetailed(coreRequest());
     expect(result.outcome).toBe('ACCEPTED');
     const surface = result as unknown as Record<string, unknown>;
-    for (const forbidden of ['send', 'deliver', 'execute', 'persist', 'callN8n']) {
+    for (const forbidden of ['send', 'deliver', 'execute', 'persist', 'callcoreAutomation']) {
       expect(surface[forbidden]).toBeUndefined();
     }
   });

@@ -28,7 +28,7 @@ describe('Jarvis recommends — and only Jarvis recommends', () => {
     expect(safeParseRecommendation(cloneFixture(validActionableRecommendation)).success).toBe(true);
   });
 
-  it.each(['quickfurno-core', 'n8n', 'qf-communications-runtime'])(
+  it.each(['quickfurno-core', 'quickfurno-core-automation', 'qf-communications-runtime'])(
     'refuses a recommendation produced by %s',
     (system) => {
       const forged = { ...cloneFixture(validActionableRecommendation), producingSystem: system };
@@ -38,7 +38,7 @@ describe('Jarvis recommends — and only Jarvis recommends', () => {
 });
 
 describe('QuickFurno authorizes — Jarvis may not mark its own recommendation approved', () => {
-  it.each(['qf-jarvis', 'n8n', 'qf-communications-runtime'])(
+  it.each(['qf-jarvis', 'quickfurno-core-automation', 'qf-communications-runtime'])(
     'refuses an approval decision issued by %s',
     (system) => {
       const forged = { ...cloneFixture(validApprovalDecisionByHuman), issuer: system };
@@ -76,11 +76,11 @@ describe('QuickFurno authorizes — Jarvis may not mark its own recommendation a
 });
 
 describe('Jarvis may not generate a valid Core-issued execution intent', () => {
-  it('accepts an intent issued by Core and executed by n8n', () => {
+  it('accepts an intent issued by Core and executed by QuickFurno Core Automation', () => {
     expect(safeParseExecutionIntent(cloneFixture(validExecutionIntent)).success).toBe(true);
   });
 
-  it.each(['qf-jarvis', 'n8n', 'qf-communications-runtime'])(
+  it.each(['qf-jarvis', 'quickfurno-core-automation', 'qf-communications-runtime'])(
     'refuses an intent issued by %s',
     (system) => {
       const forged = { ...cloneFixture(validExecutionIntent), issuer: system };
@@ -89,7 +89,7 @@ describe('Jarvis may not generate a valid Core-issued execution intent', () => {
   );
 
   it.each(['qf-jarvis', 'quickfurno-core', 'whatsapp-provider', 'twilio'])(
-    'refuses an intent executed by %s — only n8n executes',
+    'refuses an intent executed by %s — only QuickFurno Core Automation executes',
     (executor) => {
       const forged = { ...cloneFixture(validExecutionIntent), executor };
       expect(safeParseExecutionIntent(forged).success).toBe(false);

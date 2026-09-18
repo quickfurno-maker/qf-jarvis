@@ -4,7 +4,7 @@
  * The overlay sentence this file exists to satisfy, in full:
  *
  * > Governed inbound/outbound conversation on Instagram. Delivery remains provider-side and
- * > execution remains n8n-side; Aarohi holds no provider credential and calls no Meta API. Consent
+ * > execution remains QuickFurno Core Automation-side; Aarohi holds no provider credential and calls no Meta API. Consent
  * > and eligibility are Core's, revalidated at execution time.
  *
  * Every clause of that is structural here rather than aspirational.
@@ -17,7 +17,7 @@
  * That omission is the decision, not an oversight. A member of the shared vocabulary is a channel a
  * `CommunicationRequestV1` may name, which pulls it into the eighteen-state delivery lifecycle with
  * its `provider-accepted` and `delivered` states — states nothing in this repository could honestly
- * assert for Instagram, because there is no Core -> n8n -> Instagram execution path yet and no
+ * assert for Instagram, because there is no Core -> QuickFurno Core Automation -> Instagram execution path yet and no
  * provider adapter to report one. Naming a channel there is a promise that a transport exists.
  *
  * The owner's sequencing is explicit: finish Aarohi AVG-5..AVG-12 first, then adopt the real
@@ -708,7 +708,7 @@ export interface InstagramOutboundCandidatePosture {
   readonly approvalDecisionCreated: false;
   readonly communicationAuthorizationCreated: false;
   readonly executionIntentCreated: false;
-  readonly n8nExecutionRequested: false;
+  readonly coreAutomationExecutionRequested: false;
   readonly metaApiCalled: false;
   readonly providerSendRequested: false;
   readonly sent: false;
@@ -726,7 +726,7 @@ export const instagramOutboundCandidatePostureSchema = z
     approvalDecisionCreated: z.literal(false),
     communicationAuthorizationCreated: z.literal(false),
     executionIntentCreated: z.literal(false),
-    n8nExecutionRequested: z.literal(false),
+    coreAutomationExecutionRequested: z.literal(false),
     metaApiCalled: z.literal(false),
     providerSendRequested: z.literal(false),
     sent: z.literal(false),
@@ -747,7 +747,7 @@ export const INSTAGRAM_OUTBOUND_CANDIDATE_POSTURE: InstagramOutboundCandidatePos
       approvalDecisionCreated: false,
       communicationAuthorizationCreated: false,
       executionIntentCreated: false,
-      n8nExecutionRequested: false,
+      coreAutomationExecutionRequested: false,
       metaApiCalled: false,
       providerSendRequested: false,
       sent: false,

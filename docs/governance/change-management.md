@@ -27,7 +27,7 @@ If yes, it does not merge, regardless of what it fixes.
 
 Specific review blockers, beyond correctness:
 
-- A path from QF Jarvis to n8n, to a provider, or to business state.
+- A path from QF Jarvis to QuickFurno Core Automation, to a provider, or to business state.
 - A recommendation that can execute without an approval decision.
 - A timeout-to-approve, in any form, under any name.
 - An approval path shortened by model confidence.
@@ -64,7 +64,7 @@ Any change to the shape of the system is an ADR: **status, date, context, decisi
 
 This includes — especially includes — changes made under time pressure. An architectural decision that exists only in code is one that will be refactored away by someone who never knew why it was there. The permanent boundary this project rests on is exactly the kind of thing that gets "simplified" by a well-meaning stranger in eighteen months.
 
-**Weakening the system boundary requires a superseding ADR and the business owner's explicit decision.** It is not a code review comment, not a sprint deadline, and not a pragmatic exception. The four edges that do not exist — Jarvis → provider, Jarvis → n8n, Jarvis → business state, agent → approval — do not become negotiable because a delivery date is close ([system-boundary.md](../architecture/system-boundary.md)).
+**Weakening the system boundary requires a superseding ADR and the business owner's explicit decision.** It is not a code review comment, not a sprint deadline, and not a pragmatic exception. The four edges that do not exist — Jarvis → provider, Jarvis → QuickFurno Core Automation, Jarvis → business state, agent → approval — do not become negotiable because a delivery date is close ([system-boundary.md](../architecture/system-boundary.md)).
 
 ### The ADR lifecycle
 

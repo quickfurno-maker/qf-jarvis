@@ -9,7 +9,7 @@
 ## 1. Owner scope statement (verbatim)
 
 > “The evaluation reference approves only the synthetic staging connectivity smoke. It does not
-> approve production quality, production activation, rollout, real customer data, WhatsApp, n8n,
+> approve production quality, production activation, rollout, real customer data, WhatsApp, QuickFurno Core Automation,
 > QuickFurno Core access, database access, or deployment.”
 
 ## 2. What this reference covers
@@ -61,7 +61,7 @@ This is a wire probe, not a quality measurement. It approves **none** of the fol
 - concurrency, throughput, or rate-limit behaviour;
 - production activation, rollout promotion, or provider registration;
 - real customer, client, or vendor data;
-- WhatsApp, n8n, QuickFurno Core, database access, or deployment.
+- WhatsApp, QuickFurno Core Automation, QuickFurno Core, database access, or deployment.
 
 ## 6. Evidence status
 
