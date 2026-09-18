@@ -489,17 +489,20 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
     }
   });
 
-  it('exactly three modules arm timers, and every arm has its clear', () => {
+  it('exactly four reviewed modules arm timers, and every arm has its clear', () => {
     // The second is the certification composition (JF-5B-R1, ADR-0152): the bounded discovery GET needs
     // one abort deadline, or a hung provider would hang an owner's terminal indefinitely. JF-5B-R6 adds
     // the evaluation-only pacing sleep in the same file. The RULE is unchanged -- every arm matched by a
     // clear, nothing repeating, nothing rescheduling -- and it is now COUNTED per file rather than
     // assumed to be one. JF-6 adds one abort deadline to the injected Core availability HTTP reader;
-    // it owns no retry loop and clears the timer in `finally` on every path.
+    // it owns no retry loop and clears the timer in `finally` on every path. The QuickFurno
+    // WhatsApp signed HTTP client owns the same one-shot abort deadline for material reads/callbacks;
+    // it also has no retry loop and clears its timer in `finally`.
     const ARMS_BY_FILE: Readonly<Record<string, number>> = Object.freeze({
       [DESIGNATED_TIMER_MODULE]: 1,
       [JF5B_COMPOSITION]: 2,
       'src/jf6-private-process/create-core-service-availability-reader.ts': 1,
+      'src/quickfurno-whatsapp/quickfurno-http.ts': 1,
     });
     const timerFiles = productionFiles().filter((file) =>
       codeOnly(readFileSync(file, 'utf8')).includes('setTimeout'),

@@ -12,6 +12,14 @@ import {
   verifyHandshakeSignature,
 } from './protocol.js';
 import { BoundedReplayCache, type ReplayGuard } from './replay-cache.js';
+import type { DurableTurnSpool } from './durable-turn-spool.js';
+import {
+  WHATSAPP_TURN_METHOD,
+  WHATSAPP_TURN_PATH,
+  WHATSAPP_TURN_PROTOCOL,
+  parseWhatsAppTurn,
+  verifyWhatsAppTurnSignature,
+} from './whatsapp-turn-protocol.js';
 
 const MAX_BODY_BYTES = 8_192;
 const JSON_TYPE = 'application/json; charset=utf-8';
@@ -72,6 +80,7 @@ function contentTypeAllowed(request: IncomingMessage): boolean {
 export interface GatewayServerDependencies {
   readonly config: GatewayConfig;
   readonly replayGuard?: ReplayGuard;
+  readonly turnSpool?: DurableTurnSpool;
   readonly now?: () => Date;
 }
 
@@ -92,6 +101,61 @@ export function createGatewayServer(dependencies: GatewayServerDependencies) {
 
         if (request.method === 'GET' && url.pathname === '/healthz') {
           writeJson(response, 200, { status: 'ok', service: 'qf-jarvis-gateway', version: 1 });
+          return;
+        }
+
+        if (request.method === WHATSAPP_TURN_METHOD && url.pathname === WHATSAPP_TURN_PATH) {
+          if (dependencies.turnSpool === undefined) {
+            writeJson(response, 503, { error: 'service_unavailable' });
+            return;
+          }
+          if (!contentTypeAllowed(request)) {
+            writeJson(response, 415, { error: 'invalid_request' });
+            return;
+          }
+          const rawBody = await readBoundedBody(request);
+          if (rawBody === null) {
+            writeJson(response, 413, { error: 'invalid_request' });
+            return;
+          }
+          let decoded: unknown;
+          try {
+            decoded = JSON.parse(Buffer.from(rawBody).toString('utf8'));
+          } catch {
+            writeJson(response, 400, { error: 'invalid_request' });
+            return;
+          }
+          const turn = parseWhatsAppTurn(decoded);
+          if (turn === null) {
+            writeJson(response, 400, { error: 'invalid_request' });
+            return;
+          }
+          const current = now();
+          const authenticated = verifyWhatsAppTurnSignature({
+            rawBody,
+            turn,
+            keyId: singleHeader(request, KEY_ID_HEADER),
+            signature: singleHeader(request, SIGNATURE_HEADER),
+            verificationKeys: dependencies.config.verificationKeys,
+            nowMs: current.getTime(),
+            maxClockSkewMs: dependencies.config.maxClockSkewMs,
+          });
+          if (!authenticated) {
+            writeJson(response, 401, { error: 'authentication_failed' });
+            return;
+          }
+          const accepted = await dependencies.turnSpool.accept(turn, current.toISOString());
+          if (accepted.outcome === 'conflict') {
+            writeJson(response, 409, { error: 'turn_identity_conflict' });
+            return;
+          }
+          writeJson(response, 202, {
+            protocol: WHATSAPP_TURN_PROTOCOL,
+            version: 1,
+            requestId: turn.requestId,
+            status: accepted.outcome,
+            durable: true,
+          });
           return;
         }
 
