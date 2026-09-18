@@ -3,6 +3,7 @@ import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import type { GatewayConfig } from '../config.js';
+import type { DurableTurnSpool, DurableTurnRecordV1 } from '../durable-turn-spool.js';
 import {
   KEY_ID_HEADER,
   SIGNATURE_HEADER,
@@ -14,6 +15,11 @@ import {
   type HandshakeResponseV1,
 } from '../protocol.js';
 import { createGatewayServer } from '../server.js';
+import {
+  WHATSAPP_TURN_PATH,
+  whatsAppTurnSigningInput,
+  type WhatsAppTurnV1,
+} from '../whatsapp-turn-protocol.js';
 
 const quickfurno = generateKeyPairSync('ed25519');
 const jarvis = generateKeyPairSync('ed25519');
@@ -38,6 +44,43 @@ const config: GatewayConfig = {
   replayMaxEntries: 100,
 };
 
+function memoryTurnSpool() {
+  const records = new Map<string, DurableTurnRecordV1>();
+  const spool: DurableTurnSpool = Object.freeze({
+    accept(turn: WhatsAppTurnV1, acceptedAt: string) {
+      const next: DurableTurnRecordV1 = Object.freeze({
+        version: 1,
+        conversationId: turn.conversationId,
+        conversationRevision: turn.conversationRevision,
+        inboundMessageId: turn.inboundMessageId,
+        receivedAt: turn.receivedAt,
+        assignedActor: turn.assignedActor,
+        subjectType: turn.subjectType,
+        acceptedAt,
+      });
+      const prior = records.get(turn.inboundMessageId);
+      if (prior) {
+        const same =
+          JSON.stringify({ ...prior, acceptedAt: '' }) ===
+          JSON.stringify({ ...next, acceptedAt: '' });
+        return Promise.resolve(
+          same
+            ? { outcome: 'duplicate' as const, record: prior }
+            : { outcome: 'conflict' as const },
+        );
+      }
+      records.set(turn.inboundMessageId, next);
+      return Promise.resolve({ outcome: 'accepted' as const, record: next });
+    },
+    claimNext: () => Promise.resolve(null),
+    complete: () => Promise.resolve(),
+    fail: () => Promise.resolve(),
+    release: () => Promise.resolve(),
+    recoverStale: () => Promise.resolve(0),
+  });
+  return { spool, records };
+}
+
 const servers: ReturnType<typeof createGatewayServer>[] = [];
 afterEach(async () => {
   await Promise.all(
@@ -52,8 +95,12 @@ afterEach(async () => {
   );
 });
 
-async function startServer(now: Date): Promise<string> {
-  const server = createGatewayServer({ config, now: () => now });
+async function startServer(now: Date, turnSpool?: DurableTurnSpool): Promise<string> {
+  const server = createGatewayServer({
+    config,
+    now: () => now,
+    ...(turnSpool ? { turnSpool } : {}),
+  });
   servers.push(server);
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);
@@ -86,6 +133,46 @@ function signedHeaders(
     null,
     Buffer.from(
       requestSigningInput({
+        requestId: request.requestId,
+        issuedAt: request.issuedAt,
+        keyId: quickfurnoKeyId,
+        bodyDigest: rawBodyDigest(Buffer.from(body, 'utf8')),
+      }),
+      'utf8',
+    ),
+    quickfurno.privateKey,
+  ).toString('base64url');
+  return {
+    'content-type': 'application/json',
+    [KEY_ID_HEADER]: quickfurnoKeyId,
+    [SIGNATURE_HEADER]: signature,
+  };
+}
+
+function turn(now: Date, over: Partial<Record<string, unknown>> = {}) {
+  return {
+    protocol: 'qfj.whatsapp.turn',
+    version: 1,
+    caller: 'quickfurno-core',
+    audience: 'qf-jarvis',
+    requestId: '44444444-4444-4444-8444-444444444444',
+    issuedAt: now.toISOString(),
+    conversationId: '55555555-5555-4555-8555-555555555555',
+    conversationRevision: 7,
+    inboundMessageId: '66666666-6666-4666-8666-666666666666',
+    receivedAt: now.toISOString(),
+    assignedActor: 'RIYA',
+    subjectType: 'client',
+    normalizedText: 'hello',
+    ...over,
+  } as const;
+}
+
+function signedTurnHeaders(body: string, request: ReturnType<typeof turn>): Record<string, string> {
+  const signature = sign(
+    null,
+    Buffer.from(
+      whatsAppTurnSigningInput({
         requestId: request.requestId,
         issuedAt: request.issuedAt,
         keyId: quickfurnoKeyId,
@@ -202,5 +289,61 @@ describe('QuickFurno gateway HTTP boundary', () => {
       body,
     });
     expect(response.status).toBe(401);
+  });
+
+  it('durably accepts a signed WhatsApp turn and stores no normalized text', async () => {
+    const now = new Date('2026-09-18T12:00:00.000Z');
+    const memory = memoryTurnSpool();
+    const base = await startServer(now, memory.spool);
+    const request = turn(now);
+    const body = JSON.stringify(request);
+    const response = await fetch(`${base}${WHATSAPP_TURN_PATH}`, {
+      method: 'POST',
+      headers: signedTurnHeaders(body, request),
+      body,
+    });
+    expect(response.status).toBe(202);
+    expect(await response.json()).toMatchObject({ status: 'accepted', durable: true });
+    const stored = memory.records.get(request.inboundMessageId);
+    expect(stored?.assignedActor).toBe('RIYA');
+    expect(stored).not.toHaveProperty('normalizedText');
+  });
+
+  it('converges a re-signed duplicate turn and rejects identity conflict', async () => {
+    const now = new Date('2026-09-18T12:00:00.000Z');
+    const memory = memoryTurnSpool();
+    const base = await startServer(now, memory.spool);
+    const first = turn(now);
+    const sendTurn = async (request: ReturnType<typeof turn>) => {
+      const body = JSON.stringify(request);
+      return fetch(`${base}${WHATSAPP_TURN_PATH}`, {
+        method: 'POST',
+        headers: signedTurnHeaders(body, request),
+        body,
+      });
+    };
+    expect((await sendTurn(first)).status).toBe(202);
+    const duplicate = turn(now, { requestId: '77777777-7777-4777-8777-777777777777' });
+    const duplicateResponse = await sendTurn(duplicate);
+    expect(duplicateResponse.status).toBe(202);
+    expect(await duplicateResponse.json()).toMatchObject({ status: 'duplicate' });
+    const conflict = turn(now, {
+      requestId: '88888888-8888-4888-8888-888888888888',
+      conversationRevision: 8,
+    });
+    expect((await sendTurn(conflict)).status).toBe(409);
+  });
+
+  it('refuses WhatsApp turns when durable spool is not configured', async () => {
+    const now = new Date('2026-09-18T12:00:00.000Z');
+    const base = await startServer(now);
+    const request = turn(now);
+    const body = JSON.stringify(request);
+    const response = await fetch(`${base}${WHATSAPP_TURN_PATH}`, {
+      method: 'POST',
+      headers: signedTurnHeaders(body, request),
+      body,
+    });
+    expect(response.status).toBe(503);
   });
 });

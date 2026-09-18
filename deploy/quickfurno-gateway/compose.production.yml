@@ -18,11 +18,16 @@ services:
     environment:
       NODE_ENV: production
       QFJ_GATEWAY_CONFIG_FILE: /run/secrets/qf-jarvis-gateway.json
+      QFJ_GATEWAY_TURN_SPOOL_DIR: /var/lib/qfj-turns
     volumes:
       - type: bind
         source: /srv/qf-jarvis/secrets/qf-jarvis-gateway.json
         target: /run/secrets/qf-jarvis-gateway.json
         read_only: true
+      - type: bind
+        source: /srv/qf-jarvis/state/quickfurno-gateway-turns
+        target: /var/lib/qfj-turns
+        read_only: false
     deploy:
       resources:
         limits:

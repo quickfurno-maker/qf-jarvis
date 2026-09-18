@@ -310,6 +310,22 @@ describe('(127-132) no live model id, tool, workflow or database path', () => {
     'src/temporal/create-durable-orchestration-client.ts',
   ]);
 
+  const QUICKFURNO_WHATSAPP_VOCABULARY_FILES: readonly string[] = Object.freeze([
+    // Reviewed QuickFurno transport/processor seam. These files may name the WhatsApp surface,
+    // but they acquire no provider send authority, tool capability, raw database handle or webhook.
+    'src/quickfurno-whatsapp/contracts.ts',
+    'src/quickfurno-whatsapp/quickfurno-http.ts',
+    'src/quickfurno-whatsapp/specialist-runtime.ts',
+    'src/quickfurno-whatsapp/turn-processor.ts',
+    'src/tests/quickfurno-whatsapp-http.test.ts',
+    'src/tests/quickfurno-whatsapp-specialist-runtime.test.ts',
+    'src/tests/quickfurno-whatsapp-turn-processor.test.ts',
+  ]);
+  const QUICKFURNO_WHATSAPP_WORKFLOW_FILES: readonly string[] = Object.freeze([
+    // The specialist seam reuses the existing bounded Mastra turn wrapper; it does not define a new workflow.
+    'src/quickfurno-whatsapp/specialist-runtime.ts',
+  ]);
+
   it('(130, 131) no tool, execution, workflow or database capability is reachable', () => {
     for (const file of allFiles()) {
       // `DIRECT_BUSINESS_OR_CORE_AUTOMATION_EXECUTION` is a red-team case KIND from `model-evaluation`: it names the
@@ -328,17 +344,25 @@ describe('(127-132) no live model id, tool, workflow or database path', () => {
       const orchestratesDurableJourney = DURABLE_ORCHESTRATION_FILES.some((allowed) =>
         normalise(file).endsWith(`/${allowed}`),
       );
+      const namesQuickFurnoWhatsApp = QUICKFURNO_WHATSAPP_VOCABULARY_FILES.some((allowed) =>
+        normalise(file).endsWith(`/${allowed}`),
+      );
+      const orchestratesQuickFurnoWhatsApp = QUICKFURNO_WHATSAPP_WORKFLOW_FILES.some((allowed) =>
+        normalise(file).endsWith(`/${allowed}`),
+      );
       if (CONTAINMENT_VOCABULARY_SPECS.some((allowed) => normalise(file).endsWith(`/${allowed}`))) {
         continue;
       }
       for (const forbidden of [
         'quickfurno-core-automation',
-        'whatsapp',
+        ...(namesQuickFurnoWhatsApp ? [] : ['whatsapp']),
         'webhook',
         'toolcall',
         'tool_call',
         'tools:',
-        ...(orchestratesCustomerTurn || orchestratesDurableJourney ? [] : ['workflow']),
+        ...(orchestratesCustomerTurn || orchestratesDurableJourney || orchestratesQuickFurnoWhatsApp
+          ? []
+          : ['workflow']),
         // A RAW pool stays forbidden EVERYWHERE, the two composition files included: they reach the
         // database through the public workspace APIs or not at all.
         'pg-pool',
