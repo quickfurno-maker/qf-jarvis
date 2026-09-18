@@ -149,10 +149,9 @@ export async function createFileDurableTurnSpool(root: string): Promise<DurableT
       const record = stableRecord(turn, acceptedAt);
       const prior = await existingRecord(turn.inboundMessageId);
       if (prior) {
-        if (prior.requestId === turn.requestId) return { outcome: 'replay', record: prior };
-        return sameIdentity(prior, record)
-          ? { outcome: 'duplicate', record: prior }
-          : { outcome: 'conflict' };
+        const same = sameIdentity(prior, record);
+        if (same && prior.requestId === turn.requestId) return { outcome: 'replay', record: prior };
+        return same ? { outcome: 'duplicate', record: prior } : { outcome: 'conflict' };
       }
       const path = join(pending, fileName(turn.inboundMessageId));
       let handle;
@@ -165,12 +164,12 @@ export async function createFileDurableTurnSpool(root: string): Promise<DurableT
         const code = (error as { code?: unknown }).code;
         if (code === 'EEXIST') {
           const converged = await existingRecord(turn.inboundMessageId);
-          if (converged?.requestId === turn.requestId) {
+          if (!converged) return { outcome: 'conflict' };
+          const same = sameIdentity(converged, record);
+          if (same && converged.requestId === turn.requestId) {
             return { outcome: 'replay', record: converged };
           }
-          return converged && sameIdentity(converged, record)
-            ? { outcome: 'duplicate', record: converged }
-            : { outcome: 'conflict' };
+          return same ? { outcome: 'duplicate', record: converged } : { outcome: 'conflict' };
         }
         throw error;
       } finally {
