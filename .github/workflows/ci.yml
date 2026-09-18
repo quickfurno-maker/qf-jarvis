@@ -115,6 +115,18 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Diagnostic exact Prettier patch
+        shell: bash
+        run: |
+          pnpm prettier --write \
+            apps/api/src/quickfurno-whatsapp/contracts.ts \
+            apps/api/src/quickfurno-whatsapp/quickfurno-http.ts \
+            apps/api/src/tests/quickfurno-whatsapp-http.test.ts
+          git --no-pager diff -- \
+            apps/api/src/quickfurno-whatsapp/contracts.ts \
+            apps/api/src/quickfurno-whatsapp/quickfurno-http.ts \
+            apps/api/src/tests/quickfurno-whatsapp-http.test.ts
+
       # The migration CLI runs from `dist/`, so the workspace must be built before it
       # can be invoked. This step also proves the CLI itself works — `pnpm check` would
       # exercise the migration *runner* through the tests, but not the executable that
@@ -141,6 +153,13 @@ jobs:
       #
       # This is what makes `pnpm format:check` honest: without this step, a
       # generated file could be committed by accident and nothing would notice.
+      - name: Restore diagnostic formatting inputs
+        run: |
+          git checkout -- \
+            apps/api/src/quickfurno-whatsapp/contracts.ts \
+            apps/api/src/quickfurno-whatsapp/quickfurno-http.ts \
+            apps/api/src/tests/quickfurno-whatsapp-http.test.ts
+
       - name: Verify the working tree is clean
         shell: bash
         run: |
