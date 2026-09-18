@@ -50,6 +50,7 @@ function memoryTurnSpool() {
     accept(turn: WhatsAppTurnV1, acceptedAt: string) {
       const next: DurableTurnRecordV1 = Object.freeze({
         version: 1,
+        requestId: turn.requestId,
         conversationId: turn.conversationId,
         conversationRevision: turn.conversationRevision,
         inboundMessageId: turn.inboundMessageId,
@@ -61,8 +62,15 @@ function memoryTurnSpool() {
       const prior = records.get(turn.inboundMessageId);
       if (prior) {
         const same =
-          JSON.stringify({ ...prior, acceptedAt: '' }) ===
-          JSON.stringify({ ...next, acceptedAt: '' });
+          prior.conversationId === next.conversationId &&
+          prior.conversationRevision === next.conversationRevision &&
+          prior.inboundMessageId === next.inboundMessageId &&
+          prior.receivedAt === next.receivedAt &&
+          prior.assignedActor === next.assignedActor &&
+          prior.subjectType === next.subjectType;
+        if (same && prior.requestId === turn.requestId) {
+          return Promise.resolve({ outcome: 'replay' as const, record: prior });
+        }
         return Promise.resolve(
           same
             ? { outcome: 'duplicate' as const, record: prior }
@@ -323,14 +331,14 @@ describe('QuickFurno gateway HTTP boundary', () => {
       });
     };
     expect((await sendTurn(first)).status).toBe(202);
+    const replayResponse = await sendTurn(first);
+    expect(replayResponse.status).toBe(409);
+    expect(await replayResponse.json()).toEqual({ error: 'replay_rejected' });
     const duplicate = turn(now, { requestId: '77777777-7777-4777-8777-777777777777' });
     const duplicateResponse = await sendTurn(duplicate);
     expect(duplicateResponse.status).toBe(202);
     expect(await duplicateResponse.json()).toMatchObject({ status: 'duplicate' });
-    const conflict = turn(now, {
-      requestId: '88888888-8888-4888-8888-888888888888',
-      conversationRevision: 8,
-    });
+    const conflict = turn(now, { conversationRevision: 8 });
     expect((await sendTurn(conflict)).status).toBe(409);
   });
 

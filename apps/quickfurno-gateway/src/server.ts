@@ -145,6 +145,10 @@ export function createGatewayServer(dependencies: GatewayServerDependencies) {
             return;
           }
           const accepted = await dependencies.turnSpool.accept(turn, current.toISOString());
+          if (accepted.outcome === 'replay') {
+            writeJson(response, 409, { error: 'replay_rejected' });
+            return;
+          }
           if (accepted.outcome === 'conflict') {
             writeJson(response, 409, { error: 'turn_identity_conflict' });
             return;
