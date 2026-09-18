@@ -61,9 +61,6 @@ function memoryTurnSpool() {
       });
       const prior = records.get(turn.inboundMessageId);
       if (prior) {
-        if (prior.requestId === turn.requestId) {
-          return Promise.resolve({ outcome: 'replay' as const, record: prior });
-        }
         const same =
           prior.conversationId === next.conversationId &&
           prior.conversationRevision === next.conversationRevision &&
@@ -71,6 +68,9 @@ function memoryTurnSpool() {
           prior.receivedAt === next.receivedAt &&
           prior.assignedActor === next.assignedActor &&
           prior.subjectType === next.subjectType;
+        if (same && prior.requestId === turn.requestId) {
+          return Promise.resolve({ outcome: 'replay' as const, record: prior });
+        }
         return Promise.resolve(
           same
             ? { outcome: 'duplicate' as const, record: prior }
@@ -338,10 +338,7 @@ describe('QuickFurno gateway HTTP boundary', () => {
     const duplicateResponse = await sendTurn(duplicate);
     expect(duplicateResponse.status).toBe(202);
     expect(await duplicateResponse.json()).toMatchObject({ status: 'duplicate' });
-    const conflict = turn(now, {
-      requestId: '88888888-8888-4888-8888-888888888888',
-      conversationRevision: 8,
-    });
+    const conflict = turn(now, { conversationRevision: 8 });
     expect((await sendTurn(conflict)).status).toBe(409);
   });
 
