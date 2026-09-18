@@ -9,13 +9,13 @@
 
 ## The permanent rule
 
-> ## **Jarvis recommends. QuickFurno Core authorizes. n8n executes. Providers deliver. Results return to Core.**
+> ## **Jarvis recommends. QuickFurno Core authorizes. QuickFurno Core Automation executes. Providers deliver. Results return to Core.**
 
-- **No Jarvis→n8n path.** Not now, not in any phase.
+- **No Jarvis→QuickFurno Core Automation path.** Not now, not in any phase.
 - **No Jarvis→provider path.** No WhatsApp API call, no telephony, no provider credential inside the Jarvis trust zone.
 - **No Jarvis write path into any QuickFurno business table.** Not permanently, not temporarily, **not "just as a cache."**
 
-**This is enforced structurally, not by policy.** `ExecutionIntentV1.issuer` is the literal `quickfurno-core` and `executor` the literal `n8n` — so **Jarvis cannot construct a valid execution intent**, even in error, even if an agent tried ([ADR-0002](../decisions/ADR-0002-recommend-authorize-execute-model.md), [ADR-0014](../decisions/ADR-0014-governed-lifecycle-contracts.md)).
+**This is enforced structurally, not by policy.** `ExecutionIntentV1.issuer` is the literal `quickfurno-core` and `executor` the literal `QuickFurno Core Automation` — so **Jarvis cannot construct a valid execution intent**, even in error, even if an agent tried ([ADR-0002](../decisions/ADR-0002-recommend-authorize-execute-model.md), [ADR-0014](../decisions/ADR-0014-governed-lifecycle-contracts.md)).
 
 **Every action has exactly one authoritative owner, and it is never Jarvis.**
 
@@ -23,38 +23,38 @@
 
 ## Classification
 
-| Code             | Meaning                                                     |
-| ---------------- | ----------------------------------------------------------- |
-| **CORE-DET**     | Core-only deterministic action. Jarvis has no role at all   |
-| **REC**          | Jarvis may **recommend**. Inert until Core authorizes       |
-| **FOUNDER**      | Requires **founder** approval before Core issues an intent  |
-| **ADMIN**        | Requires **admin** approval before Core issues an intent    |
-| **N8N**          | Executed by n8n **on an intent Core issued**                |
-| **PROVIDER**     | Delivered by a provider (Meta WhatsApp, telephony)          |
-| **🚫 FORBIDDEN** | **Jarvis may never do this, and may not even recommend it** |
+| Code                           | Meaning                                                             |
+| ------------------------------ | ------------------------------------------------------------------- |
+| **CORE-DET**                   | Core-only deterministic action. Jarvis has no role at all           |
+| **REC**                        | Jarvis may **recommend**. Inert until Core authorizes               |
+| **FOUNDER**                    | Requires **founder** approval before Core issues an intent          |
+| **ADMIN**                      | Requires **admin** approval before Core issues an intent            |
+| **QuickFurno Core Automation** | Executed by QuickFurno Core Automation **on an intent Core issued** |
+| **PROVIDER**                   | Delivered by a provider (Meta WhatsApp, telephony)                  |
+| **🚫 FORBIDDEN**               | **Jarvis may never do this, and may not even recommend it**         |
 
 ---
 
 ## The matrix
 
-| #   | Action                         | Authoritative owner                                        | Jarvis may                                                                                     | Approval                    | Executed by                |
-| --- | ------------------------------ | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | --------------------------- | -------------------------- |
-| 1   | **Verify / reject a lead**     | **Core** (LeadLens)                                        | **REC** — advise quality, completeness, fraud signals                                          | ADMIN                       | Core                       |
-| 2   | **Change consent**             | **Core** (Communication Core)                              | **🚫 FORBIDDEN**                                                                               | —                           | Core only                  |
-| 3   | **Assign vendors to a lead**   | **Core**                                                   | **REC** — advise _matching readiness_. **Never names a vendor**                                | ADMIN                       | Core                       |
-| 4   | **Deduct a credit**            | **Core**                                                   | **🚫 FORBIDDEN**                                                                               | —                           | Core (RPC, in-transaction) |
-| 5   | **Refund a credit**            | **Core**                                                   | **🚫 FORBIDDEN**                                                                               | FOUNDER/ADMIN               | Core                       |
-| 6   | **Activate a vendor**          | **Core**                                                   | **REC** — advise readiness                                                                     | ADMIN                       | Core                       |
-| 7   | **Suspend a vendor**           | **Core**                                                   | **REC** — advise risk. **Never suspends**                                                      | ADMIN                       | Core                       |
-| 8   | **Change a vendor's package**  | **Core**                                                   | **REC** — advise a recharge _conversation_                                                     | ADMIN                       | Core                       |
-| 9   | **Record a payment**           | **Core**                                                   | **🚫 FORBIDDEN**                                                                               | —                           | Core (admin-recorded)      |
-| 10  | **Send a WhatsApp message**    | **Core** authorizes · **n8n** executes · **Meta** delivers | **REC** — propose a `CommunicationRequestV1`. **Never sends**                                  | **FOUNDER** (first) → ADMIN | N8N → PROVIDER             |
-| 11  | **Place a voice call**         | **Core** authorizes · **n8n** executes                     | **REC** — **only after messaging safety evidence** (Phase 11A)                                 | **FOUNDER**                 | N8N → PROVIDER             |
-| 12  | **Reassign / replace vendors** | **Core**                                                   | **REC** — **only** with an explicit `ClientConfirmationV1`                                     | ADMIN                       | Core                       |
-| 13  | **Resolve a complaint**        | **Core**                                                   | **REC** — advise, escalate, hand off to a human                                                | ADMIN                       | Core                       |
-| 14  | **Campaign spend / budget**    | **Core**                                                   | **REC** — advise budget shift. **Jitin has no ad-provider credential and no budget authority** | **FOUNDER**                 | Core                       |
-| 15  | **Change categories / cities** | **Core** (Superadmin)                                      | **REC** — advise demand/expansion                                                              | ADMIN                       | Core                       |
-| 16  | **Modify runtime settings**    | **Core** (Superadmin)                                      | **🚫 FORBIDDEN**                                                                               | —                           | Core only                  |
+| #   | Action                         | Authoritative owner                                                               | Jarvis may                                                                                     | Approval                    | Executed by                           |
+| --- | ------------------------------ | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | --------------------------- | ------------------------------------- |
+| 1   | **Verify / reject a lead**     | **Core** (LeadLens)                                                               | **REC** — advise quality, completeness, fraud signals                                          | ADMIN                       | Core                                  |
+| 2   | **Change consent**             | **Core** (Communication Core)                                                     | **🚫 FORBIDDEN**                                                                               | —                           | Core only                             |
+| 3   | **Assign vendors to a lead**   | **Core**                                                                          | **REC** — advise _matching readiness_. **Never names a vendor**                                | ADMIN                       | Core                                  |
+| 4   | **Deduct a credit**            | **Core**                                                                          | **🚫 FORBIDDEN**                                                                               | —                           | Core (RPC, in-transaction)            |
+| 5   | **Refund a credit**            | **Core**                                                                          | **🚫 FORBIDDEN**                                                                               | FOUNDER/ADMIN               | Core                                  |
+| 6   | **Activate a vendor**          | **Core**                                                                          | **REC** — advise readiness                                                                     | ADMIN                       | Core                                  |
+| 7   | **Suspend a vendor**           | **Core**                                                                          | **REC** — advise risk. **Never suspends**                                                      | ADMIN                       | Core                                  |
+| 8   | **Change a vendor's package**  | **Core**                                                                          | **REC** — advise a recharge _conversation_                                                     | ADMIN                       | Core                                  |
+| 9   | **Record a payment**           | **Core**                                                                          | **🚫 FORBIDDEN**                                                                               | —                           | Core (admin-recorded)                 |
+| 10  | **Send a WhatsApp message**    | **Core** authorizes · **QuickFurno Core Automation** executes · **Meta** delivers | **REC** — propose a `CommunicationRequestV1`. **Never sends**                                  | **FOUNDER** (first) → ADMIN | QuickFurno Core Automation → PROVIDER |
+| 11  | **Place a voice call**         | **Core** authorizes · **QuickFurno Core Automation** executes                     | **REC** — **only after messaging safety evidence** (Phase 11A)                                 | **FOUNDER**                 | QuickFurno Core Automation → PROVIDER |
+| 12  | **Reassign / replace vendors** | **Core**                                                                          | **REC** — **only** with an explicit `ClientConfirmationV1`                                     | ADMIN                       | Core                                  |
+| 13  | **Resolve a complaint**        | **Core**                                                                          | **REC** — advise, escalate, hand off to a human                                                | ADMIN                       | Core                                  |
+| 14  | **Campaign spend / budget**    | **Core**                                                                          | **REC** — advise budget shift. **Jitin has no ad-provider credential and no budget authority** | **FOUNDER**                 | Core                                  |
+| 15  | **Change categories / cities** | **Core** (Superadmin)                                                             | **REC** — advise demand/expansion                                                              | ADMIN                       | Core                                  |
+| 16  | **Modify runtime settings**    | **Core** (Superadmin)                                                             | **🚫 FORBIDDEN**                                                                               | —                           | Core only                             |
 
 ---
 
@@ -87,7 +87,7 @@ Two rules that follow, and that may never be softened:
 
 ### Communication eligibility (#10, #11)
 
-**Jarvis may not decide that a channel is acceptable, that a recipient is contactable, or that a message was delivered.** It proposes; the Communication Core decides; n8n executes; the provider delivers; **the truth of what happened comes back from Core.**
+**Jarvis may not decide that a channel is acceptable, that a recipient is contactable, or that a message was delivered.** It proposes; the Communication Core decides; QuickFurno Core Automation executes; the provider delivers; **the truth of what happened comes back from Core.**
 
 **No production communication before Phase 11 succeeds.** Voice only after messaging safety evidence.
 
@@ -144,7 +144,7 @@ The `whatsapp-dispatch` Edge Function **calls the real Meta Graph API**, gated *
 >
 > **Until Phase 11A:** it **must not be scheduled**, **must not be manually invoked for production delivery**, and **must not be given active Meta credentials**. **Queued `whatsapp_logs` rows do not constitute authorization to send.** **No Jarvis recommendation may directly trigger it.**
 >
-> Future live delivery runs **Core authorization → execution intent → n8n → approved provider adapter → provider result → authoritative Core result event**, with recipient resolution, consent, opt-out/DNC, communication eligibility, quiet hours, message purpose, approval level, idempotency, at-most-once execution and an audit trail **all checked by Core**.
+> Future live delivery runs **Core authorization → execution intent → QuickFurno Core Automation → approved provider adapter → provider result → authoritative Core result event**, with recipient resolution, consent, opt-out/DNC, communication eligibility, quiet hours, message purpose, approval level, idempotency, at-most-once execution and an audit trail **all checked by Core**.
 
 **The general lesson is worth more than the specific bug: a feature flag in one runtime does not govern another.** The Next.js constants and the Deno Edge Function are separately deployed artifacts. **A safety flag the dangerous code path cannot see is not a safety flag — it is a comment that looks like one**, and it is more dangerous than no flag at all, because everybody believes it.
 

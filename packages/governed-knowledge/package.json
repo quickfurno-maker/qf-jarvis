@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "sideEffects": false,
-  "description": "QF Jarvis governed-knowledge foundation (QFJ-P04.03). A dedicated, provider-neutral, immutable governed-knowledge lifecycle + registry + deterministic bounded exact retrieval that a future agent may consult to retrieve and CITE approved knowledge as evidence. Knowledge is evidence, never business authority — QuickFurno Core remains the authoritative system of record. No database/persistence, no schema/migration, no document upload/scanning, no vector database/embeddings/semantic search/RAG, no live model call, no key/token, no agent/memory/WhatsApp/dashboard/n8n. Retrieval is exact, bounded, permission/privacy/data-class gated, and fails closed. Depends only on zod.",
+  "description": "QF Jarvis governed-knowledge foundation (QFJ-P04.03). A dedicated, provider-neutral, immutable governed-knowledge lifecycle + registry + deterministic bounded exact retrieval that a future agent may consult to retrieve and CITE approved knowledge as evidence. Knowledge is evidence, never business authority — QuickFurno Core remains the authoritative system of record. No database/persistence, no schema/migration, no document upload/scanning, no vector database/embeddings/semantic search/RAG, no live model call, no key/token, no agent/memory/WhatsApp/dashboard/QuickFurno Core Automation. Retrieval is exact, bounded, permission/privacy/data-class gated, and fails closed. Depends only on zod.",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",

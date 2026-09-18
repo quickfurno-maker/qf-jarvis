@@ -164,7 +164,7 @@ export type RiyaDatasetFactClass = (typeof RIYA_DATASET_FACT_CLASSES)[number];
 /**
  * The closed set of assistant decisions.
  *
- * Notice what cannot be expressed: no provider call, no n8n trigger, no database write, no vendor
+ * Notice what cannot be expressed: no provider call, no QuickFurno Core Automation trigger, no database write, no vendor
  * assignment, no price setting, no discount grant, no payment authority. `REQUEST_CONTROLLED_ACTION`
  * is the strongest thing here and it is a REQUEST — the deterministic business layer decides, and a
  * dataset that could express otherwise would be teaching Riya it has authority it does not have.

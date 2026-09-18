@@ -8,7 +8,7 @@ One dedicated, provider-neutral package — **`@qf-jarvis/model-evaluation`** �
 
 ## Boundary (what it does NOT do)
 
-No live Groq/local call, no real key/token, **no LLM-as-judge, no model voting**, no real conversation data; no provider activation, **no rollout promotion**; no database/persistence, no schema, **no migration (0008 absent)**; **no semantic retrieval/embeddings/vector DB/RAG**; no agents/memory/WhatsApp/dashboard/n8n. Depends only on `zod`. Migrations 0001–0007 byte-exact; `@qf-jarvis/event-backbone` root API remains **39**.
+No live Groq/local call, no real key/token, **no LLM-as-judge, no model voting**, no real conversation data; no provider activation, **no rollout promotion**; no database/persistence, no schema, **no migration (0008 absent)**; **no semantic retrieval/embeddings/vector DB/RAG**; no agents/memory/WhatsApp/dashboard/QuickFurno Core Automation. Depends only on `zod`. Migrations 0001–0007 byte-exact; `@qf-jarvis/event-backbone` root API remains **39**.
 
 ## Package layout
 

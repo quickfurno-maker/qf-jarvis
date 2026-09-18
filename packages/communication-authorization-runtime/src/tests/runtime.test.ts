@@ -524,7 +524,13 @@ describe('neither artifact is ever repaired', () => {
   it('refuses an authorization issued by anything other than QuickFurno Core', () => {
     // A Jarvis-issued artifact is not a Core artifact with a wrong label. Normalizing one into the
     // other is how a system ends up authorizing itself.
-    for (const issuer of ['qf-jarvis', 'n8n', 'quickfurno_core', 'QuickFurno-Core', '']) {
+    for (const issuer of [
+      'qf-jarvis',
+      'quickfurno-core-automation',
+      'quickfurno_core',
+      'QuickFurno-Core',
+      '',
+    ]) {
       expectCode(
         () =>
           runtime.validate({

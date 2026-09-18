@@ -254,7 +254,7 @@ PostgreSQL was not accessed and still carries `0001` only. Production rollout re
 **QuickFurno Core Sync Gate: passed.** Core's authoritative ownership of consent, preferences,
 suppressions, STOP/START, do-not-contact, communication authorization, current eligibility and
 business data is unchanged. No duplicate Core state, no Jarvis consent cache, no direct Meta access,
-no direct n8n execution, no direct business mutation, and no invented live Core endpoint, URL,
+no direct QuickFurno Core Automation execution, no direct business mutation, and no invented live Core endpoint, URL,
 credential format or auth protocol. Live Core protocol adoption remains separate Core-integration
 work, gated on its own authorization.
 
@@ -264,12 +264,12 @@ authorization; a producer for `CommunicationRequestV1`; the operator surface's H
 authentication provider; and all P09 execution work. Compatibility with the locked QuickFurno Mini
 Brain architecture is preserved — a Mini Brain may later choose an intent and an approved template
 and produce a powerless request, and may never decide consent, cache it, interpret STOP as authority,
-override a suppression, treat a template match as send permission, bypass Core, or call Meta or n8n.
+override a suppression, treat a template match as send permission, bypass Core, or call Meta or QuickFurno Core Automation.
 
 ## Non-goals
 
 No live QuickFurno Core endpoint, client, URL, header, credential format or auth protocol. No
-Core-side implementation of any kind. No Meta or WhatsApp client. No n8n workflow. No provider SDK.
+Core-side implementation of any kind. No Meta or WhatsApp client. No QuickFurno Core Automation workflow. No provider SDK.
 No transport, persistence, cache or event emission. No `ExecutionIntentV1`, idempotency key, provider
 selection or recipient resolution. No consent, opt-out, STOP, suppression or eligibility state. No
 `CommunicationRequestV1` producer and no Mini Brain implementation. No HTTP, UI or authentication

@@ -159,7 +159,7 @@ export const JAO6_PRODUCER_VERSION = 'jarvis.jao6.v1' as const;
  * `risk`, `requiredApproval`, `recommendationType`, `actionType`, `actionContractVersion`,
  * `producingAgent`, `producingAgentVersion`, `producingSystem`, `recommendationId`, `actionId`,
  * `actionFingerprint`, `approvalRequestId`, `approved`, `authorized`, `canExecute`, `canSend`,
- * `approvalDecision`, `executionIntent`, `provider`, `executor`, `n8n`, `webhookUrl`, `recipient`,
+ * `approvalDecision`, `executionIntent`, `provider`, `executor`, `QuickFurno Core Automation`, `webhookUrl`, `recipient`,
  * `phoneNumber` and any credential key are all simply not fields here.
  *
  * `parameters` is `unknown` on purpose. Its real shape is the POLICY's parameter schema, which is
@@ -235,7 +235,7 @@ export const jao6PostureSchema = z.strictObject({
   communicationAuthorizationCreated: z.literal(false),
   communicationEligibilityChecked: z.literal(false),
   coreMutations: z.literal(0),
-  n8nExecutions: z.literal(0),
+  coreAutomationExecutions: z.literal(0),
   channelSends: z.literal(0),
   providerCalls: z.literal(0),
   modelCalls: z.literal(0),
@@ -258,7 +258,7 @@ export const JAO6_POSTURE: Jao6Posture = Object.freeze(
     communicationAuthorizationCreated: false,
     communicationEligibilityChecked: false,
     coreMutations: 0,
-    n8nExecutions: 0,
+    coreAutomationExecutions: 0,
     channelSends: 0,
     providerCalls: 0,
     modelCalls: 0,

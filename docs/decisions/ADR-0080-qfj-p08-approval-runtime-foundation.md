@@ -243,7 +243,7 @@ integration, and an authenticated operator approval surface, in that locked orde
 No approval persistence, queue, ledger or pending state. No optimistic or local approved state. No
 operator HTTP, API, UI or authentication. No Core transport call. No canonical approval-decision
 event emitted by Jarvis. No execution intent, idempotency key, provider selection or recipient
-resolution. No consent, opt-out or communication-authorization evaluation. No P09 transport, n8n or
+resolution. No consent, opt-out or communication-authorization evaluation. No P09 transport, QuickFurno Core Automation or
 WhatsApp. No `JarvisRuntime` or application wiring. No migration and no `0009`. No managed database
 access or deployment.
 

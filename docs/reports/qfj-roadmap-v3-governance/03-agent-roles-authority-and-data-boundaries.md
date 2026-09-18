@@ -4,7 +4,7 @@
 
 ## Jarvis — final role
 
-**Jarvis — Coordination and Complex-Case Agent.** Analyzes, recommends, classifies, routes, coordinates, evaluates, monitors, manages complex/cross-agent cases, requests approvals, preserves conflicts, and assists QuickFurno Core. It does **not** authorize sensitive/commercial actions, mutate marketplace tables, call providers or n8n directly, conclude a specialist's domain decision, or become a source of truth. Authority ceiling: **coordination only**.
+**Jarvis — Coordination and Complex-Case Agent.** Analyzes, recommends, classifies, routes, coordinates, evaluates, monitors, manages complex/cross-agent cases, requests approvals, preserves conflicts, and assists QuickFurno Core. It does **not** authorize sensitive/commercial actions, mutate marketplace tables, call providers or QuickFurno Core Automation directly, conclude a specialist's domain decision, or become a source of truth. Authority ceiling: **coordination only**.
 
 ## Riya — final role
 
@@ -27,7 +27,7 @@ customer-side routine → Riya
 vendor-side routine   → Anisha
 complex/cross-agent   → Jarvis
 sensitive/commercial/legal → QuickFurno Core or authorized human
-approved execution    → n8n
+approved execution    → QuickFurno Core Automation
 delivery              → provider
 result                → QuickFurno Core and Jarvis
 ```

@@ -12,7 +12,7 @@
  * ### Data in, nothing out
  *
  * This package cannot cause an effect. No HTTP, no fetch, no URL, no API key, no environment read, no
- * database, no cache, no clock, no randomness, no n8n, no provider, no model. It also knows nothing
+ * database, no cache, no clock, no randomness, no QuickFurno Core Automation, no provider, no model. It also knows nothing
  * about Riya: no phase, no continuity, no conversation, no observation. Those directions are both
  * enforced by its containment spec, and they are what let one contract serve a future WhatsApp Riya,
  * an operator surface, or anything else that needs the same authority.

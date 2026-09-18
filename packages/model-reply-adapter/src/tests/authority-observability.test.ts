@@ -3,7 +3,7 @@
  *
  * Matrix 60–68: events and the minimized request are content-free (no inbound/reply/prompt/knowledge/
  * subject/PII/secret/CoT), carrying only safe reference ids and bounded counters; model output is a
- * draft only — never a Core `ACCEPTED`, with no authorize/execute/send/deliver/callN8n method.
+ * draft only — never a Core `ACCEPTED`, with no authorize/execute/send/deliver/callcoreAutomation method.
  */
 import { describe, expect, it } from 'vitest';
 
@@ -126,12 +126,12 @@ describe('authority — draft only, no send', () => {
     }
   });
 
-  it('(68) neither the adapter nor the draft exposes authorize/execute/send/deliver/callN8n', async () => {
+  it('(68) neither the adapter nor the draft exposes authorize/execute/send/deliver/callcoreAutomation', async () => {
     const adapter = makeAdapter();
     const result = await adapter.draftReplyDetailed(replyPlan());
     const adapterSurface = adapter as unknown as Record<string, unknown>;
     const draftSurface = (result.draft ?? {}) as unknown as Record<string, unknown>;
-    for (const forbidden of ['authorize', 'execute', 'send', 'deliver', 'callN8n']) {
+    for (const forbidden of ['authorize', 'execute', 'send', 'deliver', 'callcoreAutomation']) {
       expect(adapterSurface[forbidden]).toBeUndefined();
       expect(draftSurface[forbidden]).toBeUndefined();
     }

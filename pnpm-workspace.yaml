@@ -62,25 +62,25 @@ minimumReleaseAgeStrict: true
 # cooldown bypass would take.
 minimumReleaseAgeIgnoreMissingTime: false
 
-# Supply chain: no dependency may run a lifecycle build script.
+# Supply chain: dependency lifecycle scripts are denied unless explicitly reviewed.
 #
-# An empty list is a deliberate, explicit statement that none has been reviewed
-# and approved — and, as of Phase 1, none needs to be: no package in the tree has
-# an install or build script. Adding an entry grants that package arbitrary code
-# execution at install time, on every developer machine and in CI. It is a
-# supply-chain decision requiring review and a note in
-# docs/engineering/supported-toolchain.md — never a way to silence a message.
-onlyBuiltDependencies: []
+# pnpm 11 uses `allowBuilds`. `false` is an explicit denial, not an approval. The
+# Temporal dependency graph contains @swc/core and protobufjs build hooks, but Jarvis
+# does not grant either package install-time code execution. Any future unlisted build
+# script fails closed under pnpm's strict dependency-build policy.
+allowBuilds:
+  '@swc/core': false
+  protobufjs: false
 
 # Supply chain: optional dependencies this repository refuses to install at all.
 #
 # `sharp` is an OPTIONAL dependency of `next`, used only for image optimization by a
 # production `next start`. It is a native binary that requires a lifecycle build script,
-# which `onlyBuiltDependencies: []` above forbids — and the right answer to "this package
+# whose lifecycle build is denied by policy — and the right answer to "this package
 # wants to run code at install time" is to not install it, never to grant the exemption.
 #
 # Listing it here REMOVES it from the tree. It does not permit a build script, and
-# `onlyBuiltDependencies` stays empty. Jarvis OS ships no optimized raster images and this
+# the build-script deny-by-default policy remains intact. Jarvis OS ships no optimized raster images and this
 # repository runs no production Next.js server, so nothing needs it. If image optimization
 # is ever required, that is a supply-chain decision with its own review — not a silent
 # unblocking of an install.

@@ -184,7 +184,14 @@ describe('adapter — approval only, no execution', () => {
     });
     expect(Object.keys(adapter).sort()).toEqual(['decide', 'decideDetailed']);
     const surface = adapter as unknown as Record<string, unknown>;
-    for (const forbidden of ['send', 'deliver', 'execute', 'persist', 'callN8n', 'authorize']) {
+    for (const forbidden of [
+      'send',
+      'deliver',
+      'execute',
+      'persist',
+      'callcoreAutomation',
+      'authorize',
+    ]) {
       expect(surface[forbidden]).toBeUndefined();
     }
     expect(Object.isFrozen(adapter)).toBe(true);

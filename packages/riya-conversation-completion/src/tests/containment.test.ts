@@ -78,7 +78,7 @@ describe('it is pure, which is what makes it re-runnable', () => {
       'SELECT ',
       'INSERT INTO',
       'compareAndSet',
-      'n8n',
+      'quickfurno-core-automation',
       'webhook',
       'https://',
     ]);

@@ -930,7 +930,7 @@ describe('every autonomy level carries the same authority ceiling', () => {
       'approvalDecisionCreated',
       'communicationAuthorizationCreated',
       'executionIntentCreated',
-      'n8nExecutionRequested',
+      'coreAutomationExecutionRequested',
       'providerSendRequested',
       'channelSendRequested',
       'sent',

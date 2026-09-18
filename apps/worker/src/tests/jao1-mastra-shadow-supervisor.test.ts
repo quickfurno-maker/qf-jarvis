@@ -65,7 +65,7 @@ function snapshot(state: 'HEALTHY' | 'DEGRADED' | 'OFFLINE' = 'DEGRADED', detail
     authority: {
       jarvis: 'RECOMMENDS_AND_OBSERVES',
       quickfurnoCore: 'AUTHORIZES_AND_OWNS_BUSINESS_TRUTH',
-      n8n: 'EXECUTES_ONLY',
+      coreAutomation: 'EXECUTES_ONLY',
       provider: 'DELIVERS_ONLY',
     },
     rollout: { enabled: false, state: 'ROLLOUT_OFF' },
@@ -101,7 +101,7 @@ function snapshot(state: 'HEALTHY' | 'DEGRADED' | 'OFFLINE' = 'DEGRADED', detail
       evaluations: section('NOT_CONNECTED'),
       coreSync: section('STATIC_BASELINE'),
       businessAnalytics: section('NOT_CONNECTED'),
-      n8nExecution: section('NOT_CONNECTED'),
+      coreAutomationExecution: section('NOT_CONNECTED'),
     },
   };
 }

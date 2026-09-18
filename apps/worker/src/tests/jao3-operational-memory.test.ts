@@ -738,7 +738,7 @@ describe('JAO-3 operational memory', () => {
           'jarvis-runtime',
           'postgres-conversation-state',
           'core-decision-adapter',
-          'n8n',
+          'quickfurno-core-automation',
           'whatsapp',
           'meta',
         ]) {

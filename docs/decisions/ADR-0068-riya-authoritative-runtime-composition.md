@@ -207,7 +207,7 @@ PR defines and wires the seam; it does not switch it on.
 
 ## Non-goals
 
-No production activation · no prompt text or registry · no memory · no WhatsApp · no n8n · no tools ·
+No production activation · no prompt text or registry · no memory · no WhatsApp · no QuickFurno Core Automation · no tools ·
 no persistence, database, Supabase, Docker or migration · no credential or environment read · no
 provider or network call · no send, deliver, execute, assign, schedule or webhook · no CANARY, ACTIVE
 or FALLBACK · no deployment · no S3-D Anisha.

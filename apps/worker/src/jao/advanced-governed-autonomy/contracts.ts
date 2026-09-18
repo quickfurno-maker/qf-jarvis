@@ -22,7 +22,7 @@
  * There is no vocabulary member anywhere below that means "authorized", "executed" or "sent". Not
  * as a run state, not as an outcome, not as a posture field. A system that can express a state
  * eventually reaches it, and the honest position is that Jarvis cannot reach those: only QuickFurno
- * Core issues an `ApprovalDecisionV1` and an `ExecutionIntentV1`, and only n8n executes one.
+ * Core issues an `ApprovalDecisionV1` and an `ExecutionIntentV1`, and only QuickFurno Core Automation executes one.
  */
 import { z } from 'zod';
 
@@ -405,8 +405,8 @@ export class Jao7AutonomyError extends Error {
  * is a sentence, and it is much harder to skim past than `SHADOW`.
  *
  * `executionIntentExecuted: false` is the field that matters most. A validated `ExecutionIntentV1`
- * names `quickfurno-core` as issuer and `n8n` as executor. JAO-7 correlates it and stops; it does
- * not become n8n because it happens to be holding the intent.
+ * names `quickfurno-core` as issuer and `QuickFurno Core Automation` as executor. JAO-7 correlates it and stops; it does
+ * not become QuickFurno Core Automation because it happens to be holding the intent.
  */
 export const jao7PostureSchema = z.strictObject({
   mode: z.literal('SHADOW'),
@@ -417,7 +417,7 @@ export const jao7PostureSchema = z.strictObject({
   executionIntentCreated: z.literal(false),
   executionIntentExecuted: z.literal(false),
   coreCalls: z.literal(0),
-  n8nExecutions: z.literal(0),
+  coreAutomationExecutions: z.literal(0),
   providerCalls: z.literal(0),
   channelSends: z.literal(0),
   managedMigrationAdopted: z.literal(false),
@@ -438,7 +438,7 @@ export const JAO7_POSTURE: Jao7Posture = Object.freeze(
     executionIntentCreated: false,
     executionIntentExecuted: false,
     coreCalls: 0,
-    n8nExecutions: 0,
+    coreAutomationExecutions: 0,
     providerCalls: 0,
     channelSends: 0,
     managedMigrationAdopted: false,

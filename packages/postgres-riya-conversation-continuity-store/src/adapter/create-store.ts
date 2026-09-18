@@ -12,7 +12,7 @@
  * through the database rather than through one process's memory.
  *
  * It changes nothing else. There is no HTTP, no endpoint, no ingress, no browser, no session, no
- * provider, no n8n, no QuickFurno client and no credential. Nothing in the repository imports this
+ * provider, no QuickFurno Core Automation, no QuickFurno client and no credential. Nothing in the repository imports this
  * package -- it is a durable adapter with tests until a later composition slice injects it, and
  * RWC-P2C still REQUIRES an injected store. It implements storage semantics only: no phase
  * transition, no extraction from prose and no provenance merge, all three of which RWC-P4 owns.

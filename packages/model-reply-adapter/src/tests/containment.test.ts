@@ -1,7 +1,7 @@
 /**
  * QFJ-M4 — containment and repository guardrails (ADR-0057 §C, §M, §N).
  *
- * Matrix 66–84: no direct provider SDK/fetch/network/`process.env`/transport/n8n/DB import in the
+ * Matrix 66–84: no direct provider SDK/fetch/network/`process.env`/transport/QuickFurno Core Automation/DB import in the
  * adapter package (agent-runtime + model-gateway are the only workspace dependencies); no live Core;
  * the package depends solely on agent-runtime + model-gateway + zod and exposes only the root and
  * `./testing`; the public API is locked; migrations 0001–0011 are byte-exact with no 0014; the
@@ -93,7 +93,7 @@ describe('containment', () => {
         /from ['"]node:(fs|net|http|https|dns|tls|dgram|child_process|crypto)['"]/,
       );
       expect(text).not.toMatch(
-        /from ['"](pg|groq-sdk|openai|axios|undici|whatsapp-web\.js|@whiskeysockets\/baileys|n8n)['"]/,
+        /from ['"](pg|groq-sdk|openai|axios|undici|whatsapp-web\.js|@whiskeysockets\/baileys|QuickFurno Core Automation)['"]/,
       );
     }
   });

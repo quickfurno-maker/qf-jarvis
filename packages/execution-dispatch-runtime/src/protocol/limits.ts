@@ -11,7 +11,7 @@
  * Domain separation, and the single most important constant in this package.
  *
  * A signature is only meaningful for the boundary it was produced for. Core → Jarvis event
- * ingestion (B1) signs under `qf-jarvis-event-v1`; this is Core → n8n execution dispatch (B4) and
+ * ingestion (B1) signs under `qf-jarvis-event-v1`; this is Core → QuickFurno Core Automation execution dispatch (B4) and
  * signs under its own prefix. The two use the same algorithm, so WITHOUT this a captured event
  * signature would verify as an execution dispatch — a system that observes could be replayed into
  * one that acts.
@@ -24,11 +24,12 @@ export const EXECUTION_DISPATCH_DOMAIN_SEPARATOR = 'qf-execution-dispatch-v1';
  * The purpose an execution-dispatch verification key is trusted FOR.
  *
  * Key material is not fungible across trust boundaries. A key trusted to sign events Jarvis merely
- * records must not also authorise dispatches n8n would act on, so the registry records a purpose
+ * records must not also authorise dispatches QuickFurno Core Automation would act on, so the registry records a purpose
  * and refuses anything else. Stating it as a value rather than a convention means the refusal is
  * testable.
  */
-export const EXECUTION_DISPATCH_KEY_PURPOSE = 'quickfurno-core-to-n8n-execution-dispatch';
+export const EXECUTION_DISPATCH_KEY_PURPOSE =
+  'quickfurno-core-to-QuickFurno Core Automation-execution-dispatch';
 
 /** The one and only accepted signature algorithm. Asymmetric, and not negotiable. */
 export const SUPPORTED_ALGORITHM = 'ed25519';

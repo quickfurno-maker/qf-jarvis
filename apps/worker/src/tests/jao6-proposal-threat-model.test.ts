@@ -4,7 +4,7 @@
  * ### What is actually at risk here
  *
  * Not "can a recommendation execute?" — the architecture already answers that, and it answers it in
- * Core and n8n, not here. The risks this suite exists for are quieter:
+ * Core and QuickFurno Core Automation, not here. The risks this suite exists for are quieter:
  *
  * - a public caller MUTATING the reviewed policy it is supposedly only reading;
  * - a proposal carrying a field that makes it look decided;
@@ -368,8 +368,8 @@ describe('JAO-6 proposal threat model', () => {
     for (const [key, value] of [
       ['provider', 'meta'],
       ['providerId', 'meta'],
-      ['executor', 'n8n'],
-      ['n8nWorkflowId', 'workflow-7'],
+      ['executor', 'quickfurno-core-automation'],
+      ['coreAutomationWorkflowId', 'workflow-7'],
       ['webhookUrl', 'https://example.invalid/hook'],
       ['url', 'https://example.invalid'],
       ['channel', 'whatsapp'],
@@ -395,7 +395,7 @@ describe('JAO-6 proposal threat model', () => {
     for (const extra of [
       { canExecute: true },
       { approved: true },
-      { executor: 'n8n' },
+      { executor: 'quickfurno-core-automation' },
       { provider: 'meta' },
       { webhookUrl: 'https://example.invalid/hook' },
       { recipient: 'vendor-contact' },
@@ -758,19 +758,19 @@ describe('JAO-6 proposal threat model', () => {
         expect(code, `${name} -> ${forbidden}`).not.toContain(forbidden);
       }
 
-      // n8n is scanned as an API SHAPE, not as a bare substring. `n8nExecutions: z.literal(0)` is a
-      // DECLARATION OF ABSENCE, and a scan that flags the statement "no n8n execution happened" is
+      // QuickFurno Core Automation is scanned as an API SHAPE, not as a bare substring. `coreAutomationExecutions: z.literal(0)` is a
+      // DECLARATION OF ABSENCE, and a scan that flags the statement "no QuickFurno Core Automation execution happened" is
       // a scan somebody eventually weakens because it cries wolf.
       for (const forbidden of [
-        /\bn8nClient\b/u,
-        /\bcallN8n\b/u,
-        /from '[^']*n8n/u,
-        /require\('[^']*n8n/u,
+        /\bcoreAutomationClient\b/u,
+        /\bcallCoreAutomation\b/u,
+        /from '[^']*quickfurno-core-automation/u,
+        /require\('[^']*quickfurno-core-automation/u,
       ]) {
         expect(forbidden.test(code), `${name} -> ${String(forbidden)}`).toBe(false);
       }
-      for (const occurrence of code.match(/n8n\w*/gu) ?? []) {
-        expect(occurrence, `${name} -> ${occurrence}`).toBe('n8nExecutions');
+      for (const occurrence of code.match(/coreAutomation\w*/gu) ?? []) {
+        expect(occurrence, `${name} -> ${occurrence}`).toBe('coreAutomationExecutions');
       }
     }
   });

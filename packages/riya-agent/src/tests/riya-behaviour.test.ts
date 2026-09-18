@@ -381,7 +381,7 @@ describe('(19-24) decisions, dispositions and proposal semantics', () => {
     ]) {
       expect(serialised).not.toContain(forbidden);
     }
-    for (const method of ['execute', 'send', 'authorize', 'callN8n']) {
+    for (const method of ['execute', 'send', 'authorize', 'callcoreAutomation']) {
       expect((p as unknown as Record<string, unknown>)[method]).toBeUndefined();
     }
   });
@@ -479,7 +479,7 @@ describe('(25-31) call budget: nothing here can reach a model', () => {
         'groq',
         'gpt-oss',
         'whatsapp',
-        'n8n',
+        'quickfurno-core-automation',
       ]) {
         expect(code.toLowerCase()).not.toContain(forbidden.toLowerCase());
       }
@@ -624,7 +624,15 @@ describe('(44) the public API lock', () => {
       'proposalKindFor',
     ]);
     expect(Object.keys(barrel)).toHaveLength(16);
-    for (const forbidden of ['groq', 'whatsapp', 'n8n', 'http', 'sql', 'gateway', 'prompttext']) {
+    for (const forbidden of [
+      'groq',
+      'whatsapp',
+      'quickfurno-core-automation',
+      'http',
+      'sql',
+      'gateway',
+      'prompttext',
+    ]) {
       expect(Object.keys(barrel).filter((k) => k.toLowerCase().includes(forbidden))).toEqual([]);
     }
     // A PORT symbol, not merely the letters: `RIYA_SUPPORTED_PARTY` legitimately contains "port".

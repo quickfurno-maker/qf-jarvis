@@ -11,11 +11,11 @@ authority of its own:
 
 - it creates no approval and answers none;
 - it sends no communication and reaches no provider;
-- it invokes no n8n workflow and calls no Meta API;
+- it invokes no QuickFurno Core Automation workflow and calls no Meta API;
 - it mutates no QuickFurno Core record and no Jarvis durable state;
 - it reads no secret and reaches no database.
 
-QuickFurno Core authorizes. n8n executes. Providers deliver. Jarvis recommends and observes.
+QuickFurno Core authorizes. QuickFurno Core Automation executes. Providers deliver. Jarvis recommends and observes.
 
 ## Running it
 
@@ -54,7 +54,7 @@ states its own availability (`AVAILABLE`, `STATIC_BASELINE`, `NOT_CONNECTED`, `P
 `ROLLOUT_OFF`) with a reason and its expected source, and the contract parser rejects any unavailable
 section that carries rows — so an unreadable source can never render as a successful zero.
 
-QuickFurno Core and n8n are both `NOT_CONNECTED`. No live read protocol has been adopted here.
+QuickFurno Core and QuickFurno Core Automation are both `NOT_CONNECTED`. No live read protocol has been adopted here.
 
 ```
 merged repository / governance declarations
@@ -67,7 +67,7 @@ merged repository / governance declarations
 
 `generatedAt` records when the JSON envelope was produced and moves on every response.
 `source.freshness` records how fresh the underlying FACTS are and stays `BUILD_DECLARATION`:
-answering a request re-reads no Git, no governance document, no QuickFurno Core and no n8n. The
+answering a request re-reads no Git, no governance document, no QuickFurno Core and no QuickFurno Core Automation. The
 contract REJECTS a `REPOSITORY_BASELINE` that claims `REQUEST_TIME` or live data, so request time
 can never promote a compiled-in baseline.
 

@@ -19,7 +19,7 @@
 # ### It touches no other project and prunes nothing
 #
 # `docker system prune`, `image prune -a`, `volume prune` and `network prune` would all reach
-# shared Traefik, n8n and Core resources.
+# shared Traefik, coreAutomation and Core resources.
 #
 # ### Why the stage is required rather than defaulted
 #

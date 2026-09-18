@@ -10,7 +10,7 @@
 >
 > **Acceptance authorizes the documented architecture and the owner policies recorded below** — the compatibility boundary, the vendor distribution policy, the WhatsApp policy, the classification of the safety findings, and the staged remediation plan.
 >
-> **Acceptance authorizes no action against any running system.** It does **not** authorize live integration, a Supabase connection, a provider setting change, a migration, n8n, WhatsApp, or any mutation of the QuickFurno repository. **Reading a system does not grant permission to act on it**, and an accepted description of a boundary is not permission to cross it.
+> **Acceptance authorizes no action against any running system.** It does **not** authorize live integration, a Supabase connection, a provider setting change, a migration, QuickFurno Core Automation, WhatsApp, or any mutation of the QuickFurno repository. **Reading a system does not grant permission to act on it**, and an accepted description of a boundary is not permission to cross it.
 
 **Depends on:** [ADR-0001](./ADR-0001-source-of-truth-boundary.md) (source-of-truth boundary) · [ADR-0002](./ADR-0002-recommend-authorize-execute-model.md) (recommend → authorize → execute) · [ADR-0003](./ADR-0003-event-driven-integration.md) (event-driven integration) · [ADR-0013](./ADR-0013-canonical-event-envelope-and-versioning.md) (canonical envelope) · [ADR-0015](./ADR-0015-complete-client-journey-and-reassignment-policy.md) (assignment and reassignment policy) · [ADR-0020](./ADR-0020-event-ingestion-signature-verification-and-idempotency.md) (signature verification and idempotency) · the [QuickFurno Compatibility Directive](../architecture/quickfurno-compatibility-directive.md)
 
@@ -28,7 +28,7 @@ Stage 3.1.2 read the QuickFurno repository at a **pinned commit** and produced a
 
 **Three facts from that read change how the integration must be designed, and none of them were knowable from this side of the boundary.**
 
-**One. Core's current event bridge is not an event bus.** The AOS n8n bridge is preview-first, fire-and-forget, and best-effort: an emission failure is caught and logged, and the business transaction commits anyway. **An event that is allowed to be lost is not an event a downstream system may derive truth from.** Building Jarvis ingestion on top of it would mean building a durable, replayable, idempotent event store fed by a source that silently drops events — the durability would be decorative.
+**One. Core's current event bridge is not an event bus.** The AOS QuickFurno Core Automation bridge is preview-first, fire-and-forget, and best-effort: an emission failure is caught and logged, and the business transaction commits anyway. **An event that is allowed to be lost is not an event a downstream system may derive truth from.** Building Jarvis ingestion on top of it would mean building a durable, replayable, idempotent event store fed by a source that silently drops events — the durability would be decorative.
 
 **Two. Core's authoritative business operations are PostgreSQL functions invoked with the Supabase service role**, which bypasses row-level security. Authority in Core is therefore enforced by _application code choosing which function to call_, not by the database. That is Core's business to run as it sees fit — but it means **the boundary between Jarvis and Core cannot be a database boundary**, and any design that gave Jarvis a credential into Core's database would be handing out a credential that RLS does not constrain.
 
@@ -70,7 +70,7 @@ Status: **`live_capable_not_authorized`** · Remediation required before: **`pha
 
 **Until Phase 11A:** the function **must not be scheduled**, **must not be manually invoked for production delivery**, and **must not be given active Meta credentials**. **Queued records do not constitute authorization to send.** **No Jarvis recommendation may directly trigger it.**
 
-Future live delivery requires: **Core authorization → execution intent → n8n → approved provider adapter → provider result → authoritative Core result event** — with recipient resolution, consent, opt-out/DNC, communication eligibility, quiet hours, message purpose, approval level, idempotency, at-most-once execution, and an audit trail all checked **by Core**.
+Future live delivery requires: **Core authorization → execution intent → QuickFurno Core Automation → approved provider adapter → provider result → authoritative Core result event** — with recipient resolution, consent, opt-out/DNC, communication eligibility, quiet hours, message purpose, approval level, idempotency, at-most-once execution, and an audit trail all checked **by Core**.
 
 ### 3. Feature flags in one runtime do not govern another
 
@@ -134,7 +134,7 @@ The governed payload refuses the free-text carrier keys (`body`, `notes`, `freet
 
 Unchanged, and reaffirmed against the real system rather than against an assumption about it:
 
-> **Jarvis recommends. QuickFurno Core authorizes. n8n executes. Providers deliver. Results return to Core.**
+> **Jarvis recommends. QuickFurno Core authorizes. QuickFurno Core Automation executes. Providers deliver. Results return to Core.**
 
 Core owns leads, clients, vendors, assignments, packages, credits, payments, and campaigns, and **it alone mutates them**. Jarvis holds derived, non-authoritative views. When a derived view disagrees with Core, **Core wins, and the view is rebuilt** ([ADR-0001](./ADR-0001-source-of-truth-boundary.md)).
 
@@ -163,7 +163,7 @@ The current AOS bridge is **transitional, not canonical** (§5). The event sourc
 
 ### 4. Recommendations return to Core for authorization
 
-Jarvis submits recommendations to Core. **Core validates, applies deterministic policy, obtains human approval where required, and — only then — issues its own execution intent.** `ExecutionIntentV1.issuer` is the literal `quickfurno-core` and `executor` the literal `n8n`, so **Jarvis cannot construct a valid execution intent** even in error ([ADR-0014](./ADR-0014-governed-lifecycle-contracts.md)).
+Jarvis submits recommendations to Core. **Core validates, applies deterministic policy, obtains human approval where required, and — only then — issues its own execution intent.** `ExecutionIntentV1.issuer` is the literal `quickfurno-core` and `executor` the literal `QuickFurno Core Automation`, so **Jarvis cannot construct a valid execution intent** even in error ([ADR-0014](./ADR-0014-governed-lifecycle-contracts.md)).
 
 A recommendation is **inert**. It is a proposal with evidence, an expiry, and a required approval level. It is not an instruction, and Core is not obliged to act on it.
 
@@ -217,7 +217,7 @@ The baseline is pinned to `00706899b46ae16fa6170c70125708b63e0926a9`. QuickFurno
 
 ## Alternatives rejected
 
-**Ingest from the existing AOS n8n bridge.** Rejected. It is fire-and-forget: emission failures are swallowed and the transaction commits regardless. A durable, replayable event store fed by a lossy source has durable copies of the events that happened to survive, and no way to know which ones did not.
+**Ingest from the existing AOS QuickFurno Core Automation bridge.** Rejected. It is fire-and-forget: emission failures are swallowed and the transaction commits regardless. A durable, replayable event store fed by a lossy source has durable copies of the events that happened to survive, and no way to know which ones did not.
 
 **Give Jarvis a read-only credential into Core's database.** Rejected, and it is the tempting one — it would work immediately and skip the outbox entirely. It couples Jarvis to Core's schema, makes every Core migration a potential Jarvis outage, and puts a credential to Core's data inside the Jarvis trust zone. Core's authority is enforced in application code above a service role that bypasses RLS, so "read-only" would be a property of our restraint rather than of the credential.
 

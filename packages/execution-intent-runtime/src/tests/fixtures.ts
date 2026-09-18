@@ -325,7 +325,7 @@ export function executionIntent(
     actionContractVersion: from.actionContractVersion,
     parameters: { ...from.parameters },
     issuer: 'quickfurno-core',
-    executor: 'n8n',
+    executor: 'quickfurno-core-automation',
     issuedAt: ISSUED_AT,
     expiresAt: INTENT_EXPIRES_AT,
     idempotencyKey: `intent-${nextSuffix()}`,

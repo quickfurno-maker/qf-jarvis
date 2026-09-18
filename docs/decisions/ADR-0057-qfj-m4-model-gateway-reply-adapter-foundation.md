@@ -8,7 +8,7 @@
 
 **Design documents introduced:** [docs/reports/qfj-m4-model-reply-adapter/](../reports/qfj-m4-model-reply-adapter/) (reports 01–05)
 
-> **This ADR is implemented in the same bounded slice it governs.** It adds one new package `@qf-jarvis/model-reply-adapter`: a concrete implementation of the M2 `ModelReplyPort` that translates an authority-safe reply **plan** into an **exact model-gateway request**, obtains a result through a **narrow injected gateway invoker**, and **strictly validates** the returned structured result — its **provenance**, its **citations**, and the surrounding **conversation state** — into a bounded structured reply **draft**. It composes the **existing** `@qf-jarvis/model-gateway` for all routing, capability, rollout, failover, provider selection, and error normalization; it introduces **no second router**, **no hard-coded provider/model id**, and **no fallback**. **No live Groq/local call, no key/token/env, no provider activation, no rollout promotion; no live QuickFurno Core; no WhatsApp/n8n/send/transport; no persistence/DB/schema/migration 0008; no knowledge retrieval; no semantic/vector/embedding/RAG.** Model output is a **draft/proposal input only** — never a Core `ACCEPTED`, never sent, delivered, or executed. QuickFurno Core remains the only business authority. The `@qf-jarvis/event-backbone` root API remains **39**.
+> **This ADR is implemented in the same bounded slice it governs.** It adds one new package `@qf-jarvis/model-reply-adapter`: a concrete implementation of the M2 `ModelReplyPort` that translates an authority-safe reply **plan** into an **exact model-gateway request**, obtains a result through a **narrow injected gateway invoker**, and **strictly validates** the returned structured result — its **provenance**, its **citations**, and the surrounding **conversation state** — into a bounded structured reply **draft**. It composes the **existing** `@qf-jarvis/model-gateway` for all routing, capability, rollout, failover, provider selection, and error normalization; it introduces **no second router**, **no hard-coded provider/model id**, and **no fallback**. **No live Groq/local call, no key/token/env, no provider activation, no rollout promotion; no live QuickFurno Core; no WhatsApp/QuickFurno Core Automation/send/transport; no persistence/DB/schema/migration 0008; no knowledge retrieval; no semantic/vector/embedding/RAG.** Model output is a **draft/proposal input only** — never a Core `ACCEPTED`, never sent, delivered, or executed. QuickFurno Core remains the only business authority. The `@qf-jarvis/event-backbone` root API remains **39**.
 
 ---
 
@@ -40,7 +40,7 @@ Include only the bounded normalized input necessary for the reply task; only the
 
 ### F. Prompt contract
 
-Use an exact versioned prompt template/contract. The prompt preserves: Riya client-only; Anisha vendor-only; Jarvis coordinator; QuickFurno Core final authority; reply/proposal only; no direct execution, n8n, or business mutation; exact citations when knowledge is used; and no chain-of-thought request or storage. No free-form provider-specific prompt construction spread through business logic.
+Use an exact versioned prompt template/contract. The prompt preserves: Riya client-only; Anisha vendor-only; Jarvis coordinator; QuickFurno Core final authority; reply/proposal only; no direct execution, QuickFurno Core Automation, or business mutation; exact citations when knowledge is used; and no chain-of-thought request or storage. No free-form provider-specific prompt construction spread through business logic.
 
 ### G. Structured output
 
@@ -68,11 +68,11 @@ Content-free events: `model-adapter-plan-validated`, `model-gateway-requested`, 
 
 ### M. Authority / no-send
 
-Model output is a **draft/proposal input only**. The adapter cannot create a Core `ACCEPTED`; it has **no** `send`/`deliver`/`execute`/`callN8n`/`authorize` method, makes **no** Core decision, issues **no** delivery command, and performs **no** WhatsApp/provider transport. The Conversation Operations Center remains a mandatory later phase, not implemented here. Kimi is excluded.
+Model output is a **draft/proposal input only**. The adapter cannot create a Core `ACCEPTED`; it has **no** `send`/`deliver`/`execute`/`callQuickFurno Core Automation`/`authorize` method, makes **no** Core decision, issues **no** delivery command, and performs **no** WhatsApp/provider transport. The Conversation Operations Center remains a mandatory later phase, not implemented here. Kimi is excluded.
 
 ### N. Non-goals
 
-No live Groq/local call; no key/token/env provisioning; no provider activation or rollout promotion; no live Core call; no WhatsApp/n8n/send; no persistence/DB/schema/migration 0008; no knowledge retrieval; no semantic/vector/embedding/RAG; no dashboard; no deployment.
+No live Groq/local call; no key/token/env provisioning; no provider activation or rollout promotion; no live Core call; no WhatsApp/QuickFurno Core Automation/send; no persistence/DB/schema/migration 0008; no knowledge retrieval; no semantic/vector/embedding/RAG; no dashboard; no deployment.
 
 ## Consequences
 

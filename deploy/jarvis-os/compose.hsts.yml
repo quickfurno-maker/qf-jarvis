@@ -24,7 +24,7 @@
 #   stsSeconds: 31536000        one year. The conventional maximum-confidence value.
 #   stsIncludeSubdomains: false this host is one name under quickfurno.in. Including subdomains
 #                               would impose HTTPS-only on sibling names this project does not
-#                               own or audit — staging-core, the n8n host, the apex.
+#                               own or audit — staging-core, the QuickFurno Core Automation host, the apex.
 #   stsPreload: false           preload submission is effectively irreversible and is a decision
 #                               about the whole domain, not about this service.
 #   forceSTSHeader: false       do not emit HSTS over plain HTTP. The header is only meaningful on

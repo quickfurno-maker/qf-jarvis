@@ -27,7 +27,7 @@
  *   at execution time by Core and the communications runtime (ADR-0083). A `canSend` here would
  *   quietly answer a question this package never asked.
  * - **Jarvis does not authorize execution.** Core issues intents from its own recorded
- *   authorization, n8n validates and executes. A permission flag inside Jarvis would put a piece of
+ *   authorization, QuickFurno Core Automation validates and executes. A permission flag inside Jarvis would put a piece of
  *   that authority back on the wrong side of the boundary (ADR-0002).
  *
  * A caller that wants Core's terms reads them off `observation.intent`. That is a fact about a

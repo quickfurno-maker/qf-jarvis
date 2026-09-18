@@ -1,6 +1,6 @@
 # ADR-0115 - JAO-1 Mastra shadow operations supervisor proof
 
-**Status:** Accepted - offline/shadow implementation only. No production activation, route, scheduler, persistence, migration, database access, provider credential, live model call, Core call, n8n execution, channel action, deployment, or business effect is introduced.
+**Status:** Accepted - offline/shadow implementation only. No production activation, route, scheduler, persistence, migration, database access, provider credential, live model call, Core call, QuickFurno Core Automation execution, channel action, deployment, or business effect is introduced.
 **Deciders:** Owner
 **Owned by:** QFJ-P12 / JAO-1 - Jarvis Operations Supervisor, Shadow MVP
 **Supersedes for this implementation only:** the older uploaded P05.04 phase label for the Mastra shadow supervisor. Its technical safety requirements are retained; ADR-0114 is the canonical roadmap ownership decision.
@@ -232,7 +232,7 @@ Both mutations are restored byte-for-byte, and the focused test is re-run green.
 `LOCAL_MODEL_CALLS=0`
 `REAL_CREDENTIAL_READS=0`
 `LIVE_CORE_CALLS=0`
-`LIVE_N8N_EXECUTED=NO`
+`LIVE_QuickFurno Core Automation_EXECUTED=NO`
 `LIVE_WHATSAPP_EXECUTED=NO`
 `LIVE_META_EXECUTED=NO`
 `PRODUCTION_DEPLOYMENT=NO`

@@ -65,11 +65,11 @@ QFJ-P04.02 capability, QFJ-P04.03 knowledge, QFJ-P04.04 evidence, and QFJ-P04.01
 
 ### K. Authority
 
-Provisioning authorizes and executes nothing; there is no retrieval tool and no provider/n8n call. Core is final authority; Riya client-only; Anisha vendor-only; Jarvis coordinates. The Jarvis Conversation Operations Center remains a mandatory later phase, absent here. Kimi is excluded.
+Provisioning authorizes and executes nothing; there is no retrieval tool and no provider/QuickFurno Core Automation call. Core is final authority; Riya client-only; Anisha vendor-only; Jarvis coordinates. The Jarvis Conversation Operations Center remains a mandatory later phase, absent here. Kimi is excluded.
 
 ### L. Non-goals
 
-No embeddings, vector DB, semantic search, chunking, indexing, retrieval, augmentation, external service, DB/schema/migration 0008, live model, agents, memory, WhatsApp, dashboard, n8n, tools, or deployment.
+No embeddings, vector DB, semantic search, chunking, indexing, retrieval, augmentation, external service, DB/schema/migration 0008, live model, agents, memory, WhatsApp, dashboard, QuickFurno Core Automation, tools, or deployment.
 
 ## Rejected alternatives
 

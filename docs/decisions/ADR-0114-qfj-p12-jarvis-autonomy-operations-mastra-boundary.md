@@ -1,6 +1,6 @@
 # ADR-0114 - QFJ-P12 Jarvis Autonomy & Operations (JAO) and Mastra supervisor boundary
 
-**Status:** Accepted - governance and documentation only. No runtime package, Mastra dependency, migration, database access, provider route, credential, channel, n8n execution, deployment, or rollout is introduced. JAO remains **PLANNED / DISABLED**.
+**Status:** Accepted - governance and documentation only. No runtime package, Mastra dependency, migration, database access, provider route, credential, channel, QuickFurno Core Automation execution, deployment, or rollout is introduced. JAO remains **PLANNED / DISABLED**.
 **Deciders:** Owner
 **Relates to:** [ADR-0002](./ADR-0002-recommend-authorize-execute-model.md), [ADR-0039](./ADR-0039-canonical-qf-jarvis-roadmap-v3-and-governance-reconciliation.md), [ADR-0085](./ADR-0085-qfj-p12-aarohi-vendor-growth-and-roadmap-reconciliation.md).
 
@@ -57,7 +57,7 @@ JAO composes existing seams and must not rebuild them.
 - Existing approval and communication-authorization boundaries remain the path for authority evidence.
 - Existing execution-intent and dispatch boundaries remain the execution provenance/verification path.
 - QuickFurno Core remains final business authority.
-- n8n/providers perform effects only through the existing governed execution model.
+- QuickFurno Core Automation/providers perform effects only through the existing governed execution model.
 
 There is no Mastra mode that bypasses these seams.
 
@@ -115,7 +115,7 @@ approved/synthetic operational snapshot
 
 JAO-1 may detect one operational anomaly, gather bounded evidence, explain hypotheses, and recommend a next step.
 
-It performs no external business effect: no communication send, Core mutation, n8n execution, provider/channel action, database write, deployment, or automatic remediation.
+It performs no external business effect: no communication send, Core mutation, QuickFurno Core Automation execution, provider/channel action, database write, deployment, or automatic remediation.
 
 ### 9. Specialist delegation never expands authority
 
@@ -137,7 +137,7 @@ A dependency review may narrow or reject a Mastra feature without changing JAO o
 
 **Replace Jarvis runtime or Model Gateway with Mastra defaults.** Rejected. That would create a second source of policy and invalidate existing authority/provenance proofs.
 
-**Let Mastra call providers/infrastructure directly.** Rejected. Direct provider, DB, Core, n8n, channel, shell, filesystem, or arbitrary HTTP access turns reasoning infrastructure into ambient authority.
+**Let Mastra call providers/infrastructure directly.** Rejected. Direct provider, DB, Core, QuickFurno Core Automation, channel, shell, filesystem, or arbitrary HTTP access turns reasoning infrastructure into ambient authority.
 
 **Create a shared broker package now.** Rejected. The logical seam is accepted, but shared code waits for multiple genuine consumers.
 
@@ -154,7 +154,7 @@ A dependency review may narrow or reject a Mastra feature without changing JAO o
 
 ## Non-goals
 
-JAO-0 does not install/version-lock Mastra, implement a supervisor, create persistent autonomy memory or MCP, add a broker package/tool sandbox/migration/table, make a live provider call, add any Core/n8n/channel integration, change Riya/Aarohi/Anisha behaviour, change model/prompt/evaluation/rollout settings, deploy anything, or activate autonomous action.
+JAO-0 does not install/version-lock Mastra, implement a supervisor, create persistent autonomy memory or MCP, add a broker package/tool sandbox/migration/table, make a live provider call, add any Core/QuickFurno Core Automation/channel integration, change Riya/Aarohi/Anisha behaviour, change model/prompt/evaluation/rollout settings, deploy anything, or activate autonomous action.
 
 ## Change-control rule
 

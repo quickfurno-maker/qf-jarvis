@@ -364,12 +364,12 @@ describe('temporal relationships between artifacts — and no clock', () => {
 
 describe('the intent contract is what proves issuer, executor and semantics', () => {
   it('refuses a wrong issuer, executor or delivery semantics', () => {
-    // Structural, from `executionIntentV1Schema`. Only Core issues; only n8n executes; at-most-once
+    // Structural, from `executionIntentV1Schema`. Only Core issues; only QuickFurno Core Automation executes; at-most-once
     // is a literal, so at-least-once cannot be expressed at all.
     const s = scenario('f1f1f1f1');
     for (const [label, over] of [
       ['issued by Jarvis', { issuer: 'qf-jarvis' }],
-      ['issued by n8n', { issuer: 'n8n' }],
+      ['issued by QuickFurno Core Automation', { issuer: 'quickfurno-core-automation' }],
       ['executed by Core', { executor: 'quickfurno-core' }],
       ['executed by Jarvis', { executor: 'qf-jarvis' }],
       ['at-least-once', { deliverySemantics: 'at-least-once' }],

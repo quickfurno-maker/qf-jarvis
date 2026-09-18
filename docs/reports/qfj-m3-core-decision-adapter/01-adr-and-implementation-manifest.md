@@ -12,7 +12,7 @@ A new package `@qf-jarvis/core-decision-adapter`: a **concrete implementation of
 
 ## Boundary (what it does NOT do)
 
-No live QuickFurno Core, network, HTTP, socket, auth, or secret; no WhatsApp/n8n/send/transport/delivery-state mutation; no persistence, DB, schema, or **migration 0008**; no live model/provider/key/token; no semantic retrieval / vector / embeddings / RAG; no dashboard; no deployment. The adapter contains **no business decision rule** and **cannot fabricate or upgrade** an outcome. `ACCEPTED` is an **approved proposal only** — never sent, delivered, executed, or persisted.
+No live QuickFurno Core, network, HTTP, socket, auth, or secret; no WhatsApp/QuickFurno Core Automation/send/transport/delivery-state mutation; no persistence, DB, schema, or **migration 0008**; no live model/provider/key/token; no semantic retrieval / vector / embeddings / RAG; no dashboard; no deployment. The adapter contains **no business decision rule** and **cannot fabricate or upgrade** an outcome. `ACCEPTED` is an **approved proposal only** — never sent, delivered, executed, or persisted.
 
 ## Package layout
 

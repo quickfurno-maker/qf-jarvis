@@ -28,7 +28,7 @@ in this audit.
 ## 1. Scope and boundary
 
 Repository-local, offline, docs-only. No QuickFurno Marketplace/Core, no QuickFurno database, no
-OneDecore, n8n, Meta, WhatsApp, Groq, NaraRouter, local model server, provider, external CRM, external
+OneDecore, QuickFurno Core Automation, Meta, WhatsApp, Groq, NaraRouter, local model server, provider, external CRM, external
 database or external authoring service was accessed. No external repository checkout, no managed
 database mutation, no message send, no deployment, no activation. **No model or provider call was made
 for any purpose.**

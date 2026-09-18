@@ -17,8 +17,8 @@ The tempting position is that TypeScript already solves this. We chose TypeScrip
 TypeScript types are erased. They exist during compilation and are gone at runtime. Every one of these contracts crosses a boundary between systems:
 
 - A **canonical event** arrives from QuickFurno Core, over a wire, as bytes somebody else produced.
-- An **execution intent** is read by n8n, in a different trust zone.
-- An **execution result** originates at a provider, is relayed by n8n, and is recorded by Core.
+- An **execution intent** is read by QuickFurno Core Automation, in a different trust zone.
+- An **execution result** originates at a provider, is relayed by QuickFurno Core Automation, and is recorded by Core.
 
 At each of those, the value is `unknown`. Writing `const event = payload as CanonicalEvent` does not check anything — it _asserts_, and the assertion is a promise the compiler believes and the runtime never verifies. A malformed, stale, or hostile payload sails straight through, and the first thing that notices is a `TypeError` three modules later, or worse, nothing notices at all.
 
@@ -79,11 +79,11 @@ Rejected, and it is the alternative worth rejecting loudly, because it is what a
 Rejected. Two definitions of one contract, kept in agreement by discipline. They will diverge, and the divergence will be discovered in production, because the compile-time contract and the runtime contract disagree in exactly the case nobody tested.
 
 **3. JSON Schema (Ajv).**
-Rejected, though it was the closest call, and its advantages are real: it is language-agnostic and standardized, which genuinely matters for a contract QuickFurno Core and n8n must also honor — and Core may not be TypeScript.
+Rejected, though it was the closest call, and its advantages are real: it is language-agnostic and standardized, which genuinely matters for a contract QuickFurno Core and QuickFurno Core Automation must also honor — and Core may not be TypeScript.
 
 It loses on developer ergonomics in the place that matters most: types must be _generated_ from schemas in a build step, and cross-field invariants (`emittedAt` may not precede `occurredAt`; an indeterminate result must be classified for reconciliation) become awkward `if/then` constructs that are hard to read and harder to review. Those invariants are where the architecture actually lives; they must be legible.
 
-**Recorded as a follow-up rather than dismissed:** if Core or n8n need a language-neutral schema, JSON Schema can be **generated from** these Zod schemas. That keeps one source of truth and adds an export, which is the right shape for that problem when it arrives.
+**Recorded as a follow-up rather than dismissed:** if Core or QuickFurno Core Automation need a language-neutral schema, JSON Schema can be **generated from** these Zod schemas. That keeps one source of truth and adds an export, which is the right shape for that problem when it arrives.
 
 **4. Valibot, or another lighter validator.**
 Rejected. Smaller bundle, similar model. Bundle size is not a problem this repository has — nothing here ships to a browser. Zod's ecosystem, stability, and documentation are worth more than kilobytes we are not paying for.
@@ -145,7 +145,7 @@ A zero-dependency, script-free, ESM-native package is close to the best supply-c
 
 ## Follow-up
 
-- **If Core or n8n need a language-neutral contract**, generate JSON Schema _from_ these Zod schemas rather than maintaining a second definition. One source of truth, plus an export.
+- **If Core or QuickFurno Core Automation need a language-neutral contract**, generate JSON Schema _from_ these Zod schemas rather than maintaining a second definition. One source of truth, plus an export.
 - **Phase 3** consumes `parseCanonicalEvent` at the ingestion boundary, where a rejected event becomes a visible, replayable dead letter.
 - **Phase 11** adds Core's domain event contracts, after Core's real capabilities are verified — and adapters absorb any difference, per [phased-roadmap.md](../architecture/phased-roadmap.md).
 - Re-verify Zod's supply-chain profile on every upgrade, against the table above.

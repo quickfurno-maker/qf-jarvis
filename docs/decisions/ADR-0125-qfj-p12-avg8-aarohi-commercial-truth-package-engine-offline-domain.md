@@ -234,7 +234,7 @@ containment.
 A prospect saying "I want that package" produces, here, exactly nothing.
 
 No model call, prompt resolution or retrieval; no communication request, approval, decision,
-authorization or execution intent; no n8n, provider or channel send; no persistence, cache, table or
+authorization or execution intent; no QuickFurno Core Automation, provider or channel send; no persistence, cache, table or
 migration. This package does not duplicate QuickFurno's `packages` table.
 
 ### 12. AVG-8 terminates at the brief
@@ -311,14 +311,14 @@ instead would have made the proof look stronger than it is.
 
 ## What AVG-8 deliberately does not do
 
-| Left out                                                                | Owner                                      |
-| ----------------------------------------------------------------------- | ------------------------------------------ |
-| Registration integration                                                | AVG-9                                      |
-| Payment, package order, assignment, credits, activation, Anisha handoff | AVG-10                                     |
-| Persistence, dashboards, admin APIs, analytics                          | AVG-11                                     |
-| Any increase in autonomy                                                | AVG-12                                     |
-| Model calls, prompt resolution, retrieval, drafting                     | later composition through QF Model Gateway |
-| Live Core reads, provider adapters, n8n routes, sends                   | **QFJ-P09**                                |
+| Left out                                                                     | Owner                                      |
+| ---------------------------------------------------------------------------- | ------------------------------------------ |
+| Registration integration                                                     | AVG-9                                      |
+| Payment, package order, assignment, credits, activation, Anisha handoff      | AVG-10                                     |
+| Persistence, dashboards, admin APIs, analytics                               | AVG-11                                     |
+| Any increase in autonomy                                                     | AVG-12                                     |
+| Model calls, prompt resolution, retrieval, drafting                          | later composition through QF Model Gateway |
+| Live Core reads, provider adapters, QuickFurno Core Automation routes, sends | **QFJ-P09**                                |
 
 Dependencies are unchanged: `zod` alone. No devDependencies, no workspace dependency, no lockfile
 change, and no dependency on the QuickFurno marketplace in either direction.

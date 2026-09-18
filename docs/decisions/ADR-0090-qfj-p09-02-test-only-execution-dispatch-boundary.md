@@ -1,4 +1,4 @@
-# ADR-0090 — QFJ-P09.02 Test-Only Execution Dispatch Boundary (Core → n8n)
+# ADR-0090 — QFJ-P09.02 Test-Only Execution Dispatch Boundary (Core → QuickFurno Core Automation)
 
 **Status:** Accepted — QFJ-P09.02. Test-only; no transport, no deployment, no live send.
 **Deciders:** Owner
@@ -6,22 +6,22 @@
 
 ## Context
 
-The permanent boundary is: Jarvis recommends, **QuickFurno Core authorizes, n8n executes**, providers
+The permanent boundary is: Jarvis recommends, **QuickFurno Core authorizes, QuickFurno Core Automation executes**, providers
 deliver, results return to Core.
 
 P09.01 answered a Jarvis-side question — _does this Core-issued intent faithfully name the approved
 action?_ — with no clock and no state. The next question belongs to the other end of the wire:
-_before n8n acts, did this exact intent really arrive from Core, intact, in time, and not already?_
+_before QuickFurno Core Automation acts, did this exact intent really arrive from Core, intact, in time, and not already?_
 
-Nothing in merged `main` answered it. There was no Core → n8n wire protocol, no execution-side
+Nothing in merged `main` answered it. There was no Core → QuickFurno Core Automation wire protocol, no execution-side
 verifier, and no owner of replay state at the execution boundary.
 
 ## Decision
 
-### 1. This is the B4 Core → n8n edge, and it is execution-side
+### 1. This is the B4 Core → QuickFurno Core Automation edge, and it is execution-side
 
-`@qf-jarvis/execution-dispatch-runtime` models the validation an **n8n-side adapter** would run. It
-is not a Jarvis outbound adapter, and the edge Jarvis → n8n still does not exist.
+`@qf-jarvis/execution-dispatch-runtime` models the validation an **QuickFurno Core Automation-side adapter** would run. It
+is not a Jarvis outbound adapter, and the edge Jarvis → QuickFurno Core Automation still does not exist.
 
 The package cannot create one: it has no transport, no endpoint, no URL, no webhook, no workflow id,
 no HTTP client, no provider client and no credential. Containment tests assert each absence, and
@@ -52,11 +52,11 @@ Ed25519, one algorithm, no negotiation.
 
 The domain separator is `qf-execution-dispatch-v1` — **never** the event-ingestion
 `qf-jarvis-event-v1`. Both boundaries use the same algorithm, so without separation a captured
-Core → Jarvis event signature would verify as a Core → n8n execution dispatch: a system that merely
+Core → Jarvis event signature would verify as a Core → QuickFurno Core Automation execution dispatch: a system that merely
 **observes** could be replayed into one that **acts**. A test signs under the event domain and
 asserts the dispatch boundary refuses it.
 
-Verification keys carry a purpose, `quickfurno-core-to-n8n-execution-dispatch`, and a registry record
+Verification keys carry a purpose, `quickfurno-core-to-QuickFurno Core Automation-execution-dispatch`, and a registry record
 declaring anything else is a CONSTRUCTION error — it throws when the registry is built, so an
 operator wiring the wrong keys finds out immediately rather than at the first dispatch. There is
 deliberately no lookup-time refusal reason for a wrong purpose, because such a key never enters the
@@ -200,7 +200,7 @@ to a later, separately authorized slice.
 ## Consequences
 
 - No database, no migration. The set remains `0001`–`0009`; there is no `0010`.
-- No Core connection, no n8n connection, no Meta, WhatsApp or provider connection, no credential.
+- No Core connection, no QuickFurno Core Automation connection, no Meta, WhatsApp or provider connection, no credential.
 - `apps/api` PRODUCTION/runtime code is unchanged and still exports nothing. Three of its
   governance/containment specs were updated to record this package: the two package-API locks,
   and the roadmap-status check whose wording had P09.02 as the NEXT slice rather than the
@@ -209,7 +209,7 @@ to a later, separately authorized slice.
 
 ## What this does NOT implement
 
-Real adopted Core → n8n transport and composition · a durable production replay/idempotency store ·
+Real adopted Core → QuickFurno Core Automation transport and composition · a durable production replay/idempotency store ·
 execution-time communications eligibility · the 18-state communication lifecycle runtime · provider
 dispatch, results and reconciliation · production rollout.
 

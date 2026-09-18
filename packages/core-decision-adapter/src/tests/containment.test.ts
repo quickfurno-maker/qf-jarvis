@@ -1,7 +1,7 @@
 /**
  * QFJ-M3 — containment and repository guardrails (ADR-0056 §K, §L).
  *
- * Matrix: no WhatsApp/n8n/provider/DB/network library, no `process.env`/`node:` I/O, and no P04 or
+ * Matrix: no WhatsApp/QuickFurno Core Automation/provider/DB/network library, no `process.env`/`node:` I/O, and no P04 or
  * event-backbone package import in production source (the M2 agent-runtime is the ONLY workspace
  * dependency); the package depends solely on agent-runtime + zod and exposes only the root and
  * `./testing`; the public API surface is locked; migrations 0001–0011 are byte-exact and there is no
@@ -84,7 +84,7 @@ describe('containment', () => {
     readFileSync(fileURLToPath(new URL('package.json', PKG_DIR)), 'utf8'),
   ) as { dependencies?: Record<string, string>; exports: Record<string, unknown> };
 
-  it('(no network/n8n/provider/DB) production source imports no live transport or store', () => {
+  it('(no network/QuickFurno Core Automation/provider/DB) production source imports no live transport or store', () => {
     for (const file of productionFiles()) {
       const text = readFileSync(file, 'utf8');
       expect(text).not.toMatch(/\bfetch\s*\(/);
@@ -93,7 +93,7 @@ describe('containment', () => {
         /from ['"]node:(fs|net|http|https|dns|tls|dgram|child_process|crypto)['"]/,
       );
       expect(text).not.toMatch(
-        /from ['"](pg|groq-sdk|openai|axios|undici|whatsapp-web\.js|@whiskeysockets\/baileys|n8n)['"]/,
+        /from ['"](pg|groq-sdk|openai|axios|undici|whatsapp-web\.js|@whiskeysockets\/baileys|QuickFurno Core Automation)['"]/,
       );
     }
   });

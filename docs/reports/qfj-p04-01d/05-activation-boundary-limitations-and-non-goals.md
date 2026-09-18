@@ -20,14 +20,14 @@ This slice did **not**, and this report asserts it did not:
 - activate any provider in production; make any live Groq or local-model call; use a real key/token; or change any provider account or data-control setting.
 - add any adaptive scoring, cost optimizer, latency optimizer, model voting, A/B or percentage traffic, or autonomous dynamic profile.
 - add `SHADOW`/`CANARY` traffic duplication or any parallel/speculative provider call (deferred to QFJ-P04.01E).
-- add any agent runtime, Riya/Anisha prompt logic, memory, RAG, model tool-calls, MCP, web search, code execution, provider tools, or n8n.
+- add any agent runtime, Riya/Anisha prompt logic, memory, RAG, model tool-calls, MCP, web search, code execution, provider tools, or QuickFurno Core Automation.
 - touch any database, schema, or migration; reserve or add **migration 0008**; or access a managed database.
 - widen the existing gateway mode behaviour (routing is opt-in; a gateway with no `routingProfile` is byte-for-byte unchanged), deploy anything, or change the event-backbone root API (remains **39**).
 - change migrations 0001–0007, the Groq or local adapters, or the protected `docs/reports/qfj-managed-reconciliation-0002-0005/` directory.
 
 ## Standing boundary — reaffirmed
 
-Routing selects inference only; the gateway and providers authorize and execute nothing. Riya is client-only, Anisha vendor-only, Jarvis the central coordinator, QuickFurno Core the final business authority, n8n execution-only. Kimi is excluded unless the owner reintroduces it.
+Routing selects inference only; the gateway and providers authorize and execute nothing. Riya is client-only, Anisha vendor-only, Jarvis the central coordinator, QuickFurno Core the final business authority, QuickFurno Core Automation execution-only. Kimi is excluded unless the owner reintroduces it.
 
 ## Limitations and exact next action
 

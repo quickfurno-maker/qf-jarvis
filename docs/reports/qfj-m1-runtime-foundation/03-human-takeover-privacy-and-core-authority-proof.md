@@ -24,4 +24,4 @@ A subject-linked conversation is gated by an injected `ConversationPrivacyGate`,
 
 ## Core authority — proposals only
 
-Every runtime output is a **proposal** carrying `authorityStatus: PENDING_CORE_VALIDATION` and **no** `execute`/`send`/`authorize`/`callN8n`/`commit` method (proven). The `RuntimeDecision` itself exposes no such method. QuickFurno Core is the only authority that may validate and act; n8n is transport-only; models/knowledge/evaluation grant no business authority and RAG remains disabled. Riya=CLIENT, Anisha=VENDOR, Jarvis=COORDINATION, kept distinct.
+Every runtime output is a **proposal** carrying `authorityStatus: PENDING_CORE_VALIDATION` and **no** `execute`/`send`/`authorize`/`callQuickFurno Core Automation`/`commit` method (proven). The `RuntimeDecision` itself exposes no such method. QuickFurno Core is the only authority that may validate and act; QuickFurno Core Automation is transport-only; models/knowledge/evaluation grant no business authority and RAG remains disabled. Riya=CLIENT, Anisha=VENDOR, Jarvis=COORDINATION, kept distinct.

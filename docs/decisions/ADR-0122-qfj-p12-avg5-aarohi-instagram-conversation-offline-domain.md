@@ -19,7 +19,7 @@
 The overlay sentence for this stage is short and every clause of it is load-bearing:
 
 > **AVG-5 — Instagram Conversation Integration.** Governed inbound/outbound conversation on
-> Instagram. Delivery remains provider-side and execution remains n8n-side; Aarohi holds no provider
+> Instagram. Delivery remains provider-side and execution remains QuickFurno Core Automation-side; Aarohi holds no provider
 > credential and calls no Meta API. Consent and eligibility are Core's, revalidated at execution
 > time.
 
@@ -36,7 +36,7 @@ central decision below the right one rather than merely a cautious one.
 
 ### The limitation this ADR refuses to paper over
 
-There is no Core → n8n → Instagram execution path in this repository. There is no Meta provider
+There is no Core → QuickFurno Core Automation → Instagram execution path in this repository. There is no Meta provider
 adapter, no credential, no webhook and no delivery receipt. Nothing here can honestly report that an
 Instagram message was accepted by a provider or delivered to a person, because nothing here could
 observe either fact.
@@ -70,7 +70,7 @@ imports no shared contract at all, so there is nothing for the literal to widen.
 reads the shared file directly and asserts the four members and the absence of a fifth.
 
 **Adopting a real, executable Instagram channel is QFJ-P09's work.** That later integration must
-decide the shared boundary — the request contract, the lifecycle, the n8n route, the provider adapter
+decide the shared boundary — the request contract, the lifecycle, the QuickFurno Core Automation route, the provider adapter
 and the delivery evidence — as one governed decision. It must not arrive as a side effect of an
 offline domain slice, which is exactly what adding a member here would have been.
 
@@ -202,16 +202,16 @@ permission: Core re-decides at execution time, on the far side of a boundary tha
 
 Every candidate carries a frozen posture in which `communicationRequestCreated`,
 `approvalRequestCreated`, `approvalDecisionCreated`, `communicationAuthorizationCreated`,
-`executionIntentCreated`, `n8nExecutionRequested`, `metaApiCalled`, `providerSendRequested`, `sent`,
+`executionIntentCreated`, `coreAutomationExecutionRequested`, `metaApiCalled`, `providerSendRequested`, `sent`,
 `delivered`, `businessEffect` and `productionMutation` are all `false`, pinned to that literal by a
 strict schema. A posture that could hold `true` for any of them would be a posture worth lying with;
 this one cannot even be constructed, and the module fails to load if somebody tries.
 
 ### 10. A containment scan was narrowed, deliberately and truthfully
 
-Through AVG-4 the package's containment spec banned the bare substrings `instagram`, `meta`, `n8n`
+Through AVG-4 the package's containment spec banned the bare substrings `instagram`, `meta`, `QuickFurno Core Automation`
 and `authorization` anywhere in production source. AVG-5 writes three of those — its channel token,
-and its declarations that `metaApiCalled`, `n8nExecutionRequested` and
+and its declarations that `metaApiCalled`, `coreAutomationExecutionRequested` and
 `communicationAuthorizationCreated` are false.
 
 Those are **declarations of absence**. A scan that read them as presence would have forced the public
@@ -225,16 +225,16 @@ and the shared channel file is read and asserted unchanged. `whatsapp` remains a
 
 ## What AVG-5 deliberately does not do
 
-| Left out                                                                                              | Owner       |
-| ----------------------------------------------------------------------------------------------------- | ----------- |
-| Shared executable Instagram channel, `CommunicationRequestV1`, lifecycle, n8n route, provider adapter | **QFJ-P09** |
-| Omnichannel identity resolution, Instagram → WhatsApp handoff                                         | AVG-6       |
-| Reply generation, objection handling, conversation classification, any model call                     | AVG-7       |
-| Package, pricing, discount, entitlement, offer truth                                                  | AVG-8       |
-| Registration integration                                                                              | AVG-9       |
-| Payment, activation, Anisha handoff beyond the existing Core gate                                     | AVG-10      |
-| Persistence, dashboard, admin APIs, analytics                                                         | AVG-11      |
-| Any increase in autonomy                                                                              | AVG-12      |
+| Left out                                                                                                                     | Owner       |
+| ---------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| Shared executable Instagram channel, `CommunicationRequestV1`, lifecycle, QuickFurno Core Automation route, provider adapter | **QFJ-P09** |
+| Omnichannel identity resolution, Instagram → WhatsApp handoff                                                                | AVG-6       |
+| Reply generation, objection handling, conversation classification, any model call                                            | AVG-7       |
+| Package, pricing, discount, entitlement, offer truth                                                                         | AVG-8       |
+| Registration integration                                                                                                     | AVG-9       |
+| Payment, activation, Anisha handoff beyond the existing Core gate                                                            | AVG-10      |
+| Persistence, dashboard, admin APIs, analytics                                                                                | AVG-11      |
+| Any increase in autonomy                                                                                                     | AVG-12      |
 
 There is no database, migration, store, file, cache, scheduler, environment read, secret, HTTP client
 or provider SDK. Dependencies are unchanged: `zod` alone.

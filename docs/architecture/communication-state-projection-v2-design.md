@@ -215,15 +215,15 @@ governed `parameters`/`metadata` containers; a named human actor unless separate
 ### 5.5 `execution-submitted` — evidence UNRESOLVED
 
 `communication-model.md` defines the state as **"Core dispatched an authorized execution intent to
-n8n."** `qf.execution.intent-issued` is documented as *"QuickFurno Core issued a bounded, expiring
-execution intent to n8n."*
+QuickFurno Core Automation."** `qf.execution.intent-issued` is documented as *"QuickFurno Core issued a bounded, expiring
+execution intent to QuickFurno Core Automation."*
 
 **Issuance is not dispatch**, and the repository does not prove the event is emitted only after a
-successful n8n submission:
+successful QuickFurno Core Automation submission:
 
 - the event is named `intent-issued`, not `intent-dispatched`; `event-catalog.ts` carries no dispatch
   vocabulary;
-- `ExecutionIntentV1.executor` is a **literal naming n8n as the intended executor** — an address, not
+- `ExecutionIntentV1.executor` is a **literal naming QuickFurno Core Automation as the intended executor** — an address, not
   a delivery receipt;
 - **ADR-0090 / `execution-dispatch-runtime`:** *"The wire protocol is PROPOSED. Core does not sign
   this way yet and the execution side does not verify this way yet."*
@@ -492,7 +492,7 @@ claim is made.** Rollout remains **OFF**.
 | `rejected` | C | communication-**authorization** refusal evidence; never a human approval id | Tier-C locked event; needs D2a + D4 + adoption |
 | `authorized` | C | Core communication-authorization evidence | as above |
 | `scheduled` | B | trusted `authorized` prerequisite **and** Jarvis's scheduling act | **UNRESOLVED** — never inferred from `requestedTiming` |
-| `execution-submitted` | C | evidence Core **dispatched** to n8n | **UNRESOLVED** (§5.5) |
+| `execution-submitted` | C | evidence Core **dispatched** to QuickFurno Core Automation | **UNRESOLVED** (§5.5) |
 | `provider-accepted` | C | **Core-recorded result**; an intent is never sufficient | Tier-C locked event; needs D2a + D4 + adoption |
 | `delivered` / `read` / `answered` / `no-answer` / `busy` / `failed` | C | Core-recorded provider/result evidence | as above |
 | `follow-up-requested` | B | trusted prior outcome **and** Jarvis's follow-up decision | **UNRESOLVED** — never inferred from a later request alone |
@@ -593,7 +593,7 @@ Architecture-step labels inside this decision — **not new QFJ phases**. **No m
 ## 11. Posture
 
 No production code. No contract. No event registry, event-backbone, projection-runtime or ingestion
-change. No Core access, no n8n, no provider, no message sent. No persistence and **no migration** —
+change. No Core access, no QuickFurno Core Automation, no provider, no message sent. No persistence and **no migration** —
 `0013` is not allocated, and the `0010`–`0012` ledger drift remains separate governance debt.
 
 **Production rollout remains OFF. Aarohi's runtime remains PLANNED / DISABLED.**

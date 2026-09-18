@@ -8,7 +8,7 @@ Three registers, kept distinct: (1) **declared** technical capability — QFJ-P0
 
 ## Authority boundary
 
-Evaluation produces **evidence only** — it authorizes and executes nothing (proven: results/evidence carry no `authorize`/`execute`/`send`/`callN8n`/`promote`/`activate` method). QuickFurno Core remains the final business authority; n8n execution-only; models/evaluators authorize and execute nothing. Riya=CLIENT, Anisha=VENDOR, Jarvis=COORDINATION — kept distinct. The **Jarvis Conversation Operations Center** remains a mandatory later phase (ADR-0052 §Q) and is **absent here**. Kimi is excluded.
+Evaluation produces **evidence only** — it authorizes and executes nothing (proven: results/evidence carry no `authorize`/`execute`/`send`/`callQuickFurno Core Automation`/`promote`/`activate` method). QuickFurno Core remains the final business authority; QuickFurno Core Automation execution-only; models/evaluators authorize and execute nothing. Riya=CLIENT, Anisha=VENDOR, Jarvis=COORDINATION — kept distinct. The **Jarvis Conversation Operations Center** remains a mandatory later phase (ADR-0052 §Q) and is **absent here**. Kimi is excluded.
 
 ## Semantic-retrieval boundary
 
@@ -16,7 +16,7 @@ Evaluation produces **evidence only** — it authorizes and executes nothing (pr
 
 ## Non-goals — confirmed absent
 
-No live model/provider call; no real key/token; **no LLM-as-judge, no model voting**; no real conversation data; no provider activation; **no rollout promotion**; no persistence/database/schema/**migration 0008**; no managed/local production database access; no agents/memory/WhatsApp/dashboard/n8n/tools; no semantic retrieval/vector/RAG; no deployment. Migrations 0001–0007 unchanged; event-backbone root API remains **39**; the protected `docs/reports/qfj-managed-reconciliation-0002-0005/` directory is untouched.
+No live model/provider call; no real key/token; **no LLM-as-judge, no model voting**; no real conversation data; no provider activation; **no rollout promotion**; no persistence/database/schema/**migration 0008**; no managed/local production database access; no agents/memory/WhatsApp/dashboard/QuickFurno Core Automation/tools; no semantic retrieval/vector/RAG; no deployment. Migrations 0001–0007 unchanged; event-backbone root API remains **39**; the protected `docs/reports/qfj-managed-reconciliation-0002-0005/` directory is untouched.
 
 ## Limitations and exact next action
 

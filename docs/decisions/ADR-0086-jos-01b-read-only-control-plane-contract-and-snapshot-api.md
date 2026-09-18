@@ -35,7 +35,7 @@ JOS-01B fixes both, and does it behind a contract that a future Android client c
 
 `@qf-jarvis/control-plane-read-contract`: **four** root runtime symbols — a version constant, an
 error-code list, one error class, one parse function. Its only dependency is zod. There is no Next,
-no React, no Node API, no filesystem, no network, no clock, no database, no provider, no Core or n8n
+no React, no Node API, no filesystem, no network, no clock, no database, no provider, no Core or QuickFurno Core Automation
 client and no `process.env`.
 
 That constraint is what makes the Android position real rather than aspirational. A React
@@ -56,7 +56,7 @@ methods, because a JSON contract with a method is an API client and an Android a
 receive data and nothing that can act.
 
 The authority boundary is restated **on every snapshot** as four literals — Jarvis
-`RECOMMENDS_AND_OBSERVES`, QuickFurno Core `AUTHORIZES_AND_OWNS_BUSINESS_TRUTH`, n8n `EXECUTES_ONLY`,
+`RECOMMENDS_AND_OBSERVES`, QuickFurno Core `AUTHORIZES_AND_OWNS_BUSINESS_TRUTH`, QuickFurno Core Automation `EXECUTES_ONLY`,
 provider `DELIVERS_ONLY`. A snapshot claiming otherwise cannot be parsed.
 
 Every string is length-bounded and every array size-bounded. Unbounded fields are how a stack trace,
@@ -94,7 +94,7 @@ and the route passed `REQUEST_TIME`, so every response labelled a compiled-in re
 request-time fresh. That is wrong in a way that matters. A deployed binary could be a week old,
 answer every call with a brand-new timestamp, and still be reciting facts fixed when it was built —
 while the payload asserted they had just been read. The request re-read no Git, no governance
-document, no QuickFurno Core, no n8n and no adapter.
+document, no QuickFurno Core, no QuickFurno Core Automation and no adapter.
 
 The correction has three parts, and the third is the one that lasts:
 
@@ -143,9 +143,9 @@ business truth, not an integration point.
 
 ### 6. The default surface is the repository baseline
 
-`controlPlane()` now returns a baseline read model, `kind: 'baseline'`. QuickFurno Core and n8n both
+`controlPlane()` now returns a baseline read model, `kind: 'baseline'`. QuickFurno Core and QuickFurno Core Automation both
 report `NOT_CONNECTED`; approvals, conversation control, workload, latency, models, knowledge,
-evaluations, business analytics and n8n execution all carry no rows and state why; Aarohi's funnel is
+evaluations, business analytics and QuickFurno Core Automation execution all carry no rows and state why; Aarohi's funnel is
 `PLANNED` and empty. What the baseline **does** state is checkable against merged artifacts: four
 governed agents, the capability inventory, rollout OFF, QFJ-P09.01 merged, QFJ-P09.02 next, the
 Aarohi AVG overlay planned, the ownership boundary and the JOS phase track.
@@ -182,7 +182,7 @@ paths that can disagree, for no benefit.
 
 ## Non-goals
 
-No authentication, session, cookie or operator identity. No live Core, n8n, Meta or provider access.
+No authentication, session, cookie or operator identity. No live Core, QuickFurno Core Automation, Meta or provider access.
 No database of any kind, managed or local. No migration — `0010` is not created. No deployment, DNS,
 Traefik or VPS change. No Android files. No change to QFJ-P09.01 execution-intent semantics.
 Production rollout remains **OFF**.

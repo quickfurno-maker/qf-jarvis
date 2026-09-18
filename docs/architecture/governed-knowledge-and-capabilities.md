@@ -112,7 +112,7 @@ An open-ended capability is indistinguishable from a lack of a boundary. The reg
 Adding knowledge and capabilities introduces **no new edge across the permanent boundary**. Jarvis continues to have:
 
 - **no write access to QuickFurno business state**;
-- **no direct path to n8n**;
+- **no direct path to QuickFurno Core Automation**;
 - **no provider credentials**;
 - **no direct communication transport**.
 

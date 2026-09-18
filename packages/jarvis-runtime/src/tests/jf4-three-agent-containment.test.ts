@@ -245,7 +245,7 @@ describe('JF-4C the Aarohi -> Anisha ownership transition has exactly one route'
 });
 
 describe('JF-4B/C/D repository boundaries', () => {
-  it('(J82,J83,J84,J85) no QuickFurno, OneDecore, Meta or n8n anywhere in the composition', () => {
+  it('(J82,J83,J84,J85) no QuickFurno, OneDecore, Meta or QuickFurno Core Automation anywhere in the composition', () => {
     for (const file of walk(COMPOSITION_DIR)) {
       const code = codeOnly(readFileSync(file, 'utf8')).toLowerCase();
       for (const forbidden of [
@@ -253,7 +253,7 @@ describe('JF-4B/C/D repository boundaries', () => {
         'onedecore',
         'graph.facebook',
         'meta.com',
-        'n8n',
+        'quickfurno-core-automation',
         'twilio',
       ]) {
         expect({

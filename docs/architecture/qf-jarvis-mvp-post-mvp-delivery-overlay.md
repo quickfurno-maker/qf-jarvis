@@ -134,7 +134,7 @@ Milestones inside **Phase 1** (not QFJ phases, not product phases):
 | Riya | MVP | QFJ-P06 | QFJ-P05 | HUMAN_APPROVAL → LIMITED_AUTONOMY | customer-only; no financial | QFJ-P04.04 | none |
 | Anisha | MVP | QFJ-P07 | QFJ-P05 | HUMAN_APPROVAL → LIMITED_AUTONOMY | vendor-only; no price/entitlement | QFJ-P04.04 | none |
 | Consent / approval / human control | MVP | QFJ-P08 | QFJ-P05 | FULLY_ACTIVE | enforces authority | self | none |
-| WhatsApp / execution lifecycle | MVP | QFJ-P09 | QFJ-P08 | LIMITED_AUTONOMY | delivery only via n8n | QFJ-P04.04 | none (queue durable) |
+| WhatsApp / execution lifecycle | MVP | QFJ-P09 | QFJ-P08 | LIMITED_AUTONOMY | delivery only via QuickFurno Core Automation | QFJ-P04.04 | none (queue durable) |
 | QuickFurno Core integration | MVP | QFJ-P10 | QFJ-P09; Core remediation | LIMITED_AUTONOMY | Core is authority | QFJ-P04.04 | none in Jarvis repo |
 | Deployment / pilot / resilience (active + warm standby) | MVP | QFJ-P11 (+ QFJ-P11.06 profiles) | QFJ-P10 | LIMITED_AUTONOMY | ops-gated | self | none |
 | Advanced agents / local intelligence / active-active | Post-MVP | QFJ-P12 (+ QFJ-P11 active-active) | MVP live | DISABLED | future ADR to activate | QFJ-P04.04 | own authorized design |

@@ -3,11 +3,11 @@ import { PageHeader } from '@/components/shell/PageHeader';
 import { CapabilityBadge, StatusPill } from '@/components/system/StatusPill';
 
 /**
- * n8n / Integrations (JOS-01A).
+ * coreAutomation / Integrations (JOS-01A).
  *
- * The sentence this page exists to make unmissable: **n8n is the execution fabric, not the
+ * The sentence this page exists to make unmissable: **coreAutomation is the execution fabric, not the
  * brain.** It validates an authorized intent and performs exactly what that intent says. An
- * n8n that decided whether an action should happen would be an authorization system holding
+ * coreAutomation that decided whether an action should happen would be an authorization system holding
  * every provider credential in the business — the worst available arrangement of those three
  * properties.
  *
@@ -18,29 +18,29 @@ export default function IntegrationsPage() {
   return (
     <>
       <PageHeader
-        breadcrumb={['Boundary', 'n8n / Integrations']}
+        breadcrumb={['Boundary', 'coreAutomation / Integrations']}
         title="Execution fabric"
         purpose="Where an authorized intent goes after Core issues it — and why nothing on that path is a decision-maker."
         status={<CapabilityBadge lifecycle="NOT_CONNECTED" />}
       />
 
       <div className="space-y-5">
-        <Notice tone="critical" title="Jarvis never calls n8n, Meta or a provider">
+        <Notice tone="critical" title="Jarvis never calls coreAutomation, Meta or a provider">
           There is no client, no workflow definition, no webhook and no credential anywhere in
           Jarvis OS or in the Jarvis backend. QuickFurno&rsquo;s existing approved Meta WhatsApp and
-          n8n infrastructure is untouched by this application.
+          coreAutomation infrastructure is untouched by this application.
         </Notice>
 
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
           <Boundary
-            title="n8n"
+            title="coreAutomation"
             role="Executes approved intents"
             forbidden="Authorizes nothing. Holds no business truth. Is not conversational intelligence."
           />
           <Boundary
             title="QF Communications Runtime"
             role="Validates and dispatches"
-            forbidden="Re-validates consent and eligibility at execution time. Belongs to neither Jarvis nor n8n alone."
+            forbidden="Re-validates consent and eligibility at execution time. Belongs to neither Jarvis nor coreAutomation alone."
           />
           <Boundary
             title="Meta / providers"
@@ -52,7 +52,7 @@ export default function IntegrationsPage() {
         <Panel title="Integration status" subtitle="What is attached today">
           <ul className="divide-y divide-[var(--color-line)]">
             <IntegrationRow
-              label="n8n execution bridge"
+              label="coreAutomation execution bridge"
               detail="QFJ-P09.02 — next main-track slice. Test-only bridge validation, not implemented."
             />
             <IntegrationRow
@@ -68,7 +68,7 @@ export default function IntegrationsPage() {
 
         <Panel title="Why the fabric holds no discretion" subtitle="The property being protected">
           <p className="max-w-[86ch] text-[12px] leading-relaxed text-[var(--color-ink-muted)]">
-            n8n&rsquo;s safety property is that it has none. It checks an intent&rsquo;s
+            coreAutomation&rsquo;s safety property is that it has none. It checks an intent&rsquo;s
             authenticity, integrity, freshness and bounds, and then does precisely what the intent
             says. Give it the ability to decide <em>whether</em> an action should happen and it
             becomes an authorization system that also holds every provider credential —

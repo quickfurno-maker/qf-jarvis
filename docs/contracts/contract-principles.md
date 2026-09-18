@@ -61,7 +61,7 @@ Reason codes, failure codes, purpose codes, signal codes: lowercase machine toke
 
 ## 9. Authority is a literal, not a convention
 
-`producingSystem: 'qf-jarvis'`. `issuer: 'quickfurno-core'`. `executor: 'n8n'`. `deliverySemantics: 'at-most-once'`.
+`producingSystem: 'qf-jarvis'`. `issuer: 'quickfurno-core'`. `executor: 'QuickFurno Core Automation'`. `deliverySemantics: 'at-most-once'`.
 
 **Forbids:** an authority claim that a reviewer has to notice. A rule in a document is enforced by whoever remembers it. A literal in a schema is enforced by the parser, at 3am, on a payload nobody is watching. The deciding actor of an approval is a human **or** a versioned policy — and there is no agent variant, so an agent approving itself is not merely forbidden, it is **unrepresentable**.
 

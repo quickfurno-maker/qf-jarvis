@@ -14,7 +14,7 @@
 
 The **second provider class** — a `LocalOpenAICompatibleModelProvider` (execution class **LOCAL**) implementing the same provider-neutral `ModelProvider` contract as Groq. It targets an OpenAI-compatible **non-streaming** Chat Completions server on a future private workstation/GPU node, reached through an **injected transport** whose production endpoint is validated down to a **private IP literal** (SSRF guard), with an **optional injected redacting** bearer token.
 
-**No live local-model call, no model-server install, no model weights, no real token, no external/LAN network in tests/CI. No agent, no n8n, no RAG, no memory, no schema, no migration.** Production health fails closed until endpoint/model/auth-posture attestations are injected. Groq and local coexist behind the unchanged contract; adding local required no gateway/agent/Core/n8n rewrite.
+**No live local-model call, no model-server install, no model weights, no real token, no external/LAN network in tests/CI. No agent, no QuickFurno Core Automation, no RAG, no memory, no schema, no migration.** Production health fails closed until endpoint/model/auth-posture attestations are injected. Groq and local coexist behind the unchanged contract; adding local required no gateway/agent/Core/QuickFurno Core Automation rewrite.
 
 ## Changed-file manifest
 

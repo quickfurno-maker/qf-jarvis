@@ -33,7 +33,7 @@ Integration tests require the CI PostgreSQL service; this slice touches no datab
 ## Containment — proven
 
 - The package depends **only** on `zod`; it exposes only `.` and `./testing`.
-- Production source has **no** `fetch`, `process.env`, `node:` I/O import, provider SDK import, or `embedding`/`vector`/`semantic`/`RAG`/`n8n`/excluded-vendor term (proven by source scan).
+- Production source has **no** `fetch`, `process.env`, `node:` I/O import, provider SDK import, or `embedding`/`vector`/`semantic`/`RAG`/`QuickFurno Core Automation`/excluded-vendor term (proven by source scan).
 - The build (`tsconfig.build.json`) excludes `src/tests`, so **dist is production-only** (no `*.test.*`, no fixtures); the shipped `./testing` gate is the only test-support export.
 - Migrations 0001–0007 are **byte-exact** (sha-256 locked) and there is **no 0008**; the `@qf-jarvis/event-backbone` root API remains **39**.
 - No control byte exists in any tracked TypeScript file (whole-repo scan, after the Stage A hygiene fix).

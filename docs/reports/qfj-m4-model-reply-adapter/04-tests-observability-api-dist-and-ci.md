@@ -24,7 +24,7 @@ The root barrel exports **exactly 8** value symbols: `MODEL_REPLY_ADAPTER_ERROR_
 
 ## Containment guardrails (§N)
 
-Scanning all production files proves: no `fetch(`, no `process.env`, no `node:{fs,net,http,https,dns,tls,dgram,child_process,crypto}` import, no provider/DB/n8n library (`pg`, `groq-sdk`, `openai`, `axios`, `undici`, `whatsapp-web.js`, `@whiskeysockets/baileys`, `n8n`), and **no** governed-knowledge/model-evaluation/rag-provisioning/core-decision-adapter/event-backbone import — `@qf-jarvis/agent-runtime` and `@qf-jarvis/model-gateway` are the **only** workspace dependencies. The manifest depends **only** on agent-runtime + model-gateway + zod and exposes **only** `.` and `./testing`. Migrations 0001–0007 are **byte-exact** (sha256-locked) and there is **no 0008**. The `@qf-jarvis/event-backbone` public-api lock remains **39**. Production source holds **no NUL/control byte**.
+Scanning all production files proves: no `fetch(`, no `process.env`, no `node:{fs,net,http,https,dns,tls,dgram,child_process,crypto}` import, no provider/DB/QuickFurno Core Automation library (`pg`, `groq-sdk`, `openai`, `axios`, `undici`, `whatsapp-web.js`, `@whiskeysockets/baileys`, `QuickFurno Core Automation`), and **no** governed-knowledge/model-evaluation/rag-provisioning/core-decision-adapter/event-backbone import — `@qf-jarvis/agent-runtime` and `@qf-jarvis/model-gateway` are the **only** workspace dependencies. The manifest depends **only** on agent-runtime + model-gateway + zod and exposes **only** `.` and `./testing`. Migrations 0001–0007 are **byte-exact** (sha256-locked) and there is **no 0008**. The `@qf-jarvis/event-backbone` public-api lock remains **39**. Production source holds **no NUL/control byte**.
 
 ## Dist containment (§C)
 

@@ -41,7 +41,7 @@ class at construction.
 `packages/model-gateway/src/providers/nara/` implements the existing `ModelProvider` contract:
 `providerId: 'nara'`, `executionClass: 'HOSTED'`, one bounded non-streaming Chat Completions call per
 `invoke`, through an injected transport, honouring the `AbortSignal`, never retrying and never sleeping.
-It holds no business, execution or tool authority, reaches no n8n and touches no database — the contract
+It holds no business, execution or tool authority, reaches no QuickFurno Core Automation and touches no database — the contract
 has no method that could.
 
 Everything is injected: model identity, capabilities, token bounds, key holder, transport, and a

@@ -94,8 +94,9 @@ const DESCRIPTIONS: Readonly<Record<CanonicalEventType, string>> = {
     'A recommendation moved through its governed lifecycle. Recorded by Core.',
   'qf.approval.decision-recorded': 'A human or a named policy decided. Core recorded the decision.',
   'qf.execution.intent-issued':
-    'QuickFurno Core authorized an action and issued an intent for n8n to execute. Only Core may issue one.',
-  'qf.execution.result-recorded': 'n8n reported an outcome, and Core recorded it as authoritative.',
+    'QuickFurno Core authorized an action and issued an intent for QuickFurno Core Automation to execute. Only Core may issue one.',
+  'qf.execution.result-recorded':
+    'QuickFurno Core Automation reported an outcome, and Core recorded it as authoritative.',
   'qf.communication.state-recorded': 'A communication reached one of the eighteen governed states.',
 
   'qf.client.requirement-completed': 'A client requirement is complete enough to act on.',

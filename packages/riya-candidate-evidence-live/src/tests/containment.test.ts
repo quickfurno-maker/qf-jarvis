@@ -321,7 +321,7 @@ describe('the operator cannot serve, activate or persist', () => {
         'supabase',
         'migration',
         'whatsapp',
-        'n8n',
+        'quickfurno-core-automation',
         'core-decision-adapter',
         'approval-runtime',
         'execution-dispatch',

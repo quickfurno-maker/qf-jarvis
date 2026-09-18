@@ -10,10 +10,10 @@
  * Core, because **a fact is only a fact once Core has recorded it** (ADR-0001).
  *
  * This holds even when the underlying thing happened elsewhere. A provider
- * delivered a message; n8n observed it; n8n reported it; Core recorded it; *Core*
+ * delivered a message; QuickFurno Core Automation observed it; QuickFurno Core Automation reported it; Core recorded it; *Core*
  * emitted the canonical event. The provider's own view of the delivery appears
  * inside an execution-result payload as **reported evidence**, and it is not
- * authoritative until Core has recorded it. So the payload may say "n8n reported
+ * authoritative until Core has recorded it. So the payload may say "QuickFurno Core Automation reported
  * this", while the envelope always says "Core is telling you".
  *
  * Those two claims are different, and this package refuses to blur them.

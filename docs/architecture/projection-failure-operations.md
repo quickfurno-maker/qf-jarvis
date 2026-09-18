@@ -10,7 +10,7 @@ Design the operations layer that turns a **blocked** projection (retry-exhausted
 
 ## Exclusions
 
-No runtime implementation; no migration 0006; no SQL; no operator tooling/API; no source or test changes; no database access; no QFJ-P03.08 rebuild/erasure; no model/RAG/agent/n8n/WhatsApp/Core work.
+No runtime implementation; no migration 0006; no SQL; no operator tooling/API; no source or test changes; no database access; no QFJ-P03.08 rebuild/erasure; no model/RAG/agent/QuickFurno Core Automation/WhatsApp/Core work.
 
 ## Repository baseline
 
@@ -219,7 +219,7 @@ The `blocked` checkpoint and immutable attempt log cannot represent the durable 
 - **Replay authorization** — authorization ID; failure ID; exact failure generation; authorized actor; reason; created; optional expiry; consumed time + consumed attempt reference; revocation; idempotency key. **Constraint:** one active authorization per exact failure generation.
 - **Replay attempt evidence** — attempt ID; failure ID; authorization ID; started/finished; outcome; normalized code; resulting checkpoint position; runner identity/correlation; bounded diagnostics. *(May share the projection-attempt lineage or be a sibling table; kept distinct so automatic vs replay evidence never blur.)*
 
-**Constraints/indexes (concepts):** non-negative counters; valid versions/positions; lifecycle CHECK; event-identity consistency; immutable action rows; unique idempotency keys in scope; operator-queue and runner-lookup indexes; FKs where repository policy permits. **Least privilege:** the projection runtime role gains only what replay needs; no DELETE/TRUNCATE; operator-action and authorization writes go through a bounded application boundary, not ad-hoc SQL. **0006 must not contain:** RAG, agents, task runtime, model gateway, WhatsApp, n8n, Core integration, `rm_subject_activity`.
+**Constraints/indexes (concepts):** non-negative counters; valid versions/positions; lifecycle CHECK; event-identity consistency; immutable action rows; unique idempotency keys in scope; operator-queue and runner-lookup indexes; FKs where repository policy permits. **Least privilege:** the projection runtime role gains only what replay needs; no DELETE/TRUNCATE; operator-action and authorization writes go through a bounded application boundary, not ad-hoc SQL. **0006 must not contain:** RAG, agents, task runtime, model gateway, WhatsApp, QuickFurno Core Automation, Core integration, `rm_subject_activity`.
 
 ## Implementation slices
 

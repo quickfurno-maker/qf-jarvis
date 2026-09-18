@@ -84,7 +84,7 @@
  *
  * Pure over already-supplied values. Every instant is injected, so the same input replays to a
  * byte-identical result; there is no randomness, no seed, no store and no network. AVG-12 adds no
- * third-party dependency and no route to Core, n8n, a provider, a channel, a model, a prompt or a
+ * third-party dependency and no route to Core, QuickFurno Core Automation, a provider, a channel, a model, a prompt or a
  * retrieval.
  *
  * ### What AVG-12 is NOT
@@ -298,7 +298,7 @@ export interface AarohiAvg12Posture {
   readonly communicationAuthorizationCreated: false;
   readonly executionIntentCreated: false;
 
-  readonly n8nExecutionRequested: false;
+  readonly coreAutomationExecutionRequested: false;
   readonly providerSendRequested: false;
   readonly channelSendRequested: false;
   readonly sent: false;
@@ -357,7 +357,7 @@ export const aarohiAvg12PostureSchema = z
     communicationAuthorizationCreated: z.literal(false),
     executionIntentCreated: z.literal(false),
 
-    n8nExecutionRequested: z.literal(false),
+    coreAutomationExecutionRequested: z.literal(false),
     providerSendRequested: z.literal(false),
     channelSendRequested: z.literal(false),
     sent: z.literal(false),
@@ -418,7 +418,7 @@ export const AAROHI_AVG12_POSTURE: AarohiAvg12Posture = Object.freeze(
     communicationAuthorizationCreated: false,
     executionIntentCreated: false,
 
-    n8nExecutionRequested: false,
+    coreAutomationExecutionRequested: false,
     providerSendRequested: false,
     channelSendRequested: false,
     sent: false,
@@ -817,7 +817,7 @@ const EFFECT_FIELDS: readonly string[] = Object.freeze([
   'modelCallExecuted',
   'promptResolved',
   'retrievalExecuted',
-  'n8nExecutionRequested',
+  'coreAutomationExecutionRequested',
   'providerSendRequested',
   'channelSendRequested',
   'communicationRequestCreated',
@@ -1518,7 +1518,7 @@ const autonomyDecisionInputSchema = z
  * The most this function can say is that a caller may NAME which already-certified offline
  * preparation applies. It authorizes no contact, approves no communication, creates no execution
  * authority, registers nobody, pays nothing, activates nothing, transitions no case, hands nothing
- * to Anisha, calls no provider, n8n, model or prompt, mutates no Core record and enables no rollout.
+ * to Anisha, calls no provider, QuickFurno Core Automation, model or prompt, mutates no Core record and enables no rollout.
  * Every level carries the same posture, and that posture says all of it as literals.
  *
  * ### Fail-closed in one direction
@@ -2492,7 +2492,7 @@ function isOfflineProbe(value: string): value is AarohiOfflineProbe {
  *
  * ### It executes nothing
  *
- * No clock, no randomness, no seed, no store, no network, no Core, no n8n, no provider, no channel,
+ * No clock, no randomness, no seed, no store, no network, no Core, no QuickFurno Core Automation, no provider, no channel,
  * no model, no prompt and no retrieval. The certified functions it drives are themselves pure, and
  * no acquisition case anywhere ends this call in a different state than it began it.
  */

@@ -114,7 +114,7 @@ this slice: `groq-bind-prompt-invalid` and `groq-bind-approval-refs-missing`.
 
 - **Run once.** Do not invoke a second time under any outcome, including a 429 or a 5xx.
 - Do not activate the provider, promote any rollout, or register anything.
-- Do not contact QuickFurno Core, n8n, or WhatsApp. Do not send, deliver, or persist anything.
+- Do not contact QuickFurno Core, QuickFurno Core Automation, or WhatsApp. Do not send, deliver, or persist anything.
 - Discard the model output — it is a draft with no business authority.
 - Do not commit the configuration file if it sits inside the repository; prefer a path outside it.
 - The process exits and the key leaves memory with it. Nothing persistent was created, so there is
@@ -133,7 +133,7 @@ that credential through the normal owner-controlled process, and escalate before
 ## After the smoke test
 
 In order, each separately authorized: QuickFurno Core-side M3 protocol adoption → a Core-approved
-delivery command with n8n/WhatsApp transport → authoritative persistence and delivery states → the
+delivery command with QuickFurno Core Automation/WhatsApp transport → authoritative persistence and delivery states → the
 minimum Conversation Operations Center → a controlled pilot.
 
 Managed database, migration, and live lanes remain paused. RAG stays disabled. Kimi remains excluded.

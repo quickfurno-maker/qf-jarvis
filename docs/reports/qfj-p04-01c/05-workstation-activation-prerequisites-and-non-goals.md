@@ -19,7 +19,7 @@ This slice did **not**, and this report asserts it did not:
 
 - make any live local-model call, any external request, or any LAN request; install or configure Ollama/llama.cpp/vLLM/LocalAI or any model server; download model weights; or use a real token.
 - activate the local provider (or Groq) in production; deploy anything.
-- add any agent runtime, Riya/Anisha prompt logic, memory, RAG, model tool-calls, MCP, web search, code execution, built-in provider tools, or n8n.
+- add any agent runtime, Riya/Anisha prompt logic, memory, RAG, model tool-calls, MCP, web search, code execution, built-in provider tools, or QuickFurno Core Automation.
 - add GPU orchestration, load balancing, a multi-node scheduler, or voice/audio/vision.
 - touch any database, schema, or migration; reserve or add **migration 0008**; or access a managed database.
 - introduce `process.env`, a secret loader, a hard-coded model default, `/models` discovery, streaming, the Responses API, tools/functions, or chain-of-thought/reasoning output.
@@ -28,7 +28,7 @@ This slice did **not**, and this report asserts it did not:
 
 ## Standing boundary — reaffirmed
 
-Riya is client-only, Anisha vendor-only, Jarvis the central coordinator, QuickFurno Core the final business authority, n8n execution-only. Kimi is excluded unless the owner reintroduces it. Model providers perform bounded inference only and authorize/execute nothing; the gateway (not n8n, not an agent) selects providers.
+Riya is client-only, Anisha vendor-only, Jarvis the central coordinator, QuickFurno Core the final business authority, QuickFurno Core Automation execution-only. Kimi is excluded unless the owner reintroduces it. Model providers perform bounded inference only and authorize/execute nothing; the gateway (not QuickFurno Core Automation, not an agent) selects providers.
 
 ## Readiness
 

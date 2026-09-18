@@ -100,4 +100,4 @@ Consequently, **the Stage 3.3.5 managed-readiness report's `READY_FOR_SEPARATE_O
 
 ## Explicit exclusions
 
-Stage 3.4 does **not** add: a dead-letter table, quarantine ledger, or replay/unblock command (Stage 3.5); an HTTP endpoint, `apps/api`, worker loop, or `apps/worker` change; a live emitter, agent, model, or external integration; a new public runtime export in this slice; a PostgreSQL enum (statuses/outcomes are CHECK-constrained TEXT); any change to migrations `0001`–`0003`; and any Supabase, managed-database, Core, n8n, WhatsApp, or provider access. Managed PostgreSQL still carries only `0001`.
+Stage 3.4 does **not** add: a dead-letter table, quarantine ledger, or replay/unblock command (Stage 3.5); an HTTP endpoint, `apps/api`, worker loop, or `apps/worker` change; a live emitter, agent, model, or external integration; a new public runtime export in this slice; a PostgreSQL enum (statuses/outcomes are CHECK-constrained TEXT); any change to migrations `0001`–`0003`; and any Supabase, managed-database, Core, QuickFurno Core Automation, WhatsApp, or provider access. Managed PostgreSQL still carries only `0001`.

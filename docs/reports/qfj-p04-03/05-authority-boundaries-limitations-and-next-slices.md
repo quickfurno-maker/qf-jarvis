@@ -4,7 +4,7 @@
 
 ## Authority boundary (the central discipline)
 
-Governed knowledge is **evidence, never business authority**. A registry resolution and a retrieval result are **data summaries with citations** — they carry no `authorize`/`execute`/`invoke`/`run`/`send`/`callN8n` method (proven). QuickFurno Core remains the **final business authority and authoritative system of record** for current leads, vendors, wallets, subscriptions, packages, consent, assignments, and policies; retrieved knowledge informs _how_ an agent reasons, never _what is currently true_. Models/providers authorize and execute nothing; n8n is execution-only. Riya=CLIENT, Anisha=VENDOR, Jarvis=COORDINATION — kept distinct, never blurred by retrieval. The excluded vendor is absent.
+Governed knowledge is **evidence, never business authority**. A registry resolution and a retrieval result are **data summaries with citations** — they carry no `authorize`/`execute`/`invoke`/`run`/`send`/`callQuickFurno Core Automation` method (proven). QuickFurno Core remains the **final business authority and authoritative system of record** for current leads, vendors, wallets, subscriptions, packages, consent, assignments, and policies; retrieved knowledge informs _how_ an agent reasons, never _what is currently true_. Models/providers authorize and execute nothing; QuickFurno Core Automation is execution-only. Riya=CLIENT, Anisha=VENDOR, Jarvis=COORDINATION — kept distinct, never blurred by retrieval. The excluded vendor is absent.
 
 ## Declared vs approved (P04.04 boundary)
 
@@ -12,11 +12,11 @@ A record records **declared/reviewed** reference material with attributable appr
 
 ## Conversation Operations Center — mandatory later, absent here
 
-The Jarvis Conversation Operations Center remains **mandatory** in later agent/WhatsApp/dashboard phases (all active Riya/Anisha/Jarvis/human conversations visible; searchable WhatsApp history; assignment/status/delivery/escalation/follow-up/AI-pause/human-takeover; Core owns the authoritative conversation record; n8n transport/execution only). It is **documented as mandatory** (ADR-0051 §O) and **implemented nowhere** in this slice (no conversation store, no WhatsApp, no dashboard — proven by source scan).
+The Jarvis Conversation Operations Center remains **mandatory** in later agent/WhatsApp/dashboard phases (all active Riya/Anisha/Jarvis/human conversations visible; searchable WhatsApp history; assignment/status/delivery/escalation/follow-up/AI-pause/human-takeover; Core owns the authoritative conversation record; QuickFurno Core Automation transport/execution only). It is **documented as mandatory** (ADR-0051 §O) and **implemented nowhere** in this slice (no conversation store, no WhatsApp, no dashboard — proven by source scan).
 
 ## Non-goals — confirmed absent
 
-No persistence/database/schema/**migration 0008**; no managed/local production database access; no document upload/scanning runtime; **no vector database, embeddings, semantic search, cosine ranking, or RAG**; no live Groq/local model call; no real key/token; no provider activation; no model tools/MCP/web/code execution/provider tools; no agent runtime, Riya/Anisha prompts, memory, WhatsApp, dashboard, or n8n; no deployment. Migrations 0001–0007 unchanged; event-backbone root API remains **39**; the protected `docs/reports/qfj-managed-reconciliation-0002-0005/` directory is untouched.
+No persistence/database/schema/**migration 0008**; no managed/local production database access; no document upload/scanning runtime; **no vector database, embeddings, semantic search, cosine ranking, or RAG**; no live Groq/local model call; no real key/token; no provider activation; no model tools/MCP/web/code execution/provider tools; no agent runtime, Riya/Anisha prompts, memory, WhatsApp, dashboard, or QuickFurno Core Automation; no deployment. Migrations 0001–0007 unchanged; event-backbone root API remains **39**; the protected `docs/reports/qfj-managed-reconciliation-0002-0005/` directory is untouched.
 
 ## Operator prerequisites (all separately owner-authorized, none done here)
 

@@ -45,7 +45,7 @@ new phase is created. The execution chain has accumulated validators without a p
 | `approval-core-adapter` | ADR-0082 | submits human approval intent over an **injected** transport | no transport adopted |
 | `communication-authorization-runtime` | ADR-0083 | correlates a `CommunicationRequestV1` with Core's `CommunicationAuthorizationV1` | **no** |
 | `execution-intent-runtime` | ADR-0084 | proves a Core `ExecutionIntentV1` names the approved action | **no** (one offline JAO-7 use) |
-| `execution-dispatch-runtime` | ADR-0090 | Core → n8n dispatch verification: signature, domain separation, freshness, expiry, replay claim | **no** |
+| `execution-dispatch-runtime` | ADR-0090 | Core → QuickFurno Core Automation dispatch verification: signature, domain separation, freshness, expiry, replay claim | **no** |
 | `postgres-execution-replay-store` | ADR-0091 | the durable replay guard (migration `0010`) | **no** |
 | `execution-dispatch-composition` | ADR-0109 | binds the verifier to the durable store | **no importer at all** |
 | `communication-lifecycle-runtime` | ADR-0110 | validates 18-state transitions against the approved graph | **no importer at all** |
@@ -61,7 +61,7 @@ new phase is created. The execution chain has accumulated validators without a p
 
 **QFJ-P09 remains INCOMPLETE**, confirmed against the import graph:
 
-1. an **adopted** Core → n8n transport and its composition — the B4 wire protocol is **PROPOSED**;
+1. an **adopted** Core → QuickFurno Core Automation transport and its composition — the B4 wire protocol is **PROPOSED**;
 2. execution-time communications **eligibility** integration;
 3. a **producer** of `CommunicationStateRecordV1`;
 4. provider dispatch, provider results and **reconciliation** to Core and back to Jarvis;
@@ -109,7 +109,7 @@ have changed.
 | Payment context | `listVendorPackageOrders(vendorId)`, `getVendorCurrentPackageSummary(vendorId)` — vendor-id keyed. `payment_status` / `order_status` / `activation_status` are unconstrained `text` with no CHECK; the only writer sets `created` / `not_started` / `not_activated` over `payment_provider: "not_connected"` | **authoritative READ, not prospect-addressable, not a lifecycle** |
 | Activation truth | **Core has no ACTIVE vendor status.** `vendors.status` ∈ `('Pending','Approved','Rejected','Suspended')`; "active" is a separate boolean `is_active`; `package_status` uses lowercase `active` | **absent as an enum**; Jarvis `ACTIVE` is an abstraction over *"Core says this party is live"* |
 | Commercial truth | available-package read service, seven fields, mirrored by AVG-8 | **authoritative READ, adopted** |
-| Execution-time eligibility | authority is the **QuickFurno Communication Core**; the **QF Communications Runtime** re-validates at execution time, outside this repository, reached only by n8n | **authoritative, no Jarvis-facing protocol adopted** |
+| Execution-time eligibility | authority is the **QuickFurno Communication Core**; the **QF Communications Runtime** re-validates at execution time, outside this repository, reached only by QuickFurno Core Automation | **authoritative, no Jarvis-facing protocol adopted** |
 | Execution authorization | `ApprovalDecisionV1`, `CommunicationAuthorizationV1`, `ExecutionIntentV1` exist as canonical contracts in `@qf-jarvis/contracts`; the inter-system wire protocol is **PROPOSED** | **proposed protocol**, not adopted |
 | Result reconciliation | no versioned Core → Jarvis reconciliation event or contract | **absent** |
 
@@ -127,7 +127,7 @@ flowchart TD
     S2["S2 · QFJ-P09<br/>CommunicationStateRecordV1 PRODUCER<br/>no Core dependency"]
     S3["S3 · QFJ-P10<br/>Fresh Core audit + protocol adoption<br/>(identity · registration · payment · activation · reconciliation)"]
     S4["S4 · QFJ-P08<br/>Live Core transport for<br/>communication authorization"]
-    S5["S5 · QFJ-P09<br/>Adopted Core → n8n transport + composition"]
+    S5["S5 · QFJ-P09<br/>Adopted Core → QuickFurno Core Automation transport + composition"]
     S6["S6 · QFJ-P09<br/>Execution-time contact eligibility"]
     S7["S7 · QFJ-P10<br/>Provider result → Core → Jarvis reconciliation"]
     S8["S8 · QFJ-P12<br/>GAP A · same-acquisition continuation"]
@@ -218,16 +218,16 @@ item: carry an S1 request to Core and receive Core's `CommunicationAuthorization
 through the merged `communication-authorization-runtime`. **A Core refusal is an ordinary
 authoritative observation, never retried, reinterpreted or downgraded.**
 
-**S5 — adopted Core → n8n transport and composition (QFJ-P09).** Move the PROPOSED B4 envelope to
+**S5 — adopted Core → QuickFurno Core Automation transport and composition (QFJ-P09).** Move the PROPOSED B4 envelope to
 adopted, then compose `execution-dispatch-composition` behind it. Preserves Core-issued signed
 `ExecutionIntentV1`, domain separation, signature freshness, intent expiry with no grace period, and
-the durable replay claim. **No Jarvis → n8n shortcut is created.**
+the durable replay claim. **No Jarvis → QuickFurno Core Automation shortcut is created.**
 
 **S6 — execution-time contact eligibility (QFJ-P09).** Consent, STOP, opt-out, DNC, suppression,
 quiet hours and attempt limits are revalidated immediately before dispatch by Core and the QF
 Communications Runtime. **Jarvis caches nothing and stores no eligibility answer.**
 
-**S7 — provider result → Core → Jarvis reconciliation (QFJ-P10).** Provider and n8n outcomes reach
+**S7 — provider result → Core → Jarvis reconciliation (QFJ-P10).** Provider and QuickFurno Core Automation outcomes reach
 Core first. Only Core's recorded result returns to Jarvis, as an authoritative event. **A provider
 success never becomes Jarvis business truth directly.**
 
@@ -253,13 +253,13 @@ separate owner decision with its own ADR.
 
 ## 4. Gap and authority matrix
 
-| # | Capability | Owner | Today | Authority | Missing dependency | Proposed artifact | Jarvis-only? | Core change? | n8n/provider? | Migration? | Activation impact | Fail-closed behaviour |
+| # | Capability | Owner | Today | Authority | Missing dependency | Proposed artifact | Jarvis-only? | Core change? | QuickFurno Core Automation/provider? | Migration? | Activation impact | Fail-closed behaviour |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | S1 | `CommunicationRequestV1` producer | **P08** | contract + consumer, **no producer** | Jarvis asks; Core decides | none | producer package | **yes** | no | no | none justified here | none | cannot express consent, eligibility or authorization |
 | S2 | `CommunicationStateRecordV1` producer | **P09** | contract + validator, **no producer** | Jarvis coordination; Core owns the cited artifacts | S1 identity fields | producer package | **yes** | no | no | none justified here | none | later states unconstructible without Core ids |
 | S3 | Fresh Core audit + protocol adoption | **P10** | historical audit only | Core | Core-side publication | versioned read/event contracts | no | **yes** | no | none justified here | none | absent fact ⇒ no downstream slice proceeds |
 | S4 | Live Core transport for communication authorization | **P08** | correlation runtime merged, **no transport** | Core | S1, S3 | adopted transport | no | **yes** | no | none justified here | none | refusal is an ordinary observation |
-| S5 | Core → n8n transport | **P09** | PROPOSED envelope, verifier merged | Core issues, n8n executes | S3, S4 | adopted transport + composition | no | **yes** | **yes** | none justified here | none | unverified/expired/replayed ⇒ refuse |
+| S5 | Core → QuickFurno Core Automation transport | **P09** | PROPOSED envelope, verifier merged | Core issues, QuickFurno Core Automation executes | S3, S4 | adopted transport + composition | no | **yes** | **yes** | none justified here | none | unverified/expired/replayed ⇒ refuse |
 | S6 | Execution-time eligibility | **P09** | absent | QuickFurno Communication Core | S5 | integration at dispatch | no | **yes** | **yes** | none justified here | none | unknown ⇒ refuse; never cached |
 | S7 | Result reconciliation | **P10** | absent | Core | S3, S5 | Core → Jarvis event | no | **yes** | **yes** | **must be proved by the slice** | none | provider truth alone ⇒ not business truth |
 | S8 | GAP A continuation | **P12** | **open** | Core | prospect ↔ vendor fact | continuation boundary | no | **yes** | no | **must be proved by the slice** | none | no fact ⇒ refuse; gate never widened |
@@ -299,7 +299,7 @@ flowchart LR
     Request["CommunicationRequestV1<br/>producer · QFJ-P08"]
     Approval["Approval + authorization<br/>correlation runtimes"]
     Dispatch["Execution dispatch boundary<br/>+ durable replay guard"]
-    N8N["n8n<br/>executes only"]
+    QuickFurno Core Automation["QuickFurno Core Automation<br/>executes only"]
     Provider["Provider<br/>delivers only"]
     Lifecycle["Communication state records<br/>+ lifecycle validator"]
 
@@ -312,8 +312,8 @@ flowchart LR
     CommCore -->|"blocked S6 · P09: execution-time eligibility"| Core
     Core -->|"blocked S5 · P09: signed ExecutionIntentV1"| Dispatch
     Dispatch -->|"existing: verify · claim replay"| Dispatch
-    Dispatch -->|"blocked S5 · P09: adopted transport"| N8N
-    N8N -->|"blocked: authorized execution"| Provider
+    Dispatch -->|"blocked S5 · P09: adopted transport"| QuickFurno Core Automation
+    QuickFurno Core Automation -->|"blocked: authorized execution"| Provider
     Provider -->|"blocked S7 · P10: delivery result"| Core
     Core -->|"blocked S7 · P10: reconciliation event"| Jarvis
     Jarvis -->|"proposed S2 · P09: state records"| Lifecycle
@@ -342,7 +342,7 @@ Every row must be a **test** in the slice that introduces the capability, not a 
 | 13 | Dispatch an expired `ExecutionIntentV1` | ADR-0090 verifier | `now >= expiresAt`, no grace period |
 | 14 | Dispatch a forged Core intent | ADR-0090 verifier | signature under a distinct domain separator and key purpose |
 | 15 | Replay with a conflicting idempotency/digest | ADR-0091 guard | `conflict`, fail closed |
-| 16 | Treat an n8n/provider result as business truth | S7 | truth returns through Core first |
+| 16 | Treat an QuickFurno Core Automation/provider result as business truth | S7 | truth returns through Core first |
 | 17 | Treat offline certification as activation authority | ADR-0131, ADR-0132 | certification is evidence, not a credential |
 | 18 | Treat autonomy `L2` as contact or send authority | AVG-12 | same zero-authority posture at every level |
 | 19 | Treat a produced `CommunicationRequestV1` as permission to contact | S1 | producing a request is asking; Core answers |
@@ -360,9 +360,9 @@ slices.**
 | **3** | QFJ-P10 | **Fresh read-only Core audit** at a current pinned commit — **MERGED (ADR-0136, PR #177)** | none | docs | none | read-only inspection | no | owner sign-off on findings | n/a |
 | **4** | QFJ-P10 | Core protocol **adoption** — identity, registration, payment, activation, reconciliation — **scoped by ADR-0137 (D2) into C0–C6; PR open** | PR 3 + Core-side work | contracts + docs | must be proved | **Core change required** | no | bilateral adoption | contracts unused until composed |
 | **5** | **QFJ-P08** | **Live Core transport for communication authorization** | PRs 1, 4 | production code | must be proved | Core | no | transport adoption | not composed |
-| **6** | QFJ-P09 | Adopted Core → n8n transport + composition | PRs 2, 4, 5 | production code | must be proved | Core + n8n | no | transport adoption | composition not wired |
+| **6** | QFJ-P09 | Adopted Core → QuickFurno Core Automation transport + composition | PRs 2, 4, 5 | production code | must be proved | Core + QuickFurno Core Automation | no | transport adoption | composition not wired |
 | **7** | QFJ-P09 | Execution-time eligibility integration | PR 6 | production code | must be proved | Core + QF Communications Runtime | no | Core sign-off | refuse when unknown |
-| **8** | QFJ-P10 | Provider result → Core → Jarvis reconciliation | PR 6 | production code | **must be proved** | Core + n8n + provider | no | Core sign-off | no event ⇒ no truth |
+| **8** | QFJ-P10 | Provider result → Core → Jarvis reconciliation | PR 6 | production code | **must be proved** | Core + QuickFurno Core Automation + provider | no | Core sign-off | no event ⇒ no truth |
 | **9** | QFJ-P12 | GAP A continuation boundary | PR 4 | production code | must be proved | none | no | owner review | refuse without the fact |
 | **10** | QFJ-P12 | GAP B pre-activation bridge | PR 4 | production code | must be proved | none | no | owner review | boundary stays unreachable |
 | **11** | QFJ-P12 | Aarohi runtime composition, **default OFF** | PRs 7–10 | production code | must be proved | none until enabled | no | owner review | disabled by default |
@@ -411,7 +411,7 @@ ledger drift must be reconciled before any allocation.
     `execution-dispatch-composition` — durable by construction.
 11. **Who produces lifecycle records?** Nobody yet; that is S2 (QFJ-P09), and it is a different
     producer from S1's.
-12. **How do provider results reach Core?** Provider → n8n → Core. Not through Jarvis.
+12. **How do provider results reach Core?** Provider → QuickFurno Core Automation → Core. Not through Jarvis.
 13. **How does Core truth return to Jarvis?** As an authoritative reconciliation event. **Contract
     absent — S3/S4 then S7.**
 14. **What must Aarohi persist?** Nothing yet. Persistence is a separate governed decision, and each

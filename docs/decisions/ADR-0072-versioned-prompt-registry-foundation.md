@@ -42,7 +42,7 @@ prompt-registry  ->  zod   (+ node:crypto, a Node built-in, internally)
 
 Nothing imports it yet. S3-I-B will add `model-reply-adapter -> prompt-registry`. It is a true leaf
 with **no** project references: it knows nothing of agents, the runtime, the gateway, providers, Core,
-evaluation, WhatsApp, n8n, a database or deployment — which is precisely what will let S3-I-B depend
+evaluation, WhatsApp, QuickFurno Core Automation, a database or deployment — which is precisely what will let S3-I-B depend
 on it from M4 without inverting anything.
 
 **S3-I-A changes no model request, no system message, no runtime and no evaluation behaviour.**
@@ -229,7 +229,7 @@ environment prompt body. **Production rollout remains OFF.**
 No runtime binding · no production prompt · no lifecycle or ACTIVE state · no template engine · no
 persistence, database, Supabase or migration · no network, provider or live model call · no credential
 or environment read · no deployment or activation · no CANARY/ACTIVE/FALLBACK · no RAG · no WhatsApp ·
-no n8n · no memory · no send, execute or persist.
+no QuickFurno Core Automation · no memory · no send, execute or persist.
 
 ## Change-control rule
 

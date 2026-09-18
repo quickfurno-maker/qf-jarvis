@@ -23,7 +23,7 @@ Ownership statements here follow [system-boundary.md](./system-boundary.md), whi
 
 ## Matrix
 
-| Activity | QuickFurno Core | QF Jarvis | Human approver | n8n | Provider |
+| Activity | QuickFurno Core | QF Jarvis | Human approver | QuickFurno Core Automation | Provider |
 | --- | --- | --- | --- | --- | --- |
 | **Lead creation** | **A / R** | I | — | — | — |
 | **Lead verification** | **A** | **C** — Kabir recommends verification, flags fraud and implausibility | R — operations verifies | R — where an authorized verification action is executed | R — where a provider action is involved |

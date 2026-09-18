@@ -24,8 +24,8 @@ import { checkDispatchTemporalRules } from './time/dispatch-temporal.js';
 /**
  * `verifyExecutionDispatch` — the test-only B4 execution-dispatch boundary (QFJ-P09.02, ADR-0090).
  *
- * This is the validation an n8n-side adapter would run BEFORE acting on a QuickFurno Core-issued
- * `ExecutionIntentV1`. It is the Core → n8n edge. It is not, and must never become, Jarvis → n8n:
+ * This is the validation an QuickFurno Core Automation-side adapter would run BEFORE acting on a QuickFurno Core-issued
+ * `ExecutionIntentV1`. It is the Core → QuickFurno Core Automation edge. It is not, and must never become, Jarvis → coreAutomation:
  * there is no transport here, no endpoint, no client and no credential, and the package cannot
  * reach one.
  *

@@ -241,7 +241,7 @@ export const sectionsV2Schema = z
     evaluations: sectionSchema(evaluationDimensionSchema, 32),
     coreSync: sectionSchema(ownershipRowSchema, 32),
     businessAnalytics: sectionSchema(distributionSliceSchema, 24),
-    n8nExecution: sectionSchema(distributionSliceSchema, 24),
+    coreAutomationExecution: sectionSchema(distributionSliceSchema, 24),
   })
   .strict();
 

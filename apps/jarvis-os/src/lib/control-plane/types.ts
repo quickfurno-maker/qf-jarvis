@@ -19,7 +19,7 @@
  * There is no `canSend`, `canExecute`, `isAuthorized`, `approve()`, `dispatch()` or
  * `consentValid` anywhere in this file, and no field in which one could be smuggled. The
  * read model is a description of what the system reports; authority is QuickFurno Core's,
- * execution is n8n's, delivery is a provider's. A surface that could grant permission would
+ * execution is QuickFurno Core Automation's, delivery is a provider's. A surface that could grant permission would
  * be a second source of business truth, which ADR-0001 forbids outright.
  */
 import type { CapabilityId, CapabilityLifecycle, CapabilityTone } from '../capabilities/catalog';
@@ -388,5 +388,5 @@ export interface ControlPlaneReadModel {
   ownership(): Section<OwnershipRow>;
   roadmap(): readonly RoadmapMarker[];
   businessAnalytics(): Section<DistributionSlice>;
-  n8nExecution(): Section<DistributionSlice>;
+  coreAutomationExecution(): Section<DistributionSlice>;
 }

@@ -387,7 +387,7 @@ describe('the governed approval-decision contract refuses a malformed decision',
     for (const over of [
       // Not issued by Core. The literal is what makes authority unmanufacturable.
       { issuer: 'qf-jarvis' },
-      { issuer: 'n8n' },
+      { issuer: 'quickfurno-core-automation' },
       // An agent as the decider: the shape does not exist, at any confidence.
       { decidedBy: { actorType: 'agent', agentId: 'anisha' } },
       { decidedBy: { actorType: 'human' } },

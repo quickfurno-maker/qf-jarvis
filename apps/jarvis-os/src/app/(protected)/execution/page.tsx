@@ -19,7 +19,7 @@ import { controlPlane } from '@/lib/control-plane';
 export default async function ExecutionPage() {
   const roadmap = (await controlPlane()).roadmap();
   const intent = capability('execution.intent.validate');
-  const bridge = capability('execution.n8n.bridge');
+  const bridge = capability('execution.core-automation.bridge');
   const send = capability('communication.live-send');
 
   return (
@@ -27,15 +27,15 @@ export default async function ExecutionPage() {
       <PageHeader
         breadcrumb={['Operate', 'Execution']}
         title="Execution readiness"
-        purpose="What Jarvis can prove about an execution intent, and everything it still cannot do. Core issues intents, n8n executes them, providers deliver."
+        purpose="What Jarvis can prove about an execution intent, and everything it still cannot do. Core issues intents, coreAutomation executes them, providers deliver."
         status={<CapabilityBadge lifecycle="ROLLOUT_OFF" />}
       />
 
       <div className="space-y-5">
         <Notice tone="critical" title="LIVE SEND IS OFF">
-          No communication can reach a real recipient. There is no n8n bridge, no provider client
-          and no credential anywhere in Jarvis, and production rollout is disabled independently of
-          all three.
+          No communication can reach a real recipient. There is no coreAutomation bridge, no
+          provider client and no credential anywhere in Jarvis, and production rollout is disabled
+          independently of all three.
         </Notice>
 
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
@@ -51,7 +51,7 @@ export default async function ExecutionPage() {
           />
           <PhaseCard
             marker="QFJ-P09.02"
-            title="Authorized dispatch envelope / n8n bridge"
+            title="Authorized dispatch envelope / coreAutomation bridge"
             state="NEXT — NOT IMPLEMENTED"
             tone="warning"
             detail={
@@ -152,7 +152,8 @@ export default async function ExecutionPage() {
 
         <Notice tone="info" title="Main Jarvis resume point — QFJ-P09.02">
           After the Jarvis OS foundation track (JOS-01A through JOS-01E), backend work resumes at
-          QFJ-P09.02 — the test-only authorized dispatch envelope and n8n bridge validation.
+          QFJ-P09.02 — the test-only authorized dispatch envelope and coreAutomation bridge
+          validation.
         </Notice>
       </div>
     </>

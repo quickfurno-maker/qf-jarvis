@@ -247,7 +247,7 @@ builder that interpolates.
 The only outcome is JAO-1's own inert `SHADOW_OPERATIONAL_ATTENTION`. There is no `APPROVED_ACTION`,
 `EXECUTION`, `REMEDIATION` or `AUTHORIZATION` in the vocabulary. `businessEffect` and
 `productionMutation` are literals, and `coreMutations`, `executionIntentsCreated`, `channelSends`,
-`n8nExecutions`, `specialistCalls`, `memoryWrites` and `toolCalls` are literal zeros on the result.
+`coreAutomationExecutions`, `specialistCalls`, `memoryWrites` and `toolCalls` are literal zeros on the result.
 
 The `sourcePosture` literal on an injected event is a CLOSED FIRST-PROOF POSTURE and **not
 production authentication**. A caller supplying it has not been authenticated by anything. A
@@ -288,7 +288,7 @@ cannot be un-spent by a write that did not land, and the same trigger identity d
 
 Unchanged. **Recommend -> Authorize -> Execute.** QuickFurno Core remains the final business
 authority. The QF Model Gateway remains the sole governed inference path. The existing approval and
-execution-intent boundaries remain the only effect path. n8n executes only already-authorized
+execution-intent boundaries remain the only effect path. QuickFurno Core Automation executes only already-authorized
 intents.
 
 JAO-5 adds autonomous OBSERVATION and INVESTIGATION-START GOVERNANCE. It adds no autonomous business

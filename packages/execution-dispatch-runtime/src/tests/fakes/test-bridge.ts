@@ -5,7 +5,7 @@ import { type ExecutionDispatchResult } from '../../contracts/result.js';
  *
  * ### What it is not
  *
- * It does not open a socket, call n8n, call a provider, load a credential or read the environment.
+ * It does not open a socket, call QuickFurno Core Automation, call a provider, load a credential or read the environment.
  * It counts. The name of what it counts was chosen carefully: `handoffs`, never `sent`, `delivered`,
  * `executed` or `accepted`. Nothing here reaches a provider, so calling it any of those would put a
  * lie in a test name — and a test name is the first thing someone reads when deciding what the

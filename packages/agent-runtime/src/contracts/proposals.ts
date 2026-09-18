@@ -3,8 +3,8 @@
  *
  * The runtime produces PROPOSALS ONLY. Every proposal is a frozen data record bound to an exact
  * id/version, an actor/party/conversation, and the authority status `PENDING_CORE_VALIDATION`, and it
- * has NO `execute`/`send`/`authorize`/`callN8n` method. QuickFurno Core is the only authority that may
- * validate and act on a proposal; n8n is transport-only. Actor↔party scope is enforced at creation.
+ * has NO `execute`/`send`/`authorize`/`callcoreAutomation` method. QuickFurno Core is the only authority that may
+ * validate and act on a proposal; QuickFurno Core Automation is transport-only. Actor↔party scope is enforced at creation.
  */
 import { z } from 'zod';
 

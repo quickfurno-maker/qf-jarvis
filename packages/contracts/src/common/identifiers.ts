@@ -5,7 +5,7 @@
  * category error:
  *
  * 1. **Contract-generated identifiers** — created by QF Jarvis, QuickFurno Core,
- *    or n8n *for* these contracts. We choose their shape, so we choose UUID and
+ *    or QuickFurno Core Automation *for* these contracts. We choose their shape, so we choose UUID and
  *    validate it strictly.
  *
  * 2. **QuickFurno Core entity identifiers** — a lead, a vendor, a client. These

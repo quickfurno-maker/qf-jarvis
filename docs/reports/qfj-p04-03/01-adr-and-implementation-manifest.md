@@ -8,7 +8,7 @@ One dedicated, provider-neutral package — **`@qf-jarvis/governed-knowledge`** 
 
 ## Boundary (what it does NOT do)
 
-No database/persistence, no schema, **no migration (0008 absent)**; no document upload/scanning runtime; **no vector database, embeddings, semantic search, or RAG**; no live model call, no real key/token; no provider activation; no agent runtime, memory, WhatsApp, dashboard, or n8n. The package depends only on `zod`. The `@qf-jarvis/event-backbone` root API remains **39**; migrations 0001–0007 are byte-exact.
+No database/persistence, no schema, **no migration (0008 absent)**; no document upload/scanning runtime; **no vector database, embeddings, semantic search, or RAG**; no live model call, no real key/token; no provider activation; no agent runtime, memory, WhatsApp, dashboard, or QuickFurno Core Automation. The package depends only on `zod`. The `@qf-jarvis/event-backbone` root API remains **39**; migrations 0001–0007 are byte-exact.
 
 ## Package layout
 

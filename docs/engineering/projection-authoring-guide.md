@@ -140,7 +140,7 @@ A projection handler MUST NOT:
 
 - call `COMMIT` or `ROLLBACK`, or create/release a `SAVEPOINT` — the runner owns the transaction;
 - open an independent database connection or pool;
-- make any external request (network, filesystem, process, provider, Core, n8n, WhatsApp);
+- make any external request (network, filesystem, process, provider, Core, QuickFurno Core Automation, WhatsApp);
 - read the clock (`Date.now`, `new Date()` for values) — timestamps in a read model come from the
   **event**, never from `now`;
 - use randomness, environment variables, or any value that differs between runs;

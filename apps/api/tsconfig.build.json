@@ -24,6 +24,11 @@
     { "path": "../../packages/event-backbone" },
     { "path": "../../packages/jarvis-runtime/tsconfig.build.json" },
     { "path": "../../packages/postgres-conversation-state/tsconfig.build.json" },
+    // JF-6 final QuickFurno integration: the serving Riya composition reuses the already-reviewed
+    // durable continuity store and turn coordinator. Both receive the caller-owned pool; neither
+    // creates a connection or reads deployment configuration on import.
+    { "path": "../../packages/postgres-riya-conversation-continuity-store/tsconfig.build.json" },
+    { "path": "../../packages/postgres-riya-turn-coordinator/tsconfig.build.json" },
     // QFJ-P08 (ADR-0082): the authenticated operator boundary. `contracts` is a real runtime edge --
     // the service validates an identifier and two instants with the governed schemas -- while the
     // approval adapter and the durable queue are named as TYPES ONLY: both are INJECTED, so the
@@ -36,6 +41,8 @@
     // vocabulary the classification-policy output is validated against.
     { "path": "../../packages/riya-web-conversation-service/tsconfig.build.json" },
     { "path": "../../packages/agent-runtime/tsconfig.build.json" },
+    { "path": "../../packages/action-kernel/tsconfig.build.json" },
+    { "path": "../../packages/durable-orchestration-contracts/tsconfig.build.json" },
     // JF-4 (ADR-0149): the customer orchestration boundary. `rag-provisioning` is the JF-3
     // provisioning boundary the governed-RAG port calls, and `governed-knowledge` supplies the
     // request/result TYPES that port adapts between. Neither adds a knowledge authority here -- the

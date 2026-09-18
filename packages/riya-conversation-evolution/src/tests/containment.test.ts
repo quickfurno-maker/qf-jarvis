@@ -236,7 +236,7 @@ describe('it holds no authority it does not own', () => {
       'latitude',
       'longitude',
       'pincode',
-      'n8n',
+      'quickfurno-core-automation',
       'whatsapp',
       'provider',
       'sendMessage',

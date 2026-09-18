@@ -551,7 +551,7 @@ describe('JAO-5 controlled ambient operations', () => {
       'coreMutations',
       'executionIntentsCreated',
       'channelSends',
-      'n8nExecutions',
+      'coreAutomationExecutions',
       'specialistCalls',
       'memoryWrites',
       'toolCalls',

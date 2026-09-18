@@ -49,7 +49,7 @@ The first level where the system spends someone's attention — which is a real 
 
 **Approved recommendations become execution intents, through policy or human approval.**
 
-The first level where Jarvis's output can reach a real client, vendor, or ad account — and it does so only after an explicit, attributable approval decision recorded in QuickFurno Core, and only via a bounded, expiring execution intent executed by n8n.
+The first level where Jarvis's output can reach a real client, vendor, or ad account — and it does so only after an explicit, attributable approval decision recorded in QuickFurno Core, and only via a bounded, expiring execution intent executed by QuickFurno Core Automation.
 
 **Every execution at this level has a human behind it.** No policy automates anything yet.
 

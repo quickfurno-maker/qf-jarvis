@@ -12,7 +12,7 @@
   // owns `communicationRequestV1Schema` and every schema this package validates against, and
   // `recommendation-runtime`, whose PUBLIC `fingerprintProposedAction` is how a supplied binding is
   // re-proved. It knows nothing of the approval runtime, the communication-authorization runtime,
-  // the agent runtime, the composition root, Core, persistence, n8n or any provider -- a
+  // the agent runtime, the composition root, Core, persistence, QuickFurno Core Automation or any provider -- a
   // communication request is powerless, and a package that could reach any of those would not be.
   "references": [
     { "path": "../../packages/contracts" },

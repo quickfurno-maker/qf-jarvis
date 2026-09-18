@@ -4,35 +4,35 @@
 
 ## Old stage/phase names found (and their canonical replacement)
 
-| Historical name (found in docs)                             | Canonical replacement                                             |
-| ----------------------------------------------------------- | ----------------------------------------------------------------- |
-| Phase 0 — Charter and Architecture                          | QFJ-P00 — Governance and Delivery Control                         |
-| Phase 1 — Engineering Foundation                            | (foundation; folded into QFJ-P00 governance substrate)            |
-| Phase 2 — Contracts and Canonical Events                    | QFJ-P01 — Contracts, Identity and Trust Boundary                  |
-| Phase 3 — Durable Event Backbone (Stage 3.0–3.3.5)          | QFJ-P02 — Event Ingestion and Durable Storage                     |
-| Stage 3.4.1 — projection foundation (migration 0004)        | QFJ-P03.01 / QFJ-P03.02                                           |
-| Stage 3.4.2 — projection registry                           | QFJ-P03.04                                                        |
-| Stage 3.4.3 — gap-free projection ordering (migration 0005) | QFJ-P03.03                                                        |
-| Stage 3.4.4 — projection runner `runProjectionOnce`         | QFJ-P03.05                                                        |
-| Stage 3.4.5A — projection worker `runProjectionWorker`      | QFJ-P03.05 / QFJ-P03.06 supporting work                           |
-| Stage 3.4.5B — production projection activation             | **QFJ-P03.06 — Production Projection Activation**                 |
-| Stage 3.4.5C — broad rebuild proposal                       | absorbed into QFJ-P03.08                                          |
-| Stage 3.5 — dead letters and replay                         | QFJ-P03.07 — Projection Failure Operations                        |
-| Stage 3.6 — rebuild and erasure / `rm_subject_activity`     | QFJ-P03.08 (rebuild/erasure) + QFJ-P03.09 (`rm_subject_activity`) |
-| Stage 3.7–3.9 — emitter / metrics / exit audit              | QFJ-P03.10 — Operational Readiness and Exit Audit                 |
-| Stage 4.0 — model gateway                                   | QFJ-P04.01                                                        |
-| Stage 4.1 — knowledge / capabilities                        | QFJ-P04.02 (capabilities) + QFJ-P04.03 (knowledge)                |
-| Stage 4.2 — evaluation / observability                      | QFJ-P04.04                                                        |
-| Stage 4.3 — Jarvis coordination layer                       | QFJ-P05                                                           |
-| Phase 5 — Kabir (lead intelligence)                         | QFJ-P12 (future specialist; PLANNED/DISABLED)                     |
-| Phase 6 — Riya (client journey)                             | QFJ-P06 — Riya Customer Journey                                   |
-| Phase 7 — Anisha (vendor intelligence)                      | QFJ-P07 — Anisha Vendor Journey (broadened to full lifecycle)     |
-| Phase 8 / 8.5 — Jitin / identity & access                   | QFJ-P08 (approval/human control); Jitin → QFJ-P12                 |
-| Phase 9 — approval and policy                               | QFJ-P08 — Consent, Approval and Human Control                     |
-| Phase 10 / 10.5 — n8n bridge / production readiness         | QFJ-P09 — Execution Gateway and Communication Lifecycle           |
-| Phase 11 — live Core integration                            | QFJ-P10 — QuickFurno Core Integration and Reconciliation          |
-| Phase 11A / 12–15 — pilot / control plane / automation      | QFJ-P11 — Pilot, Resilience and Scale                             |
-| Future specialist agents                                    | QFJ-P12 — Advanced Intelligence and Future Agents                 |
+| Historical name (found in docs)                                            | Canonical replacement                                             |
+| -------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| Phase 0 — Charter and Architecture                                         | QFJ-P00 — Governance and Delivery Control                         |
+| Phase 1 — Engineering Foundation                                           | (foundation; folded into QFJ-P00 governance substrate)            |
+| Phase 2 — Contracts and Canonical Events                                   | QFJ-P01 — Contracts, Identity and Trust Boundary                  |
+| Phase 3 — Durable Event Backbone (Stage 3.0–3.3.5)                         | QFJ-P02 — Event Ingestion and Durable Storage                     |
+| Stage 3.4.1 — projection foundation (migration 0004)                       | QFJ-P03.01 / QFJ-P03.02                                           |
+| Stage 3.4.2 — projection registry                                          | QFJ-P03.04                                                        |
+| Stage 3.4.3 — gap-free projection ordering (migration 0005)                | QFJ-P03.03                                                        |
+| Stage 3.4.4 — projection runner `runProjectionOnce`                        | QFJ-P03.05                                                        |
+| Stage 3.4.5A — projection worker `runProjectionWorker`                     | QFJ-P03.05 / QFJ-P03.06 supporting work                           |
+| Stage 3.4.5B — production projection activation                            | **QFJ-P03.06 — Production Projection Activation**                 |
+| Stage 3.4.5C — broad rebuild proposal                                      | absorbed into QFJ-P03.08                                          |
+| Stage 3.5 — dead letters and replay                                        | QFJ-P03.07 — Projection Failure Operations                        |
+| Stage 3.6 — rebuild and erasure / `rm_subject_activity`                    | QFJ-P03.08 (rebuild/erasure) + QFJ-P03.09 (`rm_subject_activity`) |
+| Stage 3.7–3.9 — emitter / metrics / exit audit                             | QFJ-P03.10 — Operational Readiness and Exit Audit                 |
+| Stage 4.0 — model gateway                                                  | QFJ-P04.01                                                        |
+| Stage 4.1 — knowledge / capabilities                                       | QFJ-P04.02 (capabilities) + QFJ-P04.03 (knowledge)                |
+| Stage 4.2 — evaluation / observability                                     | QFJ-P04.04                                                        |
+| Stage 4.3 — Jarvis coordination layer                                      | QFJ-P05                                                           |
+| Phase 5 — Kabir (lead intelligence)                                        | QFJ-P12 (future specialist; PLANNED/DISABLED)                     |
+| Phase 6 — Riya (client journey)                                            | QFJ-P06 — Riya Customer Journey                                   |
+| Phase 7 — Anisha (vendor intelligence)                                     | QFJ-P07 — Anisha Vendor Journey (broadened to full lifecycle)     |
+| Phase 8 / 8.5 — Jitin / identity & access                                  | QFJ-P08 (approval/human control); Jitin → QFJ-P12                 |
+| Phase 9 — approval and policy                                              | QFJ-P08 — Consent, Approval and Human Control                     |
+| Phase 10 / 10.5 — QuickFurno Core Automation bridge / production readiness | QFJ-P09 — Execution Gateway and Communication Lifecycle           |
+| Phase 11 — live Core integration                                           | QFJ-P10 — QuickFurno Core Integration and Reconciliation          |
+| Phase 11A / 12–15 — pilot / control plane / automation                     | QFJ-P11 — Pilot, Resilience and Scale                             |
+| Future specialist agents                                                   | QFJ-P12 — Advanced Intelligence and Future Agents                 |
 
 ## Conflicts identified
 

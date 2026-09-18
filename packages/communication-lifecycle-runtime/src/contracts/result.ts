@@ -16,7 +16,7 @@
  * movement from `provider-accepted` to `delivered` is a legal one and the record evidences it with
  * an execution result id. It says nothing whatsoever about whether a message reached a person --
  * "no provider state becomes authoritative until Core records it", and this runtime never spoke to
- * Core, to n8n or to a provider. A consumer that renders a tick on `ok: true` has invented a fact.
+ * Core, to QuickFurno Core Automation or to a provider. A consumer that renders a tick on `ok: true` has invented a fact.
  *
  * Equally, consistency is not permission looking forward. A consistent move into `authorized` does
  * not authorize anything: QuickFurno Core issued that authorization, this package merely observed

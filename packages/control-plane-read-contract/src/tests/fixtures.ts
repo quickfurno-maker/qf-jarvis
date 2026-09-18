@@ -20,7 +20,7 @@ export function validSnapshot(): ControlPlaneSnapshotV1 {
     authority: {
       jarvis: 'RECOMMENDS_AND_OBSERVES',
       quickfurnoCore: 'AUTHORIZES_AND_OWNS_BUSINESS_TRUTH',
-      n8n: 'EXECUTES_ONLY',
+      coreAutomation: 'EXECUTES_ONLY',
       provider: 'DELIVERS_ONLY',
     },
     rollout: { enabled: false, state: 'ROLLOUT_OFF' },
@@ -57,7 +57,8 @@ export function validSnapshot(): ControlPlaneSnapshotV1 {
         label: 'QFJ-P09.02',
         track: 'QFJ',
         state: 'next',
-        detail: 'Test-only authorized dispatch envelope and n8n bridge validation.',
+        detail:
+          'Test-only authorized dispatch envelope and QuickFurno Core Automation bridge validation.',
       },
     ],
     sections: {
@@ -89,7 +90,7 @@ export function validSnapshot(): ControlPlaneSnapshotV1 {
       evaluations: emptySection('NOT_CONNECTED'),
       coreSync: emptySection('STATIC_BASELINE'),
       businessAnalytics: emptySection('NOT_CONNECTED'),
-      n8nExecution: emptySection('NOT_CONNECTED'),
+      coreAutomationExecution: emptySection('NOT_CONNECTED'),
     },
   };
 }

@@ -206,7 +206,7 @@ environment prompt body. **Production rollout remains OFF.**
 No production QuickFurno prompt · no prompt lifecycle or ACTIVE state · no template engine or variable
 interpolation · no persistence, database, Supabase or migration · no network, provider or live model
 call · no credential or environment read · no deployment or activation · no CANARY/ACTIVE/FALLBACK ·
-no RAG · no WhatsApp · no n8n · no memory · no send, execute or persist.
+no RAG · no WhatsApp · no QuickFurno Core Automation · no memory · no send, execute or persist.
 
 ## Change-control rule
 

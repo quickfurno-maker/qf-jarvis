@@ -10,7 +10,7 @@ It arrived in **Phase 2**, which is exactly where [ADR-0010](../docs/decisions/A
 
 > **Two or more consumers genuinely need the same thing, and that thing has a boundary somebody can name.**
 
-The contracts qualify without argument. Every later phase depends on them: ingestion parses canonical events (Phase 3), the coordination layer routes recommendations (Phase 4), the agents produce them (Phases 5–8), the approval path submits them (Phase 9), n8n validates execution intents (Phase 10), and Core integration adapts to them (Phase 11). A contract that two systems must agree on is the textbook case for a package with a versioning obligation and a review surface.
+The contracts qualify without argument. Every later phase depends on them: ingestion parses canonical events (Phase 3), the coordination layer routes recommendations (Phase 4), the agents produce them (Phases 5–8), the approval path submits them (Phase 9), QuickFurno Core Automation validates execution intents (Phase 10), and Core integration adapts to them (Phase 11). A contract that two systems must agree on is the textbook case for a package with a versioning obligation and a review surface.
 
 **It contains no business logic and no transport.** It is data and validation. Importing it cannot cause an effect.
 

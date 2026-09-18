@@ -1155,7 +1155,7 @@ describe('every plan states the sales-ethics prohibitions as literals', () => {
     'modelCallExecuted',
     'promptResolved',
     'retrievalExecuted',
-    'n8nExecutionRequested',
+    'coreAutomationExecutionRequested',
     'providerSendRequested',
     'channelSendRequested',
     'sent',

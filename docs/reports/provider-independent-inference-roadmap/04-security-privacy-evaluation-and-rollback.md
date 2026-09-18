@@ -8,7 +8,7 @@
 2. Provider output is revalidated locally (structured-output validation refuses malformed output).
 3. Hosted-provider requests are minimized and sanitized (no raw PII, credentials, secrets).
 4. The local PC receives no business-system credentials.
-5. No provider directly calls WhatsApp, n8n, or QuickFurno Core.
+5. No provider directly calls WhatsApp, QuickFurno Core Automation, or QuickFurno Core.
 6. Provider errors never expose request content, prompts, headers, or secrets.
 7. A provider outage never loses inbound messages (durable queue + retry + human handoff).
 8. Fallback is idempotent.
@@ -42,5 +42,5 @@ Provider and mode are chosen by configuration; **no real key is stored in the re
 
 ## Verdicts
 
-- **Security & privacy verdict:** SATISFIED by design — SDK isolation, local revalidation, minimized/sanitized hosted requests, no business credentials on the local PC, no provider→WhatsApp/n8n/Core path, no secret leakage in errors, no message loss on outage, idempotent single-reply fallback, human-only always available, model confidence not authority.
+- **Security & privacy verdict:** SATISFIED by design — SDK isolation, local revalidation, minimized/sanitized hosted requests, no business credentials on the local PC, no provider→WhatsApp/QuickFurno Core Automation/Core path, no secret leakage in errors, no message loss on outage, idempotent single-reply fallback, human-only always available, model confidence not authority.
 - **Migration/SQL:** none created; no migration number allocated.

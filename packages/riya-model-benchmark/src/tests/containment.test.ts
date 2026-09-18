@@ -125,7 +125,7 @@ describe('RMB-A invokes nothing and measures nothing', () => {
         /\bhuggingface\b/iu,
         /\btransformers\b/iu,
         /\bmlx\b/iu,
-        /\bn8n\b/iu,
+        /\bcoreAutomation\b/iu,
       ]) {
         expect(forbidden.test(code), `${file} must not match ${String(forbidden)}`).toBe(false);
       }

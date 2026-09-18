@@ -60,8 +60,8 @@ export const SYSTEM_HEALTH: SystemHealth = Object.freeze<SystemHealth>({
       detail: 'Authoritative. No Jarvis↔Core transport has been adopted.',
     },
     {
-      id: 'n8n',
-      label: 'n8n',
+      id: 'quickfurno-core-automation',
+      label: 'quickfurno-core-automation',
       state: 'NOT_CONNECTED',
       detail: 'Execution fabric. Bridge is QFJ-P09.02, not implemented.',
     },
@@ -314,7 +314,7 @@ export const ATTENTION: readonly AttentionItem[] = Object.freeze<readonly Attent
   {
     id: 'BLK-DEMO-0007',
     kind: 'blocked',
-    title: 'Execution blocked — no n8n bridge',
+    title: 'Execution blocked — no QuickFurno Core Automation bridge',
     context: 'QFJ-P09.02 not implemented; live send is off',
     age: '—',
     severity: 'info',
@@ -831,7 +831,8 @@ export const ROADMAP: readonly RoadmapMarker[] = Object.freeze<readonly RoadmapM
   },
   {
     id: 'p09-02',
-    label: 'QFJ-P09.02 — Authorized dispatch envelope / n8n bridge (test-only)',
+    label:
+      'QFJ-P09.02 — Authorized dispatch envelope / QuickFurno Core Automation bridge (test-only)',
     track: 'QFJ',
     state: 'next',
     detail: 'MAIN JARVIS RESUME POINT after the Jarvis OS foundation track.',

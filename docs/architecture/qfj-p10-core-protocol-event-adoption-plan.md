@@ -26,15 +26,15 @@ Read with [ADR-0136](../decisions/ADR-0136-qfj-p10-s3-fresh-quickfurno-core-audi
 | **Q4** authoritative party-live fact | **DECIDED_NOW** + **DEFERRED_TO_NAMED_SLICE** | **One explicit machine-readable "this party is live as a vendor" read**, Core-derivable, not necessarily a new column. `package_status='active'`, `is_active`, `Approved`, auth-enabled are each **insufficient**. Jarvis stores only the Core assertion reference. | Core | Core | **C-S9** | **YES** | reference carriage only | **CORE-SIDE POSSIBLE — MUST PROVE** | S9 / GAP B |
 | **Q5** communication authorization | **DECIDED_NOW** + **DEFERRED_TO_NAMED_SLICE** (wire) | **(A)** submission/receipt · **(B)** Core business authorization adapted into the **existing `CommunicationAuthorizationV1`** · **(C)** execution-time re-validation. Core's closed **consent** outcome is **never** returned as the whole authorization. | Core | Core | **C1 → S4** | **YES** | consume + correlate (existing runtime) | **CORE-SIDE POSSIBLE — MUST PROVE** | S4 |
 | **Q6** first primitive events | **DECIDED_NOW** (target family) + **DEFERRED** (result readiness) | Exactly **two TARGET families**: `qf.communication.authorization-recorded` and `qf.communication.result-recorded`. **Target selection ≠ emission readiness** — see §2.1 and the **C3A / C3B split**. | Core | Core | **C3A / C3B** | **YES** | consume only | **CORE-SIDE POSSIBLE — MUST PROVE** | Tier-C projection |
-| **Q7** dispatch / `execution-submitted` | **DECIDED_NOW** (semantics) + **BLOCKED_BY_MISSING_CORE_TRUTH** (artifact) | Core **actually handed** the authorized execution to the governed n8n boundary **and holds durable evidence** the handoff reached the defined submission boundary. Never request/authorization/intent creation, a generic outbox insert, "attempt started", provider acceptance or delivery. | Core | Core | **C4 / S5** | **YES** | consume only | **CORE-SIDE POSSIBLE — MUST PROVE** | `execution-submitted` |
+| **Q7** dispatch / `execution-submitted` | **DECIDED_NOW** (semantics) + **BLOCKED_BY_MISSING_CORE_TRUTH** (artifact) | Core **actually handed** the authorized execution to the governed QuickFurno Core Automation boundary **and holds durable evidence** the handoff reached the defined submission boundary. Never request/authorization/intent creation, a generic outbox insert, "attempt started", provider acceptance or delivery. | Core | Core | **C4 / S5** | **YES** | consume only | **CORE-SIDE POSSIBLE — MUST PROVE** | `execution-submitted` |
 | **Q8** cancellation | **REJECTED_FOR_MVP** | Core's consent-deny `cancelled` maps to Jarvis **`rejected`**. No authoritative Core cancellation operation exists; none is invented. | Core (future) | Core | future, on product need | **YES (future)** | no | **UNKNOWN** | Jarvis `cancelled` |
 | **Q9** expiry | **REJECTED_FOR_MVP** | No owning Core clock or recorded outcome. **`now > expires_at` is never authoritative.** | Core (future) | Core | future | **YES (future)** | no | **UNKNOWN** | Jarvis `expired` |
 | **Q10** Tier A/B evidence + ordering | **DECIDED_NOW** (option per state) → **D2b** confirmation | `draft` **C** · `authorization-requested` **A** · `scheduled` **A** · `follow-up-requested` **C** · `human-handoff-required` **C/blocked**. **Option B (separate durable Jarvis log) REJECTED_FOR_MVP.** | mixed | mixed | **D2b** | **YES** for the two A states | yes | **NONE EXPECTED** in Jarvis | D2b, D3, D5 |
 | **Q11** channel semantics | **DECIDED_NOW** | Request keeps `proposedChannel`; authorization keeps `authorizedChannel`; Core may refuse before authorizing a channel. **First live runtime is WhatsApp-only**; any other authorized channel **fails closed as unsupported**. No `CommunicationAuthorizationV2`. | Core decides; Jarvis constrains its runtime | Core | **S4 / D5** | no | runtime capability gate | **NONE EXPECTED** | — |
-| **Q12** provider result / reconciliation | **DECIDED_NOW** (family) + **DEFERRED** (readiness) | Target family is **`qf.communication.result-recorded`**. Core receives, verifies, normalises, records, then emits. **Jarvis never accepts provider or n8n truth directly.** Emission readiness is gated by **C3B** (§2.1). | Core | Core | **C3B → C6 / S7** | **YES** | consume only | **CORE-SIDE POSSIBLE — MUST PROVE** | S7 |
+| **Q12** provider result / reconciliation | **DECIDED_NOW** (family) + **DEFERRED** (readiness) | Target family is **`qf.communication.result-recorded`**. Core receives, verifies, normalises, records, then emits. **Jarvis never accepts provider or QuickFurno Core Automation truth directly.** Emission readiness is gated by **C3B** (§2.1). | Core | Core | **C3B → C6 / S7** | **YES** | consume only | **CORE-SIDE POSSIBLE — MUST PROVE** | S7 |
 | **Q13** execution-time eligibility | **DECIDED_NOW** (semantics) + **DEFERRED_TO_C5/S6** (denial evidence) | Core remains **sole authority**, re-evaluated by the execution side **before the external provider effect**. **Jarvis caches no eligibility answer.** A late denial is a **Core-authoritative policy/eligibility outcome, never a provider failure** — but **its durable artifact and lifecycle mapping are NOT yet proved** (§3.2). | Core | Core | **C5 / S6** | **YES** | no cache, no gate | **CORE-SIDE POSSIBLE — MUST PROVE** | S6 |
 | **Q14** Core event / outbox capability | **DECIDED_NOW** (gate) + **DEFERRED_TO_NAMED_SLICE** | **A governed Core readiness gate (C0) must verify actual applied-state under Core ownership** before anything relies on event/outbox. Then, if required, apply/align under **Core** migration governance, wire transactionally, publish idempotently — **only then adopted**. Jarvis gets **no database role**. | Core | Core | **C0 → C2** | **YES** | no | **CORE-SIDE POSSIBLE — MUST PROVE** | every Tier-C fact |
-| **Q15** signature / trust protocol | **DECIDED_NOW** | Adopt Jarvis's **existing** ingestion trust model: **Ed25519** (`SUPPORTED_ALGORITHM`), domain `qf-jarvis-event-v1`, key purpose **`core-to-jarvis-event`**, with the verifier's key-id/rotation, freshness and replay semantics. **No existing Core webhook or n8n signing key/domain is reused.** **D2a is required regardless.** | shared boundary | — | **C2 + D2a** | **YES** (Core signs) | **D2a** | **NONE EXPECTED** | trusted ingestion |
+| **Q15** signature / trust protocol | **DECIDED_NOW** | Adopt Jarvis's **existing** ingestion trust model: **Ed25519** (`SUPPORTED_ALGORITHM`), domain `qf-jarvis-event-v1`, key purpose **`core-to-jarvis-event`**, with the verifier's key-id/rotation, freshness and replay semantics. **No existing Core webhook or QuickFurno Core Automation signing key/domain is reused.** **D2a is required regardless.** | shared boundary | — | **C2 + D2a** | **YES** (Core signs) | **D2a** | **NONE EXPECTED** | trusted ingestion |
 
 **Statuses:** `DECIDED_NOW` · `DEFERRED_TO_NAMED_SLICE` · `REJECTED_FOR_MVP` ·
 `BLOCKED_BY_MISSING_CORE_TRUTH`. **No item is left "TBD" without a named owner and prerequisite.**
@@ -163,7 +163,7 @@ Three orderings are distinct and must not be conflated. **Slice numbering (C4 be
 implementation order, not runtime chronology.**
 
 **Runtime order, per `communication-model.md`:** Core authorizes → Core sends the authorized execution
-intent to n8n → n8n/runtime executes → **the runtime re-validates consent/eligibility at execution
+intent to QuickFurno Core Automation → QuickFurno Core Automation/runtime executes → **the runtime re-validates consent/eligibility at execution
 time** → provider effect.
 
 **Distinction chain — no arrow collapsed, and this is a chain of DISTINCTIONS, not a claim that every
@@ -173,7 +173,7 @@ implementation stage is serialised by these labels:**
 constructed request
   != submitted to Core
   != initial Core authorization
-  != Core→n8n submission
+  != Core→QuickFurno Core Automation submission
   != execution-side revalidation
   != provider acceptance
   != delivery
@@ -215,9 +215,9 @@ it.
 | Communication request submission | Jarvis | Core | **Core** decides; Jarvis asks | `CommunicationRequestV1` | authenticated Jarvis → Core channel (**shape deferred**) | one request, one `communicationRequestId` | **C1 / S4** | **ABSENT** |
 | Authorization response | Core | Jarvis | **Core** | **existing `CommunicationAuthorizationV1`** | Core-authenticated; correlated via the merged runtime | one decision per request; a repeat is the same decision | **C1 / S4** | **ABSENT** |
 | Canonical event publication | Core | Jarvis | **Core** | canonical events | **Ed25519**, domain `qf-jarvis-event-v1`, purpose `core-to-jarvis-event`, freshness + replay | `eventId` idempotency; durable-before-publish | **C2 → C3A / C3B** | **CONTRACT ONLY** |
-| Execution submission | Core | n8n | **Core** issues; n8n executes | a future Core-owned **durable submission fact** | Core-governed; **the QF-MVP automation transport is NOT this boundary** | at-most-once; replay must not re-dispatch | **C4 / S5** | **NOT ADOPTED** |
-| Execution-time revalidation | n8n / QF Communications Runtime | Core | **Core** | a narrow Core decision surface; **denial artifact + lifecycle mapping unresolved** | Core-internal, governed | a denial is a decision, recorded — never retried into an allow | **C5 / S6** | **ABSENT** |
-| Provider result ingress | provider / n8n | Core | **Core** normalises and records | webhook receipt → delivery event | signature-gated (**already present in Core**) | provider-event de-duplication (**already present**) | current | **PRESENT in Core** |
+| Execution submission | Core | QuickFurno Core Automation | **Core** issues; QuickFurno Core Automation executes | a future Core-owned **durable submission fact** | Core-governed; **the QF-MVP automation transport is NOT this boundary** | at-most-once; replay must not re-dispatch | **C4 / S5** | **NOT ADOPTED** |
+| Execution-time revalidation | QuickFurno Core Automation / QF Communications Runtime | Core | **Core** | a narrow Core decision surface; **denial artifact + lifecycle mapping unresolved** | Core-internal, governed | a denial is a decision, recorded — never retried into an allow | **C5 / S6** | **ABSENT** |
+| Provider result ingress | provider / QuickFurno Core Automation | Core | **Core** normalises and records | webhook receipt → delivery event | signature-gated (**already present in Core**) | provider-event de-duplication (**already present**) | current | **PRESENT in Core** |
 | Result reconciliation | Core | Jarvis | **Core** | `qf.communication.result-recorded` | as canonical event publication | `eventId` idempotency | **C3B → C6 / S7** | **ABSENT** |
 
 **No URL, header, credential, payload schema or event name is invented in any row.**
@@ -239,7 +239,7 @@ flowchart TD
     C2["C2 · canonical event/outbox publication<br/>+ dedicated Core→Jarvis signing domain"]
     C3A["C3A · authorization-recorded emission"]
     C3B["C3B · result-recorded emission<br/>after contract-fit proof"]
-    C4["C4 · Core→n8n submission + durable fact (S5)"]
+    C4["C4 · Core→QuickFurno Core Automation submission + durable fact (S5)"]
     C5["C5 · execution-time eligibility semantics (S6)"]
     C6["C6 · result reconciliation (S7)"]
     S8["S8 · GAP A"]
@@ -371,7 +371,7 @@ debt, **not repaired here**.
 ## 7. Posture
 
 No production code. No contract, event registry, event-backbone, ingestion or projection change. No
-Core modification, branch or PR. No managed Supabase. No n8n or provider access. No message sent. **No
+Core modification, branch or PR. No managed Supabase. No QuickFurno Core Automation or provider access. No message sent. **No
 migration allocated.**
 
 **Production rollout remains OFF. Runtime activation is unchanged.**

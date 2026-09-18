@@ -126,7 +126,7 @@ describe('it reaches nothing, and invents nothing', () => {
       'randomUUID',
       'hrtime',
       'setTimeout',
-      'n8n',
+      'quickfurno-core-automation',
       'webhook',
       'quickfurno.',
     ]);

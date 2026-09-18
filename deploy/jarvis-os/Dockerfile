@@ -117,7 +117,7 @@ EXPOSE 3000
 # Liveness ONLY: "the Node process answers HTTP".
 #
 # It deliberately does not mean the auth configuration is valid, TLS works, DNS resolves, or Core
-# and n8n are reachable — none of which this container can honestly assess. `/login` is used
+# and coreAutomation are reachable — none of which this container can honestly assess. `/login` is used
 # because it is the one route that is public by design, so a healthy answer needs no credential.
 # Node's built-in fetch is used rather than installing curl: a health probe is not a reason to add
 # a binary with its own CVE stream to a hardened image.

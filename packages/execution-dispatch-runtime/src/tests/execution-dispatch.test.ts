@@ -86,7 +86,7 @@ describe('the happy path', () => {
     expect(result.disposition).toBe('first-seen');
     if (result.disposition !== 'first-seen') return;
     expect(result.intent.issuer).toBe('quickfurno-core');
-    expect(result.intent.executor).toBe('n8n');
+    expect(result.intent.executor).toBe('quickfurno-core-automation');
     expect(result.intent.deliverySemantics).toBe('at-most-once');
     expect(result.keyId).toBe('core-exec-1');
     expect(result.bodyDigestHex).toBe(digestHex(bodyOf(makeIntent())));
@@ -330,7 +330,7 @@ describe('signature and envelope', () => {
   /**
    * The single most important test in this file.
    *
-   * B1 (Core -> Jarvis event ingestion) and B4 (Core -> n8n execution dispatch) use the same
+   * B1 (Core -> Jarvis event ingestion) and B4 (Core -> QuickFurno Core Automation execution dispatch) use the same
    * algorithm. Without domain separation, a captured event signature would verify here — and a
    * boundary that only OBSERVES could be replayed into one that ACTS.
    */
@@ -364,7 +364,7 @@ describe('the key registry is a distinct trust purpose', () => {
       ExecutionDispatchKeyRegistry.fromRecords([
         {
           keyId: signer.keyId,
-          // A key trusted for Core -> Jarvis events must not authorise Core -> n8n dispatches.
+          // A key trusted for Core -> Jarvis events must not authorise Core -> QuickFurno Core Automation dispatches.
           purpose: 'quickfurno-core-to-jarvis-event',
           publicKeySpkiBase64: signer.publicKeySpkiBase64,
           validFrom: '2020-01-01T00:00:00.000Z',
@@ -376,7 +376,9 @@ describe('the key registry is a distinct trust purpose', () => {
   });
 
   it('names the execution-dispatch purpose explicitly', () => {
-    expect(EXECUTION_DISPATCH_KEY_PURPOSE).toBe('quickfurno-core-to-n8n-execution-dispatch');
+    expect(EXECUTION_DISPATCH_KEY_PURPOSE).toBe(
+      'quickfurno-core-to-QuickFurno Core Automation-execution-dispatch',
+    );
   });
 
   it.each([
@@ -450,7 +452,7 @@ describe('the raw body, only after authenticity', () => {
   it.each([
     ['an unknown extra field', { extra: 'x' }],
     ['a non-Core issuer', { issuer: 'qf-jarvis' }],
-    ['a non-n8n executor', { executor: 'whatsapp' }],
+    ['a non-QuickFurno Core Automation executor', { executor: 'whatsapp' }],
     ['non-at-most-once semantics', { deliverySemantics: 'at-least-once' }],
     ['a contact detail smuggled into parameters', { parameters: { to: '+447700900123' } }],
     ['a credential smuggled into parameters', { parameters: { apiKey: 'sk-live-abc' } }],

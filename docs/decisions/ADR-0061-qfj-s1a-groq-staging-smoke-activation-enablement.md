@@ -8,7 +8,7 @@
 
 **Design documents introduced:** [docs/reports/qfj-s1a-groq-smoke-activation-enablement/](../reports/qfj-s1a-groq-smoke-activation-enablement/) (reports 01–05)
 
-> **This is enablement, not another foundation phase.** PR #56 merged the S1 staging binding into `main` at `10b7bac40792561b50360866e06c76c6deb5b02e`. The S1 **safety** contract is accepted and unchanged: the fixed `api.groq.com` origin with its SSRF guard, the fail-closed execution/data-class/attestation gates that run **before** credential resolution, one HTTP request maximum, zero adapter retry, `AbortSignal` honoured, strict structured output with no silent downgrade, closed content-free observability, and full key redaction. The read-only activation audit nevertheless classified the repository **BLOCKED_BY_CODE_OR_CONTRACT** for the already-authorized single synthetic staging smoke, on four blockers. **S1A clears exactly those four and nothing else.** It adds no router, no provider adapter, no business rule, no delivery, no persistence, and no activation. **No real Groq key is read/created/rotated/stored/printed/validated; no live Groq request is made by this slice or its tests; no provider activation or rollout promotion; no live Core/WhatsApp/n8n/send; no persistence/DB/migration 0008; no dashboard/deployment.** The model gateway remains the **only** router and the sole owner of retry/timeout/circuit/failover for gateway-routed traffic; **QuickFurno Core remains the only business authority.** Migrations 0001–0007 stay byte-exact with no 0008; the `@qf-jarvis/event-backbone` root API remains **39**.
+> **This is enablement, not another foundation phase.** PR #56 merged the S1 staging binding into `main` at `10b7bac40792561b50360866e06c76c6deb5b02e`. The S1 **safety** contract is accepted and unchanged: the fixed `api.groq.com` origin with its SSRF guard, the fail-closed execution/data-class/attestation gates that run **before** credential resolution, one HTTP request maximum, zero adapter retry, `AbortSignal` honoured, strict structured output with no silent downgrade, closed content-free observability, and full key redaction. The read-only activation audit nevertheless classified the repository **BLOCKED_BY_CODE_OR_CONTRACT** for the already-authorized single synthetic staging smoke, on four blockers. **S1A clears exactly those four and nothing else.** It adds no router, no provider adapter, no business rule, no delivery, no persistence, and no activation. **No real Groq key is read/created/rotated/stored/printed/validated; no live Groq request is made by this slice or its tests; no provider activation or rollout promotion; no live Core/WhatsApp/QuickFurno Core Automation/send; no persistence/DB/migration 0008; no dashboard/deployment.** The model gateway remains the **only** router and the sole owner of retry/timeout/circuit/failover for gateway-routed traffic; **QuickFurno Core remains the only business authority.** Migrations 0001–0007 stay byte-exact with no 0008; the `@qf-jarvis/event-backbone` root API remains **39**.
 
 ---
 
@@ -63,7 +63,7 @@ One executable staging-only harness lives at `packages/groq-staging-smoke/` — 
 - prints **only** sanitized status / reference / counter fields;
 - exits after the first result, success or failure;
 - exposes **no** reusable interactive chat loop and no second-invocation surface;
-- calls **no** QuickFurno Core, Jarvis runtime, n8n, WhatsApp, database, persistence, rollout, or activation API.
+- calls **no** QuickFurno Core, Jarvis runtime, QuickFurno Core Automation, WhatsApp, database, persistence, rollout, or activation API.
 
 ### D. Configuration
 
@@ -132,7 +132,7 @@ Never printed or recorded: the key, the credential reference **value**, the `Aut
 
 ### I. Authority
 
-Groq output is a **discarded staging draft only**. **QuickFurno Core remains the final business authority and system of record.** No send, delivery, execution, or persistence. No provider registration, activation, or rollout promotion. Riya is client-only, Anisha vendor-only, Jarvis coordinator; n8n is transport/execution only and is not involved. Kimi excluded; RAG disabled. The minimum Conversation Operations Center remains mandatory before a pilot and is not implemented here.
+Groq output is a **discarded staging draft only**. **QuickFurno Core remains the final business authority and system of record.** No send, delivery, execution, or persistence. No provider registration, activation, or rollout promotion. Riya is client-only, Anisha vendor-only, Jarvis coordinator; QuickFurno Core Automation is transport/execution only and is not involved. Kimi excluded; RAG disabled. The minimum Conversation Operations Center remains mandatory before a pilot and is not implemented here.
 
 ### J. Live-run boundary
 
@@ -143,4 +143,4 @@ Groq output is a **discarded staging draft only**. **QuickFurno Core remains the
 - All four audit blockers become mechanically closed: a concrete resolver exists outside the gateway, an executable one-shot harness exists, the harness owns its abort and timer, and the staging release binds an exact prompt identity.
 - The repository still contains **no** real credential and makes **no** live request. The audit classification can move from `BLOCKED_BY_CODE_OR_CONTRACT` to ready only after this slice is merged **and** the owner supplies the exact configuration values (P2–P9 of the S1 report).
 - The masked-TTY resolver is a deliberately narrow, controlled-run mechanism. Replacing it with a real secret-manager integration is a separate, later, separately-authorized decision.
-- Next, in order and each separately authorized: the single synthetic staging smoke run → QuickFurno Core-side M3 protocol adoption → a Core-approved delivery command with n8n/WhatsApp transport → authoritative persistence/delivery states → the minimum Conversation Operations Center → a controlled pilot.
+- Next, in order and each separately authorized: the single synthetic staging smoke run → QuickFurno Core-side M3 protocol adoption → a Core-approved delivery command with QuickFurno Core Automation/WhatsApp transport → authoritative persistence/delivery states → the minimum Conversation Operations Center → a controlled pilot.

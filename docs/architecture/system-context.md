@@ -15,10 +15,10 @@ This document describes the systems and actors around QF Jarvis, and how informa
 | --- | --- |
 | **QuickFurno Core** | Source of truth. Owns business state, authorization, and policy. Emits canonical events. Records approval decisions, execution intents, and execution results. |
 | **QF Jarvis** | Intelligence layer. Consumes canonical events, runs specialist agents, produces structured recommendations, prioritizes founder attention. No authority, no provider access. |
-| **n8n** | Approved execution fabric. Validates and executes authorized execution intents. Reports results back to QuickFurno Core. |
-| **Communication providers** | WhatsApp, SMS, email, voice. Deliver messages. Reached only by n8n. |
-| **Advertising providers** | Google Ads, Meta Ads. Deliver campaign and spend changes. Reached only by n8n. |
-| **CRM** | External record-keeping integration. Reached only by n8n. |
+| **QuickFurno Core Automation** | Approved execution fabric. Validates and executes authorized execution intents. Reports results back to QuickFurno Core. |
+| **Communication providers** | WhatsApp, SMS, email, voice. Deliver messages. Reached only by QuickFurno Core Automation. |
+| **Advertising providers** | Google Ads, Meta Ads. Deliver campaign and spend changes. Reached only by QuickFurno Core Automation. |
+| **CRM** | External record-keeping integration. Reached only by QuickFurno Core Automation. |
 
 ### Human actors
 
@@ -46,7 +46,7 @@ flowchart TB
 
     Core["QuickFurno Core<br/>source of truth<br/>authorization and policy"]
     Jarvis["QF Jarvis<br/>intelligence and recommendations<br/>no authority, no provider access"]
-    N8N["n8n<br/>approved execution fabric"]
+    QuickFurno Core Automation["QuickFurno Core Automation<br/>approved execution fabric"]
 
     Comms["Communication providers<br/>WhatsApp, SMS, email, voice"]
     Ads["Advertising providers<br/>Google Ads, Meta Ads"]
@@ -67,11 +67,11 @@ flowchart TB
     Jarvis -->|"recommendations"| Mkt
     Jarvis -->|"recommendations"| Admins
 
-    Core -->|"authorized execution intents"| N8N
-    N8N --> Comms
-    N8N --> Ads
-    N8N --> CRM
-    N8N -->|"execution results"| Core
+    Core -->|"authorized execution intents"| QuickFurno Core Automation
+    QuickFurno Core Automation --> Comms
+    QuickFurno Core Automation --> Ads
+    QuickFurno Core Automation --> CRM
+    QuickFurno Core Automation -->|"execution results"| Core
 
     Comms -->|"messages"| Clients
     Comms -->|"messages"| Vendors
@@ -79,10 +79,10 @@ flowchart TB
 
     style Jarvis fill:#e8f0fe,stroke:#1a73e8
     style Core fill:#e6f4ea,stroke:#137333
-    style N8N fill:#fef7e0,stroke:#b06000
+    style QuickFurno Core Automation fill:#fef7e0,stroke:#b06000
 ```
 
-Read the diagram for what is **absent**: there is no edge from QF Jarvis to any provider, and no edge from QF Jarvis to n8n. Those absences are the architecture.
+Read the diagram for what is **absent**: there is no edge from QF Jarvis to any provider, and no edge from QF Jarvis to QuickFurno Core Automation. Those absences are the architecture.
 
 ---
 
@@ -114,7 +114,7 @@ sequenceDiagram
     participant Jarvis as QF Jarvis
     participant Agent as Specialist Agent
     participant Approver as Policy or Human Approver
-    participant N8N as n8n
+    participant QuickFurno Core Automation as QuickFurno Core Automation
     participant Provider as Provider
 
     Core->>Jarvis: canonical event
@@ -134,11 +134,11 @@ sequenceDiagram
     Jarvis->>Approver: display the authoritative result
 
     alt approved and execution required
-        Core->>N8N: authorized execution intent, bounded and expiring
-        N8N->>N8N: validate intent
-        N8N->>Provider: perform action
-        Provider->>N8N: provider response
-        N8N->>Core: execution result
+        Core->>QuickFurno Core Automation: authorized execution intent, bounded and expiring
+        QuickFurno Core Automation->>QuickFurno Core Automation: validate intent
+        QuickFurno Core Automation->>Provider: perform action
+        Provider->>QuickFurno Core Automation: provider response
+        QuickFurno Core Automation->>Core: execution result
         Core->>Jarvis: execution result as canonical event
     else approved, no execution required
         Core->>Jarvis: decision recorded, recommendation closed
@@ -147,7 +147,7 @@ sequenceDiagram
     end
 ```
 
-The sequence makes the invariant visible: **the only path from a recommendation to a real-world effect runs through QuickFurno Core.** Jarvis cannot short-circuit it, because Jarvis has no edge to n8n and no credentials for any **execution** provider. Its one governed model-inference credential buys a draft and can deliver nothing ([system-boundary.md](./system-boundary.md) § Two kinds of provider credential).
+The sequence makes the invariant visible: **the only path from a recommendation to a real-world effect runs through QuickFurno Core.** Jarvis cannot short-circuit it, because Jarvis has no edge to QuickFurno Core Automation and no credentials for any **execution** provider. Its one governed model-inference credential buys a draft and can deliver nothing ([system-boundary.md](./system-boundary.md) § Two kinds of provider credential).
 
 Note the approval round trip. The approver interacts with **Jarvis**, because that is where the evidence is — but the click produces an **approval request**, and Core is what validates, decides, records, and emits. Jarvis then *displays* an outcome it did not choose, and which may be a rejection. Hosting the button is not holding the authority ([execution-governance.md](./execution-governance.md) §2a, [ADR-0007](../decisions/ADR-0007-founder-approval-interface-and-authority.md)).
 
@@ -156,7 +156,7 @@ Note the approval round trip. The approver interacts with **Jarvis**, because th
 ## What this context deliberately excludes
 
 - **Jarvis → provider.** Does not exist. Jarvis holds no provider credentials.
-- **Jarvis → n8n.** Does not exist. Execution intents originate from QuickFurno Core after authorization.
+- **Jarvis → QuickFurno Core Automation.** Does not exist. Execution intents originate from QuickFurno Core after authorization.
 - **Jarvis → Core write path for business state.** Does not exist. Jarvis submits recommendations; it does not mutate leads, clients, vendors, assignments, packages, wallets, or payments.
 - **Client/vendor → Jarvis.** Does not exist. They are subjects, not users.
 - **Agent → approval.** Does not exist. No agent authorizes anything, including its own output.

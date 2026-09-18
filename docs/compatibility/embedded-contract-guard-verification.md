@@ -96,6 +96,6 @@ for (const key of CANONICAL_PAYLOAD_KEYS) {
 
 ## What this stage did **not** change about them
 
-**Nothing.** No field was added, removed, renamed, widened or narrowed in any of the 15. The authority literals — `ExecutionIntentV1.issuer === 'quickfurno-core'`, `executor === 'n8n'` — are untouched, so **Jarvis still cannot construct a valid execution intent**. The assignment caps, the client-confirmation requirement, the linked-lead independence literals: all untouched.
+**Nothing.** No field was added, removed, renamed, widened or narrowed in any of the 15. The authority literals — `ExecutionIntentV1.issuer === 'quickfurno-core'`, `executor === 'QuickFurno Core Automation'` — are untouched, so **Jarvis still cannot construct a valid execution intent**. The assignment caps, the client-confirmation requirement, the linked-lead independence literals: all untouched.
 
 **Canonical payload hardening grants no new authority, and removes none.**

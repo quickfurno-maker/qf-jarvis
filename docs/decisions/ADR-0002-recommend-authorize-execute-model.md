@@ -18,21 +18,21 @@ We want a model where the guardrail is a property of the *architecture* — wher
 
 ## Decision
 
-**Jarvis recommends. QuickFurno authorizes. n8n executes. Providers deliver. Results return to QuickFurno Core.**
+**Jarvis recommends. QuickFurno authorizes. QuickFurno Core Automation executes. Providers deliver. Results return to QuickFurno Core.**
 
 Concretely:
 
 1. **Agents produce recommendations, and recommendations are inert.** A recommendation is a structured proposal — evidence, rationale, confidence, risk, priority, expiry, required approval. It has no mechanism to cause an effect.
 2. **Authorization happens only in QuickFurno Core**, as an explicit, attributable decision by a named human or a named, versioned policy. No agent authorizes anything, including its own output.
 3. **Only an approved recommendation may become an execution intent**, and Core creates it — bounded to an exact action, subject, provider, and parameters, and expiring.
-4. **Only n8n executes**, after validating authenticity, integrity, freshness, and bounds. n8n has no discretion.
+4. **Only QuickFurno Core Automation executes**, after validating authenticity, integrity, freshness, and bounds. QuickFurno Core Automation has no discretion.
 5. **Only providers deliver** the real-world effect.
 6. **Results return to QuickFurno Core**, which records them as truth.
 
 And the four edges that make this structural rather than merely intended, from [system-boundary.md](../architecture/system-boundary.md):
 
 - **QF Jarvis → provider does not exist.** No integration, no credential.
-- **QF Jarvis → n8n does not exist.** Intents come from Core.
+- **QF Jarvis → QuickFurno Core Automation does not exist.** Intents come from Core.
 - **QF Jarvis → business state does not exist.** No write path.
 - **Agent → approval does not exist.** No self-authorization at any confidence.
 
@@ -81,7 +81,7 @@ These costs are accepted. The alternative is an unattributable action reaching a
 | --- | --- |
 | **Approval fatigue** — humans rubber-stamp, and the approval becomes ceremonial | Consolidation, prioritization, and expiry keep volume low. Acceptance rate and stale rate are tracked as adoption canaries ([success-metrics.md](../charter/success-metrics.md)) |
 | **Pressure to add a fast lane** for "urgent" actions | If an action is urgent, the answer is a faster human approval, not a bypassed one. There is no exception path and no debug mode ([execution-governance.md](../architecture/execution-governance.md)) |
-| **Someone builds a Jarvis → n8n path** for convenience | Boundary violation. Requires a superseding ADR and the business owner's decision |
+| **Someone builds a Jarvis → QuickFurno Core Automation path** for convenience | Boundary violation. Requires a superseding ADR and the business owner's decision |
 | **A policy is written so broadly it is autonomy in disguise** | Policies are explicit, versioned, narrow, and attributable. Silent policy change is prohibited ([change-management.md](../governance/change-management.md)) |
 | **Prompt injection produces a plausible malicious recommendation** | It cannot execute. Beyond that: evidence must reference real event identifiers, outputs are contract-validated, and approvers see the evidence rather than only the conclusion |
 
@@ -91,5 +91,5 @@ These costs are accepted. The alternative is an unattributable action reaching a
 - [ADR-0007](./ADR-0007-founder-approval-interface-and-authority.md) separates the approval *interface* (which may be Jarvis's) from the approval *authority* (which is always Core's).
 - [ADR-0006](./ADR-0006-agent-responsibility-boundaries.md) keeps agents inside their domains, so that no agent accumulates enough scope to be worth compromising.
 - Phase 9 implements the approval layer **before** anything can execute from it — proving the approval path while it is still harmless.
-- Phase 10 implements the n8n bridge, and its exit criteria include demonstrating that a **forged** intent and an **expired** intent are both refused.
+- Phase 10 implements the QuickFurno Core Automation bridge, and its exit criteria include demonstrating that a **forged** intent and an **expired** intent are both refused.
 - Phase 15 may promote a narrow class to policy automation, and may never promote a money-related one.

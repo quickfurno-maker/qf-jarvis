@@ -108,7 +108,7 @@ services:
       traefik.enable: 'false'
 
 networks:
-  # A dedicated bridge. It joins no existing project network: `n8n-cjls_default`,
+  # A dedicated bridge. It joins no existing project network: `QuickFurno Core Automation-cjls_default`,
   # `qf-core-staging_default` and every database network stay unreachable from this container.
   jarvis-os:
     name: qf-jarvis-os_jarvis-os

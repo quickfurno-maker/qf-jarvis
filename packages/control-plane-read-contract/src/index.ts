@@ -28,13 +28,13 @@
  * ### Framework-neutral on purpose
  *
  * zod is the only dependency. There is no Next, no React, no Node API, no filesystem, no network,
- * no clock, no database, no provider, no Core or n8n client and no `process.env`. That is what lets
+ * no clock, no database, no provider, no Core or QuickFurno Core Automation client and no `process.env`. That is what lets
  * a future React Native / Expo Android client compile this package unchanged and inherit the same
  * contract, rather than growing a second, drifting definition of what the operator surface means.
  *
  * ### It carries no authority
  *
- * Jarvis recommends and observes. QuickFurno Core authorizes and owns business truth. n8n executes
+ * Jarvis recommends and observes. QuickFurno Core authorizes and owns business truth. QuickFurno Core Automation executes
  * approved intents. Providers deliver. Nothing in this contract can say otherwise: there is no
  * `canSend`, `canExecute`, `isAuthorized`, `consentValid`, `approvalGranted` or `dispatchAllowed`,
  * every object is strict, `rollout.enabled` is the literal `false`, and there are no methods.

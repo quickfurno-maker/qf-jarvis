@@ -80,7 +80,7 @@ Authoritative source: `packages/event-backbone/src/persistence/migrations/` (com
 
 ## External-system status
 
-- **No** live QuickFurno Core connection, **no** Supabase managed access, **no** n8n, **no** WhatsApp/provider integration is active. Phase 3 uses synthetic fixtures only.
+- **No** live QuickFurno Core connection, **no** Supabase managed access, **no** QuickFurno Core Automation, **no** WhatsApp/provider integration is active. Phase 3 uses synthetic fixtures only.
 
 ## Known limitations
 

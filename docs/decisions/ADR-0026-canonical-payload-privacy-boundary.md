@@ -11,7 +11,7 @@
 >
 > **§5 asked for exactly this decision and named it as the owner's to make.** It is now made: the migration window is zero because there was nobody to migrate, and v1 is retired immediately rather than kept ingestible for the benefit of no one.
 >
-> **Acceptance authorizes the contract design and the retirement. It authorizes no action against any running system** — no Supabase connection, no provider change, no migration, no n8n, no WhatsApp, no QuickFurno mutation, and no Stage 3.2 implementation before PR #9 is merged.
+> **Acceptance authorizes the contract design and the retirement. It authorizes no action against any running system** — no Supabase connection, no provider change, no migration, no QuickFurno Core Automation, no WhatsApp, no QuickFurno mutation, and no Stage 3.2 implementation before PR #9 is merged.
 >
 > **The acknowledged residuals stand, and are not softened by acceptance.** The prohibited-content scan is the _second_ lock and can be defeated by a determined producer; `rationale`/`summary`/`explanation` survive as guarded human-authored governance text; and a benign sentence under 64 characters is still a valid taxonomy label. Each is stated in the sections below, and acceptance does not quietly delete any of them.
 

@@ -4,7 +4,7 @@
 
 ## Provider-neutral contract
 
-The runtime depends only on repository-owned contracts: `ModelRequest`, `ModelResponse`, `ProviderCapabilities`, and the `ModelProvider` interface (`descriptor`, `capabilities()`, `health()`, one non-streaming `invoke()`). A provider is an **inference engine only** — it has no business-authority method, executes no tool, holds no n8n access, and touches no database. A provider SDK type **never crosses the boundary**: `invoke` takes a bounded, sanitized `ProviderInvocationInput` and returns a normalized `ProviderInvocationResult` (completed/timeout/cancelled/unavailable/failed/malformed) — never a raw SDK object, header, or body.
+The runtime depends only on repository-owned contracts: `ModelRequest`, `ModelResponse`, `ProviderCapabilities`, and the `ModelProvider` interface (`descriptor`, `capabilities()`, `health()`, one non-streaming `invoke()`). A provider is an **inference engine only** — it has no business-authority method, executes no tool, holds no QuickFurno Core Automation access, and touches no database. A provider SDK type **never crosses the boundary**: `invoke` takes a bounded, sanitized `ProviderInvocationInput` and returns a normalized `ProviderInvocationResult` (completed/timeout/cancelled/unavailable/failed/malformed) — never a raw SDK object, header, or body.
 
 ## Hybrid-ready from day one (proven by tests)
 
@@ -13,7 +13,7 @@ The runtime depends only on repository-owned contracts: `ModelRequest`, `ModelRe
 - **`HOSTED_ALLOWED` may select a hosted OR a local provider** — proven with both.
 - **Provider policy order is configuration/injection** (the `providers` array), not hard-coded business logic — proven by the deterministic-order test.
 - **No provider-specific field in public contracts:** no Groq/local/OpenAI field appears; the containment test asserts no real adapter class and no provider SDK import anywhere in production source.
-- **No n8n dependency, no agent-specific prompt logic, no Core business rule** in the gateway; **no model name is hard-coded as architectural truth** (model identity is a provider-declared capability).
+- **No QuickFurno Core Automation dependency, no agent-specific prompt logic, no Core business rule** in the gateway; **no model name is hard-coded as architectural truth** (model identity is a provider-declared capability).
 
 Therefore future Groq-first (QFJ-P04.01B) and later local-first (QFJ-P04.01C) operation are **configuration + evaluation approval**, not architecture rewrites: a real adapter implements the same `ModelProvider` interface, wrapping its SDK/HTTP internally, and is registered in the `providers` policy order.
 

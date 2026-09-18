@@ -24,11 +24,11 @@ Every model call passes through one governed **Model Gateway**. The gateway is t
 
 ### B. Hybrid strategy (locked)
 
-The gateway is **provider-neutral from day one**. **Groq is the planned first real hosted provider** (added in QFJ-P04.01B). A **local OpenAI-compatible workstation provider follows later** (QFJ-P04.01C). Adding a provider must not require rewriting agents, Core tools, n8n workflows, memory, or business rules — only configuration, adapter activation, a model identifier, and evaluation approval (QFJ-P04.04). Runtime modes support hosted, local, and hybrid operation. **A `LOCAL_ONLY` request can never silently fall back to a hosted provider.** **No real provider adapter is implemented in P04.01A** — only the deterministic `FakeModelProvider`.
+The gateway is **provider-neutral from day one**. **Groq is the planned first real hosted provider** (added in QFJ-P04.01B). A **local OpenAI-compatible workstation provider follows later** (QFJ-P04.01C). Adding a provider must not require rewriting agents, Core tools, QuickFurno Core Automation workflows, memory, or business rules — only configuration, adapter activation, a model identifier, and evaluation approval (QFJ-P04.04). Runtime modes support hosted, local, and hybrid operation. **A `LOCAL_ONLY` request can never silently fall back to a hosted provider.** **No real provider adapter is implemented in P04.01A** — only the deterministic `FakeModelProvider`.
 
 ### C. Authority (locked)
 
-Riya = client-side only; Anisha = vendor-side only; Jarvis = central coordinator; **QuickFurno Core = final business authority**; n8n = execution/integration only (decides no business rule). Models, the gateway, and providers **cannot call n8n or mutate Core state directly** — a model proposes a typed intent/tool request; Core authorizes or rejects; n8n executes only authorized intents; protected/high-risk actions require human approval. **Kimi / Kimi K3 is excluded** unless the owner explicitly reintroduces it.
+Riya = client-side only; Anisha = vendor-side only; Jarvis = central coordinator; **QuickFurno Core = final business authority**; QuickFurno Core Automation = execution/integration only (decides no business rule). Models, the gateway, and providers **cannot call QuickFurno Core Automation or mutate Core state directly** — a model proposes a typed intent/tool request; Core authorizes or rejects; QuickFurno Core Automation executes only authorized intents; protected/high-risk actions require human approval. **Kimi / Kimi K3 is excluded** unless the owner explicitly reintroduces it.
 
 ### D. Scope (QFJ-P04.01A)
 
@@ -36,7 +36,7 @@ A new package `@qf-jarvis/model-gateway` containing: provider-neutral contracts 
 
 ### E. Non-goals
 
-No Groq adapter; no local adapter; no network; no API key; no provider SDK; no agent runtime; no Riya/Anisha conversation logic; no memory/RAG/knowledge; no tools/n8n; no database/schema/migration; no deployment; no model training/fine-tuning; **no chain-of-thought storage**; no full evaluation platform.
+No Groq adapter; no local adapter; no network; no API key; no provider SDK; no agent runtime; no Riya/Anisha conversation logic; no memory/RAG/knowledge; no tools/QuickFurno Core Automation; no database/schema/migration; no deployment; no model training/fine-tuning; **no chain-of-thought storage**; no full evaluation platform.
 
 ### F. Schema / API
 

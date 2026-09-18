@@ -2,7 +2,7 @@
 
 **Status:** Read-only audit. **MERGED as PR #177** (merge commit `1c8b4f6a2b4090db816da7dc49654713e8bbcc3b`).
 **Its evidence is FROZEN and is the fact base for D2** — not re-audited and not re-pinned.
-**No Core modification, no Supabase access, no n8n/provider access, no message sent, no
+**No Core modification, no Supabase access, no QuickFurno Core Automation/provider access, no message sent, no
 migration, no activation.**
 **Owning decision:** [ADR-0136](../../decisions/ADR-0136-qfj-p10-s3-fresh-quickfurno-core-audit.md)
 (**Accepted / MERGED**)
@@ -164,7 +164,7 @@ machine-readable and closed — `CONSENT_SUPPRESSED`, `CONSENT_NOT_GRANTED`,
 `CONSENT_AUTHORITY_UNAVAILABLE` — the outcome is a discriminated union validated in full, and caller-
 chosen scope/identity is refused. It **fails closed**.
 
-It names Jarvis explicitly: _"CommunicationService, provider adapters, Meta, SMS, n8n and Jarvis
+It names Jarvis explicitly: _"CommunicationService, provider adapters, Meta, SMS, QuickFurno Core Automation and Jarvis
 consume ONLY the closed outcome."_
 
 ### 5.C Full business / send authorization — **NOT proved by consent**
@@ -261,14 +261,14 @@ Three distinct statements, deliberately kept apart:
 | **Jarvis envelope wiring**        | **definitively NOT WIRED** at the pinned code                                                                                                                                                      |
 | **Managed live applied-state**    | **`AMBIGUOUS_REQUIRES_D2`** — _Core's own boundary documentation states the migration is unapplied on the live database_; **S3 did not query live schema and does not independently certify this** |
 
-| Question                   | Finding                                                                                                                                       |
-| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| Core → Jarvis protocol     | **ABSENT** (contract only)                                                                                                                    |
-| Jarvis → Core protocol     | **ABSENT** (recommendation APIs named, not built)                                                                                             |
-| Core → n8n protocol        | see §9 — an automation supervisor transport exists; **the Jarvis B4 protocol does not**                                                       |
-| n8n → Core result protocol | **PARTIALLY PRESENT** — signature-gated webhook receipts + append-only delivery events                                                        |
-| Retry / idempotency        | **PRESENT** — bounded attempts, `next_retry_at`, unique idempotency keys, plus `idempotency_records`                                          |
-| Signing capability         | **PRESENT** — `communication_webhook_receipts.signature_valid` gates de-duplication; automation recover/reconcile routes take signed requests |
+| Question                                          | Finding                                                                                                                                       |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Core → Jarvis protocol                            | **ABSENT** (contract only)                                                                                                                    |
+| Jarvis → Core protocol                            | **ABSENT** (recommendation APIs named, not built)                                                                                             |
+| Core → QuickFurno Core Automation protocol        | see §9 — an automation supervisor transport exists; **the Jarvis B4 protocol does not**                                                       |
+| QuickFurno Core Automation → Core result protocol | **PARTIALLY PRESENT** — signature-gated webhook receipts + append-only delivery events                                                        |
+| Retry / idempotency                               | **PRESENT** — bounded attempts, `next_retry_at`, unique idempotency keys, plus `idempotency_records`                                          |
+| Signing capability                                | **PRESENT** — `communication_webhook_receipts.signature_valid` gates de-duplication; automation recover/reconcile routes take signed requests |
 
 Core's roadmap (its boundary doc): **5F-A** pure contract (current) → **Phase 6** event taxonomy →
 **Phase 7** signed integration/execution delivery → later canonical persistence.
@@ -409,12 +409,12 @@ has no distinct Core representation.
 ## 14. Domain N — execution-time eligibility
 
 **`AUTHORITATIVE_PRESENT` inside Core for consent/suppression; `ABSENT` as an adopted Jarvis- or
-n8n-facing protocol.**
+QuickFurno Core Automation-facing protocol.**
 
 Core can re-check consent, suppression, scope and channel immediately before dispatch — that is what
 `outboundConsentEnforcementService` does, failing closed. Frequency/attempt limits exist
 (`communicationFrequencyPolicyService`, `20260728001600`). **Quiet hours: not found as a named control
-— `AMBIGUOUS_REQUIRES_D2`.** No adopted query surface for n8n or a runtime. **S6 is not designed here.**
+— `AMBIGUOUS_REQUIRES_D2`.** No adopted query surface for QuickFurno Core Automation or a runtime. **S6 is not designed here.**
 
 ---
 
@@ -480,7 +480,7 @@ Two categories, kept separate so a newly audited domain is never phrased as a hi
 
 Corroboration, from Core's own words: QuickFurno is the system of record and _"Jarvis holds no
 authoritative copy"_; a recommendation is _"inert data"_ that _"authorizes nothing"_; _"an `approved`
-recommendation does NOT bypass"_ the policy engine; _"n8n remains the execution fabric, not the second
+recommendation does NOT bypass"_ the policy engine; _"QuickFurno Core Automation remains the execution fabric, not the second
 brain."_
 
 Every ADR-0135 caution is **confirmed**: candidate ≠ live emission; `execution-submitted` unresolved;
@@ -507,7 +507,7 @@ role at all.
 | **D2-Q10** | Tier A/B evidence + ordering      | handoff absent; scheduled/request clearer                                                                                        | blocks D2b, D3, D5            | pick ADR-0135 Option A/B/C per state                                                                                     | D2-Q5, D2-Q6        | that a Jarvis contract implies a Core fact                                                           |
 | **D2-Q11** | channel semantics                 | messages pinned `whatsapp`                                                                                                       | blocks V2 `channel`           | decide proposed vs authorized representation                                                                             | D2-Q5               | that Core will always name a channel                                                                 |
 | **D2-Q12** | provider-result reconciliation    | internal only                                                                                                                    | blocks S7                     | adopt a Core → Jarvis reconciliation event                                                                               | D2-Q6               | that internal reconciliation reaches Jarvis                                                          |
-| **D2-Q13** | execution-time eligibility        | present, unexposed                                                                                                               | blocks S6                     | decide whether n8n/runtime may query Core                                                                                | D2-Q5               | that Jarvis may cache any answer                                                                     |
+| **D2-Q13** | execution-time eligibility        | present, unexposed                                                                                                               | blocks S6                     | decide whether QuickFurno Core Automation/runtime may query Core                                                         | D2-Q5               | that Jarvis may cache any answer                                                                     |
 | **D2-Q14** | Core event/outbox capability      | defined in source; wiring absent; live state uncertified                                                                         | blocks every Tier-C fact      | **verify governed Core applied-state, then adopt/wire authoritative event/outbox persistence and publication as needed** | Core Phase 6/7      | that a repository migration is a live capability, **or that S3 verified live state**                 |
 | **D2-Q15** | signature / trust protocol        | webhook + signed-route **capability** exists                                                                                     | blocks trusted ingestion      | agree a Jarvis trust purpose, domain separation and key model                                                            | D2-Q14, Jarvis D2a  | **that the existing signing domain is reusable**                                                     |
 
@@ -517,7 +517,7 @@ role at all.
 
 ## 19. Posture
 
-No Core branch, commit, push or PR. No managed Supabase access. No migration run. No n8n, provider or
+No Core branch, commit, push or PR. No managed Supabase access. No migration run. No QuickFurno Core Automation, provider or
 Meta access. No message sent. No secret value read or printed. No Jarvis production code, contract,
 event registry, event-backbone, ingestion or projection change. **No migration allocated.**
 

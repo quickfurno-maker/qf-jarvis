@@ -1,7 +1,7 @@
 # ADR-0121 - JAO-7 advanced governed autonomy
 
 **Status:** Accepted - offline composition and local durable state only. No Core submission, no
-approval decision, no execution intent, no execution of a Core-issued intent, no n8n, provider or
+approval decision, no execution intent, no execution of a Core-issued intent, no QuickFurno Core Automation, provider or
 channel call, no managed migration, no scheduler, no runtime activation, no business effect. JAO-7 is
 **DEFAULT-OFF** and **SHADOW**.
 
@@ -43,11 +43,11 @@ The second paragraph is the load-bearing one, and it decides what this slice is 
 
 ### The limitation this ADR refuses to paper over
 
-**The live Core -> n8n execution transport is not adopted here.** The repository has contracts,
+**The live Core -> QuickFurno Core Automation execution transport is not adopted here.** The repository has contracts,
 validation, correlation, replay governance and durable boundary proofs. It does not have a production
 transport that JAO-7 could honestly invoke.
 
-So this proof does not claim that Jarvis executed a Core intent, sent anything to n8n, remediated
+So this proof does not claim that Jarvis executed a Core intent, sent anything to QuickFurno Core Automation, remediated
 production, changed a live system, or submitted anything to Core. It claims something smaller and
 true: that a long-running autonomous mission can be planned, evaluated, paused, resumed, killed,
 expired, correlated against externally supplied Core artifacts, rehearsed in a virtual sandbox,
@@ -281,10 +281,10 @@ At `AWAIT_AUTHORITY` the run stops. Moving past it requires an `ApprovalDecision
 **JAO-7 creates neither, and cannot.** There is no constructor for either artifact in this slice or
 in the packages it imports: the approval runtime only validates a decision Core has already issued,
 and the execution-intent runtime only validates an intent Core has already issued and has no method
-that creates one. There is no Core transport to fetch one from and no n8n client to hand one to.
+that creates one. There is no Core transport to fetch one from and no QuickFurno Core Automation client to hand one to.
 
 `executionIntentV1Schema` does most of the structural work: it establishes that the issuer is
-`quickfurno-core`, the executor is `n8n`, delivery is at-most-once, an idempotency key is present, and
+`quickfurno-core`, the executor is `QuickFurno Core Automation`, delivery is at-most-once, an idempotency key is present, and
 the parameters carry no contact detail, credential or smuggled retry permission. None of that is
 restated in this slice.
 
@@ -299,8 +299,8 @@ or changes-requested decision never reaches the sandbox.
 
 ### 11. Jarvis never executes the execution intent
 
-A validated `ExecutionIntentV1` names `n8n` as its executor. JAO-7 records a bounded OBSERVATION -
-digests, ids and a correlation code - and stops. It does not become n8n because it happens to be
+A validated `ExecutionIntentV1` names `QuickFurno Core Automation` as its executor. JAO-7 records a bounded OBSERVATION -
+digests, ids and a correlation code - and stops. It does not become QuickFurno Core Automation because it happens to be
 holding the intent, and `executionIntentExecuted: false` is a literal on every result.
 
 ### 12. The persisted authority observation is history, never permission
@@ -317,7 +317,7 @@ The one state that comes close is deliberately verbose:
 ### 13. The reversible effect is a VIRTUAL REHEARSAL, and the name is part of the control
 
 It changes exactly two integers in a JAO-7 row. It reaches no host filesystem, process, environment
-or network; no provider, channel, n8n, Core or business table; and it produces no `ExecutionResultV1`,
+or network; no provider, channel, QuickFurno Core Automation, Core or business table; and it produces no `ExecutionResultV1`,
 because nothing executed.
 
 It is never called `EXECUTION`, `LIVE_APPLY` or `PRODUCTION_APPLY`. That is not decoration: the most
@@ -325,7 +325,7 @@ likely way this slice becomes dangerous is not a missing check but somebody read
 a year and wiring it to something real because the name suggested that was the intent.
 
 It may consume the exact approved action as **simulation input** after correlation. It simulates what
-the action would do if Core issued it and n8n ran it; it does not run the Core-issued intent.
+the action would do if Core issued it and QuickFurno Core Automation ran it; it does not run the Core-issued intent.
 
 - **Mission A**: a virtual operator-task ledger. Present, and BOUND to the approved action's
   fingerprint - presence alone would verify for a task created by something else entirely.
@@ -398,7 +398,7 @@ runtime too, because `as const` is a compile-time note and the array that ships 
 
 Unchanged, and unchangeable by this slice:
 
-> **Jarvis recommends. QuickFurno Core authorizes and owns business truth. n8n executes approved
+> **Jarvis recommends. QuickFurno Core authorizes and owns business truth. QuickFurno Core Automation executes approved
 > intents. Providers deliver. Results return to Core.**
 
 Confidence is never authority. There is no emergency override, debug bypass, timeout-to-approve,
@@ -435,7 +435,7 @@ was added - `@qf-jarvis/execution-intent-runtime` - to a package this repository
 governs, and which can only validate an intent, never create one.
 
 What this buys is narrow and worth stating plainly. When a production Core submission path and a
-Core -> n8n transport are eventually built, they will be attached to a coordinator that already
+Core -> QuickFurno Core Automation transport are eventually built, they will be attached to a coordinator that already
 plans finitely, evaluates every step, survives restart, refuses to move without externally issued
 authority, and can undo what it rehearsed. The transport is the easy part; the controls around it are
 what took seven slices.

@@ -202,7 +202,7 @@ export const approvalDecisionRecordedEventV1Schema = defineCanonicalEvent(
 );
 export type ApprovalDecisionRecordedEventV1 = z.infer<typeof approvalDecisionRecordedEventV1Schema>;
 
-/** QuickFurno Core issued a bounded, expiring execution intent to n8n. */
+/** QuickFurno Core issued a bounded, expiring execution intent to QuickFurno Core Automation. */
 export const executionIntentIssuedEventV1Schema = defineCanonicalEvent(
   'qf.execution.intent-issued',
   1,
@@ -213,7 +213,7 @@ export type ExecutionIntentIssuedEventV1 = z.infer<typeof executionIntentIssuedE
 /**
  * QuickFurno Core recorded an execution result.
  *
- * The payload may name n8n or the QF Communications Runtime as the *reporter*. The
+ * The payload may name QuickFurno Core Automation or the QF Communications Runtime as the *reporter*. The
  * envelope still names Core as the *source*, because reporting is not authority.
  */
 export const executionResultRecordedEventV1Schema = defineCanonicalEvent(

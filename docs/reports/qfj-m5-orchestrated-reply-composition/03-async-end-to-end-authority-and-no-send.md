@@ -34,7 +34,7 @@ The entry point is `async` and returns a `Promise`; the model and Core ports are
 
 - Every proposal remains `PENDING_CORE_VALIDATION` (inherited from M2); the model draft is a **proposal input only**.
 - **`CORE_ACCEPTED` comes solely from the M3 Core response** — never fabricated, never upgraded — and is **revision-bound** (`boundRevision`). A run with no Core transport yields `MODEL_DRAFTED`, never a faked acceptance.
-- `CORE_ACCEPTED` is **never sent, delivered, executed, or persisted**: the result exposes no `send`/`deliver`/`execute`/`persist`/`callN8n`/`transmit` field, and the runtime object exposes **only** `processInbound` (asserted; frozen).
+- `CORE_ACCEPTED` is **never sent, delivered, executed, or persisted**: the result exposes no `send`/`deliver`/`execute`/`persist`/`callQuickFurno Core Automation`/`transmit` field, and the runtime object exposes **only** `processInbound` (asserted; frozen).
 - CLIENT → Riya, VENDOR → Anisha, UNKNOWN → Jarvis (or Human under a HUMAN policy, which refuses before the model); HUMAN_ONLY reaches no model; LOCAL_ONLY never uses a hosted release; a non-`clear` subject (tombstoned/erased) blocks before the model.
 
 ## Rejection normalization

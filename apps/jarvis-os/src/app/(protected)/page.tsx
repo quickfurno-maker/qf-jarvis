@@ -41,7 +41,7 @@ export default async function OverviewPage() {
       <PageHeader
         breadcrumb={['Control', 'Overview']}
         title="Operational overview"
-        purpose="System-wide picture across the control plane, agents and boundaries. Read-only: Jarvis OS observes, QuickFurno Core authorizes, n8n executes."
+        purpose="System-wide picture across the control plane, agents and boundaries. Read-only: Jarvis OS observes, QuickFurno Core authorizes, coreAutomation executes."
         status={<CapabilityBadge lifecycle="AVAILABLE" />}
       />
 
@@ -50,9 +50,9 @@ export default async function OverviewPage() {
 
         <Notice tone="warning" title="Production rollout is OFF — and no live source is connected">
           No communication can reach a real recipient from anywhere in Jarvis. Every figure below is
-          declared by merged repository and governance state; QuickFurno Core and n8n are both{' '}
-          <span className="font-mono">NOT_CONNECTED</span>, so the sections that would depend on
-          them show that rather than a zero.
+          declared by merged repository and governance state; QuickFurno Core and coreAutomation are
+          both <span className="font-mono">NOT_CONNECTED</span>, so the sections that would depend
+          on them show that rather than a zero.
         </Notice>
 
         <StatusStrip components={health.components} />

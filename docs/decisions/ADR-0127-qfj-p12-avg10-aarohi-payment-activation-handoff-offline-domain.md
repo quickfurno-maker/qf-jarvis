@@ -243,18 +243,18 @@ made the proof look stronger than it is.
 
 ## What AVG-10 deliberately does not do
 
-| Left out                                                 | Owner                                                   |
-| -------------------------------------------------------- | ------------------------------------------------------- |
-| Taking, recording, confirming or reconciling a payment   | **QuickFurno Core**                                     |
-| Creating an order, assigning a package, granting credits | **QuickFurno Core**                                     |
-| Activating a vendor, or establishing ACTIVE              | **QuickFurno Core**                                     |
-| A payment lifecycle vocabulary, or any payment state     | **QuickFurno Core**                                     |
-| The `AWAITING_CORE_ACTIVATION` bridge                    | future work, once Core exposes a fact that justifies it |
-| A post-registration continuation boundary                | future work, and never a widened cold gate              |
-| Analytics, admin APIs, dashboards                        | AVG-11                                                  |
-| Any increase in autonomy                                 | AVG-12                                                  |
-| Drafting the follow-up itself                            | later composition through QF Model Gateway              |
-| Live Core reads, payment providers, n8n routes, sends    | **QFJ-P09**                                             |
+| Left out                                                                     | Owner                                                   |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------- |
+| Taking, recording, confirming or reconciling a payment                       | **QuickFurno Core**                                     |
+| Creating an order, assigning a package, granting credits                     | **QuickFurno Core**                                     |
+| Activating a vendor, or establishing ACTIVE                                  | **QuickFurno Core**                                     |
+| A payment lifecycle vocabulary, or any payment state                         | **QuickFurno Core**                                     |
+| The `AWAITING_CORE_ACTIVATION` bridge                                        | future work, once Core exposes a fact that justifies it |
+| A post-registration continuation boundary                                    | future work, and never a widened cold gate              |
+| Analytics, admin APIs, dashboards                                            | AVG-11                                                  |
+| Any increase in autonomy                                                     | AVG-12                                                  |
+| Drafting the follow-up itself                                                | later composition through QF Model Gateway              |
+| Live Core reads, payment providers, QuickFurno Core Automation routes, sends | **QFJ-P09**                                             |
 
 Dependencies are unchanged: `zod` alone. No devDependencies, no workspace dependency, no lockfile
 change, no payment-gateway SDK, and no dependency on the QuickFurno marketplace in either direction.

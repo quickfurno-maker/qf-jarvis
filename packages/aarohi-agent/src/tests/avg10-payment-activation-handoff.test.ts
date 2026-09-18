@@ -1343,7 +1343,7 @@ describe('every brief pins the authority ceiling as literals', () => {
     'communicationAuthorizationCreated',
     'executionIntentCreated',
 
-    'n8nExecutionRequested',
+    'coreAutomationExecutionRequested',
     'providerSendRequested',
     'channelSendRequested',
     'sent',

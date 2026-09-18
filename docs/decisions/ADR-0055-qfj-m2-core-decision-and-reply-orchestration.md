@@ -8,13 +8,13 @@
 
 **Design documents introduced:** [docs/reports/qfj-m2-core-decision-orchestration/](../reports/qfj-m2-core-decision-orchestration/) (reports 01–05)
 
-> **This ADR is implemented in the same bounded slice it governs.** It extends `@qf-jarvis/agent-runtime` with an **orchestration** module that composes the M1 authority-first runtime with an **injected model reply port** and an **injected QuickFurno Core decision port**: it turns an inbound request into a bounded model **reply plan**, a validated structured **draft**, a `PENDING_CORE_VALIDATION` **proposal**, and a Core **decision** — and it **sends nothing**. Core is the only business authority; `ACCEPTED` means Core-approved, **never** sent/delivered/executed/persisted. **No real Core/WhatsApp/n8n/provider integration, no transport, no persistence, no database/migration 0008, no live model call, no semantic retrieval/RAG.** The `@qf-jarvis/event-backbone` root API remains **39**.
+> **This ADR is implemented in the same bounded slice it governs.** It extends `@qf-jarvis/agent-runtime` with an **orchestration** module that composes the M1 authority-first runtime with an **injected model reply port** and an **injected QuickFurno Core decision port**: it turns an inbound request into a bounded model **reply plan**, a validated structured **draft**, a `PENDING_CORE_VALIDATION` **proposal**, and a Core **decision** — and it **sends nothing**. Core is the only business authority; `ACCEPTED` means Core-approved, **never** sent/delivered/executed/persisted. **No real Core/WhatsApp/QuickFurno Core Automation/provider integration, no transport, no persistence, no database/migration 0008, no live model call, no semantic retrieval/RAG.** The `@qf-jarvis/event-backbone` root API remains **39**.
 
 ---
 
 ## Context
 
-QFJ-M1 gave the coordinator a deterministic, authority-first spine — assignment, conversation state, human takeover / AI pause, a privacy gate, and proposal-only decisions. The next narrow launch-critical slice (QFJ-P05 Jarvis Orchestration — Core proposal validation and model reply composition) composes that spine with **model planning** and **QuickFurno Core decision validation**, still **pre-transport and pre-persistence**. It converts model output into a bounded proposal (never an executable command) and produces a Core **decision record** that is still **not a delivery action**. Everything real — the Core adapter, the model provider, WhatsApp/n8n transport, persistence — is an injected port with a deterministic testing fake only.
+QFJ-M1 gave the coordinator a deterministic, authority-first spine — assignment, conversation state, human takeover / AI pause, a privacy gate, and proposal-only decisions. The next narrow launch-critical slice (QFJ-P05 Jarvis Orchestration — Core proposal validation and model reply composition) composes that spine with **model planning** and **QuickFurno Core decision validation**, still **pre-transport and pre-persistence**. It converts model output into a bounded proposal (never an executable command) and produces a Core **decision record** that is still **not a delivery action**. Everything real — the Core adapter, the model provider, WhatsApp/QuickFurno Core Automation transport, persistence — is an injected port with a deterministic testing fake only.
 
 ## Decision
 
@@ -48,7 +48,7 @@ A model release/prompt/capability may carry an exact QFJ-P04.04 `evaluationRef`;
 
 ### H. Proposal contract
 
-Closed proposal kinds: `REPLY`, `ESCALATE_TO_HUMAN`, `REQUEST_CLARIFICATION`, `NO_ACTION`. No business-mutation/tool-execution proposal (no execution path exists). Every proposal carries an exact id/version; conversation id and expected revision; assigned actor and party type; proposal kind; a bounded structured intent; an optional bounded reply draft; exact citations/references; a `PENDING_CORE_VALIDATION` status before Core; and **no** `send`/`execute`/`authorize`/`callN8n` method.
+Closed proposal kinds: `REPLY`, `ESCALATE_TO_HUMAN`, `REQUEST_CLARIFICATION`, `NO_ACTION`. No business-mutation/tool-execution proposal (no execution path exists). Every proposal carries an exact id/version; conversation id and expected revision; assigned actor and party type; proposal kind; a bounded structured intent; an optional bounded reply draft; exact citations/references; a `PENDING_CORE_VALIDATION` status before Core; and **no** `send`/`execute`/`authorize`/`callQuickFurno Core Automation` method.
 
 ### I. Double gate
 
@@ -68,24 +68,24 @@ Closed safe events: `orchestration-started`, `model-plan-created`, `model-invoca
 
 ### M. Authority / transport
 
-The Core decision is the final business decision in this slice; **no message is sent; no n8n call; no provider transport; no delivery-state mutation.** n8n later executes only a separately authorized delivery command. Models/agents/Jarvis authorize and execute nothing. The Conversation Operations Center remains a mandatory later phase. Kimi is excluded.
+The Core decision is the final business decision in this slice; **no message is sent; no QuickFurno Core Automation call; no provider transport; no delivery-state mutation.** QuickFurno Core Automation later executes only a separately authorized delivery command. Models/agents/Jarvis authorize and execute nothing. The Conversation Operations Center remains a mandatory later phase. Kimi is excluded.
 
 ### N. Non-goals
 
-No WhatsApp/provider webhook; no n8n; no sending; no persistence/DB/schema/migration 0008; no live model/provider/key/token; no semantic retrieval/RAG; no dashboard; no production Core adapter; no deployment.
+No WhatsApp/provider webhook; no QuickFurno Core Automation; no sending; no persistence/DB/schema/migration 0008; no live model/provider/key/token; no semantic retrieval/RAG; no dashboard; no production Core adapter; no deployment.
 
 ## Rejected alternatives
 
 - **Treat model output as the final answer / let the agent send.** Rejected — model output is a bounded proposal; only the injected QuickFurno Core decision port may `ACCEPT` it, and even `ACCEPTED` is not sent/delivered/executed.
 - **Fake the Core decision inside Jarvis.** Rejected — the decision port is injected and owned by the integration boundary; a missing port fails closed to `CORE_UNAVAILABLE`, and agent-runtime cannot construct `ACCEPTED`.
 - **Skip the second gate after drafting.** Rejected — a takeover/pause/cancellation/revision/privacy/scope change between drafting and Core invalidates the proposal (the double gate).
-- **Call a real model / integrate transport now.** Rejected — the model and Core ports are injected with deterministic fakes; no live call, no n8n, no WhatsApp, no persistence in this slice.
+- **Call a real model / integrate transport now.** Rejected — the model and Core ports are injected with deterministic fakes; no live call, no QuickFurno Core Automation, no WhatsApp, no persistence in this slice.
 
 ## Consequences
 
 **Positive.** The coordinator can plan a model reply, hold it as a revision-bound proposal, and obtain a Core decision — with Core as the only authority, the double gate protecting against stale state, and no message ever sent — giving a safe, testable seam for the later transport/persistence/Core-adapter slices.
 
-**Negative — accepted.** Nothing is sent, delivered, executed, or persisted; the model and Core ports are deterministic fakes. Real Core validation, a real model call via the gateway, transport (WhatsApp via n8n), and persistence are later, separately authorized slices.
+**Negative — accepted.** Nothing is sent, delivered, executed, or persisted; the model and Core ports are deterministic fakes. Real Core validation, a real model call via the gateway, transport (WhatsApp via QuickFurno Core Automation), and persistence are later, separately authorized slices.
 
 ## Change-control rule
 

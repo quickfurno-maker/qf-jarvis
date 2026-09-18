@@ -9,7 +9,7 @@
  * These are the channels a *governed request* may name. The transport chain sits
  * entirely on the far side of the boundary:
  *
- *   n8n → QF Communications Runtime → WhatsApp adapter or QF Voice Runtime
+ *   QuickFurno Core Automation → QF Communications Runtime → WhatsApp adapter or QF Voice Runtime
  *       → external provider → recipient
  *
  * ### Why there is no `web` here, and never will be (JRW-0B, ADR-0092)

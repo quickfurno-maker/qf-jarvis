@@ -1,7 +1,7 @@
 # ADR-0120 - JAO-6 governed business-action proposals
 
 **Status:** Accepted - offline composition only. No Core submission, no approval decision, no
-execution intent, no n8n or provider call, no persistence, no managed migration, no runtime
+execution intent, no QuickFurno Core Automation or provider call, no persistence, no managed migration, no runtime
 activation, no business effect. JAO-6 is **DEFAULT-OFF** and **SHADOW**.
 
 **Date:** 2026-08-25
@@ -54,7 +54,7 @@ built and then deliberately left without one.
       -> canonical powerless ApprovalRequestV1
       -> STOP.
 
-There is no Core submission, no `ApprovalDecisionV1`, no `ExecutionIntentV1`, no n8n call, no
+There is no Core submission, no `ApprovalDecisionV1`, no `ExecutionIntentV1`, no QuickFurno Core Automation call, no
 provider or channel call, and nothing is persisted. The output means **"ready to enter the existing
 path"**, which is a different state from **"authorized"**.
 
@@ -144,7 +144,7 @@ rather than something quietly dropped. That closes the whole policy-smuggling cl
 `risk`, `requiredApproval`, `recommendationType`, `actionType`, `actionContractVersion`,
 `producingAgent`, `producingSystem`, `recommendationId`, `actionId`, `actionFingerprint`,
 `approvalRequestId`, `approved`, `authorized`, `canExecute`, `canSend`, `approvalDecision`,
-`executionIntent`, `provider`, `executor`, `n8n`, `webhookUrl`, `recipient`, `phoneNumber` and every
+`executionIntent`, `provider`, `executor`, `QuickFurno Core Automation`, `webhookUrl`, `recipient`, `phoneNumber` and every
 credential key are simply not fields.
 
 Identity is never caller-chosen. `recommendationId`, each `actionId` and `approvalRequestId` come
@@ -178,7 +178,7 @@ specialist output** - a real delegation result, correlated. It is not implemente
 
 The canonical `actionParametersSchema` scans at any depth for credentials, contact details, raw
 payloads and model internals, and it would catch the obvious smuggling. But it permits keys it has
-never heard of, and `canExecute`, `executor`, `n8n` and `webhookUrl` are keys it has never heard of.
+never heard of, and `canExecute`, `executor`, `QuickFurno Core Automation` and `webhookUrl` are keys it has never heard of.
 
 So the policy owns an **exact, strict, closed** parameter schema. For this class every field is a
 closed structured value and deliberately non-transport - a reason code, a topic code and a follow-up
@@ -301,7 +301,7 @@ remembered approval and a stale eligibility snapshot are both not permission.
 Every result carries `mode: SHADOW`, `authority: RECOMMEND_ONLY`, `businessEffect: false`,
 `productionMutation: false`, `approvalDecisionCreated: false`, `executionIntentCreated: false`,
 `communicationAuthorizationCreated: false`, `communicationEligibilityChecked: false`, and literal
-zeros for `coreMutations`, `n8nExecutions`, `channelSends`, `providerCalls`, `modelCalls`,
+zeros for `coreMutations`, `coreAutomationExecutions`, `channelSends`, `providerCalls`, `modelCalls`,
 `specialistCalls`, `toolCalls` and `memoryWrites`.
 
 These are `z.literal`, so a drifted value is a parse error rather than a differently-worded report,
@@ -313,12 +313,12 @@ and the object is strict, so an added `canExecute` is a refusal.
 
 Unchanged, and unchangeable by this slice:
 
-> **Jarvis recommends. QuickFurno Core authorizes and owns business truth. n8n executes only
+> **Jarvis recommends. QuickFurno Core authorizes and owns business truth. QuickFurno Core Automation executes only
 > approved intents. Providers deliver only. Results return to Core.**
 
 - Only QuickFurno Core issues `ApprovalDecisionV1`.
 - Only QuickFurno Core issues `ExecutionIntentV1`.
-- Only n8n executes an approved execution intent.
+- Only QuickFurno Core Automation executes an approved execution intent.
 - Confidence is never authority; there is no timeout-to-approve; silence is never consent; an
   undecided recommendation expires.
 

@@ -117,7 +117,7 @@ describe('containment', () => {
     readFileSync(fileURLToPath(new URL('package.json', PKG_DIR)), 'utf8'),
   ) as { dependencies?: Record<string, string>; exports: Record<string, unknown> };
 
-  it('(30,31,35) has no embedding/vector/similarity/network library, no n8n/agent, no env/fs/crypto', () => {
+  it('(30,31,35) has no embedding/vector/similarity/network library, no QuickFurno Core Automation/agent, no env/fs/crypto', () => {
     for (const file of productionFiles()) {
       const text = readFileSync(file, 'utf8');
       expect(text).not.toMatch(/\bfetch\s*\(/);
@@ -129,7 +129,7 @@ describe('containment', () => {
       // The P04.04 evaluation authority stays banned WITHOUT exception: nothing in a retrieval
       // boundary should be able to read, produce or consult evaluation evidence.
       expect(text).not.toMatch(/from ['"]@qf-jarvis\/model-evaluation['"]/);
-      expect(text).not.toMatch(/\bn8n\b|kimi|semantic search|cosine/i);
+      expect(text).not.toMatch(/\bcoreAutomation\b|kimi|semantic search|cosine/i);
       // JF-3 restated: ACTIVE mode introduced no similarity, ranking or free-text retrieval.
       expect(text).not.toMatch(/\b(embedding|embed|vectorStore|similarity|rerank|topK)\s*\(/i);
     }

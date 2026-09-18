@@ -8,7 +8,7 @@ One dedicated, provider-neutral package — **`@qf-jarvis/agent-runtime`** — t
 
 ## Boundary (what it does NOT do)
 
-No transport/provider/database/n8n coupling; **no WhatsApp API, no dashboard UI, no persistence, no live model call, no real message data**; no memory/RAG/tools/execution; no deployment. Depends only on `zod`. Migrations 0001–0007 byte-exact; **no 0008**; `@qf-jarvis/event-backbone` root API remains **39**. QuickFurno Core remains final authority.
+No transport/provider/database/QuickFurno Core Automation coupling; **no WhatsApp API, no dashboard UI, no persistence, no live model call, no real message data**; no memory/RAG/tools/execution; no deployment. Depends only on `zod`. Migrations 0001–0007 byte-exact; **no 0008**; `@qf-jarvis/event-backbone` root API remains **39**. QuickFurno Core remains final authority.
 
 ## Package layout
 

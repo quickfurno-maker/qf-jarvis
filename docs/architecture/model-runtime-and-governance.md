@@ -91,7 +91,7 @@ Modes move forward on evidence and backward on trouble. `SHADOW` before `CANARY`
 
 ## What the gateway does not do
 
-- It **authorizes nothing** and **executes nothing.** It turns a bounded request into a model call and returns a validated result. Authorization is QuickFurno Core's; execution is n8n's.
+- It **authorizes nothing** and **executes nothing.** It turns a bounded request into a model call and returns a validated result. Authorization is QuickFurno Core's; execution is QuickFurno Core Automation's.
 - It **holds no provider communication credential** — no WhatsApp, no telephony. A model backend is not a communication provider.
 - It is **not an agent** and makes **no domain judgment.** It is infrastructure the agents call.
 - It **stores no chain-of-thought.** What is retained is provenance and the validated output, never the model's private deliberation ([privacy-principles.md](../governance/privacy-principles.md) §7).

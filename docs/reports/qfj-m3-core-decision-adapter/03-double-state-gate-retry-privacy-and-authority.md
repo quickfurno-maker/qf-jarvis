@@ -33,4 +33,4 @@ The transport is invoked **at most once per decision**; the adapter **never auto
 
 ## Authority (§L)
 
-`ACCEPTED` originates **solely** from a validated Core response with the exact identity and unchanged state — the adapter never fabricates it and **never upgrades** a `REJECTED` or `HUMAN_REVIEW_REQUIRED`. The adapter object exposes **only** `decide` and `decideDetailed`; it has **no** `send`, `deliver`, `execute`, `persist`, `callN8n`, or `authorize` method, and it is frozen. **QuickFurno Core remains the only business authority**; `ACCEPTED` is an approved proposal only — never sent, delivered, executed, or persisted.
+`ACCEPTED` originates **solely** from a validated Core response with the exact identity and unchanged state — the adapter never fabricates it and **never upgrades** a `REJECTED` or `HUMAN_REVIEW_REQUIRED`. The adapter object exposes **only** `decide` and `decideDetailed`; it has **no** `send`, `deliver`, `execute`, `persist`, `callQuickFurno Core Automation`, or `authorize` method, and it is frozen. **QuickFurno Core remains the only business authority**; `ACCEPTED` is an approved proposal only — never sent, delivered, executed, or persisted.

@@ -261,7 +261,7 @@ The global analytics page is untouched and stays non-commercial.
 
 ### 12. No live data stack
 
-Zero Supabase clients, SQL statements, migrations, analytics tables, Core HTTP calls, provider or n8n
+Zero Supabase clients, SQL statements, migrations, analytics tables, Core HTTP calls, provider or QuickFurno Core Automation
 calls, workers, queues and schedulers. Zero new third-party dependencies and zero lockfile delta.
 `aarohi-agent` remains zod-only, `jarvis-os` gains no dependency, and the repository baseline
 truthfully states that the READ SURFACE exists while live funnel data remains `PLANNED` and

@@ -169,7 +169,7 @@ input port is optional and unsupplied, and an absent port means a `PROSPECT` tur
 
 This does **not** authorize — and JF-4 did none of — pretending Core adopted an event it has not,
 fabricating registration/payment/ACTIVE/consent truth or recipient identity, sending a message, provider
-execution, D5 activation, DB grant widening, QuickFurno code or calls, or n8n/Meta calls.
+execution, D5 activation, DB grant widening, QuickFurno code or calls, or QuickFurno Core Automation/Meta calls.
 
 The distinction, stated plainly:
 
@@ -187,7 +187,7 @@ QuickFurno integration.
 ### 26–28. No side effect, no provider, no deployment
 
 All three agents remain proposal/reply systems. Model output is a DRAFT; only a Core-authorized result
-becomes `authorizedReply`. No WhatsApp, Instagram, Meta, n8n, payment call, vendor activation, lead
+becomes `authorizedReply`. No WhatsApp, Instagram, Meta, QuickFurno Core Automation, payment call, vendor activation, lead
 creation or assignment. No real Groq/Nara call and no credential. Nothing binds a listener.
 
 ### 29–32. Next
@@ -330,7 +330,7 @@ authorized to touch it. **Flagged for the owner rather than decided here.**
 
 ### 42. What this correction did NOT do
 
-No D5 activation and no grant change. No QuickFurno, OneDecore, Meta or n8n. No provider call and no
+No D5 activation and no grant change. No QuickFurno, OneDecore, Meta or QuickFurno Core Automation. No provider call and no
 credential. No managed-database migration. No new dependency, no vector store, no embedding, no
 training or benchmark asset touched. No historical evidence or dataset deleted. Riya's behaviour is
 byte-unchanged, and her web wire stays client-only.

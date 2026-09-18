@@ -21,7 +21,7 @@
  * submission. The fingerprint is a content binding — unkeyed, publicly computable — and is not a
  * signature, a MAC, an authorization or a proof of origin.
  *
- * Jarvis recommends. QuickFurno Core authorizes. n8n executes. Providers deliver. Results return to
+ * Jarvis recommends. QuickFurno Core authorizes. QuickFurno Core Automation executes. Providers deliver. Results return to
  * Core.
  *
  * Four root runtime symbols. Every schema, canonicalizer, identity helper and freezer stays internal.

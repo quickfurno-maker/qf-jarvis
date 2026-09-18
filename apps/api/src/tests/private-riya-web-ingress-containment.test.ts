@@ -172,7 +172,7 @@ describe('no business authority, no delivery, no persistence', () => {
   it('names no provider, execution or delivery capability', () => {
     const code = ingressCode();
     for (const forbidden of [
-      'n8n',
+      'quickfurno-core-automation',
       'whatsapp',
       'WhatsApp',
       'Meta',

@@ -130,8 +130,8 @@ The original six. Facts about the recommend → authorize → execute → report
 | `qf.recommendation.created`                  | `{ recommendation }` | Jarvis produced a recommendation; Core recorded it. **The recommendation is inert**                   |
 | `qf.recommendation.lifecycle-state-recorded` | `{ record }`         | A recommendation moved to a new lifecycle state                                                       |
 | `qf.approval.decision-recorded`              | `{ decision }`       | **Core recorded an authoritative approval decision.** This event _is_ the authorization becoming real |
-| `qf.execution.intent-issued`                 | `{ intent }`         | Core issued a bounded, expiring execution intent to n8n                                               |
-| `qf.execution.result-recorded`               | `{ result }`         | Core recorded an execution result reported by n8n or the runtime                                      |
+| `qf.execution.intent-issued`                 | `{ intent }`         | Core issued a bounded, expiring execution intent to QuickFurno Core Automation                        |
+| `qf.execution.result-recorded`               | `{ result }`         | Core recorded an execution result reported by QuickFurno Core Automation or the runtime               |
 | `qf.communication.state-recorded`            | `{ record }`         | A governed communication moved to a new lifecycle state                                               |
 
 ---

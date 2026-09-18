@@ -18,7 +18,7 @@
   // `event-backbone` is deliberately NOT referenced: it is a DEV dependency supplying migration
   // tooling to the integration harness only, so a production import of it fails the build rather
   // than quietly creating an edge from a storage adapter to the event backbone. There is likewise
-  // no reference to a transport, to n8n, to a provider, to approval-runtime,
+  // no reference to a transport, to QuickFurno Core Automation, to a provider, to approval-runtime,
   // communication-authorization-runtime or execution-intent-runtime, or to any application.
   "references": [{ "path": "../../packages/execution-dispatch-runtime/tsconfig.build.json" }],
   "include": ["src/**/*.ts"],

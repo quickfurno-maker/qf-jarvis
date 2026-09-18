@@ -353,7 +353,11 @@ describe('a caller may state semantics, never identity or provenance', () => {
         JSON.stringify(over),
       );
     }
-    for (const over of [{ recipient: 'x' }, { executor: 'n8n' }, { idempotencyKey: 'k' }]) {
+    for (const over of [
+      { recipient: 'x' },
+      { executor: 'quickfurno-core-automation' },
+      { idempotencyKey: 'k' },
+    ]) {
       expectCode(
         () => runtime(sequentialIdentity()).create(input({ proposedActions: [actionDraft(over)] })),
         'invalid-input',
@@ -539,7 +543,7 @@ describe('the error contract', () => {
       'dispatch',
       'emit',
       'persist',
-      'callN8n',
+      'callcoreAutomation',
     ]) {
       expect(surface[forbidden], forbidden).toBeUndefined();
     }

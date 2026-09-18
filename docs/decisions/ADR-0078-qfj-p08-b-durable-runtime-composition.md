@@ -225,7 +225,7 @@ Recommendation Runtime**, then a return to the P08 approval runtime. Production 
 
 No HTTP server, route or health endpoint. No operator API, UI or authentication. No production
 provisioning or Core-synchronization caller. No operations-projection producer. No consent, approval
-or recommendation runtime. No P09 transport, WhatsApp or n8n. No live Core, provider or LAN model
+or recommendation runtime. No P09 transport, WhatsApp or QuickFurno Core Automation. No live Core, provider or LAN model
 call. No persistent memory, dataset or training. No send, deliver, execute or authorize path. No
 migration created or modified, and no `0009`. No managed database access, managed migration or
 deployment.

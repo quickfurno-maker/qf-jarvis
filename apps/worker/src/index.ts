@@ -12,9 +12,9 @@
  * async cleanup before exiting. The exit code is bounded: 0 on a clean stop AND a clean pool close, 1
  * on any startup, worker-runtime, signal-registration, or pool-close failure.
  *
- * The permanent architecture boundary applies here: Jarvis recommends, QuickFurno Core authorizes, n8n
+ * The permanent architecture boundary applies here: Jarvis recommends, QuickFurno Core authorizes, QuickFurno Core Automation
  * executes, providers deliver, results return to Core (docs/architecture/system-boundary.md). This
- * slice connects to no external system: no QuickFurno Core, n8n, WhatsApp, Supabase, cloud model, HTTP
+ * slice connects to no external system: no QuickFurno Core, QuickFurno Core Automation, WhatsApp, Supabase, cloud model, HTTP
  * endpoint, cron, or queue.
  */
 import { runWorkerEntry } from './worker-entry.js';

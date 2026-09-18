@@ -8,7 +8,7 @@
 
 **Design documents introduced:** [docs/reports/qfj-p04-03/](../reports/qfj-p04-03/) (reports 01–05)
 
-> **This ADR is implemented in the same bounded slice it governs.** It adds one new provider-neutral package `@qf-jarvis/governed-knowledge`: an **immutable, deterministic governed-knowledge lifecycle + registry + bounded exact retrieval** that a future agent may consult to retrieve and **cite approved knowledge as evidence**. Knowledge is **evidence, never business authority**; QuickFurno Core remains the authoritative system of record. **No database/persistence, no schema, no migration (0008 absent); no document upload/scanning; no vector database, embeddings, semantic search, or RAG; no live model call, no real key/token; no agent runtime, memory, WhatsApp, dashboard, or n8n.** Retrieval is exact and bounded, permission/privacy/data-class gated, and **fails closed**. The `@qf-jarvis/event-backbone` root API remains **39**.
+> **This ADR is implemented in the same bounded slice it governs.** It adds one new provider-neutral package `@qf-jarvis/governed-knowledge`: an **immutable, deterministic governed-knowledge lifecycle + registry + bounded exact retrieval** that a future agent may consult to retrieve and **cite approved knowledge as evidence**. Knowledge is **evidence, never business authority**; QuickFurno Core remains the authoritative system of record. **No database/persistence, no schema, no migration (0008 absent); no document upload/scanning; no vector database, embeddings, semantic search, or RAG; no live model call, no real key/token; no agent runtime, memory, WhatsApp, dashboard, or QuickFurno Core Automation.** Retrieval is exact and bounded, permission/privacy/data-class gated, and **fails closed**. The `@qf-jarvis/event-backbone` root API remains **39**.
 
 ---
 
@@ -24,7 +24,7 @@ Provide a governed, reviewable, **deterministic** knowledge lifecycle so future 
 
 ### B. Package ownership
 
-A **dedicated, provider-neutral** package/module, separate from `@qf-jarvis/model-gateway`, `@qf-jarvis/event-backbone`, agent memory, Core data, and n8n:
+A **dedicated, provider-neutral** package/module, separate from `@qf-jarvis/model-gateway`, `@qf-jarvis/event-backbone`, agent memory, Core data, and QuickFurno Core Automation:
 
 - `packages/governed-knowledge/` — `@qf-jarvis/governed-knowledge`.
 
@@ -86,11 +86,11 @@ The QFJ-P04.02 capability registry governs **model** technical eligibility; gove
 
 ### O. Authority
 
-Knowledge is **evidence only**; models/providers authorize and execute nothing; **QuickFurno Core is the final business authority**; n8n is execution-only. The **Jarvis Conversation Operations Center** remains a mandatory later phase (live/history visibility, assignment, delivery, escalation, follow-up, AI pause, human takeover; Core owns the authoritative conversation record; n8n transport-only) but is **absent here**. Kimi is excluded.
+Knowledge is **evidence only**; models/providers authorize and execute nothing; **QuickFurno Core is the final business authority**; QuickFurno Core Automation is execution-only. The **Jarvis Conversation Operations Center** remains a mandatory later phase (live/history visibility, assignment, delivery, escalation, follow-up, AI pause, human takeover; Core owns the authoritative conversation record; QuickFurno Core Automation transport-only) but is **absent here**. Kimi is excluded.
 
 ### P. Non-goals
 
-No persistence/database/schema/migration 0008; no document upload/scanning runtime; no vector DB/embedding/semantic search/RAG; no live model integration; no agents/memory/WhatsApp/dashboard/n8n; no provider activation; no deployment.
+No persistence/database/schema/migration 0008; no document upload/scanning runtime; no vector DB/embedding/semantic search/RAG; no live model integration; no agents/memory/WhatsApp/dashboard/QuickFurno Core Automation; no provider activation; no deployment.
 
 ## Rejected alternatives
 

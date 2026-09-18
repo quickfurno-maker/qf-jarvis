@@ -11,13 +11,13 @@
 
 The path from a proposal to an effect in the world is **five separate contracts**, and the boundary runs between the first two and the last three:
 
-| Contract             | Produced by                           | Says                                          |
-| -------------------- | ------------------------------------- | --------------------------------------------- |
-| `RecommendationV1`   | QF Jarvis                             | _This is what I think should happen, and why_ |
-| `ApprovalRequestV1`  | QF Jarvis                             | _I am asking for the authority to do it_      |
-| `ApprovalDecisionV1` | QuickFurno Core                       | _Here is the authority — or the refusal_      |
-| `ExecutionIntentV1`  | QuickFurno Core                       | _Do exactly this, once, before this moment_   |
-| `ExecutionResultV1`  | Reported by n8n; **recorded by Core** | _This is what actually happened_              |
+| Contract             | Produced by                                                  | Says                                          |
+| -------------------- | ------------------------------------------------------------ | --------------------------------------------- |
+| `RecommendationV1`   | QF Jarvis                                                    | _This is what I think should happen, and why_ |
+| `ApprovalRequestV1`  | QF Jarvis                                                    | _I am asking for the authority to do it_      |
+| `ApprovalDecisionV1` | QuickFurno Core                                              | _Here is the authority — or the refusal_      |
+| `ExecutionIntentV1`  | QuickFurno Core                                              | _Do exactly this, once, before this moment_   |
+| `ExecutionResultV1`  | Reported by QuickFurno Core Automation; **recorded by Core** | _This is what actually happened_              |
 
 Everything above the line is Jarvis stating a wish. Everything below it is authority, and Jarvis cannot construct any of it.
 
@@ -163,13 +163,13 @@ There is no field that could express one. An undecided recommendation **expires*
 
 **Produced by:** QuickFurno Core.
 **Authoritative:** **Yes** — it is a narrow, expiring authorization to do one specific thing.
-**Consumed by:** n8n (Phase 10).
+**Consumed by:** QuickFurno Core Automation (Phase 10).
 
 ### Jarvis cannot construct a valid one
 
-`issuer` is the literal `quickfurno-core`. `executor` is the literal `n8n`.
+`issuer` is the literal `quickfurno-core`. `executor` is the literal `QuickFurno Core Automation`.
 
-There is **no `qf-jarvis` issuer**, and **no provider executor**. The two edges that do not exist — _Jarvis → n8n_ and _Jarvis → provider_ — are absent from the **type**, not merely forbidden by a rule in a document ([system-boundary.md](../architecture/system-boundary.md), "the four edges that do not exist").
+There is **no `qf-jarvis` issuer**, and **no provider executor**. The two edges that do not exist — _Jarvis → coreAutomation_ and _Jarvis → provider_ — are absent from the **type**, not merely forbidden by a rule in a document ([system-boundary.md](../architecture/system-boundary.md), "the four edges that do not exist").
 
 ### It is not a general permission
 
@@ -202,13 +202,13 @@ So permission to try again **cannot be smuggled in as a parameter**. `parameters
 
 ## `ExecutionResultV1`
 
-**Reported by:** n8n, or the QF Communications Runtime.
+**Reported by:** QuickFurno Core Automation, or the QF Communications Runtime.
 **Recorded by — and authoritative from:** **QuickFurno Core.**
 **Consumed by:** Jarvis, to close the lifecycle and to learn.
 
 ### Reporting is not authority
 
-`reportingSystem` may be `n8n` or `qf-communications-runtime`. Those systems _observe_ what a provider did and report it.
+`reportingSystem` may be `QuickFurno Core Automation` or `qf-communications-runtime`. Those systems _observe_ what a provider did and report it.
 
 The result becomes **truth** when Core records it and emits the canonical event — whose `source` is always `quickfurno-core`. _"A provider's own view of a delivery is not truth until Core has recorded it."_ The payload and the envelope make two different claims, and this package keeps them apart.
 

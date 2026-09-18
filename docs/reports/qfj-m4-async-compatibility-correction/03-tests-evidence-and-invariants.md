@@ -25,9 +25,9 @@ No root barrel gained or lost a value symbol. `@qf-jarvis/model-reply-adapter` s
 ## Preserved M1–M4 invariants
 
 - **Authority.** Riya client-only; Anisha vendor-only; Jarvis coordinator; **QuickFurno Core** is the only business authority; model output is a draft/proposal only; a missing Core port fails closed; nothing is sent, delivered, executed, or persisted. Making a boundary async changed **when** a value arrives, never **who** decides.
-- **Containment.** No `fetch`, `process.env`, `node:{fs,net,http,https,dns,tls,dgram,child_process,crypto}` import, provider/DB/n8n library, or forbidden `@qf-jarvis/*` import in production source; a new scan proves **no** `Atomics.wait`/`execSync`/`spawnSync`/`deasync` sync-over-async primitive.
+- **Containment.** No `fetch`, `process.env`, `node:{fs,net,http,https,dns,tls,dgram,child_process,crypto}` import, provider/DB/QuickFurno Core Automation library, or forbidden `@qf-jarvis/*` import in production source; a new scan proves **no** `Atomics.wait`/`execSync`/`spawnSync`/`deasync` sync-over-async primitive.
 - **Migrations** 0001–0007 are byte-exact (sha256-locked) and there is **no** 0008. The `@qf-jarvis/event-backbone` public-api lock remains **39**. Production source holds no NUL/control byte. The protected directory `docs/reports/qfj-managed-reconciliation-0002-0005/` is untouched.
 
 ## Deliberately deferred (unchanged from M4)
 
-No live async gateway/Core binding is wired here — the ports are async-shaped and driven by deterministic async fakes only. Live Groq/local/Core calls, keys/tokens/env, provider activation, rollout promotion, delivery/n8n/WhatsApp, persistence/DB, and semantic retrieval/RAG remain separate, later, owner-authorized slices. Binding a live provider or Core is now a drop-in `async` implementation of an already-async port — no public contract breaks.
+No live async gateway/Core binding is wired here — the ports are async-shaped and driven by deterministic async fakes only. Live Groq/local/Core calls, keys/tokens/env, provider activation, rollout promotion, delivery/QuickFurno Core Automation/WhatsApp, persistence/DB, and semantic retrieval/RAG remain separate, later, owner-authorized slices. Binding a live provider or Core is now a drop-in `async` implementation of an already-async port — no public contract breaks.

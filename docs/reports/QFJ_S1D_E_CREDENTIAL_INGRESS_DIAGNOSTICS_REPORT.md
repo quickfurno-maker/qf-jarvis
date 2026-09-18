@@ -123,7 +123,7 @@ is internal.
 No Groq credential was read, requested, validated, displayed, hashed, stored, or used. The masked
 resolver was never invoked with real input — every test injects a scripted source. No Groq, API, or
 network request. No smoke run. No database, Supabase, Docker, migration, deployment, activation, or
-rollout. No QuickFurno Core, WhatsApp, n8n, or real data. The protected reconciliation directory was
+rollout. No QuickFurno Core, WhatsApp, QuickFurno Core Automation, or real data. The protected reconciliation directory was
 never opened, read, hashed, staged, or modified.
 
 **The consumed S1D-C authorization was not reused. Another live attempt remains forbidden without new

@@ -22,13 +22,13 @@ This slice did **not**, and this report asserts it did not:
 - implement the full evaluation (QFJ-P04.04); make any compliance/legal claim.
 - add automatic promotion, self-approval, an A/B platform, a dynamic cost/latency optimizer, model voting, or parallel/speculative provider calls (shadow is a single sequential non-returning call).
 - add a remote ops API, a CLI, or any environment/persistence access; add a database, schema, or migration; reserve or add **migration 0008**; or access a managed database.
-- add any agent runtime, Riya/Anisha prompt logic, memory, RAG, model tool-calls, MCP, web search, code execution, provider tools, or n8n.
+- add any agent runtime, Riya/Anisha prompt logic, memory, RAG, model tool-calls, MCP, web search, code execution, provider tools, or QuickFurno Core Automation.
 - widen the existing gateway behaviour (rollout is opt-in; a gateway with no controller is byte-for-byte unchanged) or the `GatewayEvent` contract; deploy anything; or change the event-backbone root API (remains **39**).
 - change migrations 0001–0007, the Groq/local/routing sources, or the protected `docs/reports/qfj-managed-reconciliation-0002-0005/` directory.
 
 ## Standing boundary — reaffirmed
 
-The controller and providers hold no business authority; the rollout selects inference only. Riya is client-only, Anisha vendor-only, Jarvis the central coordinator, QuickFurno Core the final business authority, n8n execution-only. Kimi is excluded unless the owner reintroduces it.
+The controller and providers hold no business authority; the rollout selects inference only. Riya is client-only, Anisha vendor-only, Jarvis the central coordinator, QuickFurno Core the final business authority, QuickFurno Core Automation execution-only. Kimi is excluded unless the owner reintroduces it.
 
 ## Limitations and exact next action
 

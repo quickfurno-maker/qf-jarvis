@@ -197,13 +197,13 @@ describe('(41-46) the package is pure and reaches nothing', () => {
     }
   });
 
-  it('reaches no model, provider, transport or n8n', () => {
+  it('reaches no model, provider, transport or QuickFurno Core Automation', () => {
     const code = productionCode();
     for (const forbidden of [
       'model-gateway',
       'promptRef',
       'draftReply',
-      'n8n',
+      'quickfurno-core-automation',
       'whatsapp',
       'twilio',
       'webhook',

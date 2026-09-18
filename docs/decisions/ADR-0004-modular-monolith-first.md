@@ -24,7 +24,7 @@ There is also a specific trap here. Agents are *reasoning* components, not *scal
 4. **The module boundaries are drawn where a service boundary would go**, so that extraction is a deployment change rather than a rewrite.
 5. **Extraction requires evidence**: a real scaling limit, a real independent-deployment need, or a real ownership split — and an ADR recording it. "It feels cleaner" is not evidence.
 
-This decision is about QF Jarvis's *internal* structure only. It says nothing about the boundary between Jarvis, QuickFurno Core, n8n, and providers — those are separate systems across trust boundaries, and that separation is permanent ([ADR-0001](./ADR-0001-source-of-truth-boundary.md), [ADR-0002](./ADR-0002-recommend-authorize-execute-model.md)).
+This decision is about QF Jarvis's *internal* structure only. It says nothing about the boundary between Jarvis, QuickFurno Core, QuickFurno Core Automation, and providers — those are separate systems across trust boundaries, and that separation is permanent ([ADR-0001](./ADR-0001-source-of-truth-boundary.md), [ADR-0002](./ADR-0002-recommend-authorize-execute-model.md)).
 
 ## Alternatives considered
 

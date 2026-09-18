@@ -57,7 +57,7 @@ Wallets, packages, payments, recharges, and every balance in the system are owne
 
 ### N3 — Direct provider execution by Jarvis
 
-Jarvis holds no provider credentials and makes no calls to WhatsApp, SMS, email, voice, CRM, Google Ads, Meta Ads, or any other provider. Execution belongs to n8n, and only for authorized execution intents. See [ADR-0002](../decisions/ADR-0002-recommend-authorize-execute-model.md).
+Jarvis holds no provider credentials and makes no calls to WhatsApp, SMS, email, voice, CRM, Google Ads, Meta Ads, or any other provider. Execution belongs to QuickFurno Core Automation, and only for authorized execution intents. See [ADR-0002](../decisions/ADR-0002-recommend-authorize-execute-model.md).
 
 ### N4 — Uncontrolled autonomous decisions
 

@@ -2,8 +2,8 @@
  * QFJ-P09.01 — public API, dependency and side-effect containment (ADR-0084).
  *
  * This is the first P09 package, and the boundary it must not cross is the sharpest one in the
- * architecture: **Jarvis recommends, QuickFurno Core authorizes, n8n executes, providers deliver.**
- * A correlation runtime that could reach n8n, a provider, a credential or a recipient would not be a
+ * architecture: **Jarvis recommends, QuickFurno Core authorizes, QuickFurno Core Automation executes, providers deliver.**
+ * A correlation runtime that could reach QuickFurno Core Automation, a provider, a credential or a recipient would not be a
  * correlation runtime — it would be the beginning of a second execution path.
  *
  * So the scans below are about capability, not intent: no transport, no credential, no recipient
@@ -321,7 +321,7 @@ describe('side-effect containment', () => {
     for (const file of productionFiles()) {
       const code = codeOnly(readFileSync(file, 'utf8')).toLowerCase();
       for (const forbidden of [
-        'n8n',
+        'quickfurno-core-automation',
         'whatsapp',
         'meta',
         'twilio',

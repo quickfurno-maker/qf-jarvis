@@ -25,7 +25,7 @@ Idempotency is the property this application exists to protect. It is developed 
 The [permanent architecture boundary](../../docs/architecture/system-boundary.md) is authoritative and applies to every line ever added here:
 
 - It may not authorize anything.
-- It may not call n8n, or any external provider.
+- It may not call QuickFurno Core Automation, or any external provider.
 - It may not write QuickFurno Core's business state.
 - It may not hold a provider, WhatsApp, or telephony credential.
 

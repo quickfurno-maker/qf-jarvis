@@ -23,7 +23,7 @@
  * ### What availability means
  *
  * `ACTIVE_FOR_OFFLINE_SHADOW_PROOF_ONLY` is the strongest state that exists in this slice. It is not
- * production enablement: JAO-7 is imported by no production entry, reaches no Core, n8n, provider or
+ * production enablement: JAO-7 is imported by no production entry, reaches no Core, QuickFurno Core Automation, provider or
  * channel, and its only effect is a local synthetic integer.
  */
 import { machineTokenSchema, TEXT_LIMITS, boundedText } from '@qf-jarvis/contracts';

@@ -332,7 +332,7 @@ export const validApprovalDecisionRejected: ApprovalDecisionV1 = {
 // Execution
 // ---------------------------------------------------------------------------
 
-/** Issued by Core. Executed by n8n. At most once. Jarvis cannot build this object. */
+/** Issued by Core. Executed by QuickFurno Core Automation. At most once. Jarvis cannot build this object. */
 export const validExecutionIntent: ExecutionIntentV1 = {
   executionIntentId: FIXTURE_IDS.intent,
   contractVersion: 1,
@@ -343,7 +343,7 @@ export const validExecutionIntent: ExecutionIntentV1 = {
   actionContractVersion: 1,
   parameters: { templateId: 'client-followup-v2', channel: 'whatsapp' },
   issuer: 'quickfurno-core',
-  executor: 'n8n',
+  executor: 'quickfurno-core-automation',
   issuedAt: FIXTURE_TIMES.issuedAt,
   expiresAt: FIXTURE_TIMES.intentExpiresAt,
   idempotencyKey: 'idem-8daf5c6e-4071-4293',
@@ -356,7 +356,7 @@ export const validExecutionResultSucceeded: ExecutionResultV1 = {
   executionResultId: FIXTURE_IDS.result,
   executionIntentId: FIXTURE_IDS.intent,
   contractVersion: 1,
-  reportingSystem: 'n8n',
+  reportingSystem: 'quickfurno-core-automation',
   recordedByCoreAt: FIXTURE_TIMES.recordedAt,
   providerOccurredAt: FIXTURE_TIMES.issuedAt,
   outcome: 'succeeded',
@@ -623,7 +623,7 @@ export const VALID_FIXTURES: readonly ValidFixture[] = [
     value: validApprovalDecisionRejected,
   },
   {
-    name: 'execution intent: Core-issued, n8n-executed, at-most-once',
+    name: 'execution intent: Core-issued, QuickFurno Core Automation-executed, at-most-once',
     contract: 'ExecutionIntentV1',
     value: validExecutionIntent,
   },

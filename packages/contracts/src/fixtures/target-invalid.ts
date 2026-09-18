@@ -325,10 +325,10 @@ export const TARGET_INVALID_FIXTURES: readonly TargetInvalidFixture[] = [
       'An ambiguous outcome is reconciled, never retried. A retry here dials a real person twice.',
   },
   {
-    name: 'communication result: issued by n8n',
+    name: 'communication result: issued by QuickFurno Core Automation',
     contract: 'CommunicationResultV1',
     value: variantOf(validCommunicationResultDelivered, (draft) => {
-      draft['issuer'] = 'n8n';
+      draft['issuer'] = 'quickfurno-core-automation';
     }),
     because: 'Reporting is not authority. A result becomes true when Core records it.',
   },

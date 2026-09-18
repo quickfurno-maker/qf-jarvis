@@ -286,15 +286,15 @@ is what the bare `whatsapp` ban was really standing in for.
 
 ## What AVG-6 deliberately does not do
 
-| Left out                                                                                  | Owner       |
-| ----------------------------------------------------------------------------------------- | ----------- |
-| Reply generation, objection handling, conversation interpretation, any model call         | AVG-7       |
-| Package, pricing, discount, entitlement, offer truth                                      | AVG-8       |
-| Registration integration                                                                  | AVG-9       |
-| Payment, activation, Anisha ownership handoff                                             | AVG-10      |
-| Persistence, dashboard, admin APIs, analytics, a durable identity store                   | AVG-11      |
-| Any increase in autonomy                                                                  | AVG-12      |
-| Shared executable channel adoption, `CommunicationRequestV1`, n8n route, provider adapter | **QFJ-P09** |
+| Left out                                                                                                         | Owner       |
+| ---------------------------------------------------------------------------------------------------------------- | ----------- |
+| Reply generation, objection handling, conversation interpretation, any model call                                | AVG-7       |
+| Package, pricing, discount, entitlement, offer truth                                                             | AVG-8       |
+| Registration integration                                                                                         | AVG-9       |
+| Payment, activation, Anisha ownership handoff                                                                    | AVG-10      |
+| Persistence, dashboard, admin APIs, analytics, a durable identity store                                          | AVG-11      |
+| Any increase in autonomy                                                                                         | AVG-12      |
+| Shared executable channel adoption, `CommunicationRequestV1`, QuickFurno Core Automation route, provider adapter | **QFJ-P09** |
 
 There is no database, migration, store, cache, scheduler, environment read, secret, HTTP client or
 provider SDK. Dependencies are unchanged: `zod` alone.

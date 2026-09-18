@@ -57,11 +57,11 @@ Every routing decision can emit bounded, content-free evidence: routing profile,
 
 ### I. Authority
 
-Routing selects inference only; the gateway and providers authorize and execute nothing. Riya is client-only, Anisha vendor-only, Jarvis the coordinator, QuickFurno Core the final authority, n8n execution-only. Kimi is excluded.
+Routing selects inference only; the gateway and providers authorize and execute nothing. Riya is client-only, Anisha vendor-only, Jarvis the coordinator, QuickFurno Core the final authority, QuickFurno Core Automation execution-only. Kimi is excluded.
 
 ### J. Scope / non-goals
 
-No real provider activation; no live calls; no keys/tokens; no provider account changes; no adaptive scoring, cost optimizer, latency optimizer, A/B or percentage traffic; no shadow/canary duplication; no persistence/database; no migration/0008; no agents/memory/RAG/tools/n8n; no deployment.
+No real provider activation; no live calls; no keys/tokens; no provider account changes; no adaptive scoring, cost optimizer, latency optimizer, A/B or percentage traffic; no shadow/canary duplication; no persistence/database; no migration/0008; no agents/memory/RAG/tools/QuickFurno Core Automation; no deployment.
 
 ## Rejected alternatives
 

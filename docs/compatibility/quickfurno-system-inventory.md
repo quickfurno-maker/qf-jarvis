@@ -38,18 +38,18 @@
 
 ## 2. Domain modules
 
-| Module                    | Location                                                                                                                                                   | What it is                                                        |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| **Client / lead capture** | `app/enquiry`, `app/actions.ts`, `services/leadService.ts`                                                                                                 | Public enquiry → one `leads` row                                  |
-| **Lead quality**          | `services/leadQualityService.ts`                                                                                                                           | **Pure TypeScript** scoring. There is **no SQL scoring function** |
-| **Clarification**         | `services/leadClarificationService.ts`                                                                                                                     | Preview-only. Answers are typed in by a superadmin                |
-| **Requirement groups**    | `services/clientRequirementGroupService.ts`                                                                                                                | Multi-category grouping by phone + city + parent category         |
-| **Vendor**                | `services/vendorService.ts`, `vendorAdminService.ts`, `publicVendorService.ts`                                                                             | Registration, profile, pipeline                                   |
-| **Packages / credits**    | `services/packageService.ts`, `vendorPackageOrderService.ts`                                                                                               | Credits, package orders                                           |
-| **Matching / assignment** | `services/leadMatchingEngine.ts`, `leadDeliveryService.ts`, `manualLeadAssignmentService.ts`, `delayedLeadFillService.ts`, `preferredVendorLeadService.ts` | **Five distinct assignment paths** (§6)                           |
-| **AOS**                   | `lib/aos/**` (193 files)                                                                                                                                   | Agent scaffold + n8n bridge. **Advisory/preview only**            |
-| **Admin**                 | `app/admin`, `services/adminService.ts`, `adminAuditService.ts`                                                                                            | Superadmin console                                                |
-| **CRM / analytics**       | `lib/crm`, `lib/analytics`                                                                                                                                 | Read-only views over rule engines                                 |
+| Module                    | Location                                                                                                                                                   | What it is                                                                    |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| **Client / lead capture** | `app/enquiry`, `app/actions.ts`, `services/leadService.ts`                                                                                                 | Public enquiry → one `leads` row                                              |
+| **Lead quality**          | `services/leadQualityService.ts`                                                                                                                           | **Pure TypeScript** scoring. There is **no SQL scoring function**             |
+| **Clarification**         | `services/leadClarificationService.ts`                                                                                                                     | Preview-only. Answers are typed in by a superadmin                            |
+| **Requirement groups**    | `services/clientRequirementGroupService.ts`                                                                                                                | Multi-category grouping by phone + city + parent category                     |
+| **Vendor**                | `services/vendorService.ts`, `vendorAdminService.ts`, `publicVendorService.ts`                                                                             | Registration, profile, pipeline                                               |
+| **Packages / credits**    | `services/packageService.ts`, `vendorPackageOrderService.ts`                                                                                               | Credits, package orders                                                       |
+| **Matching / assignment** | `services/leadMatchingEngine.ts`, `leadDeliveryService.ts`, `manualLeadAssignmentService.ts`, `delayedLeadFillService.ts`, `preferredVendorLeadService.ts` | **Five distinct assignment paths** (§6)                                       |
+| **AOS**                   | `lib/aos/**` (193 files)                                                                                                                                   | Agent scaffold + QuickFurno Core Automation bridge. **Advisory/preview only** |
+| **Admin**                 | `app/admin`, `services/adminService.ts`, `adminAuditService.ts`                                                                                            | Superadmin console                                                            |
+| **CRM / analytics**       | `lib/crm`, `lib/analytics`                                                                                                                                 | Read-only views over rule engines                                             |
 
 ---
 
@@ -154,24 +154,24 @@ Against the SQL **as committed**, every `createLead` insert would violate `leads
 
 **Three separate settings tables, and they are easy to confuse:**
 
-| Table                          | Purpose                                                                                                         | Consumed by                                                                |
-| ------------------------------ | --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `aos_runtime_settings`         | **Only one key**: `aos_n8n_master_router`. Lock 2 of the n8n gate. **No effect on assignment, credits or caps** | AOS event bridge                                                           |
-| `marketplace_runtime_settings` | `max_vendors_per_lead`, `auto_assignment_mode`, `allow_trial_vendors_for_assignment`, …                         | **The preview engine only.** The production matcher reads **none of them** |
-| `app_settings`                 | `max_vendors_per_lead`, `duplicate_lead_window_days`, …                                                         | SQL `get_setting_int`. **No application writer exists**                    |
+| Table                          | Purpose                                                                                                                                           | Consumed by                                                                |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `aos_runtime_settings`         | **Only one key**: `aos_coreAutomation_master_router`. Lock 2 of the QuickFurno Core Automation gate. **No effect on assignment, credits or caps** | AOS event bridge                                                           |
+| `marketplace_runtime_settings` | `max_vendors_per_lead`, `auto_assignment_mode`, `allow_trial_vendors_for_assignment`, …                                                           | **The preview engine only.** The production matcher reads **none of them** |
+| `app_settings`                 | `max_vendors_per_lead`, `duplicate_lead_window_days`, …                                                                                           | SQL `get_setting_int`. **No application writer exists**                    |
 
-**Feature flags** (`lib/aos/config/featureFlags.ts`): `N8N_ENABLED` and `N8N_OUTBOUND_WEBHOOK_ENABLED` default `false` **but are environment-overridable**. `WHATSAPP_SENDING_ENABLED`, `CREDIT_DEDUCTION_ENABLED`, `AUTO_ASSIGNMENT_ENABLED` are `false` with **no env path** — a code change is required to flip them.
+**Feature flags** (`lib/aos/config/featureFlags.ts`): `QuickFurno Core Automation_ENABLED` and `QuickFurno Core Automation_OUTBOUND_WEBHOOK_ENABLED` default `false` **but are environment-overridable**. `WHATSAPP_SENDING_ENABLED`, `CREDIT_DEDUCTION_ENABLED`, `AUTO_ASSIGNMENT_ENABLED` are `false` with **no env path** — a code change is required to flip them.
 
 ---
 
 ## 9. Ownership boundaries
 
-| Owner               | What                                                                                                                                        |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| **QuickFurno Core** | **Everything authoritative**: leads, clients, vendors, assignments, credits, payments, packages, categories, cities, consent, communication |
-| **n8n**             | Execution. Currently gated off behind two locks                                                                                             |
-| **Providers**       | Delivery (Meta WhatsApp Cloud API)                                                                                                          |
-| **QF Jarvis**       | **Nothing in Core.** Derived, non-authoritative views only. **No table, no credential, no write, no read**                                  |
+| Owner                          | What                                                                                                                                        |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| **QuickFurno Core**            | **Everything authoritative**: leads, clients, vendors, assignments, credits, payments, packages, categories, cities, consent, communication |
+| **QuickFurno Core Automation** | Execution. Currently gated off behind two locks                                                                                             |
+| **Providers**                  | Delivery (Meta WhatsApp Cloud API)                                                                                                          |
+| **QF Jarvis**                  | **Nothing in Core.** Derived, non-authoritative views only. **No table, no credential, no write, no read**                                  |
 
 ---
 

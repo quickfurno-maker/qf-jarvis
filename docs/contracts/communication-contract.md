@@ -16,7 +16,7 @@ There is **no WhatsApp client here, no SMS gateway, no SMTP, and no telephony or
 These are the channels a **governed request** may name. The transport chain sits entirely on the far side of the boundary:
 
 ```
-n8n → QF Communications Runtime → WhatsApp adapter or QF Voice Runtime
+QuickFurno Core Automation → QF Communications Runtime → WhatsApp adapter or QF Voice Runtime
     → external provider → recipient
 ```
 
@@ -63,7 +63,7 @@ The concrete failure, worth keeping in mind because it is the one that will actu
 
 **`authorized`, `delivered`, `completed`.**
 
-Authorization comes from Core. Delivery comes from the provider, is reported through n8n, and **Core records it**. Jarvis _reflects_ all three; it originates none of them. The constant `STATES_JARVIS_MAY_NOT_ORIGINATE` is exported so a future coordination layer can assert this rather than remember it.
+Authorization comes from Core. Delivery comes from the provider, is reported through QuickFurno Core Automation, and **Core records it**. Jarvis _reflects_ all three; it originates none of them. The constant `STATES_JARVIS_MAY_NOT_ORIGINATE` is exported so a future coordination layer can assert this rather than remember it.
 
 ---
 
@@ -229,7 +229,7 @@ The template registry lives in the QF Communications Runtime, on the far side of
 
 **Produced by:** the **QuickFurno Communication Core**. `issuer` is the literal `quickfurno-core`.
 **Authoritative:** **Yes.** Only this can authorize a communication.
-**Consumed by:** Jarvis, which reflects it — and n8n, in a later phase, which cannot act without it.
+**Consumed by:** Jarvis, which reflects it — and QuickFurno Core Automation, in a later phase, which cannot act without it.
 
 This is the artifact that makes _"Core is the consent authority"_ mean something operationally rather than rhetorically. The request asks; **this answers**.
 
@@ -289,11 +289,11 @@ This record says what Core decided **when it decided**. It is **not a permission
 
 ## `CommunicationResultV1`
 
-**Reported by:** n8n, or the QF Communications Runtime.
+**Reported by:** QuickFurno Core Automation, or the QF Communications Runtime.
 **Recorded by — and authoritative from:** **QuickFurno Core.** `issuer` is the literal `quickfurno-core`.
 **Consumed by:** Jarvis, to close the lifecycle and to learn.
 
-Reporting is not authority. n8n and the Runtime _observe_ a provider and _report_; Core **records**, and that recording is what makes it true. _A provider's own view of a delivery is not truth until Core has recorded it_ ([execution-governance.md](../architecture/execution-governance.md) §6).
+Reporting is not authority. QuickFurno Core Automation and the Runtime _observe_ a provider and _report_; Core **records**, and that recording is what makes it true. _A provider's own view of a delivery is not truth until Core has recorded it_ ([execution-governance.md](../architecture/execution-governance.md) §6).
 
 ### Fields
 

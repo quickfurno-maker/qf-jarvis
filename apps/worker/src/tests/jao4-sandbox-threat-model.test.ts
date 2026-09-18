@@ -454,7 +454,7 @@ describe('JAO-4 threat model', () => {
           'operational-memory',
           'governed-specialist-delegation',
           'mastra-supervisor',
-          'n8n',
+          'quickfurno-core-automation',
           'whatsapp',
           'meta',
           'execa',

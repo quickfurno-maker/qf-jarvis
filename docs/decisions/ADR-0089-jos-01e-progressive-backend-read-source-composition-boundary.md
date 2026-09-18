@@ -181,8 +181,8 @@ crossing a boundary this phase may not cross:
 
 - **QuickFurno Core** has no adopted read protocol. Inventing an endpoint, token or Supabase query
   would fabricate connectivity, and Core owns business truth regardless. Core stays `NOT_CONNECTED`.
-- **n8n** has no adopted read protocol, and the test-only execution bridge belongs to **QFJ-P09.02**.
-  n8n stays `NOT_CONNECTED`.
+- **QuickFurno Core Automation** has no adopted read protocol, and the test-only execution bridge belongs to **QFJ-P09.02**.
+  QuickFurno Core Automation stays `NOT_CONNECTED`.
 - The **durable runtimes** (`postgres-conversation-state`, `postgres-approval-queue`) need
   managed-database credentials. Granting a read-only surface a connection string to make panels look
   populated would hand it exactly the reach it was designed not to have.
@@ -210,7 +210,7 @@ production business rollout remains **OFF**.
 - The bounded Jarvis OS foundation track **closes** with this slice. The roadmap carries one
   `current` JOS marker and deliberately **no** JOS `next` — naming a successor would mean inventing
   one.
-- Main Jarvis work resumes at **QFJ-P09.02** (test-only authorized dispatch envelope / n8n bridge
+- Main Jarvis work resumes at **QFJ-P09.02** (test-only authorized dispatch envelope / QuickFurno Core Automation bridge
   validation), which is the only `next` marker in the roadmap.
 - JOS-01D is recorded as **merged**. That describes the code. Whether a deployment is currently
   running stays an operational fact an operator verifies against the host — this build asserts no
@@ -218,7 +218,7 @@ production business rollout remains **OFF**.
 
 ## Non-goals
 
-No Core connection. No n8n connection. No Meta or model-provider connection. No database access. No
+No Core connection. No QuickFurno Core Automation connection. No Meta or model-provider connection. No database access. No
 migration. No write capability. No business authority in Jarvis OS. No new backend server. No
 dashboard redesign. No Android files.
 

@@ -2,11 +2,11 @@
  * What this composition cannot become.
  *
  * A composition package is the most tempting place in this architecture to grow a transport: it
- * already knows about a verifier and a database, and "just call n8n from here" would look like the
+ * already knows about a verifier and a database, and "just call QuickFurno Core Automation from here" would look like the
  * obvious next line. It is not, and these specs are why it stays not.
  *
  * The permanent flow is unchanged by composing two merged capabilities: Jarvis recommends,
- * QuickFurno Core authorizes and issues the intent, this boundary VERIFIES, n8n executes behind a
+ * QuickFurno Core authorizes and issues the intent, this boundary VERIFIES, QuickFurno Core Automation executes behind a
  * future adopted transport, providers deliver, results return to Core.
  *
  * Scans read source with comments stripped, because this package documents at length the things it
@@ -54,7 +54,7 @@ describe('it adopts no transport and executes nothing', () => {
         'https://',
         'webhook',
         'endpoint',
-        'n8n.',
+        'QuickFurno Core Automation.',
         'workflowid',
         'graph.facebook',
         'whatsapp',

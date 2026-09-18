@@ -243,7 +243,7 @@ choice.** **Nothing is registered or retired here, and no model is chosen here.*
 The first revision's "`expired` must require an execution intent" is **withdrawn**. The authoritative
 document is ambiguous about whether an `ExecutionIntentV1` exists at `scheduled`: the state table and
 the scheduling section imply it does, while the execution-flow sequence diagram issues the intent to
-n8n only in the branch the vocabulary calls `execution-submitted`. And even where an intent does
+QuickFurno Core Automation only in the branch the vocabulary calls `execution-submitted`. And even where an intent does
 exist, `CommunicationResultV1` cannot report the expiry, because it also demands an `executionResultId`
 that a never-dispatched intent never produces.
 
@@ -313,6 +313,6 @@ against the contracts exactly as they stand and asserts current behaviour — in
 contradictions — so that a future one-sided "fix" fails loudly instead of silently. Those tests pin
 **current V1 behaviour only**; they encode no position on the open authorship model.
 
-**No production code changed. No contract changed. No registry changed. No Core access, no n8n, no
+**No production code changed. No contract changed. No registry changed. No Core access, no QuickFurno Core Automation, no
 provider, no message sent, no persistence, no migration. Production rollout OFF. Runtime activation
 unchanged.**

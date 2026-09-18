@@ -43,7 +43,7 @@
  *
  * `ACTIVE_FOR_OFFLINE_SHADOW_PROOF_ONLY` is the strongest state that exists in this slice. It does
  * not mean production-enabled: JAO-6 is imported by nothing in any production entry, creates no
- * approval decision and no execution intent, and reaches no Core, n8n, provider or channel.
+ * approval decision and no execution intent, and reaches no Core, QuickFurno Core Automation, provider or channel.
  * `PLANNED` policies are declared so the shape of a second class is visible and so refusal on a
  * non-active policy can be proved -- they are refused before any runtime is invoked.
  */
@@ -84,7 +84,7 @@ export type Jao6PolicyAvailability = (typeof JAO6_POLICY_AVAILABILITIES)[number]
  * A closed schema rather than a governed free-form object is the other half. The canonical
  * `actionParametersSchema` scans for credentials, contact details, raw payloads and model internals
  * at any depth and would catch the obvious smuggling -- but it permits keys it has never heard of,
- * and `canExecute`, `executor`, `n8n` and `webhookUrl` are keys it has never heard of. Here they
+ * and `canExecute`, `executor`, `QuickFurno Core Automation` and `webhookUrl` are keys it has never heard of. Here they
  * are simply not fields.
  */
 export const jao6VendorFollowUpParametersSchema = z.strictObject({

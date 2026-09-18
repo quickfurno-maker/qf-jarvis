@@ -79,7 +79,7 @@ export function SideNav({
 
       <div className="border-t border-[var(--color-line)] px-5 py-3.5">
         <p className="text-[10.5px] leading-relaxed text-[var(--color-ink-faint)]">
-          Jarvis recommends. QuickFurno Core authorizes. n8n executes.
+          Jarvis recommends. QuickFurno Core authorizes. coreAutomation executes.
         </p>
       </div>
     </nav>

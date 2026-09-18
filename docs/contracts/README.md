@@ -25,7 +25,7 @@ So this phase produces schemas, types, fixtures, and tests. It produces nothing 
 | **Phase 4**    | The coordination layer, routing, consolidation, **lifecycle transition enforcement**                     |
 | **Phases 5–8** | The agents — Kabir, Riya, Anisha, Jitin. **No AI, no prompts, no model SDK, no model gateway**           |
 | **Phase 9**    | The approval submission path                                                                             |
-| **Phase 10**   | n8n and the communications runtime — **built and tested, reaching nobody**                               |
+| **Phase 10**   | QuickFurno Core Automation and the communications runtime — **built and tested, reaching nobody**        |
 | **Phase 11**   | **QuickFurno Core integration** — the live emitters, the authorization interface, the Communication Core |
 | **Phase 11A**  | **The first real message.** No production communication before Phase 11 succeeds                         |
 | **Phase 14**   | The evaluation loop that consumes the learning contracts                                                 |
@@ -46,7 +46,7 @@ The memory and learning contracts define **shapes**, not behaviour. There is no 
 
 Worth stating explicitly, because it is the property everything else rests on.
 
-A `RecommendationV1` is a structured proposal. It has no `send` method, no provider address, no credential, and no `approved` field. An `ExecutionIntentV1` describes an authorized action — and **Jarvis cannot construct a valid one**, because the issuer must be QuickFurno Core and the executor must be n8n, and those are literals in the schema, not conventions in a comment.
+A `RecommendationV1` is a structured proposal. It has no `send` method, no provider address, no credential, and no `approved` field. An `ExecutionIntentV1` describes an authorized action — and **Jarvis cannot construct a valid one**, because the issuer must be QuickFurno Core and the executor must be QuickFurno Core Automation, and those are literals in the schema, not conventions in a comment.
 
 Even a fully compromised agent, emitting a maliciously crafted recommendation, has at most _proposed_ something that a human or a policy will then decline. That containment is the strongest security argument for the whole boundary, and Phase 2 is where it stops being an argument and starts being a type ([security-principles.md](../governance/security-principles.md)).
 
@@ -84,27 +84,27 @@ All seven were **Accepted** by the business owner on **2026-07-12**, alongside P
 
 ## Who produces and consumes what
 
-| Contract                            | Produced by                                                            | Authoritative?                              | Consumed by (later)                       |
-| ----------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------- | ----------------------------------------- |
-| **Canonical event**                 | **QuickFurno Core**, always                                            | **Yes** — Core recorded it                  | Jarvis ingestion (Phase 3)                |
-| **RecommendationV1**                | QF Jarvis                                                              | **No — advisory, and inert**                | Core's authorization path (Phase 9)       |
-| **RecommendationLifecycleRecordV1** | Jarvis, for its own states; Core, for the states only Core can produce | Mixed — see the doc                         | Jarvis, evaluation (Phase 14)             |
-| **ApprovalRequestV1**               | **QF Jarvis**                                                          | **No — it asks, and carries no authority**  | Core's authorization interface (Phase 11) |
-| **ApprovalDecisionV1**              | **QuickFurno Core**                                                    | **Yes**                                     | Jarvis, reflected never anticipated       |
-| **ExecutionIntentV1**               | **QuickFurno Core**                                                    | **Yes**                                     | n8n (Phase 10)                            |
-| **ExecutionResultV1**               | Reported by n8n or the runtime; **recorded by Core**                   | Authoritative once **Core** records it      | Jarvis, to close the lifecycle            |
-| **CommunicationRequestV1**          | **QF Jarvis**                                                          | **No — it asks. It cannot send**            | The Communication Core (Phase 11)         |
-| **CommunicationAuthorizationV1**    | **QuickFurno Communication Core**                                      | **Yes** — this is the consent decision      | Jarvis, reflected never anticipated       |
-| **CommunicationResultV1**           | **QuickFurno Core** records it                                         | **Yes**                                     | Jarvis, to close the lifecycle            |
-| **CommunicationStateRecordV1**      | Jarvis, for drafts; Core, for everything authoritative                 | Mixed — see the doc                         | The control plane (Phase 12)              |
-| **ClientReassignmentRequestV1**     | **QF Jarvis** (Riya)                                                   | **No — advisory. It cannot name a vendor**  | Core (Phase 11)                           |
-| **ClientReassignmentDecisionV1**    | **QuickFurno Core**                                                    | **Yes**                                     | Jarvis, reflected                         |
-| **AssignmentBatchV1**               | **QuickFurno Core**                                                    | **Yes** — **Riya cannot construct one**     | Jarvis, derived view                      |
-| **AdditionalServiceRequestV1**      | **QF Jarvis** (Riya)                                                   | **No — advisory**                           | Core (Phase 11)                           |
-| **LinkedLeadCreatedV1**             | **QuickFurno Core**                                                    | **Yes**                                     | Jarvis, derived view                      |
-| **AgentRunRecordV1**                | QF Jarvis                                                              | Its own record of its own run               | Evaluation (Phase 14)                     |
-| **AgentMemoryRecordV1**             | QF Jarvis                                                              | **No — `authoritative: false`, by literal** | The agent that owns it                    |
-| **TrainingEligibilityDecisionV1**   | A named **human** (or approved policy)                                 | **Yes** — and there is no default           | Any future learning pipeline              |
-| **ErasureRequestV1 / RecordV1**     | **QuickFurno Core**                                                    | **Yes**                                     | Every derived store in Jarvis             |
+| Contract                            | Produced by                                                                 | Authoritative?                              | Consumed by (later)                       |
+| ----------------------------------- | --------------------------------------------------------------------------- | ------------------------------------------- | ----------------------------------------- |
+| **Canonical event**                 | **QuickFurno Core**, always                                                 | **Yes** — Core recorded it                  | Jarvis ingestion (Phase 3)                |
+| **RecommendationV1**                | QF Jarvis                                                                   | **No — advisory, and inert**                | Core's authorization path (Phase 9)       |
+| **RecommendationLifecycleRecordV1** | Jarvis, for its own states; Core, for the states only Core can produce      | Mixed — see the doc                         | Jarvis, evaluation (Phase 14)             |
+| **ApprovalRequestV1**               | **QF Jarvis**                                                               | **No — it asks, and carries no authority**  | Core's authorization interface (Phase 11) |
+| **ApprovalDecisionV1**              | **QuickFurno Core**                                                         | **Yes**                                     | Jarvis, reflected never anticipated       |
+| **ExecutionIntentV1**               | **QuickFurno Core**                                                         | **Yes**                                     | QuickFurno Core Automation (Phase 10)     |
+| **ExecutionResultV1**               | Reported by QuickFurno Core Automation or the runtime; **recorded by Core** | Authoritative once **Core** records it      | Jarvis, to close the lifecycle            |
+| **CommunicationRequestV1**          | **QF Jarvis**                                                               | **No — it asks. It cannot send**            | The Communication Core (Phase 11)         |
+| **CommunicationAuthorizationV1**    | **QuickFurno Communication Core**                                           | **Yes** — this is the consent decision      | Jarvis, reflected never anticipated       |
+| **CommunicationResultV1**           | **QuickFurno Core** records it                                              | **Yes**                                     | Jarvis, to close the lifecycle            |
+| **CommunicationStateRecordV1**      | Jarvis, for drafts; Core, for everything authoritative                      | Mixed — see the doc                         | The control plane (Phase 12)              |
+| **ClientReassignmentRequestV1**     | **QF Jarvis** (Riya)                                                        | **No — advisory. It cannot name a vendor**  | Core (Phase 11)                           |
+| **ClientReassignmentDecisionV1**    | **QuickFurno Core**                                                         | **Yes**                                     | Jarvis, reflected                         |
+| **AssignmentBatchV1**               | **QuickFurno Core**                                                         | **Yes** — **Riya cannot construct one**     | Jarvis, derived view                      |
+| **AdditionalServiceRequestV1**      | **QF Jarvis** (Riya)                                                        | **No — advisory**                           | Core (Phase 11)                           |
+| **LinkedLeadCreatedV1**             | **QuickFurno Core**                                                         | **Yes**                                     | Jarvis, derived view                      |
+| **AgentRunRecordV1**                | QF Jarvis                                                                   | Its own record of its own run               | Evaluation (Phase 14)                     |
+| **AgentMemoryRecordV1**             | QF Jarvis                                                                   | **No — `authoritative: false`, by literal** | The agent that owns it                    |
+| **TrainingEligibilityDecisionV1**   | A named **human** (or approved policy)                                      | **Yes** — and there is no default           | Any future learning pipeline              |
+| **ErasureRequestV1 / RecordV1**     | **QuickFurno Core**                                                         | **Yes**                                     | Every derived store in Jarvis             |
 
 The pattern to notice: **everything Jarvis produces is either advisory, or a record of its own reasoning. It produces nothing authoritative, and it produces nothing that can act.**

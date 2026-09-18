@@ -253,7 +253,7 @@ and governed template variables, none of which may be echoed back.
 **Dependencies:** `@qf-jarvis/contracts`, `@qf-jarvis/recommendation-runtime`, `zod`, and
 `node:crypto` for `randomUUID` only. Nothing else, asserted against the manifest and against every
 production import. Notably **not** `approval-runtime`, `communication-authorization-runtime`,
-`execution-intent-runtime`, any database package, any Core adapter, n8n, a provider SDK, the model
+`execution-intent-runtime`, any database package, any Core adapter, QuickFurno Core Automation, a provider SDK, the model
 gateway or `aarohi-agent`.
 
 **No persistence and no migration.** The set stays `0001`–`0012`, asserted. The `0010`–`0012` ledger
@@ -263,7 +263,7 @@ drift ADR-0132 recorded is **not** reconciled here, and no number is allocated.
 `packages/*` and `apps/*` manifest, not by a hand-maintained list. It remains an uncomposed leaf.
 Composition with `communication-authorization-runtime` is S4, after S3 adopts a Core transport.
 
-**No transport of any kind:** no Core endpoint, URL, header, credential format or protocol; no n8n;
+**No transport of any kind:** no Core endpoint, URL, header, credential format or protocol; no QuickFurno Core Automation;
 no provider or Meta client; no production recipient; no live-send flag; no activation.
 
 **Production rollout remains OFF. Aarohi's runtime remains PLANNED / DISABLED.**

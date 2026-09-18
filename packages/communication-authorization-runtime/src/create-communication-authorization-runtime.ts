@@ -45,7 +45,7 @@
  * forward in time. Eligibility is revalidated at execution time by Core and the communications
  * runtime, and that answer is the one that counts.
  *
- * It reads no clock, opens no socket, touches no database, and cannot reach Meta, n8n, a provider or
+ * It reads no clock, opens no socket, touches no database, and cannot reach Meta, QuickFurno Core Automation, a provider or
  * an execution intent.
  */
 import {

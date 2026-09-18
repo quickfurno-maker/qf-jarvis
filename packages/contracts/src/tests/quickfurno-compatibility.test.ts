@@ -202,7 +202,7 @@ interface Manifest {
   };
   readonly entities: readonly Entity[];
   readonly sourceEvents: {
-    readonly n8n: readonly SourceEvent[];
+    readonly coreAutomation: readonly SourceEvent[];
     readonly internal: readonly SourceEvent[];
     readonly preview: readonly SourceEvent[];
   };
@@ -225,7 +225,7 @@ const raw = await readFile(MANIFEST_URL, 'utf8');
 const manifest = JSON.parse(raw) as Manifest;
 
 const allSourceEvents: readonly SourceEvent[] = [
-  ...manifest.sourceEvents.n8n,
+  ...manifest.sourceEvents.coreAutomation,
   ...manifest.sourceEvents.internal,
   ...manifest.sourceEvents.preview,
 ];
@@ -353,8 +353,8 @@ describe('every mapped canonical event is real, or is an explicit contract gap',
 });
 
 describe('every current QuickFurno event is accounted for', () => {
-  it('classifies all 29 named events (21 n8n + 4 internal + 4 preview)', () => {
-    expect(manifest.sourceEvents.n8n).toHaveLength(21);
+  it('classifies all 29 named events (21 QuickFurno Core Automation + 4 internal + 4 preview)', () => {
+    expect(manifest.sourceEvents.coreAutomation).toHaveLength(21);
     expect(manifest.sourceEvents.internal).toHaveLength(4);
     expect(manifest.sourceEvents.preview).toHaveLength(4);
     expect(allSourceEvents).toHaveLength(29);
@@ -458,7 +458,7 @@ describe('Jarvis is never authoritative for money, consent, assignment, activati
     expect(entry?.jarvisMayRecommend).toBe(false);
   });
 
-  it('communication is executed by n8n, never by Jarvis', () => {
+  it('communication is executed by QuickFurno Core Automation, never by Jarvis', () => {
     const send = manifest.authority.find((entry) => entry.action === 'send-whatsapp');
 
     expect(send).toBeDefined();
@@ -595,10 +595,10 @@ describe('live WhatsApp before Phase 11A is PROHIBITED', () => {
     expect(policy.jarvisRecommendationMayTriggerDelivery).toBe(false);
   });
 
-  it('the authorized delivery chain runs through Core and n8n, never Jarvis-to-provider', () => {
+  it('the authorized delivery chain runs through Core and QuickFurno Core Automation, never Jarvis-to-provider', () => {
     expect(policy.authorizedDeliveryChain[0]).toBe('quickfurno-core-authorization');
     expect(policy.authorizedDeliveryChain).toContain('execution-intent');
-    expect(policy.authorizedDeliveryChain).toContain('n8n');
+    expect(policy.authorizedDeliveryChain).toContain('quickfurno-core-automation');
     expect(policy.authorizedDeliveryChain).not.toContain('qf-jarvis');
   });
 

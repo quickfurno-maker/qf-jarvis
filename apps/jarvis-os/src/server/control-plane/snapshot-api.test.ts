@@ -208,12 +208,12 @@ describe('GET /api/control-plane/v1/snapshot', () => {
 
     expect(body.authority.jarvis).toBe('RECOMMENDS_AND_OBSERVES');
     expect(body.authority.quickfurnoCore).toBe('AUTHORIZES_AND_OWNS_BUSINESS_TRUTH');
-    expect(body.authority.n8n).toBe('EXECUTES_ONLY');
+    expect(body.authority.coreAutomation).toBe('EXECUTES_ONLY');
     expect(body.authority.provider).toBe('DELIVERS_ONLY');
 
     const byId = new Map(body.system.map((component) => [component.id, component]));
     expect(byId.get('quickfurno-core')?.state).toBe('NOT_CONNECTED');
-    expect(byId.get('n8n')?.state).toBe('NOT_CONNECTED');
+    expect(byId.get('quickfurno-core-automation')?.state).toBe('NOT_CONNECTED');
 
     const aarohi = body.agents.find((agent) => agent.id === 'aarohi');
     expect(aarohi?.lifecycle).toBe('PLANNED');
@@ -232,7 +232,7 @@ describe('GET /api/control-plane/v1/snapshot', () => {
     expect(qfjMerged).toContain('QFJ-P09.01');
     expect(qfjMerged).toContain('QFJ-P09.02');
     expect(qfjMerged).toContain('QFJ-P09.03');
-    // Those slices merged a VALIDATION boundary and a storage adapter. n8n stays NOT_CONNECTED
+    // Those slices merged a VALIDATION boundary and a storage adapter. QuickFurno Core Automation stays NOT_CONNECTED
     // above, and this surface must not let a reader infer a bridge from a merge -- nor infer a
     // successor phase from an empty in-flight slot.
     expect(JSON.stringify(body.roadmap)).not.toContain('QFJ-P09.04');
@@ -258,7 +258,7 @@ describe('GET /api/control-plane/v1/snapshot', () => {
   it('stamps the envelope at request time WITHOUT promoting source freshness', async () => {
     // The correction, asserted end to end. Two separate requests genuinely produce two different
     // `generatedAt` values -- and the facts underneath are compiled in, so freshness does not
-    // budge. A request re-reads no Git, no governance document, no Core and no n8n.
+    // budge. A request re-reads no Git, no governance document, no Core and no QuickFurno Core Automation.
     const first = parseControlPlaneSnapshotV1(await (await call()).json());
     await new Promise((resolve) => setTimeout(resolve, 5));
     const second = parseControlPlaneSnapshotV1(await (await call()).json());
@@ -345,7 +345,7 @@ describe('the route file itself', () => {
     expect(code).not.toContain("'use server'");
   });
 
-  it('reaches no database, provider, n8n or Core transport', () => {
+  it('reaches no database, provider, QuickFurno Core Automation or Core transport', () => {
     // The whole server directory, not just the route: the builder is the thing a future
     // contributor would be tempted to "just add a fetch to".
     for (const file of walk(join(SRC, 'server'))) {
@@ -367,7 +367,7 @@ describe('the route file itself', () => {
         for (const forbidden of [
           'pg',
           'supabase',
-          'n8n-',
+          'quickfurno-core-automation-',
           'whatsapp',
           'twilio',
           'groq',

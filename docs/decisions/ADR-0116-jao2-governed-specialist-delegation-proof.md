@@ -109,7 +109,7 @@ proposal object, no mutation.
 
 Deliberately not reachable, and asserted absent by a spec that reads **code with comments stripped**:
 `createRiyaProposal`, the live Riya conversation service, the Jarvis inbound orchestrator, the
-model-reply adapter, communication authorization, execution intent, n8n, WhatsApp, Meta, any provider
+model-reply adapter, communication authorization, execution intent, QuickFurno Core Automation, WhatsApp, Meta, any provider
 SDK, raw SQL, a database pool, an HTTP client, a shell and the filesystem.
 
 **Riya's own guards stay superior.** A `VENDOR` party, a paused conversation, a human takeover or
@@ -160,7 +160,7 @@ delegation id and specialist to the executing run id is precisely the false pair
 ## Authority
 
 Unchanged, and JAO-2 adds nothing to it. **Recommend -> Authorize -> Execute.** QuickFurno Core
-remains the sole business authority. n8n executes only already-authorized intents. Providers deliver.
+remains the sole business authority. QuickFurno Core Automation executes only already-authorized intents. Providers deliver.
 The QF Model Gateway remains the sole model authority - JAO-2 does not create a second router because
 it does not route anything. Mastra remains a harness: it sequences two steps and holds no authority,
 credential, provider or state.
@@ -177,7 +177,7 @@ new third-party dependency: the only additions are the workspace links
 `@mastra/core` stays exactly `1.61.0`, `@mastra/core/workflows` remains the only production Mastra
 import surface in the repository, and no package under `packages/` imports Mastra.
 
-No migration, no database, no Core call, no n8n, no channel, no deployment, no rollout change.
+No migration, no database, no Core call, no QuickFurno Core Automation, no channel, no deployment, no rollout change.
 
 ## Consequences
 

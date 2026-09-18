@@ -13,7 +13,7 @@
  * 2. NO JSON canonicalisation. The signature is over the digest of the exact bytes received, so
  *    there is no re-serialisation step where signer and verifier could disagree about whitespace,
  *    key order or number formatting.
- * 3. The prefix pins the signature to the Core -> n8n execution boundary. A signature produced for
+ * 3. The prefix pins the signature to the Core -> QuickFurno Core Automation execution boundary. A signature produced for
  *    Core -> Jarvis event ingestion cannot verify here, even though both use Ed25519.
  */
 import { EXECUTION_DISPATCH_DOMAIN_SEPARATOR } from './limits.js';

@@ -17,7 +17,7 @@ import './globals.css';
 export const metadata: Metadata = {
   title: 'Jarvis OS — Control Plane',
   description:
-    'Operator control plane for QF Jarvis. A powerless read surface: QuickFurno Core authorizes, n8n executes, providers deliver.',
+    'Operator control plane for QF Jarvis. A powerless read surface: QuickFurno Core authorizes, coreAutomation executes, providers deliver.',
   robots: { index: false, follow: false },
 };
 

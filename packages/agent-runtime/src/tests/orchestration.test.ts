@@ -259,7 +259,14 @@ describe('proposals', () => {
       expect(result.proposal.authorityStatus).toBe(PROPOSAL_AUTHORITY_STATUS);
       expect(Object.isFrozen(result.proposal)).toBe(true);
       const asRecord = result.proposal as unknown as Record<string, unknown>;
-      for (const method of ['send', 'execute', 'authorize', 'callN8n', 'commit', 'deliver']) {
+      for (const method of [
+        'send',
+        'execute',
+        'authorize',
+        'callcoreAutomation',
+        'commit',
+        'deliver',
+      ]) {
         expect(asRecord[method]).toBeUndefined();
       }
     }

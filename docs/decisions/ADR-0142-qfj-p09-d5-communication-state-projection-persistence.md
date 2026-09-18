@@ -8,7 +8,7 @@ nothing was applied to managed PostgreSQL.**
 **Accepted Core evidence pin:** `af7c2bb4f5a83731666fe059e963d1824cddd7b6` — **not re-pinned, not
 re-audited; no Core code read, accessed or modified**
 
-**Offline implementation only.** No Core change, no managed database, no n8n/provider/Meta, no message,
+**Offline implementation only.** No Core change, no managed database, no QuickFurno Core Automation/provider/Meta, no message,
 **exactly one authorized migration (`0013`)**, no registry entry, no activation, rollout **OFF**.
 
 ## Prerequisites, all merged
@@ -288,7 +288,7 @@ and in the ledger itself, and `0013` is recorded alongside them.
 
 One new projection handler, one new migration (`0013`), and tests. No contract, event registry or
 ingestion change. No Core modification, branch, PR, audit or re-pin. No managed Supabase or managed
-PostgreSQL — **the managed database still carries only `0001`**. No n8n or provider access. No message
+PostgreSQL — **the managed database still carries only `0001`**. No QuickFurno Core Automation or provider access. No message
 sent. **No production-registry entry; the projection is not activated.**
 
 **Production rollout remains OFF. Runtime activation is unchanged.**

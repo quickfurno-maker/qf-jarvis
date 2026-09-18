@@ -12,11 +12,11 @@ It has exactly one runtime dependency: **Zod 4.4.3**, which itself has none ([AD
 
 ## What this package is not
 
-Phase 2 defines contracts, **not transport**. There is no event bus, no ingestion, no persistence, no HTTP, no webhook, no database, no n8n, no provider, no agent, **no model gateway, and no learning pipeline**. A contract describes a shape; it does not move anything, and it cannot execute anything.
+Phase 2 defines contracts, **not transport**. There is no event bus, no ingestion, no persistence, no HTTP, no webhook, no database, no QuickFurno Core Automation, no provider, no agent, **no model gateway, and no learning pipeline**. A contract describes a shape; it does not move anything, and it cannot execute anything.
 
 ## The boundary, made structural
 
-The permanent rule — _Jarvis recommends, QuickFurno authorizes, n8n executes, providers deliver, results return to Core_ — is not merely documented here. Parts of it are **unrepresentable**:
+The permanent rule — _Jarvis recommends, QuickFurno authorizes, QuickFurno Core Automation executes, providers deliver, results return to Core_ — is not merely documented here. Parts of it are **unrepresentable**:
 
 | Rule                                                | How the contract enforces it                                                                                                                                            |
 | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -24,7 +24,7 @@ The permanent rule — _Jarvis recommends, QuickFurno authorizes, n8n executes, 
 | Jarvis may not approve its own recommendation       | `issuer` is the literal `quickfurno-core`, and the deciding actor is a **human or a versioned policy** — there is no agent variant, so agent self-approval has no shape |
 | **Asking is not deciding**                          | `ApprovalRequestV1` has **no outcome field**, and the strict object refuses one                                                                                         |
 | **Silence is never consent**                        | Expiry is mandatory, and there is **no field in which a timeout could grant approval**                                                                                  |
-| Jarvis may not issue an execution intent            | `issuer` is `quickfurno-core`, `executor` is `n8n`. **Jarvis cannot construct a valid one**                                                                             |
+| Jarvis may not issue an execution intent            | `issuer` is `quickfurno-core`, `executor` is `QuickFurno Core Automation`. **Jarvis cannot construct a valid one**                                                      |
 | No Jarvis-to-provider edge                          | There is no provider executor to address                                                                                                                                |
 | At most once                                        | `deliverySemantics` is the literal `at-most-once`, and retry keys are refused inside `parameters`                                                                       |
 | Ambiguity is never success                          | `indeterminate` is its own outcome and must be classified `requires-reconciliation`                                                                                     |

@@ -8,7 +8,7 @@
 
 **New document introduced:** [docs/architecture/model-provider-independence.md](../architecture/model-provider-independence.md) — provider-neutral inference architecture (contracts, operating modes, deployment boundaries, security/privacy, memory, env-var reference, rollback).
 
-> **This ADR extends the roadmap only. It implements nothing.** No model provider, adapter, SDK, source, migration, or SQL is created. No Groq, Supabase, managed PostgreSQL, WhatsApp, n8n, or production system is accessed; no API key is used. The next migration number is **not** allocated. Current QFJ-P03 work remains the active priority and is unchanged.
+> **This ADR extends the roadmap only. It implements nothing.** No model provider, adapter, SDK, source, migration, or SQL is created. No Groq, Supabase, managed PostgreSQL, WhatsApp, QuickFurno Core Automation, or production system is accessed; no API key is used. The next migration number is **not** allocated. Current QFJ-P03 work remains the active priority and is unchanged.
 
 ---
 
@@ -39,11 +39,11 @@ The conversation runtime depends only on a **repository-owned `ModelProvider`** 
 
 ### 4. Deployment boundaries
 
-The **Jarvis VPS** owns inbound webhook, queues, task routing, provider selection, memory coordination, response validation, delivery scheduling, monitoring, and execution intents. The **local PC** owns only model serving, GPU resource control, local-model health, and model lifecycle. The local PC **must not** receive WhatsApp access tokens, Supabase service-role credentials, unrestricted database credentials, n8n administrative credentials, GitHub credentials, or payment credentials. The local inference service uses a private authenticated connection (TLS/mTLS or equivalent signed service auth), firewall allowlisting, **no anonymous public inference endpoint**, and bounded sanitized requests.
+The **Jarvis VPS** owns inbound webhook, queues, task routing, provider selection, memory coordination, response validation, delivery scheduling, monitoring, and execution intents. The **local PC** owns only model serving, GPU resource control, local-model health, and model lifecycle. The local PC **must not** receive WhatsApp access tokens, Supabase service-role credentials, unrestricted database credentials, QuickFurno Core Automation administrative credentials, GitHub credentials, or payment credentials. The local inference service uses a private authenticated connection (TLS/mTLS or equivalent signed service auth), firewall allowlisting, **no anonymous public inference endpoint**, and bounded sanitized requests.
 
 ### 5. Agent ownership unchanged
 
-The Agent Constitution is preserved. **Riya** remains the Customer Conversation and Qualification Agent; **Anisha** remains the Vendor Sales, Relationship and Success Agent (**not** narrowed to onboarding/support). **Provider selection never alters agent authority.** QuickFurno Core remains the final business authority; Jarvis recommends and coordinates; n8n executes approved intents; providers deliver only.
+The Agent Constitution is preserved. **Riya** remains the Customer Conversation and Qualification Agent; **Anisha** remains the Vendor Sales, Relationship and Success Agent (**not** narrowed to onboarding/support). **Provider selection never alters agent authority.** QuickFurno Core remains the final business authority; Jarvis recommends and coordinates; QuickFurno Core Automation executes approved intents; providers deliver only.
 
 ### 5a. Routing clarifications (provider terminology, fallback, data class, capability)
 
@@ -60,7 +60,7 @@ Groq and the local model are **not** authoritative memory systems; memory remain
 
 ### 7. Security and failure invariants
 
-Provider SDK objects never cross the adapter boundary; provider output is revalidated locally; hosted-provider requests are minimized and sanitized; the local PC receives no business-system credentials; no provider directly calls WhatsApp/n8n/Core; provider errors never expose request content, prompts, headers, or secrets; a provider outage never loses inbound messages; fallback is idempotent; human-only mode is always available; a production provider/model change requires evaluation approval; **one inference request produces at most one accepted outbound result**; and model-generated confidence is **not** business authority.
+Provider SDK objects never cross the adapter boundary; provider output is revalidated locally; hosted-provider requests are minimized and sanitized; the local PC receives no business-system credentials; no provider directly calls WhatsApp/QuickFurno Core Automation/Core; provider errors never expose request content, prompts, headers, or secrets; a provider outage never loses inbound messages; fallback is idempotent; human-only mode is always available; a production provider/model change requires evaluation approval; **one inference request produces at most one accepted outbound result**; and model-generated confidence is **not** business authority.
 
 ## Rejected alternatives
 
@@ -78,4 +78,4 @@ Provider SDK objects never cross the adapter boundary; provider output is revali
 
 ## Change-control rule
 
-This extension adds subphases and profiles; it changes **no** existing major phase ID, agent authority, migration ownership, or the Core/Jarvis/n8n/provider boundary. Activating a provider adapter in production requires evaluation approval (QFJ-P04.04) and, for deployment, an owner-selected profile (QFJ-P11.06). Changing the provider-independence contract, the operating-mode semantics, or the deployment credential boundary requires a superseding ADR. Operational status may advance without a new ADR.
+This extension adds subphases and profiles; it changes **no** existing major phase ID, agent authority, migration ownership, or the Core/Jarvis/QuickFurno Core Automation/provider boundary. Activating a provider adapter in production requires evaluation approval (QFJ-P04.04) and, for deployment, an owner-selected profile (QFJ-P11.06). Changing the provider-independence contract, the operating-mode semantics, or the deployment credential boundary requires a superseding ADR. Operational status may advance without a new ADR.

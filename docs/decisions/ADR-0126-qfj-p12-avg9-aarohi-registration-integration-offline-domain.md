@@ -224,7 +224,7 @@ named in the containment list and every listed name is a `false` field):
 `anishaHandoffExecuted`, `processContextSourceAuthenticated`, `modelCallExecuted`, `promptResolved`,
 `retrievalExecuted`, `communicationRequestCreated`, `approvalRequestCreated`,
 `approvalDecisionCreated`, `communicationAuthorizationCreated`, `executionIntentCreated`,
-`n8nExecutionRequested`, `providerSendRequested`, `channelSendRequested`, `sent`, `delivered`,
+`coreAutomationExecutionRequested`, `providerSendRequested`, `channelSendRequested`, `sent`, `delivered`,
 `productionMutation`, `businessEffect`.
 
 And four pinned `true`: `assistanceContextOnly`, `requiresCoreRegistrationExecution`,
@@ -326,15 +326,15 @@ same as describing the stage; the spec now requires the header to say what AVG-9
 
 ## What AVG-9 deliberately does not do
 
-| Left out                                                                  | Owner                                      |
-| ------------------------------------------------------------------------- | ------------------------------------------ |
-| Performing a registration, or any `public.vendors` write                  | **QuickFurno Core**                        |
-| Describing the registration workflow, its steps or its requirements       | **QuickFurno Core**                        |
-| Payment, checkout, package order, credits, activation, Anisha handoff     | AVG-10                                     |
-| Persistence, dashboards, admin APIs, analytics                            | AVG-11                                     |
-| Any increase in autonomy                                                  | AVG-12                                     |
-| Model calls, prompt resolution, retrieval, drafting the assistance itself | later composition through QF Model Gateway |
-| Live Core reads, provider adapters, n8n routes, sends                     | **QFJ-P09**                                |
+| Left out                                                                     | Owner                                      |
+| ---------------------------------------------------------------------------- | ------------------------------------------ |
+| Performing a registration, or any `public.vendors` write                     | **QuickFurno Core**                        |
+| Describing the registration workflow, its steps or its requirements          | **QuickFurno Core**                        |
+| Payment, checkout, package order, credits, activation, Anisha handoff        | AVG-10                                     |
+| Persistence, dashboards, admin APIs, analytics                               | AVG-11                                     |
+| Any increase in autonomy                                                     | AVG-12                                     |
+| Model calls, prompt resolution, retrieval, drafting the assistance itself    | later composition through QF Model Gateway |
+| Live Core reads, provider adapters, QuickFurno Core Automation routes, sends | **QFJ-P09**                                |
 
 Dependencies are unchanged: `zod` alone. No devDependencies, no workspace dependency, no lockfile
 change, and no dependency on the QuickFurno marketplace in either direction.

@@ -47,12 +47,12 @@ expired intent from an unavailable store.
 
 ### What it deliberately is not
 
-**No transport is adopted.** There is no URL, webhook, endpoint, HTTP client, n8n client, workflow id,
+**No transport is adopted.** There is no URL, webhook, endpoint, HTTP client, QuickFurno Core Automation client, workflow id,
 credential, provider client, message or recipient anywhere in the package. Nothing sends, executes,
-schedules, retries, polls or queues. The Core → n8n wire protocol remains **PROPOSED**.
+schedules, retries, polls or queues. The Core → QuickFurno Core Automation wire protocol remains **PROPOSED**.
 
 **No new authority is created for anybody.** The permanent flow is unchanged: Jarvis recommends,
-QuickFurno Core authorizes and issues the intent, this boundary **verifies**, n8n executes behind a
+QuickFurno Core authorizes and issues the intent, this boundary **verifies**, QuickFurno Core Automation executes behind a
 future adopted transport, providers deliver, and results return to Core. Composing a verifier with a
 store creates no authority that neither had, and the package exposes no `canExecute`, `canSend`,
 `isAuthorized`, `executed`, `sent`, `delivered`, `consentValid` or `retryAllowed` — because none of
@@ -84,7 +84,7 @@ unusable without this one and would let transport concerns leak downward.
 The repository now has one restart-durable dispatch-validation path that cannot be silently
 downgraded to a process-lifetime one.
 
-**QFJ-P09 remains INCOMPLETE.** Still absent after P09.04: a real adopted Core → n8n transport and its
+**QFJ-P09 remains INCOMPLETE.** Still absent after P09.04: a real adopted Core → QuickFurno Core Automation transport and its
 composition, execution-time communications eligibility integration, the 18-state communication
 lifecycle runtime, provider dispatch, results and reconciliation, and production rollout. **Live send
 remains OFF.** No application composes this package, and wiring it into a running application is a

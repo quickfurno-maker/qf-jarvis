@@ -287,14 +287,14 @@ asserts the slice imports no `@mastra` package at all.
 
 Unchanged, and JAO-3 adds nothing to it. **Recommend -> Authorize -> Execute.** QuickFurno Core
 remains the sole business authority and the sole source of current business truth and authorization.
-n8n executes only already-authorized intents. Providers deliver. The QF Model Gateway remains the
+QuickFurno Core Automation executes only already-authorized intents. Providers deliver. The QF Model Gateway remains the
 sole model authority. Mastra remains an orchestration harness and is not used here at all.
 
 Jarvis may store non-authoritative operational investigation state. It does not own business truth,
 and it does not turn memory into permission.
 
 **Zero model calls, zero specialist calls, zero proposals, zero approval requests, zero execution
-intents, zero Core calls, zero n8n, zero channel actions, zero business effects.** JAO-1 owns the
+intents, zero Core calls, zero QuickFurno Core Automation, zero channel actions, zero business effects.** JAO-1 owns the
 model-call proof and JAO-2 owns the delegation proof; combining them into JAO-3 would make three
 slices depend on one another's containment.
 

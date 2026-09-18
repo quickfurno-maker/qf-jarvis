@@ -12,7 +12,7 @@
   // owns `executionIntentV1Schema` and the governed recommendation this package validates against,
   // and `approval-runtime`, whose PUBLIC validateDecision re-proves the approval evidence rather
   // than this package re-implementing it. There is no reference to persistence, to a transport, to
-  // n8n, to a provider, or to any application -- a package that could reach one of those would be a
+  // QuickFurno Core Automation, to a provider, or to any application -- a package that could reach one of those would be a
   // dispatcher, and this one correlates.
   "references": [
     { "path": "../../packages/contracts" },

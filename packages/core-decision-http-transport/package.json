@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "sideEffects": false,
-  "description": "Signed, one-shot QuickFurno Core decision transport. Authenticates Jarvis to QuickFurno with Ed25519, sends exactly one qfj.core.decision v2 command, and returns the raw Core response for the existing adapter to validate. No environment access, no database, no n8n, no provider, no retry, no activation.",
+  "description": "Signed, one-shot QuickFurno Core decision transport. Authenticates Jarvis to QuickFurno with Ed25519, sends exactly one qfj.core.decision v2 command, and returns the raw Core response for the existing adapter to validate. No environment access, no database, no QuickFurno Core Automation, no provider, no retry, no activation.",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",

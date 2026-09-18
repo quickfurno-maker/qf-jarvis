@@ -26,7 +26,7 @@ flowchart LR
     P0["0<br/>Charter"] --> P1["1<br/>Foundation"] --> P2["2<br/>Contracts"] --> P3["3<br/>Event backbone"]
     P3 --> P40["4.0<br/>Model gateway"] --> P41["4.1<br/>Knowledge &<br/>capabilities"] --> P42["4.2<br/>Evaluation &<br/>tracing"] --> P43["4.3<br/>Jarvis coordination"]
     P43 --> P5["5<br/>Kabir"] --> P6["6<br/>Riya"] --> P7["7<br/>Anisha"] --> P8["8<br/>Jitin"]
-    P8 --> P85["8.5<br/>Identity &<br/>access"] --> P9["9<br/>Approval and policy"] --> P10["10<br/>n8n bridge<br/><b>TEST ONLY</b>"]
+    P8 --> P85["8.5<br/>Identity &<br/>access"] --> P9["9<br/>Approval and policy"] --> P10["10<br/>QuickFurno Core Automation bridge<br/><b>TEST ONLY</b>"]
     P10 --> P105["10.5<br/>Production<br/>readiness"] --> P11["11<br/>Core integration<br/><b>LIVE</b>"]
     P11 --> P11A["11A<br/>Controlled comms pilot<br/>+ multilingual gate"] --> P12["12<br/>Founder control plane<br/>and operating system"]
     P12 --> P13["13<br/>Security and observability"] --> P14["14<br/>Evaluation loop"] --> P15["15<br/>Controlled automation"]
@@ -238,7 +238,7 @@ The canonical envelope defined in Phase 2 carries **no aggregate sequence**. Pha
 
 **There is no sequence to detect a gap in.** Per-aggregate ordering requires a future versioned envelope carrying one, which requires Core to emit it — a **Phase 11** decision that **must not be invented in Phase 3** ([ADR-0022](../decisions/ADR-0022-projections-ordering-and-rebuild-determinism.md)).
 
-**Explicit exclusions.** No agents. No recommendations. No AI or model SDK. No execution. No approval flow. No communication sending. No n8n. No provider integration. **No live QuickFurno Core connection. No QuickFurno Supabase credential. No writes to QuickFurno business tables.** No founder control-plane UI. **No HTTP ingestion endpoint** — ingestion is a function, and `apps/api` remains a compileable boundary. **No agent-specific or domain-intelligence read model.** Per [ADR-0034](../decisions/ADR-0034-stage-3-4-projections-checkpoints-and-bounded-retries.md) §10: **exactly two infrastructure-metadata proof projections during Stage 3.4** (`rm_event_type_activity` and `rm_daily_event_acceptance`) — the locked Stage 3.4 exit gate needs two to prove isolation. **No agent, domain-intelligence, or authoritative business projection.** **`rm_subject_activity` remains deferred to Stage 3.6.**
+**Explicit exclusions.** No agents. No recommendations. No AI or model SDK. No execution. No approval flow. No communication sending. No QuickFurno Core Automation. No provider integration. **No live QuickFurno Core connection. No QuickFurno Supabase credential. No writes to QuickFurno business tables.** No founder control-plane UI. **No HTTP ingestion endpoint** — ingestion is a function, and `apps/api` remains a compileable boundary. **No agent-specific or domain-intelligence read model.** Per [ADR-0034](../decisions/ADR-0034-stage-3-4-projections-checkpoints-and-bounded-retries.md) §10: **exactly two infrastructure-metadata proof projections during Stage 3.4** (`rm_event_type_activity` and `rm_daily_event_acceptance`) — the locked Stage 3.4 exit gate needs two to prove isolation. **No agent, domain-intelligence, or authoritative business projection.** **`rm_subject_activity` remains deferred to Stage 3.6.**
 
 **Note.** `apps/worker` **begins to run a loop** in this phase. That is a planned change, anticipated by name in [ADR-0010](../decisions/ADR-0010-workspace-and-module-structure.md) §2 — not scope creep.
 
@@ -280,7 +280,7 @@ The canonical envelope defined in Phase 2 carries **no aggregate sequence**. Pha
 
 **Key outputs.** A knowledge lifecycle — `uploaded → scanned → reviewed → approved → active → retired` — with every record carrying document identifier, version, source, owner, `approvedBy`, `effectiveFrom`, `expiresAt` (where applicable), classification, retrieval permissions, and `supersededBy` (where applicable). A secure capability registry, each capability declaring identifier, owning component, allowed caller or agent, read/write classification, input contract, output contract, data classification, timeout, rate limit, audit requirements, environment availability, feature flag, and failure behaviour.
 
-**Explicit exclusions.** **Retrieved knowledge is evidence, never business authority** — QuickFurno Core remains authoritative for current operational and business state. **No commitment to a vector database merely because retrieval exists** — vector retrieval must be justified by Phase 4.2 evaluation evidence, and deterministic lookup with metadata filtering is the valid first implementation. **Open-ended capabilities are prohibited** — no arbitrary SQL, arbitrary shell, unrestricted filesystem access, arbitrary URL fetching, generic provider invocation, or unrestricted document retrieval. Jarvis retains **no write access to business state, no path to n8n, no provider credentials, and no direct communication transport.**
+**Explicit exclusions.** **Retrieved knowledge is evidence, never business authority** — QuickFurno Core remains authoritative for current operational and business state. **No commitment to a vector database merely because retrieval exists** — vector retrieval must be justified by Phase 4.2 evaluation evidence, and deterministic lookup with metadata filtering is the valid first implementation. **Open-ended capabilities are prohibited** — no arbitrary SQL, arbitrary shell, unrestricted filesystem access, arbitrary URL fetching, generic provider invocation, or unrestricted document retrieval. Jarvis retains **no write access to business state, no path to QuickFurno Core Automation, no provider credentials, and no direct communication transport.**
 
 **Entry criteria.** Phase 4.0 complete.
 
@@ -424,7 +424,7 @@ The canonical envelope defined in Phase 2 carries **no aggregate sequence**. Pha
 
 **Key outputs.** The **approval-request submission capability** — Jarvis submitting an approval request to Core's authorization interface, and reflecting Core's authoritative response ([execution-governance.md](./execution-governance.md), [ADR-0007](../decisions/ADR-0007-founder-approval-interface-and-authority.md)). Approval-decision handling: approved, rejected, changes requested. Risk classification driving the approval path. Delegated approval limits. Expiry with **no timeout-to-approve**. Attribution and audit of every decision. Policy awareness — Jarvis knowing what approval a recommendation would require. Automation **Level 2 — assisted recommendations**: recommendations are shown to humans, who act manually.
 
-**Explicit exclusions.** No execution — approval exists, but nothing is executed from it yet. No policy automation. No n8n. **No optimistic or local approval state** — Jarvis never marks anything approved on its own. This phase deliberately builds the approval mechanism *before* anything can act on an approval, so the path is proven while it is still harmless.
+**Explicit exclusions.** No execution — approval exists, but nothing is executed from it yet. No policy automation. No QuickFurno Core Automation. **No optimistic or local approval state** — Jarvis never marks anything approved on its own. This phase deliberately builds the approval mechanism *before* anything can act on an approval, so the path is proven while it is still harmless.
 
 **Entry criteria.** Phases 5–8 complete, with at least one agent evaluated as good enough to show a human. **Phase 8.5 complete** — identity, MFA and RBAC exist before approval is exposed to people.
 
@@ -436,9 +436,9 @@ The canonical envelope defined in Phase 2 carries **no aggregate sequence**. Pha
 
 ---
 
-## Phase 10 — n8n Execution Bridge — **TEST ONLY**
+## Phase 10 — QuickFurno Core Automation Execution Bridge — **TEST ONLY**
 
-**Objective.** Build and prove the n8n execution bridge **against fixtures and a test dispatcher**. Reach nobody.
+**Objective.** Build and prove the QuickFurno Core Automation execution bridge **against fixtures and a test dispatcher**. Reach nobody.
 
 > **This phase sends nothing to anyone.** No production recipient. No live provider. No production message. No production call. Not "discouraged", not "only with approval" — **forbidden** ([ADR-0017](../decisions/ADR-0017-live-communication-sequencing.md)).
 
@@ -446,17 +446,17 @@ The canonical envelope defined in Phase 2 carries **no aggregate sequence**. Pha
 
 **The first real message must not be sent against a fake consent authority.**
 
-**Key outputs.** A **test dispatcher** and fixtures. A **simulated Core interface**. Execution-intent validation: authenticity, integrity, freshness, bounds. n8n-side contract validation. **Duplicate-effect testing** — one execution intent produces at most one provider call initiation, proven by deliberately redelivering. Messaging lifecycle simulation across all eighteen states. Bounded retries preserving idempotency. Dead-letter handling. **Voice-gate design and tests.**
+**Key outputs.** A **test dispatcher** and fixtures. A **simulated Core interface**. Execution-intent validation: authenticity, integrity, freshness, bounds. QuickFurno Core Automation-side contract validation. **Duplicate-effect testing** — one execution intent produces at most one provider call initiation, proven by deliberately redelivering. Messaging lifecycle simulation across all eighteen states. Bounded retries preserving idempotency. Dead-letter handling. **Voice-gate design and tests.**
 
 **The QF Communications Runtime** ([communication-model.md](./communication-model.md)), built and tested but not connected: consent and policy validation interface, template and script registry, scheduling, retry and idempotency controls, delivery and call status handling, human handoff, structured result reporting. Provider credentials live **here and nowhere else** — and in this phase, nowhere at all.
 
-**Explicit exclusions.** **No production recipient. No live provider. No production message. No production call.** **No Jarvis-to-n8n path, ever** — intents come from QuickFurno Core. **No Jarvis-to-provider path and no provider credential in Jarvis, ever.** No policy automation. No voice execution of any kind.
+**Explicit exclusions.** **No production recipient. No live provider. No production message. No production call.** **No Jarvis-to-QuickFurno Core Automation path, ever** — intents come from QuickFurno Core. **No Jarvis-to-provider path and no provider credential in Jarvis, ever.** No policy automation. No voice execution of any kind.
 
 **Entry criteria.** Phase 9 complete. Approval decisions are recorded and attributable.
 
 **Exit criteria.** Against the test dispatcher and a conforming simulated Core: an approved, low-risk, reversible action executes end to end and its result returns. **Retry demonstrably does not double-send and does not double-dial.** **An ambiguous provider outcome is demonstrably reconciled before any further attempt.** **A legitimate later attempt after a no-answer is demonstrably a new intent** — its own identity, consent check, attempt-limit check, expiry, and audit trail — not a retry. An expired intent is demonstrably refused. A forged intent is demonstrably refused. **A communication request for an opted-out recipient is demonstrably refused — including one the founder made.** **A scheduled communication whose recipient withdraws consent before the scheduled moment is demonstrably not sent.** Dead letters are visible and replayable. The full audit chain — event → recommendation → approval → intent → result — is verifiable.
 
-**Dependencies.** Phase 9. n8n availability. **No dependency on QuickFurno Core's readiness** — that is the point. This phase completes on its own schedule.
+**Dependencies.** Phase 9. QuickFurno Core Automation availability. **No dependency on QuickFurno Core's readiness** — that is the point. This phase completes on its own schedule.
 
 **Principal risks.** The temptation to "just try one" because the bridge is working. There is no production credential in this phase, which is what makes the temptation unactionable rather than merely resisted.
 
@@ -488,7 +488,7 @@ The canonical envelope defined in Phase 2 carries **no aggregate sequence**. Pha
 
 - **Canonical event emitters in QuickFurno Core** — emitting the Phase 2 events for all four agent domains, including the **client, assignment, and vendor target events**, versioned and signed.
 - **The authorization interface in QuickFurno Core** — accepting an `ApprovalRequestV1`, validating identity, authority, current state, risk policy, expiry, and recommendation eligibility; deciding; recording the authoritative decision; and emitting the resulting canonical decision event ([ADR-0007](../decisions/ADR-0007-founder-approval-interface-and-authority.md)).
-- **Execution-intent dispatch from Core to n8n**, completing the Phase 10 bridge.
+- **Execution-intent dispatch from Core to QuickFurno Core Automation**, completing the Phase 10 bridge.
 - **The QuickFurno Communication Core** — the real consent authority. Contact identity, phone number, WhatsApp eligibility, voice-call consent, opt-in and opt-out status, do-not-contact, suppressions, STOP/START, approved purpose, attempt limits, quiet hours, communication history, human-handoff state, and **authoritative delivery and call outcomes** ([communication-model.md](./communication-model.md)).
 - **Consent re-validation at execution time** — the runtime asks Core, and Core's answer *then* is the one that counts.
 - **Assignment, reassignment, and linked-lead capability in Core** — batch creation, the two-batch cap, the six-per-lead-category lifetime cap, client-confirmation capture, and separate linked-lead creation ([ADR-0015](../decisions/ADR-0015-complete-client-journey-and-reassignment-policy.md)).
@@ -557,7 +557,7 @@ Voice is not just another channel. It is synchronous, intrusive, impossible to r
 
 **No voice policy automation is permitted.** Any future limited-policy voice automation requires a separate Accepted ADR, Phase 14 evaluation evidence, explicit Phase 15 promotion gates, business-owner approval, and immediate revocation capability. **Unrestricted autonomous calling remains prohibited**, and the example call types recorded in [automation-levels.md](../governance/automation-levels.md) — requested callbacks, appointment reminders, opted-in status calls, vendor-requested onboarding assistance — are **possibilities for a future ADR to argue, not authorized scope**.
 
-**Explicit exclusions.** No policy automation — every communication in this phase traces to a human approval. No money-related execution until its stronger-approval path is proven end to end. **No voice before messaging safety evidence exists.** **No real message before the multilingual safety gate passes.** **No Jarvis-to-n8n path and no Jarvis-to-provider path, ever.**
+**Explicit exclusions.** No policy automation — every communication in this phase traces to a human approval. No money-related execution until its stronger-approval path is proven end to end. **No voice before messaging safety evidence exists.** **No real message before the multilingual safety gate passes.** **No Jarvis-to-QuickFurno Core Automation path and no Jarvis-to-provider path, ever.**
 
 **Entry criteria.** **Phase 11 has succeeded** — not started, not mostly working. Core emits, Core authorizes, Core records, and consent is enforced by the authority that owns it. **The multilingual communication safety gate passes.**
 
@@ -565,7 +565,7 @@ Voice is not just another channel. It is synchronous, intrusive, impossible to r
 
 **Exit criteria.** A real, approved, low-risk, reversible message reaches a real recipient and its authoritative result returns to Core. **A retry demonstrably does not double-send and does not double-dial.** **An opted-out recipient is demonstrably refused — including one the founder approved.** **A scheduled communication whose recipient withdraws consent before the scheduled moment is demonstrably not sent.** Nothing was rendered as `delivered` that was not. Dead letters are visible and replayable. The full audit chain is verifiable for every message sent.
 
-**Dependencies.** Phase 11. Provider credentials provisioned **in n8n only** — and verifiably nowhere inside the Jarvis trust zone.
+**Dependencies.** Phase 11. Provider credentials provisioned **in QuickFurno Core Automation only** — and verifiably nowhere inside the Jarvis trust zone.
 
 **Principal risks.** **The first real effect on a real client or vendor.** Mitigated by internal destinations first, by one purpose, by volume bounds, by a named human behind every single message, by the multilingual safety gate, and by an off switch that costs nothing to pull.
 

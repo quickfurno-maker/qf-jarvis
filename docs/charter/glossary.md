@@ -53,11 +53,11 @@ A structured, **governed** request to contact a client or vendor by WhatsApp or 
 
 ### Governed execution (communication)
 
-The sanctioned path by which Jarvis supports calling and WhatsApp: **Jarvis requests and coordinates → QuickFurno Core authorizes → n8n and the communication runtime execute → providers deliver → QuickFurno Core records the authoritative result → Jarvis reflects it.** Jarvis has controlled communication coordination and user-facing capabilities; it has **no direct provider transport, delivery, or authorization authority**.
+The sanctioned path by which Jarvis supports calling and WhatsApp: **Jarvis requests and coordinates → QuickFurno Core authorizes → QuickFurno Core Automation and the communication runtime execute → providers deliver → QuickFurno Core records the authoritative result → Jarvis reflects it.** Jarvis has controlled communication coordination and user-facing capabilities; it has **no direct provider transport, delivery, or authorization authority**.
 
 ### QF Communications Runtime
 
-Shared execution-side infrastructure — WhatsApp adapter, QF Voice Runtime, consent and policy validation interface, template and script registry, scheduling, retry and idempotency controls, delivery and call status handling, transcript and summary processing, human handoff, structured result reporting. It lives **outside QF Jarvis**, is reached only by n8n under an authorized execution intent, and holds the provider credentials that Jarvis does not.
+Shared execution-side infrastructure — WhatsApp adapter, QF Voice Runtime, consent and policy validation interface, template and script registry, scheduling, retry and idempotency controls, delivery and call status handling, transcript and summary processing, human handoff, structured result reporting. It lives **outside QF Jarvis**, is reached only by QuickFurno Core Automation under an authorized execution intent, and holds the provider credentials that Jarvis does not.
 
 It may serve Jarvis, Riya, and Anisha — but each agent retains separate permissions, prompts, policies, communication purposes, recipient eligibility, templates, memory boundaries, evaluation datasets, and escalation rules. **Shared plumbing must not become a shared identity.**
 
@@ -65,7 +65,7 @@ It may serve Jarvis, Riya, and Anisha — but each agent retains separate permis
 
 The **internal voice component of the QF Communications Runtime** — ours, execution-side, credential-holding. It routes a call toward an **external telephony or SIP provider**, which delivers it.
 
-**It is not a provider, and it is not a source of truth.** The external telephony/SIP provider delivers; **QuickFurno Core records the authoritative result**. **Jarvis does not connect to it directly** — voice reaches it only through an authorized execution intent dispatched by Core and executed by n8n.
+**It is not a provider, and it is not a source of truth.** The external telephony/SIP provider delivers; **QuickFurno Core records the authoritative result**. **Jarvis does not connect to it directly** — voice reaches it only through an authorized execution intent dispatched by Core and executed by QuickFurno Core Automation.
 
 Voice **begins at Automation Level 2 or 3**: production outbound voice initially requires explicit human approval on every call. Any future limited-policy automation for voice requires a **separate accepted ADR** ([automation-levels.md](../governance/automation-levels.md)).
 
@@ -83,7 +83,7 @@ A bounded, expiring instruction to perform a specific authorized action, produce
 
 ### Execution result
 
-The outcome reported after n8n attempts an execution intent: delivered, failed, partially completed, rejected by the provider. Results return to QuickFurno Core, which records them as truth. Jarvis reads results; it does not own them.
+The outcome reported after QuickFurno Core Automation attempts an execution intent: delivered, failed, partially completed, rejected by the provider. Results return to QuickFurno Core, which records them as truth. Jarvis reads results; it does not own them.
 
 ### Idempotency
 
@@ -107,11 +107,11 @@ A bounded reasoning component within QF Jarvis with a named domain, a defined in
 
 ### Provider
 
-An external system that delivers a real-world effect: WhatsApp, SMS, email, voice, CRM, Google Ads, Meta Ads, and other approved providers. Providers are reached **only** by n8n. Jarvis holds no provider credentials and makes no provider calls.
+An external system that delivers a real-world effect: WhatsApp, SMS, email, voice, CRM, Google Ads, Meta Ads, and other approved providers. Providers are reached **only** by QuickFurno Core Automation. Jarvis holds no provider credentials and makes no provider calls.
 
-### n8n
+### QuickFurno Core Automation
 
-The approved execution fabric. Validates and executes authorized execution intents against providers, then reports execution results back to QuickFurno Core. n8n executes; it does not decide.
+The approved execution fabric. Validates and executes authorized execution intents against providers, then reports execution results back to QuickFurno Core. QuickFurno Core Automation executes; it does not decide.
 
 ### Dead letter
 

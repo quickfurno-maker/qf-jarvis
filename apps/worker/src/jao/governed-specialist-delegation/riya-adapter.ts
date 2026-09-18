@@ -11,7 +11,7 @@
  *
  * Deliberately NOT imported, and asserted absent by a spec: `createRiyaProposal`, the live Riya
  * conversation service, the Jarvis inbound orchestrator, the model-reply adapter, communication
- * authorization, execution intent, n8n, WhatsApp and Meta. This is analysis, not sales.
+ * authorization, execution intent, QuickFurno Core Automation, WhatsApp and Meta. This is analysis, not sales.
  *
  * ### Riya's own guards stay superior
  *

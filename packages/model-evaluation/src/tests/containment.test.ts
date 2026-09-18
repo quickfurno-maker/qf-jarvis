@@ -3,7 +3,7 @@
  *
  * Matrix items 49–65: content-free events; evaluation grants no authority; scopes distinct; the
  * Conversation Operations Center is documented-mandatory but absent; no semantic/RAG; no live call/
- * provider SDK/DB/secret/n8n dependency; the public API is locked; migrations exact with no 0014; the
+ * provider SDK/DB/secret/QuickFurno Core Automation dependency; the public API is locked; migrations exact with no 0014; the
  * event-backbone root API remains 39; and no tracked source carries a control byte.
  */
 import { createHash } from 'node:crypto';
@@ -122,7 +122,7 @@ describe('observability and authority', () => {
     }
   });
 
-  it('(51,52) evaluation grants no authority and has no execute/send/callN8n method', () => {
+  it('(51,52) evaluation grants no authority and has no execute/send/callcoreAutomation method', () => {
     const suite = buildFoundationSuite();
     const result = evaluateSuite(suite, safeObservations(suite)) as unknown as Record<
       string,
@@ -132,7 +132,14 @@ describe('observability and authority', () => {
       evaluateSuite(suite, safeObservations(suite)),
       'ACTIVE_MODEL_RELEASE',
     );
-    for (const method of ['authorize', 'execute', 'send', 'callN8n', 'promote', 'activate']) {
+    for (const method of [
+      'authorize',
+      'execute',
+      'send',
+      'callcoreAutomation',
+      'promote',
+      'activate',
+    ]) {
       expect(result[method]).toBeUndefined();
       if (evidence.ok) {
         expect((evidence.evidence as unknown as Record<string, unknown>)[method]).toBeUndefined();
@@ -249,7 +256,7 @@ describe('containment', () => {
     readFileSync(fileURLToPath(new URL('package.json', PKG_DIR)), 'utf8'),
   ) as { dependencies?: Record<string, string>; exports: Record<string, unknown> };
 
-  it('(57,61) has no live call/provider SDK/process.env/secret/n8n term in production source', () => {
+  it('(57,61) has no live call/provider SDK/process.env/secret/QuickFurno Core Automation term in production source', () => {
     for (const file of productionFiles()) {
       const text = readFileSync(file, 'utf8');
       expect(text).not.toMatch(/\bfetch\s*\(/);
@@ -260,7 +267,7 @@ describe('containment', () => {
       expect(text).not.toMatch(
         /from ['"](pg|groq-sdk|openai|@anthropic-ai\/sdk|ollama|axios|undici)['"]/,
       );
-      expect(text).not.toMatch(/\bn8n\b|kimi/i);
+      expect(text).not.toMatch(/\bcoreAutomation\b|kimi/i);
     }
   });
 

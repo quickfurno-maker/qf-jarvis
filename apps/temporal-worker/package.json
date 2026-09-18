@@ -1,0 +1,26 @@
+{
+  "name": "@qf-jarvis/temporal-worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "QF Jarvis native Temporal durable-orchestration worker. Temporal owns crash-proof waiting, retries and journey progress; Mastra/agent planning runs inside activities; every business proposal crosses @qf-jarvis/action-kernel to QuickFurno Core; QuickFurno Core Automation executes authorized effects. Temporal never becomes an authority or business database.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/action-kernel": "workspace:*",
+    "@qf-jarvis/agent-runtime": "workspace:*",
+    "@qf-jarvis/durable-orchestration-contracts": "workspace:*",
+    "@temporalio/worker": "1.24.0",
+    "@temporalio/workflow": "1.24.0"
+  }
+}

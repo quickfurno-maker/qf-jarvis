@@ -31,11 +31,11 @@ Unknown fields are rejected. The envelope is strict.
 
 Every canonical event is emitted by Core, because **a fact is only a fact once Core has recorded it** ([ADR-0001](./ADR-0001-source-of-truth-boundary.md)).
 
-This holds even when the underlying thing happened elsewhere: a provider delivered a message, n8n observed it, n8n reported it, **Core recorded it, Core emitted the event**. The provider's view appears _inside_ an execution-result payload as **reported evidence** — `reportingSystem` may name n8n or the QF Communications Runtime — but the envelope still says Core.
+This holds even when the underlying thing happened elsewhere: a provider delivered a message, QuickFurno Core Automation observed it, QuickFurno Core Automation reported it, **Core recorded it, Core emitted the event**. The provider's view appears _inside_ an execution-result payload as **reported evidence** — `reportingSystem` may name QuickFurno Core Automation or the QF Communications Runtime — but the envelope still says Core.
 
 One event therefore carries two distinct claims, and the contract keeps them apart:
 
-- **Payload:** "n8n reports the provider accepted this."
+- **Payload:** "QuickFurno Core Automation reports the provider accepted this."
 - **Envelope:** "QuickFurno Core is telling you."
 
 Collapsing them would make a provider's optimistic acknowledgement into business truth — the exact failure that lets a founder believe a message arrived when it did not.

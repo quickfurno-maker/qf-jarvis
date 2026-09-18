@@ -8,7 +8,7 @@
 
 ## Context
 
-The roadmap approved in Phase 0 put the messaging pilot **inside Phase 10**, as gates 10a–10f. Phase 10 would build the n8n bridge and, in the same phase, run a controlled pilot against real recipients — with the caveat that _if Core's dispatch capability was not ready, Phase 10 would exit against a conforming test dispatcher instead._
+The roadmap approved in Phase 0 put the messaging pilot **inside Phase 10**, as gates 10a–10f. Phase 10 would build the QuickFurno Core Automation bridge and, in the same phase, run a controlled pilot against real recipients — with the caveat that _if Core's dispatch capability was not ready, Phase 10 would exit against a conforming test dispatcher instead._
 
 Read that caveat again, because it is the problem. It makes the most consequential property of the entire project — _whether a real client's phone rings_ — **conditional on the readiness of another team's roadmap.** If Core happened to be ready, Phase 10 would go live. If it happened not to be, Phase 10 would stay in test.
 
@@ -22,13 +22,13 @@ There is a second problem underneath it. Phase 10's pilot would run against a **
 
 **Phase 10 is test-only. Phase 11 makes Core integration live. Phase 11A is a separate, gated, controlled communication pilot. No production communication is permitted before Phase 11 succeeds.**
 
-### Phase 10 — n8n Execution Bridge: **TEST ONLY**
+### Phase 10 — QuickFurno Core Automation Execution Bridge: **TEST ONLY**
 
-Builds and proves the n8n side against the Phase 2 contracts and fixtures:
+Builds and proves the QuickFurno Core Automation side against the Phase 2 contracts and fixtures:
 
 - test dispatcher; fixtures; **simulated** Core interface
 - execution-intent validation — authenticity, integrity, freshness, bounds
-- n8n contract validation
+- QuickFurno Core Automation contract validation
 - **duplicate-effect testing** — one intent produces at most one provider call initiation
 - messaging lifecycle simulation across all eighteen states
 - voice-gate design and tests
@@ -66,7 +66,7 @@ Voice is not just another channel. It is synchronous, intrusive, impossible to r
 
 ### And the boundary, unchanged
 
-**No Jarvis-to-n8n path. No Jarvis-to-provider path.** Execution intents are dispatched to n8n **by QuickFurno Core**. Jarvis cannot construct one — `issuer` is the literal `quickfurno-core` and `executor` the literal `n8n`.
+**No Jarvis-to-QuickFurno Core Automation path. No Jarvis-to-provider path.** Execution intents are dispatched to QuickFurno Core Automation **by QuickFurno Core**. Jarvis cannot construct one — `issuer` is the literal `quickfurno-core` and `executor` the literal `QuickFurno Core Automation`.
 
 ## Consequences
 

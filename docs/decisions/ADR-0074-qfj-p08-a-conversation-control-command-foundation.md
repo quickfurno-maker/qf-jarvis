@@ -136,7 +136,7 @@ broader human control and the operator interface all remain unimplemented. The C
 Center remains, as ADR-0054 §L says, a contract with no producer.
 
 No writable authoritative-state port, no `jarvis-runtime` composition, no HTTP, no API, no UI, no
-transport, no provider, no Core call, no WhatsApp, no n8n. No existing production package is modified.
+transport, no provider, no Core call, no WhatsApp, no QuickFurno Core Automation. No existing production package is modified.
 No assignment semantics change: M1's `assignAgent` remains the sole assignment authority, and nothing
 here can name an actor.
 
@@ -189,7 +189,7 @@ remains OFF.**
 
 No writable authoritative-state port · no Jarvis composition · no operator HTTP/API · no operator UI ·
 no persistence, database, Supabase or migration · no durable idempotency · no consent runtime · no
-approval runtime · no opt-out enforcement · no P09 transport · no WhatsApp · no n8n · no live Core
+approval runtime · no opt-out enforcement · no P09 transport · no WhatsApp · no QuickFurno Core Automation · no live Core
 call · no provider or live model call · no credential or environment read · no deployment or
 activation · no CANARY/ACTIVE/FALLBACK · no RAG · no memory · no dataset or training · no send,
 execute, authorize or persist.

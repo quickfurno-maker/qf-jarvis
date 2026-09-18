@@ -14,7 +14,7 @@
 
 An explicit, immutable, validated **hybrid-routing policy** and a **bounded failover matrix** over the existing Groq (HOSTED) and local (LOCAL) providers, behind the unchanged `ModelProvider` contract. Routing is **opt-in**: a gateway with no `routingProfile` behaves exactly as the foundation (its 191 prior tests are unchanged). When a policy is present, provider selection is deterministic (execution class first by profile, then configured order) and the single fallback is gated by why the primary failed.
 
-**No live Groq or local-model call, no real key/token, no external network in tests/CI. No agent, no n8n, no RAG, no memory, no schema, no migration.** Routing selects inference only and authorizes/executes nothing.
+**No live Groq or local-model call, no real key/token, no external network in tests/CI. No agent, no QuickFurno Core Automation, no RAG, no memory, no schema, no migration.** Routing selects inference only and authorizes/executes nothing.
 
 ## Changed-file manifest
 

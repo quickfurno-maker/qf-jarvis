@@ -29,4 +29,4 @@ Neither is done here.
 
 ## After the smoke test (roadmap order, each separately authorized)
 
-QuickFurno Core-side M3 protocol adoption → a Core-approved delivery command + n8n/WhatsApp transport → authoritative persistence/delivery states → the minimum Conversation Operations Center → a controlled pilot. Managed database/migration/live lanes remain paused; RAG stays disabled; Kimi excluded; migrations 0001–0007 byte-exact with no 0008; event-backbone root API 39.
+QuickFurno Core-side M3 protocol adoption → a Core-approved delivery command + QuickFurno Core Automation/WhatsApp transport → authoritative persistence/delivery states → the minimum Conversation Operations Center → a controlled pilot. Managed database/migration/live lanes remain paused; RAG stays disabled; Kimi excluded; migrations 0001–0007 byte-exact with no 0008; event-backbone root API 39.

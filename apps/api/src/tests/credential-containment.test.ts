@@ -130,8 +130,12 @@ const DESIGNATED_TIMER_MODULE = 'src/shadow/create-controlled-shadow-runner.ts';
  * rather than a property the application quietly acquired.
  */
 const DESIGNATED_DATABASE_MODULE = 'src/runtime/durable-jarvis-runtime.ts';
+const JF6_RIYA_SERVICE_COMPOSITION_MODULE =
+  'src/jf6-private-process/create-riya-service-boundary.ts';
 const isDesignatedDatabaseModule = (f: string): boolean =>
   normalise(f).endsWith(`/${DESIGNATED_DATABASE_MODULE}`);
+const isJf6RiyaServiceComposition = (f: string): boolean =>
+  normalise(f).endsWith(`/${JF6_RIYA_SERVICE_COMPOSITION_MODULE}`);
 
 /**
  * The one production file permitted to NAME the durable approval queue (QFJ-P08, ADR-0082).
@@ -209,7 +213,7 @@ describe('(67) the process boundary reads no environment', () => {
     for (const file of productionFiles()) {
       const code = codeOnly(readFileSync(file, 'utf8'));
       const allowed = allowlistFor(file);
-      for (const raw of code.match(/process\s*\.\s*[A-Za-z]+/g) ?? []) {
+      for (const raw of code.match(/(?<![A-Za-z0-9_/-])process\s*\.\s*[A-Za-z]+/g) ?? []) {
         const use = raw.replace(/\s/g, '');
         expect(allowed).toContain(use);
         seen.add(`${normalise(file).split('/src/')[1] ?? ''}:${use}`);
@@ -413,16 +417,21 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
         }
         expect(code, `${file}: ${forbidden}`).not.toContain(forbidden);
       }
-      // `postgres` is permitted in EXACTLY TWO modules and forbidden everywhere else: the one that
-      // creates a pool (QFJ-P08-B3), and the operator boundary that names the durable queue as a
-      // TYPE (QFJ-P08, ADR-0082). The test above proves the second holds no runtime reference.
-      if (!isDesignatedDatabaseModule(file) && !isDesignatedQueueTypeModule(file)) {
+      // `postgres` is permitted in EXACTLY THREE modules and forbidden everywhere else: the one that
+      // creates a pool (QFJ-P08-B3), the JF-6 serving composition that injects that caller-owned pool
+      // into two reviewed durable Riya adapters, and the operator boundary that names the durable
+      // queue as a TYPE (QFJ-P08, ADR-0082). None imports `pg` or handles a connection string.
+      if (
+        !isDesignatedDatabaseModule(file) &&
+        !isJf6RiyaServiceComposition(file) &&
+        !isDesignatedQueueTypeModule(file)
+      ) {
         expect(code, file).not.toContain('postgres');
       }
     }
   });
 
-  it('exactly two production modules name a database, and neither opens a connection of its own', () => {
+  it('exactly three production modules name a database, and none opens a connection of its own', () => {
     const touching = productionFiles().filter((file) => {
       const code = codeOnly(readFileSync(file, 'utf8')).toLowerCase();
       return (
@@ -431,13 +440,18 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
         code.includes('conversation-state')
       );
     });
-    // An EXACT set, not a superset. QFJ-P08 (ADR-0082) adds the operator boundary, which names the
-    // durable approval queue as a TYPE; the seam that actually creates a pool is still exactly one.
+    // An EXACT set, not a superset. JF-6 adds one composition that receives an already-created pool
+    // and hands it to the two reviewed durable Riya adapters; the seam that actually creates a pool
+    // remains exactly one, and the operator boundary still names its queue as a TYPE only.
     expect(touching.map((f) => normalise(f).split('/apps/api/')[1] ?? '').sort()).toEqual(
-      [DESIGNATED_DATABASE_MODULE, DESIGNATED_QUEUE_TYPE_MODULE].sort(),
+      [
+        DESIGNATED_DATABASE_MODULE,
+        JF6_RIYA_SERVICE_COMPOSITION_MODULE,
+        DESIGNATED_QUEUE_TYPE_MODULE,
+      ].sort(),
     );
 
-    // BOTH reach persistence only through public workspace APIs: no `pg` import, no raw pool, no
+    // All three reach persistence only through public workspace APIs: no `pg` import, no raw pool, no
     // SQL, no migration, no connection string handling, and no HTTP surface.
     for (const file of touching) {
       const code = codeOnly(readFileSync(file, 'utf8'));
@@ -475,15 +489,17 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
     }
   });
 
-  it('exactly two modules arm timers, and every arm has its clear', () => {
+  it('exactly three modules arm timers, and every arm has its clear', () => {
     // The second is the certification composition (JF-5B-R1, ADR-0152): the bounded discovery GET needs
     // one abort deadline, or a hung provider would hang an owner's terminal indefinitely. JF-5B-R6 adds
     // the evaluation-only pacing sleep in the same file. The RULE is unchanged -- every arm matched by a
     // clear, nothing repeating, nothing rescheduling -- and it is now COUNTED per file rather than
-    // assumed to be one.
+    // assumed to be one. JF-6 adds one abort deadline to the injected Core availability HTTP reader;
+    // it owns no retry loop and clears the timer in `finally` on every path.
     const ARMS_BY_FILE: Readonly<Record<string, number>> = Object.freeze({
       [DESIGNATED_TIMER_MODULE]: 1,
       [JF5B_COMPOSITION]: 2,
+      'src/jf6-private-process/create-core-service-availability-reader.ts': 1,
     });
     const timerFiles = productionFiles().filter((file) =>
       codeOnly(readFileSync(file, 'utf8')).includes('setTimeout'),
@@ -542,6 +558,9 @@ describe('the staging smoke stays out of the production boundary', () => {
       // application dependency delta and not a new third-party resolution. A spec asserts both
       // manifests carry the same exact version, and `packages/**` remain Mastra-free.
       '@mastra/core',
+      // ADR-0153: the shared Action Kernel is the deterministic proposal-submission firewall used by
+      // API/Temporal composition. It adds no authority and is a workspace-only dependency.
+      '@qf-jarvis/action-kernel',
       // ADR-0097 adds exactly two, both genuinely used by the private ingress: the conversation
       // SERVICE it delegates to, and `agent-runtime` for the closed `RUNTIME_DATA_CLASSES`
       // vocabulary its classification-policy output is validated against. No web framework, and no
@@ -570,6 +589,9 @@ describe('the staging smoke stays out of the production boundary', () => {
       // existing adapter. Workspace-only dependency; no new third-party resolution and no provider.
       '@qf-jarvis/core-decision-http-transport',
       '@qf-jarvis/core-service-availability-read',
+      // ADR-0154: the API owns only the content-minimized Temporal client contract. Workflow state
+      // and execution authority remain outside this app boundary.
+      '@qf-jarvis/durable-orchestration-contracts',
       // QFJ-P08-B3 (ADR-0078): the three -- and only three -- new production edges the durable
       // composition needs, to create a pool, build the durable adapter, and compose the runtime.
       '@qf-jarvis/event-backbone',
@@ -587,12 +609,19 @@ describe('the staging smoke stays out of the production boundary', () => {
       '@qf-jarvis/model-reply-adapter',
       '@qf-jarvis/postgres-approval-queue',
       '@qf-jarvis/postgres-conversation-state',
+      // JF-6 serving composition: these are the existing durable implementations of the two ports
+      // Riya already requires. They receive the caller-owned pool and add no environment authority.
+      '@qf-jarvis/postgres-riya-conversation-continuity-store',
+      '@qf-jarvis/postgres-riya-turn-coordinator',
       // QFJ-S3-I-B (ADR-0073): the SHADOW runner's fixed synthetic prompt is now a real
       // `PromptDefinition`, so its identity and its bytes cannot drift apart. Still an EXACT set.
       '@qf-jarvis/prompt-registry',
       '@qf-jarvis/rag-provisioning',
       '@qf-jarvis/riya-prompts',
       '@qf-jarvis/riya-web-conversation-service',
+      // Exact Temporal client version is pinned in the app manifest; it is used only by the native
+      // durable-orchestration client and does not grant business authority.
+      '@temporalio/client',
       'zod',
     ]);
     // QFJ-P08-B3: dev dependencies exist now, and are EXACTLY the test-only fixture packages the
@@ -757,7 +786,7 @@ describe('(71-77) package API and dependency locks are untouched', () => {
       // QFJ-P09.01 (ADR-0084): the execution intent correlation runtime, locked from the day it
       // lands. It validates Core's intent; it issues none.
       'execution-intent-runtime': 3,
-      // QFJ-P09.02 (ADR-0090): the test-only Core -> n8n execution dispatch boundary, locked from
+      // QFJ-P09.02 (ADR-0090): the test-only Core -> QuickFurno Core Automation execution dispatch boundary, locked from
       // the day it lands. Seven root symbols: the verifier, the key registry and its two error
       // types, the closed reason set, and the two protocol constants that make the B4 domain and
       // key purpose distinct from event ingestion. No transport, no fake and no bridge is exported.

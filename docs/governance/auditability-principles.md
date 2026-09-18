@@ -40,7 +40,7 @@ Nothing executes without a bounded, expiring, signed execution intent, created b
 
 ## 4. Each provider result is recorded
 
-- n8n reports the execution result; **QuickFurno Core records it as truth**.
+- QuickFurno Core Automation reports the execution result; **QuickFurno Core records it as truth**.
 - A provider's own view of a delivery is **not truth** until Core has recorded it.
 - Failures are recorded as faithfully as successes. Dead letters are **visible, alertable, and replayable** — a silently dropped execution is the worst failure mode in this architecture, because a human believes an approved action happened and it did not ([execution-governance.md](../architecture/execution-governance.md)).
 

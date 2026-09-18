@@ -131,7 +131,7 @@ describe('JAO-6 governed business-action proposals', () => {
     expect(result.posture.productionMutation).toBe(false);
     for (const zero of [
       result.posture.coreMutations,
-      result.posture.n8nExecutions,
+      result.posture.coreAutomationExecutions,
       result.posture.channelSends,
       result.posture.providerCalls,
       result.posture.modelCalls,

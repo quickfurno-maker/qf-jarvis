@@ -23,7 +23,7 @@ Run against the working tree on branch `qfj-p04-05-no-op-rag-provisioning`:
 ## Containment — proven
 
 - Depends **only** on `zod`; exposes only `.` and `./testing`.
-- Production source has **no** `fetch`, `process.env`, `node:` I/O import, provider/vector/embedding library import (pinecone/weaviate/qdrant/chroma/faiss/hnswlib/langchain/openai/groq/pg/onnxruntime/@xenova/…), `@qf-jarvis/governed-knowledge` or `@qf-jarvis/model-evaluation` import, or `n8n`/`kimi`/`semantic search`/`cosine` term (proven by source scan). "RAG"/"vector"/"embedding" appear only as the closed mode/backend/counter identifiers — there is no implementation behind them.
+- Production source has **no** `fetch`, `process.env`, `node:` I/O import, provider/vector/embedding library import (pinecone/weaviate/qdrant/chroma/faiss/hnswlib/langchain/openai/groq/pg/onnxruntime/@xenova/…), `@qf-jarvis/governed-knowledge` or `@qf-jarvis/model-evaluation` import, or `QuickFurno Core Automation`/`kimi`/`semantic search`/`cosine` term (proven by source scan). "RAG"/"vector"/"embedding" appear only as the closed mode/backend/counter identifiers — there is no implementation behind them.
 - The build excludes `src/tests`, so **dist is production-only** (no `*.test.*`); the synthetic `./testing` fixtures are the only test-support export.
 - Migrations 0001–0007 **byte-exact** (sha-256 locked); **no 0008**; `@qf-jarvis/event-backbone` root API remains **39**.
 - No control byte in any tracked TypeScript file (whole-repo scan).

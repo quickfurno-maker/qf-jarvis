@@ -14,7 +14,7 @@
  *
  * `approvalDecision` and `executionIntent` are supplied by the caller and validated by the canonical
  * runtimes. That is not a weakness of the proof; it IS the proof. JAO-7 has no constructor for either
- * artifact, no Core transport to fetch one from, and no n8n client to hand one to. The only way the
+ * artifact, no Core transport to fetch one from, and no QuickFurno Core Automation client to hand one to. The only way the
  * run can move past the authority gate is for somebody outside to produce artifacts that correlate --
  * and the posture literal records honestly that in this offline proof those artifacts are injected
  * rather than authenticated.

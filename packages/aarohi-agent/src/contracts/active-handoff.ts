@@ -140,7 +140,7 @@ export type CoreActiveHandoffResult =
  * ### It executes nothing
  *
  * A pure domain transition over an ALREADY-SUPPLIED Core-derived attestation. It sends nothing,
- * notifies nobody, persists nothing, and calls no Core endpoint, no n8n, no provider and no model.
+ * notifies nobody, persists nothing, and calls no Core endpoint, no QuickFurno Core Automation, no provider and no model.
  * Obtaining the attestation is somebody else's job; believing it correctly is this function's.
  */
 export function completeCoreActiveHandoff(

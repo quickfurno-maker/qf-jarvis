@@ -1157,7 +1157,7 @@ describe('every brief pins the authority ceiling as literals', () => {
     'communicationAuthorizationCreated',
     'executionIntentCreated',
 
-    'n8nExecutionRequested',
+    'coreAutomationExecutionRequested',
     'providerSendRequested',
     'channelSendRequested',
     'sent',
@@ -1440,7 +1440,7 @@ describe('AVG-9 reaches no Core write, no execution path and no model', () => {
       'approvalDecisionCreated',
       'communicationAuthorizationCreated',
       'executionIntentCreated',
-      'n8nExecutionRequested',
+      'coreAutomationExecutionRequested',
       'providerSendRequested',
       'channelSendRequested',
     ]) {

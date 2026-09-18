@@ -85,7 +85,7 @@ describe('RWC-P10 can neither call a model nor be one', () => {
         'undici',
         'axios',
         'WebSocket',
-        'n8n',
+        'quickfurno-core-automation',
         'pg',
         'Pool',
       ]) {

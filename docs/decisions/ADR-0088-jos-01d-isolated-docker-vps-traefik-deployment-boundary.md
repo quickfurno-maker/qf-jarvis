@@ -158,7 +158,7 @@ Read-only findings on `srv1873796` (Ubuntu 24.04.4, Docker 29.6.1, 2 vCPU / 7.8 
 - Entrypoints `web` (:80), `websecure` (:443); HTTP→HTTPS redirect already global on `web`
 - Resolver `letsencrypt`, HTTP-01, storage `/letsencrypt/acme.json` (0600 root)
 - `--api.dashboard=false --api.insecure=false`; Docker socket mounted read-only
-- `qf-core-staging` (172.16.1.2) and `n8n-cjls` (172.16.0.2) run on private bridges with **no
+- `qf-core-staging` (172.16.1.2) and `QuickFurno Core Automation-cjls` (172.16.0.2) run on private bridges with **no
   published ports**; host-network Traefik reaches them by container IP
 
 That last point is the load-bearing one. It means Jarvis OS needs **no published port at all** — not
@@ -355,13 +355,13 @@ for a probe, when `/login` is already public by design.
 
 - Jarvis OS can be deployed by building one SHA and starting one project; nothing else changes.
 - Rollback re-points only the JOS project at a previous immutable tag. No prune command is ever run,
-  because each would reach shared Traefik, n8n and Core resources.
-- Traefik, n8n and QuickFurno Core staging were read and not modified in any way.
+  because each would reach shared Traefik, QuickFurno Core Automation and Core resources.
+- Traefik, QuickFurno Core Automation and QuickFurno Core staging were read and not modified in any way.
 
 ## Non-goals
 
 No deployment in Gate 1. No DNS change. No Traefik restart, recreate, pull or upgrade. No database,
-managed database, Core, n8n, Meta or provider connection. No business mutation. No migration —
+managed database, Core, QuickFurno Core Automation, Meta or provider connection. No business mutation. No migration —
 `0010` is not created. Production business rollout remains **OFF**.
 
 ## Change-control rule

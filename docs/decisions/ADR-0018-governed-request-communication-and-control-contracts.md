@@ -78,7 +78,7 @@ Correspondingly, `CommunicationRequestV1` carries **no consent field at all** â€
 
 ### 6. Provider evidence is not authoritative delivery truth â€” `CommunicationResultV1`
 
-`issuer` is the literal `quickfurno-core`. n8n and the runtime **observe and report**; Core **records**, and the recording is what makes it true.
+`issuer` is the literal `quickfurno-core`. QuickFurno Core Automation and the runtime **observe and report**; Core **records**, and the recording is what makes it true.
 
 Two collapses are refused outright:
 

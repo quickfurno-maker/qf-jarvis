@@ -282,7 +282,7 @@ persists anything, and no reply text is logged, emitted or stored. `proposalDige
 ## What this does NOT implement
 
 No HTTP server, route, URL, cookie, CORS, HMAC, webhook or browser reachability. No ingress. No
-second Core approval endpoint, second Core decision port or second action contract. No n8n step, no
+second Core approval endpoint, second Core decision port or second action contract. No QuickFurno Core Automation step, no
 provider call, no send or delivery of any kind. No QuickFurno repository change, shared/sync file,
 shared filesystem, shared database or service-role credential. No RWC-P4 extraction, reducer,
 provenance merge or phase transition. No RUI-3A. No migration and no managed-database access.

@@ -92,7 +92,7 @@ describe('it invokes nothing', () => {
       'SELECT ',
       'INSERT INTO',
       'compareAndSet',
-      'n8n',
+      'quickfurno-core-automation',
       'webhook',
       'twilio',
       'whatsapp',

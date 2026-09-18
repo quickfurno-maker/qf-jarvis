@@ -479,7 +479,7 @@ export interface AarohiRegistrationAssistancePosture {
   readonly communicationAuthorizationCreated: false;
   readonly executionIntentCreated: false;
 
-  readonly n8nExecutionRequested: false;
+  readonly coreAutomationExecutionRequested: false;
   readonly providerSendRequested: false;
   readonly channelSendRequested: false;
   readonly sent: false;
@@ -534,7 +534,7 @@ export const aarohiRegistrationAssistancePostureSchema = z
     communicationAuthorizationCreated: z.literal(false),
     executionIntentCreated: z.literal(false),
 
-    n8nExecutionRequested: z.literal(false),
+    coreAutomationExecutionRequested: z.literal(false),
     providerSendRequested: z.literal(false),
     channelSendRequested: z.literal(false),
     sent: z.literal(false),
@@ -577,7 +577,7 @@ export const AAROHI_REGISTRATION_ASSISTANCE_POSTURE: AarohiRegistrationAssistanc
       communicationAuthorizationCreated: false,
       executionIntentCreated: false,
 
-      n8nExecutionRequested: false,
+      coreAutomationExecutionRequested: false,
       providerSendRequested: false,
       channelSendRequested: false,
       sent: false,

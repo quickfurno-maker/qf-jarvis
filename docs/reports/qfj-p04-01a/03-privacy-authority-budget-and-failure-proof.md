@@ -4,8 +4,8 @@
 
 ## Authority boundary (locked)
 
-- The gateway **authorizes nothing and executes nothing**: `invoke` returns a validated data result with provenance — proven, the response exposes no `authorize`/`execute` method and no tool/n8n/DB access.
-- Model output is **advisory/proposed only**; model confidence is not business authority. QuickFurno Core remains the final authority; n8n executes only authorized intents; a model proposes a typed intent that Core authorizes/rejects.
+- The gateway **authorizes nothing and executes nothing**: `invoke` returns a validated data result with provenance — proven, the response exposes no `authorize`/`execute` method and no tool/QuickFurno Core Automation/DB access.
+- Model output is **advisory/proposed only**; model confidence is not business authority. QuickFurno Core remains the final authority; QuickFurno Core Automation executes only authorized intents; a model proposes a typed intent that Core authorizes/rejects.
 - Agent scope is a **closed** vocabulary (`CLIENT`=Riya, `VENDOR`=Anisha, `COORDINATION`=Jarvis, `SYSTEM`); an unknown scope is rejected — proven. Riya (CLIENT) and Anisha (VENDOR) scopes are distinct and validated.
 - **Kimi is excluded** — proven: no `kimi` reference anywhere in production source.
 

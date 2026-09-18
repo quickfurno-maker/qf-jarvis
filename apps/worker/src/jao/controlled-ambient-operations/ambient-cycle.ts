@@ -41,7 +41,7 @@
  *
  * The only thing a cycle can produce is JAO-1's own inert `SHADOW_OPERATIONAL_ATTENTION`. JAO-5
  * creates no proposal, no approval request, no execution intent, no Core mutation, no channel send
- * and no n8n run -- and the result schema has literal zeros where those counts would go.
+ * and no QuickFurno Core Automation run -- and the result schema has literal zeros where those counts would go.
  */
 import { parseControlPlaneSnapshotV1 } from '@qf-jarvis/control-plane-read-contract';
 import type { DatabasePool } from '@qf-jarvis/event-backbone';
@@ -169,7 +169,7 @@ export const JAO5_AMBIENT_BOUNDS = Object.freeze({
   coreMutations: 0,
   executionIntentsCreated: 0,
   channelSends: 0,
-  n8nExecutions: 0,
+  coreAutomationExecutions: 0,
   specialistCalls: 0,
   memoryWrites: 0,
   toolCalls: 0,
@@ -545,7 +545,7 @@ function finish(
     coreMutations: 0,
     executionIntentsCreated: 0,
     channelSends: 0,
-    n8nExecutions: 0,
+    coreAutomationExecutions: 0,
     specialistCalls: 0,
     memoryWrites: 0,
     toolCalls: 0,

@@ -30,7 +30,7 @@ Computed locally with `sha256sum` against `packages/event-backbone/src/persisten
 
 ## Migration 0006 verdict
 
-**ABSENT and not created.** Migration 0006 does not exist and was not created by this governance task. It is **conditionally reserved for QFJ-P03.07 (Projection Failure Operations)** and only if the approved QFJ-P03.07 design proves schema is required. If ever created it must not contain RAG, agents, task runtime, model gateway, WhatsApp, n8n, QuickFurno Core integration, or `rm_subject_activity` (absent a later explicit ownership decision). This is consistent with historical ADRs 0036/0037/0038, which state "there is no 0006" and "Stage 3.5's migration shifts to 0006+."
+**ABSENT and not created.** Migration 0006 does not exist and was not created by this governance task. It is **conditionally reserved for QFJ-P03.07 (Projection Failure Operations)** and only if the approved QFJ-P03.07 design proves schema is required. If ever created it must not contain RAG, agents, task runtime, model gateway, WhatsApp, QuickFurno Core Automation, QuickFurno Core integration, or `rm_subject_activity` (absent a later explicit ownership decision). This is consistent with historical ADRs 0036/0037/0038, which state "there is no 0006" and "Stage 3.5's migration shifts to 0006+."
 
 ## RAG migration verdict
 

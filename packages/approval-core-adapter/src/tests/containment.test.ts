@@ -273,7 +273,7 @@ describe('side-effect containment', () => {
     for (const file of productionFiles()) {
       const code = codeOnly(readFileSync(file, 'utf8')).toLowerCase();
       for (const forbidden of [
-        'n8n',
+        'quickfurno-core-automation',
         'whatsapp',
         'webhook',
         'twilio',

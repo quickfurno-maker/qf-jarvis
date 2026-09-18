@@ -3,7 +3,7 @@
  *
  * ### What is actually at risk in the final autonomy slice
  *
- * Not "can Jarvis execute?" — the architecture answers that in Core and n8n. The risks here are the
+ * Not "can Jarvis execute?" — the architecture answers that in Core and QuickFurno Core Automation. The risks here are the
  * ones that appear precisely BECAUSE the slice is more capable:
  *
  * - a caller supplying its own plan, budget, risk, approval or autonomy ceiling;
@@ -641,13 +641,17 @@ describe('JAO-7 autonomy threat model', () => {
         expect(code, `${name} -> ${forbidden}`).not.toContain(forbidden);
       }
 
-      // n8n is scanned as an API SHAPE, not as a bare substring: `n8nExecutions: z.literal(0)` is a
+      // QuickFurno Core Automation is scanned as an API SHAPE, not as a bare substring: `coreAutomationExecutions: z.literal(0)` is a
       // DECLARATION OF ABSENCE, and a scan that flags it is one somebody eventually weakens.
-      for (const forbidden of [/\bn8nClient\b/u, /\bcallN8n\b/u, /from '[^']*n8n/u]) {
+      for (const forbidden of [
+        /\bcoreAutomationClient\b/u,
+        /\bcallCoreAutomation\b/u,
+        /from '[^']*quickfurno-core-automation/u,
+      ]) {
         expect(forbidden.test(code), `${name} -> ${String(forbidden)}`).toBe(false);
       }
-      for (const occurrence of code.match(/n8n\w*/gu) ?? []) {
-        expect(occurrence, `${name} -> ${occurrence}`).toBe('n8nExecutions');
+      for (const occurrence of code.match(/coreAutomation\w*/gu) ?? []) {
+        expect(occurrence, `${name} -> ${occurrence}`).toBe('coreAutomationExecutions');
       }
     }
   });

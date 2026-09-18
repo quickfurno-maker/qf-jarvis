@@ -70,7 +70,7 @@ response remains fail-closed exactly as before.
 
 The API gains one workspace dependency: `@qf-jarvis/core-decision-http-transport`. It introduces no new
 third-party package. The transport holds the injected Ed25519 signing key only for the bounded Core hop,
-reads no environment, opens no database, calls no n8n surface, and selects no model or provider.
+reads no environment, opens no database, calls no QuickFurno Core Automation surface, and selects no model or provider.
 
 Production QuickFurno credentials, URLs and key material are not committed in this repository and are
 not introduced by this ADR. JF-6 does not add a credential acquisition policy for them.

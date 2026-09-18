@@ -8,7 +8,7 @@
 
 **Design documents introduced:** [docs/reports/qfj-m1-runtime-foundation/](../reports/qfj-m1-runtime-foundation/) (reports 01–05)
 
-> **This ADR is implemented in the same bounded slice it governs.** It adds one new provider-neutral package `@qf-jarvis/agent-runtime`: **deterministic, authority-first runtime contracts** for the future WhatsApp coordinator — an actor/party/channel vocabulary, strict agent assignment (Riya=client-only, Anisha=vendor-only, Jarvis=coordination), a validated conversation-state machine with **human takeover / AI pause** gates, a content-minimized inbound envelope, and **proposal-only** decisions that always remain `PENDING_CORE_VALIDATION`. **No transport/provider/database/n8n coupling; no WhatsApp API, no dashboard UI, no persistence, no live model call, no real message data.** QuickFurno Core remains final authority; the runtime coordinates proposals and executes nothing. The `@qf-jarvis/event-backbone` root API remains **39**.
+> **This ADR is implemented in the same bounded slice it governs.** It adds one new provider-neutral package `@qf-jarvis/agent-runtime`: **deterministic, authority-first runtime contracts** for the future WhatsApp coordinator — an actor/party/channel vocabulary, strict agent assignment (Riya=client-only, Anisha=vendor-only, Jarvis=coordination), a validated conversation-state machine with **human takeover / AI pause** gates, a content-minimized inbound envelope, and **proposal-only** decisions that always remain `PENDING_CORE_VALIDATION`. **No transport/provider/database/QuickFurno Core Automation coupling; no WhatsApp API, no dashboard UI, no persistence, no live model call, no real message data.** QuickFurno Core remains final authority; the runtime coordinates proposals and executes nothing. The `@qf-jarvis/event-backbone` root API remains **39**.
 
 ---
 
@@ -68,12 +68,12 @@ The mandatory future dashboard projection fields are **documented** (not impleme
 
 ### M. Non-goals
 
-No DB/schema/migration 0008; no WhatsApp/n8n/provider API; no live model; no real messages; no memory/RAG/tools/execution; no dashboard/deployment.
+No DB/schema/migration 0008; no WhatsApp/QuickFurno Core Automation/provider API; no live model; no real messages; no memory/RAG/tools/execution; no dashboard/deployment.
 
 ## Rejected alternatives
 
 - **Let a model choose the agent.** Rejected — assignment is a pure, deterministic function of party type / takeover / pause / policy; a model guessing authority would blur Riya/Anisha scopes.
-- **Have the runtime send or execute.** Rejected — every output is a proposal `PENDING_CORE_VALIDATION` with no `execute`/`send`/`authorize` method; Core is the only authority that acts, n8n is transport-only.
+- **Have the runtime send or execute.** Rejected — every output is a proposal `PENDING_CORE_VALIDATION` with no `execute`/`send`/`authorize` method; Core is the only authority that acts, QuickFurno Core Automation is transport-only.
 - **Auto-release human takeover after a timeout.** Rejected — return-to-AI requires an explicit authorized transition; AI pause is fail-closed.
 - **Persist conversations / integrate WhatsApp now.** Rejected — no DB, no transport, no provider API in this slice; the runtime is deterministic contracts only, and Core owns the authoritative record.
 
@@ -85,4 +85,4 @@ No DB/schema/migration 0008; no WhatsApp/n8n/provider API; no live model; no rea
 
 ## Change-control rule
 
-Adding an actor/party/channel, a conversation state, a proposal kind, or a transition, or changing the assignment/takeover/privacy rules or the proposal authority status, requires a superseding ADR. The runtime never sends, executes, authorizes, or calls n8n; it never selects a provider or calls a model; Riya stays client-only and Anisha vendor-only. The Conversation Operations Center is a separate, later, mandatory phase.
+Adding an actor/party/channel, a conversation state, a proposal kind, or a transition, or changing the assignment/takeover/privacy rules or the proposal authority status, requires a superseding ADR. The runtime never sends, executes, authorizes, or calls QuickFurno Core Automation; it never selects a provider or calls a model; Riya stays client-only and Anisha vendor-only. The Conversation Operations Center is a separate, later, mandatory phase.

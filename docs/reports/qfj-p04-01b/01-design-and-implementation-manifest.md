@@ -14,7 +14,7 @@
 
 The first **real HOSTED provider** — a `GroqModelProvider` implementing the existing provider-neutral `ModelProvider` contract from QFJ-P04.01A. It performs Groq's OpenAI-compatible Chat Completions call through an **injected HTTP transport**, behind a redacting **injected key** holder. It is the ONLY code in the package that may reach the network, and even that single egress is confined to one SSRF-guarded transport function.
 
-**No real key, no live Groq call, no network in tests or CI. No agent, no n8n, no RAG, no memory, no MCP, no schema, no migration.** Production health fails closed until a Groq data-controls (ZDR) attestation is injected.
+**No real key, no live Groq call, no network in tests or CI. No agent, no QuickFurno Core Automation, no RAG, no memory, no MCP, no schema, no migration.** Production health fails closed until a Groq data-controls (ZDR) attestation is injected.
 
 ## Changed-file manifest
 

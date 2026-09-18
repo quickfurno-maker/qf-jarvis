@@ -1018,7 +1018,7 @@ async function performStep(
       }
 
       // The exact approved action, as SIMULATION INPUT, after correlation. This simulates what the
-      // action would do; it does not execute the Core-issued intent, whose executor is n8n.
+      // action would do; it does not execute the Core-issued intent, whose executor is QuickFurno Core Automation.
       const proposal = carriedProposal(stated, policy, run);
       const action = proposal.recommendation.proposedActions[0];
       const binding = proposal.actionBindings[0];

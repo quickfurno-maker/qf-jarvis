@@ -32,7 +32,7 @@ With a shared secret, **Jarvis would hold a key capable of forging Core's events
 
 That is not a marginal improvement. It is the same property the whole boundary rests on — _"the worst a compromised Jarvis can do is ask"_ ([trust-boundaries.md](../architecture/trust-boundaries.md) B3) — extended to the input side. It costs nothing, `node:crypto` implements it natively, and it removes a forgery capability we would otherwise have had to trust ourselves not to misuse.
 
-Signing keys between Core→Jarvis, Jarvis→Core, and Core→n8n remain **distinct** ([security-principles.md](../governance/security-principles.md) §7).
+Signing keys between Core→Jarvis, Jarvis→Core, and Core→QuickFurno Core Automation remain **distinct** ([security-principles.md](../governance/security-principles.md) §7).
 
 ### 2. Sign the exact bytes. Do not canonicalise.
 

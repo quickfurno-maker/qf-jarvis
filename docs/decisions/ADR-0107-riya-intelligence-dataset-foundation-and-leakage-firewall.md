@@ -231,7 +231,7 @@ gate is worse than an honest gap. Findings are closed classes; no text is echoed
 
 ### 19. No database, no migration, no deployment
 
-Migrations stay `0001`–`0012`. No managed database, no live WhatsApp, no provider, no n8n, no
+Migrations stay `0001`–`0012`. No managed database, no live WhatsApp, no provider, no QuickFurno Core Automation, no
 QuickFurno repository access, nothing deployed.
 
 ### 20. No runtime may import this package

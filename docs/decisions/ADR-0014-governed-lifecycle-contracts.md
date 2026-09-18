@@ -10,7 +10,7 @@
 
 The permanent rule is five sentences:
 
-> Jarvis recommends. QuickFurno authorizes. n8n executes. Providers deliver. Results return to QuickFurno Core.
+> Jarvis recommends. QuickFurno authorizes. QuickFurno Core Automation executes. Providers deliver. Results return to QuickFurno Core.
 
 Phase 0 wrote it down. Phase 1 built a repository that could hold code obeying it. **Phase 2 is where it stops being prose and becomes a type.**
 
@@ -45,9 +45,9 @@ The canonical event registry and versioning rules are [ADR-0013](./ADR-0013-cano
 | `ApprovalDecisionV1` | `issuer: 'quickfurno-core'`                                         | Jarvis approving anything                                   |
 | `ApprovalDecisionV1` | `decidedBy` is human **or** versioned policy — **no agent variant** | **Agent self-approval has no shape**                        |
 | `ExecutionIntentV1`  | `issuer: 'quickfurno-core'`                                         | Jarvis manufacturing authority by manufacturing an artifact |
-| `ExecutionIntentV1`  | `executor: 'n8n'`                                                   | The _Jarvis → provider_ edge                                |
+| `ExecutionIntentV1`  | `executor: 'QuickFurno Core Automation'`                            | The _Jarvis → provider_ edge                                |
 | `ExecutionIntentV1`  | `deliverySemantics: 'at-most-once'`                                 | Any other delivery guarantee                                |
-| `ExecutionResultV1`  | `reportingSystem` ∈ {n8n, runtime}                                  | Jarvis reporting a result it could not have observed        |
+| `ExecutionResultV1`  | `reportingSystem` ∈ {QuickFurno Core Automation, runtime}           | Jarvis reporting a result it could not have observed        |
 | Canonical envelope   | `source: 'quickfurno-core'`                                         | A non-Core system asserting a fact                          |
 
 **Jarvis cannot construct a valid execution intent.** Not "is not allowed to" — _cannot_. The object does not typecheck and does not parse. That is the difference between a policy and an architecture.
@@ -149,7 +149,7 @@ The scan **fails closed**: it will occasionally refuse a legitimate value that m
 Stated plainly, because it is the property the entire system rests on:
 
 1. They are **data**. No methods, no side effects, no I/O. Importing the package opens no socket, reads no environment, logs nothing — enforced by lint and asserted by test.
-2. **Jarvis cannot construct a valid execution intent.** The issuer literal is Core; the executor literal is n8n.
+2. **Jarvis cannot construct a valid execution intent.** The issuer literal is Core; the executor literal is QuickFurno Core Automation.
 3. **There is no provider to address.** No credential field, no endpoint, no phone number.
 4. **An agent cannot approve.** The actor union has no agent variant.
 5. **Authority requires a Core record**, and a Core record is something only Core can produce.
@@ -211,6 +211,6 @@ Rejected, and it is the most seductive of these. It would be _convenient_ for th
 - **Phase 3** ingests canonical events idempotently on `eventId`, and proves it by deliberately redelivering them.
 - **Phase 4** builds the coordination layer — including **lifecycle transition enforcement**, which this ADR explicitly leaves to it.
 - **Phase 9** submits approval requests against `ApprovalDecisionV1` and reflects only what Core returns.
-- **Phase 10** validates `ExecutionIntentV1` inside n8n: authenticity, integrity, freshness, bounds. Its exit criteria require proving that a retry does not double-dial and that an ambiguous outcome is reconciled.
+- **Phase 10** validates `ExecutionIntentV1` inside QuickFurno Core Automation: authenticity, integrity, freshness, bounds. Its exit criteria require proving that a retry does not double-dial and that an ambiguous outcome is reconciled.
 - **Phase 11** adds Core's domain event contracts, with adapters absorbing any difference.
 - Each phase gate re-reads the authority literals in this package. If any of them has been relaxed, that is a boundary change, and it needs a superseding ADR and the business owner's explicit decision.

@@ -2,7 +2,7 @@
  * QFJ-P08 — public API, dependency and side-effect containment (ADR-0133).
  *
  * A communication request is powerless, and this package must be too. Its safety argument rests on
- * what it CANNOT reach — Core, a database, a queue, a transport, n8n, a provider, a template
+ * what it CANNOT reach — Core, a database, a queue, a transport, QuickFurno Core Automation, a provider, a template
  * registry — so that is asserted against the source, not against intent.
  *
  * The API lock matters most here of anywhere: a fourth root export is how a package that ASKS
@@ -287,7 +287,7 @@ describe('side-effect containment', () => {
     for (const file of productionFiles()) {
       const code = codeOnly(readFileSync(file, 'utf8')).toLowerCase();
       for (const forbidden of [
-        'n8n',
+        'quickfurno-core-automation',
         'whatsappclient',
         'webhook',
         'twilio',

@@ -68,6 +68,17 @@ const COMPOSE_CODE = yaml(COMPOSE);
 const INGRESS_CODE = yaml(INGRESS);
 const HSTS_CODE = yaml(HSTS);
 
+/**
+ * Bash executable for the real script exercises below.
+ *
+ * On Windows, the bare `bash` command may resolve to the legacy WSL launcher even when no Linux
+ * distribution is installed. Git for Windows ships a real Bash that can execute these hermetic
+ * fixtures, so prefer that exact executable when present. Linux/CI keeps using the normal `bash`.
+ */
+const WINDOWS_GIT_BASH = 'C:\\Program Files\\Git\\bin\\bash.exe';
+const WINDOWS_GIT_CYGPATH = 'C:\\Program Files\\Git\\usr\\bin\\cygpath.exe';
+const BASH_EXECUTABLE = existsSync(WINDOWS_GIT_BASH) ? WINDOWS_GIT_BASH : 'bash';
+
 describe('the production image', () => {
   it('pins an exact Node 24.18.0 base by digest, never a floating tag', () => {
     expect(DOCKERFILE_CODE).toContain('node@sha256:');
@@ -222,7 +233,7 @@ describe('the private base topology', () => {
 
   it('joins no other project network', () => {
     for (const foreign of [
-      'n8n-cjls_default',
+      'quickfurno-core-automation-cjls_default',
       'qf-core-staging_default',
       'external: true',
       'network_mode',
@@ -232,10 +243,10 @@ describe('the private base topology', () => {
     expect(COMPOSE_CODE).toContain('name: qf-jarvis-os_jarvis-os');
   });
 
-  it('reaches no Core, n8n, database or provider', () => {
+  it('reaches no Core, QuickFurno Core Automation, database or provider', () => {
     for (const forbidden of [
       'staging-core.quickfurno.in',
-      'n8n-cjls.srv1873796',
+      'quickfurno-core-automation-cjls.srv1873796',
       '5678',
       'postgres',
       'supabase',
@@ -258,7 +269,9 @@ describe('the ingress overlay', () => {
     expect(INGRESS_CODE).toContain('jarvis-os:');
     expect(INGRESS_CODE).not.toMatch(/^networks:/mu);
     expect(INGRESS_CODE).not.toMatch(/^volumes:/mu);
-    expect(INGRESS_CODE).not.toMatch(/^\s{2}(traefik|n8n|qf-core-staging):/mu);
+    expect(INGRESS_CODE).not.toMatch(
+      /^\s{2}(traefik|quickfurno-core-automation|qf-core-staging):/mu,
+    );
     // It must not re-open any of the hardening the base establishes.
     for (const forbidden of ['read_only: false', 'privileged', 'cap_add', 'user: "0:0"']) {
       expect(INGRESS_CODE, forbidden).not.toContain(forbidden);
@@ -337,7 +350,7 @@ describe('the HSTS overlay', () => {
   it('is additive and JOS-only', () => {
     expect(HSTS_CODE).not.toMatch(/^networks:/mu);
     expect(HSTS_CODE).not.toMatch(/^volumes:/mu);
-    expect(HSTS_CODE).not.toMatch(/^\s{2}(traefik|n8n|qf-core-staging):/mu);
+    expect(HSTS_CODE).not.toMatch(/^\s{2}(traefik|quickfurno-core-automation|qf-core-staging):/mu);
     expect(HSTS_CODE).not.toMatch(/^\s*ports:/mu);
   });
 });
@@ -372,7 +385,7 @@ describe('the operational scripts', () => {
   const ALL = Object.values(CODE);
 
   it('never prunes shared Docker resources', () => {
-    // Each of these would reach Traefik, n8n and Core images, volumes or networks.
+    // Each of these would reach Traefik, QuickFurno Core Automation and Core images, volumes or networks.
     for (const script of ALL) {
       for (const forbidden of [
         'system prune',
@@ -386,15 +399,15 @@ describe('the operational scripts', () => {
     }
   });
 
-  it('never runs a lifecycle command against the shared Traefik, n8n or Core projects', () => {
+  it('never runs a lifecycle command against the shared Traefik, QuickFurno Core Automation or Core projects', () => {
     // Asserted as COMMANDS rather than as the substring "traefik": the scripts legitimately read
     // and set `traefik.enable` labels on their OWN container, and a blanket substring ban would
     // force that honest code to be obfuscated to pass.
     for (const script of ALL) {
       expect(script).not.toMatch(
-        /docker\s+(restart|stop|start|kill|rm|rmi|pull|update|exec)\s+[^\n]*\b(traefik|n8n|qf-core-staging)\b/u,
+        /docker\s+(restart|stop|start|kill|rm|rmi|pull|update|exec)\s+[^\n]*\b(traefik|quickfurno-core-automation|qf-core-staging)\b/u,
       );
-      expect(script).not.toMatch(/-p\s+(traefik|n8n|qf-core-staging)\b/u);
+      expect(script).not.toMatch(/-p\s+(traefik|quickfurno-core-automation|qf-core-staging)\b/u);
       expect(script).not.toMatch(/compose[^\n]*\b(pull|up)\b[^\n]*\btraefik\b/u);
 
       // Every compose invocation is scoped to the JOS project.
@@ -561,7 +574,7 @@ describe('the merged-main commit guard', () => {
       // No environment override and no skip flag: the fixture's `origin` is a local bare repo, so
       // the guard's mandatory `git fetch --prune origin` runs for real and offline. That exercises
       // the freshness path rather than switching it off to make the test convenient.
-      const out = execFileSync('bash', [GUARD, sha, work], {
+      const out = execFileSync(BASH_EXECUTABLE, [GUARD, sha, work], {
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'pipe'],
       });
@@ -690,7 +703,7 @@ describe('the immutable release package', () => {
     try {
       return {
         code: 0,
-        out: execFileSync('bash', args.map(posixPath), {
+        out: execFileSync(BASH_EXECUTABLE, args.map(posixPath), {
           encoding: 'utf8',
           stdio: ['ignore', 'pipe', 'pipe'],
         }),
@@ -957,7 +970,7 @@ describe('deployment configuration is bound to the release SHA', () => {
         expect(invocation, invocation).toContain('-p qf-jarvis-os');
       }
       expect(script).not.toMatch(
-        /docker\s+(restart|stop|start|kill|rm|rmi|pull|update)\s+[^\n]*\b(traefik|n8n|qf-core-staging)\b/u,
+        /docker\s+(restart|stop|start|kill|rm|rmi|pull|update)\s+[^\n]*\b(traefik|quickfurno-core-automation|qf-core-staging)\b/u,
       );
     }
   });
@@ -1006,7 +1019,7 @@ describe('the approved release root cannot be escaped', () => {
     try {
       return {
         code: 0,
-        out: execFileSync('bash', args.map(posixPath), {
+        out: execFileSync(BASH_EXECUTABLE, args.map(posixPath), {
           encoding: 'utf8',
           stdio: ['ignore', 'pipe', 'pipe'],
           ...(env ? { env } : {}),
@@ -1221,18 +1234,17 @@ describe('the external exact-SHA smoke package', () => {
    */
   const toNative = (p: string): string => {
     if (existsSync(p)) return p;
-    try {
-      return execFileSync('cygpath', ['-w', p], { encoding: 'utf8' }).trim();
-    } catch {
-      return p;
+    if (existsSync(WINDOWS_GIT_CYGPATH)) {
+      return execFileSync(WINDOWS_GIT_CYGPATH, ['-w', p], { encoding: 'utf8' }).trim();
     }
+    return p;
   };
 
   const run = (args: string[]): { code: number; out: string } => {
     try {
       return {
         code: 0,
-        out: execFileSync('bash', [SCRIPT, ...args].map(posixPath), {
+        out: execFileSync(BASH_EXECUTABLE, [SCRIPT, ...args].map(posixPath), {
           encoding: 'utf8',
           stdio: ['ignore', 'pipe', 'pipe'],
         }),

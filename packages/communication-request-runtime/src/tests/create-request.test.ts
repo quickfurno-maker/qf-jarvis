@@ -507,7 +507,7 @@ describe('authority and contact containment', () => {
       'webhook',
       'webhookUrl',
       'workflowId',
-      'n8nWorkflow',
+      'coreAutomationWorkflow',
       'credentials',
       'apiKey',
     ]) {

@@ -3,10 +3,10 @@
  *
  * ### Jarvis does not issue execution intents. This checks the one Core issued.
  *
- * `ExecutionIntentV1` is created by QuickFurno Core from its own recorded authorization, names n8n
+ * `ExecutionIntentV1` is created by QuickFurno Core from its own recorded authorization, names QuickFurno Core Automation
  * as the executor, and is `at-most-once` by construction. Nothing in this package builds one, and
  * nothing in it can dispatch, send, execute, retry, persist, emit, resolve a recipient, choose a
- * provider, or reach n8n or a provider at all. It answers one question:
+ * provider, or reach QuickFurno Core Automation or a provider at all. It answers one question:
  *
  * > does this intent faithfully name and reproduce the approved proposed action it cites?
  *
@@ -94,7 +94,7 @@ export function createExecutionIntentRuntime(): ExecutionIntentRuntime {
     // 1. Core's artifact, by its OWN governed schema, never repaired.
     //
     //    Parsing is doing far more work here than it looks. `executionIntentV1Schema` is what
-    //    structurally establishes that the issuer is `quickfurno-core`, the executor is `n8n`, the
+    //    structurally establishes that the issuer is `quickfurno-core`, the executor is `QuickFurno Core Automation`, the
     //    delivery semantics are `at-most-once`, an idempotency key is present and well-formed,
     //    `issuedAt < expiresAt`, and the parameters are governed -- which is to say they carry no
     //    contact detail, no credential, and no smuggled permission to retry. None of those rules is

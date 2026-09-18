@@ -159,7 +159,7 @@ The up-to-date requirement closes the other quiet gap: two pull requests can eac
 
 CI runs a formatter, a linter, a type checker, a test suite, and a build. **None of them can see a boundary violation.**
 
-CI will give a green tick to a pull request that hands Jarvis a WhatsApp credential, builds a path to n8n, or renders an action as approved before QuickFurno Core said so. Every one of those compiles, lints, formats, and passes an empty test suite.
+CI will give a green tick to a pull request that hands Jarvis a WhatsApp credential, builds a path to QuickFurno Core Automation, or renders an action as approved before QuickFurno Core said so. Every one of those compiles, lints, formats, and passes an empty test suite.
 
 > **Could this change let a recommendation cause an effect without an authorization decision recorded in QuickFurno Core?**
 

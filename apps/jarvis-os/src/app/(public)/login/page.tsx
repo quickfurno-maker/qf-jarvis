@@ -62,7 +62,7 @@ export default async function LoginPage({
         <ul className="mt-5 grid grid-cols-1 gap-px overflow-hidden rounded-[var(--radius-panel)] border border-[var(--color-line)] bg-[var(--color-line)] sm:grid-cols-2">
           <SecurityFact label="Production rollout" value="OFF" />
           <SecurityFact label="QuickFurno Core" value="NOT CONNECTED" />
-          <SecurityFact label="n8n" value="NOT CONNECTED" />
+          <SecurityFact label="coreAutomation" value="NOT CONNECTED" />
           <SecurityFact label="Access" value="OWNER ONLY" />
         </ul>
 
