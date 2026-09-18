@@ -122,6 +122,15 @@ jobs:
             apps/api/src/quickfurno-whatsapp/contracts.ts \
             apps/api/src/quickfurno-whatsapp/quickfurno-http.ts \
             apps/api/src/tests/quickfurno-whatsapp-http.test.ts
+          mkdir -p /tmp/qf-format
+          cp apps/api/src/quickfurno-whatsapp/contracts.ts /tmp/qf-format/contracts.ts
+          cp apps/api/src/quickfurno-whatsapp/quickfurno-http.ts /tmp/qf-format/quickfurno-http.ts
+          cp apps/api/src/tests/quickfurno-whatsapp-http.test.ts /tmp/qf-format/quickfurno-whatsapp-http.test.ts
+          git fetch origin feat/whatsapp-essential-material
+          git checkout -B qf-format origin/feat/whatsapp-essential-material
+          cp /tmp/qf-format/contracts.ts apps/api/src/quickfurno-whatsapp/contracts.ts
+          cp /tmp/qf-format/quickfurno-http.ts apps/api/src/quickfurno-whatsapp/quickfurno-http.ts
+          cp /tmp/qf-format/quickfurno-whatsapp-http.test.ts apps/api/src/tests/quickfurno-whatsapp-http.test.ts
           if ! git diff --quiet -- \
             apps/api/src/quickfurno-whatsapp/contracts.ts \
             apps/api/src/quickfurno-whatsapp/quickfurno-http.ts \
@@ -136,10 +145,6 @@ jobs:
             git push origin HEAD:feat/whatsapp-essential-material
           fi
 
-      # The migration CLI runs from `dist/`, so the workspace must be built before it
-      # can be invoked. This step also proves the CLI itself works — `pnpm check` would
-      # exercise the migration *runner* through the tests, but not the executable that
-      # a deploy actually calls.
       - name: Build
         run: pnpm build
 
