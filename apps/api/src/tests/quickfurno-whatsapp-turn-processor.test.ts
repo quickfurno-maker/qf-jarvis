@@ -22,7 +22,7 @@ const material: QuickFurnoWhatsAppTurnMaterialV1 = Object.freeze({
   tenantId: 'quickfurno.marketplace',
   dataClass: 'HOSTED_ALLOWED',
   receivedAt: '2026-09-18T12:00:00.000Z',
-  inbound: { version: 1, messageType: 'text', normalizedText: 'hello' },
+  inbound: { version: 1 as const, messageType: 'text' as const, normalizedText: 'hello' },
   normalizedText: 'hello',
 });
 
