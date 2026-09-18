@@ -12,9 +12,20 @@ export const QFJ_WHATSAPP_REPLY_SIGNING_DOMAIN = 'qfj.whatsapp.reply.http.sig.v2
 export type QuickFurnoWhatsAppAgent = 'AAROHI' | 'ANISHA' | 'RIYA';
 export type QuickFurnoWhatsAppSubjectType = 'prospect' | 'client' | 'vendor';
 export type QuickFurnoWhatsAppInboundMessageType =
-  | 'text' | 'button_reply' | 'list_reply'
-  | 'image' | 'document' | 'audio' | 'video' | 'sticker'
-  | 'location' | 'contact' | 'reaction' | 'order' | 'system' | 'unsupported';
+  | 'text'
+  | 'button_reply'
+  | 'list_reply'
+  | 'image'
+  | 'document'
+  | 'audio'
+  | 'video'
+  | 'sticker'
+  | 'location'
+  | 'contact'
+  | 'reaction'
+  | 'order'
+  | 'system'
+  | 'unsupported';
 
 export interface QuickFurnoWhatsAppInboundMaterialV1 {
   readonly version: 1;
@@ -33,8 +44,14 @@ export interface QuickFurnoWhatsAppInboundMaterialV1 {
     readonly description?: string;
   };
   readonly replyContext?: { readonly providerMessageId: string };
-  readonly referral?: { readonly sourceType?: string; readonly sourceId?: string };
-  readonly reaction?: { readonly emoji?: string; readonly targetProviderMessageId?: string };
+  readonly referral?: {
+    readonly sourceType?: string;
+    readonly sourceId?: string;
+  };
+  readonly reaction?: {
+    readonly emoji?: string;
+    readonly targetProviderMessageId?: string;
+  };
   readonly order?: {
     readonly itemCount: number;
     readonly catalogId?: string;
