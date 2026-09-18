@@ -4,6 +4,7 @@ import type { WhatsAppTurnV1 } from './whatsapp-turn-protocol.js';
 
 export interface DurableTurnRecordV1 {
   readonly version: 1;
+  readonly requestId?: string;
   readonly conversationId: string;
   readonly conversationRevision: number;
   readonly inboundMessageId: string;
@@ -16,6 +17,7 @@ export interface DurableTurnRecordV1 {
 export type TurnAcceptResult =
   | { readonly outcome: 'accepted'; readonly record: DurableTurnRecordV1 }
   | { readonly outcome: 'duplicate'; readonly record: DurableTurnRecordV1 }
+  | { readonly outcome: 'replay'; readonly record: DurableTurnRecordV1 }
   | { readonly outcome: 'conflict' };
 
 export interface DurableTurnSpool {
@@ -32,6 +34,7 @@ const fileName = (id: string): string => `${id}.json`;
 function stableRecord(turn: WhatsAppTurnV1, acceptedAt: string): DurableTurnRecordV1 {
   return Object.freeze({
     version: 1,
+    requestId: turn.requestId,
     conversationId: turn.conversationId,
     conversationRevision: turn.conversationRevision,
     inboundMessageId: turn.inboundMessageId,
@@ -56,7 +59,7 @@ function sameIdentity(a: DurableTurnRecordV1, b: DurableTurnRecordV1): boolean {
 function parseRecord(value: unknown): DurableTurnRecordV1 | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const r = value as Record<string, unknown>;
-  const keys = [
+  const legacyKeys = [
     'version',
     'conversationId',
     'conversationRevision',
@@ -66,8 +69,15 @@ function parseRecord(value: unknown): DurableTurnRecordV1 | null {
     'subjectType',
     'acceptedAt',
   ];
-  if (Object.keys(r).sort().join(',') !== keys.sort().join(',')) return null;
+  const currentKeys = [...legacyKeys, 'requestId'];
+  const actualKeys = Object.keys(r).sort().join(',');
+  if (
+    actualKeys !== [...legacyKeys].sort().join(',') &&
+    actualKeys !== currentKeys.sort().join(',')
+  )
+    return null;
   const version = r['version'];
+  const requestId = r['requestId'];
   const conversationId = r['conversationId'];
   const conversationRevision = r['conversationRevision'];
   const inboundMessageId = r['inboundMessageId'];
@@ -77,6 +87,7 @@ function parseRecord(value: unknown): DurableTurnRecordV1 | null {
   const acceptedAt = r['acceptedAt'];
   if (
     version !== 1 ||
+    (requestId !== undefined && (typeof requestId !== 'string' || !UUID.test(requestId))) ||
     typeof conversationId !== 'string' ||
     !UUID.test(conversationId) ||
     typeof inboundMessageId !== 'string' ||
@@ -96,6 +107,7 @@ function parseRecord(value: unknown): DurableTurnRecordV1 | null {
     return null;
   return Object.freeze({
     version: 1,
+    ...(requestId === undefined ? {} : { requestId }),
     conversationId,
     conversationRevision,
     inboundMessageId,
@@ -136,10 +148,12 @@ export async function createFileDurableTurnSpool(root: string): Promise<DurableT
     async accept(turn: WhatsAppTurnV1, acceptedAt: string): Promise<TurnAcceptResult> {
       const record = stableRecord(turn, acceptedAt);
       const prior = await existingRecord(turn.inboundMessageId);
-      if (prior)
+      if (prior) {
+        if (prior.requestId === turn.requestId) return { outcome: 'replay', record: prior };
         return sameIdentity(prior, record)
           ? { outcome: 'duplicate', record: prior }
           : { outcome: 'conflict' };
+      }
       const path = join(pending, fileName(turn.inboundMessageId));
       let handle;
       try {
@@ -151,6 +165,9 @@ export async function createFileDurableTurnSpool(root: string): Promise<DurableT
         const code = (error as { code?: unknown }).code;
         if (code === 'EEXIST') {
           const converged = await existingRecord(turn.inboundMessageId);
+          if (converged?.requestId === turn.requestId) {
+            return { outcome: 'replay', record: converged };
+          }
           return converged && sameIdentity(converged, record)
             ? { outcome: 'duplicate', record: converged }
             : { outcome: 'conflict' };
