@@ -696,10 +696,17 @@ describe('(133-148) the declared budget and every prior lock', () => {
       'riya-web-conversation-service',
     ]);
     // JOS-01A (docs/architecture/jarvis-os.md): the Jarvis OS operator control plane. Still an
-    // EXACT set match -- this records an authorised addition, it does not relax the assertion.
-    // It is a POWERLESS read surface: it reaches no database, no provider, no QuickFurno Core Automation and no Core,
-    // and its own suite scans its source to prove it.
-    expect(dirs('apps')).toEqual(['api', 'jarvis-os', 'temporal-worker', 'worker']);
+    // EXACT set match -- this records authorised additions, it does not relax the assertion.
+    // Jarvis OS is a POWERLESS read surface. quickfurno-gateway is a separate, narrowly-scoped
+    // machine ingress: it authenticates QuickFurno with Ed25519 but owns no database, provider,
+    // business authority, or Jarvis OS session surface.
+    expect(dirs('apps')).toEqual([
+      'api',
+      'jarvis-os',
+      'quickfurno-gateway',
+      'temporal-worker',
+      'worker',
+    ]);
   });
 
   it('(RWC-P5) no production source anywhere invents a city or a service', () => {

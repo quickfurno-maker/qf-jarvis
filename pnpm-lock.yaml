@@ -164,6 +164,8 @@ importers:
         specifier: 4.3.0
         version: 4.3.0
 
+  apps/quickfurno-gateway: {}
+
   apps/temporal-worker:
     dependencies:
       '@qf-jarvis/action-kernel':
