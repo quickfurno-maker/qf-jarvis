@@ -37,10 +37,7 @@ export interface QuickFurnoWhatsAppInboundMaterialV1 {
   readonly reaction?: { readonly emoji?: string; readonly targetProviderMessageId?: string };
   readonly order?: {
     readonly itemCount: number;
-    readonly productItems?: readonly {
-      readonly productRetailerId: string;
-      readonly quantity?: number;
-    }[];
+    readonly catalogId?: string;
   };
   readonly forwarded?: boolean;
   readonly frequentlyForwarded?: boolean;
