@@ -130,29 +130,34 @@ describe('QuickFurno WhatsApp signed HTTP clients', () => {
       const request = JSON.parse(init.body) as Record<string, unknown>;
       return Promise.resolve({
         status: 200,
-        text: () => Promise.resolve(JSON.stringify({
-          protocol: 'qfj.whatsapp.turn-material',
-          version: 1,
-          requestId: request['requestId'],
-          conversationId: request['conversationId'],
-          inboundMessageId: request['inboundMessageId'],
-          conversationRevision: request['expectedRevision'],
-          assignedActor: 'RIYA',
-          subjectType: 'client',
-          tenantId: 'quickfurno.marketplace',
-          dataClass: 'HOSTED_ALLOWED',
-          receivedAt: '2026-09-18T12:00:00.000Z',
-          inbound: { version: 1, messageType: 'text', normalizedText: 'trusted text' },
-          normalizedText: 'different text',
-        })),
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({
+              protocol: 'qfj.whatsapp.turn-material',
+              version: 1,
+              requestId: request['requestId'],
+              conversationId: request['conversationId'],
+              inboundMessageId: request['inboundMessageId'],
+              conversationRevision: request['expectedRevision'],
+              assignedActor: 'RIYA',
+              subjectType: 'client',
+              tenantId: 'quickfurno.marketplace',
+              dataClass: 'HOSTED_ALLOWED',
+              receivedAt: '2026-09-18T12:00:00.000Z',
+              inbound: { version: 1, messageType: 'text', normalizedText: 'trusted text' },
+              normalizedText: 'different text',
+            }),
+          ),
       });
     };
     const reader = createQuickFurnoWhatsAppMaterialReader(config(post));
-    await expect(reader.read({
-      conversationId: '22222222-2222-4222-8222-222222222222',
-      inboundMessageId: '33333333-3333-4333-8333-333333333333',
-      expectedRevision: 7,
-    })).rejects.toMatchObject({ code: 'response-invalid' });
+    await expect(
+      reader.read({
+        conversationId: '22222222-2222-4222-8222-222222222222',
+        inboundMessageId: '33333333-3333-4333-8333-333333333333',
+        expectedRevision: 7,
+      }),
+    ).rejects.toMatchObject({ code: 'response-invalid' });
   });
 
   it('reply writer signs V2 structured Concierge output with deterministic idempotency', async () => {
