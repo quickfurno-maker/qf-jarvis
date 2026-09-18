@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, readdir, rm, utimes } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -48,13 +48,18 @@ describe('durable WhatsApp turn spool', () => {
     const raw = await readFile(join(root, 'pending', pendingFile), 'utf8');
     expect(raw).not.toContain('sensitive customer sentence');
     expect(raw).not.toContain('normalizedText');
-    expect(JSON.parse(raw)).toMatchObject({ assignedActor: 'RIYA', subjectType: 'client' });
+    expect(JSON.parse(raw)).toMatchObject({
+      requestId: '11111111-1111-4111-8111-111111111111',
+      assignedActor: 'RIYA',
+      subjectType: 'client',
+    });
   });
 
   it('converges a duplicate logical turn and rejects changed identity', async () => {
     const root = await spoolRoot();
     const spool = await createFileDurableTurnSpool(root);
     expect((await spool.accept(turn(), '2026-09-18T12:00:01.000Z')).outcome).toBe('accepted');
+    expect((await spool.accept(turn(), '2026-09-18T12:00:01.500Z')).outcome).toBe('replay');
     expect(
       (
         await spool.accept(
@@ -68,6 +73,33 @@ describe('durable WhatsApp turn spool', () => {
     ).toBe('conflict');
   });
 
+  it('keeps legacy durable records readable and treats a new request id as a duplicate', async () => {
+    const root = await spoolRoot();
+    const spool = await createFileDurableTurnSpool(root);
+    await writeFile(
+      join(root, 'pending', '33333333-3333-4333-8333-333333333333.json'),
+      JSON.stringify({
+        version: 1,
+        conversationId: '22222222-2222-4222-8222-222222222222',
+        conversationRevision: 4,
+        inboundMessageId: '33333333-3333-4333-8333-333333333333',
+        receivedAt: '2026-09-18T12:00:00.000Z',
+        assignedActor: 'RIYA',
+        subjectType: 'client',
+        acceptedAt: '2026-09-18T12:00:01.000Z',
+      }),
+      'utf8',
+    );
+    expect(
+      (
+        await spool.accept(
+          turn({ requestId: '44444444-4444-4444-8444-444444444444' }),
+          '2026-09-18T12:00:02.000Z',
+        )
+      ).outcome,
+    ).toBe('duplicate');
+  });
+
   it('atomically claims, releases, completes, and retains completion identity', async () => {
     const root = await spoolRoot();
     const spool = await createFileDurableTurnSpool(root);
@@ -79,7 +111,14 @@ describe('durable WhatsApp turn spool', () => {
     expect(await readdir(join(root, 'completed'))).toEqual([
       '33333333-3333-4333-8333-333333333333.json',
     ]);
-    expect((await spool.accept(turn(), '2026-09-18T12:00:10.000Z')).outcome).toBe('duplicate');
+    expect(
+      (
+        await spool.accept(
+          turn({ requestId: '44444444-4444-4444-8444-444444444444' }),
+          '2026-09-18T12:00:10.000Z',
+        )
+      ).outcome,
+    ).toBe('duplicate');
   });
   it('recovers a stale processing claim without losing the turn', async () => {
     const root = await spoolRoot();
