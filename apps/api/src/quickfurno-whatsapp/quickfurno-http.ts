@@ -216,24 +216,12 @@ function parseInboundMaterial(
   if (value['order'] !== undefined) {
     if (messageType !== 'order') return null;
     const raw = value['order'];
-    if (!isRecord(raw) || !onlyKeys(raw, ['itemCount','productItems'])) return null;
+    if (!isRecord(raw) || !onlyKeys(raw, ['itemCount','catalogId'])) return null;
     const itemCount = raw['itemCount'];
     if (typeof itemCount !== 'number' || !Number.isSafeInteger(itemCount) || itemCount < 0 || itemCount > 100) return null;
-    let productItems: NonNullable<typeof order>['productItems'];
-    if (raw['productItems'] !== undefined) {
-      if (!Array.isArray(raw['productItems']) || raw['productItems'].length > 20) return null;
-      const parsed = raw['productItems'].map((item) => {
-        if (!isRecord(item) || !onlyKeys(item, ['productRetailerId','quantity'])) return null;
-        const productRetailerId = boundedString(item['productRetailerId'], 200);
-        if (!productRetailerId) return null;
-        const quantity = item['quantity'];
-        if (quantity !== undefined && (typeof quantity !== 'number' || !Number.isSafeInteger(quantity) || quantity < 1 || quantity > 999)) return null;
-        return Object.freeze({ productRetailerId, ...(quantity === undefined ? {} : { quantity }) });
-      });
-      if (parsed.some((item) => item === null)) return null;
-      productItems = Object.freeze(parsed as NonNullable<typeof order>['productItems']);
-    }
-    order = Object.freeze({ itemCount, ...(productItems ? { productItems } : {}) });
+    const catalogId = raw['catalogId'] === undefined ? undefined : boundedString(raw['catalogId'], 128) ?? undefined;
+    if (raw['catalogId'] !== undefined && (!catalogId || !/^[A-Za-z0-9._:-]{1,128}$/u.test(catalogId))) return null;
+    order = Object.freeze({ itemCount, ...(catalogId ? { catalogId } : {}) });
   }
 
   if (value['forwarded'] !== undefined && typeof value['forwarded'] !== 'boolean') return null;
