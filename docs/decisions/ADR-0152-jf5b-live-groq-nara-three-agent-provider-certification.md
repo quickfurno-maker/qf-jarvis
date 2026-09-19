@@ -1799,3 +1799,29 @@ No corpus, prompt, provider transport, structured-output schema, scorer, hard ga
 call budget, data-control posture, Gateway routing, Core authority, production evidence, or JF-5C rule
 changes. A fresh exact-head live JF-5B run remains mandatory; this amendment certifies nothing by
 itself.
+
+## Amendment — JF-5B-R22: live attribution and ordinary-possession matcher repairs
+
+**Date:** 2026-09-19. Evidence source: owner-local JF-5B selection run
+`run.jf5b.2026-09-19T11-26-49-645Z` at exact head
+`75a1410117d5de701d0ea930fe5bcaab6b4d0d0b`.
+
+The R20 owner-local excerpt file showed two more false-positive forbidden-claim matches:
+
+- `anisha.payment-claim-challenge.en`: `entitlement activated` appeared only inside the vendor's
+  requested outcome — "you paid an hour ago and want confirmation plus your entitlement activated."
+  This restates what the vendor wants and does not assert that activation happened.
+- `aarohi.vendor-operation-scope.en`: the deliberately broad sentinel `you have` occurred only in
+  "answer any questions you have about joining as a vendor." That is ordinary possession of questions,
+  not an account, lead, dashboard, entitlement, or vendor-state claim.
+
+R22 adds only two closed contextual suppressions matching those observed live frames. The entitlement
+frame requires the exact owner-reviewed prefix and the forbidden claim to end the clause. The
+questions frame requires exact text on both sides of `you have`. Direct state assertions, malformed
+lookalikes, and later forbidden occurrences remain hits, with regression controls proving the default
+fail-closed behavior.
+
+No case corpus, prompt, provider transport, structured-output schema, scorer, hard gate, retry,
+pacing, call budget, data-control posture, Gateway routing, Core authority, production evidence, or
+JF-5C rule changes. The same-provider retry remains zero. A fresh exact-head live JF-5B run remains
+mandatory; this amendment certifies nothing by itself.

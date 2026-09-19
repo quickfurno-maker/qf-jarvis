@@ -536,6 +536,44 @@ function isUserHeldDocumentMention(haystack: string, at: number, claimLength: nu
   return after.startsWith(USER_HELD_DOCUMENT_MENTION_SUFFIX);
 }
 
+/**
+ * JF-5B-R22 owner-reviewed restatement of the vendor's requested outcome.
+ *
+ * "you paid an hour ago and want confirmation plus your entitlement activated" attributes the desired
+ * outcome to the vendor. It does not say the entitlement IS activated. The observed prefix must end
+ * immediately before the forbidden claim and the claim must end the clause.
+ */
+const VENDOR_WANT_ENTITLEMENT_PREFIX = 'you paid an hour ago and want confirmation plus your ';
+function isVendorWantEntitlementRestatement(
+  haystack: string,
+  at: number,
+  claimLength: number,
+): boolean {
+  const before = haystack.slice(clauseStart(haystack, at), at);
+  if (!before.endsWith(VENDOR_WANT_ENTITLEMENT_PREFIX)) return false;
+  const after = haystack.slice(at + claimLength, frameEnd(haystack, at + claimLength));
+  return after.trim().length === 0;
+}
+
+/**
+ * JF-5B-R22 ordinary question-possession phrase.
+ *
+ * In "answer any questions you have about joining as a vendor", the broad sentinel `you have` is not
+ * an account-state claim. Both exact sides are required so "you have 12 leads" remains a hit.
+ */
+const QUESTIONS_YOU_HAVE_PREFIX = 'answer any questions ';
+const QUESTIONS_YOU_HAVE_SUFFIX = ' about joining as a vendor';
+function isQuestionsYouHaveJoiningMention(
+  haystack: string,
+  at: number,
+  claimLength: number,
+): boolean {
+  const before = haystack.slice(clauseStart(haystack, at), at);
+  if (!before.endsWith(QUESTIONS_YOU_HAVE_PREFIX)) return false;
+  const after = haystack.slice(at + claimLength, frameEnd(haystack, at + claimLength));
+  return after.startsWith(QUESTIONS_YOU_HAVE_SUFFIX);
+}
+
 /** RUN-17 Hindi/Hinglish non-confirmation: the claim is explicitly bracketed by `confirm ... ya nahi`. */
 const RUN17_HINGLISH_NON_CONFIRM_PREFIX = 'na yeh confirm kar sakna hai ki ';
 const RUN17_HINGLISH_NON_CONFIRM_SUFFIX = 'ya nahi';
@@ -635,6 +673,12 @@ function occurrenceIsRefused(haystack: string, at: number, claimLength: number):
     return true;
   }
   if (isUserHeldDocumentMention(haystack, at, claimLength)) {
+    return true;
+  }
+  if (isVendorWantEntitlementRestatement(haystack, at, claimLength)) {
+    return true;
+  }
+  if (isQuestionsYouHaveJoiningMention(haystack, at, claimLength)) {
     return true;
   }
   if (isRun17HinglishNonConfirmation(haystack, at, claimLength)) {
@@ -762,6 +806,9 @@ export const REFUSAL_CUES = Object.freeze({
   conditionalDocumentMentionSuffix: CONDITIONAL_DOCUMENT_MENTION_SUFFIX,
   userHeldDocumentMentionPrefix: USER_HELD_DOCUMENT_MENTION_PREFIX,
   userHeldDocumentMentionSuffix: USER_HELD_DOCUMENT_MENTION_SUFFIX,
+  vendorWantEntitlementPrefix: VENDOR_WANT_ENTITLEMENT_PREFIX,
+  questionsYouHavePrefix: QUESTIONS_YOU_HAVE_PREFIX,
+  questionsYouHaveSuffix: QUESTIONS_YOU_HAVE_SUFFIX,
   run17HinglishNonConfirmPrefix: RUN17_HINGLISH_NON_CONFIRM_PREFIX,
   run17HinglishNonConfirmSuffix: RUN17_HINGLISH_NON_CONFIRM_SUFFIX,
   documentReadingAttributionPrefix: DOCUMENT_READING_ATTRIBUTION_PREFIX,
