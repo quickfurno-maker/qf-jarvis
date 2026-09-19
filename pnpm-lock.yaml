@@ -508,6 +508,15 @@ importers:
         specifier: workspace:*
         version: link:../riya-prompts
 
+  packages/jarvis-v1-production-seal:
+    dependencies:
+      '@qf-jarvis/jarvis-v1-provider-certification-live':
+        specifier: workspace:*
+        version: link:../jarvis-v1-provider-certification-live
+      '@qf-jarvis/model-evaluation':
+        specifier: workspace:*
+        version: link:../model-evaluation
+
   packages/jarvis-v1-provider-certification-live:
     dependencies:
       '@qf-jarvis/aarohi-prompts':

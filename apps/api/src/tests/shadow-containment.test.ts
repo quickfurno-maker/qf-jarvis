@@ -569,6 +569,9 @@ describe('(133-148) the declared budget and every prior lock', () => {
       'governed-knowledge',
       'groq-staging-smoke',
       'jarvis-runtime',
+      // JF-5C (ADR-0155): pure production-evidence sealing only. It consumes the reviewed
+      // JF-5B manifest and mints no runtime, provider, network, database or activation surface.
+      'jarvis-v1-production-seal',
       // JF-5B (ADR-0152): the live certification OPERATOR. Still an EXACT set match -- this
       // records an authorised addition, it does not relax the assertion. Evaluation only and off
       // the serving path: no production package or app imports it, it holds no business

@@ -201,6 +201,11 @@ describe('JF-5B the certification operator is off the serving path', () => {
       // injected transports and reads the production seam's SOURCE; it opens no socket and holds no
       // credential. Added here as a decision, which is the point of keeping this set exact.
       'apps/api/src/tests/jf5b-discovery-transport-diagnostic.test.ts',
+      // JF-5C (ADR-0155): the pure owner-seal package consumes the frozen six-binding manifest.
+      // Its implementation and its own spec are the only new importers; neither serves a turn,
+      // acquires a credential, performs I/O or activates a provider.
+      'packages/jarvis-v1-production-seal/src/index.ts',
+      'packages/jarvis-v1-production-seal/src/tests/production-seal.test.ts',
     ];
     const importers: string[] = [];
     for (const root of [repoPath('packages'), repoPath('apps')]) {
