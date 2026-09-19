@@ -21,9 +21,7 @@ import {
 
 const jarvisKeyPair = generateKeyPairSync('ed25519');
 const keyId = 'jarvis-riya-e2e-test';
-const privateKeyPem = jarvisKeyPair.privateKey
-  .export({ format: 'pem', type: 'pkcs8' })
-  .toString();
+const privateKeyPem = jarvisKeyPair.privateKey.export({ format: 'pem', type: 'pkcs8' }).toString();
 
 const now = '2026-09-19T00:30:00.000Z';
 const conversationId = '22222222-2222-4222-8222-222222222222';
