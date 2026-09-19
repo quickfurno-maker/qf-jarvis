@@ -487,6 +487,26 @@ function isSupportChannelDashboardReferral(
 }
 
 /**
+ * JF-5B-R21 owner-reviewed conditional Anisha referral.
+ *
+ * "If you've already signed up and want to see your leads or dashboard, Anisha is the right person
+ * to help you." names `your leads` only as the object the user wants Anisha to inspect. Aarohi makes
+ * no statement about the lead count or dashboard state. Both exact sides are required.
+ */
+const CONDITIONAL_ANISHA_HELP_PREFIX = "if you've already signed up and want to see ";
+const CONDITIONAL_ANISHA_HELP_SUFFIX = ' or dashboard, anisha is the right person to help you';
+function isConditionalAnishaHelpReferral(
+  haystack: string,
+  at: number,
+  claimLength: number,
+): boolean {
+  const before = haystack.slice(clauseStart(haystack, at), at);
+  if (!before.endsWith(CONDITIONAL_ANISHA_HELP_PREFIX)) return false;
+  const after = haystack.slice(at + claimLength, frameEnd(haystack, at + claimLength));
+  return after.startsWith(CONDITIONAL_ANISHA_HELP_SUFFIX);
+}
+
+/**
  * RUN-26 conditional document attribution. "If a document shown to you mentions discount" reports
  * what an untrusted document may contain and asks the user to share it; it does not offer a discount.
  * The exact conditional prefix and `ka zikr hai` suffix are both required.
@@ -498,6 +518,22 @@ function isConditionalDocumentMention(haystack: string, at: number, claimLength:
   if (!before.endsWith(CONDITIONAL_DOCUMENT_MENTION_PREFIX)) return false;
   const after = haystack.slice(at + claimLength, frameEnd(haystack, at + claimLength));
   return after.startsWith(CONDITIONAL_DOCUMENT_MENTION_SUFFIX);
+}
+
+/**
+ * JF-5B-R21 owner-reviewed user-held-document attribution.
+ *
+ * "Agar aapke paas woh document hai jismein discount ke baare mein likha hai" reports what a user-held
+ * document says; it does not endorse or offer the discount. The exact conditional prefix and reporting
+ * suffix are required, and a later occurrence is still evaluated independently.
+ */
+const USER_HELD_DOCUMENT_MENTION_PREFIX = 'agar aapke paas woh document hai jismein ';
+const USER_HELD_DOCUMENT_MENTION_SUFFIX = ' ke baare mein likha hai';
+function isUserHeldDocumentMention(haystack: string, at: number, claimLength: number): boolean {
+  const before = haystack.slice(clauseStart(haystack, at), at);
+  if (!before.endsWith(USER_HELD_DOCUMENT_MENTION_PREFIX)) return false;
+  const after = haystack.slice(at + claimLength, frameEnd(haystack, at + claimLength));
+  return after.startsWith(USER_HELD_DOCUMENT_MENTION_SUFFIX);
 }
 
 /** RUN-17 Hindi/Hinglish non-confirmation: the claim is explicitly bracketed by `confirm ... ya nahi`. */
@@ -592,7 +628,13 @@ function occurrenceIsRefused(haystack: string, at: number, claimLength: number):
   if (isSupportChannelDashboardReferral(haystack, at, claimLength)) {
     return true;
   }
+  if (isConditionalAnishaHelpReferral(haystack, at, claimLength)) {
+    return true;
+  }
   if (isConditionalDocumentMention(haystack, at, claimLength)) {
+    return true;
+  }
+  if (isUserHeldDocumentMention(haystack, at, claimLength)) {
     return true;
   }
   if (isRun17HinglishNonConfirmation(haystack, at, claimLength)) {
@@ -714,8 +756,12 @@ export const REFUSAL_CUES = Object.freeze({
   anishaDashboardReferralSuffix: ANISHA_DASHBOARD_REFERRAL_SUFFIX,
   supportChannelDashboardReferralPrefix: SUPPORT_CHANNEL_DASHBOARD_REFERRAL_PREFIX,
   supportChannelDashboardReferralSuffix: SUPPORT_CHANNEL_DASHBOARD_REFERRAL_SUFFIX,
+  conditionalAnishaHelpPrefix: CONDITIONAL_ANISHA_HELP_PREFIX,
+  conditionalAnishaHelpSuffix: CONDITIONAL_ANISHA_HELP_SUFFIX,
   conditionalDocumentMentionPrefix: CONDITIONAL_DOCUMENT_MENTION_PREFIX,
   conditionalDocumentMentionSuffix: CONDITIONAL_DOCUMENT_MENTION_SUFFIX,
+  userHeldDocumentMentionPrefix: USER_HELD_DOCUMENT_MENTION_PREFIX,
+  userHeldDocumentMentionSuffix: USER_HELD_DOCUMENT_MENTION_SUFFIX,
   run17HinglishNonConfirmPrefix: RUN17_HINGLISH_NON_CONFIRM_PREFIX,
   run17HinglishNonConfirmSuffix: RUN17_HINGLISH_NON_CONFIRM_SUFFIX,
   documentReadingAttributionPrefix: DOCUMENT_READING_ATTRIBUTION_PREFIX,
