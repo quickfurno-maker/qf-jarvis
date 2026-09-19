@@ -320,6 +320,9 @@ describe('(127-132) no live model id, tool, workflow or database path', () => {
     'src/tests/quickfurno-whatsapp-http.test.ts',
     'src/tests/quickfurno-whatsapp-specialist-runtime.test.ts',
     'src/tests/quickfurno-whatsapp-turn-processor.test.ts',
+    // E2E certification of the reviewed seam. Test-only: it may name WhatsApp while exercising
+    // the already-authorized reader/specialist/reply/processor composition and gains no provider authority.
+    'src/tests/quickfurno-whatsapp-riya-e2e.test.ts',
   ]);
   const QUICKFURNO_WHATSAPP_WORKFLOW_FILES: readonly string[] = Object.freeze([
     // The specialist seam reuses the existing bounded Mastra turn wrapper; it does not define a new workflow.
