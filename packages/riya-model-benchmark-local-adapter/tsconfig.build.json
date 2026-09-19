@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "tsBuildInfoFile": "./tsconfig.tsbuildinfo"
+  },
+
+  // The EMITTING build. Specs under src/tests are EXCLUDED, so no fake transport, no canned engine
+  // stream and no ephemeral loopback server reaches dist/. The fakes under src/testing ARE emitted:
+  // they are the published `./testing` subpath and the only transports this package is run against in
+  // CI.
+  //
+  // TWO project references, both one-way and both INWARD. `riya-model-benchmark-harness` owns the
+  // target port this package implements, the suite plan and the scheduler; `riya-model-benchmark`
+  // owns the subject, environment, workload and evidence contracts this package fills in. Neither is
+  // modified by this package existing -- the whole point of RMB-B's port was that a local-engine
+  // adapter is an implementation of it rather than a change to it.
+  //
+  // Deliberately absent: `model-gateway` and `model-gateway-composition` (the serving waist must not
+  // grow benchmark instrumentation, and a benchmark request must not reach the path that serves
+  // customers), every runtime, `riya-ai-synthetic-generation` and
+  // `riya-ai-synthetic-provider-adapters` (AS3 is paid-provider corpus generation; this is unpaid
+  // local performance traffic and shares no code with it), `riya-intelligence-dataset` and
+  // `riya-quality-evaluation` (Human Gold and the P10 exam reach no benchmark prompt),
+  // `prompt-registry` and `governed-knowledge` (benchmark prompts are synthetic and closed), and
+  // anything Postgres or `event-backbone`.
+  "references": [
+    { "path": "../riya-model-benchmark/tsconfig.build.json" },
+    { "path": "../riya-model-benchmark-harness/tsconfig.build.json" }
+  ],
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/tests/**"]
+}

@@ -266,11 +266,18 @@ describe('RMB-A is the operational authority and nothing else', () => {
   });
 
   it('is imported by no runtime, service or application', () => {
-    // RMB-B adds the first and only permitted importer, and it is the opposite of a runtime:
+    // RMB-B added the first permitted importer, and it is the opposite of a runtime:
     // `riya-model-benchmark-harness` is the offline scheduler that PRODUCES evidence and hands it
     // straight to these constructors. The direction is still one-way -- nothing that serves a customer
     // turn may name this package.
-    const ALLOWED = new Set(['riya-model-benchmark-harness']);
+    //
+    // AS4-PREP-A adds the second, on the same reasoning. `riya-model-benchmark-local-adapter` is the
+    // offline local-engine adapter that implements RMB-B's target port and fills in the subject,
+    // environment and workload contracts this package owns; it serves no customer turn, holds no
+    // credential, and reaches nothing but a loopback port. The invariant is unchanged -- both entries
+    // are OFFLINE evidence producers, and the moment a runtime, an app or the model gateway appears in
+    // this list, that is the failure this spec exists to cause.
+    const ALLOWED = new Set(['riya-model-benchmark-harness', 'riya-model-benchmark-local-adapter']);
     const importers: string[] = [];
     for (const root of [join(REPO_ROOT, 'packages'), join(REPO_ROOT, 'apps')]) {
       for (const entry of readdirSync(root)) {
