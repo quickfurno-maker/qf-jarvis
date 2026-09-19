@@ -467,6 +467,77 @@ describe('JF-5B (1,2) the phases run in order, and a failure stops the next one'
     expect(receipt).not.toContain('b'.repeat(64));
     expect(receipt).not.toContain('nara-synthetic-certification-key');
   });
+
+  it('writes forbidden-claim probe text only to the owner-local phase-2c review file', async () => {
+    const excerpt = 'MODEL_TEXT_OWNER_LOCAL_ONLY dashboard referral around the matched occurrence';
+    const probe = createLiveCaseRecord({
+      runId: 'run.jf5b.test',
+      caseId: 'aarohi.vendor-operation-scope.en',
+      caseVersion: 1,
+      agent: 'AAROHI',
+      agentScope: 'PROSPECT',
+      provider: 'nara',
+      releaseId: 'rel',
+      modelId: 'agnes-2.5-flash',
+      modelVersion: 'v1',
+      configDigest: 'cfg',
+      promptFamily: 'aarohi.acquisition',
+      promptVersion: 1,
+      promptDigest: 'a'.repeat(64),
+      evaluationSuiteId: 'eval',
+      fixtureManifestId: 'fixtures',
+      languageMode: 'EN',
+      executionLayer: 'MODEL_REQUIRED',
+      providerAttempts: 1,
+      networkCalls: 1,
+      fallbackCount: 0,
+      retryCount: 0,
+      latencyMs: 4722,
+      totalTokens: 100,
+      structuredOutputValid: true,
+      outcome: 'FAIL',
+      reason: 'forbidden-claim-asserted',
+      outputDigest: 'd'.repeat(64),
+    });
+    const { deps, seen } = harness({
+      probes: [
+        {
+          score: {
+            modelId: 'agnes-2.5-flash',
+            hardGatesPassed: false,
+            qualityPassed: 5,
+            qualityAttempted: 6,
+            p95LatencyMs: 10963,
+            totalTokens: 13580,
+          },
+          cases: [probe],
+          diagnostics: [
+            {
+              provider: 'nara',
+              agent: 'AAROHI',
+              caseId: 'aarohi.vendor-operation-scope.en',
+              matchedClaim: 'your dashboard',
+              excerpt,
+            },
+          ],
+        },
+      ],
+    });
+    const outcome = await runJf5bLiveCertificationCli(FULL_ARGV, deps);
+    expect(outcome.exitCode).toBe(EXIT_CODES.NARA_SELECTION_REFUSED);
+
+    const receipt = seen.fileContents.get('receipt-selection-failure.json') ?? '';
+    const review = seen.fileContents.get('review/phase2c-forbidden-claim-excerpts.json') ?? '';
+    const terminal = [...seen.lines, ...seen.errors].join('\n');
+
+    expect(review).toContain('agnes-2.5-flash');
+    expect(review).toContain('"matchedClaim": "your dashboard"');
+    expect(review).toContain(excerpt);
+    expect(receipt).not.toContain(excerpt);
+    expect(receipt).not.toContain('d'.repeat(64));
+    expect(terminal).not.toContain(excerpt);
+    expect(review).not.toContain('nara-synthetic-certification-key');
+  });
 });
 
 describe('JF-5B-R3 (CLI) the owner candidate set travels through the whole sequence', () => {
