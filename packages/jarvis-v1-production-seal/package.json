@@ -1,0 +1,23 @@
+{
+  "name": "@qf-jarvis/jarvis-v1-production-seal",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "JF-5C owner production-evidence seal. Pure, fail-closed and non-activating: consumes a complete JF-5B six-binding manifest plus blinded human-review decisions and explicit Nara data-controls acceptance, then emits exact prompt-scoped ACTIVE_MODEL_RELEASE evidence and provider coverage seals. No provider, network, credential, database, filesystem or rollout mutation.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/jarvis-v1-provider-certification-live": "workspace:*",
+    "@qf-jarvis/model-evaluation": "workspace:*"
+  }
+}

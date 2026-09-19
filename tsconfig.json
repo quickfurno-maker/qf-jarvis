@@ -65,6 +65,7 @@
     { "path": "./packages/anisha-prompts/tsconfig.build.json" },
     { "path": "./packages/aarohi-prompts/tsconfig.build.json" },
     { "path": "./packages/jarvis-v1-provider-certification-live/tsconfig.build.json" },
+    { "path": "./packages/jarvis-v1-production-seal/tsconfig.build.json" },
     { "path": "./packages/riya-prompts/tsconfig.build.json" },
     { "path": "./packages/riya-candidate-evidence-live/tsconfig.build.json" }
   ]
