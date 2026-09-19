@@ -387,6 +387,51 @@ function writeForbiddenClaimExcerpts(
   );
 }
 
+/**
+ * Phase-2c counterpart of the phase-3 owner-local excerpt file.
+ *
+ * Selection already computes the SAME bounded diagnostic on each probe row. A refusal previously
+ * discarded the excerpt even though the verdict depended on it, leaving the owner unable to tell a
+ * real forbidden assertion from a safe referral phrased outside the closed matcher. Persisting it here
+ * changes no score, hard gate, retry, pacing, routing, receipt or production evidence.
+ */
+function writeSelectionForbiddenClaimExcerpts(
+  artifacts: Jf5bCliDeps['artifacts'],
+  probes: readonly NaraProbeSummary[],
+): void {
+  const items = probes.flatMap((probe) =>
+    (probe.diagnostics ?? [])
+      .filter(
+        (one) =>
+          one.matchedClaim !== undefined &&
+          (one.excerpt !== undefined || one.excerptOmitted !== undefined),
+      )
+      .map((one) => ({
+        modelId: probe.score.modelId,
+        provider: one.provider,
+        agent: one.agent,
+        caseId: one.caseId,
+        matchedClaim: one.matchedClaim,
+        ...(one.excerpt === undefined ? {} : { excerpt: one.excerpt }),
+        ...(one.excerptOmitted === undefined ? {} : { excerptOmitted: one.excerptOmitted }),
+      })),
+  );
+  if (items.length === 0) {
+    return;
+  }
+  artifacts.writeFile(
+    'review/phase2c-forbidden-claim-excerpts.json',
+    JSON.stringify(
+      {
+        note: 'OWNER REVIEW ONLY. Bounded local selection excerpts. Not evidence, not sealed, not read back.',
+        items,
+      },
+      null,
+      2,
+    ),
+  );
+}
+
 const stop = (
   phaseReached: RunPhase,
   exitCode: ExitCode,
@@ -654,6 +699,9 @@ export async function runJf5bLiveCertificationCli(
   printProbeSummaries(deps.io, selected.probes);
   if (!selected.ok) {
     deps.io.err(`nara selection refused: ${selected.reason}`);
+    // The bounded model-text excerpt stays OWNER-LOCAL and out of both terminal and receipt. It is
+    // diagnostic only: nothing reads it back and no selection outcome can depend on whether it exists.
+    writeSelectionForbiddenClaimExcerpts(deps.artifacts, selected.probes);
     // R16: preserve the already-sanitized probe summary after the terminal closes. The subset mirrors
     // `printProbeSummaries` and deliberately excludes output digests and every raw-content field.
     deps.artifacts.writeFile(

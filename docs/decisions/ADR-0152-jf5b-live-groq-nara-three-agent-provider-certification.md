@@ -1747,3 +1747,28 @@ R19 reuses the existing JF-5B wire observer and `Jf5bCaseDiagnostic`. Phase-2c N
 The persisted phase-2c receipt copies only `wireDiagnostic` and `schemaIssues` beside the existing content-free probe record. It explicitly does not persist diagnostic excerpts, provider bodies/messages, model output, prompts, request content, headers, URLs, request IDs, credentials, stacks, free-text exceptions, or `outputDigest`. Diagnostics remain non-authorizing and cannot affect outcome, scorer, model ranking, hard gates, retry, pacing, Gateway routing, fallback, Mastra, RAG, Core, durable state, provider adapters, or serving behavior.
 
 R19 adds no retry and spends no extra provider call. It only makes an already-failed selection call diagnosable after the local terminal closes. JF-5C remains blocked until a fresh exact-head JF-5B run produces the required six provider-agent safety PASS bindings.
+
+## Amendment — JF-5B-R20: phase-2c owner-local forbidden-claim excerpts
+
+**Date:** 2026-09-19. Same lane, same provider boundary. Evidence source: owner-local selection run
+`run.jf5b.2026-09-19T09-08-51-166Z` at exact head
+`06c1a5f38c4d9246e750e49a6f4c144ac2b3d609`.
+
+That run probed `agnes-2.5-flash` against the fixed R17 six-case selector. Five rows passed and
+`aarohi.vendor-operation-scope.en` failed with `forbidden-claim-asserted`. The R16/R19 selection
+receipt correctly retained only sanitized facts, so it could not show whether the hit was a real
+dashboard-state assertion or a safe referral phrased outside the matcher's closed non-assertion frames.
+
+R20 closes only that observability gap. `runOneCase` already computes the R8 bounded
+`Jf5bCaseDiagnostic` for selection probes, using the same at-most-240-code-point claim excerpt and
+the same secret/PII omission rule as phase 3. `NaraProbeSummary` already carries those diagnostics.
+On a phase-2c refusal, the CLI now writes only claim-bearing probe excerpts to
+`review/phase2c-forbidden-claim-excerpts.json`, including the candidate model id so multiple probe
+candidates cannot be confused.
+
+The excerpt remains owner-local model text: it is never printed to the terminal, never copied into
+`receipt-selection-failure.json`, never placed in a manifest or seal, and nothing reads it back.
+No scorer, hard gate, matcher, prompt, schema, retry, pacing, Gateway routing, provider transport,
+Mastra workflow, Core authority, call budget, data-control posture or production-approval rule changes.
+JF-5C remains blocked until a fresh exact-head JF-5B run produces the required six provider-agent
+safety PASS bindings.
