@@ -20,6 +20,7 @@ function material(
     dataClass: 'HOSTED_ALLOWED',
     subjectRef: '44444444-4444-4444-8444-444444444444',
     receivedAt: '2026-09-18T12:00:00.000Z',
+    inbound: { version: 1, messageType: 'text', normalizedText: 'Hello' },
     normalizedText: 'Hello',
     ...over,
   };

@@ -99,6 +99,220 @@ function signingInput(
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
+
+const MATERIAL_MESSAGE_TYPES = [
+  'text',
+  'button_reply',
+  'list_reply',
+  'image',
+  'document',
+  'audio',
+  'video',
+  'sticker',
+  'location',
+  'contact',
+  'reaction',
+  'order',
+  'system',
+  'unsupported',
+] as const;
+const MATERIAL_MEDIA_TYPES = ['image', 'document', 'audio', 'video', 'sticker'] as const;
+const MEDIA_ID = /^[A-Za-z0-9._:-]{1,256}$/u;
+
+function onlyKeys(value: Record<string, unknown>, allowed: readonly string[]): boolean {
+  return Object.keys(value).every((key) => allowed.includes(key));
+}
+function boundedString(value: unknown, max: number, min = 1): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length >= min && trimmed.length <= max ? trimmed : null;
+}
+function parseInboundMaterial(value: unknown): QuickFurnoWhatsAppTurnMaterialV1['inbound'] | null {
+  if (
+    !isRecord(value) ||
+    !onlyKeys(value, [
+      'version',
+      'messageType',
+      'normalizedText',
+      'attachment',
+      'selection',
+      'replyContext',
+      'referral',
+      'reaction',
+      'order',
+      'forwarded',
+      'frequentlyForwarded',
+    ])
+  )
+    return null;
+  if (value['version'] !== 1) return null;
+  const messageType = value['messageType'];
+  if (
+    typeof messageType !== 'string' ||
+    !(MATERIAL_MESSAGE_TYPES as readonly string[]).includes(messageType)
+  )
+    return null;
+
+  let normalizedText: string | undefined;
+  if (value['normalizedText'] !== undefined) {
+    normalizedText = boundedString(value['normalizedText'], 4096) ?? undefined;
+    if (normalizedText === undefined) return null;
+  }
+
+  let attachment: QuickFurnoWhatsAppTurnMaterialV1['inbound']['attachment'];
+  if (value['attachment'] !== undefined) {
+    const raw = value['attachment'];
+    if (!isRecord(raw) || !onlyKeys(raw, ['kind', 'mediaId', 'mimeType', 'caption', 'filename']))
+      return null;
+    const kind = raw['kind'];
+    const mediaId = raw['mediaId'];
+    if (typeof kind !== 'string' || !(MATERIAL_MEDIA_TYPES as readonly string[]).includes(kind))
+      return null;
+    if (kind !== messageType || typeof mediaId !== 'string' || !MEDIA_ID.test(mediaId)) return null;
+    const mimeType =
+      raw['mimeType'] === undefined
+        ? undefined
+        : (boundedString(raw['mimeType'], 128) ?? undefined);
+    const caption =
+      raw['caption'] === undefined ? undefined : (boundedString(raw['caption'], 1024) ?? undefined);
+    const filename =
+      raw['filename'] === undefined
+        ? undefined
+        : (boundedString(raw['filename'], 240) ?? undefined);
+    if (raw['mimeType'] !== undefined && mimeType === undefined) return null;
+    if (raw['caption'] !== undefined && caption === undefined) return null;
+    if (raw['filename'] !== undefined && filename === undefined) return null;
+    attachment = Object.freeze({
+      kind: kind as NonNullable<typeof attachment>['kind'],
+      mediaId,
+      ...(mimeType ? { mimeType } : {}),
+      ...(caption ? { caption } : {}),
+      ...(filename ? { filename } : {}),
+    });
+  }
+
+  let selection: QuickFurnoWhatsAppTurnMaterialV1['inbound']['selection'];
+  if (value['selection'] !== undefined) {
+    if (!['button_reply', 'list_reply'].includes(messageType)) return null;
+    const raw = value['selection'];
+    if (!isRecord(raw) || !onlyKeys(raw, ['id', 'title', 'description'])) return null;
+    const id = raw['id'] === undefined ? undefined : (boundedString(raw['id'], 200) ?? undefined);
+    const title =
+      raw['title'] === undefined ? undefined : (boundedString(raw['title'], 240) ?? undefined);
+    const description =
+      raw['description'] === undefined
+        ? undefined
+        : (boundedString(raw['description'], 240) ?? undefined);
+    if (raw['id'] !== undefined && id === undefined) return null;
+    if (raw['title'] !== undefined && title === undefined) return null;
+    if (raw['description'] !== undefined && description === undefined) return null;
+    if (!id && !title && !description) return null;
+    selection = Object.freeze({
+      ...(id ? { id } : {}),
+      ...(title ? { title } : {}),
+      ...(description ? { description } : {}),
+    });
+  }
+
+  let replyContext: QuickFurnoWhatsAppTurnMaterialV1['inbound']['replyContext'];
+  if (value['replyContext'] !== undefined) {
+    const raw = value['replyContext'];
+    if (!isRecord(raw) || !onlyKeys(raw, ['providerMessageId'])) return null;
+    const providerMessageId = boundedString(raw['providerMessageId'], 512);
+    if (!providerMessageId) return null;
+    replyContext = Object.freeze({ providerMessageId });
+  }
+
+  let referral: QuickFurnoWhatsAppTurnMaterialV1['inbound']['referral'];
+  if (value['referral'] !== undefined) {
+    const raw = value['referral'];
+    if (!isRecord(raw) || !onlyKeys(raw, ['sourceType', 'sourceId'])) return null;
+    const sourceType =
+      raw['sourceType'] === undefined
+        ? undefined
+        : (boundedString(raw['sourceType'], 40) ?? undefined);
+    const sourceId =
+      raw['sourceId'] === undefined
+        ? undefined
+        : (boundedString(raw['sourceId'], 128) ?? undefined);
+    if (raw['sourceType'] !== undefined && (!sourceType || !/^[a-z_]{1,40}$/iu.test(sourceType)))
+      return null;
+    if (raw['sourceId'] !== undefined && (!sourceId || !/^[A-Za-z0-9._:-]{1,128}$/u.test(sourceId)))
+      return null;
+    if (!sourceType && !sourceId) return null;
+    referral = Object.freeze({
+      ...(sourceType ? { sourceType } : {}),
+      ...(sourceId ? { sourceId } : {}),
+    });
+  }
+
+  let reaction: QuickFurnoWhatsAppTurnMaterialV1['inbound']['reaction'];
+  if (value['reaction'] !== undefined) {
+    if (messageType !== 'reaction') return null;
+    const raw = value['reaction'];
+    if (!isRecord(raw) || !onlyKeys(raw, ['emoji', 'targetProviderMessageId'])) return null;
+    const emoji =
+      raw['emoji'] === undefined ? undefined : (boundedString(raw['emoji'], 32) ?? undefined);
+    const targetProviderMessageId =
+      raw['targetProviderMessageId'] === undefined
+        ? undefined
+        : (boundedString(raw['targetProviderMessageId'], 512) ?? undefined);
+    if (raw['emoji'] !== undefined && emoji === undefined) return null;
+    if (raw['targetProviderMessageId'] !== undefined && targetProviderMessageId === undefined)
+      return null;
+    if (!emoji && !targetProviderMessageId) return null;
+    reaction = Object.freeze({
+      ...(emoji ? { emoji } : {}),
+      ...(targetProviderMessageId ? { targetProviderMessageId } : {}),
+    });
+  }
+
+  let order: QuickFurnoWhatsAppTurnMaterialV1['inbound']['order'];
+  if (value['order'] !== undefined) {
+    if (messageType !== 'order') return null;
+    const raw = value['order'];
+    if (!isRecord(raw) || !onlyKeys(raw, ['itemCount', 'catalogId'])) return null;
+    const itemCount = raw['itemCount'];
+    if (
+      typeof itemCount !== 'number' ||
+      !Number.isSafeInteger(itemCount) ||
+      itemCount < 0 ||
+      itemCount > 100
+    )
+      return null;
+    const catalogId =
+      raw['catalogId'] === undefined
+        ? undefined
+        : (boundedString(raw['catalogId'], 128) ?? undefined);
+    if (
+      raw['catalogId'] !== undefined &&
+      (!catalogId || !/^[A-Za-z0-9._:-]{1,128}$/u.test(catalogId))
+    )
+      return null;
+    order = Object.freeze({ itemCount, ...(catalogId ? { catalogId } : {}) });
+  }
+
+  if (value['forwarded'] !== undefined && typeof value['forwarded'] !== 'boolean') return null;
+  if (
+    value['frequentlyForwarded'] !== undefined &&
+    typeof value['frequentlyForwarded'] !== 'boolean'
+  )
+    return null;
+
+  return Object.freeze({
+    version: 1,
+    messageType: messageType as QuickFurnoWhatsAppTurnMaterialV1['inbound']['messageType'],
+    ...(normalizedText ? { normalizedText } : {}),
+    ...(attachment ? { attachment } : {}),
+    ...(selection ? { selection } : {}),
+    ...(replyContext ? { replyContext } : {}),
+    ...(referral ? { referral } : {}),
+    ...(reaction ? { reaction } : {}),
+    ...(order ? { order } : {}),
+    ...(value['forwarded'] === true ? { forwarded: true } : {}),
+    ...(value['frequentlyForwarded'] === true ? { frequentlyForwarded: true } : {}),
+  });
+}
 function parseMaterial(value: unknown, requestId: string): QuickFurnoWhatsAppTurnMaterialV1 | null {
   if (!isRecord(value)) return null;
   const required = [
@@ -113,6 +327,7 @@ function parseMaterial(value: unknown, requestId: string): QuickFurnoWhatsAppTur
     'tenantId',
     'dataClass',
     'receivedAt',
+    'inbound',
   ];
   const allowed = [...required, 'subjectRef', 'normalizedText'];
   if (
@@ -120,6 +335,7 @@ function parseMaterial(value: unknown, requestId: string): QuickFurnoWhatsAppTur
     !required.every((key) => key in value)
   )
     return null;
+
   const conversationId = value['conversationId'];
   const inboundMessageId = value['inboundMessageId'];
   const revision = value['conversationRevision'];
@@ -127,7 +343,8 @@ function parseMaterial(value: unknown, requestId: string): QuickFurnoWhatsAppTur
   const subject = value['subjectType'];
   const subjectRef = value['subjectRef'];
   const receivedAt = value['receivedAt'];
-  const normalizedText = value['normalizedText'];
+  const normalizedTextRaw = value['normalizedText'];
+
   if (
     value['protocol'] !== QFJ_WHATSAPP_TURN_MATERIAL_PROTOCOL ||
     value['version'] !== 1 ||
@@ -155,11 +372,16 @@ function parseMaterial(value: unknown, requestId: string): QuickFurnoWhatsAppTur
     !Number.isFinite(Date.parse(receivedAt))
   )
     return null;
-  if (
-    normalizedText !== undefined &&
-    (typeof normalizedText !== 'string' || normalizedText.length > 4096)
-  )
-    return null;
+
+  const inbound = parseInboundMaterial(value['inbound']);
+  if (!inbound) return null;
+  const normalizedText =
+    normalizedTextRaw === undefined
+      ? undefined
+      : (boundedString(normalizedTextRaw, 4096) ?? undefined);
+  if (normalizedTextRaw !== undefined && normalizedText === undefined) return null;
+  if (normalizedText !== inbound.normalizedText) return null;
+
   return Object.freeze({
     protocol: QFJ_WHATSAPP_TURN_MATERIAL_PROTOCOL,
     version: 1,
@@ -173,9 +395,11 @@ function parseMaterial(value: unknown, requestId: string): QuickFurnoWhatsAppTur
     dataClass: 'HOSTED_ALLOWED',
     ...(subjectRef === undefined ? {} : { subjectRef }),
     receivedAt,
+    inbound,
     ...(normalizedText === undefined ? {} : { normalizedText }),
   });
 }
+
 function parsePrivateKey(config: QuickFurnoWhatsAppHttpConfig): {
   key: KeyObject;
   timeoutMs: number;

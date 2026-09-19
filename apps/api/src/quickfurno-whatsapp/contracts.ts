@@ -11,6 +11,54 @@ export const QFJ_WHATSAPP_REPLY_SIGNING_DOMAIN = 'qfj.whatsapp.reply.http.sig.v2
 
 export type QuickFurnoWhatsAppAgent = 'AAROHI' | 'ANISHA' | 'RIYA';
 export type QuickFurnoWhatsAppSubjectType = 'prospect' | 'client' | 'vendor';
+export type QuickFurnoWhatsAppInboundMessageType =
+  | 'text'
+  | 'button_reply'
+  | 'list_reply'
+  | 'image'
+  | 'document'
+  | 'audio'
+  | 'video'
+  | 'sticker'
+  | 'location'
+  | 'contact'
+  | 'reaction'
+  | 'order'
+  | 'system'
+  | 'unsupported';
+
+export interface QuickFurnoWhatsAppInboundMaterialV1 {
+  readonly version: 1;
+  readonly messageType: QuickFurnoWhatsAppInboundMessageType;
+  readonly normalizedText?: string;
+  readonly attachment?: {
+    readonly kind: 'image' | 'document' | 'audio' | 'video' | 'sticker';
+    readonly mediaId: string;
+    readonly mimeType?: string;
+    readonly caption?: string;
+    readonly filename?: string;
+  };
+  readonly selection?: {
+    readonly id?: string;
+    readonly title?: string;
+    readonly description?: string;
+  };
+  readonly replyContext?: { readonly providerMessageId: string };
+  readonly referral?: {
+    readonly sourceType?: string;
+    readonly sourceId?: string;
+  };
+  readonly reaction?: {
+    readonly emoji?: string;
+    readonly targetProviderMessageId?: string;
+  };
+  readonly order?: {
+    readonly itemCount: number;
+    readonly catalogId?: string;
+  };
+  readonly forwarded?: boolean;
+  readonly frequentlyForwarded?: boolean;
+}
 
 export interface QuickFurnoWhatsAppTurnMaterialV1 {
   readonly protocol: typeof QFJ_WHATSAPP_TURN_MATERIAL_PROTOCOL;
@@ -25,6 +73,7 @@ export interface QuickFurnoWhatsAppTurnMaterialV1 {
   readonly dataClass: 'HOSTED_ALLOWED';
   readonly subjectRef?: string;
   readonly receivedAt: string;
+  readonly inbound: QuickFurnoWhatsAppInboundMaterialV1;
   readonly normalizedText?: string;
 }
 
