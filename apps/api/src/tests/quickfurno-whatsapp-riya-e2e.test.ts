@@ -81,7 +81,7 @@ describe('Riya complete QuickFurno WhatsApp flow', () => {
     const requestIds = [materialRequestId, replyRequestId];
     const callbackBodies: Record<string, unknown>[] = [];
 
-    const httpPost: QuickFurnoWhatsAppHttpPost = async (url, init) => {
+    const httpPost: QuickFurnoWhatsAppHttpPost = (url, init) => {
       const path = new URL(url).pathname;
 
       if (path === QFJ_WHATSAPP_TURN_MATERIAL_PATH) {
@@ -102,7 +102,7 @@ describe('Riya complete QuickFurno WhatsApp flow', () => {
           expectedRevision: revision,
         });
 
-        return {
+        return Promise.resolve({
           status: 200,
           text: () =>
             Promise.resolve(
@@ -127,7 +127,7 @@ describe('Riya complete QuickFurno WhatsApp flow', () => {
                 normalizedText: clientText,
               }),
             ),
-        };
+        });
       }
 
       if (path === QFJ_WHATSAPP_REPLY_PATH) {
@@ -158,7 +158,7 @@ describe('Riya complete QuickFurno WhatsApp flow', () => {
         });
         expect(request['idempotencyKey']).toMatch(/^[0-9a-f]{64}$/u);
 
-        return {
+        return Promise.resolve({
           status: 202,
           text: () =>
             Promise.resolve(
@@ -169,7 +169,7 @@ describe('Riya complete QuickFurno WhatsApp flow', () => {
                 status: 'queued',
               }),
             ),
-        };
+        });
       }
 
       throw new Error('unexpected QuickFurno test endpoint');
