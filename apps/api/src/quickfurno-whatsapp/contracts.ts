@@ -1,16 +1,23 @@
 export const QFJ_WHATSAPP_TURN_MATERIAL_PROTOCOL = 'qfj.whatsapp.turn-material' as const;
-export const QFJ_WHATSAPP_TURN_MATERIAL_VERSION = 1 as const;
+export const QFJ_WHATSAPP_TURN_MATERIAL_VERSION = 2 as const;
 export const QFJ_WHATSAPP_TURN_MATERIAL_PATH =
   '/api/internal/jarvis/whatsapp-turn-material' as const;
 export const QFJ_WHATSAPP_TURN_MATERIAL_SIGNING_DOMAIN =
-  'qfj.whatsapp.turn-material.http.sig.v1' as const;
+  'qfj.whatsapp.turn-material.http.sig.v2' as const;
 export const QFJ_WHATSAPP_REPLY_PROTOCOL = 'qfj.whatsapp.reply' as const;
 export const QFJ_WHATSAPP_REPLY_VERSION = 2 as const;
 export const QFJ_WHATSAPP_REPLY_PATH = '/api/internal/jarvis/whatsapp-reply' as const;
 export const QFJ_WHATSAPP_REPLY_SIGNING_DOMAIN = 'qfj.whatsapp.reply.http.sig.v2' as const;
 
 export type QuickFurnoWhatsAppAgent = 'AAROHI' | 'ANISHA' | 'RIYA';
-export type QuickFurnoWhatsAppSubjectType = 'prospect' | 'client' | 'vendor';
+export type QuickFurnoWhatsAppAuthorityActor = QuickFurnoWhatsAppAgent | 'HUMAN' | 'SYSTEM';
+export type QuickFurnoWhatsAppSubjectType = 'unknown' | 'prospect' | 'client' | 'vendor';
+export type QuickFurnoWhatsAppPartyType = 'CLIENT' | 'VENDOR' | 'PROSPECT' | 'UNKNOWN';
+export type QuickFurnoWhatsAppConversationState = 'OPEN' | 'PAUSED' | 'HUMAN' | 'CLOSED';
+export type QuickFurnoWhatsAppDataClass = 'HOSTED_ALLOWED' | 'LOCAL_ONLY' | 'HUMAN_ONLY';
+export type QuickFurnoWhatsAppSubjectStatus =
+  'clear' | 'erased' | 'anonymised' | 'tombstoned' | 'in-progress';
+
 export type QuickFurnoWhatsAppInboundMessageType =
   | 'text'
   | 'button_reply'
@@ -60,18 +67,34 @@ export interface QuickFurnoWhatsAppInboundMaterialV1 {
   readonly frequentlyForwarded?: boolean;
 }
 
-export interface QuickFurnoWhatsAppTurnMaterialV1 {
+export interface QuickFurnoWhatsAppAuthorityStateV2 {
   readonly protocol: typeof QFJ_WHATSAPP_TURN_MATERIAL_PROTOCOL;
-  readonly version: 1;
+  readonly version: 2;
   readonly requestId: string;
+  readonly tenantId: 'quickfurno';
   readonly conversationId: string;
-  readonly inboundMessageId: string;
-  readonly conversationRevision: number;
-  readonly assignedActor: QuickFurnoWhatsAppAgent;
+  readonly revision: number;
+  readonly assignedActor: QuickFurnoWhatsAppAuthorityActor;
   readonly subjectType: QuickFurnoWhatsAppSubjectType;
-  readonly tenantId: 'quickfurno.marketplace';
-  readonly dataClass: 'HOSTED_ALLOWED';
+  readonly partyType: QuickFurnoWhatsAppPartyType;
+  readonly conversationState: QuickFurnoWhatsAppConversationState;
+  readonly jarvisAllowed: boolean;
+  readonly dataClass: QuickFurnoWhatsAppDataClass;
+  readonly humanTakeover: boolean;
+  readonly aiPaused: boolean;
+  readonly cancelled: boolean;
+  readonly subjectStatus: QuickFurnoWhatsAppSubjectStatus;
   readonly subjectRef?: string;
+  readonly observedAt: string;
+}
+
+export interface QuickFurnoWhatsAppTurnMaterialV2 extends Omit<
+  QuickFurnoWhatsAppAuthorityStateV2,
+  'assignedActor' | 'subjectType'
+> {
+  readonly assignedActor: QuickFurnoWhatsAppAgent;
+  readonly subjectType: Exclude<QuickFurnoWhatsAppSubjectType, 'unknown'>;
+  readonly inboundMessageId: string;
   readonly receivedAt: string;
   readonly inbound: QuickFurnoWhatsAppInboundMaterialV1;
   readonly normalizedText?: string;
@@ -84,7 +107,7 @@ export interface QuickFurnoWhatsAppExperienceV1 {
   readonly body: string;
 }
 
-export interface QuickFurnoWhatsAppAuthorizedReply {
+export interface QuickFurnoWhatsAppReplyProposal {
   readonly actor: QuickFurnoWhatsAppAgent;
   readonly proposalId: string;
   readonly boundRevision: number;

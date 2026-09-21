@@ -95,6 +95,21 @@ const JF5B_FILES: readonly string[] = Object.freeze([
 const isJf5bFile = (f: string, only: readonly string[] = JF5B_FILES): boolean =>
   only.some((one) => normalise(f).endsWith(`/${one}`));
 
+const JF7_BIN = 'src/bin/run-quickfurno-whatsapp-production-worker.ts';
+const JF7_CONFIG = 'src/quickfurno-whatsapp/production-worker-config.ts';
+const JF7_KILL_SWITCH = 'src/quickfurno-whatsapp/production-kill-switch.ts';
+const JF7_NETWORK = 'src/quickfurno-whatsapp/production-network.ts';
+const JF7_WORKER = 'src/quickfurno-whatsapp/production-worker.ts';
+const JF7_FILES: readonly string[] = Object.freeze([
+  JF7_BIN,
+  JF7_CONFIG,
+  JF7_KILL_SWITCH,
+  JF7_NETWORK,
+  JF7_WORKER,
+]);
+const isJf7File = (f: string, only: readonly string[] = JF7_FILES): boolean =>
+  only.some((one) => normalise(f).endsWith(`/${one}`));
+
 /**
  * The files permitted to touch `process` at all, and the exact member each may touch.
  *
@@ -116,6 +131,16 @@ const PROCESS_ALLOWLIST: Readonly<Record<string, readonly string[]>> = Object.fr
   // which explains why a live certification is the one operation that must read a terminal.
   'src/bin/run-jf5b-live-certification.ts': ['process.exitCode', 'process.argv'],
   'src/composition/jf5b-live-composition.ts': ['process.stdout', 'process.stderr', 'process.stdin'],
+  // JF-7 production worker process boundary. It reads only argv, writes fixed status lines, and owns
+  // signal registration/removal plus the exit code. It never reads environment variables.
+  [JF7_BIN]: [
+    'process.argv',
+    'process.stdout',
+    'process.stderr',
+    'process.once',
+    'process.removeListener',
+    'process.exitCode',
+  ],
 });
 
 /** THE one file permitted to arm a timer: the single hard run deadline (ADR-0065 §11). */
@@ -269,6 +294,14 @@ describe('(68) node:fs is confined to one designated adapter', () => {
         expect(code, file).toMatch(/from 'node:fs'/);
         continue;
       }
+      if (isJf7File(file, [JF7_CONFIG])) {
+        expect(code, file).toMatch(/import \{ readFileSync \} from 'node:fs'/);
+        continue;
+      }
+      if (isJf7File(file, [JF7_KILL_SWITCH])) {
+        expect(code, file).toMatch(/import \{ statSync \} from 'node:fs'/);
+        continue;
+      }
       expect(code).not.toMatch(/from ['"]node:fs(\/promises)?['"]/);
     }
   });
@@ -358,10 +391,15 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
       // `packages/model-gateway`. `apps/api` supplies the credential and the composition; it never
       // opens a socket itself.
       //
-      // JF-5B-R25 removes the historical Nara discovery exception completely. Provider calls
-      // remain inside the gateway/smoke packages; no production apps/api source performs a direct fetch.
-      // The repository-facts module still runs git through execFileSync to bind evidence to an exact head.
-      expect(code, file).not.toMatch(/\bfetch\s*\(/);
+      // JF-7 adds exactly one direct QuickFurno HTTP adapter. It receives already bounded/signed
+      // requests and performs two plain fetch calls (authority/reply and availability), with no retry,
+      // redirect following, credential lookup or response interpretation. Every other direct fetch
+      // remains forbidden in apps/api.
+      if (isJf7File(file, [JF7_NETWORK])) {
+        expect(code.match(/\bfetch\s*\(/g), file).toHaveLength(2);
+      } else {
+        expect(code, file).not.toMatch(/\bfetch\s*\(/);
+      }
       if (isJf5bFile(file, [JF5B_REPOSITORY_FACTS])) {
         // `execFileSync` only: an argument vector, never a shell string, so nothing is interpreted.
         expect(code, file).not.toMatch(/\bexecSync\s*\(|\bspawn\w*\s*\(/);
@@ -407,21 +445,21 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
         }
         expect(code, `${file}: ${forbidden}`).not.toContain(forbidden);
       }
-      // `postgres` is permitted in EXACTLY THREE modules and forbidden everywhere else: the one that
-      // creates a pool (QFJ-P08-B3), the JF-6 serving composition that injects that caller-owned pool
-      // into two reviewed durable Riya adapters, and the operator boundary that names the durable
-      // queue as a TYPE (QFJ-P08, ADR-0082). None imports `pg` or handles a connection string.
+      // Database vocabulary is confined to five exact modules. JF-7 adds a bounded config parser
+      // (the only new connection-string seam) and the worker composition (the only new pool creator).
+      // Both still go through event-backbone; neither imports `pg`, embeds SQL or owns migrations.
       if (
         !isDesignatedDatabaseModule(file) &&
         !isJf6RiyaServiceComposition(file) &&
-        !isDesignatedQueueTypeModule(file)
+        !isDesignatedQueueTypeModule(file) &&
+        !isJf7File(file, [JF7_CONFIG, JF7_WORKER])
       ) {
         expect(code, file).not.toContain('postgres');
       }
     }
   });
 
-  it('exactly three production modules name a database, and none opens a connection of its own', () => {
+  it('exactly five production modules name a database, with only reviewed config/pool seams', () => {
     const touching = productionFiles().filter((file) => {
       const code = codeOnly(readFileSync(file, 'utf8')).toLowerCase();
       return (
@@ -430,19 +468,21 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
         code.includes('conversation-state')
       );
     });
-    // An EXACT set, not a superset. JF-6 adds one composition that receives an already-created pool
-    // and hands it to the two reviewed durable Riya adapters; the seam that actually creates a pool
-    // remains exactly one, and the operator boundary still names its queue as a TYPE only.
+    // An EXACT set, not a superset. JF-7 adds one bounded database-config parser and one worker
+    // composition that creates a pool through event-backbone. No other app module gains persistence.
     expect(touching.map((f) => normalise(f).split('/apps/api/')[1] ?? '').sort()).toEqual(
       [
         DESIGNATED_DATABASE_MODULE,
         JF6_RIYA_SERVICE_COMPOSITION_MODULE,
         DESIGNATED_QUEUE_TYPE_MODULE,
+        JF7_CONFIG,
+        JF7_WORKER,
       ].sort(),
     );
 
-    // All three reach persistence only through public workspace APIs: no `pg` import, no raw pool, no
-    // SQL, no migration, no connection string handling, and no HTTP surface.
+    // All five reach persistence only through public workspace APIs: no `pg`, raw Pool constructor,
+    // SQL, migrations or HTTP server. Only the JF-7 config parser may handle a connection string,
+    // and only the two reviewed composition roots may call createDatabasePool.
     for (const file of touching) {
       const code = codeOnly(readFileSync(file, 'utf8'));
       const label = normalise(file).split('/apps/api/')[1] ?? '';
@@ -450,9 +490,21 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
       expect(code, label).not.toMatch(/\bnew\s+Pool\b/);
       expect(code, label).not.toMatch(/\b(SELECT|INSERT|UPDATE|DELETE|CREATE TABLE|ALTER TABLE)\b/);
       expect(code, label).not.toMatch(/migrat/i);
-      expect(code, label).not.toMatch(/connectionString/);
+      if (!isJf7File(file, [JF7_CONFIG])) {
+        expect(code, label).not.toMatch(/connectionString/);
+      }
       expect(code, label).not.toMatch(/createServer|express|fastify/i);
     }
+    const jf7Config = touching.find((file) => isJf7File(file, [JF7_CONFIG])) ?? '';
+    expect(codeOnly(readFileSync(jf7Config, 'utf8'))).toContain('createDatabaseConfig');
+    expect(codeOnly(readFileSync(jf7Config, 'utf8'))).not.toContain('createDatabasePool');
+
+    const poolCreators = touching.filter((file) =>
+      codeOnly(readFileSync(file, 'utf8')).includes('createDatabasePool'),
+    );
+    expect(poolCreators.map((f) => normalise(f).split('/apps/api/')[1] ?? '').sort()).toEqual(
+      [DESIGNATED_DATABASE_MODULE, JF7_WORKER].sort(),
+    );
 
     // And the operator boundary names the queue as a TYPE ONLY -- erased at compile time, so it
     // holds no reference to the adapter at runtime and receives one already built.
@@ -479,7 +531,7 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
     }
   });
 
-  it('exactly four reviewed modules arm timers, and every arm has its clear', () => {
+  it('exactly five reviewed modules arm timers, and every arm has its clear', () => {
     // The second is the certification composition (JF-5B-R1, ADR-0152): the bounded discovery GET needs
     // one abort deadline, or a hung provider would hang an owner's terminal indefinitely. JF-5B-R6 adds
     // the evaluation-only pacing sleep in the same file. The RULE is unchanged -- every arm matched by a
@@ -493,6 +545,7 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
       [JF5B_COMPOSITION]: 1,
       'src/jf6-private-process/create-core-service-availability-reader.ts': 1,
       'src/quickfurno-whatsapp/quickfurno-http.ts': 1,
+      [JF7_WORKER]: 1,
     });
     const timerFiles = productionFiles().filter((file) =>
       codeOnly(readFileSync(file, 'utf8')).includes('setTimeout'),
@@ -595,6 +648,10 @@ describe('the staging smoke stays out of the production boundary', () => {
       '@qf-jarvis/governed-knowledge',
       '@qf-jarvis/groq-staging-smoke',
       '@qf-jarvis/jarvis-runtime',
+      // JF-7 serving consumes immutable release/profile facts and a finished owner seal. The live
+      // certification operator remains a separate offline dependency used only by the JF-5B bin.
+      '@qf-jarvis/jarvis-v1-production-profile',
+      '@qf-jarvis/jarvis-v1-production-seal',
       '@qf-jarvis/jarvis-v1-provider-certification-live',
       '@qf-jarvis/model-evaluation',
       '@qf-jarvis/model-gateway',
@@ -609,6 +666,8 @@ describe('the staging smoke stays out of the production boundary', () => {
       // QFJ-S3-I-B (ADR-0073): the SHADOW runner's fixed synthetic prompt is now a real
       // `PromptDefinition`, so its identity and its bytes cannot drift apart. Still an EXACT set.
       '@qf-jarvis/prompt-registry',
+      // JF-7 reuses only the durable-turn-spool subpath from the signed QuickFurno gateway package.
+      '@qf-jarvis/quickfurno-gateway',
       '@qf-jarvis/rag-provisioning',
       '@qf-jarvis/riya-prompts',
       '@qf-jarvis/riya-web-conversation-service',

@@ -77,11 +77,11 @@ export type ProductionCompositionRefusal =
    */
   | 'active-release-set-mismatch'
   /**
-   * The PRODUCTION APPROVAL set is not one-to-one with the serving providers.
+   * The PRODUCTION APPROVAL set contains an ambiguous duplicate or a claim for a provider this mode
+   * does not serve.
    *
-   * A duplicate claim for one provider, or a claim for a provider this mode does not serve. Duplicates
-   * matter because selecting by `.find()` would make the approval that authorized production a
-   * function of declaration order.
+   * Multiple prompt-scoped approvals for one provider are valid and ALL are verified. Repeating the
+   * same evaluationRef is not: it would make one artifact count twice toward coverage.
    */
   | 'production-approval-set-mismatch'
   /**
@@ -170,10 +170,11 @@ export interface ProductionCompositionConfig {
    */
   readonly providerMode?: ProviderMode;
   /**
-   * The production approvals — one per canonical provider that could return customer-facing output.
+   * The production approvals for every canonical provider that could return customer-facing output.
    *
-   * Under `AUTO` that is BOTH providers: Nara is the fallback, and a fallback answer is still an answer
-   * a customer reads. Connectivity or shadow-eligibility evidence is insufficient for either.
+   * A provider may carry multiple prompt-scoped approvals (for example JF-5C v2 emits one for each
+   * reviewed agent prompt). Every supplied claim is verified; none is selected by declaration order.
+   * Under `AUTO` every serving provider must still have at least one exact ACTIVE_MODEL_RELEASE claim.
    */
   readonly productionApprovals?: readonly ProductionApprovalClaim[];
   /** Already-constructed provider instances. The composition never builds one. */

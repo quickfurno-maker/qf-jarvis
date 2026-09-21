@@ -201,6 +201,10 @@ describe('JF-5B the certification operator is off the serving path', () => {
       // injected transports and reads the production seam's SOURCE; it opens no socket and holds no
       // credential. Added here as a decision, which is the point of keeping this set exact.
       'apps/api/src/tests/jf5b-discovery-transport-diagnostic.test.ts',
+      // JF-7: this one worker SEAL-BINDING SPEC constructs a synthetic JF-5C artifact from the
+      // certification manifest factory. The production binder beside it imports only the neutral
+      // production profile + finished seal; no serving source reaches this operator package.
+      'apps/api/src/tests/quickfurno-whatsapp-production-seal-binding.test.ts',
       // JF-5C (ADR-0155): the pure owner-seal package consumes the frozen six-binding manifest.
       // Its implementation and its own spec are the only new importers; neither serves a turn,
       // acquires a credential, performs I/O or activates a provider.

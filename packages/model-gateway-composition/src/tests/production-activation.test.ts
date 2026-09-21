@@ -735,6 +735,52 @@ describe('JF-2B correction A. the claim must authorize the release actually serv
   });
 });
 
+describe('JF-2B prompt-scoped production approvals', () => {
+  it('verifies every distinct prompt-scoped approval for one exact serving release', () => {
+    const groq = leg(GROQ);
+    const secondEvidence = evidenceFor('ACTIVE_MODEL_RELEASE', {
+      synthetic: false,
+      productionApproval: true,
+      binding: evidenceBinding({
+        release: groq.release,
+        promptFamily: 'prompt.second',
+        promptDigest: '2'.repeat(64),
+      }),
+      evaluationRef: 'evref.jf2b.groq.prompt.second',
+    });
+    const secondApproval: ProductionApprovalClaim = {
+      evaluationRef: secondEvidence.evaluationRef,
+      evidenceDigest: derivedDigestOf(secondEvidence),
+      approvalTarget: 'ACTIVE_MODEL_RELEASE',
+      release: groq.release,
+      capabilityProfileRef: CAPABILITY_PROFILE_REF,
+    };
+
+    const result = createProductionModelGateway(
+      activeConfig('GROQ_ONLY', [groq], {
+        evaluationEvidence: [groq.evidence, secondEvidence],
+        productionApprovals: [secondApproval, groq.approval],
+      }),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.composition.status.verifiedApprovalCount).toBe(2);
+  });
+
+  it('refuses a repeated evaluationRef instead of counting one artifact twice', () => {
+    const groq = leg(GROQ);
+    expect(
+      reasonOf(
+        createProductionModelGateway(
+          activeConfig('GROQ_ONLY', [groq], {
+            productionApprovals: [groq.approval, { ...groq.approval }],
+          }),
+        ),
+      ),
+    ).toBe('production-approval-set-mismatch');
+  });
+});
+
 describe('JF-2B correction C-D. the ACTIVE release and approval sets are one-to-one', () => {
   it('10. AUTO missing an approved release refuses', () => {
     const groq = leg(GROQ);

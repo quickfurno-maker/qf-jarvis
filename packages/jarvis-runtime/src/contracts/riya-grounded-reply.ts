@@ -27,6 +27,7 @@ import type { CoreServiceAvailabilitySnapshotV1 } from '@qf-jarvis/core-service-
 import type { RiyaConversationContinuityStateV1 } from '@qf-jarvis/riya-conversation-continuity';
 
 import type { JarvisCoreAuthorizedReplyV1 } from './core-authorized-reply.js';
+import type { JarvisProposedReplyV1 } from './proposed-reply.js';
 import type { JarvisRuntimeResult } from './runtime-result.js';
 
 /** What the grounded reply method needs. The same three inputs the P4B method takes. */
@@ -54,4 +55,6 @@ export interface JarvisRiyaGroundedReplyResult {
   readonly runtimeResult: JarvisRuntimeResult;
   /** Present only under the unchanged RWC-P2D gate: a final `CORE_ACCEPTED` text-carrying proposal. */
   readonly authorizedReply: JarvisCoreAuthorizedReplyV1 | undefined;
+  /** Proposal-only sibling for outer QuickFurno authorization; never Core-authorized. */
+  readonly proposedReply: JarvisProposedReplyV1 | undefined;
 }

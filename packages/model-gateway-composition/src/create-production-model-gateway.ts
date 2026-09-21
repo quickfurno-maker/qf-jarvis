@@ -184,34 +184,39 @@ function indexByProviderUnique<T>(
  */
 function verifyServingProvider(
   activeRelease: ProviderReleaseRef,
-  claim: ProductionApprovalClaim | undefined,
+  claims: readonly ProductionApprovalClaim[] | undefined,
   verifier: EvaluationEvidenceVerifier,
 ): ProductionCompositionRefusal | undefined {
-  if (claim === undefined) {
+  if (claims === undefined || claims.length === 0) {
     return 'production-approval-missing';
   }
-  if (claim.approvalTarget !== REQUIRED_APPROVAL_TARGET) {
-    return 'production-evidence-target-insufficient';
+  for (const claim of claims) {
+    if (claim.approvalTarget !== REQUIRED_APPROVAL_TARGET) {
+      return 'production-evidence-target-insufficient';
+    }
+    if (hasWildcardIdentity(claim.release)) {
+      return 'wildcard-identity';
+    }
+    // THE JOIN. Distinct from `production-evidence-release-mismatch`, which means the registered
+    // evidence disagrees with the claim: this means the claim does not authorize what will be served.
+    if (!sameRelease(claim.release, activeRelease)) {
+      return 'production-approval-release-mismatch';
+    }
+    const verified = verifier.verify({
+      evaluationRef: claim.evaluationRef,
+      evidenceDigest: claim.evidenceDigest,
+      approvalTarget: claim.approvalTarget,
+      release: claim.release,
+      capabilityProfileRef: claim.capabilityProfileRef,
+      // ACTIVE is the mode being authorized. The verifier's own ladder decides whether the evidence
+      // target reaches it, and its production rules demand non-synthetic + production-approved.
+      mode: 'ACTIVE',
+    });
+    if (!verified.ok) {
+      return refusalForVerification(verified.reason);
+    }
   }
-  if (hasWildcardIdentity(claim.release)) {
-    return 'wildcard-identity';
-  }
-  // THE JOIN. Distinct from `production-evidence-release-mismatch`, which means the registered
-  // evidence disagrees with the claim: this means the claim does not authorize what will be served.
-  if (!sameRelease(claim.release, activeRelease)) {
-    return 'production-approval-release-mismatch';
-  }
-  const verified = verifier.verify({
-    evaluationRef: claim.evaluationRef,
-    evidenceDigest: claim.evidenceDigest,
-    approvalTarget: claim.approvalTarget,
-    release: claim.release,
-    capabilityProfileRef: claim.capabilityProfileRef,
-    // ACTIVE is the mode being authorized. The verifier's own ladder decides whether the evidence
-    // target reaches it, and its production rules demand non-synthetic + production-approved.
-    mode: 'ACTIVE',
-  });
-  return verified.ok ? undefined : refusalForVerification(verified.reason);
+  return undefined;
 }
 
 /**
@@ -257,7 +262,7 @@ export function createProductionModelGateway(
   let servingProviderIds: readonly string[] = [];
   let verifiedApprovalCount = 0;
   let releasesByProvider: Map<string, ProviderReleaseRef> | undefined;
-  let approvalsByProvider: Map<string, ProductionApprovalClaim> | undefined;
+  let approvalsByProvider: Map<string, readonly ProductionApprovalClaim[]> | undefined;
 
   if (config.mode === 'ACTIVE') {
     // 6a. The provider mode is REQUIRED and never defaulted. Defaulting an omission to AUTO would turn
@@ -300,21 +305,26 @@ export function createProductionModelGateway(
     }
     releasesByProvider = releases;
 
-    // 6d. The APPROVAL CLAIM SET must be one-to-one too. Indexing refuses duplicates rather than
-    //     letting `.find()` take whichever was declared first, which would make the approval that
-    //     authorized production a function of array order.
-    const claims = indexByProviderUnique(
-      config.productionApprovals ?? [],
-      (one) => one.release.providerId,
-    );
-    if (claims === undefined) {
-      return refuse('production-approval-set-mismatch');
+    // 6d. Approval evidence may now be PROMPT-SCOPED: JF-5C v2 produces one exact
+    //     ACTIVE_MODEL_RELEASE approval per reviewed agent prompt. Group every claim by provider,
+    //     reject claims for providers this mode does not serve, and verify EVERY claim below. Nothing
+    //     is selected by array order and no prompt-scoped approval can be silently ignored.
+    const claims = new Map<string, ProductionApprovalClaim[]>();
+    for (const claim of config.productionApprovals ?? []) {
+      const providerId = claim.release.providerId;
+      if (!servingProviderIds.includes(providerId)) {
+        return refuse('production-approval-set-mismatch');
+      }
+      const group = claims.get(providerId) ?? [];
+      if (group.some((existing) => existing.evaluationRef === claim.evaluationRef)) {
+        return refuse('production-approval-set-mismatch');
+      }
+      group.push(claim);
+      claims.set(providerId, group);
     }
     approvalsByProvider = claims;
-    if (claims.size > servingProviderIds.length) {
-      // An approval for a provider this mode does not serve. Refused rather than ignored: a claim
-      // sitting unused in a production configuration reads as authorization that was granted.
-      return refuse('production-approval-set-mismatch');
+    if (servingProviderIds.some((id) => (claims.get(id)?.length ?? 0) === 0)) {
+      return refuse('production-approval-missing');
     }
   }
 
@@ -393,7 +403,7 @@ export function createProductionModelGateway(
       if (refusal !== undefined) {
         return refuse(refusal);
       }
-      verifiedApprovalCount += 1;
+      verifiedApprovalCount += activeApprovals.get(providerId)?.length ?? 0;
     }
   }
 

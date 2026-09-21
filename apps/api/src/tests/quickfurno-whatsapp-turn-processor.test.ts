@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { QuickFurnoWhatsAppHttpError } from '../quickfurno-whatsapp/quickfurno-http.js';
-import type { QuickFurnoWhatsAppTurnMaterialV1 } from '../quickfurno-whatsapp/contracts.js';
+import type { QuickFurnoWhatsAppTurnMaterialV2 } from '../quickfurno-whatsapp/contracts.js';
 import {
   createQuickFurnoWhatsAppTurnProcessor,
   type QuickFurnoWhatsAppTurnQueue,
@@ -14,13 +14,25 @@ const ref = Object.freeze({
   subjectType: 'client' as const,
 });
 
-const material: QuickFurnoWhatsAppTurnMaterialV1 = Object.freeze({
+const material: QuickFurnoWhatsAppTurnMaterialV2 = Object.freeze({
   protocol: 'qfj.whatsapp.turn-material',
-  version: 1,
+  version: 2,
   requestId: '11111111-1111-4111-8111-111111111111',
-  ...ref,
-  tenantId: 'quickfurno.marketplace',
+  tenantId: 'quickfurno',
+  conversationId: ref.conversationId,
+  revision: ref.conversationRevision,
+  assignedActor: ref.assignedActor,
+  subjectType: ref.subjectType,
+  partyType: 'CLIENT',
+  conversationState: 'OPEN',
+  jarvisAllowed: true,
   dataClass: 'HOSTED_ALLOWED',
+  humanTakeover: false,
+  aiPaused: false,
+  cancelled: false,
+  subjectStatus: 'clear',
+  observedAt: '2026-09-18T12:00:00.000Z',
+  inboundMessageId: ref.inboundMessageId,
   receivedAt: '2026-09-18T12:00:00.000Z',
   inbound: Object.freeze({
     version: 1 as const,
@@ -32,7 +44,7 @@ const material: QuickFurnoWhatsAppTurnMaterialV1 = Object.freeze({
 
 function fixture(
   over: {
-    materialRead?: () => Promise<QuickFurnoWhatsAppTurnMaterialV1>;
+    materialRead?: () => Promise<QuickFurnoWhatsAppTurnMaterialV2>;
     specialist?: () => Promise<unknown>;
     write?: () => Promise<'queued' | 'stale'>;
   } = {},

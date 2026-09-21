@@ -18,6 +18,7 @@ export { createJarvisRuntime } from './composition/create-jarvis-runtime.js';
 export type {
   CoreAuthorizedReplyJarvisRuntime,
   JarvisRuntime,
+  ProposedReplyJarvisRuntime,
   RiyaConversationEvolutionJarvisRuntime,
 } from './composition/create-jarvis-runtime.js';
 
@@ -37,6 +38,11 @@ export type {
   JarvisCoreAuthorizedReplyResult,
   JarvisCoreAuthorizedReplyV1,
 } from './contracts/core-authorized-reply.js';
+export type {
+  JarvisProposedReplyResult,
+  JarvisProposedReplyV1,
+  ProposedTextCarryingProposalKind,
+} from './contracts/proposed-reply.js';
 
 // The ONE authoritative conversation-state source, plus its OPTIONAL operator capabilities
 // (QFJ-P08-A, ADR-0075). Types only -- there is still exactly one `authoritativeState` config field,

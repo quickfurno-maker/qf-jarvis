@@ -504,9 +504,14 @@ describe('JF-5B-R5 nothing about certification SEMANTICS moved', () => {
     expect(runnerCode.match(/new GroqModelProvider\(/gu)).toHaveLength(1);
     // NO agent-specific model routing: the id is a module constant, never chosen per agent.
     expect(runner).not.toMatch(/agent === '(RIYA|ANISHA|AAROHI)'[^;]*openai\//u);
-    // The ceilings and the reservation the candidate was re-audited against.
-    expect(runner).toContain('const MAX_INPUT_TOKENS = 16_384;');
-    expect(runner).toContain('const MAX_COMPLETION_TOKENS = 4_096;');
+    // JF-7 moves immutable serving/certification facts into the neutral production profile rather
+    // than duplicating them in the live operator. The runner must consume those exact aliases, and the
+    // neutral package remains the one source of the reviewed numeric ceilings.
+    expect(runner).toContain('const MAX_INPUT_TOKENS = JF5B_MAX_INPUT_TOKENS;');
+    expect(runner).toContain('const MAX_COMPLETION_TOKENS = JF5B_MAX_COMPLETION_TOKENS;');
+    const profile = read('../../../../packages/jarvis-v1-production-profile/src/index.ts');
+    expect(profile).toContain('JARVIS_V1_PRODUCTION_MAX_INPUT_TOKENS = 16_384');
+    expect(profile).toContain('JARVIS_V1_PRODUCTION_MAX_COMPLETION_TOKENS = 4_096');
     expect(runner).toContain('const PER_CALL_SPEND_USD = 0.01;');
   });
 

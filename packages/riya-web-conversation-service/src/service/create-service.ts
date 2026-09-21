@@ -47,6 +47,7 @@
  */
 import type {
   JarvisCoreAuthorizedReplyV1,
+  JarvisProposedReplyV1,
   JarvisRuntimeOutcome,
   JarvisRuntimeResult,
   RiyaConversationEvolutionJarvisRuntime,
@@ -226,6 +227,28 @@ function materializationAgreesWithRun(
  *
  * `PROCESSED` deliberately does not mean "replied". The runtime returns no client-facing text at
  * all, so no disposition here may imply one.
+ */
+function proposalAgreesWithRun(
+  runtimeResult: JarvisRuntimeResult,
+  proposedReply: JarvisProposedReplyV1,
+): boolean {
+  return (
+    runtimeResult.outcome === 'MODEL_DRAFTED' &&
+    !runtimeResult.coreConsulted &&
+    runtimeResult.modelDrafted &&
+    runtimeResult.proposalId !== undefined &&
+    runtimeResult.boundRevision !== undefined &&
+    proposedReply.proposalId === runtimeResult.proposalId &&
+    proposedReply.boundRevision === runtimeResult.boundRevision &&
+    TEXT_CARRYING_KINDS.includes(proposedReply.proposalKind) &&
+    proposedReply.replyBody.length > 0 &&
+    proposedReply.replyBody.length <= REPLY_BODY_MAX
+  );
+}
+
+/**
+ * Map the runtime's outcome onto the channel-neutral disposition. A MODEL_DRAFTED result can carry a
+ * proposedReply to a trusted adapter, but remains merely PROCESSED; it never means authorized/sent.
  */
 function dispositionFor(outcome: JarvisRuntimeOutcome): RiyaWebConversationDisposition {
   switch (outcome) {
@@ -836,6 +859,7 @@ export function createRiyaWebConversationService(
         reason: undefined,
         continuity,
         authorizedReply: undefined,
+        proposedReply: undefined,
       });
     }
 
@@ -879,6 +903,7 @@ export function createRiyaWebConversationService(
     let outcome: JarvisRuntimeOutcome;
     let refusalReason: RiyaWebConversationResultV2['reason'];
     let authorizedReply: JarvisCoreAuthorizedReplyV1 | undefined;
+    let proposedReply: JarvisProposedReplyV1 | undefined;
     let observationBatch: RiyaConversationObservationBatchV1 | undefined;
     try {
       // EXACTLY ONE Riya-aware capability, chosen by the loaded PHASE (RWC-P7, ADR-0103).
@@ -899,6 +924,7 @@ export function createRiyaWebConversationService(
       let detailed: {
         readonly runtimeResult: JarvisRuntimeResult;
         readonly authorizedReply: JarvisCoreAuthorizedReplyV1 | undefined;
+        readonly proposedReply: JarvisProposedReplyV1 | undefined;
       };
       if (POST_SUMMARY_PHASES.includes(continuity.phase)) {
         detailed = await runtime.processInboundForRiyaGroundedReply({
@@ -928,6 +954,12 @@ export function createRiyaWebConversationService(
           throw new RiyaWebConversationError('repository-invariant');
         }
         authorizedReply = detailed.authorizedReply;
+      }
+      if (detailed.proposedReply !== undefined) {
+        if (!proposalAgreesWithRun(detailed.runtimeResult, detailed.proposedReply)) {
+          throw new RiyaWebConversationError('repository-invariant');
+        }
+        proposedReply = detailed.proposedReply;
       }
     } catch (error: unknown) {
       // A refusal this service already decided is re-thrown unchanged. Only the RUNTIME's own error
@@ -967,6 +999,7 @@ export function createRiyaWebConversationService(
         // always permitted PROCESSED with no `authorizedReply`, and the private ingress already
         // treats the body's PRESENCE as the sole text gate.
         authorizedReply = undefined;
+        proposedReply = undefined;
       }
     }
 
@@ -999,6 +1032,7 @@ export function createRiyaWebConversationService(
       reason: refusalReason,
       continuity,
       authorizedReply,
+      proposedReply,
     });
   }
 

@@ -254,6 +254,11 @@ describe('(127-132) no live model id, tool, workflow or database path', () => {
    */
   const DATABASE_COMPOSITION_FILES: readonly string[] = Object.freeze([
     'src/jf6-private-process/create-riya-service-boundary.ts',
+    // JF-7: the worker config validates the caller-supplied DatabaseConfig and the worker creates the
+    // one caller-owned pool used only for Jarvis continuity/turn coordination. QuickFurno business
+    // authority still comes from signed authority-v2 reads, never from this database.
+    'src/quickfurno-whatsapp/production-worker-config.ts',
+    'src/quickfurno-whatsapp/production-worker.ts',
     'src/runtime/durable-jarvis-runtime.ts',
     'src/tests/durable-database-harness.ts',
   ]);
@@ -317,6 +322,21 @@ describe('(127-132) no live model id, tool, workflow or database path', () => {
     'src/quickfurno-whatsapp/quickfurno-http.ts',
     'src/quickfurno-whatsapp/specialist-runtime.ts',
     'src/quickfurno-whatsapp/turn-processor.ts',
+    // JF-7 production worker: these named files are the reviewed private WhatsApp serving boundary.
+    // Naming WhatsApp buys no provider-send authority: the worker emits only a signed proposal and
+    // QuickFurno re-authorizes it at /whatsapp-reply.
+    'src/bin/run-quickfurno-whatsapp-production-worker.ts',
+    'src/quickfurno-whatsapp/authority-state-port.ts',
+    'src/quickfurno-whatsapp/production-kill-switch.ts',
+    'src/quickfurno-whatsapp/production-network.ts',
+    'src/quickfurno-whatsapp/production-seal-binding.ts',
+    'src/quickfurno-whatsapp/production-worker-config.ts',
+    'src/quickfurno-whatsapp/production-worker.ts',
+    'src/tests/quickfurno-whatsapp-authority-state-port.test.ts',
+    'src/tests/quickfurno-whatsapp-deployment-containment.test.ts',
+    'src/tests/quickfurno-whatsapp-production-seal-binding.test.ts',
+    'src/tests/quickfurno-whatsapp-production-worker.test.ts',
+    'src/tests/quickfurno-worker-deployment-containment.test.ts',
     'src/tests/quickfurno-whatsapp-http.test.ts',
     'src/tests/quickfurno-whatsapp-specialist-runtime.test.ts',
     'src/tests/quickfurno-whatsapp-turn-processor.test.ts',
@@ -386,15 +406,16 @@ describe('(127-132) no live model id, tool, workflow or database path', () => {
     }
   });
 
-  it('(130, 131) exactly three files name the persistence packages, and only two are production', () => {
+  it('(130, 131) exactly five reviewed files name persistence, and four are production', () => {
     const naming = allFiles().filter((file) =>
       codeOnly(readFileSync(file, 'utf8')).toLowerCase().includes('event-backbone'),
     );
     expect(naming.map((f) => normalise(f).split('/apps/api/')[1] ?? '').sort()).toEqual([
       ...DATABASE_COMPOSITION_FILES,
     ]);
-    // Exactly TWO are production composition seams; the harness remains test-only and excluded.
-    expect(naming.filter((f) => !normalise(f).includes('/tests/'))).toHaveLength(2);
+    // JF-6 durable composition + JF-7 worker config/pool + the existing durable runtime are
+    // production seams; the harness remains test-only and excluded.
+    expect(naming.filter((f) => !normalise(f).includes('/tests/'))).toHaveLength(4);
   });
 
   it('(132) the prompt and schema are fixed in source and not configurable', () => {
@@ -447,12 +468,19 @@ describe('(133-148) the declared budget and every prior lock', () => {
       const code = codeOnly(readFileSync(file, 'utf8'));
       expect(code).not.toMatch(FORBIDDEN_CALLS);
       expect(code).not.toMatch(/\brotateCredential\b|\bhotRebind\b|\bdisposeProvider\b/);
-      // `close()` is permitted ONLY on a file handle in the designated JSON reader, where releasing the
-      // descriptor is mandatory. Nothing may close a provider, transport or gateway.
+      // `close()` is permitted on the designated shadow file handle and on the JF-7 worker
+      // process boundary, where it closes the caller-owned database pool during shutdown. Neither
+      // location can refresh/rebind/dispose a provider.
       const closes = code.match(/\.\s*close\s*\(/g) ?? [];
       if (closes.length > 0) {
-        expect(normalise(file).endsWith('/src/shadow/shadow-json-reader.ts')).toBe(true);
-        expect(code).toMatch(/handle\.close\(\)/);
+        const normalised = normalise(file);
+        const isShadowReader = normalised.endsWith('/src/shadow/shadow-json-reader.ts');
+        const isWorkerBin = normalised.endsWith(
+          '/src/bin/run-quickfurno-whatsapp-production-worker.ts',
+        );
+        expect(isShadowReader || isWorkerBin).toBe(true);
+        if (isShadowReader) expect(code).toMatch(/handle\.close\(\)/);
+        if (isWorkerBin) expect(code).toMatch(/worker\?\.close\(\)/);
       }
     }
   });
@@ -569,6 +597,9 @@ describe('(133-148) the declared budget and every prior lock', () => {
       'governed-knowledge',
       'groq-staging-smoke',
       'jarvis-runtime',
+      // JF-7: neutral immutable serving facts shared by offline certification and production. No
+      // credential, network, evidence minting, rollout or business-authority surface.
+      'jarvis-v1-production-profile',
       // JF-5C (ADR-0155): pure production-evidence sealing only. It consumes the reviewed
       // JF-5B manifest and mints no runtime, provider, network, database or activation surface.
       'jarvis-v1-production-seal',

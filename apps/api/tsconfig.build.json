@@ -57,6 +57,8 @@
     // core-decision adapter supplies the synthetic certification Core boundary; the model-reply adapter
     // supplies the invoker and prompt-binding TYPES the runtime configuration is built from.
     // Reachable ONLY from src/bin/run-jf5b-live-certification.ts.
+    { "path": "../../packages/jarvis-v1-production-profile/tsconfig.build.json" },
+    { "path": "../../packages/jarvis-v1-production-seal/tsconfig.build.json" },
     { "path": "../../packages/jarvis-v1-provider-certification-live/tsconfig.build.json" },
     { "path": "../../packages/groq-staging-smoke/tsconfig.build.json" },
     { "path": "../../packages/core-decision-adapter/tsconfig.build.json" },
@@ -66,7 +68,10 @@
     // The synthetic certification context builds its Core availability snapshot through that
     // package's OWN public parser rather than casting a hand-written object into its contract. One
     // edge, used only by the certification composition.
-    { "path": "../../packages/core-service-availability-read/tsconfig.build.json" }
+    { "path": "../../packages/core-service-availability-read/tsconfig.build.json" },
+    // JF-7 production WhatsApp worker consumes the exact same durable spool implementation the
+    // QuickFurno ingress writes. Only the explicit durable-turn-spool subpath is importable.
+    { "path": "../quickfurno-gateway/tsconfig.build.json" }
   ],
   "include": ["src/**/*.ts"],
   "exclude": ["src/tests/**"]

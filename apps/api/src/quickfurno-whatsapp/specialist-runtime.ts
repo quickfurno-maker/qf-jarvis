@@ -1,47 +1,47 @@
 import { createInboundEnvelope } from '@qf-jarvis/agent-runtime';
-import type { CoreAuthorizedReplyJarvisRuntime } from '@qf-jarvis/jarvis-runtime';
+import type { ProposedReplyJarvisRuntime } from '@qf-jarvis/jarvis-runtime';
 import type { RiyaCustomerTurnRunner } from '../riya-customer-orchestration/create-riya-customer-runtime.js';
 import { runCustomerTurnWorkflow } from '../riya-customer-orchestration/mastra-customer-turn-runner.js';
 import type {
   QuickFurnoWhatsAppAgent,
-  QuickFurnoWhatsAppAuthorizedReply,
-  QuickFurnoWhatsAppTurnMaterialV1,
+  QuickFurnoWhatsAppReplyProposal,
+  QuickFurnoWhatsAppTurnMaterialV2,
 } from './contracts.js';
 
 export interface QuickFurnoWhatsAppSpecialistRuntime {
   process(
-    material: QuickFurnoWhatsAppTurnMaterialV1,
-  ): Promise<QuickFurnoWhatsAppAuthorizedReply | null>;
+    material: QuickFurnoWhatsAppTurnMaterialV2,
+  ): Promise<QuickFurnoWhatsAppReplyProposal | null>;
 }
 
 export interface QuickFurnoWhatsAppSpecialistRuntimeConfig {
   readonly runtimeId: string;
   readonly riya: RiyaCustomerTurnRunner;
-  readonly jarvisRuntime: CoreAuthorizedReplyJarvisRuntime;
+  readonly jarvisRuntime: ProposedReplyJarvisRuntime;
 }
 
 const expectedSubjectByActor: Readonly<
-  Record<QuickFurnoWhatsAppAgent, QuickFurnoWhatsAppTurnMaterialV1['subjectType']>
+  Record<QuickFurnoWhatsAppAgent, QuickFurnoWhatsAppTurnMaterialV2['subjectType']>
 > = Object.freeze({ RIYA: 'client', ANISHA: 'vendor', AAROHI: 'prospect' });
 
-function replyFrom(
-  material: QuickFurnoWhatsAppTurnMaterialV1,
-  authorizedReply:
+function proposalFrom(
+  material: QuickFurnoWhatsAppTurnMaterialV2,
+  proposal:
     | {
         readonly proposalId: string;
         readonly boundRevision: number;
         readonly replyBody: string;
       }
     | undefined,
-): QuickFurnoWhatsAppAuthorizedReply | null {
-  if (authorizedReply === undefined) return null;
-  if (authorizedReply.boundRevision !== material.conversationRevision) return null;
-  if (authorizedReply.replyBody.length < 1 || authorizedReply.replyBody.length > 4096) return null;
+): QuickFurnoWhatsAppReplyProposal | null {
+  if (proposal === undefined) return null;
+  if (proposal.boundRevision !== material.revision) return null;
+  if (proposal.replyBody.length < 1 || proposal.replyBody.length > 4096) return null;
   return Object.freeze({
     actor: material.assignedActor,
-    proposalId: authorizedReply.proposalId,
-    boundRevision: authorizedReply.boundRevision,
-    body: authorizedReply.replyBody,
+    proposalId: proposal.proposalId,
+    boundRevision: proposal.boundRevision,
+    body: proposal.replyBody,
   });
 }
 export function createQuickFurnoWhatsAppSpecialistRuntime(
@@ -52,7 +52,7 @@ export function createQuickFurnoWhatsAppSpecialistRuntime(
   }
 
   return Object.freeze({
-    async process(material: QuickFurnoWhatsAppTurnMaterialV1) {
+    async process(material: QuickFurnoWhatsAppTurnMaterialV2) {
       if (expectedSubjectByActor[material.assignedActor] !== material.subjectType) {
         return null;
       }
@@ -72,7 +72,7 @@ export function createQuickFurnoWhatsAppSpecialistRuntime(
             ? {}
             : { normalizedText: material.normalizedText }),
         });
-        return replyFrom(material, result.authorizedReply);
+        return proposalFrom(material, result.proposedReply);
       }
 
       const envelope = createInboundEnvelope({
@@ -92,11 +92,11 @@ export function createQuickFurnoWhatsAppSpecialistRuntime(
           : { normalizedText: material.normalizedText }),
       });
       const result = await runCustomerTurnWorkflow(
-        () => config.jarvisRuntime.processInboundForCoreAuthorizedReply(envelope),
+        () => config.jarvisRuntime.processInboundForProposedReply(envelope),
         'WHATSAPP',
         {},
       );
-      return replyFrom(material, result.authorizedReply);
+      return proposalFrom(material, result.proposedReply);
     },
   });
 }

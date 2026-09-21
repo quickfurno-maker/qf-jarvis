@@ -19,7 +19,7 @@
  * decides what to do with an authorized body, exactly as a future web ingress does.
  */
 import type { OrchestrationReason } from '@qf-jarvis/agent-runtime';
-import type { JarvisCoreAuthorizedReplyV1 } from '@qf-jarvis/jarvis-runtime';
+import type { JarvisCoreAuthorizedReplyV1, JarvisProposedReplyV1 } from '@qf-jarvis/jarvis-runtime';
 import type { RiyaConversationContinuityStateV1 } from '@qf-jarvis/riya-conversation-continuity';
 
 import type { RiyaWebConversationDisposition } from './result.js';
@@ -43,4 +43,10 @@ export interface RiyaConversationResultV1 {
    * eligible for a second Riya turn.
    */
   readonly authorizedReply: JarvisCoreAuthorizedReplyV1 | undefined;
+  /**
+   * A validated but NOT authorized Jarvis proposal. Present only for a deployment that deliberately
+   * defers final authorization to its trusted outer channel boundary (for example QuickFurno
+   * WhatsApp). Existing WEB projection drops this field and may never return it to a browser.
+   */
+  readonly proposedReply: JarvisProposedReplyV1 | undefined;
 }

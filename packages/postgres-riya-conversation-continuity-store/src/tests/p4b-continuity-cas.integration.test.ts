@@ -159,6 +159,7 @@ function scriptedRuntime(observations: readonly RiyaDiscoveryObservationV1[]): {
           proposalKind: 'REPLY' as const,
           replyBody: 'Understood — thank you.',
         },
+        proposedReply: undefined,
         observationBatch:
           observations.length === 0 && n > 1
             ? undefined

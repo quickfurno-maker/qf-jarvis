@@ -21,6 +21,7 @@
     { "path": "../aarohi-prompts/tsconfig.build.json" },
     { "path": "../anisha-prompts/tsconfig.build.json" },
     { "path": "../groq-staging-smoke/tsconfig.build.json" },
+    { "path": "../jarvis-v1-production-profile/tsconfig.build.json" },
     { "path": "../model-evaluation/tsconfig.build.json" },
     { "path": "../model-gateway" },
     { "path": "../prompt-registry/tsconfig.build.json" },
