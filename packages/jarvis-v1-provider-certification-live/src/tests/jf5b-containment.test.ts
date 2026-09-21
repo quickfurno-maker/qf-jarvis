@@ -330,6 +330,49 @@ describe('JF-5B the certification operator is off the serving path', () => {
   });
 });
 
+describe('JF-5B-R25 current live composition has no Nara execution seam', () => {
+  it('the production live composition cannot acquire a Nara credential or open Nara discovery', () => {
+    const composition = codeOnly(
+      readFileSync(repoPath('apps/api/src/composition/jf5b-live-composition.ts'), 'utf8'),
+    );
+    for (const forbidden of [
+      'readNaraCredential',
+      'systemNaraCredential',
+      'NARA_MODELS_ENDPOINT',
+      'systemDiscoveryTransport',
+      'createDiscoveryDiagnosticRecorder',
+      'naraCredential:',
+      'discoveryTransport:',
+    ]) {
+      expect({ forbidden, present: composition.includes(forbidden) }).toEqual({
+        forbidden,
+        present: false,
+      });
+    }
+  });
+
+  it('the live CLI cannot select, certify, or route through Nara', () => {
+    const cli = codeOnly(
+      readFileSync(repoPath('apps/api/src/cli/run-jf5b-live-certification.ts'), 'utf8'),
+    );
+    for (const forbidden of [
+      'fetchNaraModelCatalogue',
+      'resolveOwnerCandidateShortlist',
+      '.selectNaraModel(',
+      '.certifyAllSix(',
+      '.certifyAutoRouting(',
+      "ledger.reserve('nara'",
+    ]) {
+      expect({ forbidden, present: cli.includes(forbidden) }).toEqual({
+        forbidden,
+        present: false,
+      });
+    }
+    expect(cli).toContain('.certifyGroqOnly(');
+    expect(cli).toContain('JF5B_GROQ_ONLY_BUDGET');
+  });
+});
+
 // ---------------------------------------------------------------------------
 // §31 — CI can never open the live gate.
 // ---------------------------------------------------------------------------

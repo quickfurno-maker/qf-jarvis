@@ -358,20 +358,10 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
       // `packages/model-gateway`. `apps/api` supplies the credential and the composition; it never
       // opens a socket itself.
       //
-      // JF-5B-R1 (ADR-0152) adds exactly two exceptions, each in one named file:
-      //
-      //   - the certification composition issues ONE bounded `fetch`, to the fixed NaraRouter model
-      //     catalogue. Provider CHAT still goes through the gateway's own transports; what this call
-      //     discovers is which aliases the credential is entitled to, which is an infrastructure
-      //     question and takes the direct bounded path by design.
-      //   - the repository-facts module runs `git` through `execFileSync` to read the head, the
-      //     worktree state and the repository root. A live certification result that could not name
-      //     the exact commit it ran at would be a receipt about nothing.
-      if (isJf5bFile(file, [JF5B_COMPOSITION])) {
-        expect(code.match(/\bfetch\s*\(/g), file).toHaveLength(1);
-      } else {
-        expect(code, file).not.toMatch(/\bfetch\s*\(/);
-      }
+      // JF-5B-R25 removes the historical Nara discovery exception completely. Provider calls
+      // remain inside the gateway/smoke packages; no production apps/api source performs a direct fetch.
+      // The repository-facts module still runs git through execFileSync to bind evidence to an exact head.
+      expect(code, file).not.toMatch(/\bfetch\s*\(/);
       if (isJf5bFile(file, [JF5B_REPOSITORY_FACTS])) {
         // `execFileSync` only: an argument vector, never a shell string, so nothing is interpreted.
         expect(code, file).not.toMatch(/\bexecSync\s*\(|\bspawn\w*\s*\(/);
@@ -500,7 +490,7 @@ describe('(69, 70) no network, shell, terminal, store, logger, timer or watcher'
     // it also has no retry loop and clears its timer in `finally`.
     const ARMS_BY_FILE: Readonly<Record<string, number>> = Object.freeze({
       [DESIGNATED_TIMER_MODULE]: 1,
-      [JF5B_COMPOSITION]: 2,
+      [JF5B_COMPOSITION]: 1,
       'src/jf6-private-process/create-core-service-availability-reader.ts': 1,
       'src/quickfurno-whatsapp/quickfurno-http.ts': 1,
     });

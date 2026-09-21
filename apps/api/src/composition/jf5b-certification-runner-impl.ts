@@ -109,6 +109,7 @@ import type {
   AutoRoutingResult,
   CertifyAllInput,
   CertifyAllResult,
+  CertifyGroqInput,
   CertificationRunner,
   Jf5bCaseDiagnostic,
   NaraProbeSummary,
@@ -916,6 +917,55 @@ function buildManifest(input: {
   });
 }
 
+function buildGroqOnlyManifest(input: {
+  readonly runId: string;
+  readonly headSha: string;
+  readonly createdAt: string;
+  readonly executed: readonly ExecutedCase[];
+  readonly reviewBundleDigest: string;
+}): Jf5bCoverageManifest {
+  const provider = 'groq' as const;
+  const release = releaseFor(provider, JF5B_GROQ_MODEL_ID);
+  const entries = CERTIFIED_AGENTS.map((agent) => {
+    const records = input.executed
+      .filter((one) => one.record.provider === provider && one.record.agent === agent)
+      .map((one) => one.record);
+    const prompt = PROMPT_BY_AGENT[agent];
+    return {
+      provider,
+      agent,
+      releaseId: release.releaseId,
+      modelId: release.modelId,
+      modelVersion: release.modelVersion,
+      configDigest: release.configDigest,
+      promptFamily: prompt.promptId,
+      promptVersion: prompt.promptVersion,
+      promptDigest: prompt.contentDigest,
+      evaluationSuiteId: JF5B_EVALUATION_SUITE_ID,
+      evaluationSuiteVersion: JF5B_EVALUATION_SUITE_VERSION,
+      redTeamSuiteId: JF5B_RED_TEAM_SUITE_ID,
+      fixtureManifestId: JF5B_FIXTURE_MANIFEST_ID,
+      liveRunId: input.runId,
+      caseSetDigest: sha256(records.map((one) => one.caseId).join('\n')),
+      resultDigest: sha256(JSON.stringify(records)),
+      safety: safetyOf(records),
+      qualityReview: 'REVIEW_PENDING' as const,
+      languageCounts: languageCounts(records),
+      reviewBundleDigest: input.reviewBundleDigest,
+    };
+  });
+
+  return createJf5bCoverageManifest({
+    manifestVersion: 2,
+    providerMode: 'GROQ_ONLY',
+    runId: input.runId,
+    headSha: input.headSha,
+    createdAt: input.createdAt,
+    dataControlsRefs: [GROQ_DATA_CONTROLS_REF],
+    entries,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // The runner.
 // ---------------------------------------------------------------------------
@@ -1030,6 +1080,108 @@ export function createJf5bCertificationRunner(seams: Jf5bRunnerSeams = {}): Cert
   });
 
   return Object.freeze({
+    /**
+     * JF-5B-R25 current production-certification path.
+     *
+     * Exactly one provider is reachable: Groq. Nara is not configured into this gateway and the
+     * caller has no Nara credential/model field. Every governed case still runs through the same
+     * Mastra/runtime/model-gateway/Core path used by the historical dual-provider lane.
+     */
+    async certifyGroqOnly(input: CertifyGroqInput): Promise<CertifyAllResult> {
+      const executed: ExecutedCase[] = [];
+      const createdAt = clock();
+      try {
+        const provider = 'groq' as const;
+        const posture = 'GROQ_ONLY' as const;
+        const gateway = createEvaluationGateway(posture, wire({ groqApiKey: input.groqApiKey }));
+        const release = releaseFor(provider, JF5B_GROQ_MODEL_ID);
+        for (const agent of CERTIFIED_AGENTS) {
+          for (const governed of casesFor(agent)) {
+            executed.push(
+              await runOneCase({
+                governed,
+                provider,
+                posture,
+                gateway,
+                release,
+                runId: input.runId,
+                ledger: input.ledger,
+                clock,
+                ...(groqPacer === undefined ? {} : { pacer: groqPacer }),
+                diagnostics: caseDiagnostics,
+              }),
+            );
+          }
+        }
+      } catch (error: unknown) {
+        return {
+          ok: false,
+          reason:
+            error instanceof Error && error.message.startsWith('jf5b-')
+              ? error.message
+              : 'certification-run-failed',
+          cases: executed.map((one) => one.record),
+          manifest: undefined,
+          rawBundle: '',
+          reviewBundle: '',
+          diagnostics: diagnosticsOf(executed),
+        };
+      }
+
+      const reviewBundle = JSON.stringify(
+        {
+          runId: input.runId,
+          providerMode: 'GROQ_ONLY',
+          items: executed
+            .filter((one) => one.raw !== undefined)
+            .map((one) => ({
+              itemId: sha256(`${one.record.provider}|${one.record.caseId}`).slice(0, 16),
+              agent: one.record.agent,
+              dimension: one.governed.dimension,
+              language: one.record.languageMode,
+              turn: one.governed.text,
+              answer: one.raw,
+            })),
+        },
+        null,
+        2,
+      );
+      const rawBundle = JSON.stringify(
+        {
+          runId: input.runId,
+          providerMode: 'GROQ_ONLY',
+          outputs: executed.map((one) => ({
+            caseId: one.record.caseId,
+            provider: one.record.provider,
+            agent: one.record.agent,
+            outcome: one.record.outcome,
+            answer: one.raw ?? null,
+          })),
+        },
+        null,
+        2,
+      );
+
+      const manifest = buildGroqOnlyManifest({
+        runId: input.runId,
+        headSha: input.headSha,
+        createdAt,
+        executed,
+        reviewBundleDigest: sha256(reviewBundle),
+      });
+      const nonPass = executed.filter((one) => one.record.outcome !== 'PASS');
+
+      return {
+        ok: nonPass.length === 0,
+        reason: nonPass.length === 0 ? 'certified' : 'safety-incomplete',
+        cases: executed.map((one) => one.record),
+        manifest,
+        rawBundle,
+        reviewBundle,
+        diagnostics: diagnosticsOf(executed),
+      };
+    },
+
     /**
      * Phase 2c. Probe each shortlisted alias with the SAME bounded case set, then rank.
      *

@@ -1,13 +1,13 @@
 /**
  * JF-5C — owner production-evidence seal.
  *
- * Pure and non-activating. It consumes the sanitized JF-5B six-binding manifest,
- * blinded human review decisions, and explicit owner acceptance of the observed
- * Nara data-controls posture. It performs no I/O and exposes no rollout control.
+ * Pure and non-activating. v2 consumes the sanitized JF-5B Groq-only three-binding manifest
+ * plus blinded human review decisions. It performs no I/O and exposes no rollout control.
+ * Historical dual-provider v1 manifests remain parseable upstream but are refused here.
  */
 import {
+  ACTIVE_CERTIFICATION_PROVIDERS,
   CERTIFIED_AGENTS,
-  CERTIFIED_PROVIDERS,
   GROQ_DATA_CONTROLS_REF,
   JF5B_CAPABILITY_PROFILE_REF,
   JF5B_CREATED_AT,
@@ -18,14 +18,14 @@ import {
   JF5B_FIXTURE_MANIFEST_ID,
   JF5B_FIXTURE_MANIFEST_VERSION,
   JF5B_POLICY_CONTRACT_REVISION,
+  JF5B_PROVIDER_MODE,
   JF5B_RED_TEAM_SUITE_ID,
   JF5B_RED_TEAM_SUITE_VERSION,
-  NARA_DATA_CONTROLS_REF,
   PROMPT_BY_AGENT,
   createJf5bCoverageManifest,
   manifestReadiness,
+  type ActiveCertifiedProvider,
   type CertifiedAgent,
-  type CertifiedProvider,
   type Jf5bCoverageManifest,
 } from '@qf-jarvis/jarvis-v1-provider-certification-live';
 import {
@@ -38,11 +38,11 @@ import {
   type ProviderReleaseRef,
 } from '@qf-jarvis/model-evaluation';
 
-export const JF5C_SEAL_VERSION = 1 as const;
+export const JF5C_SEAL_VERSION = 2 as const;
 export const JF5C_APPROVAL_TARGET = 'ACTIVE_MODEL_RELEASE' as const;
 
 export interface Jf5cHumanReview {
-  readonly provider: CertifiedProvider;
+  readonly provider: ActiveCertifiedProvider;
   readonly agent: CertifiedAgent;
   readonly reviewerRef: string;
   readonly reviewedAt: string;
@@ -53,11 +53,10 @@ export interface Jf5cHumanReview {
 export interface Jf5cOwnerAcceptance {
   readonly ownerRef: string;
   readonly acceptedAt: string;
-  readonly naraDataControlsRef: string;
   readonly decision: 'ACCEPT' | 'REJECT';
 }
 export interface Jf5cProviderCoverageSeal {
-  readonly provider: CertifiedProvider;
+  readonly provider: ActiveCertifiedProvider;
   readonly release: ProviderReleaseRef;
   readonly capabilityProfileRef: typeof JF5B_CAPABILITY_PROFILE_REF;
   readonly evidenceRefs: readonly string[];
@@ -73,7 +72,8 @@ export interface Jf5cProductionSeal {
   readonly sourceManifestDigest: string;
   readonly sealedAt: string;
   readonly ownerRef: string;
-  readonly naraDataControlsRef: typeof NARA_DATA_CONTROLS_REF;
+  readonly providerMode: typeof JF5B_PROVIDER_MODE;
+  readonly providerDataControlsRefs: readonly [typeof GROQ_DATA_CONTROLS_REF];
   readonly evidence: readonly ApprovalEvidence[];
   readonly providers: readonly Jf5cProviderCoverageSeal[];
   readonly sealDigest: string;
@@ -86,7 +86,7 @@ export type Jf5cSealRefusal =
   | 'review-set-mismatch'
   | 'review-rejected'
   | 'review-bundle-mismatch'
-  | 'nara-data-controls-not-accepted'
+  | 'provider-mode-mismatch'
   | 'binding-mismatch';
 
 export type Jf5cSealResult =
@@ -100,7 +100,7 @@ function instant(value: string): boolean {
   return CANONICAL_INSTANT.test(value) && Number.isFinite(Date.parse(value));
 }
 
-function reviewKey(provider: CertifiedProvider, agent: CertifiedAgent): string {
+function reviewKey(provider: ActiveCertifiedProvider, agent: CertifiedAgent): string {
   return `${provider}/${agent}`;
 }
 
@@ -172,34 +172,32 @@ export function createJf5cProductionSeal(input: {
     return refusal('invalid-input');
   }
 
+  if (
+    manifest.manifestVersion !== 2 ||
+    manifest.entries.some((entry) => entry.provider !== 'groq')
+  ) {
+    return refusal('provider-mode-mismatch');
+  }
   if (!instant(input.sealedAt) || !SAFE_REF.test(input.ownerAcceptance.ownerRef)) {
     return refusal('invalid-input');
   }
-  if (
-    !instant(input.ownerAcceptance.acceptedAt) ||
-    input.ownerAcceptance.decision !== 'ACCEPT' ||
-    input.ownerAcceptance.naraDataControlsRef !== NARA_DATA_CONTROLS_REF
-  ) {
-    return refusal('nara-data-controls-not-accepted');
+  if (!instant(input.ownerAcceptance.acceptedAt) || input.ownerAcceptance.decision !== 'ACCEPT') {
+    return refusal('invalid-input');
   }
-  const dataControls = [...manifest.dataControlsRefs].sort();
-  const requiredControls = [GROQ_DATA_CONTROLS_REF, NARA_DATA_CONTROLS_REF].sort();
-  if (
-    dataControls.length !== requiredControls.length ||
-    dataControls.some((value, index) => value !== requiredControls[index])
-  ) {
+  const dataControls = [...manifest.dataControlsRefs];
+  if (dataControls.length !== 1 || dataControls[0] !== GROQ_DATA_CONTROLS_REF) {
     return refusal('manifest-data-controls-mismatch');
   }
   if (!manifestReadiness(manifest).allSafetyPassed) {
     return refusal('safety-incomplete');
   }
-  if (input.reviews.length !== CERTIFIED_PROVIDERS.length * CERTIFIED_AGENTS.length) {
+  if (input.reviews.length !== ACTIVE_CERTIFICATION_PROVIDERS.length * CERTIFIED_AGENTS.length) {
     return refusal('review-set-mismatch');
   }
   const reviews = new Map<string, Jf5cHumanReview>();
   for (const review of input.reviews) {
     if (
-      !CERTIFIED_PROVIDERS.includes(review.provider) ||
+      !ACTIVE_CERTIFICATION_PROVIDERS.includes(review.provider) ||
       !CERTIFIED_AGENTS.includes(review.agent) ||
       !SAFE_REF.test(review.reviewerRef) ||
       !instant(review.reviewedAt) ||
@@ -214,9 +212,10 @@ export function createJf5cProductionSeal(input: {
 
   const manifestDigest = contentDigest(manifest);
   const evidence: ApprovalEvidence[] = [];
-  const bindingsByProvider = new Map<CertifiedProvider, EvaluationBinding[]>();
+  const bindingsByProvider = new Map<ActiveCertifiedProvider, EvaluationBinding[]>();
 
   for (const entry of manifest.entries) {
+    if (entry.provider !== 'groq') return refusal('provider-mode-mismatch');
     const review = reviews.get(reviewKey(entry.provider, entry.agent));
     if (!review) return refusal('review-set-mismatch');
     if (review.decision !== 'ACCEPT') return refusal('review-rejected');
@@ -229,7 +228,7 @@ export function createJf5cProductionSeal(input: {
     const binding = expectedBinding(entry);
     if (!binding) return refusal('binding-mismatch');
     const evaluationRef = `evref-${contentDigest({
-      lane: 'jf5c.production-seal.v1',
+      lane: 'jf5c.production-seal.v2.groq-only',
       manifestDigest,
       provider: entry.provider,
       agent: entry.agent,
@@ -239,7 +238,8 @@ export function createJf5cProductionSeal(input: {
       reviewedAt: review.reviewedAt,
       ownerRef: input.ownerAcceptance.ownerRef,
       ownerAcceptedAt: input.ownerAcceptance.acceptedAt,
-      naraDataControlsRef: NARA_DATA_CONTROLS_REF,
+      providerMode: JF5B_PROVIDER_MODE,
+      providerDataControlsRef: GROQ_DATA_CONTROLS_REF,
     })}`;
 
     evidence.push(
@@ -260,7 +260,7 @@ export function createJf5cProductionSeal(input: {
   }
 
   const providers: Jf5cProviderCoverageSeal[] = [];
-  for (const provider of CERTIFIED_PROVIDERS) {
+  for (const provider of ACTIVE_CERTIFICATION_PROVIDERS) {
     const bindings = bindingsByProvider.get(provider) ?? [];
     if (bindings.length !== CERTIFIED_AGENTS.length) return refusal('binding-mismatch');
     const release = sameProviderRelease(bindings);
@@ -290,6 +290,10 @@ export function createJf5cProductionSeal(input: {
     );
   }
 
+  const providerDataControlsRefs: Jf5cProductionSeal['providerDataControlsRefs'] = Object.freeze([
+    GROQ_DATA_CONTROLS_REF,
+  ]);
+
   const body = {
     version: JF5C_SEAL_VERSION,
     target: JF5C_APPROVAL_TARGET,
@@ -298,7 +302,8 @@ export function createJf5cProductionSeal(input: {
     sourceManifestDigest: manifestDigest,
     sealedAt: input.sealedAt,
     ownerRef: input.ownerAcceptance.ownerRef,
-    naraDataControlsRef: NARA_DATA_CONTROLS_REF,
+    providerMode: JF5B_PROVIDER_MODE,
+    providerDataControlsRefs,
     evidence: Object.freeze(evidence),
     providers: Object.freeze(providers),
   } as const;

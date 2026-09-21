@@ -76,6 +76,7 @@ export {
   EXECUTE_LIVE_FLAG,
   GATE_REFUSALS,
   JF5B_BUDGET,
+  JF5B_GROQ_ONLY_BUDGET,
   LIVE_CONFIRMATION_PHRASE,
   checkArgvGate,
   checkOutputPath,
@@ -134,6 +135,7 @@ export type {
 
 // The JF-5B release identities and the six bindings.
 export {
+  ACTIVE_CERTIFICATION_PROVIDERS,
   CERTIFIED_AGENTS,
   CERTIFIED_PROVIDERS,
   GROQ_DATA_CONTROLS_REF,
@@ -147,15 +149,18 @@ export {
   JF5B_FIXTURE_MANIFEST_ID,
   JF5B_FIXTURE_MANIFEST_VERSION,
   JF5B_POLICY_CONTRACT_REVISION,
+  JF5B_PROVIDER_MODE,
   JF5B_RED_TEAM_SUITE_ID,
   JF5B_RED_TEAM_SUITE_VERSION,
   NARA_DATA_CONTROLS_REF,
   PROMPT_BY_AGENT,
   createJf5bBinding,
   createJf5bBindingMatrix,
+  createJf5bGroqBindingMatrix,
   createJf5bRelease,
 } from './releases/jf5b-releases.js';
 export type {
+  ActiveCertifiedProvider,
   CertifiedAgent,
   CertifiedProvider,
   Jf5bReleaseInput,

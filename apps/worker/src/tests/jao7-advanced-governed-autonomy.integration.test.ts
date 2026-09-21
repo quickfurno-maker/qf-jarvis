@@ -974,16 +974,41 @@ describe('JAO-7 durable advanced autonomy', () => {
     const b = startProcess('b');
     await createRun(a, runId, MISSION_B);
 
-    // Two independent pools, one step, released together.
-    const results = await Promise.allSettled([
-      advanceJao7AutonomyRunInternal(capacityRequest(runId, `${runId}.left`), a.composition),
-      advanceJao7AutonomyRunInternal(capacityRequest(runId, `${runId}.right`), b.composition),
-    ]);
-    expect(results.filter((result) => result.status === 'fulfilled').length).toBeGreaterThanOrEqual(
-      1,
-    );
+    // A Promise.all alone does NOT prove the two coordinators race the same plan position: on a fast
+    // database one caller can finish step 0 before the other has even read the header, making the
+    // second caller legitimately run step 1. Synchronise at the claim seam so both coordinators have
+    // already read the same revision + step index before either claim reaches PostgreSQL.
+    let arrivals = 0;
+    let releaseClaims: (() => void) | undefined;
+    const bothAtClaim = new Promise<void>((resolve) => {
+      releaseClaims = resolve;
+    });
+    const barrier = (store: Jao7AutonomyStore): Jao7AutonomyStore =>
+      Object.freeze({
+        ...store,
+        async claimStep(request: Parameters<Jao7AutonomyStore['claimStep']>[0], nowMs: number) {
+          arrivals += 1;
+          if (arrivals === 2) {
+            releaseClaims?.();
+          }
+          await bothAtClaim;
+          return store.claimStep(request, nowMs);
+        },
+      });
 
-    // Whatever each caller believed, the database holds exactly one row for step 0.
+    const results = await Promise.allSettled([
+      advanceJao7AutonomyRunInternal(capacityRequest(runId, `${runId}.left`), {
+        ...a.composition,
+        store: barrier(a.composition.store),
+      }),
+      advanceJao7AutonomyRunInternal(capacityRequest(runId, `${runId}.right`), {
+        ...b.composition,
+        store: barrier(b.composition.store),
+      }),
+    ]);
+    expect(results.filter((result) => result.status === 'fulfilled').length).toBe(1);
+
+    // Both callers raced step 0. The row lock + revision check must leave exactly one durable claim.
     expect(await countJao7RowsFor(a.pool, 'autonomy_step', runId)).toBe(1);
     await a.close();
     await b.close();

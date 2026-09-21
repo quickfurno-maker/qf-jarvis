@@ -125,6 +125,19 @@ export const JF5B_BUDGET: LiveBudget = Object.freeze({
   maxEstimatedSpendUsd: 10,
 });
 
+/**
+ * Current JF-5B-R25 production-certification budget.
+ *
+ * Nara is disabled: the zero ceiling makes any accidental Nara reservation fail closed even if stale
+ * code somehow reaches the shared ledger.
+ */
+export const JF5B_GROQ_ONLY_BUDGET: LiveBudget = Object.freeze({
+  maxGroqCalls: 120,
+  maxNaraCalls: 0,
+  maxTotalCalls: 120,
+  maxEstimatedSpendUsd: 10,
+});
+
 const budgetSchema = z
   .object({
     maxGroqCalls: z.int().min(0).max(1000),

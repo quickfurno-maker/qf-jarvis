@@ -24,6 +24,7 @@
  * providers, across all three agents.
  */
 import {
+  GROQ_DATA_CONTROLS_REF,
   createCallLedger,
   createLiveBudget,
 } from '@qf-jarvis/jarvis-v1-provider-certification-live';
@@ -208,6 +209,44 @@ async function certify(replyBody: string = NEUTRAL_BODY) {
   });
   return { result, seams };
 }
+
+describe('JF-5B-R25 current Groq-only certification path', () => {
+  it('runs all three agent corpora through Groq, contacts Nara zero times, and emits manifest v2', async () => {
+    const seams = wire();
+    const ledger = budget();
+    const result = await createJf5bCertificationRunner({
+      groqTransport: seams.groq,
+      naraTransport: seams.nara,
+    }).certifyGroqOnly({
+      groqApiKey: GROQ_KEY,
+      runId: RUN_ID,
+      headSha: HEAD,
+      ledger,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.cases).toHaveLength(JF5B_CASES.length);
+    expect(result.cases.every((one) => one.provider === 'groq')).toBe(true);
+    for (const agent of ['RIYA', 'ANISHA', 'AAROHI'] as const) {
+      expect(result.cases.filter((one) => one.agent === agent)).toHaveLength(
+        casesFor(agent).length,
+      );
+    }
+
+    expect(seams.groqCalls()).toBe(MODEL_REQUIRED_CASES.length);
+    expect(seams.naraCalls()).toBe(0);
+    expect(ledger.naraCalls()).toBe(0);
+
+    expect(result.manifest).toBeDefined();
+    if (result.manifest === undefined) return;
+    expect(result.manifest.manifestVersion).toBe(2);
+    if (result.manifest.manifestVersion !== 2) return;
+    expect(result.manifest.providerMode).toBe('GROQ_ONLY');
+    expect(result.manifest.dataControlsRefs).toEqual([GROQ_DATA_CONTROLS_REF]);
+    expect(result.manifest.entries).toHaveLength(3);
+    expect(result.manifest.entries.every((entry) => entry.provider === 'groq')).toBe(true);
+  });
+});
 
 describe('JF-5B (3) the engine executes every case, through the real composition', () => {
   it('runs the whole corpus against BOTH providers and records one result each', async () => {
