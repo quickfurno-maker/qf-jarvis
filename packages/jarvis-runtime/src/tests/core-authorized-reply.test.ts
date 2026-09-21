@@ -121,6 +121,18 @@ async function runDetailed(
   );
 }
 
+async function runProposed(
+  over: Partial<JarvisRuntimeConfig> = {},
+  dropCore = true,
+): ReturnType<ReturnType<typeof createJarvisRuntime>['processInboundForProposedReply']> {
+  const base = syntheticRuntimeConfig({
+    gatewayInvoker: sentinelInvoker(),
+    ...over,
+  });
+  const config = dropCore ? withoutCoreTransport(base) : base;
+  return createJarvisRuntime(config).processInboundForProposedReply(syntheticInboundEnvelope());
+}
+
 /** One turn through the real composition root, via the ORDINARY content-free entry point. */
 async function runOrdinary(over: Partial<JarvisRuntimeConfig> = {}): Promise<JarvisRuntimeResult> {
   return createJarvisRuntime(
@@ -206,6 +218,48 @@ describe('(2, 3, 15) an accepted text-carrying proposal materializes exactly', (
     expect(runtimeResult.outcome).toBe('CORE_ACCEPTED');
     expect(authorizedReply?.proposalKind).toBe('FOLLOW_UP');
     expect(authorizedReply?.replyBody).toBe(SENTINEL);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// JF-7 proposal-only materialization for a trusted outer QuickFurno authority.
+// ---------------------------------------------------------------------------
+
+describe('proposal-only reply materialization', () => {
+  it('exposes a validated PENDING proposal only when Core is deliberately absent', async () => {
+    const { runtimeResult, proposedReply } = await runProposed();
+    expect(runtimeResult.outcome).toBe('MODEL_DRAFTED');
+    expect(runtimeResult.coreConsulted).toBe(false);
+    expect(proposedReply).toMatchObject({
+      version: 1,
+      proposalId: runtimeResult.proposalId,
+      boundRevision: runtimeResult.boundRevision,
+      proposalKind: 'REPLY',
+      authorityStatus: 'PENDING_CORE_VALIDATION',
+      replyBody: SENTINEL,
+    });
+    expect(Object.isFrozen(proposedReply)).toBe(true);
+  });
+
+  it('cannot bypass a configured Core even when Core ACCEPTS', async () => {
+    const transport = scriptedCoreTransport('ACCEPTED');
+    const { runtimeResult, proposedReply } = await runProposed({ coreTransport: transport }, false);
+    expect(runtimeResult.outcome).toBe('CORE_ACCEPTED');
+    expect(runtimeResult.coreConsulted).toBe(true);
+    expect(proposedReply).toBeUndefined();
+    expect(transport.invoked()).toBe(1);
+  });
+
+  it.each([
+    ['REJECTED', 'CORE_REJECTED'],
+    ['CORE_UNAVAILABLE', 'CORE_UNAVAILABLE'],
+    ['STALE_REVISION', 'STALE_REVISION'],
+  ] as const)('cannot bypass a configured Core outcome %s', async (decision, outcome) => {
+    const transport = scriptedCoreTransport(decision);
+    const result = await runProposed({ coreTransport: transport }, false);
+    expect(result.runtimeResult.outcome).toBe(outcome);
+    expect(result.proposedReply).toBeUndefined();
+    expect(transport.invoked()).toBe(1);
   });
 });
 
@@ -471,12 +525,13 @@ describe('the materialization rule is not a public capability', () => {
     ]);
   });
 
-  it('the runtime exposes exactly the six expected methods', () => {
+  it('the runtime exposes exactly the seven expected methods', () => {
     const runtime = createJarvisRuntime(syntheticRuntimeConfig());
     expect(Object.keys(runtime).sort()).toEqual([
       'applyConversationControlCommand',
       'processInbound',
       'processInboundForCoreAuthorizedReply',
+      'processInboundForProposedReply',
       'processInboundForRiyaConversationEvolution',
       // RWC-P7 (ADR-0103): the post-summary grounded reply capability. A SIXTH method, additive in
       // exactly the way the fourth and fifth were, and still reached through the ONE factory. It

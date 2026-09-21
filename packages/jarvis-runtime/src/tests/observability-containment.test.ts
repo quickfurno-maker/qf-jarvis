@@ -147,7 +147,7 @@ describe('public API lock', () => {
     }
   });
 
-  it('exposes only the six composition methods (no send/deliver/execute/persist)', () => {
+  it('exposes only the seven composition methods (no send/deliver/execute/persist)', () => {
     // QFJ-P08-A (ADR-0075) adds two OPERATOR methods beside the one inbound method, and RWC-P2D
     // (ADR-0096) adds `processInboundForCoreAuthorizedReply` beside it. Still an EXACT set match,
     // and still nothing that sends, delivers, executes, persists or authorizes: handing a trusted
@@ -160,6 +160,8 @@ describe('public API lock', () => {
       'applyConversationControlCommand',
       'processInbound',
       'processInboundForCoreAuthorizedReply',
+      // JF-7 / ADR-0157: content-bearing proposal projection only; final authority stays outside.
+      'processInboundForProposedReply',
       'processInboundForRiyaConversationEvolution',
       // RWC-P7 (ADR-0103): the post-summary grounded reply capability. A SIXTH method, additive in
       // exactly the way the fourth and fifth were, and still reached through the ONE factory. It

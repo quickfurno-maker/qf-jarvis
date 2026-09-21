@@ -77,6 +77,8 @@ import {
   JF5B_EVALUATION_SUITE_ID,
   JF5B_EVALUATION_SUITE_VERSION,
   JF5B_FIXTURE_MANIFEST_ID,
+  JF5B_MAX_COMPLETION_TOKENS,
+  JF5B_MAX_INPUT_TOKENS,
   JF5B_RED_TEAM_SUITE_ID,
   NARA_DATA_CONTROLS_REF,
   PROMPT_BY_AGENT,
@@ -159,8 +161,8 @@ const EVALUATION_CIRCUIT = Object.freeze({ failureThreshold: 1_000, cooldownMs: 
  * eligible to serve it -- correctly -- so a lower number here would not have produced a cheaper run, it
  * would have produced six certifications that never reached a provider.
  */
-const MAX_INPUT_TOKENS = 16_384;
-const MAX_COMPLETION_TOKENS = 4_096;
+const MAX_INPUT_TOKENS = JF5B_MAX_INPUT_TOKENS;
+const MAX_COMPLETION_TOKENS = JF5B_MAX_COMPLETION_TOKENS;
 
 /**
  * The exact Groq model JF-5B certifies. Pinned; never `latest`, never a floating alias.

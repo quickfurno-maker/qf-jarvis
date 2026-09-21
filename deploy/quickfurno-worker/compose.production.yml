@@ -1,0 +1,66 @@
+name: qf-jarvis-whatsapp-worker
+
+services:
+  quickfurno-worker:
+    image: 'qf-jarvis-whatsapp-worker:${QFJ_WORKER_IMAGE_TAG:?QFJ_WORKER_IMAGE_TAG must be the exact merged git SHA}'
+    container_name: qf-jarvis-whatsapp-worker
+    restart: unless-stopped
+    init: true
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    stop_grace_period: 30s
+    user: '10003:10002'
+    environment:
+      NODE_ENV: production
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=32m
+    volumes:
+      - type: bind
+        source: /srv/qf-jarvis/secrets/qf-jarvis-whatsapp-worker.json
+        target: /run/secrets/qf-jarvis-whatsapp-worker.json
+        read_only: true
+      - type: bind
+        source: /srv/qf-jarvis/secrets/groq-production.key
+        target: /run/secrets/groq-production.key
+        read_only: true
+      - type: bind
+        source: /srv/qf-jarvis/seals/jf5c-production-seal.json
+        target: /run/secrets/jf5c-production-seal.json
+        read_only: true
+      - type: bind
+        source: /srv/qf-jarvis/secrets/postgres-ca.pem
+        target: /run/secrets/postgres-ca.pem
+        read_only: true
+      - type: bind
+        source: /srv/qf-jarvis/state/quickfurno-gateway-turns
+        target: /var/lib/qfj-turns
+        read_only: false
+      - type: bind
+        source: /srv/qf-jarvis/state/quickfurno-worker-control
+        target: /var/run/qfj-control
+        read_only: true
+    deploy:
+      resources:
+        limits:
+          cpus: '1.00'
+          memory: 1024m
+          pids: 256
+        reservations:
+          memory: 256m
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '5'
+    networks:
+      - worker
+    labels:
+      traefik.enable: 'false'
+
+networks:
+  worker:
+    name: qf-jarvis-whatsapp-worker_worker
+    driver: bridge

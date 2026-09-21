@@ -22,6 +22,7 @@ import type { RiyaConversationContinuityStateV1 } from '@qf-jarvis/riya-conversa
 import type { RiyaConversationObservationBatchV1 } from '@qf-jarvis/riya-conversation-evolution';
 
 import type { JarvisCoreAuthorizedReplyV1 } from './core-authorized-reply.js';
+import type { JarvisProposedReplyV1 } from './proposed-reply.js';
 import type { JarvisRuntimeResult } from './runtime-result.js';
 
 /** One Riya-aware run, reported three ways from ONE model call and at most one Core decision. */
@@ -30,6 +31,11 @@ export interface JarvisRiyaConversationEvolutionResult {
   readonly runtimeResult: JarvisRuntimeResult;
   /** Present only under the unchanged RWC-P2D gate: a final `CORE_ACCEPTED` text-carrying proposal. */
   readonly authorizedReply: JarvisCoreAuthorizedReplyV1 | undefined;
+  /**
+   * Present only when Core is deliberately deferred: a validated PENDING_CORE_VALIDATION text
+   * proposal for a trusted outer authority such as QuickFurno WhatsApp. Never Core-authorized.
+   */
+  readonly proposedReply: JarvisProposedReplyV1 | undefined;
   /**
    * The canonical RWC-P4A batch this turn observed, or `undefined`.
    *

@@ -1370,7 +1370,7 @@ describe('(O, P) one source, one revision', () => {
 // ---------------------------------------------------------------------------
 
 describe('the runtime surface', () => {
-  it('exposes exactly six methods and nothing that sends or executes', () => {
+  it('exposes exactly seven methods and nothing that sends or executes', () => {
     // RWC-P2D (ADR-0096) adds the content-bearing sibling of `processInbound`. Deliberately a
     // fourth METHOD rather than a field on the result: the ordinary result stays content-free and
     // safe to log whole. Still an EXACT set match, and still nothing that sends or executes --
@@ -1380,6 +1380,9 @@ describe('the runtime surface', () => {
       'applyConversationControlCommand',
       'processInbound',
       'processInboundForCoreAuthorizedReply',
+      // JF-7 / ADR-0157: a validated PENDING_CORE_VALIDATION projection for trusted outer
+      // authorities such as QuickFurno WhatsApp. It sends/authorizes nothing itself.
+      'processInboundForProposedReply',
       'processInboundForRiyaConversationEvolution',
       // RWC-P7 (ADR-0103): the post-summary grounded reply capability. A SIXTH method, additive in
       // exactly the way the fourth and fifth were, and still reached through the ONE factory. It

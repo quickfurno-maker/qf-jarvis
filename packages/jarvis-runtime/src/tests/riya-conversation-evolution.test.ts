@@ -523,8 +523,10 @@ describe('one call, one model invocation, one Core decision', () => {
     expect(Object.keys(result).sort()).toStrictEqual([
       'authorizedReply',
       'observationBatch',
+      'proposedReply',
       'runtimeResult',
     ]);
+    expect(result.proposedReply).toBeUndefined();
     expect(result.observationBatch?.observations).toHaveLength(1);
     expect(result.observationBatch?.observations[0]).toMatchObject({
       field: 'serviceInterest',

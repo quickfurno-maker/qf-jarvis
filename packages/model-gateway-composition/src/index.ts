@@ -22,6 +22,7 @@ export type {
   ProductionCompositionConfig,
   ProductionCompositionRefusal,
   ProductionCompositionResult,
+  ProductionApprovalClaim,
   ProductionCompositionStatus,
   ProductionModelGatewayComposition,
 } from './contracts/production-composition-config.js';

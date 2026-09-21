@@ -93,10 +93,11 @@ describe('Riya complete QuickFurno WhatsApp flow', () => {
         );
         expect(request).toMatchObject({
           protocol: 'qfj.whatsapp.turn-material',
-          version: 1,
+          version: 2,
           caller: 'qf-jarvis',
           audience: 'quickfurno-core',
           requestId: materialRequestId,
+          tenantId: 'quickfurno',
           conversationId,
           inboundMessageId,
           expectedRevision: revision,
@@ -108,16 +109,24 @@ describe('Riya complete QuickFurno WhatsApp flow', () => {
             Promise.resolve(
               JSON.stringify({
                 protocol: 'qfj.whatsapp.turn-material',
-                version: 1,
+                version: 2,
                 requestId: materialRequestId,
+                tenantId: 'quickfurno',
                 conversationId,
-                inboundMessageId,
-                conversationRevision: revision,
+                revision,
                 assignedActor: 'RIYA',
                 subjectType: 'client',
-                tenantId: 'quickfurno.marketplace',
+                partyType: 'CLIENT',
+                conversationState: 'OPEN',
+                jarvisAllowed: true,
                 dataClass: 'HOSTED_ALLOWED',
+                humanTakeover: false,
+                aiPaused: false,
+                cancelled: false,
+                subjectStatus: 'clear',
                 subjectRef,
+                observedAt: now,
+                inboundMessageId,
                 receivedAt: now,
                 inbound: {
                   version: 1,
@@ -192,7 +201,7 @@ describe('Riya complete QuickFurno WhatsApp flow', () => {
       expect(turn).toMatchObject({
         version: 1,
         channel: 'WHATSAPP',
-        tenantId: 'quickfurno.marketplace',
+        tenantId: 'quickfurno',
         conversationId,
         messageId: inboundMessageId,
         receivedAt: now,
@@ -202,11 +211,12 @@ describe('Riya complete QuickFurno WhatsApp flow', () => {
         normalizedText: clientText,
       });
       return Promise.resolve({
-        authorizedReply: {
+        proposedReply: {
           version: 1,
           proposalId: 'riya.e2e.reply.1',
           boundRevision: revision,
           proposalKind: 'REPLY',
+          authorityStatus: 'PENDING_CORE_VALIDATION',
           replyBody: replyText,
         },
       });
@@ -226,7 +236,7 @@ describe('Riya complete QuickFurno WhatsApp flow', () => {
       runtimeId: 'qfj.whatsapp.riya.e2e',
       riya,
       jarvisRuntime: {
-        processInboundForCoreAuthorizedReply: nonRiyaRuntime,
+        processInboundForProposedReply: nonRiyaRuntime,
       } as never,
     });
 

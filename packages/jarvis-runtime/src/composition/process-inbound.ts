@@ -37,8 +37,13 @@ import {
 } from '../contracts/agent-knowledge-policy.js';
 import { riyaBehaviourPort } from './riya-behaviour-adapter.js';
 import { materializeCoreAuthorizedReply } from './materialize-core-authorized-reply.js';
+import { materializeProposedReply } from './materialize-proposed-reply.js';
 import type { ConversationStateKey } from '../contracts/authoritative-state.js';
 import type { JarvisCoreAuthorizedReplyResult } from '../contracts/core-authorized-reply.js';
+import type {
+  JarvisProposedReplyResult,
+  JarvisProposedReplyV1,
+} from '../contracts/proposed-reply.js';
 import type { JarvisRuntimeConfig } from '../contracts/runtime-config.js';
 import type { JarvisRuntimeResult } from '../contracts/runtime-result.js';
 import type { JarvisRuntimeOutcome } from '../contracts/reasons.js';
@@ -108,6 +113,7 @@ export interface RiyaEvolutionRunOptions {
 export interface InternalRunResult {
   readonly runtimeResult: JarvisRuntimeResult;
   readonly authorizedReply: JarvisCoreAuthorizedReplyResult['authorizedReply'];
+  readonly proposedReply: JarvisProposedReplyV1 | undefined;
   /** Whatever the Riya profile validated out of the SAME model call, or `undefined`. */
   readonly profileDetail: unknown;
 }
@@ -268,6 +274,7 @@ export async function composeAndProcessInternal(
     Object.freeze({
       runtimeResult,
       authorizedReply: undefined,
+      proposedReply: undefined,
       profileDetail: undefined,
     });
 
@@ -491,6 +498,12 @@ export async function composeAndProcessInternal(
       result.proposal,
       result.decision.boundRevision,
     ),
+    proposedReply: materializeProposedReply(
+      outcome,
+      coreConsulted,
+      result.proposal,
+      result.decision.boundRevision,
+    ),
     profileDetail: capturedProfileDetail,
   });
 }
@@ -509,6 +522,25 @@ export async function composeAndProcessDetailed(
   return Object.freeze({
     runtimeResult: run.runtimeResult,
     authorizedReply: run.authorizedReply,
+  });
+}
+
+/**
+ * Proposal-only content-bearing projection for deployments where QuickFurno performs the final
+ * authorization at a later boundary (for example WhatsApp /whatsapp-reply).
+ *
+ * This performs the same single orchestration run as the other entry points. A proposal is exposed
+ * only when Core was deliberately not consulted; a configured-but-rejecting/unavailable Core can
+ * never be bypassed through this method.
+ */
+export async function composeAndProcessProposedReply(
+  config: JarvisRuntimeConfig,
+  envelope: InboundEnvelope,
+): Promise<JarvisProposedReplyResult> {
+  const run = await composeAndProcessInternal(config, envelope);
+  return Object.freeze({
+    runtimeResult: run.runtimeResult,
+    proposedReply: run.proposedReply,
   });
 }
 

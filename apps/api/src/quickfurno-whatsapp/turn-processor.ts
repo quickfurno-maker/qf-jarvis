@@ -43,7 +43,7 @@ function materialMatches(
   ref: QuickFurnoWhatsAppTurnReference,
   material: {
     readonly conversationId: string;
-    readonly conversationRevision: number;
+    readonly revision: number;
     readonly inboundMessageId: string;
     readonly assignedActor: string;
     readonly subjectType: string;
@@ -51,7 +51,7 @@ function materialMatches(
 ): boolean {
   return (
     material.conversationId === ref.conversationId &&
-    material.conversationRevision === ref.conversationRevision &&
+    material.revision === ref.conversationRevision &&
     material.inboundMessageId === ref.inboundMessageId &&
     material.assignedActor === ref.assignedActor &&
     material.subjectType === ref.subjectType
@@ -89,14 +89,14 @@ export function createQuickFurnoWhatsAppTurnProcessor(
         await config.queue.fail(ref.inboundMessageId);
         return 'failed-indeterminate';
       }
-      let authorized;
+      let proposal;
       try {
-        authorized = await config.specialistRuntime.process(material);
+        proposal = await config.specialistRuntime.process(material);
       } catch {
         await config.queue.fail(ref.inboundMessageId);
         return 'failed-indeterminate';
       }
-      if (authorized === null) {
+      if (proposal === null) {
         await config.queue.complete(ref.inboundMessageId);
         return 'completed-no-reply';
       }
@@ -105,7 +105,7 @@ export function createQuickFurnoWhatsAppTurnProcessor(
         const outcome = await config.replyWriter.write({
           conversationId: ref.conversationId,
           expectedRevision: ref.conversationRevision,
-          reply: authorized,
+          proposal,
         });
         await config.queue.complete(ref.inboundMessageId);
         return outcome === 'stale' ? 'completed-stale' : 'completed-queued';

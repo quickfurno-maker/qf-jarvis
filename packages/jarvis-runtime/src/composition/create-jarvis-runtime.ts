@@ -40,13 +40,18 @@ import {
   parseRiyaModelProfileDetail,
 } from '@qf-jarvis/riya-model-interaction';
 import type { JarvisCoreAuthorizedReplyResult } from '../contracts/core-authorized-reply.js';
+import type { JarvisProposedReplyResult } from '../contracts/proposed-reply.js';
 import type {
   JarvisRuntimeConfig,
   RiyaGroundedKnowledgeConfig,
 } from '../contracts/runtime-config.js';
 import type { JarvisRuntimeResult } from '../contracts/runtime-result.js';
 import { assertMandatoryDependencies } from './validate-composition.js';
-import { composeAndProcessDetailed, composeAndProcessInternal } from './process-inbound.js';
+import {
+  composeAndProcessDetailed,
+  composeAndProcessInternal,
+  composeAndProcessProposedReply,
+} from './process-inbound.js';
 import { provenRiyaRunInput } from './riya-run-input.js';
 import type {
   JarvisRiyaConversationEvolutionInput,
@@ -119,7 +124,15 @@ export interface CoreAuthorizedReplyJarvisRuntime extends JarvisRuntime {
  * ONE call performs ONE orchestration: one model-gateway invocation, at most one Core decision. It
  * does not call either older method internally — that would be a second run.
  */
-export interface RiyaConversationEvolutionJarvisRuntime extends CoreAuthorizedReplyJarvisRuntime {
+export interface ProposedReplyJarvisRuntime extends CoreAuthorizedReplyJarvisRuntime {
+  /**
+   * Return the validated PENDING_CORE_VALIDATION text proposal only when this deployment deliberately
+   * has no Core transport. A configured Core rejection/unavailability never falls back to a draft.
+   */
+  processInboundForProposedReply(envelope: InboundEnvelope): Promise<JarvisProposedReplyResult>;
+}
+
+export interface RiyaConversationEvolutionJarvisRuntime extends ProposedReplyJarvisRuntime {
   /**
    * Process one inbound Riya turn and additionally return the observations the SAME model call
    * produced.
@@ -218,6 +231,9 @@ export function createJarvisRuntime(
       // The SAME primitive, called once. `processInbound` is never invoked in addition.
       return composeAndProcessDetailed(config, envelope);
     },
+    processInboundForProposedReply(envelope: InboundEnvelope): Promise<JarvisProposedReplyResult> {
+      return composeAndProcessProposedReply(config, envelope);
+    },
     async processInboundForRiyaConversationEvolution(
       input: JarvisRiyaConversationEvolutionInput,
     ): Promise<JarvisRiyaConversationEvolutionResult> {
@@ -233,6 +249,7 @@ export function createJarvisRuntime(
         Object.freeze({
           runtimeResult: refusedRuntimeResult(config, runId, conversationId),
           authorizedReply: undefined,
+          proposedReply: undefined,
           observationBatch: undefined,
         });
 
@@ -299,6 +316,7 @@ export function createJarvisRuntime(
       return Object.freeze({
         runtimeResult: run.runtimeResult,
         authorizedReply: run.authorizedReply,
+        proposedReply: run.proposedReply,
         observationBatch: detail?.observationBatch,
       });
     },
@@ -309,6 +327,7 @@ export function createJarvisRuntime(
         Object.freeze({
           runtimeResult: refusedRuntimeResult(config, runId, conversationId),
           authorizedReply: undefined,
+          proposedReply: undefined,
         });
 
       const proven = provenRiyaRunInput(input);
@@ -359,6 +378,7 @@ export function createJarvisRuntime(
       return Object.freeze({
         runtimeResult: run.runtimeResult,
         authorizedReply: run.authorizedReply,
+        proposedReply: run.proposedReply,
       });
     },
     applyConversationControlCommand(

@@ -13,7 +13,8 @@
   "scripts": {
     "build": "tsc --build tsconfig.build.json",
     "typecheck": "tsc --build tsconfig.build.json",
-    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json",
+    "start:quickfurno-whatsapp-worker": "node ./dist/bin/run-quickfurno-whatsapp-production-worker.js"
   },
   "dependencies": {
     "@mastra/core": "1.61.0",
@@ -27,6 +28,8 @@
     "@qf-jarvis/governed-knowledge": "workspace:*",
     "@qf-jarvis/groq-staging-smoke": "workspace:*",
     "@qf-jarvis/jarvis-runtime": "workspace:*",
+    "@qf-jarvis/jarvis-v1-production-profile": "workspace:*",
+    "@qf-jarvis/jarvis-v1-production-seal": "workspace:*",
     "@qf-jarvis/jarvis-v1-provider-certification-live": "workspace:*",
     "@qf-jarvis/model-evaluation": "workspace:*",
     "@qf-jarvis/model-gateway": "workspace:*",
@@ -37,6 +40,7 @@
     "@qf-jarvis/postgres-riya-conversation-continuity-store": "workspace:*",
     "@qf-jarvis/postgres-riya-turn-coordinator": "workspace:*",
     "@qf-jarvis/prompt-registry": "workspace:*",
+    "@qf-jarvis/quickfurno-gateway": "workspace:*",
     "@qf-jarvis/rag-provisioning": "workspace:*",
     "@qf-jarvis/riya-prompts": "workspace:*",
     "@qf-jarvis/riya-web-conversation-service": "workspace:*",

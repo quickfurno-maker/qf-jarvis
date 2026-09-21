@@ -19,12 +19,18 @@
  * an earlier run actually measured. JF-5B pins its own identities, with its own dated catalogue
  * observation label, and leaves the old ones alone.
  */
-import { AAROHI_ACQUISITION_PROMPT_V1 } from '@qf-jarvis/aarohi-prompts';
-import { ANISHA_VENDOR_JOURNEY_PROMPT_V1 } from '@qf-jarvis/anisha-prompts';
+import {
+  JARVIS_V1_GROQ_DATA_CONTROLS_REF,
+  JARVIS_V1_PRODUCTION_AGENTS,
+  JARVIS_V1_PRODUCTION_CAPABILITY_PROFILE_REF,
+  JARVIS_V1_PRODUCTION_MAX_COMPLETION_TOKENS,
+  JARVIS_V1_PRODUCTION_MAX_INPUT_TOKENS,
+  JARVIS_V1_PRODUCTION_PROMPT_BY_AGENT,
+  JARVIS_V1_PRODUCTION_PROVIDER_MODE,
+  type JarvisV1ProductionAgent,
+} from '@qf-jarvis/jarvis-v1-production-profile';
 import { createEvaluationBinding } from '@qf-jarvis/model-evaluation';
 import type { EvaluationBinding, ProviderReleaseRef } from '@qf-jarvis/model-evaluation';
-import { RIYA_CLIENT_SALES_EVOLUTION_PROMPT_V1 } from '@qf-jarvis/riya-prompts';
-import type { PromptDefinition } from '@qf-jarvis/prompt-registry';
 
 /**
  * The catalogue OBSERVATION label, not a weight hash.
@@ -36,7 +42,11 @@ import type { PromptDefinition } from '@qf-jarvis/prompt-registry';
 export const JF5B_CATALOGUE_SNAPSHOT = 'certification-snapshot-2026-09-11';
 
 /** The capability profile the three agents' structured turns run under. */
-export const JF5B_CAPABILITY_PROFILE_REF = 'cap.jf5b.structured.v1';
+export const JF5B_CAPABILITY_PROFILE_REF = JARVIS_V1_PRODUCTION_CAPABILITY_PROFILE_REF;
+
+/** Exact model token ceilings certified by JF-5B and reused by the production provider instance. */
+export const JF5B_MAX_INPUT_TOKENS = JARVIS_V1_PRODUCTION_MAX_INPUT_TOKENS;
+export const JF5B_MAX_COMPLETION_TOKENS = JARVIS_V1_PRODUCTION_MAX_COMPLETION_TOKENS;
 
 /**
  * The observed Nara data-controls posture, as a reference rather than a claim.
@@ -54,7 +64,7 @@ export const NARA_DATA_CONTROLS_REF =
   'datacontrols.nara.observed.2026-09-11.forwarded-retained-limited';
 
 /** Groq's posture reference, recorded the same way and for the same reason. */
-export const GROQ_DATA_CONTROLS_REF = 'datacontrols.groq.observed.2026-09-11.staging-synthetic';
+export const GROQ_DATA_CONTROLS_REF = JARVIS_V1_GROQ_DATA_CONTROLS_REF;
 
 /** The suite, fixture and evaluator identities every JF-5B binding shares. */
 export const JF5B_EVALUATION_SUITE_ID = 'suite.jf5b.three-agent-live';
@@ -69,14 +79,10 @@ export const JF5B_POLICY_CONTRACT_REVISION = 'policy.jf5b.rev.1';
 export const JF5B_CREATED_AT = '2026-09-11T00:00:00Z';
 
 /** The three agents JF-5B certifies, and the prompt each one owns. */
-export const CERTIFIED_AGENTS = ['RIYA', 'ANISHA', 'AAROHI'] as const;
-export type CertifiedAgent = (typeof CERTIFIED_AGENTS)[number];
+export const CERTIFIED_AGENTS = JARVIS_V1_PRODUCTION_AGENTS;
+export type CertifiedAgent = JarvisV1ProductionAgent;
 
-export const PROMPT_BY_AGENT: Readonly<Record<CertifiedAgent, PromptDefinition>> = Object.freeze({
-  RIYA: RIYA_CLIENT_SALES_EVOLUTION_PROMPT_V1,
-  ANISHA: ANISHA_VENDOR_JOURNEY_PROMPT_V1,
-  AAROHI: AAROHI_ACQUISITION_PROMPT_V1,
-});
+export const PROMPT_BY_AGENT = JARVIS_V1_PRODUCTION_PROMPT_BY_AGENT;
 
 /**
  * Historical provider vocabulary.
@@ -96,7 +102,7 @@ export type CertifiedProvider = (typeof CERTIFIED_PROVIDERS)[number];
  */
 export const ACTIVE_CERTIFICATION_PROVIDERS = ['groq'] as const;
 export type ActiveCertifiedProvider = (typeof ACTIVE_CERTIFICATION_PROVIDERS)[number];
-export const JF5B_PROVIDER_MODE = 'GROQ_ONLY' as const;
+export const JF5B_PROVIDER_MODE = JARVIS_V1_PRODUCTION_PROVIDER_MODE;
 
 export interface Jf5bReleaseInput {
   readonly providerId: CertifiedProvider;

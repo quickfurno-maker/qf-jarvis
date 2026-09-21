@@ -1,6 +1,7 @@
 import { createHash, generateKeyPairSync, verify } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  createQuickFurnoWhatsAppAuthorityReader,
   createQuickFurnoWhatsAppMaterialReader,
   createQuickFurnoWhatsAppReplyWriter,
   type QuickFurnoWhatsAppHttpPost,
@@ -50,6 +51,33 @@ function config(httpPost: QuickFurnoWhatsAppHttpPost) {
     httpPost,
   };
 }
+function authorityResponse(
+  request: Record<string, unknown>,
+  overrides: Record<string, unknown> = {},
+) {
+  return {
+    protocol: 'qfj.whatsapp.turn-material',
+    version: 2,
+    requestId: request['requestId'],
+    tenantId: 'quickfurno',
+    conversationId: request['conversationId'],
+    revision: request['expectedRevision'] ?? 7,
+    assignedActor: 'RIYA',
+    subjectType: 'client',
+    partyType: 'CLIENT',
+    conversationState: 'OPEN',
+    jarvisAllowed: true,
+    dataClass: 'HOSTED_ALLOWED',
+    humanTakeover: false,
+    aiPaused: false,
+    cancelled: false,
+    subjectStatus: 'clear',
+    subjectRef: '44444444-4444-4444-8444-444444444444',
+    observedAt: '2026-09-18T12:00:00.000Z',
+    ...overrides,
+  };
+}
+
 describe('QuickFurno WhatsApp signed HTTP clients', () => {
   it('material reader signs the exact bytes and accepts only the bound response identity', async () => {
     const post = vi.fn<QuickFurnoWhatsAppHttpPost>((_url, init) => {
@@ -74,17 +102,8 @@ describe('QuickFurno WhatsApp signed HTTP clients', () => {
         ),
       ).toBe(true);
       const responseBody = {
-        protocol: 'qfj.whatsapp.turn-material',
-        version: 1,
-        requestId: request['requestId'],
-        conversationId: request['conversationId'],
+        ...authorityResponse(request),
         inboundMessageId: request['inboundMessageId'],
-        conversationRevision: request['expectedRevision'],
-        assignedActor: 'RIYA',
-        subjectType: 'client',
-        tenantId: 'quickfurno.marketplace',
-        dataClass: 'HOSTED_ALLOWED',
-        subjectRef: '44444444-4444-4444-8444-444444444444',
         receivedAt: '2026-09-18T12:00:00.000Z',
         inbound: {
           version: 1,
@@ -115,7 +134,7 @@ describe('QuickFurno WhatsApp signed HTTP clients', () => {
     expect(result).toMatchObject({
       assignedActor: 'RIYA',
       subjectType: 'client',
-      tenantId: 'quickfurno.marketplace',
+      tenantId: 'quickfurno',
     });
     expect(result.inbound).toMatchObject({
       messageType: 'image',
@@ -125,6 +144,64 @@ describe('QuickFurno WhatsApp signed HTTP clients', () => {
     expect(post).toHaveBeenCalledOnce();
   });
 
+  it('authority reader performs a signed content-free v2 read', async () => {
+    const post = vi.fn<QuickFurnoWhatsAppHttpPost>((_url, init) => {
+      const request = JSON.parse(init.body) as Record<string, unknown>;
+      expect(request).not.toHaveProperty('inboundMessageId');
+      expect(request).not.toHaveProperty('expectedRevision');
+      return Promise.resolve({
+        status: 200,
+        text: () => Promise.resolve(JSON.stringify(authorityResponse(request))),
+      });
+    });
+    const reader = createQuickFurnoWhatsAppAuthorityReader(config(post));
+    const authority = await reader.read({
+      tenantId: 'quickfurno',
+      conversationId: '22222222-2222-4222-8222-222222222222',
+    });
+    expect(authority).toMatchObject({
+      tenantId: 'quickfurno',
+      revision: 7,
+      partyType: 'CLIENT',
+      jarvisAllowed: true,
+      subjectStatus: 'clear',
+    });
+    expect(post).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ['client', 'ANISHA', 'CLIENT'],
+    ['client', 'AAROHI', 'CLIENT'],
+    ['vendor', 'RIYA', 'VENDOR'],
+    ['vendor', 'AAROHI', 'VENDOR'],
+    ['prospect', 'RIYA', 'PROSPECT'],
+    ['prospect', 'ANISHA', 'PROSPECT'],
+    ['client', 'HUMAN', 'CLIENT'],
+    ['client', 'SYSTEM', 'CLIENT'],
+    ['client', 'RIYA', 'VENDOR'],
+  ])(
+    'rejects jarvisAllowed authority drift for subject=%s actor=%s party=%s',
+    async (subjectType, assignedActor, partyType) => {
+      const post: QuickFurnoWhatsAppHttpPost = (_url, init) => {
+        const request = JSON.parse(init.body) as Record<string, unknown>;
+        return Promise.resolve({
+          status: 200,
+          text: () =>
+            Promise.resolve(
+              JSON.stringify(authorityResponse(request, { subjectType, assignedActor, partyType })),
+            ),
+        });
+      };
+      const reader = createQuickFurnoWhatsAppAuthorityReader(config(post));
+      await expect(
+        reader.read({
+          tenantId: 'quickfurno',
+          conversationId: '22222222-2222-4222-8222-222222222222',
+        }),
+      ).rejects.toMatchObject({ code: 'response-invalid' });
+    },
+  );
+
   it('material reader rejects conflicting parallel text and structured material', async () => {
     const post: QuickFurnoWhatsAppHttpPost = (_url, init) => {
       const request = JSON.parse(init.body) as Record<string, unknown>;
@@ -133,16 +210,8 @@ describe('QuickFurno WhatsApp signed HTTP clients', () => {
         text: () =>
           Promise.resolve(
             JSON.stringify({
-              protocol: 'qfj.whatsapp.turn-material',
-              version: 1,
-              requestId: request['requestId'],
-              conversationId: request['conversationId'],
+              ...authorityResponse(request),
               inboundMessageId: request['inboundMessageId'],
-              conversationRevision: request['expectedRevision'],
-              assignedActor: 'RIYA',
-              subjectType: 'client',
-              tenantId: 'quickfurno.marketplace',
-              dataClass: 'HOSTED_ALLOWED',
               receivedAt: '2026-09-18T12:00:00.000Z',
               inbound: { version: 1, messageType: 'text', normalizedText: 'trusted text' },
               normalizedText: 'different text',
@@ -201,7 +270,7 @@ describe('QuickFurno WhatsApp signed HTTP clients', () => {
     const outcome = await writer.write({
       conversationId: '22222222-2222-4222-8222-222222222222',
       expectedRevision: 7,
-      reply: {
+      proposal: {
         actor: 'ANISHA',
         proposalId: 'prop.vendor.1',
         boundRevision: 7,
@@ -229,7 +298,7 @@ describe('QuickFurno WhatsApp signed HTTP clients', () => {
       writer.write({
         conversationId: '22222222-2222-4222-8222-222222222222',
         expectedRevision: 7,
-        reply: { actor: 'RIYA', proposalId: 'prop.1', boundRevision: 7, body: 'hello' },
+        proposal: { actor: 'RIYA', proposalId: 'prop.1', boundRevision: 7, body: 'hello' },
       }),
     ).resolves.toBe('stale');
   });

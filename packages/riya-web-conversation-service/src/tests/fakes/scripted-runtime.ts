@@ -145,6 +145,7 @@ export function scriptedRuntime(
       return Promise.resolve({
         runtimeResult: runtimeResultFor(input.envelope),
         authorizedReply: materialization(),
+        proposedReply: undefined,
         observationBatch: batch(),
       });
     },
@@ -165,6 +166,17 @@ export function scriptedRuntime(
       return Promise.resolve({
         runtimeResult: runtimeResultFor(input.envelope),
         authorizedReply: materialization(),
+        proposedReply: undefined,
+      });
+    },
+    processInboundForProposedReply(envelope: InboundEnvelope) {
+      seen = envelope;
+      if (over.throws === true) {
+        return Promise.reject(new Error('runtime at 10.0.0.1 — password=hunter2'));
+      }
+      return Promise.resolve({
+        runtimeResult: runtimeResultFor(envelope),
+        proposedReply: undefined,
       });
     },
     applyConversationControlCommand: () => Promise.reject(new Error('not used')),

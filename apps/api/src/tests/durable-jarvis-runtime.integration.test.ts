@@ -744,14 +744,15 @@ describe('durable control semantics through the composed runtime', () => {
       expect(
         (started2.lifecycle.runtime as unknown as Record<string, unknown>)['provision'],
       ).toBeUndefined();
-      // The runtime surface is exactly four methods since RWC-P2D (ADR-0096), which added the
-      // content-bearing `processInboundForCoreAuthorizedReply` beside `processInbound`. The
-      // property this test guards is unchanged and is the reason the set is pinned rather than
-      // counted: none of the four provisions a conversation, and no `provision` method exists.
+      // The runtime surface is pinned exactly. JF-7 adds one proposal-only method for trusted outer
+      // authorities; it still has no provisioning method and does not create QuickFurno business state.
+      // The property this test guards is unchanged: a missing conversation stays missing.
       expect(Object.keys(started2.lifecycle.runtime).sort()).toEqual([
         'applyConversationControlCommand',
         'processInbound',
         'processInboundForCoreAuthorizedReply',
+        // JF-7 / ADR-0157: validated proposal projection only; no provisioning side effect.
+        'processInboundForProposedReply',
         // RWC-P4B (ADR-0099).
         'processInboundForRiyaConversationEvolution',
         // RWC-P7 (ADR-0103): a SIXTH method, additive as the fourth and fifth were, still reached

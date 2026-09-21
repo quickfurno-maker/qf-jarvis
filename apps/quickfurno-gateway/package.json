@@ -4,6 +4,12 @@
   "private": true,
   "type": "module",
   "description": "Dedicated machine-to-machine ingress for QuickFurno Core -> Jarvis. Verifies signed, bounded requests; owns no business authority and no provider credentials.",
+  "exports": {
+    "./durable-turn-spool": {
+      "types": "./dist/durable-turn-spool.d.ts",
+      "default": "./dist/durable-turn-spool.js"
+    }
+  },
   "scripts": {
     "build": "tsc --build tsconfig.build.json",
     "typecheck": "tsc --build tsconfig.build.json",
