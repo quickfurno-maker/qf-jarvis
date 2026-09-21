@@ -78,9 +78,25 @@ export const PROMPT_BY_AGENT: Readonly<Record<CertifiedAgent, PromptDefinition>>
   AAROHI: AAROHI_ACQUISITION_PROMPT_V1,
 });
 
-/** The two providers certified directly. AUTO is routing, not a third provider. */
+/**
+ * Historical provider vocabulary.
+ *
+ * v1 JF-5B manifests used both providers. Keep the vocabulary readable so old receipts remain
+ * verifiable, but do not confuse it with the current production-eligible provider set.
+ */
 export const CERTIFIED_PROVIDERS = ['groq', 'nara'] as const;
 export type CertifiedProvider = (typeof CERTIFIED_PROVIDERS)[number];
+
+/**
+ * Current production-certification posture (JF-5B-R25): Groq only.
+ *
+ * Nara remains a historical provider id for old receipts and dormant adapter code, but it is not a
+ * current certification target, fallback, or production-eligible provider. Any future local provider
+ * is a NEW release decision and must be separately certified.
+ */
+export const ACTIVE_CERTIFICATION_PROVIDERS = ['groq'] as const;
+export type ActiveCertifiedProvider = (typeof ACTIVE_CERTIFICATION_PROVIDERS)[number];
+export const JF5B_PROVIDER_MODE = 'GROQ_ONLY' as const;
 
 export interface Jf5bReleaseInput {
   readonly providerId: CertifiedProvider;
@@ -136,7 +152,10 @@ export function createJf5bBinding(
   });
 }
 
-/** All SIX bindings, in a fixed order. Two providers x three prompt bodies. */
+/**
+ * Historical v1 six-binding matrix. Retained only so old evidence remains reproducible.
+ * New production certification MUST use createJf5bGroqBindingMatrix.
+ */
 export function createJf5bBindingMatrix(
   groq: ProviderReleaseRef,
   nara: ProviderReleaseRef,
@@ -153,4 +172,14 @@ export function createJf5bBindingMatrix(
     }
   }
   return Object.freeze(bindings);
+}
+
+/** Current v2 production-certification matrix: one Groq release x three reviewed prompt bodies. */
+export function createJf5bGroqBindingMatrix(
+  groq: ProviderReleaseRef,
+  knowledgeRevision?: string,
+): readonly EvaluationBinding[] {
+  return Object.freeze(
+    CERTIFIED_AGENTS.map((agent) => createJf5bBinding(groq, agent, knowledgeRevision)),
+  );
 }

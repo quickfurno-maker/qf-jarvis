@@ -602,14 +602,13 @@ describe('JF-5B-R10 the preflight separates the smoke from the certification mod
     naraCandidates: [],
   }).join(String.fromCharCode(10));
 
-  it('names BOTH, so the owner never edits a local smoke file to change a candidate', () => {
-    // Two different things. Phase 1 proves a credential and a host with whatever model the supplied
-    // smoke config names; phase 3 certifies the model below. Conflating them cost an owner a pointless
-    // edit, which is why they are printed adjacently and labelled by phase.
+  it('separates the Groq smoke from the Groq-only certification model', () => {
     expect(lines).toContain(
       'groq connectivity smoke  as supplied by --groq-smoke-config (phase 1 only)',
     );
-    expect(lines).toContain('groq certification model openai/gpt-oss-120b (phase 3)');
+    expect(lines).toContain('groq certification model openai/gpt-oss-120b (phase 2)');
+    expect(lines).toContain('provider mode          GROQ_ONLY');
+    expect(lines).toContain('providers              groq only (Nara disabled; no hosted fallback)');
   });
 
   it('renders the model it was GIVEN, never a literal of its own', () => {
@@ -625,7 +624,7 @@ describe('JF-5B-R10 the preflight separates the smoke from the certification mod
       groqCertificationModelId: 'some/other-model',
       naraCandidates: [],
     }).join(String.fromCharCode(10));
-    expect(other).toContain('groq certification model some/other-model (phase 3)');
+    expect(other).toContain('groq certification model some/other-model (phase 2)');
     expect(other).not.toContain('gpt-oss');
   });
 });
@@ -644,13 +643,15 @@ describe('JF-5B (C) the preflight states every non-secret fact, and no secret', 
   });
   const text = lines.join('\n');
 
-  it('names the head, the ceilings, the endpoints and the output directory', () => {
+  it('names the head, Groq-only ceilings, endpoint and output directory', () => {
     expect(text).toContain('b'.repeat(40));
     expect(text).toContain('D:/jarvis-certification/JF-5B/run-1');
-    expect(text).toContain(NARA_MODELS_ENDPOINT);
-    expect(text).toContain('router.bynara.id');
     expect(text).toContain('api.groq.com');
-    expect(text).toContain(String(JF5B_BUDGET.maxTotalCalls));
+    expect(text).toContain('provider mode          GROQ_ONLY');
+    expect(text).toContain('max nara calls         0 (hard-disabled)');
+    expect(text).toContain('provider fallback      NONE');
+    expect(text).not.toContain(NARA_MODELS_ENDPOINT);
+    expect(text).not.toContain('router.bynara.id');
     expect(text).toContain('same-provider retry    0');
   });
 
@@ -666,13 +667,14 @@ describe('JF-5B (C) the preflight states every non-secret fact, and no secret', 
     expect(text).toContain('No production approval is minted');
   });
 
-  it('describes the Nara posture truthfully and never claims ZDR', () => {
-    expect(text).toContain('retained for a limited period');
-    expect(text).toContain('is NOT claimed as ZDR');
-    expect(text.toLowerCase()).not.toContain('zero data retention claim');
-    // The reference itself must not promise what the policy does not.
-    expect(NARA_DATA_CONTROLS_REF).not.toContain('zdr');
-    expect(NARA_DATA_CONTROLS_REF).not.toContain('zero-retention');
+  it('states that Nara is disabled and a future local provider is separately gated', () => {
+    expect(text).toContain(
+      'nara                   DISABLED — no credential, discovery, probe, certification or fallback call',
+    );
+    expect(text).toContain(
+      'future local provider  NOT ACTIVE — requires a separate release + certification before use',
+    );
+    expect(text).not.toContain(NARA_DATA_CONTROLS_REF);
   });
 
   it('carries no credential, and asks for none before both gates', () => {

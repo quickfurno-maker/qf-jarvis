@@ -78,6 +78,20 @@ export type NaraSelectionResult =
   | { readonly ok: true; readonly modelId: string; readonly probes: readonly NaraProbeSummary[] }
   | { readonly ok: false; readonly reason: string; readonly probes: readonly NaraProbeSummary[] };
 
+export interface CertifyGroqInput {
+  /**
+   * The Groq holder the connectivity phase already resolved.
+   *
+   * JF-5B-R25 current production certification is Groq-only: no Nara model/key is accepted by this
+   * input, so the direct certification path cannot accidentally reconstruct hosted fallback.
+   */
+  readonly groqApiKey: GroqApiKey;
+  readonly runId: string;
+  readonly headSha: string;
+  readonly ledger: CallLedger;
+}
+
+/** Historical v1 dual-provider input retained for old deterministic tests/audit helpers only. */
 export interface CertifyAllInput {
   /** The exact alias discovery selected. Never a router alias; never a documentation example. */
   readonly naraModelId: string;
@@ -171,10 +185,14 @@ export interface AutoRoutingResult {
  * provider/prompt pairs, and measure routing. A fourth would be a job nothing asked for.
  */
 export interface CertificationRunner {
-  /** Phase 2c. Bounded probes per shortlisted alias, through the gateway, never a raw transport. */
+  /**
+   * Current JF-5B-R25 path: Groq against Riya, Anisha and Aarohi with no fallback provider.
+   * This is the only method the live CLI is permitted to call.
+   */
+  certifyGroqOnly(input: CertifyGroqInput): Promise<CertifyAllResult>;
+
+  /** Historical v1 helpers retained for non-production audit/regression coverage only. */
   selectNaraModel(input: NaraSelectionInput): Promise<NaraSelectionResult>;
-  /** Phase 3. The six direct certifications: Groq and Nara, each against all three agents. */
   certifyAllSix(input: CertifyAllInput): Promise<CertifyAllResult>;
-  /** Phase 4. AUTO success, forced fallback and a non-fallback class. */
   certifyAutoRouting(input: AutoRoutingInput): Promise<AutoRoutingResult>;
 }

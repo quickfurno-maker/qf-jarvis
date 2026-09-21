@@ -27,44 +27,30 @@
 import {
   EXECUTE_LIVE_FLAG,
   EXIT_CODES,
-  JF5B_BUDGET,
+  JF5B_GROQ_ONLY_BUDGET,
   LIVE_CONFIRMATION_PHRASE,
-  buildNaraShortlist,
   checkArgvGate,
   checkOutputPath,
-  checkOwnerCandidates,
   checkTypedConfirmation,
   createCallLedger,
-  fetchNaraModelCatalogue,
   parseCertifyArgv,
-  parseNaraModelDiscovery,
   renderPreflightSummary,
-  resolveOwnerCandidateShortlist,
 } from '@qf-jarvis/jarvis-v1-provider-certification-live';
 import type {
   ArtifactWriter,
   ConfirmationReader,
   ExitCode,
   LiveCaseRecord,
-  NaraDiscoveryTransport,
   OperatorIo,
   RepositoryFacts,
   RunOutcome,
   RunPhase,
 } from '@qf-jarvis/jarvis-v1-provider-certification-live';
 
-import {
-  renderDiscoveryDiagnostic,
-  renderSchemaIssues,
-} from '@qf-jarvis/jarvis-v1-provider-certification-live';
-import type { DiscoveryDiagnostic } from '@qf-jarvis/jarvis-v1-provider-certification-live';
+import { renderSchemaIssues } from '@qf-jarvis/jarvis-v1-provider-certification-live';
 import { JF5B_GROQ_MODEL_ID } from '../composition/jf5b-certification-runner-impl.js';
-import type {
-  CertificationRunner,
-  Jf5bCaseDiagnostic,
-  NaraProbeSummary,
-} from './jf5b-certification-runner.js';
-import type { GroqConnectivityCheck, NaraCredentialGate } from './jf5b-live-deps.js';
+import type { CertificationRunner, Jf5bCaseDiagnostic } from './jf5b-certification-runner.js';
+import type { GroqConnectivityCheck } from './jf5b-live-deps.js';
 
 /** Everything the CLI needs from the outside world. Production wires it in `bin`; specs fake it. */
 export interface Jf5bCliDeps {
@@ -74,92 +60,9 @@ export interface Jf5bCliDeps {
   readonly runId: string;
   /** Phase 1: the EXISTING Groq staging smoke, composed. Never a second connectivity call. */
   readonly groqConnectivity: GroqConnectivityCheck;
-  /** Phase 2: the Nara credential, through the existing masked-TTY primitive. */
-  readonly naraCredential: NaraCredentialGate;
-  readonly discoveryTransport: NaraDiscoveryTransport;
-  /**
-   * The sanitized discovery-throw diagnostic (JF-5B-R11). Optional: a spec that does not care omits it.
-   *
-   * Read ONLY after `discovery-transport-failed`, which is the one failure whose cause was discarded on
-   * purpose. Every other discovery failure already names itself.
-   */
-  readonly discoveryDiagnostics?: { latest(): DiscoveryDiagnostic | undefined };
   /** Phases 3-4: the real three-agent Mastra composition. */
   readonly runner: CertificationRunner;
   readonly artifacts: ArtifactWriter;
-}
-
-/**
- * Print the SANITIZED per-candidate probe summary (JF-5B-R4).
- *
- * Two authenticated live runs ended with `no-shortlisted-alias-passed-the-hard-gates` and nothing else.
- * That is true, and it is almost useless: it says five aliases failed without saying what any of them
- * did, which is how a lane ends up guessing at another blind model set.
- *
- * Every field below comes from the existing `NaraProbeScore` or the existing sanitized
- * `LiveCaseRecord`. There is no reply text, no response body, no message content, no header and no
- * credential in either — `LiveCaseRecord` carries a DIGEST of the output and never the output, which is
- * exactly why it is the right vocabulary to print.
- */
-function sanitizedProbeSummaries(probes: readonly NaraProbeSummary[]) {
-  return probes.map((probe) => ({
-    modelId: probe.score.modelId,
-    hardGatesPassed: probe.score.hardGatesPassed,
-    qualityPassed: probe.score.qualityPassed,
-    qualityAttempted: probe.score.qualityAttempted,
-    p95LatencyMs: probe.score.p95LatencyMs,
-    totalTokens: probe.score.totalTokens,
-    cases: probe.cases.map((record) => {
-      const diagnostic = probe.diagnostics?.find((one) => one.caseId === record.caseId);
-      return {
-        caseId: record.caseId,
-        outcome: record.outcome,
-        structuredOutputValid: record.structuredOutputValid,
-        networkCalls: record.networkCalls,
-        providerAttempts: record.providerAttempts,
-        retryCount: record.retryCount,
-        latencyMs: record.latencyMs,
-        ...(record.providerErrorClass === undefined
-          ? {}
-          : { providerErrorClass: record.providerErrorClass }),
-        ...(record.reason === undefined ? {} : { reason: record.reason }),
-        ...(diagnostic?.wireDiagnostic === undefined
-          ? {}
-          : { wireDiagnostic: diagnostic.wireDiagnostic }),
-        ...(diagnostic?.schemaIssues === undefined
-          ? {}
-          : { schemaIssues: diagnostic.schemaIssues }),
-      };
-    }),
-  }));
-}
-
-function printProbeSummaries(io: OperatorIo, probes: readonly NaraProbeSummary[]): void {
-  for (const probe of probes) {
-    const score = probe.score;
-    io.out(
-      `  probe ${score.modelId}: hardGates=${score.hardGatesPassed ? 'PASS' : 'FAIL'} ` +
-        `quality=${String(score.qualityPassed)}/${String(score.qualityAttempted)} ` +
-        `p95=${String(score.p95LatencyMs)}ms tokens=${String(score.totalTokens)}`,
-    );
-    for (const record of probe.cases) {
-      const parts = [
-        `    ${record.caseId}`,
-        `outcome=${record.outcome}`,
-        `structuredValid=${record.structuredOutputValid ? 'yes' : 'no'}`,
-        `calls=${String(record.networkCalls)}`,
-        `attempts=${String(record.providerAttempts)}`,
-        `latency=${String(record.latencyMs)}ms`,
-      ];
-      if (record.providerErrorClass !== undefined) {
-        parts.push(`errorClass=${record.providerErrorClass}`);
-      }
-      if (record.reason !== undefined) {
-        parts.push(`reason=${record.reason}`);
-      }
-      io.out(parts.join(' '));
-    }
-  }
 }
 
 /**
@@ -387,51 +290,6 @@ function writeForbiddenClaimExcerpts(
   );
 }
 
-/**
- * Phase-2c counterpart of the phase-3 owner-local excerpt file.
- *
- * Selection already computes the SAME bounded diagnostic on each probe row. A refusal previously
- * discarded the excerpt even though the verdict depended on it, leaving the owner unable to tell a
- * real forbidden assertion from a safe referral phrased outside the closed matcher. Persisting it here
- * changes no score, hard gate, retry, pacing, routing, receipt or production evidence.
- */
-function writeSelectionForbiddenClaimExcerpts(
-  artifacts: Jf5bCliDeps['artifacts'],
-  probes: readonly NaraProbeSummary[],
-): void {
-  const items = probes.flatMap((probe) =>
-    (probe.diagnostics ?? [])
-      .filter(
-        (one) =>
-          one.matchedClaim !== undefined &&
-          (one.excerpt !== undefined || one.excerptOmitted !== undefined),
-      )
-      .map((one) => ({
-        modelId: probe.score.modelId,
-        provider: one.provider,
-        agent: one.agent,
-        caseId: one.caseId,
-        matchedClaim: one.matchedClaim,
-        ...(one.excerpt === undefined ? {} : { excerpt: one.excerpt }),
-        ...(one.excerptOmitted === undefined ? {} : { excerptOmitted: one.excerptOmitted }),
-      })),
-  );
-  if (items.length === 0) {
-    return;
-  }
-  artifacts.writeFile(
-    'review/phase2c-forbidden-claim-excerpts.json',
-    JSON.stringify(
-      {
-        note: 'OWNER REVIEW ONLY. Bounded local selection excerpts. Not evidence, not sealed, not read back.',
-        items,
-      },
-      null,
-      2,
-    ),
-  );
-}
-
 const stop = (
   phaseReached: RunPhase,
   exitCode: ExitCode,
@@ -475,16 +333,6 @@ export async function runJf5bLiveCertificationCli(
     return stop('PRECHECK', EXIT_CODES.INVALID_USAGE, 'groq-smoke-config-missing');
   }
 
-  // The owner candidate set is checked for SHAPE here, before the summary is even rendered: a set
-  // that could never be probed should cost nothing, and certainly not a credential. Whether each alias
-  // is currently ENTITLED is a question only the authenticated endpoint can answer, and phase 2b asks
-  // it after discovery.
-  const candidateShape = checkOwnerCandidates(parsed.naraCandidates);
-  if (!candidateShape.ok) {
-    deps.io.err(`refused: ${candidateShape.refusal} (${candidateShape.modelId})`);
-    return stop('PRECHECK', EXIT_CODES.INVALID_USAGE, candidateShape.refusal);
-  }
-
   if (!deps.facts.worktreeClean) {
     // A dirty tree means the artifacts could not name what actually ran.
     deps.io.err('refused: the worktree is dirty; a live result must name an exact head');
@@ -506,7 +354,6 @@ export async function runJf5bLiveCertificationCli(
     ciConclusion: 'success',
     outputDirectory: deps.facts.resolvedOutputDirectory,
     runId: deps.runId,
-    naraCandidates: parsed.naraCandidates,
     groqCertificationModelId: JF5B_GROQ_MODEL_ID,
   })) {
     deps.io.out(line);
@@ -522,7 +369,7 @@ export async function runJf5bLiveCertificationCli(
     return stop('PRECHECK', EXIT_CODES.GATE_REFUSED, confirmRefusal);
   }
 
-  const ledger = createCallLedger(JF5B_BUDGET);
+  const ledger = createCallLedger(JF5B_GROQ_ONLY_BUDGET);
   deps.artifacts.ensureDirectory(deps.facts.resolvedOutputDirectory);
 
   // ---------------------------------------------------------------- PHASE 1: Groq connectivity
@@ -556,215 +403,32 @@ export async function runJf5bLiveCertificationCli(
     );
   }
 
-  // ---------------------------------------------------------------- PHASE 2: Nara discovery
-  deps.io.out('phase 2: nara authenticated model discovery');
-  const credential = await deps.naraCredential.read();
-  if (!credential.ok) {
-    deps.io.err(`nara credential refused: ${credential.failure}`);
-    return stop(
-      'NARA_DISCOVERY',
-      EXIT_CODES.CREDENTIAL_REFUSED,
-      credential.failure,
-      ledger.groqCalls(),
-      ledger.naraCalls(),
-    );
-  }
-
-  const catalogue = await fetchNaraModelCatalogue(
-    deps.discoveryTransport,
-    credential.key,
-    () => ledger.reserve('nara', 0.001) === undefined,
-  );
-  if (!catalogue.ok) {
-    // UNCHANGED, verbatim: an operator and every prior run receipt read this exact line.
-    deps.io.err(`nara discovery failed: ${catalogue.failure}`);
-    // R15: persist the SAME closed-token reason the terminal already prints. Run-22 proved the prior
-    // terminal-only diagnostic was insufficient when the interactive window closed before review.
-    // No provider body, header, URL, credential, stack or free-text error is written here.
-    let discoveryDiagnostic: DiscoveryDiagnostic | undefined;
-    if (catalogue.failure === 'discovery-transport-failed') {
-      const diagnostic = deps.discoveryDiagnostics?.latest();
-      if (diagnostic !== undefined) {
-        discoveryDiagnostic = diagnostic;
-        deps.io.err(renderDiscoveryDiagnostic(diagnostic));
-      }
-    }
-    deps.artifacts.writeFile(
-      'receipt-discovery-failure.json',
-      JSON.stringify(
-        {
-          runId: deps.runId,
-          headSha: deps.facts.headSha,
-          phase: 'NARA_DISCOVERY',
-          reason: catalogue.failure,
-          groqCalls: ledger.groqCalls(),
-          naraCalls: ledger.naraCalls(),
-          ...(discoveryDiagnostic === undefined ? {} : { diagnostic: discoveryDiagnostic }),
-        },
-        null,
-        2,
-      ),
-    );
-    return stop(
-      'NARA_DISCOVERY',
-      EXIT_CODES.NARA_DISCOVERY_FAILED,
-      catalogue.failure,
-      ledger.groqCalls(),
-      ledger.naraCalls(),
-    );
-  }
-
-  const discovered = parseNaraModelDiscovery(catalogue.payload);
-  if (discovered === undefined) {
-    deps.io.err('nara discovery failed: the payload is not a model list; nothing was selected');
-    return stop(
-      'NARA_DISCOVERY',
-      EXIT_CODES.NARA_DISCOVERY_FAILED,
-      'discovery-not-a-model-list',
-      ledger.groqCalls(),
-      ledger.naraCalls(),
-    );
-  }
-  deps.io.out(
-    `  returned ${String(discovered.totalReturned)}, eligible ${String(discovered.eligible.length)}, rejected ${String(discovered.rejected.length)}`,
-  );
-
-  // ---------------------------------------------------------------- PHASE 2b: the shortlist
-  //
-  // Two paths, one outcome: a list of models THIS run's authenticated discovery returned.
-  //
-  //   - with owner candidates, each is re-verified against `discovered.eligible` by exact
-  //     case-sensitive match and the DISCOVERED object is carried forward;
-  //   - without them, the existing metadata rule applies unchanged, including its honest refusal.
-  //
-  // The owner answers "which models are worth probing?" and nothing else. No ranking happens on either
-  // path, and the scorer in phase 2c still chooses the winner.
-  const shortlist =
-    parsed.naraCandidates.length > 0
-      ? resolveOwnerCandidateShortlist(parsed.naraCandidates, discovered.eligible)
-      : buildNaraShortlist(discovered.eligible);
-  if (!shortlist.ok) {
-    // The honest stop. The sanitized alias list is printed so the owner can choose; nothing is guessed.
-    deps.io.err(`nara selection refused: ${shortlist.refusal}`);
-    for (const model of discovered.eligible) {
-      deps.io.out(`  eligible: ${model.modelId}`);
-    }
-    // R16: persist only the same sanitized selection facts already printed to the terminal.
-    // No provider body, prompt, model text, header, credential or URL is retained.
-    deps.artifacts.writeFile(
-      'receipt-selection-failure.json',
-      JSON.stringify(
-        {
-          runId: deps.runId,
-          headSha: deps.facts.headSha,
-          phase: 'NARA_SELECTION',
-          stage: 'SHORTLIST',
-          reason: shortlist.refusal,
-          groqCalls: ledger.groqCalls(),
-          naraCalls: ledger.naraCalls(),
-          eligibleModelIds: discovered.eligible.map((model) => model.modelId),
-        },
-        null,
-        2,
-      ),
-    );
-    return stop(
-      'NARA_SELECTION',
-      EXIT_CODES.NARA_SELECTION_REFUSED,
-      shortlist.refusal,
-      ledger.groqCalls(),
-      ledger.naraCalls(),
-    );
-  }
-  deps.io.out(
-    `  candidate source       ${parsed.naraCandidates.length > 0 ? 'OWNER_EXPLICIT' : 'DISCOVERY_METADATA'}`,
-  );
-  for (const model of shortlist.shortlist) {
-    deps.io.out(`  shortlisted: ${model.modelId}`);
-  }
-
-  // ---------------------------------------------------------------- PHASES 2c-5: through the runner
-  //
-  // Selection probes, the six direct certifications and the AUTO routing cases all run agent turns, and
-  // every agent turn must traverse the existing Mastra workflow. That composition lives in the runner,
-  // beside the application code that owns it, so this file stays a sequence rather than a second
-  // composition root.
-  deps.io.out('phase 2c: bounded selection probes through the Model Gateway');
-  const selected = await deps.runner.selectNaraModel({
-    shortlist: shortlist.shortlist,
-    apiKey: credential.key,
-    runId: deps.runId,
-    ledger,
-  });
-  printProbeSummaries(deps.io, selected.probes);
-  if (!selected.ok) {
-    deps.io.err(`nara selection refused: ${selected.reason}`);
-    // The bounded model-text excerpt stays OWNER-LOCAL and out of both terminal and receipt. It is
-    // diagnostic only: nothing reads it back and no selection outcome can depend on whether it exists.
-    writeSelectionForbiddenClaimExcerpts(deps.artifacts, selected.probes);
-    // R16: preserve the already-sanitized probe summary after the terminal closes. The subset mirrors
-    // `printProbeSummaries` and deliberately excludes output digests and every raw-content field.
-    deps.artifacts.writeFile(
-      'receipt-selection-failure.json',
-      JSON.stringify(
-        {
-          runId: deps.runId,
-          headSha: deps.facts.headSha,
-          phase: 'NARA_SELECTION',
-          stage: 'PROBES',
-          reason: selected.reason,
-          groqCalls: ledger.groqCalls(),
-          naraCalls: ledger.naraCalls(),
-          probes: sanitizedProbeSummaries(selected.probes),
-        },
-        null,
-        2,
-      ),
-    );
-    return stop(
-      'NARA_SELECTION',
-      EXIT_CODES.NARA_SELECTION_REFUSED,
-      selected.reason,
-      ledger.groqCalls(),
-      ledger.naraCalls(),
-    );
-  }
-  deps.io.out(`  selected: ${selected.modelId}`);
-
-  deps.io.out('phase 3: six direct provider certifications');
-  const certification = await deps.runner.certifyAllSix({
-    naraModelId: selected.modelId,
-    naraApiKey: credential.key,
-    // The holder phase 1 already resolved. One prompt for one secret.
+  // ---------------------------------------------------------------- PHASE 2: Groq-only three-agent certification
+  deps.io.out('phase 2: groq-only three-agent certification through the Model Gateway');
+  const certification = await deps.runner.certifyGroqOnly({
     groqApiKey: groq.key,
     runId: deps.runId,
     headSha: deps.facts.headSha,
     ledger,
   });
+
   if (!certification.ok) {
     deps.io.err(`certification failed: ${certification.reason}`);
     printCertificationFailure(deps.io, certification.cases, certification.diagnostics);
-    // Persist ONLY the already-sanitized terminal diagnostics. This lets the owner/local operator
-    // inspect a finished run later without retaining terminal scrollback or any raw provider content.
     writeSanitizedCaseDiagnostics(deps.artifacts, certification.diagnostics);
-    // The excerpts go to a FILE, never the terminal, and only on failure. See the function's header.
     writeForbiddenClaimExcerpts(deps.artifacts, certification.diagnostics);
-    // ONE sanitized receipt, in the already-approved external run directory. Deliberately NOT the raw
-    // bundle, the review bundle or the manifest: a failed certification has nothing to seal, and a raw
-    // bundle beside a refusal is content kept for a claim nobody is making.
     deps.artifacts.writeFile(
       'receipt-certification-failure.json',
       JSON.stringify(
         {
           runId: deps.runId,
           headSha: deps.facts.headSha,
+          providerMode: 'GROQ_ONLY',
           phase: 'CERTIFICATION',
           reason: certification.reason,
-          selectedNaraModelId: selected.modelId,
           groqCalls: ledger.groqCalls(),
           naraCalls: ledger.naraCalls(),
           counts: summarizeCaseCounts(certification.cases),
-          // The SAME sanitized subset the terminal prints, and no more. `outputDigest` is not here.
           nonPassCases: certification.cases
             .filter((one) => one.outcome !== 'PASS')
             .map((one) => ({
@@ -797,27 +461,19 @@ export async function runJf5bLiveCertificationCli(
     );
   }
 
-  deps.io.out('phase 4: AUTO routing');
-  const routing = await deps.runner.certifyAutoRouting({
-    naraModelId: selected.modelId,
-    naraApiKey: credential.key,
-    groqApiKey: groq.key,
-    runId: deps.runId,
-    ledger,
-  });
-  if (!routing.ok) {
-    deps.io.err(`auto routing failed: ${routing.reason}`);
+  if (certification.manifest === undefined) {
+    deps.io.err('certification failed: manifest-missing');
     return stop(
-      'AUTO_ROUTING',
-      EXIT_CODES.AUTO_ROUTING_FAILED,
-      routing.reason,
+      'CERTIFICATION',
+      EXIT_CODES.CERTIFICATION_FAILED,
+      'manifest-missing',
       ledger.groqCalls(),
       ledger.naraCalls(),
     );
   }
 
-  // ---------------------------------------------------------------- PHASE 5: artifacts
-  deps.io.out('phase 5: artifacts');
+  // ---------------------------------------------------------------- PHASE 3: artifacts
+  deps.io.out('phase 3: artifacts');
   deps.artifacts.writeFile('raw/live-outputs.json', certification.rawBundle);
   deps.artifacts.writeFile('review/blinded-review-bundle.json', certification.reviewBundle);
   deps.artifacts.writeFile('receipts/cases.json', JSON.stringify(certification.cases, null, 2));
@@ -825,6 +481,7 @@ export async function runJf5bLiveCertificationCli(
   const manifestDigest = deps.artifacts.digestOf('manifest.json');
 
   deps.io.out(`  manifest digest ${manifestDigest}`);
+  deps.io.out('  provider mode GROQ_ONLY; Nara is disabled and was not contacted.');
   deps.io.out('  NO production approval was minted. JF-5C owns the owner seal.');
 
   return Object.freeze({

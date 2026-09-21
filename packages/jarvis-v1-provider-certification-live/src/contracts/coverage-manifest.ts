@@ -16,7 +16,12 @@
  */
 import { z } from 'zod';
 
-import { CERTIFIED_AGENTS, CERTIFIED_PROVIDERS } from '../releases/jf5b-releases.js';
+import {
+  ACTIVE_CERTIFICATION_PROVIDERS,
+  CERTIFIED_AGENTS,
+  CERTIFIED_PROVIDERS,
+  JF5B_PROVIDER_MODE,
+} from '../releases/jf5b-releases.js';
 
 /** Whether a case needed a model at all. A pre-model case is certified with zero network calls. */
 export const EXECUTION_LAYERS = ['PRE_MODEL_REQUIRED', 'MODEL_REQUIRED'] as const;
@@ -116,41 +121,65 @@ const entrySchema = z
   })
   .strict();
 
-const manifestSchema = z
+const manifestCommon = {
+  runId: IDENTIFIER,
+  /** The exact repository head the operator ran at. */
+  headSha: z.string().regex(/^[0-9a-f]{40}$/),
+  createdAt: z.string().min(1).max(64),
+  dataControlsRefs: z.array(IDENTIFIER).min(1).max(8),
+} as const;
+
+/** Historical dual-provider manifest. Readable for audit, never newly production-authorizing. */
+const manifestV1Schema = z
   .object({
     manifestVersion: z.literal(1),
-    runId: IDENTIFIER,
-    /** The exact repository head the operator ran at. */
-    headSha: z.string().regex(/^[0-9a-f]{40}$/),
-    createdAt: z.string().min(1).max(64),
-    dataControlsRefs: z.array(IDENTIFIER).min(1).max(8),
+    ...manifestCommon,
     entries: z.array(entrySchema).length(6),
   })
   .strict();
 
+/** Current owner posture: Groq only, exactly three prompt-scoped bindings. */
+const manifestV2Schema = z
+  .object({
+    manifestVersion: z.literal(2),
+    providerMode: z.literal(JF5B_PROVIDER_MODE),
+    ...manifestCommon,
+    entries: z.array(entrySchema).length(3),
+  })
+  .strict();
+
+const manifestSchema = z.discriminatedUnion('manifestVersion', [
+  manifestV1Schema,
+  manifestV2Schema,
+]);
+
 export type Jf5bCoverageManifest = z.infer<typeof manifestSchema>;
 
 /**
- * Build the six-binding coverage manifest.
+ * Validate either historical v1 (Groq+Nara) or current v2 (Groq-only) coverage.
  *
- * EXACTLY six entries, and exactly one per provider and agent pair: the schema pins the length and this
- * function pins the pairing. Five entries would be a provider certified for two prompt bodies presented
- * as if it were three, which is the specific dishonesty the six-binding rule exists to prevent.
+ * The provider roster is derived from the manifest version, never from whatever entries happened to
+ * arrive. v2 therefore cannot smuggle a Nara row into a Groq-only production claim.
  */
 export function createJf5bCoverageManifest(input: unknown): Jf5bCoverageManifest {
   const parsed = manifestSchema.safeParse(input);
   if (!parsed.success) {
     throw new Error('invalid-coverage-manifest');
   }
+  const providers =
+    parsed.data.manifestVersion === 2 ? ACTIVE_CERTIFICATION_PROVIDERS : CERTIFIED_PROVIDERS;
   const seen = new Set<string>();
   for (const entry of parsed.data.entries) {
+    if (!providers.includes(entry.provider as never)) {
+      throw new Error('invalid-coverage-manifest');
+    }
     const key = `${entry.provider}/${entry.agent}`;
     if (seen.has(key)) {
       throw new Error('invalid-coverage-manifest');
     }
     seen.add(key);
   }
-  for (const provider of CERTIFIED_PROVIDERS) {
+  for (const provider of providers) {
     for (const agent of CERTIFIED_AGENTS) {
       if (!seen.has(`${provider}/${agent}`)) {
         throw new Error('invalid-coverage-manifest');
@@ -160,11 +189,11 @@ export function createJf5bCoverageManifest(input: unknown): Jf5bCoverageManifest
   // Distinct prompt digests per provider: three agents, three reviewed bodies. A manifest whose three
   // entries for one provider shared a digest would be exactly the "one prompt stands in for three"
   // shortcut, wearing the shape of full coverage.
-  for (const provider of CERTIFIED_PROVIDERS) {
+  for (const provider of providers) {
     const digests = parsed.data.entries
       .filter((entry) => entry.provider === provider)
       .map((entry) => entry.promptDigest);
-    if (new Set(digests).size !== digests.length) {
+    if (new Set(digests).size !== CERTIFIED_AGENTS.length) {
       throw new Error('invalid-coverage-manifest');
     }
   }

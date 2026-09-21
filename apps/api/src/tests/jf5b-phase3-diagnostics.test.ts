@@ -21,21 +21,31 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { EXIT_CODES, createLiveCaseRecord } from '@qf-jarvis/jarvis-v1-provider-certification-live';
+import {
+  CERTIFIED_AGENTS,
+  EXIT_CODES,
+  GROQ_DATA_CONTROLS_REF,
+  JF5B_EVALUATION_SUITE_ID,
+  JF5B_EVALUATION_SUITE_VERSION,
+  JF5B_FIXTURE_MANIFEST_ID,
+  JF5B_PROVIDER_MODE,
+  JF5B_RED_TEAM_SUITE_ID,
+  PROMPT_BY_AGENT,
+  createJf5bCoverageManifest,
+  createLiveCaseRecord,
+} from '@qf-jarvis/jarvis-v1-provider-certification-live';
 import type {
   ArtifactWriter,
   ConfirmationReader,
-  DiscoveryHttpResponse,
   LiveCaseRecord,
-  NaraDiscoveryTransport,
   OperatorIo,
   RepositoryFacts,
 } from '@qf-jarvis/jarvis-v1-provider-certification-live';
-import { createGroqApiKey, createNaraApiKey } from '@qf-jarvis/model-gateway';
+import { createGroqApiKey } from '@qf-jarvis/model-gateway';
 import { describe, expect, it } from 'vitest';
 
 import type { CertificationRunner, Jf5bCaseDiagnostic } from '../cli/jf5b-certification-runner.js';
-import type { GroqConnectivityCheck, NaraCredentialGate } from '../cli/jf5b-live-deps.js';
+import type { GroqConnectivityCheck } from '../cli/jf5b-live-deps.js';
 import { runJf5bLiveCertificationCli } from '../cli/run-jf5b-live-certification.js';
 import type { Jf5bCliDeps } from '../cli/run-jf5b-live-certification.js';
 
@@ -55,9 +65,9 @@ const record = (
     caseVersion: 1,
     agent: 'ANISHA',
     agentScope: 'VENDOR',
-    provider: 'nara',
-    releaseId: 'rel.jf5b.nara.1',
-    modelId: 'agnes-2.5-flash',
+    provider: 'groq',
+    releaseId: 'rel.jf5b.groq.1',
+    modelId: 'openai/gpt-oss-120b',
     modelVersion: 'certification-snapshot-2026-09-11',
     configDigest: 'abcdef0123456789',
     promptFamily: 'anisha.vendor-journey',
@@ -102,8 +112,42 @@ const RUN7_LIKE: readonly LiveCaseRecord[] = Object.freeze([
     providerErrorClass: 'provider-terminal',
     latencyMs: 26_633,
   }),
-  record({ caseId: 'riya.opening-need.en', agent: 'RIYA', agentScope: 'CLIENT', provider: 'groq' }),
+  record({ caseId: 'riya.opening-need.en', agent: 'RIYA', agentScope: 'CLIENT' }),
 ]);
+
+const SUCCESS_MANIFEST = createJf5bCoverageManifest({
+  manifestVersion: 2,
+  providerMode: JF5B_PROVIDER_MODE,
+  runId: 'run.jf5b.test',
+  headSha: 'a'.repeat(40),
+  createdAt: '2026-09-21T06:00:00Z',
+  dataControlsRefs: [GROQ_DATA_CONTROLS_REF],
+  entries: CERTIFIED_AGENTS.map((agent, index) => {
+    const prompt = PROMPT_BY_AGENT[agent];
+    return {
+      provider: 'groq' as const,
+      agent,
+      releaseId: 'rel.jf5b.groq.1',
+      modelId: 'openai/gpt-oss-120b',
+      modelVersion: 'certification-snapshot-2026-09-11',
+      configDigest: 'c'.repeat(64),
+      promptFamily: prompt.promptId,
+      promptVersion: prompt.promptVersion,
+      promptDigest: prompt.contentDigest,
+      evaluationSuiteId: JF5B_EVALUATION_SUITE_ID,
+      evaluationSuiteVersion: JF5B_EVALUATION_SUITE_VERSION,
+      redTeamSuiteId: JF5B_RED_TEAM_SUITE_ID,
+      fixtureManifestId: JF5B_FIXTURE_MANIFEST_ID,
+      liveRunId: 'run.jf5b.test',
+      caseSetDigest: String(index + 1).repeat(64),
+      resultDigest: String(index + 4).repeat(64),
+      safety: 'PASS' as const,
+      qualityReview: 'REVIEW_PENDING' as const,
+      languageCounts: { EN: 1, HI: 1, HINGLISH: 1 },
+      reviewBundleDigest: 'd'.repeat(64),
+    };
+  }),
+});
 
 function harness(
   over: {
@@ -140,46 +184,31 @@ function harness(
       });
     },
   };
-  const naraCredential: NaraCredentialGate = {
-    read: () =>
-      Promise.resolve({
-        ok: true as const,
-        key: createNaraApiKey('nara-synthetic-certification-key-000'),
-      }),
-  };
-  const discoveryTransport: NaraDiscoveryTransport = {
-    get: (): Promise<DiscoveryHttpResponse> => {
-      const body = JSON.stringify({ data: [{ id: 'agnes-2.5-flash' }] });
-      return Promise.resolve({
-        status: 200,
-        redirected: false,
-        bodyText: body,
-        bodyBytes: body.length,
-      });
-    },
-  };
+  const certificationResult = () =>
+    Promise.resolve({
+      ok: over.ok ?? false,
+      reason: (over.ok ?? false) ? 'certified' : 'forbidden-claim-asserted',
+      cases: over.cases ?? RUN7_LIKE,
+      diagnostics: over.diagnostics ?? [],
+      manifest: (over.ok ?? false) ? SUCCESS_MANIFEST : undefined,
+      // The raw and review bundles EXIST on the result, carrying the sentinel. A failed certification
+      // must write neither.
+      rawBundle: JSON.stringify({ answer: RAW_REPLY }),
+      reviewBundle: JSON.stringify({ answer: RAW_REPLY }),
+    });
+
   const runner: CertificationRunner = {
-    selectNaraModel: () =>
-      Promise.resolve({ ok: true as const, modelId: 'agnes-2.5-flash', probes: [] }),
-    certifyAllSix: () =>
-      Promise.resolve({
-        ok: over.ok ?? false,
-        reason: (over.ok ?? false) ? 'certified' : 'forbidden-claim-asserted',
-        cases: over.cases ?? RUN7_LIKE,
-        diagnostics: over.diagnostics ?? [],
-        manifest: undefined,
-        // The raw and review bundles EXIST on the result, carrying the sentinel. The point of these
-        // specs is that a failed phase 3 writes neither.
-        rawBundle: JSON.stringify({ answer: RAW_REPLY }),
-        reviewBundle: JSON.stringify({ answer: RAW_REPLY }),
-      }),
+    certifyGroqOnly: certificationResult,
+    // Historical methods remain on the interface for v1 audit tests but are unreachable from this CLI.
+    selectNaraModel: () => Promise.resolve({ ok: false as const, reason: 'disabled', probes: [] }),
+    certifyAllSix: certificationResult,
     certifyAutoRouting: () =>
       Promise.resolve({
-        ok: true,
-        reason: 'routing-certified',
+        ok: false,
+        reason: 'disabled',
         groqSuccessNaraCalls: 0,
-        forcedFallbackAttempts: 2,
-        forcedFallbackNaraCalls: 1,
+        forcedFallbackAttempts: 0,
+        forcedFallbackNaraCalls: 0,
         nonFallbackNaraCalls: 0,
         retryCount: 0,
       }),
@@ -195,8 +224,6 @@ function harness(
     facts,
     runId: 'run.jf5b.test',
     groqConnectivity,
-    naraCredential,
-    discoveryTransport,
     runner,
     artifacts,
   };
@@ -209,8 +236,6 @@ const ARGV = [
   OUTSIDE,
   '--groq-smoke-config',
   'D:/certification/smoke.json',
-  '--nara-candidate',
-  'agnes-2.5-flash',
 ];
 
 async function failedRun(over: Parameters<typeof harness>[0] = {}) {
@@ -237,21 +262,21 @@ describe('JF-5B-R5 a phase-3 failure says WHAT failed', () => {
   it('groups by provider and agent from the existing fields', async () => {
     const { all } = await failedRun();
     expect(all).toContain('groq/RIYA: PASS 1 FAIL 0 INCONCLUSIVE 0');
-    expect(all).toContain('nara/ANISHA: PASS 1 FAIL 1 INCONCLUSIVE 1');
-    expect(all).toContain('nara/AAROHI: PASS 0 FAIL 1 INCONCLUSIVE 0');
+    expect(all).toContain('groq/ANISHA: PASS 1 FAIL 1 INCONCLUSIVE 1');
+    expect(all).toContain('groq/AAROHI: PASS 0 FAIL 1 INCONCLUSIVE 0');
   });
 
   it('names provider, agent and caseId on every FAIL', async () => {
     const { all } = await failedRun();
-    expect(all).toContain('case nara/ANISHA/anisha.payment-claim-challenge.en:');
-    expect(all).toContain('case nara/AAROHI/aarohi.system-prompt-extraction.en:');
+    expect(all).toContain('case groq/ANISHA/anisha.payment-claim-challenge.en:');
+    expect(all).toContain('case groq/AAROHI/aarohi.system-prompt-extraction.en:');
     expect(all).toContain('reason=forbidden-claim-asserted');
     expect(all).toContain('outcome=FAIL');
   });
 
   it('names the provider error class on an INCONCLUSIVE case', async () => {
     const { all } = await failedRun();
-    expect(all).toContain('case nara/ANISHA/anisha.knowledge-injection.en:');
+    expect(all).toContain('case groq/ANISHA/anisha.knowledge-injection.en:');
     expect(all).toContain('errorClass=provider-terminal');
     expect(all).toContain('structuredValid=no');
   });
@@ -263,7 +288,7 @@ describe('JF-5B-R5 a phase-3 failure says WHAT failed', () => {
       'attempts=1',
       'retry=0',
       'latency=7330ms',
-      'model=agnes-2.5-flash',
+      'model=openai/gpt-oss-120b',
     ]) {
       expect([field, all.includes(field)]).toEqual([field, true]);
     }
@@ -273,7 +298,7 @@ describe('JF-5B-R5 a phase-3 failure says WHAT failed', () => {
     const { all } = await failedRun();
     expect(all).toContain('non-PASS cases (3):');
     // Counted, not listed. A failure report that reprinted every success would bury the failures.
-    expect(all).not.toContain('case nara/ANISHA/anisha.routine-question.en:');
+    expect(all).not.toContain('case groq/ANISHA/anisha.routine-question.en:');
     expect(all).not.toContain('case groq/RIYA/riya.opening-need.en:');
   });
 });
@@ -331,13 +356,15 @@ describe('JF-5B-R5 a failed certification writes no evidence it cannot back', ()
     const receipt = JSON.parse(seen.files[0]?.contents ?? '{}') as {
       readonly phase?: string;
       readonly reason?: string;
-      readonly selectedNaraModelId?: string;
+      readonly providerMode?: string;
+      readonly naraCalls?: number;
       readonly counts?: Record<string, number>;
       readonly nonPassCases?: readonly Record<string, unknown>[];
     };
     expect(receipt.phase).toBe('CERTIFICATION');
     expect(receipt.reason).toBe('forbidden-claim-asserted');
-    expect(receipt.selectedNaraModelId).toBe('agnes-2.5-flash');
+    expect(receipt.providerMode).toBe('GROQ_ONLY');
+    expect(receipt.naraCalls).toBe(0);
     expect(receipt.counts).toEqual({ total: 5, pass: 2, fail: 2, inconclusive: 1, other: 0 });
     expect(receipt.nonPassCases).toHaveLength(3);
     // An EXACT key set per case, so a field cannot be added here without somebody deciding to.
@@ -547,7 +574,7 @@ const R8_DIAGNOSTICS: readonly Jf5bCaseDiagnostic[] = Object.freeze([
   }),
   // The INCONCLUSIVE row: a provider failure, carrying the wire line and the schema tokens.
   Object.freeze({
-    provider: 'nara',
+    provider: 'groq',
     agent: 'ANISHA',
     caseId: 'anisha.knowledge-injection.en',
     wireDiagnostic:
@@ -557,7 +584,7 @@ const R8_DIAGNOSTICS: readonly Jf5bCaseDiagnostic[] = Object.freeze([
   }),
   // A claim FAIL that may be quoted.
   Object.freeze({
-    provider: 'nara',
+    provider: 'groq',
     agent: 'ANISHA',
     caseId: 'anisha.payment-claim-challenge.en',
     matchedClaim: 'payment received',
@@ -565,7 +592,7 @@ const R8_DIAGNOSTICS: readonly Jf5bCaseDiagnostic[] = Object.freeze([
   }),
   // A claim FAIL that may NOT be quoted.
   Object.freeze({
-    provider: 'nara',
+    provider: 'groq',
     agent: 'AAROHI',
     caseId: 'aarohi.system-prompt-extraction.en',
     matchedClaim: 'system prompt',
@@ -734,7 +761,7 @@ const FAILED_GENERATION_SENTINEL = 'ZZFAILEDGENERATIONSENTINEL';
 
 const R9_DIAGNOSTICS: readonly Jf5bCaseDiagnostic[] = Object.freeze([
   Object.freeze({
-    provider: 'nara',
+    provider: 'groq',
     agent: 'ANISHA',
     caseId: 'anisha.knowledge-injection.en',
     wireDiagnostic:
@@ -773,7 +800,7 @@ describe('JF-5B-R9 (22-26) the failed-generation diagnostic reaches the operator
     // The sentinel is placed where a careless implementation would put it: in the diagnostic itself.
     const leaky: readonly Jf5bCaseDiagnostic[] = [
       Object.freeze({
-        provider: 'nara',
+        provider: 'groq',
         agent: 'ANISHA',
         caseId: 'anisha.knowledge-injection.en',
         wireDiagnostic: 'diagnostic=GROQ_JSON_VALIDATE_FAILED failedGenerationPresent=true',
