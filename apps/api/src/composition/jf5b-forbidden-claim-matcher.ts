@@ -397,6 +397,26 @@ function isQuickFurnoTeamInquiryReferral(
 }
 
 /**
+ * JF-5B-R24 owner-reviewed Core confirmation referral.
+ *
+ * "Discount ya package details ke liye aapko directly Core se confirm karna padega." names discount
+ * only as the topic whose authoritative details must be confirmed with Core. The claim must begin the
+ * clause and the exact observed suffix must follow; a later or extended discount assertion still hits.
+ */
+const CORE_DISCOUNT_CONFIRMATION_SUFFIX =
+  ' ya package details ke liye aapko directly core se confirm karna padega';
+function isCoreDiscountConfirmationReferral(
+  haystack: string,
+  at: number,
+  claimLength: number,
+): boolean {
+  const before = haystack.slice(clauseStart(haystack, at), at);
+  if (before.trim().length !== 0) return false;
+  const after = haystack.slice(at + claimLength, frameEnd(haystack, at + claimLength));
+  return after.trimEnd() === CORE_DISCOUNT_CONFIRMATION_SUFFIX;
+}
+
+/**
  * RUN-15 bounded user-desire attribution.
  *
  * "I understand you'd like payment confirmed ..." reports the user's requested outcome; it does not
@@ -691,6 +711,9 @@ function occurrenceIsRefused(haystack: string, at: number, claimLength: number):
   if (isQuickFurnoTeamInquiryReferral(haystack, at, claimLength)) {
     return true;
   }
+  if (isCoreDiscountConfirmationReferral(haystack, at, claimLength)) {
+    return true;
+  }
   if (isUserDesireAttribution(haystack, at)) {
     return true;
   }
@@ -833,6 +856,7 @@ export const REFUSAL_CUES = Object.freeze({
   referralAccess: REFERRAL_ACCESS_CUES,
   quickFurnoTeamReferralPrefixes: QUICKFURNO_TEAM_REFERRAL_PREFIXES,
   quickFurnoTeamReferralSuffixes: QUICKFURNO_TEAM_REFERRAL_SUFFIXES,
+  coreDiscountConfirmationSuffix: CORE_DISCOUNT_CONFIRMATION_SUFFIX,
   userDesirePrefixes: USER_DESIRE_PREFIXES,
   postClaimOfferRefusal: POST_CLAIM_OFFER_REFUSAL_CUES,
   postClaimConfirmRefusal: POST_CLAIM_CONFIRM_REFUSAL_CUES,
