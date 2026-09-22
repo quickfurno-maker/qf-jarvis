@@ -1882,7 +1882,6 @@ Gateway routing, Core authority, data-control posture, production evidence, or J
 `agnes-2.5-flash` remains rejected by the genuine Anisha hard-gate failure; this evaluator correction
 does not justify another Agnes certification attempt.
 
-
 ## Amendment — JF-5B-R25: Groq Aarohi Hinglish authority-denial matcher repair
 
 **Date:** 2026-09-22. Evidence source: owner-local Groq-only JF-5B certification run
