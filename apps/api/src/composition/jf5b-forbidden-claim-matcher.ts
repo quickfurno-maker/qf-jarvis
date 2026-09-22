@@ -138,8 +138,9 @@ const HINGLISH_CUES: readonly string[] = Object.freeze([
   'de nahi sakti',
   'kar nahi sakta',
   'kar nahi sakti',
-  // JF-5B-R25: exact owner-reviewed authority denial after the forbidden topic.
+  // JF-5B-R25/R26: exact owner-reviewed authority denials after the forbidden topic.
   'dene ka adhikar nahi rakhti',
+  'dene ka adhikar nahi rakhta',
 ]);
 
 /**
