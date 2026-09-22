@@ -25,7 +25,10 @@ import type { PromptRegistry } from '@qf-jarvis/prompt-registry';
 import type { AuthoritativeConversationStatePort } from './authoritative-state.js';
 import type { ClientSalesBehaviourInputPort } from './behaviour-input.js';
 import type { AarohiAcquisitionBehaviourInputPort } from './aarohi-acquisition-behaviour-input.js';
-import type { AgentGroundedKnowledgePolicy } from './agent-knowledge-policy.js';
+import type {
+  AgentGroundedKnowledgePolicy,
+  AgentHybridKnowledgePolicy,
+} from './agent-knowledge-policy.js';
 import type { VendorJourneyBehaviourInputPort } from './vendor-journey-behaviour-input.js';
 import type { JarvisRuntimeObservabilityHook } from './observability.js';
 
@@ -183,6 +186,15 @@ export interface JarvisRuntimeConfig {
    * an existing RWC-P7 deployment keeps byte-identical behaviour.
    */
   readonly agentGroundedKnowledge?: AgentGroundedKnowledgePolicy;
+
+  /**
+   * Optional scalable semantic/hybrid grounding policy.
+   *
+   * This is separate from the exact shared policy above. A deployment may configure at most one
+   * shared three-agent grounding plane. Scope and purpose remain derived from the assigned actor in
+   * code; configuration supplies only bounded search controls and optional topic prefilters.
+   */
+  readonly agentHybridKnowledge?: AgentHybridKnowledgePolicy;
 
   /** Optional deployment-level provenance references; safe defaults are derived when absent. */
   readonly provenanceRefs?: JarvisProvenanceRefs;

@@ -65,6 +65,11 @@ import type {
   KnowledgeRetrievalResult as M2KnowledgeRetrievalResult,
 } from '@qf-jarvis/agent-runtime';
 import { createRetrievalRequest, retrieveGovernedKnowledge } from '@qf-jarvis/governed-knowledge';
+import { createHybridKnowledgeSearchRequest } from '@qf-jarvis/knowledge-index';
+import type {
+  HybridKnowledgeRetrievalResult,
+  HybridKnowledgeSearchRequest,
+} from '@qf-jarvis/knowledge-index';
 import type {
   GovernedKnowledgeRegistry,
   KnowledgeAgentScope,
@@ -78,6 +83,7 @@ import {
   RIYA_KNOWLEDGE_PURPOSE,
   RIYA_KNOWLEDGE_SCOPE,
 } from '../contracts/agent-knowledge-policy.js';
+import type { HybridKnowledgeRetrievalPort } from '../contracts/agent-knowledge-policy.js';
 
 /**
  * The RWC-P7 record ceiling.
@@ -292,5 +298,115 @@ export function createRiyaGroundedKnowledgeBridge(
     ...input,
     agentScope: RIYA_KNOWLEDGE_SCOPE,
     purpose: RIYA_KNOWLEDGE_PURPOSE,
+  });
+}
+
+/** Inputs for one semantic/hybrid grounded turn. */
+export interface AgentHybridGroundedKnowledgeBridgeInput {
+  readonly envelope: InboundEnvelope;
+  readonly topicFilters: readonly string[];
+  readonly agentScope: KnowledgeAgentScope;
+  readonly purpose: KnowledgePurpose;
+  readonly candidatePool: number;
+  readonly maxResults: number;
+  readonly maxContentChars: number;
+  readonly retrieval: HybridKnowledgeRetrievalPort;
+}
+
+/**
+ * Build the shared scalable grounding bridge for one turn.
+ *
+ * The semantic query is never caller-configured: it is the normalized text already bound to the
+ * authenticated inbound envelope. M2 still sees only its old citation-only KnowledgePort surface.
+ */
+export function createAgentHybridGroundedKnowledgeBridge(
+  input: AgentHybridGroundedKnowledgeBridgeInput,
+): RiyaGroundedKnowledgeBridge {
+  const envelope = input.envelope;
+  const topicFilters = Object.freeze([...input.topicFilters]);
+  let captured: RiyaGroundedKnowledgeContextV1 | undefined;
+  let attempted = false;
+
+  const refused = (): M2KnowledgeRetrievalResult =>
+    Object.freeze({ ok: false as const, reason: 'orchestration-knowledge-refused' as const });
+
+  const knowledgePort: KnowledgePort = {
+    async retrieve(request: M2KnowledgeRetrievalRequest): Promise<M2KnowledgeRetrievalResult> {
+      if (attempted) return refused();
+      attempted = true;
+
+      if (
+        request.conversationId !== envelope.conversationId ||
+        request.dataClass !== envelope.dataClass ||
+        request.topics.length !== topicFilters.length ||
+        !topicFilters.every((topic, index) => request.topics[index] === topic)
+      ) {
+        return refused();
+      }
+
+      const queryText = envelope.normalizedText?.trim();
+      if (queryText === undefined || queryText.length === 0) return refused();
+
+      let hybridRequest: HybridKnowledgeSearchRequest;
+      try {
+        hybridRequest = createHybridKnowledgeSearchRequest({
+          requestId: envelope.messageId,
+          tenantId: envelope.tenantId,
+          agentScope: input.agentScope,
+          purpose: input.purpose,
+          dataClass: envelope.dataClass,
+          asOf: envelope.receivedAt,
+          queryText,
+          topicFilters,
+          candidatePool: input.candidatePool,
+          maxResults: input.maxResults,
+          maxContentChars: input.maxContentChars,
+        });
+      } catch {
+        return refused();
+      }
+
+      let result: HybridKnowledgeRetrievalResult;
+      try {
+        result = await input.retrieval.retrieve(hybridRequest);
+      } catch {
+        return refused();
+      }
+      if (!result.ok) return refused();
+
+      captured = Object.freeze({
+        version: 1 as const,
+        records: Object.freeze(
+          result.hits.map((hit) =>
+            Object.freeze({
+              knowledgeId: hit.citation.knowledgeId,
+              version: hit.citation.version,
+              topic: hit.topic,
+              contentFormat: hit.contentFormat,
+              content: hit.content,
+            }),
+          ),
+        ),
+      });
+
+      return Object.freeze({
+        ok: true as const,
+        citations: Object.freeze(
+          result.hits.map((hit) =>
+            Object.freeze({
+              knowledgeId: hit.citation.knowledgeId,
+              version: hit.citation.version,
+              source: hit.citation.sourceRef,
+              digest: hit.citation.contentDigest,
+            }),
+          ),
+        ),
+      });
+    },
+  };
+
+  return Object.freeze({
+    knowledgePort,
+    readCaptured: () => captured,
   });
 }

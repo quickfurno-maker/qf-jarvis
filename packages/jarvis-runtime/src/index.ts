@@ -98,6 +98,9 @@ export type {
   AgentGroundedKnowledgePolicy,
   AgentKnowledgeBinding,
   AgentKnowledgeTopicPolicy,
+  AgentHybridKnowledgePolicy,
+  AgentHybridKnowledgeSearchPolicy,
+  HybridKnowledgeRetrievalPort,
   GroundedAgentActor,
 } from './contracts/agent-knowledge-policy.js';
 

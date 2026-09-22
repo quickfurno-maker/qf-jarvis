@@ -488,6 +488,9 @@ importers:
       '@qf-jarvis/governed-knowledge':
         specifier: workspace:*
         version: link:../governed-knowledge
+      '@qf-jarvis/knowledge-index':
+        specifier: workspace:*
+        version: link:../knowledge-index
       '@qf-jarvis/model-reply-adapter':
         specifier: workspace:*
         version: link:../model-reply-adapter
@@ -571,6 +574,21 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
 
+  packages/knowledge-index:
+    dependencies:
+      '@qf-jarvis/governed-knowledge':
+        specifier: workspace:*
+        version: link:../governed-knowledge
+      '@qf-jarvis/knowledge-ingestion':
+        specifier: workspace:*
+        version: link:../knowledge-ingestion
+
+  packages/knowledge-ingestion:
+    dependencies:
+      '@qf-jarvis/governed-knowledge':
+        specifier: workspace:*
+        version: link:../governed-knowledge
+
   packages/model-evaluation:
     dependencies:
       zod:
@@ -609,6 +627,12 @@ importers:
       zod:
         specifier: 4.4.3
         version: 4.4.3
+
+  packages/openai-compatible-embedding-adapter:
+    dependencies:
+      '@qf-jarvis/knowledge-index':
+        specifier: workspace:*
+        version: link:../knowledge-index
 
   packages/postgres-approval-queue:
     dependencies:
@@ -666,6 +690,25 @@ importers:
       '@qf-jarvis/event-backbone':
         specifier: workspace:*
         version: link:../event-backbone
+      '@types/pg':
+        specifier: 8.20.0
+        version: 8.20.0
+
+  packages/postgres-knowledge-index:
+    dependencies:
+      '@qf-jarvis/governed-knowledge':
+        specifier: workspace:*
+        version: link:../governed-knowledge
+      '@qf-jarvis/knowledge-index':
+        specifier: workspace:*
+        version: link:../knowledge-index
+      '@qf-jarvis/knowledge-ingestion':
+        specifier: workspace:*
+        version: link:../knowledge-ingestion
+      pg:
+        specifier: 8.22.0
+        version: 8.22.0
+    devDependencies:
       '@types/pg':
         specifier: 8.20.0
         version: 8.20.0

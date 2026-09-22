@@ -12,6 +12,11 @@
  * three-agent RAG policy is the newer (ADR-0150 §43).
  */
 import { GovernedKnowledgeError, createRetrievalRequest } from '@qf-jarvis/governed-knowledge';
+import {
+  MAX_HYBRID_CANDIDATES,
+  MAX_HYBRID_RESULTS,
+  MAX_HYBRID_TOPIC_FILTERS,
+} from '@qf-jarvis/knowledge-index';
 
 import {
   AGENT_KNOWLEDGE_BINDINGS,
@@ -35,7 +40,9 @@ export function assertMandatoryDependencies(config: JarvisRuntimeConfig): void {
     typeof c.capabilityProfileRef !== 'string' ||
     c.capabilityProfileRef.length === 0 ||
     !groundedKnowledgeConfigured(c) ||
-    !agentGroundedKnowledgeConfigured(c);
+    !agentGroundedKnowledgeConfigured(c) ||
+    !agentHybridKnowledgeConfigured(c) ||
+    (c.agentGroundedKnowledge !== undefined && c.agentHybridKnowledge !== undefined);
   if (missing) {
     throw new JarvisRuntimeError('invalid-config');
   }
@@ -162,6 +169,117 @@ function agentGroundedKnowledgeConfigured(c: Partial<JarvisRuntimeConfig>): bool
     }
   }
   return true;
+}
+
+/**
+ * The scalable shared hybrid policy is absent-or-complete and mutually exclusive with the exact
+ * shared policy. The retrieval implementation is injected, while every scope/purpose remains closed
+ * in AGENT_KNOWLEDGE_BINDINGS.
+ */
+function agentHybridKnowledgeConfigured(c: Partial<JarvisRuntimeConfig>): boolean {
+  const configured: unknown = c.agentHybridKnowledge;
+  if (configured === undefined) return true;
+  if (typeof configured !== 'object' || configured === null || Array.isArray(configured))
+    return false;
+
+  const policy = configured as {
+    readonly knowledgeRevision?: unknown;
+    readonly retrieval?: unknown;
+    readonly agents?: unknown;
+  };
+  const revision = policy.knowledgeRevision;
+  const retrieval = policy.retrieval;
+  if (
+    typeof revision !== 'string' ||
+    !/^[A-Za-z0-9._:-]{1,128}$/u.test(revision) ||
+    revision === '*' ||
+    revision.toLocaleLowerCase() === 'latest' ||
+    typeof retrieval !== 'object' ||
+    retrieval === null ||
+    typeof (retrieval as { readonly retrieve?: unknown }).retrieve !== 'function' ||
+    (retrieval as { readonly knowledgeRevision?: unknown }).knowledgeRevision !== revision
+  ) {
+    return false;
+  }
+
+  const agents = policy.agents;
+  if (typeof agents !== 'object' || agents === null || Array.isArray(agents)) return false;
+
+  // Riya's dedicated evolution/reply methods use their own grounded schemas and therefore their own
+  // evaluated bindings. A shared hybrid policy that enables Riya is incomplete without both.
+  if (
+    'RIYA' in agents &&
+    (!evaluatedBinding(c.riyaGroundedConversationEvolutionPromptBinding) ||
+      !evaluatedBinding(c.riyaGroundedReplyPromptBinding))
+  ) {
+    return false;
+  }
+
+  for (const [actor, entry] of Object.entries(agents as Record<string, unknown>)) {
+    if (!isGroundedAgentActor(actor)) return false;
+    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) return false;
+
+    // Hybrid content changes the model's user payload. It may therefore run only under an explicitly
+    // evaluated per-scope binding; a legacy/global or unevaluated prompt cannot be silently upgraded
+    // into a grounded prompt by configuration.
+    const binding = AGENT_KNOWLEDGE_BINDINGS[actor];
+    if (c.promptBindings === undefined || !evaluatedBinding(c.promptBindings[binding.agentScope])) {
+      return false;
+    }
+
+    const item = entry as {
+      readonly topicFilters?: unknown;
+      readonly candidatePool?: unknown;
+      readonly maxResults?: unknown;
+      readonly maxContentChars?: unknown;
+    };
+    if (!hybridTopicFiltersValid(actor, item.topicFilters)) return false;
+    if (
+      typeof item.candidatePool !== 'number' ||
+      !Number.isInteger(item.candidatePool) ||
+      item.candidatePool < 1 ||
+      item.candidatePool > MAX_HYBRID_CANDIDATES ||
+      typeof item.maxResults !== 'number' ||
+      !Number.isInteger(item.maxResults) ||
+      item.maxResults < 1 ||
+      item.maxResults > Math.min(MAX_HYBRID_RESULTS, 8) ||
+      item.maxResults > item.candidatePool ||
+      typeof item.maxContentChars !== 'number' ||
+      !Number.isInteger(item.maxContentChars) ||
+      item.maxContentChars < 256 ||
+      item.maxContentChars > 4096
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function hybridTopicFiltersValid(actor: string, topics: unknown): boolean {
+  if (!Array.isArray(topics) || topics.length > MAX_HYBRID_TOPIC_FILTERS) return false;
+  if (!topics.every((topic) => typeof topic === 'string' && topic.length > 0)) return false;
+  if (new Set(topics as readonly string[]).size !== topics.length) return false;
+  if (topics.length === 0) return true;
+
+  const binding = AGENT_KNOWLEDGE_BINDINGS[actor as keyof typeof AGENT_KNOWLEDGE_BINDINGS];
+  try {
+    createRetrievalRequest({
+      requestId: PROBE_REF,
+      tenantId: PROBE_REF,
+      agentScope: binding.agentScope,
+      purpose: binding.purpose,
+      dataClass: 'HOSTED_ALLOWED',
+      asOf: PROBE_INSTANT,
+      maxRecords: 1,
+      maxContentChars: 1,
+      requireCitation: true,
+      selectors: { topics: topics as readonly string[] },
+    });
+    return true;
+  } catch (error) {
+    if (error instanceof GovernedKnowledgeError) return false;
+    throw error;
+  }
 }
 
 /**

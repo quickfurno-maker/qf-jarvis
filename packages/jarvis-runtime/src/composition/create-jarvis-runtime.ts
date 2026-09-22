@@ -61,8 +61,15 @@ import type {
   JarvisRiyaGroundedReplyInput,
   JarvisRiyaGroundedReplyResult,
 } from '../contracts/riya-grounded-reply.js';
-import { createRiyaGroundedKnowledgeBridge } from './riya-grounded-knowledge.js';
-import type { RiyaGroundedKnowledgeBridgeInput } from './riya-grounded-knowledge.js';
+import {
+  createAgentHybridGroundedKnowledgeBridge,
+  createRiyaGroundedKnowledgeBridge,
+} from './riya-grounded-knowledge.js';
+import type {
+  RiyaGroundedKnowledgeBridge,
+  RiyaGroundedKnowledgeBridgeInput,
+} from './riya-grounded-knowledge.js';
+import { AGENT_KNOWLEDGE_BINDINGS } from '../contracts/agent-knowledge-policy.js';
 import {
   applyControlCommandThroughSource,
   type JarvisConversationControlInput,
@@ -215,6 +222,44 @@ function groundedBridgeInput(
   };
 }
 
+interface RiyaResolvedGrounding {
+  readonly bridge: RiyaGroundedKnowledgeBridge;
+  readonly topics: readonly string[];
+}
+
+/** Exact Riya grounding wins for compatibility; otherwise use the shared hybrid plane when configured. */
+function resolveRiyaGrounding(
+  config: JarvisRuntimeConfig,
+  envelope: InboundEnvelope,
+): RiyaResolvedGrounding | undefined {
+  const exact = config.riyaGroundedKnowledge;
+  if (exact !== undefined) {
+    return Object.freeze({
+      bridge: createRiyaGroundedKnowledgeBridge(groundedBridgeInput(envelope, exact)),
+      topics: exact.topics,
+    });
+  }
+
+  const hybrid = config.agentHybridKnowledge?.agents.RIYA;
+  const retrieval = config.agentHybridKnowledge?.retrieval;
+  if (hybrid === undefined || retrieval === undefined) return undefined;
+
+  const binding = AGENT_KNOWLEDGE_BINDINGS.RIYA;
+  return Object.freeze({
+    bridge: createAgentHybridGroundedKnowledgeBridge({
+      envelope,
+      topicFilters: hybrid.topicFilters,
+      agentScope: binding.agentScope,
+      purpose: binding.purpose,
+      candidatePool: hybrid.candidatePool,
+      maxResults: hybrid.maxResults,
+      maxContentChars: hybrid.maxContentChars,
+      retrieval,
+    }),
+    topics: hybrid.topicFilters,
+  });
+}
+
 export function createJarvisRuntime(
   config: JarvisRuntimeConfig,
 ): RiyaConversationEvolutionJarvisRuntime {
@@ -271,25 +316,21 @@ export function createJarvisRuntime(
       }
 
       // GROUNDED or not, decided by CONFIGURATION alone -- never by the client's message.
-      const grounded = config.riyaGroundedKnowledge;
+      // Exact Riya grounding wins for compatibility; otherwise the shared scalable hybrid plane may
+      // ground Riya under the same CLIENT / CLIENT_RESPONSE authority pair.
+      const grounding = resolveRiyaGrounding(config, envelope);
 
-      // No evaluated prompt, no Riya-aware model call. No fallback in EITHER direction: an ungrounded
-      // deployment may not borrow the grounded prompt, and a grounded one may not fall back to the
-      // ungrounded prompt that was evaluated before knowledge records existed.
+      // No evaluated prompt, no Riya-aware model call. A grounded turn always uses the already
+      // dedicated grounded prompt binding; it never borrows the ungrounded prompt.
       const binding =
-        grounded === undefined
+        grounding === undefined
           ? config.riyaConversationEvolutionPromptBinding
           : config.riyaGroundedConversationEvolutionPromptBinding;
       if (binding?.evaluationRef === undefined || binding.evaluationPromptDigest === undefined) {
         return refused(envelope.runtimeId, envelope.conversationId);
       }
 
-      // ONE bridge for THIS run. A module-level or config-level port would let two concurrent
-      // conversations capture into the same slot.
-      const bridge =
-        grounded === undefined
-          ? undefined
-          : createRiyaGroundedKnowledgeBridge(groundedBridgeInput(envelope, grounded));
+      const bridge = grounding?.bridge;
 
       const run = await composeAndProcessInternal(config, envelope, {
         profile: createRiyaConversationModelProfile({
@@ -302,12 +343,12 @@ export function createJarvisRuntime(
         }),
         promptBinding: binding,
         taskClass:
-          grounded === undefined
+          grounding === undefined
             ? RIYA_CONVERSATION_EVOLUTION_TASK_CLASS
             : RIYA_GROUNDED_CONVERSATION_EVOLUTION_TASK_CLASS,
-        ...(bridge === undefined || grounded === undefined
+        ...(bridge === undefined || grounding === undefined
           ? {}
-          : { knowledgePort: bridge.knowledgePort, knowledgeTopics: grounded.topics }),
+          : { knowledgePort: bridge.knowledgePort, knowledgeTopics: grounding.topics }),
       });
 
       // The generic seam types the detail as `unknown` on purpose; the package that produced it owns
@@ -350,8 +391,8 @@ export function createJarvisRuntime(
       // Grounded configuration is REQUIRED here, unlike the pre-summary path. Past SUMMARY there is
       // no discovery left to do, so a text turn with nothing to ground against has nothing to say
       // that this repository is willing to source from a model's general knowledge.
-      const grounded = config.riyaGroundedKnowledge;
-      if (grounded === undefined) {
+      const grounding = resolveRiyaGrounding(config, envelope);
+      if (grounding === undefined) {
         return refused(envelope.runtimeId, envelope.conversationId);
       }
       const binding = config.riyaGroundedReplyPromptBinding;
@@ -359,7 +400,7 @@ export function createJarvisRuntime(
         return refused(envelope.runtimeId, envelope.conversationId);
       }
 
-      const bridge = createRiyaGroundedKnowledgeBridge(groundedBridgeInput(envelope, grounded));
+      const bridge = grounding.bridge;
 
       const run = await composeAndProcessInternal(config, envelope, {
         profile: createRiyaGroundedReplyModelProfile({
@@ -370,7 +411,7 @@ export function createJarvisRuntime(
         promptBinding: binding,
         taskClass: RIYA_GROUNDED_REPLY_TASK_CLASS,
         knowledgePort: bridge.knowledgePort,
-        knowledgeTopics: grounded.topics,
+        knowledgeTopics: grounding.topics,
       });
 
       // No observation batch, no detail, no continuity change. The reply-only schema has nowhere to

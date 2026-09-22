@@ -495,7 +495,7 @@ describe('(133-148) the declared budget and every prior lock', () => {
     }
   });
 
-  it('(140) no new package or app was created', () => {
+  it('(140) package and app sets remain exact, including reviewed ADR additions', () => {
     const dirs = (relative: string): string[] =>
       readdirSync(join(REPO_ROOT, relative))
         .filter((entry) => statSync(join(REPO_ROOT, relative, entry)).isDirectory())
@@ -609,10 +609,16 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // authority, it reaches no database, and a live provider call needs an explicit flag AND a
       // phrase typed at a terminal.
       'jarvis-v1-provider-certification-live',
+      // ADR-0158: the shared provider-neutral hybrid retrieval core and deterministic ingestion plane.
+      // These additions are explicit and exact; they add no agent-specific authority or serving app.
+      'knowledge-index',
+      'knowledge-ingestion',
       'model-evaluation',
       'model-gateway',
       'model-gateway-composition',
       'model-reply-adapter',
+      // ADR-0158: bounded OpenAI-compatible embedding transport. Policy remains in knowledge-index.
+      'openai-compatible-embedding-adapter',
       // QFJ-P08 (ADR-0081): the durable approval queue and audit. Still an EXACT set match -- this
       // records an authorised addition, it does not relax the assertion.
       'postgres-approval-queue',
@@ -624,6 +630,8 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // EXACT set match; it records an authorised addition, it does not relax the assertion. It is
       // TRANSPORT-NEUTRAL: no endpoint, no QuickFurno Core Automation, no provider, no credential, no intent payload.
       'postgres-execution-replay-store',
+      // ADR-0158: immutable PostgreSQL full-text + pgvector index and sealed-release pointer.
+      'postgres-knowledge-index',
       // RWC-P2B (ADR-0095): the durable PostgreSQL Riya conversation-continuity store -- the
       // implementation of the port RWC-P2C declared and deliberately left injected with no default.
       // Still an EXACT set match; it records an authorised addition, it does not relax the
