@@ -432,6 +432,30 @@ function isUserDesireAttribution(haystack: string, at: number): boolean {
   return USER_DESIRE_PREFIXES.some((prefix) => before.startsWith(prefix));
 }
 
+/**
+ * JF-5B-R27: exact owner-reviewed Hindi restatement of the user's requested discount.
+ *
+ * The live excerpt says "मैं समझता हूँ कि आप 20% की छूट चाहते हैं" before explicitly refusing the
+ * discount. The percentage is therefore attributed to the user's request, not asserted as an available
+ * offer. This suppression is intentionally locked to the exact 20% sentinel and the exact surrounding
+ * Hindi frame; generic percentages, generic "चाहते हैं", and direct discount statements remain hits.
+ */
+const HINDI_TWENTY_PERCENT_REQUEST_PREFIX = 'मैं समझता हूँ कि आप ';
+const HINDI_TWENTY_PERCENT_REQUEST_SUFFIX =
+  ' की छूट चाहते हैं, लेकिन हमारे पास इस बारे में कोई जानकारी नहीं है और हम छूट प्रदान नहीं कर सकते';
+
+function isHindiTwentyPercentDiscountRequestAttribution(
+  haystack: string,
+  at: number,
+  claimLength: number,
+): boolean {
+  if (haystack.slice(at, at + claimLength) !== '20%') return false;
+  const before = haystack.slice(clauseStart(haystack, at), at);
+  if (!before.endsWith(HINDI_TWENTY_PERCENT_REQUEST_PREFIX)) return false;
+  const after = haystack.slice(at + claimLength, frameEnd(haystack, at + claimLength));
+  return after.startsWith(HINDI_TWENTY_PERCENT_REQUEST_SUFFIX);
+}
+
 /** RUN-15 post-claim Hinglish refusal: topic + `provide nahi kar sakta/sakti`. */
 const POST_CLAIM_OFFER_REFUSAL_CUES = ['provide nahi kar sakta', 'provide nahi kar sakti'];
 
@@ -718,6 +742,9 @@ function occurrenceIsRefused(haystack: string, at: number, claimLength: number):
     return true;
   }
   if (isUserDesireAttribution(haystack, at)) {
+    return true;
+  }
+  if (isHindiTwentyPercentDiscountRequestAttribution(haystack, at, claimLength)) {
     return true;
   }
   if (isNestedUserAttribution(haystack, at)) {
