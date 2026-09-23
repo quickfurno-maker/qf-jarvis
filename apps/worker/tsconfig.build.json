@@ -15,6 +15,7 @@
   "references": [
     { "path": "../../packages/event-backbone" },
     { "path": "../../packages/contracts" },
+    { "path": "../../packages/durable-orchestration-contracts/tsconfig.build.json" },
     { "path": "../../packages/recommendation-runtime/tsconfig.build.json" },
     { "path": "../../packages/approval-runtime/tsconfig.build.json" },
     { "path": "../../packages/execution-intent-runtime/tsconfig.build.json" },
