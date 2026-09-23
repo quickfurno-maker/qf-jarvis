@@ -32,6 +32,7 @@ export type KnowledgeQualityFailure =
   | 'no-result-rate-above-threshold';
 
 export interface KnowledgeQualityReport {
+  readonly caseSetRef: string;
   readonly metrics: KnowledgeQualityMetrics;
   readonly thresholds: KnowledgeQualityThresholds;
   readonly passed: boolean;
@@ -112,9 +113,13 @@ function citationRef(hit: HybridKnowledgeHit): string {
 export function evaluateKnowledgeQuality(
   cases: readonly KnowledgeQualityCase[],
   thresholds: KnowledgeQualityThresholds,
+  caseSetRef: string,
 ): KnowledgeQualityReport {
   validateCases(cases);
   validateThresholds(thresholds);
+  if (!/^[A-Za-z0-9._:-]{1,128}$/u.test(caseSetRef)) {
+    throw new TypeError('knowledge-quality-case-set-ref-invalid');
+  }
 
   const recalls: number[] = [];
   const precisions: number[] = [];
@@ -162,6 +167,7 @@ export function evaluateKnowledgeQuality(
     failures.push('no-result-rate-above-threshold');
 
   return Object.freeze({
+    caseSetRef,
     metrics,
     thresholds: Object.freeze({ ...thresholds }),
     passed: failures.length === 0,
@@ -192,6 +198,12 @@ export function compareKnowledgeQualityReports(
   tolerance: KnowledgeQualityRegressionTolerance,
 ): KnowledgeQualityRegressionReport {
   validateTolerance(tolerance);
+  if (baseline.caseSetRef !== candidate.caseSetRef) {
+    return Object.freeze({
+      passed: false,
+      regressions: Object.freeze(['case-set-mismatch']),
+    });
+  }
   const regressions: string[] = [];
   if (baseline.metrics.recallAtK - candidate.metrics.recallAtK > tolerance.maxRecallDrop)
     regressions.push('recall-regressed');
