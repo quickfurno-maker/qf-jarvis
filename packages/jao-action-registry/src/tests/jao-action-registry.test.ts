@@ -18,7 +18,7 @@ describe('JAO action registry', () => {
         actionId: 'schedule_callback',
         actionVersion: 1,
         agentScope: 'RIYA',
-        maturityReviewEligible: true,
+        maturityDecision: 'BOUNDED_AUTONOMY_REVIEW_ELIGIBLE',
         authorityEvidenceRef: 'authority.evidence.1',
         approvalEvidenceRef: 'approval.evidence.1',
       }),
@@ -37,7 +37,7 @@ describe('JAO action registry', () => {
         actionId: 'schedule_callback',
         actionVersion: 1,
         agentScope: 'RIYA',
-        maturityReviewEligible: false,
+        maturityDecision: 'KEEP_DEFAULT_OFF',
       }),
     ).toMatchObject({ decision: 'MATURITY_REVIEW_REQUIRED' });
 
@@ -47,7 +47,7 @@ describe('JAO action registry', () => {
         actionId: 'schedule_callback',
         actionVersion: 1,
         agentScope: 'RIYA',
-        maturityReviewEligible: true,
+        maturityDecision: 'BOUNDED_AUTONOMY_REVIEW_ELIGIBLE',
       }),
     ).toMatchObject({ decision: 'AUTHORITY_EVIDENCE_MISSING' });
 
@@ -57,7 +57,7 @@ describe('JAO action registry', () => {
         actionId: 'schedule_callback',
         actionVersion: 1,
         agentScope: 'RIYA',
-        maturityReviewEligible: true,
+        maturityDecision: 'BOUNDED_AUTONOMY_REVIEW_ELIGIBLE',
         authorityEvidenceRef: 'authority.evidence.1',
       }),
     ).toMatchObject({ decision: 'APPROVAL_EVIDENCE_MISSING' });
@@ -74,7 +74,7 @@ describe('JAO action registry', () => {
       actionId: 'schedule_callback',
       actionVersion: 1,
       agentScope: 'RIYA',
-      maturityReviewEligible: true,
+      maturityDecision: 'BOUNDED_AUTONOMY_REVIEW_ELIGIBLE',
       authorityEvidenceRef: 'authority.evidence.1',
       approvalEvidenceRef: 'approval.evidence.1',
     });
