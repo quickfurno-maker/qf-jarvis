@@ -118,6 +118,7 @@ export {
 export type {
   WorkerSloPolicy,
   WorkerSloPolicyInput,
+  WorkerSloObservationInput,
   WorkerSloObjective,
   WorkerSloEvaluation,
 } from './slo.js';
