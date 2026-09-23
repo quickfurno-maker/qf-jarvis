@@ -30,11 +30,11 @@ The initial engineering SLO policy measures model p95 latency, knowledge p95 lat
 
 ### Cost optimization is evidence-gated
 
-Provider prices are supplied as exact versioned price cards. The repository does not hard-code current market pricing as authority.
+Model and embedding prices are supplied as exact versioned price cards. The repository does not hard-code current market pricing as authority.
 
 A cheaper model is eligible for recommendation only when its evidence is non-synthetic production approval for ACTIVE_MODEL_RELEASE, its evaluation context/case set matches the baseline, and quality stays inside an explicitly allowed degradation band.
 
-The selector cannot alter serving. A selected candidate still requires the normal production approval, seal and composition path.
+Aggregate model-token and embedding request/text/character usage can be converted into model, embedding and combined workload cost estimates without storing a conversation identifier or query text. The selector cannot alter serving. A selected candidate still requires the normal production approval, seal and composition path.
 
 ### Resilience and red-team drills recur
 
