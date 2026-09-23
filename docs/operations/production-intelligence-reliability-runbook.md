@@ -28,6 +28,9 @@ Initial engineering targets are:
 
 - model p95 <= 15,000 ms after at least 20 samples;
 - RAG p95 <= 500 ms after at least 20 samples;
+- model failure rate <= 2% after at least 20 model outcomes;
+- model fallback rate = 0% under the current no-fallback production policy;
+- model availability >= 98% after at least 20 model outcomes;
 - oldest pending turn <= 30,000 ms;
 - failed-indeterminate rate <= 1%;
 - technical RAG failure rate <= 2%.
