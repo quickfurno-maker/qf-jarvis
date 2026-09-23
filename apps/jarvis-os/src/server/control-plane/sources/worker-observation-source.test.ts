@@ -79,6 +79,38 @@ describe('worker observation read source', () => {
     expect(JSON.stringify(result)).not.toContain('knowledge.quickfurno.release.1');
   });
 
+
+  it('surfaces v2 usage aggregates and an explicit engineering SLO state without content', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'qfj-worker-observation-'));
+    const path = join(root, 'worker-v2.json');
+    const v2 = {
+      ...observation(),
+      protocol: 'qfj.quickfurno-worker-observation.v2',
+      modelUsage: {
+        invocations: 5,
+        reportedTokenInvocations: 5,
+        inputTokens: 1000,
+        outputTokens: 500,
+        totalTokens: 1500,
+      },
+      embeddingUsage: { requests: 3, texts: 3, characters: 120 },
+    };
+    writeFileSync(path, JSON.stringify(v2), 'utf8');
+    const result = await createWorkerObservationReadSource(path).acquire(
+      new AbortController().signal,
+    );
+    expect(result.status).toBe('OBSERVED');
+    if (result.status !== 'OBSERVED') return;
+    const items = result.sections.headlineMetrics?.items ?? [];
+    expect(items.find((item) => item.id === 'model-total-tokens')?.value).toBe('1500');
+    expect(items.find((item) => item.id === 'embedding-requests')?.value).toBe('3');
+    expect(items.find((item) => item.id === 'engineering-slo-state')?.value).toBe(
+      'INSUFFICIENT_DATA',
+    );
+    expect(JSON.stringify(result)).not.toContain('queryText');
+    expect(JSON.stringify(result)).not.toContain('conversationId');
+  });
+
   it('refuses stale or content-bearing snapshots rather than rendering them as live', async () => {
     const root = mkdtempSync(join(tmpdir(), 'qfj-worker-observation-'));
     const stalePath = join(root, 'stale.json');
