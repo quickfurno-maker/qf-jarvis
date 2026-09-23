@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import type { ApprovalEvidence } from '../contracts/evidence.js';
 import {
   chooseCostEfficientQualifiedCandidate,
+  estimateConversationCostUsd,
+  estimateEmbeddingCostUsd,
   estimateModelCostUsd,
 } from '../service/cost-efficiency.js';
 import { createSyntheticBinding } from '../testing/fixtures.js';
@@ -124,6 +126,44 @@ describe('cost-efficient qualified model selection', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.selected.candidateId).toBe('baseline');
+  });
+
+  it('estimates embedding usage from an explicit versioned billing unit', () => {
+    expect(
+      estimateEmbeddingCostUsd(
+        { requests: 10, texts: 20, characters: 2_000_000 },
+        {
+          priceCardRef: 'embedding.price.v1',
+          billingUnit: 'CHARACTER',
+          usdPerMillionUnits: 0.25,
+        },
+      ),
+    ).toBeCloseTo(0.5);
+  });
+
+  it('combines model and embedding usage without requiring a conversation identifier', () => {
+    expect(
+      estimateConversationCostUsd(
+        {
+          model: { inputTokens: 1_000_000, outputTokens: 100_000 },
+          embedding: { requests: 2, texts: 2, characters: 1_000_000 },
+        },
+        {
+          priceCardRef: 'model.price.v1',
+          inputUsdPerMillionTokens: 2,
+          outputUsdPerMillionTokens: 4,
+        },
+        {
+          priceCardRef: 'embedding.price.v1',
+          billingUnit: 'CHARACTER',
+          usdPerMillionUnits: 0.5,
+        },
+      ),
+    ).toEqual({
+      modelUsd: 2.4,
+      embeddingUsd: 0.5,
+      totalUsd: 2.9,
+    });
   });
 
   it('validates versioned price cards instead of guessing provider pricing', () => {
