@@ -25,6 +25,7 @@ export interface ProductionSpoolObservation {
 
 export interface QuickFurnoWorkerObservationWriter {
   recordModelLatency(latencyMs: number, at: string): void;
+  recordModelOutcome(ok: boolean, usedFallback?: boolean): void;
   recordModelUsage(usage: ModelUsage): void;
   recordEmbeddingUsage(texts: readonly string[]): void;
   recordKnowledgeRetrieval(reason: HybridRetrievalReason, latencyMs: number, at: string): void;
@@ -81,6 +82,11 @@ export function createQuickFurnoWorkerObservationWriter(
     releasedPreAgent: 0,
     failedIndeterminate: 0,
   };
+  const modelGateway = {
+    completed: 0,
+    failed: 0,
+    fallbackUsed: 0,
+  };
   const modelUsage = {
     invocations: 0,
     reportedTokenInvocations: 0,
@@ -100,6 +106,12 @@ export function createQuickFurnoWorkerObservationWriter(
       latencies.push(Object.freeze({ at, latencyMs }));
       if (latencies.length > MAX_LATENCY_SAMPLES)
         latencies.splice(0, latencies.length - MAX_LATENCY_SAMPLES);
+    },
+
+    recordModelOutcome(ok: boolean, usedFallback = false): void {
+      if (ok) modelGateway.completed = increment(modelGateway.completed);
+      else modelGateway.failed = increment(modelGateway.failed);
+      if (ok && usedFallback) modelGateway.fallbackUsed = increment(modelGateway.fallbackUsed);
     },
 
     recordModelUsage(usage: ModelUsage): void {
@@ -185,6 +197,7 @@ export function createQuickFurnoWorkerObservationWriter(
           ...knowledgeRetrieval,
           latency: knowledgeLatencies,
         },
+        modelGateway,
         modelUsage,
         embeddingUsage,
       }) as QuickFurnoWorkerObservationV2;
