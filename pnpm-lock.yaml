@@ -360,6 +360,15 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
 
+  packages/core-data-tools:
+    dependencies:
+      '@qf-jarvis/core-riya-intake':
+        specifier: workspace:*
+        version: link:../core-riya-intake
+      '@qf-jarvis/core-service-availability-read':
+        specifier: workspace:*
+        version: link:../core-service-availability-read
+
   packages/core-decision-adapter:
     dependencies:
       '@qf-jarvis/agent-runtime':
@@ -465,6 +474,8 @@ importers:
         specifier: workspace:*
         version: link:../recommendation-runtime
 
+  packages/governed-memory-foundation: {}
+
   packages/governed-knowledge:
     dependencies:
       zod:
@@ -479,6 +490,8 @@ importers:
       zod:
         specifier: 4.4.3
         version: 4.4.3
+
+  packages/jao-action-registry: {}
 
   packages/jarvis-runtime:
     dependencies:
@@ -588,6 +601,8 @@ importers:
       zod:
         specifier: 4.4.3
         version: 4.4.3
+
+  packages/knowledge-freshness: {}
 
   packages/knowledge-index:
     dependencies:
