@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import type { Pool, PoolClient } from 'pg';
 
 import { createKnowledgeRecord } from '@qf-jarvis/governed-knowledge';
@@ -125,6 +127,10 @@ function iso(value: Date | null): string | undefined {
 
 function rowToChunk(row: CandidateRow): GovernedKnowledgeChunk {
   try {
+    const actualDigest = createHash('sha256').update(row.content, 'utf8').digest('hex');
+    if (actualDigest !== row.content_digest) {
+      throw new PostgresKnowledgeIndexError('database-row-invalid');
+    }
     const record = createKnowledgeRecord({
       knowledgeId: row.chunk_id,
       version: 1,
