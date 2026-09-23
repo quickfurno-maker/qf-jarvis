@@ -15,6 +15,7 @@ const source = (
   contentDigest,
   ownerRef: 'owner.knowledge',
   approvedForProduction,
+  ...(approvedForProduction ? { approvalRef: 'approval.knowledge.1' } : {}),
 });
 
 describe('knowledge freshness', () => {
@@ -46,6 +47,25 @@ describe('knowledge freshness', () => {
     expect(
       assessKnowledgeCandidate({ freshness, observedSources: observed, evaluationPassed: true }),
     ).toEqual({ decision: 'BLOCKED_UNAPPROVED_SOURCE', sourceCount: 1 });
+  });
+
+  it('treats approval evidence drift as a change that must be reviewed', () => {
+    const accepted = [source('policy.a', 'rev.1', digest('a'))];
+    const observed = [
+      {
+        ...source('policy.a', 'rev.1', digest('a')),
+        approvalRef: 'approval.knowledge.2',
+      },
+    ];
+    const freshness = assessKnowledgeFreshness(accepted, observed);
+    expect(freshness.records).toEqual([
+      {
+        sourceRef: 'policy.a',
+        drift: 'CHANGED',
+        previousRevision: 'rev.1',
+        observedRevision: 'rev.1',
+      },
+    ]);
   });
 
   it('blocks source disappearance rather than silently shrinking the corpus', () => {
