@@ -163,3 +163,34 @@ export function assessKnowledgeCandidate(input: {
     sourceCount: input.observedSources.length,
   });
 }
+
+
+export interface KnowledgeSourceFingerprintReader {
+  readCurrent(): Promise<readonly KnowledgeSourceFingerprint[]>;
+}
+
+export interface KnowledgeFreshnessEngineResult {
+  readonly freshness: KnowledgeFreshnessReport;
+  readonly candidate: KnowledgeCandidateAssessment;
+}
+
+/**
+ * Execute one observation pass through an injected source reader.
+ *
+ * The reader is the only I/O seam. This engine performs no polling, scheduling, ingestion, sealing
+ * or activation; callers may run it from a reviewed scheduler later.
+ */
+export async function runKnowledgeFreshnessCheck(input: {
+  readonly acceptedSources: readonly KnowledgeSourceFingerprint[];
+  readonly reader: KnowledgeSourceFingerprintReader;
+  readonly evaluationPassed: boolean;
+}): Promise<KnowledgeFreshnessEngineResult> {
+  const observedSources = await input.reader.readCurrent();
+  const freshness = assessKnowledgeFreshness(input.acceptedSources, observedSources);
+  const candidate = assessKnowledgeCandidate({
+    freshness,
+    observedSources,
+    evaluationPassed: input.evaluationPassed,
+  });
+  return Object.freeze({ freshness, candidate });
+}
