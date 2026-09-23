@@ -56,6 +56,7 @@ describe('knowledge quality evaluator', () => {
         },
       ],
       thresholds,
+      'quality.cases.v1',
     );
 
     expect(report.metrics).toEqual({
@@ -89,6 +90,7 @@ describe('knowledge quality evaluator', () => {
         minCitationPrecision: 0,
         maxNoResultRate: 1,
       },
+      'quality.cases.v1',
     );
     const candidate = evaluateKnowledgeQuality(
       [
@@ -106,6 +108,7 @@ describe('knowledge quality evaluator', () => {
         minCitationPrecision: 0,
         maxNoResultRate: 1,
       },
+      'quality.cases.v1',
     );
 
     expect(
@@ -128,6 +131,37 @@ describe('knowledge quality evaluator', () => {
     });
   });
 
+  it('fails closed when a candidate report uses a different labelled case-set revision', () => {
+    const one = evaluateKnowledgeQuality(
+      [
+        {
+          caseId: 'q.one',
+          expectedChunkIds: ['chunk.a'],
+          expectedCitationRefs: ['doc.a@1'],
+          hits: [hit('chunk.a', 'doc.a')],
+        },
+      ],
+      {
+        minRecallAtK: 0,
+        minPrecisionAtK: 0,
+        minMeanReciprocalRank: 0,
+        minCitationPrecision: 0,
+        maxNoResultRate: 1,
+      },
+      'quality.cases.v1',
+    );
+    const two = { ...one, caseSetRef: 'quality.cases.v2' };
+    expect(
+      compareKnowledgeQualityReports(one, two, {
+        maxRecallDrop: 1,
+        maxPrecisionDrop: 1,
+        maxMrrDrop: 1,
+        maxCitationPrecisionDrop: 1,
+        maxNoResultRateIncrease: 1,
+      }),
+    ).toEqual({ passed: false, regressions: ['case-set-mismatch'] });
+  });
+
   it('rejects malformed or duplicate fixture identities instead of scoring ambiguous evidence', () => {
     expect(() =>
       evaluateKnowledgeQuality(
@@ -140,6 +174,7 @@ describe('knowledge quality evaluator', () => {
           },
         ],
         thresholds,
+        'quality.cases.v1',
       ),
     ).toThrow('knowledge-quality-cases-invalid');
 
