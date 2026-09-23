@@ -232,7 +232,7 @@ describe('(43, 44, 45) sibling package API locks are undisturbed', () => {
     ).toContain('toHaveLength(30)');
   });
 
-  it('(44) model-evaluation remains 35', () => {
+  it('(44) model-evaluation is exactly 41', () => {
     const containment = readRepo('packages/model-evaluation/src/tests/containment.test.ts');
     const block = /const EXPECTED = \[([\s\S]*?)\];/.exec(containment);
     const symbols = (block?.[1] ?? '')
@@ -243,7 +243,7 @@ describe('(43, 44, 45) sibling package API locks are undisturbed', () => {
     // grammar made independently constructible so the operational-benchmark package can NAME a
     // release without a second copy of the six fields. Still an EXACT count; it records an
     // authorised addition, it does not relax the assertion.
-    expect(symbols).toHaveLength(35);
+    expect(symbols).toHaveLength(41);
   });
 
   it('(45) event-backbone remains 39', () => {

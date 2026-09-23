@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  INITIAL_WORKER_SLO_POLICY_V1,
-  createWorkerSloPolicy,
-  evaluateWorkerSlo,
-} from '../slo.js';
+import { INITIAL_WORKER_SLO_POLICY_V1, createWorkerSloPolicy, evaluateWorkerSlo } from '../slo.js';
 
 function observation(over: Record<string, unknown> = {}) {
   return {

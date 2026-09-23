@@ -117,11 +117,7 @@ export function parseQuickFurnoWorkerObservation(value: unknown): QuickFurnoWork
   return quickFurnoWorkerObservationSchema.parse(value);
 }
 
-export {
-  createWorkerSloPolicy,
-  evaluateWorkerSlo,
-  INITIAL_WORKER_SLO_POLICY_V1,
-} from './slo.js';
+export { createWorkerSloPolicy, evaluateWorkerSlo, INITIAL_WORKER_SLO_POLICY_V1 } from './slo.js';
 export type {
   WorkerSloPolicy,
   WorkerSloPolicyInput,
@@ -130,10 +126,7 @@ export type {
   WorkerSloEvaluation,
 } from './slo.js';
 
-export {
-  createScaleReadinessPolicy,
-  evaluateScaleReadiness,
-} from './scaling.js';
+export { createScaleReadinessPolicy, evaluateScaleReadiness } from './scaling.js';
 export type {
   ScaleReadinessPolicy,
   ScaleReadinessPolicyInput,

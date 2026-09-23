@@ -9,6 +9,17 @@ import {
 } from '../service/cost-efficiency.js';
 import { createSyntheticBinding } from '../testing/fixtures.js';
 
+function release(releaseId: string, modelId: string) {
+  return {
+    releaseId,
+    providerId: 'groq',
+    modelId,
+    modelVersion: 'v1',
+    configDigest: releaseId.endsWith('2') ? 'abcdef02' : 'abcdef01',
+    executionClass: 'HOSTED' as const,
+  };
+}
+
 function evidence(
   evaluationRef: string,
   releaseId: string,
@@ -18,16 +29,7 @@ function evidence(
   return {
     evaluationRef,
     target: 'ACTIVE_MODEL_RELEASE',
-    binding: createSyntheticBinding({
-      release: {
-        releaseId,
-        providerId: 'groq',
-        modelId,
-        modelVersion: 'v1',
-        configDigest: releaseId.endsWith('2') ? 'abcdef02' : 'abcdef01',
-        executionClass: 'HOSTED',
-      },
-    }),
+    binding: createSyntheticBinding({ release: release(releaseId, modelId) }),
     suiteResultDigest: 'a'.repeat(64),
     caseSetDigest: 'b'.repeat(64),
     createdAt: '2026-09-23T00:00:00.000Z',
@@ -47,6 +49,7 @@ describe('cost-efficient qualified model selection', () => {
           qualityScore: 0.94,
           priceCard: {
             priceCardRef: 'price.baseline.v1',
+            release: release('rel.1', 'model-one'),
             inputUsdPerMillionTokens: 2,
             outputUsdPerMillionTokens: 4,
           },
@@ -57,6 +60,7 @@ describe('cost-efficient qualified model selection', () => {
           qualityScore: 0.93,
           priceCard: {
             priceCardRef: 'price.cheaper.v1',
+            release: release('rel.2', 'model-two'),
             inputUsdPerMillionTokens: 0.5,
             outputUsdPerMillionTokens: 1,
           },
@@ -85,6 +89,7 @@ describe('cost-efficient qualified model selection', () => {
           qualityScore: 1,
           priceCard: {
             priceCardRef: 'price.baseline.v1',
+            release: release('rel.1', 'model-one'),
             inputUsdPerMillionTokens: 1,
             outputUsdPerMillionTokens: 1,
           },
@@ -105,6 +110,7 @@ describe('cost-efficient qualified model selection', () => {
           qualityScore: 0.95,
           priceCard: {
             priceCardRef: 'price.baseline.v1',
+            release: release('rel.1', 'model-one'),
             inputUsdPerMillionTokens: 2,
             outputUsdPerMillionTokens: 2,
           },
@@ -115,6 +121,7 @@ describe('cost-efficient qualified model selection', () => {
           qualityScore: 0.8,
           priceCard: {
             priceCardRef: 'price.cheap.v1',
+            release: release('rel.2', 'model-two'),
             inputUsdPerMillionTokens: 0.1,
             outputUsdPerMillionTokens: 0.1,
           },
@@ -131,9 +138,15 @@ describe('cost-efficient qualified model selection', () => {
   it('estimates embedding usage from an explicit versioned billing unit', () => {
     expect(
       estimateEmbeddingCostUsd(
-        { requests: 10, texts: 20, characters: 2_000_000 },
+        {
+          embeddingModelRef: 'embedding/model-v1',
+          requests: 10,
+          texts: 20,
+          characters: 2_000_000,
+        },
         {
           priceCardRef: 'embedding.price.v1',
+          embeddingModelRef: 'embedding/model-v1',
           billingUnit: 'CHARACTER',
           usdPerMillionUnits: 0.25,
         },
@@ -144,9 +157,10 @@ describe('cost-efficient qualified model selection', () => {
   it('rejects an unknown embedding billing unit at the runtime boundary', () => {
     expect(() =>
       estimateEmbeddingCostUsd(
-        { requests: 1, texts: 1, characters: 1 },
+        { embeddingModelRef: 'embedding/model-v1', requests: 1, texts: 1, characters: 1 },
         {
           priceCardRef: 'embedding.price.v1',
+          embeddingModelRef: 'embedding/model-v1',
           billingUnit: 'TOKEN' as never,
           usdPerMillionUnits: 1,
         },
@@ -159,15 +173,22 @@ describe('cost-efficient qualified model selection', () => {
       estimateConversationCostUsd(
         {
           model: { inputTokens: 1_000_000, outputTokens: 100_000 },
-          embedding: { requests: 2, texts: 2, characters: 1_000_000 },
+          embedding: {
+            embeddingModelRef: 'embedding/model-v1',
+            requests: 2,
+            texts: 2,
+            characters: 1_000_000,
+          },
         },
         {
           priceCardRef: 'model.price.v1',
+          release: release('rel.1', 'model-one'),
           inputUsdPerMillionTokens: 2,
           outputUsdPerMillionTokens: 4,
         },
         {
           priceCardRef: 'embedding.price.v1',
+          embeddingModelRef: 'embedding/model-v1',
           billingUnit: 'CHARACTER',
           usdPerMillionUnits: 0.5,
         },
@@ -179,12 +200,48 @@ describe('cost-efficient qualified model selection', () => {
     });
   });
 
+  it('refuses a model price card bound to a different release than the candidate evidence', () => {
+    const result = chooseCostEfficientQualifiedCandidate(
+      [
+        {
+          candidateId: 'baseline',
+          evidence: evidence('ev.baseline', 'rel.1', 'model-one'),
+          qualityScore: 1,
+          priceCard: {
+            priceCardRef: 'price.wrong-release.v1',
+            release: release('rel.2', 'model-two'),
+            inputUsdPerMillionTokens: 1,
+            outputUsdPerMillionTokens: 1,
+          },
+        },
+      ],
+      { inputTokens: 100, outputTokens: 50 },
+      { baselineEvaluationRef: 'ev.baseline', maxQualityDrop: 0 },
+    );
+    expect(result).toEqual({ ok: false, reason: 'invalid-input' });
+  });
+
+  it('refuses an embedding price card for a different embedding model', () => {
+    expect(() =>
+      estimateEmbeddingCostUsd(
+        { embeddingModelRef: 'embedding/model-v1', requests: 1, texts: 1, characters: 100 },
+        {
+          priceCardRef: 'embedding.price.v2',
+          embeddingModelRef: 'embedding/model-v2',
+          billingUnit: 'CHARACTER',
+          usdPerMillionUnits: 1,
+        },
+      ),
+    ).toThrow('embedding-cost-input-invalid');
+  });
+
   it('validates versioned price cards instead of guessing provider pricing', () => {
     expect(
       estimateModelCostUsd(
         { inputTokens: 1_000_000, outputTokens: 1_000_000 },
         {
           priceCardRef: 'price.v1',
+          release: release('rel.1', 'model-one'),
           inputUsdPerMillionTokens: 1.25,
           outputUsdPerMillionTokens: 2.5,
         },
@@ -195,6 +252,7 @@ describe('cost-efficient qualified model selection', () => {
         { inputTokens: 1, outputTokens: 1 },
         {
           priceCardRef: 'bad price',
+          release: release('rel.1', 'model-one'),
           inputUsdPerMillionTokens: 1,
           outputUsdPerMillionTokens: 1,
         },

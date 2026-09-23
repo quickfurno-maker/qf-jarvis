@@ -246,7 +246,7 @@ describe('observability and authority', () => {
     expect([...EVALUATION_APPROVAL_TARGETS]).toContain('SEMANTIC_RETRIEVAL_RESEARCH_ELIGIBILITY');
     for (const file of productionFiles()) {
       const text = readFileSync(file, 'utf8');
-      const path = normalise(file);
+      const path = file.replaceAll('\\', '/');
 
       if (path.endsWith('/src/service/cost-efficiency.ts')) {
         // ADR-0160 may NAME embedding usage as a billing unit, but this module must still have

@@ -103,14 +103,8 @@ export type { CreateEvidenceOptions, EvidenceResult } from './service/create-evi
 export { toRolloutApprovalReference } from './service/rollout-bridge.js';
 export type { RolloutApprovalReference } from './service/rollout-bridge.js';
 
-export {
-  EVALUATION_IMPACT_DIMENSIONS,
-  classifyEvaluationImpact,
-} from './service/change-impact.js';
-export type {
-  EvaluationImpactDimension,
-  EvaluationImpactReport,
-} from './service/change-impact.js';
+export { EVALUATION_IMPACT_DIMENSIONS, classifyEvaluationImpact } from './service/change-impact.js';
+export type { EvaluationImpactDimension, EvaluationImpactReport } from './service/change-impact.js';
 
 export {
   estimateModelCostUsd,

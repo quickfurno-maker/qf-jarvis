@@ -1,10 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { HybridKnowledgeHit } from '../contracts.js';
-import {
-  compareKnowledgeQualityReports,
-  evaluateKnowledgeQuality,
-} from '../quality.js';
+import { compareKnowledgeQualityReports, evaluateKnowledgeQuality } from '../quality.js';
 
 function hit(chunkId: string, knowledgeId: string): HybridKnowledgeHit {
   return {

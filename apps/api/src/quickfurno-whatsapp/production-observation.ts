@@ -50,12 +50,7 @@ function increment(value: number): number {
 }
 
 function addUsage(value: number, delta: number | undefined): number {
-  if (
-    delta === undefined ||
-    !Number.isFinite(delta) ||
-    !Number.isInteger(delta) ||
-    delta < 0
-  ) {
+  if (delta === undefined || !Number.isFinite(delta) || !Number.isInteger(delta) || delta < 0) {
     return value;
   }
   return Math.min(MAX_USAGE, value + delta);

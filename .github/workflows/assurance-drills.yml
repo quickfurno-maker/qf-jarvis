@@ -93,7 +93,11 @@ jobs:
           pnpm exec vitest run
           packages/model-evaluation/src/tests/red-team-evidence.test.ts
           packages/knowledge-index/src/tests/hybrid.test.ts
+          packages/jarvis-runtime/src/tests/fail-closed.test.ts
+          packages/jarvis-runtime/src/tests/jf4-three-agent-rag.test.ts
+          apps/api/src/tests/jf4-shared-retrieval-port.test.ts
           apps/api/src/tests/jf5b-certification-runner.test.ts
           apps/api/src/tests/jf5b-forbidden-claim-matcher.test.ts
+          apps/api/src/tests/jf5b-claim-excerpt.test.ts
           apps/api/src/tests/credential-containment.test.ts
           apps/api/src/tests/shadow-containment.test.ts

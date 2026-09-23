@@ -42,9 +42,7 @@ export interface JaoMaturityAssessment {
 
 const REF = /^[A-Za-z0-9._:-]{1,128}$/u;
 
-export function createJaoMaturityPolicy(
-  policy: JaoMaturityPolicy,
-): JaoMaturityPolicy {
+export function createJaoMaturityPolicy(policy: JaoMaturityPolicy): JaoMaturityPolicy {
   if (
     !REF.test(policy.policyRef) ||
     !Number.isFinite(policy.minObservationHours) ||

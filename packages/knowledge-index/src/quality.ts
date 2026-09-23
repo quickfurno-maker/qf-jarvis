@@ -157,8 +157,7 @@ export function evaluateKnowledgeQuality(
 
   const failures: KnowledgeQualityFailure[] = [];
   if (metrics.recallAtK < thresholds.minRecallAtK) failures.push('recall-below-threshold');
-  if (metrics.precisionAtK < thresholds.minPrecisionAtK)
-    failures.push('precision-below-threshold');
+  if (metrics.precisionAtK < thresholds.minPrecisionAtK) failures.push('precision-below-threshold');
   if (metrics.meanReciprocalRank < thresholds.minMeanReciprocalRank)
     failures.push('mrr-below-threshold');
   if (metrics.citationPrecision < thresholds.minCitationPrecision)
@@ -207,10 +206,7 @@ export function compareKnowledgeQualityReports(
   const regressions: string[] = [];
   if (baseline.metrics.recallAtK - candidate.metrics.recallAtK > tolerance.maxRecallDrop)
     regressions.push('recall-regressed');
-  if (
-    baseline.metrics.precisionAtK - candidate.metrics.precisionAtK >
-    tolerance.maxPrecisionDrop
-  )
+  if (baseline.metrics.precisionAtK - candidate.metrics.precisionAtK > tolerance.maxPrecisionDrop)
     regressions.push('precision-regressed');
   if (
     baseline.metrics.meanReciprocalRank - candidate.metrics.meanReciprocalRank >

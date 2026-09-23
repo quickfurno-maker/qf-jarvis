@@ -5,15 +5,27 @@ on:
     branches: [main]
     paths:
       - 'packages/riya-prompts/**'
+      - 'packages/anisha-prompts/**'
+      - 'packages/aarohi-prompts/**'
+      - 'packages/riya-agent/**'
+      - 'packages/anisha-agent/**'
+      - 'packages/aarohi-agent/**'
+      - 'packages/agent-runtime/**'
       - 'packages/jarvis-v1-production-profile/**'
+      - 'packages/jarvis-v1-production-seal/**'
+      - 'packages/jarvis-v1-provider-certification-live/**'
       - 'packages/model-gateway/**'
       - 'packages/model-evaluation/**'
+      - 'packages/governed-knowledge/**'
       - 'packages/knowledge-index/**'
       - 'packages/knowledge-ingestion/**'
       - 'packages/postgres-knowledge-index/**'
+      - 'packages/rag-provisioning/**'
       - 'packages/jarvis-runtime/**'
       - 'apps/api/src/composition/jf5b-**'
       - 'apps/api/src/tests/jf5b-**'
+      - 'apps/api/src/quickfurno-whatsapp/production-seal-binding.ts'
+      - 'apps/api/src/quickfurno-whatsapp/production-worker-config.ts'
       - 'apps/api/src/tests/credential-containment.test.ts'
       - '.github/workflows/continuous-evaluation.yml'
 
@@ -54,6 +66,9 @@ jobs:
           packages/model-evaluation/src/tests
           packages/knowledge-index/src/tests/quality.test.ts
           packages/jarvis-runtime/src/tests/hybrid-grounding.test.ts
+          packages/jarvis-runtime/src/tests/jf4-three-agent-rag.test.ts
+          packages/jarvis-runtime/src/tests/fail-closed.test.ts
+          apps/api/src/tests/jf4-shared-retrieval-port.test.ts
           apps/api/src/tests/jf5b-certification-runner.test.ts
           apps/api/src/tests/jf5b-forbidden-claim-matcher.test.ts
           apps/api/src/tests/credential-containment.test.ts

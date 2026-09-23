@@ -26,7 +26,7 @@ export interface WorkerSloPolicyInput {
   readonly maxKnowledgeTechnicalFailureRate: number;
 }
 
-export interface WorkerSloPolicy extends WorkerSloPolicyInput {}
+export type WorkerSloPolicy = WorkerSloPolicyInput;
 
 export interface WorkerSloObservationInput {
   readonly spool: {
@@ -175,10 +175,7 @@ export function evaluateWorkerSlo(
     observation.outcomes.completedStale +
     observation.outcomes.releasedPreAgent +
     observation.outcomes.failedIndeterminate;
-  const failedIndeterminateRate = ratio(
-    observation.outcomes.failedIndeterminate,
-    outcomeTotal,
-  );
+  const failedIndeterminateRate = ratio(observation.outcomes.failedIndeterminate, outcomeTotal);
 
   const technicalFailures =
     observation.knowledgeRetrieval.embeddingFailed +

@@ -39,7 +39,6 @@ describe('worker observation contract', () => {
     expect(parsed.knowledgeRetrieval.latency[0]?.latencyMs).toBe(37);
   });
 
-
   it('accepts v2 aggregate usage without customer or message identifiers', () => {
     const parsed = parseQuickFurnoWorkerObservation({
       protocol: 'qfj.quickfurno-worker-observation.v2',

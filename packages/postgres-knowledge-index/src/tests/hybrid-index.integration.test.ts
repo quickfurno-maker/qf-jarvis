@@ -12,6 +12,7 @@ import { createDeterministicTestEmbeddingPort } from '@qf-jarvis/knowledge-index
 
 import {
   applyKnowledgeIndexMigration,
+  assertPostgresKnowledgeReleaseReady,
   buildStreamingKnowledgeRelease,
   createPostgresHybridCandidateStore,
   createPostgresKnowledgeIndexWriter,
@@ -207,8 +208,29 @@ describe('postgres hybrid knowledge index', () => {
         "WHERE knowledge_id='doc.corrupt' AND version=1",
     );
 
-    const result = await retrieval('knowledge.release.corrupt', 'installation scheduling corrupted');
+    const result = await retrieval(
+      'knowledge.release.corrupt',
+      'installation scheduling corrupted',
+    );
     expect(result).toEqual({ ok: false, reason: 'hybrid-candidate-store-failed' });
+  }, 60_000);
+
+  it('fails closed when active knowledge-index metadata is corrupted away from the sealed embedding model', async () => {
+    await publish('knowledge.release.corrupt-model', [
+      source('doc.corrupt-model', 1, 'Installation scheduling CORRUPT MODEL guard marker.'),
+    ]);
+
+    await pool.query(
+      "UPDATE qf_jarvis_knowledge.index_metadata SET embedding_model_ref='tampered.embedding.model' WHERE singleton=true",
+    );
+
+    await expect(
+      assertPostgresKnowledgeReleaseReady(
+        pool,
+        'knowledge.release.corrupt-model',
+        embedding.modelRef,
+      ),
+    ).rejects.toMatchObject({ code: 'embedding-model-mismatch' });
   }, 60_000);
 
   it('supports atomic rollback by switching only the active sealed-release pointer', async () => {

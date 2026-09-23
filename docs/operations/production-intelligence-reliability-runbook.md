@@ -41,7 +41,7 @@ INSUFFICIENT_DATA is not a pass.
 
 ## 4. Cost intelligence
 
-Keep model and embedding pricing outside code as exact versioned price cards. Record model input/output tokens plus aggregate embedding requests/texts/characters and their price-card refs.
+Keep model and embedding pricing outside code as exact versioned price cards. Bind each model price card to the exact provider/model release and each embedding price card to the exact embedding model reference observed for the workload; an identity mismatch is invalid. Record model input/output tokens plus aggregate embedding requests/texts/characters and their price-card refs.
 
 Only compare models with non-synthetic ACTIVE_MODEL_RELEASE evidence under the same evaluation context and case set. The permitted quality-drop band must be explicit.
 

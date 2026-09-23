@@ -1,8 +1,15 @@
-import type { EvaluationBinding } from '../contracts/binding.js';
+import {
+  createProviderReleaseRef,
+  releaseKey,
+  type EvaluationBinding,
+  type ProviderReleaseRef,
+} from '../contracts/binding.js';
 import type { ApprovalEvidence } from '../contracts/evidence.js';
 
 export interface VersionedModelPriceCard {
   readonly priceCardRef: string;
+  /** Exact provider/model release this price card applies to. */
+  readonly release: ProviderReleaseRef;
   readonly inputUsdPerMillionTokens: number;
   readonly outputUsdPerMillionTokens: number;
 }
@@ -22,11 +29,15 @@ export interface ModelCostWorkload {
 
 export interface VersionedEmbeddingPriceCard {
   readonly priceCardRef: string;
+  /** Exact embedding model identity this price card applies to. */
+  readonly embeddingModelRef: string;
   readonly billingUnit: 'REQUEST' | 'TEXT' | 'CHARACTER';
   readonly usdPerMillionUnits: number;
 }
 
 export interface EmbeddingCostWorkload {
+  /** Exact embedding model identity observed for this workload. */
+  readonly embeddingModelRef: string;
   readonly requests: number;
   readonly texts: number;
   readonly characters: number;
@@ -74,6 +85,10 @@ function validId(value: string): boolean {
   return /^[A-Za-z0-9._:-]{1,128}$/u.test(value);
 }
 
+function validModelRef(value: string): boolean {
+  return /^[A-Za-z0-9._:/-]{1,256}$/u.test(value);
+}
+
 function sameEvaluationContext(a: EvaluationBinding, b: EvaluationBinding): boolean {
   return (
     a.evaluationSuiteId === b.evaluationSuiteId &&
@@ -95,9 +110,7 @@ function sameEvaluationContext(a: EvaluationBinding, b: EvaluationBinding): bool
 
 function productionApproved(evidence: ApprovalEvidence): boolean {
   return (
-    evidence.target === 'ACTIVE_MODEL_RELEASE' &&
-    evidence.productionApproval &&
-    !evidence.synthetic
+    evidence.target === 'ACTIVE_MODEL_RELEASE' && evidence.productionApproval && !evidence.synthetic
   );
 }
 
@@ -114,6 +127,11 @@ export function estimateModelCostUsd(
     !finiteNonNegative(priceCard.inputUsdPerMillionTokens) ||
     !finiteNonNegative(priceCard.outputUsdPerMillionTokens)
   ) {
+    throw new TypeError('model-cost-input-invalid');
+  }
+  try {
+    createProviderReleaseRef(priceCard.release);
+  } catch {
     throw new TypeError('model-cost-input-invalid');
   }
   return (
@@ -134,7 +152,10 @@ export function estimateEmbeddingCostUsd(
     workload.texts < 0 ||
     !Number.isInteger(workload.characters) ||
     workload.characters < 0 ||
+    !validModelRef(workload.embeddingModelRef) ||
     !validId(priceCard.priceCardRef) ||
+    !validModelRef(priceCard.embeddingModelRef) ||
+    priceCard.embeddingModelRef !== workload.embeddingModelRef ||
     !['REQUEST', 'TEXT', 'CHARACTER'].includes(priceCard.billingUnit) ||
     !finiteNonNegative(priceCard.usdPerMillionUnits)
   ) {
@@ -198,6 +219,11 @@ export function chooseCostEfficientQualifiedCandidate(
     ids.add(candidate.candidateId);
     try {
       estimateModelCostUsd(workload, candidate.priceCard);
+      if (
+        releaseKey(candidate.priceCard.release) !== releaseKey(candidate.evidence.binding.release)
+      ) {
+        return { ok: false, reason: 'invalid-input' };
+      }
     } catch {
       return { ok: false, reason: 'invalid-input' };
     }

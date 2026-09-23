@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  JAO_MATURITY_ENGINEERING_POLICY_V1,
-  assessJaoMaturity,
-} from '../jao/maturity-gate.js';
+import { JAO_MATURITY_ENGINEERING_POLICY_V1, assessJaoMaturity } from '../jao/maturity-gate.js';
 
 describe('JAO maturity gate', () => {
   it('keeps JAO default-off while production evidence is insufficient', () => {

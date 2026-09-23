@@ -8,12 +8,10 @@ export interface ScaleReadinessPolicyInput {
   readonly minOldestPendingAgeMs: number;
 }
 
-export interface ScaleReadinessPolicy extends ScaleReadinessPolicyInput {}
+export type ScaleReadinessPolicy = ScaleReadinessPolicyInput;
 
 export type ScaleReadinessDecision =
-  | 'INSUFFICIENT_DATA'
-  | 'KEEP_SINGLE_OWNER'
-  | 'ELIGIBLE_FOR_SHARED_QUEUE_DESIGN';
+  'INSUFFICIENT_DATA' | 'KEEP_SINGLE_OWNER' | 'ELIGIBLE_FOR_SHARED_QUEUE_DESIGN';
 
 export interface ScaleReadinessEvaluation {
   readonly policyRef: string;
@@ -27,9 +25,7 @@ function validRef(value: string): boolean {
   return /^[A-Za-z0-9._:-]{1,128}$/u.test(value);
 }
 
-export function createScaleReadinessPolicy(
-  input: ScaleReadinessPolicyInput,
-): ScaleReadinessPolicy {
+export function createScaleReadinessPolicy(input: ScaleReadinessPolicyInput): ScaleReadinessPolicy {
   if (
     !validRef(input.policyRef) ||
     !Number.isInteger(input.minObservationCount) ||

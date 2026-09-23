@@ -79,7 +79,6 @@ describe('worker observation read source', () => {
     expect(JSON.stringify(result)).not.toContain('knowledge.quickfurno.release.1');
   });
 
-
   it('surfaces v2 usage aggregates and an explicit engineering SLO state without content', async () => {
     const root = mkdtempSync(join(tmpdir(), 'qfj-worker-observation-'));
     const path = join(root, 'worker-v2.json');
@@ -105,9 +104,9 @@ describe('worker observation read source', () => {
     const items = result.sections.headlineMetrics?.items ?? [];
     expect(items.find((item) => item.id === 'model-total-tokens')?.value).toBe('1500');
     expect(items.find((item) => item.id === 'embedding-requests')?.value).toBe('3');
-    expect(items.find((item) => item.id === 'engineering-slo-state')?.value).toBe(
-      'INSUFFICIENT_DATA',
-    );
+    // The fixture has one pending turn aged 60s, above the engineering 30s queue-age ceiling.
+    // Queue-age is directly measurable without a minimum sample count, so this is a real BREACH.
+    expect(items.find((item) => item.id === 'engineering-slo-state')?.value).toBe('BREACH');
     expect(JSON.stringify(result)).not.toContain('queryText');
     expect(JSON.stringify(result)).not.toContain('conversationId');
   });

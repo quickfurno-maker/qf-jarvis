@@ -77,11 +77,7 @@ export function classifyEvaluationImpact(
     'CAPABILITY_PROFILE',
   );
   changed(dimensions, previous.knowledgeRevision !== next.knowledgeRevision, 'KNOWLEDGE');
-  changed(
-    dimensions,
-    previous.policyContractRevision !== next.policyContractRevision,
-    'POLICY',
-  );
+  changed(dimensions, previous.policyContractRevision !== next.policyContractRevision, 'POLICY');
 
   return Object.freeze({
     requiresReevaluation: dimensions.length > 0,

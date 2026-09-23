@@ -96,7 +96,8 @@ export function createWorkerObservationReadSource(filePath: string): ReadSourceD
                     ? 'n/a'
                     : ((observation.modelGateway.completed / total) * 100).toFixed(2) + '%';
                 })(),
-                caption: 'Validated gateway completions divided by completed plus failed model calls.',
+                caption:
+                  'Validated gateway completions divided by completed plus failed model calls.',
               },
               {
                 id: 'model-fallback-rate',
@@ -109,13 +110,15 @@ export function createWorkerObservationReadSource(filePath: string): ReadSourceD
                           observation.modelGateway.completed) *
                         100
                       ).toFixed(2) + '%',
-                caption: 'Fallback use among validated model completions; production policy currently disables fallback.',
+                caption:
+                  'Fallback use among validated model completions; production policy currently disables fallback.',
               },
               {
                 id: 'model-total-tokens',
                 label: 'Model tokens',
                 value: String(observation.modelUsage.totalTokens),
-                caption: 'Aggregate provider-reported tokens from successful validated model calls.',
+                caption:
+                  'Aggregate provider-reported tokens from successful validated model calls.',
               },
               {
                 id: 'embedding-requests',
@@ -127,7 +130,8 @@ export function createWorkerObservationReadSource(filePath: string): ReadSourceD
                 id: 'embedding-characters',
                 label: 'Embedding characters',
                 value: String(observation.embeddingUsage.characters),
-                caption: 'Aggregate query characters submitted for embeddings; no query text retained.',
+                caption:
+                  'Aggregate query characters submitted for embeddings; no query text retained.',
               },
             ]
           : [];
