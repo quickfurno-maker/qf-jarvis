@@ -18,6 +18,8 @@
     { "path": "../../packages/recommendation-runtime/tsconfig.build.json" },
     { "path": "../../packages/approval-runtime/tsconfig.build.json" },
     { "path": "../../packages/execution-intent-runtime/tsconfig.build.json" },
+    // ADR-0161 proposal-only action registry. It adds no executor; the worker binding enters JAO-6.
+    { "path": "../../packages/jao-action-registry/tsconfig.build.json" },
     { "path": "../../packages/control-plane-read-contract/tsconfig.build.json" },
     { "path": "../../packages/model-gateway" },
     { "path": "../../packages/agent-runtime/tsconfig.build.json" },

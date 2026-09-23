@@ -775,8 +775,9 @@ describe('JAO-6 proposal threat model', () => {
     }
   });
 
-  it('G3 leaves every production entry untouched', () => {
-    // JAO-6 is imported and started by NOTHING. Implementation is not activation.
+  it('G3 leaves serving entries untouched and permits only the ADR-0161 registry binding', () => {
+    // JAO-6 is still imported and started by no serving entry. ADR-0161 adds exactly one internal
+    // proposal-only registry binding; it is not reachable from index.ts or worker-entry.ts.
     for (const entry of ['index.ts', 'worker-entry.ts']) {
       const file = repoFile(entry);
       if (!fs.existsSync(file)) {
@@ -788,7 +789,7 @@ describe('JAO-6 proposal threat model', () => {
       expect(code, entry).not.toContain('Jao6');
     }
 
-    // And nothing anywhere outside the slice and its own tests imports it.
+    // Exactly one reviewed internal binding may import the slice. No other production file may.
     const workerSrc = repoFile('.');
     const importers: string[] = [];
     const walk = (dir: string): void => {
@@ -813,7 +814,7 @@ describe('JAO-6 proposal threat model', () => {
       }
     };
     walk(workerSrc);
-    expect(importers).toStrictEqual([]);
+    expect(importers).toStrictEqual([path.join('jao', 'registered-action-proposal.ts')]);
   });
 
   it('G4 adds no managed migration and no schema of its own', () => {

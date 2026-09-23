@@ -46,6 +46,8 @@ export interface CoreDataToolInvocation {
   readonly result: CoreDataToolResult;
 }
 
+export type CoreRiyaIntakeReadPort = Pick<CoreRiyaIntakePort, 'readCurrent' | 'lookupSubmission'>;
+
 export interface CoreDataTools {
   readonly descriptors: readonly CoreDataToolDescriptor[];
   invoke(toolId: CoreDataToolId, context: CoreDataToolContext): Promise<CoreDataToolInvocation>;
@@ -95,7 +97,7 @@ function requiredRef(value: string | undefined, code: string): string {
  */
 export function createCoreDataTools(input: {
   readonly availabilityReader: CoreServiceAvailabilityReader;
-  readonly riyaIntakePort: CoreRiyaIntakePort;
+  readonly riyaIntakePort: CoreRiyaIntakeReadPort;
 }): CoreDataTools {
   return Object.freeze({
     descriptors,

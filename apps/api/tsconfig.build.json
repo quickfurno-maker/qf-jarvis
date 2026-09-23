@@ -69,6 +69,12 @@
     // package's OWN public parser rather than casting a hand-written object into its contract. One
     // edge, used only by the certification composition.
     { "path": "../../packages/core-service-availability-read/tsconfig.build.json" },
+    // ADR-0161 capability composition. These remain governed leaves: Core tools are read-only,
+    // durable memory is owner-policy gated, and freshness may only build inactive candidates.
+    { "path": "../../packages/core-data-tools/tsconfig.build.json" },
+    { "path": "../../packages/knowledge-freshness/tsconfig.build.json" },
+    { "path": "../../packages/knowledge-ingestion/tsconfig.build.json" },
+    { "path": "../../packages/knowledge-index/tsconfig.build.json" },
     // RAG V2 production worker: both packages are direct runtime imports from
     // quickfurno-whatsapp/production-worker.ts. Keep them explicit project references so a CLEAN
     // checkout builds their declarations before the API rather than relying on stale local dist/.

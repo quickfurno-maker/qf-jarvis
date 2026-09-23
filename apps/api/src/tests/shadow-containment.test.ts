@@ -555,6 +555,10 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // API, no network, no persistence, no provider, and no authority field it could express.
       'control-plane-read-contract',
       'conversation-control',
+      // ADR-0161: read-only Core data-tool composition over already-governed Core ports. It exposes
+      // no write operation, invents no adapter or credential, and re-proves every returned value
+      // through the canonical Core contract parser before it reaches the tool result.
+      'core-data-tools',
       'core-decision-adapter',
       // QFJ integration transport: one signed qfj.core.decision HTTP hop behind the existing Core
       // transport contract. Still an EXACT set match; this records an authorised, non-activating
@@ -597,7 +601,13 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // this only correlates. Still an EXACT set match; it records an authorised addition.
       'execution-intent-runtime',
       'governed-knowledge',
+      // ADR-0161: policy/runtime governed long-term-memory foundation. Durable memory is default-OFF,
+      // canonical ADR-0016 contracts stay authoritative, and the package itself has no database I/O.
+      'governed-memory-foundation',
       'groq-staging-smoke',
+      // ADR-0161: proposal-only JAO action metadata. Engineering actions ship disabled and the
+      // strongest possible assessment is ELIGIBLE_FOR_PROPOSAL, never execution or authorization.
+      'jao-action-registry',
       'jarvis-runtime',
       // JF-7: neutral immutable serving facts shared by offline certification and production. No
       // credential, network, evidence minting, rollout or business-authority surface.
@@ -611,6 +621,10 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // authority, it reaches no database, and a live provider call needs an explicit flag AND a
       // phrase typed at a terminal.
       'jarvis-v1-provider-certification-live',
+      // ADR-0161: deterministic source-revision/digest/approval drift assessment. It may
+      // make a changed approved corpus eligible for a STAGING build, but cannot ingest, seal,
+      // activate or publish a release.
+      'knowledge-freshness',
       // ADR-0158: the shared provider-neutral hybrid retrieval core and deterministic ingestion plane.
       // These additions are explicit and exact; they add no agent-specific authority or serving app.
       'knowledge-index',
@@ -632,6 +646,9 @@ describe('(133-148) the declared budget and every prior lock', () => {
       // EXACT set match; it records an authorised addition, it does not relax the assertion. It is
       // TRANSPORT-NEUTRAL: no endpoint, no QuickFurno Core Automation, no provider, no credential, no intent payload.
       'postgres-execution-replay-store',
+      // ADR-0161: disconnected PostgreSQL adapter for canonical derived agent memory. The schema
+      // artifact is source-only and is not part of the managed migration ledger.
+      'postgres-governed-memory-store',
       // ADR-0158: immutable PostgreSQL full-text + pgvector index and sealed-release pointer.
       'postgres-knowledge-index',
       // RWC-P2B (ADR-0095): the durable PostgreSQL Riya conversation-continuity store -- the

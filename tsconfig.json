@@ -19,6 +19,7 @@
     { "path": "./packages/knowledge-ingestion/tsconfig.build.json" },
     { "path": "./packages/knowledge-index/tsconfig.build.json" },
     { "path": "./packages/postgres-knowledge-index/tsconfig.build.json" },
+    { "path": "./packages/postgres-governed-memory-store/tsconfig.build.json" },
     { "path": "./packages/openai-compatible-embedding-adapter/tsconfig.build.json" },
     { "path": "./packages/model-evaluation/tsconfig.build.json" },
     { "path": "./packages/agent-runtime/tsconfig.build.json" },

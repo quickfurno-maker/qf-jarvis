@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "sideEffects": false,
-  "description": "Policy-only foundation for structured Jarvis long-term memory. It creates no database, transport or background writer and keeps durable memory disabled until an exact owner-approved lifecycle policy is supplied.",
+  "description": "Governed long-term memory admission/runtime over canonical AgentMemoryRecordV1 and MemoryInvalidationRequestV1. Durable reads/writes are default-off until an exact owner-approved lifecycle policy is supplied; invalidation remains available for cleanup. No database or transport implementation lives here.",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -15,5 +15,8 @@
     "build": "tsc --build tsconfig.build.json",
     "typecheck": "tsc --build tsconfig.build.json",
     "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/contracts": "workspace:*"
   }
 }

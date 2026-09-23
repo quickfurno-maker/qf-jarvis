@@ -1,75 +1,152 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   GOVERNED_MEMORY_ENGINEERING_POLICY_V1,
   assessGovernedMemoryWrite,
   createGovernedMemoryPolicy,
+  createGovernedMemoryRuntime,
+  type GovernedMemoryStorePort,
 } from '../index.js';
 
-const fact = {
-  factRef: 'memory.fact.1',
-  subjectRef: 'subject.1',
-  memoryClass: 'DURABLE_PREFERENCE' as const,
-  factType: 'preferred_language',
-  valueRef: 'language.hinglish',
-  sourceRef: 'conversation.turn.1',
-  observedAt: '2026-09-23T10:00:00.000Z',
+const record = {
+  memoryRecordId: 'c2000004-0000-4000-8000-000000000004',
+  contractVersion: 1 as const,
+  ownerAgent: 'riya' as const,
+  subjectReferences: [{ entityType: 'client', entityId: 'client.1' }],
+  sourceEventIds: ['c2000005-0000-4000-8000-000000000005'],
+  derivedSummary: 'The client prefers evening contact.',
+  createdAt: '2026-09-23T10:00:00.000Z',
+  updatedAt: '2026-09-23T10:00:00.000Z',
+  expiresAt: '2026-10-23T10:00:00.000Z',
+  policy: { policyId: 'memory-policy', policyVersion: 1 },
+  dataClassification: 'personal' as const,
+  rebuildable: true as const,
+  authoritative: false as const,
+  erasureState: 'none' as const,
+  reasonCode: 'relationship-context',
+  correlationId: 'c2000006-0000-4000-8000-000000000006',
 };
 
-describe('governed memory foundation', () => {
+const enabledPolicy = createGovernedMemoryPolicy({
+  policyRef: 'qfj.memory.owner.v1',
+  durableMemoryEnabled: true,
+  ownerApprovalRef: 'owner.memory.approval.1',
+  retentionPolicyRef: 'policy.memory.retention.1',
+  erasurePolicyRef: 'policy.memory.erasure.1',
+  maxDurableRetentionDays: 90,
+});
+
+function store(over: Partial<GovernedMemoryStorePort> = {}): GovernedMemoryStorePort {
+  return {
+    readActive: vi.fn().mockResolvedValue([]),
+    write: vi.fn().mockResolvedValue(undefined),
+    invalidate: vi
+      .fn()
+      .mockResolvedValue({ invalidatedCount: 0, sampledMemoryRecordIds: [], truncated: false }),
+    ...over,
+  };
+}
+
+describe('governed long-term memory', () => {
   it('keeps durable memory disabled by default', () => {
-    expect(assessGovernedMemoryWrite(fact)).toEqual({
+    expect(assessGovernedMemoryWrite(record)).toEqual({
       decision: 'REFUSE_DURABLE_DISABLED',
       policyRef: GOVERNED_MEMORY_ENGINEERING_POLICY_V1.policyRef,
-      factRef: fact.factRef,
+      memoryRecordId: record.memoryRecordId,
     });
   });
 
-  it('allows ephemeral structured facts without turning them into durable memory', () => {
-    expect(
-      assessGovernedMemoryWrite({ ...fact, memoryClass: 'CONVERSATION_EPHEMERAL' }),
-    ).toMatchObject({ decision: 'ALLOW_EPHEMERAL', factRef: fact.factRef });
-  });
-
-  it('never lets memory become a copy of Core authority', () => {
-    expect(
-      assessGovernedMemoryWrite({ ...fact, memoryClass: 'CORE_AUTHORITY_REFERENCE' }),
-    ).toMatchObject({ decision: 'REFUSE_CORE_AUTHORITY' });
-  });
-
-  it('requires owner, retention and erasure refs before durable memory can be enabled', () => {
+  it('requires explicit owner, retention and erasure policy before enablement', () => {
     expect(() =>
-      createGovernedMemoryPolicy({
-        policyRef: 'policy.memory.1',
-        durableMemoryEnabled: true,
-      }),
+      createGovernedMemoryPolicy({ policyRef: 'policy.memory.1', durableMemoryEnabled: true }),
     ).toThrow('governed-memory-owner-policy-required');
   });
 
-  it('permits a durable preference only under an explicit bounded lifecycle policy', () => {
-    const policy = createGovernedMemoryPolicy({
-      policyRef: 'policy.memory.1',
-      durableMemoryEnabled: true,
-      ownerApprovalRef: 'owner.memory.approval.1',
-      retentionPolicyRef: 'policy.retention.1',
-      erasurePolicyRef: 'policy.erasure.1',
-      maxDurableRetentionDays: 90,
-    });
-
-    expect(assessGovernedMemoryWrite(fact, policy)).toEqual({
-      decision: 'ALLOW_DURABLE',
-      policyRef: 'policy.memory.1',
-      factRef: 'memory.fact.1',
-      expiresAfterDays: 90,
+  it('uses the canonical memory contract and refuses authority/shape violations', () => {
+    expect(assessGovernedMemoryWrite({ ...record, authoritative: true }, enabledPolicy)).toEqual({
+      decision: 'REFUSE_INVALID_RECORD',
+      policyRef: enabledPolicy.policyRef,
     });
   });
 
-  it('refuses malformed or free-form-shaped fact identifiers', () => {
+  it('requires a bounded expiry and refuses retention beyond the owner ceiling', () => {
     expect(
-      assessGovernedMemoryWrite({ ...fact, valueRef: 'call me after dinner please!' }),
-    ).toEqual({
-      decision: 'REFUSE_INVALID_FACT',
-      policyRef: GOVERNED_MEMORY_ENGINEERING_POLICY_V1.policyRef,
+      assessGovernedMemoryWrite({ ...record, expiresAt: undefined }, enabledPolicy),
+    ).toMatchObject({
+      decision: 'REFUSE_EXPIRY_MISSING',
     });
+    expect(
+      assessGovernedMemoryWrite(
+        { ...record, expiresAt: '2027-09-23T10:00:00.000Z' },
+        enabledPolicy,
+      ),
+    ).toMatchObject({ decision: 'REFUSE_RETENTION_EXCEEDED' });
+  });
+
+  it('allows a canonical bounded record under an enabled owner policy', () => {
+    expect(assessGovernedMemoryWrite(record, enabledPolicy)).toMatchObject({
+      decision: 'ALLOW_DURABLE',
+      memoryRecordId: record.memoryRecordId,
+      retentionDays: 30,
+    });
+  });
+
+  it('is a no-op read while durable memory is disabled and touches no store', async () => {
+    const readActive = vi.fn();
+    const runtime = createGovernedMemoryRuntime({ store: store({ readActive }) });
+    await expect(
+      runtime.readActive({ ownerAgent: 'riya', asOf: '2026-09-23T11:00:00.000Z', limit: 10 }),
+    ).resolves.toEqual([]);
+    expect(readActive).not.toHaveBeenCalled();
+  });
+
+  it('re-proves store output and refuses stale, erased or cross-agent rows', async () => {
+    const runtime = createGovernedMemoryRuntime({
+      policy: enabledPolicy,
+      store: store({
+        readActive: vi.fn().mockResolvedValue([{ ...record, ownerAgent: 'anisha' }]),
+      }),
+    });
+    await expect(
+      runtime.readActive({ ownerAgent: 'riya', asOf: '2026-09-23T11:00:00.000Z', limit: 10 }),
+    ).rejects.toThrow('governed-memory-store-result-invalid');
+  });
+
+  it('writes only after admission and keeps invalidation available as a separate cleanup path', async () => {
+    const write = vi.fn().mockResolvedValue(undefined);
+    const invalidate = vi.fn().mockResolvedValue({
+      invalidatedCount: 1,
+      sampledMemoryRecordIds: [record.memoryRecordId],
+      truncated: false,
+    });
+    const runtime = createGovernedMemoryRuntime({
+      policy: enabledPolicy,
+      store: store({ write, invalidate }),
+    });
+    await expect(runtime.write(record)).resolves.toMatchObject({ decision: 'ALLOW_DURABLE' });
+    expect(write).toHaveBeenCalledOnce();
+
+    const request = {
+      memoryInvalidationRequestId: 'c2000007-0000-4000-8000-000000000007',
+      contractVersion: 1 as const,
+      scope: 'subject' as const,
+      ownerAgent: 'riya' as const,
+      subjectReference: { entityType: 'client', entityId: 'client.1' },
+      erasureRequestId: 'c2000008-0000-4000-8000-000000000008',
+      requestedBy: {
+        actorType: 'human' as const,
+        actor: { entityType: 'operator', entityId: 'operator.1' },
+      },
+      requestedAt: '2026-09-23T11:00:00.000Z',
+      reasonCode: 'erasure-requested',
+      policy: { policyId: 'memory-erasure', policyVersion: 1 },
+      correlationId: 'c2000006-0000-4000-8000-000000000006',
+    };
+    await expect(runtime.invalidate(request)).resolves.toEqual({
+      invalidatedCount: 1,
+      sampledMemoryRecordIds: [record.memoryRecordId],
+      truncated: false,
+    });
+    expect(invalidate).toHaveBeenCalledOnce();
   });
 });

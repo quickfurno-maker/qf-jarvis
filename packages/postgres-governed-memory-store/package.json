@@ -1,0 +1,27 @@
+{
+  "name": "@qf-jarvis/postgres-governed-memory-store",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "description": "PostgreSQL adapter for canonical governed agent memory. Importing connects to nothing and applies no migration. Managed deployment remains blocked on explicit owner lifecycle and migration authorization.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --build tsconfig.build.json",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@qf-jarvis/contracts": "workspace:*",
+    "@qf-jarvis/governed-memory-foundation": "workspace:*",
+    "pg": "8.22.0"
+  },
+  "devDependencies": {
+    "@types/pg": "8.20.0"
+  }
+}

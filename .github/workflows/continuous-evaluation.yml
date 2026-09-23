@@ -22,6 +22,7 @@ on:
       - 'packages/postgres-knowledge-index/**'
       - 'packages/rag-provisioning/**'
       - 'packages/governed-memory-foundation/**'
+      - 'packages/postgres-governed-memory-store/**'
       - 'packages/core-data-tools/**'
       - 'packages/knowledge-freshness/**'
       - 'packages/jao-action-registry/**'
@@ -70,9 +71,13 @@ jobs:
           packages/model-evaluation/src/tests
           packages/knowledge-index/src/tests/quality.test.ts
           packages/governed-memory-foundation/src/tests
+          packages/postgres-governed-memory-store/src/tests
           packages/core-data-tools/src/tests
           packages/knowledge-freshness/src/tests
           packages/jao-action-registry/src/tests
+          apps/api/src/tests/jf6-core-data-tools.test.ts
+          apps/api/src/tests/knowledge-freshness-coordinator.test.ts
+          apps/worker/src/tests/jao-action-registry-binding.test.ts
           packages/jarvis-runtime/src/tests/hybrid-grounding.test.ts
           packages/jarvis-runtime/src/tests/jf4-three-agent-rag.test.ts
           packages/jarvis-runtime/src/tests/fail-closed.test.ts

@@ -53,6 +53,9 @@ importers:
       '@qf-jarvis/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@qf-jarvis/core-data-tools':
+        specifier: workspace:*
+        version: link:../../packages/core-data-tools
       '@qf-jarvis/core-decision-adapter':
         specifier: workspace:*
         version: link:../../packages/core-decision-adapter
@@ -86,9 +89,15 @@ importers:
       '@qf-jarvis/jarvis-v1-provider-certification-live':
         specifier: workspace:*
         version: link:../../packages/jarvis-v1-provider-certification-live
+      '@qf-jarvis/knowledge-freshness':
+        specifier: workspace:*
+        version: link:../../packages/knowledge-freshness
       '@qf-jarvis/knowledge-index':
         specifier: workspace:*
         version: link:../../packages/knowledge-index
+      '@qf-jarvis/knowledge-ingestion':
+        specifier: workspace:*
+        version: link:../../packages/knowledge-ingestion
       '@qf-jarvis/model-evaluation':
         specifier: workspace:*
         version: link:../../packages/model-evaluation
@@ -231,6 +240,9 @@ importers:
       '@qf-jarvis/execution-intent-runtime':
         specifier: workspace:*
         version: link:../../packages/execution-intent-runtime
+      '@qf-jarvis/jao-action-registry':
+        specifier: workspace:*
+        version: link:../../packages/jao-action-registry
       '@qf-jarvis/model-gateway':
         specifier: workspace:*
         version: link:../../packages/model-gateway
@@ -474,13 +486,17 @@ importers:
         specifier: workspace:*
         version: link:../recommendation-runtime
 
-  packages/governed-memory-foundation: {}
-
   packages/governed-knowledge:
     dependencies:
       zod:
         specifier: 4.4.3
         version: 4.4.3
+
+  packages/governed-memory-foundation:
+    dependencies:
+      '@qf-jarvis/contracts':
+        specifier: workspace:*
+        version: link:../contracts
 
   packages/groq-staging-smoke:
     dependencies:
@@ -720,6 +736,22 @@ importers:
       '@qf-jarvis/event-backbone':
         specifier: workspace:*
         version: link:../event-backbone
+      '@types/pg':
+        specifier: 8.20.0
+        version: 8.20.0
+
+  packages/postgres-governed-memory-store:
+    dependencies:
+      '@qf-jarvis/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@qf-jarvis/governed-memory-foundation':
+        specifier: workspace:*
+        version: link:../governed-memory-foundation
+      pg:
+        specifier: 8.22.0
+        version: 8.22.0
+    devDependencies:
       '@types/pg':
         specifier: 8.20.0
         version: 8.20.0

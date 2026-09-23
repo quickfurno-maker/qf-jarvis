@@ -14,17 +14,25 @@ function engineeringAction(): JaoActionDefinition {
 }
 
 describe('JAO action registry', () => {
-  it('ships all engineering actions disabled', () => {
+  it('ships all engineering actions disabled and deeply freezes their agent scopes', () => {
     expect(JAO_ENGINEERING_REGISTRY_V1.actions.every((action) => !action.enabled)).toBe(true);
+    expect(JAO_ENGINEERING_REGISTRY_V1.actions.every((action) => Object.isFrozen(action))).toBe(
+      true,
+    );
+    expect(
+      JAO_ENGINEERING_REGISTRY_V1.actions.every((action) =>
+        Object.isFrozen(action.allowedAgentScopes),
+      ),
+    ).toBe(true);
   });
 
   it('cannot make a disabled action proposal-eligible', () => {
     expect(
       assessJaoActionProposal({
         registry: JAO_ENGINEERING_REGISTRY_V1,
-        actionId: 'schedule_callback',
+        actionId: 'propose_vendor_follow_up',
         actionVersion: 1,
-        agentScope: 'RIYA',
+        agentScope: 'JARVIS',
         maturityDecision: 'BOUNDED_AUTONOMY_REVIEW_ELIGIBLE',
         authorityEvidenceRef: 'authority.evidence.1',
         approvalEvidenceRef: 'approval.evidence.1',
@@ -41,9 +49,9 @@ describe('JAO action registry', () => {
     expect(
       assessJaoActionProposal({
         registry,
-        actionId: 'schedule_callback',
+        actionId: 'propose_vendor_follow_up',
         actionVersion: 1,
-        agentScope: 'RIYA',
+        agentScope: 'JARVIS',
         maturityDecision: 'KEEP_DEFAULT_OFF',
       }),
     ).toMatchObject({ decision: 'MATURITY_REVIEW_REQUIRED' });
@@ -51,9 +59,9 @@ describe('JAO action registry', () => {
     expect(
       assessJaoActionProposal({
         registry,
-        actionId: 'schedule_callback',
+        actionId: 'propose_vendor_follow_up',
         actionVersion: 1,
-        agentScope: 'RIYA',
+        agentScope: 'JARVIS',
         maturityDecision: 'BOUNDED_AUTONOMY_REVIEW_ELIGIBLE',
       }),
     ).toMatchObject({ decision: 'AUTHORITY_EVIDENCE_MISSING' });
@@ -61,9 +69,9 @@ describe('JAO action registry', () => {
     expect(
       assessJaoActionProposal({
         registry,
-        actionId: 'schedule_callback',
+        actionId: 'propose_vendor_follow_up',
         actionVersion: 1,
-        agentScope: 'RIYA',
+        agentScope: 'JARVIS',
         maturityDecision: 'BOUNDED_AUTONOMY_REVIEW_ELIGIBLE',
         authorityEvidenceRef: 'authority.evidence.1',
       }),
@@ -78,17 +86,20 @@ describe('JAO action registry', () => {
 
     const result = assessJaoActionProposal({
       registry,
-      actionId: 'schedule_callback',
+      actionId: 'propose_vendor_follow_up',
       actionVersion: 1,
-      agentScope: 'RIYA',
+      agentScope: 'JARVIS',
       maturityDecision: 'BOUNDED_AUTONOMY_REVIEW_ELIGIBLE',
       authorityEvidenceRef: 'authority.evidence.1',
       approvalEvidenceRef: 'approval.evidence.1',
     });
     expect(result).toEqual({
-      actionId: 'schedule_callback',
+      actionId: 'propose_vendor_follow_up',
+      actionVersion: 1,
       decision: 'ELIGIBLE_FOR_PROPOSAL',
       registryRef: 'registry.reviewed.1',
+      effectClass: 'CORE_PROPOSAL',
+      bindingRef: 'jao6.vendor-follow-up.v1',
     });
     expect('executed' in result).toBe(false);
     expect('authorized' in result).toBe(false);

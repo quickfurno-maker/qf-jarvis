@@ -18,7 +18,6 @@ describe('Core data tools', () => {
       riyaIntakePort: {
         readCurrent: vi.fn(),
         lookupSubmission: vi.fn(),
-        submit: vi.fn(),
       },
     });
 
@@ -46,7 +45,6 @@ describe('Core data tools', () => {
       riyaIntakePort: {
         readCurrent: vi.fn(),
         lookupSubmission: vi.fn(),
-        submit: vi.fn(),
       },
     });
 
@@ -65,7 +63,6 @@ describe('Core data tools', () => {
       riyaIntakePort: {
         readCurrent: vi.fn(),
         lookupSubmission: vi.fn(),
-        submit: vi.fn(),
       },
     });
 
@@ -74,19 +71,17 @@ describe('Core data tools', () => {
     ).rejects.toThrow();
   });
 
-  it('never exposes the mutating intake method', () => {
-    const submit = vi.fn();
+  it('has no mutation-capable method on the tool surface', () => {
     const tools = createCoreDataTools({
       availabilityReader: { readCurrent: vi.fn() },
       riyaIntakePort: {
         readCurrent: vi.fn(),
         lookupSubmission: vi.fn(),
-        submit,
       },
     });
 
     expect('submit' in tools).toBe(false);
-    expect(submit).not.toHaveBeenCalled();
+    expect(Object.keys(tools).sort()).toEqual(['descriptors', 'invoke']);
   });
 
   it('fails closed when a scoped read is missing required identity', async () => {
@@ -95,7 +90,6 @@ describe('Core data tools', () => {
       riyaIntakePort: {
         readCurrent: vi.fn(),
         lookupSubmission: vi.fn(),
-        submit: vi.fn(),
       },
     });
 
