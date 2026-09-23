@@ -364,6 +364,7 @@ export async function runJf5bLiveCertificationCli(
     outputDirectory: deps.facts.resolvedOutputDirectory,
     runId: deps.runId,
     groqCertificationModelId: JF5B_GROQ_MODEL_ID,
+    knowledgeRevision: parsed.knowledgeRevision,
   })) {
     deps.io.out(line);
   }

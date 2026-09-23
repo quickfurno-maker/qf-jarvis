@@ -42,6 +42,8 @@ export interface PreflightFacts {
   /** Historical compatibility field; ignored in Groq-only mode and must be empty in live use. */
   readonly naraCandidates?: readonly string[];
   readonly groqCertificationModelId: string;
+  /** Exact governed knowledge release for a current grounded certification. */
+  readonly knowledgeRevision?: string;
 }
 
 export function renderPreflightSummary(facts: PreflightFacts): readonly string[] {
@@ -59,6 +61,7 @@ export function renderPreflightSummary(facts: PreflightFacts): readonly string[]
     `  groq host              ${GROQ_CHAT_HOST}`,
     '  groq connectivity smoke  as supplied by --groq-smoke-config (phase 1 only)',
     `  groq certification model ${facts.groqCertificationModelId} (phase 2)`,
+    `  knowledge revision      ${facts.knowledgeRevision ?? 'UNBOUND — historical/audit helper only'}`,
     '',
     `  max groq calls         ${String(JF5B_GROQ_ONLY_BUDGET.maxGroqCalls)}`,
     `  max nara calls         ${String(JF5B_GROQ_ONLY_BUDGET.maxNaraCalls)} (hard-disabled)`,
