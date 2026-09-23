@@ -84,9 +84,10 @@ function answerFor(body: string, replyBody: string, citeGrounded = true): string
       if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) continue;
       const grounded = (payload as Record<string, unknown>)['groundedKnowledge'];
       if (typeof grounded !== 'object' || grounded === null || Array.isArray(grounded)) continue;
-      const records = (grounded as Record<string, unknown>)['records'];
-      if (!Array.isArray(records)) continue;
-      const first = records[0];
+      const rawRecords: unknown = (grounded as Record<string, unknown>)['records'];
+      if (!Array.isArray(rawRecords)) continue;
+      const records = rawRecords as readonly unknown[];
+      const first: unknown = records[0];
       if (typeof first !== 'object' || first === null || Array.isArray(first)) continue;
       const record = first as Record<string, unknown>;
       if (typeof record['knowledgeId'] === 'string' && typeof record['version'] === 'number') {
